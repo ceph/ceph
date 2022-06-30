@@ -101,35 +101,27 @@ class CachedExtent : public boost::intrusive_ref_counter<
   CachedExtentRef prior_instance;
 
   // time of the last modification
-  seastar::lowres_system_clock::time_point last_modified;
+  sea_time_point modify_time = NULL_TIME;
 
-  // time of the last rewrite
-  seastar::lowres_system_clock::time_point last_rewritten;
 public:
-
-  void set_last_modified(seastar::lowres_system_clock::duration d) {
-    last_modified = seastar::lowres_system_clock::time_point(d);
+  void init(extent_state_t _state,
+            paddr_t paddr,
+            placement_hint_t hint,
+            reclaim_gen_t gen) {
+    state = _state;
+    set_paddr(paddr);
+    user_hint = hint;
+    reclaim_generation = gen;
   }
 
-  void set_last_modified(seastar::lowres_system_clock::time_point t) {
-    last_modified = t;
+  void set_modify_time(sea_time_point t) {
+    modify_time = t;
   }
 
-  seastar::lowres_system_clock::time_point get_last_modified() const {
-    return last_modified;
+  sea_time_point get_modify_time() const {
+    return modify_time;
   }
 
-  void set_last_rewritten(seastar::lowres_system_clock::duration d) {
-    last_rewritten = seastar::lowres_system_clock::time_point(d);
-  }
-
-  void set_last_rewritten(seastar::lowres_system_clock::time_point t) {
-    last_rewritten = t;
-  }
-
-  seastar::lowres_system_clock::time_point get_last_rewritten() const {
-    return last_rewritten;
-  }
   /**
    *  duplicate_for_write
    *
@@ -203,13 +195,14 @@ public:
 	<< ", type=" << get_type()
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
-	<< ", last_modified=" << last_modified.time_since_epoch()
-	<< ", last_rewritten=" << last_rewritten.time_since_epoch()
+	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
 	<< ", paddr=" << get_paddr()
 	<< ", length=" << get_length()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
-	<< ", refcount=" << use_count();
+	<< ", refcount=" << use_count()
+	<< ", user_hint=" << user_hint
+	<< ", reclaim_gen=" << reclaim_generation;
     if (state != extent_state_t::INVALID &&
         state != extent_state_t::CLEAN_PENDING) {
       print_detail(out);
@@ -374,8 +367,24 @@ public:
 
   virtual ~CachedExtent();
 
-  /// hint for allocators
-  placement_hint_t hint = placement_hint_t::NUM_HINTS;
+  placement_hint_t get_user_hint() const {
+    return user_hint;
+  }
+
+  reclaim_gen_t get_reclaim_generation() const {
+    return reclaim_generation;
+  }
+
+  void invalidate_hints() {
+    user_hint = placement_hint_t::NUM_HINTS;
+    reclaim_generation = NULL_GENERATION;
+  }
+
+  void set_reclaim_generation(reclaim_gen_t gen) {
+    assert(gen < RECLAIM_GENERATIONS);
+    user_hint = placement_hint_t::REWRITE;
+    reclaim_generation = gen;
+  }
 
   bool is_inline() const {
     return poffset.is_relative();
@@ -453,6 +462,11 @@ private:
   }
 
   read_set_item_t<Transaction>::list transactions;
+
+  placement_hint_t user_hint;
+
+  /// > 0 and not null means the extent is under reclaimming
+  reclaim_gen_t reclaim_generation;
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;

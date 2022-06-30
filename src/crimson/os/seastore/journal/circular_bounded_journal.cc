@@ -429,14 +429,12 @@ Journal::replay_ret CircularBoundedJournal::replay(
 		record_deltas.deltas,
 		[locator,
 		&d_handler](auto& p) {
-		auto& commit_time = p.first;
+		auto& modify_time = p.first;
 		auto& delta = p.second;
 		return d_handler(locator,
 		  delta,
 		  locator.write_result.start_seq,
-		  seastar::lowres_system_clock::time_point(
-		    seastar::lowres_system_clock::duration(commit_time))
-		  );
+		  modify_time);
 	      });
 	    }).safe_then([this, &cursor_addr]() {
 	      if (cursor_addr >= get_journal_end()) {

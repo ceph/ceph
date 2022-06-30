@@ -13,13 +13,15 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentAllocator::SegmentAllocator(
-  std::string name,
   segment_type_t type,
+  data_category_t category,
+  reclaim_gen_t gen,
   SegmentProvider &sp,
   SegmentSeqAllocator &ssa)
-  : name{name},
-    print_name{fmt::format("D?_{}", name)},
+  : print_name{fmt::format("{}_G{}", category, gen)},
     type{type},
+    category{category},
+    gen{gen},
     segment_provider{sp},
     sm_group{*sp.get_segment_manager_group()},
     segment_seq_allocator(ssa)
@@ -40,7 +42,8 @@ SegmentAllocator::do_open()
     new_segment_seq,
     reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
     sizeof(meta.seastore_id.uuid));
-  auto new_segment_id = segment_provider.allocate_segment(new_segment_seq, type);
+  auto new_segment_id = segment_provider.allocate_segment(
+      new_segment_seq, type, category, gen);
   ceph_assert(new_segment_id != NULL_SEG_ID);
   return sm_group.open(new_segment_id
   ).handle_error(
@@ -66,7 +69,9 @@ SegmentAllocator::do_open()
       new_journal_tail,
       new_alloc_replay_from,
       current_segment_nonce,
-      type};
+      type,
+      category,
+      gen};
     INFO("{} writing header to new segment ... -- {}",
          print_name, header);
 
@@ -124,7 +129,8 @@ SegmentAllocator::open()
   for (auto& device_id : device_ids) {
     oss << "_" << device_id_printer_t{device_id};
   }
-  oss << "_" << name;
+  oss << "_"
+      << fmt::format("{}_G{}", category, gen);
   print_name = oss.str();
 
   INFO("{}", print_name);
@@ -215,6 +221,10 @@ SegmentAllocator::close_segment()
     cur_journal_tail = NO_DELTAS;
     new_alloc_replay_from = NO_DELTAS;
   }
+  ceph_assert((close_seg_info.modify_time == NULL_TIME &&
+               close_seg_info.num_extents == 0) ||
+              (close_seg_info.modify_time != NULL_TIME &&
+               close_seg_info.num_extents != 0));
   auto tail = segment_tail_t{
     close_seg_info.seq,
     close_segment_id,
@@ -222,8 +232,8 @@ SegmentAllocator::close_segment()
     new_alloc_replay_from,
     current_segment_nonce,
     type,
-    close_seg_info.last_modified.time_since_epoch().count(),
-    close_seg_info.last_rewritten.time_since_epoch().count()};
+    timepoint_to_mod(close_seg_info.modify_time),
+    close_seg_info.num_extents};
   ceph::bufferlist bl;
   encode(tail, bl);
   INFO("{} close segment id={}, seq={}, written_to={}, nonce={}, journal_tail={}",
@@ -513,6 +523,10 @@ RecordSubmitter::submit(record_t&& record)
   LOG_PREFIX(RecordSubmitter::submit);
   assert(is_available());
   assert(check_action(record.size) != action_t::ROLL);
+  segment_allocator.get_provider().update_modify_time(
+      segment_allocator.get_segment_id(),
+      record.modify_time,
+      record.extents.size());
   auto eval = p_current_batch->evaluate_submit(
       record.size, segment_allocator.get_block_size());
   bool needs_flush = (

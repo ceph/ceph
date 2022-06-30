@@ -757,9 +757,9 @@ constexpr objaddr_t OBJ_ADDR_MAX = std::numeric_limits<objaddr_t>::max();
 constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX;
 
 enum class placement_hint_t {
-  HOT = 0,   // Most of the metadata
-  COLD,      // Object data
-  REWRITE,   // Cold metadata and data (probably need further splits)
+  HOT = 0,   // The default user hint that expects mutations or retirement
+  COLD,      // Expect no mutations and no retirement in the near future
+  REWRITE,   // Hint for the internal rewrites
   NUM_HINTS  // Constant for number of hints
 };
 
@@ -973,21 +973,85 @@ constexpr bool is_backref_node(extent_types_t type)
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
-enum class record_commit_type_t : uint8_t {
-  NONE,
-  MODIFY,
-  REWRITE
+using reclaim_gen_t = uint8_t;
+
+constexpr reclaim_gen_t DIRTY_GENERATION = 1;
+constexpr reclaim_gen_t COLD_GENERATION = 1;
+constexpr reclaim_gen_t RECLAIM_GENERATIONS = 3;
+constexpr reclaim_gen_t NULL_GENERATION =
+  std::numeric_limits<reclaim_gen_t>::max();
+
+struct reclaim_gen_printer_t {
+  reclaim_gen_t gen;
 };
 
+std::ostream &operator<<(std::ostream &out, reclaim_gen_printer_t gen);
+
+enum class data_category_t : uint8_t {
+  METADATA = 0,
+  DATA,
+  NUM
+};
+
+std::ostream &operator<<(std::ostream &out, data_category_t c);
+
+constexpr data_category_t get_extent_category(extent_types_t type) {
+  if (type == extent_types_t::OBJECT_DATA_BLOCK ||
+      type == extent_types_t::COLL_BLOCK) {
+    return data_category_t::DATA;
+  } else {
+    return data_category_t::METADATA;
+  }
+}
+
 // type for extent modification time, milliseconds since the epoch
+using sea_time_point = seastar::lowres_system_clock::time_point;
+using sea_duration = seastar::lowres_system_clock::duration;
 using mod_time_point_t = int64_t;
+
+constexpr mod_time_point_t
+timepoint_to_mod(const sea_time_point &t) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+      t.time_since_epoch()).count();
+}
+
+constexpr sea_time_point
+mod_to_timepoint(mod_time_point_t t) {
+  return sea_time_point(std::chrono::duration_cast<sea_duration>(
+      std::chrono::milliseconds(t)));
+}
+
+constexpr auto NULL_TIME = sea_time_point();
+constexpr auto NULL_MOD_TIME = timepoint_to_mod(NULL_TIME);
+
+struct sea_time_point_printer_t {
+  sea_time_point tp;
+};
+std::ostream &operator<<(std::ostream &out, sea_time_point_printer_t tp);
+
+struct mod_time_point_printer_t {
+  mod_time_point_t tp;
+};
+std::ostream &operator<<(std::ostream &out, mod_time_point_printer_t tp);
+
+constexpr sea_time_point
+get_average_time(const sea_time_point& t1, std::size_t n1,
+                 const sea_time_point& t2, std::size_t n2) {
+  assert(t1 != NULL_TIME);
+  assert(t2 != NULL_TIME);
+  auto new_size = n1 + n2;
+  assert(new_size > 0);
+  auto c1 = t1.time_since_epoch().count();
+  auto c2 = t2.time_since_epoch().count();
+  auto c_ret = c1 / new_size * n1 + c2 / new_size * n2;
+  return sea_time_point(sea_duration(c_ret));
+}
 
 /* description of a new physical extent */
 struct extent_t {
   extent_types_t type;  ///< type of extent
   laddr_t addr;         ///< laddr of extent (L_ADDR_NULL for non-logical)
   ceph::bufferlist bl;  ///< payload, bl.length() == length, aligned
-  mod_time_point_t last_modified;
 };
 
 using extent_version_t = uint32_t;
@@ -1379,13 +1443,11 @@ struct extent_info_t {
   extent_types_t type = extent_types_t::NONE;
   laddr_t addr = L_ADDR_NULL;
   extent_len_t len = 0;
-  mod_time_point_t last_modified;
 
   extent_info_t() = default;
   extent_info_t(const extent_t &et)
     : type(et.type), addr(et.addr),
-      len(et.bl.length()),
-      last_modified(et.last_modified)
+      len(et.bl.length())
   {}
 
   DENC(extent_info_t, v, p) {
@@ -1393,7 +1455,6 @@ struct extent_info_t {
     denc(v.type, p);
     denc(v.addr, p);
     denc(v.len, p);
-    denc(v.last_modified, p);
     DENC_FINISH(p);
   }
 };
@@ -1419,6 +1480,9 @@ struct segment_header_t {
 
   segment_type_t type;
 
+  data_category_t category;
+  reclaim_gen_t generation;
+
   segment_type_t get_type() const {
     return type;
   }
@@ -1431,6 +1495,8 @@ struct segment_header_t {
     denc(v.alloc_replay_from, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
+    denc(v.category, p);
+    denc(v.generation, p);
     DENC_FINISH(p);
   }
 };
@@ -1446,8 +1512,8 @@ struct segment_tail_t {
 
   segment_type_t type;
 
-  mod_time_point_t last_modified;
-  mod_time_point_t last_rewritten;
+  mod_time_point_t modify_time;
+  std::size_t num_extents;
 
   segment_type_t get_type() const {
     return type;
@@ -1461,8 +1527,8 @@ struct segment_tail_t {
     denc(v.alloc_replay_from, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
-    denc(v.last_modified, p);
-    denc(v.last_rewritten, p);
+    denc(v.modify_time, p);
+    denc(v.num_extents, p);
     DENC_FINISH(p);
   }
 };
@@ -1494,14 +1560,16 @@ struct record_t {
   std::vector<extent_t> extents;
   std::vector<delta_info_t> deltas;
   record_size_t size;
-  mod_time_point_t commit_time;
-  record_commit_type_t commit_type;
+  sea_time_point modify_time = NULL_TIME;
 
   record_t() = default;
+
+  // unit test only
   record_t(std::vector<extent_t>&& _extents,
            std::vector<delta_info_t>&& _deltas) {
+    auto modify_time = seastar::lowres_system_clock::now();
     for (auto& e: _extents) {
-      push_back(std::move(e));
+      push_back(std::move(e), modify_time);
     }
     for (auto& d: _deltas) {
       push_back(std::move(d));
@@ -1523,7 +1591,14 @@ struct record_t {
     return delta_size;
   }
 
-  void push_back(extent_t&& extent) {
+  void push_back(extent_t&& extent, sea_time_point &t) {
+    ceph_assert(t != NULL_TIME);
+    if (extents.size() == 0) {
+      assert(modify_time == NULL_TIME);
+      modify_time = t;
+    } else {
+      modify_time = get_average_time(modify_time, extents.size(), t, 1);
+    }
     size.account(extent);
     extents.push_back(std::move(extent));
   }
@@ -1538,18 +1613,17 @@ std::ostream &operator<<(std::ostream&, const record_t&);
 struct record_header_t {
   uint32_t deltas;              // number of deltas
   uint32_t extents;             // number of extents
-  mod_time_point_t commit_time = 0;
-  record_commit_type_t commit_type;
+  mod_time_point_t modify_time;
 
   DENC(record_header_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.deltas, p);
     denc(v.extents, p);
-    denc(v.commit_time, p);
-    denc(v.commit_type, p);
+    denc(v.modify_time, p);
     DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream&, const record_header_t&);
 
 struct record_group_header_t {
   uint32_t      records;
@@ -1691,8 +1765,7 @@ try_decode_record_headers(
 
 struct record_deltas_t {
   paddr_t record_block_base;
-  // the mod time here can only be modification time, not rewritten time
-  std::vector<std::pair<mod_time_point_t, delta_info_t>> deltas;
+  std::vector<std::pair<sea_time_point, delta_info_t>> deltas;
 };
 std::optional<std::vector<record_deltas_t> >
 try_decode_deltas(
