@@ -1244,6 +1244,13 @@ Group:          System/Monitoring
 %description prometheus-alerts
 This package provides Ceph default alerts for Prometheus.
 
+%package mib
+Summary:        MIB for SNMP alerts
+BuildArch:      noarch
+Group:          System/Monitoring
+%description mib
+This package provides a Ceph MIB for SNMP traps.
+
 #################################################################################
 # common
 #################################################################################
@@ -1482,6 +1489,9 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 
 # prometheus alerts
 install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yml %{buildroot}/etc/prometheus/ceph/ceph_default_alerts.yml
+
+# SNMP MIB
+install -m 644 -D -p monitoring/snmp/CEPH-MIB.txt %{buildroot}/usr/share/snmp/mib
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -2561,5 +2571,9 @@ exit 0
 %endif
 %attr(0755,root,root) %dir %{_sysconfdir}/prometheus/ceph
 %config %{_sysconfdir}/prometheus/ceph/ceph_default_alerts.yml
+
+%files mib
+%attr(0755,root,root) %dir %{_datadir}/snmp
+%attr(0655,-,-,) %{_datadir}/snmp/mib
 
 %changelog
