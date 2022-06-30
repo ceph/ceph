@@ -1010,14 +1010,13 @@ const string& RGWSI_Zone::zone_name() const
   return get_zone_params().get_name();
 }
 
-bool RGWSI_Zone::find_zone(const rgw_zone_id& id, RGWZone **zone)
+RGWZone* RGWSI_Zone::find_zone(const rgw_zone_id& id)
 {
   auto iter = zone_by_id.find(id);
   if (iter == zone_by_id.end()) {
-    return false;
+    return nullptr;
   }
-  *zone = &(iter->second);
-  return true;
+  return &(iter->second);
 }
 
 RGWRESTConn *RGWSI_Zone::get_zone_conn(const rgw_zone_id& zone_id) {
