@@ -660,6 +660,38 @@ bool SnapMapper::is_legacy_mapping(const string &to_test)
     LEGACY_MAPPING_PREFIX;
 }
 
+/* Octopus modified the SnapMapper key format from
+ *
+ *  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
+ *
+ * to
+ *
+ *  <MAPPING_PREFIX><pool>_<snapid>_<shardid>_<hobject_t::to_str()>
+ *
+ * We can't reconstruct the new key format just from the value since the
+ * Mapping object contains an hobject rather than a ghobject. Instead,
+ * we exploit the fact that the new format is identical starting at <snapid>.
+ *
+ * Note that the original version of this conversion introduced in 94ebe0ea
+ * had a crucial bug which essentially destroyed legacy keys by mapping
+ * them to
+ *
+ *  <MAPPING_PREFIX><poolid>_<snapid>_
+ *
+ * without the object-unique suffix.
+ * See https://tracker.ceph.com/issues/56147
+ */
+std::string SnapMapper::convert_legacy_key(
+  const std::string& old_key,
+  const bufferlist& value)
+{
+  auto old = from_raw(make_pair(old_key, value));
+  std::string object_suffix = old_key.substr(
+    SnapMapper::LEGACY_MAPPING_PREFIX.length());
+  return SnapMapper::MAPPING_PREFIX + std::to_string(old.second.pool)
+    + "_" + object_suffix;
+}
+
 int SnapMapper::convert_legacy(
   CephContext *cct,
   ObjectStore *store,
@@ -681,13 +713,9 @@ int SnapMapper::convert_legacy(
   while (iter->valid()) {
     bool valid = SnapMapper::is_legacy_mapping(iter->key());
     if (valid) {
-      SnapMapper::Mapping m;
-      bufferlist bl(iter->value());
-      auto bp = bl.cbegin();
-      decode(m, bp);
       to_set.emplace(
-	SnapMapper::get_prefix(m.hoid.pool, m.snap),
-	bl);
+	convert_legacy_key(iter->key(), iter->value()),
+	iter->value());
       ++n;
       iter->next();
     }
