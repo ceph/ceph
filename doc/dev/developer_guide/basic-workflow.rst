@@ -1,3 +1,5 @@
+.. _basic workflow dev guide:
+
 Basic Workflow
 ==============
 
