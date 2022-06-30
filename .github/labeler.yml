@@ -1,15 +1,6 @@
 api-change:
   - src/pybind/mgr/dashboard/openapi.yaml
 
-backport quincy:
-  - doc/releases/**
-
-backport pacific:
-  - doc/releases/**
-
-backport octopus:
-  - doc/releases/**
-
 build/ops:
   - "**/CMakeLists.txt"
   - admin/**
