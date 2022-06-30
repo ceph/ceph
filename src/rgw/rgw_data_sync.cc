@@ -5370,10 +5370,16 @@ int RGWBucketPipeSyncStatusManager::do_init(const DoutPrefixProvider *dpp)
       ldpp_dout(this, 0) << "connection object to zone " << szone << " does not exist" << dendl;
       return -EINVAL;
     }
+
+    RGWZone* z;
+    if (!(z = store->svc()->zone->find_zone(szone))) {
+      ldpp_dout(this, 0) << "zone " << szone << " does not exist" << dendl;
+      return -EINVAL;
+    }
     sources.emplace_back(&sync_env, szone, conn,
 			 pipe.source.get_bucket_info(),
 			 pipe.target.get_bucket(),
-			 pipe.handler);
+			 pipe.handler, z->name);
   }
 
   return 0;

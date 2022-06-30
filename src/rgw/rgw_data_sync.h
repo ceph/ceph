@@ -703,11 +703,14 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
     RGWBucketInfo info;
     rgw_bucket dest;
     RGWBucketSyncFlowManager::pipe_handler handler;
+    std::string zone_name;
 
     source(RGWDataSyncEnv* env, const rgw_zone_id& zone, RGWRESTConn* conn,
 	   const RGWBucketInfo& info, const rgw_bucket& dest,
-	   const RGWBucketSyncFlowManager::pipe_handler& handler)
-      : sc(env, conn, zone), info(info), dest(dest), handler(handler) {}
+	   const RGWBucketSyncFlowManager::pipe_handler& handler,
+	   const std::string& zone_name)
+      : sc(env, conn, zone), info(info), dest(dest), handler(handler),
+	zone_name(zone_name) {}
   };
   std::vector<source> sources;
 
