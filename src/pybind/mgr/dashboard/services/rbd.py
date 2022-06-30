@@ -38,13 +38,32 @@ class MIRROR_IMAGE_MODE(IntEnum):
     snapshot = rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT
 
 
-def _rbd_support_remote(method_name: str, *args, **kwargs):
+def _rbd_support_remote(method_name: str, *args, level_spec: str = '',
+                        interval: str = '', start_time: str = '', **kwargs):
+    # pacific specific implementation of rbd mirror schedule snapshot remote methods
+    prefixes = {
+        'mirror_snapshot_schedule_status': 'rbd mirror snapshot schedule status',
+        'mirror_snapshot_schedule_add': 'rbd mirror snapshot schedule add',
+        'mirror_snapshot_schedule_remove': 'rbd mirror snapshot schedule remove',
+    }
+    cmd = {
+        'level_spec': level_spec,
+        'prefix': prefixes[method_name]
+    }
+    if interval:
+        cmd['interval'] = interval
+    if start_time:
+        cmd['start_time'] = start_time
+
     try:
-        return mgr.remote('rbd_support', method_name, *args, **kwargs)
+        res = mgr.remote('rbd_support', 'handle_command', None, cmd, *args, **kwargs)
+        return res
     except ImportError as ie:
         raise DashboardException(f'rbd_support module not found {ie}')
     except RuntimeError as ie:
         raise DashboardException(f'rbd_support.{method_name} error: {ie}')
+    except ValueError as ie:
+        raise DashboardException(f'rbd_support handle_command {prefixes[method_name]} error: {ie}')
 
 
 def format_bitmask(features):
@@ -493,9 +512,9 @@ class RbdMirroringService:
 
     @classmethod
     def snapshot_schedule_add(cls, image_spec: str, interval: str):
-        _rbd_support_remote('mirror_snapshot_schedule_add', image_spec,
-                            str(RBDSchedulerInterval(interval)))
+        _rbd_support_remote('mirror_snapshot_schedule_add', level_spec=image_spec,
+                            interval=str(RBDSchedulerInterval(interval)))
 
     @classmethod
     def snapshot_schedule_remove(cls, image_spec: str):
-        _rbd_support_remote('mirror_snapshot_schedule_remove', image_spec)
+        _rbd_support_remote('mirror_snapshot_schedule_remove', level_spec=image_spec)
