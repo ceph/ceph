@@ -5437,28 +5437,33 @@ RGWBucketPipeSyncStatusManager::construct(
   return self;
 }
 
-int RGWBucketPipeSyncStatusManager::init_sync_status(const DoutPrefixProvider *dpp)
+int RGWBucketPipeSyncStatusManager::init_sync_status(
+  const DoutPrefixProvider *dpp)
 {
-  list<RGWCoroutinesStack *> stacks;
-  std::vector<rgw_raw_obj> full_status_objs;
-  std::vector<rgw_bucket_sync_status> full_status;
-
+  // Just running one at a time saves us from buildup/teardown and in
+  // practice we only do one zone at a time.
   for (auto& source : sources) {
+    list<RGWCoroutinesStack*> stacks;
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
-    full_status_objs.emplace_back(
-      sync_env.svc->zone->get_zone_params().log_pool,
-      full_status_oid(source.sc.source_zone, source.info.bucket, source.dest));
-
-    full_status.emplace_back();
-
+    pretty_print(source.sc.env, "Initializing sync state of bucket {} with zone {}.\n",
+		 source.info.bucket.name, source.zone_name);
     stack->call(new RGWSimpleRadosWriteCR<rgw_bucket_sync_status>(
 		  dpp, source.sc.env->async_rados, source.sc.env->svc->sysobj,
-		  full_status_objs.back(), full_status.back()));
-
+		  {sync_env.svc->zone->get_zone_params().log_pool,
+                   full_status_oid(source.sc.source_zone,
+				   source.info.bucket,
+				   source.dest)},
+		  rgw_bucket_sync_status{}));
     stacks.push_back(stack);
+    auto r = cr_mgr.run(dpp, stacks);
+    if (r < 0) {
+      pretty_print(source.sc.env,
+		   "Initialization of sync state for bucket {} with zone {} "
+		   "failed with error {}\n",
+		   source.info.bucket.name, source.zone_name, cpp_strerror(r));
+    }
   }
-
-  return cr_mgr.run(dpp, stacks);
+  return 0;
 }
 
 tl::expected<std::map<int, rgw_bucket_shard_sync_info>, int>
