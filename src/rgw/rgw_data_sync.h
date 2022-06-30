@@ -7,6 +7,7 @@
 #include "include/encoding.h"
 
 #include "common/ceph_json.h"
+#include "common/likely.h"
 
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
@@ -328,7 +329,18 @@ struct RGWDataSyncEnv {
 
   std::string shard_obj_name(int shard_id);
   std::string status_oid();
+
+  std::ostream* ostr{nullptr}; // For pretty printing progress
 };
+
+// pretty ostream output for `radosgw-admin bucket sync run`
+template<typename ...T>
+void pretty_print(const RGWDataSyncEnv* env, T&& ...t) {
+  if (unlikely(!!env->ostr)) {
+    fmt::print(*env->ostr, std::forward<T>(t)...);
+    env->ostr->flush();
+  }
+}
 
 struct RGWDataSyncCtx {
   RGWDataSyncEnv *env{nullptr};
@@ -714,7 +726,7 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
   };
   std::vector<source> sources;
 
-  int do_init(const DoutPrefixProvider *dpp);
+  int do_init(const DoutPrefixProvider *dpp, std::ostream* ostr);
   RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* store,
 				 std::optional<rgw_zone_id> source_zone,
 				 std::optional<rgw_bucket> source_bucket,
@@ -730,7 +742,7 @@ public:
   construct(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* store,
 	    std::optional<rgw_zone_id> source_zone,
 	    std::optional<rgw_bucket> source_bucket,
-	    const rgw_bucket& dest_bucket);
+	    const rgw_bucket& dest_bucket, std::ostream *ostream);
   ~RGWBucketPipeSyncStatusManager() = default;
 
 
