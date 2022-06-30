@@ -5983,11 +5983,17 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
           return r;
       }
     } else if (name == "quota.max_bytes") {
+      /*
+       * The "quota.max_bytes" must be aligned to 4MB if greater than or
+       * equal to 4MB, otherwise must be aligned to 4KB.
+       */
       string cast_err;
       int64_t q = strict_iec_cast<int64_t>(value, &cast_err);
-      if(!cast_err.empty()) {
+      if(!cast_err.empty() ||
+         (!IS_ALIGNED(q, CEPH_4M_BLOCK_SIZE) &&
+          (q < CEPH_4M_BLOCK_SIZE && !IS_ALIGNED(q, CEPH_4K_BLOCK_SIZE)))) {
         dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
-        << cast_err << dendl;
+                 << cast_err << dendl;
         return -CEPHFS_EINVAL;
       }
       quota->max_bytes = q;
