@@ -444,7 +444,7 @@ will need to force push your branch with:
    git push --force origin fix_1
 
 Why do we take these extra steps instead of simply adding additional commits
-the the PR?  It is best practice for a PR to consist of a single commit; this
+the PR?  It is best practice for a PR to consist of a single commit; this
 makes for clean history, eases peer review of your changes, and facilitates
 merges.  In rare circumstances it also makes it easier to cleanly revert
 changes.
