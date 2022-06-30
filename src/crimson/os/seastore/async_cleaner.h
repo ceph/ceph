@@ -27,7 +27,7 @@ namespace crimson::os::seastore {
  * It is read-only outside segments_info_t.
  */
 struct segment_info_t {
-  using time_point = seastar::lowres_system_clock::time_point;
+  segment_id_t id = NULL_SEG_ID;
 
   // segment_info_t is initiated as set_empty()
   Segment::segment_state_t state = Segment::segment_state_t::EMPTY;
@@ -37,8 +37,13 @@ struct segment_info_t {
 
   segment_type_t type = segment_type_t::NULL_SEG;
 
-  time_point last_modified;
-  time_point last_rewritten;
+  data_category_t category = data_category_t::NUM;
+
+  reclaim_gen_t generation = NULL_GENERATION;
+
+  sea_time_point modify_time = NULL_TIME;
+
+  std::size_t num_extents = 0;
 
   std::size_t written_to = 0;
 
@@ -59,21 +64,28 @@ struct segment_info_t {
     return state == Segment::segment_state_t::OPEN;
   }
 
-  void init_closed(segment_seq_t, segment_type_t, std::size_t);
+  void init_closed(segment_seq_t, segment_type_t,
+                   data_category_t, reclaim_gen_t,
+                   std::size_t);
 
-  void set_open(segment_seq_t, segment_type_t);
+  void set_open(segment_seq_t, segment_type_t,
+                data_category_t, reclaim_gen_t);
 
   void set_empty();
 
   void set_closed();
 
-  void update_last_modified_rewritten(
-      time_point _last_modified, time_point _last_rewritten) {
-    if (_last_modified != time_point() && last_modified < _last_modified) {
-      last_modified = _last_modified;
-    }
-    if (_last_rewritten != time_point() && last_rewritten < _last_rewritten) {
-      last_rewritten = _last_rewritten;
+  void update_modify_time(sea_time_point _modify_time, std::size_t _num_extents) {
+    ceph_assert(!is_closed());
+    assert(_modify_time != NULL_TIME);
+    assert(_num_extents != 0);
+    if (modify_time == NULL_TIME) {
+      modify_time = _modify_time;
+      num_extents = _num_extents;
+    } else {
+      modify_time = get_average_time(
+          modify_time, num_extents, _modify_time, _num_extents);
+      num_extents += _num_extents;
     }
   }
 };
@@ -87,8 +99,6 @@ std::ostream& operator<<(std::ostream&, const segment_info_t&);
  */
 class segments_info_t {
 public:
-  using time_point = seastar::lowres_system_clock::time_point;
-
   segments_info_t() {
     reset();
   }
@@ -185,14 +195,30 @@ public:
     };
   }
 
+  sea_time_point get_time_bound() const {
+    if (!modify_times.empty()) {
+      return *modify_times.begin();
+    } else {
+      return NULL_TIME;
+    }
+  }
+
   void reset();
 
   void add_segment_manager(SegmentManager &segment_manager);
 
-  // initiate non-empty segments, the others are by default empty
-  void init_closed(segment_id_t, segment_seq_t, segment_type_t);
+  void assign_ids() {
+    for (auto &item : segments) {
+      item.second.id = item.first;
+    }
+  }
 
-  void mark_open(segment_id_t, segment_seq_t, segment_type_t);
+  // initiate non-empty segments, the others are by default empty
+  void init_closed(segment_id_t, segment_seq_t, segment_type_t,
+                   data_category_t, reclaim_gen_t);
+
+  void mark_open(segment_id_t, segment_seq_t, segment_type_t,
+                 data_category_t, reclaim_gen_t);
 
   void mark_empty(segment_id_t);
 
@@ -200,9 +226,14 @@ public:
 
   void update_written_to(segment_type_t, paddr_t);
 
-  void update_last_modified_rewritten(
-      segment_id_t id, time_point last_modified, time_point last_rewritten) {
-    segments[id].update_last_modified_rewritten(last_modified, last_rewritten);
+  void update_modify_time(
+      segment_id_t id, sea_time_point tp, std::size_t num) {
+    if (num == 0) {
+      return;
+    }
+
+    assert(tp != NULL_TIME);
+    segments[id].update_modify_time(tp, num);
   }
 
 private:
@@ -229,6 +260,8 @@ private:
 
   std::size_t total_bytes;
   std::size_t avail_bytes_in_open;
+
+  std::multiset<sea_time_point> modify_times;
 };
 
 /**
@@ -241,7 +274,7 @@ public:
   virtual const segment_info_t& get_seg_info(segment_id_t id) const = 0;
 
   virtual segment_id_t allocate_segment(
-      segment_seq_t seq, segment_type_t type) = 0;
+      segment_seq_t, segment_type_t, data_category_t, reclaim_gen_t) = 0;
 
   virtual journal_seq_t get_dirty_extents_replay_from() const = 0;
 
@@ -252,6 +285,9 @@ public:
   virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
 
   virtual void update_segment_avail_bytes(segment_type_t, paddr_t) = 0;
+
+  virtual void update_modify_time(
+      segment_id_t, sea_time_point, std::size_t) = 0;
 
   virtual SegmentManagerGroup* get_segment_manager_group() = 0;
 
@@ -469,9 +505,6 @@ public:
 
 class AsyncCleaner : public SegmentProvider {
 public:
-  using time_point = seastar::lowres_system_clock::time_point;
-  using duration = seastar::lowres_system_clock::duration;
-
   /// Config
   struct config_t {
     /// Number of minimum journal segments to stop trimming.
@@ -513,8 +546,8 @@ public:
 	  12,   // target_journal_segments
 	  16,   // max_journal_segments
 	  2,	// target_backref_inflight_segments
-	  .1,   // available_ratio_gc_max
-	  .05,  // available_ratio_hard_limit
+	  .15,  // available_ratio_gc_max
+	  .1,   // available_ratio_hard_limit
 	  .1,   // reclaim_ratio_gc_threshold
 	  1<<20,// reclaim_bytes_per_cycle
 	  1<<17,// rewrite_dirty_bytes_per_cycle
@@ -597,7 +630,9 @@ public:
     using rewrite_extent_ret = rewrite_extent_iertr::future<>;
     virtual rewrite_extent_ret rewrite_extent(
       Transaction &t,
-      CachedExtentRef extent) = 0;
+      CachedExtentRef extent,
+      reclaim_gen_t target_generation,
+      sea_time_point modify_time) = 0;
 
     /**
      * get_extent_if_live
@@ -739,7 +774,7 @@ public:
   }
 
   segment_id_t allocate_segment(
-      segment_seq_t seq, segment_type_t type) final;
+      segment_seq_t, segment_type_t, data_category_t, reclaim_gen_t) final;
 
   void close_segment(segment_id_t segment) final;
 
@@ -748,6 +783,12 @@ public:
   void update_segment_avail_bytes(segment_type_t type, paddr_t offset) final {
     segments.update_written_to(type, offset);
     gc_process.maybe_wake_on_space_used();
+  }
+
+  void update_modify_time(
+      segment_id_t id, sea_time_point tp, std::size_t num_extents) final {
+    ceph_assert(num_extents == 0 || tp != NULL_TIME);
+    segments.update_modify_time(id, tp, num_extents);
   }
 
   SegmentManagerGroup* get_segment_manager_group() final {
@@ -790,8 +831,6 @@ public:
   void mark_space_used(
     paddr_t addr,
     extent_len_t len,
-    time_point last_modified = time_point(),
-    time_point last_rewritten = time_point(),
     bool init_scan = false);
 
   void mark_space_free(
@@ -867,17 +906,10 @@ private:
 
   // journal status helpers
 
-  double calc_gc_benefit_cost(segment_id_t id) const {
-    double util = calc_utilization(id);
-    ceph_assert(util >= 0 && util < 1);
-    auto cur_time = seastar::lowres_system_clock::now();
-    auto segment = segments[id];
-    assert(cur_time >= segment.last_modified);
-    auto segment_age =
-      cur_time - std::max(segment.last_modified, segment.last_rewritten);
-    uint64_t age = segment_age.count();
-    return (1 - util) * age / (1 + util);
-  }
+  double calc_gc_benefit_cost(
+      segment_id_t id,
+      const sea_time_point &now_time,
+      const sea_time_point &bound_time) const;
 
   segment_id_t get_next_reclaim_segment() const;
 
@@ -935,14 +967,21 @@ private:
   }
 
   struct reclaim_state_t {
+    reclaim_gen_t generation;
+    reclaim_gen_t target_generation;
     std::size_t segment_size;
     paddr_t start_pos;
     paddr_t end_pos;
 
     static reclaim_state_t create(
         segment_id_t segment_id,
+        reclaim_gen_t generation,
         std::size_t segment_size) {
-      return {segment_size,
+      ceph_assert(generation < RECLAIM_GENERATIONS);
+      return {generation,
+              (reclaim_gen_t)(generation == RECLAIM_GENERATIONS - 1 ?
+                              generation : generation + 1),
+              segment_size,
               P_ADDR_NULL,
               paddr_t::make_seg_paddr(segment_id, 0)};
     }
@@ -1051,7 +1090,7 @@ private:
   } gc_process;
 
   using gc_ertr = work_ertr::extend_ertr<
-    SegmentManagerGroup::scan_extents_ertr
+    SegmentManagerGroup::scan_valid_records_ertr
     >;
 
   gc_cycle_ret do_gc_cycle();
@@ -1140,6 +1179,9 @@ private:
     if (segments.get_unavailable_bytes() == 0) return 0;
     return (double)get_unavailable_unused_bytes() / (double)segments.get_unavailable_bytes();
   }
+  double get_alive_ratio() const {
+    return stats.used_bytes / (double)segments.get_total_bytes();
+  }
 
   /*
    * Space calculations (projected)
@@ -1224,13 +1266,10 @@ private:
     }
   }
 
-  using scan_extents_ret_bare =
-    std::vector<std::pair<segment_id_t, segment_header_t>>;
-  using scan_extents_ertr = SegmentManagerGroup::scan_extents_ertr;
+  using scan_extents_ertr = SegmentManagerGroup::scan_valid_records_ertr;
   using scan_extents_ret = scan_extents_ertr::future<>;
-  scan_extents_ret scan_nonfull_segment(
+  scan_extents_ret scan_no_tail_segment(
     const segment_header_t& header,
-    scan_extents_ret_bare& segment_set,
     segment_id_t segment_id);
 
   /**
@@ -1280,10 +1319,12 @@ private:
   void init_mark_segment_closed(
       segment_id_t segment,
       segment_seq_t seq,
-      segment_type_t s_type) {
+      segment_type_t s_type,
+      data_category_t category,
+      reclaim_gen_t generation) {
     ceph_assert(!init_complete);
     auto old_usage = calc_utilization(segment);
-    segments.init_closed(segment, seq, s_type);
+    segments.init_closed(segment, seq, s_type, category, generation);
     auto new_usage = calc_utilization(segment);
     adjust_segment_util(old_usage, new_usage);
     if (s_type == segment_type_t::OOL) {

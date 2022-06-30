@@ -88,7 +88,7 @@ struct cache_test_t : public seastar_test_suite_t {
       return segment_manager->mkfs(
         segment_manager::get_ephemeral_device_config(0, 1));
     }).safe_then([this] {
-      epm.reset(new ExtentPlacementManager());
+      epm.reset(new ExtentPlacementManager(false));
       cache.reset(new Cache(*epm));
       current = paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0);
       epm->add_device(segment_manager.get(), true);
@@ -131,7 +131,9 @@ TEST_F(cache_test_t, test_addr_fixup)
       auto t = get_transaction();
       auto extent = cache->alloc_new_extent<TestBlockPhysical>(
 	*t,
-	TestBlockPhysical::SIZE);
+	TestBlockPhysical::SIZE,
+	placement_hint_t::HOT,
+	0);
       extent->set_contents('c');
       csum = extent->get_crc32c();
       submit_transaction(std::move(t)).get0();
@@ -160,7 +162,9 @@ TEST_F(cache_test_t, test_dirty_extent)
       auto t = get_transaction();
       auto extent = cache->alloc_new_extent<TestBlockPhysical>(
 	*t,
-	TestBlockPhysical::SIZE);
+	TestBlockPhysical::SIZE,
+	placement_hint_t::HOT,
+	0);
       extent->set_contents('c');
       csum = extent->get_crc32c();
       auto reladdr = extent->get_paddr();

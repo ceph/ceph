@@ -31,8 +31,9 @@ SegmentedJournal::SegmentedJournal(
   : segment_provider(segment_provider),
     segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::JOURNAL)),
-    journal_segment_allocator("JOURNAL",
-                              segment_type_t::JOURNAL,
+    journal_segment_allocator(segment_type_t::JOURNAL,
+                              data_category_t::METADATA,
+                              0, // generation
                               segment_provider,
                               *segment_seq_allocator),
     record_submitter(crimson::common::get_conf<uint64_t>(
@@ -194,7 +195,7 @@ SegmentedJournal::replay_segment(
              FNAME,
              &handler](auto &p)
           {
-	    auto& commit_time = p.first;
+	    auto& modify_time = p.first;
 	    auto& delta = p.second;
             /* The journal may validly contain deltas for extents in
              * since released segments.  We can detect those cases by
@@ -224,8 +225,7 @@ SegmentedJournal::replay_segment(
 	      locator,
 	      delta,
 	      segment_provider.get_alloc_info_replay_from(),
-	      seastar::lowres_system_clock::time_point(
-		seastar::lowres_system_clock::duration(commit_time)));
+              modify_time);
           });
         });
       });

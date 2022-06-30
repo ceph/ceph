@@ -28,16 +28,14 @@ TransactionManager::TransactionManager(
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef &&epm,
-  BackrefManagerRef&& backref_manager,
-  tm_make_config_t config)
+  BackrefManagerRef&& backref_manager)
   : async_cleaner(std::move(_async_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
     backref_manager(std::move(backref_manager)),
-    sm_group(*async_cleaner->get_segment_manager_group()),
-    config(config)
+    sm_group(*async_cleaner->get_segment_manager_group())
 {
   async_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -95,7 +93,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	const auto &offsets,
 	const auto &e,
 	const journal_seq_t alloc_replay_from,
-	auto last_modified)
+	auto modify_time)
       {
 	auto start_seq = offsets.write_result.start_seq;
 	async_cleaner->update_journal_tail_target(
@@ -106,7 +104,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  offsets.record_block_base,
 	  e,
 	  alloc_replay_from,
-	  last_modified);
+	  modify_time);
       });
   }).safe_then([this] {
     return journal->open_for_write();
@@ -144,8 +142,6 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    async_cleaner->mark_space_used(
 		      addr,
 		      len ,
-		      seastar::lowres_system_clock::time_point(),
-		      seastar::lowres_system_clock::time_point(),
 		      /* init_scan = */ true);
 		  }
 		  if (is_backref_node(type)) {
@@ -166,8 +162,6 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    async_cleaner->mark_space_used(
 		      backref.paddr,
 		      backref.len,
-		      seastar::lowres_system_clock::time_point(),
-		      seastar::lowres_system_clock::time_point(),
 		      true);
 		    cache->update_tree_extents_num(backref.type, 1);
 		  }
@@ -473,14 +467,15 @@ TransactionManager::rewrite_logical_extent(
     t,
     lextent->get_type(),
     lextent->get_length(),
-    placement_hint_t::REWRITE)->cast<LogicalCachedExtent>();
+    lextent->get_user_hint(),
+    lextent->get_reclaim_generation())->cast<LogicalCachedExtent>();
   lextent->get_bptr().copy_out(
     0,
     lextent->get_length(),
     nlextent->get_bptr().c_str());
   nlextent->set_laddr(lextent->get_laddr());
   nlextent->set_pin(lextent->get_pin().duplicate());
-  nlextent->last_modified = lextent->last_modified;
+  nlextent->set_modify_time(lextent->get_modify_time());
 
   DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
@@ -497,7 +492,9 @@ TransactionManager::rewrite_logical_extent(
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   Transaction &t,
-  CachedExtentRef extent)
+  CachedExtentRef extent,
+  reclaim_gen_t target_generation,
+  sea_time_point modify_time)
 {
   LOG_PREFIX(TransactionManager::rewrite_extent);
 
@@ -509,6 +506,15 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     }
     extent = updated;
     ceph_assert(!extent->is_pending_io());
+  }
+
+  assert(extent->is_valid() && !extent->is_initial_pending());
+  if (extent->is_dirty()) {
+    extent->set_reclaim_generation(DIRTY_GENERATION);
+  } else {
+    extent->set_reclaim_generation(target_generation);
+    ceph_assert(modify_time != NULL_TIME);
+    extent->set_modify_time(modify_time);
   }
 
   t.get_rewrite_version_stats().increment(extent->get_version());
@@ -640,7 +646,7 @@ TransactionManager::~TransactionManager() {}
 TransactionManagerRef make_transaction_manager(tm_make_config_t config)
 {
   LOG_PREFIX(make_transaction_manager);
-  auto epm = std::make_unique<ExtentPlacementManager>();
+  auto epm = std::make_unique<ExtentPlacementManager>(config.epm_prefer_ool);
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
@@ -681,8 +687,7 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
     std::move(cache),
     std::move(lba_manager),
     std::move(epm),
-    std::move(backref_manager),
-    config);
+    std::move(backref_manager));
 }
 
 }
