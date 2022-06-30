@@ -257,6 +257,9 @@ class CloudZone(Zone):
     def has_buckets(self):
         return False
 
+    def has_roles(self):
+        return False
+
     class Conn(ZoneConn):
         def __init__(self, zone, credentials):
             super(CloudZone.Conn, self).__init__(zone, credentials)
