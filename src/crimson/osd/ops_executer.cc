@@ -533,47 +533,47 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_RMXATTR:
     return do_write_op([&osd_op](auto& backend, auto& os, auto& txn) {
       return backend.rm_xattr(os, osd_op, txn);
-    }, true);
+    });
   case CEPH_OSD_OP_CREATE:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.create(os, osd_op, txn, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_WRITE:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.write(os, osd_op, txn, *osd_op_params, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_WRITESAME:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.write_same(os, osd_op, txn, *osd_op_params, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_WRITEFULL:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.writefull(os, osd_op, txn, *osd_op_params, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_APPEND:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.append(os, osd_op, txn, *osd_op_params, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_TRUNCATE:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       // FIXME: rework needed. Move this out to do_write_op(), introduce
       // do_write_op_no_user_modify()...
       return backend.truncate(os, osd_op, txn, *osd_op_params, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_ZERO:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.zero(os, osd_op, txn, *osd_op_params, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_SETALLOCHINT:
     return osd_op_errorator::now();
   case CEPH_OSD_OP_SETXATTR:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.setxattr(os, osd_op, txn, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_DELETE:
     return do_write_op([this](auto& backend, auto& os, auto& txn) {
       return backend.remove(os, txn, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_CALL:
     return this->do_op_call(osd_op);
   case CEPH_OSD_OP_STAT:
@@ -616,7 +616,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
 #endif
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_set_vals(os, osd_op, txn, *osd_op_params, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_OMAPSETHEADER:
 #if 0
     if (!pg.get_pgpool().info.supports_omap()) {
@@ -626,7 +626,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_set_header(os, osd_op, txn, *osd_op_params,
         delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_OMAPRMKEYRANGE:
 #if 0
     if (!pg.get_pgpool().info.supports_omap()) {
@@ -635,7 +635,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
 #endif
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_remove_range(os, osd_op, txn, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_OMAPRMKEYS:
     /** TODO: Implement supports_omap()
     if (!pg.get_pgpool().info.supports_omap()) {
@@ -643,17 +643,17 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
     }*/
     return do_write_op([&osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_remove_key(os, osd_op, txn);
-    }, true);
+    });
   case CEPH_OSD_OP_OMAPCLEAR:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_clear(os, osd_op, txn, *osd_op_params, delta_stats);
-    }, true);
+    });
 
   // watch/notify
   case CEPH_OSD_OP_WATCH:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return do_op_watch(osd_op, os, txn);
-    }, false);
+    }, /* user modify=*/false);
   case CEPH_OSD_OP_LIST_WATCHERS:
     return do_read_op([this, &osd_op](auto&, const auto& os) {
       return do_op_list_watchers(osd_op, os);
