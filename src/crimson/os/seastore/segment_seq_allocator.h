@@ -7,7 +7,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 
 namespace crimson::os::seastore {
-class SegmentCleaner;
+class AsyncCleaner;
 }
 
 namespace crimson::os::seastore::journal {
@@ -41,7 +41,7 @@ private:
   segment_seq_t next_segment_seq = 0;
   segment_type_t type = segment_type_t::NULL_SEG;
   friend class journal::SegmentedJournal;
-  friend class SegmentCleaner;
+  friend class AsyncCleaner;
 };
 
 using SegmentSeqAllocatorRef =

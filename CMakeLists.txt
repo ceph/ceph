@@ -60,16 +60,17 @@ endif()
 
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
-  find_program(CCACHE_EXECUTABLE ccache)
-  if(NOT CCACHE_EXECUTABLE)
-    message(FATAL_ERROR "Can't find ccache. Is it installed?")
+  if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
+    message(WARNING "Compiler launcher already set. stop configuring ccache")
+  else()
+    find_program(CCACHE_EXECUTABLE ccache)
+    if(NOT CCACHE_EXECUTABLE)
+      message(FATAL_ERROR "Can't find ccache. Is it installed?")
+    endif()
+    message(STATUS "Building with ccache: ${CCACHE_EXECUTABLE}, CCACHE_DIR=$ENV{CCACHE_DIR}")
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
   endif()
-  message(STATUS "Building with ccache: ${CCACHE_EXECUTABLE}, CCACHE_DIR=$ENV{CCACHE_DIR}")
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_EXECUTABLE}")
-  # ccache does not accelerate link (ld), but let it handle it. by passing it
-  # along with cc to python's distutils, we are able to workaround
-  # https://bugs.python.org/issue8027.
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK "${CCACHE_EXECUTABLE}")
 endif(WITH_CCACHE)
 
 option(WITH_MANPAGE "Build man pages." ON)

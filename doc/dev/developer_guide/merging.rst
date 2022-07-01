@@ -97,7 +97,7 @@ the release is pronounced "stable".
 When ?
 ^^^^^^
 
-After Sage Weil announces that it is time for phase 2 to happen.
+After the CLT announces that it is time for phase 2 to happen.
 
 Branch merges
 ^^^^^^^^^^^^^

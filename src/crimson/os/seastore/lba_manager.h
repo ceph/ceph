@@ -145,17 +145,6 @@ public:
     scan_mappings_func_t &&f) = 0;
 
   /**
-   * Calls f for each mapped space usage
-   */
-  using scan_mapped_space_iertr = base_iertr;
-  using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
-  using scan_mapped_space_func_t = std::function<
-    void(paddr_t, extent_len_t, depth_t)>;
-  virtual scan_mapped_space_ret scan_mapped_space(
-    Transaction &t,
-    scan_mapped_space_func_t &&f) = 0;
-
-  /**
    * rewrite_extent
    *
    * rewrite extent into passed transaction

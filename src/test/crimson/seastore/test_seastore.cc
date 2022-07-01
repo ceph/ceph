@@ -504,6 +504,7 @@ TEST_F(seastore_test_t, omap_test_simple)
 {
   run_async([this] {
     auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
     test_obj.set_omap(
       *seastore,
       "asdf",
@@ -518,6 +519,7 @@ TEST_F(seastore_test_t, attr)
 {
   run_async([this] {
     auto& test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
   {
     std::string oi("asdfasdfasdf");
     bufferlist bl;
@@ -664,6 +666,7 @@ TEST_F(seastore_test_t, omap_test_iterator)
       return ss.str();
     };
     auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
     for (unsigned i = 0; i < 20; ++i) {
       test_obj.set_omap(
 	*seastore,

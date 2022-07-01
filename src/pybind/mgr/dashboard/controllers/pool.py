@@ -345,3 +345,9 @@ class PoolUi(Pool):
             "used_profiles": used_profiles,
             'nodes': mgr.get('osd_map_tree')['nodes']
         }
+
+
+class RBDPool(Pool):
+    def create(self, pool='rbd-mirror'):  # pylint: disable=arguments-differ
+        super().create(pool, pg_num=1, pool_type='replicated',
+                       rule_name='replicated_rule', application_metadata=['rbd'])

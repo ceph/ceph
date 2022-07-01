@@ -251,7 +251,7 @@ class RGWHandler_Period : public RGWHandler_Auth_S3 {
 class RGWRESTMgr_Period : public RGWRESTMgr {
  public:
   RGWHandler_REST* get_handler(rgw::sal::Store* store,
-			       struct req_state*,
+			       req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_Period(auth_registry);
@@ -368,7 +368,7 @@ RGWRESTMgr_Realm::RGWRESTMgr_Realm()
 
 RGWHandler_REST*
 RGWRESTMgr_Realm::get_handler(rgw::sal::Store* store,
-			      struct req_state*,
+			      req_state*,
                               const rgw::auth::StrategyRegistry& auth_registry,
                               const std::string&)
 {

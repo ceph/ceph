@@ -6,7 +6,7 @@
 #include <random>
 
 #include "crimson/common/log.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 
@@ -109,7 +109,9 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   segment_id_t allocate_segment(
     segment_seq_t seq,
-    segment_type_t type
+    segment_type_t type,
+    data_category_t,
+    reclaim_gen_t
   ) final {
     auto ret = next;
     next = segment_id_t{
@@ -125,6 +127,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   void update_journal_tail_committed(journal_seq_t paddr) final {}
 
   void update_segment_avail_bytes(segment_type_t, paddr_t) final {}
+
+  void update_modify_time(segment_id_t, sea_time_point, std::size_t) final {}
 
   SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
 

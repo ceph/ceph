@@ -2527,6 +2527,7 @@ void OSD::asok_command(
   // --- PG commands are routed here to PG::do_command ---
   if (prefix == "pg" ||
       prefix == "query" ||
+      prefix == "log" ||
       prefix == "mark_unfound_lost" ||
       prefix == "list_unfound" ||
       prefix == "scrub" ||
@@ -4191,6 +4192,13 @@ void OSD::final_init()
   r = admin_socket->register_command(
     "pg "			   \
     "name=pgid,type=CephPgid "	   \
+    "name=cmd,type=CephChoices,strings=log",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "pg "			   \
+    "name=pgid,type=CephPgid "	   \
     "name=cmd,type=CephChoices,strings=mark_unfound_lost " \
     "name=mulcmd,type=CephChoices,strings=revert|delete",
     asok_hook,
@@ -4225,6 +4233,11 @@ void OSD::final_init()
     "query",
     asok_hook,
     "show details of a specific pg");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "log",
+    asok_hook,
+    "dump pg_log of a specific pg");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
     "mark_unfound_lost "					\
@@ -7568,6 +7581,18 @@ bool OSD::scrub_random_backoff()
 void OSD::sched_scrub()
 {
   auto& scrub_scheduler = service.get_scrub_services();
+
+  if (auto blocked_pgs = scrub_scheduler.get_blocked_pgs_count();
+      blocked_pgs > 0) {
+    // some PGs managed by this OSD were blocked by a locked object during
+    // scrub. This means we might not have the resources needed to scrub now.
+    dout(10)
+      << fmt::format(
+	   "{}: PGs are blocked while scrubbing due to locked objects ({} PGs)",
+	   __func__,
+	   blocked_pgs)
+      << dendl;
+  }
 
   // fail fast if no resources are available
   if (!scrub_scheduler.can_inc_scrubs()) {

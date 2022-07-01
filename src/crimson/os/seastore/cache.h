@@ -26,7 +26,7 @@ class BtreeBackrefManager;
 namespace crimson::os::seastore {
 
 class BackrefManager;
-class SegmentCleaner;
+class AsyncCleaner;
 
 struct backref_buf_entry_t {
   backref_buf_entry_t(
@@ -303,8 +303,10 @@ public:
     if (!cached) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
-      ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
+      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+                offset,
+                placement_hint_t::NUM_HINTS,
+                NULL_GENERATION);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent, add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
@@ -319,8 +321,10 @@ public:
     if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
-      ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
+      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+                offset,
+                placement_hint_t::NUM_HINTS,
+                NULL_GENERATION);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent(placeholder), reading ... -- {}",
           T::TYPE, offset, length, *ret);
@@ -565,7 +569,7 @@ private:
     auto start_iter = backref_inserted_set.lower_bound(
       start,
       backref_buf_entry_t::cmp_t());
-    auto end_iter = backref_inserted_set.upper_bound(
+    auto end_iter = backref_inserted_set.lower_bound(
       end,
       backref_buf_entry_t::cmp_t());
     std::set<
@@ -587,7 +591,7 @@ private:
     auto start_iter = backref_remove_set.lower_bound(
       start,
       backref_buf_entry_t::cmp_t());
-    auto end_iter = backref_remove_set.upper_bound(
+    auto end_iter = backref_remove_set.lower_bound(
       end,
       backref_buf_entry_t::cmp_t());
     std::set<
@@ -681,19 +685,23 @@ public:
   TCachedExtentRef<T> alloc_new_extent(
     Transaction &t,         ///< [in, out] current transaction
     seastore_off_t length,  ///< [in] length
-    placement_hint_t hint = placement_hint_t::HOT
+    placement_hint_t hint,  ///< [in] user hint
+    reclaim_gen_t gen       ///< [in] reclaim generation
   ) {
     LOG_PREFIX(Cache::alloc_new_extent);
-    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}",
-              t, T::TYPE, length, hint);
-    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint);
+    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
+              t, T::TYPE, length, hint, reclaim_gen_printer_t{gen});
+    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen);
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
-    ret->set_paddr(result.paddr);
-    ret->hint = hint;
-    ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
+    ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
+              result.paddr,
+              hint,
+              result.gen);
     t.add_fresh_extent(ret);
-    SUBDEBUGT(seastore_cache, "allocated {} {}B extent at {}, hint={} -- {}",
-              t, T::TYPE, length, result.paddr, hint, *ret);
+    SUBDEBUGT(seastore_cache,
+              "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
+              t, T::TYPE, length, result.paddr,
+              hint, reclaim_gen_printer_t{result.gen}, *ret);
     return ret;
   }
 
@@ -703,10 +711,11 @@ public:
    * Allocates a fresh extent.  addr will be relative until commit.
    */
   CachedExtentRef alloc_new_extent_by_type(
-    Transaction &t,       ///< [in, out] current transaction
-    extent_types_t type,  ///< [in] type tag
+    Transaction &t,        ///< [in, out] current transaction
+    extent_types_t type,   ///< [in] type tag
     seastore_off_t length, ///< [in] length
-    placement_hint_t hint = placement_hint_t::HOT
+    placement_hint_t hint, ///< [in] user hint
+    reclaim_gen_t gen      ///< [in] reclaim generation
     );
 
   /**
@@ -747,7 +756,7 @@ public:
     Transaction &t,            ///< [in, out] current transaction
     paddr_t final_block_start, ///< [in] offset of initial block
     journal_seq_t seq,         ///< [in] journal commit seq
-    SegmentCleaner *cleaner=nullptr ///< [out] optional segment stat listener
+    AsyncCleaner *cleaner=nullptr ///< [out] optional segment stat listener
   );
 
   /**
@@ -789,7 +798,7 @@ public:
     const delta_info_t &delta,
     const journal_seq_t &, // journal seq from which alloc
 			   // delta should be replayed
-    seastar::lowres_system_clock::time_point& last_modified);
+    sea_time_point &modify_time);
 
   /**
    * init_cached_extents
@@ -975,6 +984,38 @@ public:
     };
   };
 
+  void update_tree_extents_num(extent_types_t type, int64_t delta) {
+    switch (type) {
+    case extent_types_t::LADDR_INTERNAL:
+      [[fallthrough]];
+    case extent_types_t::LADDR_LEAF:
+      stats.lba_tree_extents_num += delta;
+      ceph_assert(stats.lba_tree_extents_num >= 0);
+      return;
+    case extent_types_t::OMAP_INNER:
+      [[fallthrough]];
+    case extent_types_t::OMAP_LEAF:
+      stats.omap_tree_extents_num += delta;
+      ceph_assert(stats.lba_tree_extents_num >= 0);
+      return;
+    case extent_types_t::ONODE_BLOCK_STAGED:
+      stats.onode_tree_extents_num += delta;
+      ceph_assert(stats.onode_tree_extents_num >= 0);
+      return;
+    case extent_types_t::BACKREF_INTERNAL:
+      [[fallthrough]];
+    case extent_types_t::BACKREF_LEAF:
+      stats.backref_tree_extents_num += delta;
+      ceph_assert(stats.backref_tree_extents_num >= 0);
+      return;
+    default:
+      return;
+    }
+  }
+
+  uint64_t get_omap_tree_depth() {
+    return stats.omap_tree_depth;
+  }
 private:
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
@@ -1170,18 +1211,22 @@ private:
     uint64_t dirty_bytes = 0;
 
     uint64_t onode_tree_depth = 0;
+    int64_t onode_tree_extents_num = 0;
     counter_by_src_t<tree_efforts_t> committed_onode_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_onode_tree_efforts;
 
     uint64_t omap_tree_depth = 0;
+    int64_t omap_tree_extents_num = 0;
     counter_by_src_t<tree_efforts_t> committed_omap_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_omap_tree_efforts;
 
     uint64_t lba_tree_depth = 0;
+    int64_t lba_tree_extents_num = 0;
     counter_by_src_t<tree_efforts_t> committed_lba_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_lba_tree_efforts;
 
     uint64_t backref_tree_depth = 0;
+    int64_t backref_tree_extents_num = 0;
     counter_by_src_t<tree_efforts_t> committed_backref_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_backref_tree_efforts;
 

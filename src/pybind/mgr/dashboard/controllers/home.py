@@ -14,7 +14,6 @@ import cherrypy
 from cherrypy.lib.static import serve_file
 
 from .. import mgr
-from ..services.custom_banner import get_login_banner_mgr
 from . import BaseController, Endpoint, Proxy, Router, UIRouter
 
 logger = logging.getLogger("controllers.home")
@@ -146,4 +145,4 @@ class LangsController(BaseController, LanguageMixin):
 class LoginController(BaseController):
     @Endpoint('GET', 'custom_banner')
     def __call__(self):
-        return get_login_banner_mgr()
+        return mgr.get_store('custom_login_banner')

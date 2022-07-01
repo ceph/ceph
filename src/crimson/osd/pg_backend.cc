@@ -239,11 +239,28 @@ PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
   }
 
   const auto& op = osd_op.op;
+  /* clients (particularly cephfs) may send truncate operations out of order
+   * w.r.t. reads.  op.extent.truncate_seq and op.extent.truncate_size allow
+   * the OSD to determine whether the client submitted read needs to be
+   * adjusted to compensate for a truncate the OSD hasn't seen yet.
+   */
+  uint64_t adjusted_size = os.oi.size;
+  const uint64_t offset = op.extent.offset;
+  uint64_t adjusted_length = op.extent.length;
+  if ((os.oi.truncate_seq < op.extent.truncate_seq) &&
+       (op.extent.offset + op.extent.length > op.extent.truncate_size) &&
+       (adjusted_size > op.extent.truncate_size)) {
+    adjusted_size = op.extent.truncate_size;
+  }
+  if (offset > adjusted_size) {
+    adjusted_length = 0;
+  } else if (offset + adjusted_length > adjusted_size) {
+    adjusted_length = adjusted_size - offset;
+  }
   logger().trace("sparse_read: {} {}~{}",
                  os.oi.soid, op.extent.offset, op.extent.length);
   return interruptor::make_interruptible(store->fiemap(coll, ghobject_t{os.oi.soid},
-		       op.extent.offset,
-		       op.extent.length)).safe_then_interruptible(
+    offset, adjusted_length)).safe_then_interruptible(
     [&delta_stats, &os, &osd_op, this](auto&& m) {
     return seastar::do_with(interval_set<uint64_t>{std::move(m)},
 			    [&delta_stats, &os, &osd_op, this](auto&& extents) {
@@ -398,19 +415,19 @@ PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
   } else {
     read_ext = _read(os.oi.soid, op.extent.offset, ext_len, 0);
   }
-  return read_ext.safe_then_interruptible([&osd_op](auto&& read_bl) {
-    int32_t retcode = 0;
+  return read_ext.safe_then_interruptible([&osd_op](auto&& read_bl)
+    -> cmp_ext_errorator::future<> {
     for (unsigned index = 0; index < osd_op.indata.length(); index++) {
       char byte_in_op = osd_op.indata[index];
       char byte_from_disk = (index < read_bl.length() ? read_bl[index] : 0);
       if (byte_in_op != byte_from_disk) {
         logger().debug("cmp_ext: mismatch at {}", index);
-        retcode = -MAX_ERRNO - index;
-	break;
+        osd_op.rval = -MAX_ERRNO - index;
+        return crimson::ct_error::cmp_fail::make();
       }
     }
-    logger().debug("cmp_ext: {}", retcode);
-    osd_op.rval = retcode;
+    osd_op.rval = 0;
+    return cmp_ext_errorator::make_ready_future<>();
   });
 }
 

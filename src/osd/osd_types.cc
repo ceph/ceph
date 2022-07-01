@@ -2931,10 +2931,17 @@ void pg_stat_t::dump_brief(Formatter *f) const
 std::string pg_stat_t::dump_scrub_schedule() const
 {
   if (scrub_sched_status.m_is_active) {
-    return fmt::format(
-      "{}scrubbing for {}s",
-      ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
-      scrub_sched_status.m_duration_seconds);
+    // are we blocked (in fact, stuck) on some locked object?
+    if (scrub_sched_status.m_sched_status == pg_scrub_sched_status_t::blocked) {
+      return fmt::format(
+	"Blocked! locked objects (for {}s)",
+	scrub_sched_status.m_duration_seconds);
+    } else {
+      return fmt::format(
+	"{}scrubbing for {}s",
+	((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
+	scrub_sched_status.m_duration_seconds);
+    }
   }
   switch (scrub_sched_status.m_sched_status) {
     case pg_scrub_sched_status_t::unknown:

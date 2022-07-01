@@ -1146,7 +1146,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   __func__, op.tag.c_str());
       return -EINVAL;
     }
-    CLS_LOG_BITX(bitx_inst, 1,
+    CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: removing tag %s from pending map",
 		   __func__, op.tag.c_str());
     entry.pending_map.erase(pinter);
@@ -1287,7 +1287,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     }
   } // remove loop
 
-  CLS_LOG_BITX(bitx_inst, 0,
+  CLS_LOG_BITX(bitx_inst, 20,
 	       "INFO: %s: writing bucket header", __func__);
   rc = write_bucket_header(hctx, &header);
   if (rc < 0) {

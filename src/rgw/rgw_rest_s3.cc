@@ -79,17 +79,17 @@ using namespace std;
 using namespace rgw;
 using namespace ceph::crypto;
 
-void list_all_buckets_start(struct req_state *s)
+void list_all_buckets_start(req_state *s)
 {
   s->formatter->open_array_section_in_ns("ListAllMyBucketsResult", XMLNS_AWS_S3);
 }
 
-void list_all_buckets_end(struct req_state *s)
+void list_all_buckets_end(req_state *s)
 {
   s->formatter->close_section();
 }
 
-void dump_bucket(struct req_state *s, rgw::sal::Bucket& obj)
+void dump_bucket(req_state *s, rgw::sal::Bucket& obj)
 {
   s->formatter->open_object_section("Bucket");
   s->formatter->dump_string("Name", obj.get_name());
@@ -111,7 +111,7 @@ void rgw_get_errno_s3(rgw_http_error *e , int err_no)
 }
 
 static inline std::string get_s3_expiration_header(
-  struct req_state* s,
+  req_state* s,
   const ceph::real_time& mtime)
 {
   return rgw::lc::s3_expiration_header(
@@ -119,7 +119,7 @@ static inline std::string get_s3_expiration_header(
 }
 
 static inline bool get_s3_multipart_abort_header(
-  struct req_state* s, const ceph::real_time& mtime,
+  req_state* s, const ceph::real_time& mtime,
   ceph::real_time& date, std::string& rule_id)
 {
   return rgw::lc::s3_multipart_abort_header(
@@ -2266,7 +2266,7 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_bucket_metadata(struct req_state *s, rgw::sal::Bucket* bucket)
+static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket)
 {
   dump_header(s, "X-RGW-Object-Count", static_cast<long long>(bucket->get_count()));
   dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(bucket->get_size()));
@@ -2294,7 +2294,7 @@ void RGWStatBucket_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-static int create_s3_policy(struct req_state *s, rgw::sal::Store* store,
+static int create_s3_policy(req_state *s, rgw::sal::Store* store,
 			    RGWAccessControlPolicy_S3& s3policy,
 			    ACLOwner& owner)
 {
@@ -2463,7 +2463,7 @@ void RGWDeleteBucket_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
-static inline void map_qs_metadata(struct req_state* s, bool crypto_too)
+static inline void map_qs_metadata(req_state* s, bool crypto_too)
 {
   /* merge S3 valid user metadata from the query-string into
    * x_meta_map, which maps them to attributes */
@@ -3508,7 +3508,7 @@ int RGWPutACLs_ObjStore_S3::get_params(optional_yield y)
 }
 
 int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::Store* store,
-						  struct req_state *s,
+						  req_state *s,
 						  stringstream& ss)
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
@@ -4743,7 +4743,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_options()
 }
 
 int RGWHandler_REST_S3::init_from_header(rgw::sal::Store* store,
-					 struct req_state* s,
+					 req_state* s,
 					 int default_formatter,
 					 bool configurable_format)
 {
@@ -4897,7 +4897,7 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
   return 0;
 }
 
-int RGWHandler_REST_S3::init(rgw::sal::Store* store, struct req_state *s,
+int RGWHandler_REST_S3::init(rgw::sal::Store* store, req_state *s,
                              rgw::io::BasicClient *cio)
 {
   int ret;
@@ -5009,7 +5009,7 @@ discover_aws_flavour(const req_info& info)
 int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
                            rgw::sal::Store* const store,
                            const rgw::auth::StrategyRegistry& auth_registry,
-                           struct req_state* const s, optional_yield y)
+                           req_state* const s, optional_yield y)
 {
 
   /* neither keystone and rados enabled; warn and exit! */
@@ -5029,7 +5029,7 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-int RGWHandler_Auth_S3::init(rgw::sal::Store* store, struct req_state *state,
+int RGWHandler_Auth_S3::init(rgw::sal::Store* store, req_state *state,
                              rgw::io::BasicClient *cio)
 {
   int ret = RGWHandler_REST_S3::init_from_header(store, state, RGW_FORMAT_JSON, true);
@@ -5040,7 +5040,7 @@ int RGWHandler_Auth_S3::init(rgw::sal::Store* store, struct req_state *state,
 }
 
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Store* store,
-					    struct req_state* const s,
+					    req_state* const s,
                                             const rgw::auth::StrategyRegistry& auth_registry,
                                             const std::string& frontend_prefix)
 {

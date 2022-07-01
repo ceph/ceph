@@ -43,6 +43,7 @@ class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
     crimson::ct_error::eexist,
     crimson::ct_error::enospc,
     crimson::ct_error::edquot,
+    crimson::ct_error::cmp_fail,
     crimson::ct_error::eagain,
     crimson::ct_error::invarg,
     crimson::ct_error::erange,

@@ -8,7 +8,7 @@ set(crimson_seastore_srcs
   transaction.cc
   cache.cc
   lba_manager.cc
-  segment_cleaner.cc
+  async_cleaner.cc
   backref_manager.cc
   backref/backref_tree_node.cc
   backref/btree_backref_manager.cc

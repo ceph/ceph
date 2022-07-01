@@ -553,7 +553,7 @@ Upgrading from v0.66
   in order to accommodate the new write back throttle system.  On
   Ubuntu, upstart now sets the fd limit to 32k.  On other platforms,
   the sysvinit script will set it to 32k by default (still
-  overrideable via max_open_files).  If this field has been customized
+  overridable via max_open_files).  If this field has been customized
   in ceph.conf it should likely be adjusted upwards.
 
 Upgrading from v0.61 "Cuttlefish"

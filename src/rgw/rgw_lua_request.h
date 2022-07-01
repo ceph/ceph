@@ -3,7 +3,7 @@
 #include <string>
 #include "include/common_fwd.h"
 
-class req_state;
+struct req_state;
 class RGWREST;
 class OpsLogSink;
 namespace rgw::sal {
