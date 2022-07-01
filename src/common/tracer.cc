@@ -23,7 +23,8 @@ Tracer::Tracer(opentelemetry::nostd::string_view service_name) {
 
 void Tracer::init(opentelemetry::nostd::string_view service_name) {
   if (!tracer) {
-    const opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
+    opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
+    exporter_options.server_port = 6799;
     const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
     const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
     auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
