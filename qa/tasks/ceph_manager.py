@@ -646,6 +646,7 @@ class OSDThrasher(Thrasher):
                     options['max_change'])
 
     def primary_affinity(self, osd=None):
+        self.log("primary_affinity")
         if osd is None:
             osd = random.choice(self.in_osds)
         if random.random() >= .5:
@@ -672,6 +673,7 @@ class OSDThrasher(Thrasher):
         """
         Install or remove random pg_upmap entries in OSDMap
         """
+        self.log("thrash_pg_upmap")
         from random import shuffle
         out = self.ceph_manager.raw_cluster_cmd('osd', 'dump', '-f', 'json-pretty')
         j = json.loads(out)
@@ -680,12 +682,14 @@ class OSDThrasher(Thrasher):
             if random.random() >= .3:
                 pgs = self.ceph_manager.get_pg_stats()
                 if not pgs:
+                    self.log('No pgs; doing nothing')
                     return
                 pg = random.choice(pgs)
                 pgid = str(pg['pgid'])
                 poolid = int(pgid.split('.')[0])
                 sizes = [x['size'] for x in j['pools'] if x['pool'] == poolid]
                 if len(sizes) == 0:
+                    self.log('No pools; doing nothing')
                     return
                 n = sizes[0]
                 osds = self.in_osds + self.out_osds
@@ -714,6 +718,7 @@ class OSDThrasher(Thrasher):
         """
         Install or remove random pg_upmap_items entries in OSDMap
         """
+        self.log("thrash_pg_upmap_items")
         from random import shuffle
         out = self.ceph_manager.raw_cluster_cmd('osd', 'dump', '-f', 'json-pretty')
         j = json.loads(out)
@@ -722,12 +727,14 @@ class OSDThrasher(Thrasher):
             if random.random() >= .3:
                 pgs = self.ceph_manager.get_pg_stats()
                 if not pgs:
+                    self.log('No pgs; doing nothing')
                     return
                 pg = random.choice(pgs)
                 pgid = str(pg['pgid'])
                 poolid = int(pgid.split('.')[0])
                 sizes = [x['size'] for x in j['pools'] if x['pool'] == poolid]
                 if len(sizes) == 0:
+                    self.log('No pools; doing nothing')
                     return
                 n = sizes[0]
                 osds = self.in_osds + self.out_osds
@@ -991,7 +998,7 @@ class OSDThrasher(Thrasher):
         Pause injection testing. Check for osd being down when finished.
         """
         the_one = random.choice(self.live_osds)
-        self.log("inject_pause on {osd}".format(osd=the_one))
+        self.log("inject_pause on osd.{osd}".format(osd=the_one))
         self.log(
             "Testing {key} pause injection for duration {duration}".format(
                 key=conf_key,
@@ -1166,6 +1173,7 @@ class OSDThrasher(Thrasher):
         This sequence should cause the revived osd to have to handle
         a map gap since the mons would have trimmed
         """
+        self.log("test_map_discontinuity")
         while len(self.in_osds) < (self.minin + 1):
             self.in_osd()
         self.log("Waiting for recovery")
@@ -1207,8 +1215,9 @@ class OSDThrasher(Thrasher):
         mindead = int(self.config.get("min_dead", 0))
 
         self.log('choose_action: min_in %d min_out '
-                 '%d min_live %d min_dead %d' %
-                 (minin, minout, minlive, mindead))
+                 '%d min_live %d min_dead %d '
+                 'chance_down %.2f' %
+                 (minin, minout, minlive, mindead, chance_down))
         actions = []
         if len(self.in_osds) > minin:
             actions.append((self.out_osd, 1.0,))
@@ -2670,7 +2679,11 @@ class CephManager:
         True if all pgs are clean
         """
         pgs = self.get_pg_stats()
-        return self._get_num_active_clean(pgs) == len(pgs)
+        if self._get_num_active_clean(pgs) == len(pgs):
+            return True
+        else:
+            self.dump_pgs_not_active_clean()
+            return False
 
     def is_recovered(self):
         """
@@ -2715,6 +2728,12 @@ class CephManager:
            if 'active' not in pg['state']:
              self.log('PG %s is not active' % pg['pgid'])
              self.log(pg)
+
+    def dump_pgs_not_active_peered(self, pgs):
+        for pg in pgs:
+            if (not pg['state'].count('active')) and (not pg['state'].count('peered')):
+                self.log('PG %s is not active or peered' % pg['pgid'])
+                self.log(pg)
 
     def wait_for_clean(self, timeout=1200):
         """
@@ -2901,7 +2920,11 @@ class CephManager:
         Wrapper to check if all PGs are active or peered
         """
         pgs = self.get_pg_stats()
-        return self._get_num_active(pgs) + self._get_num_peered(pgs) == len(pgs)
+        if self._get_num_active(pgs) + self._get_num_peered(pgs) == len(pgs):
+            return True
+        else:
+            self.dump_pgs_not_active_peered(pgs)
+            return False
 
     def wait_till_active(self, timeout=None):
         """
