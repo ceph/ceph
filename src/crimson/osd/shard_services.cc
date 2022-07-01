@@ -1,9 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/smart_ptr/make_local_shared.hpp>
+
 #include "crimson/osd/shard_services.h"
 
 #include "messages/MOSDAlive.h"
+#include "messages/MOSDMap.h"
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
 
@@ -42,14 +45,12 @@ PerShardState::PerShardState(
 
 CoreState::CoreState(
   int whoami,
-  OSDMapService &osdmap_service,
   crimson::net::Messenger &cluster_msgr,
   crimson::net::Messenger &public_msgr,
   crimson::mon::Client &monc,
   crimson::mgr::Client &mgrc,
   crimson::os::FuturizedStore &store)
   : whoami(whoami),
-    osdmap_service(osdmap_service),
     osdmap_gate("CoreState::osdmap_gate"),
     cluster_msgr(cluster_msgr),
     public_msgr(public_msgr),
@@ -68,6 +69,7 @@ CoreState::CoreState(
       crimson::common::local_conf()->osd_min_recovery_priority)
 {
   crimson::common::local_conf().add_observer(this);
+  osdmaps[0] = boost::make_local_shared<OSDMap>();
 }
 
 seastar::future<> CoreState::send_to_osd(
@@ -263,6 +265,105 @@ void CoreState::handle_conf_change(const ConfigProxy& conf,
     local_reserver.set_min_priority(conf->osd_min_recovery_priority);
     remote_reserver.set_min_priority(conf->osd_min_recovery_priority);
   }
+}
+
+CoreState::cached_map_t CoreState::get_map() const
+{
+  return osdmap;
+}
+
+seastar::future<CoreState::cached_map_t> CoreState::get_map(epoch_t e)
+{
+  // TODO: use LRU cache for managing osdmap, fallback to disk if we have to
+  if (auto found = osdmaps.find(e); found) {
+    return seastar::make_ready_future<cached_map_t>(std::move(found));
+  } else {
+    return load_map(e).then([e, this](std::unique_ptr<OSDMap> osdmap) {
+      return seastar::make_ready_future<cached_map_t>(
+        osdmaps.insert(e, std::move(osdmap)));
+    });
+  }
+}
+
+void CoreState::store_map_bl(ceph::os::Transaction& t,
+                       epoch_t e, bufferlist&& bl)
+{
+  meta_coll->store_map(t, e, bl);
+  map_bl_cache.insert(e, std::move(bl));
+}
+
+seastar::future<bufferlist> CoreState::load_map_bl(epoch_t e)
+{
+  if (std::optional<bufferlist> found = map_bl_cache.find(e); found) {
+    return seastar::make_ready_future<bufferlist>(*found);
+  } else {
+    return meta_coll->load_map(e);
+  }
+}
+
+seastar::future<std::map<epoch_t, bufferlist>> CoreState::load_map_bls(
+  epoch_t first,
+  epoch_t last)
+{
+  return seastar::map_reduce(boost::make_counting_iterator<epoch_t>(first),
+			     boost::make_counting_iterator<epoch_t>(last + 1),
+			     [this](epoch_t e) {
+    return load_map_bl(e).then([e](auto&& bl) {
+      return seastar::make_ready_future<std::pair<epoch_t, bufferlist>>(
+	std::make_pair(e, std::move(bl)));
+    });
+  },
+  std::map<epoch_t, bufferlist>{},
+  [](auto&& bls, auto&& epoch_bl) {
+    bls.emplace(std::move(epoch_bl));
+    return std::move(bls);
+  });
+}
+
+seastar::future<std::unique_ptr<OSDMap>> CoreState::load_map(epoch_t e)
+{
+  auto o = std::make_unique<OSDMap>();
+  if (e > 0) {
+    return load_map_bl(e).then([o=std::move(o)](bufferlist bl) mutable {
+      o->decode(bl);
+      return seastar::make_ready_future<std::unique_ptr<OSDMap>>(std::move(o));
+    });
+  } else {
+    return seastar::make_ready_future<std::unique_ptr<OSDMap>>(std::move(o));
+  }
+}
+
+seastar::future<> CoreState::store_maps(ceph::os::Transaction& t,
+                                  epoch_t start, Ref<MOSDMap> m)
+{
+  return seastar::do_for_each(boost::make_counting_iterator(start),
+                              boost::make_counting_iterator(m->get_last() + 1),
+                              [&t, m, this](epoch_t e) {
+    if (auto p = m->maps.find(e); p != m->maps.end()) {
+      auto o = std::make_unique<OSDMap>();
+      o->decode(p->second);
+      logger().info("store_maps osdmap.{}", e);
+      store_map_bl(t, e, std::move(std::move(p->second)));
+      osdmaps.insert(e, std::move(o));
+      return seastar::now();
+    } else if (auto p = m->incremental_maps.find(e);
+               p != m->incremental_maps.end()) {
+      return load_map(e - 1).then([e, bl=p->second, &t, this](auto o) {
+        OSDMap::Incremental inc;
+        auto i = bl.cbegin();
+        inc.decode(i);
+        o->apply_incremental(inc);
+        bufferlist fbl;
+        o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
+        store_map_bl(t, e, std::move(fbl));
+        osdmaps.insert(e, std::move(o));
+        return seastar::now();
+      });
+    } else {
+      logger().error("MOSDMap lied about what maps it had?");
+      return seastar::now();
+    }
+  });
 }
 
 seastar::future<> ShardServices::dispatch_context_transaction(

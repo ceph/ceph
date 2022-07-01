@@ -68,7 +68,7 @@ seastar::future<> PGAdvanceMap::start()
       boost::make_counting_iterator(from + 1),
       boost::make_counting_iterator(to + 1),
       [this](epoch_t next_epoch) {
-        return osd.get_map(next_epoch).then(
+        return osd.pg_shard_manager.get_map(next_epoch).then(
           [this] (cached_map_t&& next_map) {
             pg->handle_advance_map(next_map, rctx);
           });
