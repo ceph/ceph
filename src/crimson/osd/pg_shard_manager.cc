@@ -12,14 +12,13 @@ namespace {
 namespace crimson::osd {
 
 PGShardManager::PGShardManager(
-  OSDMapService &osdmap_service,
   const int whoami,
   crimson::net::Messenger &cluster_msgr,
   crimson::net::Messenger &public_msgr,
   crimson::mon::Client &monc,
   crimson::mgr::Client &mgrc,
   crimson::os::FuturizedStore &store)
-  : core_state(whoami, osdmap_service, cluster_msgr, public_msgr,
+  : core_state(whoami, cluster_msgr, public_msgr,
 	       monc, mgrc, store),
     local_state(whoami),
     shard_services(core_state, local_state)
