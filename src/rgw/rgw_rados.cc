@@ -3972,7 +3972,7 @@ int RGWRados::fetch_remote_obj(const DoutPrefixProvider *dpp,
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this->store, nullptr, user_id,
-                                  obj_ctx, std::move(dest_obj), params.olh_epoch,
+                                  obj_ctx, dest_obj->clone(), params.olh_epoch,
                                   tag, dpp, null_yield);
 
   boost::optional<RGWPutObj_Compress> compressor;
