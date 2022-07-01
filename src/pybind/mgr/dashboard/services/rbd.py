@@ -437,7 +437,7 @@ class RbdService(object):
         return joint_refs
 
     @classmethod
-    def rbd_pool_list(cls, pool_names: List[str], namespace=None, offset=0, limit=0):
+    def rbd_pool_list(cls, pool_names: List[str], namespace=None, offset=0, limit=0, search=''):
         offset = int(offset)
         limit = int(limit)
         # let's use -1 to denotate we want ALL images for now. Iscsi currently gathers
@@ -448,8 +448,9 @@ class RbdService(object):
         refs = cls._rbd_pool_image_refs(pool_names, namespace)
         image_refs = []
         # transform to list so that we can count
-        for i in refs:
-            image_refs.append(i)
+        for ref in refs:
+            if search in ref['name']:
+                image_refs.append(ref)
 
         result = []
         end = offset + limit

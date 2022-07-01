@@ -79,13 +79,14 @@ class Rbd(RESTController):
     ALLOW_DISABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "deep-flatten",
                               "journaling"}
 
-    def _rbd_list(self, pool_name=None, offset=0, limit=5):
+    def _rbd_list(self, pool_name=None, offset=0, limit=5, search=''):
         if pool_name:
             pools = [pool_name]
         else:
             pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
 
-        images, num_total_images = RbdService.rbd_pool_list(pools, offset=offset, limit=limit)
+        images, num_total_images = RbdService.rbd_pool_list(
+            pools, offset=offset, limit=limit, search=search)
         cherrypy.response.headers['X-Total-Count'] = num_total_images
         pool_result = {}
         for i, image in enumerate(images):
@@ -107,8 +108,9 @@ class Rbd(RESTController):
                      'offset': (int, 'offset'),
                  },
                  responses={200: RBD_SCHEMA})
-    def list(self, pool_name=None, offset: int = 0, limit: int = 5):
-        return self._rbd_list(pool_name, offset=offset, limit=limit)
+    def list(self, pool_name=None, offset: int = 0, limit: int = 5,
+             search: str = ''):
+        return self._rbd_list(pool_name, offset=offset, limit=limit, search=search)
 
     @handle_rbd_error()
     @handle_rados_error('pool')
