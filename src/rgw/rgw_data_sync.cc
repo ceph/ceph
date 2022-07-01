@@ -1664,7 +1664,7 @@ public:
                            boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
                            const RGWSyncTraceNodeRef& _tn_parent)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      sip(_sip),
+      sip(_sip), shard_id(_shard_id),
       state(std::move(state)), obligation(std::move(obligation)),
       marker_tracker(_marker_tracker), error_repo(error_repo),
       lease_cr(std::move(lease_cr)) {
