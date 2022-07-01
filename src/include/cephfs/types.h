@@ -244,7 +244,7 @@ struct quota_info_t
   bool is_valid() const {
     return max_bytes >=0 && max_files >=0;
   }
-  bool is_enable(quota_max_t type=QUOTA_ANY) const {
+  bool is_enabled(quota_max_t type=QUOTA_ANY) const {
     switch (type) {
     case QUOTA_MAX_FILES:
       return !!max_files;
