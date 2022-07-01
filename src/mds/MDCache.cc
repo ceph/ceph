@@ -6391,14 +6391,19 @@ void MDCache::identify_files_to_recover()
 
 void MDCache::start_files_to_recover()
 {
+  int count = 0;
   for (CInode *in : rejoin_check_q) {
     if (in->filelock.get_state() == LOCK_XLOCKSNAP)
       mds->locker->issue_caps(in);
     mds->locker->check_inode_max_size(in);
+    if (!(++count % 1000))
+      mds->heartbeat_reset();
   }
   rejoin_check_q.clear();
   for (CInode *in : rejoin_recover_q) {
     mds->locker->file_recover(&in->filelock);
+    if (!(++count % 1000))
+      mds->heartbeat_reset();
   }
   if (!rejoin_recover_q.empty()) {
     rejoin_recover_q.clear();
