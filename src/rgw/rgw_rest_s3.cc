@@ -4983,9 +4983,14 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yiel
   if (!(s->prot_flags & RGW_REST_WEBSITE))
     return 0;
 
+  if (rgw::sal::Bucket::empty(s->bucket.get())) {
+    // TODO-FUTURE: if the bucket does not exist, maybe expose it here?
+    return -ERR_NO_SUCH_BUCKET;
+  }
+
   if (!s->bucket->get_info().has_website) {
-      // TODO-FUTURE: if the bucket has no WebsiteConfig, expose it here
-      return -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
+    // TODO-FUTURE: if the bucket has no WebsiteConfig, expose it here
+    return -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
   }
 
   rgw_obj_key new_obj;
