@@ -1243,8 +1243,9 @@ int RadosStore::get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_
 
 int RadosStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
-  RadosZoneGroup zg(this, svc()->zone->get_zonegroup());
-  zone = make_unique<RadosZone>(this, zg);
+  std::unique_ptr<ZoneGroup> zg =
+    std::make_unique<RadosZoneGroup>(this, svc()->zone->get_zonegroup());
+  zone = make_unique<RadosZone>(this, std::move(zg));
   return 0;
 }
 
@@ -2938,11 +2939,6 @@ int RadosZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
 
   tier->reset(t);
   return 0;
-}
-
-ZoneGroup& RadosZone::get_zonegroup()
-{
-  return group;
 }
 
 int RadosZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup)
