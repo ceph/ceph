@@ -18,6 +18,7 @@ for details on individual services:
     custom-container
     monitoring
     snmp-gateway
+    tracing
 
 Service Status
 ==============

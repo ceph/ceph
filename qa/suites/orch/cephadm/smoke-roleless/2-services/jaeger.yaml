@@ -1,0 +1,12 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - ceph orch apply jaeger
+- cephadm.wait_for_service:
+    service: elasticsearch
+- cephadm.wait_for_service:
+    service: jaeger-collector
+- cephadm.wait_for_service:
+    service: jaeger-query
+- cephadm.wait_for_service:
+    service: jaeger-agent

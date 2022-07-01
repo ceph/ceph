@@ -445,7 +445,8 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi loki promtail mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw agent ' \
-                          'container ingress cephfs-mirror snmp-gateway'.split()
+                          'container ingress cephfs-mirror snmp-gateway jaeger-tracing ' \
+                          'elasticsearch jaeger-agent jaeger-collector jaeger-query'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
@@ -470,6 +471,11 @@ class ServiceSpec(object):
             'loki': MonitoringSpec,
             'promtail': MonitoringSpec,
             'snmp-gateway': SNMPGatewaySpec,
+            'elasticsearch': TracingSpec,
+            'jaeger-agent': TracingSpec,
+            'jaeger-collector': TracingSpec,
+            'jaeger-query': TracingSpec,
+            'jaeger-tracing': TracingSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise SpecValidationError('Spec needs a "service_type" key.')
@@ -1355,3 +1361,64 @@ class MDSSpec(ServiceSpec):
 
 
 yaml.add_representer(MDSSpec, ServiceSpec.yaml_representer)
+
+
+class TracingSpec(ServiceSpec):
+    SERVICE_TYPES = ['elasticsearch', 'jaeger-collector', 'jaeger-query', 'jaeger-agent']
+
+    def __init__(self,
+                 service_type: str,
+                 es_nodes: Optional[str] = None,
+                 without_query: bool = False,
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False
+                 ):
+        assert service_type in TracingSpec.SERVICE_TYPES + ['jaeger-tracing']
+
+        super(TracingSpec, self).__init__(
+            service_type, service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only, config=config,
+            networks=networks)
+        self.without_query = without_query
+        self.es_nodes = es_nodes
+
+    def get_port_start(self) -> List[int]:
+        return [self.get_port()]
+
+    def get_port(self) -> int:
+        return {'elasticsearch': 9200,
+                'jaeger-agent': 6799,
+                'jaeger-collector': 14250,
+                'jaeger-query': 16686}[self.service_type]
+
+    def get_tracing_specs(self) -> List[ServiceSpec]:
+        assert self.service_type == 'jaeger-tracing'
+        specs: List[ServiceSpec] = []
+        daemons: Dict[str, Optional[PlacementSpec]] = {
+            daemon: None for daemon in TracingSpec.SERVICE_TYPES}
+
+        if self.es_nodes:
+            del daemons['elasticsearch']
+        if self.without_query:
+            del daemons['jaeger-query']
+        if self.placement:
+            daemons.update({'jaeger-collector': self.placement})
+
+        for daemon, daemon_placement in daemons.items():
+            specs.append(TracingSpec(service_type=daemon,
+                                     es_nodes=self.es_nodes,
+                                     placement=daemon_placement,
+                                     unmanaged=self.unmanaged,
+                                     config=self.config,
+                                     networks=self.networks,
+                                     preview_only=self.preview_only
+                                     ))
+        return specs
+
+
+yaml.add_representer(TracingSpec, ServiceSpec.yaml_representer)
