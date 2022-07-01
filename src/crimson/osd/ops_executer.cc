@@ -531,8 +531,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.cmp_xattr(os, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_RMXATTR:
-    return do_write_op(
-      [&osd_op](auto& backend, auto& os, auto& txn) {
+    return do_write_op([&osd_op](auto& backend, auto& os, auto& txn) {
       return backend.rm_xattr(os, osd_op, txn);
     }, true);
   case CEPH_OSD_OP_CREATE:
