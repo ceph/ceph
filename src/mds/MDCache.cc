@@ -2007,7 +2007,7 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
     return;
 
   const auto& pi = in->get_projected_inode();
-  if (!pi->quota.is_enable() && !quota_change)
+  if (!pi->quota.is_enabled() && !quota_change)
     return;
 
   // creaete snaprealm for quota inode (quota was set before mimic)
