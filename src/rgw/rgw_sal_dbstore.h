@@ -289,6 +289,10 @@ protected:
 				   std::unique_ptr<PlacementTier>* tier) {
       return -1;
     }
+    virtual std::unique_ptr<ZoneGroup> clone() override {
+      std::unique_ptr<RGWZoneGroup>zg = std::make_unique<RGWZoneGroup>(*group.get());
+      return std::make_unique<DBZoneGroup>(store, std::move(zg));
+    }
   };
 
   class DBZone : public StoreZone {
@@ -325,6 +329,9 @@ protected:
 	delete current_period;
       }
 
+      virtual std::unique_ptr<Zone> clone() override {
+	return std::make_unique<DBZone>(store);
+      }
       virtual ZoneGroup& get_zonegroup() override;
       virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
       const RGWZoneParams& get_rgw_params();
