@@ -2817,6 +2817,11 @@ const std::string& RadosZone::get_current_period_id()
   return store->svc()->zone->get_current_period_id();
 }
 
+const std::string& RadosZone::get_tier_type()
+{
+  return store->svc()->zone->get_zone().tier_type;
+}
+
 int RadosLuaScriptManager::get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
 {
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
