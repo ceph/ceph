@@ -65,6 +65,22 @@ void dump_mempools()
   delete f;
   cout << ostr.str() << std::endl;
 }
+/*void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
+{
+  uint64_t meta_allocated = mempool::bluestore_cache_meta::allocated_bytes();
+  uint64_t onode_allocated = mempool::bluestore_cache_onode::allocated_bytes();
+  uint64_t other_allocated = mempool::bluestore_cache_other::allocated_bytes();
+
+  uint64_t meta_items = mempool::bluestore_cache_meta::allocated_items();
+  uint64_t onode_items = mempool::bluestore_cache_onode::allocated_items();
+  uint64_t other_items = mempool::bluestore_cache_other::allocated_items();
+  cout << "meta(" << meta_allocated << "/" << meta_items
+       << ") onode(" << onode_allocated << "/" << onode_items
+       << ") other(" << other_allocated << "/" << other_items
+       << ")" << std::endl;
+  *total_bytes = meta_allocated + onode_allocated + other_allocated;
+  *total_items = onode_items;
+}*/
 
 TEST(sb_info_space_efficient_map_t, basic) {
   sb_info_space_efficient_map_t sb_info;
@@ -2247,6 +2263,73 @@ TEST(shared_blob_2hash_tracker_t, basic_test)
   ASSERT_TRUE(t1.test_all_zero_range(5, 0x4500, 0x3b00));
   ASSERT_TRUE(!t1.test_all_zero_range(5, 0, 0x9000));
 }
+
+TEST(bluestore_blob_use_tracker_t, mempool_stats_test)
+{
+  using mempool::bluestore_cache_other::allocated_items;
+  using mempool::bluestore_cache_other::allocated_bytes;
+  uint64_t other_items0 = allocated_items();
+  uint64_t other_bytes0 = allocated_bytes();
+  {
+    bluestore_blob_use_tracker_t* t1 = new bluestore_blob_use_tracker_t;
+
+    t1->init(1024 * 1024, 4096);
+    ASSERT_EQ(256, allocated_items() - other_items0);  // = 1M / 4K
+    ASSERT_EQ(1024, allocated_bytes() - other_bytes0); // = 1M / 4K * 4
+
+    delete t1;
+    ASSERT_EQ(allocated_items(), other_items0);
+    ASSERT_EQ(allocated_bytes(), other_bytes0);
+  }
+  {
+    bluestore_blob_use_tracker_t* t1 = new bluestore_blob_use_tracker_t;
+
+    t1->init(1024 * 1024, 4096);
+    t1->add_tail(2048 * 1024, 4096);
+    // proper stats update after tail add
+    ASSERT_EQ(512, allocated_items() - other_items0);  // = 2M / 4K
+    ASSERT_EQ(2048, allocated_bytes() - other_bytes0); // = 2M / 4K * 4
+
+    delete t1;
+    ASSERT_EQ(allocated_items(), other_items0);
+    ASSERT_EQ(allocated_bytes(), other_bytes0);
+  }
+  {
+    bluestore_blob_use_tracker_t* t1 = new bluestore_blob_use_tracker_t;
+
+    t1->init(1024 * 1024, 4096);
+    t1->prune_tail(512 * 1024);
+    // no changes in stats after pruning
+    ASSERT_EQ(256, allocated_items() - other_items0);  // = 1M / 4K
+    ASSERT_EQ(1024, allocated_bytes() - other_bytes0); // = 1M / 4K * 4
+
+    delete t1;
+    ASSERT_EQ(allocated_items(), other_items0);
+    ASSERT_EQ(allocated_bytes(), other_bytes0);
+  }
+  {
+    bluestore_blob_use_tracker_t* t1 = new bluestore_blob_use_tracker_t;
+    bluestore_blob_use_tracker_t* t2 = new bluestore_blob_use_tracker_t;
+
+    t1->init(1024 * 1024, 4096);
+
+    // t1 keeps the same amount of entries + t2 has got half of them
+    t1->split(512 * 1024, t2);
+    ASSERT_EQ(256 + 128, allocated_items() - other_items0);  //= 1M / 4K*1.5
+    ASSERT_EQ(1024 + 512, allocated_bytes() - other_bytes0); //= 1M / 4K*4*1.5
+
+    // t1 & t2 release everything, then t2 get one less entry than t2 had had
+    // before
+    t1->split(4096, t2);
+    ASSERT_EQ(127, allocated_items() - other_items0);     // = 512K / 4K - 1
+    ASSERT_EQ(127 * 4, allocated_bytes() - other_bytes0); // = 512L / 4K * 4 - 4
+    delete t1;
+    delete t2;
+    ASSERT_EQ(allocated_items(), other_items0);
+    ASSERT_EQ(allocated_bytes(), other_bytes0);
+  }
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
