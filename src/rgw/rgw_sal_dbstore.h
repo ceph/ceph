@@ -335,6 +335,7 @@ protected:
       virtual const RGWAccessKey& get_system_key() override;
       virtual const std::string& get_realm_name() override;
       virtual const std::string& get_realm_id() override;
+      virtual const std::string& get_tier_type() override { return "fixme"; }
   };
 
   class DBLuaScriptManager : public StoreLuaScriptManager {

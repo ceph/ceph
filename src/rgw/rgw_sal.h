@@ -1495,6 +1495,8 @@ class Zone {
     virtual const std::string& get_realm_name() = 0;
     /** Get the ID of the realm containing this zone */
     virtual const std::string& get_realm_id() = 0;
+    /** Get the tier type for the zone */
+    virtual const std::string& get_tier_type() = 0;
 };
 
 /**
