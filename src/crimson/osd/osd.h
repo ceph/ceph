@@ -126,6 +126,8 @@ public:
       crimson::net::MessengerRef hb_back_msgr);
   ~OSD() final;
 
+  seastar::future<> open_meta_coll();
+  seastar::future<> open_or_create_meta_coll();
   seastar::future<> mkfs(uuid_d osd_uuid,
                          uuid_d cluster_fsid,
                          std::string osdspec_affinity);

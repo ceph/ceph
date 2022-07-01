@@ -154,6 +154,31 @@ CompatSet get_osd_initial_compat_set()
 }
 }
 
+seastar::future<> OSD::open_meta_coll()
+{
+  return store.open_collection(
+    coll_t::meta()
+  ).then([this](auto ch) {
+    meta_coll = make_unique<OSDMeta>(ch, store);
+    return seastar::now();
+  });
+}
+
+seastar::future<> OSD::open_or_create_meta_coll()
+{
+  return store.open_collection(coll_t::meta()).then([this] (auto ch) {
+    if (!ch) {
+      return store.create_new_collection(coll_t::meta()).then([this] (auto ch) {
+	meta_coll = make_unique<OSDMeta>(ch, store);
+	return seastar::now();
+      });
+    } else {
+      meta_coll = make_unique<OSDMeta>(ch, store);
+      return seastar::now();
+    }
+  });
+}
+
 seastar::future<> OSD::mkfs(
   uuid_d osd_uuid,
   uuid_d cluster_fsid,
@@ -175,6 +200,8 @@ seastar::future<> OSD::mkfs(
                        ec.value(), ec.message());
         std::exit(EXIT_FAILURE);
       }));
+  }).then([this] {
+    return open_or_create_meta_coll();
   }).then([cluster_fsid, this] {
     superblock.cluster_fsid = cluster_fsid;
     superblock.osd_fsid = store.get_fsid();
@@ -203,39 +230,33 @@ seastar::future<> OSD::mkfs(
 
 seastar::future<> OSD::_write_superblock()
 {
-  return store.open_collection(coll_t::meta()).then([this] (auto ch) {
-    if (ch) {
-      // if we already have superblock, check if it matches
-      meta_coll = make_unique<OSDMeta>(ch, store);
-      return meta_coll->load_superblock().then([this](OSDSuperblock&& sb) {
-        if (sb.cluster_fsid != superblock.cluster_fsid) {
-          logger().error("provided cluster fsid {} != superblock's {}",
-                         sb.cluster_fsid, superblock.cluster_fsid);
-          throw std::invalid_argument("mismatched fsid");
-        }
-        if (sb.whoami != superblock.whoami) {
-          logger().error("provided osd id {} != superblock's {}",
-                         sb.whoami, superblock.whoami);
-          throw std::invalid_argument("mismatched osd id");
-        }
-      });
-    } else {
+  return meta_coll->load_superblock().safe_then([this](OSDSuperblock&& sb) {
+    if (sb.cluster_fsid != superblock.cluster_fsid) {
+      logger().error("provided cluster fsid {} != superblock's {}",
+		     sb.cluster_fsid, superblock.cluster_fsid);
+      throw std::invalid_argument("mismatched fsid");
+    }
+    if (sb.whoami != superblock.whoami) {
+      logger().error("provided osd id {} != superblock's {}",
+		     sb.whoami, superblock.whoami);
+      throw std::invalid_argument("mismatched osd id");
+    }
+  }).handle_error(
+    crimson::ct_error::enoent::handle([this] {
       // meta collection does not yet, create superblock
       logger().info(
         "{} writing superblock cluster_fsid {} osd_fsid {}",
         "_write_superblock",
         superblock.cluster_fsid,
         superblock.osd_fsid);
-      return store.create_new_collection(coll_t::meta()).then([this] (auto ch) {
-        meta_coll = make_unique<OSDMeta>(ch, store);
-        ceph::os::Transaction t;
-        meta_coll->create(t);
-        meta_coll->store_superblock(t, superblock);
-        logger().debug("OSD::_write_superblock: do_transaction...");
-        return store.do_transaction(meta_coll->collection(), std::move(t));
-      });
-    }
-  });
+      ceph::os::Transaction t;
+      meta_coll->create(t);
+      meta_coll->store_superblock(t, superblock);
+      logger().debug("OSD::_write_superblock: do_transaction...");
+      return store.do_transaction(meta_coll->collection(), std::move(t));
+    }),
+    crimson::ct_error::assert_all("_write_superbock error")
+  );
 }
 
 // this `to_string` sits in the `crimson::osd` namespace, so we don't brake
@@ -323,10 +344,12 @@ seastar::future<> OSD::start()
         std::exit(EXIT_FAILURE);
       }));
   }).then([this] {
-    return store.open_collection(coll_t::meta());
-  }).then([this](auto ch) {
-    meta_coll = make_unique<OSDMeta>(ch, store);
-    return meta_coll->load_superblock();
+    return open_meta_coll();
+  }).then([this] {
+    return meta_coll->load_superblock(
+    ).handle_error(
+      crimson::ct_error::assert_all("open_meta_coll error")
+    );
   }).then([this](OSDSuperblock&& sb) {
     superblock = std::move(sb);
     return get_map(superblock.current_epoch);
