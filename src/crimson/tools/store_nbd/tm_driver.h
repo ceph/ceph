@@ -4,7 +4,6 @@
 #include "block_driver.h"
 
 #include "crimson/os/seastore/cache.h"
-#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/device.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "test/crimson/seastore/test_block.h"
