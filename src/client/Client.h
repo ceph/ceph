@@ -757,6 +757,7 @@ public:
   void flush_snaps(Inode *in);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
+  void submit_sync_caps(Inode *in, ceph_tid_t want, Context *onfinish);
   void wait_sync_caps(Inode *in, ceph_tid_t want);
   void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
@@ -1425,6 +1426,78 @@ private:
     }
   };
 
+  struct C_nonblocking_fsync_state {
+    Client *clnt;
+
+    // nonblocking_fsync parms
+    Inode *in;
+    bool syncdataonly;
+    Context *onfinish;
+
+    // were local variables
+    ceph_tid_t flush_tid;
+    InodeRef tmp_ref;
+    utime_t start;
+    MetaRequest *req;
+
+    // we need to keep track of where we are
+    int progress;
+    bool flush_wait;
+    bool flush_completed;
+    int result;
+    bool waitfor_safe;
+
+    C_nonblocking_fsync_state(Client *clnt, Inode *in, bool syncdataonly, Context *onfinish)
+      : clnt(clnt), in(in), syncdataonly(syncdataonly), onfinish(onfinish) {
+      flush_tid = 0;
+      start = ceph_clock_now();
+      progress = 0;
+      flush_wait = false;
+      flush_completed = false;
+      result = 0;
+      waitfor_safe = false;
+    }
+
+    void advance();
+
+    void complete_flush(int r) {
+      flush_completed = true;
+      result = r;
+      if (progress == 2)
+        advance();
+    }
+  };
+
+  struct C_nonblocking_fsync_state_advancer : Context {
+    Client *clnt;
+    Client::C_nonblocking_fsync_state *state;
+
+    C_nonblocking_fsync_state_advancer(Client *clnt, Client::C_nonblocking_fsync_state *state)
+      : clnt(clnt), state(state) {
+    }
+
+    void finish(int r) override {
+      clnt->client_lock.lock();
+      state->advance();
+      clnt->client_lock.unlock();
+    }
+  };
+
+  struct C_nonblocking_fsync_flush_finisher : Context {
+    Client *clnt;
+    Client::C_nonblocking_fsync_state *state;
+
+    C_nonblocking_fsync_flush_finisher(Client *clnt, Client::C_nonblocking_fsync_state *state)
+      : clnt(clnt), state(state) {
+    }
+
+    void finish(int r) override {
+      clnt->client_lock.lock();
+      state->complete_flush(r);
+      clnt->client_lock.unlock();
+    }
+  };
+
   struct C_Readahead : public Context {
     C_Readahead(Client *c, Fh *f);
     ~C_Readahead() override;
@@ -1596,6 +1669,7 @@ private:
                       int64_t offset, bool write, Context *onfinish = nullptr,
                       bufferlist *blp = nullptr);
   int _flush(Fh *fh);
+  void nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
   int _fsync(Fh *fh, bool syncdataonly);
   int _fsync(Inode *in, bool syncdataonly);
   int _sync_fs();
