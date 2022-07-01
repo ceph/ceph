@@ -146,10 +146,9 @@ void LCFilter_S3::decode_xml(XMLObj *obj)
 
   RGWXMLDecoder::decode_xml("Prefix", prefix, o);
 
-  /* parse optional flags (extension) */
-  auto flags_iter = o->find("Flag");
-  while (auto flag_xml = flags_iter.get_next()){
-    flags |= LCFilter::recognize_flags(flag_xml->get_data());
+  /* parse optional ArchiveZone flag (extension) */
+  if (o->find_first("ArchiveZone")) {
+    flags |= make_flag(LCFlagType::ArchiveZone);
   }
 
   obj_tags.clear(); // why is this needed?

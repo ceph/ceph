@@ -47,12 +47,7 @@ TEST(TestLCFilterDecoder, XMLDoc1)
 static const char* xmldoc_2 =
 R"(<Filter>
    <And>
-      <Flag>
-         ArchiveZone
-      </Flag>
-      <Flag>
-         ArchiveZone
-      </Flag>
+      <ArchiveZone />
       <Tag>
          <Key>spongebob</Key>
          <Value>squarepants</Value>
@@ -69,12 +64,12 @@ TEST(TestLCFilterDecoder, XMLDoc2)
   LCFilter_S3 filter;
   auto result = RGWXMLDecoder::decode_xml("Filter", filter, &parser, true);
   ASSERT_TRUE(result);
-  /* check repeated Tag element */
+  /* check tags */
   auto tag_map = filter.get_tags().get_tags();
   auto val1 = tag_map.find("spongebob");
   ASSERT_EQ(val1->second, "squarepants");
   /* check our flags */
-  ASSERT_EQ(filter.get_flags(), uint32_t(LCFlagType::ArchiveZone));
+  ASSERT_EQ(filter.get_flags(), LCFilter::make_flag(LCFlagType::ArchiveZone));
 }
 
 // invalid And element placement
