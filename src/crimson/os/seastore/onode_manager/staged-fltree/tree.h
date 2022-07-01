@@ -47,6 +47,15 @@ class Btree {
   Btree& operator=(const Btree&) = delete;
   Btree& operator=(Btree&&) = delete;
 
+  /**
+   * compare
+   *
+   * This defines the internal order of Btree from ghobject_t perspective.
+   */
+  static int compare(const ghobject_t &l, const ghobject_t &r) {
+    return static_cast<int>(key_hobj_t(l).compare_to(key_hobj_t(r)));
+  }
+
   eagain_ifuture<> mkfs(Transaction& t) {
     return Node::mkfs(get_context(t), *root_tracker);
   }
@@ -218,6 +227,13 @@ class Btree {
     );
   }
 
+  /**
+   * lower_bound
+   *
+   * Returns a Cursor pointing to the element that is equal to the key, or the
+   * first element larger than the key, or the end Cursor if that element
+   * doesn't exist.
+   */
   eagain_ifuture<Cursor> lower_bound(Transaction& t, const ghobject_t& obj) {
     return seastar::do_with(
       full_key_t<KeyT::HOBJ>(obj),
