@@ -583,30 +583,39 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   static constexpr uint32_t lock_duration = 30;
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
+  RGWDataSyncInfoCRHandlerPair dsi;
   rgw::sal::RadosStore* store;
   const rgw_pool& pool;
-  const uint32_t num_shards;
+  uint32_t num_shards;
 
   string sync_status_oid;
 
   string lock_name;
   string cookie;
   rgw_data_sync_status *status;
-  map<int, RGWDataChangesLogInfo> shards_info;
+
+  std::vector<sip_data_inc_pos> shards_info;
 
   RGWSyncTraceNodeRef tn;
+
+  int i;
+  RGWCoroutine *cr;
 public:
-  RGWInitDataSyncStatusCoroutine(RGWDataSyncCtx *_sc, uint32_t num_shards,
+  RGWInitDataSyncStatusCoroutine(RGWDataSyncCtx *_sc,
                                  uint64_t instance_id,
                                  RGWSyncTraceNodeRef& _tn_parent,
                                  rgw_data_sync_status *status)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env), store(sync_env->store),
+    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
+      dsi(_sc->dsi), store(sync_env->store),
       pool(sync_env->svc->zone->get_zone_params().log_pool),
-      num_shards(num_shards), status(status),
+      status(status),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "init_data_sync_status")) {
     lock_name = "sync_lock";
 
     status->sync_info.instance_id = instance_id;
+
+    num_shards = sc->dsi.inc->num_shards();
+    status->sync_info.num_shards = num_shards;
 
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
@@ -617,7 +626,7 @@ public:
     sync_status_oid = RGWDataSyncStatusManager::sync_status_oid(sc->source_zone);
 
   }
-
+  
   int operate(const DoutPrefixProvider *dpp) override {
     int ret;
     reenter(this) {
@@ -649,30 +658,70 @@ public:
 
       tn->log(10, "took lease");
 
+#define DATA_INIT_SPAWN_WINDOW 16
       /* fetch current position in logs */
-      yield {
-        auto conns = sync_env->store->ctl()->remote->zone_conns(sc->source_zone);
-        if (!conns) {
-          tn->log(0, SSTR("ERROR: connection to zone " << sc->source_zone << " does not exist!"));
-          return set_cr_error(-EIO);
-        }
-        for (uint32_t i = 0; i < num_shards; i++) {
-          spawn(new RGWReadRemoteDataLogShardInfoCR(sc, i, &shards_info[i]), true);
-        }
+      shards_info.resize(num_shards);
+      for (i = 0; i < (int)num_shards; i++) {
+        yield_spawn_window(dsi.inc->get_pos_cr(dpp, i, &shards_info[i], nullptr),
+                           DATA_INIT_SPAWN_WINDOW,
+                           [&](uint64_t stack_id, int ret) {
+                           if (ret < 0) {
+                             tn->log(0, SSTR("ERROR: failed to read remote data log shards"));
+                             return ret;
+                           }
+                           return 0;
+                         });
+
       }
-      while (collect(&ret, NULL)) {
+
+      drain_all_cb([&](uint64_t stack_id, int ret) {
         if (ret < 0) {
           tn->log(0, SSTR("ERROR: failed to read remote data log shards"));
-          return set_state(RGWCoroutine_Error);
+          return ret;
         }
-        yield;
+        return 0;
+      });
+
+      /* init remote status markers */
+      for (i = 0; i < (int)num_shards; i++) {
+
+        {
+          auto& info = shards_info[i];
+          cr = dsi.inc->update_marker_cr(dpp, i, { RGWSI_SIP_Marker::create_target_id(sync_env->svc->zone->get_zone().id, nullopt),
+                                               info.marker,
+                                               info.timestamp,
+                                               false });
+        }
+
+        yield_spawn_window(cr,
+                           DATA_INIT_SPAWN_WINDOW,
+                           [&](uint64_t stack_id, int ret) {
+                             if (ret < 0) {
+                               tn->log(0, SSTR("WARNING: failed to update remote sync status markers"));
+
+                               /* not erroring out, should we? */
+                             }
+                             return 0;
+                           });
+
       }
+
+      drain_all_cb([&](uint64_t stack_id, int ret) {
+        if (ret < 0) {
+          tn->log(0, SSTR("ERROR: failed to read remote data log shards"));
+
+          /* not erroring out, should we? */
+        }
+        return 0;
+      });
+
+      /* init local status */
       yield {
         for (uint32_t i = 0; i < num_shards; i++) {
-          RGWDataChangesLogInfo& info = shards_info[i];
+          auto& info = shards_info[i];
           auto& marker = status->sync_markers[i];
           marker.next_step_marker = info.marker;
-          marker.timestamp = info.last_update;
+          marker.timestamp = info.timestamp;
           const auto& oid = RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, i);
           using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_data_sync_marker>;
           spawn(new WriteMarkerCR(dpp, sync_env->async_rados, sync_env->svc->sysobj,
@@ -735,13 +784,7 @@ int RGWRemoteDataLog::read_log_info(const DoutPrefixProvider *dpp, rgw_datalog_i
 
 int RGWRemoteDataLog::read_source_log_shards_info(const DoutPrefixProvider *dpp, map<int, RGWDataChangesLogInfo> *shards_info)
 {
-  rgw_datalog_info log_info;
-  int ret = read_log_info(dpp, &log_info);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return run(dpp, new RGWReadRemoteDataLogInfoCR(&sc, log_info.num_shards, shards_info));
+  return run(dpp, new RGWReadRemoteDataLogInfoCR(&sc, sc.dsi.inc->num_shards(), shards_info));
 }
 
 int RGWRemoteDataLog::read_source_log_shards_next(const DoutPrefixProvider *dpp, map<int, string> shard_markers, map<int, rgw_datalog_shard_data> *result)
@@ -856,10 +899,9 @@ int RGWRemoteDataLog::init_sync_status(const DoutPrefixProvider *dpp, int num_sh
 {
   int ret = local_call(dpp, [&](RGWCoroutinesManager& crs, RGWDataSyncCtx& sc_local) {
     rgw_data_sync_status sync_status;
-    sync_status.sync_info.num_shards = num_shards;
     auto instance_id = ceph::util::generate_random_number<uint64_t>();
 
-    return crs.run(dpp, new RGWInitDataSyncStatusCoroutine(&sc_local, num_shards, instance_id, tn, &sync_status));
+    return crs.run(dpp, new RGWInitDataSyncStatusCoroutine(&sc_local, instance_id, tn, &sync_status));
   });
 
   return ret;
@@ -2252,7 +2294,7 @@ public:
         tn->log(20, SSTR("init"));
         uint64_t instance_id;
         instance_id = ceph::util::generate_random_number<uint64_t>();
-        yield call(new RGWInitDataSyncStatusCoroutine(sc, num_shards, instance_id, tn, &sync_status));
+        yield call(new RGWInitDataSyncStatusCoroutine(sc, instance_id, tn, &sync_status));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: failed to init sync, retcode=" << retcode));
           return set_cr_error(retcode);
@@ -3639,9 +3681,7 @@ class RGWReadPendingBucketShardsCoroutine : public RGWCoroutine {
   rgw_data_sync_marker* sync_marker;
   int count;
 
-  std::string next_marker;
-  vector<rgw_data_change_log_entry> log_entries;
-  bool truncated;
+  sip_data_list_result fetch_result;
 
 public:
   RGWReadPendingBucketShardsCoroutine(RGWDataSyncCtx *_sc, const int _shard_id,
@@ -3675,8 +3715,8 @@ int RGWReadPendingBucketShardsCoroutine::operate(const DoutPrefixProvider *dpp)
     marker = sync_marker->marker;
     count = 0;
     do{
-      yield call(new RGWReadRemoteDataLogShardCR(sc, shard_id, marker,
-                                                 &next_marker, &log_entries, &truncated));
+      yield call(sc->dsi.inc->fetch_cr(shard_id, marker,
+                                       &fetch_result));
 
       if (retcode == -ENOENT) {
         break;
@@ -3688,15 +3728,15 @@ int RGWReadPendingBucketShardsCoroutine::operate(const DoutPrefixProvider *dpp)
         return set_cr_error(retcode);
       }
 
-      if (log_entries.empty()) {
+      if (fetch_result.entries.empty()) {
         break;
       }
 
-      count += log_entries.size();
-      for (const auto& entry : log_entries) {
-        pending_buckets.insert(entry.entry.key);
+      count += fetch_result.entries.size();
+      for (const auto& entry : fetch_result.entries) {
+        pending_buckets.insert(entry.key);
       }
-    }while(truncated && count < max_entries);
+    } while (fetch_result.truncated && count < max_entries);
 
     return set_cr_done();
   }
