@@ -655,10 +655,10 @@ struct AWSSyncConfig {
     auto& root_conf = root_profile->conn_conf;
 
     root_profile->conn.reset(new S3RESTConn(sc->cct,
-                                           sync_env->svc->zone,
                                            id,
                                            { root_conf->endpoint },
                                            root_conf->key,
+					   sync_env->svc->zone->get_zonegroup().get_id(),
                                            root_conf->region,
                                            root_conf->host_style));
 
@@ -666,10 +666,10 @@ struct AWSSyncConfig {
       auto& c = i.second;
 
       c->conn.reset(new S3RESTConn(sc->cct,
-                                   sync_env->svc->zone,
                                    id,
                                    { c->conn_conf->endpoint },
                                    c->conn_conf->key,
+				   sync_env->svc->zone->get_zonegroup().get_id(),
                                    c->conn_conf->region,
                                    c->conn_conf->host_style));
     }

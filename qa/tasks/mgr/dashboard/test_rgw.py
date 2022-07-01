@@ -84,7 +84,7 @@ class RgwApiCredentialsTest(RgwTestCase):
         # Set the default credentials.
         self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
         self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
-        data = self._get('/api/rgw/status')
+        data = self._get('/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertIn('available', data)
         self.assertIn('message', data)
@@ -183,13 +183,13 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['tenant'], '')
 
         # List all buckets.
-        data = self._get('/api/rgw/bucket')
+        data = self._get('/api/rgw/bucket', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 1)
         self.assertIn('teuth-test-bucket', data)
 
         # List all buckets with stats.
-        data = self._get('/api/rgw/bucket?stats=true')
+        data = self._get('/api/rgw/bucket?stats=true', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 1)
         self.assertSchema(data[0], JObj(sub_elems={
@@ -203,7 +203,7 @@ class RgwBucketTest(RgwTestCase):
         }, allow_unknown=True))
 
         # List all buckets names without stats.
-        data = self._get('/api/rgw/bucket?stats=false')
+        data = self._get('/api/rgw/bucket?stats=false', version='1.1')
         self.assertStatus(200)
         self.assertEqual(data, ['teuth-test-bucket'])
 
@@ -283,7 +283,7 @@ class RgwBucketTest(RgwTestCase):
         # Delete the bucket.
         self._delete('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(204)
-        data = self._get('/api/rgw/bucket')
+        data = self._get('/api/rgw/bucket', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
 
@@ -306,7 +306,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertIsNone(data)
 
         # List all buckets.
-        data = self._get('/api/rgw/bucket')
+        data = self._get('/api/rgw/bucket', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 1)
         self.assertIn('testx/teuth-test-bucket', data)
@@ -379,7 +379,7 @@ class RgwBucketTest(RgwTestCase):
         self._delete('/api/rgw/bucket/{}'.format(
             parse.quote_plus('testx/teuth-test-bucket')))
         self.assertStatus(204)
-        data = self._get('/api/rgw/bucket')
+        data = self._get('/api/rgw/bucket', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
 
@@ -480,7 +480,7 @@ class RgwDaemonTest(RgwTestCase):
         self.assertTrue(data['rgw_metadata'])
 
     def test_status(self):
-        data = self._get('/api/rgw/status')
+        data = self._get('/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertIn('available', data)
         self.assertIn('message', data)

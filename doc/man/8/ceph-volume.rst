@@ -383,6 +383,10 @@ Optional arguments:
 
    show the help message and exit
 
+.. option:: --no-systemd
+
+   Skip checking OSD systemd unit
+
 Required arguments:
 
 .. option:: --target
@@ -406,6 +410,10 @@ Optional arguments:
 .. option:: -h, --help
 
    show the help message and exit
+
+.. option:: --no-systemd
+
+   Skip checking OSD systemd unit
 
 Required arguments:
 
@@ -438,6 +446,10 @@ Optional arguments:
 .. option:: -h, --help
 
    show the help message and exit
+
+.. option:: --no-systemd
+
+   Skip checking OSD systemd unit
 
 Required arguments:
 

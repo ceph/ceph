@@ -191,6 +191,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     stringstream ss;
     string name;
     cmd_getval(cmdmap, "key", name);
+    name = ConfFile::normalize_key_name(name);
     const Option *opt = g_conf().find_option(name);
     if (!opt) {
       opt = mon.mgrmon()->find_module_option(name);
@@ -321,11 +322,13 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       &src);
 
     if (cmd_getval(cmdmap, "key", name)) {
+      name = ConfFile::normalize_key_name(name);
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon.mgrmon()->find_module_option(name);
       }
       if (!opt) {
+        ss << "unrecognized key '" << name << "'";
 	err = -ENOENT;
 	goto reply;
       }
@@ -535,7 +538,8 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     cmd_getval(cmdmap, "name", name);
     cmd_getval(cmdmap, "value", value);
     cmd_getval(cmdmap, "force", force);
-
+    name = ConfFile::normalize_key_name(name);
+    
     if (prefix == "config set" && !force) {
       const Option *opt = g_conf().find_option(name);
       if (!opt) {

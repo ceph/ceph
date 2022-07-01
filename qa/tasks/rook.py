@@ -22,6 +22,14 @@ from tasks.cephadm import update_archive_setting
 
 log = logging.getLogger(__name__)
 
+def path_to_examples(ctx, cluster_name : str) -> str:
+    for p in ['rook/deploy/examples/', 'rook/cluster/examples/kubernetes/ceph/']:
+        try: 
+           ctx.rook[cluster_name].remote.get_file(p + 'operator.yaml')
+           return p
+        except:
+            pass 
+    assert False, 'Path to examples not found'
 
 def _kubectl(ctx, config, args, **kwargs):
     cluster_name = config.get('cluster', 'ceph')
@@ -94,8 +102,12 @@ def rook_operator(ctx, config):
     )
 
     # operator.yaml
+    log.info(os.path.abspath(os.getcwd()))
+    object_methods = [method_name for method_name in dir(ctx.rook[cluster_name].remote)
+                  if callable(getattr(ctx.rook[cluster_name].remote, method_name))]
+    log.info(object_methods)
     operator_yaml = ctx.rook[cluster_name].remote.read_file(
-        'rook/cluster/examples/kubernetes/ceph/operator.yaml'
+        (path_to_examples(ctx, cluster_name) + 'operator.yaml')
     )
     rook_image = config.get('rook_image')
     if rook_image:
@@ -111,8 +123,8 @@ def rook_operator(ctx, config):
         log.info('Deploying operator')
         _kubectl(ctx, config, [
             'create',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/crds.yaml',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/common.yaml',
+            '-f', (path_to_examples(ctx, cluster_name) + 'crds.yaml'),
+            '-f', (path_to_examples(ctx, cluster_name) + 'common.yaml'),
             '-f', 'operator.yaml',
         ])
 
@@ -165,11 +177,11 @@ def rook_operator(ctx, config):
             # fails sometimes when deleting some of the CRDs... not sure why!)
             _kubectl(ctx, config, [
                 'delete',
-                '-f', 'rook/cluster/examples/kubernetes/ceph/common.yaml',
+                '-f', (path_to_examples() + 'common.yaml'),
             ])
             _kubectl(ctx, config, [
                 'delete',
-                '-f', 'rook/cluster/examples/kubernetes/ceph/crds.yaml',
+                '-f', (path_to_examples() + 'crds.yaml'),
             ])
         ctx.rook[cluster_name].remote.run(args=['rm', '-rf', 'rook', 'operator.yaml'])
         if op_job:
@@ -318,18 +330,18 @@ def rook_cluster(ctx, config):
     ctx.rook[cluster_name].num_osds = num_devs
 
     # config
-    config = build_initial_config(ctx, config)
-    config_fp = BytesIO()
-    config.write(config_fp)
-    log.info(f'Config:\n{config_fp.getvalue()}')
-    _kubectl(ctx, config, ['create', '-f', '-'], stdin=yaml.dump({
+    ceph_conf = build_initial_config(ctx, config)
+    ceph_conf_fp = BytesIO()
+    ceph_conf.write(ceph_conf_fp)
+    log.info(f'Config:\n{ceph_conf_fp.getvalue()}')
+    _kubectl(ctx, ceph_conf, ['create', '-f', '-'], stdin=yaml.dump({
         'apiVersion': 'v1',
         'kind': 'ConfigMap',
         'metadata': {
             'name': 'rook-config-override',
             'namespace': 'rook-ceph'},
         'data': {
-            'config': config_fp.getvalue()
+            'config': ceph_conf_fp.getvalue()
         }
     }))
 
@@ -354,6 +366,30 @@ def rook_cluster(ctx, config):
             'mon': {
                 'count': num_hosts,
                 'allowMultiplePerNode': True,
+            },
+            'storage': {
+                'storageClassDeviceSets': [
+                    {
+                        'name': 'scratch',
+                        'count': num_devs,
+                        'portable': False,
+                        'volumeClaimTemplates': [
+                            {
+                                'metadata': {'name': 'data'},
+                                'spec': {
+                                    'resources': {
+                                        'requests': {
+                                            'storage': '10Gi'  # <= (lte) the actual PV size
+                                        }
+                                    },
+                                    'storageClassName': 'scratch',
+                                    'volumeMode': 'Block',
+                                    'accessModes': ['ReadWriteOnce'],
+                                },
+                            },
+                        ],
+                    }
+                ],
             },
         }
     }
@@ -409,7 +445,7 @@ def rook_toolbox(ctx, config):
     try:
         _kubectl(ctx, config, [
             'create',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/toolbox.yaml',
+            '-f', (path_to_examples(ctx, cluster_name) + 'toolbox.yaml'),
         ])
 
         log.info('Waiting for tools container to start')
@@ -419,6 +455,11 @@ def rook_toolbox(ctx, config):
                 p = _kubectl(
                     ctx, config,
                     ['-n', 'rook-ceph', 'get', 'pods', '-l', 'app=rook-ceph-tools'],
+                    stdout=BytesIO(),
+                )
+                _kubectl(
+                    ctx, config,
+                    ['-n', 'rook-ceph', 'get', 'pods'],
                     stdout=BytesIO(),
                 )
                 for line in p.stdout.getvalue().decode('utf-8').strip().splitlines():
@@ -436,41 +477,8 @@ def rook_toolbox(ctx, config):
     finally:
         _kubectl(ctx, config, [
             'delete',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/toolbox.yaml',
+            '-f', (path_to_examples(ctx, cluster_name) + 'toolbox.yaml'),
         ], check_status=False)
-
-
-@contextlib.contextmanager
-def wait_for_orch(ctx, config):
-    log.info('Waiting for mgr/rook orchestrator to be available')
-    with safe_while(sleep=10, tries=90, action="check orch status") as proceed:
-        while proceed():
-            p = _shell(ctx, config, ['ceph', 'orch', 'status', '-f', 'json'],
-                       stdout=BytesIO(),
-                       check_status=False)
-            if p.exitstatus == 0:
-                r = json.loads(p.stdout.getvalue().decode('utf-8'))
-                if r.get('available') and r.get('backend') == 'rook':
-                    log.info(' mgr/rook orchestrator is active')
-                    break
-
-    yield
-
-
-@contextlib.contextmanager
-def rook_post_config(ctx, config):
-    try:
-        _shell(ctx, config, ['ceph', 'config', 'set', 'mgr', 'mgr/rook/storage_class',
-                             'scratch'])
-        _shell(ctx, config, ['ceph', 'orch', 'apply', 'osd', '--all-available-devices'])
-        yield
-
-    except Exception as e:
-        log.exception(e)
-        raise
-
-    finally:
-        pass
 
 
 @contextlib.contextmanager
@@ -492,7 +500,6 @@ def wait_for_osds(ctx, config):
                 log.info(f' have {have}/{want} OSDs')
 
     yield
-
 
 @contextlib.contextmanager
 def ceph_config_keyring(ctx, config):
@@ -624,8 +631,6 @@ def task(ctx, config):
             lambda: ceph_log(ctx, config),
             lambda: rook_cluster(ctx, config),
             lambda: rook_toolbox(ctx, config),
-            lambda: wait_for_orch(ctx, config),
-            lambda: rook_post_config(ctx, config),
             lambda: wait_for_osds(ctx, config),
             lambda: ceph_config_keyring(ctx, config),
             lambda: ceph_clients(ctx, config),

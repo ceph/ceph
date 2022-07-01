@@ -1,13 +1,19 @@
-<div class="modal-header">
-  <h4 class="modal-title float-left">
-    <ng-content select=".modal-title"></ng-content>
-  </h4>
-  <button type="button"
-          class="close float-right"
-          aria-label="Close"
-          (click)="close()">
-    <span aria-hidden="true">&times;</span>
-  </button>
-</div>
+<div [ngClass]="pageURL ? 'modal' : ''">
+  <div [ngClass]="pageURL ? 'modal-dialog' : ''">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title float-left">
+          <ng-content select=".modal-title"></ng-content>
+        </h4>
+        <button type="button"
+                class="close float-right"
+                aria-label="Close"
+                (click)="close()">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
 
-<ng-content select=".modal-content"></ng-content>
+      <ng-content select=".modal-content"></ng-content>
+    </div>
+  </div>
+</div>

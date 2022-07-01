@@ -10,6 +10,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class _MatchInvalid(Exception):
+    pass
+
+
 # pylint: disable=too-few-public-methods
 class Matcher(object):
     """ The base class to all Matchers
@@ -70,7 +74,7 @@ class Matcher(object):
         if disk_value:
             return disk_value[0]
         else:
-            raise Exception("No value found for {} or {}".format(
+            raise _MatchInvalid("No value found for {} or {}".format(
                 self.key, self.fallback_key))
 
     def compare(self, disk):
@@ -256,7 +260,7 @@ class SizeMatcher(Matcher):
         """
         suffix = suffix.upper()
         if suffix not in cls.supported_suffixes:
-            raise ValueError("Unit '{}' not supported".format(suffix))
+            raise _MatchInvalid("Unit '{}' not supported".format(suffix))
         return dict(zip(
             cls.SUFFIXES[1],
             cls.SUFFIXES[0],
@@ -327,7 +331,7 @@ class SizeMatcher(Matcher):
             self.exact = self._get_k_v(exact.group())
 
         if not self.low and not self.high and not self.exact:
-            raise Exception("Couldn't parse {}".format(self.value))
+            raise _MatchInvalid("Couldn't parse {}".format(self.value))
 
     @staticmethod
     # pylint: disable=inconsistent-return-statements
@@ -404,5 +408,5 @@ class SizeMatcher(Matcher):
             logger.debug("Disk didn't match for 'exact' filter")
         else:
             logger.debug("Neither high, low, nor exact was given")
-            raise Exception("No filters applied")
+            raise _MatchInvalid("No filters applied")
         return False

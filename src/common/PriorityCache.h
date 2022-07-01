@@ -100,6 +100,18 @@ namespace PriorityCache {
 
     // Get the name of this cache.
     virtual std::string get_cache_name() const = 0;
+
+    // Rotate the bins
+    virtual void shift_bins() = 0;
+
+    // Import user bins (from PRI1 to LAST-1)
+    virtual void import_bins(const std::vector<uint64_t> &bins) = 0;
+
+    // Set bins (PRI0 and LAST should be ignored)
+    virtual void set_bins(PriorityCache::Priority pri, uint64_t end_bin) = 0;
+
+    // Get bins
+    virtual uint64_t get_bins(PriorityCache::Priority pri) const = 0;
   };
 
   class Manager {
@@ -140,7 +152,7 @@ namespace PriorityCache {
     void clear();
     void tune_memory();
     void balance();
-
+    void shift_bins();
   private:
     void balance_priority(int64_t *mem_avail, Priority pri);
   };

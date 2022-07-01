@@ -1,33 +1,53 @@
-# dbstore
-DBStore for Rados Gateway (RGW)
+# DBStore
+Standalone Rados Gateway (RGW) on DBStore (Experimental)
 
-## Pre-install
-fmt(-devel) and gtest(-devel) packages need to be installed
+
+## CMake Option
+Add below cmake option (enabled by default)
+
+    -DWITH_RADOSGW_DBSTORE=ON 
+
 
 ## Build
-Add below options to cmake - 
--DWITH_RADOSGW_DBSTORE=ON -DWITH_RADOSGW_LUA_PACKAGES=OFF
 
-cd build
+    cd build
+    ninja [vstart]
 
-ninja src/rgw/store/dbstore/install
 
-## Gtests
-To execute Gtest cases, from build directory
+## Running Test cluster
+Edit ceph.conf to add below option
 
-./bin/dbstore-tests
-(default logfile: rgw_dbstore_tests.log, loglevel: 20)
+    [client]
+        rgw backend store = dbstore
 
-## Execute Sample test file
+Start vstart cluster
 
-./bin/dbstore-bin
-(default logfile: rgw_dbstore_bin.log, loglevel: 20)
+    [..] RGW=1 ../src/vstart.sh -o rgw_backend_store=dbstore -n -d
 
-## Logging
-[To provide custom log file and change log level]
+The above vstart command brings up RGW server on dbstore and creates few default users (eg., testid) to be used for s3 operations.
 
-./dbstore-tests log_file log_level
-./dbstore-bin log_file log_level
+`radosgw-admin` can be used to create and remove other users.
 
-When run as RADOSGW process, logfile and loglevel are set to the
-ones provided to the radosgw cmd args.
+
+By default, dbstore creates .db file *'/var/lib/ceph/radosgw/dbstore-default_ns.db'* to store the data. This can be configured using below options in ceph.conf
+
+    [client]
+        dbstore db dir = <path for the directory for storing the db backend store data>
+        dbstore db name prefix = <prefix to the file names created by db backend store>
+
+
+## DBStore Unit Tests
+To execute DBStore unit test cases (using Gtest framework), from build directory
+
+    ninja unittest_dbstore_tests
+    ./bin/unittest_dbstore_tests [logfile] [loglevel]
+    (default logfile: rgw_dbstore_tests.log, loglevel: 20)
+    ninja unittest_dbstore_mgr_tests
+    ./bin/unittest_dbstore_mgr_tests
+
+To execute Sample test file
+
+    ninja src/rgw/store/dbstore/install
+    ./bin/dbstore-bin [logfile] [loglevel]
+    (default logfile: rgw_dbstore_bin.log, loglevel: 20)
+

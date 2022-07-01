@@ -513,6 +513,15 @@ describe('TableComponent', () => {
       equalStorageConfig();
     });
 
+    it('should toggle on off columns', () => {
+      for (const column of component.columns) {
+        component.toggleColumn(column);
+        expect(column.isHidden).toBeTruthy();
+        component.toggleColumn(column);
+        expect(column.isHidden).toBeFalsy();
+      }
+    });
+
     afterEach(() => {
       clearLocalStorage();
     });
@@ -559,12 +568,30 @@ describe('TableComponent', () => {
       expect(executingElement.nativeElement.textContent.trim()).toBe(`(${state})`);
     };
 
-    it.only('should display executing template', () => {
+    it('should display executing template', () => {
       testExecutingTemplate();
     });
 
-    it.only('should display executing template with custom classes', () => {
+    it('should display executing template with custom classes', () => {
       testExecutingTemplate({ valueClass: 'a b', executingClass: 'c d' });
+    });
+  });
+
+  describe('test unselect functionality of rows', () => {
+    beforeEach(() => {
+      component.autoReload = -1;
+      component.selectionType = 'single';
+      fixture.detectChanges();
+    });
+
+    it('should unselect row on clicking on it again', () => {
+      const rowCellDebugElement = fixture.debugElement.query(By.css('datatable-body-cell'));
+
+      rowCellDebugElement.triggerEventHandler('click', null);
+      expect(component.selection.selected.length).toEqual(1);
+
+      rowCellDebugElement.triggerEventHandler('click', null);
+      expect(component.selection.selected.length).toEqual(0);
     });
   });
 

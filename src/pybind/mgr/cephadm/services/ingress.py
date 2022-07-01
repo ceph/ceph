@@ -129,7 +129,7 @@ class IngressService(CephService):
                 'servers': servers,
                 'user': spec.monitor_user or 'admin',
                 'password': password,
-                'ip': daemon_spec.ip or '*',
+                'ip': str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '*',
                 'frontend_port': daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port,
                 'monitor_port': daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
             }

@@ -1,0 +1,111 @@
+tasks:
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - radosgw-admin realm create --rgw-realm=r --default
+      - radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
+      - radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=z --master --default
+      - radosgw-admin period update --rgw-realm=r --commit
+      - ceph orch apply rgw r z --placement=2 --port=8000
+      - sleep 180
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim false --force
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false --force
+      - ceph config set global log_to_journald false --force
+      # get some good info on the state of things pre-upgrade. Useful for debugging
+      - ceph orch ps
+      - ceph versions
+      - ceph -s
+      - ceph orch ls
+      # doing staggered upgrade requires mgr daemons being on a version that contains the staggered upgrade code
+      # until there is a stable version that contains it, we can test by manually upgrading a mgr daemon
+      - ceph config set mgr container_image quay.ceph.io/ceph-ci/ceph:$sha1
+      - ceph orch daemon redeploy "mgr.$(ceph mgr dump -f json | jq .standbys | jq .[] | jq -r .name)"
+      - ceph orch ps --refresh
+      - sleep 180
+      # gather more possible debugging info
+      - ceph orch ps
+      - ceph versions
+      - ceph -s
+      # check that there are two different versions found for mgr daemon (which implies we upgraded one)
+      - ceph versions | jq -e '.mgr | length == 2'
+      - ceph mgr fail
+      - sleep 180
+      # now try upgrading the other mgr
+      # we should now have access to --image flag for the daemon redeploy command
+      - ceph orch daemon redeploy "mgr.$(ceph mgr dump -f json | jq .standbys | jq .[] | jq -r .name)" --image quay.ceph.io/ceph-ci/ceph:$sha1
+      - ceph orch ps --refresh
+      - sleep 180
+      # gather more possible debugging info
+      - ceph orch ps
+      - ceph versions
+      - ceph -s
+      - ceph mgr fail
+      - sleep 180
+      # gather more debugging info
+      - ceph orch ps
+      - ceph versions
+      - ceph -s
+      # now that both mgrs should have been redeployed with the new version, we should be back on only 1 version for the mgrs
+      - ceph versions | jq -e '.mgr | length == 1'
+      - ceph mgr fail
+      - sleep 180
+      # debugging info
+      - ceph orch ps
+      - ceph versions
+      # to make sure mgr daemons upgrade is fully completed, including being deployed by a mgr on new new version
+      # also serves as an early failure if manually upgrading the mgrs failed as --daemon-types won't be recognized
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mgr
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      # verify only one version found for mgrs and that their version hash matches what we are upgrading to
+      - ceph versions | jq -e '.mgr | length == 1'
+      - ceph versions | jq -e '.mgr | keys' | grep $sha1
+      # verify overall we still se two versions, basically to make sure --daemon-types wans't ignored and all daemons upgraded
+      - ceph versions | jq -e '.overall | length == 2'
+      # check that exactly two daemons have been upgraded to the new image (our 2 mgr daemons)
+      - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 2'
+      # upgrade only the mons on one of the two hosts
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon --hosts $(ceph orch ps | grep mgr.x | awk '{print $2}')
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      - ceph orch ps
+      # verify tow different version seen for mons
+      - ceph versions | jq -e '.mon | length == 2'
+      # upgrade mons on the other hosts
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mon --hosts $(ceph orch ps | grep mgr.y | awk '{print $2}')
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      - ceph orch ps
+      # verify all mons now on same version and version hash matches what we are upgrading to
+      - ceph versions | jq -e '.mon | length == 1'
+      - ceph versions | jq -e '.mon | keys' | grep $sha1
+      # verify exactly 5 daemons are now upgraded (2 mgrs, 3 mons)
+      - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 5'
+      # upgrade exactly 2 osd daemons
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types osd --limit 2
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      - ceph orch ps
+      # verify two different versions now seen for osds
+      - ceph versions | jq -e '.osd | length == 2'
+      # verify exactly 7 daemons have been upgraded (2 mgrs, 3 mons, 2 osds)
+      - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 7'
+      # upgrade one more osd
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types crash,osd --limit 1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      - ceph orch ps
+      - ceph versions | jq -e '.osd | length == 2'
+      # verify now 8 daemons have been upgraded
+      - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 8'
+      # upgrade the rest of the osds
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types crash,osd
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      - ceph orch ps
+      # verify all osds are now on same version and version hash matches what we are upgrading to
+      - ceph versions | jq -e '.osd | length == 1'
+      - ceph versions | jq -e '.osd | keys' | grep $sha1
+      # upgrade the rgw daemons using --services
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --services rgw.r.z
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      - ceph orch ps
+      # verify all rgw daemons on same version and version hash matches what we are upgrading to
+      - ceph versions | jq -e '.rgw | length == 1'
+      - ceph versions | jq -e '.rgw | keys' | grep $sha1
+      # run upgrade one more time with no filter parameters to make sure anything left gets upgraded
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1

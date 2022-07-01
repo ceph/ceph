@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
-import { mergeMap, retryWhen, take, tap } from 'rxjs/operators';
+import { mergeMap, take, tap } from 'rxjs/operators';
 
 import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
 import { cdEncode } from '~/app/shared/decorators/cd-encode';
@@ -25,7 +25,10 @@ export class RgwDaemonService {
     return this.http.get<RgwDaemon[]>(this.url).pipe(
       tap((daemons: RgwDaemon[]) => {
         this.daemons.next(daemons);
-        if (_.isEmpty(this.selectedDaemon.getValue())) {
+        const selectedDaemon = this.selectedDaemon.getValue();
+        // Set or re-select the default daemon if the current one is not
+        // in the list anymore.
+        if (_.isEmpty(selectedDaemon) || undefined === _.find(daemons, { id: selectedDaemon.id })) {
           this.selectDefaultDaemon(daemons);
         }
       })
@@ -59,16 +62,14 @@ export class RgwDaemonService {
   request(next: (params: HttpParams) => Observable<any>) {
     return this.selectedDaemon.pipe(
       mergeMap((daemon: RgwDaemon) =>
-        // If there is no selected daemon, retrieve daemon list (default daemon will be selected)
-        // and try again if daemon list is not empty.
+        // If there is no selected daemon, retrieve daemon list so default daemon will be selected.
         _.isEmpty(daemon)
-          ? this.list().pipe(mergeMap((daemons) => throwError(!_.isEmpty(daemons))))
+          ? this.list().pipe(
+              mergeMap((daemons) =>
+                _.isEmpty(daemons) ? throwError('No RGW daemons found!') : this.selectedDaemon$
+              )
+            )
           : of(daemon)
-      ),
-      retryWhen((error) =>
-        error.pipe(
-          mergeMap((hasToRetry) => (hasToRetry ? error : throwError('No RGW daemons found!')))
-        )
       ),
       take(1),
       mergeMap((daemon: RgwDaemon) => {

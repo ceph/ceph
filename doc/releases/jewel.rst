@@ -395,7 +395,7 @@ Snap Trimmer Improvements
 This release greatly improves control and throttling of the snap trimmer. It
 introduces the "osd max trimming pgs" option (defaulting to 2), which limits
 how many PGs on an OSD can be trimming snapshots at a time. And it restores
-the safe use of the "osd snap trim sleep" option, wihch defaults to 0 but
+the safe use of the "osd snap trim sleep" option, which defaults to 0 but
 otherwise adds the given number of seconds in delay between every dispatch
 of trim operations to the underlying system.
 
@@ -2006,7 +2006,7 @@ Notable Changes since Infernalis
 * doc: little improvements for troubleshooting scrub issues (`pr#6827 <http://github.com/ceph/ceph/pull/6827>`_, Mykola Golub)
 * doc: man page updates (Kefu Chai)
 * doc: mds data structure docs (Yan, Zheng)
-* doc: misc updates (Fracois Lafont, Ken Dreyer, Kefu Chai, Owen Synge, Gael Fenet-Garde, Loic Dachary, Yannick Atchy-Dalama, Jiaying Ren, Kevin Caradant, Robert Maxime, Nicolas Yong, Germain Chipaux, Arthur Gorjux, Gabriel Sentucq, Clement Lebrun, Jean-Remi Deveaux, Clair Massot, Robin Tang, Thomas Laumondais, Jordan Dorne, Yuan Zhou, Valentin Thomas, Pierre Chaumont, Benjamin Troquereau, Benjamin Sesia, Vikhyat Umrao, Nilamdyuti Goswami, Vartika Rai, Florian Haas, Loic Dachary, Simon Guinot, Andy Allan, Alistair Israel, Ken Dreyer, Robin Rehu, Lee Revell, Florian Marsylle, Thomas Johnson, Bosse Klykken, Travis Rhoden, Ian Kelling)
+* doc: misc updates (Francois Lafont, Ken Dreyer, Kefu Chai, Owen Synge, Gael Fenet-Garde, Loic Dachary, Yannick Atchy-Dalama, Jiaying Ren, Kevin Caradant, Robert Maxime, Nicolas Yong, Germain Chipaux, Arthur Gorjux, Gabriel Sentucq, Clement Lebrun, Jean-Remi Deveaux, Clair Massot, Robin Tang, Thomas Laumondais, Jordan Dorne, Yuan Zhou, Valentin Thomas, Pierre Chaumont, Benjamin Troquereau, Benjamin Sesia, Vikhyat Umrao, Nilamdyuti Goswami, Vartika Rai, Florian Haas, Loic Dachary, Simon Guinot, Andy Allan, Alistair Israel, Ken Dreyer, Robin Rehu, Lee Revell, Florian Marsylle, Thomas Johnson, Bosse Klykken, Travis Rhoden, Ian Kelling)
 * doc: Modified a note section in rbd-snapshot doc. (`pr#6908 <http://github.com/ceph/ceph/pull/6908>`_, Nilamdyuti Goswami)
 * doc: note that cephfs auth stuff is new in jewel (`pr#6858 <http://github.com/ceph/ceph/pull/6858>`_, John Spray)
 * doc: osd-config Add Configuration Options for op queue. (`pr#7837 <http://github.com/ceph/ceph/pull/7837>`_, Robert LeBlanc)

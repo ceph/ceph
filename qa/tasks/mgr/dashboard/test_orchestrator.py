@@ -8,7 +8,7 @@ class OrchestratorControllerTest(DashboardTestCase):
 
     AUTH_ROLES = ['cluster-manager']
 
-    URL_STATUS = '/api/orchestrator/status'
+    URL_STATUS = '/ui-api/orchestrator/status'
 
     ORCHESTRATOR = True
 

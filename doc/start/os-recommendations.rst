@@ -38,112 +38,27 @@ Platforms
 
 The charts below show how Ceph's requirements map onto various Linux
 platforms.  Generally speaking, there is very little dependence on
-specific distributions aside from the kernel and system initialization
+specific distributions outside of the kernel and system initialization
 package (i.e., sysvinit, systemd).
 
-Octopus (15.2.z)
------------------
++--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
+| Release Name | Tag    | CentOS                 | Ubuntu                         | OpenSUSE :sup:`C` | Debian :sup:`C` |
++==============+========+========================+================================+===================+=================+
+| Quincy       | 17.2.z | 8 :sup:`A`             | 20.04 :sup:`A`                 | 15.3              | 11              |
++--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
+| Pacific      | 16.2.z | 8 :sup:`A`             | 18.04 :sup:`C`, 20.04 :sup:`A` | 15.2              | 10, 11          |
++--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
+| Octopus      | 15.2.z | 7 :sup:`B` 8 :sup:`A`  | 18.04 :sup:`C`, 20.04 :sup:`A` | 15.2              | 10              |
++--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
 
-+----------+----------+--------------------+--------------+---------+------------+
-| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
-+==========+==========+====================+==============+=========+============+
-| CentOS   | 8        | N/A                | linux-4.18   |         | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| CentOS   | 7        | N/A                | linux-3.10.0 | 4, 5    | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 10       | Buster             | linux-4.19   |         | B          |
-+----------+----------+--------------------+--------------+---------+------------+
-| RHEL     | 8        | Ootpa              | linux-4.18   |         | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 18.04    | Bionic Beaver      | linux-4.15   | 4       | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| openSUSE | 15.2     | Leap               | linux-5.3    | 6       |            |
-+----------+----------+--------------------+--------------+---------+------------+
-| openSUSE |          | Tumbleweed         |              |         |            |
-+----------+----------+--------------------+--------------+---------+------------+
+- **A**: Ceph provides packages and has done comprehensive tests on the software in them.
+- **B**: Ceph provides packages and has done basic tests on the software in them.
+- **C**: Ceph provides packages only. No tests have been done on these releases.
 
-
-Nautilus (14.2.z)
------------------
-
-+----------+----------+--------------------+--------------+---------+------------+
-| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
-+==========+==========+====================+==============+=========+============+
-| CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 8.0      | Jessie             | linux-3.16.0 | 1, 2    | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 9.0      | Stretch            | linux-4.9    | 1, 2    | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 16.04    | Xenial Xerus       | linux-4.4.0  | 3       | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 18.04    | Bionic Beaver      | linux-4.15   | 3       | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| openSUSE | 15.1     | Leap               | linux-4.12   | 6       |            |
-+----------+----------+--------------------+--------------+---------+------------+
-
-Luminous (12.2.z)
------------------
-
-+----------+----------+--------------------+--------------+---------+------------+
-| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
-+==========+==========+====================+==============+=========+============+
-| CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 8.0      | Jessie             | linux-3.16.0 | 1, 2    | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 9.0      | Stretch            | linux-4.9    | 1, 2    | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| Fedora   | 22       | N/A                | linux-3.14.0 |         | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 16.04    | Xenial Xerus       | linux-4.4.0  | 3       | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-
-Notes
------
-
-- **1**: The default kernel has an older version of ``Btrfs`` that we do not
-  recommend for ``ceph-osd`` storage nodes.  We recommend using ``BlueStore``
-  starting with Luminous, and ``XFS`` for previous releases with ``Filestore``.
-
-- **2**: The default kernel has an old Ceph client that we do not recommend
-  for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
-  recommended kernel.
-
-- **3**: The default kernel regularly fails in QA when the ``Btrfs``
-  file system is used.  We recommend using ``BlueStore`` starting from
-  Luminous, and ``XFS`` for previous releases with ``Filestore``.
-
-- **4**: ``btrfs`` is no longer tested on this release. We recommend
-  using ``bluestore``.
-
-- **5**: Some additional features related to dashboard are not available.
-
-- **6**: Packages are built regularly, but not distributed by upstream Ceph.
-
-Testing
--------
-
-- **B**: We build release packages for this platform. For some of these
-  platforms, we may also continuously build all Ceph branches and perform
-  basic unit tests.
-
-- **I**: We do basic installation and functionality tests of releases on this
-  platform.
-
-- **C**: We run a comprehensive functional, regression, and stress test suite
-  on this platform on a continuous basis. This includes development branches,
-  pre-release, and released code.
+.. note::
+   **For Centos 7 Users** 
+   
+   ``Btrfs`` is no longer tested on Centos 7 in the Octopus release. We recommend using ``bluestore`` instead.
 
 .. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
 

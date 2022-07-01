@@ -10,7 +10,7 @@
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
-
+#include "rgw_ratelimit.h"
 #include "include/ceph_assert.h"
 
 #include "common/WorkQueue.h"
@@ -30,14 +30,20 @@ extern void signal_shutdown();
 namespace rgw::dmclock {
   class Scheduler;
 }
+namespace rgw::lua {
+  class Background;
+}
 
 struct RGWProcessEnv {
   rgw::sal::Store* store;
   RGWREST *rest;
-  OpsLogSocket *olog;
+  OpsLogSink *olog;
   int port;
   std::string uri_prefix;
   std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
+  //maybe there is a better place to store the rate limit data structure
+  ActiveRateLimiter* ratelimiting;
+  rgw::lua::Background* lua_background;
 };
 
 class RGWFrontendConfig;
@@ -49,13 +55,14 @@ protected:
   CephContext *cct;
   rgw::sal::Store* store;
   rgw_auth_registry_ptr_t auth_registry;
-  OpsLogSocket* olog;
+  OpsLogSink* olog;
   ThreadPool m_tp;
   Throttle req_throttle;
   RGWREST* rest;
   RGWFrontendConfig* conf;
   int sock_fd;
   std::string uri_prefix;
+  rgw::lua::Background* lua_background;
 
   struct RGWWQ : public DoutPrefixProvider, public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess* process;
@@ -107,6 +114,7 @@ public:
       conf(conf),
       sock_fd(-1),
       uri_prefix(pe->uri_prefix),
+      lua_background(pe->lua_background),
       req_wq(this,
 	     ceph::make_timespan(g_conf()->rgw_op_thread_timeout),
 	     ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
@@ -169,18 +177,21 @@ extern int process_request(rgw::sal::Store* store,
                            const std::string& frontend_prefix,
                            const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
-                           OpsLogSocket* olog,
+                           OpsLogSink* olog,
                            optional_yield y,
                            rgw::dmclock::Scheduler *scheduler,
                            std::string* user,
                            ceph::coarse_real_clock::duration* latency,
-                           int* http_ret = nullptr);
+                           std::shared_ptr<RateLimiter> ratelimit,
+                           int* http_ret = nullptr,
+                           rgw::lua::Background* lua_background = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWOp*& op,
                                      RGWRequest* req,
                                      req_state* s,
-				     optional_yield y,
+				                             optional_yield y,
+                                     rgw::sal::Store* store,
                                      bool skip_retarget = false);
 
 #if defined(def_dout_subsys)

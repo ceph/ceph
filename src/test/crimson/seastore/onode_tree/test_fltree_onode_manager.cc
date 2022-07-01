@@ -26,20 +26,22 @@ namespace {
 struct onode_item_t {
   uint32_t size;
   uint64_t id;
+  uint64_t block_size;
   uint32_t cnt_modify = 0;
 
   void initialize(Transaction& t, Onode& value) const {
     auto& layout = value.get_mutable_layout(t);
     layout.size = size;
-    layout.omap_root.update(omap_root_t(id, cnt_modify, value.get_hint()));
+    layout.omap_root.update(omap_root_t(id, cnt_modify,
+      value.get_metadata_hint(block_size)));
     validate(value);
   }
 
   void validate(Onode& value) const {
     auto& layout = value.get_layout();
     ceph_assert(laddr_t(layout.size) == laddr_t{size});
-    ceph_assert(layout.omap_root.get(value.get_hint()).addr == id);
-    ceph_assert(layout.omap_root.get(value.get_hint()).depth == cnt_modify);
+    ceph_assert(layout.omap_root.get(value.get_metadata_hint(block_size)).addr == id);
+    ceph_assert(layout.omap_root.get(value.get_metadata_hint(block_size)).depth == cnt_modify);
   }
 
   void modify(Transaction& t, Onode& value) {
@@ -48,9 +50,9 @@ struct onode_item_t {
     initialize(t, value);
   }
 
-  static onode_item_t create(std::size_t size, std::size_t id) {
+  static onode_item_t create(std::size_t size, std::size_t id, uint64_t block_size) {
     ceph_assert(size <= std::numeric_limits<uint32_t>::max());
-    return {(uint32_t)size, id};
+    return {(uint32_t)size, id, block_size};
   }
 };
 
@@ -79,21 +81,24 @@ struct fltree_onode_manager_test_t
     TMTestState::_destroy();
   }
 
-  virtual seastar::future<> _mkfs() final {
+  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() final {
     return TMTestState::_mkfs(
-    ).then([this] {
+    ).safe_then([this] {
+      tm->add_device(segment_manager.get(), true);
       return tm->mount(
       ).safe_then([this] {
-	return seastar::do_with(
-	  create_mutate_transaction(),
-	  [this](auto &ref_t) {
-	    return with_trans_intr(*ref_t, [&](auto &t) {
-	      return manager->mkfs(t
-	      ).si_then([this, &t] {
-	        return submit_transaction_fut2(t);
+	return repeat_eagain([this] {
+	  return seastar::do_with(
+	    create_mutate_transaction(),
+	    [this](auto &ref_t) {
+	      return with_trans_intr(*ref_t, [&](auto &t) {
+		return manager->mkfs(t
+		).si_then([this, &t] {
+		  return submit_transaction_fut2(t);
+		});
 	      });
-	    });
 	  });
+	});
       }).safe_then([this] {
 	return tm->close();
       }).handle_error(
@@ -107,7 +112,7 @@ struct fltree_onode_manager_test_t
     auto t = create_mutate_transaction();
     std::invoke(f, *t);
     submit_transaction(std::move(t));
-    segment_cleaner->run_until_halt().get0();
+    async_cleaner->run_until_halt().get0();
   }
 
   template <typename F>
@@ -237,7 +242,8 @@ struct fltree_onode_manager_test_t
 TEST_F(fltree_onode_manager_test_t, 1_single)
 {
   run_async([this] {
-    auto pool = KVPool<onode_item_t>::create_range({0, 1}, {128, 256});
+    uint64_t block_size = tm->get_block_size();
+    auto pool = KVPool<onode_item_t>::create_range({0, 1}, {128, 256}, block_size);
     auto iter = pool.begin();
     with_onode_write(iter, [](auto& t, auto& onode, auto& item) {
       item.initialize(t, onode);
@@ -264,8 +270,9 @@ TEST_F(fltree_onode_manager_test_t, 1_single)
 TEST_F(fltree_onode_manager_test_t, 2_synthetic)
 {
   run_async([this] {
+    uint64_t block_size = tm->get_block_size();
     auto pool = KVPool<onode_item_t>::create_range(
-        {0, 100}, {32, 64, 128, 256, 512});
+        {0, 100}, {32, 64, 128, 256, 512}, block_size);
     auto start = pool.begin();
     auto end = pool.end();
     with_onodes_write(start, end,

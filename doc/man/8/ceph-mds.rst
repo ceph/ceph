@@ -65,7 +65,12 @@ Options
 
 .. option:: --id/-i ID
 
-   Set ID portion of the MDS name.
+   Set ID portion of the MDS name. The ID should not start with a numeric digit.
+
+.. option:: --name/-n TYPE.ID
+
+   Set the MDS name of the format TYPE.ID. The TYPE is obviously 'mds'.
+   The ID should not start with a numeric digit.
 
 Availability
 ============

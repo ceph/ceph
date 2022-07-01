@@ -24,7 +24,7 @@ class Module(MgrModule):
 
     def get_rate(self, daemon_type: str, daemon_name: str, stat: str) -> int:
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
-        if data and len(data) > 1 and data[-1][0] != data[-2][0]:
+        if data and len(data) > 1 and (int(data[-1][0] - data[-2][0]) != 0):
             return (data[-1][1] - data[-2][1]) // int(data[-1][0] - data[-2][0])
         else:
             return 0

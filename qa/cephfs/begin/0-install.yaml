@@ -1,0 +1,56 @@
+tasks:
+  - install:
+      extra_packages:
+        rpm:
+        - python3-cephfs
+        - cephfs-top
+        - cephfs-mirror
+        deb:
+        - python3-cephfs
+        - cephfs-shell
+        - cephfs-top
+        - cephfs-mirror
+      # For kernel_untar_build workunit
+      extra_system_packages:
+        deb:
+        - bison
+        - flex
+        - libelf-dev
+        - libssl-dev
+        - network-manager
+        - iproute2
+        - util-linux
+        # for xfstests-dev
+        - dump
+        - indent
+        # for fsx
+        - libaio-dev
+        - libtool-bin
+        - uuid-dev
+        - xfslibs-dev
+        rpm:
+        - bison
+        - flex
+        - elfutils-libelf-devel
+        - openssl-devel
+        - NetworkManager
+        - iproute
+        - util-linux
+        # for xfstests-dev
+        - libacl-devel
+        - libaio-devel
+        - libattr-devel
+        - libtool
+        - libuuid-devel
+        - xfsdump
+        - xfsprogs
+        - xfsprogs-devel
+        # for fsx
+        - libaio-devel
+        - libtool
+        - libuuid-devel
+        - xfsprogs-devel
+syslog:
+  ignorelist:
+    - WARNING*.*check_session_state
+    - WARNING*.*__ceph_remove_cap

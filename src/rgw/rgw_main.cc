@@ -16,13 +16,14 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "rgw_common.h"
-#include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
 #include "rgw_rest_admin.h"
+#include "rgw_rest_info.h"
 #include "rgw_rest_usage.h"
 #include "rgw_rest_user.h"
 #include "rgw_rest_bucket.h"
@@ -31,6 +32,7 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_sts.h"
+#include "rgw_rest_ratelimit.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
@@ -53,6 +55,10 @@
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include "rgw_lua.h"
 #endif
+#ifdef WITH_RADOSGW_DBSTORE
+#include "rgw_sal_dbstore.h"
+#endif
+#include "rgw_lua_background.h"
 
 #include "services/svc_zone.h"
 
@@ -126,6 +132,15 @@ static void handle_sigterm(int signum)
 
 }
 
+static OpsLogFile* ops_log_file = nullptr;
+
+static void rgw_sighup_handler(int signum) {
+    if (ops_log_file != nullptr) {
+        ops_log_file->reopen();
+    }
+    sighup_handler(signum);
+}
+
 static void godown_alarm(int signum)
 {
   _exit(0);
@@ -173,6 +188,25 @@ static RGWRESTMgr *rest_filter(rgw::sal::Store* store, int dialect, RGWRESTMgr *
   }
 }
 
+class RGWPauser : public RGWRealmReloader::Pauser {
+  std::vector<Pauser*> pausers;
+
+public:
+  ~RGWPauser() override = default;
+  
+  void add_pauser(Pauser* pauser) {
+    pausers.push_back(pauser);
+  }
+
+  void pause() override {
+    std::for_each(pausers.begin(), pausers.end(), [](Pauser* p){p->pause();});
+  }
+  void resume(rgw::sal::Store* store) override {
+    std::for_each(pausers.begin(), pausers.end(), [store](Pauser* p){p->resume(store);});
+  }
+
+};
+
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
@@ -213,8 +247,8 @@ int radosgw_Main(int argc, const char **argv)
   // privileged ports
   flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
 
-  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_DAEMON, flags);
+  auto cct = rgw_global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
+			     CODE_ENVIRONMENT_DAEMON, flags);
 
   // First, let's determine which frontends are configured.
   list<string> frontends;
@@ -310,7 +344,6 @@ int radosgw_Main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
 
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(g_ceph_context);
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(g_ceph_context);
@@ -321,7 +354,7 @@ int radosgw_Main(int argc, const char **argv)
     derr << "ERROR: unable to initialize rgw tools" << dendl;
     return -r;
   }
-
+  tracing::rgw::tracer.init("rgw");
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
   rgw_http_client_init(g_ceph_context);
@@ -346,9 +379,25 @@ int radosgw_Main(int argc, const char **argv)
   }
   lsubdout(cct, rgw, 1) << "D3N datacache enabled: " << rgw_d3n_datacache_enabled << dendl;
 
+  std::string rgw_store = (!rgw_d3n_datacache_enabled) ? "rados" : "d3n";
+
+  // Get the store backend
+  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+#ifdef WITH_RADOSGW_DBSTORE
+  if (config_store == "dbstore") {
+    rgw_store = "dbstore";
+  }
+#endif
+
+#ifdef WITH_RADOSGW_MOTR
+  if (config_store == "motr") {
+    rgw_store = "motr";
+  }
+#endif
+
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
-				 (!rgw_d3n_datacache_enabled) ? "rados" : "d3n",
+				 rgw_store,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
 				 g_conf()->rgw_enable_quota_threads,
@@ -434,17 +483,20 @@ int radosgw_Main(int argc, const char **argv)
     store->set_luarocks_path(luarocks_path+"/"+g_conf()->name.to_str());
   }
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-  rgw::lua::packages_t failed_packages;
-  std::string output;
-  r = rgw::lua::install_packages(&dp, store, null_yield, failed_packages, output);
-  if (r < 0) {
-    dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
-  }
-  if (!output.empty()) {
-    dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
-  }
-  for (const auto& p : failed_packages) {
-    dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
+  if (rados) { /* Supported for only RadosStore */
+    rgw::lua::packages_t failed_packages;
+    std::string output;
+    r = rgw::lua::install_packages(&dp, rados, null_yield, failed_packages, output);
+    if (r < 0) {
+      dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
+    }
+    if (!output.empty()) {
+      dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
+    }
+    for (const auto& p : failed_packages) {
+      dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+    }
   }
 #endif
 
@@ -467,7 +519,7 @@ int radosgw_Main(int argc, const char **argv)
                           set_logging(rest_filter(store, RGW_REST_SWIFT,
                                                   swift_resource)));
     } else {
-      if (store->get_zone()->get_zonegroup().zones.size() > 1) {
+      if (store->get_zone()->get_zonegroup().get_zone_count() > 1) {
         derr << "Placing Swift API in the root of URL hierarchy while running"
              << " multi-site configuration requires another instance of RadosGW"
              << " with S3 API enabled!" << dendl;
@@ -484,6 +536,7 @@ int radosgw_Main(int argc, const char **argv)
 
   if (apis_map.count("admin") > 0) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
+    admin_resource->register_resource("info", new RGWRESTMgr_Info);
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
     admin_resource->register_resource("user", new RGWRESTMgr_User);
     /* XXX dang part of this is RADOS specific */
@@ -495,6 +548,7 @@ int radosgw_Main(int argc, const char **argv)
     admin_resource->register_resource("log", new RGWRESTMgr_Log);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
+    admin_resource->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
     rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
   }
 
@@ -518,12 +572,22 @@ int radosgw_Main(int argc, const char **argv)
 
   rgw::dmclock::SchedulerCtx sched_ctx{cct.get()};
 
-  OpsLogSocket *olog = NULL;
+  OpsLogManifold *olog = new OpsLogManifold();
+  ActiveRateLimiter ratelimiting{cct.get()};
+  ratelimiting.start();
 
   if (!g_conf()->rgw_ops_log_socket_path.empty()) {
-    olog = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
-    olog->init(g_conf()->rgw_ops_log_socket_path);
+    OpsLogSocket* olog_socket = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
+    olog_socket->init(g_conf()->rgw_ops_log_socket_path);
+    olog->add_sink(olog_socket);
   }
+  if (!g_conf()->rgw_ops_log_file_path.empty()) {
+    ops_log_file = new OpsLogFile(g_ceph_context, g_conf()->rgw_ops_log_file_path, g_conf()->rgw_ops_log_data_backlog);
+    ops_log_file->start();
+    olog->add_sink(ops_log_file);
+  }
+  register_async_signal_handler(SIGHUP, rgw_sighup_handler);
+  olog->add_sink(new OpsLogRados(store));
 
   r = signal_fd_init();
   if (r < 0) {
@@ -561,6 +625,12 @@ int radosgw_Main(int argc, const char **argv)
 
   int fe_count = 0;
 
+  std::unique_ptr<rgw::lua::Background> lua_background;
+  if (rados) { /* Supported for only RadosStore */
+    lua_background = std::make_unique<rgw::lua::Background>(store, cct.get(), store->get_luarocks_path());
+    lua_background->start();
+  }
+
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
        fiter != fe_map.end(); ++fiter, ++fe_count) {
     RGWFrontendConfig *config = fiter->second;
@@ -579,7 +649,8 @@ int radosgw_Main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, auth_registry };
+      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, 
+                            auth_registry, &ratelimiting, lua_background.get()};
 
       fe = new RGWLoadGenFrontend(env, config);
     }
@@ -588,7 +659,8 @@ int radosgw_Main(int argc, const char **argv)
       config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
+      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, 
+                         auth_registry, &ratelimiting, lua_background.get()};
       fe = new RGWAsioFrontend(env, config, sched_ctx);
     }
 
@@ -623,15 +695,27 @@ int radosgw_Main(int argc, const char **argv)
   }
 
 
-  // add a watcher to respond to realm configuration changes
-  RGWPeriodPusher pusher(&dp, store, null_yield);
-  RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
-  auto reloader = std::make_unique<RGWRealmReloader>(store,
-						     service_map_meta, &pauser);
+  std::unique_ptr<RGWRealmReloader> reloader;
+  std::unique_ptr<RGWPeriodPusher> pusher;
+  std::unique_ptr<RGWFrontendPauser> fe_pauser;
+  std::unique_ptr<RGWRealmWatcher> realm_watcher;
+  std::unique_ptr<RGWPauser> rgw_pauser;
+  if (store->get_name() == "rados") {
+    // add a watcher to respond to realm configuration changes
+    pusher = std::make_unique<RGWPeriodPusher>(&dp, store, null_yield);
+    fe_pauser = std::make_unique<RGWFrontendPauser>(fes, implicit_tenant_context, pusher.get());
+    rgw_pauser = std::make_unique<RGWPauser>();
+    rgw_pauser->add_pauser(fe_pauser.get());
+    if (lua_background) {
+      rgw_pauser->add_pauser(lua_background.get());
+    }
+    reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, rgw_pauser.get());
 
-  RGWRealmWatcher realm_watcher(&dp, g_ceph_context, store->get_zone()->get_realm());
-  realm_watcher.add_watcher(RGWRealmNotify::Reload, *reloader);
-  realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
+    realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
+				  static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm());
+    realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
+    realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher.get());
+  }
 
 #if defined(HAVE_SYS_PRCTL_H)
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
@@ -643,7 +727,9 @@ int radosgw_Main(int argc, const char **argv)
 
   derr << "shutting down" << dendl;
 
-  reloader.reset(); // stop the realm reloader
+  if (store->get_name() == "rados") {
+    reloader.reset(); // stop the realm reloader
+  }
 
   for (list<RGWFrontend *>::iterator liter = fes.begin(); liter != fes.end();
        ++liter) {
@@ -664,15 +750,18 @@ int radosgw_Main(int argc, const char **argv)
     delete fec;
   }
 
-  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGHUP, rgw_sighup_handler);
   unregister_async_signal_handler(SIGTERM, handle_sigterm);
   unregister_async_signal_handler(SIGINT, handle_sigterm);
   unregister_async_signal_handler(SIGUSR1, handle_sigterm);
   shutdown_async_signal_handler();
 
   rgw_log_usage_finalize();
-
   delete olog;
+
+  if (lua_background) {
+    lua_background->shutdown();
+  }
 
   StoreManager::close_storage(store);
   rgw::auth::s3::LDAPEngine::shutdown();
@@ -688,6 +777,7 @@ int radosgw_Main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   rgw::kafka::shutdown();
 #endif
+
 
   rgw_perf_stop(g_ceph_context);
 

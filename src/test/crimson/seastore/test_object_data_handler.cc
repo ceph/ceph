@@ -11,6 +11,10 @@ using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
 
+#define MAX_OBJECT_SIZE (16<<20)
+#define DEFAULT_OBJECT_DATA_RESERVATION (16<<20)
+#define DEFAULT_OBJECT_METADATA_RESERVATION (16<<20)
+
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_test);
@@ -22,6 +26,7 @@ class TestOnode final : public Onode {
   bool dirty = false;
 
 public:
+  TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr) {}
   const onode_layout_t &get_layout() const final {
     return layout;
   }
@@ -58,7 +63,7 @@ struct object_data_handler_test_t:
 	offset,
 	len));
     with_trans_intr(t, [&](auto &t) {
-      return ObjectDataHandler().write(
+      return ObjectDataHandler(MAX_OBJECT_SIZE).write(
         ObjectDataHandler::context_t{
           *tm,
           t,
@@ -81,7 +86,7 @@ struct object_data_handler_test_t:
 	0,
 	size - offset);
       with_trans_intr(t, [&](auto &t) {
-        return ObjectDataHandler().truncate(
+        return ObjectDataHandler(MAX_OBJECT_SIZE).truncate(
           ObjectDataHandler::context_t{
             *tm,
             t,
@@ -100,7 +105,7 @@ struct object_data_handler_test_t:
 
   void read(Transaction &t, objaddr_t offset, extent_len_t len) {
     bufferlist bl = with_trans_intr(t, [&](auto &t) {
-      return ObjectDataHandler().read(
+      return ObjectDataHandler(MAX_OBJECT_SIZE).read(
         ObjectDataHandler::context_t{
           *tm,
           t,
@@ -132,7 +137,9 @@ struct object_data_handler_test_t:
   }
 
   seastar::future<> set_up_fut() final {
-    onode = new TestOnode{};
+    onode = new TestOnode(
+      DEFAULT_OBJECT_DATA_RESERVATION,
+      DEFAULT_OBJECT_METADATA_RESERVATION);
     known_contents = buffer::create(4<<20 /* 4MB */);
     memset(known_contents.c_str(), 0, known_contents.length());
     size = 0;

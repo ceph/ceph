@@ -42,7 +42,7 @@ Change this to:
 Mirroring
 =========
 
-You can easily mirror Ceph yourself using a Bash script and rsync. A easy to use
+You can easily mirror Ceph yourself using a Bash script and rsync. An easy-to-use
 script can be found at `Github`_.
 
 When mirroring Ceph, please keep the following guidelines in mind:

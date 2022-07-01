@@ -910,9 +910,17 @@ int RGWSI_User_RADOS::read_stats(const DoutPrefixProvider *dpp,
 {
   string user_str = user.to_str();
 
+  RGWUserInfo info;
+  real_time mtime;
+  int ret = read_user_info(ctx, user, &info, nullptr, &mtime, nullptr, nullptr, null_yield, dpp);
+  if (ret < 0)
+  {
+    return ret;
+  }
+
   cls_user_header header;
   int r = cls_user_get_header(dpp, rgw_user(user_str), &header, y);
-  if (r < 0)
+  if (r < 0 && r != -ENOENT)
     return r;
 
   const cls_user_stats& hs = header.stats;
@@ -965,7 +973,6 @@ int RGWSI_User_RADOS::read_stats_async(const DoutPrefixProvider *dpp, RGWSI_Meta
   RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(_cb);
   int r = cls_user_get_header_async(dpp, user_str, cb);
   if (r < 0) {
-    _cb->put();
     delete cb;
     return r;
   }

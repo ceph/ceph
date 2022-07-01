@@ -13,6 +13,9 @@ top_level = \
         os.path.dirname(
             os.path.abspath(__file__)))
 
+pybind_rgw_mod = __import__('rgw', globals(), locals(), [], 0)
+sys.modules['pybind_rgw_mod'] = pybind_rgw_mod
+
 
 def parse_ceph_release():
     with open(os.path.join(top_level, 'src/ceph_release')) as f:
@@ -51,7 +54,7 @@ html_theme_options = {
     'display_version': False,
     'prev_next_buttons_location': 'bottom',
     'style_external_links': False,
-    'vcs_pageview_mode': '',
+    'vcs_pageview_mode': 'edit',
     'style_nav_header_background': '#eee',
     # Toc options
     'collapse_navigation': True,
@@ -109,6 +112,8 @@ build_with_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 sys.path.insert(0, os.path.abspath('_ext'))
 
+smartquotes_action = "qe"
+
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.graphviz',
@@ -121,6 +126,7 @@ extensions = [
     'ceph_commands',
     'ceph_releases',
     'ceph_confval',
+    'sphinxcontrib.mermaid',
     'sphinxcontrib.openapi',
     'sphinxcontrib.seqdiag',
     ]
@@ -164,7 +170,8 @@ breathe_domain_by_extension = {'py': 'py',
 breathe_doxygen_config_options = {
     'EXPAND_ONLY_PREDEF': 'YES',
     'MACRO_EXPANSION': 'YES',
-    'PREDEFINED': 'CEPH_RADOS_API= '
+    'PREDEFINED': 'CEPH_RADOS_API= ',
+    'WARN_IF_UNDOCUMENTED': 'NO',
 }
 
 # graphviz options

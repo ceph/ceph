@@ -36,15 +36,17 @@
 #include <linux/fs.h>
 
 #include <seastar/apps/lib/stop_signal.hh>
+#include <seastar/core/app-template.hh>
 #include <seastar/core/byteorder.hh>
-#include <seastar/util/defer.hh>
+#include <seastar/core/future-util.hh>
 #include <seastar/core/gate.hh>
+#include <seastar/core/reactor.hh>
 #include <seastar/core/rwlock.hh>
+#include <seastar/core/thread.hh>
+#include <seastar/util/defer.hh>
 
-#include "crimson/common/log.h"
 #include "crimson/common/config_proxy.h"
-
-#include "test/crimson/seastar_runner.h"
+#include "crimson/common/log.h"
 
 #include "block_driver.h"
 
@@ -298,7 +300,7 @@ int main(int argc, char** argv)
         crimson::common::sharded_conf().stop().get();
       });
 
-      auto backend = get_backend(backend_config, app.alien());
+      auto backend = get_backend(backend_config);
       NBDHandler nbd(*backend, nbd_config);
       backend->mount().get();
       auto close_backend = seastar::defer([&] {

@@ -5,7 +5,8 @@ from textwrap import dedent
 import datetime
 import gevent
 
-from teuthology.orchestra.run import CommandFailedError, Raw
+from teuthology.exceptions import CommandFailedError
+from teuthology.orchestra.run import Raw
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 log = logging.getLogger(__name__)
@@ -344,6 +345,35 @@ class TestStrays(CephFSTestCase):
 
         self.await_data_pool_empty()
 
+    def test_reintegration_limit(self):
+        """
+        That the reintegration is not blocked by full directories.
+        """
+
+        LOW_LIMIT = 50
+        self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
+        time.sleep(10) # for config to reach MDS; async create is fast!!
+
+        last_reintegrated = self.get_mdc_stat("strays_reintegrated")
+        self.mount_a.run_shell_payload("""
+        mkdir a b
+        for i in `seq 1 50`; do
+           touch a/"$i"
+           ln a/"$i" b/"$i"
+        done
+        sync -f a b
+        rm a/*
+        """)
+
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays"),
+            expect_val=0,
+            timeout=60
+        )
+        curr_reintegrated = self.get_mdc_stat("strays_reintegrated")
+        self.assertGreater(curr_reintegrated, last_reintegrated)
+
+
     def test_hardlink_reintegration(self):
         """
         That removal of primary dentry of hardlinked inode results
@@ -455,6 +485,57 @@ class TestStrays(CephFSTestCase):
         # We purged it at the last
         self.assertEqual(self.get_mdc_stat("strays_enqueued"), 1)
 
+    def test_reintegration_via_scrub(self):
+        """
+        That reintegration is triggered via recursive scrub.
+        """
+
+        self.mount_a.run_shell_payload("""
+        mkdir -p a b
+        for i in `seq 1 50`; do
+           touch a/"$i"
+           ln a/"$i" b/"$i"
+        done
+        sync -f .
+        """)
+
+        self.mount_a.remount() # drop caps/cache
+        self.fs.rank_tell(["flush", "journal"])
+        self.fs.rank_fail()
+        self.fs.wait_for_daemons()
+
+        # only / in cache, reintegration cannot happen
+        self.wait_until_equal(
+            lambda: len(self.fs.rank_tell(["dump", "tree", "/"])),
+            expect_val=3,
+            timeout=60
+        )
+
+        last_reintegrated = self.get_mdc_stat("strays_reintegrated")
+        self.mount_a.run_shell_payload("""
+        rm a/*
+        sync -f .
+        """)
+        self.wait_until_equal(
+            lambda: len(self.fs.rank_tell(["dump", "tree", "/"])),
+            expect_val=3,
+            timeout=60
+        )
+        self.assertEqual(self.get_mdc_stat("num_strays"), 50)
+        curr_reintegrated = self.get_mdc_stat("strays_reintegrated")
+        self.assertEqual(last_reintegrated, curr_reintegrated)
+
+        self.fs.rank_tell(["scrub", "start", "/", "recursive,force"])
+
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays"),
+            expect_val=0,
+            timeout=60
+        )
+        curr_reintegrated = self.get_mdc_stat("strays_reintegrated")
+        # N.B.: reintegrate (rename RPC) may be tried multiple times from different code paths
+        self.assertGreaterEqual(curr_reintegrated, last_reintegrated+50)
+
     def test_mv_hardlink_cleanup(self):
         """
         That when doing a rename from A to B, and B has hardlinks,
@@ -521,7 +602,6 @@ class TestStrays(CephFSTestCase):
         """
         :param to_id: MDS id to move it to
         :param path: Filesystem path (string) to move
-        :param watch_ino: Inode number to look for at destination to confirm move
         :return: None
         """
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", str(rank), path])
@@ -618,6 +698,46 @@ ln dir_1/original dir_2/linkto
 
         # See that the stray counter on rank 0 has incremented
         self.assertEqual(self.get_mdc_stat("strays_created", rank_0_id), 1)
+
+    def test_migrate_unlinked_dir(self):
+        """
+        Reproduce https://tracker.ceph.com/issues/53597
+        """
+        rank_0_id, rank_1_id = self._setup_two_ranks()
+
+        self.mount_a.run_shell_payload("""
+mkdir pin
+touch pin/placeholder
+""")
+
+        self._force_migrate("pin")
+
+        # Hold the dir open so it cannot be purged
+        p = self.mount_a.open_dir_background("pin/to-be-unlinked")
+
+        # Unlink the dentry
+        self.mount_a.run_shell(["rmdir", "pin/to-be-unlinked"])
+
+        # Wait to see the stray count increment
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays", mds_id=rank_1_id),
+            expect_val=1, timeout=60, reject_fn=lambda x: x > 1)
+        # but not purged
+        self.assertEqual(self.get_mdc_stat("strays_created", mds_id=rank_1_id), 1)
+        self.assertEqual(self.get_mdc_stat("strays_enqueued", mds_id=rank_1_id), 0)
+
+        # Test loading unlinked dir into cache
+        self.fs.mds_asok(['flush', 'journal'], rank_1_id)
+        self.fs.mds_asok(['cache', 'drop'], rank_1_id)
+
+        # Shut down rank 1
+        self.fs.set_max_mds(1)
+        self.fs.wait_for_daemons(timeout=120)
+        # Now the stray should be migrated to rank 0
+        # self.assertEqual(self.get_mdc_stat("strays_created", mds_id=rank_0_id), 1)
+        # https://github.com/ceph/ceph/pull/44335#issuecomment-1125940158
+
+        self.mount_a.kill_background(p)
 
     def assert_backtrace(self, ino, expected_path):
         """
@@ -799,110 +919,71 @@ ln dir_1/original dir_2/linkto
     def test_dirfrag_limit(self):
         """
         That the directory fragment size cannot exceed mds_bal_fragment_size_max (using a limit of 50 in all configurations).
-
-        That fragmentation (forced) will allow more entries to be created.
-
-        That unlinking fails when the stray directory fragment becomes too large and that unlinking may continue once those strays are purged.
         """
 
         LOW_LIMIT = 50
-        for mds in self.fs.get_daemon_names():
-            self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(LOW_LIMIT)], mds)
+        self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
+        time.sleep(10) # for config to reach MDS; async create is fast!!
 
         try:
-            self.mount_a.run_python(dedent("""
-                import os
-                path = os.path.join("{path}", "subdir")
-                os.mkdir(path)
-                for n in range(0, {file_count}):
-                    with open(os.path.join(path, "%s" % n), 'w') as f:
-                        f.write(str(n))
-                """.format(
-            path=self.mount_a.mountpoint,
-            file_count=LOW_LIMIT+1
-            )))
+            self.mount_a.create_n_files("subdir/file", LOW_LIMIT+1, finaldirsync=True)
         except CommandFailedError:
-            pass # ENOSPAC
+            pass # ENOSPC
         else:
-            raise RuntimeError("fragment size exceeded")
+            self.fail("fragment size exceeded")
 
-        # Now test that we can go beyond the limit if we fragment the directory
 
-        self.mount_a.run_python(dedent("""
-            import os
-            path = os.path.join("{path}", "subdir2")
-            os.mkdir(path)
-            for n in range(0, {file_count}):
-                with open(os.path.join(path, "%s" % n), 'w') as f:
-                    f.write(str(n))
-            dfd = os.open(path, os.O_DIRECTORY)
-            os.fsync(dfd)
-            """.format(
-        path=self.mount_a.mountpoint,
-        file_count=LOW_LIMIT
-        )))
+    def test_dirfrag_limit_fragmented(self):
+        """
+        That fragmentation (forced) will allow more entries to be created.
+        """
 
-        # Ensure that subdir2 is fragmented
-        mds_id = self.fs.get_active_names()[0]
-        self.fs.mds_asok(["dirfrag", "split", "/subdir2", "0/0", "1"], mds_id)
+        LOW_LIMIT = 50
+        self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
+        self.config_set('mds', 'mds_bal_merge_size', 1) # disable merging
+        time.sleep(10) # for config to reach MDS; async create is fast!!
 
-        # remount+flush (release client caps)
-        self.mount_a.umount_wait()
-        self.fs.mds_asok(["flush", "journal"], mds_id)
-        self.mount_a.mount_wait()
+        # Test that we can go beyond the limit if we fragment the directory
+        self.mount_a.create_n_files("subdir/file", LOW_LIMIT, finaldirsync=True)
+        self.mount_a.umount_wait() # release client caps
+
+        # Ensure that subdir is fragmented
+        self.fs.rank_asok(["dirfrag", "split", "/subdir", "0/0", "1"])
+        self.fs.rank_asok(["flush", "journal"])
 
         # Create 50% more files than the current fragment limit
-        self.mount_a.run_python(dedent("""
-            import os
-            path = os.path.join("{path}", "subdir2")
-            for n in range({file_count}, ({file_count}*3)//2):
-                with open(os.path.join(path, "%s" % n), 'w') as f:
-                    f.write(str(n))
-            """.format(
-        path=self.mount_a.mountpoint,
-        file_count=LOW_LIMIT
-        )))
+        self.mount_a.mount_wait()
+        self.mount_a.create_n_files("subdir/file", (LOW_LIMIT*3)//2, finaldirsync=True)
+
+    def test_dirfrag_limit_strays(self):
+        """
+        That unlinking fails when the stray directory fragment becomes too
+        large and that unlinking may continue once those strays are purged.
+        """
+
+        LOW_LIMIT = 10
+        # N.B. this test is inherently racy because stray removal may be faster
+        # than slow(er) file creation.
+        self.config_set('mds', 'mds_bal_fragment_size_max', LOW_LIMIT)
+        time.sleep(10) # for config to reach MDS; async create is fast!!
 
         # Now test the stray directory size is limited and recovers
         strays_before = self.get_mdc_stat("strays_created")
         try:
-            self.mount_a.run_python(dedent("""
-                import os
-                path = os.path.join("{path}", "subdir3")
-                os.mkdir(path)
-                for n in range({file_count}):
-                    fpath = os.path.join(path, "%s" % n)
-                    with open(fpath, 'w') as f:
-                        f.write(str(n))
-                    os.unlink(fpath)
-                """.format(
-            path=self.mount_a.mountpoint,
-            file_count=LOW_LIMIT*10 # 10 stray directories, should collide before this count
-            )))
+            # 10 stray directories: expect collisions
+            self.mount_a.create_n_files("subdir/file", LOW_LIMIT*10, finaldirsync=True, unlink=True)
         except CommandFailedError:
-            pass # ENOSPAC
+            pass # ENOSPC
         else:
-            raise RuntimeError("fragment size exceeded")
-
+            self.fail("fragment size exceeded")
         strays_after = self.get_mdc_stat("strays_created")
         self.assertGreaterEqual(strays_after-strays_before, LOW_LIMIT)
 
         self._wait_for_counter("mds_cache", "strays_enqueued", strays_after)
         self._wait_for_counter("purge_queue", "pq_executed", strays_after)
 
-        self.mount_a.run_python(dedent("""
-            import os
-            path = os.path.join("{path}", "subdir4")
-            os.mkdir(path)
-            for n in range({file_count}):
-                fpath = os.path.join(path, "%s" % n)
-                with open(fpath, 'w') as f:
-                    f.write(str(n))
-                os.unlink(fpath)
-            """.format(
-        path=self.mount_a.mountpoint,
-        file_count=LOW_LIMIT
-        )))
+        # verify new files can be created and unlinked
+        self.mount_a.create_n_files("subdir/file", LOW_LIMIT, dirsync=True, unlink=True)
 
     def test_purge_queue_upgrade(self):
         """

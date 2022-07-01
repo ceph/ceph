@@ -2326,8 +2326,8 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  if (boost::get<cls::rbd::UnknownSnapshotNamespace>(
-        &snap_meta.snapshot_namespace) != nullptr) {
+  if (std::holds_alternative<cls::rbd::UnknownSnapshotNamespace>(
+        snap_meta.snapshot_namespace)) {
     CLS_ERR("Unknown snapshot namespace provided");
     return -EINVAL;
   }
@@ -5059,7 +5059,22 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   ondisk_status.up = false;
   ondisk_status.last_update = ceph_clock_now();
 
-  int r = cls_get_request_origin(hctx, &ondisk_status.origin);
+  std::string global_id_key = global_key(global_image_id);
+  std::string image_id;
+  int r = read_key(hctx, global_id_key, &image_id);
+  if (r < 0) {
+    return 0;
+  }
+  cls::rbd::MirrorImage mirror_image;
+  r = image_get(hctx, image_id, &mirror_image);
+  if (r < 0) {
+    return 0;
+  }
+  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    return 0;
+  }
+
+  r = cls_get_request_origin(hctx, &ondisk_status.origin);
   ceph_assert(r == 0);
 
   bufferlist bl;
@@ -5693,7 +5708,7 @@ int image_snapshot_unlink_peer(cls_method_context_t hctx,
     return r;
   }
 
-  auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+  auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
     &snap.snapshot_namespace);
   if (mirror_ns == nullptr) {
     CLS_LOG(5, "mirror_image_snapshot_unlink_peer " \
@@ -5711,8 +5726,8 @@ int image_snapshot_unlink_peer(cls_method_context_t hctx,
     // should remove the snapshot instead.
     auto search_lambda = [snap_id](const cls_rbd_snap& snap_meta) {
       if (snap_meta.id > snap_id &&
-          boost::get<cls::rbd::MirrorSnapshotNamespace>(
-                   &snap_meta.snapshot_namespace) != nullptr) {
+          std::holds_alternative<cls::rbd::MirrorSnapshotNamespace>(
+                   snap_meta.snapshot_namespace)) {
         return -EEXIST;
       }
       return 0;
@@ -5748,7 +5763,7 @@ int image_snapshot_set_copy_progress(cls_method_context_t hctx,
     return r;
   }
 
-  auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+  auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
     &snap.snapshot_namespace);
   if (mirror_ns == nullptr) {
     CLS_LOG(5, "mirror_image_snapshot_set_copy_progress " \
@@ -6366,7 +6381,6 @@ int mirror_image_status_set(cls_method_context_t hctx, bufferlist *in,
  * Output:
  * @returns 0 on success, negative error code on failure
  *
- * NOTE: deprecated - remove this method after Octopus is unsupported
  */
 int mirror_image_status_remove(cls_method_context_t hctx, bufferlist *in,
 			       bufferlist *out) {

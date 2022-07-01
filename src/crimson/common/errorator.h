@@ -8,6 +8,7 @@
 
 #include <seastar/core/future-util.hh>
 
+#include "crimson/common/utility.h"
 #include "include/ceph_assert.h"
 
 namespace crimson::interruptible {
@@ -130,8 +131,14 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
   static auto handle(Func&& func) {
     return [
       func = std::forward<Func>(func)
-    ] (const unthrowable_wrapper&) mutable -> decltype(auto) {
-      if constexpr (std::is_invocable_v<Func, ErrorT>) {
+    ] (const unthrowable_wrapper& raw_error) mutable -> decltype(auto) {
+      if constexpr (std::is_invocable_v<Func, ErrorT, decltype(raw_error)>) {
+	// check whether the handler wants to take the raw error object which
+	// would be the case if it wants conditionally handle-or-pass-further.
+        return std::invoke(std::forward<Func>(func),
+                           ErrorV,
+                           std::move(raw_error));
+      } else if constexpr (std::is_invocable_v<Func, ErrorT>) {
         return std::invoke(std::forward<Func>(func), ErrorV);
       } else {
         return std::invoke(std::forward<Func>(func));
@@ -196,14 +203,17 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
     return [
       func = std::forward<Func>(func)
     ] (stateful_error_t<ErrorT>&& e) mutable -> decltype(auto) {
+      if constexpr (std::is_invocable_v<Func>) {
+        return std::invoke(std::forward<Func>(func));
+      }
       try {
         std::rethrow_exception(e.ep);
       } catch (const ErrorT& obj) {
-        if constexpr (std::is_invocable_v<Func, decltype(obj)>) {
+        if constexpr (std::is_invocable_v<Func, decltype(obj), decltype(e)>) {
+          return std::invoke(std::forward<Func>(func), obj, e);
+	} else if constexpr (std::is_invocable_v<Func, decltype(obj)>) {
           return std::invoke(std::forward<Func>(func), obj);
-        } else {
-          return std::invoke(std::forward<Func>(func));
-        }
+	}
       }
       ceph_abort_msg("exception type mismatch -- impossible!");
     };
@@ -329,6 +339,13 @@ class parallel_for_each_state;
 
 template <class T>
 static inline constexpr bool is_error_v = std::is_base_of_v<error_t<T>, T>;
+
+template <typename... AllowedErrors>
+struct errorator;
+
+template <typename Iterator, typename Func, typename... AllowedErrors>
+static inline typename errorator<AllowedErrors...>::template future<>
+parallel_for_each(Iterator first, Iterator last, Func&& func) noexcept;
 
 template <class... AllowedErrors>
 struct errorator {
@@ -667,6 +684,19 @@ private:
                        errorator_type::pass_further{});
     }
 
+    template <class ValueFunc,
+              class... ErrorFuncs>
+    auto safe_then_unpack(ValueFunc&& value_func,
+                          ErrorFuncs&&... error_funcs) {
+      return safe_then(
+        [value_func=std::move(value_func)] (ValueT&& tuple) mutable {
+          assert_moveable(value_func);
+          return std::apply(std::move(value_func), std::move(tuple));
+        },
+        std::forward<ErrorFuncs>(error_funcs)...
+      );
+    }
+
     template <class Func>
     void then(Func&&) = delete;
 
@@ -782,6 +812,11 @@ public:
     }
   };
 
+  template <typename T>
+  static future<T> make_errorator_future(seastar::future<T>&& fut) {
+    return std::move(fut);
+  }
+
   // assert_all{ "TODO" };
   class assert_all {
     const char* const msg = nullptr;
@@ -875,44 +910,22 @@ public:
     return make_ready_future<>();
   }
 
-  template <typename Iterator, typename Func>
-  static inline errorator<AllowedErrors...>::future<>
-  parallel_for_each(Iterator first, Iterator last, Func&& func) noexcept {
-    parallel_for_each_state<AllowedErrors...>* s = nullptr;
-    // Process all elements, giving each future the following treatment:
-    //   - available, not failed: do nothing
-    //   - available, failed: collect exception in ex
-    //   - not available: collect in s (allocating it if needed)
-    for (;first != last; ++first) {
-      auto f = seastar::futurize_invoke(std::forward<Func>(func), *first);
-      if (!f.available() || f.failed()) {
-        if (!s) {
-          using itraits = std::iterator_traits<Iterator>;
-          auto n = (seastar::internal::iterator_range_estimate_vector_capacity(
-                first, last, typename itraits::iterator_category()) + 1);
-          s = new parallel_for_each_state<AllowedErrors...>(n);
-        }
-        s->add_future(std::move(f));
-      }
-    }
-    // If any futures were not available, hand off to parallel_for_each_state::start().
-    // Otherwise we can return a result immediately.
-    if (s) {
-      // s->get_future() takes ownership of s (and chains it to one of the futures it contains)
-      // so this isn't a leak
-      return s->get_future();
-    }
-    return seastar::make_ready_future<>();
-  }
-
   template <typename Container, typename Func>
   static inline auto parallel_for_each(Container&& container, Func&& func) noexcept {
-    return parallel_for_each(
+    return crimson::parallel_for_each<decltype(std::begin(container)), Func, AllowedErrors...>(
         std::begin(container),
         std::end(container),
         std::forward<Func>(func));
   }
 
+  template <typename Iterator, typename Func>
+  static inline errorator<AllowedErrors...>::future<>
+  parallel_for_each(Iterator first, Iterator last, Func&& func) noexcept {
+    return crimson::parallel_for_each<Iterator, Func, AllowedErrors...>(
+      first,
+      last,
+      std::forward<Func>(func));
+  }
 private:
   template <class T>
   class futurize {
@@ -1099,35 +1112,42 @@ using compound_errorator_t = typename compound_errorator<Args...>::type;
 // this is conjunction of two nasty features: C++14's variable template
 // and inline global variable of C++17. The latter is crucial to ensure
 // the variable will get the same address across all translation units.
-template <std::errc ErrorV>
-inline std::error_code ec = std::make_error_code(ErrorV);
+template <int ErrorV>
+inline std::error_code ec = std::error_code(ErrorV, std::generic_category());
 
-template <std::errc ErrorV>
+template <int ErrorV>
 using ct_error_code = unthrowable_wrapper<const std::error_code&, ec<ErrorV>>;
 
 namespace ct_error {
-  using enoent = ct_error_code<std::errc::no_such_file_or_directory>;
-  using enodata = ct_error_code<std::errc::no_message_available>;
-  using invarg =  ct_error_code<std::errc::invalid_argument>;
-  using input_output_error = ct_error_code<std::errc::io_error>;
-  using object_corrupted = ct_error_code<std::errc::illegal_byte_sequence>;
-  using permission_denied = ct_error_code<std::errc::permission_denied>;
+  using enoent = ct_error_code<static_cast<int>(std::errc::no_such_file_or_directory)>;
+  using enodata = ct_error_code<static_cast<int>(std::errc::no_message_available)>;
+  using invarg =  ct_error_code<static_cast<int>(std::errc::invalid_argument)>;
+  using input_output_error = ct_error_code<static_cast<int>(std::errc::io_error)>;
+  using object_corrupted = ct_error_code<static_cast<int>(std::errc::illegal_byte_sequence)>;
+  using permission_denied = ct_error_code<static_cast<int>(std::errc::permission_denied)>;
   using operation_not_supported =
-    ct_error_code<std::errc::operation_not_supported>;
-  using not_connected = ct_error_code<std::errc::not_connected>;
-  using timed_out = ct_error_code<std::errc::timed_out>;
+    ct_error_code<static_cast<int>(std::errc::operation_not_supported)>;
+  using not_connected = ct_error_code<static_cast<int>(std::errc::not_connected)>;
+  using timed_out = ct_error_code<static_cast<int>(std::errc::timed_out)>;
   using erange =
-    ct_error_code<std::errc::result_out_of_range>;
+    ct_error_code<static_cast<int>(std::errc::result_out_of_range)>;
   using ebadf =
-    ct_error_code<std::errc::bad_file_descriptor>;
+    ct_error_code<static_cast<int>(std::errc::bad_file_descriptor)>;
   using enospc =
-    ct_error_code<std::errc::no_space_on_device>;
-  using value_too_large = ct_error_code<std::errc::value_too_large>;
+    ct_error_code<static_cast<int>(std::errc::no_space_on_device)>;
+  using value_too_large = ct_error_code<static_cast<int>(std::errc::value_too_large)>;
   using eagain =
-    ct_error_code<std::errc::resource_unavailable_try_again>;
+    ct_error_code<static_cast<int>(std::errc::resource_unavailable_try_again)>;
   using file_too_large =
-    ct_error_code<std::errc::file_too_large>;
-  using address_in_use = ct_error_code<std::errc::address_in_use>;
+    ct_error_code<static_cast<int>(std::errc::file_too_large)>;
+  using address_in_use = ct_error_code<static_cast<int>(std::errc::address_in_use)>;
+  using address_not_available = ct_error_code<static_cast<int>(std::errc::address_not_available)>;
+  using ecanceled = ct_error_code<static_cast<int>(std::errc::operation_canceled)>;
+  using einprogress = ct_error_code<static_cast<int>(std::errc::operation_in_progress)>;
+  using enametoolong = ct_error_code<static_cast<int>(std::errc::filename_too_long)>;
+  using eexist = ct_error_code<static_cast<int>(std::errc::file_exists)>;
+  using edquot = ct_error_code<int(122)>;
+  using cmp_fail = ct_error_code<int(4095)>;
 
   struct pass_further_all {
     template <class ErrorT>

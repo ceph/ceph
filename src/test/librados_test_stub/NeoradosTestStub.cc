@@ -22,12 +22,14 @@
 #include <boost/system/system_error.hpp>
 
 namespace bs = boost::system;
+using namespace std::literals;
 using namespace std::placeholders;
 
 namespace neorados {
 namespace detail {
 
-struct Client {
+class Client {
+public:
   ceph::mutex mutex = ceph::make_mutex("NeoradosTestStub::Client");
 
   librados::TestRadosClient* test_rados_client;
@@ -220,6 +222,10 @@ void IOContext::write_snap_context(
 
     snapc = n;
   }
+}
+
+void IOContext::full_try(bool _full_try) {
+  // no-op
 }
 
 bool operator ==(const IOContext& lhs, const IOContext& rhs) {

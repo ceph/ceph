@@ -20,14 +20,14 @@ class PGBackend;
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
 public:
   template <typename T = void>
-  using blocking_interruptible_future =
-    ::crimson::blocking_interruptible_future<
-      ::crimson::osd::IOInterruptCondition, T>;
+  using interruptible_future = RecoveryBackend::interruptible_future<T>;
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
   virtual ~PGRecovery() {}
   void start_pglogbased_recovery();
 
-  blocking_interruptible_future<bool> start_recovery_ops(size_t max_to_start);
+  interruptible_future<bool> start_recovery_ops(
+    RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
+    size_t max_to_start);
   void on_backfill_reserved();
   void dispatch_backfill_event(
     boost::intrusive_ptr<const boost::statechart::event_base> evt);
@@ -36,25 +36,28 @@ public:
 private:
   PGRecoveryListener* pg;
   size_t start_primary_recovery_ops(
+    RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     size_t max_to_start,
-    std::vector<blocking_interruptible_future<>> *out);
+    std::vector<interruptible_future<>> *out);
   size_t start_replica_recovery_ops(
+    RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     size_t max_to_start,
-    std::vector<blocking_interruptible_future<>> *out);
+    std::vector<interruptible_future<>> *out);
 
   std::vector<pg_shard_t> get_replica_recovery_order() const {
     return pg->get_replica_recovery_order();
   }
-  blocking_interruptible_future<> recover_missing(
+  RecoveryBackend::interruptible_future<> recover_missing(
+    RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     const hobject_t &soid, eversion_t need);
-  size_t prep_object_replica_deletes(
+  RecoveryBackend::interruptible_future<> prep_object_replica_deletes(
+    RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
     const hobject_t& soid,
-    eversion_t need,
-    std::vector<blocking_interruptible_future<>> *in_progress);
-  size_t prep_object_replica_pushes(
+    eversion_t need);
+  RecoveryBackend::interruptible_future<> prep_object_replica_pushes(
+    RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
     const hobject_t& soid,
-    eversion_t need,
-    std::vector<blocking_interruptible_future<>> *in_progress);
+    eversion_t need);
 
   void on_local_recover(
     const hobject_t& soid,
@@ -77,14 +80,6 @@ private:
 				eversion_t last_complete);
   friend class ReplicatedRecoveryBackend;
   friend class crimson::osd::UrgentRecovery;
-  seastar::future<> handle_pull(Ref<MOSDPGPull> m);
-  seastar::future<> handle_push(Ref<MOSDPGPush> m);
-  seastar::future<> handle_push_reply(Ref<MOSDPGPushReply> m);
-  seastar::future<> handle_recovery_delete(Ref<MOSDPGRecoveryDelete> m);
-  seastar::future<> handle_recovery_delete_reply(
-      Ref<MOSDPGRecoveryDeleteReply> m);
-  seastar::future<> handle_pull_response(Ref<MOSDPGPush> m);
-  seastar::future<> handle_scan(MOSDPGScan& m);
 
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;

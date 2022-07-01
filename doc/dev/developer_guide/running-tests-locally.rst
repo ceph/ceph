@@ -103,9 +103,10 @@ vstart_runner.py can take the following options -
           to ``/etc/fuse.conf``.
 
 .. note:: If using the kernel client, the user must have the ability to run
-          commands with passwordless sudo access. A failure on the kernel
-          client may crash the host, so it's recommended to use this
-          functionality within a virtual machine.
+          commands with passwordless sudo access.
+
+.. note:: A failure on the kernel client may crash the host, so it's
+          recommended to use this functionality within a virtual machine.
 
 Internal working of vstart_runner.py -
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -131,6 +132,38 @@ vstart_runner.py primarily does three things -
     ``LocalCephManager`` provides methods to run Ceph cluster commands with
     and without admin socket and ``LocalCephCluster`` provides methods to set
     or clear ``ceph.conf``.
+
+.. note:: vstart_runner.py deletes "adjust-ulimits" and "ceph-coverage" from
+          the command arguments unconditionally since they are not applicable
+          when tests are run on a developer's machine.
+
+.. note:: "omit_sudo" is re-set to False unconditionally in cases of commands
+          "passwd" and "chown".
+
+.. note:: The presence of binary file named after the first argument is
+          checked in ``<ceph-repo-root>/build/bin/``. If present, the first
+          argument is replaced with the path to binary file.
+
+Running Workunits Using vstart_enviroment.sh
+--------------------------------------------
+
+Code can be tested by building Ceph locally from source, starting a vstart
+cluster, and running any suite against it.
+Similar to S3-Tests, other workunits can be run against by configuring your environment.
+
+Set up the environment
+^^^^^^^^^^^^^^^^^^^^^^
+
+Configure your environment::
+
+    $ . ./build/vstart_enviroment.sh
+
+Running a test
+^^^^^^^^^^^^^^
+
+To run a workunit (e.g ``mon/osd.sh``) do the following::
+
+    $ ./qa/workunits/mon/osd.sh
 
 .. _test_reconnect_timeout: https://github.com/ceph/ceph/blob/master/qa/tasks/cephfs/test_client_recovery.py#L133
 .. _TestClientRecovery: https://github.com/ceph/ceph/blob/master/qa/tasks/cephfs/test_client_recovery.py#L86

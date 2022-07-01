@@ -26,7 +26,8 @@ public:
   void init_alloc(int64_t size, uint64_t min_alloc_size) {
     std::cout << "Creating alloc type " << string(GetParam()) << " \n";
     alloc.reset(Allocator::create(g_ceph_context, GetParam(), size,
-				  min_alloc_size));
+				  min_alloc_size,
+				  256*1048576, 100*256*1048576ull));
   }
 
   void init_close() {
@@ -387,7 +388,7 @@ TEST_P(AllocTest, test_dump_fragmentation_score)
       ceph_assert(len > 0);
       free_sum += len;
     };
-    alloc->dump(iterated_allocation);
+    alloc->foreach(iterated_allocation);
     EXPECT_GT(1, alloc->get_fragmentation_score());
     EXPECT_EQ(capacity, free_sum + allocated_cnt);
   }

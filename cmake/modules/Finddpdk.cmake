@@ -26,12 +26,12 @@ else()
       include)
   find_path(dpdk_common_INCLUDE_DIR rte_common.h
     HINTS
-      ENC DPDK_DIR
+      ENV DPDK_DIR
     PATH_SUFFIXES
       dpdk
       include)
   set(dpdk_INCLUDE_DIRS "${dpdk_config_INCLUDE_DIR}")
-  if(NOT dpdk_config_INCLUDE_DIR EQUAL dpdk_common_INCLUDE_DIR)
+  if(dpdk_common_INCLUDE_DIR AND NOT dpdk_config_INCLUDE_DIR STREQUAL dpdk_common_INCLUDE_DIR)
     list(APPEND dpdk_INCLUDE_DIRS "${dpdk_common_INCLUDE_DIR}")
   endif()
 endif()
@@ -48,7 +48,6 @@ set(components
   mbuf
   mempool
   mempool_ring
-  mempool_stack
   net
   pci
   pmd_af_packet
@@ -66,6 +65,8 @@ set(components
   pmd_ring
   pmd_sfc_efx
   pmd_vmxnet3_uio
+  pmd_hns3
+  pmd_hinic
   ring
   timer)
 
@@ -79,11 +80,7 @@ foreach(c ${components})
     get_target_property(DPDK_rte_${c}_LIBRARY
       ${dpdk_lib} IMPORTED_LOCATION)
   else()
-    find_library(DPDK_rte_${c}_LIBRARY
-      NAMES
-        # use static library
-        ${CMAKE_STATIC_LIBRARY_PREFIX}rte_${c}${CMAKE_STATIC_LIBRARY_SUFFIX}
-        rte_${c}
+    find_library(DPDK_rte_${c}_LIBRARY rte_${c}
       HINTS
         ENV DPDK_DIR
         ${dpdk_LIBRARY_DIRS}
@@ -135,7 +132,8 @@ if(dpdk_FOUND)
     find_package(Threads QUIET)
     list(APPEND _dpdk_libs
       Threads::Threads
-      dpdk::cflags)
+      dpdk::cflags
+      numa)
     set_target_properties(dpdk::dpdk PROPERTIES
       INTERFACE_LINK_LIBRARIES "${_dpdk_libs}"
       INTERFACE_INCLUDE_DIRECTORIES "${dpdk_INCLUDE_DIRS}")

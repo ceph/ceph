@@ -22,16 +22,17 @@ namespace gtest {
       db_type("SQLite"), ret(-1) {}
 
       Environment(string tenantname, string db_typename): 
-        tenant("tenantname"), db(nullptr),
-        db_type("db_typename"), ret(-1) {}
+        tenant(tenantname), db(nullptr),
+        db_type(db_typename), ret(-1) {}
 
       virtual ~Environment() {}
 
       void SetUp() override {
         cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-            CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1)->get();
+            CODE_ENVIRONMENT_DAEMON,
+            CINIT_FLAG_NO_DEFAULT_CONFIG_FILE | CINIT_FLAG_NO_MON_CONFIG | CINIT_FLAG_NO_DAEMON_ACTIONS);
         if (!db_type.compare("SQLite")) {
-          db = new SQLiteDB(tenant, cct);
+          db = new SQLiteDB(tenant, cct.get());
           ASSERT_TRUE(db != nullptr);
           ret = db->Initialize(logfile, loglevel);
           ASSERT_GE(ret, 0);
@@ -51,12 +52,25 @@ namespace gtest {
       int ret;
       string logfile = "rgw_dbstore_tests.log";
       int loglevel = 30;
-      CephContext *cct;
+      boost::intrusive_ptr<CephContext> cct;
   };
 }
 
 ceph::real_time bucket_mtime = real_clock::now();
 string marker1;
+
+class DBGetDataCB : public RGWGetDataCB {
+  public:
+    bufferlist data_bl;
+    off_t data_ofs, data_len;
+
+    int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+      data_bl = bl;
+      data_ofs = bl_ofs;
+      data_len = bl_len;
+      return 0;
+    }
+};
 
 namespace {
 
@@ -82,16 +96,17 @@ namespace {
         GlobalParams.op.user.uinfo.display_name = user1;
         GlobalParams.op.user.uinfo.user_id.id = user_id1;
         GlobalParams.op.bucket.info.bucket.name = bucket1;
-        GlobalParams.object = object1;
-        GlobalParams.offset = 0;
-        GlobalParams.data = data;
-        GlobalParams.datalen = data.length();
+        GlobalParams.op.obj.state.obj.bucket = GlobalParams.op.bucket.info.bucket;
+        GlobalParams.op.obj.state.obj.key.name = object1;
+        GlobalParams.op.obj.state.obj.key.instance = "inst1";
+        GlobalParams.op.obj.obj_id = "obj_id1";
+        GlobalParams.op.obj_data.part_num = 0;
 
         /* As of now InitializeParams doesnt do anything
          * special based on fop. Hence its okay to do
          * global initialization once.
          */
-        ret = db->InitializeParams(dpp, "", &GlobalParams);
+        ret = db->InitializeParams(dpp, &GlobalParams);
         ASSERT_EQ(ret, 0);
       }
 
@@ -253,7 +268,7 @@ TEST_F(DBStoreTest, StoreUser) {
   uinfo.access_keys["id2"] = k2;
 
   /* non exclusive create..should create new one */
-  ret = db->store_user(dpp, uinfo, true, &attrs, &objv_tracker, &old_uinfo);
+  ret = db->store_user(dpp, uinfo, false, &attrs, &objv_tracker, &old_uinfo);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(old_uinfo.user_email, "");
   ASSERT_EQ(objv_tracker.read_version.ver, 1);
@@ -290,7 +305,7 @@ TEST_F(DBStoreTest, GetUserQueryByUserID) {
   uinfo.user_id.tenant = "tenant";
   uinfo.user_id.id = "user_id2";
 
-  ret = db->get_user(dpp, "user_id", "", uinfo, &attrs, &objv);
+  ret = db->get_user(dpp, "user_id", "user_id2", uinfo, &attrs, &objv);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(uinfo.user_id.tenant, "tenant");
   ASSERT_EQ(uinfo.user_email, "user2_new@dbstore.com");
@@ -377,19 +392,6 @@ TEST_F(DBStoreTest, UpdateBucketAttrs) {
   ASSERT_EQ(objv.read_version.ver, 2);
 }
 
-TEST_F(DBStoreTest, BucketChown) {
-  int ret = -1;
-  RGWBucketInfo info;
-  rgw_user user;
-  user.id = "user_id2";
-
-  info.bucket.name = "bucket1";
-
-  ret = db->update_bucket(dpp, "owner", info, false, &user, nullptr, &bucket_mtime, nullptr);
-  ASSERT_EQ(ret, 0);
-  ASSERT_EQ(info.objv_tracker.read_version.ver, 3);
-}
-
 TEST_F(DBStoreTest, UpdateBucketInfo) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
@@ -405,13 +407,14 @@ TEST_F(DBStoreTest, UpdateBucketInfo) {
   info.bucket.marker = "marker2";
   ret = db->update_bucket(dpp, "info", info, false, nullptr, nullptr, &bucket_mtime, nullptr);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(info.objv_tracker.read_version.ver, 4);
+  ASSERT_EQ(info.objv_tracker.read_version.ver, 3);
 }
 
 TEST_F(DBStoreTest, GetBucket) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
+  params.op.bucket.info.bucket.name = "bucket1";
   ret = db->ProcessOp(dpp, "GetBucket", &params);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(params.op.bucket.info.bucket.name, "bucket1");
@@ -421,10 +424,10 @@ TEST_F(DBStoreTest, GetBucket) {
   ASSERT_EQ(params.op.bucket.ent.bucket.name, "bucket1");
   ASSERT_EQ(params.op.bucket.ent.bucket.tenant, "tenant");
   ASSERT_EQ(params.op.bucket.info.has_instance_obj, false);
-  ASSERT_EQ(params.op.bucket.info.objv_tracker.read_version.ver, 4);
+  ASSERT_EQ(params.op.bucket.info.objv_tracker.read_version.ver, 3);
   ASSERT_EQ(params.op.bucket.info.objv_tracker.read_version.tag, "read_tag");
   ASSERT_EQ(params.op.bucket.mtime, bucket_mtime);
-  ASSERT_EQ(params.op.bucket.info.owner.id, "user_id2");
+  ASSERT_EQ(params.op.bucket.info.owner.id, "user_id1");
   bufferlist k, k2;
   string acl;
   map<std::string, bufferlist>::iterator it2 = params.op.bucket.bucket_attrs.begin();
@@ -435,35 +438,6 @@ TEST_F(DBStoreTest, GetBucket) {
   k2 = it2->second;
   decode(acl, k2);
   ASSERT_EQ(acl, "attrs2");
-}
-
-TEST_F(DBStoreTest, RemoveBucketAPI) {
-  int ret = -1;
-  RGWBucketInfo info;
-
-  info.bucket.name = "bucket1";
-
-  ret = db->remove_bucket(dpp, info);
-  ASSERT_EQ(ret, 0);
-}
-
-TEST_F(DBStoreTest, RemoveUserAPI) {
-  int ret = -1;
-  RGWUserInfo uinfo;
-  RGWObjVersionTracker objv;
-
-  uinfo.user_id.tenant = "tenant";
-  uinfo.user_id.id = "user_id2";
-
-  /* invalid version number...should fail */
-  objv.read_version.ver = 4;
-  ret = db->remove_user(dpp, uinfo, &objv);
-  ASSERT_EQ(ret, -125);
-
-  /* invalid version number...should fail */
-  objv.read_version.ver = 2;
-  ret = db->remove_user(dpp, uinfo, &objv);
-  ASSERT_EQ(ret, 0);
 }
 
 TEST_F(DBStoreTest, CreateBucket) {
@@ -551,7 +525,8 @@ TEST_F(DBStoreTest, ListUserBuckets) {
   marker1 = "";
   do {
     is_truncated = false;
-    ret = db->list_buckets(dpp, owner, marker1, "", max, need_stats, &ulist, &is_truncated);
+    ret = db->list_buckets(dpp, "", owner, marker1, "", max, need_stats, &ulist,
+          &is_truncated);
     ASSERT_EQ(ret, 0);
 
     cout << "marker1 :" << marker1 << "\n";
@@ -573,6 +548,19 @@ TEST_F(DBStoreTest, ListUserBuckets) {
   } while(is_truncated);
 }
 
+TEST_F(DBStoreTest, BucketChown) {
+  int ret = -1;
+  RGWBucketInfo info;
+  rgw_user user;
+  user.id = "user_id2";
+
+  info.bucket.name = "bucket5";
+
+  ret = db->update_bucket(dpp, "owner", info, false, &user, nullptr, &bucket_mtime, nullptr);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(info.objv_tracker.read_version.ver, 3);
+}
+
 TEST_F(DBStoreTest, ListAllBuckets) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
@@ -581,19 +569,95 @@ TEST_F(DBStoreTest, ListAllBuckets) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreTest, InsertObject) {
+TEST_F(DBStoreTest, ListAllBuckets2) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
+  rgw_user owner;
+  int max = 2;
+  bool need_stats = true;
+  bool is_truncated = false;
+  RGWUserBuckets ulist;
 
-  ret = db->ProcessOp(dpp, "InsertObject", &params);
+  marker1 = "";
+  do {
+    is_truncated = false;
+    ret = db->list_buckets(dpp, "all", owner, marker1, "", max, need_stats, &ulist,
+          &is_truncated);
+    ASSERT_EQ(ret, 0);
+
+    cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ \n";
+    cout << "ownerID : " << owner.id << "\n";
+    cout << "marker1 :" << marker1 << "\n";
+
+    cout << "is_truncated :" << is_truncated << "\n";
+
+    for (const auto& ent: ulist.get_buckets()) {
+      RGWBucketEnt e = ent.second;
+      cout << "###################### \n";
+      cout << "ent.bucket.id : " << e.bucket.name << "\n";
+      cout << "ent.bucket.marker : " << e.bucket.marker << "\n";
+      cout << "ent.bucket.bucket_id : " << e.bucket.bucket_id << "\n";
+      cout << "ent.size : " << e.size << "\n";
+      cout << "ent.rule.name : " << e.placement_rule.name << "\n";
+
+      marker1 = e.bucket.name;
+    }
+    ulist.clear();
+  } while(is_truncated);
+}
+
+TEST_F(DBStoreTest, RemoveBucketAPI) {
+  int ret = -1;
+  RGWBucketInfo info;
+
+  info.bucket.name = "bucket5";
+
+  ret = db->remove_bucket(dpp, info);
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreTest, ListObject) {
+TEST_F(DBStoreTest, RemoveUserAPI) {
+  int ret = -1;
+  RGWUserInfo uinfo;
+  RGWObjVersionTracker objv;
+
+  uinfo.user_id.tenant = "tenant";
+  uinfo.user_id.id = "user_id2";
+
+  /* invalid version number...should fail */
+  objv.read_version.ver = 4;
+  ret = db->remove_user(dpp, uinfo, &objv);
+  ASSERT_EQ(ret, -125);
+
+  objv.read_version.ver = 2;
+  ret = db->remove_user(dpp, uinfo, &objv);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, PutObject) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp(dpp, "ListObject", &params);
+  params.op.obj.category = RGWObjCategory::Main;
+  params.op.obj.storage_class = "STANDARD";
+  bufferlist b1;
+  encode("HELLO WORLD", b1);
+  cout<<"XXXXXXXXX Insert b1.length " << b1.length() << "\n";
+  params.op.obj.head_data = b1;
+  params.op.obj.state.size = 12;
+  params.op.obj.state.is_olh = false;
+  ret = db->ProcessOp(dpp, "PutObject", &params);
+  ASSERT_EQ(ret, 0);
+
+  /* Insert another objects */
+  params.op.obj.state.obj.key.name = "object2";
+  params.op.obj.state.obj.key.instance = "inst2";
+  ret = db->ProcessOp(dpp, "PutObject", &params);
+  ASSERT_EQ(ret, 0);
+
+  params.op.obj.state.obj.key.name = "object3";
+  params.op.obj.state.obj.key.instance = "inst3";
+  ret = db->ProcessOp(dpp, "PutObject", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -602,14 +666,356 @@ TEST_F(DBStoreTest, ListAllObjects) {
   int ret = -1;
 
   ret = db->ListAllObjects(dpp, &params);
+  ASSERT_GE(ret, 0);
+}
+
+TEST_F(DBStoreTest, GetObject) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+
+  ret = db->ProcessOp(dpp, "GetObject", &params);
   ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.obj.category, RGWObjCategory::Main);
+  ASSERT_EQ(params.op.obj.storage_class, "STANDARD");
+  string data;
+  decode(data, params.op.obj.head_data);
+  ASSERT_EQ(data, "HELLO WORLD");
+  ASSERT_EQ(params.op.obj.state.size, 12);
+}
+
+TEST_F(DBStoreTest, GetObjectState) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  RGWObjState* s;
+
+  params.op.obj.state.obj.key.name = "object2";
+  params.op.obj.state.obj.key.instance = "inst2";
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+
+  ret = op_target.get_obj_state(dpp, params.op.bucket.info, params.op.obj.state.obj,
+      false, &s);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(s->size, 12);
+  ASSERT_EQ(s->is_olh, false);
+
+  /* Recheck with get_state API */
+  ret = op_target.get_state(dpp, &s, false);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(s->size, 12);
+  ASSERT_EQ(s->is_olh, false);
+}
+
+TEST_F(DBStoreTest, ObjAttrs) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  map<string, bufferlist> setattrs;
+  map<string, bufferlist> rmattrs;
+  map<string, bufferlist> readattrs;
+
+  bufferlist b1, b2, b3;
+  encode("ACL", b1);
+  setattrs[RGW_ATTR_ACL] = b1;
+  encode("LC", b2);
+  setattrs[RGW_ATTR_LC] = b2;
+  encode("ETAG", b3);
+  setattrs[RGW_ATTR_ETAG] = b3;
+
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+
+  /* Set some attrs */
+  ret = op_target.set_attrs(dpp, setattrs, nullptr);
+  ASSERT_EQ(ret, 0);
+
+  /* read those attrs */
+  DB::Object::Read read_op(&op_target);
+  read_op.params.attrs = &readattrs;
+  ret = read_op.prepare(dpp);
+  ASSERT_EQ(ret, 0);
+
+  string val;
+  decode(val, readattrs[RGW_ATTR_ACL]);
+  ASSERT_EQ(val, "ACL");
+  decode(val, readattrs[RGW_ATTR_LC]);
+  ASSERT_EQ(val, "LC");
+  decode(val, readattrs[RGW_ATTR_ETAG]);
+  ASSERT_EQ(val, "ETAG");
+
+  /* Remove some attrs */
+  rmattrs[RGW_ATTR_ACL] = b1;
+  map<string, bufferlist> empty;
+  ret = op_target.set_attrs(dpp, empty, &rmattrs);
+  ASSERT_EQ(ret, 0);
+
+  /* read those attrs */
+  ret = read_op.prepare(dpp);
+  ASSERT_EQ(ret, 0);
+
+  ASSERT_EQ(readattrs.count(RGW_ATTR_ACL), 0);
+  decode(val, readattrs[RGW_ATTR_LC]);
+  ASSERT_EQ(val, "LC");
+  decode(val, readattrs[RGW_ATTR_ETAG]);
+  ASSERT_EQ(val, "ETAG");
+}
+
+TEST_F(DBStoreTest, WriteObject) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  map<string, bufferlist> setattrs;
+  params.op.obj.state.obj.key.name = "object3";
+  params.op.obj.state.obj.key.instance = "inst3";
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+  DB::Object::Write write_op(&op_target);
+  ret = write_op.prepare(dpp);
+  ASSERT_EQ(ret, 0);
+
+  write_op.meta.mtime = &bucket_mtime;
+  write_op.meta.category = RGWObjCategory::Main;
+  write_op.meta.owner = params.op.user.uinfo.user_id;
+
+  bufferlist b1;
+  encode("HELLO WORLD - Object3", b1);
+  cout<<"XXXXXXXXX Insert b1.length " << b1.length() << "\n";
+  write_op.meta.data = &b1;
+
+  bufferlist b2;
+  encode("ACL", b2);
+  setattrs[RGW_ATTR_ACL] = b2;
+
+  ret = write_op.write_meta(0, 22, 25, setattrs);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, ReadObject) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  map<string, bufferlist> readattrs;
+  params.op.obj.state.obj.key.name = "object3";
+  params.op.obj.state.obj.key.instance = "inst3";
+  uint64_t obj_size;
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+  DB::Object::Read read_op(&op_target);
+  read_op.params.attrs = &readattrs;
+  read_op.params.obj_size = &obj_size;
+  ret = read_op.prepare(dpp);
+  ASSERT_EQ(ret, 0);
+
+  bufferlist bl;
+  ret = read_op.read(0, 25, bl, dpp);
+  cout<<"XXXXXXXXX Insert bl.length " << bl.length() << "\n";
+  ASSERT_EQ(ret, 25);
+
+  string data;
+  decode(data, bl);
+  ASSERT_EQ(data, "HELLO WORLD - Object3");
+  ASSERT_EQ(obj_size, 22);
+}
+
+TEST_F(DBStoreTest, IterateObject) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  map<string, bufferlist> readattrs;
+  uint64_t obj_size;
+  DBGetDataCB cb;
+
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+  DB::Object::Read read_op(&op_target);
+  read_op.params.attrs = &readattrs;
+  read_op.params.obj_size = &obj_size;
+  ret = read_op.prepare(dpp);
+  ASSERT_EQ(ret, 0);
+
+  bufferlist bl;
+  ret = read_op.iterate(dpp, 0, 15, &cb);
+  ASSERT_EQ(ret, 0);
+  string data;
+  decode(data, cb.data_bl);
+  cout << "XXXXXXXXXX iterate data is " << data << ", bl_ofs = " << cb.data_ofs << ", bl_len = " << cb.data_len << "\n";
+  ASSERT_EQ(data, "HELLO WORLD");
+  ASSERT_EQ(cb.data_ofs, 0);
+  ASSERT_EQ(cb.data_len, 15);
+}
+
+TEST_F(DBStoreTest, ListBucketObjects) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  
+  int max = 2;
+  bool is_truncated = false;
+  rgw_obj_key marker1;
+  DB::Bucket target(db, params.op.bucket.info);
+  DB::Bucket::List list_op(&target);
+
+  vector<rgw_bucket_dir_entry> dir_list;
+
+  marker1.name = "";
+  do {
+    is_truncated = false;
+    list_op.params.marker = marker1;
+    ret = list_op.list_objects(dpp, max, &dir_list, nullptr, &is_truncated);
+    ASSERT_EQ(ret, 0);
+
+    cout << "marker1 :" << marker1.name << "\n";
+
+    cout << "is_truncated :" << is_truncated << "\n";
+
+    for (const auto& ent: dir_list) {
+      cls_rgw_obj_key key = ent.key;
+      cout << "###################### \n";
+      cout << "key.name : " << key.name << "\n";
+      cout << "key.instance : " << key.instance << "\n";
+
+      marker1 = list_op.get_next_marker();
+    }
+    dir_list.clear();
+  } while(is_truncated);
+}
+
+TEST_F(DBStoreTest, DeleteObj) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  RGWObjState *s;
+
+  /* delete object2 */
+  params.op.obj.state.obj.key.name = "object2";
+  params.op.obj.state.obj.key.instance = "inst2";
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+
+  DB::Object::Delete delete_op(&op_target);
+  ret = delete_op.delete_obj(dpp);
+  ASSERT_EQ(ret, 0);
+
+  /* Should return ENOENT */
+  ret = op_target.get_state(dpp, &s, false);
+  ASSERT_EQ(ret, -2);
+}
+
+TEST_F(DBStoreTest, ObjectOmapSetVal) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+
+  string val = "part1_val";
+  bufferlist bl;
+  encode(val, bl);
+  ret = op_target.obj_omap_set_val_by_key(dpp, "part1", bl, false);
+  ASSERT_EQ(ret, 0);
+
+  val = "part2_val";
+  bl.clear();
+  encode(val, bl);
+  ret = op_target.obj_omap_set_val_by_key(dpp, "part2", bl, false);
+  ASSERT_EQ(ret, 0);
+
+  val = "part3_val";
+  bl.clear();
+  encode(val, bl);
+  ret = op_target.obj_omap_set_val_by_key(dpp, "part3", bl, false);
+  ASSERT_EQ(ret, 0);
+
+  val = "part4_val";
+  bl.clear();
+  encode(val, bl);
+  ret = op_target.obj_omap_set_val_by_key(dpp, "part4", bl, false);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, ObjectOmapGetValsByKeys) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  std::set<std::string> keys;
+  std::map<std::string, bufferlist> vals;
+
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+
+  keys.insert("part2");
+  keys.insert("part4");
+
+  ret = op_target.obj_omap_get_vals_by_keys(dpp, "", keys, &vals);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(vals.size(), 2);
+
+  string val;
+  decode(val, vals["part2"]);
+  ASSERT_EQ(val, "part2_val");
+  decode(val, vals["part4"]);
+  ASSERT_EQ(val, "part4_val");
+}
+
+TEST_F(DBStoreTest, ObjectOmapGetAll) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  std::map<std::string, bufferlist> vals;
+
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+
+  ret = op_target.obj_omap_get_all(dpp, &vals);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(vals.size(), 4);
+
+  string val;
+  decode(val, vals["part1"]);
+  ASSERT_EQ(val, "part1_val");
+  decode(val, vals["part2"]);
+  ASSERT_EQ(val, "part2_val");
+  decode(val, vals["part3"]);
+  ASSERT_EQ(val, "part3_val");
+  decode(val, vals["part4"]);
+  ASSERT_EQ(val, "part4_val");
+}
+
+TEST_F(DBStoreTest, ObjectOmapGetVals) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  std::set<std::string> keys;
+  std::map<std::string, bufferlist> vals;
+  bool pmore;
+
+  DB::Object op_target(db, params.op.bucket.info,
+      params.op.obj.state.obj);
+
+  ret = op_target.obj_omap_get_vals(dpp, "part3", 10, &vals, &pmore);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(vals.size(), 2);
+
+  string val;
+  decode(val, vals["part3"]);
+  ASSERT_EQ(val, "part3_val");
+  decode(val, vals["part4"]);
+  ASSERT_EQ(val, "part4_val");
 }
 
 TEST_F(DBStoreTest, PutObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
+  params.op.obj_data.part_num = 1;
+  params.op.obj_data.offset = 10;
+  params.op.obj_data.multipart_part_str = "2";
+  bufferlist b1;
+  encode("HELLO WORLD", b1);
+  params.op.obj_data.data = b1;
+  params.op.obj_data.size = 12;
+  params.op.obj.state.mtime = real_clock::now();
   ret = db->ProcessOp(dpp, "PutObjectData", &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, UpdateObjectData) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+
+  params.op.obj.state.mtime = bucket_mtime;
+  ret = db->ProcessOp(dpp, "UpdateObjectData", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -617,8 +1023,19 @@ TEST_F(DBStoreTest, GetObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
+  params.op.obj.state.obj.key.instance = "inst1";
+  params.op.obj.state.obj.key.name = "object1";
   ret = db->ProcessOp(dpp, "GetObjectData", &params);
   ASSERT_EQ(ret, 0);
+  ASSERT_EQ(params.op.obj_data.part_num, 1);
+  ASSERT_EQ(params.op.obj_data.offset, 10);
+  ASSERT_EQ(params.op.obj_data.multipart_part_str, "2");
+  ASSERT_EQ(params.op.obj.state.obj.key.instance, "inst1");
+  ASSERT_EQ(params.op.obj.state.obj.key.name, "object1");
+  ASSERT_EQ(params.op.obj.state.mtime, bucket_mtime);
+  string data;
+  decode(data, params.op.obj_data.data);
+  ASSERT_EQ(data, "HELLO WORLD");
 }
 
 TEST_F(DBStoreTest, DeleteObjectData) {
@@ -629,12 +1046,119 @@ TEST_F(DBStoreTest, DeleteObjectData) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreTest, RemoveObject) {
+TEST_F(DBStoreTest, DeleteObject) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp(dpp, "RemoveObject", &params);
+  ret = db->ProcessOp(dpp, "DeleteObject", &params);
   ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, LCTables) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+
+  ret = db->createLCTables(dpp);
+  ASSERT_GE(ret, 0);
+}
+
+TEST_F(DBStoreTest, LCHead) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  std::string index1 = "bucket1";
+  std::string index2 = "bucket2";
+  time_t lc_time = ceph_clock_now();
+  rgw::sal::Lifecycle::LCHead head;
+  std::string ents[] = {"entry1", "entry2", "entry3"};
+  rgw::sal::Lifecycle::LCHead head1 = {lc_time, ents[0]};
+  rgw::sal::Lifecycle::LCHead head2 = {lc_time, ents[1]};
+  rgw::sal::Lifecycle::LCHead head3 = {lc_time, ents[2]};
+
+  ret = db->put_head(index1, head1);
+  ASSERT_EQ(ret, 0);
+  ret = db->put_head(index2, head2);
+  ASSERT_EQ(ret, 0);
+
+  ret = db->get_head(index1, head);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(head.marker, "entry1");
+
+  ret = db->get_head(index2, head);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(head.marker, "entry2");
+
+  // update index1
+  ret = db->put_head(index1, head3);
+  ASSERT_EQ(ret, 0);
+  ret = db->get_head(index1, head);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(head.marker, "entry3");
+
+}
+TEST_F(DBStoreTest, LCEntry) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  uint64_t lc_time = ceph_clock_now();
+  std::string index1 = "lcindex1";
+  std::string index2 = "lcindex2";
+  typedef enum {lc_uninitial = 1, lc_complete} status;
+  std::string ents[] = {"bucket1", "bucket2", "bucket3", "bucket4"};
+  rgw::sal::Lifecycle::LCEntry entry;
+  rgw::sal::Lifecycle::LCEntry entry1 = {ents[0], lc_time, lc_uninitial};
+  rgw::sal::Lifecycle::LCEntry entry2 = {ents[1], lc_time, lc_uninitial};
+  rgw::sal::Lifecycle::LCEntry entry3 = {ents[2], lc_time, lc_uninitial};
+  rgw::sal::Lifecycle::LCEntry entry4 = {ents[3], lc_time, lc_uninitial};
+
+  vector<rgw::sal::Lifecycle::LCEntry> lc_entries;
+
+  ret = db->set_entry(index1, entry1);
+  ASSERT_EQ(ret, 0);
+  ret = db->set_entry(index1, entry2);
+  ASSERT_EQ(ret, 0);
+  ret = db->set_entry(index1, entry3);
+  ASSERT_EQ(ret, 0);
+  ret = db->set_entry(index2, entry4);
+  ASSERT_EQ(ret, 0);
+
+  // get entry index1, entry1
+  ret = db->get_entry(index1, ents[0], entry); 
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(entry.status, lc_uninitial);
+  ASSERT_EQ(entry.start_time, lc_time);
+
+  // get next entry index1, entry2
+  ret = db->get_next_entry(index1, ents[1], entry); 
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(entry.bucket, ents[2]);
+  ASSERT_EQ(entry.status, lc_uninitial);
+  ASSERT_EQ(entry.start_time, lc_time);
+
+  // update entry4 to entry5
+  entry4.status = lc_complete;
+  ret = db->set_entry(index2, entry4);
+  ASSERT_EQ(ret, 0);
+  ret = db->get_entry(index2, ents[3], entry); 
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(entry.status, lc_complete);
+
+  // list entries
+  ret = db->list_entries(index1, "", 5, lc_entries);
+  ASSERT_EQ(ret, 0);
+  for (const auto& ent: lc_entries) {
+    cout << "###################### \n";
+    cout << "lc entry.bucket : " << ent.bucket << "\n";
+    cout << "lc entry.status : " << ent.status << "\n";
+  }
+
+  // remove index1, entry3
+  ret = db->rm_entry(index1, entry3); 
+  ASSERT_EQ(ret, 0);
+
+  // get next entry index1, entry2.. should be null
+  entry = {};
+  ret = db->get_next_entry(index1, ents[1], entry); 
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(entry.start_time, 0);
 }
 
 TEST_F(DBStoreTest, RemoveBucket) {
@@ -678,9 +1202,9 @@ int main(int argc, char **argv)
 
   // format: ./dbstore-tests logfile loglevel
   if (argc == 3) {
-	c_logfile = argv[1];
-	c_loglevel = (atoi)(argv[2]);
-	cout << "logfile:" << c_logfile << ", loglevel set to " << c_loglevel << "\n";
+    c_logfile = argv[1];
+    c_loglevel = (atoi)(argv[2]);
+    cout << "logfile:" << c_logfile << ", loglevel set to " << c_loglevel << "\n";
   }
 
   ::testing::InitGoogleTest(&argc, argv);

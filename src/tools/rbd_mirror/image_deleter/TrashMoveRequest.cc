@@ -15,6 +15,7 @@
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/ResetRequest.h"
+#include "librbd/mirror/ImageRemoveRequest.h"
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/trash/MoveRequest.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
@@ -181,6 +182,13 @@ template <typename I>
 void TrashMoveRequest<I>::handle_open_image(int r) {
   dout(10) << "r=" << r << dendl;
 
+  if (r == -ENOENT) {
+    dout(5) << "mirror image does not exist, removing orphaned metadata" << dendl;
+    m_image_ctx = nullptr;
+    remove_mirror_image();
+    return;
+  }
+
   if (r < 0) {
     derr << "failed to open image: " << cpp_strerror(r) << dendl;
     m_image_ctx = nullptr;
@@ -315,15 +323,12 @@ template <typename I>
 void TrashMoveRequest<I>::remove_mirror_image() {
   dout(10) << dendl;
 
-  librados::ObjectWriteOperation op;
-  librbd::cls_client::mirror_image_remove(&op, m_image_id);
-
-  auto aio_comp = create_rados_callback<
+  auto ctx = create_context_callback<
     TrashMoveRequest<I>,
     &TrashMoveRequest<I>::handle_remove_mirror_image>(this);
-  int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
-  ceph_assert(r == 0);
-  aio_comp->release();
+  auto req = librbd::mirror::ImageRemoveRequest<I>::create(
+    m_io_ctx, m_global_image_id, m_image_id, ctx);
+  req->send();
 }
 
 template <typename I>
@@ -345,6 +350,10 @@ template <typename I>
 void TrashMoveRequest<I>::close_image() {
   dout(10) << dendl;
 
+  if (m_image_ctx == nullptr) {
+    handle_close_image(0);
+    return;
+  }
   Context *ctx = create_context_callback<
     TrashMoveRequest<I>, &TrashMoveRequest<I>::handle_close_image>(this);
   m_image_ctx->state->close(ctx);

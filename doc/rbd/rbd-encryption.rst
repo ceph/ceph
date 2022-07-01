@@ -118,7 +118,7 @@ allows selecting AES-128 as well. Adding / removing passphrases is currently
 not supported by RBD, but can be applied to the raw RBD data using compatible
 tools such as cryptsetup.
 
-The LUKS header size can vary (upto 136MiB in LUKS2), but is usually upto
+The LUKS header size can vary (up to 136MiB in LUKS2), but is usually up to
 16MiB, depending on the version of `libcryptsetup` installed. For optimal
 performance, the encryption format will set the data offset to be aligned with
 the image object size. For example expect a minimum overhead of 8MiB if using

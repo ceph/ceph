@@ -5,6 +5,7 @@ from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, NotConnected,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
+                   LIBRADOS_CMPXATTR_OP_EQ, LIBRADOS_CMPXATTR_OP_GT, LIBRADOS_CMPXATTR_OP_LT, OSError,
                    LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO, NoData, ExtendMismatch)
 from datetime import timedelta
 import time
@@ -597,6 +598,50 @@ class TestIoctx(object):
             eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "test_obj")
             eq(list(iter), [("4", b"dddd")])
+
+    def test_omap_cmp(self):
+        object_id = 'test'
+        self.ioctx.write(object_id, b'omap_cmp')
+        with WriteOpCtx() as write_op:
+            self.ioctx.set_omap(write_op, ('key1',), ('1',))
+            self.ioctx.operate_write_op(write_op, object_id)
+        with WriteOpCtx() as write_op:
+            write_op.omap_cmp('key1', '1', LIBRADOS_CMPXATTR_OP_EQ)
+            self.ioctx.set_omap(write_op, ('key1',), ('2',))
+            self.ioctx.operate_write_op(write_op, object_id)
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, ('key1',))
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, object_id)
+            eq(list(iter), [('key1', b'2')])
+        with WriteOpCtx() as write_op:
+            write_op.omap_cmp('key1', '1', LIBRADOS_CMPXATTR_OP_GT)
+            self.ioctx.set_omap(write_op, ('key1',), ('3',))
+            self.ioctx.operate_write_op(write_op, object_id)
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, ('key1',))
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, object_id)
+            eq(list(iter), [('key1', b'3')])
+        with WriteOpCtx() as write_op:
+            write_op.omap_cmp('key1', '4', LIBRADOS_CMPXATTR_OP_LT)
+            self.ioctx.set_omap(write_op, ('key1',), ('4',))
+            self.ioctx.operate_write_op(write_op, object_id)
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, ('key1',))
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, object_id)
+            eq(list(iter), [('key1', b'4')])
+        with WriteOpCtx() as write_op:
+            write_op.omap_cmp('key1', '1', LIBRADOS_CMPXATTR_OP_EQ)
+            self.ioctx.set_omap(write_op, ('key1',), ('5',))
+            try:
+                self.ioctx.operate_write_op(write_op, object_id)
+            except (OSError, ExtendMismatch) as e:
+                eq(e.errno, 125)
+            else:
+                message = "omap_cmp did not raise Exception when omap content does not match"
+                raise AssertionError(message)
 
     def test_cmpext_op(self):
         object_id = 'test'

@@ -108,10 +108,11 @@ struct OMapInnerNode
   }
 
   ceph::bufferlist get_delta() final {
-    assert(!delta_buffer.empty());
     ceph::bufferlist bl;
-    encode(delta_buffer, bl);
-    delta_buffer.clear();
+    if (!delta_buffer.empty()) {
+      encode(delta_buffer, bl);
+      delta_buffer.clear();
+    }
     return bl;
   }
 
@@ -205,10 +206,11 @@ struct OMapLeafNode
   }
 
   ceph::bufferlist get_delta() final {
-    assert(!delta_buffer.empty());
     ceph::bufferlist bl;
-    encode(delta_buffer, bl);
-    delta_buffer.clear();
+    if (!delta_buffer.empty()) {
+      encode(delta_buffer, bl);
+      delta_buffer.clear();
+    }
     return bl;
   }
 

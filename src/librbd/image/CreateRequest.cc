@@ -283,8 +283,7 @@ void CreateRequest<I>::validate_data_pool() {
 
   auto ctx = create_context_callback<
     CreateRequest<I>, &CreateRequest<I>::handle_validate_data_pool>(this);
-  auto req = ValidatePoolRequest<I>::create(m_data_io_ctx, m_op_work_queue,
-                                            ctx);
+  auto req = ValidatePoolRequest<I>::create(m_data_io_ctx, ctx);
   req->send();
 }
 

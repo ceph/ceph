@@ -342,7 +342,7 @@ public:
       string instance = (!e.key.instance.empty() ? e.key.instance : "null");
       s->formatter->dump_string("Instance", instance.c_str());
       s->formatter->dump_int("VersionedEpoch", e.versioned_epoch);
-      dump_time(s, "LastModified", &e.meta.mtime);
+      dump_time(s, "LastModified", e.meta.mtime);
       s->formatter->dump_int("Size", e.meta.size);
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
       s->formatter->dump_string("ContentType", e.meta.content_type.c_str());
@@ -404,7 +404,7 @@ public:
 
 
 RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Store* store,
-						     struct req_state* const s,
+						     req_state* const s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
                                                      const std::string& frontend_prefix)
 {

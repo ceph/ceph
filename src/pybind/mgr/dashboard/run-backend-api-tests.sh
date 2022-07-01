@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# SHELL_TRACE=true ./run-backend-api-tests.sh to enable debugging
+[ -v SHELL_TRACE ] && set -x
+
 # cross shell: Are we sourced?
 # Source: https://stackoverflow.com/a/28776166/3185053
 ([[ -n $ZSH_EVAL_CONTEXT && $ZSH_EVAL_CONTEXT =~ :file$ ]] ||
@@ -43,8 +46,8 @@ setup_teuthology() {
 
     ${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python3} -m venv venv
     source venv/bin/activate
-    pip install -U pip 'setuptools >= 12'
-    pip install git+https://github.com/ceph/teuthology#egg=teuthology[test]
+    pip install -U pip 'setuptools>=12,<60'
+    pip install "git+https://github.com/ceph/teuthology@7039075#egg=teuthology[test]"
     pushd $CURR_DIR
     pip install -r requirements.txt -c constraints.txt
     popd

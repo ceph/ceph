@@ -78,7 +78,7 @@ TEST_P(CompressorTest, small_round_trip)
   bufferlist orig;
   orig.append("This is a short string.  There are many strings like it but this one is mine.");
   bufferlist compressed;
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   int r = compressor->compress(orig, compressed, compressor_message);
   ASSERT_EQ(0, r);
   bufferlist decompressed;
@@ -98,7 +98,7 @@ TEST_P(CompressorTest, big_round_trip_repeated)
     orig.append("This is a short string.  There are many strings like it but this one is mine.");
   }
   bufferlist compressed;
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   int r = compressor->compress(orig, compressed, compressor_message);
   ASSERT_EQ(0, r);
   bufferlist decompressed;
@@ -128,7 +128,7 @@ TEST_P(CompressorTest, big_round_trip_randomish)
     orig.append(bp);
   }
   bufferlist compressed;
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   int r = compressor->compress(orig, compressed, compressor_message);
   ASSERT_EQ(0, r);
   bufferlist decompressed;
@@ -183,7 +183,7 @@ TEST_P(CompressorTest, round_trip_osdmap)
     chunk.substr_of(fbl, j*size, l);
     //fbl.rebuild();
     bufferlist compressed;
-    boost::optional<int32_t> compressor_message;
+    std::optional<int32_t> compressor_message;
     int r = compressor->compress(chunk, compressed, compressor_message);
     ASSERT_EQ(0, r);
     bufferlist decompressed;
@@ -211,7 +211,7 @@ TEST_P(CompressorTest, compress_decompress)
   bufferlist after;
   bufferlist exp;
   in.append(test, len);
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   res = compressor->compress(in, out, compressor_message);
   EXPECT_EQ(res, 0);
   res = compressor->decompress(out, after, compressor_message);
@@ -261,7 +261,7 @@ TEST_P(CompressorTest, sharded_input_decompress)
   int len = test.size();
   bufferlist in, out;
   in.append(test.c_str(), len);
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   int res = compressor->compress(in, out, compressor_message);
   EXPECT_EQ(res, 0);
   EXPECT_GT(out.length(), small_prefix_size);
@@ -294,7 +294,7 @@ void test_compress(CompressorRef compressor, size_t size)
   in.append(data, size);
   for (size_t t = 0; t < 10000; t++) {
     bufferlist out;
-    boost::optional<int32_t> compressor_message;
+    std::optional<int32_t> compressor_message;
     int res = compressor->compress(in, out, compressor_message);
     EXPECT_EQ(res, 0);
   }
@@ -309,7 +309,7 @@ void test_decompress(CompressorRef compressor, size_t size)
   }
   bufferlist in, out;
   in.append(data, size);
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   int res = compressor->compress(in, out, compressor_message);
   EXPECT_EQ(res, 0);
   for (size_t t = 0; t < 10000; t++) {
@@ -411,7 +411,7 @@ TEST(ZlibCompressor, zlib_isal_compatibility)
   bufferlist in, out;
   in.append(test, len);
   // isal -> zlib
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   int res = isal->compress(in, out, compressor_message);
   EXPECT_EQ(res, 0);
   bufferlist after;
@@ -480,7 +480,7 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
     bufferlist in, out;
     in.append(test, size);
 
-    boost::optional<int32_t> compressor_message;
+    std::optional<int32_t> compressor_message;
     int res = isal->compress(in, out, compressor_message);
     EXPECT_EQ(res, 0);
     bufferlist after;
@@ -520,7 +520,7 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
     bufferlist in, out;
     in.append(test, size);
 
-    boost::optional<int32_t> compressor_message;
+    std::optional<int32_t> compressor_message;
     int res = isal->compress(in, out, compressor_message);
     EXPECT_EQ(res, 0);
     bufferlist after;
@@ -559,7 +559,7 @@ TEST(QAT, enc_qat_dec_noqat) {
       bufferlist in, out;
       in.append(test, size);
   
-      boost::optional<int32_t> compressor_message;
+      std::optional<int32_t> compressor_message;
       int res = q->compress(in, out, compressor_message);
       EXPECT_EQ(res, 0);
       bufferlist after;
@@ -596,7 +596,7 @@ TEST(QAT, enc_noqat_dec_qat) {
       bufferlist in, out;
       in.append(test, size);
   
-      boost::optional<int32_t> compressor_message;
+      std::optional<int32_t> compressor_message;
       int res = noq->compress(in, out, compressor_message);
       EXPECT_EQ(res, 0);
       bufferlist after;

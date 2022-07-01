@@ -7,6 +7,7 @@ import orchestrator
 from ceph.deployment.service_spec import ServiceSpec
 from orchestrator._interface import DaemonDescription
 from orchestrator import OrchestratorValidationError
+from .utils import RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES
 
 logger = logging.getLogger(__name__)
 T = TypeVar('T')
@@ -104,9 +105,9 @@ class DaemonPlacement(NamedTuple):
         if self.name and self.name != dd.daemon_id:
             return False
         if self.ports:
-            if self.ports != dd.ports:
+            if self.ports != dd.ports and dd.ports:
                 return False
-            if self.ip != dd.ip:
+            if self.ip != dd.ip and dd.ip:
                 return False
         return True
 
@@ -255,6 +256,10 @@ class HostAssignment(object):
 
         # get candidate hosts based on [hosts, label, host_pattern]
         candidates = self.get_candidates()  # type: List[DaemonPlacement]
+        if self.primary_daemon_type in RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES:
+            # remove unreachable hosts that are not in maintenance so daemons
+            # on these hosts will be rescheduled
+            candidates = self.remove_non_maintenance_unreachable_candidates(candidates)
 
         def expand_candidates(ls: List[DaemonPlacement], num: int) -> List[DaemonPlacement]:
             r = []
@@ -348,21 +353,14 @@ class HostAssignment(object):
             for i in range(len(to_add)):
                 to_add[i] = to_add[i].assign_rank_generation(ranks[i], self.rank_map)
 
-        # If we don't have <count> the list of candidates is definitive.
-        if count is None:
-            final = existing_slots + to_add
-            logger.debug('Provided hosts: %s' % final)
-            return self.place_per_host_daemons(final, to_add, to_remove)
-
-        logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
-            existing, to_add))
+        logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (existing, to_add))
         return self.place_per_host_daemons(existing_slots + to_add, to_add, to_remove)
 
     def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
         for subnet in subnets:
             ips: List[str] = []
-            for iface, ips in self.networks.get(hostname, {}).get(subnet, {}).items():
-                ips.extend(ips)
+            for iface, iface_ips in self.networks.get(hostname, {}).get(subnet, {}).items():
+                ips.extend(iface_ips)
             if ips:
                 return sorted(ips)[0]
         return None
@@ -424,12 +422,26 @@ class HostAssignment(object):
             if len(old) > len(ls):
                 logger.debug('Filtered %s down to %s' % (old, ls))
 
-        # shuffle for pseudo random selection
-        # gen seed off of self.spec to make shuffling deterministic
+        # now that we have the list of nodes candidates based on the configured
+        # placement, let's shuffle the list for node pseudo-random selection. For this,
+        # we generate a seed from the service name and we use to shuffle the candidates.
+        # This makes shuffling deterministic for the same service name.
         seed = int(
             hashlib.sha1(self.spec.service_name().encode('utf-8')).hexdigest(),
             16
-        ) % (2 ** 32)
+        ) % (2 ** 32)  # truncate result to 32 bits
         final = sorted(ls)
         random.Random(seed).shuffle(final)
-        return ls
+        return final
+
+    def remove_non_maintenance_unreachable_candidates(self, candidates: List[DaemonPlacement]) -> List[DaemonPlacement]:
+        in_maintenance: Dict[str, bool] = {}
+        for h in self.hosts:
+            if h.status.lower() == 'maintenance':
+                in_maintenance[h.hostname] = True
+                continue
+            in_maintenance[h.hostname] = False
+        unreachable_hosts = [h.hostname for h in self.unreachable_hosts]
+        candidates = [
+            c for c in candidates if c.hostname not in unreachable_hosts or in_maintenance[c.hostname]]
+        return candidates

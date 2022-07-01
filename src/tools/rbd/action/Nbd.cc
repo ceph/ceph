@@ -163,10 +163,17 @@ int execute_attach(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  if (!vm["force"].as<bool>()) {
+  if (vm["show-cookie"].as<bool>()) {
+    args.push_back("--show-cookie");
+  }
+
+  if (vm.count("cookie")) {
+    args.push_back("--cookie");
+    args.push_back(vm["cookie"].as<std::string>());
+  } else if (!vm["force"].as<bool>()) {
     std::cerr << "rbd: could not validate attach request\n";
     std::cerr << "rbd: mismatching the image and the device may lead to data corruption\n";
-    std::cerr << "rbd: must specify --force to proceed" << std::endl;
+    std::cerr << "rbd: must specify --cookie <arg> or --force to proceed" << std::endl;
     return -EINVAL;
   }
 
@@ -257,6 +264,15 @@ int execute_map(const po::variables_map &vm,
 
   if (vm["quiesce"].as<bool>()) {
     args.push_back("--quiesce");
+  }
+
+  if (vm["show-cookie"].as<bool>()) {
+    args.push_back("--show-cookie");
+  }
+
+  if (vm.count("cookie")) {
+    args.push_back("--cookie");
+    args.push_back(vm["cookie"].as<std::string>());
   }
 
   if (vm["read-only"].as<bool>()) {
@@ -398,8 +414,6 @@ int execute_unmap_deprecated(const po::variables_map &vm,
             << "use 'device unmap -t nbd' instead" << std::endl;
   return execute_unmap(vm, ceph_global_args);
 }
-
-Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
 
 Shell::Action action_show_deprecated(
   {"nbd", "list"}, {"nbd", "ls"}, "List the nbd devices already used.", "",

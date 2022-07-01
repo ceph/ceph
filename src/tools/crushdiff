@@ -104,7 +104,8 @@ def get_erasure_code_profiles(osdmap):
 
 def get_pgmap(pg_dump_file):
     with open(pg_dump_file, "r") as f:
-        return json.load(f)['pg_map']
+        dump = json.load(f)
+        return dump.get('pg_map', dump)
 
 def get_pg_stats(pgmap):
     return {pg['pgid']: pg for pg in pgmap['pg_stats']}

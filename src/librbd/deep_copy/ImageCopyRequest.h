@@ -109,7 +109,7 @@ private:
   void handle_compute_diff(int r);
 
   void send_object_copies();
-  int send_next_object_copy();
+  void send_next_object_copy();
   void handle_object_copy(uint64_t object_no, int r);
 
   void finish(int r);

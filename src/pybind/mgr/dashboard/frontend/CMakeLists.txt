@@ -83,7 +83,7 @@ endif(WITH_SYSTEM_NPM)
 
 add_npm_command(
   OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/node_modules"
-  COMMAND CYPRESS_CACHE_FOLDER=${CMAKE_SOURCE_DIR}/build/src/pybind/mgr/dashboard/cypress NG_CLI_ANALYTICS=false npm ci ${mgr-dashboard-userconfig}
+  COMMAND CYPRESS_CACHE_FOLDER=${CMAKE_SOURCE_DIR}/build/src/pybind/mgr/dashboard/cypress NG_CLI_ANALYTICS=false npm ci -f ${mgr-dashboard-userconfig}
   DEPENDS package.json
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMENT "dashboard frontend dependencies are being installed"
@@ -109,7 +109,7 @@ execute_process(
 set(frontend_dist_dir "${CMAKE_CURRENT_BINARY_DIR}/dist")
 set(npm_args "--output-path ${frontend_dist_dir}")
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  string(APPEND npm_args " --prod --progress=false")
+  string(APPEND npm_args " --configuration=production --progress=false")
 else()
   string(APPEND npm_args " --progress=false")
 endif()

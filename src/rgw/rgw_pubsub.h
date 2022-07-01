@@ -364,7 +364,7 @@ struct rgw_pubsub_event {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_event)
 
-// settign a unique ID for an event based on object hash and timestamp
+// setting a unique ID for an event based on object hash and timestamp
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts);
 
 struct rgw_pubsub_sub_dest {

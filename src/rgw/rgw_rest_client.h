@@ -65,7 +65,7 @@ public:
                        param_vec_t *_headers, param_vec_t *_params,
                        std::optional<std::string> _api_name) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params), api_name(_api_name) {}
 
-  int forward_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
+  int forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service="");
 };
 
 class RGWWriteDrainCB {
@@ -217,6 +217,15 @@ class RGWRESTStreamHeadRequest : public RGWRESTStreamRWRequest {
 public:
   RGWRESTStreamHeadRequest(CephContext *_cct, const std::string& _url, ReceiveCB *_cb, param_vec_t *_headers,
 		param_vec_t *_params, std::optional<std::string> _api_name) : RGWRESTStreamRWRequest(_cct, "HEAD", _url, _cb, _headers, _params, _api_name) {}
+};
+
+class RGWRESTStreamSendRequest : public RGWRESTStreamRWRequest {
+public:
+  RGWRESTStreamSendRequest(CephContext *_cct, const std::string& method,
+                           const std::string& _url,
+                           ReceiveCB *_cb, param_vec_t *_headers, param_vec_t *_params,
+                           std::optional<std::string> _api_name,
+                           HostStyle _host_style = PathStyle) : RGWRESTStreamRWRequest(_cct, method, _url, _cb, _headers, _params, _api_name, _host_style) {}
 };
 
 class RGWRESTStreamS3PutObj : public RGWHTTPStreamRWRequest {

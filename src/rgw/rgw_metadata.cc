@@ -31,6 +31,22 @@ using namespace std;
 
 const std::string RGWMetadataLogHistory::oid = "meta.history";
 
+struct obj_version;
+
+void encode_json(const char *name, const obj_version& v, Formatter *f)
+{
+  f->open_object_section(name);
+  f->dump_string("tag", v.tag);
+  f->dump_unsigned("ver", v.ver);
+  f->close_section();
+}
+
+void decode_json_obj(obj_version& v, JSONObj *obj)
+{
+  JSONDecoder::decode_json("tag", v.tag, obj);
+  JSONDecoder::decode_json("ver", v.ver, obj);
+}
+
 void LogStatusDump::dump(Formatter *f) const {
   string s;
   switch (status) {
@@ -105,6 +121,32 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("status", status, obj);
 }
 
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
+{
+  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
+  char buf[16];
+  if (shard_id) {
+    *shard_id = val % max_shards;
+  }
+  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
+  name = prefix + buf;
+}
+
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name)
+{
+  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
+  val ^= ceph_str_hash_linux(section.c_str(), section.size());
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
+  name = prefix + buf;
+}
+
+void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
+{
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%u", shard_id);
+  name = prefix + buf;
+}
 
 int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl) {
   if (!svc.zone->need_to_log_metadata())
@@ -855,5 +897,20 @@ void RGWMetadataManager::get_sections(list<string>& sections)
   for (map<string, RGWMetadataHandler *>::iterator iter = handlers.begin(); iter != handlers.end(); ++iter) {
     sections.push_back(iter->first);
   }
+}
+
+void RGWMetadataLogInfo::dump(Formatter *f) const
+{
+  encode_json("marker", marker, f);
+  utime_t ut(last_update);
+  encode_json("last_update", ut, f);
+}
+
+void RGWMetadataLogInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("marker", marker, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("last_update", ut, obj);
+  last_update = ut.to_real_time();
 }
 

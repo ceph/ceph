@@ -57,10 +57,18 @@ struct RGWUID
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
+/** Entry for bucket metadata collection */
+struct bucket_meta_entry {
+  size_t size;
+  size_t size_rounded;
+  ceph::real_time creation_time;
+  uint64_t count;
+};
+
 extern int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::User* user, optional_yield y);
 extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
   rgw::sal::Store* store, rgw::sal::User* user,
-  std::map<std::string, cls_user_bucket_entry>& buckets_usage_map, optional_yield y);
+  std::map<std::string, bucket_meta_entry>& buckets_usage_map, optional_yield y);
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.
@@ -121,6 +129,7 @@ struct RGWUserAdminOpState {
   std::string id; // access key
   std::string key; // secret key
   int32_t key_type{-1};
+  bool access_key_exist = false;
 
   std::set<std::string> mfa_ids;
 
@@ -164,9 +173,12 @@ struct RGWUserAdminOpState {
 
   bool bucket_quota_specified{false};
   bool user_quota_specified{false};
+  bool bucket_ratelimit_specified{false};
+  bool user_ratelimit_specified{false};
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
+  RGWRateLimitInfo user_ratelimit;
+  RGWRateLimitInfo bucket_ratelimit;
 
   // req parameters for listing user
   std::string marker{""};
@@ -254,6 +266,10 @@ struct RGWUserAdminOpState {
     type_specified = true;
   }
 
+  void set_access_key_exist() {
+    access_key_exist = true;
+  }
+
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
@@ -282,6 +298,8 @@ struct RGWUserAdminOpState {
   }
 
   void set_user_info(RGWUserInfo& user_info);
+
+  void set_user_version_tracker(RGWObjVersionTracker& objv_tracker);
 
   void set_max_buckets(int32_t mb) {
     max_buckets = mb;
@@ -316,14 +334,24 @@ struct RGWUserAdminOpState {
     key_op = true;
   }
 
-  void set_bucket_quota(RGWQuotaInfo& quota) {
-    bucket_quota = quota;
+  void set_bucket_quota(RGWQuotaInfo& quotas) {
+    quota.bucket_quota = quotas;
     bucket_quota_specified = true;
   }
 
-  void set_user_quota(RGWQuotaInfo& quota) {
-    user_quota = quota;
+  void set_user_quota(RGWQuotaInfo& quotas) {
+    quota.user_quota = quotas;
     user_quota_specified = true;
+  }
+
+  void set_bucket_ratelimit(RGWRateLimitInfo& ratelimit) {
+    bucket_ratelimit = ratelimit;
+    bucket_ratelimit_specified = true;
+  }
+
+  void set_user_ratelimit(RGWRateLimitInfo& ratelimit) {
+    user_ratelimit = ratelimit;
+    user_ratelimit_specified = true;
   }
 
   void set_mfa_ids(const std::set<std::string>& ids) {
@@ -372,11 +400,12 @@ struct RGWUserAdminOpState {
   void set_generate_subuser(bool flag) { gen_subuser = flag; }
   __u8 get_suspension_status() { return suspended; }
   int32_t get_key_type() {return key_type; }
+  bool get_access_key_exist() {return access_key_exist; }
   uint32_t get_subuser_perm() { return perm_mask; }
   int32_t get_max_buckets() { return max_buckets; }
   uint32_t get_op_mask() { return op_mask; }
-  RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
-  RGWQuotaInfo& get_user_quota() { return user_quota; }
+  RGWQuotaInfo& get_bucket_quota() { return quota.bucket_quota; }
+  RGWQuotaInfo& get_user_quota() { return quota.user_quota; }
   std::set<std::string>& get_mfa_ids() { return mfa_ids; }
 
   rgw::sal::User* get_user() { return user.get(); }

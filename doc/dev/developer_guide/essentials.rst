@@ -7,9 +7,9 @@ to know.
 Leads
 -----
 
-The Ceph project is led by Sage Weil. In addition, each major project
-component has its own lead. The following table shows all the leads and
-their nicks on `GitHub`_:
+The Ceph project was created by Sage Weil and is led by the Ceph Leadership
+Team (CLT). In addition, each major project component has its own lead. The
+following table shows all the leads and their nicks on `GitHub`_:
 
 .. _github: https://github.com/
 
@@ -20,8 +20,8 @@ Ceph      Sage Weil        liewegas
 RADOS     Neha Ojha        neha-ojha
 RGW       Yehuda Sadeh     yehudasa
 RGW       Matt Benjamin    mattbenjamin
-RBD       Jason Dillaman   dillaman
-CephFS    Patrick Donnelly batrick
+RBD       Ilya Dryomov     dis 
+CephFS    Venky Shankar    vshankar
 Dashboard Ernesto Puerta   epuertat
 MON       Joao Luis        jecluis
 Build/Ops Ken Dreyer       ktdreyer
@@ -187,7 +187,7 @@ file `CONTRIBUTING.rst`_ in the top-level directory of the source-code
 tree. There may be some overlap between this guide and that file.
 
 .. _`CONTRIBUTING.rst`:
-  https://github.com/ceph/ceph/blob/master/CONTRIBUTING.rst
+  https://github.com/ceph/ceph/blob/main/CONTRIBUTING.rst
 
 All newcomers are encouraged to read that file carefully.
 
@@ -289,7 +289,7 @@ See :ref:`kubernetes-dev`
 Backporting
 -----------
 
-All bugfixes should be merged to the ``master`` branch before being
+All bugfixes should be merged to the ``main`` branch before being
 backported. To flag a bugfix for backporting, make sure it has a
 `tracker issue`_ associated with it and set the ``Backport`` field to a
 comma-separated list of previous releases (e.g. "hammer,jewel") that you think

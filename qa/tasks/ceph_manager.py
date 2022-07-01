@@ -25,6 +25,7 @@ from tasks.util import get_remote
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
+from teuthology.parallel import parallel
 from teuthology.exceptions import CommandFailedError
 from tasks.thrasher import Thrasher
 
@@ -1438,7 +1439,7 @@ class ObjectStoreTool:
             if self.osd == "primary":
                 self.osd = self.manager.get_object_primary(self.pool,
                                                            self.object_name)
-        assert self.osd
+        assert self.osd is not None
         if self.object_name:
             self.pgid = self.manager.get_object_pg_with_shard(self.pool,
                                                               self.object_name,
@@ -1680,15 +1681,15 @@ class CephManager:
         :param wait_for_mon: wait for mon to be synced with mgr. 0 to disable
                              it. (5 min by default)
         """
-        seq = {osd: int(self.raw_cluster_cmd('tell', 'osd.%d' % osd, 'flush_pg_stats'))
-               for osd in osds}
-        if not wait_for_mon:
-            return
         if no_wait is None:
             no_wait = []
-        for osd, need in seq.items():
+
+        def flush_one_osd(osd: int, wait_for_mon: int):
+            need = int(self.raw_cluster_cmd('tell', 'osd.%d' % osd, 'flush_pg_stats'))
+            if not wait_for_mon:
+                return
             if osd in no_wait:
-                continue
+                return
             got = 0
             while wait_for_mon > 0:
                 got = int(self.raw_cluster_cmd('osd', 'last-stat-seq', 'osd.%d' % osd))
@@ -1703,6 +1704,10 @@ class CephManager:
                 raise Exception('timed out waiting for mon to be updated with '
                                 'osd.{osd}: {got} < {need}'.
                                 format(osd=osd, got=got, need=need))
+
+        with parallel() as p:
+            for osd in osds:
+                p.spawn(flush_one_osd, osd, wait_for_mon)
 
     def flush_all_pg_stats(self):
         self.flush_pg_stats(range(len(self.get_osd_dump())))
@@ -2331,6 +2336,24 @@ class CephManager:
             return j['pg_map']['pg_stats']
         except KeyError:
             return j['pg_stats']
+
+    def get_osd_df(self, osdid):
+        """
+        Get the osd df stats
+        """
+        out = self.raw_cluster_cmd('osd', 'df', 'name', 'osd.{}'.format(osdid),
+                                   '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return j['nodes'][0]
+
+    def get_pool_df(self, name):
+        """
+        Get the pool df stats
+        """
+        out = self.raw_cluster_cmd('df', 'detail', '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return next((p['stats'] for p in j['pools'] if p['name'] == name),
+                    None)
 
     def get_pgids_to_force(self, backfill):
         """

@@ -25,8 +25,8 @@
  * - Specially optimized for onode key structures and seastore
  *   delta/transaction semantics;
  *
- * Note: User should not hold any Cursor/Value when call
- * submit_transaction() because of validations implemented in ~tree_cursor_t().
+ * Note: Cursor/Value are transactional, they cannot be used outside the scope
+ * of the according transaction, or the behavior is undefined.
  */
 
 namespace crimson::os::seastore::onode {
@@ -46,6 +46,15 @@ class Btree {
   Btree(Btree&&) = delete;
   Btree& operator=(const Btree&) = delete;
   Btree& operator=(Btree&&) = delete;
+
+  /**
+   * compare
+   *
+   * This defines the internal order of Btree from ghobject_t perspective.
+   */
+  static int compare(const ghobject_t &l, const ghobject_t &r) {
+    return static_cast<int>(key_hobj_t(l).compare_to(key_hobj_t(r)));
+  }
 
   eagain_ifuture<> mkfs(Transaction& t) {
     return Node::mkfs(get_context(t), *root_tracker);
@@ -218,6 +227,13 @@ class Btree {
     );
   }
 
+  /**
+   * lower_bound
+   *
+   * Returns a Cursor pointing to the element that is equal to the key, or the
+   * first element larger than the key, or the end Cursor if that element
+   * doesn't exist.
+   */
   eagain_ifuture<Cursor> lower_bound(Transaction& t, const ghobject_t& obj) {
     return seastar::do_with(
       full_key_t<KeyT::HOBJ>(obj),
@@ -248,18 +264,18 @@ class Btree {
   insert(Transaction& t, const ghobject_t& obj, tree_value_config_t _vconf) {
     LOG_PREFIX(OTree::insert);
     if (_vconf.payload_size > value_builder.get_max_value_payload_size()) {
-      ERRORT("value payload size {} too large to insert {}",
-             t, _vconf.payload_size, key_hobj_t{obj});
+      SUBERRORT(seastore_onode, "value payload size {} too large to insert {}",
+                t, _vconf.payload_size, key_hobj_t{obj});
       return crimson::ct_error::value_too_large::make();
     }
     if (obj.hobj.nspace.size() > value_builder.get_max_ns_size()) {
-      ERRORT("namespace size {} too large to insert {}",
-             t, obj.hobj.nspace.size(), key_hobj_t{obj});
+      SUBERRORT(seastore_onode, "namespace size {} too large to insert {}",
+                t, obj.hobj.nspace.size(), key_hobj_t{obj});
       return crimson::ct_error::value_too_large::make();
     }
     if (obj.hobj.oid.name.size() > value_builder.get_max_oid_size()) {
-      ERRORT("oid size {} too large to insert {}",
-             t, obj.hobj.oid.name.size(), key_hobj_t{obj});
+      SUBERRORT(seastore_onode, "oid size {} too large to insert {}",
+                t, obj.hobj.oid.name.size(), key_hobj_t{obj});
       return crimson::ct_error::value_too_large::make();
     }
     value_config_t vconf{value_builder.get_header_magic(), _vconf.payload_size};

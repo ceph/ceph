@@ -67,6 +67,7 @@ public:
   void init() {}
   void shutdown() override;
 
+  std::string cluster_fsid();
   uint64_t instance_id();
   bool check_secure_mon_conn(const DoutPrefixProvider *dpp) const;
 
@@ -107,8 +108,12 @@ public:
       return pool;
     }
 
-    librados::IoCtx& ioctx() {
+    librados::IoCtx& ioctx() & {
       return state.ioctx;
+    }
+
+    librados::IoCtx&& ioctx() && {
+      return std::move(state.ioctx);
     }
 
     struct List {

@@ -29,7 +29,15 @@ describe('RgwBucketService', () => {
 
   it('should call list', () => {
     service.list().subscribe();
-    const req = httpTesting.expectOne(`api/rgw/bucket?${RgwHelper.DAEMON_QUERY_PARAM}&stats=true`);
+    const req = httpTesting.expectOne(`api/rgw/bucket?${RgwHelper.DAEMON_QUERY_PARAM}&stats=false`);
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call list with stats and user id', () => {
+    service.list(true, 'test-name').subscribe();
+    const req = httpTesting.expectOne(
+      `api/rgw/bucket?${RgwHelper.DAEMON_QUERY_PARAM}&stats=true&uid=test-name`
+    );
     expect(req.request.method).toBe('GET');
   });
 

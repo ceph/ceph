@@ -28,8 +28,8 @@ describe('HostService', () => {
 
   it('should call list', fakeAsync(() => {
     let result;
-    service.list().subscribe((resp) => (result = resp));
-    const req = httpTesting.expectOne('api/host');
+    service.list('true').subscribe((resp) => (result = resp));
+    const req = httpTesting.expectOne('api/host?facts=true');
     expect(req.request.method).toBe('GET');
     req.flush(['foo', 'bar']);
     tick();
@@ -44,14 +44,28 @@ describe('HostService', () => {
   });
 
   it('should update host', fakeAsync(() => {
-    service.update('mon0', true, ['foo', 'bar']).subscribe();
+    service.update('mon0', true, ['foo', 'bar'], true, false).subscribe();
     const req = httpTesting.expectOne('api/host/mon0');
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual({
       force: false,
       labels: ['foo', 'bar'],
+      maintenance: true,
+      update_labels: true,
+      drain: false
+    });
+  }));
+
+  it('should test host drain call', fakeAsync(() => {
+    service.update('host0', false, null, false, false, true).subscribe();
+    const req = httpTesting.expectOne('api/host/host0');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({
+      force: false,
+      labels: null,
       maintenance: false,
-      update_labels: true
+      update_labels: false,
+      drain: true
     });
   }));
 

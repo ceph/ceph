@@ -16,7 +16,7 @@
 #include <boost/spirit/include/qi_uint.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/fusion/include/std_pair.hpp>
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix.hpp>
 #include <boost/fusion/adapted/struct/adapt_struct.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -183,6 +183,9 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
+    StringConstraint constraint(StringConstraint::MATCH_TYPE_REGEX,
+                                string("osd_mclock_max_capacity_iops_(hdd|ssd)"));
+    profile_grants.push_back(MonCapGrant("config set", "name", constraint));
   }
   if (profile == "mds") {
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_ALL));

@@ -9,6 +9,7 @@
 
 #include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
+#include "common/Formatter.h"
 
 #include "rgw_op.h"
 #include "rgw_common.h"
@@ -18,11 +19,11 @@
 #include "rgw_arn.h"
 #include "rgw_data_sync.h"
 
+#include "global/global_init.h"
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
 #include "common/errno.h"
 #include "common/Clock.h"
-#include "common/Formatter.h"
 #include "common/convenience.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
@@ -112,6 +113,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_POSITION_NOT_EQUAL_TO_LENGTH, {409, "PositionNotEqualToLength"}},
     { ERR_OBJECT_NOT_APPENDABLE, {409, "ObjectNotAppendable"}},
     { ERR_INVALID_BUCKET_STATE, {409, "InvalidBucketState"}},
+    { ERR_INVALID_OBJECT_STATE, {403, "InvalidObjectState"}},
     { ERR_INVALID_SECRET_KEY, {400, "InvalidSecretKey"}},
     { ERR_INVALID_KEY_TYPE, {400, "InvalidKeyType"}},
     { ERR_INVALID_CAP, {400, "InvalidCapability"}},
@@ -126,7 +128,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
     { ERR_RATE_LIMITED, {503, "SlowDown"}},
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
-    { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSetError"}},
+    { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSet"}},
     { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError"}},
 });
 
@@ -331,7 +333,7 @@ void set_req_state_err(struct rgw_err& err,	/* out */
   err.err_code = "UnknownError";
 }
 
-void set_req_state_err(struct req_state* s, int err_no, const string& err_msg)
+void set_req_state_err(req_state* s, int err_no, const string& err_msg)
 {
   if (s) {
     set_req_state_err(s, err_no);
@@ -349,14 +351,14 @@ void set_req_state_err(struct req_state* s, int err_no, const string& err_msg)
   }
 }
 
-void set_req_state_err(struct req_state* s, int err_no)
+void set_req_state_err(req_state* s, int err_no)
 {
   if (s) {
     set_req_state_err(s->err, err_no, s->prot_flags);
   }
 }
 
-void dump(struct req_state* s)
+void dump(req_state* s)
 {
   if (s->format != RGW_FORMAT_HTML)
     s->formatter->open_object_section("Error");
@@ -392,6 +394,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
 void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta)
 {
   x_meta_map.clear();
+  crypt_attribute_map.clear();
 
   for (const auto& kv: env->get_map()) {
     const char *prefix;
@@ -431,6 +434,9 @@ void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_met
         } else {
           x_meta_map[name_low] = val;
         }
+        if (strncmp(name_low, "x-amz-server-side-encryption", 20) == 0) {
+          crypt_attribute_map[name_low] = val;
+        }
       }
     }
   }
@@ -460,6 +466,35 @@ void rgw_add_amz_meta_header(
   } else {
     x_meta_map[k] = v;
   }
+}
+
+bool rgw_set_amz_meta_header(
+  meta_map_t& x_meta_map,
+  const std::string& k,
+  const std::string& v,
+  rgw_set_action_if_set a)
+{
+  auto it { x_meta_map.find(k) };
+  bool r { it != x_meta_map.end() };
+  switch(a) {
+  default:
+    ceph_assert(a == 0);
+  case DISCARD:
+    break;
+  case APPEND:
+    if (r) {
+	std::string old { it->second };
+	boost::algorithm::trim_right(old);
+	old.append(",");
+	old.append(v);
+	x_meta_map[k] = old;
+	break;
+    }
+    /* fall through */
+  case OVERWRITE:
+    x_meta_map[k] = v;
+  }
+  return r;
 }
 
 string rgw_string_unquote(const string& s)
@@ -834,6 +869,24 @@ int RGWHTTPArgs::parse(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+void RGWHTTPArgs::remove(const string& name)
+{
+  auto val_iter = val_map.find(name);
+  if (val_iter != std::end(val_map)) {
+    val_map.erase(val_iter);
+  }
+
+  auto sys_val_iter = sys_val_map.find(name);
+  if (sys_val_iter != std::end(sys_val_map)) {
+    sys_val_map.erase(sys_val_iter);
+  }
+
+  auto subres_iter = sub_resources.find(name);
+  if (subres_iter != std::end(sub_resources)) {
+    sub_resources.erase(subres_iter);
+  }
+}
+
 void RGWHTTPArgs::append(const string& name, const string& val)
 {
   if (name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) == 0) {
@@ -917,9 +970,9 @@ RGWHTTPArgs::get_optional(const std::string& name) const
   }
 }
 
-int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists) const
 {
-  map<string, string>::iterator iter;
+  map<string, string>::const_iterator iter;
   iter = val_map.find(name);
   bool e = (iter != val_map.end());
   if (exists)
@@ -940,13 +993,13 @@ int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
   return 0;
 }
 
-int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists) const
 {
   string s(name);
   return get_bool(s, val, exists);
 }
 
-void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
+void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val) const
 {
   bool exists = false;
   if ((get_bool(name, val, &exists) < 0) ||
@@ -955,7 +1008,7 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
-int RGWHTTPArgs::get_int(const char *name, int *val, int def_val)
+int RGWHTTPArgs::get_int(const char *name, int *val, int def_val) const
 {
   bool exists = false;
   string val_str;
@@ -1053,24 +1106,23 @@ Effect eval_or_pass(const boost::optional<Policy>& policy,
 		    const rgw::IAM::Environment& env,
 		    boost::optional<const rgw::auth::Identity&> id,
 		    const uint64_t op,
-		    const ARN& arn,
+		    const ARN& resource,
 				boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
   if (!policy)
     return Effect::Pass;
   else
-    return policy->eval(env, id, op, arn, princ_type);
+    return policy->eval(env, id, op, resource, princ_type);
 }
 
 }
 
 Effect eval_identity_or_session_policies(const vector<Policy>& policies,
                           const rgw::IAM::Environment& env,
-                          boost::optional<const rgw::auth::Identity&> id,
                           const uint64_t op,
                           const ARN& arn) {
   auto policy_res = Effect::Pass, prev_res = Effect::Pass;
   for (auto& policy : policies) {
-    if (policy_res = eval_or_pass(policy, env, id, op, arn); policy_res == Effect::Deny)
+    if (policy_res = eval_or_pass(policy, env, boost::none, op, arn); policy_res == Effect::Deny)
       return policy_res;
     else if (policy_res == Effect::Allow)
       prev_res = Effect::Allow;
@@ -1088,13 +1140,13 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             const rgw::ARN& res,
                             const uint64_t op)
 {
-  auto identity_policy_res = eval_identity_or_session_policies(user_policies, s->env, boost::none, op, res);
+  auto identity_policy_res = eval_identity_or_session_policies(user_policies, s->env, op, res);
   if (identity_policy_res == Effect::Deny) {
     return false;
   }
 
   if (! session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, boost::none, op, res);
+    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, op, res);
     if (session_policy_res == Effect::Deny) {
       return false;
     }
@@ -1137,7 +1189,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
 }
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            struct req_state * const s,
+                            req_state * const s,
                             const rgw::ARN& res,
                             const uint64_t op)
 {
@@ -1146,7 +1198,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
 }
 
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, 
-                                      struct req_state * const s,
+                                      req_state * const s,
                                       const int perm)
 {
   perm_state_from_req_state ps(s);
@@ -1186,7 +1238,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
   if (!verify_requester_payer_permission(s))
     return false;
 
-  auto identity_policy_res = eval_identity_or_session_policies(identity_policies, s->env, boost::none, op, ARN(bucket));
+  auto identity_policy_res = eval_identity_or_session_policies(identity_policies, s->env, op, ARN(bucket));
   if (identity_policy_res == Effect::Deny)
     return false;
 
@@ -1198,7 +1250,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 
   //Take into account session policies, if the identity making a request is a role
   if (!session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, boost::none, op, ARN(bucket));
+    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, op, ARN(bucket));
     if (session_policy_res == Effect::Deny) {
         return false;
     }
@@ -1229,7 +1281,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 }
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              struct req_state * const s,
+                              req_state * const s,
 			      const rgw_bucket& bucket,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
@@ -1268,7 +1320,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct pe
   return user_acl->verify_permission(dpp, *s->identity, perm, perm);
 }
 
-bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state * const s,
+bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state * const s,
 					RGWAccessControlPolicy * const user_acl,
 					RGWAccessControlPolicy * const bucket_acl,
 					const int perm)
@@ -1281,7 +1333,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct re
                                             perm);
 }
 
-bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state * const s, const int perm)
+bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state * const s, const int perm)
 {
   perm_state_from_req_state ps(s);
 
@@ -1295,7 +1347,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct re
                                             perm);
 }
 
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * const s, const uint64_t op)
+bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op)
 {
   perm_state_from_req_state ps(s);
 
@@ -1313,10 +1365,10 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * 
 // Authorize anyone permitted by the bucket policy, identity policies, session policies and the bucket owner
 // unless explicitly denied by the policy.
 
-int verify_bucket_owner_or_policy(struct req_state* const s,
+int verify_bucket_owner_or_policy(req_state* const s,
 				  const uint64_t op)
 {
-  auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env, boost::none, op, ARN(s->bucket->get_key()));
+  auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env, op, ARN(s->bucket->get_key()));
   if (identity_policy_res == Effect::Deny) {
     return -EACCES;
   }
@@ -1330,7 +1382,7 @@ int verify_bucket_owner_or_policy(struct req_state* const s,
   }
 
   if (!s->session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env, boost::none, op, ARN(s->bucket->get_key()));
+    auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env, op, ARN(s->bucket->get_key()));
     if (session_policy_res == Effect::Deny) {
         return -EACCES;
     }
@@ -1401,7 +1453,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
   if (!verify_requester_payer_permission(s))
     return false;
 
-  auto identity_policy_res = eval_identity_or_session_policies(identity_policies, s->env, boost::none, op, ARN(obj));
+  auto identity_policy_res = eval_identity_or_session_policies(identity_policies, s->env, op, ARN(obj));
   if (identity_policy_res == Effect::Deny)
     return false;
 
@@ -1411,7 +1463,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
     return false;
 
   if (!session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, boost::none, op, ARN(obj));
+    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, op, ARN(obj));
     if (session_policy_res == Effect::Deny) {
         return false;
     }
@@ -1484,7 +1536,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
   return user_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm);
 }
 
-bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state * const s,
+bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s,
 			      const rgw_obj& obj,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
@@ -1552,7 +1604,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
   return user_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm);
 }
 
-bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state *s, int perm)
+bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s, int perm)
 {
   perm_state_from_req_state ps(s);
 
@@ -1567,7 +1619,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, struct re
                                             perm);
 }
 
-bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s, uint64_t op)
+bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op)
 {
   perm_state_from_req_state ps(s);
 
@@ -1828,6 +1880,25 @@ static struct rgw_name_to_flag cap_names[] = { {"*",     RGW_CAP_ALL},
 		  {"write", RGW_CAP_WRITE},
 		  {NULL, 0} };
 
+static int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
+			    const string& str, uint32_t *perm)
+{
+  list<string> strs;
+  get_str_list(str, strs);
+  list<string>::iterator iter;
+  uint32_t v = 0;
+  for (iter = strs.begin(); iter != strs.end(); ++iter) {
+    string& s = *iter;
+    for (int i = 0; mapping[i].type_name; i++) {
+      if (s.compare(mapping[i].type_name) == 0)
+        v |= mapping[i].flag;
+    }
+  }
+
+  *perm = v;
+  return 0;
+}
+
 int RGWUserCaps::parse_cap_perm(const string& str, uint32_t *perm)
 {
   return rgw_parse_list_of_flags(cap_names, str, perm);
@@ -2006,6 +2077,7 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "users",
                                     "buckets",
                                     "metadata",
+                                    "info",
                                     "usage",
                                     "zone",
                                     "bilog",
@@ -2014,7 +2086,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "roles",
                                     "user-policy",
                                     "amz-cache",
-                                    "oidc-provider"};
+                                    "oidc-provider",
+				                            "ratelimit"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {
@@ -2254,7 +2327,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     decode(swift_versioning, bl);
     if (swift_versioning) {
       decode(swift_ver_location, bl);
-    }
+   }
   }
   if (struct_v >= 17) {
     decode(creation_time, bl);
@@ -2278,6 +2351,11 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   if (struct_v >= 23) {
     decode(owner.ns, bl);
   }
+
+  if (layout.logs.empty() &&
+      layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
+    layout.logs.push_back(rgw::log_layout_from_index(0, layout.current_index));
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2295,3 +2373,673 @@ bool RGWBucketInfo::empty_sync_policy() const
   return sync_policy->empty();
 }
 
+struct rgw_pool;
+struct rgw_placement_rule;
+class RGWUserCaps;
+
+void decode_json_obj(rgw_pool& pool, JSONObj *obj)
+{
+  string s;
+  decode_json_obj(s, obj);
+  pool = rgw_pool(s);
+}
+
+void encode_json(const char *name, const rgw_placement_rule& r, Formatter *f)
+{
+  encode_json(name, r.to_str(), f);
+}
+
+void encode_json(const char *name, const rgw_pool& pool, Formatter *f)
+{
+  f->dump_string(name, pool.to_str());
+}
+
+void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
+{
+  val.dump(f, name);
+}
+
+void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
+{
+  RGWBucketEnt *e = new RGWBucketEnt;
+  init_bucket(&e->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  e->size = 1024;
+  e->size_rounded = 4096;
+  e->count = 1;
+  o.push_back(e);
+  o.push_back(new RGWBucketEnt);
+}
+
+void RGWBucketEnt::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("size", size, f);
+  encode_json("size_rounded", size_rounded, f);
+  utime_t ut(creation_time);
+  encode_json("mtime", ut, f); /* mtime / creation time discrepency needed for backward compatibility */
+  encode_json("count", count, f);
+  encode_json("placement_rule", placement_rule.to_str(), f);
+}
+
+void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
+{
+  rgw_bucket b;
+  init_bucket(&b, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  rgw_obj *obj = new rgw_obj(b, "object");
+  o.push_back(obj);
+  o.push_back(new rgw_obj);
+}
+
+void rgw_bucket_placement::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("placement_rule", placement_rule, f);
+}
+
+void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
+{
+  // Since things without a log will have one synthesized on decode,
+  // ensure the things we attempt to encode will have one added so we
+  // round-trip properly.
+  auto gen_layout = [](rgw::BucketLayout& l) {
+    l.current_index.gen = 0;
+    l.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
+    l.current_index.layout.type = rgw::BucketIndexType::Normal;
+    l.current_index.layout.normal.num_shards = 11;
+    l.logs.push_back(log_layout_from_index(
+                       l.current_index.gen,
+                       l.current_index));
+  };
+
+
+  RGWBucketInfo *i = new RGWBucketInfo;
+  init_bucket(&i->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  i->owner = "owner";
+  i->flags = BUCKET_SUSPENDED;
+  gen_layout(i->layout);
+  o.push_back(i);
+  i = new RGWBucketInfo;
+  gen_layout(i->layout);
+  o.push_back(i);
+}
+
+void RGWBucketInfo::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  utime_t ut(creation_time);
+  encode_json("creation_time", ut, f);
+  encode_json("owner", owner.to_str(), f);
+  encode_json("flags", flags, f);
+  encode_json("zonegroup", zonegroup, f);
+  encode_json("placement_rule", placement_rule, f);
+  encode_json("has_instance_obj", has_instance_obj, f);
+  encode_json("quota", quota, f);
+  encode_json("num_shards", layout.current_index.layout.normal.num_shards, f);
+  encode_json("bi_shard_hash_type", (uint32_t)layout.current_index.layout.normal.hash_type, f);
+  encode_json("requester_pays", requester_pays, f);
+  encode_json("has_website", has_website, f);
+  if (has_website) {
+    encode_json("website_conf", website_conf, f);
+  }
+  encode_json("swift_versioning", swift_versioning, f);
+  encode_json("swift_ver_location", swift_ver_location, f);
+  encode_json("index_type", (uint32_t)layout.current_index.layout.type, f);
+  encode_json("mdsearch_config", mdsearch_config, f);
+  encode_json("reshard_status", (int)reshard_status, f);
+  encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
+  if (!empty_sync_policy()) {
+    encode_json("sync_policy", *sync_policy, f);
+  }
+}
+
+void RGWBucketInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("bucket", bucket, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("creation_time", ut, obj);
+  creation_time = ut.to_real_time();
+  JSONDecoder::decode_json("owner", owner, obj);
+  JSONDecoder::decode_json("flags", flags, obj);
+  JSONDecoder::decode_json("zonegroup", zonegroup, obj);
+  /* backward compatability with region */
+  if (zonegroup.empty()) {
+    JSONDecoder::decode_json("region", zonegroup, obj);
+  }
+  string pr;
+  JSONDecoder::decode_json("placement_rule", pr, obj);
+  placement_rule.from_str(pr);
+  JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
+  JSONDecoder::decode_json("quota", quota, obj);
+  JSONDecoder::decode_json("num_shards", layout.current_index.layout.normal.num_shards, obj);
+  uint32_t hash_type;
+  JSONDecoder::decode_json("bi_shard_hash_type", hash_type, obj);
+  layout.current_index.layout.normal.hash_type = static_cast<rgw::BucketHashType>(hash_type);
+  JSONDecoder::decode_json("requester_pays", requester_pays, obj);
+  JSONDecoder::decode_json("has_website", has_website, obj);
+  if (has_website) {
+    JSONDecoder::decode_json("website_conf", website_conf, obj);
+  }
+  JSONDecoder::decode_json("swift_versioning", swift_versioning, obj);
+  JSONDecoder::decode_json("swift_ver_location", swift_ver_location, obj);
+  uint32_t it;
+  JSONDecoder::decode_json("index_type", it, obj);
+  layout.current_index.layout.type = (rgw::BucketIndexType)it;
+  JSONDecoder::decode_json("mdsearch_config", mdsearch_config, obj);
+  int rs;
+  JSONDecoder::decode_json("reshard_status", rs, obj);
+  reshard_status = (cls_rgw_reshard_status)rs;
+
+  rgw_sync_policy_info sp;
+  JSONDecoder::decode_json("sync_policy", sp, obj);
+  if (!sp.empty()) {
+    set_sync_policy(std::move(sp));
+  }
+}
+
+void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
+{
+  RGWUserInfo *i = new RGWUserInfo;
+  i->user_id = "user_id";
+  i->display_name =  "display_name";
+  i->user_email = "user@email";
+  RGWAccessKey k1, k2;
+  k1.id = "id1";
+  k1.key = "key1";
+  k2.id = "id2";
+  k2.subuser = "subuser";
+  RGWSubUser u;
+  u.name = "id2";
+  u.perm_mask = 0x1;
+  i->access_keys[k1.id] = k1;
+  i->swift_keys[k2.id] = k2;
+  i->subusers[u.name] = u;
+  o.push_back(i);
+
+  o.push_back(new RGWUserInfo);
+}
+
+static void user_info_dump_subuser(const char *name, const RGWSubUser& subuser, Formatter *f, void *parent)
+{
+  RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
+  subuser.dump(f, info->user_id.to_str());
+}
+
+static void user_info_dump_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
+{
+  RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
+  key.dump(f, info->user_id.to_str(), false);
+}
+
+static void user_info_dump_swift_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
+{
+  RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
+  key.dump(f, info->user_id.to_str(), true);
+}
+
+static void decode_access_keys(map<string, RGWAccessKey>& m, JSONObj *o)
+{
+  RGWAccessKey k;
+  k.decode_json(o);
+  m[k.id] = k;
+}
+
+static void decode_swift_keys(map<string, RGWAccessKey>& m, JSONObj *o)
+{
+  RGWAccessKey k;
+  k.decode_json(o, true);
+  m[k.id] = k;
+}
+
+static void decode_subusers(map<string, RGWSubUser>& m, JSONObj *o)
+{
+  RGWSubUser u;
+  u.decode_json(o);
+  m[u.name] = u;
+}
+
+
+struct rgw_flags_desc {
+  uint32_t mask;
+  const char *str;
+};
+
+static struct rgw_flags_desc rgw_perms[] = {
+ { RGW_PERM_FULL_CONTROL, "full-control" },
+ { RGW_PERM_READ | RGW_PERM_WRITE, "read-write" },
+ { RGW_PERM_READ, "read" },
+ { RGW_PERM_WRITE, "write" },
+ { RGW_PERM_READ_ACP, "read-acp" },
+ { RGW_PERM_WRITE_ACP, "write-acp" },
+ { 0, NULL }
+};
+
+void rgw_perm_to_str(uint32_t mask, char *buf, int len)
+{
+  const char *sep = "";
+  int pos = 0;
+  if (!mask) {
+    snprintf(buf, len, "<none>");
+    return;
+  }
+  while (mask) {
+    uint32_t orig_mask = mask;
+    for (int i = 0; rgw_perms[i].mask; i++) {
+      struct rgw_flags_desc *desc = &rgw_perms[i];
+      if ((mask & desc->mask) == desc->mask) {
+        pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
+        if (pos == len)
+          return;
+        sep = ", ";
+        mask &= ~desc->mask;
+        if (!mask)
+          return;
+      }
+    }
+    if (mask == orig_mask) // no change
+      break;
+  }
+}
+
+uint32_t rgw_str_to_perm(const char *str)
+{
+  if (strcasecmp(str, "") == 0)
+    return RGW_PERM_NONE;
+  else if (strcasecmp(str, "read") == 0)
+    return RGW_PERM_READ;
+  else if (strcasecmp(str, "write") == 0)
+    return RGW_PERM_WRITE;
+  else if (strcasecmp(str, "readwrite") == 0)
+    return RGW_PERM_READ | RGW_PERM_WRITE;
+  else if (strcasecmp(str, "full") == 0)
+    return RGW_PERM_FULL_CONTROL;
+
+  return RGW_PERM_INVALID;
+}
+
+template <class T>
+static void mask_to_str(T *mask_list, uint32_t mask, char *buf, int len)
+{
+  const char *sep = "";
+  int pos = 0;
+  if (!mask) {
+    snprintf(buf, len, "<none>");
+    return;
+  }
+  while (mask) {
+    uint32_t orig_mask = mask;
+    for (int i = 0; mask_list[i].mask; i++) {
+      T *desc = &mask_list[i];
+      if ((mask & desc->mask) == desc->mask) {
+        pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
+        if (pos == len)
+          return;
+        sep = ", ";
+        mask &= ~desc->mask;
+        if (!mask)
+          return;
+      }
+    }
+    if (mask == orig_mask) // no change
+      break;
+  }
+}
+
+static void perm_to_str(uint32_t mask, char *buf, int len)
+{
+  return mask_to_str(rgw_perms, mask, buf, len);
+}
+
+static struct rgw_flags_desc op_type_flags[] = {
+ { RGW_OP_TYPE_READ, "read" },
+ { RGW_OP_TYPE_WRITE, "write" },
+ { RGW_OP_TYPE_DELETE, "delete" },
+ { 0, NULL }
+};
+
+void op_type_to_str(uint32_t mask, char *buf, int len)
+{
+  return mask_to_str(op_type_flags, mask, buf, len);
+}
+
+void RGWRateLimitInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("max_read_ops", max_read_ops, obj);
+  JSONDecoder::decode_json("max_write_ops", max_write_ops, obj);
+  JSONDecoder::decode_json("max_read_bytes", max_read_ops, obj);
+  JSONDecoder::decode_json("max_write_bytes", max_write_ops, obj);
+  JSONDecoder::decode_json("enabled", enabled, obj);
+}
+
+void RGWRateLimitInfo::dump(Formatter *f) const
+{
+  f->dump_int("max_read_ops", max_read_ops);
+  f->dump_int("max_write_ops", max_write_ops);
+  f->dump_int("max_read_bytes", max_read_bytes);
+  f->dump_int("max_write_bytes", max_write_bytes);
+  f->dump_bool("enabled", enabled);
+}
+
+void RGWUserInfo::dump(Formatter *f) const
+{
+
+  encode_json("user_id", user_id.to_str(), f);
+  encode_json("display_name", display_name, f);
+  encode_json("email", user_email, f);
+  encode_json("suspended", (int)suspended, f);
+  encode_json("max_buckets", (int)max_buckets, f);
+
+  encode_json_map("subusers", NULL, "subuser", NULL, user_info_dump_subuser,(void *)this, subusers, f);
+  encode_json_map("keys", NULL, "key", NULL, user_info_dump_key,(void *)this, access_keys, f);
+  encode_json_map("swift_keys", NULL, "key", NULL, user_info_dump_swift_key,(void *)this, swift_keys, f);
+
+  encode_json("caps", caps, f);
+
+  char buf[256];
+  op_type_to_str(op_mask, buf, sizeof(buf));
+  encode_json("op_mask", (const char *)buf, f);
+
+  if (system) { /* no need to show it for every user */
+    encode_json("system", (bool)system, f);
+  }
+  if (admin) {
+    encode_json("admin", (bool)admin, f);
+  }
+  encode_json("default_placement", default_placement.name, f);
+  encode_json("default_storage_class", default_placement.storage_class, f);
+  encode_json("placement_tags", placement_tags, f);
+  encode_json("bucket_quota", quota.bucket_quota, f);
+  encode_json("user_quota", quota.user_quota, f);
+  encode_json("temp_url_keys", temp_url_keys, f);
+
+  string user_source_type;
+  switch ((RGWIdentityType)type) {
+  case TYPE_RGW:
+    user_source_type = "rgw";
+    break;
+  case TYPE_KEYSTONE:
+    user_source_type = "keystone";
+    break;
+  case TYPE_LDAP:
+    user_source_type = "ldap";
+    break;
+  case TYPE_NONE:
+    user_source_type = "none";
+    break;
+  default:
+    user_source_type = "none";
+    break;
+  }
+  encode_json("type", user_source_type, f);
+  encode_json("mfa_ids", mfa_ids, f);
+}
+
+void RGWUserInfo::decode_json(JSONObj *obj)
+{
+  string uid;
+
+  JSONDecoder::decode_json("user_id", uid, obj, true);
+  user_id.from_str(uid);
+
+  JSONDecoder::decode_json("display_name", display_name, obj);
+  JSONDecoder::decode_json("email", user_email, obj);
+  bool susp = false;
+  JSONDecoder::decode_json("suspended", susp, obj);
+  suspended = (__u8)susp;
+  JSONDecoder::decode_json("max_buckets", max_buckets, obj);
+
+  JSONDecoder::decode_json("keys", access_keys, decode_access_keys, obj);
+  JSONDecoder::decode_json("swift_keys", swift_keys, decode_swift_keys, obj);
+  JSONDecoder::decode_json("subusers", subusers, decode_subusers, obj);
+
+  JSONDecoder::decode_json("caps", caps, obj);
+
+  string mask_str;
+  JSONDecoder::decode_json("op_mask", mask_str, obj);
+  rgw_parse_op_type_list(mask_str, &op_mask);
+
+  bool sys = false;
+  JSONDecoder::decode_json("system", sys, obj);
+  system = (__u8)sys;
+  bool ad = false;
+  JSONDecoder::decode_json("admin", ad, obj);
+  admin = (__u8)ad;
+  JSONDecoder::decode_json("default_placement", default_placement.name, obj);
+  JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
+  JSONDecoder::decode_json("placement_tags", placement_tags, obj);
+  JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
+  JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
+
+  string user_source_type;
+  JSONDecoder::decode_json("type", user_source_type, obj);
+  if (user_source_type == "rgw") {
+    type = TYPE_RGW;
+  } else if (user_source_type == "keystone") {
+    type = TYPE_KEYSTONE;
+  } else if (user_source_type == "ldap") {
+    type = TYPE_LDAP;
+  } else if (user_source_type == "none") {
+    type = TYPE_NONE;
+  }
+  JSONDecoder::decode_json("mfa_ids", mfa_ids, obj);
+}
+
+
+void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
+{
+  RGWSubUser *u = new RGWSubUser;
+  u->name = "name";
+  u->perm_mask = 0xf;
+  o.push_back(u);
+  o.push_back(new RGWSubUser);
+}
+
+void RGWSubUser::dump(Formatter *f) const
+{
+  encode_json("id", name, f);
+  char buf[256];
+  perm_to_str(perm_mask, buf, sizeof(buf));
+  encode_json("permissions", (const char *)buf, f);
+}
+
+void RGWSubUser::dump(Formatter *f, const string& user) const
+{
+  string s = user;
+  s.append(":");
+  s.append(name);
+  encode_json("id", s, f);
+  char buf[256];
+  perm_to_str(perm_mask, buf, sizeof(buf));
+  encode_json("permissions", (const char *)buf, f);
+}
+
+uint32_t str_to_perm(const string& s)
+{
+  if (s.compare("read") == 0)
+    return RGW_PERM_READ;
+  else if (s.compare("write") == 0)
+    return RGW_PERM_WRITE;
+  else if (s.compare("read-write") == 0)
+    return RGW_PERM_READ | RGW_PERM_WRITE;
+  else if (s.compare("full-control") == 0)
+    return RGW_PERM_FULL_CONTROL;
+  return 0;
+}
+
+void RGWSubUser::decode_json(JSONObj *obj)
+{
+  string uid;
+  JSONDecoder::decode_json("id", uid, obj);
+  int pos = uid.find(':');
+  if (pos >= 0)
+    name = uid.substr(pos + 1);
+  string perm_str;
+  JSONDecoder::decode_json("permissions", perm_str, obj);
+  perm_mask = str_to_perm(perm_str);
+}
+
+void RGWAccessKey::generate_test_instances(list<RGWAccessKey*>& o)
+{
+  RGWAccessKey *k = new RGWAccessKey;
+  k->id = "id";
+  k->key = "key";
+  k->subuser = "subuser";
+  o.push_back(k);
+  o.push_back(new RGWAccessKey);
+}
+
+void RGWAccessKey::dump(Formatter *f) const
+{
+  encode_json("access_key", id, f);
+  encode_json("secret_key", key, f);
+  encode_json("subuser", subuser, f);
+}
+
+void RGWAccessKey::dump_plain(Formatter *f) const
+{
+  encode_json("access_key", id, f);
+  encode_json("secret_key", key, f);
+}
+
+void RGWAccessKey::dump(Formatter *f, const string& user, bool swift) const
+{
+  string u = user;
+  if (!subuser.empty()) {
+    u.append(":");
+    u.append(subuser);
+  }
+  encode_json("user", u, f);
+  if (!swift) {
+    encode_json("access_key", id, f);
+  }
+  encode_json("secret_key", key, f);
+}
+
+void RGWAccessKey::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("access_key", id, obj, true);
+  JSONDecoder::decode_json("secret_key", key, obj, true);
+  if (!JSONDecoder::decode_json("subuser", subuser, obj)) {
+    string user;
+    JSONDecoder::decode_json("user", user, obj);
+    int pos = user.find(':');
+    if (pos >= 0) {
+      subuser = user.substr(pos + 1);
+    }
+  }
+}
+
+void RGWAccessKey::decode_json(JSONObj *obj, bool swift) {
+  if (!swift) {
+    decode_json(obj);
+    return;
+  }
+
+  if (!JSONDecoder::decode_json("subuser", subuser, obj)) {
+    JSONDecoder::decode_json("user", id, obj, true);
+    int pos = id.find(':');
+    if (pos >= 0) {
+      subuser = id.substr(pos + 1);
+    }
+  }
+  JSONDecoder::decode_json("secret_key", key, obj, true);
+}
+
+void RGWStorageStats::dump(Formatter *f) const
+{
+  encode_json("size", size, f);
+  encode_json("size_actual", size_rounded, f);
+  if (dump_utilized) {
+    encode_json("size_utilized", size_utilized, f);
+  }
+  encode_json("size_kb", rgw_rounded_kb(size), f);
+  encode_json("size_kb_actual", rgw_rounded_kb(size_rounded), f);
+  if (dump_utilized) {
+    encode_json("size_kb_utilized", rgw_rounded_kb(size_utilized), f);
+  }
+  encode_json("num_objects", num_objects, f);
+}
+
+void rgw_obj_key::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("instance", instance, f);
+  encode_json("ns", ns, f);
+}
+
+void rgw_obj_key::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("instance", instance, obj);
+  JSONDecoder::decode_json("ns", ns, obj);
+}
+
+void rgw_raw_obj::dump(Formatter *f) const
+{
+  encode_json("pool", pool, f);
+  encode_json("oid", oid, f);
+  encode_json("loc", loc, f);
+}
+
+void rgw_raw_obj::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("pool", pool, obj);
+  JSONDecoder::decode_json("oid", oid, obj);
+  JSONDecoder::decode_json("loc", loc, obj);
+}
+
+void rgw_obj::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("key", key, f);
+}
+
+int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id)
+{
+  auto pos = bucket_instance.rfind(':');
+  if (pos == string::npos) {
+    return -EINVAL;
+  }
+
+  string first = bucket_instance.substr(0, pos);
+  string second = bucket_instance.substr(pos + 1);
+
+  pos = first.find(':');
+
+  if (pos == string::npos) {
+    *shard_id = -1;
+    *bucket_name = first;
+    *bucket_id = second;
+    return 0;
+  }
+
+  *bucket_name = first.substr(0, pos);
+  *bucket_id = first.substr(pos + 1);
+
+  string err;
+  *shard_id = strict_strtol(second.c_str(), 10, &err);
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+boost::intrusive_ptr<CephContext>
+rgw_global_init(const std::map<std::string,std::string> *defaults,
+		    std::vector < const char* >& args,
+		    uint32_t module_type, code_environment_t code_env,
+		    int flags)
+{
+  // Load the config from the files, but not the mon
+  global_pre_init(defaults, args, module_type, code_env, flags);
+
+  // Get the store backend
+  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+
+  if ((config_store == "dbstore") ||
+      (config_store == "motr")) {
+    // These stores don't use the mon
+    flags |= CINIT_FLAG_NO_MON_CONFIG;
+  }
+
+  // Finish global init, indicating we already ran pre-init
+  return global_init(defaults, args, module_type, code_env, flags, false);
+}

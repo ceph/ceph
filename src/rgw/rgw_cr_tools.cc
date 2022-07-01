@@ -56,35 +56,34 @@ int RGWUserCreateCR::Request::_send_request(const DoutPrefixProvider *dpp)
 
 
   if (params.apply_quota) {
-    RGWQuotaInfo bucket_quota;
-    RGWQuotaInfo user_quota;
+    RGWQuota quota;
 
     if (cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-      bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
-      bucket_quota.enabled = true;
+      quota.bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
+      quota.bucket_quota.enabled = true;
     }
 
     if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
-      bucket_quota.enabled = true;
+      quota.bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
+      quota.bucket_quota.enabled = true;
     }
 
     if (cct->_conf->rgw_user_default_quota_max_objects >= 0) {
-      user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
-      user_quota.enabled = true;
+      quota.user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
+      quota.user_quota.enabled = true;
     }
 
     if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
-      user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
-      user_quota.enabled = true;
+      quota.user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
+      quota.user_quota.enabled = true;
     }
 
-    if (bucket_quota.enabled) {
-      op_state.set_bucket_quota(bucket_quota);
+    if (quota.bucket_quota.enabled) {
+      op_state.set_bucket_quota(quota.bucket_quota);
     }
 
-    if (user_quota.enabled) {
-      op_state.set_user_quota(user_quota);
+    if (quota.user_quota.enabled) {
+      op_state.set_user_quota(quota.user_quota);
     }
   }
 

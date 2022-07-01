@@ -217,6 +217,11 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return ioctl(fd, BLKDISCARD, range);
 }
 
+int BlkDev::get_optimal_io_size() const
+{
+	return get_int_property("queue/optimal_io_size");
+}
+
 bool BlkDev::is_rotational() const
 {
   return get_int_property("queue/rotational") > 0;
@@ -859,6 +864,11 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return -EOPNOTSUPP;
 }
 
+int BlkDev::get_optimal_io_size() const
+{
+  return 0;
+}
+
 bool BlkDev::is_rotational() const
 {
   return false;
@@ -986,6 +996,11 @@ bool BlkDev::support_discard() const
 int BlkDev::discard(int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
+}
+
+int BlkDev::get_optimal_io_size() const
+{
+  return 0;
 }
 
 bool BlkDev::is_rotational() const

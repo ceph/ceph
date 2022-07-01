@@ -138,7 +138,7 @@ the cluster::
      mon initial members = foo, bar, baz
 
 The monitors can then be initialized by providing the other pieces of
-information (they keyring, cluster fsid, and a way of determining
+information (the keyring, cluster fsid, and a way of determining
 their own address).  For example::
 
      ceph-mon --mkfs -i <name> --mon-initial-hosts 'foo,bar,baz' --keyring <initial_keyring> --public-addr <ip>

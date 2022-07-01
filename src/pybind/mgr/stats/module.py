@@ -5,7 +5,7 @@ performance stats for ceph filesystem (for now...)
 import json
 from typing import List, Dict
 
-from mgr_module import MgrModule, Option
+from mgr_module import MgrModule, Option, NotifyType
 
 from .fs.perf_stats import FSPerfStats
 
@@ -21,14 +21,17 @@ class Module(MgrModule):
         },
     ]
     MODULE_OPTIONS: List[Option] = []
+    NOTIFY_TYPES = [NotifyType.command, NotifyType.fs_map]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.fs_perf_stats = FSPerfStats(self)
 
-    def notify(self, notify_type, notify_id):
-        if notify_type == "command":
-            self.fs_perf_stats.notify(notify_id)
+    def notify(self, notify_type: NotifyType, notify_id):
+        if notify_type == NotifyType.command:
+            self.fs_perf_stats.notify_cmd(notify_id)
+        elif notify_type == NotifyType.fs_map:
+            self.fs_perf_stats.notify_fsmap()
 
     def handle_command(self, inbuf, cmd):
         prefix = cmd['prefix']

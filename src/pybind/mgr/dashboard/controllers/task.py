@@ -2,7 +2,7 @@
 
 from ..services import progress
 from ..tools import TaskManager
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController
+from . import APIDoc, APIRouter, EndpointDoc, RESTController
 
 TASK_SCHEMA = {
     "executing_tasks": (str, "ongoing executing tasks"),
@@ -22,8 +22,8 @@ TASK_SCHEMA = {
 }
 
 
-@ApiController('/task')
-@ControllerDoc("Task Management API", "Task")
+@APIRouter('/task')
+@APIDoc("Task Management API", "Task")
 class Task(RESTController):
     @EndpointDoc("Display Tasks",
                  parameters={

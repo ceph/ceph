@@ -175,6 +175,8 @@ void get_map_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
+    ("show-cookie", po::bool_switch(), "show device cookie")
+    ("cookie", po::value<std::string>(), "specify device cookie")
     ("read-only", po::bool_switch(), "map read-only")
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
     ("quiesce", po::bool_switch(), "use quiesce hooks")
@@ -212,6 +214,8 @@ void get_attach_arguments(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
     ("device", po::value<std::string>()->required(), "specify device path")
+    ("show-cookie", po::bool_switch(), "show device cookie")
+    ("cookie", po::value<std::string>(), "specify device cookie")
     ("read-only", po::bool_switch(), "attach read-only")
     ("force", po::bool_switch(), "force attach")
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
@@ -243,7 +247,9 @@ int execute_detach(const po::variables_map &vm,
   return (*get_device_operations(vm)->execute_detach)(vm, ceph_global_init_args);
 }
 
-Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
+Shell::SwitchArguments switched_arguments({"exclusive", "force", "quiesce",
+                                           "read-only", "show-cookie"});
+
 Shell::Action action_list(
   {"device", "list"}, {"showmapped"}, "List mapped rbd images.", "",
   &get_list_arguments, &execute_list);

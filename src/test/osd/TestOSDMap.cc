@@ -40,6 +40,12 @@ public:
   const uint64_t my_ec_pool = 1;
   const uint64_t my_rep_pool = 2;
 
+  // Blacklist testing lists
+  // I pulled the first two ranges and their start/end points from
+  // https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
+  static const string range_addrs[];
+  static const string ip_addrs[];
+  static const string unblocked_ip_addrs[];
 
   OSDMapTest() {}
 
@@ -2071,6 +2077,207 @@ TEST_P(OSDMapTest, BUG_51842) {
       ASSERT_TRUE(!tmpmap.have_pg_upmaps(rep_pgid2));
       ASSERT_TRUE(!tmpmap.have_pg_upmaps(rep_pgid3));
     }
+}
+
+const string OSDMapTest::range_addrs[] = {"198.51.100.0/22", "10.2.5.102/32", "2001:db8::/48",
+  "3001:db8::/72", "4001:db8::/30", "5001:db8::/64", "6001:db8::/128", "7001:db8::/127"};
+const string OSDMapTest::ip_addrs[] = {"198.51.100.14", "198.51.100.0", "198.51.103.255",
+  "10.2.5.102",
+  "2001:db8:0:0:0:0:0:0", "2001:db8:0:0:0:0001:ffff:ffff",
+  "2001:db8:0:ffff:ffff:ffff:ffff:ffff",
+  "3001:db8:0:0:0:0:0:0", "3001:db8:0:0:0:0001:ffff:ffff",
+  "3001:db8:0:0:00ff:ffff:ffff:ffff",
+  "4001:db8::", "4001:db8:0:0:0:0001:ffff:ffff",
+  "4001:dbb:ffff:ffff:ffff:ffff:ffff:ffff",
+  "5001:db8:0:0:0:0:0:0", "5001:db8:0:0:0:0:ffff:ffff",
+  "5001:db8:0:0:ffff:ffff:ffff:ffff",
+  "6001:db8:0:0:0:0:0:0",
+  "7001:db8:0:0:0:0:0:0", "7001:db8:0:0:0:0:0:0001"
+};
+const string OSDMapTest::unblocked_ip_addrs[] = { "0.0.0.0", "1.1.1.1", "192.168.1.1",
+  "198.51.99.255", "198.51.104.0",
+  "10.2.5.101", "10.2.5.103",
+  "2001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "2001:db8:0001::",
+  "3001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "3001:db8:0:0:0100::",
+  "4001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "4001:dbc::",
+  "5001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "5001:db8:0:0001:0:0:0:0", 
+  "6001:db8:0:0:0:0:0:0001",
+  "7001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "7001:db8:0:0:0:0:0:0002"
+};
+
+TEST_F(OSDMapTest, blocklisting_ips) {
+  set_up_map(6); //whatever
+
+  OSDMap::Incremental new_blocklist_inc(osdmap.get_epoch() + 1);
+  for (const auto& a : ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    new_blocklist_inc.new_blocklist[addr] = ceph_clock_now();
+  }
+  osdmap.apply_incremental(new_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_TRUE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_FALSE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+
+  OSDMap::Incremental rm_blocklist_inc(osdmap.get_epoch() + 1);
+  for (const auto& a : ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    rm_blocklist_inc.old_blocklist.push_back(addr);
+  }
+  osdmap.apply_incremental(rm_blocklist_inc);
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_FALSE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (blocklisted) {
+      cout << "erroneously blocklisted " << addr << std::endl;
+    }
+    EXPECT_FALSE(blocklisted);
+  }
+}
+
+TEST_F(OSDMapTest, blocklisting_ranges) {
+  set_up_map(6); //whatever
+  OSDMap::Incremental range_blocklist_inc(osdmap.get_epoch() + 1);
+  for (const auto& a : range_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.type = entity_addr_t::TYPE_CIDR;
+    range_blocklist_inc.new_range_blocklist[addr] = ceph_clock_now();
+  }
+  osdmap.apply_incremental(range_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (blocklisted) {
+      cout << "erroneously blocklisted " << addr << std::endl;
+    }
+    EXPECT_FALSE(blocklisted);
+  }
+
+  OSDMap::Incremental rm_range_blocklist(osdmap.get_epoch() + 1);
+  for (const auto& a : range_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.type = entity_addr_t::TYPE_CIDR;
+    rm_range_blocklist.old_range_blocklist.push_back(addr);
+  }
+  osdmap.apply_incremental(rm_range_blocklist);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_FALSE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (blocklisted) {
+      cout << "erroneously blocklisted " << addr << std::endl;
+    }
+    EXPECT_FALSE(blocklisted);
+  }
+}
+
+TEST_F(OSDMapTest, blocklisting_everything) {
+  set_up_map(6); //whatever
+  OSDMap::Incremental range_blocklist_inc(osdmap.get_epoch() + 1);
+  entity_addr_t baddr;
+  baddr.parse("2001:db8::/0");
+  baddr.type = entity_addr_t::TYPE_CIDR;
+  range_blocklist_inc.new_range_blocklist[baddr] = ceph_clock_now();
+  osdmap.apply_incremental(range_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+
+  OSDMap::Incremental swap_blocklist_inc(osdmap.get_epoch()+1);
+  swap_blocklist_inc.old_range_blocklist.push_back(baddr);
+
+  entity_addr_t caddr;
+  caddr.parse("1.1.1.1/0");
+  caddr.type = entity_addr_t::TYPE_CIDR;
+  swap_blocklist_inc.new_range_blocklist[caddr] = ceph_clock_now();
+  osdmap.apply_incremental(swap_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (!addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (!addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(

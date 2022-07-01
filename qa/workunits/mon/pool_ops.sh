@@ -43,6 +43,23 @@ function expect_config_value()
   fi
 }
 
+# pg_num min/max
+TEST_POOL=testpool1234
+ceph osd pool create testpool1234 8 --autoscale-mode off
+ceph osd pool set $TEST_POOL pg_num_min 2
+ceph osd pool get $TEST_POOL pg_num_min | grep 2
+ceph osd pool set $TEST_POOL pg_num_max 33
+ceph osd pool get $TEST_POOL pg_num_max | grep 33
+expect_false ceph osd pool set $TEST_POOL pg_num_min 9
+expect_false ceph osd pool set $TEST_POOL pg_num_max 7
+expect_false ceph osd pool set $TEST_POOL pg_num 1
+expect_false ceph osd pool set $TEST_POOL pg_num 44
+ceph osd pool set $TEST_POOL pg_num_min 0
+expect_false ceph osd pool get $TEST_POOL pg_num_min
+ceph osd pool set $TEST_POOL pg_num_max 0
+expect_false ceph osd pool get $TEST_POOL pg_num_max
+ceph osd pool delete $TEST_POOL $TEST_POOL --yes-i-really-really-mean-it
+
 # note: we need to pass the other args or ceph_argparse.py will take
 # 'invalid' that is not replicated|erasure and assume it is the next
 # argument, which is a string.

@@ -13,12 +13,6 @@ export class PoolPageHelper extends PageHelper {
     return expect((n & (n - 1)) === 0, `Placement groups ${n} are not a power of 2`).to.be.true;
   }
 
-  @PageHelper.restrictTo(pages.index.url)
-  exist(name: string, oughtToBePresent = true) {
-    const waitRule = oughtToBePresent ? 'be.visible' : 'not.exist';
-    this.getFirstTableCell(name).should(waitRule);
-  }
-
   @PageHelper.restrictTo(pages.create.url)
   create(name: string, placement_groups: number, ...apps: string[]) {
     cy.get('input[name=name]').clear().type(name);

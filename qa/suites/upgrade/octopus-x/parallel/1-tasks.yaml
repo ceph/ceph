@@ -1,10 +1,12 @@
 tasks:
 - install:
     branch: octopus
+    exclude_packages:
+      - ceph-volume
 - print: "**** done install task..."
 - print: "**** done start installing octopus cephadm ..."
 - cephadm:
-    image: docker.io/ceph/daemon-base:latest-octopus
+    image: quay.io/ceph/daemon-base:latest-octopus
     cephadm_branch: octopus
     cephadm_git_url: https://github.com/ceph/ceph
     conf:

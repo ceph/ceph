@@ -12,7 +12,7 @@ public:
   explicit RGWRESTMgr_MDSearch_S3() {}
 
   RGWHandler_REST *get_handler(rgw::sal::Store* store,
-			       struct req_state* s,
+			       req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };

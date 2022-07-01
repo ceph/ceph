@@ -79,7 +79,6 @@ export class ErasureCodeProfileFormModalComponent
         4, // Will be overwritten with plugin defaults
         [
           Validators.required,
-          Validators.min(2),
           CdValidators.custom('max', () => this.baseValueValidation(true)),
           CdValidators.custom('unequal', (v: number) => this.lrcDataValidation(v)),
           CdValidators.custom('kLowerM', (v: number) => this.shecDataValidation(v))
@@ -87,11 +86,7 @@ export class ErasureCodeProfileFormModalComponent
       ],
       m: [
         2, // Will be overwritten with plugin defaults
-        [
-          Validators.required,
-          Validators.min(1),
-          CdValidators.custom('max', () => this.baseValueValidation())
-        ]
+        [Validators.required, CdValidators.custom('max', () => this.baseValueValidation())]
       ],
       crushFailureDomain: '', // Will be preselected
       crushRoot: null, // Will be preselected
@@ -100,13 +95,12 @@ export class ErasureCodeProfileFormModalComponent
       // Only for 'jerasure', 'clay' and 'isa' use
       technique: 'reed_sol_van',
       // Only for 'jerasure' use
-      packetSize: [2048, [Validators.min(1)]],
+      packetSize: [2048],
       // Only for 'lrc' use
       l: [
         3, // Will be overwritten with plugin defaults
         [
           Validators.required,
-          Validators.min(1),
           CdValidators.custom('unequal', (v: number) => this.lrcLocalityValidation(v))
         ]
       ],
@@ -116,7 +110,6 @@ export class ErasureCodeProfileFormModalComponent
         2, // Will be overwritten with plugin defaults
         [
           Validators.required,
-          Validators.min(1),
           CdValidators.custom('cGreaterM', (v: number) => this.shecDurabilityValidation(v))
         ]
       ],

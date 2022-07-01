@@ -20,7 +20,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-class OpsLogSocket;
+class OpsLogSink;
 
 namespace rgw {
 
@@ -29,7 +29,7 @@ namespace rgw {
   class RGWLib : public DoutPrefixProvider {
     RGWFrontendConfig* fec;
     RGWLibFrontend* fe;
-    OpsLogSocket* olog;
+    OpsLogSink* olog;
     rgw::LDAPHelper* ldh{nullptr};
     RGWREST rest; // XXX needed for RGWProcessEnv
     rgw::sal::Store* store;
@@ -128,7 +128,7 @@ namespace rgw {
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
     static int init_from_header(rgw::sal::Store* store,
-				struct req_state *s);
+				req_state *s);
   }; /* RGWHandler_Lib */
 
   class RGWLibRequest : public RGWRequest,
@@ -139,7 +139,7 @@ namespace rgw {
     CephContext* cct;
 
     /* unambiguiously return req_state */
-    inline struct req_state* get_state() { return this->RGWRequest::s; }
+    inline req_state* get_state() { return this->RGWRequest::s; }
 
     RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user)
       :  RGWRequest(rgwlib.get_store()->get_new_req_id()),
@@ -160,13 +160,12 @@ namespace rgw {
 
     using RGWHandler::init;
 
-    int init(const RGWEnv& rgw_env, RGWObjectCtx* rados_ctx,
-	     RGWLibIO* io, struct req_state* _s) {
+    int init(const RGWEnv& rgw_env, rgw::sal::Store* _store,
+	     RGWLibIO* io, req_state* _s) {
 
       RGWRequest::init_state(_s);
-      RGWHandler::init(rados_ctx->get_store(), _s, io);
+      RGWHandler::init(_store, _s, io);
 
-      get_state()->obj_ctx = rados_ctx;
       get_state()->req_id = store->zone_unique_id(id);
       get_state()->trans_id = store->zone_unique_trans_id(id);
       get_state()->bucket_tenant = tuser->get_tenant();
@@ -177,7 +176,7 @@ namespace rgw {
 
       int ret = header_init();
       if (ret == 0) {
-	ret = init_from_header(rados_ctx->get_store(), _s);
+	ret = init_from_header(store, _s);
       }
       return ret;
     }
@@ -190,22 +189,19 @@ namespace rgw {
 
   class RGWLibContinuedReq : public RGWLibRequest {
     RGWLibIO io_ctx;
-    struct req_state rstate;
-    RGWObjectCtx rados_ctx;
+    req_state rstate;
   public:
 
     RGWLibContinuedReq(CephContext* _cct,
 		       std::unique_ptr<rgw::sal::User> _user)
       :  RGWLibRequest(_cct, std::move(_user)), io_ctx(),
-	 rstate(_cct, &io_ctx.get_env(), id),
-	 rados_ctx(rgwlib.get_store(), &rstate)
+	 rstate(_cct, &io_ctx.get_env(), id)
       {
 	io_ctx.init(_cct);
 
 	RGWRequest::init_state(&rstate);
-	RGWHandler::init(rados_ctx.get_store(), &rstate, &io_ctx);
+	RGWHandler::init(rgwlib.get_store(), &rstate, &io_ctx);
 
-	get_state()->obj_ctx = &rados_ctx;
 	get_state()->req_id = store->zone_unique_id(id);
 	get_state()->trans_id = store->zone_unique_trans_id(id);
 
@@ -215,7 +211,6 @@ namespace rgw {
 
     inline rgw::sal::Store* get_store() { return store; }
     inline RGWLibIO& get_io() { return io_ctx; }
-    inline RGWObjectCtx& get_octx() { return rados_ctx; }
 
     virtual int execute() final { ceph_abort(); }
     virtual int exec_start() = 0;

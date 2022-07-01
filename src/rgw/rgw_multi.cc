@@ -57,7 +57,9 @@ RGWMultiXMLParser::~RGWMultiXMLParser() {}
 
 XMLObj *RGWMultiXMLParser::alloc_obj(const char *el) {
   XMLObj *obj = NULL;
+  // CompletedMultipartUpload is incorrect but some versions of some libraries use it, see PR #41700
   if (strcmp(el, "CompleteMultipartUpload") == 0 ||
+      strcmp(el, "CompletedMultipartUpload") == 0 ||
       strcmp(el, "MultipartUpload") == 0) {
     obj = new RGWMultiCompleteUpload();
   } else if (strcmp(el, "Part") == 0) {
@@ -77,5 +79,24 @@ bool is_v2_upload_id(const string& upload_id)
 
   return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0) ||
          (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
+}
+
+void RGWUploadPartInfo::generate_test_instances(list<RGWUploadPartInfo*>& o)
+{
+  RGWUploadPartInfo *i = new RGWUploadPartInfo;
+  i->num = 1;
+  i->size = 10 * 1024 * 1024;
+  i->etag = "etag";
+  o.push_back(i);
+  o.push_back(new RGWUploadPartInfo);
+}
+
+void RGWUploadPartInfo::dump(Formatter *f) const
+{
+  encode_json("num", num, f);
+  encode_json("size", size, f);
+  encode_json("etag", etag, f);
+  utime_t ut(modified);
+  encode_json("modified", ut, f);
 }
 

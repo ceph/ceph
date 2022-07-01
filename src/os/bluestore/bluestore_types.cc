@@ -1181,3 +1181,88 @@ void bluestore_compression_header_t::generate_test_instances(
   o.push_back(new bluestore_compression_header_t(1));
   o.back()->length = 1234;
 }
+
+// adds more salt to build a hash func input
+shared_blob_2hash_tracker_t::hash_input_t
+  shared_blob_2hash_tracker_t::build_hash_input(
+    uint64_t sbid,
+    uint64_t offset) const
+{
+  hash_input_t res = {
+    sbid,
+    offset >> au_void_bits,
+    ((sbid & 0xffffffff) << 32) + ~(uint32_t((offset >> au_void_bits) & 0xffffffff))
+  };
+  return res;
+}
+
+void shared_blob_2hash_tracker_t::inc(
+  uint64_t sbid,
+  uint64_t offset,
+  int n)
+{
+  auto hash_input = build_hash_input(sbid, offset);
+  ref_counter_2hash_tracker_t::inc(
+    (char*)hash_input.data(),
+    get_hash_input_size(),
+    n);
+}
+
+void shared_blob_2hash_tracker_t::inc_range(
+  uint64_t sbid,
+  uint64_t offset,
+  uint32_t len,
+  int n)
+{
+  uint32_t alloc_unit = 1 << au_void_bits;
+  int64_t l = len;
+  while (l > 0) {
+    // don't care about ofset alignment as inc() trims it anyway
+    inc(sbid, offset, n);
+    offset += alloc_unit;
+    l -= alloc_unit;
+  }
+}
+
+bool shared_blob_2hash_tracker_t::test_hash_conflict(
+  uint64_t sbid1,
+  uint64_t offset1,
+  uint64_t sbid2,
+  uint64_t offset2) const
+{
+  auto hash_input1 = build_hash_input(sbid1, offset1);
+  auto hash_input2 = build_hash_input(sbid2, offset2);
+  return ref_counter_2hash_tracker_t::test_hash_conflict(
+    (char*)hash_input1.data(),
+    (char*)hash_input2.data(),
+    get_hash_input_size());
+}
+
+bool shared_blob_2hash_tracker_t::test_all_zero(
+  uint64_t sbid,
+  uint64_t offset) const
+{
+  auto hash_input = build_hash_input(sbid, offset);
+  return
+    ref_counter_2hash_tracker_t::test_all_zero(
+      (char*)hash_input.data(),
+      get_hash_input_size());
+}
+
+bool shared_blob_2hash_tracker_t::test_all_zero_range(
+  uint64_t sbid,
+  uint64_t offset,
+  uint32_t len) const
+{
+  uint32_t alloc_unit = 1 << au_void_bits;
+  int64_t l = len;
+  while (l > 0) {
+    // don't care about ofset alignment as inc() trims it anyway
+    if (!test_all_zero(sbid, offset)) {
+      return false;
+    }
+    offset += alloc_unit;
+    l -= alloc_unit;
+  }
+  return true;
+}

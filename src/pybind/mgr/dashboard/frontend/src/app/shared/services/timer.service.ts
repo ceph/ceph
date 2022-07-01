@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, timer } from 'rxjs';
 import { observeOn, shareReplay, switchMap } from 'rxjs/operators';
 
+import { whenPageVisible } from '../rxjs/operators/page-visibilty.operator';
 import { NgZoneSchedulerService } from './ngzone-scheduler.service';
 
 @Injectable({
@@ -21,7 +22,8 @@ export class TimerService {
     return timer(dueTime, refreshInterval, this.ngZone.leave).pipe(
       observeOn(this.ngZone.enter),
       switchMap(next),
-      shareReplay({ refCount: true, bufferSize: 1 })
+      shareReplay({ refCount: true, bufferSize: 1 }),
+      whenPageVisible()
     );
   }
 }

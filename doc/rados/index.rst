@@ -1,3 +1,5 @@
+.. _rados-index:
+
 ======================
  Ceph Storage Cluster
 ======================

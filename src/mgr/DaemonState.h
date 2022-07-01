@@ -162,46 +162,8 @@ class DaemonState
     : perf_counters(types_)
   {
   }
-
-  void set_metadata(const std::map<std::string,std::string>& m) {
-    devices.clear();
-    devices_bypath.clear();
-    metadata = m;
-    auto p = m.find("device_ids");
-    if (p != m.end()) {
-      std::map<std::string,std::string> devs, paths; // devname -> id or path
-      get_str_map(p->second, &devs, ",; ");
-      auto q = m.find("device_paths");
-      if (q != m.end()) {
-	get_str_map(q->second, &paths, ",; ");
-      }
-      for (auto& i : devs) {
-	if (i.second.size()) {  // skip blank ids
-	  devices[i.second] = i.first;   // id -> devname
-	  auto j = paths.find(i.first);
-	  if (j != paths.end()) {
-	    devices_bypath[i.second] = j->second; // id -> path
-	  }
-	}
-      }
-    }
-    p = m.find("hostname");
-    if (p != m.end()) {
-      hostname = p->second;
-    }
-  }
-
-  const std::map<std::string,std::string>& _get_config_defaults() {
-    if (config_defaults.empty() &&
-	config_defaults_bl.length()) {
-      auto p = config_defaults_bl.cbegin();
-      try {
-	decode(config_defaults, p);
-      } catch (buffer::error& e) {
-      }
-    }
-    return config_defaults;
-  }
+  void set_metadata(const std::map<std::string,std::string>& m);
+  const std::map<std::string,std::string>& _get_config_defaults();
 };
 
 typedef std::shared_ptr<DaemonState> DaemonStatePtr;

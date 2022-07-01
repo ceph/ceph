@@ -3996,12 +3996,6 @@ CEPH_RADOS_API int rados_pg_command(rados_t cluster, const char *pgstr,
 		                    char **outbuf, size_t *outbuflen,
 		                    char **outs, size_t *outslen);
 
-CEPH_RADOS_API int rados_mgr_command(rados_t cluster,
-                                     const char **cmd, size_t cmdlen,
-		                     const char *inbuf, size_t inbuflen,
-		                     char **outbuf, size_t *outbuflen,
-		                     char **outs, size_t *outslen);
-
 /*
  * This is not a doxygen comment leadin, because doxygen breaks on
  * a typedef with function params and returns, and I can't figure out

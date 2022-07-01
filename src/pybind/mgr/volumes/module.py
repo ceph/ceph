@@ -12,17 +12,21 @@ log = logging.getLogger(__name__)
 
 goodchars = '[A-Za-z0-9-_.]'
 
+
 class VolumesInfoWrapper():
     def __init__(self, f, context):
         self.f = f
         self.context = context
+
     def __enter__(self):
         log.info("Starting {}".format(self.context))
+
     def __exit__(self, exc_type, exc_value, tb):
         if exc_type is not None:
             log.error("Failed {}:\n{}".format(self.context, "".join(traceback.format_exception(exc_type, exc_value, tb))))
         else:
             log.info("Finishing {}".format(self.context))
+
 
 def mgr_cmd_wrap(f):
     def wrap(self, inbuf, cmd):
@@ -33,6 +37,7 @@ def mgr_cmd_wrap(f):
         with VolumesInfoWrapper(f, context):
             return f(self, inbuf, cmd)
     return wrap
+
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -56,6 +61,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs volume rename '
+                   f'name=vol_name,type=CephString,goodchars={goodchars} '
+                   f'name=new_vol_name,type=CephString,goodchars={goodchars} '
+                   'name=yes_i_really_mean_it,type=CephBool,req=false ',
+            'desc': "Rename a CephFS volume by passing --yes-i-really-mean-it flag",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolumegroup ls '
             'name=vol_name,type=CephString ',
             'desc': "List subvolumegroups",
@@ -65,6 +78,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolumegroup create '
                    'name=vol_name,type=CephString '
                    f'name=group_name,type=CephString,goodchars={goodchars} '
+                   'name=size,type=CephInt,req=false '
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
@@ -79,6 +93,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=group_name,type=CephString '
                    'name=force,type=CephBool,req=false ',
             'desc': "Delete a CephFS subvolume group in a volume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup info '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString ',
+            'desc': "Get the metadata of a CephFS subvolume group in a volume, ",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolumegroup resize '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=new_size,type=CephString,req=true '
+                   'name=no_shrink,type=CephBool,req=false ',
+            'desc': "Resize a CephFS subvolume group",
             'perm': 'rw'
         },
         {
@@ -176,9 +206,50 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
-            'desc': "Get the metadata of a CephFS subvolume in a volume, "
+            'desc': "Get the information of a CephFS subvolume in a volume, "
                     "and optionally, in a specific subvolume group",
             'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume metadata set '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=key_name,type=CephString '
+                   'name=value,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Set custom metadata (key-value) for a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume metadata get '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=key_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Get custom metadata associated with the key of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume metadata ls '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "List custom metadata (key-value pairs) of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume metadata rm '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=key_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
+                   'name=force,type=CephBool,req=false ',
+            'desc': "Remove custom metadata (key-value) associated with the key of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'rw'
         },
         {
             'cmd': 'fs subvolumegroup pin'
@@ -237,9 +308,54 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=sub_name,type=CephString '
                    'name=snap_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
-            'desc': "Get the metadata of a CephFS subvolume snapshot "
+            'desc': "Get the information of a CephFS subvolume snapshot "
                     "and optionally, in a specific subvolume group",
             'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume snapshot metadata set '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=key_name,type=CephString '
+                   'name=value,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Set custom metadata (key-value) for a CephFS subvolume snapshot in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot metadata get '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=key_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Get custom metadata associated with the key of a CephFS subvolume snapshot in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume snapshot metadata ls '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "List custom metadata (key-value pairs) of a CephFS subvolume snapshot in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume snapshot metadata rm '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=key_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
+                   'name=force,type=CephBool,req=false ',
+            'desc': "Remove custom metadata (key-value) associated with the key of a CephFS subvolume snapshot in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'rw'
         },
         {
             'cmd': 'fs subvolume snapshot rm '
@@ -412,12 +528,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.list_fs_volumes()
 
     @mgr_cmd_wrap
+    def _cmd_fs_volume_rename(self, inbuf, cmd):
+        return self.vc.rename_fs_volume(cmd['vol_name'],
+                                        cmd['new_vol_name'],
+                                        cmd.get('yes_i_really_mean_it', False))
+
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
         return self.vc.create_subvolume_group(
-            vol_name=cmd['vol_name'], group_name=cmd['group_name'],
+            vol_name=cmd['vol_name'], group_name=cmd['group_name'], size=cmd.get('size', None),
             pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'),
             uid=cmd.get('uid', None), gid=cmd.get('gid', None))
 
@@ -430,6 +552,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                               group_name=cmd['group_name'],
                                               force=cmd.get('force', False))
 
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_info(self, inbuf, cmd):
+        return self.vc.subvolumegroup_info(vol_name=cmd['vol_name'],
+                                           group_name=cmd['group_name'])
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_resize(self, inbuf, cmd):
+        return self.vc.resize_subvolume_group(vol_name=cmd['vol_name'],
+                                              group_name=cmd['group_name'],
+                                              new_size=cmd['new_size'],
+                                              no_shrink=cmd.get('no_shrink', False))
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'])
@@ -525,10 +658,39 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                       group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
+    def _cmd_fs_subvolume_metadata_set(self, inbuf, cmd):
+        return self.vc.set_user_metadata(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      key_name=cmd['key_name'],
+                                      value=cmd['value'],
+                                      group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_metadata_get(self, inbuf, cmd):
+        return self.vc.get_user_metadata(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      key_name=cmd['key_name'],
+                                      group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_metadata_ls(self, inbuf, cmd):
+        return self.vc.list_user_metadata(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_metadata_rm(self, inbuf, cmd):
+        return self.vc.remove_user_metadata(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      key_name=cmd['key_name'],
+                                      group_name=cmd.get('group_name', None),
+                                      force=cmd.get('force', False))
+
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_pin(self, inbuf, cmd):
         return self.vc.pin_subvolume_group(vol_name=cmd['vol_name'],
-            group_name=cmd['group_name'], pin_type=cmd['pin_type'],
-            pin_setting=cmd['pin_setting'])
+                                           group_name=cmd['group_name'], pin_type=cmd['pin_type'],
+                                           pin_setting=cmd['pin_setting'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
@@ -571,6 +733,39 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_metadata_set(self, inbuf, cmd):
+        return self.vc.set_subvolume_snapshot_metadata(vol_name=cmd['vol_name'],
+                                               sub_name=cmd['sub_name'],
+                                               snap_name=cmd['snap_name'],
+                                               key_name=cmd['key_name'],
+                                               value=cmd['value'],
+                                               group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_metadata_get(self, inbuf, cmd):
+        return self.vc.get_subvolume_snapshot_metadata(vol_name=cmd['vol_name'],
+                                               sub_name=cmd['sub_name'],
+                                               snap_name=cmd['snap_name'],
+                                               key_name=cmd['key_name'],
+                                               group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_metadata_ls(self, inbuf, cmd):
+        return self.vc.list_subvolume_snapshot_metadata(vol_name=cmd['vol_name'],
+                                               sub_name=cmd['sub_name'],
+                                               snap_name=cmd['snap_name'],
+                                               group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_metadata_rm(self, inbuf, cmd):
+        return self.vc.remove_subvolume_snapshot_metadata(vol_name=cmd['vol_name'],
+                                               sub_name=cmd['sub_name'],
+                                               snap_name=cmd['snap_name'],
+                                               key_name=cmd['key_name'],
+                                               group_name=cmd.get('group_name', None),
+                                               force=cmd.get('force', False))
+
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_snapshots(vol_name=cmd['vol_name'],
                                                 sub_name=cmd['sub_name'],
@@ -585,9 +780,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_pin(self, inbuf, cmd):
         return self.vc.subvolume_pin(vol_name=cmd['vol_name'],
-            sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
-            pin_setting=cmd['pin_setting'],
-            group_name=cmd.get('group_name', None))
+                                     sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
+                                     pin_setting=cmd['pin_setting'],
+                                     group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_protect(self, inbuf, cmd):
@@ -609,9 +804,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_clone_status(self, inbuf, cmd):
         return self.vc.clone_status(
-            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
-            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))

@@ -54,6 +54,7 @@ struct rbm_metadata_header_t {
   uint32_t start_data_area;
   uint64_t flag; // reserved
   uint64_t feature;
+  device_id_t device_id;
   checksum_t crc;
 
   DENC(rbm_metadata_header_t, v, p) {
@@ -70,6 +71,7 @@ struct rbm_metadata_header_t {
     denc(v.start_data_area, p);
     denc(v.flag, p);
     denc(v.feature, p);
+    denc(v.device_id, p);
 
     denc(v.crc, p);
     DENC_FINISH(p);
@@ -182,9 +184,9 @@ public:
    */
 
   mkfs_ertr::future<> mkfs(mkfs_config_t) final;
-  read_ertr::future<> read(uint64_t addr, bufferptr &buffer) final;
-  write_ertr::future<> write(uint64_t addr, bufferptr &buf) final;
-  open_ertr::future<> open(const std::string &path, blk_paddr_t start) final;
+  read_ertr::future<> read(paddr_t addr, bufferptr &buffer) final;
+  write_ertr::future<> write(paddr_t addr, bufferptr &buf) final;
+  open_ertr::future<> open(const std::string &path, paddr_t start) final;
   close_ertr::future<> close() final;
 
   /*
@@ -201,7 +203,7 @@ public:
    * TODO: multiple allocation
    *
    */
-  allocate_ertr::future<> alloc_extent(
+  allocate_ret alloc_extent(
       Transaction &t, size_t size) final; // allocator, return blocks
 
   /*
@@ -210,14 +212,11 @@ public:
    * add a range of free blocks to transaction
    *
    */
-  // TODO: will include trim if necessary
-  free_block_ertr::future<> free_extent(
-      Transaction &t, blk_paddr_t from, size_t len) final;
   abort_allocation_ertr::future<> abort_allocation(Transaction &t) final;
   write_ertr::future<> complete_allocation(Transaction &t) final;
 
   open_ertr::future<> _open_device(const std::string path);
-  read_ertr::future<rbm_metadata_header_t> read_rbm_header(blk_paddr_t addr);
+  read_ertr::future<rbm_metadata_header_t> read_rbm_header(rbm_abs_addr addr);
   write_ertr::future<> write_rbm_header();
 
   size_t get_size() const final { return super.size; };
@@ -228,7 +227,7 @@ public:
     return (super.block_size - ceph::encoded_sizeof_bounded<rbm_bitmap_block_t>()) * 8;
   }
 
-  uint64_t convert_block_no_to_bitmap_block(blk_id_t block_no)
+  uint64_t convert_block_no_to_bitmap_block(blk_no_t block_no)
   {
     ceph_assert(super.block_size);
     return block_no / max_block_by_bitmap_block();
@@ -239,7 +238,7 @@ public:
    *
    * return block id using address where freebitmap is stored and offset
    */
-  blk_id_t convert_bitmap_block_no_to_block_id(uint64_t offset, blk_paddr_t addr)
+  blk_no_t convert_bitmap_block_no_to_block_id(uint64_t offset, rbm_abs_addr addr)
   {
     ceph_assert(super.block_size);
     // freebitmap begins at block 1
@@ -260,7 +259,7 @@ public:
   using find_block_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::enoent>;
-  using find_block_ret = find_block_ertr::future<interval_set<blk_id_t>>;
+  using find_block_ret = find_block_ertr::future<interval_set<blk_no_t>>;
   /*
    * find_free_block
    *
@@ -281,7 +280,7 @@ public:
    *
    */
   write_ertr::future<> rbm_sync_block_bitmap(
-      rbm_bitmap_block_t &block, blk_id_t block_no);
+      rbm_bitmap_block_t &block, blk_no_t block_no);
 
   using check_bitmap_blocks_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -327,11 +326,11 @@ public:
     b_block.buf.append(bitmap_blk);
   }
 
-  blk_paddr_t get_blk_paddr_by_block_no(blk_id_t id) {
+  rbm_abs_addr get_blk_paddr_by_block_no(blk_no_t id) {
     return (id * super.block_size) + super.start;
   }
 
-  int num_block_between_blk_ids(blk_id_t start, blk_id_t end) {
+  int num_block_between_blk_ids(blk_no_t start, blk_no_t end) {
     auto max = max_block_by_bitmap_block();
     auto block_start = start / max;
     auto block_end = end / max;
@@ -339,7 +338,7 @@ public:
   }
 
   write_ertr::future<> rbm_sync_block_bitmap_by_range(
-      blk_id_t start, blk_id_t end, bitmap_op_types_t op);
+      blk_no_t start, blk_no_t end, bitmap_op_types_t op);
   void add_cont_bitmap_blocks_to_buf(
       bufferlist& buf, int num_block, bitmap_op_types_t op) {
     rbm_bitmap_block_t b_block(super.block_size);
@@ -354,11 +353,15 @@ public:
     }
   }
 
-  write_ertr::future<> write(blk_paddr_t addr, bufferlist &bl);
+  write_ertr::future<> write(rbm_abs_addr addr, bufferlist &bl);
   write_ertr::future<> sync_allocation(
-      std::vector<rbm_alloc_delta_t>& alloc_blocks);
-  free_block_ertr::future<> add_free_extent(
-      std::vector<rbm_alloc_delta_t>& v, blk_paddr_t from, size_t len);
+      std::vector<alloc_delta_t>& alloc_blocks);
+  void add_free_extent(
+      std::vector<alloc_delta_t>& v, rbm_abs_addr from, size_t len);
+
+  device_id_t get_device_id() const final {
+    return super.device_id;
+  }
 
 private:
   /*

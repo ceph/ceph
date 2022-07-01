@@ -179,20 +179,40 @@ seastar::future<bufferlist> FSDriver::read(
 
 seastar::future<> FSDriver::mkfs()
 {
-  init();
-  assert(fs);
-  return fs->start(
+  return init(    
   ).then([this] {
+    assert(fs);
+    return fs->start();
+  }).then([this] {
     uuid_d uuid;
     uuid.generate_random();
-    return fs->mkfs(uuid);
+    return fs->mkfs(uuid).handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        crimson::get_logger(ceph_subsys_test)
+          .error("error creating empty object store in {}: ({}) {}",
+          crimson::common::local_conf().get_val<std::string>("osd_data"),
+          ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return fs->stop();
   }).then([this] {
-    init();
-    return fs->start();
+    return init().then([this] {
+      return fs->start();
+    });
   }).then([this] {
-    return fs->mount();
+    return fs->mount(
+    ).handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        crimson::get_logger(
+	  ceph_subsys_test
+	).error(
+	  "error mounting object store in {}: ({}) {}",
+	  crimson::common::local_conf().get_val<std::string>("osd_data"),
+	  ec.value(),
+	  ec.message());
+	std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return seastar::do_for_each(
       boost::counting_iterator<unsigned>(0),
@@ -221,10 +241,22 @@ seastar::future<> FSDriver::mount()
   return (
     config.mkfs ? mkfs() : seastar::now()
   ).then([this] {
-    init();
-    return fs->start();
+    return init().then([this] {
+      return fs->start();
+    });
   }).then([this] {
-    return fs->mount();
+    return fs->mount(
+    ).handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        crimson::get_logger(
+	  ceph_subsys_test
+	).error(
+	  "error mounting object store in {}: ({}) {}",
+	  crimson::common::local_conf().get_val<std::string>("osd_data"),
+	  ec.value(),
+	  ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return seastar::do_for_each(
       boost::counting_iterator<unsigned>(0),
@@ -270,11 +302,15 @@ seastar::future<> FSDriver::close()
   });
 }
 
-void FSDriver::init()
+seastar::future<> FSDriver::init()
 {
   fs.reset();
-  fs = FuturizedStore::create(
+  return FuturizedStore::create(
     config.get_fs_type(),
     *config.path,
-    crimson::common::local_conf().get_config_values());
+    crimson::common::local_conf().get_config_values()
+  ).then([this] (auto store_ptr) {
+      fs = std::move(store_ptr);
+      return seastar::now();
+  });
 }

@@ -196,7 +196,7 @@ public:
   friend struct CopyFromFinisher;
   friend class PromoteCallback;
   friend struct PromoteFinisher;
-  friend class C_gather;
+  friend struct C_gather;
   
   struct ProxyReadOp {
     OpRequestRef op;
@@ -281,11 +281,12 @@ public:
     std::map<hobject_t, std::pair<uint64_t, uint64_t>> chunks;
     uint64_t num_chunks = 0;
     object_manifest_t new_manifest;
+    ObjectContextRef obc;
     
 
-    ManifestOp(RefCountCallback* cb)
-      : cb(cb) {}
-    ManifestOp() = default;
+    ManifestOp(ObjectContextRef obc, RefCountCallback* cb)
+      : cb(cb), obc(obc) {}
+    ManifestOp() = delete;
   };
   typedef std::shared_ptr<ManifestOp> ManifestOpRef;
   std::map<hobject_t, ManifestOpRef> manifest_ops;
@@ -1475,7 +1476,7 @@ public:
 	       const PGPool &_pool,
 	       const std::map<std::string,std::string>& ec_profile,
 	       spg_t p);
-  ~PrimaryLogPG() override {}
+  ~PrimaryLogPG() override;
 
   void do_command(
     const std::string_view& prefix,

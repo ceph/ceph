@@ -8,12 +8,17 @@
 #include "cls/user/cls_user_types.h"
 
 #include "rgw_basic_types.h"
+#include "rgw_bucket.h"
 #include "rgw_xml.h"
+
 #include "common/ceph_json.h"
+#include "common/Formatter.h"
 
 using std::ostream;
 using std::string;
 using std::stringstream;
+
+using namespace std;
 
 void decode_json_obj(rgw_user& val, JSONObj *obj)
 {
@@ -70,16 +75,36 @@ std::string rgw_bucket::get_key(char tenant_delim, char id_delim, size_t reserve
   return key;
 }
 
+void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
+{
+  rgw_bucket *b = new rgw_bucket;
+  init_bucket(b, "tenant", "name", "pool", ".index_pool", "marker", "123");
+  o.push_back(b);
+  o.push_back(new rgw_bucket);
+}
+
 std::string rgw_bucket_shard::get_key(char tenant_delim, char id_delim,
-                                      char shard_delim) const
+                                      char shard_delim, size_t reserve) const
 {
   static constexpr size_t shard_len{12}; // ":4294967295\0"
-  auto key = bucket.get_key(tenant_delim, id_delim, shard_len);
+  auto key = bucket.get_key(tenant_delim, id_delim, reserve + shard_len);
   if (shard_id >= 0 && shard_delim) {
     key.append(1, shard_delim);
     key.append(std::to_string(shard_id));
   }
   return key;
+}
+
+void encode(const rgw_bucket_shard& b, bufferlist& bl, uint64_t f)
+{
+  encode(b.bucket, bl, f);
+  encode(b.shard_id, bl, f);
+}
+
+void decode(rgw_bucket_shard& b, bufferlist::const_iterator& bl)
+{
+  decode(b.bucket, bl);
+  decode(b.shard_id, bl);
 }
 
 void encode_json_impl(const char *name, const rgw_zone_id& zid, Formatter *f)
@@ -90,6 +115,50 @@ void encode_json_impl(const char *name, const rgw_zone_id& zid, Formatter *f)
 void decode_json_obj(rgw_zone_id& zid, JSONObj *obj)
 {
   decode_json_obj(zid.id, obj);
+}
+
+void rgw_user::generate_test_instances(list<rgw_user*>& o)
+{
+  rgw_user *u = new rgw_user("tenant", "user");
+
+  o.push_back(u);
+  o.push_back(new rgw_user);
+}
+
+void rgw_data_placement_target::dump(Formatter *f) const
+{
+  encode_json("data_pool", data_pool, f);
+  encode_json("data_extra_pool", data_extra_pool, f);
+  encode_json("index_pool", index_pool, f);
+}
+
+void rgw_data_placement_target::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("data_pool", data_pool, obj);
+  JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
+  JSONDecoder::decode_json("index_pool", index_pool, obj);
+}
+
+void rgw_bucket::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("marker", marker, f);
+  encode_json("bucket_id", bucket_id, f);
+  encode_json("tenant", tenant, f);
+  encode_json("explicit_placement", explicit_placement, f);
+}
+
+void rgw_bucket::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("marker", marker, obj);
+  JSONDecoder::decode_json("bucket_id", bucket_id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
+  JSONDecoder::decode_json("explicit_placement", explicit_placement, obj);
+  if (explicit_placement.data_pool.empty()) {
+    /* decoding old format */
+    JSONDecoder::decode_json("pool", explicit_placement.data_pool, obj);
+    JSONDecoder::decode_json("data_extra_pool", explicit_placement.data_extra_pool, obj);
+    JSONDecoder::decode_json("index_pool", explicit_placement.index_pool, obj);
+  }
 }
 
 namespace rgw {

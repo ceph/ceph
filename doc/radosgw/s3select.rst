@@ -8,15 +8,15 @@ Overview
 --------
 
     | The purpose of the **s3 select** engine is to create an efficient pipe between user client and storage nodes (the engine should be close as possible to storage).
-    | It enables selection of a restricted subset of (structured) data stored in an S3 object using an SQL-like syntax.
-    | It also enables for higher level analytic-applications (such as SPARK-SQL) , using that feature to improve their latency and throughput.
+    | It enables the selection of a restricted subset of (structured) data stored in an S3 object using an SQL-like syntax.
+    | It also enables for higher level analytic-applications (such as SPARK-SQL), using that feature to improve their latency and throughput.
 
-    | For example, a s3-object of several GB (CSV file), a user needs to extract a single column which filtered by another column.
+    | For example, an s3-object of several GB (CSV file), a user needs to extract a single column filtered by another column.
     | As the following query:
     | ``select customer-id from s3Object where age>30 and age<65;``
 
-    | Currently the whole s3-object must retrieve from OSD via RGW before filtering and extracting data.
-    | By "pushing down" the query into OSD , it's possible to save a lot of network and CPU(serialization / deserialization).
+    | Currently the whole s3-object must be retrieved from OSD via RGW before filtering and extracting data.
+    | By "pushing down" the query into radosgw, it's possible to save a lot of network and CPU(serialization / deserialization).
 
     | **The bigger the object, and the more accurate the query, the better the performance**.
  
@@ -29,31 +29,38 @@ Basic workflow
     | **RGWSelectObj_ObjStore_S3::send_response_data** is the “entry point”, it handles each fetched chunk according to input object-key.
     | **send_response_data** is first handling the input query, it extracts the query and other CLI parameters.
    
-    | Per each new fetched chunk (~4m), RGW executes s3-select query on it.    
+    | Per each new fetched chunk (~4m), RGW executes an s3-select query on it.    
     | The current implementation supports CSV objects and since chunks are randomly “cutting” the CSV rows in the middle, those broken-lines (first or last per chunk) are skipped while processing the query.   
     | Those “broken” lines are stored and later merged with the next broken-line (belong to the next chunk), and finally processed.
    
     | Per each processed chunk an output message is formatted according to `AWS specification <https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTObjectSELECTContent.html#archive-RESTObjectSELECTContent-responses>`_ and sent back to the client.
     | RGW supports the following response: ``{:event-type,records} {:content-type,application/octet-stream} {:message-type,event}``.
-    | For aggregation queries the last chunk should be identified as the end of input, following that the s3-select-engine initiates end-of-process and produces an aggregate result.  
+    | For aggregation queries the last chunk should be identified as the end of input, following that the s3-select-engine initiates end-of-process and produces an aggregated result.  
 
         
 Basic functionalities
 ~~~~~~~~~~~~~~~~~~~~~
 
-    | **S3select** has a definite set of functionalities that should be implemented (if we wish to stay compliant with AWS), currently only a portion of it is implemented.
+    | **S3select** has a definite set of functionalities compliant with AWS.
     
-    | The implemented software architecture supports basic arithmetic expressions, logical and compare expressions, including nested function calls and casting operators, that alone enables the user reasonable flexibility. 
+    | The implemented software architecture supports basic arithmetic expressions, logical and compare expressions, including nested function calls and casting operators, which enables the user great flexibility. 
     | review the below s3-select-feature-table_.
 
 
 Error Handling
 ~~~~~~~~~~~~~~
 
-    | Any error occurs while the input query processing, i.e. parsing phase or execution phase, is returned to client as response error message.
-
-    | Fatal severity (attached to the exception) will end query execution immediately, other error severity are counted, upon reaching 100, it ends query execution with an error message.
-
+    | Upon an error being detected, RGW returns 400-Bad-Request and a specific error message sends back to the client.
+    | Currently, there are 2 main types of error.
+    |
+    | **Syntax error**: the s3selecet parser rejects user requests that are not aligned with parser syntax definitions, as     
+    | described in this documentation.
+    | Upon Syntax Error, the engine creates an error message that points to the location of the error.
+    | RGW sends back the error message in a specific error response. 
+    |
+    | **Processing Time error**: the runtime engine may detect errors that occur only on processing time, for that type of     
+    | error, a different error message would describe that.
+    | RGW sends back the error message in a specific error response.
 
 
 .. _s3-select-feature-table:
@@ -150,7 +157,7 @@ Features Support
 | predicate as a projection       | where address like '%new-york%';                                                        |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | an alias to                     | select (_1 like "_3_") as *likealias*,_1 from s3object                                  |
-| predicate as a prjection        | where *likealias* = true and cast(_1 as int) between 800 and 900;                       |
+| predicate as a projection       | where *likealias* = true and cast(_1 as int) between 800 and 900;                       |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | casting operator                | select cast(123 as int)%2 from s3object;                                                |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
@@ -274,7 +281,7 @@ Timestamp functions
     | ``date_add(date-part, quantity, timestamp)`` : The function adds quantity (integer) to date-part of timestamp and returns result as timestamp. It also includes timezone in calculation.
     | Supported data-part : year, month, day, hour, minute, second.
 
-    | ``date_diff(date-part, timestamp, timestamp)`` : The function returns an integer, a calculated result for difference between 2 timestamps according to date-part. It includes timezone in calculation.
+    | ``date_diff(date-part, timestamp, timestamp)`` : The function returns an integer, a calculated result for difference between 2 timestamps according to date-part. It includes timezone in calculation.
     | supported date-part : year, month, day, hour, minute, second.
 
     | ``utcnow()`` : return timestamp of current time.
@@ -393,33 +400,43 @@ Alias
 Testing
 ~~~~~~~
     
-    | s3select contains several testing frameworks which provide a large coverage for its functionalities.
+    | s3select contains several testing frameworks which provide a large coverage for its functionalities.
 
-    | (1) tests comparison against trusted engine, meaning,  C/C++ compiler is a trusted expression evaluator, 
+    | (1) tests comparison against a trusted engine, meaning,  C/C++ compiler is a trusted expression evaluator, 
     | since the syntax for arithmetical and logical expressions are identical (s3select compare to C) 
-    | the framework runs equal expressions and validates their results.
+    | the framework runs equal expressions and validates their results.
     | A dedicated expression generator produces different sets of expressions per each new test session. 
 
-    | (2) compare results of queries whose syntax is different but semantically they are equal.
-    | this kind of test validates that different runtime flows produce identical result, 
-    | on each run with different dataset(random).
+    | (2) compare results of queries whose syntax is different but semantically they are equal.
+    | this kind of test validates that different runtime flows produce an identical result, 
+    | on each run with a different dataset(random).
 
     | For one example, on a dataset which contains a random numbers(1-1000)
     | the following queries will produce identical results.
     | ``select count(*) from s3object where char_length(_3)=3;``
     | ``select count(*) from s3object where cast(_3 as int)>99 and cast(_3 as int)<1000;``
 
-    | (3) constant dataset, the conventional way of testing. A query is processing a constant dataset, its result is validated against constant results.   
+    | (3) constant dataset, the conventional way of testing. A query is processing a constant dataset, its result is validated against constant results.   
+
+Additional syntax support
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    | S3select syntax supports table-alias ``select s._1 from s3object s where s._2 = ‘4’;``
+    | 
+    | S3select syntax supports case insensitive ``Select SUM(Cast(_1 as int)) FROM S3Object;``
+    | 
+    | S3select syntax supports statements without closing semicolon  ``select count(*) from s3object``
+
 
 Sending Query to RGW
 --------------------
 
-   | Any http-client can send s3-select request to RGW, it must be compliant with `AWS Request syntax <https://docs.aws.amazon.com/AmazonS3/latest/API/API_SelectObjectContent.html#API_SelectObjectContent_RequestSyntax>`_.
+   | Any http-client can send an s3-select request to RGW, it must be compliant with `AWS Request syntax <https://docs.aws.amazon.com/AmazonS3/latest/API/API_SelectObjectContent.html#API_SelectObjectContent_RequestSyntax>`_.
 
 
 
-   | Sending s3-select request to RGW using AWS cli, should follow `AWS command reference <https://docs.aws.amazon.com/cli/latest/reference/s3api/select-object-content.html>`_.
-   | below is an example for it.
+   | Sending s3-select request to RGW using AWS CLI, should follow `AWS command reference <https://docs.aws.amazon.com/cli/latest/reference/s3api/select-object-content.html>`_.
+   | below is an example of it.
 
 ::
 
@@ -428,28 +445,67 @@ Sending Query to RGW
   --expression-type 'SQL'     
   --input-serialization 
   '{"CSV": {"FieldDelimiter": "," , "QuoteCharacter": "\"" , "RecordDelimiter" : "\n" , "QuoteEscapeCharacter" : "\\" , "FileHeaderInfo": "USE" }, "CompressionType": "NONE"}' 
-  --output-serialization '{"CSV": {}}' 
-  --key {OBJECT-NAME} 
+  --output-serialization '{"CSV": {"FieldDelimiter": ":", "RecordDelimiter":"\t", "QuoteFields": "ALWAYS"}}' 
+  --key {OBJECT-NAME}
+  --request-progress '{"Enabled": True}'
   --expression "select count(0) from s3object where int(_1)<10;" output.csv
 
-Syntax
-~~~~~~
+Input Serialization
+~~~~~~~~~~~~~~~~~~~
 
-    | **Input serialization** (Implemented), it let the user define the CSV definitions; the default values are {\\n} for row-delimiter {,} for field delimiter, {"} for quote, {\\} for escape characters.
-    | it handle the **csv-header-info**, the first row in input object containing the schema.
-    | **Output serialization** is currently not implemented, the same for **compression-type**.
+    | **FileHeaderInfo** -> (string)
+    | Describes the first line of input. Valid values are:
+    | 
+    | **NONE** : The first line is not a header.
+    | **IGNORE** : The first line is a header, but you can't use the header values to indicate the column in an expression.      
+    | it's possible to use column position (such as _1, _2, …) to indicate the column (``SELECT s._1 FROM S3OBJECT s``).
+    | **USE** : First line is a header, and you can use the header value to identify a column in an expression (``SELECT column_name FROM S3OBJECT``).
+    |
+    | **QuoteEscapeCharacter** -> (string) 
+    | A single character used for escaping the quotation mark character inside an already escaped value.
+    |
+    | **RecordDelimiter** -> (string) 
+    | A single character is used to separate individual records in the input. Instead of the default value, you can specify an arbitrary delimiter.
+    |
+    | **FieldDelimiter** -> (string) 
+    | A single character is used to separate individual fields in a record. You can specify an arbitrary delimiter.
 
-    | s3-select engine contain a CSV parser, which parse s3-objects as follows.   
-    | - each row ends with row-delimiter.
-    | - field-separator separates between adjacent columns, successive field separator define NULL column.
-    | - quote-character overrides field separator, meaning , field separator become as any character between quotes.
-    | - escape character disables any special characters, except for row delimiter.
-    
-    | Below are examples for CSV parsing rules.
+Output Serialization
+~~~~~~~~~~~~~~~~~~~~
 
+| **AWS CLI example**
+
+   | aws s3api select-object-content \
+   | --bucket "mybucket" \
+   | --key keyfile1 \
+   | --expression "SELECT * FROM s3object s" \
+   | --expression-type 'SQL' \
+   | --request-progress '{"Enabled": false}' \
+   | --input-serialization '{"CSV": {"FieldDelimiter": ","}, "CompressionType": "NONE"}' \
+   | --output-serialization '{"CSV": {"FieldDelimiter": ":", "RecordDelimiter":"\\t", "QuoteFields": "ALWAYS"}}' /dev/stdout
+   | 
+   | **QuoteFields** -> (string)
+   | Indicates whether to use quotation marks around output fields.
+   | **ALWAYS**: Always use quotation marks for output fields.
+   | **ASNEEDED** (not implemented): Use quotation marks for output fields when needed.
+   |
+   | **RecordDelimiter** -> (string)
+   | A single character is used to separate individual records in the output. Instead of the default value, you can specify an        
+   | arbitrary delimiter.
+   | 
+   | **FieldDelimiter** -> (string)
+   | The value used to separate individual fields in a record. You can specify an arbitrary delimiter.
 
 CSV parsing behavior
 --------------------
+
+    | s3-select engine contains a CSV parser, which parses s3-objects as follows.   
+    | - each row ends with row-delimiter.
+    | - field-separator separates between adjacent columns, successive field separator defines NULL column.
+    | - quote-character overrides field separator, meaning, field separator becomes as any character between quotes.
+    | - escape character disables any special characters, except for row delimiter.
+    
+    | Below are examples of CSV parsing rules.
 
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | Feature                         | Description     | input ==> tokens                                                      |
@@ -482,29 +538,45 @@ BOTO3
 
 ::
 
+ import pprint
 
  def run_s3select(bucket,key,query,column_delim=",",row_delim="\n",quot_char='"',esc_char='\\',csv_header_info="NONE"):
+
     s3 = boto3.client('s3',
         endpoint_url=endpoint,
         aws_access_key_id=access_key,
         region_name=region_name,
         aws_secret_access_key=secret_key)
-        
 
-
-    r = s3.select_object_content(
+    result = ""
+    try:
+        r = s3.select_object_content(
         Bucket=bucket,
         Key=key,
         ExpressionType='SQL',
         InputSerialization = {"CSV": {"RecordDelimiter" : row_delim, "FieldDelimiter" : column_delim,"QuoteEscapeCharacter": esc_char, "QuoteCharacter": quot_char, "FileHeaderInfo": csv_header_info}, "CompressionType": "NONE"},
         OutputSerialization = {"CSV": {}},
-        Expression=query,)
+        Expression=query,
+        RequestProgress = {"Enabled": progress})
 
-    result = ""
+    except ClientError as c:
+        result += str(c)
+        return result
+
     for event in r['Payload']:
-        if 'Records' in event:
-            records = event['Records']['Payload'].decode('utf-8')
-            result += records
+            if 'Records' in event:
+                result = ""
+                records = event['Records']['Payload'].decode('utf-8')
+                result += records
+            if 'Progress' in event:
+                print("progress")
+                pprint.pprint(event['Progress'],width=1)
+            if 'Stats' in event:
+                print("Stats")
+                pprint.pprint(event['Stats'],width=1)
+            if 'End' in event:
+                print("End")
+                pprint.pprint(event['End'],width=1)
 
     return result
 
@@ -516,3 +588,63 @@ BOTO3
   "my_csv_object",
   "select int(_1) as a1, int(_2) as a2 , (a1+a2) as a3 from s3object where a3>100 and a3<300;")
 
+
+S3 SELECT Responses
+-------------------
+
+Error Response
+~~~~~~~~~~~~~~
+
+   | <?xml version="1.0" encoding="UTF-8"?>
+   | <Error>
+   |   <Code>NoSuchKey</Code>
+   |   <Message>The resource you requested does not exist</Message>
+   |   <Resource>/mybucket/myfoto.jpg</Resource> 
+   |   <RequestId>4442587FB7D0A2F9</RequestId>
+   | </Error>
+
+Report Response
+~~~~~~~~~~~~~~~
+   | HTTP/1.1 200
+   | <?xml version="1.0" encoding="UTF-8"?>
+   | <Payload>
+   |    <Records>
+   |       <Payload>blob</Payload>
+   |    </Records>
+   |    <Stats>
+   |       <Details>
+   |          <BytesProcessed>long</BytesProcessed>
+   |          <BytesReturned>long</BytesReturned>
+   |          <BytesScanned>long</BytesScanned>
+   |       </Details>
+   |    </Stats>
+   |    <Progress>
+   |       <Details>
+   |          <BytesProcessed>long</BytesProcessed>
+   |          <BytesReturned>long</BytesReturned>
+   |          <BytesScanned>long</BytesScanned>
+   |       </Details>
+   |    </Progress>
+   |    <Cont>
+   |    </Cont>
+   |    <End>
+   |    </End>
+   | </Payload>
+
+Response Description
+~~~~~~~~~~~~~~~~~~~~
+
+   | For CEPH S3 Select, responses can be messages of the following types:
+   | 
+   | **Records message**: Can contain a single record, partial records, or multiple records. Depending on the size of the result, a response can contain one or more of these messages.
+   | 
+   | **Error message**: Upon an error being detected, RGW returns 400 Bad Request, and a specific error message sends back to the client, according to its type.
+   |
+   | **Continuation message**: Ceph S3 periodically sends this message to keep the TCP connection open.
+   | These messages appear in responses at random. The client must detect the message type and process it accordingly.
+   | 
+   | **Progress message**: Ceph S3 periodically sends this message if requested. It contains information about the progress of a query that has started but has not yet been completed.  
+   | 
+   | **Stats message**: Ceph S3 sends this message at the end of the request. It contains statistics about the query.
+   | 
+   | **End message**: Indicates that the request is complete, and no more messages will be sent. You should not assume that request is complete until the client receives an End message.

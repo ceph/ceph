@@ -252,6 +252,30 @@ To access the admin socket, first enter the daemon container on the host::
     [root@mon1 ~]# cephadm enter --name <daemon-name>
     [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
 
+Calling miscellaneous ceph tools
+--------------------------------
+
+To call miscellaneous like ``ceph-objectstore-tool`` or 
+``ceph-monstore-tool``, you can run them by calling 
+``cephadm shell --name <daemon-name>`` like so::
+
+    root@myhostname # cephadm unit --name mon.myhostname stop
+    root@myhostname # cephadm shell --name mon.myhostname
+    [ceph: root@myhostname /]# ceph-monstore-tool /var/lib/ceph/mon/ceph-myhostname get monmap > monmap         
+    [ceph: root@myhostname /]# monmaptool --print monmap
+    monmaptool: monmap file monmap
+    epoch 1
+    fsid 28596f44-3b56-11ec-9034-482ae35a5fbb
+    last_changed 2021-11-01T20:57:19.755111+0000
+    created 2021-11-01T20:57:19.755111+0000
+    min_mon_release 17 (quincy)
+    election_strategy: 1
+    0: [v2:127.0.0.1:3300/0,v1:127.0.0.1:6789/0] mon.myhostname
+
+This command sets up the environment in a way that is suitable
+for extended daemon maintenance and running the daemon interactively. 
+
+.. _cephadm-restore-quorum:
 
 Restoring the MON quorum
 ------------------------
@@ -275,6 +299,7 @@ form the monmap by following these steps:
 
 3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy`
 
+.. _cephadm-manually-deploy-mgr:
 
 Manually deploying a MGR daemon
 -------------------------------
@@ -299,7 +324,7 @@ Get the container image::
 
   ceph config get "mgr.hostname.smfvfd" container_image
 
-Create a file ``config-json.json`` which contains the information neccessary to deploy
+Create a file ``config-json.json`` which contains the information necessary to deploy
 the daemon:
 
 .. code-block:: json
@@ -313,3 +338,33 @@ Deploy the daemon::
 
   cephadm --image <container-image> deploy --fsid <fsid> --name mgr.hostname.smfvfd --config-json config-json.json
 
+Analyzing core dumps
+---------------------
+
+In case a Ceph daemon crashes, cephadm supports analyzing core dumps. To enable core dumps, run
+
+.. prompt:: bash #
+
+  ulimit -c unlimited
+
+core dumps will now be written to ``/var/lib/systemd/coredump``.
+
+.. note::
+
+  core dumps are not namespaced by the kernel, which means
+  they will be written to ``/var/lib/systemd/coredump`` on
+  the container host. 
+
+Now, wait for the crash to happen again. (To simulate the crash of a daemon, run e.g. ``killall -3 ceph-mon``)
+
+Install debug packages by entering the cephadm shell and install ``ceph-debuginfo``::
+
+  # cephadm shell --mount /var/lib/systemd/coredump
+  [ceph: root@host1 /]# dnf install ceph-debuginfo gdb zstd
+  [ceph: root@host1 /]# unzstd /mnt/coredump/core.ceph-*.zst
+  [ceph: root@host1 /]# gdb /usr/bin/ceph-mon /mnt/coredump/core.ceph-...
+  (gdb) bt
+  #0  0x00007fa9117383fc in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
+  #1  0x00007fa910d7f8f0 in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib64/libstdc++.so.6
+  #2  0x00007fa913d3f48f in AsyncMessenger::wait() () from /usr/lib64/ceph/libceph-common.so.2
+  #3  0x0000563085ca3d7e in main ()

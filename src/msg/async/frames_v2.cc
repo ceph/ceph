@@ -108,7 +108,7 @@ bufferlist FrameAssembler::asm_crc_rev0(const preamble_block_t& preamble,
   frame_bl.append(reinterpret_cast<const char*>(&preamble), sizeof(preamble));
   for (size_t i = 0; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
-    epilogue.crc_values[i] = segment_bls[i].crc32c(-1);
+    epilogue.crc_values[i] = m_with_data_crc ? segment_bls[i].crc32c(-1) : 0;
     if (segment_bls[i].length() > 0) {
       frame_bl.claim_append(segment_bls[i]);
     }
@@ -161,7 +161,7 @@ bufferlist FrameAssembler::asm_crc_rev1(const preamble_block_t& preamble,
 
   ceph_assert(segment_bls[0].length() == m_descs[0].logical_len);
   if (segment_bls[0].length() > 0) {
-    uint32_t crc = segment_bls[0].crc32c(-1);
+    uint32_t crc = m_with_data_crc ? segment_bls[0].crc32c(-1) : 0;
     frame_bl.claim_append(segment_bls[0]);
     encode(crc, frame_bl);
   }
@@ -171,7 +171,8 @@ bufferlist FrameAssembler::asm_crc_rev1(const preamble_block_t& preamble,
 
   for (size_t i = 1; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
-    epilogue.crc_values[i - 1] = segment_bls[i].crc32c(-1);
+    epilogue.crc_values[i - 1] =
+            m_with_data_crc ? segment_bls[i].crc32c(-1) : 0;
     if (segment_bls[i].length() > 0) {
       frame_bl.claim_append(segment_bls[i]);
     }
@@ -341,7 +342,9 @@ bool FrameAssembler::disasm_all_crc_rev0(bufferlist segment_bls[],
 
   for (size_t i = 0; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
-    check_segment_crc(segment_bls[i], epilogue->crc_values[i]);
+    if (m_with_data_crc) {
+      check_segment_crc(segment_bls[i], epilogue->crc_values[i]);
+    }
   }
   return !(epilogue->late_flags & FRAME_LATE_FLAG_ABORTED);
 }
@@ -374,7 +377,9 @@ void FrameAssembler::disasm_first_crc_rev1(bufferlist& preamble_bl,
     uint32_t expected_crc;
     decode(expected_crc, it);
     segment_bl.splice(m_descs[0].logical_len, FRAME_CRC_SIZE);
-    check_segment_crc(segment_bl, expected_crc);
+    if (m_with_data_crc) {
+      check_segment_crc(segment_bl, expected_crc);
+    }
   } else {
     ceph_assert(segment_bl.length() == 0);
   }
@@ -388,7 +393,9 @@ bool FrameAssembler::disasm_remaining_crc_rev1(bufferlist segment_bls[],
 
   for (size_t i = 1; i < m_descs.size(); i++) {
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
-    check_segment_crc(segment_bls[i], epilogue->crc_values[i - 1]);
+    if (m_with_data_crc) {
+      check_segment_crc(segment_bls[i], epilogue->crc_values[i - 1]);
+    }
   }
   return check_epilogue_late_status(epilogue->late_status);
 }

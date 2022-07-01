@@ -1,9 +1,12 @@
 
 import json
+import textwrap
 
 import pytest
 import yaml
 
+from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.inventory import Devices, Device
 from ceph.deployment.service_spec import ServiceSpec
 from ceph.deployment import inventory
 from ceph.utils import datetime_now
@@ -11,9 +14,10 @@ from mgr_module import HandleCommandResult
 
 from test_orchestrator import TestOrchestrator as _TestOrchestrator
 
-from orchestrator import InventoryHost, DaemonDescription, ServiceDescription, DaemonDescriptionStatus
+from orchestrator import InventoryHost, DaemonDescription, ServiceDescription, DaemonDescriptionStatus, OrchResult
 from orchestrator import OrchestratorValidationError
 from orchestrator.module import to_format, Format, OrchestratorCli, preview_table_osd
+from unittest import mock
 
 
 def _test_resource(data, resource_class, extra=None):
@@ -72,17 +76,18 @@ def test_daemon_description():
 def test_apply():
     to = _TestOrchestrator('', 0, 0)
     completion = to.apply([
-        ServiceSpec(service_type='nfs'),
-        ServiceSpec(service_type='nfs'),
-        ServiceSpec(service_type='nfs'),
+        ServiceSpec(service_type='nfs', service_id='foo'),
+        ServiceSpec(service_type='nfs', service_id='foo'),
+        ServiceSpec(service_type='nfs', service_id='foo'),
     ])
-    res = '<NFSServiceSpec for service_name=nfs>'
+    res = '<NFSServiceSpec for service_name=nfs.foo>'
     assert completion.result == [res, res, res]
 
 
 def test_yaml():
     y = """daemon_type: crash
 daemon_id: ubuntu
+daemon_name: crash.ubuntu
 hostname: ubuntu
 status: 1
 status_desc: starting
@@ -138,6 +143,98 @@ def test_handle_command():
     r = m._handle_command(None, cmd)
     assert r == HandleCommandResult(
         retval=-2, stdout='', stderr='No orchestrator configured (try `ceph orch set backend`)')
+
+
+r = OrchResult([ServiceDescription(spec=ServiceSpec(service_type='osd'), running=123)])
+
+
+@mock.patch("orchestrator.OrchestratorCli.describe_service", return_value=r)
+def test_orch_ls(_describe_service):
+    cmd = {
+        'prefix': 'orch ls',
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    out = 'NAME  PORTS  RUNNING  REFRESHED  AGE  PLACEMENT  \n' \
+          'osd              123  -          -               '
+    assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
+
+    cmd = {
+        'prefix': 'orch ls',
+        'format': 'yaml',
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    out = textwrap.dedent("""
+        service_type: osd
+        service_name: osd
+        spec:
+          filter_logic: AND
+          objectstore: bluestore
+        status:
+          running: 123
+          size: 0
+        """).lstrip()
+    assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
+
+
+dlist = OrchResult([DaemonDescription(daemon_type="osd", daemon_id="1"), DaemonDescription(
+    daemon_type="osd", daemon_id="10"), DaemonDescription(daemon_type="osd", daemon_id="2")])
+
+
+@mock.patch("orchestrator.OrchestratorCli.list_daemons", return_value=dlist)
+def test_orch_ps(_describe_service):
+
+    # Ensure natural sorting on daemon names (osd.1, osd.2, osd.10)
+    cmd = {
+        'prefix': 'orch ps'
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    out = 'NAME    HOST       PORTS  STATUS   REFRESHED  AGE  MEM USE  MEM LIM  VERSION    IMAGE ID   \n'\
+          'osd.1   <unknown>         unknown          -    -        -        -  <unknown>  <unknown>  \n'\
+          'osd.2   <unknown>         unknown          -    -        -        -  <unknown>  <unknown>  \n'\
+          'osd.10  <unknown>         unknown          -    -        -        -  <unknown>  <unknown>  '
+    assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
+
+
+hlist = OrchResult([HostSpec("ceph-node-1"), HostSpec("ceph-node-2"), HostSpec("ceph-node-10")])
+
+
+@mock.patch("orchestrator.OrchestratorCli.get_hosts", return_value=hlist)
+def test_orch_host_ls(_describe_service):
+
+    # Ensure natural sorting on hostnames (ceph-node-1, ceph-node-2, ceph-node-10)
+    cmd = {
+        'prefix': 'orch host ls'
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    out = 'HOST          ADDR          LABELS  STATUS  \n'\
+        'ceph-node-1   ceph-node-1                   \n'\
+        'ceph-node-2   ceph-node-2                   \n'\
+        'ceph-node-10  ceph-node-10                  \n'\
+        '3 hosts in cluster'
+    assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
+
+
+def test_orch_device_ls():
+    devices = Devices([Device("/dev/vdb", available=True)])
+    ilist = OrchResult([InventoryHost("ceph-node-1", devices=devices), InventoryHost("ceph-node-2",
+                       devices=devices), InventoryHost("ceph-node-10", devices=devices)])
+
+    with mock.patch("orchestrator.OrchestratorCli.get_inventory", return_value=ilist):
+        # Ensure natural sorting on hostnames (ceph-node-1, ceph-node-2, ceph-node-10)
+        cmd = {
+            'prefix': 'orch device ls'
+        }
+        m = OrchestratorCli('orchestrator', 0, 0)
+        r = m._handle_command(None, cmd)
+        out = 'HOST          PATH      TYPE     DEVICE ID   SIZE  AVAILABLE  REFRESHED  REJECT REASONS  \n'\
+              'ceph-node-1   /dev/vdb  unknown  None          0   Yes        0s ago                     \n'\
+              'ceph-node-2   /dev/vdb  unknown  None          0   Yes        0s ago                     \n'\
+              'ceph-node-10  /dev/vdb  unknown  None          0   Yes        0s ago                     '
+        assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
 
 
 def test_preview_table_osd_smoke():

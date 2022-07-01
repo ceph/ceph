@@ -240,8 +240,14 @@ static void bluefs_import(
     cerr << "open " << input_file.c_str() << " failed: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
   }
-
-  std::unique_ptr<BlueFS> bs{open_bluefs_readonly(cct, path, devs)};
+  BlueStore bluestore(cct, path);
+  KeyValueDB *db_ptr;
+  r = bluestore.open_db_environment(&db_ptr, false);
+  if (r < 0) {
+    cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  BlueFS* bs = bluestore.get_bluefs();
 
   BlueFS::FileWriter *h;
   fs::path file_path(dest_file);
@@ -261,7 +267,7 @@ static void bluefs_import(
   f.close();
   bs->fsync(h);
   bs->close_writer(h);
-  bs->umount();
+  bluestore.close_db_environment();
   return;
 }
 
@@ -559,14 +565,14 @@ int main(int argc, char **argv)
 #endif
   }
   else if (action == "allocmap") {
-#ifndef CEPH_BLUESTORE_TOOL_ENABLE_ALLOCMAP
+#ifdef CEPH_BLUESTORE_TOOL_DISABLE_ALLOCMAP
     cerr << action << " bluestore.allocmap is not supported!!! " << std::endl;
     exit(EXIT_FAILURE);
 #else
     cout << action << " bluestore.allocmap" << std::endl;
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.read_allocation_from_drive_for_bluestore_tool(true);
+    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -583,7 +589,7 @@ int main(int argc, char **argv)
     cout << action << " bluestore.quick-fsck" << std::endl;
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.read_allocation_from_drive_for_fsck();
+    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1054,6 +1060,11 @@ int main(int argc, char **argv)
     AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
     validate_path(cct.get(), path, false);
+
+    // make sure we can adjust any config settings
+    g_conf()._clear_safe_to_start_threads();
+    g_conf().set_val_or_die("bluestore_volume_selection_policy",
+                            "use_some_extra_enforced");
     BlueStore bluestore(cct.get(), path);
     int r = bluestore.cold_open();
     if (r < 0) {

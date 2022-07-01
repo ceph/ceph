@@ -393,7 +393,7 @@ public:
         return r;
       }
 
-      auto ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+      auto ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
         &snap_info.snapshot_namespace);
       if (ns != nullptr) {
         *mirror_snap_id = snap_id;
@@ -664,7 +664,7 @@ TYPED_TEST(TestImageReplayer, BootstrapMirrorDisabling)
   this->create_replayer();
   C_SaferCond cond;
   this->m_replayer->start(&cond);
-  ASSERT_EQ(-EREMOTEIO, cond.wait());
+  ASSERT_EQ(-ENOENT, cond.wait());
   ASSERT_TRUE(this->m_replayer->is_stopped());
 }
 

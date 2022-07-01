@@ -9,6 +9,7 @@ import uuid
 import unittest
 from hashlib import md5
 from textwrap import dedent
+from io import StringIO
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
@@ -53,11 +54,22 @@ class TestVolumesHelper(CephFSTestCase):
             time.sleep(1)
         self.assertTrue(check < timo)
 
+    def _get_clone_status(self, clone, clone_group=None):
+        args = ["clone", "status", self.volname, clone]
+        if clone_group:
+            args.append(clone_group)
+        args = tuple(args)
+        result = json.loads(self._fs_cmd(*args))
+        return result
+
     def _wait_for_clone_to_complete(self, clone, clone_group=None, timo=120):
         self.__check_clone_state("complete", clone, clone_group, timo)
 
     def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120):
         self.__check_clone_state("failed", clone, clone_group, timo)
+
+    def _wait_for_clone_to_be_in_progress(self, clone, clone_group=None, timo=120):
+        self.__check_clone_state("in-progress", clone, clone_group, timo)
 
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
@@ -201,6 +213,12 @@ class TestVolumesHelper(CephFSTestCase):
         # remove the leading '/', and trailing whitespaces
         return path[1:].rstrip()
 
+    def  _get_subvolume_group_info(self, vol_name, group_name):
+        args = ["subvolumegroup", "info", vol_name, group_name]
+        args = tuple(args)
+        group_md = self._fs_cmd(*args)
+        return group_md
+
     def  _get_subvolume_path(self, vol_name, subvol_name, group_name=None):
         args = ["subvolume", "getpath", vol_name, subvol_name]
         if group_name:
@@ -284,11 +302,21 @@ class TestVolumesHelper(CephFSTestCase):
         # flip ownership to nobody. assumption: nobody's id is 65534
         self.mount_a.run_shell(["chown", "-h", "65534:65534", sym_path2], sudo=True, omit_sudo=False)
 
-    def _wait_for_trash_empty(self, timeout=30):
+    def _wait_for_trash_empty(self, timeout=60):
         # XXX: construct the trash dir path (note that there is no mgr
         # [sub]volume interface for this).
         trashdir = os.path.join("./", "volumes", "_deleting")
         self.mount_a.wait_for_dir_empty(trashdir, timeout=timeout)
+
+    def _wait_for_subvol_trash_empty(self, subvol, group="_nogroup", timeout=30):
+        trashdir = os.path.join("./", "volumes", group, subvol, ".trash")
+        try:
+            self.mount_a.wait_for_dir_empty(trashdir, timeout=timeout)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.ENOENT:
+                pass
+            else:
+                raise
 
     def _assert_meta_location_and_version(self, vol_name, subvol_name, subvol_group=None, version=2, legacy=False):
         if legacy:
@@ -513,6 +541,89 @@ class TestVolumes(TestVolumesHelper):
             self.assertNotIn(pool["name"], pools,
                              "pool {0} exists after volume removal".format(pool["name"]))
 
+    def test_volume_rename(self):
+        """
+        That volume, its file system and pools, can be renamed.
+        """
+        for m in self.mounts:
+            m.umount_wait()
+        oldvolname = self.volname
+        newvolname = self._generate_random_volume_name()
+        new_data_pool, new_metadata_pool = f"cephfs.{newvolname}.data", f"cephfs.{newvolname}.meta"
+        self._fs_cmd("volume", "rename", oldvolname, newvolname,
+                     "--yes-i-really-mean-it")
+        volumels = json.loads(self._fs_cmd('volume', 'ls'))
+        volnames = [volume['name'] for volume in volumels]
+        # volume name changed
+        self.assertIn(newvolname, volnames)
+        self.assertNotIn(oldvolname, volnames)
+        # pool names changed
+        self.fs.get_pool_names(refresh=True)
+        self.assertEqual(new_metadata_pool, self.fs.get_metadata_pool_name())
+        self.assertEqual(new_data_pool, self.fs.get_data_pool_name())
+
+    def test_volume_rename_idempotency(self):
+        """
+        That volume rename is idempotent.
+        """
+        for m in self.mounts:
+            m.umount_wait()
+        oldvolname = self.volname
+        newvolname = self._generate_random_volume_name()
+        new_data_pool, new_metadata_pool = f"cephfs.{newvolname}.data", f"cephfs.{newvolname}.meta"
+        self._fs_cmd("volume", "rename", oldvolname, newvolname,
+                     "--yes-i-really-mean-it")
+        self._fs_cmd("volume", "rename", oldvolname, newvolname,
+                     "--yes-i-really-mean-it")
+        volumels = json.loads(self._fs_cmd('volume', 'ls'))
+        volnames = [volume['name'] for volume in volumels]
+        self.assertIn(newvolname, volnames)
+        self.assertNotIn(oldvolname, volnames)
+        self.fs.get_pool_names(refresh=True)
+        self.assertEqual(new_metadata_pool, self.fs.get_metadata_pool_name())
+        self.assertEqual(new_data_pool, self.fs.get_data_pool_name())
+
+    def test_volume_rename_fails_without_confirmation_flag(self):
+        """
+        That renaming volume fails without --yes-i-really-mean-it flag.
+        """
+        newvolname = self._generate_random_volume_name()
+        try:
+            self._fs_cmd("volume", "rename", self.volname, newvolname)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM,
+                "invalid error code on renaming a FS volume without the "
+                "'--yes-i-really-mean-it' flag")
+        else:
+            self.fail("expected renaming of FS volume to fail without the "
+                      "'--yes-i-really-mean-it' flag")
+
+    def test_volume_rename_for_more_than_one_data_pool(self):
+        """
+        That renaming a volume with more than one data pool does not change
+        the name of the data pools.
+        """
+        for m in self.mounts:
+            m.umount_wait()
+        self.fs.add_data_pool('another-data-pool')
+        oldvolname = self.volname
+        newvolname = self._generate_random_volume_name()
+        self.fs.get_pool_names(refresh=True)
+        orig_data_pool_names = list(self.fs.data_pools.values())
+        new_metadata_pool = f"cephfs.{newvolname}.meta"
+        self._fs_cmd("volume", "rename", self.volname, newvolname,
+                     "--yes-i-really-mean-it")
+        volumels = json.loads(self._fs_cmd('volume', 'ls'))
+        volnames = [volume['name'] for volume in volumels]
+        # volume name changed
+        self.assertIn(newvolname, volnames)
+        self.assertNotIn(oldvolname, volnames)
+        self.fs.get_pool_names(refresh=True)
+        # metadata pool name changed
+        self.assertEqual(new_metadata_pool, self.fs.get_metadata_pool_name())
+        # data pool names unchanged
+        self.assertCountEqual(orig_data_pool_names, list(self.fs.data_pools.values()))
+
 
 class TestSubvolumeGroups(TestVolumesHelper):
     """Tests for FS subvolume group operations."""
@@ -610,17 +721,20 @@ class TestSubvolumeGroups(TestVolumesHelper):
         expected_mode2 = "777"
 
         # create group
-        self._fs_cmd("subvolumegroup", "create", self.volname, group1)
         self._fs_cmd("subvolumegroup", "create", self.volname, group2, f"--mode={expected_mode2}")
+        self._fs_cmd("subvolumegroup", "create", self.volname, group1)
 
         group1_path = self._get_subvolume_group_path(self.volname, group1)
         group2_path = self._get_subvolume_group_path(self.volname, group2)
+        volumes_path = os.path.dirname(group1_path)
 
         # check group's mode
         actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', group1_path]).stdout.getvalue().strip()
         actual_mode2 = self.mount_a.run_shell(['stat', '-c' '%a', group2_path]).stdout.getvalue().strip()
+        actual_mode3 = self.mount_a.run_shell(['stat', '-c' '%a', volumes_path]).stdout.getvalue().strip()
         self.assertEqual(actual_mode1, expected_mode1)
         self.assertEqual(actual_mode2, expected_mode2)
+        self.assertEqual(actual_mode3, expected_mode1)
 
         self._fs_cmd("subvolumegroup", "rm", self.volname, group1)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group2)
@@ -662,6 +776,805 @@ class TestSubvolumeGroups(TestVolumesHelper):
         else:
             raise RuntimeError("expected the 'fs subvolumegroup create' command to fail")
 
+    def test_subvolume_group_create_with_size(self):
+        # create group with size -- should set quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # get group metadata
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["bytes_quota"], 1000000000)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_info(self):
+        # tests the 'fs subvolumegroup info' command
+
+        group_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
+                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "uid"]
+
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # get group metadata
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        for md in group_md:
+            self.assertIn(md, group_info, "'{0}' key not present in metadata of group".format(md))
+
+        self.assertEqual(group_info["bytes_pcent"], "undefined", "bytes_pcent should be set to undefined if quota is not set")
+        self.assertEqual(group_info["bytes_quota"], "infinite", "bytes_quota should be set to infinite if quota is not set")
+        self.assertEqual(group_info["uid"], 0)
+        self.assertEqual(group_info["gid"], 0)
+
+        nsize = self.DEFAULT_FILE_SIZE*1024*1024
+        self._fs_cmd("subvolumegroup", "resize", self.volname, group, str(nsize))
+
+        # get group metadata after quota set
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        for md in group_md:
+            self.assertIn(md, group_info, "'{0}' key not present in metadata of subvolume".format(md))
+
+        self.assertNotEqual(group_info["bytes_pcent"], "undefined", "bytes_pcent should not be set to undefined if quota is set")
+        self.assertEqual(group_info["bytes_quota"], nsize, "bytes_quota should be set to '{0}'".format(nsize))
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_idempotence(self):
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # try creating w/ same subvolume group name -- should be idempotent
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_idempotence_mode(self):
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # try creating w/ same subvolume group name with mode -- should set mode
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--mode=766")
+
+        group_path = self._get_subvolume_group_path(self.volname, group)
+
+        # check subvolumegroup's  mode
+        mode = self.mount_a.run_shell(['stat', '-c' '%a', group_path]).stdout.getvalue().strip()
+        self.assertEqual(mode, "766")
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_idempotence_uid_gid(self):
+        desired_uid = 1000
+        desired_gid = 1000
+
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # try creating w/ same subvolume group name with uid/gid -- should set uid/gid
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--uid", str(desired_uid), "--gid", str(desired_gid))
+
+        group_path = self._get_subvolume_group_path(self.volname, group)
+
+        # verify the uid and gid
+        actual_uid = int(self.mount_a.run_shell(['stat', '-c' '%u', group_path]).stdout.getvalue().strip())
+        actual_gid = int(self.mount_a.run_shell(['stat', '-c' '%g', group_path]).stdout.getvalue().strip())
+        self.assertEqual(desired_uid, actual_uid)
+        self.assertEqual(desired_gid, actual_gid)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_idempotence_data_pool(self):
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        group_path = self._get_subvolume_group_path(self.volname, group)
+
+        default_pool = self.mount_a.getfattr(group_path, "ceph.dir.layout.pool")
+        new_pool = "new_pool"
+        self.assertNotEqual(default_pool, new_pool)
+
+        # add data pool
+        newid = self.fs.add_data_pool(new_pool)
+
+        # try creating w/ same subvolume group name with new data pool -- should set pool
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--pool_layout", new_pool)
+        desired_pool = self.mount_a.getfattr(group_path, "ceph.dir.layout.pool")
+        try:
+            self.assertEqual(desired_pool, new_pool)
+        except AssertionError:
+            self.assertEqual(int(desired_pool), newid) # old kernel returns id
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_idempotence_resize(self):
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # try creating w/ same subvolume name with size -- should set quota
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # get group metadata
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["bytes_quota"], 1000000000)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_quota_mds_path_restriction_to_group_path(self):
+        """
+        Tests subvolumegroup quota enforcement with mds path restriction set to group.
+        For quota to be enforced, read permission needs to be provided to the parent
+        of the directory on which quota is set. Please see the tracker comment [1]
+        [1] https://tracker.ceph.com/issues/55090#note-8
+        """
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create group with 100MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # Create auth_id
+        authid = "client.guest1"
+        user = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "get-or-create", authid,
+            "mds", "allow rw path=/volumes",
+            "mgr", "allow rw",
+            "osd", "allow rw tag cephfs *=*",
+            "mon", "allow r",
+            "--format=json-pretty"
+            ))
+
+        # Prepare guest_mount with new authid
+        guest_mount = self.mount_b
+        guest_mount.umount_wait()
+
+        # configure credentials for guest client
+        self._configure_guest_auth(guest_mount, "guest1", user[0]["key"])
+
+        # mount the subvolume
+        mount_path = os.path.join("/", subvolpath)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
+
+        # create 99 files of 1MB
+        guest_mount.run_shell_payload("mkdir -p dir1")
+        for i in range(99):
+            filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+            guest_mount.write_n_mb(os.path.join("dir1", filename), self.DEFAULT_FILE_SIZE)
+        try:
+            # write two files of 1MB file to exceed the quota
+            guest_mount.run_shell_payload("mkdir -p dir2")
+            for i in range(2):
+                filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+                guest_mount.write_n_mb(os.path.join("dir2", filename), self.DEFAULT_FILE_SIZE)
+            # For quota to be enforced
+            time.sleep(60)
+            # create 400 files of 1MB to exceed quota
+            for i in range(400):
+                filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+                guest_mount.write_n_mb(os.path.join("dir2", filename), self.DEFAULT_FILE_SIZE)
+                # Sometimes quota enforcement takes time.
+                if i == 200:
+                    time.sleep(60)
+        except CommandFailedError:
+            pass
+        else:
+            self.fail(f"expected filling subvolume {subvolname} with 400 files of size 1MB to fail")
+
+        # clean up
+        guest_mount.umount_wait()
+
+        # Delete the subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_mds_path_restriction_to_subvolume_path(self):
+        """
+        Tests subvolumegroup quota enforcement with mds path restriction set to subvolume path
+        The quota should not be enforced because of the fourth limitation mentioned at
+        https://docs.ceph.com/en/latest/cephfs/quota/#limitations
+        """
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create group with 100MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        mount_path = os.path.join("/", subvolpath)
+
+        # Create auth_id
+        authid = "client.guest1"
+        user = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "get-or-create", authid,
+            "mds", f"allow rw path={mount_path}",
+            "mgr", "allow rw",
+            "osd", "allow rw tag cephfs *=*",
+            "mon", "allow r",
+            "--format=json-pretty"
+            ))
+
+        # Prepare guest_mount with new authid
+        guest_mount = self.mount_b
+        guest_mount.umount_wait()
+
+        # configure credentials for guest client
+        self._configure_guest_auth(guest_mount, "guest1", user[0]["key"])
+
+        # mount the subvolume
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
+
+        # create 99 files of 1MB to exceed quota
+        guest_mount.run_shell_payload("mkdir -p dir1")
+        for i in range(99):
+            filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+            guest_mount.write_n_mb(os.path.join("dir1", filename), self.DEFAULT_FILE_SIZE)
+        try:
+            # write two files of 1MB file to exceed the quota
+            guest_mount.run_shell_payload("mkdir -p dir2")
+            for i in range(2):
+                filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+                guest_mount.write_n_mb(os.path.join("dir2", filename), self.DEFAULT_FILE_SIZE)
+            # For quota to be enforced
+            time.sleep(60)
+            # create 400 files of 1MB to exceed quota
+            for i in range(400):
+                filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+                guest_mount.write_n_mb(os.path.join("dir2", filename), self.DEFAULT_FILE_SIZE)
+                # Sometimes quota enforcement takes time.
+                if i == 200:
+                    time.sleep(60)
+        except CommandFailedError:
+            self.fail(f"Quota should not be enforced, expected filling subvolume {subvolname} with 400 files of size 1MB to succeed")
+
+        # clean up
+        guest_mount.umount_wait()
+
+        # Delete the subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_exceeded_subvolume_removal(self):
+        """
+        Tests subvolume removal if it's group quota is exceeded
+        """
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create group with 100MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # create 99 files of 1MB to exceed quota
+        self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=99)
+
+        try:
+            # write two files of 1MB file to exceed the quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=2)
+            # For quota to be enforced
+            time.sleep(20)
+            # create 400 files of 1MB to exceed quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=400)
+        except CommandFailedError:
+            # Delete subvolume when group quota is exceeded
+            self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+        else:
+            self.fail(f"expected filling subvolume {subvolname} with 400 files of size 1MB to fail")
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_exceeded_subvolume_removal_retained_snaps(self):
+        """
+        Tests retained snapshot subvolume removal if it's group quota is exceeded
+        """
+        group = self._generate_random_group_name()
+        subvolname = self._generate_random_subvolume_name()
+        snapshot1, snapshot2 = self._generate_random_snapshot_name(2)
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create group with 100MB quota
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # create 99 files of 1MB to exceed quota
+        self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=99)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot1, "--group_name", group)
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot2, "--group_name", group)
+
+        try:
+            # write two files of 1MB file to exceed the quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=2)
+            # For quota to be enforced
+            time.sleep(20)
+            # create 400 files of 1MB to exceed quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=400)
+        except CommandFailedError:
+            # remove with snapshot retention
+            self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group, "--retain-snapshots")
+            # remove snapshot1
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot1, "--group_name", group)
+            # remove snapshot2 (should remove volume)
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot2, "--group_name", group)
+            # verify subvolume trash is clean
+            self._wait_for_subvol_trash_empty(subvolname, group=group)
+        else:
+            self.fail(f"expected filling subvolume {subvolname} with 400 files of size 1MB to fail")
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_subvolume_removal(self):
+        """
+        Tests subvolume removal if it's group quota is set.
+        """
+        # create group with size -- should set quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # remove subvolume
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
+
+        # remove subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_legacy_subvolume_removal(self):
+        """
+        Tests legacy subvolume removal if it's group quota is set.
+        """
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # emulate a old-fashioned subvolume -- in a custom group
+        createpath1 = os.path.join(".", "volumes", group, subvolume)
+        self.mount_a.run_shell(['mkdir', '-p', createpath1], sudo=True)
+
+        # this would auto-upgrade on access without anyone noticing
+        subvolpath1 = self._fs_cmd("subvolume", "getpath", self.volname, subvolume, "--group-name", group)
+        self.assertNotEqual(subvolpath1, None)
+        subvolpath1 = subvolpath1.rstrip() # remove "/" prefix and any trailing newline
+
+        # and... the subvolume path returned should be what we created behind the scene
+        self.assertEqual(createpath1[1:], subvolpath1)
+
+        # Set subvolumegroup quota on idempotent subvolumegroup creation
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # remove subvolume
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
+
+        # remove subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_v1_subvolume_removal(self):
+        """
+        Tests v1 subvolume removal if it's group quota is set.
+        """
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # emulate a v1 subvolume -- in a custom group
+        self._create_v1_subvolume(subvolume, subvol_group=group, has_snapshot=False)
+
+        # Set subvolumegroup quota on idempotent subvolumegroup creation
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # remove subvolume
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
+
+        # remove subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_resize_fail_invalid_size(self):
+        """
+        That a subvolume group cannot be resized to an invalid size and the quota did not change
+        """
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024
+        # create group with 1MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--size", str(osize))
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # try to resize the subvolume with an invalid size -10
+        nsize = -10
+        try:
+            self._fs_cmd("subvolumegroup", "resize", self.volname, group, str(nsize))
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                             "invalid error code on resize of subvolume group with invalid size")
+        else:
+            self.fail("expected the 'fs subvolumegroup resize' command to fail")
+
+        # verify the quota did not change
+        size = int(self.mount_a.getfattr(grouppath, "ceph.quota.max_bytes"))
+        self.assertEqual(size, osize)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_resize_fail_zero_size(self):
+        """
+        That a subvolume group cannot be resized to a zero size and the quota did not change
+        """
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024
+        # create group with 1MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--size", str(osize))
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # try to resize the subvolume group with size 0
+        nsize = 0
+        try:
+            self._fs_cmd("subvolumegroup", "resize", self.volname, group, str(nsize))
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                             "invalid error code on resize of subvolume group with invalid size")
+        else:
+            self.fail("expected the 'fs subvolumegroup resize' command to fail")
+
+        # verify the quota did not change
+        size = int(self.mount_a.getfattr(grouppath, "ceph.quota.max_bytes"))
+        self.assertEqual(size, osize)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_resize_quota_lt_used_size(self):
+        """
+        That a subvolume group can be resized to a size smaller than the current used size
+        and the resulting quota matches the expected size.
+        """
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*20
+        # create group with 20MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # create one file of 10MB
+        file_size=self.DEFAULT_FILE_SIZE*10
+        number_of_files=1
+        log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
+                                                                             number_of_files,
+                                                                             file_size))
+        filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, self.DEFAULT_NUMBER_OF_FILES+1)
+        self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
+
+        usedsize = int(self.mount_a.getfattr(subvolpath, "ceph.dir.rbytes"))
+
+        # shrink the subvolume group
+        nsize = usedsize // 2
+        try:
+            self._fs_cmd("subvolumegroup", "resize", self.volname, group, str(nsize))
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolumegroup resize' command to succeed")
+
+        # verify the quota
+        size = int(self.mount_a.getfattr(grouppath, "ceph.quota.max_bytes"))
+        self.assertEqual(size, nsize)
+
+        # remove subvolume and group
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_resize_fail_quota_lt_used_size_no_shrink(self):
+        """
+        That a subvolume group cannot be resized to a size smaller than the current used size
+        when --no_shrink is given and the quota did not change.
+        """
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*20
+        # create group with 20MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # create one file of 10MB
+        file_size=self.DEFAULT_FILE_SIZE*10
+        number_of_files=1
+        log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
+                                                                             number_of_files,
+                                                                             file_size))
+        filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, self.DEFAULT_NUMBER_OF_FILES+2)
+        self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
+
+        usedsize = int(self.mount_a.getfattr(grouppath, "ceph.dir.rbytes"))
+
+        # shrink the subvolume group
+        nsize = usedsize // 2
+        try:
+            self._fs_cmd("subvolumegroup", "resize", self.volname, group, str(nsize), "--no_shrink")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL, "invalid error code on resize of subvolumegroup with quota less than used")
+        else:
+            self.fail("expected the 'fs subvolumegroup resize' command to fail")
+
+        # verify the quota did not change
+        size = int(self.mount_a.getfattr(grouppath, "ceph.quota.max_bytes"))
+        self.assertEqual(size, osize)
+
+        # remove subvolume and group
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_resize_expand_on_full_subvolume(self):
+        """
+        That the subvolume group can be expanded after it is full and future write succeed
+        """
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create group with 100MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # create 99 files of 1MB
+        self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=99)
+
+        try:
+            # write two files of 1MB file to exceed the quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=2)
+            # For quota to be enforced
+            time.sleep(20)
+            # create 500 files of 1MB
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=500)
+        except CommandFailedError:
+            # Not able to write. So expand the subvolumegroup more and try writing the files again
+            nsize = osize*7
+            self._fs_cmd("subvolumegroup", "resize", self.volname, group, str(nsize))
+            try:
+                self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=500)
+            except CommandFailedError:
+                self.fail("expected filling subvolume {0} with 500 files of size 1MB "
+                          "to succeed".format(subvolname))
+        else:
+            self.fail("expected filling subvolume {0} with 500 files of size 1MB "
+                      "to fail".format(subvolname))
+
+        # remove subvolume and group
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_resize_infinite_size(self):
+        """
+        That a subvolume group can be resized to an infinite size by unsetting its quota.
+        """
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize))
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # resize inf
+        self._fs_cmd("subvolumegroup", "resize", self.volname, group, "inf")
+
+        # verify that the quota is None
+        size = self.mount_a.getfattr(grouppath, "ceph.quota.max_bytes")
+        self.assertEqual(size, None)
+
+        # remove subvolume group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_resize_infinite_size_future_writes(self):
+        """
+        That a subvolume group can be resized to an infinite size and the future writes succeed.
+        """
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*5
+        # create group with 5MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # create 4 files of 1MB
+        self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=4)
+
+        try:
+            # write two files of 1MB file to exceed the quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=2)
+            # For quota to be enforced
+            time.sleep(20)
+            # create 500 files of 1MB
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=500)
+        except CommandFailedError:
+            # Not able to write. So resize subvolumegroup to 'inf' and try writing the files again
+            # resize inf
+            self._fs_cmd("subvolumegroup", "resize", self.volname, group, "inf")
+            try:
+                self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=500)
+            except CommandFailedError:
+                self.fail("expected filling subvolume {0} with 500 files of size 1MB "
+                          "to succeed".format(subvolname))
+        else:
+            self.fail("expected filling subvolume {0} with 500 files of size 1MB "
+                      "to fail".format(subvolname))
+
+
+        # verify that the quota is None
+        size = self.mount_a.getfattr(grouppath, "ceph.quota.max_bytes")
+        self.assertEqual(size, None)
+
+        # remove subvolume and group
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_group_ls(self):
         # tests the 'fs subvolumegroup ls' command
 
@@ -679,6 +1592,26 @@ class TestSubvolumeGroups(TestVolumesHelper):
             subvolgroupnames = [subvolumegroup['name'] for subvolumegroup in subvolumegroupls]
             if collections.Counter(subvolgroupnames) != collections.Counter(subvolumegroups):
                 raise RuntimeError("Error creating or listing subvolume groups")
+
+    def test_subvolume_group_ls_filter(self):
+        # tests the 'fs subvolumegroup ls' command filters '_deleting' directory
+
+        subvolumegroups = []
+
+        #create subvolumegroup
+        subvolumegroups = self._generate_random_group_name(3)
+        for groupname in subvolumegroups:
+            self._fs_cmd("subvolumegroup", "create", self.volname, groupname)
+
+        # create subvolume and remove. This creates '_deleting' directory.
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        subvolumegroupls = json.loads(self._fs_cmd('subvolumegroup', 'ls', self.volname))
+        subvolgroupnames = [subvolumegroup['name'] for subvolumegroup in subvolumegroupls]
+        if "_deleting" in subvolgroupnames:
+            self.fail("Listing subvolume groups listed '_deleting' directory")
 
     def test_subvolume_group_ls_for_nonexistent_volume(self):
         # tests the 'fs subvolumegroup ls' command when /volume doesn't exist
@@ -846,6 +1779,58 @@ class TestSubvolumes(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_create_idempotence_mode(self):
+        # default mode
+        default_mode = "755"
+
+        # create subvolume
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        subvol_path = self._get_subvolume_path(self.volname, subvolume)
+
+        actual_mode_1 = self.mount_a.run_shell(['stat', '-c' '%a', subvol_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode_1, default_mode)
+
+        # try creating w/ same subvolume name with --mode 777
+        new_mode = "777"
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode", new_mode)
+
+        actual_mode_2 = self.mount_a.run_shell(['stat', '-c' '%a', subvol_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode_2, new_mode)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_create_idempotence_without_passing_mode(self):
+        # create subvolume
+        desired_mode = "777"
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode", desired_mode)
+
+        subvol_path = self._get_subvolume_path(self.volname, subvolume)
+
+        actual_mode_1 = self.mount_a.run_shell(['stat', '-c' '%a', subvol_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode_1, desired_mode)
+
+        # default mode
+        default_mode = "755"
+
+        # try creating w/ same subvolume name without passing --mode argument
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        actual_mode_2 = self.mount_a.run_shell(['stat', '-c' '%a', subvol_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode_2, default_mode)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_create_isolated_namespace(self):
         """
         Create subvolume in separate rados namespace
@@ -917,6 +1902,36 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
         self._fs_cmd("subvolume", "rm", self.volname, subvol1, group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_create_with_desired_mode(self):
+        subvol1 = self._generate_random_subvolume_name()
+
+        # default mode
+        default_mode = "755"
+        # desired mode
+        desired_mode = "777"
+
+        self._fs_cmd("subvolume", "create", self.volname, subvol1,  "--mode", "777")
+
+        subvol1_path = self._get_subvolume_path(self.volname, subvol1)
+
+        # check subvolumegroup's mode
+        subvol_par_path = os.path.dirname(subvol1_path)
+        group_path = os.path.dirname(subvol_par_path)
+        actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', group_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode1, default_mode)
+        # check /volumes mode
+        volumes_path = os.path.dirname(group_path)
+        actual_mode2 = self.mount_a.run_shell(['stat', '-c' '%a', volumes_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode2, default_mode)
+        # check subvolume's  mode
+        actual_mode3 = self.mount_a.run_shell(['stat', '-c' '%a', subvol1_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode3, desired_mode)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvol1)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
@@ -1012,6 +2027,41 @@ class TestSubvolumes(TestVolumesHelper):
             self.fail("expected the 'fs subvolume create' command to fail")
 
         # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_create_and_ls_providing_group_as_nogroup(self):
+        """
+        That a 'subvolume create' and 'subvolume ls' should throw
+        permission denied error if option --group=_nogroup is provided.
+        """
+
+        subvolname = self._generate_random_subvolume_name()
+
+        # try to create subvolume providing --group_name=_nogroup option
+        try:
+            self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", "_nogroup")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM)
+        else:
+            self.fail("expected the 'fs subvolume create' command to fail")
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolname)
+
+        # try to list subvolumes providing --group_name=_nogroup option
+        try:
+            self._fs_cmd("subvolume", "ls", self.volname, "--group_name", "_nogroup")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM)
+        else:
+            self.fail("expected the 'fs subvolume ls' command to fail")
+
+        # list subvolumes
+        self._fs_cmd("subvolume", "ls", self.volname)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean.
         self._wait_for_trash_empty()
 
     def test_subvolume_expand(self):
@@ -2249,6 +3299,527 @@ class TestSubvolumes(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_retain_snapshot_rm_idempotency(self):
+        """
+        ensure subvolume deletion of a subvolume which is already deleted with retain snapshots option passes.
+        After subvolume deletion with retain snapshots, the subvolume exists until the trash directory (resides inside subvolume)
+        is cleaned up. The subvolume deletion issued while the trash directory is not empty, should pass and should
+        not error out with EAGAIN.
+        """
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=256)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # remove with snapshot retention
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
+
+        # remove snapshots (removes retained volume)
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume (check idempotency)
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.ENOENT:
+                self.fail(f"expected subvolume rm to pass with error: {os.strerror(ce.exitstatus)}")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+
+    def test_subvolume_user_metadata_set(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        try:
+            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata set' command to succeed")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_set_idempotence(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        try:
+            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata set' command to succeed")
+
+        # set same metadata again for subvolume.
+        try:
+            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata set' command to succeed because it is idempotent operation")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_get(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+
+        # get value for specified key.
+        try:
+            ret = self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, key, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata get' command to succeed")
+
+        # remove '\n' from returned value.
+        ret = ret.strip('\n')
+
+        # match received value with expected value.
+        self.assertEqual(value, ret)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_get_for_nonexisting_key(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+
+        # try to get value for nonexisting key
+        # Expecting ENOENT exit status because key does not exist
+        try:
+            self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, "key_nonexist", "--group_name", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because 'key_nonexist' does not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_get_for_nonexisting_section(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # try to get value for nonexisting key (as section does not exist)
+        # Expecting ENOENT exit status because key does not exist
+        try:
+            self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, "key", "--group_name", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because section does not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_update(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+
+        # update metadata against key.
+        new_value = "new_value"
+        self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, new_value, "--group_name", group)
+
+        # get metadata for specified key of subvolume.
+        try:
+            ret = self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, key, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata get' command to succeed")
+
+        # remove '\n' from returned value.
+        ret = ret.strip('\n')
+
+        # match received value with expected value.
+        self.assertEqual(new_value, ret)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_list(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        input_metadata_dict =  {f'key_{i}' : f'value_{i}' for i in range(3)}
+
+        for k, v in input_metadata_dict.items():
+            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, k, v, "--group_name", group)
+
+        # list metadata
+        try:
+            ret = self._fs_cmd("subvolume", "metadata", "ls", self.volname, subvolname, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata ls' command to succeed")
+
+        ret_dict = json.loads(ret)
+
+        # compare output with expected output
+        self.assertDictEqual(input_metadata_dict, ret_dict)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_list_if_no_metadata_set(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # list metadata
+        try:
+            ret = self._fs_cmd("subvolume", "metadata", "ls", self.volname, subvolname, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata ls' command to succeed")
+
+        # remove '\n' from returned value.
+        ret = ret.strip('\n')
+
+        # compare output with expected output
+        # expecting empty json/dictionary
+        self.assertEqual(ret, "{}")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_remove(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+
+        # remove metadata against specified key.
+        try:
+            self._fs_cmd("subvolume", "metadata", "rm", self.volname, subvolname, key, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata rm' command to succeed")
+
+        # confirm key is removed by again fetching metadata
+        try:
+            self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, key, "--group_name", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because key does not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_remove_for_nonexisting_key(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+
+        # try to remove value for nonexisting key
+        # Expecting ENOENT exit status because key does not exist
+        try:
+            self._fs_cmd("subvolume", "metadata", "rm", self.volname, subvolname, "key_nonexist", "--group_name", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because 'key_nonexist' does not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_remove_for_nonexisting_section(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # try to remove value for nonexisting key (as section does not exist)
+        # Expecting ENOENT exit status because key does not exist
+        try:
+            self._fs_cmd("subvolume", "metadata", "rm", self.volname, subvolname, "key", "--group_name", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because section does not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_remove_force(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+
+        # remove metadata against specified key with --force option.
+        try:
+            self._fs_cmd("subvolume", "metadata", "rm", self.volname, subvolname, key, "--group_name", group, "--force")
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata rm' command to succeed")
+
+        # confirm key is removed by again fetching metadata
+        try:
+            self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, key, "--group_name", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because key does not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_remove_force_for_nonexisting_key(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+
+        # remove metadata against specified key.
+        try:
+            self._fs_cmd("subvolume", "metadata", "rm", self.volname, subvolname, key, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata rm' command to succeed")
+
+        # confirm key is removed by again fetching metadata
+        try:
+            self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, key, "--group_name", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because key does not exist")
+
+        # again remove metadata against already removed key with --force option.
+        try:
+            self._fs_cmd("subvolume", "metadata", "rm", self.volname, subvolname, key, "--group_name", group, "--force")
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata rm' (with --force) command to succeed")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_set_and_get_for_legacy_subvolume(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # emulate a old-fashioned subvolume in a custom group
+        createpath = os.path.join(".", "volumes", group, subvolname)
+        self.mount_a.run_shell(['mkdir', '-p', createpath], sudo=True)
+
+        # set metadata for subvolume.
+        key = "key"
+        value = "value"
+        try:
+            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, key, value, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata set' command to succeed")
+
+        # get value for specified key.
+        try:
+            ret = self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, key, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata get' command to succeed")
+
+        # remove '\n' from returned value.
+        ret = ret.strip('\n')
+
+        # match received value with expected value.
+        self.assertEqual(value, ret)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_user_metadata_list_and_remove_for_legacy_subvolume(self):
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # emulate a old-fashioned subvolume in a custom group
+        createpath = os.path.join(".", "volumes", group, subvolname)
+        self.mount_a.run_shell(['mkdir', '-p', createpath], sudo=True)
+
+        # set metadata for subvolume.
+        input_metadata_dict =  {f'key_{i}' : f'value_{i}' for i in range(3)}
+
+        for k, v in input_metadata_dict.items():
+            self._fs_cmd("subvolume", "metadata", "set", self.volname, subvolname, k, v, "--group_name", group)
+
+        # list metadata
+        try:
+            ret = self._fs_cmd("subvolume", "metadata", "ls", self.volname, subvolname, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata ls' command to succeed")
+
+        ret_dict = json.loads(ret)
+
+        # compare output with expected output
+        self.assertDictEqual(input_metadata_dict, ret_dict)
+
+        # remove metadata against specified key.
+        try:
+            self._fs_cmd("subvolume", "metadata", "rm", self.volname, subvolname, "key_1", "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume metadata rm' command to succeed")
+
+        # confirm key is removed by again fetching metadata
+        try:
+            self._fs_cmd("subvolume", "metadata", "get", self.volname, subvolname, "key_1", "--group_name", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because key_1 does not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
 
 class TestSubvolumeGroupSnapshots(TestVolumesHelper):
     """Tests for FS subvolume group snapshot operations."""
@@ -2475,7 +4046,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         tests the 'fs subvolume snapshot info' command
         """
 
-        snap_md = ["created_at", "data_pool", "has_pending_clones", "size"]
+        snap_md = ["created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._generate_random_subvolume_name()
         snapshot, snap_missing = self._generate_random_snapshot_name(2)
@@ -2802,7 +4373,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         """
         ensure a retained subvolume can be recreated and further snapshotted
         """
-        snap_md = ["created_at", "data_pool", "has_pending_clones", "size"]
+        snap_md = ["created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._generate_random_subvolume_name()
         snapshot1, snapshot2 = self._generate_random_snapshot_name(2)
@@ -2865,7 +4436,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         ensure retain snapshots based delete of a subvolume with snapshots retains the subvolume
         also test allowed and dis-allowed operations on a retained subvolume
         """
-        snap_md = ["created_at", "data_pool", "has_pending_clones", "size"]
+        snap_md = ["created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._generate_random_subvolume_name()
         snapshot = self._generate_random_snapshot_name()
@@ -3100,6 +4671,583 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         except CommandFailedError:
             raise RuntimeError("expected the 'fs subvolume snapshot rm --force' command to succeed")
 
+    def test_subvolume_snapshot_metadata_set(self):
+        """
+        Set custom metadata for subvolume snapshot.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata set' command to succeed")
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_set_idempotence(self):
+        """
+        Set custom metadata for subvolume snapshot (Idempotency).
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata set' command to succeed")
+
+        # set same metadata again for subvolume.
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata set' command to succeed because it is idempotent operation")
+
+        # get value for specified key.
+        try:
+            ret = self._fs_cmd("subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata get' command to succeed")
+
+        # remove '\n' from returned value.
+        ret = ret.strip('\n')
+
+        # match received value with expected value.
+        self.assertEqual(value, ret)
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_get(self):
+        """
+        Get custom metadata for a specified key in subvolume snapshot metadata.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+
+        # get value for specified key.
+        try:
+            ret = self._fs_cmd("subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata get' command to succeed")
+
+        # remove '\n' from returned value.
+        ret = ret.strip('\n')
+
+        # match received value with expected value.
+        self.assertEqual(value, ret)
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_get_for_nonexisting_key(self):
+        """
+        Get custom metadata for subvolume snapshot if specified key not exist in metadata.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+
+        # try to get value for nonexisting key
+        # Expecting ENOENT exit status because key does not exist
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, "key_nonexist", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because 'key_nonexist' does not exist")
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_get_for_nonexisting_section(self):
+        """
+        Get custom metadata for subvolume snapshot if metadata is not added for subvolume snapshot.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # try to get value for nonexisting key (as section does not exist)
+        # Expecting ENOENT exit status because key does not exist
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, "key", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because section does not exist")
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_update(self):
+        """
+        Update custom metadata for a specified key in subvolume snapshot metadata.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+
+        # update metadata against key.
+        new_value = "new_value"
+        self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, new_value, group)
+
+        # get metadata for specified key of snapshot.
+        try:
+            ret = self._fs_cmd("subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata get' command to succeed")
+
+        # remove '\n' from returned value.
+        ret = ret.strip('\n')
+
+        # match received value with expected value.
+        self.assertEqual(new_value, ret)
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_list(self):
+        """
+        List custom metadata for subvolume snapshot.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for subvolume.
+        input_metadata_dict =  {f'key_{i}' : f'value_{i}' for i in range(3)}
+
+        for k, v in input_metadata_dict.items():
+            self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, k, v, group)
+
+        # list metadata
+        try:
+            ret_dict = json.loads(self._fs_cmd("subvolume", "snapshot", "metadata", "ls", self.volname, subvolname, snapshot, group))
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata ls' command to succeed")
+
+        # compare output with expected output
+        self.assertDictEqual(input_metadata_dict, ret_dict)
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_list_if_no_metadata_set(self):
+        """
+        List custom metadata for subvolume snapshot if metadata is not added for subvolume snapshot.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # list metadata
+        try:
+            ret_dict = json.loads(self._fs_cmd("subvolume", "snapshot", "metadata", "ls", self.volname, subvolname, snapshot, group))
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata ls' command to succeed")
+
+        # compare output with expected output
+        empty_dict = {}
+        self.assertDictEqual(ret_dict, empty_dict)
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_remove(self):
+        """
+        Remove custom metadata for a specified key in subvolume snapshot metadata.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+
+        # remove metadata against specified key.
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "rm", self.volname, subvolname, snapshot, key, group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata rm' command to succeed")
+
+        # confirm key is removed by again fetching metadata
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "get", self.volname, subvolname, key, snapshot, group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because key does not exist")
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_remove_for_nonexisting_key(self):
+        """
+        Remove custom metadata for subvolume snapshot if specified key not exist in metadata.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+
+        # try to remove value for nonexisting key
+        # Expecting ENOENT exit status because key does not exist
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "rm", self.volname, subvolname, snapshot, "key_nonexist", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because 'key_nonexist' does not exist")
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_remove_for_nonexisting_section(self):
+        """
+        Remove custom metadata for subvolume snapshot if metadata is not added for subvolume snapshot.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # try to remove value for nonexisting key (as section does not exist)
+        # Expecting ENOENT exit status because key does not exist
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "rm", self.volname, subvolname, snapshot, "key", group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because section does not exist")
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_remove_force(self):
+        """
+        Forcefully remove custom metadata for a specified key in subvolume snapshot metadata.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+
+        # remove metadata against specified key with --force option.
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "rm", self.volname, subvolname, snapshot, key, group, "--force")
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata rm' command to succeed")
+
+        # confirm key is removed by again fetching metadata
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because key does not exist")
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_remove_force_for_nonexisting_key(self):
+        """
+        Forcefully remove custom metadata for subvolume snapshot if specified key not exist in metadata.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+
+        # remove metadata against specified key.
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "rm", self.volname, subvolname, snapshot, key, group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata rm' command to succeed")
+
+        # confirm key is removed by again fetching metadata
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("Expected ENOENT because key does not exist")
+
+        # again remove metadata against already removed key with --force option.
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "rm", self.volname, subvolname, snapshot, key, group, "--force")
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata rm' (with --force) command to succeed")
+
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_metadata_after_snapshot_remove(self):
+        """
+        Verify metadata removal of subvolume snapshot after snapshot removal.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+
+        # get value for specified key.
+        ret = self._fs_cmd("subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group)
+
+        # remove '\n' from returned value.
+        ret = ret.strip('\n')
+
+        # match received value with expected value.
+        self.assertEqual(value, ret)
+
+        # remove subvolume snapshot.
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+
+        # try to get metadata after removing snapshot.
+        # Expecting error ENOENT with error message of snapshot does not exist
+        cmd_ret = self.mgr_cluster.mon_manager.run_cluster_cmd(
+                args=["fs", "subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group],
+                check_status=False, stdout=StringIO(), stderr=StringIO())
+        self.assertEqual(cmd_ret.returncode, errno.ENOENT, "Expecting ENOENT error")
+        self.assertIn(f"snapshot '{snapshot}' does not exist", cmd_ret.stderr.getvalue(),
+                f"Expecting message: snapshot '{snapshot}' does not exist ")
+
+        # confirm metadata is removed by searching section name in .meta file
+        meta_path = os.path.join(".", "volumes", group, subvolname, ".meta")
+        section_name = "SNAP_METADATA_" + snapshot
+
+        try:
+            self.mount_a.run_shell(f"sudo grep {section_name} {meta_path}", omit_sudo=False)
+        except CommandFailedError as e:
+            self.assertNotEqual(e.exitstatus, 0)
+        else:
+            self.fail("Expected non-zero exist status because section should not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
 
 class TestSubvolumeSnapshotClones(TestVolumesHelper):
     """ Tests for FS subvolume snapshot clone operations."""
@@ -3200,6 +5348,54 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # verify clone
         self._verify_clone(subvolume, snapshot, clone)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_clone_inherit_quota_attrs(self):
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*12
+
+        # create subvolume with a specified size
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777", "--size", str(osize))
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=8)
+
+        # get subvolume path
+        subvolpath = self._get_subvolume_path(self.volname, subvolume)
+
+        # set quota on number of files
+        self.mount_a.setfattr(subvolpath, 'ceph.quota.max_files', "20", sudo=True)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # verify clone
+        self._verify_clone(subvolume, snapshot, clone)
+
+        # get subvolume path
+        clonepath = self._get_subvolume_path(self.volname, clone)
+
+        # verify quota max_files is inherited from source snapshot
+        subvol_quota = self.mount_a.getfattr(subvolpath, "ceph.quota.max_files")
+        clone_quota = self.mount_a.getfattr(clonepath, "ceph.quota.max_files")
+        self.assertEqual(subvol_quota, clone_quota)
 
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
@@ -3667,6 +5863,208 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_clone_failure_status_pending_in_progress_complete(self):
+        """
+        ensure failure status is not shown when clone is not in failed/cancelled state
+        """
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone1 = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=200)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 5)
+
+        # schedule a clone1
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
+
+        # pending clone shouldn't show failure status
+        clone1_result = self._get_clone_status(clone1)
+        try:
+            clone1_result["status"]["failure"]["errno"]
+        except KeyError as e:
+            self.assertEqual(str(e), "'failure'")
+        else:
+            self.fail("clone status shouldn't show failure for pending clone")
+
+        # check clone1 to be in-progress
+        self._wait_for_clone_to_be_in_progress(clone1)
+
+        # in-progress clone1 shouldn't show failure status
+        clone1_result = self._get_clone_status(clone1)
+        try:
+            clone1_result["status"]["failure"]["errno"]
+        except KeyError as e:
+            self.assertEqual(str(e), "'failure'")
+        else:
+            self.fail("clone status shouldn't show failure for in-progress clone")
+
+        # wait for clone1 to complete
+        self._wait_for_clone_to_complete(clone1)
+
+        # complete clone1 shouldn't show failure status
+        clone1_result = self._get_clone_status(clone1)
+        try:
+            clone1_result["status"]["failure"]["errno"]
+        except KeyError as e:
+            self.assertEqual(str(e), "'failure'")
+        else:
+            self.fail("clone status shouldn't show failure for complete clone")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone1)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_clone_failure_status_failed(self):
+        """
+        ensure failure status is shown when clone is in failed state and validate the reason
+        """
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone1 = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=200)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 5)
+
+        # schedule a clone1
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
+
+        # remove snapshot from backend to force the clone failure.
+        snappath = os.path.join(".", "volumes", "_nogroup", subvolume, ".snap", snapshot)
+        self.mount_a.run_shell(['rmdir', snappath], sudo=True)
+
+        # wait for clone1 to fail.
+        self._wait_for_clone_to_fail(clone1)
+
+        # check clone1 status
+        clone1_result = self._get_clone_status(clone1)
+        self.assertEqual(clone1_result["status"]["state"], "failed")
+        self.assertEqual(clone1_result["status"]["failure"]["errno"], "2")
+        self.assertEqual(clone1_result["status"]["failure"]["error_msg"], "snapshot '{0}' does not exist".format(snapshot))
+
+        # clone removal should succeed after failure, remove clone1
+        self._fs_cmd("subvolume", "rm", self.volname, clone1, "--force")
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_clone_failure_status_pending_cancelled(self):
+        """
+        ensure failure status is shown when clone is cancelled during pending state and validate the reason
+        """
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone1 = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=200)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 5)
+
+        # schedule a clone1
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
+
+        # cancel pending clone1
+        self._fs_cmd("clone", "cancel", self.volname, clone1)
+
+        # check clone1 status
+        clone1_result = self._get_clone_status(clone1)
+        self.assertEqual(clone1_result["status"]["state"], "canceled")
+        self.assertEqual(clone1_result["status"]["failure"]["errno"], "4")
+        self.assertEqual(clone1_result["status"]["failure"]["error_msg"], "user interrupted clone operation")
+
+        # clone removal should succeed with force after cancelled, remove clone1
+        self._fs_cmd("subvolume", "rm", self.volname, clone1, "--force")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_clone_failure_status_in_progress_cancelled(self):
+        """
+        ensure failure status is shown when clone is cancelled during in-progress state and validate the reason
+        """
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone1 = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=200)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 5)
+
+        # schedule a clone1
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
+
+        # wait for clone1 to be in-progress
+        self._wait_for_clone_to_be_in_progress(clone1)
+
+        # cancel in-progess clone1
+        self._fs_cmd("clone", "cancel", self.volname, clone1)
+
+        # check clone1 status
+        clone1_result = self._get_clone_status(clone1)
+        self.assertEqual(clone1_result["status"]["state"], "canceled")
+        self.assertEqual(clone1_result["status"]["failure"]["errno"], "4")
+        self.assertEqual(clone1_result["status"]["failure"]["error_msg"], "user interrupted clone operation")
+
+        # clone removal should succeed with force after cancelled, remove clone1
+        self._fs_cmd("subvolume", "rm", self.volname, clone1, "--force")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_snapshot_clone(self):
         subvolume = self._generate_random_subvolume_name()
         snapshot = self._generate_random_snapshot_name()
@@ -3677,6 +6075,40 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=64)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # verify clone
+        self._verify_clone(subvolume, snapshot, clone)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_quota_exceeded(self):
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        # create subvolume with 20MB quota
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*20
+        self._fs_cmd("subvolume", "create", self.volname, subvolume,"--mode=777", "--size", str(osize))
+
+        # do IO, write 50 files of 1MB each to exceed quota. This mostly succeeds as quota enforcement takes time.
+        self._do_subvolume_io(subvolume, number_of_files=50)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
@@ -4555,7 +6987,7 @@ class TestMisc(TestVolumesHelper):
         subvol_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
                      "data_pool", "gid", "mode", "mon_addrs", "mtime", "path", "pool_namespace",
                      "type", "uid", "features", "state"]
-        snap_md = ["created_at", "data_pool", "has_pending_clones", "size"]
+        snap_md = ["created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._generate_random_subvolume_name()
         snapshot = self._generate_random_snapshot_name()

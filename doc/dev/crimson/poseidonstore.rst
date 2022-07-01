@@ -108,7 +108,7 @@ Two data types in Ceph
 * Data (object data)
 
   - The cost of double write is high
-  - The best mehod to store this data is in-place update
+  - The best method to store this data is in-place update
 
     - At least two operations required to store the data: 1) data and 2) location of
       data. Nevertheless, a constant number of operations would be better than out-of-place
@@ -254,7 +254,7 @@ Comparison
 * Worst case
 
   - At least three writes are required additionally on WAL, object metadata, and data blocks.
-  - If the flush from WAL to the data parition occurs frequently, radix tree onode structure needs to be update
+  - If the flush from WAL to the data partition occurs frequently, radix tree onode structure needs to be update
     in many times. To minimize such overhead, we can make use of batch processing to minimize the update on the tree
     (the data related to the object has a locality because it will have the same parent node, so updates can be minimized)
 
@@ -285,7 +285,7 @@ Detailed Design
 
     .. code-block:: c
 
-            stuct onode {
+            struct onode {
               extent_tree block_maps;
               b+_tree omaps;
               map xattrs;
@@ -380,7 +380,7 @@ Detailed Design
 
 * Omap and xattr
   In this design, omap and xattr data is tracked by b+tree in onode. The onode only has the root node of b+tree.
-  The root node contains entires which indicate where the key onode exists.
+  The root node contains entries which indicate where the key onode exists.
   So, if we know the onode, omap can be found via omap b+tree.
 
 * Fragmentation
@@ -437,7 +437,7 @@ Detailed Design
 WAL
 ---
 Each SP has a WAL.
-The datas written to the WAL are metadata updates, free space update and small data.
+The data written to the WAL are metadata updates, free space update and small data.
 Note that only data smaller than the predefined threshold needs to be written to the WAL.
 The larger data is written to the unallocated free space and its onode's extent_tree is updated accordingly
 (also on-disk extent tree). We statically allocate WAL partition aside from data partition pre-configured.

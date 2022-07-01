@@ -65,6 +65,7 @@ struct librados::IoCtxImpl {
     last_objver = rhs.last_objver;
     notify_timeout = rhs.notify_timeout;
     oloc = rhs.oloc;
+    extra_op_flags = rhs.extra_op_flags;
     objecter = rhs.objecter;
   }
 

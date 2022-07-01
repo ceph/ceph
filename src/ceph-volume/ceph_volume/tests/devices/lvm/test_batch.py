@@ -15,6 +15,10 @@ class TestBatch(object):
         b = batch.Batch([])
         b.main()
 
+    def test_invalid_osd_ids_passed(self):
+        with pytest.raises(SystemExit):
+            batch.Batch(argv=['--osd-ids', '1', 'foo']).main()
+
     def test_disjoint_device_lists(self, factory):
         device1 = factory(used_by_ceph=False, available=True, abspath="/dev/sda")
         device2 = factory(used_by_ceph=False, available=True, abspath="/dev/sdb")
@@ -28,7 +32,10 @@ class TestBatch(object):
     def test_reject_partition(self, mocked_device):
         mocked_device.return_value = MagicMock(
             is_partition=True,
+            has_fs=False,
+            is_lvm_member=False,
             has_gpt_headers=False,
+            has_partitions=False,
         )
         with pytest.raises(ArgumentError):
             arg_validators.ValidBatchDevice()('foo')

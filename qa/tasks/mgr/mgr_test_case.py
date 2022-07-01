@@ -74,7 +74,7 @@ class MgrTestCase(CephTestCase):
 
         # Unload all non-default plugins
         loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
-                   "mgr", "module", "ls"))['enabled_modules']
+                   "mgr", "module", "ls", "--format=json-pretty"))['enabled_modules']
         unload_modules = set(loaded) - {"cephadm", "restful"}
 
         for m in unload_modules:
@@ -111,7 +111,7 @@ class MgrTestCase(CephTestCase):
     def _unload_module(cls, module_name):
         def is_disabled():
             enabled_modules = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
-                'mgr', 'module', 'ls'))['enabled_modules']
+                'mgr', 'module', 'ls', "--format=json-pretty"))['enabled_modules']
             return module_name not in enabled_modules
 
         if is_disabled():
@@ -124,7 +124,7 @@ class MgrTestCase(CephTestCase):
     @classmethod
     def _load_module(cls, module_name):
         loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
-            "mgr", "module", "ls"))['enabled_modules']
+            "mgr", "module", "ls", "--format=json-pretty"))['enabled_modules']
         if module_name in loaded:
             # The enable command is idempotent, but our wait for a restart
             # isn't, so let's return now if it's already loaded

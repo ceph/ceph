@@ -19,11 +19,8 @@ from ..rest_client import RequestException
 from ..services.exception import handle_request_error
 from ..services.iscsi_client import IscsiClient
 from ..services.orchestrator import OrchClient
+from ..tests import CLICommandTestMixin, CmdException, ControllerTestCase, KVStoreMockMixin
 from ..tools import NotificationQueue, TaskManager
-from . import CLICommandTestMixin  # pylint: disable=no-name-in-module
-from . import CmdException  # pylint: disable=no-name-in-module
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
-from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
 class IscsiTestCli(unittest.TestCase, CLICommandTestMixin):
@@ -86,9 +83,6 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         TaskManager.init()
         OrchClient.instance().available = lambda: False
         mgr.rados.side_effect = None
-        # pylint: disable=protected-access
-        Iscsi._cp_config['tools.authenticate.on'] = False
-        IscsiTarget._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Iscsi, IscsiTarget])
 
     @classmethod
@@ -752,8 +746,6 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
 class TestIscsiUi(ControllerTestCase):
     @classmethod
     def setup_server(cls):
-        # pylint: disable=protected-access
-        IscsiUi._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([IscsiUi])
 
     @mock.patch('dashboard.services.tcmu_service.TcmuService.get_image_info')

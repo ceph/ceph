@@ -10,6 +10,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/mirror/GetInfoRequest.h"
+#include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
@@ -124,9 +125,16 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
     return;
   }
 
-  // TODO save current mirror state to determine if we should
-  // delete a partially formed image
-  // (e.g. MIRROR_IMAGE_STATE_CREATING/DELETING)
+  if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_CREATING) {
+    dout(5) << "local image is still in creating state, issuing a removal"
+            << dendl;
+    move_to_trash();
+    return;
+  } else if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+    dout(5) << "local image mirroring is in disabling state" << dendl;
+    finish(-ERESTART);
+    return;
+  }
 
   switch (m_mirror_image.mode) {
   case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
@@ -154,6 +162,24 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
   (*m_state_builder)->local_image_id = m_local_image_id;
   (*m_state_builder)->local_promotion_state = m_promotion_state;
   finish(0);
+}
+
+template <typename I>
+void PrepareLocalImageRequest<I>::move_to_trash() {
+  dout(10) << dendl;
+
+  Context *ctx = create_context_callback<
+    PrepareLocalImageRequest<I>,
+    &PrepareLocalImageRequest<I>::handle_move_to_trash>(this);
+  ImageDeleter<I>::trash_move(m_io_ctx, m_global_image_id,
+                              false, m_work_queue, ctx);
+}
+
+template <typename I>
+void PrepareLocalImageRequest<I>::handle_move_to_trash(int r) {
+  dout(10) << ": r=" << r << dendl;
+
+  finish(-ENOENT);
 }
 
 template <typename I>

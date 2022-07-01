@@ -838,6 +838,12 @@ struct cls_rgw_gc_set_entry_op {
 
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<cls_rgw_gc_set_entry_op*>& ls);
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32); // version and length prefix
+    constexpr size_t expr_secs_overhead = sizeof(__u32); // expiration_seconds_overhead
+    return start_overhead + expr_secs_overhead + info.estimate_encoded_size();
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_set_entry_op)
 
@@ -1092,17 +1098,34 @@ struct cls_rgw_lc_get_entry_ret {
     : entry(std::move(_entry)) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 2, bl);
     encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(entry, bl);
+    DECODE_START(2, bl);
+    if (struct_v < 2) {
+      /* there was an unmarked change in the encoding during v1, so
+       * if the sender version is v1, try decoding both ways (sorry) */
+      ceph::buffer::list::const_iterator save_bl = bl;
+      try {
+	decode(entry, bl);
+      } catch (ceph::buffer::error& e) {
+	std::pair<std::string, int> oe;
+	bl = save_bl;
+	decode(oe, bl);
+	entry.bucket = oe.first;
+	entry.start_time = 0;
+	entry.status = oe.second;
+      }
+    } else {
+      decode(entry, bl);
+    }
     DECODE_FINISH(bl);
   }
-
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_rgw_lc_get_entry_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_entry_ret)
 

@@ -147,6 +147,7 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
     mock_crypto_object_dispatch->shut_down(on_finish);
     ASSERT_EQ(0, cond.wait());
 
+    delete mock_crypto_object_dispatch;
     delete mock_image_ctx;
 
     TestMockFixture::TearDown();

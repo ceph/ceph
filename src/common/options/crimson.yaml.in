@@ -32,7 +32,7 @@ options:
   type: size
   desc: Total size to use for SegmentManager block file if created
   level: dev
-  default: 100_G
+  default: 50_G
 - name: seastore_block_create
   type: bool
   level: dev
@@ -40,3 +40,38 @@ options:
   default: true
   see_also:
   - seastore_device_size
+- name: seastore_journal_batch_capacity
+  type: uint
+  level: dev
+  desc: The number limit of records in a journal batch
+  default: 16
+- name: seastore_journal_batch_flush_size
+  type: size
+  level: dev
+  desc: The size threshold to force flush a journal batch
+  default: 16_M
+- name: seastore_journal_iodepth_limit
+  type: uint
+  level: dev
+  desc: The io depth limit to submit journal records
+  default: 5
+- name: seastore_journal_batch_preferred_fullness
+  type: float
+  level: dev
+  desc: The record fullness threshold to flush a journal batch
+  default: 0.95
+- name: seastore_default_max_object_size
+  type: uint
+  level: dev
+  desc: default logical address space reservation for seastore objects' data
+  default: 16777216
+- name: seastore_default_object_metadata_reservation
+  type: uint
+  level: dev
+  desc: default logical address space reservation for seastore objects' metadata
+  default: 16777216
+- name: seastore_cache_lru_size
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to keep in cache.
+  default: 64_M

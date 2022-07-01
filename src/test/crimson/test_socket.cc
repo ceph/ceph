@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/ceph_argparse.h"
 #include <seastar/core/app-template.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
@@ -13,6 +14,8 @@
 #include "crimson/net/Fwd.h"
 #include "crimson/net/Socket.h"
 
+using crimson::common::local_conf;
+
 namespace {
 
 using namespace std::chrono_literals;
@@ -21,6 +24,7 @@ using seastar::engine;
 using seastar::future;
 using crimson::net::error;
 using crimson::net::FixedCPUServerSocket;
+using crimson::net::listen_ertr;
 using crimson::net::Socket;
 using crimson::net::SocketRef;
 using crimson::net::stop_t;
@@ -75,7 +79,7 @@ future<> test_bind_same() {
         return pss2->listen(saddr).safe_then([] {
           logger.error("test_bind_same() should raise address_in_use");
           ceph_abort();
-        }, FixedCPUServerSocket::listen_ertr::all_same_way(
+        }, listen_ertr::all_same_way(
             [] (const std::error_code& e) {
           if (e == std::errc::address_in_use) {
             // successful!
@@ -91,7 +95,7 @@ future<> test_bind_same() {
           return pss2->destroy();
         });
       });
-    }, FixedCPUServerSocket::listen_ertr::all_same_way(
+    }, listen_ertr::all_same_way(
         [saddr] (const std::error_code& e) {
       logger.error("test_bind_same(): there is another instance running at {}",
                    saddr);
@@ -116,7 +120,7 @@ future<> test_accept() {
           return socket->close().finally([cleanup = std::move(socket)] {});
         });
       });
-    }, FixedCPUServerSocket::listen_ertr::all_same_way(
+    }, listen_ertr::all_same_way(
         [saddr] (const std::error_code& e) {
       logger.error("test_accept(): there is another instance running at {}",
                    saddr);
@@ -162,7 +166,7 @@ class SocketFactory {
       return FixedCPUServerSocket::create().then([psf, saddr] (auto pss) {
         psf->pss = pss;
         return pss->listen(saddr
-        ).safe_then([]{}, FixedCPUServerSocket::listen_ertr::all_same_way(
+        ).safe_then([]{}, listen_ertr::all_same_way(
             [saddr] (const std::error_code& e) {
           logger.error("dispatch_sockets(): there is another instance running at {}",
                        saddr);
@@ -461,11 +465,21 @@ future<> test_preemptive_down() {
 
 }
 
-int main(int argc, char** argv)
+seastar::future<int> do_test(seastar::app_template& app)
 {
-  seastar::app_template app;
-  return app.run(argc, argv, [] {
-    return seastar::futurize_invoke([] {
+  std::vector<const char*> args;
+  std::string cluster;
+  std::string conf_file_list;
+  auto init_params = ceph_argparse_early_args(args,
+                                              CEPH_ENTITY_TYPE_CLIENT,
+                                              &cluster,
+                                              &conf_file_list);
+  return crimson::common::sharded_conf().start(init_params.name, cluster)
+  .then([conf_file_list] {
+    return local_conf().parse_config_files(conf_file_list);
+  }).then([] {
+      return local_conf().set_val("ms_inject_internal_delays", "0")
+    .then([] {
       return test_refused();
     }).then([] {
       return test_bind_same();
@@ -484,9 +498,21 @@ int main(int argc, char** argv)
       // Seastar has bugs to have events undispatched during shutdown,
       // which will result in memory leak and thus fail LeakSanitizer.
       return seastar::sleep(100ms);
-    }).handle_exception([] (auto eptr) {
-      std::cout << "Test failure" << std::endl;
-      return seastar::make_exception_future<>(eptr);
     });
+  }).then([] {
+    return crimson::common::sharded_conf().stop();
+  }).then([] {
+    return 0;
+  }).handle_exception([] (auto eptr) {
+    logger.error("Test failed: got exception {}", eptr);
+    return 1;
+  });
+}
+
+int main(int argc, char** argv)
+{
+  seastar::app_template app;
+  return app.run(argc, argv, [&app] {
+    return do_test(app);
   });
 }

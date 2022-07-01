@@ -257,6 +257,9 @@ public:
   void mark_new();
   bool is_new() const { return state_test(STATE_NEW); }
   void clear_new() { state_clear(STATE_NEW); }
+
+  void mark_auth();
+  void clear_auth();
   
   // -- exporting
   // note: this assumes the dentry already exists.  
@@ -276,7 +279,7 @@ public:
     // twiddle
     clear_replica_map();
     replica_nonce = EXPORT_NONCE;
-    state_clear(CDentry::STATE_AUTH);
+    clear_auth();
     if (is_dirty())
       mark_clean();
     put(PIN_TEMPEXPORTING);
@@ -296,7 +299,7 @@ public:
 
     // twiddle
     state &= MASK_STATE_IMPORT_KEPT;
-    state_set(CDentry::STATE_AUTH);
+    mark_auth();
     if (nstate & STATE_DIRTY)
       _mark_dirty(ls);
     if (is_replicated())

@@ -4,6 +4,7 @@ Kubernetes cluster task, deployed via kubeadm
 import argparse
 import contextlib
 import ipaddress
+import json
 import logging
 import random
 import yaml
@@ -58,18 +59,18 @@ def preflight(ctx, config):
     # set docker cgroup driver = systemd
     #  see https://kubernetes.io/docs/setup/production-environment/container-runtimes/#docker
     #  see https://github.com/kubernetes/kubeadm/issues/2066
-    daemon_json = """
-{
-  "exec-opts": ["native.cgroupdriver=systemd"],
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "100m"
-  },
-  "storage-driver": "overlay2"
-}
-"""
     for remote in ctx.cluster.remotes.keys():
-        remote.write_file('/etc/docker/daemon.json', daemon_json, sudo=True)
+        try:
+            orig = remote.read_file('/etc/docker/daemon.json', sudo=True)
+            j = json.loads(orig)
+        except Exception as e:
+            log.info(f'Failed to pull old daemon.json: {e}')
+            j = {}
+        j["exec-opts"] = ["native.cgroupdriver=systemd"]
+        j["log-driver"] = "json-file"
+        j["log-opts"] = {"max-size": "100m"}
+        j["storage-driver"] = "overlay2"
+        remote.write_file('/etc/docker/daemon.json', json.dumps(j), sudo=True)
     run.wait(
         ctx.cluster.run(
             args=[
@@ -416,7 +417,7 @@ def pod_network(ctx, config):
                         {
                             'blockSize': 26,
                             'cidr': str(ctx.kubeadm[cluster_name].pod_subnet),
-                            'encapsulation': 'VXLANCrossSubnet',
+                            'encapsulation': 'IPIPCrossSubnet',
                             'natOutgoing': 'Enabled',
                             'nodeSelector': 'all()',
                         }
@@ -467,7 +468,7 @@ def setup_pvs(ctx, config):
                     'volumeMode': 'Block',
                     'accessModes': ['ReadWriteOnce'],
                     'capacity': {'storage': '100Gi'},  # doesn't matter?
-                    'persistentVolumeReclaimPolicy': 'Recycle',
+                    'persistentVolumeReclaimPolicy': 'Retain',
                     'storageClassName': 'scratch',
                     'local': {'path': dev},
                     'nodeAffinity': {

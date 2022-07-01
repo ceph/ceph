@@ -34,6 +34,9 @@ int RGWObjTags::check_and_add_tag(const string&key, const string& val){
 }
 
 int RGWObjTags::set_from_string(const string& input){
+  if (input.empty()) {
+    return 0;
+  }
   int ret=0;
   vector <string> kvs;
   boost::split(kvs, input, boost::is_any_of("&"));
@@ -52,3 +55,13 @@ int RGWObjTags::set_from_string(const string& input){
   }
   return ret;
 }
+
+void RGWObjTags::dump(Formatter *f) const
+{
+  f->open_object_section("tagset");
+  for (auto& tag: tag_map){
+    f->dump_string(tag.first.c_str(), tag.second);
+  }
+  f->close_section();
+}
+

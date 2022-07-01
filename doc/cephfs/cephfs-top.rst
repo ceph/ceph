@@ -13,7 +13,7 @@ Manager Plugin
 
 Ceph Filesystem clients periodically forward various metrics to Ceph Metadata Servers (MDS)
 which in turn get forwarded to Ceph Manager by MDS rank zero. Each active MDS forward its
-respective set of metrics to MDS rank zero. Metrics are aggergated and forwarded to Ceph
+respective set of metrics to MDS rank zero. Metrics are aggregated and forwarded to Ceph
 Manager.
 
 Metrics are divided into two categories - global and per-mds. Global metrics represent
@@ -29,7 +29,7 @@ metrics are for a particular MDS rank (e.g., number of subtrees handled by an MD
 Once enabled, Ceph Filesystem metrics can be fetched via::
 
   $ ceph fs perf stats
-  {"version": 1, "global_counters": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease"], "counters": [], "client_metadata": {"client.614146": {"IP": "10.1.1.100", "hostname"  : "ceph-host1", "root": "/", "mount_point": "/mnt/cephfs", "valid_metrics": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease"]}}, "global_metrics": {"client.614146": [[0,  0], [0, 0], [0, 0], [0, 0], [0, 0]]}, "metrics": {"delayed_ranks": [], "mds.0": {"client.614146": []}}}
+  {"version": 1, "global_counters": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease", "opened_files", "pinned_icaps", "opened_inodes", "avg_read_latency", "stdev_read_latency", "avg_write_latency", "stdev_write_latency", "avg_metadata_latency", "stdev_metadata_latency"], "counters": [], "client_metadata": {"client.324130": {"IP": "192.168.1.100", "hostname": "ceph-host1", "root": "/", "mount_point": "/mnt/cephfs", "valid_metrics": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease, "opened_files", "pinned_icaps", "opened_inodes", "avg_read_latency", "stdev_read_latency", "avg_write_latency", "stdev_write_latency", "avg_metadata_latency", "stdev_metadata_latency"]}}, "global_metrics": {"client.324130": [[309785, 1280], [0, 0], [197, 519015022], [88, 279074768], [12, 70147], [0, 3], [3, 3], [0, 3], [0, 0], [0, 0], [0, 11699223], [0, 88245], [0, 6596951], [0, 9539]]}, "metrics": {"delayed_ranks": [], "mds.0": {"client.324130": []}}}
 
 Details of the JSON command output are as follows:
 
@@ -44,7 +44,7 @@ Details of the JSON command output are as follows:
           This can happen in cases such as (temporary) network issue between MDS rank zero
           and other active MDSs.
 
-Metrics can be fetched for a partcilar client and/or for a set of active MDSs. To fetch metrics
+Metrics can be fetched for a particular client and/or for a set of active MDSs. To fetch metrics
 for a particular client (e.g., for client-id: 1234)::
 
   $ ceph fs perf stats --client_id=1234
@@ -72,11 +72,11 @@ By default, `cephfs-top` connects to cluster name `ceph`. To use a non-default c
 
   $ cephfs-top --cluster <cluster>
 
-`cephfs-top` refreshes stats every second by default. To chose a different refresh interval use::
+`cephfs-top` refreshes stats every second by default. To choose a different refresh interval use::
 
   $ cephfs-top -d <seconds>
 
-Interval should be greater or equal to 0.5 second. Fractional seconds are honoured.
+Interval should be greater than or equal to 0.5 seconds. Fractional seconds are honoured.
 
 Sample screenshot running `cephfs-top` with 2 clients:
 

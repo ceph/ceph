@@ -27,80 +27,6 @@ using std::ostream;
 using std::ostringstream;
 using std::string;
 
-int parse_log_client_options(CephContext *cct,
-			     map<string,string> &log_to_monitors,
-			     map<string,string> &log_to_syslog,
-			     map<string,string> &log_channels,
-			     map<string,string> &log_prios,
-			     map<string,string> &log_to_graylog,
-			     map<string,string> &log_to_graylog_host,
-			     map<string,string> &log_to_graylog_port,
-			     uuid_d &fsid,
-			     string &host)
-{
-  ostringstream oss;
-
-  int r = get_conf_str_map_helper(
-    cct->_conf.get_val<string>("clog_to_monitors"), oss,
-    &log_to_monitors, CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    lderr(cct) << __func__ << " error parsing 'clog_to_monitors'" << dendl;
-    return r;
-  }
-
-  r = get_conf_str_map_helper(
-    cct->_conf.get_val<string>("clog_to_syslog"), oss,
-                              &log_to_syslog, CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    lderr(cct) << __func__ << " error parsing 'clog_to_syslog'" << dendl;
-    return r;
-  }
-
-  r = get_conf_str_map_helper(
-    cct->_conf.get_val<string>("clog_to_syslog_facility"), oss,
-    &log_channels, CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    lderr(cct) << __func__ << " error parsing 'clog_to_syslog_facility'" << dendl;
-    return r;
-  }
-
-  r = get_conf_str_map_helper(
-    cct->_conf.get_val<string>("clog_to_syslog_level"), oss,
-    &log_prios, CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    lderr(cct) << __func__ << " error parsing 'clog_to_syslog_level'" << dendl;
-    return r;
-  }
-
-  r = get_conf_str_map_helper(
-    cct->_conf.get_val<string>("clog_to_graylog"), oss,
-    &log_to_graylog, CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    lderr(cct) << __func__ << " error parsing 'clog_to_graylog'" << dendl;
-    return r;
-  }
-
-  r = get_conf_str_map_helper(
-    cct->_conf.get_val<string>("clog_to_graylog_host"), oss,
-    &log_to_graylog_host, CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    lderr(cct) << __func__ << " error parsing 'clog_to_graylog_host'" << dendl;
-    return r;
-  }
-
-  r = get_conf_str_map_helper(
-    cct->_conf.get_val<string>("clog_to_graylog_port"), oss,
-    &log_to_graylog_port, CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    lderr(cct) << __func__ << " error parsing 'clog_to_graylog_port'" << dendl;
-    return r;
-  }
-
-  fsid = cct->_conf.get_val<uuid_d>("fsid");
-  host = cct->_conf->host;
-  return 0;
-}
-
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, LogClient *logc) {
@@ -141,41 +67,23 @@ void LogChannel::set_log_to_monitors(bool v)
   }
 }
 
-void LogChannel::update_config(map<string,string> &log_to_monitors,
-			       map<string,string> &log_to_syslog,
-			       map<string,string> &log_channels,
-			       map<string,string> &log_prios,
-			       map<string,string> &log_to_graylog,
-			       map<string,string> &log_to_graylog_host,
-			       map<string,string> &log_to_graylog_port,
-			       uuid_d &fsid,
-			       string &host)
+void LogChannel::update_config(const clog_targets_conf_t& conf_strings)
 {
-  ldout(cct, 20) << __func__ << " log_to_monitors " << log_to_monitors
-		 << " log_to_syslog " << log_to_syslog
-		 << " log_channels " << log_channels
-		 << " log_prios " << log_prios
+  ldout(cct, 20) << __func__ << " log_to_monitors " << conf_strings.log_to_monitors
+		 << " log_to_syslog " << conf_strings.log_to_syslog
+		 << " log_channels " << conf_strings.log_channels
+		 << " log_prios " << conf_strings.log_prios
 		 << dendl;
-  bool to_monitors = (get_str_map_key(log_to_monitors, log_channel,
-                                      &CLOG_CONFIG_DEFAULT_KEY) == "true");
-  bool to_syslog = (get_str_map_key(log_to_syslog, log_channel,
-                                    &CLOG_CONFIG_DEFAULT_KEY) == "true");
-  string syslog_facility = get_str_map_key(log_channels, log_channel,
-					   &CLOG_CONFIG_DEFAULT_KEY);
-  string prio = get_str_map_key(log_prios, log_channel,
-				&CLOG_CONFIG_DEFAULT_KEY);
-  bool to_graylog = (get_str_map_key(log_to_graylog, log_channel,
-				     &CLOG_CONFIG_DEFAULT_KEY) == "true");
-  string graylog_host = get_str_map_key(log_to_graylog_host, log_channel,
-				       &CLOG_CONFIG_DEFAULT_KEY);
-  string graylog_port_str = get_str_map_key(log_to_graylog_port, log_channel,
-					    &CLOG_CONFIG_DEFAULT_KEY);
-  int graylog_port = atoi(graylog_port_str.c_str());
+
+  bool to_monitors = (conf_strings.log_to_monitors == "true");
+  bool to_syslog = (conf_strings.log_to_syslog == "true");
+  bool to_graylog = (conf_strings.log_to_graylog == "true");
+  auto graylog_port = atoi(conf_strings.log_to_graylog_port.c_str());
 
   set_log_to_monitors(to_monitors);
   set_log_to_syslog(to_syslog);
-  set_syslog_facility(syslog_facility);
-  set_log_prio(prio);
+  set_syslog_facility(conf_strings.log_channels);
+  set_log_prio(conf_strings.log_prios);
 
   if (to_graylog && !graylog) { /* should but isn't */
     graylog = std::make_shared<ceph::logging::Graylog>("clog");
@@ -184,23 +92,61 @@ void LogChannel::update_config(map<string,string> &log_to_monitors,
   }
 
   if (to_graylog && graylog) {
-    graylog->set_fsid(fsid);
-    graylog->set_hostname(host);
+    graylog->set_fsid(conf_strings.fsid);
+    graylog->set_hostname(conf_strings.host);
   }
 
-  if (graylog && (!graylog_host.empty()) && (graylog_port != 0)) {
-    graylog->set_destination(graylog_host, graylog_port);
+  if (graylog && !conf_strings.log_to_graylog_host.empty() && (graylog_port != 0)) {
+    graylog->set_destination(conf_strings.log_to_graylog_host, graylog_port);
   }
 
   ldout(cct, 10) << __func__
 		 << " to_monitors: " << (to_monitors ? "true" : "false")
 		 << " to_syslog: " << (to_syslog ? "true" : "false")
-		 << " syslog_facility: " << syslog_facility
-		 << " prio: " << prio
+		 << " syslog_facility: " << conf_strings.log_channels
+		 << " prio: " << conf_strings.log_prios
 		 << " to_graylog: " << (to_graylog ? "true" : "false")
-		 << " graylog_host: " << graylog_host
+		 << " graylog_host: " << conf_strings.log_to_graylog_host
 		 << " graylog_port: " << graylog_port
 		 << ")" << dendl;
+}
+
+clog_targets_conf_t LogChannel::parse_client_options(CephContext* conf_cct)
+{
+  auto parsed_options = parse_log_client_options(conf_cct);
+  update_config(parsed_options);
+  return parsed_options;
+}
+
+clog_targets_conf_t LogChannel::parse_log_client_options(CephContext* cct)
+{
+  clog_targets_conf_t targets;
+
+  targets.log_to_monitors =
+    get_value_via_strmap(cct->_conf.get_val<string>("clog_to_monitors"),
+                         log_channel, CLOG_CONFIG_DEFAULT_KEY);
+  targets.log_to_syslog =
+    get_value_via_strmap(cct->_conf.get_val<string>("clog_to_syslog"),
+                         log_channel, CLOG_CONFIG_DEFAULT_KEY);
+  targets.log_channels =
+    get_value_via_strmap(cct->_conf.get_val<string>("clog_to_syslog_facility"),
+                         log_channel, CLOG_CONFIG_DEFAULT_KEY);
+  targets.log_prios =
+    get_value_via_strmap(cct->_conf.get_val<string>("clog_to_syslog_level"),
+                         log_channel, CLOG_CONFIG_DEFAULT_KEY);
+  targets.log_to_graylog =
+    get_value_via_strmap(cct->_conf.get_val<string>("clog_to_graylog"),
+                         log_channel, CLOG_CONFIG_DEFAULT_KEY);
+  targets.log_to_graylog_host =
+    get_value_via_strmap(cct->_conf.get_val<string>("clog_to_graylog_host"),
+                         log_channel, CLOG_CONFIG_DEFAULT_KEY);
+  targets.log_to_graylog_port =
+    get_value_via_strmap(cct->_conf.get_val<string>("clog_to_graylog_port"),
+                         log_channel, CLOG_CONFIG_DEFAULT_KEY);
+
+  targets.fsid = cct->_conf.get_val<uuid_d>("fsid");
+  targets.host = cct->_conf->host;
+  return targets;
 }
 
 void LogChannel::do_log(clog_type prio, std::stringstream& ss)

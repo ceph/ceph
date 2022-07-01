@@ -76,6 +76,17 @@ service.
 For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
 
+Deployment of NFS daemons and the ingress service is asynchronous: the
+command may return before the services have completely started. You may
+wish to check that these services do successfully start and stay running.
+When using cephadm orchestration, these commands check service status:
+
+.. code:: bash
+
+    $ ceph orch ls --service_name=nfs.<cluster_id>
+    $ ceph orch ls --service_name=ingress.nfs.<cluster_id>
+
+
 Ingress
 -------
 
@@ -127,6 +138,18 @@ Delete NFS Ganesha Cluster
     $ ceph nfs cluster rm <cluster_id>
 
 This deletes the deployed cluster.
+
+
+Removal of NFS daemons and the ingress service is asynchronous: the
+command may return before the services have been completely deleted. You may
+wish to check that these services are no longer reported. When using cephadm
+orchestration, these commands check service status:
+
+.. code:: bash
+
+    $ ceph orch ls --service_name=nfs.<cluster_id>
+    $ ceph orch ls --service_name=ingress.nfs.<cluster_id>
+
 
 Updating an NFS Cluster
 -----------------------
@@ -204,6 +227,15 @@ Example use cases include:
 
          # ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=.nfs namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow rw path=<export_path>'
 
+View Customized NFS Ganesha Configuration
+-----------------------------------------
+
+.. code:: bash
+
+    $ ceph nfs cluster config get <cluster_id>
+
+This will output the user defined configuration (if any).
+
 Reset NFS Ganesha Configuration
 -------------------------------
 
@@ -230,16 +262,16 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create cephfs <fsname> <cluster_id> <pseudo_path> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>]
+    $ ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>]
 
 This creates export RADOS objects containing the export block, where
-
-``<fsname>`` is the name of the FS volume used by the NFS Ganesha cluster
-that will serve this export.
 
 ``<cluster_id>`` is the NFS Ganesha cluster ID.
 
 ``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server. It must be an absolute path and unique.
+
+``<fsname>`` is the name of the FS volume used by the NFS Ganesha cluster
+that will serve this export.
 
 ``<path>`` is the path within cephfs. Valid path should be given and default
 path is '/'. It need not be unique. Subvolume path can be fetched using:
@@ -262,27 +294,41 @@ permissible values.
 Create RGW Export
 -----------------
 
-To export a bucket
+There are two kinds of RGW exports:
+
+- a *user* export will export all buckets owned by an
+  RGW user, where the top-level directory of the export is a list of buckets.
+- a *bucket* export will export a single bucket, where the top-level directory contains
+  the objects in the bucket.
+
+RGW bucket export
+^^^^^^^^^^^^^^^^^
+  
+To export a *bucket*:
 
 .. code::
 
-   $ ceph nfs export create rgw <bucket_name> <cluster_id> <pseudo_path> [--readonly] [--client_addr <value>...] [--squash <value>]
+   $ ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>]
 
 For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */bucketdata* to any host in the ``192.168.10.0/24`` network
 
 .. code::
 
-   $ ceph nfs export create rgw mybucket mynfs /bucketdata --client_addr 192.168.10.0/24
+   $ ceph nfs export create rgw --cluster-id mynfs --pseudo-path /bucketdata --bucket mybucket --client_addr 192.168.10.0/24
 
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
-
-``<bucket_name>`` is the name of the bucket that will be exported.
-
-.. note:: Currently, if multi-site RGW is enabled, Ceph can only export RGW buckets in the default realm.
 
 ``<cluster_id>`` is the NFS Ganesha cluster ID.
 
 ``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server. It must be an absolute path and unique.
+
+``<bucket_name>`` is the name of the bucket that will be exported.
+
+``<user_id>`` is optional, and specifies which RGW user will be used for read and write
+operations to the bucket.  If it is not specified, the user who owns the bucket will be
+used.
+
+.. note:: Currently, if multi-site RGW is enabled, Ceph can only export RGW buckets in the default realm.
 
 ``<client_addr>`` is the list of client address for which these export
 permissions will be applicable. By default all clients can access the export
@@ -292,6 +338,22 @@ for permissible values.
 ``<squash>`` defines the kind of user id squashing to be performed. The default
 value is `no_root_squash`. See the `NFS-Ganesha Export Sample`_ for
 permissible values.
+
+RGW user export
+^^^^^^^^^^^^^^^
+
+To export an RGW *user*:
+
+.. code::
+
+   $ ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --user-id <user-id> [--readonly] [--client_addr <value>...] [--squash <value>]
+
+For example, to export *myuser* via NFS cluster *mynfs* at the pseudo-path */myuser* to any host in the ``192.168.10.0/24`` network
+
+.. code::
+
+   $ ceph nfs export create rgw --cluster-id mynfs --pseudo-path /bucketdata --user-id myuser --client_addr 192.168.10.0/24
+
 
 Delete Export
 -------------
@@ -494,20 +556,26 @@ The NFS log level can be adjusted using `nfs cluster config set` command (see :r
 Manual Ganesha deployment
 =========================
 
-It may be possible to deploy and manage the NFS ganesha daemons manually
-instead of allowing cephadm or rook to do so.
+It may be possible to deploy and manage the NFS ganesha daemons without
+orchestration frameworks such as cephadm or rook.
 
 .. note:: Manual configuration is not tested or fully documented; your
           mileage may vary. If you make this work, please help us by
           updating this documentation.
 
-Known issues
+Limitations
 ------------
 
-* The ``mgr/nfs`` module enumerates NFS clusters via the orchestrator API; if NFS is
-  not managed by the orchestrator (e.g., cephadm or rook) then this will not work.  It
-  may be possible to create the cluster, mark the cephadm service as 'unmanaged', but this
-  is awkward and not ideal.
+If no orchestrator module is enabled for the Ceph Manager the NFS cluster
+management commands, such as those starting with ``ceph nfs cluster``, will not
+function. However, commands that manage NFS exports, like those prefixed with
+``ceph nfs export`` are expected to work as long as the necessary RADOS objects
+have already been created. The exact RADOS objects required are not documented
+at this time as support for this feature is incomplete. A curious reader can
+find some details about the object by reading the source code for the
+``mgr/nfs`` module (found in the ceph source tree under
+``src/pybind/mgr/nfs``).
+
 
 Requirements
 ------------

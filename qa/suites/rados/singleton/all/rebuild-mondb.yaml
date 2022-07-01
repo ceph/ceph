@@ -24,6 +24,9 @@ tasks:
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
+    conf:
+      mon:
+        debug auth: 30
 - full_sequential:
   - radosbench:
       clients: [client.0]

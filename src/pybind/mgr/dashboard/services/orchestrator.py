@@ -67,6 +67,10 @@ class HostManger(ResourceManager):
         return self.api.add_host(HostSpec(hostname, addr=addr, labels=labels))
 
     @wait_api_result
+    def get_facts(self, hostname: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self.api.get_facts(hostname)
+
+    @wait_api_result
     def remove(self, hostname: str):
         return self.api.remove_host(hostname)
 
@@ -77,6 +81,10 @@ class HostManger(ResourceManager):
     @wait_api_result
     def remove_label(self, host: str, label: str) -> OrchResult[str]:
         return self.api.remove_host_label(host, label)
+
+    @wait_api_result
+    def drain(self, hostname: str):
+        return self.api.drain_host(hostname)
 
 
 class InventoryManager(ResourceManager):
@@ -143,6 +151,12 @@ class OsdManager(ResourceManager):
         return self.api.remove_osds_status()
 
 
+class DaemonManager(ResourceManager):
+    @wait_api_result
+    def action(self, daemon_name='', action='', image=None):
+        return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image)
+
+
 class OrchClient(object):
 
     _instance = None
@@ -161,6 +175,7 @@ class OrchClient(object):
         self.inventory = InventoryManager(self.api)
         self.services = ServiceManager(self.api)
         self.osds = OsdManager(self.api)
+        self.daemons = DaemonManager(self.api)
 
     def available(self, features: Optional[List[str]] = None) -> bool:
         available = self.status()['available']
@@ -188,15 +203,17 @@ class OrchClient(object):
 
 class OrchFeature(object):
     HOST_LIST = 'get_hosts'
-    HOST_CREATE = 'add_host'
-    HOST_DELETE = 'remove_host'
+    HOST_ADD = 'add_host'
+    HOST_REMOVE = 'remove_host'
     HOST_LABEL_ADD = 'add_host_label'
     HOST_LABEL_REMOVE = 'remove_host_label'
     HOST_MAINTENANCE_ENTER = 'enter_host_maintenance'
     HOST_MAINTENANCE_EXIT = 'exit_host_maintenance'
+    HOST_DRAIN = 'drain_host'
 
     SERVICE_LIST = 'describe_service'
     SERVICE_CREATE = 'apply'
+    SERVICE_EDIT = 'apply'
     SERVICE_DELETE = 'remove_service'
     SERVICE_RELOAD = 'service_action'
     DAEMON_LIST = 'list_daemons'
@@ -208,3 +225,5 @@ class OrchFeature(object):
 
     DEVICE_LIST = 'get_inventory'
     DEVICE_BLINK_LIGHT = 'blink_device_light'
+
+    DAEMON_ACTION = 'daemon_action'

@@ -25,6 +25,14 @@ enum ClientMetricType {
   CLIENT_METRIC_TYPE_OPENED_FILES,
   CLIENT_METRIC_TYPE_PINNED_ICAPS,
   CLIENT_METRIC_TYPE_OPENED_INODES,
+  CLIENT_METRIC_TYPE_READ_IO_SIZES,
+  CLIENT_METRIC_TYPE_WRITE_IO_SIZES,
+  CLIENT_METRIC_TYPE_AVG_READ_LATENCY,
+  CLIENT_METRIC_TYPE_STDEV_READ_LATENCY,
+  CLIENT_METRIC_TYPE_AVG_WRITE_LATENCY,
+  CLIENT_METRIC_TYPE_STDEV_WRITE_LATENCY,
+  CLIENT_METRIC_TYPE_AVG_METADATA_LATENCY,
+  CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY,
 };
 inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) {
   switch(type) {
@@ -51,6 +59,30 @@ inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) 
     break;
   case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES:
     os << "OPENED_INODES";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_READ_IO_SIZES:
+    os << "READ_IO_SIZES";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_WRITE_IO_SIZES:
+    os << "WRITE_IO_SIZES";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_AVG_READ_LATENCY:
+    os << "AVG_READ_LATENCY";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_STDEV_READ_LATENCY:
+    os << "STDEV_READ_LATENCY";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_AVG_WRITE_LATENCY:
+    os << "AVG_WRITE_LATENCY";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_STDEV_WRITE_LATENCY:
+    os << "STDEV_WRITE_LATENCY";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_AVG_METADATA_LATENCY:
+    os << "AVG_METADATA_LATENCY";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY:
+    os << "STDEV_METADATA_LATENCY";
     break;
   default:
     os << "(UNKNOWN:" << static_cast<std::underlying_type<ClientMetricType>::type>(type) << ")";
@@ -120,97 +152,154 @@ struct CapInfoPayload : public ClientMetricPayloadBase {
 
 struct ReadLatencyPayload : public ClientMetricPayloadBase {
   utime_t lat;
+  utime_t mean;
+  uint64_t sq_sum;  // sum of squares
+  uint64_t count;   // IO count
 
   ReadLatencyPayload()
     : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_READ_LATENCY) { }
-  ReadLatencyPayload(utime_t lat)
-    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_READ_LATENCY), lat(lat) {
+  ReadLatencyPayload(utime_t lat, utime_t mean, uint64_t sq_sum, uint64_t count)
+    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_READ_LATENCY),
+      lat(lat),
+      mean(mean),
+      sq_sum(sq_sum),
+      count(count) {
   }
 
   void encode(bufferlist &bl) const {
     using ceph::encode;
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(lat, bl);
+    encode(mean, bl);
+    encode(sq_sum, bl);
+    encode(count, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator &iter) {
     using ceph::decode;
-    DECODE_START(1, iter);
+    DECODE_START(2, iter);
     decode(lat, iter);
+    if (struct_v >= 2) {
+      decode(mean, iter);
+      decode(sq_sum, iter);
+      decode(count, iter);
+    }
     DECODE_FINISH(iter);
   }
 
   void dump(Formatter *f) const {
     f->dump_int("latency", lat);
+    f->dump_int("avg_latency", mean);
+    f->dump_unsigned("sq_sum", sq_sum);
+    f->dump_unsigned("count", count);
   }
 
   void print(std::ostream *out) const {
-    *out << "latency: " << lat;
+    *out << "latency: " << lat << ", avg_latency: " << mean
+         << ", sq_sum: " << sq_sum << ", count=" << count;
   }
 };
 
 struct WriteLatencyPayload : public ClientMetricPayloadBase {
   utime_t lat;
+  utime_t mean;
+  uint64_t sq_sum;  // sum of squares
+  uint64_t count;   // IO count
 
   WriteLatencyPayload()
     : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_WRITE_LATENCY) { }
-  WriteLatencyPayload(utime_t lat)
-    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_WRITE_LATENCY), lat(lat) {
+  WriteLatencyPayload(utime_t lat, utime_t mean, uint64_t sq_sum, uint64_t count)
+    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_WRITE_LATENCY),
+      lat(lat),
+      mean(mean),
+      sq_sum(sq_sum),
+      count(count){
   }
 
   void encode(bufferlist &bl) const {
     using ceph::encode;
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(lat, bl);
+    encode(mean, bl);
+    encode(sq_sum, bl);
+    encode(count, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator &iter) {
     using ceph::decode;
-    DECODE_START(1, iter);
+    DECODE_START(2, iter);
     decode(lat, iter);
+    if (struct_v >= 2) {
+      decode(mean, iter);
+      decode(sq_sum, iter);
+      decode(count, iter);
+    }
     DECODE_FINISH(iter);
   }
 
   void dump(Formatter *f) const {
     f->dump_int("latency", lat);
+    f->dump_int("avg_latency", mean);
+    f->dump_unsigned("sq_sum", sq_sum);
+    f->dump_unsigned("count", count);
   }
 
   void print(std::ostream *out) const {
-    *out << "latency: " << lat;
+    *out << "latency: " << lat << ", avg_latency: " << mean
+         << ", sq_sum: " << sq_sum << ", count=" << count;
   }
 };
 
 struct MetadataLatencyPayload : public ClientMetricPayloadBase {
   utime_t lat;
+  utime_t mean;
+  uint64_t sq_sum;  // sum of squares
+  uint64_t count;   // IO count
 
   MetadataLatencyPayload()
-    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_METADATA_LATENCY) { }
-  MetadataLatencyPayload(utime_t lat)
-    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_METADATA_LATENCY), lat(lat) {
+  : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_METADATA_LATENCY) { }
+  MetadataLatencyPayload(utime_t lat, utime_t mean, uint64_t sq_sum, uint64_t count)
+    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_METADATA_LATENCY),
+      lat(lat),
+      mean(mean),
+      sq_sum(sq_sum),
+      count(count) {
   }
 
   void encode(bufferlist &bl) const {
     using ceph::encode;
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(lat, bl);
+    encode(mean, bl);
+    encode(sq_sum, bl);
+    encode(count, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator &iter) {
     using ceph::decode;
-    DECODE_START(1, iter);
+    DECODE_START(2, iter);
     decode(lat, iter);
+    if (struct_v >= 2) {
+      decode(mean, iter);
+      decode(sq_sum, iter);
+      decode(count, iter);
+    }
     DECODE_FINISH(iter);
   }
 
   void dump(Formatter *f) const {
     f->dump_int("latency", lat);
+    f->dump_int("avg_latency", mean);
+    f->dump_unsigned("sq_sum", sq_sum);
+    f->dump_unsigned("count", count);
   }
 
   void print(std::ostream *out) const {
-    *out << "latency: " << lat;
+    *out << "latency: " << lat << ", avg_latency: " << mean
+         << ", sq_sum: " << sq_sum << ", count=" << count;
   }
 };
 
@@ -367,6 +456,79 @@ struct OpenedInodesPayload : public ClientMetricPayloadBase {
   }
 };
 
+struct ReadIoSizesPayload : public ClientMetricPayloadBase {
+  uint64_t total_ops = 0;
+  uint64_t total_size = 0;
+
+  ReadIoSizesPayload()
+    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_READ_IO_SIZES) { }
+  ReadIoSizesPayload(uint64_t total_ops, uint64_t total_size)
+    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_READ_IO_SIZES),
+    total_ops(total_ops), total_size(total_size) {  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(total_ops, bl);
+    encode(total_size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(total_ops, iter);
+    decode(total_size, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("total_ops", total_ops);
+    f->dump_int("total_size", total_size);
+  }
+
+  void print(std::ostream *out) const {
+    *out << "total_ops: " << total_ops << " total_size: " << total_size;
+  }
+};
+
+struct WriteIoSizesPayload : public ClientMetricPayloadBase {
+  uint64_t total_ops = 0;
+  uint64_t total_size = 0;
+
+  WriteIoSizesPayload()
+    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_WRITE_IO_SIZES) { }
+  WriteIoSizesPayload(uint64_t total_ops, uint64_t total_size)
+    : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_WRITE_IO_SIZES),
+    total_ops(total_ops), total_size(total_size) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(total_ops, bl);
+    encode(total_size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(total_ops, iter);
+    decode(total_size, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("total_ops", total_ops);
+    f->dump_int("total_size", total_size);
+  }
+
+  void print(std::ostream *out) const {
+    *out << "total_ops: " << total_ops << " total_size: " << total_size;
+  }
+};
+
 struct UnknownPayload : public ClientMetricPayloadBase {
   UnknownPayload()
     : ClientMetricPayloadBase(static_cast<ClientMetricType>(-1)) { }
@@ -394,10 +556,12 @@ typedef boost::variant<CapInfoPayload,
                        ReadLatencyPayload,
                        WriteLatencyPayload,
                        MetadataLatencyPayload,
-		       DentryLeasePayload,
-		       OpenedFilesPayload,
-		       PinnedIcapsPayload,
-		       OpenedInodesPayload,
+                       DentryLeasePayload,
+                       OpenedFilesPayload,
+                       PinnedIcapsPayload,
+                       OpenedInodesPayload,
+                       ReadIoSizesPayload,
+                       WriteIoSizesPayload,
                        UnknownPayload> ClientMetricPayload;
 
 // metric update message sent by clients
@@ -505,6 +669,12 @@ public:
       break;
     case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES:
       payload = OpenedInodesPayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_READ_IO_SIZES:
+      payload = ReadIoSizesPayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_WRITE_IO_SIZES:
+      payload = WriteIoSizesPayload();
       break;
     default:
       payload = UnknownPayload(static_cast<ClientMetricType>(metric_type));

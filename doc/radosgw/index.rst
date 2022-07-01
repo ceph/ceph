@@ -82,4 +82,5 @@ you may write data with one API and retrieve it with the other.
    S3-select <s3select>
    Lua Scripting <lua-scripting>
    D3N Data Cache <d3n_datacache>
+   Cloud Transition <cloud-transition>
 

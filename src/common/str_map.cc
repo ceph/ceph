@@ -26,7 +26,7 @@ using namespace std;
 int get_json_str_map(
     const string &str,
     ostream &ss,
-    map<string,string> *str_map,
+    str_map_t *str_map,
     bool fallback_to_plain)
 {
   json_spirit::mValue json;
@@ -59,41 +59,49 @@ int get_json_str_map(
   return 0;
 }
 
-string trim(const string& str) {
-  return boost::algorithm::trim_copy_if(
-    str,
-    [](unsigned char c) {
-      return std::isspace(c);
-    });
+static std::string_view trim(std::string_view str)
+{
+  static const char* whitespaces = "\t\n ";
+  auto beg = str.find_first_not_of(whitespaces);
+  if (beg == str.npos) {
+    return {};
+  }
+  auto end = str.find_last_not_of(whitespaces);
+  return str.substr(beg, end - beg + 1);
 }
 
 int get_str_map(
     const string &str,
-    map<string,string> *str_map,
+    str_map_t* str_map,
     const char *delims)
 {
-  list<string> pairs;
-  get_str_list(str, delims, pairs);
-  for (list<string>::iterator i = pairs.begin(); i != pairs.end(); ++i) {
-    size_t equal = i->find('=');
-    if (equal == string::npos)
-      (*str_map)[*i] = string();
-    else {
-      const string key = trim(i->substr(0, equal));
-      equal++;
-      const string value = trim(i->substr(equal));
-      (*str_map)[key] = value;
+  for_each_pair(str, delims, [str_map](std::string_view key,
+				       std::string_view val) {
+    // is the format 'K=V' or just 'K'?
+    if (val.empty()) {
+      str_map->emplace(std::string(key), "");
+    } else {
+      str_map->emplace(std::string(trim(key)), std::string(trim(val)));
     }
-  }
+  });
   return 0;
 }
 
+str_map_t get_str_map(
+  const string& str,
+  const char* delim)
+{
+  str_map_t str_map;
+  get_str_map(str, &str_map, delim);
+  return str_map;
+}
+
 string get_str_map_value(
-    const map<string,string> &str_map,
+    const str_map_t &str_map,
     const string &key,
     const string *def_val)
 {
-  map<string,string>::const_iterator p = str_map.find(key);
+  auto p = str_map.find(key);
 
   // key exists in str_map
   if (p != str_map.end()) {
@@ -105,7 +113,7 @@ string get_str_map_value(
   }
 
   // key DNE in str_map and def_val was specified
-  if (def_val != NULL)
+  if (def_val != nullptr)
     return *def_val;
 
   // key DNE in str_map, no def_val was specified
@@ -113,15 +121,15 @@ string get_str_map_value(
 }
 
 string get_str_map_key(
-    const map<string,string> &str_map,
+    const str_map_t &str_map,
     const string &key,
     const string *fallback_key)
 {
-  map<string,string>::const_iterator p = str_map.find(key);
+  auto p = str_map.find(key);
   if (p != str_map.end())
     return p->second;
 
-  if (fallback_key != NULL) {
+  if (fallback_key != nullptr) {
     p = str_map.find(*fallback_key);
     if (p != str_map.end())
       return p->second;
@@ -138,22 +146,62 @@ string get_str_map_key(
 int get_conf_str_map_helper(
     const string &str,
     ostringstream &oss,
-    map<string,string> *m,
-    const string &def_key)
+    str_map_t* str_map,
+    const string &default_key)
 {
-  int r = get_str_map(str, m);
+  get_str_map(str, str_map);
 
-  if (r < 0) {
-    return r;
-  }
-
-  if (r >= 0 && m->size() == 1) {
-    map<string,string>::iterator p = m->begin();
+  if (str_map->size() == 1) {
+    auto p = str_map->begin();
     if (p->second.empty()) {
       string s = p->first;
-      m->erase(s);
-      (*m)[def_key] = s;
+      str_map->erase(s);
+      (*str_map)[default_key] = s;
     }
   }
-  return r;
+  return 0;
+}
+
+std::string get_value_via_strmap(
+  const string& conf_string,
+  std::string_view default_key)
+{
+  auto mp = get_str_map(conf_string);
+  if (mp.size() != 1) {
+    return "";
+  }
+
+  // if the one-elem "map" is of the form { 'value' : '' }
+  // replace it with { 'default_key' : 'value' }
+  const auto& [k, v] = *(mp.begin());
+  if (v.empty()) {
+    return k;
+  }
+  return v;
+}
+
+std::string get_value_via_strmap(
+  const string& conf_string,
+  const string& key,
+  std::string_view default_key)
+{
+  auto mp = get_str_map(conf_string);
+  if (mp.size() != 1) {
+    return std::string{};
+  }
+
+  // if the one-elem "map" is of the form { 'value' : '' }
+  // replace it with { 'default_key' : 'value' }
+  const auto& [k, v] = *(mp.begin());
+  if (v.empty()) {
+    return k;
+  }
+  if (k == key) {
+    return k;
+  }
+  if (k == default_key) {
+    return v;
+  }
+
+  return string{};
 }

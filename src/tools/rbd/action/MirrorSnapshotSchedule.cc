@@ -121,7 +121,7 @@ std::ostream& operator<<(std::ostream& os, ScheduleStatus &s) {
 void get_arguments_add(po::options_description *positional,
                        po::options_description *options) {
   add_level_spec_options(options);
-  add_schedule_options(positional);
+  add_schedule_options(positional, true);
 }
 
 int execute_add(const po::variables_map &vm,
@@ -156,7 +156,7 @@ int execute_add(const po::variables_map &vm,
 void get_arguments_remove(po::options_description *positional,
                           po::options_description *options) {
   add_level_spec_options(options);
-  add_schedule_options(positional);
+  add_schedule_options(positional, false);
 }
 
 int execute_remove(const po::variables_map &vm,

@@ -1,31 +1,36 @@
+
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import
 
 from cherrypy import NotFound
 
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
-from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, UiApiController
+from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, RESTController, UIRouter
+from ._version import APIVersion
 
 LIST_SCHEMA = {
     "rule_id": (int, 'Rule ID'),
     "rule_name": (str, 'Rule Name'),
+    "ruleset": (int, 'RuleSet related to the rule'),
     "type": (int, 'Type of Rule'),
+    "min_size": (int, 'Minimum size of Rule'),
+    "max_size": (int, 'Maximum size of Rule'),
     'steps': ([{str}], 'Steps included in the rule')
 }
 
 
-@ApiController('/crush_rule', Scope.POOL)
-@ControllerDoc("Crush Rule Management API", "CrushRule")
+@APIRouter('/crush_rule', Scope.POOL)
+@APIDoc("Crush Rule Management API", "CrushRule")
 class CrushRule(RESTController):
     @EndpointDoc("List Crush Rule Configuration",
                  responses={200: LIST_SCHEMA})
-    @RESTController.MethodMap(version='2.0')
+    @RESTController.MethodMap(version=APIVersion(2, 0))
     def list(self):
         return mgr.get('osd_map_crush')['rules']
 
-    @RESTController.MethodMap(version='2.0')
+    @RESTController.MethodMap(version=APIVersion(2, 0))
     def get(self, name):
         rules = mgr.get('osd_map_crush')['rules']
         for r in rules:
@@ -46,8 +51,8 @@ class CrushRule(RESTController):
         CephService.send_command('mon', 'osd crush rule rm', name=name)
 
 
-@UiApiController('/crush_rule', Scope.POOL)
-@ControllerDoc("Dashboard UI helper function; not part of the public API", "CrushRuleUi")
+@UIRouter('/crush_rule', Scope.POOL)
+@APIDoc("Dashboard UI helper function; not part of the public API", "CrushRuleUi")
 class CrushRuleUi(CrushRule):
     @Endpoint()
     @ReadPermission

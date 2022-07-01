@@ -271,12 +271,12 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   *zone_public_config = zone_iter->second;
   ldout(cct, 20) << "zone " << zone_params->get_name() << " found"  << dendl;
 
-  ldpp_dout(dpp, 1) << "Realm:     " << std::left << setw(20) << realm->get_name() << " (" << realm->get_id() << ")" << dendl;
-  ldpp_dout(dpp, 1) << "ZoneGroup: " << std::left << setw(20) << zonegroup->get_name() << " (" << zonegroup->get_id() << ")" << dendl;
-  ldpp_dout(dpp, 1) << "Zone:      " << std::left << setw(20) << zone_params->get_name() << " (" << zone_params->get_id() << ")" << dendl;
+  ldpp_dout(dpp, 4) << "Realm:     " << std::left << setw(20) << realm->get_name() << " (" << realm->get_id() << ")" << dendl;
+  ldpp_dout(dpp, 4) << "ZoneGroup: " << std::left << setw(20) << zonegroup->get_name() << " (" << zonegroup->get_id() << ")" << dendl;
+  ldpp_dout(dpp, 4) << "Zone:      " << std::left << setw(20) << zone_params->get_name() << " (" << zone_params->get_id() << ")" << dendl;
 
   if (init_from_period) {
-    ldpp_dout(dpp, 1) << "using period configuration: " << current_period->get_id() << ":" << current_period->get_epoch() << dendl;
+    ldpp_dout(dpp, 4) << "using period configuration: " << current_period->get_id() << ":" << current_period->get_epoch() << dendl;
     ret = init_zg_from_period(dpp, y);
     if (ret < 0) {
       return ret;
@@ -358,7 +358,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
       continue;
     }
     ldpp_dout(dpp, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-    RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints, zonegroup->api_name);
+    RGWRESTConn *conn = new RGWRESTConn(cct, z.id, z.endpoints, zone_params->system_key, zonegroup->get_id(), zonegroup->api_name);
     zone_conn_map[id] = conn;
 
     bool zone_is_source = source_zones.find(z.id) != source_zones.end();
@@ -565,6 +565,8 @@ int RGWSI_Zone::replace_region_with_zonegroup(const DoutPrefixProvider *dpp, opt
     unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char md5_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     MD5 hash;
+    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     hash.Update((const unsigned char *)new_realm_name.c_str(), new_realm_name.length());
     hash.Final(md5);
     buf_to_hex(md5, CEPH_CRYPTO_MD5_DIGESTSIZE, md5_str);
@@ -803,10 +805,10 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, optional_yiel
       }
     }
     const auto& endpoints = master->second.endpoints;
-    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), endpoints, zg.api_name));
+    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, zg.get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zg.api_name));
     if (!current_period->get_master_zonegroup().empty() &&
         zg.get_id() == current_period->get_master_zonegroup()) {
-      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), endpoints, zg.api_name);
+      rest_master_conn = new RGWRESTConn(cct, zg.get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zg.api_name);
     }
   }
 
@@ -870,7 +872,7 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield
       }
     }
     const auto& endpoints = master->second.endpoints;
-    rest_master_conn = new RGWRESTConn(cct, this, zonegroup->get_id(), endpoints, zonegroup->api_name);
+    rest_master_conn = new RGWRESTConn(cct, zonegroup->get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zonegroup->api_name);
   }
 
   return 0;
@@ -926,8 +928,8 @@ int RGWSI_Zone::convert_regionmap(const DoutPrefixProvider *dpp, optional_yield 
     }
   }
 
-  current_period->set_user_quota(zonegroupmap.user_quota);
-  current_period->set_bucket_quota(zonegroupmap.bucket_quota);
+  current_period->set_user_quota(zonegroupmap.quota.user_quota);
+  current_period->set_bucket_quota(zonegroupmap.quota.bucket_quota);
 
   // remove the region_map so we don't try to convert again
   ret = sysobj.wop().remove(dpp, y);
@@ -1074,8 +1076,14 @@ bool RGWSI_Zone::need_to_log_metadata() const
 
 bool RGWSI_Zone::can_reshard() const
 {
-  return current_period->get_id().empty() ||
-    (zonegroup->zones.size() == 1 && current_period->is_single_zonegroup());
+  if (current_period->get_id().empty()) {
+    return true; // no realm
+  }
+  if (zonegroup->zones.size() == 1 && current_period->is_single_zonegroup()) {
+    return true; // single zone/zonegroup
+  }
+  // 'resharding' feature enabled in zonegroup
+  return zonegroup->supports(rgw::zone_features::resharding);
 }
 
 /**

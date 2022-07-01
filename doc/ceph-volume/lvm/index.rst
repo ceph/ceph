@@ -15,6 +15,12 @@ Implements the functionality needed to deploy OSDs from the ``lvm`` subcommand:
 
 * :ref:`ceph-volume-lvm-list`
 
+* :ref:`ceph-volume-lvm-migrate`
+
+* :ref:`ceph-volume-lvm-newdb`
+
+* :ref:`ceph-volume-lvm-newwal`
+
 .. not yet implemented
 .. * :ref:`ceph-volume-lvm-scan`
 

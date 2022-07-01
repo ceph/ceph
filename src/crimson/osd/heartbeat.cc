@@ -48,7 +48,8 @@ Heartbeat::Heartbeat(osd_id_t whoami,
 seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
                                    entity_addrvec_t back_addrs)
 {
-  logger().info("heartbeat: start");
+  logger().info("heartbeat: start front_addrs={}, back_addrs={}",
+                front_addrs, back_addrs);
   // i only care about the address, so any unused port would work
   for (auto& addr : boost::join(front_addrs.v, back_addrs.v)) {
     addr.set_port(0);
@@ -73,14 +74,11 @@ seastar::future<>
 Heartbeat::start_messenger(crimson::net::Messenger& msgr,
                            const entity_addrvec_t& addrs)
 {
-  return msgr.try_bind(addrs,
-                       local_conf()->ms_bind_port_min,
-                       local_conf()->ms_bind_port_max)
-  .safe_then([this, &msgr]() mutable {
+  return msgr.bind(addrs).safe_then([this, &msgr]() mutable {
     return msgr.start({this});
   }, crimson::net::Messenger::bind_ertr::all_same_way(
-      [] (const std::error_code& e) {
-    logger().error("heartbeat messenger try_bind(): address range is unavailable.");
+      [addrs] (const std::error_code& e) {
+    logger().error("heartbeat messenger bind({}): {}", addrs, e);
     ceph_abort();
   }));
 }
@@ -107,6 +105,16 @@ const entity_addrvec_t& Heartbeat::get_front_addrs() const
 const entity_addrvec_t& Heartbeat::get_back_addrs() const
 {
   return back_msgr->get_myaddrs();
+}
+
+crimson::net::MessengerRef Heartbeat::get_front_msgr() const
+{
+  return front_msgr;
+}
+
+crimson::net::MessengerRef Heartbeat::get_back_msgr() const
+{
+  return back_msgr;
 }
 
 void Heartbeat::set_require_authorizer(bool require_authorizer)

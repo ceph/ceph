@@ -36,6 +36,12 @@ private:
    *  IMAGE_MAP_LIST. . . . . . .
    *        |
    *        v
+   *  MIRROR_IMAGE_LIST
+   *        |
+   *        v
+   *  CLEANUP_IMAGE_MAP
+   *        |
+   *        v
    *    <finish>
    *
    * @endverbatim
@@ -48,11 +54,18 @@ private:
   std::map<std::string, cls::rbd::MirrorImageMap> *m_image_mapping;
   Context *m_on_finish;
 
+  std::set<std::string> m_global_image_ids;
+
   bufferlist m_out_bl;
   std::string m_start_after;
 
   void image_map_list();
   void handle_image_map_list(int r);
+
+  void mirror_image_list();
+  void handle_mirror_image_list(int r);
+
+  void cleanup_image_map();
 
   void finish(int r);
 };

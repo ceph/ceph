@@ -34,7 +34,6 @@ public:
 private:
     I* m_image_ctx;
     Context* m_on_finish;
-    ceph::ref_t<CryptoInterface> m_crypto;
 };
 
 } // namespace crypto

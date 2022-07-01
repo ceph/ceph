@@ -4,6 +4,8 @@ NFS
 
 .. versionadded:: Jewel
 
+.. note:: Only the NFSv4 protocol is supported when using a cephadm or rook based deployment.
+
 Ceph Object Gateway namespaces can be exported over the file-based
 NFSv4 protocols, alongside traditional HTTP access
 protocols (S3 and Swift).
@@ -117,7 +119,7 @@ ceph.conf
 
 Required ceph.conf configuration for RGW NFS includes:
 
-* valid [client.radosgw.{instance-name}] section
+* valid [client.rgw.{instance-name}] section
 * valid values for minimal instance configuration, in particular, an installed and correct ``keyring``
 
 Other config variables are optional, front-end-specific and front-end
@@ -304,7 +306,7 @@ Ceph configuration file to change the refresh rate.
 
 If exporting Swift containers that do not conform to valid S3 bucket
 naming requirements, set ``rgw_relaxed_s3_bucket_names`` to true in the
-[client.radosgw] section of the Ceph configuration file. For example,
+[client.rgw] section of the Ceph configuration file. For example,
 if a Swift container name contains underscores, it is not a valid S3
 bucket name and will be rejected unless ``rgw_relaxed_s3_bucket_names``
 is set to true.

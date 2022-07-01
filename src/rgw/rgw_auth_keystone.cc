@@ -64,7 +64,7 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
   }
 
   std::string admin_token;
-  if (rgw::keystone::Service::get_admin_token(cct, token_cache, config,
+  if (rgw::keystone::Service::get_admin_token(dpp, cct, token_cache, config,
                                               admin_token) < 0) {
     throw -EINVAL;
   }
@@ -101,7 +101,7 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
                  << ", body=" << token_body_bl.c_str() << dendl;
 
   TokenEngine::token_envelope_t token_body;
-  ret = token_body.parse(cct, token, token_body_bl, config.get_api_version());
+  ret = token_body.parse(dpp, cct, token, token_body_bl, config.get_api_version());
   if (ret < 0) {
     throw ret;
   }
@@ -134,8 +134,10 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token,
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
     level,
-    TYPE_KEYSTONE,
-  };
+    rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY,
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    TYPE_KEYSTONE
+};
 }
 
 static inline const std::string
@@ -286,7 +288,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   /* get authentication token for Keystone. */
   std::string admin_token;
-  int ret = rgw::keystone::Service::get_admin_token(cct, token_cache, config,
+  int ret = rgw::keystone::Service::get_admin_token(dpp, cct, token_cache, config,
                                                     admin_token);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"
@@ -343,7 +345,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   /* now parse response */
   rgw::keystone::TokenEnvelope token_envelope;
-  ret = token_envelope.parse(cct, std::string(), token_body_bl, api_version);
+  ret = token_envelope.parse(dpp, cct, std::string(), token_body_bl, api_version);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: token parsing failed, ret=0" << ret
                   << dendl;
@@ -379,7 +381,7 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
 
   /* get authentication token for Keystone. */
   std::string admin_token;
-  int ret = rgw::keystone::Service::get_admin_token(cct, token_cache, config,
+  int ret = rgw::keystone::Service::get_admin_token(dpp, cct, token_cache, config,
                                                     admin_token);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"
@@ -498,7 +500,8 @@ EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t&) const
 
 EC2Engine::auth_info_t
 EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
-                          const std::vector<std::string>& admin_roles
+                          const std::vector<std::string>& admin_roles,
+                          const std::string& access_key_id
                          ) const noexcept
 {
   using acct_privilege_t = \
@@ -522,7 +525,9 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
     level,
-    TYPE_KEYSTONE,
+    access_key_id,
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    TYPE_KEYSTONE
   };
 }
 
@@ -590,7 +595,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
                   << " expires: " << t->get_expires() << dendl;
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t, accepted_roles.admin));
+                                              get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)));
     return result_t::grant(std::move(apl), completer_factory(boost::none));
   }
 }

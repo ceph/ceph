@@ -109,6 +109,8 @@ enum {
   l_osdc_op_send_bytes,
   l_osdc_op_resend,
   l_osdc_op_reply,
+  l_osdc_op_latency,
+  l_osdc_op_inflight,
   l_osdc_oplen_avg,
 
   l_osdc_op,
@@ -261,6 +263,8 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes", "Sent data", NULL, 0, unit_t(UNIT_BYTES));
     pcb.add_u64_counter(l_osdc_op_resend, "op_resend", "Resent operations");
     pcb.add_u64_counter(l_osdc_op_reply, "op_reply", "Operation reply");
+    pcb.add_time_avg(l_osdc_op_latency, "op_latency", "Operation latency");
+    pcb.add_u64(l_osdc_op_inflight, "op_inflight", "Operations in flight");
     pcb.add_u64_avg(l_osdc_oplen_avg, "oplen_avg", "Average length of operation vector");
 
     pcb.add_u64_counter(l_osdc_op, "op", "Operations");
@@ -871,10 +875,15 @@ void Objecter::_linger_submit(LingerOp *info,
 
   // Populate Op::target
   OSDSession *s = NULL;
-  _calc_target(&info->target, nullptr);
+  int r = _calc_target(&info->target, nullptr);
+  switch (r) {
+  case RECALC_OP_TARGET_POOL_EIO:
+    _check_linger_pool_eio(info);
+    return;
+  }
 
   // Create LingerOp<->OSDSession relation
-  int r = _get_session(info->target.osd, &s, sul);
+  r = _get_session(info->target.osd, &s, sul);
   ceph_assert(r == 0);
   unique_lock sl(s->lock);
   _session_linger_op_assign(s, info);
@@ -1066,6 +1075,13 @@ void Objecter::_scan_requests(
 	unregister_lingers.push_back(op);
       }
       break;
+    case RECALC_OP_TARGET_POOL_EIO:
+      _check_linger_pool_eio(op);
+      ldout(cct, 10) << " need to unregister linger op "
+		     << op->linger_id << dendl;
+      op->get();
+      unregister_lingers.push_back(op);
+      break;
     }
   }
 
@@ -1094,6 +1110,9 @@ void Objecter::_scan_requests(
       break;
     case RECALC_OP_TARGET_POOL_DNE:
       _check_op_pool_dne(op, &sl);
+      break;
+    case RECALC_OP_TARGET_POOL_EIO:
+      _check_op_pool_eio(op, &sl);
       break;
     }
   }
@@ -1411,13 +1430,19 @@ void Objecter::emit_blocklist_events(const OSDMap &old_osd_map,
 
   std::set<entity_addr_t> old_set;
   std::set<entity_addr_t> new_set;
+  std::set<entity_addr_t> old_range_set;
+  std::set<entity_addr_t> new_range_set;
 
-  old_osd_map.get_blocklist(&old_set);
-  new_osd_map.get_blocklist(&new_set);
+  old_osd_map.get_blocklist(&old_set, &old_range_set);
+  new_osd_map.get_blocklist(&new_set, &new_range_set);
 
   std::set<entity_addr_t> delta_set;
   std::set_difference(
       new_set.begin(), new_set.end(), old_set.begin(), old_set.end(),
+      std::inserter(delta_set, delta_set.begin()));
+  std::set_difference(
+      new_range_set.begin(), new_range_set.end(),
+      old_range_set.begin(), old_range_set.end(),
       std::inserter(delta_set, delta_set.begin()));
   blocklist_events.insert(delta_set.begin(), delta_set.end());
 }
@@ -1565,6 +1590,37 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
   }
 }
 
+// sl may be unlocked.
+void Objecter::_check_op_pool_eio(Op *op, std::unique_lock<std::shared_mutex> *sl)
+{
+  // rwlock is locked unique
+
+  // we had a new enough map
+  ldout(cct, 10) << "check_op_pool_eio tid " << op->tid
+		 << " concluding pool " << op->target.base_pgid.pool()
+		 << " has eio" << dendl;
+  if (op->has_completion()) {
+    num_in_flight--;
+    op->complete(osdc_errc::pool_eio, -EIO);
+  }
+
+  OSDSession *s = op->session;
+  if (s) {
+    ceph_assert(s != NULL);
+    ceph_assert(sl->mutex() == &s->lock);
+    bool session_locked = sl->owns_lock();
+    if (!session_locked) {
+      sl->lock();
+    }
+    _finish_op(op, 0);
+    if (!session_locked) {
+      sl->unlock();
+    }
+  } else {
+    _finish_op(op, 0);	// no session
+  }
+}
+
 void Objecter::_send_op_map_check(Op *op)
 {
   // rwlock is locked unique
@@ -1656,6 +1712,23 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
     }
   } else {
     _send_linger_map_check(op);
+  }
+}
+
+void Objecter::_check_linger_pool_eio(LingerOp *op)
+{
+  // rwlock is locked unique
+
+  std::unique_lock wl{op->watch_lock};
+  if (op->on_reg_commit) {
+    op->on_reg_commit->defer(std::move(op->on_reg_commit),
+			     osdc_errc::pool_dne, cb::list{});
+    op->on_reg_commit = nullptr;
+  }
+  if (op->on_notify_finish) {
+    op->on_notify_finish->defer(std::move(op->on_notify_finish),
+				osdc_errc::pool_dne, cb::list{});
+    op->on_notify_finish = nullptr;
   }
 }
 
@@ -2316,11 +2389,21 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   ceph_assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool check_for_latest_map = _calc_target(&op->target, nullptr)
-    == RECALC_OP_TARGET_POOL_DNE;
+  bool check_for_latest_map = false;
+  int r = _calc_target(&op->target, nullptr);
+  switch(r) {
+  case RECALC_OP_TARGET_POOL_DNE:
+    check_for_latest_map = true;
+    break;
+  case RECALC_OP_TARGET_POOL_EIO:
+    if (op->has_completion()) {
+      op->complete(osdc_errc::pool_eio, -EIO);
+    }
+    return;
+  }
 
   // Try to get a session, including a retry if we need to take write lock
-  int r = _get_session(op->target.osd, &s, sul);
+  r = _get_session(op->target.osd, &s, sul);
   if (r == -EAGAIN ||
       (check_for_latest_map && sul.owns_lock_shared()) ||
       cct->_conf->objecter_debug_inject_relock_delay) {
@@ -2707,6 +2790,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->osd = -1;
     return RECALC_OP_TARGET_POOL_DNE;
   }
+
+  if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
+    return RECALC_OP_TARGET_POOL_EIO;
+  }
+
   ldout(cct,30) << __func__ << "  base pi " << pi
 		<< " pg_num " << pi->get_pg_num() << dendl;
 
@@ -3103,6 +3191,7 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
+  flags |= CEPH_OSD_FLAG_SUPPORTSPOOLEIO;
 
   // Nothing checks this any longer, but needed for compatibility with
   // pre-luminous osds
@@ -3477,6 +3566,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->onfinish = nullptr;
   }
   logger->inc(l_osdc_op_reply);
+  logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
+  logger->set(l_osdc_op_inflight, num_in_flight);
 
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);

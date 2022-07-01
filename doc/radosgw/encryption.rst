@@ -25,13 +25,14 @@ keys and remember which key was used to encrypt each object.
 
 This is implemented in S3 according to the `Amazon SSE-C`_ specification.
 
-As all key management is handled by the client, no special configuration is
-needed to support this encryption mode.
+As all key management is handled by the client, no special Ceph configuration
+is needed to support this encryption mode.
 
 Key Management Service
 ======================
 
-This mode allows keys to be stored in a secure key management service and
+In this mode, an administrator stores keys in a secure key management service.
+These keys are then
 retrieved on demand by the Ceph Object Gateway to serve requests to encrypt
 or decrypt data.
 
@@ -43,12 +44,26 @@ integration with `Barbican`_, `Vault`_, and `KMIP`_ are implemented.
 See `OpenStack Barbican Integration`_, `HashiCorp Vault Integration`_,
 and `KMIP Integration`_.
 
+SSE-S3
+======
+
+This makes key management invisible to the user.  They are still stored
+in vault, but they are automatically created and deleted by Ceph. and
+retrieved as required to serve requests to encrypt
+or decrypt data.
+
+This is implemented in S3 according to the `Amazon SSE-S3`_ specification.
+
+In principle, any key management service could be used here.  Currently
+only integration with `Vault`_, is implemented.
+
+See `HashiCorp Vault Integration`_.
+
 Bucket Encryption APIs
 ======================
 
 Bucket Encryption APIs to support server-side encryption with Amazon
 S3-managed keys (SSE-S3) or AWS KMS customer master keys (SSE-KMS). 
-SSE-KMS implementation via BucketEncryption APIs is not supported yet.
 
 See `PutBucketEncryption`_, `GetBucketEncryption`_, `DeleteBucketEncryption`_
 
@@ -69,6 +84,7 @@ The configuration expects a base64-encoded 256 bit key. For example::
 
 .. _Amazon SSE-C: https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html
 .. _Amazon SSE-KMS: http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
+.. _Amazon SSE-S3: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html
 .. _Barbican: https://wiki.openstack.org/wiki/Barbican
 .. _Vault: https://www.vaultproject.io/docs/
 .. _KMIP: http://www.oasis-open.org/committees/kmip/

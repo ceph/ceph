@@ -94,6 +94,8 @@ public:
   void dump_info(ceph::Formatter *f) const {
     digest.dump(f);
     f->dump_object("servicemap", get_service_map());
+    f->dump_unsigned("mgrstat_first_committed", get_first_committed());
+    f->dump_unsigned("mgrstat_last_committed", get_last_committed());
   }
   void dump_cluster_stats(std::stringstream *ss,
 			  ceph::Formatter *f,

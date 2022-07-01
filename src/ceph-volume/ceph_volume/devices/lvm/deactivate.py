@@ -54,8 +54,6 @@ class Deactivate(object):
 
             ceph-volume lvm deactivate {ID} {FSID}
 
-        To deactivate all volumes use the --all flag.
-            ceph-volume lvm deactivate --all
         """)
         parser = argparse.ArgumentParser(
             prog='ceph-volume lvm deactivate',

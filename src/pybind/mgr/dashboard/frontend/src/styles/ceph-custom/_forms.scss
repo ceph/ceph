@@ -27,6 +27,10 @@
   padding-top: 7px;
 }
 
+.custom-radio {
+  padding-top: 5px;
+}
+
 .cd-col-form {
   @extend .col-12;
   @extend .col-lg-8;
@@ -53,6 +57,17 @@
 }
 
 cd-modal {
+  .modal {
+    /* stylelint-disable */
+    background-color: rgba(0, 0, 0, 0.4);
+    /* stylelint-enable */
+    display: block;
+  }
+
+  .modal-dialog {
+    max-width: 70vh;
+  }
+
   .cd-col-form-label {
     @extend .col-lg-4;
   }

@@ -397,6 +397,8 @@ public:
 
     mempool::osdmap::map<entity_addr_t,utime_t> new_blocklist;
     mempool::osdmap::vector<entity_addr_t> old_blocklist;
+    mempool::osdmap::map<entity_addr_t,utime_t> new_range_blocklist;
+    mempool::osdmap::vector<entity_addr_t> old_range_blocklist;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_back_up;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_front_up;
 
@@ -582,7 +584,31 @@ private:
   std::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
+  class range_bits {
+    struct ip6 {
+      uint64_t upper_64_bits, lower_64_bits;
+      uint64_t upper_mask, lower_mask;
+    };
+    struct ip4 {
+      uint32_t ip_32_bits;
+      uint32_t mask;
+    };
+    union {
+      ip6 ipv6;
+      ip4 ipv4;
+    } bits;
+    bool ipv6;
+    static void get_ipv6_bytes(unsigned const char *addr,
+			uint64_t *upper, uint64_t *lower);
+  public:
+    range_bits();
+    range_bits(const entity_addr_t& addr);
+    void parse(const entity_addr_t& addr);
+    bool matches(const entity_addr_t& addr) const;
+  };
   mempool::osdmap::unordered_map<entity_addr_t,utime_t> blocklist;
+  mempool::osdmap::map<entity_addr_t,utime_t> range_blocklist;
+  mempool::osdmap::map<entity_addr_t,range_bits> calculated_ranges;
 
   /// queue of snaps to remove
   mempool::osdmap::map<int64_t, snap_interval_set_t> removed_snaps_queue;
@@ -693,10 +719,12 @@ public:
   const utime_t& get_created() const { return created; }
   const utime_t& get_modified() const { return modified; }
 
-  bool is_blocklisted(const entity_addr_t& a) const;
-  bool is_blocklisted(const entity_addrvec_t& a) const;
-  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl) const;
-  void get_blocklist(std::set<entity_addr_t> *bl) const;
+  bool is_blocklisted(const entity_addr_t& a, CephContext *cct=nullptr) const;
+  bool is_blocklisted(const entity_addrvec_t& a, CephContext *cct=nullptr) const;
+  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl,
+		     std::list<std::pair<entity_addr_t,utime_t> > *rl) const;
+  void get_blocklist(std::set<entity_addr_t> *bl,
+		     std::set<entity_addr_t> *rl) const;
 
   std::string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
@@ -1430,9 +1458,106 @@ public:
     uint32_t max_deviation, ///< max deviation from target (value >= 1)
     int max_iterations,  ///< max iterations to run
     const std::set<int64_t>& pools,        ///< [optional] restrict to pool
-    Incremental *pending_inc
+    Incremental *pending_inc,
+    std::random_device::result_type *p_seed = nullptr  ///< [optional] for regression tests
     );
 
+private: // Bunch of internal functions used only by calc_pg_upmaps (result of code refactoring)
+  float build_pool_pgs_info (
+    CephContext *cct,
+    const std::set<int64_t>& pools,        ///< [optional] restrict to pool
+    const OSDMap& tmp_osd_map,
+    int& total_pgs,
+    std::map<int, std::set<pg_t>>& pgs_by_osd,
+    std::map<int,float>& osd_weight
+  );  // return total weight of all OSDs
+
+  float calc_deviations (
+    CephContext *cct,
+    const std::map<int,std::set<pg_t>>& pgs_by_osd,
+    const std::map<int,float>& osd_weight,
+    float pgs_per_weight,
+    std::map<int,float>& osd_deviation,
+    std::multimap<float,int>& deviation_osd,
+    float& stddev
+  );  // return current max deviation
+
+  void fill_overfull_underfull (
+    CephContext *cct,
+    const std::multimap<float,int>& deviation_osd,
+    int max_deviation,
+    std::set<int>& overfull,
+    std::set<int>& more_overfull,
+    std::vector<int>& underfull,
+    std::vector<int>& more_underfull
+  );
+
+  int pack_upmap_results(
+    CephContext *cct,
+    const std::set<pg_t>& to_unmap,
+    const std::map<pg_t, mempool::osdmap::vector<std::pair<int, int>>>& to_upmap,
+    OSDMap& tmp_osd_map,
+    OSDMap::Incremental *pending_inc
+  );
+  
+  std::default_random_engine get_random_engine(
+    CephContext *cct,
+    std::random_device::result_type *p_seed
+  );
+
+  bool try_drop_remap_overfull(
+    CephContext *cct,
+    const std::vector<pg_t>& pgs,
+    const OSDMap& tmp_osd_map,
+    int osd,
+    std::map<int,std::set<pg_t>>& temp_pgs_by_osd,
+    std::set<pg_t>& to_unmap,
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap
+  );
+
+typedef std::vector<std::pair<pg_t, mempool::osdmap::vector<std::pair<int, int>>>>
+  candidates_t;
+
+bool try_drop_remap_underfull(
+    CephContext *cct,
+    const candidates_t& candidates,
+    int osd,
+    std::map<int,std::set<pg_t>>& temp_pgs_by_osd,
+    std::set<pg_t>& to_unmap,
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap
+  );
+
+  void add_remap_pair(
+    CephContext *cct,
+    int orig,
+    int out, 
+    pg_t pg,
+    size_t pg_pool_size,
+    int osd,
+    std::set<int>& existing,
+    std::map<int,std::set<pg_t>>& temp_pgs_by_osd,
+    mempool::osdmap::vector<std::pair<int32_t,int32_t>> new_upmap_items,
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap
+  );
+
+  int find_best_remap (
+    CephContext *cct,
+    const std::vector<int>& orig,
+    const std::vector<int>& out,
+    const std::set<int>& existing,
+    const std::map<int,float> osd_deviation
+  );
+
+  candidates_t build_candidates(
+    CephContext *cct,
+    const OSDMap& tmp_osd_map,
+    const std::set<pg_t> to_skip,
+    const std::set<int64_t>& only_pools,
+    bool aggressive,
+    std::random_device::result_type *p_seed
+  );
+
+public:
   int get_osds_by_bucket_name(const std::string &name, std::set<int> *osds) const;
 
   bool have_pg_upmaps(pg_t pg) const {
@@ -1542,6 +1667,7 @@ public:
 			std::ostream *ss) const;
 
   float pool_raw_used_rate(int64_t poolid) const;
+  std::optional<std::string> pending_require_osd_release() const;
 
 };
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)

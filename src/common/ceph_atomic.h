@@ -42,6 +42,7 @@ namespace ceph {
     }
     T operator=(T desired) noexcept {
       value = std::move(desired);
+      return *this;
     }
     operator T() const noexcept {
       return value;
@@ -49,23 +50,30 @@ namespace ceph {
 
     // We need to differentiate with SFINAE as std::atomic offers beefier
     // interface for integral types.
-    std::enable_if_t<std::is_integral_v<T>, T> operator++() {
+
+    template<class TT=T>
+    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT>  operator++() {
       return ++value;
     }
-    std::enable_if_t<std::is_integral_v<T>, T> operator++(int) {
+    template<class TT=T>
+    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator++(int) {
       return value++;
     }
-    std::enable_if_t<std::is_integral_v<T>, T> operator--() {
+    template<class TT=T>
+    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator--() {
       return --value;
     }
-    std::enable_if_t<std::is_integral_v<T>, T> operator--(int) {
+    template<class TT=T>
+    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator--(int) {
       return value--;
     }
-    std::enable_if_t<std::is_integral_v<T>, T> operator+=(const dummy_atomic& b) {
+    template<class TT=T>
+    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator+=(const dummy_atomic& b) {
       value += b;
       return value;
     }
-    std::enable_if_t<std::is_integral_v<T>, T> operator-=(const dummy_atomic& b) {
+    template<class TT=T>
+    std::enable_if_t<!std::is_enum_v<TT> && std::is_integral_v<TT>, TT> operator-=(const dummy_atomic& b) {
       value -= b;
       return value;
     }

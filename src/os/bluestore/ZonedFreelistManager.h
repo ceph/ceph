@@ -22,8 +22,6 @@
 
 using cfg_reader_t = std::function<int(const std::string&, std::string*)>;
 
-const std::string CLEANING_IN_PROGRESS_KEY = "cleaning_in_progress";
-
 class ZonedFreelistManager : public FreelistManager {
   std::string meta_prefix;    ///< device size, zone size, etc.
   std::string info_prefix;    ///< per zone write pointer, dead bytes
@@ -38,9 +36,12 @@ class ZonedFreelistManager : public FreelistManager {
   KeyValueDB::Iterator enumerate_p;
   uint64_t enumerate_zone_num;
 
-  void write_zone_state_to_db(uint64_t zone_num,
-			      const zone_state_t &zone_state,
-			      KeyValueDB::Transaction txn);
+  void write_zone_state_delta_to_db(uint64_t zone_num,
+				    const zone_state_t &zone_state,
+				    KeyValueDB::Transaction txn);
+  void write_zone_state_reset_to_db(uint64_t zone_num,
+				    const zone_state_t &zone_state,
+				    KeyValueDB::Transaction txn);
   void load_zone_state_from_db(uint64_t zone_num,
 			       zone_state_t &zone_state,
 			       KeyValueDB::Iterator &it) const;
@@ -63,6 +64,8 @@ public:
 
   int create(uint64_t size,
 	     uint64_t granularity,
+	     uint64_t zone_size,
+	     uint64_t first_sequential_zone,
 	     KeyValueDB::Transaction txn) override;
 
   int init(KeyValueDB *kvdb,
@@ -102,11 +105,9 @@ public:
 		std::vector<std::pair<std::string, std::string>>*) const override;
 
   std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const;
-  std::set<uint64_t> get_cleaning_in_progress_zones(KeyValueDB *kvdb) const;
-  void mark_zones_to_clean_free(const std::set<uint64_t>& zones_to_clean, 
-				KeyValueDB *kvdb);
-  void mark_zones_to_clean_in_progress(const std::set<uint64_t>& zones_to_clean,
-				       KeyValueDB *kvdb);
+
+  void mark_zone_to_clean_free(uint64_t zone,
+			       KeyValueDB *kvdb);
 };
 
 #endif

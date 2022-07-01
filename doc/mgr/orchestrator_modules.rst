@@ -233,6 +233,9 @@ Services
 .. py:currentmodule:: ceph.deployment.service_spec
 
 .. autoclass:: ServiceSpec
+  :members:
+  :private-members:
+  :noindex:
 
 .. py:currentmodule:: orchestrator
 
@@ -248,6 +251,9 @@ Daemons
 .. automethod:: Orchestrator.list_daemons
 .. automethod:: Orchestrator.remove_daemons
 .. automethod:: Orchestrator.daemon_action
+
+.. autoclass:: DaemonDescription
+.. autoclass:: DaemonDescriptionStatus
 
 OSD management
 --------------
@@ -291,6 +297,7 @@ Services
 .. py:currentmodule:: ceph.deployment.service_spec
 
 .. autoclass:: RGWSpec
+  :noindex:
 
 .. py:currentmodule:: orchestrator
 

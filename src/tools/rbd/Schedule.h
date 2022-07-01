@@ -23,7 +23,7 @@ int get_level_spec_args(const boost::program_options::variables_map &vm,
 void normalize_level_spec_args(std::map<std::string, std::string> *args);
 
 void add_schedule_options(
-  boost::program_options::options_description *positional);
+  boost::program_options::options_description *positional, bool mandatory);
 int get_schedule_args(const boost::program_options::variables_map &vm,
                       bool mandatory, std::map<std::string, std::string> *args);
 

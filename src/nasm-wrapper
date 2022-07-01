@@ -37,6 +37,10 @@ while [ -n "$*" ]; do
         refine_nasm_options+=" -i $1"
         shift
         ;;
+    -O* )
+        # ignore C optimisations
+        shift
+        ;;
     * )
         # Keep other options
         refine_nasm_options+=" $1"

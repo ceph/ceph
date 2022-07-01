@@ -113,8 +113,8 @@ bool WriteAroundObjectDispatch<I>::write_same(
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << object_len << dendl;
 
-  return dispatch_io(object_no, object_off, object_len, 0, dispatch_result,
-                     on_finish, on_dispatched);
+  return dispatch_io(object_no, object_off, object_len, op_flags,
+                     dispatch_result, on_finish, on_dispatched);
 }
 
 template <typename I>

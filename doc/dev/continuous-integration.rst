@@ -92,7 +92,7 @@ Shaman
    is a server offering RESTful API allowing the clients to query the
    information of repos hosted by chacra nodes. Shaman is also known
    for its `Web UI`_. But please note, shaman does not build the
-   packages, it justs offers information of the builds.
+   packages, it just offers information on the builds.
 
 As the following shows, `chacra`_ manages multiple projects whose metadata
 are stored in a database. These metadata are exposed via Shaman as a web
@@ -154,7 +154,7 @@ libboost
     packages `boost`_. The packages' names are changed from ``libboost-*`` to
     ``ceph-libboost-*``, and they are instead installed into ``/opt/ceph``, so
     they don't interfere with the official ``libboost`` packages shipped by
-    distro. Its build scripts are hosted at https://github.com/tchaikov/ceph-boost.
+    distro. Its build scripts are hosted at https://github.com/ceph/ceph-boost.
 
     .. prompt:: bash $
 
@@ -199,7 +199,7 @@ libraries in our dist tarball. They are
 - pmdk
 
 ``make-dist`` is a script used by our CI pipeline to create dist tarball so the
-tarball can be used to build the Ceph packages in a clean room environmet. When
+tarball can be used to build the Ceph packages in a clean room environment. When
 we need to upgrade these third party libraries, we should
 
 - update the CMake script
@@ -231,8 +231,8 @@ ref
     a unique id of a given version of a set packages. This id is used to reference
     the set packages under the ``<project>/<branch>``. It is a good practice to
     version the packaging recipes, like the ``debian`` directory for building deb
-    packages and the ``spec`` for building rpm packages, and use ths sha1 of the
-    packaging receipe for the ``ref``. But you could also the a random string for
+    packages and the ``spec`` for building rpm packages, and use the sha1 of the
+    packaging receipe for the ``ref``. But you could also use a random string for
     ``ref``, like the tag name of the built source tree.
 
 distro

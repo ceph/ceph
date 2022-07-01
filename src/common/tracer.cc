@@ -1,86 +1,110 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/ceph_context.h"
+#include "global/global_context.h"
 #include "tracer.h"
-#include <arpa/inet.h>
-#include <yaml-cpp/yaml.h>
-#ifdef __linux__
-#include <linux/types.h>
-#else
-typedef int64_t __s64;
-#endif
 
-#include "common/debug.h"
+#ifdef HAVE_JAEGER
+#include "opentelemetry/sdk/trace/batch_span_processor.h"
+#include "opentelemetry/sdk/trace/tracer_provider.h"
+#include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
 
-#define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_osd
-#undef dout_prefix
-#define dout_prefix *_dout << "jaeger_tracing "
+namespace tracing {
 
-namespace jaeger_tracing {
+const opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> Tracer::noop_tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
+const jspan Tracer::noop_span = noop_tracer->StartSpan("noop");
 
-  std::shared_ptr<opentracing::v3::Tracer> tracer = nullptr;
+using bufferlist = ceph::buffer::list;
 
-  void init_tracer(const char* tracer_name) {
-    if (!tracer) {
-	YAML::Node yaml;
-	try{
-	  yaml = YAML::LoadFile("../src/jaegertracing/config.yml");
-	dout(3) << "yaml loaded" << yaml << dendl;
-	}
-	catch(std::exception &e) {
-	  dout(3) << "failed to load yaml file using default config" << dendl;
-	  auto yaml_config = R"cfg(
-disabled: false
-reporter:
-    logSpans: false
-    queueSize: 100
-    bufferFlushInterval: 10
-sampler:
-    type: const
-    param: 1
-headers:
-    jaegerDebugHeader: debug-id
-    jaegerBaggageHeader: baggage
-    TraceContextHeaderName: trace-id
-baggage_restrictions:
-    denyBaggageOnInitializationFailure: false
-    refreshInterval: 60
-)cfg";
-	yaml = YAML::Load(yaml_config);
-	dout(3) << "yaml loaded" << yaml << dendl;
-      }
-      static auto configuration = jaegertracing::Config::parse(yaml);
-      tracer = jaegertracing::Tracer::make( tracer_name, configuration,
-	    jaegertracing::logging::consoleLogger());
-      dout(3) << "tracer_jaeger init successful" << dendl;
-    }
-    //incase of stale tracer, configure with a new global tracer
-    if (opentracing::Tracer::Global() != tracer) {
-      opentracing::Tracer::InitGlobal(
-	  std::static_pointer_cast<opentracing::Tracer>(tracer));
-    }
-  }
+Tracer::Tracer(opentelemetry::nostd::string_view service_name) {
+  init(service_name);
+}
 
-  jspan new_span(const char* span_name) {
-    return opentracing::Tracer::Global()->StartSpan(span_name);
- }
-
-  jspan child_span(const char* span_name, const jspan& parent_span) {
-    //no parent check if parent not found span will still be constructed
-    return opentracing::Tracer::Global()->StartSpan(span_name,
-	{opentracing::ChildOf(&parent_span->context())});
- }
-
-  void finish_span(const jspan& span) {
-    if (span) {
-      span->Finish();
-    }
-  }
-
-  void set_span_tag(const jspan& span, const char* key, const char* value) {
-    if (span) {
-      span->SetTag(key, value);
-    }
+void Tracer::init(opentelemetry::nostd::string_view service_name) {
+  if (!tracer) {
+    opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
+    exporter_options.server_port = 6799;
+    const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
+    const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
+    auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
+    auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(new opentelemetry::sdk::trace::BatchSpanProcessor(std::move(jaeger_exporter), processor_options));
+    const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
+    tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
   }
 }
+
+jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
+  if (is_enabled()) {
+    return tracer->StartSpan(trace_name);
+  }
+  return noop_span;
+}
+
+jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool trace_is_enabled) {
+  if (trace_is_enabled) {
+    return tracer->StartSpan(trace_name);
+  }
+  return noop_tracer->StartSpan(trace_name);
+}
+
+jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan& parent_span) {
+  if (is_enabled() && parent_span->IsRecording()) {
+    opentelemetry::trace::StartSpanOptions span_opts;
+    span_opts.parent = parent_span->GetContext();
+    return tracer->StartSpan(span_name, span_opts);
+  }
+  return noop_span;
+}
+
+jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx) {
+  if (is_enabled() && parent_ctx.IsValid()) {
+    opentelemetry::trace::StartSpanOptions span_opts;
+    span_opts.parent = parent_ctx;
+    return tracer->StartSpan(span_name, span_opts);
+  }
+  return noop_span;
+}
+
+bool Tracer::is_enabled() const {
+  return g_ceph_context->_conf->jaeger_tracing_enable;
+}
+
+void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f) {
+  ENCODE_START(1, 1, bl);
+  using namespace opentelemetry;
+  using namespace trace;
+  auto is_valid = span_ctx.IsValid();
+  encode(is_valid, bl);
+  if (is_valid) {
+    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.trace_id().Id().data()), TraceId::kSize), bl);
+    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.span_id().Id().data()), SpanId::kSize), bl);
+    encode(span_ctx.trace_flags().flags(), bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
+  using namespace opentelemetry;
+  using namespace trace;
+  DECODE_START(1, bl);
+  bool is_valid;
+  decode(is_valid, bl);
+  if (is_valid) {
+    std::array<uint8_t, TraceId::kSize> trace_id;
+    std::array<uint8_t, SpanId::kSize> span_id;
+    uint8_t flags;
+    decode(trace_id, bl);
+    decode(span_id, bl);
+    decode(flags, bl);
+    span_ctx = SpanContext(
+      TraceId(nostd::span<uint8_t, TraceId::kSize>(trace_id)),
+      SpanId(nostd::span<uint8_t, SpanId::kSize>(span_id)),
+      TraceFlags(flags),
+      true);
+  }
+  DECODE_FINISH(bl);
+}
+} // namespace tracing
+
+#endif // HAVE_JAEGER

@@ -25,6 +25,7 @@ struct MetaSession {
   uint64_t cap_renew_seq = 0;
   entity_addrvec_t addrs;
   feature_bitset_t mds_features;
+  feature_bitset_t mds_metric_flags;
 
   enum {
     STATE_NEW, // Unused
@@ -49,6 +50,8 @@ struct MetaSession {
   std::list<Context*> waiting_for_open;
 
   xlist<Cap*> caps;
+  // dirty_list keeps all the dirty inodes before flushing in current session.
+  xlist<Inode*> dirty_list;
   xlist<Inode*> flushing_caps;
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
@@ -60,6 +63,8 @@ struct MetaSession {
     : mds_num(mds_num), con(con), addrs(addrs) {
   }
 
+  xlist<Inode*> &get_dirty_list() { return dirty_list; }
+
   const char *get_state_name() const;
 
   void dump(Formatter *f, bool cap_dump=false) const;
@@ -68,4 +73,5 @@ struct MetaSession {
       ceph_seq_t mseq, epoch_t osd_barrier);
 };
 
+using MetaSessionRef = std::shared_ptr<MetaSession>;
 #endif

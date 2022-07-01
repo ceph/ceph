@@ -1,5 +1,6 @@
 import datetime
 import re
+import string
 
 from typing import Optional
 
@@ -77,17 +78,17 @@ def parse_timedelta(delta: str) -> Optional[datetime.timedelta]:
 
     >>> parse_timedelta('foo')
 
-    >>> parse_timedelta('2d')
-    datetime.timedelta(days=2)
+    >>> parse_timedelta('2d') == datetime.timedelta(days=2)
+    True
 
-    >>> parse_timedelta("4w")
-    datetime.timedelta(days=28)
+    >>> parse_timedelta("4w") == datetime.timedelta(days=28)
+    True
 
-    >>> parse_timedelta("5s")
-    datetime.timedelta(seconds=5)
+    >>> parse_timedelta("5s") == datetime.timedelta(seconds=5)
+    True
 
-    >>> parse_timedelta("-5s")
-    datetime.timedelta(days=-1, seconds=86395)
+    >>> parse_timedelta("-5s") == datetime.timedelta(days=-1, seconds=86395)
+    True
 
     :param delta: The string to process, e.g. '2h', '10d', '30s'.
     :return: The `datetime.timedelta` object or `None` in case of
@@ -105,3 +106,18 @@ def parse_timedelta(delta: str) -> Optional[datetime.timedelta]:
     parts = parts.groupdict()
     args = {name: int(param) for name, param in parts.items() if param}
     return datetime.timedelta(**args)
+
+
+def is_hex(s: str, strict: bool = True) -> bool:
+    """Simple check that a string contains only hex chars"""
+    try:
+        int(s, 16)
+    except ValueError:
+        return False
+
+    # s is multiple chars, but we should catch a '+/-' prefix too.
+    if strict:
+        if s[0] not in string.hexdigits:
+            return False
+
+    return True

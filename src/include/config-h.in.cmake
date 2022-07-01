@@ -84,6 +84,9 @@
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
+/* Defined if you have libdml */
+#cmakedefine HAVE_LIBDML
+
 /* Defined if you have libzbd */
 #cmakedefine HAVE_LIBZBD
 
@@ -117,15 +120,9 @@
 /* PMEM_DEVICE (OSD) conditional compilation */
 #cmakedefine HAVE_BLUESTORE_PMEM
 
-/* Defined if LevelDB supports bloom filters */
-#cmakedefine HAVE_LEVELDB_FILTER_POLICY
-
 /* Define if you have tcmalloc */
 #cmakedefine HAVE_LIBTCMALLOC
 #cmakedefine LIBTCMALLOC_MISSING_ALIGNED_ALLOC
-
-/* Define if have curl_multi_wait() */
-#cmakedefine HAVE_CURL_MULTI_WAIT 1
 
 /* AsyncMessenger RDMA conditional compilation */
 #cmakedefine HAVE_RDMA
@@ -156,9 +153,6 @@
 
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
-
-/* define if leveldb is enabled */
-#cmakedefine WITH_LEVELDB
 
 /* define if radosgw has openssl support */
 #cmakedefine WITH_CURL_OPENSSL
@@ -356,6 +350,9 @@
 
 /* Backend dbstore for Rados Gateway */
 #cmakedefine WITH_RADOSGW_DBSTORE
+
+/* Backend CORTX-Motr for Rados Gateway */
+#cmakedefine WITH_RADOSGW_MOTR
 
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING

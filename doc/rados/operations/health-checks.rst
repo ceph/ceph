@@ -439,6 +439,25 @@ OSDs can start.  You can safely set the flag with::
 
   ceph osd set sortbitwise
 
+OSD_FILESTORE
+__________________
+
+Filestore has been deprecated, considering that Bluestore has been the default
+objectstore for quite some time. Warn if OSDs are running Filestore.
+
+The 'mclock_scheduler' is not supported for filestore OSDs. Therefore, the
+default 'osd_op_queue' is set to 'wpq' for filestore OSDs and is enforced
+even if the user attempts to change it.
+
+Filestore OSDs can be listed with::
+
+  ceph report | jq -c '."osd_metadata" | .[] | select(.osd_objectstore | contains("filestore")) | {id, osd_objectstore}'
+
+If it is not feasible to migrate Filestore OSDs to Bluestore immediately, you can silence
+this warning temporarily with::
+
+  ceph health mute OSD_FILESTORE
+
 POOL_FULL
 _________
 
@@ -1031,6 +1050,8 @@ not contain as much data have too many PGs.  See the discussion of
 The threshold can be raised to silence the health warning by adjusting
 the ``mon_pg_warn_max_object_skew`` config option on the managers.
 
+The health warning will be silenced for a particular pool if
+``pg_autoscale_mode`` is set to ``on``.
 
 POOL_APP_NOT_ENABLED
 ____________________
@@ -1142,7 +1163,7 @@ _______________
 One or more PGs has not been scrubbed recently.  PGs are normally scrubbed
 within every configured interval specified by
 :confval:`osd_scrub_max_interval` globally. This
-interval can be overriden on per-pool basis with
+interval can be overridden on per-pool basis with
 :confval:`scrub_max_interval`. The warning triggers when
 ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed without a
 scrub since it was due.

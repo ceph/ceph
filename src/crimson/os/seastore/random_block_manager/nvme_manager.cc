@@ -14,14 +14,14 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore_tm);
   }
 }
 
 namespace crimson::os::seastore {
 
 NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap(
-    rbm_bitmap_block_t &block, blk_id_t block_no)
+    rbm_bitmap_block_t &block, blk_no_t block_no)
 {
   bufferptr bptr;
   try {
@@ -54,7 +54,11 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::initialize_blk_alloc_area() {
   for (uint64_t i = 0; i < start; i++) {
     b_block.set_bit(i);
   }
-  b_block.set_crc();
+
+  // CRC calculation is offloaded to NVMeDevice if data protection is enabled.
+  if (device->is_data_protection_enabled() == false) {
+    b_block.set_crc();
+  }
 
   return rbm_sync_block_bitmap(b_block,
     super.start_alloc_area / super.block_size
@@ -63,7 +67,7 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::initialize_blk_alloc_area() {
     /* initialize bitmap blocks as unused */
     auto max = max_block_by_bitmap_block();
     auto max_block = super.size / super.block_size;
-    blk_id_t end = round_up_to(max_block, max) - 1;
+    blk_no_t end = round_up_to(max_block, max) - 1;
     logger().debug(" init start {} end {} ", start, end);
     return rbm_sync_block_bitmap_by_range(
             start,
@@ -119,15 +123,19 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
 {
   logger().debug("path {}", path);
   return _open_device(path).safe_then([this, &config]() {
-    return read_rbm_header(config.start).safe_then([](auto super) {
+    rbm_abs_addr addr = convert_paddr_to_abs_addr(
+      config.start);
+    return read_rbm_header(addr).safe_then([](auto super) {
       logger().debug(" already exists ");
       return mkfs_ertr::now();
     }).handle_error(
       crimson::ct_error::enoent::handle([this, &config] (auto) {
 	super.uuid = uuid_d(); // TODO
 	super.magic = 0xFF; // TODO
-	super.start = config.start;
-	super.end = config.end;
+	super.start = convert_paddr_to_abs_addr(
+	  config.start);
+	super.end = convert_paddr_to_abs_addr(
+	  config.end);
 	super.block_size = config.block_size;
 	super.size = config.total_size;
 	super.free_block_count = config.total_size/config.block_size - 2;
@@ -137,6 +145,7 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
 	  super.start_alloc_area + super.alloc_area_size;
 	super.crc = 0;
 	super.feature |= RBM_BITMAP_BLOCK_CRC;
+	super.device_id = config.device_id;
 
 	logger().debug(" super {} ", super);
 	// write super block
@@ -153,16 +162,18 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
         "Invalid error read_rbm_header in NVMeManager::mkfs"
       }
     );
+  }).safe_then([this]() {
+    if (device) {
+      return device->close(
+      ).safe_then([]() {
+	return mkfs_ertr::now();
+      });
+    }
+    return mkfs_ertr::now();
   }).handle_error(
     mkfs_ertr::pass_further{},
     crimson::ct_error::assert_all{
     "Invalid error open_device in NVMeManager::mkfs"
-  }).finally([this] {
-    if (device) {
-      return device->close();
-    } else {
-      return seastar::now();
-    }
   });
 }
 
@@ -171,7 +182,7 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   return seastar::do_with(uint64_t(0),
     uint64_t(super.start_alloc_area),
-    interval_set<blk_id_t>(),
+    interval_set<blk_no_t>(),
     bp,
     [&, this] (auto &allocated, auto &addr, auto &alloc_extent, auto &bp) mutable {
     return crimson::repeat(
@@ -239,7 +250,7 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
 }
 
 /* TODO : block allocator */
-NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
+NVMeManager::allocate_ret NVMeManager::alloc_extent(
     Transaction &t, size_t size)
 {
 
@@ -253,20 +264,18 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
    *
    */
   return find_free_block(t, size
-      ).safe_then([] (auto alloc_extent) mutable
-	-> allocate_ertr::future<> {
+      ).safe_then([this] (auto alloc_extent) mutable
+	-> allocate_ertr::future<paddr_t> {
 	logger().debug("after find_free_block: allocated {}", alloc_extent);
-	if (!alloc_extent.empty()) {
-	  rbm_alloc_delta_t alloc_info {
-	    extent_types_t::RBM_ALLOC_INFO,
-	    alloc_extent,
-	    rbm_alloc_delta_t::op_types_t::SET
-	  };
-	  // TODO: add alloc info to delta
-	} else {
+	if (alloc_extent.empty()) {
 	  return crimson::ct_error::enospc::make();
 	}
-	return allocate_ertr::now();
+	paddr_t paddr = convert_abs_addr_to_paddr(
+	  alloc_extent.range_start() * super.block_size,
+	  super.device_id);
+	return allocate_ret(
+	  allocate_ertr::ready_future_marker{},
+	  paddr);
 	}
       ).handle_error(
 	allocate_ertr::pass_further{},
@@ -276,31 +285,22 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
 	);
 }
 
-NVMeManager::free_block_ertr::future<> NVMeManager::free_extent(
-    Transaction &t, blk_paddr_t from, size_t len)
-{
-  return free_block_ertr::now();
-}
-
-NVMeManager::free_block_ertr::future<> NVMeManager::add_free_extent(
-    std::vector<rbm_alloc_delta_t>& v, blk_paddr_t from, size_t len)
+void NVMeManager::add_free_extent(
+    std::vector<alloc_delta_t>& v, rbm_abs_addr from, size_t len)
 {
   ceph_assert(!(len % super.block_size));
-  blk_id_t blk_id_start = from / super.block_size;
-
-  interval_set<blk_id_t> free_extent;
-  free_extent.insert(blk_id_start, len / super.block_size);
-  rbm_alloc_delta_t alloc_info {
-    extent_types_t::RBM_ALLOC_INFO,
-    free_extent,
-    rbm_alloc_delta_t::op_types_t::CLEAR
-  };
+  paddr_t paddr = convert_abs_addr_to_paddr(
+    from,
+    super.device_id);
+  alloc_delta_t alloc_info;
+  alloc_info.alloc_blk_ranges.emplace_back(
+    paddr, L_ADDR_NULL, len, extent_types_t::ROOT);
+  alloc_info.op = alloc_delta_t::op_types_t::CLEAR;
   v.push_back(alloc_info);
-  return free_block_ertr::now();
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap_by_range(
-    blk_id_t start, blk_id_t end, bitmap_op_types_t op)
+    blk_no_t start, blk_no_t end, bitmap_op_types_t op)
 {
   auto addr = super.start_alloc_area +
 	      (start / max_block_by_bitmap_block())
@@ -418,7 +418,7 @@ NVMeManager::write_ertr::future<> NVMeManager::complete_allocation(
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
-    std::vector<rbm_alloc_delta_t> &alloc_blocks)
+    std::vector<alloc_delta_t> &alloc_blocks)
 {
   if (alloc_blocks.empty()) {
     return write_ertr::now();
@@ -427,31 +427,38 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
     [&, this] (auto &alloc_blocks) mutable {
     return crimson::do_for_each(alloc_blocks,
       [this](auto &alloc) {
-      return crimson::do_for_each(alloc.alloc_blk_ids,
+      return crimson::do_for_each(alloc.alloc_blk_ranges,
         [this, &alloc] (auto &range) -> write_ertr::future<> {
-        logger().debug("range {} ~ {}", range.first, range.second);
+        logger().debug("range {} ~ {}", range.paddr, range.len);
 	bitmap_op_types_t op =
-	  (alloc.op == rbm_alloc_delta_t::op_types_t::SET) ?
+	  (alloc.op == alloc_delta_t::op_types_t::SET) ?
 	  bitmap_op_types_t::ALL_SET :
 	  bitmap_op_types_t::ALL_CLEAR;
+	rbm_abs_addr addr = convert_paddr_to_abs_addr(
+	  range.paddr);
+	blk_no_t start = addr / super.block_size;
+	blk_no_t end = start +
+	  (round_up_to(range.len, super.block_size)) / super.block_size
+	   - 1;
 	return rbm_sync_block_bitmap_by_range(
-	  range.first,
-	  range.first + range.second - 1,
+	  start,
+	  end,
 	  op);
       });
     }).safe_then([this, &alloc_blocks]() mutable {
       int alloc_block_count = 0;
       for (const auto& b : alloc_blocks) {
-	for (interval_set<blk_id_t>::const_iterator r = b.alloc_blk_ids.begin();
-	     r != b.alloc_blk_ids.end(); ++r) {
-	  if (b.op == rbm_alloc_delta_t::op_types_t::SET) {
-	    alloc_block_count += r.get_len();
+	for (auto r : b.alloc_blk_ranges) {
+	  if (b.op == alloc_delta_t::op_types_t::SET) {
+	    alloc_block_count +=
+	      round_up_to(r.len, super.block_size) / super.block_size;
 	    logger().debug(" complete alloc block: start {} len {} ",
-			   r.get_start(), r.get_len());
+			   r.paddr, r.len);
 	  } else {
-	    alloc_block_count -= r.get_len();
-	    logger().debug(" complete free block:  start {} len {} ",
-			   r.get_start(), r.get_len());
+	    alloc_block_count -=
+	      round_up_to(r.len, super.block_size) / super.block_size;
+	    logger().debug(" complete alloc block: start {} len {} ",
+			   r.paddr, r.len);
 	  }
 	}
       }
@@ -464,9 +471,11 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
 }
 
 NVMeManager::open_ertr::future<> NVMeManager::open(
-    const std::string &path, blk_paddr_t addr)
+    const std::string &path, paddr_t paddr)
 {
   logger().debug("open: path{}", path);
+
+  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   return _open_device(path
       ).safe_then([this, addr]() {
       return read_rbm_header(addr).safe_then([&](auto s)
@@ -489,10 +498,11 @@ NVMeManager::open_ertr::future<> NVMeManager::open(
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::write(
-  blk_paddr_t addr,
+  paddr_t paddr,
   bufferptr &bptr)
 {
   ceph_assert(device);
+  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   if (addr > super.end || addr < super.start ||
       bptr.length() > super.end - super.start) {
     return crimson::ct_error::erange::make();
@@ -503,10 +513,11 @@ NVMeManager::write_ertr::future<> NVMeManager::write(
 }
 
 NVMeManager::read_ertr::future<> NVMeManager::read(
-  blk_paddr_t addr,
+  paddr_t paddr,
   bufferptr &bptr)
 {
   ceph_assert(device);
+  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   if (addr > super.end || addr < super.start ||
       bptr.length() > super.end - super.start) {
     return crimson::ct_error::erange::make();
@@ -534,7 +545,15 @@ NVMeManager::write_ertr::future<> NVMeManager::write_rbm_header()
   bufferlist meta_b_header;
   super.crc = 0;
   encode(super, meta_b_header);
-  super.crc = meta_b_header.crc32c(-1);
+  // If NVMeDevice supports data protection, CRC for checksum is not required
+  // NVMeDevice is expected to generate and store checksum internally.
+  // CPU overhead for CRC might be saved.
+  if (device->is_data_protection_enabled()) {
+    super.crc = -1;
+  }
+  else {
+    super.crc = meta_b_header.crc32c(-1);
+  }
 
   bufferlist bl;
   encode(super, bl);
@@ -547,7 +566,7 @@ NVMeManager::write_ertr::future<> NVMeManager::write_rbm_header()
 }
 
 NVMeManager::read_ertr::future<rbm_metadata_header_t> NVMeManager::read_rbm_header(
-    blk_paddr_t addr)
+    rbm_abs_addr addr)
 {
   ceph_assert(device);
   bufferptr bptr =
@@ -574,10 +593,14 @@ NVMeManager::read_ertr::future<rbm_metadata_header_t> NVMeManager::read_rbm_head
     bufferlist meta_b_header;
     super_block.crc = 0;
     encode(super_block, meta_b_header);
-    if (meta_b_header.crc32c(-1) != crc) {
-      logger().debug(" bad crc on super block, expected {} != actual {} ",
-		      meta_b_header.crc32c(-1), crc);
-      return crimson::ct_error::input_output_error::make();
+
+    // Do CRC verification only if data protection is not supported.
+    if (device->is_data_protection_enabled() == false) {
+      if (meta_b_header.crc32c(-1) != crc) {
+        logger().debug(" bad crc on super block, expected {} != actual {} ",
+                        meta_b_header.crc32c(-1), crc);
+        return crimson::ct_error::input_output_error::make();
+      }
     }
     logger().debug(" got {} ", super);
     return read_ertr::future<rbm_metadata_header_t>(
@@ -632,7 +655,7 @@ NVMeManager::check_bitmap_blocks_ertr::future<> NVMeManager::check_bitmap_blocks
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::write(
-  blk_paddr_t addr,
+  rbm_abs_addr addr,
   bufferlist &bl)
 {
   ceph_assert(device);

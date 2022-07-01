@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <cstdlib>
+#include <iostream>
+
 #include "include/ceph_assert.h"
 #include "gtest_seastar.h"
 
@@ -12,13 +15,34 @@ SeastarRunner seastar_test_suite_t::seastar_env;
 
 int main(int argc, char **argv)
 {
-  ::testing::InitGoogleTest(&argc, argv);
+  // preprocess args
+  std::vector<const char*> args;
+  bool global_log_level_is_set = false;
+  const char* prefix_log_level = "--default-log-level";
+  for (int i = 0; i < argc; ++i) {
+    if (std::strncmp(argv[i], prefix_log_level,
+                     std::strlen(prefix_log_level)) == 0) {
+      global_log_level_is_set = true;
+    }
+    args.push_back(argv[i]);
+  }
+  // HACK: differentiate between the `make check` bot and human user
+  // for the sake of log flooding
+  if (!global_log_level_is_set && !std::getenv("FOR_MAKE_CHECK")) {
+    std::cout << "WARNING: set default seastar log level to debug" << std::endl;
+    ++argc;
+    args.push_back("--default-log-level=debug");
+  }
 
-  seastar_test_suite_t::seastar_env.init(argc, argv);
+  auto app_argv = const_cast<char**>(args.data());
+  auto app_argc = static_cast<int>(args.size());
+  ::testing::InitGoogleTest(&app_argc, app_argv);
 
-  seastar::global_logger_registry().set_all_loggers_level(
-    seastar::log_level::debug
-  );
+  int ret = seastar_test_suite_t::seastar_env.init(app_argc, app_argv);
+  if (ret != 0) {
+    seastar_test_suite_t::seastar_env.stop();
+    return ret;
+  }
 
   seastar_test_suite_t::seastar_env.run([] {
     return crimson::common::sharded_conf().start(
@@ -28,7 +52,7 @@ int main(int argc, char **argv)
     });
   });
 
-  int ret = RUN_ALL_TESTS();
+  ret = RUN_ALL_TESTS();
 
   seastar_test_suite_t::seastar_env.run([] {
     return crimson::common::sharded_perf_coll().stop().then([] {

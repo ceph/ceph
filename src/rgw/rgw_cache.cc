@@ -14,6 +14,7 @@ int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCa
 {
 
   std::shared_lock rl{lock};
+  std::unique_lock wl{lock, std::defer_lock}; // may be promoted to write lock
   if (!enabled) {
     return -ENOENT;
   }
@@ -30,7 +31,7 @@ int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCa
        (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry) {
     ldpp_dout(dpp, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
     rl.unlock();
-    std::unique_lock wl{lock};  // write lock for insertion
+    wl.lock(); // write lock for expiration
     // check that wasn't already removed by other thread
     iter = cache_map.find(name);
     if (iter != cache_map.end()) {
@@ -51,7 +52,7 @@ int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCa
     ldpp_dout(dpp, 20) << "cache get: touching lru, lru_counter=" << lru_counter
                    << " promotion_ts=" << entry->lru_promotion_ts << dendl;
     rl.unlock();
-    std::unique_lock wl{lock};  // write lock for insertion
+    wl.lock(); // write lock for touch_lru()
     /* need to redo this because entry might have dropped off the cache */
     iter = cache_map.find(name);
     if (iter == cache_map.end()) {
@@ -354,5 +355,65 @@ ObjectCache::~ObjectCache()
   for (auto cache : chained_cache) {
     cache->unregistered();
   }
+}
+
+void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
+{
+  ObjectMetaInfo *m = new ObjectMetaInfo;
+  m->size = 1024 * 1024;
+  o.push_back(m);
+  o.push_back(new ObjectMetaInfo);
+}
+
+void ObjectMetaInfo::dump(Formatter *f) const
+{
+  encode_json("size", size, f);
+  encode_json("mtime", utime_t(mtime), f);
+}
+
+void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
+{
+  using ceph::encode;
+  ObjectCacheInfo *i = new ObjectCacheInfo;
+  i->status = 0;
+  i->flags = CACHE_FLAG_MODIFY_XATTRS;
+  string s = "this is a string";
+  string s2 = "this is a another string";
+  bufferlist data, data2;
+  encode(s, data);
+  encode(s2, data2);
+  i->data = data;
+  i->xattrs["x1"] = data;
+  i->xattrs["x2"] = data2;
+  i->rm_xattrs["r2"] = data2;
+  i->rm_xattrs["r3"] = data;
+  i->meta.size = 512 * 1024;
+  o.push_back(i);
+  o.push_back(new ObjectCacheInfo);
+}
+
+void ObjectCacheInfo::dump(Formatter *f) const
+{
+  encode_json("status", status, f);
+  encode_json("flags", flags, f);
+  encode_json("data", data, f);
+  encode_json_map("xattrs", "name", "value", "length", xattrs, f);
+  encode_json_map("rm_xattrs", "name", "value", "length", rm_xattrs, f);
+  encode_json("meta", meta, f);
+
+}
+
+void RGWCacheNotifyInfo::generate_test_instances(list<RGWCacheNotifyInfo*>& o)
+{
+  o.push_back(new RGWCacheNotifyInfo);
+}
+
+void RGWCacheNotifyInfo::dump(Formatter *f) const
+{
+  encode_json("op", op, f);
+  encode_json("obj", obj, f);
+  encode_json("obj_info", obj_info, f);
+  encode_json("ofs", ofs, f);
+  encode_json("ns", ns, f);
 }
 

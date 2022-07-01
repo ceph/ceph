@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 /**
@@ -80,7 +80,7 @@ public:
 	return r;
     }
     void* Realloc(void* p, size_t old, size_t nw) {
-	void *r;
+	void *r = nullptr;
 	if (nw) r = malloc(nw);
 	if (nw > old) nw = old;
 	if (r && old) memcpy(r, p, nw);
@@ -151,7 +151,27 @@ add_name_val_to_obj(std::string &n, std::string &v, rapidjson::GenericValue<E,A>
 
 template<typename E, typename A = ZeroPoolAllocator>
 static inline void
+add_name_val_to_obj(std::string &n, bool v, rapidjson::GenericValue<E,A> &d,
+  A &allocator)
+{
+  rapidjson::GenericValue<E,A> name, val;
+  name.SetString(n.c_str(), n.length(), allocator);
+  val.SetBool(v);
+  d.AddMember(name, val, allocator);
+}
+
+template<typename E, typename A = ZeroPoolAllocator>
+static inline void
 add_name_val_to_obj(const char *n, std::string &v, rapidjson::GenericValue<E,A> &d,
+  A &allocator)
+{
+  std::string ns{n, strlen(n) };
+  add_name_val_to_obj(ns, v, d, allocator);
+}
+
+template<typename E, typename A = ZeroPoolAllocator>
+static inline void
+add_name_val_to_obj(const char *n, bool v, rapidjson::GenericValue<E,A> &d,
   A &allocator)
 {
   std::string ns{n, strlen(n) };
@@ -160,30 +180,49 @@ add_name_val_to_obj(const char *n, std::string &v, rapidjson::GenericValue<E,A> 
 
 typedef std::map<std::string, std::string> EngineParmMap;
 
+
+class SSEContext {
+protected:
+  virtual ~SSEContext(){};
+public:
+  virtual const std::string & backend() = 0;
+  virtual const std::string & addr() = 0;
+  virtual const std::string & auth() = 0;
+  virtual const std::string & k_namespace() = 0;
+  virtual const std::string & prefix() = 0;
+  virtual const std::string & secret_engine() = 0;
+  virtual const std::string & ssl_cacert() = 0;
+  virtual const std::string & ssl_clientcert() = 0;
+  virtual const std::string & ssl_clientkey() = 0;
+  virtual const std::string & token_file() = 0;
+  virtual const bool verify_ssl() = 0;
+};
+
 class VaultSecretEngine: public SecretEngine {
 
 protected:
   CephContext *cct;
+  SSEContext & kctx;
 
-  int load_token_from_file(std::string *vault_token)
+  int load_token_from_file(const DoutPrefixProvider *dpp, std::string *vault_token)
   {
 
     int res = 0;
-    std::string token_file = cct->_conf->rgw_crypt_vault_token_file;
+    std::string token_file = kctx.token_file();
     if (token_file.empty()) {
-      ldout(cct, 0) << "ERROR: Vault token file not set in rgw_crypt_vault_token_file" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Vault token file not set in rgw_crypt_vault_token_file" << dendl;
       return -EINVAL;
     }
-    ldout(cct, 20) << "Vault token file: " << token_file << dendl;
+    ldpp_dout(dpp, 20) << "Vault token file: " << token_file << dendl;
 
     struct stat token_st;
     if (stat(token_file.c_str(), &token_st) != 0) {
-      ldout(cct, 0) << "ERROR: Vault token file '" << token_file << "' not found  " << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Vault token file '" << token_file << "' not found  " << dendl;
       return -ENOENT;
     }
 
     if (token_st.st_mode & (S_IRWXG | S_IRWXO)) {
-      ldout(cct, 0) << "ERROR: Vault token file '" << token_file << "' permissions are "
+      ldpp_dout(dpp, 0) << "ERROR: Vault token file '" << token_file << "' permissions are "
                     << "too open, it must not be accessible by other users" << dendl;
       return -EACCES;
     }
@@ -192,9 +231,9 @@ protected:
     res = safe_read_file("", token_file.c_str(), buf, sizeof(buf));
     if (res < 0) {
       if (-EACCES == res) {
-        ldout(cct, 0) << "ERROR: Permission denied reading Vault token file" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: Permission denied reading Vault token file" << dendl;
       } else {
-        ldout(cct, 0) << "ERROR: Failed to read Vault token file with error " << res << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: Failed to read Vault token file with error " << res << dendl;
       }
       return res;
     }
@@ -209,28 +248,28 @@ protected:
   }
 
   FORTEST_VIRTUAL
-  int send_request(const char *method, std::string_view infix,
+  int send_request(const DoutPrefixProvider *dpp, const char *method, std::string_view infix,
     std::string_view key_id,
     const std::string& postdata,
     bufferlist &secret_bl)
   {
     int res;
     string vault_token = "";
-    if (RGW_SSE_KMS_VAULT_AUTH_TOKEN == cct->_conf->rgw_crypt_vault_auth){
-      ldout(cct, 0) << "Loading Vault Token from filesystem" << dendl;
-      res = load_token_from_file(&vault_token);
+    if (RGW_SSE_KMS_VAULT_AUTH_TOKEN == kctx.auth()){
+      ldpp_dout(dpp, 0) << "Loading Vault Token from filesystem" << dendl;
+      res = load_token_from_file(dpp, &vault_token);
       if (res < 0){
         return res;
       }
     }
 
-    std::string secret_url = cct->_conf->rgw_crypt_vault_addr;
+    std::string secret_url = kctx.addr();
     if (secret_url.empty()) {
-      ldout(cct, 0) << "ERROR: Vault address not set in rgw_crypt_vault_addr" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Vault address not set in rgw_crypt_vault_addr" << dendl;
       return -EINVAL;
     }
 
-    concat_url(secret_url, cct->_conf->rgw_crypt_vault_prefix);
+    concat_url(secret_url, kctx.prefix());
     concat_url(secret_url, std::string(infix));
     concat_url(secret_url, std::string(key_id));
 
@@ -247,53 +286,53 @@ protected:
       vault_token.replace(0, vault_token.length(), vault_token.length(), '\000');
     }
 
-    string vault_namespace = cct->_conf->rgw_crypt_vault_namespace;
+    string vault_namespace = kctx.k_namespace();
     if (!vault_namespace.empty()){
-      ldout(cct, 20) << "Vault Namespace: " << vault_namespace << dendl;
+      ldpp_dout(dpp, 20) << "Vault Namespace: " << vault_namespace << dendl;
       secret_req.append_header("X-Vault-Namespace", vault_namespace);
     }
 
-    secret_req.set_verify_ssl(cct->_conf->rgw_crypt_vault_verify_ssl);
+    secret_req.set_verify_ssl(kctx.verify_ssl());
 
-    if (!cct->_conf->rgw_crypt_vault_ssl_cacert.empty()) {
-      secret_req.set_ca_path(cct->_conf->rgw_crypt_vault_ssl_cacert);
+    if (!kctx.ssl_cacert().empty()) {
+      secret_req.set_ca_path(kctx.ssl_cacert());
     }
 
-    if (!cct->_conf->rgw_crypt_vault_ssl_clientcert.empty()) {
-      secret_req.set_client_cert(cct->_conf->rgw_crypt_vault_ssl_clientcert);
+    if (!kctx.ssl_clientcert().empty()) {
+      secret_req.set_client_cert(kctx.ssl_clientcert());
     }
-    if (!cct->_conf->rgw_crypt_vault_ssl_clientkey.empty()) {
-      secret_req.set_client_key(cct->_conf->rgw_crypt_vault_ssl_clientkey);
+    if (!kctx.ssl_clientkey().empty()) {
+      secret_req.set_client_key(kctx.ssl_clientkey());
     }
 
     res = secret_req.process(null_yield);
     if (res < 0) {
-      ldout(cct, 0) << "ERROR: Request to Vault failed with error " << res << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Request to Vault failed with error " << res << dendl;
       return res;
     }
 
     if (secret_req.get_http_status() ==
         RGWHTTPTransceiver::HTTP_STATUS_UNAUTHORIZED) {
-      ldout(cct, 0) << "ERROR: Vault request failed authorization" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Vault request failed authorization" << dendl;
       return -EACCES;
     }
 
-    ldout(cct, 20) << "Request to Vault returned " << res << " and HTTP status "
+    ldpp_dout(dpp, 20) << "Request to Vault returned " << res << " and HTTP status "
       << secret_req.get_http_status() << dendl;
 
     return res;
   }
 
-  int send_request(std::string_view key_id, bufferlist &secret_bl)
+  int send_request(const DoutPrefixProvider *dpp, std::string_view key_id, bufferlist &secret_bl)
   {
-    return send_request("GET", "", key_id, string{}, secret_bl);
+    return send_request(dpp, "GET", "", key_id, string{}, secret_bl);
   }
 
-  int decode_secret(std::string encoded, std::string& actual_key){
+  int decode_secret(const DoutPrefixProvider *dpp, std::string encoded, std::string& actual_key){
     try {
       actual_key = from_base64(encoded);
     } catch (std::exception&) {
-      ldout(cct, 0) << "ERROR: Failed to base64 decode key retrieved from Vault" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Failed to base64 decode key retrieved from Vault" << dendl;
       return -EINVAL;
     }
     memset(encoded.data(), 0, encoded.length());
@@ -302,8 +341,7 @@ protected:
 
 public:
 
-  VaultSecretEngine(CephContext *cct) {
-    this->cct = cct;
+  VaultSecretEngine(CephContext *_c, SSEContext & _k) : cct(_c), kctx(_k) {
   }
 };
 
@@ -334,7 +372,7 @@ private:
   }
 
 public:
-  TransitSecretEngine(CephContext *cct, EngineParmMap parms): VaultSecretEngine(cct), parms(parms) {
+  TransitSecretEngine(CephContext *cct, SSEContext & kctx, EngineParmMap parms): VaultSecretEngine(cct, kctx), parms(parms) {
     compat = COMPAT_UNSET;
     for (auto& e: parms) {
       if (e.first == "compat") {
@@ -355,7 +393,7 @@ public:
 	<< e.first << "=" << e.second << " ignored" << dendl;
     }
     if (compat == COMPAT_UNSET) {
-      std::string_view v { cct->_conf->rgw_crypt_vault_prefix };
+      std::string_view v { kctx.prefix() };
       if (string_ends_maybe_slash(v,"/export/encryption-key")) {
 	compat = COMPAT_ONLY_OLD;
       } else {
@@ -364,7 +402,7 @@ public:
     }
   }
 
-  int get_key(std::string_view key_id, std::string& actual_key)
+  int get_key(const DoutPrefixProvider *dpp, std::string_view key_id, std::string& actual_key)
   {
     ZeroPoolDocument d;
     ZeroPoolValue *v;
@@ -372,24 +410,24 @@ public:
     bufferlist secret_bl;
 
     if (get_key_version(key_id, version) < 0){
-      ldout(cct, 20) << "Missing or invalid key version" << dendl;
+      ldpp_dout(dpp, 20) << "Missing or invalid key version" << dendl;
       return -EINVAL;
     }
 
-    int res = send_request("GET", compat == COMPAT_ONLY_OLD ? "" : "/export/encryption-key",
+    int res = send_request(dpp, "GET", compat == COMPAT_ONLY_OLD ? "" : "/export/encryption-key",
 	key_id, string{}, secret_bl);
     if (res < 0) {
       return res;
     }
 
-    ldout(cct, 20) << "Parse response into JSON Object" << dendl;
+    ldpp_dout(dpp, 20) << "Parse response into JSON Object" << dendl;
 
     secret_bl.append('\0');
     rapidjson::StringStream isw(secret_bl.c_str());
     d.ParseStream<>(isw);
 
     if (d.HasParseError()) {
-      ldout(cct, 0) << "ERROR: Failed to parse JSON response from Vault: "
+      ldpp_dout(dpp, 0) << "ERROR: Failed to parse JSON response from Vault: "
 	 << rapidjson::GetParseError_En(d.GetParseError()) << dendl;
       return -EINVAL;
     }
@@ -411,18 +449,18 @@ public:
       v = &itr->value;
     }
     if (!v || !v->IsString()) {
-      ldout(cct, 0) << "ERROR: Key not found in JSON response from Vault using Transit Engine" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Key not found in JSON response from Vault using Transit Engine" << dendl;
       return -EINVAL;
     }
-    return decode_secret(v->GetString(), actual_key);
+    return decode_secret(dpp, v->GetString(), actual_key);
   }
 
-  int make_actual_key(map<string, bufferlist>& attrs, std::string& actual_key)
+  int make_actual_key(const DoutPrefixProvider *dpp, map<string, bufferlist>& attrs, std::string& actual_key)
   {
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
-    if (compat == COMPAT_ONLY_OLD) return get_key(key_id, actual_key);
+    if (compat == COMPAT_ONLY_OLD) return get_key(dpp, key_id, actual_key);
     if (key_id.find("/") != std::string::npos) {
-      ldout(cct, 0) << "sorry, can't allow / in keyid" << dendl;
+      ldpp_dout(dpp, 0) << "sorry, can't allow / in keyid" << dendl;
       return -EINVAL;
     }
 /*
@@ -441,18 +479,18 @@ public:
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
     if (!d.Accept(writer)) {
-      ldout(cct, 0) << "ERROR: can't make json for vault" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: can't make json for vault" << dendl;
       return -EINVAL;
     }
     std::string post_data { buf.GetString() };
 
-    int res = send_request("POST", "/datakey/plaintext/", key_id,
+    int res = send_request(dpp, "POST", "/datakey/plaintext/", key_id,
 	post_data, secret_bl);
     if (res < 0) {
       return res;
     }
 
-    ldout(cct, 20) << "Parse response into JSON Object" << dendl;
+    ldpp_dout(dpp, 20) << "Parse response into JSON Object" << dendl;
 
     secret_bl.append('\0');
     rapidjson::StringStream isw(secret_bl.c_str());
@@ -460,53 +498,53 @@ public:
     d.ParseStream<>(isw);
 
     if (d.HasParseError()) {
-      ldout(cct, 0) << "ERROR: Failed to parse JSON response from Vault: "
+      ldpp_dout(dpp, 0) << "ERROR: Failed to parse JSON response from Vault: "
 	 << rapidjson::GetParseError_En(d.GetParseError()) << dendl;
       return -EINVAL;
     }
     secret_bl.zero();
 
     if (!d.IsObject()) {
-      ldout(cct, 0) << "ERROR: response from Vault is not an object" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: response from Vault is not an object" << dendl;
       return -EINVAL;
     }
     {
       auto data_itr { d.FindMember("data") };
       if (data_itr == d.MemberEnd()) {
-	ldout(cct, 0) << "ERROR: no .data in response from Vault" << dendl;
+	ldpp_dout(dpp, 0) << "ERROR: no .data in response from Vault" << dendl;
         return -EINVAL;
       }
       auto ciphertext_itr { data_itr->value.FindMember("ciphertext") };
       auto plaintext_itr { data_itr->value.FindMember("plaintext") };
       if (ciphertext_itr == data_itr->value.MemberEnd()) {
-	ldout(cct, 0) << "ERROR: no .data.ciphertext in response from Vault" << dendl;
+	ldpp_dout(dpp, 0) << "ERROR: no .data.ciphertext in response from Vault" << dendl;
 	return -EINVAL;
       }
       if (plaintext_itr == data_itr->value.MemberEnd()) {
-	ldout(cct, 0) << "ERROR: no .data.plaintext in response from Vault" << dendl;
+	ldpp_dout(dpp, 0) << "ERROR: no .data.plaintext in response from Vault" << dendl;
 	return -EINVAL;
       }
       auto &ciphertext_v { ciphertext_itr->value };
       auto &plaintext_v { plaintext_itr->value };
       if (!ciphertext_v.IsString()) {
-	ldout(cct, 0) << "ERROR: .data.ciphertext not a string in response from Vault" << dendl;
+	ldpp_dout(dpp, 0) << "ERROR: .data.ciphertext not a string in response from Vault" << dendl;
 	return -EINVAL;
       }
       if (!plaintext_v.IsString()) {
-	ldout(cct, 0) << "ERROR: .data.plaintext not a string in response from Vault" << dendl;
+	ldpp_dout(dpp, 0) << "ERROR: .data.plaintext not a string in response from Vault" << dendl;
 	return -EINVAL;
       }
       set_attr(attrs, RGW_ATTR_CRYPT_DATAKEY, ciphertext_v.GetString());
-      return decode_secret(plaintext_v.GetString(), actual_key);
+      return decode_secret(dpp, plaintext_v.GetString(), actual_key);
     }
   }
 
-  int reconstitute_actual_key(map<string, bufferlist>& attrs, std::string& actual_key)
+  int reconstitute_actual_key(const DoutPrefixProvider *dpp, map<string, bufferlist>& attrs, std::string& actual_key)
   {
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string wrapped_key = get_str_attribute(attrs, RGW_ATTR_CRYPT_DATAKEY);
     if (compat == COMPAT_ONLY_OLD || key_id.rfind("/") != std::string::npos) {
-      return get_key(key_id, actual_key);
+      return get_key(dpp, key_id, actual_key);
     }
 /*
 	.data.ciphertext <- (to-be) named attribute
@@ -525,18 +563,18 @@ public:
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
     if (!d.Accept(writer)) {
-      ldout(cct, 0) << "ERROR: can't make json for vault" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: can't make json for vault" << dendl;
       return -EINVAL;
     }
     std::string post_data { buf.GetString() };
 
-    int res = send_request("POST", "/decrypt/", key_id,
+    int res = send_request(dpp, "POST", "/decrypt/", key_id,
 	post_data, secret_bl);
     if (res < 0) {
       return res;
     }
 
-    ldout(cct, 20) << "Parse response into JSON Object" << dendl;
+    ldpp_dout(dpp, 20) << "Parse response into JSON Object" << dendl;
 
     secret_bl.append('\0');
     rapidjson::StringStream isw(secret_bl.c_str());
@@ -544,34 +582,123 @@ public:
     d.ParseStream<>(isw);
 
     if (d.HasParseError()) {
-      ldout(cct, 0) << "ERROR: Failed to parse JSON response from Vault: "
+      ldpp_dout(dpp, 0) << "ERROR: Failed to parse JSON response from Vault: "
 	 << rapidjson::GetParseError_En(d.GetParseError()) << dendl;
       return -EINVAL;
     }
     secret_bl.zero();
 
     if (!d.IsObject()) {
-      ldout(cct, 0) << "ERROR: response from Vault is not an object" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: response from Vault is not an object" << dendl;
       return -EINVAL;
     }
     {
       auto data_itr { d.FindMember("data") };
       if (data_itr == d.MemberEnd()) {
-	ldout(cct, 0) << "ERROR: no .data in response from Vault" << dendl;
+	ldpp_dout(dpp, 0) << "ERROR: no .data in response from Vault" << dendl;
         return -EINVAL;
       }
       auto plaintext_itr { data_itr->value.FindMember("plaintext") };
       if (plaintext_itr == data_itr->value.MemberEnd()) {
-	ldout(cct, 0) << "ERROR: no .data.plaintext in response from Vault" << dendl;
+	ldpp_dout(dpp, 0) << "ERROR: no .data.plaintext in response from Vault" << dendl;
 	return -EINVAL;
       }
       auto &plaintext_v { plaintext_itr->value };
       if (!plaintext_v.IsString()) {
-	ldout(cct, 0) << "ERROR: .data.plaintext not a string in response from Vault" << dendl;
+	ldpp_dout(dpp, 0) << "ERROR: .data.plaintext not a string in response from Vault" << dendl;
 	return -EINVAL;
       }
-      return decode_secret(plaintext_v.GetString(), actual_key);
+      return decode_secret(dpp, plaintext_v.GetString(), actual_key);
     }
+  }
+
+  int create_bucket_key(const DoutPrefixProvider *dpp, const std::string& key_name)
+  {
+/*
+	.data.ciphertext <- (to-be) named attribute
+	data: {"type": "chacha20-poly1305", "derived": true}
+	post to prefix + key_name
+	empty output.
+*/
+    ZeroPoolDocument d { rapidjson::kObjectType };
+    auto &allocator { d.GetAllocator() };
+    bufferlist dummy_bl;
+    std::string chacha20_poly1305 { "chacha20-poly1305" };
+
+    add_name_val_to_obj("type", chacha20_poly1305, d, allocator);
+    add_name_val_to_obj("derived", true, d, allocator);
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+    if (!d.Accept(writer)) {
+      ldpp_dout(dpp, 0) << "ERROR: can't make json for vault" << dendl;
+      return -EINVAL;
+    }
+    std::string post_data { buf.GetString() };
+
+    int res = send_request(dpp, "POST", "/keys/", key_name,
+	post_data, dummy_bl);
+    if (res < 0) {
+      return res;
+    }
+    if (dummy_bl.length() != 0) {
+      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault making a key: "
+	<< dummy_bl
+	<< dendl;
+    }
+    return 0;
+  }
+
+  int delete_bucket_key(const DoutPrefixProvider *dpp, const std::string& key_name)
+  {
+/*
+	/keys/<keyname>/config
+	data: {"deletion_allowed": true}
+	post to prefix + key_name
+	empty output.
+*/
+    ZeroPoolDocument d { rapidjson::kObjectType };
+    auto &allocator { d.GetAllocator() };
+    bufferlist dummy_bl;
+    std::ostringstream path_temp;
+    path_temp << "/keys/";
+    path_temp << key_name;
+    std::string delete_path { path_temp.str() };
+    path_temp << "/config";
+    std::string config_path { path_temp.str() };
+
+    add_name_val_to_obj("deletion_allowed", true, d, allocator);
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+    if (!d.Accept(writer)) {
+      ldpp_dout(dpp, 0) << "ERROR: can't make json for vault" << dendl;
+      return -EINVAL;
+    }
+    std::string post_data { buf.GetString() };
+
+    int res = send_request(dpp, "POST", "", config_path,
+	post_data, dummy_bl);
+    if (res < 0) {
+      return res;
+    }
+    if (dummy_bl.length() != 0) {
+      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault marking key to delete: "
+	<< dummy_bl
+	<< dendl;
+      return -EINVAL;
+    }
+
+    res = send_request(dpp, "DELETE", "", delete_path,
+	string{}, dummy_bl);
+    if (res < 0) {
+      return res;
+    }
+    if (dummy_bl.length() != 0) {
+      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault deleting key: "
+	<< dummy_bl
+	<< dendl;
+      return -EINVAL;
+    }
+    return 0;
   }
 };
 
@@ -579,7 +706,7 @@ class KvSecretEngine: public VaultSecretEngine {
 
 public:
 
-  KvSecretEngine(CephContext *cct, EngineParmMap parms): VaultSecretEngine(cct){
+  KvSecretEngine(CephContext *cct, SSEContext & kctx, EngineParmMap parms): VaultSecretEngine(cct, kctx){
     if (!parms.empty()) {
       lderr(cct) << "ERROR: vault kv secrets engine takes no parameters (ignoring them)" << dendl;
     }
@@ -587,24 +714,24 @@ public:
 
   virtual ~KvSecretEngine(){}
 
-  int get_key(std::string_view key_id, std::string& actual_key){
+  int get_key(const DoutPrefixProvider *dpp, std::string_view key_id, std::string& actual_key){
     ZeroPoolDocument d;
     ZeroPoolValue *v;
     bufferlist secret_bl;
 
-    int res = send_request(key_id, secret_bl);
+    int res = send_request(dpp, key_id, secret_bl);
     if (res < 0) {
       return res;
     }
 
-    ldout(cct, 20) << "Parse response into JSON Object" << dendl;
+    ldpp_dout(dpp, 20) << "Parse response into JSON Object" << dendl;
 
     secret_bl.append('\0');
     rapidjson::StringStream isw(secret_bl.c_str());
     d.ParseStream<>(isw);
 
     if (d.HasParseError()) {
-      ldout(cct, 0) << "ERROR: Failed to parse JSON response from Vault: "
+      ldpp_dout(dpp, 0) << "ERROR: Failed to parse JSON response from Vault: "
 	 << rapidjson::GetParseError_En(d.GetParseError()) << dendl;
       return -EINVAL;
     }
@@ -626,10 +753,10 @@ public:
       v = &itr->value;
     }
     if (!v || !v->IsString()) {
-      ldout(cct, 0) << "ERROR: Key not found in JSON response from Vault using KV Engine" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Key not found in JSON response from Vault using KV Engine" << dendl;
       return -EINVAL;
     }
-    return decode_secret(v->GetString(), actual_key);
+    return decode_secret(dpp, v->GetString(), actual_key);
   }
 
 };
@@ -722,7 +849,7 @@ public:
     this->cct = cct;
   }
 
-  int get_key(std::string_view key_id, std::string& actual_key)
+  int get_key(const DoutPrefixProvider *dpp, std::string_view key_id, std::string& actual_key)
   {
 	int r;
 	r = KmipGetTheKey{cct}
@@ -732,14 +859,6 @@ public:
 	return r;
   }
 };
-
-
-static map<string,string> get_str_map(const string &str) {
-  map<string,string> m;
-  get_str_map(str, &m, ";, \t");
-  return m;
-}
-
 
 static int get_actual_key_from_conf(const DoutPrefixProvider* dpp,
                                     CephContext *cct,
@@ -785,7 +904,8 @@ static int get_actual_key_from_conf(const DoutPrefixProvider* dpp,
   return res;
 }
 
-static int request_key_from_barbican(CephContext *cct,
+static int request_key_from_barbican(const DoutPrefixProvider *dpp,
+                                     CephContext *cct,
                                      std::string_view key_id,
                                      const std::string& barbican_token,
                                      std::string& actual_key) {
@@ -793,7 +913,7 @@ static int request_key_from_barbican(CephContext *cct,
 
   std::string secret_url = cct->_conf->rgw_barbican_url;
   if (secret_url.empty()) {
-    ldout(cct, 0) << "ERROR: conf rgw_barbican_url is not set" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: conf rgw_barbican_url is not set" << dendl;
     return -EINVAL;
   }
   concat_url(secret_url, "/v1/secrets/");
@@ -824,21 +944,22 @@ static int request_key_from_barbican(CephContext *cct,
   return res;
 }
 
-static int get_actual_key_from_barbican(CephContext *cct,
+static int get_actual_key_from_barbican(const DoutPrefixProvider *dpp,
+                                        CephContext *cct,
                                         std::string_view key_id,
                                         std::string& actual_key)
 {
   int res = 0;
   std::string token;
 
-  if (rgw::keystone::Service::get_keystone_barbican_token(cct, token) < 0) {
-    ldout(cct, 5) << "Failed to retrieve token for Barbican" << dendl;
+  if (rgw::keystone::Service::get_keystone_barbican_token(dpp, cct, token) < 0) {
+    ldpp_dout(dpp, 5) << "Failed to retrieve token for Barbican" << dendl;
     return -EINVAL;
   }
 
-  res = request_key_from_barbican(cct, key_id, token, actual_key);
+  res = request_key_from_barbican(dpp, cct, key_id, token, actual_key);
   if (res != 0) {
-    ldout(cct, 5) << "Failed to retrieve secret from Barbican:" << key_id << dendl;
+    ldpp_dout(dpp, 5) << "Failed to retrieve secret from Barbican:" << key_id << dendl;
   }
   return res;
 }
@@ -880,54 +1001,61 @@ std::string config_to_engine_and_parms(CephContext *cct,
 }
 
 
-static int get_actual_key_from_vault(CephContext *cct,
+static int get_actual_key_from_vault(const DoutPrefixProvider *dpp,
+                                     CephContext *cct,
+                                     SSEContext & kctx,
                                      map<string, bufferlist>& attrs,
                                      std::string& actual_key, bool make_it)
 {
-  std::string secret_engine_str = cct->_conf->rgw_crypt_vault_secret_engine;
+  std::string secret_engine_str = kctx.secret_engine();
   EngineParmMap secret_engine_parms;
   auto secret_engine { config_to_engine_and_parms(
     cct, "rgw_crypt_vault_secret_engine",
     secret_engine_str, secret_engine_parms) };
-  ldout(cct, 20) << "Vault authentication method: " << cct->_conf->rgw_crypt_vault_auth << dendl;
-  ldout(cct, 20) << "Vault Secrets Engine: " << secret_engine << dendl;
+  ldpp_dout(dpp, 20) << "Vault authentication method: " << kctx.auth() << dendl;
+  ldpp_dout(dpp, 20) << "Vault Secrets Engine: " << secret_engine << dendl;
 
   if (RGW_SSE_KMS_VAULT_SE_KV == secret_engine){
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
-    KvSecretEngine engine(cct, std::move(secret_engine_parms));
-    return engine.get_key(key_id, actual_key);
+    KvSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
+    return engine.get_key(dpp, key_id, actual_key);
   }
   else if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
-    TransitSecretEngine engine(cct, std::move(secret_engine_parms));
+    TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     return make_it
-	? engine.make_actual_key(attrs, actual_key)
-	: engine.reconstitute_actual_key(attrs, actual_key);
+	? engine.make_actual_key(dpp, attrs, actual_key)
+	: engine.reconstitute_actual_key(dpp, attrs, actual_key);
   }
   else {
-    ldout(cct, 0) << "Missing or invalid secret engine" << dendl;
+    ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
     return -EINVAL;
   }
 }
 
 
-static int make_actual_key_from_vault(CephContext *cct,
+static int make_actual_key_from_vault(const DoutPrefixProvider *dpp,
+                                     CephContext *cct,
+                                     SSEContext & kctx,
                                      map<string, bufferlist>& attrs,
                                      std::string& actual_key)
 {
-    return get_actual_key_from_vault(cct, attrs, actual_key, true);
+    return get_actual_key_from_vault(dpp, cct, kctx, attrs, actual_key, true);
 }
 
 
-static int reconstitute_actual_key_from_vault(CephContext *cct,
+static int reconstitute_actual_key_from_vault(const DoutPrefixProvider *dpp,
+                                     CephContext *cct,
+                                     SSEContext & kctx,
                                      map<string, bufferlist>& attrs,
                                      std::string& actual_key)
 {
-    return get_actual_key_from_vault(cct, attrs, actual_key, false);
+    return get_actual_key_from_vault(dpp, cct, kctx, attrs, actual_key, false);
 }
 
 
-static int get_actual_key_from_kmip(CephContext *cct,
+static int get_actual_key_from_kmip(const DoutPrefixProvider *dpp,
+                                     CephContext *cct,
                                      std::string_view key_id,
                                      std::string& actual_key)
 {
@@ -935,36 +1063,115 @@ static int get_actual_key_from_kmip(CephContext *cct,
 
   if (RGW_SSE_KMS_KMIP_SE_KV == secret_engine){
     KmipSecretEngine engine(cct);
-    return engine.get_key(key_id, actual_key);
+    return engine.get_key(dpp, key_id, actual_key);
   }
   else{
-    ldout(cct, 0) << "Missing or invalid secret engine" << dendl;
+    ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
     return -EINVAL;
   }
 }
+class KMSContext : public SSEContext {
+  CephContext *cct;
+public:
+  KMSContext(CephContext*_cct) : cct{_cct} {};
+  ~KMSContext() override {};
+  const std::string & backend() override {
+    return cct->_conf->rgw_crypt_s3_kms_backend;
+  };
+  const std::string & addr() override {
+    return cct->_conf->rgw_crypt_vault_addr;
+  };
+  const std::string & auth() override {
+    return cct->_conf->rgw_crypt_vault_auth;
+  };
+  const std::string & k_namespace() override {
+    return cct->_conf->rgw_crypt_vault_namespace;
+  };
+  const std::string & prefix() override {
+    return cct->_conf->rgw_crypt_vault_prefix;
+  };
+  const std::string & secret_engine() override {
+    return cct->_conf->rgw_crypt_vault_secret_engine;
+  };
+  const std::string & ssl_cacert() override {
+    return cct->_conf->rgw_crypt_vault_ssl_cacert;
+  };
+  const std::string & ssl_clientcert() override {
+    return cct->_conf->rgw_crypt_vault_ssl_clientcert;
+  };
+  const std::string & ssl_clientkey() override {
+    return cct->_conf->rgw_crypt_vault_ssl_clientkey;
+  };
+  const std::string & token_file() override {
+    return cct->_conf->rgw_crypt_vault_token_file;
+  };
+  const bool verify_ssl() override {
+    return cct->_conf->rgw_crypt_vault_verify_ssl;
+  };
+};
 
+class SseS3Context : public SSEContext {
+  CephContext *cct;
+public:
+  static const std::string sse_s3_secret_engine;
+  SseS3Context(CephContext*_cct) : cct{_cct} {};
+  ~SseS3Context(){};
+  const std::string & backend() override {
+   return cct->_conf->rgw_crypt_sse_s3_backend;
+  };
+  const std::string & addr() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_addr;
+  };
+  const std::string & auth() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_auth;
+  };
+  const std::string & k_namespace() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_namespace;
+  };
+  const std::string & prefix() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_prefix;
+  };
+  const std::string & secret_engine() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_secret_engine;
+  };
+  const std::string & ssl_cacert() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_ssl_cacert;
+  };
+  const std::string & ssl_clientcert() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_ssl_clientcert;
+  };
+  const std::string & ssl_clientkey() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_ssl_clientkey;
+  };
+  const std::string & token_file() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_token_file;
+  };
+  const bool verify_ssl() override {
+    return cct->_conf->rgw_crypt_sse_s3_vault_verify_ssl;
+  };
+};
 
-int reconstitute_actual_key_from_kms(const DoutPrefixProvider* dpp,
-                            CephContext *cct,
+int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
                             map<string, bufferlist>& attrs,
                             std::string& actual_key)
 {
   std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
-  std::string kms_backend { cct->_conf->rgw_crypt_s3_kms_backend };
+  KMSContext kctx { cct };
+  const std::string &kms_backend { kctx.backend() };
 
   ldpp_dout(dpp, 20) << "Getting KMS encryption key for key " << key_id << dendl;
   ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
 
   if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
-    return get_actual_key_from_barbican(cct, key_id, actual_key);
+    return get_actual_key_from_barbican(dpp, cct, key_id, actual_key);
   }
 
   if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
-    return reconstitute_actual_key_from_vault(cct, attrs, actual_key);
+    return reconstitute_actual_key_from_vault(dpp, cct, kctx, attrs, actual_key);
   }
 
   if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
-    return get_actual_key_from_kmip(cct, key_id, actual_key);
+    return get_actual_key_from_kmip(dpp, cct, key_id, actual_key);
   }
 
   if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
@@ -976,13 +1183,95 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider* dpp,
   return -EINVAL;
 }
 
-int make_actual_key_from_kms(const DoutPrefixProvider* dpp,
+int make_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
+                            map<string, bufferlist>& attrs,
+                            std::string& actual_key)
+{
+  KMSContext kctx { cct };
+  const std::string &kms_backend { kctx.backend() };
+  if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend)
+    return make_actual_key_from_vault(dpp, cct, kctx, attrs, actual_key);
+  return reconstitute_actual_key_from_kms(dpp, cct, attrs, actual_key);
+}
+
+int reconstitute_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
                             CephContext *cct,
                             map<string, bufferlist>& attrs,
                             std::string& actual_key)
 {
-  std::string kms_backend { cct->_conf->rgw_crypt_s3_kms_backend };
-  if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend)
-    return make_actual_key_from_vault(cct, attrs, actual_key);
-  return reconstitute_actual_key_from_kms(dpp, cct, attrs, actual_key);
+  std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
+  SseS3Context kctx { cct };
+  const std::string &kms_backend { kctx.backend() };
+
+  ldpp_dout(dpp, 20) << "Getting SSE-S3  encryption key for key " << key_id << dendl;
+  ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
+
+  if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
+    return reconstitute_actual_key_from_vault(dpp, cct, kctx, attrs, actual_key);
+  }
+
+  ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_sse_s3_backend: " << kms_backend << dendl;
+  return -EINVAL;
+}
+
+int make_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
+                            CephContext *cct,
+                            map<string, bufferlist>& attrs,
+                            std::string& actual_key)
+{
+  SseS3Context kctx { cct };
+  const std::string kms_backend { kctx.backend() };
+  if (RGW_SSE_KMS_BACKEND_VAULT != kms_backend) {
+    ldpp_dout(dpp, 0) << "ERROR: Unsupported rgw_crypt_sse_s3_backend: " << kms_backend << dendl;
+    return -EINVAL;
+  }
+  return make_actual_key_from_vault(dpp, cct, kctx, attrs, actual_key);
+}
+
+
+int create_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
+                                     CephContext *cct,
+                                     const std::string& bucket_key)
+{
+  SseS3Context kctx { cct };
+
+  const std::string kms_backend { kctx.backend() };
+  if (RGW_SSE_KMS_BACKEND_VAULT != kms_backend) {
+    ldpp_dout(dpp, 0) << "ERROR: Unsupported rgw_crypt_sse_s3_backend: " << kms_backend << dendl;
+    return -EINVAL;
+  }
+
+  std::string secret_engine_str = kctx.secret_engine();
+  EngineParmMap secret_engine_parms;
+  auto secret_engine { config_to_engine_and_parms(
+    cct, "rgw_crypt_sse_s3_vault_secret_engine",
+    secret_engine_str, secret_engine_parms) };
+  if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
+    TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
+	return engine.create_bucket_key(dpp, bucket_key);
+  }
+  else {
+    ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
+    return -EINVAL;
+  }
+}
+
+int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
+                                     CephContext *cct,
+                                     const std::string& bucket_key)
+{
+  SseS3Context kctx { cct };
+  std::string secret_engine_str = kctx.secret_engine();
+  EngineParmMap secret_engine_parms;
+  auto secret_engine { config_to_engine_and_parms(
+    cct, "rgw_crypt_sse_s3_vault_secret_engine",
+    secret_engine_str, secret_engine_parms) };
+  if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
+    TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
+	return engine.delete_bucket_key(dpp, bucket_key);
+  }
+  else {
+    ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
+    return -EINVAL;
+  }
 }

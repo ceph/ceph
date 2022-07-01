@@ -35,6 +35,29 @@ WRITE_CLASS_DENC(bluefs_extent_t)
 
 std::ostream& operator<<(std::ostream& out, const bluefs_extent_t& e);
 
+struct bluefs_fnode_delta_t {
+  uint64_t ino;
+  uint64_t size;
+  utime_t mtime;
+  uint64_t offset; // Contains offset in file of extents.
+                   // Equal to 'allocated' when created.
+                   // Used for consistency checking.
+  mempool::bluefs::vector<bluefs_extent_t> extents;
+
+  DENC(bluefs_fnode_delta_t, v, p) {
+    DENC_START(1, 1, p);
+    denc_varint(v.ino, p);
+    denc_varint(v.size, p);
+    denc(v.mtime, p);
+    denc(v.offset, p);
+    denc(v.extents, p);
+    DENC_FINISH(p);
+  }
+};
+WRITE_CLASS_DENC(bluefs_fnode_delta_t)
+
+std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta);
+
 struct bluefs_fnode_t {
   uint64_t ino;
   uint64_t size;
@@ -47,8 +70,9 @@ struct bluefs_fnode_t {
   mempool::bluefs::vector<uint64_t> extents_index;
 
   uint64_t allocated;
+  uint64_t allocated_commited;
 
-  bluefs_fnode_t() : ino(0), size(0), __unused__(0), allocated(0) {}
+  bluefs_fnode_t() : ino(0), size(0), __unused__(0), allocated(0), allocated_commited(0) {}
 
   uint64_t get_allocated() const {
     return allocated;
@@ -61,6 +85,7 @@ struct bluefs_fnode_t {
       extents_index.emplace_back(allocated);
       allocated += p.length;
     }
+    allocated_commited = allocated;
   }
 
   DENC_HELPERS
@@ -87,6 +112,15 @@ struct bluefs_fnode_t {
     DENC_FINISH(p);
   }
 
+  void reset_delta() {
+    allocated_commited = allocated;
+  }
+  void claim_extents(mempool::bluefs::vector<bluefs_extent_t>& extents) {
+    for (const auto& p : extents) {
+      append_extent(p);
+    }
+    extents.clear();
+  }
   void append_extent(const bluefs_extent_t& ext) {
     if (!extents.empty() &&
 	extents.back().end() == ext.offset &&
@@ -114,15 +148,18 @@ struct bluefs_fnode_t {
     other.extents.swap(extents);
     other.extents_index.swap(extents_index);
     std::swap(allocated, other.allocated);
+    std::swap(allocated_commited, other.allocated_commited);
   }
   void clear_extents() {
     extents_index.clear();
     extents.clear();
     allocated = 0;
+    allocated_commited = 0;
   }
 
   mempool::bluefs::vector<bluefs_extent_t>::iterator seek(
     uint64_t off, uint64_t *x_off);
+  bluefs_fnode_delta_t* make_delta(bluefs_fnode_delta_t* delta);
 
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bluefs_fnode_t*>& ls);
@@ -195,6 +232,7 @@ struct bluefs_transaction_t {
     OP_FILE_REMOVE, ///< remove file (ino)
     OP_JUMP,        ///< jump the seq # and offset
     OP_JUMP_SEQ,    ///< jump the seq #
+    OP_FILE_UPDATE_INC, ///< incremental update file metadata (file)
   } op_t;
 
   uuid_d uuid;          ///< fs uuid
@@ -237,10 +275,19 @@ struct bluefs_transaction_t {
     encode(dir, op_bl);
     encode(file, op_bl);
   }
-  void op_file_update(const bluefs_fnode_t& file) {
+  void op_file_update(bluefs_fnode_t& file) {
     using ceph::encode;
     encode((__u8)OP_FILE_UPDATE, op_bl);
     encode(file, op_bl);
+    file.reset_delta();
+  }
+  /* streams update to bufferlist and clears update state */
+  void op_file_update_inc(bluefs_fnode_t& file) {
+    using ceph::encode;
+    bluefs_fnode_delta_t delta;
+    file.make_delta(&delta); //also resets delta to zero
+    encode((__u8)OP_FILE_UPDATE_INC, op_bl);
+    encode(delta, op_bl);
   }
   void op_file_remove(uint64_t ino) {
     using ceph::encode;

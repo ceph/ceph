@@ -41,6 +41,7 @@
 #include <iosfwd>
 #include <iomanip>
 #include <list>
+#include <memory>
 #include <vector>
 #include <string>
 #if __cplusplus >= 201703L
@@ -439,7 +440,13 @@ struct error_code;
 	buffers_iterator(U* const p)
 	  : cur(p) {
 	}
-	template <class U>
+	// copy constructor
+	buffers_iterator(const buffers_iterator<T>& other)
+	  : cur(other.cur) {
+	}
+	// converting constructor, from iterator -> const_iterator only
+	template <class U, typename std::enable_if<
+	    std::is_const<T>::value && !std::is_const<U>::value, int>::type = 0>
 	buffers_iterator(const buffers_iterator<U>& other)
 	  : cur(other.cur) {
 	}
@@ -473,11 +480,6 @@ struct error_code;
 	}
 	bool operator!=(const buffers_iterator& rhs) const {
 	  return !(*this==rhs);
-	}
-
-	using citer_t = buffers_iterator<typename std::add_const<T>::type>;
-	operator citer_t() const {
-	  return citer_t(cur);
 	}
       };
 
@@ -863,7 +865,9 @@ struct error_code;
 	if (first_round) {
 	  impl_f(first_round);
 	}
-	if (const auto second_round = len - first_round; second_round) {
+	// no C++17 for the sake of the C++11 guarantees of librados, sorry.
+	const auto second_round = len - first_round;
+	if (second_round) {
 	  _refill(second_round);
 	  impl_f(second_round);
 	}
@@ -1196,6 +1200,15 @@ struct error_code;
 	++n;
       }
     }
+
+    struct iovec_t {
+      uint64_t offset;
+      uint64_t length;
+      std::vector<iovec> iov;
+    };
+    using iov_vec_t = std::vector<iovec_t>;
+    iov_vec_t prepare_iovs() const;
+
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
 

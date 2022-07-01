@@ -10,7 +10,7 @@ Intro
 The protocol design looks a lot like kerberos.  The authorizer "KDC"
 role is served by the monitor, who has a database of shared secrets
 for each entity.  Clients and non-monitor daemons all start by
-authenticating with the monitor to obtain tickets, mostly referreed to
+authenticating with the monitor to obtain tickets, mostly referred to
 in the code as authorizers.  These tickets provide both
 *authentication* and *authorization* in that they include a
 description of the *capabilities* for the entity, a concise structured
@@ -402,5 +402,5 @@ That is, the new rotating key is simply protected by the daemon's
 rotating secret.
 
 Note that, as an implementation detail, the services keep the current
-key and the prior key on hand so that the can continue to validate
+key and the prior key on hand so that they can continue to validate
 requests while the key is being rotated.

@@ -34,6 +34,8 @@ public:
 
   void remove_all_queries();
 
+  void reregister_queries();
+
   std::map<Query, Limits> get_queries() const {
     std::lock_guard locker(lock);
 
@@ -42,7 +44,9 @@ public:
       auto result_it = result.insert({query, {}}).first;
       if (is_limited(limits)) {
         for (auto& limit : limits) {
-          result_it->second.insert(*limit.second);
+          if (limit.second) {
+            result_it->second.insert(*limit.second);
+          }
         }
       }
     }

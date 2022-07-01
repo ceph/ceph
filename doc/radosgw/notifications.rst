@@ -122,6 +122,7 @@ To update a topic, use the same command used for topic creation, with the topic 
    [&Attributes.entry.7.key=OpaqueData&Attributes.entry.7.value=<opaque data>]
    [&Attributes.entry.8.key=push-endpoint&Attributes.entry.8.value=<endpoint>]
    [&Attributes.entry.9.key=persistent&Attributes.entry.9.value=true|false]
+   [&Attributes.entry.10.key=cloudevents&Attributes.entry.10.value=true|false]
 
 Request parameters:
 
@@ -134,6 +135,7 @@ Request parameters:
  - URI: ``http[s]://<fqdn>[:<port]``
  - port defaults to: 80/443 for HTTP/S accordingly
  - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
+ - cloudevents: indicate whether the HTTP header should contain attributes according to the `S3 CloudEvents Spec`_ ("false" by default)
 
 - AMQP0.9.1 endpoint
 
@@ -450,3 +452,4 @@ pushed or pulled using the pubsub sync module. For example:
 .. _S3 Notification Compatibility: ../s3-notification-compatibility
 .. _AWS Create Topic: https://docs.aws.amazon.com/sns/latest/api/API_CreateTopic.html
 .. _Bucket Operations: ../s3/bucketops
+.. _S3 CloudEvents Spec: https://github.com/cloudevents/spec/blob/main/cloudevents/adapters/aws-s3.md

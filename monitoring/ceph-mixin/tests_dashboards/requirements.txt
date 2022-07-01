@@ -1,0 +1,12 @@
+attrs==21.2.0
+behave==1.2.6
+py==1.10.0
+pyparsing==2.4.7
+PyYAML==6.0
+types-PyYAML==6.0.0
+typing-extensions==3.10.0.2
+termcolor==1.1.0
+types-termcolor==1.1.2
+dataclasses==0.6
+types-dataclasses==0.6.1
+prettytable==2.4.0

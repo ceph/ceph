@@ -140,7 +140,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
 
   getBucketList(context: CdTableFetchDataContext) {
     this.setTableRefreshTimeout();
-    this.rgwBucketService.list().subscribe(
+    this.rgwBucketService.list(true).subscribe(
       (resp: object[]) => {
         this.buckets = resp;
         this.transformBucketData();

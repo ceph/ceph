@@ -8,6 +8,7 @@ except ImportError:
     AsyncMock = None
 import pytest
 
+
 try:
     from asyncssh.misc import ConnectionLost
 except ImportError:
@@ -17,16 +18,16 @@ from ceph.deployment.hostspec import HostSpec
 
 from cephadm import CephadmOrchestrator
 from cephadm.serve import CephadmServe
-from cephadm.tests.fixtures import with_host, wait
+from cephadm.tests.fixtures import with_host, wait, async_side_effect
 
 
 @pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
 class TestWithSSH:
-    @mock.patch("cephadm.ssh.SSHManager.execute_command")
-    @mock.patch("cephadm.ssh.SSHManager.check_execute_command")
+    @mock.patch("cephadm.ssh.SSHManager._execute_command")
+    @mock.patch("cephadm.ssh.SSHManager._check_execute_command")
     def test_offline(self, check_execute_command, execute_command, cephadm_module):
-        check_execute_command.return_value = ''
-        execute_command.return_value = '', '', 0
+        check_execute_command.side_effect = async_side_effect('')
+        execute_command.side_effect = async_side_effect(('', '', 0))
 
         if not AsyncMock:
             # can't run this test if we could not import AsyncMock
@@ -40,13 +41,13 @@ class TestWithSSH:
                 assert "Host 'test' not found" in err
 
                 out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-                assert out == HostSpec('test', '1.2.3.4', status='Offline').to_json()
+                assert out == HostSpec('test', '1::4', status='Offline').to_json()
 
                 asyncssh_connect.return_value = mock.MagicMock()
                 asyncssh_connect.side_effect = None
                 assert CephadmServe(cephadm_module)._check_host('test') is None
                 out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-                assert out == HostSpec('test', '1.2.3.4').to_json()
+                assert out == HostSpec('test', '1::4').to_json()
 
 
 @pytest.mark.skipif(ConnectionLost is not None, reason='asyncssh')

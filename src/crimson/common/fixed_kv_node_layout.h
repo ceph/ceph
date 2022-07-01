@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <iostream>
+
+#include <boost/iterator/counting_iterator.hpp>
 
 #include "include/byteorder.h"
 
@@ -386,26 +389,32 @@ public:
   }
 
   const_iterator lower_bound(K l) const {
-    auto ret = begin();
-    for (; ret != end(); ++ret) {
-      if (ret->get_key() >= l)
-	break;
-    }
-    return ret;
+    auto it = std::lower_bound(boost::make_counting_iterator<uint16_t>(0),
+	                       boost::make_counting_iterator<uint16_t>(get_size()),
+		               l,
+		               [this](uint16_t i, K key) {
+			         const_iterator iter(this, i);
+			         return iter->get_key() < key;
+			       });
+    return const_iterator(this, *it);
   }
+
   iterator lower_bound(K l) {
     const auto &tref = *this;
     return iterator(this, tref.lower_bound(l).offset);
   }
 
   const_iterator upper_bound(K l) const {
-    auto ret = begin();
-    for (; ret != end(); ++ret) {
-      if (ret->get_key() > l)
-	break;
-    }
-    return ret;
+    auto it = std::upper_bound(boost::make_counting_iterator<uint16_t>(0),
+	                       boost::make_counting_iterator<uint16_t>(get_size()),
+		               l,
+		               [this](K key, uint16_t i) {
+			         const_iterator iter(this, i);
+			         return key < iter->get_key();
+			       });
+    return const_iterator(this, *it);
   }
+
   iterator upper_bound(K l) {
     const auto &tref = *this;
     return iterator(this, tref.upper_bound(l).offset);

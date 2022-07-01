@@ -4,13 +4,15 @@ import time
 import uuid
 import errno
 import traceback
+import logging
 from collections import OrderedDict
 from typing import List, Dict, Set
 
 from mgr_module import CommandResult
 
 from datetime import datetime, timedelta
-from threading import Lock, Condition, Thread
+from threading import Lock, Condition, Thread, Timer
+from ipaddress import ip_address
 
 PERF_STATS_VERSION = 1
 
@@ -33,17 +35,28 @@ MDS_PERF_QUERY_COUNTERS_MAP = OrderedDict({'cap_hit': 0,
                                            'dentry_lease': 4,
                                            'opened_files': 5,
                                            'pinned_icaps': 6,
-                                           'opened_inodes': 7})
+                                           'opened_inodes': 7,
+                                           'read_io_sizes': 8,
+                                           'write_io_sizes': 9,
+                                           'avg_read_latency': 10,
+                                           'stdev_read_latency': 11,
+                                           'avg_write_latency': 12,
+                                           'stdev_write_latency': 13,
+                                           'avg_metadata_latency': 14,
+                                           'stdev_metadata_latency': 15})
 MDS_PERF_QUERY_COUNTERS = [] # type: List[str]
-MDS_GLOBAL_PERF_QUERY_COUNTERS = ['cap_hit', 'read_latency', 'write_latency', 'metadata_latency', 'dentry_lease', 'opened_files', 'pinned_icaps', 'opened_inodes'] # type: List[str]
+MDS_GLOBAL_PERF_QUERY_COUNTERS = list(MDS_PERF_QUERY_COUNTERS_MAP.keys())
 
 QUERY_EXPIRE_INTERVAL = timedelta(minutes=1)
+REREGISTER_TIMER_INTERVAL = 1
 
 CLIENT_METADATA_KEY = "client_metadata"
 CLIENT_METADATA_SUBKEYS = ["hostname", "root"]
 CLIENT_METADATA_SUBKEYS_OPTIONAL = ["mount_point"]
 
 NON_EXISTENT_KEY_STR = "N/A"
+
+logger = logging.getLogger(__name__)
 
 class FilterSpec(object):
     """
@@ -66,7 +79,7 @@ class FilterSpec(object):
 def extract_mds_ranks_from_spec(mds_rank_spec):
     if not mds_rank_spec:
         return MDS_RANK_ALL
-    match = re.match(r'^(\d[,\d]*)$', mds_rank_spec)
+    match = re.match(r'^\d+(,\d+)*$', mds_rank_spec)
     if not match:
         raise ValueError("invalid mds filter spec: {}".format(mds_rank_spec))
     return tuple(int(mds_rank) for mds_rank in match.group(0).split(','))
@@ -76,15 +89,25 @@ def extract_client_id_from_spec(client_id_spec):
         return CLIENT_ID_ALL
     # the client id is the spec itself since it'll be a part
     # of client filter regex.
+    if not client_id_spec.isdigit():
+        raise ValueError('invalid client_id filter spec: {}'.format(client_id_spec))
     return client_id_spec
 
 def extract_client_ip_from_spec(client_ip_spec):
     if not client_ip_spec:
         return CLIENT_IP_ALL
-    # TODO: validate if it is an ip address (or a subset of it).
-    # the client ip is the spec itself since it'll be a part
-    # of client filter regex.
-    return client_ip_spec
+
+    client_ip = client_ip_spec
+    if client_ip.startswith('v1:'):
+        client_ip = client_ip.replace('v1:', '')
+    elif client_ip.startswith('v2:'):
+        client_ip = client_ip.replace('v2:', '')
+
+    try:
+        ip_address(client_ip)
+        return client_ip_spec
+    except ValueError:
+        raise ValueError('invalid client_ip filter spec: {}'.format(client_ip_spec))
 
 def extract_mds_ranks_from_report(mds_ranks_str):
     if not mds_ranks_str:
@@ -105,6 +128,7 @@ class FSPerfStats(object):
     user_queries = {} # type: Dict[str, Dict]
 
     meta_lock = Lock()
+    rqtimer = None
     client_metadata = {
         'metadata' : {},
         'to_purge' : set(),
@@ -114,6 +138,7 @@ class FSPerfStats(object):
     def __init__(self, module):
         self.module = module
         self.log = module.log
+        self.prev_rank0_gid = None
         # report processor thread
         self.report_processor = Thread(target=self.run)
         self.report_processor.start()
@@ -123,7 +148,7 @@ class FSPerfStats(object):
         if not key in result or not result[key] == meta:
             result[key] = meta
 
-    def notify(self, cmdtag):
+    def notify_cmd(self, cmdtag):
         self.log.debug("cmdtag={0}".format(cmdtag))
         with self.meta_lock:
             try:
@@ -164,19 +189,62 @@ class FSPerfStats(object):
             self.log.debug("client_metadata={0}, to_purge={1}".format(
                 self.client_metadata['metadata'], self.client_metadata['to_purge']))
 
-    def update_client_meta(self, rank_set):
+    def notify_fsmap(self):
+        #Reregister the user queries when there is a new rank0 mds
+        with self.lock:
+            gid_state = FSPerfStats.get_rank0_mds_gid_state(self.module.get('fs_map'))
+            if not gid_state:
+                return
+            rank0_gid, state = gid_state
+            if (rank0_gid and rank0_gid != self.prev_rank0_gid and state == 'up:active'):
+                #the new rank0 MDS is up:active
+                ua_last_updated = time.monotonic()
+                if (self.rqtimer and self.rqtimer.is_alive()):
+                    self.rqtimer.cancel()
+                self.rqtimer = Timer(REREGISTER_TIMER_INTERVAL,
+                                     self.re_register_queries, args=(rank0_gid, ua_last_updated,))
+                self.rqtimer.start()
+
+    def re_register_queries(self, rank0_gid, ua_last_updated):
+        #reregister queries if the metrics are the latest. Otherwise reschedule the timer and
+        #wait for the empty metrics
+        with self.lock:
+            if self.mx_last_updated >= ua_last_updated:
+                self.log.debug("reregistering queries...")
+                self.module.reregister_mds_perf_queries()
+                self.prev_rank0_gid = rank0_gid
+            else:
+                #reschedule the timer
+                self.rqtimer = Timer(REREGISTER_TIMER_INTERVAL,
+                                     self.re_register_queries, args=(rank0_gid, ua_last_updated,))
+                self.rqtimer.start()
+
+    @staticmethod
+    def get_rank0_mds_gid_state(fsmap):
+        for fs in fsmap['filesystems']:
+            mds_map = fs['mdsmap']
+            if mds_map is not None:
+                for mds_id, mds_status in mds_map['info'].items():
+                    if mds_status['rank'] == 0:
+                        return mds_status['gid'], mds_status['state']
+        logger.warn("No rank0 mds in the fsmap")
+
+    def update_client_meta(self):
         new_updates = {}
         pending_updates = [v[0] for v in self.client_metadata['in_progress'].values()]
         with self.meta_lock:
-            for rank in rank_set:
-                if rank in pending_updates:
-                    continue
+            fsmap = self.module.get('fs_map')
+            for fs in fsmap['filesystems']:
+                mdsmap = fs['mdsmap']                
+                gid = mdsmap['up']["mds_0"]
+                if gid in pending_updates:
+                    continue                
                 tag = str(uuid.uuid4())
                 result = CommandResult(tag)
-                new_updates[tag] = (rank, result)
+                new_updates[tag] = (gid, result)
             self.client_metadata['in_progress'].update(new_updates)
 
-        self.log.debug("updating client metadata from {0}".format(new_updates))
+        self.log.debug(f"updating client metadata from {new_updates}")
 
         cmd_dict = {'prefix': 'client ls'}
         for tag,val in new_updates.items():
@@ -210,7 +278,7 @@ class FSPerfStats(object):
             missing_clients.update(list(culled[1].keys()))
 
     def cull_client_entries(self, raw_perf_counters, incoming_metrics, missing_clients):
-        # this is a bit more involed -- for each rank figure out what clients
+        # this is a bit more involved -- for each rank figure out what clients
         # are missing in incoming report and purge them from our tracked map.
         # but, if this is invoked _after_ cull_mds_entries(), the rank set
         # is same, so we can loop based on that assumption.
@@ -264,19 +332,19 @@ class FSPerfStats(object):
             # what's received from MDS
             incoming_metrics = result['metrics'][1]
 
+            # metrics updated (monotonic) time
+            self.mx_last_updated = result['metrics'][2][0]
+
             # cull missing MDSs and clients
             self.cull_missing_entries(raw_perf_counters, incoming_metrics)
 
             # iterate over metrics list and update our copy (note that we have
             # already culled the differences).
-            meta_refresh_ranks = set()
             for counter in incoming_metrics:
                 mds_rank = int(counter['k'][0][0])
                 client_id, client_ip = extract_client_id_and_ip(counter['k'][1][0])
                 if client_id is not None or not client_ip: # client_id _could_ be 0
                     with self.meta_lock:
-                        if not client_id in self.client_metadata['metadata']:
-                            meta_refresh_ranks.add(mds_rank)
                         self.set_client_metadata(client_id, "IP", client_ip)
                 else:
                     self.log.warn("client metadata for client_id={0} might be unavailable".format(client_id))
@@ -288,7 +356,7 @@ class FSPerfStats(object):
                 del raw_client_counters[:]
                 raw_client_counters.extend(counter['c'])
         # send an asynchronous client metadata refresh
-        self.update_client_meta(meta_refresh_ranks)
+        self.update_client_meta()
 
     def get_raw_perf_counters_global(self, query):
         raw_perf_counters = query.setdefault(QUERY_RAW_COUNTERS_GLOBAL, {})
@@ -450,7 +518,10 @@ class FSPerfStats(object):
         return FilterSpec(mds_ranks, client_id, client_ip)
 
     def get_perf_data(self, cmd):
-        filter_spec = self.extract_query_filters(cmd)
+        try:
+            filter_spec = self.extract_query_filters(cmd)
+        except ValueError as e:
+            return -errno.EINVAL, "", str(e)
 
         counters = {}
         with self.lock:

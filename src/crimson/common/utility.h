@@ -5,12 +5,16 @@
 
 #include <type_traits>
 
+namespace _impl {
+  template <class T> struct always_false : std::false_type {};
+};
+
 template <class T>
 void assert_moveable(T& t) {
     // It's fine
 }
 template <class T>
 void assert_moveable(const T& t) {
-    static_assert(always_false<T>::value, "unable to move-out from T");
+    static_assert(_impl::always_false<T>::value, "unable to move-out from T");
 }
 

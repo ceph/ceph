@@ -2,12 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <seastar/core/future.hh>
+#include <seastar/core/sleep.hh>
 
 #include "messages/MOSDOp.h"
 
 #include "crimson/osd/pg.h"
 #include "crimson/osd/shard_services.h"
 #include "common/Formatter.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 
 namespace {
@@ -16,25 +18,46 @@ namespace {
   }
 }
 
+namespace crimson {
+  template <>
+  struct EventBackendRegistry<osd::UrgentRecovery> {
+    static std::tuple<> get_backends() {
+      return {};
+    }
+  };
+
+  template <>
+  struct EventBackendRegistry<osd::PglogBasedRecovery> {
+    static std::tuple<> get_backends() {
+      return {};
+    }
+  };
+}
+
 namespace crimson::osd {
 
-BackgroundRecovery::BackgroundRecovery(
+template <class T>
+BackgroundRecoveryT<T>::BackgroundRecoveryT(
   Ref<PG> pg,
   ShardServices &ss,
   epoch_t epoch_started,
-  crimson::osd::scheduler::scheduler_class_t scheduler_class)
+  crimson::osd::scheduler::scheduler_class_t scheduler_class,
+  float delay)
   : pg(pg),
     epoch_started(epoch_started),
+    delay(delay),
     ss(ss),
     scheduler_class(scheduler_class)
 {}
 
-void BackgroundRecovery::print(std::ostream &lhs) const
+template <class T>
+void BackgroundRecoveryT<T>::print(std::ostream &lhs) const
 {
   lhs << "BackgroundRecovery(" << pg->get_pgid() << ")";
 }
 
-void BackgroundRecovery::dump_detail(Formatter *f) const
+template <class T>
+void BackgroundRecoveryT<T>::dump_detail(Formatter *f) const
 {
   f->dump_stream("pgid") << pg->get_pgid();
   f->open_object_section("recovery_detail");
@@ -44,25 +67,49 @@ void BackgroundRecovery::dump_detail(Formatter *f) const
   f->close_section();
 }
 
-seastar::future<> BackgroundRecovery::start()
+template <class T>
+seastar::future<> BackgroundRecoveryT<T>::start()
 {
   logger().debug("{}: start", *this);
 
-  IRef ref = this;
-  return ss.throttler.with_throttle_while(
-    this, get_scheduler_params(), [this] {
-      return interruptor::with_interruption([this] {
-	return do_recovery();
-      }, [](std::exception_ptr) {
-	return seastar::make_ready_future<bool>(false);
-      }, pg);
-    }).handle_exception_type([ref, this](const std::system_error& err) {
-      if (err.code() == std::make_error_code(std::errc::interrupted)) {
-	logger().debug("{} recovery interruped: {}", *pg, err.what());
-	return seastar::now();
-      }
-      return seastar::make_exception_future<>(err);
-    });
+  typename T::IRef ref = static_cast<T*>(this);
+  auto maybe_delay = seastar::now();
+  if (delay) {
+    maybe_delay = seastar::sleep(
+      std::chrono::milliseconds(std::lround(delay * 1000)));
+  }
+  return maybe_delay.then([ref, this] {
+    return this->template with_blocking_event<OperationThrottler::BlockingEvent>(
+      [ref, this] (auto&& trigger) {
+      return ss.throttler.with_throttle_while(
+        std::move(trigger),
+        this, get_scheduler_params(), [this] {
+          return T::interruptor::with_interruption([this] {
+            return do_recovery();
+          }, [](std::exception_ptr) {
+            return seastar::make_ready_future<bool>(false);
+          }, pg);
+        }).handle_exception_type([ref, this](const std::system_error& err) {
+          if (err.code() == std::make_error_code(std::errc::interrupted)) {
+            logger().debug("{} recovery interruped: {}", *pg, err.what());
+            return seastar::now();
+          }
+          return seastar::make_exception_future<>(err);
+        });
+      });
+  });
+}
+
+UrgentRecovery::UrgentRecovery(
+    const hobject_t& soid,
+    const eversion_t& need,
+    Ref<PG> pg,
+    ShardServices& ss,
+    epoch_t epoch_started)
+  : BackgroundRecoveryT{pg, ss, epoch_started,
+                        crimson::osd::scheduler::scheduler_class_t::immediate},
+    soid{soid}, need(need)
+{
 }
 
 UrgentRecovery::interruptible_future<bool>
@@ -70,9 +117,10 @@ UrgentRecovery::do_recovery()
 {
   logger().debug("{}: {}", __func__, *this);
   if (!pg->has_reset_since(epoch_started)) {
-    return with_blocking_future_interruptible<IOInterruptCondition>(
-      pg->get_recovery_handler()->recover_missing(soid, need)
-    ).then_interruptible([] {
+    return with_blocking_event<RecoveryBackend::RecoveryBlockingEvent,
+			       interruptor>([this] (auto&& trigger) {
+      return pg->get_recovery_handler()->recover_missing(trigger, soid, need);
+    }).then_interruptible([] {
       return seastar::make_ready_future<bool>(false);
     });
   }
@@ -100,22 +148,28 @@ void UrgentRecovery::dump_detail(Formatter *f) const
 PglogBasedRecovery::PglogBasedRecovery(
   Ref<PG> pg,
   ShardServices &ss,
-  const epoch_t epoch_started)
-  : BackgroundRecovery(
+  const epoch_t epoch_started,
+  float delay)
+  : BackgroundRecoveryT(
       std::move(pg),
       ss,
       epoch_started,
-      crimson::osd::scheduler::scheduler_class_t::background_recovery)
+      crimson::osd::scheduler::scheduler_class_t::background_recovery,
+      delay)
 {}
 
 PglogBasedRecovery::interruptible_future<bool>
 PglogBasedRecovery::do_recovery()
 {
-  if (pg->has_reset_since(epoch_started))
+  if (pg->has_reset_since(epoch_started)) {
     return seastar::make_ready_future<bool>(false);
-  return with_blocking_future_interruptible<IOInterruptCondition>(
-    pg->get_recovery_handler()->start_recovery_ops(
-      crimson::common::local_conf()->osd_recovery_max_single_start));
+  }
+  return with_blocking_event<RecoveryBackend::RecoveryBlockingEvent,
+			     interruptor>([this] (auto&& trigger) {
+    return pg->get_recovery_handler()->start_recovery_ops(
+      trigger,
+      crimson::common::local_conf()->osd_recovery_max_single_start);
+  });
 }
 
 BackfillRecovery::BackfillRecoveryPipeline &BackfillRecovery::bp(PG &pg)
@@ -134,16 +188,20 @@ BackfillRecovery::do_recovery()
     return seastar::make_ready_future<bool>(false);
   }
   // TODO: limits
-  return with_blocking_future_interruptible<IOInterruptCondition>(
+  return enter_stage<interruptor>(
     // process_event() of our boost::statechart machine is non-reentrant.
     // with the backfill_pipeline we protect it from a second entry from
     // the implementation of BackfillListener.
     // additionally, this stage serves to synchronize with PeeringEvent.
-    handle.enter(bp(*pg).process)
+    bp(*pg).process
   ).then_interruptible([this] {
     pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
     return seastar::make_ready_future<bool>(false);
   });
 }
+
+template class BackgroundRecoveryT<UrgentRecovery>;
+template class BackgroundRecoveryT<PglogBasedRecovery>;
+template class BackgroundRecoveryT<BackfillRecovery>;
 
 } // namespace crimson::osd

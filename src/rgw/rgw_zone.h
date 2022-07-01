@@ -6,6 +6,7 @@
 
 #include "rgw_common.h"
 #include "rgw_sync_policy.h"
+#include "rgw_zone_features.h"
 
 namespace rgw_zone_defaults {
 
@@ -596,13 +597,15 @@ struct RGWZone {
   bool sync_from_all;
   std::set<std::string> sync_from; /* list of zones to sync from */
 
+  rgw::zone_features::set supported_features;
+
   RGWZone()
     : log_meta(false), log_data(false), read_only(false),
       bucket_index_max_shards(default_bucket_index_max_shards),
       sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(name, bl);
     encode(endpoints, bl);
     encode(log_meta, bl);
@@ -614,11 +617,12 @@ struct RGWZone {
     encode(sync_from_all, bl);
     encode(sync_from, bl);
     encode(redirect_zone, bl);
+    encode(supported_features, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(8, bl);
     decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -645,6 +649,9 @@ struct RGWZone {
     if (struct_v >= 7) {
       decode(redirect_zone, bl);
     }
+    if (struct_v >= 8) {
+      decode(supported_features, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -655,6 +662,10 @@ struct RGWZone {
 
   bool syncs_from(const std::string& zone_name) const {
     return (sync_from_all || sync_from.find(zone_name) != sync_from.end());
+  }
+
+  bool supports(std::string_view feature) const {
+    return supported_features.contains(feature);
   }
 };
 WRITE_CLASS_ENCODER(RGWZone)
@@ -679,10 +690,154 @@ struct RGWDefaultZoneGroupInfo {
 };
 WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 
+struct RGWTierACLMapping {
+  ACLGranteeTypeEnum type{ACL_TYPE_CANON_USER};
+  std::string source_id;
+  std::string dest_id;
+
+  RGWTierACLMapping() = default;
+
+  RGWTierACLMapping(ACLGranteeTypeEnum t,
+             const std::string& s,
+             const std::string& d) : type(t),
+  source_id(s),
+  dest_id(d) {}
+
+  void init(const JSONFormattable& config) {
+    const std::string& t = config["type"];
+
+    if (t == "email") {
+      type = ACL_TYPE_EMAIL_USER;
+    } else if (t == "uri") {
+      type = ACL_TYPE_GROUP;
+    } else {
+      type = ACL_TYPE_CANON_USER;
+    }
+
+    source_id = config["source_id"];
+    dest_id = config["dest_id"];
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode((uint32_t)type, bl);
+    encode(source_id, bl);
+    encode(dest_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    uint32_t it;
+    decode(it, bl);
+    type = (ACLGranteeTypeEnum)it;
+    decode(source_id, bl);
+    decode(dest_id, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWTierACLMapping)
+
+struct RGWZoneGroupPlacementTierS3 {
+#define DEFAULT_MULTIPART_SYNC_PART_SIZE (32 * 1024 * 1024)
+  std::string endpoint;
+  RGWAccessKey key;
+  std::string region;
+  HostStyle host_style{PathStyle};
+  std::string target_storage_class;
+
+  /* Should below be bucket/zone specific?? */
+  std::string target_path;
+  std::map<std::string, RGWTierACLMapping> acl_mappings;
+
+  uint64_t multipart_sync_threshold{DEFAULT_MULTIPART_SYNC_PART_SIZE};
+  uint64_t multipart_min_part_size{DEFAULT_MULTIPART_SYNC_PART_SIZE};
+
+  int update_params(const JSONFormattable& config);
+  int clear_params(const JSONFormattable& config);
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(endpoint, bl);
+    encode(key, bl);
+    encode(region, bl);
+    encode((uint32_t)host_style, bl);
+    encode(target_storage_class, bl);
+    encode(target_path, bl);
+    encode(acl_mappings, bl);
+    encode(multipart_sync_threshold, bl);
+    encode(multipart_min_part_size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(endpoint, bl);
+    decode(key, bl);
+    decode(region, bl);
+
+    uint32_t it;
+    decode(it, bl);
+    host_style = (HostStyle)it;
+
+    decode(target_storage_class, bl);
+    decode(target_path, bl);
+    decode(acl_mappings, bl);
+    decode(multipart_sync_threshold, bl);
+    decode(multipart_min_part_size, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTierS3)
+
+struct RGWZoneGroupPlacementTier {
+  std::string tier_type;
+  std::string storage_class;
+  bool retain_head_object = false;
+
+  struct _tier {
+    RGWZoneGroupPlacementTierS3 s3;
+  } t;
+
+  int update_params(const JSONFormattable& config);
+  int clear_params(const JSONFormattable& config);
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(tier_type, bl);
+    encode(storage_class, bl);
+    encode(retain_head_object, bl);
+    if (tier_type == "cloud-s3") {
+      encode(t.s3, bl);
+    }
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(tier_type, bl);
+    decode(storage_class, bl);
+    decode(retain_head_object, bl);
+    if (tier_type == "cloud-s3") {
+      decode(t.s3, bl);
+    }
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTier)
+
 struct RGWZoneGroupPlacementTarget {
   std::string name;
   std::set<std::string> tags;
   std::set<std::string> storage_classes;
+  std::map<std::string, RGWZoneGroupPlacementTier> tier_targets;
 
   bool user_permitted(const std::list<std::string>& user_tags) const {
     if (tags.empty()) {
@@ -697,15 +852,16 @@ struct RGWZoneGroupPlacementTarget {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(name, bl);
     encode(tags, bl);
     encode(storage_classes, bl);
+    encode(tier_targets, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(name, bl);
     decode(tags, bl);
     if (struct_v >= 2) {
@@ -713,6 +869,9 @@ struct RGWZoneGroupPlacementTarget {
     }
     if (storage_classes.empty()) {
       storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
+    }
+    if (struct_v >= 3) {
+      decode(tier_targets, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -754,6 +913,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string realm_id;
 
   rgw_sync_policy_info sync_policy;
+  rgw::zone_features::set enabled_features;
 
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
@@ -771,7 +931,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void post_process_params(const DoutPrefixProvider *dpp, optional_yield y);
 
   void encode(bufferlist& bl) const override {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -785,11 +945,12 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     RGWSystemMetaObj::encode(bl);
     encode(realm_id, bl);
     encode(sync_policy, bl);
+    encode(enabled_features, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -813,6 +974,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     if (struct_v >= 5) {
       decode(sync_policy, bl);
     }
+    if (struct_v >= 6) {
+      decode(enabled_features, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -826,6 +990,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
                bool *psync_from_all, std::list<std::string>& sync_from,
                std::list<std::string>& sync_from_rm, std::string *predirect_zone,
                std::optional<int> bucket_index_max_shards, RGWSyncModulesManager *sync_mgr,
+               const rgw::zone_features::set& enable_features,
+               const rgw::zone_features::set& disable_features,
 	       optional_yield y);
   int remove_zone(const DoutPrefixProvider *dpp, const std::string& zone_id, optional_yield y);
   int rename_zone(const DoutPrefixProvider *dpp, const RGWZoneParams& zone_params, optional_yield y);
@@ -839,6 +1005,10 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<RGWZoneGroup*>& o);
+
+  bool supports(std::string_view feature) const {
+    return enabled_features.contains(feature);
+  }
 };
 WRITE_CLASS_ENCODER(RGWZoneGroup)
 
@@ -878,20 +1048,31 @@ WRITE_CLASS_ENCODER(RGWPeriodMap)
 
 struct RGWPeriodConfig
 {
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
+  RGWRateLimitInfo user_ratelimit;
+  RGWRateLimitInfo bucket_ratelimit;
+  // rate limit unauthenticated user
+  RGWRateLimitInfo anon_ratelimit;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(bucket_quota, bl);
-    encode(user_quota, bl);
+    ENCODE_START(2, 1, bl);
+    encode(quota.bucket_quota, bl);
+    encode(quota.user_quota, bl);
+    encode(bucket_ratelimit, bl);
+    encode(user_ratelimit, bl);
+    encode(anon_ratelimit, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(bucket_quota, bl);
-    decode(user_quota, bl);
+    DECODE_START(2, bl);
+    decode(quota.bucket_quota, bl);
+    decode(quota.user_quota, bl);
+    if (struct_v >= 2) {
+      decode(bucket_ratelimit, bl);
+      decode(user_ratelimit, bl);
+      decode(anon_ratelimit, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -916,8 +1097,7 @@ struct RGWRegionMap {
 
   std::string master_region;
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -934,8 +1114,7 @@ struct RGWZoneGroupMap {
 
   std::string master_zonegroup;
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
 
   /* construct the map */
   int read(const DoutPrefixProvider *dpp, CephContext *cct, RGWSI_SysObj *sysobj_svc, optional_yield y);
@@ -1111,6 +1290,7 @@ public:
   const rgw_zone_id& get_master_zone() const { return master_zone; }
   const std::string& get_master_zonegroup() const { return master_zonegroup; }
   const std::string& get_realm() const { return realm_id; }
+  const std::string& get_realm_name() const { return realm_name; }
   const RGWPeriodMap& get_map() const { return period_map; }
   RGWPeriodConfig& get_config() { return period_config; }
   const RGWPeriodConfig& get_config() const { return period_config; }
@@ -1120,11 +1300,11 @@ public:
   const std::string& get_info_oid_prefix() const;
 
   void set_user_quota(RGWQuotaInfo& user_quota) {
-    period_config.user_quota = user_quota;
+    period_config.quota.user_quota = user_quota;
   }
 
   void set_bucket_quota(RGWQuotaInfo& bucket_quota) {
-    period_config.bucket_quota = bucket_quota;
+    period_config.quota.bucket_quota = bucket_quota;
   }
 
   void set_id(const std::string& _id) {

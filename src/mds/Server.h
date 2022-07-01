@@ -80,6 +80,7 @@ enum {
   l_mdss_req_unlink_latency,
   l_mdss_cap_revoke_eviction,
   l_mdss_cap_acquisition_throttle,
+  l_mdss_req_getvxattr_latency,
   l_mdss_last,
 };
 
@@ -95,6 +96,7 @@ public:
     TRIM = (1<<2),
     ENFORCE_LIVENESS = (1<<3),
   };
+
   explicit Server(MDSRank *m, MetricsHandler *metrics_handler);
   ~Server() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
@@ -132,7 +134,7 @@ public:
   void find_idle_sessions();
 
   void kill_session(Session *session, Context *on_safe);
-  size_t apply_blocklist(const std::set<entity_addr_t> &blocklist);
+  size_t apply_blocklist();
   void journal_close_session(Session *session, int state, Context *on_safe);
 
   size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
@@ -176,6 +178,7 @@ public:
 
   // some helpers
   bool check_fragment_space(MDRequestRef& mdr, CDir *in);
+  bool check_dir_max_entries(MDRequestRef& mdr, CDir *in);
   bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
@@ -184,6 +187,7 @@ public:
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
+  void _try_open_ino(MDRequestRef& mdr, int r, inodeno_t ino);
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
 			      bool no_want_auth=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
@@ -212,6 +216,10 @@ public:
 
   int parse_quota_vxattr(std::string name, std::string value, quota_info_t *quota);
   void create_quota_realm(CInode *in);
+  int parse_layout_vxattr_json(std::string name, std::string value,
+			       const OSDMap& osdmap, file_layout_t *layout);
+  int parse_layout_vxattr_string(std::string name, std::string value, const OSDMap& osdmap,
+				 file_layout_t *layout);
   int parse_layout_vxattr(std::string name, std::string value, const OSDMap& osdmap,
 			  file_layout_t *layout, bool validate=true);
   int check_layout_vxattr(MDRequestRef& mdr,
@@ -220,6 +228,7 @@ public:
                           file_layout_t *layout);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur);
   void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur);
+  void handle_client_getvxattr(MDRequestRef& mdr);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);
 
@@ -420,6 +429,33 @@ private:
            xattr_name == "ceph.dir.pin.distributed";
   }
 
+  static bool is_ceph_dir_vxattr(std::string_view xattr_name) {
+    return (xattr_name == "ceph.dir.layout" ||
+	    xattr_name == "ceph.dir.layout.json" ||
+	    xattr_name == "ceph.dir.layout.object_size" ||
+	    xattr_name == "ceph.dir.layout.stripe_unit" ||
+	    xattr_name == "ceph.dir.layout.stripe_count" ||
+	    xattr_name == "ceph.dir.layout.pool" ||
+	    xattr_name == "ceph.dir.layout.pool_name" ||
+	    xattr_name == "ceph.dir.layout.pool_id" ||
+	    xattr_name == "ceph.dir.layout.pool_namespace" ||
+	    xattr_name == "ceph.dir.pin" ||
+	    xattr_name == "ceph.dir.pin.random" ||
+	    xattr_name == "ceph.dir.pin.distributed");
+  }
+
+  static bool is_ceph_file_vxattr(std::string_view xattr_name) {
+    return (xattr_name == "ceph.file.layout" ||
+	    xattr_name == "ceph.file.layout.json" ||
+	    xattr_name == "ceph.file.layout.object_size" ||
+	    xattr_name == "ceph.file.layout.stripe_unit" ||
+	    xattr_name == "ceph.file.layout.stripe_count" ||
+	    xattr_name == "ceph.file.layout.pool" ||
+	    xattr_name == "ceph.file.layout.pool_name" ||
+	    xattr_name == "ceph.file.layout.pool_id" ||
+	    xattr_name == "ceph.file.layout.pool_namespace");
+  }
+
   static bool is_allowed_ceph_xattr(std::string_view xattr_name) {
     // not a ceph xattr -- allow!
     if (xattr_name.rfind("ceph.", 0) != 0) {
@@ -452,6 +488,7 @@ private:
   std::set<client_t> client_reconnect_denied;  // clients whose reconnect msg have been denied .
 
   feature_bitset_t supported_features;
+  feature_bitset_t supported_metric_spec;
   feature_bitset_t required_client_features;
 
   bool forward_all_requests_to_auth = false;
@@ -459,6 +496,8 @@ private:
   double cap_revoke_eviction_timeout = 0;
   uint64_t max_snaps_per_dir = 100;
   unsigned delegate_inos_pct = 0;
+  uint64_t dir_max_entries = 0;
+  int64_t bal_fragment_size_max = 0;
 
   DecayCounter recall_throttle;
   time last_recall_state;
@@ -472,6 +511,7 @@ private:
   double caps_throttle_retry_request_timeout;
 
   size_t alternate_name_max = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
+  size_t fscrypt_last_block_max_size = g_conf().get_val<Option::size_t>("mds_fscrypt_last_block_max_size");
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {

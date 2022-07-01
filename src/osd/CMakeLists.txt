@@ -11,9 +11,6 @@ endif()
 
 set(osd_srcs
   OSD.cc
-  pg_scrubber.cc
-  scrub_machine.cc
-  PrimaryLogScrub.cc
   Watch.cc
   ClassHandler.cc
   PG.cc
@@ -24,10 +21,15 @@ set(osd_srcs
   ECTransaction.cc
   PGBackend.cc
   OSDCap.cc
+  scrubber/pg_scrubber.cc
+  scrubber/osd_scrub_sched.cc
+  scrubber/PrimaryLogScrub.cc
+  scrubber/scrub_machine.cc
+  scrubber/ScrubStore.cc
+  scrubber/scrub_backend.cc
   Watch.cc
   Session.cc
   SnapMapper.cc
-  ScrubStore.cc
   osd_types.cc
   ECUtil.cc
   ExtentCache.cc
@@ -42,7 +44,8 @@ set(osd_srcs
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}
-  ${osdc_osd_srcs})
+  ${osdc_osd_srcs}
+  osd_tracer.cc)
 if(HAS_VTA)
   set_source_files_properties(osdcap.cc
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)

@@ -10,8 +10,11 @@
 
 #include "crimson/common/log.h"
 #include "crimson/common/errorator.h"
-
-#define INTR_FUT_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_osd).trace(FMT_MSG, ##__VA_ARGS__)
+#ifndef NDEBUG
+#define INTR_FUT_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).trace(FMT_MSG, ##__VA_ARGS__)
+#else
+#define INTR_FUT_DEBUG(FMT_MSG, ...)
+#endif
 
 // The interrupt condition generally works this way:
 //
@@ -60,6 +63,18 @@ namespace seastar::internal {
     : lw_shared_ptr_accessors_no_esft<::crimson::os::seastore::TransactionConflictCondition>
   {};
 }
+
+SEASTAR_CONCEPT(
+namespace crimson::interruptible {
+  template<typename InterruptCond, typename FutureType>
+  class interruptible_future_detail;
+}
+namespace seastar::impl {
+  template <typename InterruptCond, typename FutureType, typename... Rest>
+  struct is_tuple_of_futures<std::tuple<crimson::interruptible::interruptible_future_detail<InterruptCond, FutureType>, Rest...>>
+    : is_tuple_of_futures<std::tuple<Rest...>> {};
+}
+)
 
 namespace crimson::interruptible {
 
@@ -159,7 +174,7 @@ auto call_with_interruption_impl(
     typename futurator_t::type>();
   INTR_FUT_DEBUG(
     "call_with_interruption_impl: may_interrupt: {}, "
-    "local interrupt_condintion: {}, "
+    "local interrupt_condition: {}, "
     "global interrupt_cond: {},{}",
     interrupt,
     (void*)interrupt_condition.get(),
@@ -326,7 +341,8 @@ private:
       _incomplete.pop_back();
     }
     if (!_incomplete.empty()) {
-      seastar::internal::set_callback(_incomplete.back(), static_cast<continuation_base<>*>(this));
+      seastar::internal::set_callback(std::move(_incomplete.back()),
+		                      static_cast<continuation_base<>*>(this));
       _incomplete.pop_back();
       return;
     }
@@ -612,6 +628,7 @@ private:
 template <typename InterruptCond, typename Errorator>
 struct interruptible_errorator {
   using base_ertr = Errorator;
+  using intr_cond_t = InterruptCond;
 
   template <typename ValueT = void>
   using future = interruptible_future_detail<InterruptCond,
@@ -659,6 +676,9 @@ class [[nodiscard]] interruptible_future_detail<
 public:
   using core_type = ErroratedFuture<crimson::errorated_future_marker<T>>;
   using errorator_type = typename core_type::errorator_type;
+  using interrupt_errorator_type =
+    interruptible_errorator<InterruptCond, errorator_type>;
+  using interrupt_cond_type = InterruptCond;
 
   template <typename U>
   using interrupt_futurize_t =
@@ -1030,6 +1050,8 @@ template <typename InterruptCond>
 struct interruptor
 {
 public:
+  using condition = InterruptCond;
+
   template <typename FutureType>
   [[gnu::always_inline]]
   static interruptible_future_detail<InterruptCond, FutureType>
@@ -1218,7 +1240,7 @@ public:
       return make_interruptible(
 	  ::crimson::repeat(
 	    [action=std::move(action),
-	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond] {
+	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
 		      std::move(action)).to_future();
@@ -1535,4 +1557,10 @@ struct continuation_base_from_future<
   using type = typename seastar::continuation_base_from_future<FutureType>::type;
 };
 
+template <typename InterruptCond, typename FutureType>
+struct is_future<
+  ::crimson::interruptible::interruptible_future_detail<
+    InterruptCond,
+    FutureType>>
+ : std::true_type {};
 } // namespace seastar

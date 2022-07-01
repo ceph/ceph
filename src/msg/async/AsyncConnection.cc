@@ -226,6 +226,7 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
                                << " left is " << left << " buffer still has "
                                << recv_end - recv_start << dendl;
     if (left == 0) {
+      state_offset = 0;
       return 0;
     }
     state_offset += to_read;
@@ -327,7 +328,12 @@ ssize_t AsyncConnection::_try_send(bool more)
   ceph_assert(center->in_thread());
   ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outgoing_bl.length()
                              << " bytes" << dendl;
-  ssize_t r = cs.send(outgoing_bl, more);
+  // network block would make ::send return EAGAIN, that would make here looks
+  // like do not call cs.send() and r = 0
+  ssize_t r = 0;
+  if (likely(!inject_network_congestion())) {
+    r = cs.send(outgoing_bl, more);
+  }
   if (r < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
     return r;
@@ -360,6 +366,11 @@ void AsyncConnection::inject_delay() {
     t.set_from_double(async_msgr->cct->_conf->ms_inject_internal_delays);
     t.sleep();
   }
+}
+
+bool AsyncConnection::inject_network_congestion() const {
+  return (async_msgr->cct->_conf->ms_inject_network_congestion > 0 &&
+	  rand() % async_msgr->cct->_conf->ms_inject_network_congestion != 0);
 }
 
 void AsyncConnection::process() {

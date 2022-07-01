@@ -12,7 +12,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 3
+LAST_MIGRATION = 5
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class Migrations:
         self.nfs_migration_queue = json.loads(v) if v else []
 
         # for some migrations, we don't need to do anything except for
-        # setting migration_current = 1.
+        # incrementing migration_current.
         # let's try to shortcut things here.
         self.migrate(True)
 
@@ -67,6 +67,14 @@ class Migrations:
         if self.mgr.migration_current == 2 and not startup:
             if self.migrate_2_3():
                 self.set(3)
+
+        if self.mgr.migration_current == 3:
+            if self.migrate_3_4():
+                self.set(4)
+
+        if self.mgr.migration_current == 4:
+            if self.migrate_4_5():
+                self.set(5)
 
     def migrate_0_1(self) -> bool:
         """
@@ -103,7 +111,7 @@ class Migrations:
             placements, to_add, to_remove = HostAssignment(
                 spec=spec,
                 hosts=self.mgr.inventory.all_specs(),
-                unreachable_hosts=self.mgr._unreachable_hosts(),
+                unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
                 daemons=existing_daemons,
             ).place()
 
@@ -229,6 +237,12 @@ class Migrations:
             self.mgr.spec_store.rm(f'nfs.ganesha-{service_id}')
             spec.service_id = service_id
             self.mgr.spec_store.save(spec, True)
+
+            # We have to remove the old daemons here as well, otherwise we'll end up with a port conflict.
+            daemons = [d.name()
+                       for d in self.mgr.cache.get_daemons_by_service(f'nfs.ganesha-{service_id}')]
+            self.mgr.log.info(f'Removing old nfs.ganesha-{service_id} daemons {daemons}')
+            self.mgr.remove_daemons(daemons)
         else:
             # redeploy all ganesha daemons to ensures that the daemon
             # cephx are correct AND container configs are set up properly
@@ -258,6 +272,48 @@ class Migrations:
             if ret:
                 self.mgr.log.warning(f'Failed to migrate export ({ret}): {err}\nExport was:\n{ex}')
         self.mgr.log.info(f'Done migrating nfs.{service_id}')
+
+    def migrate_3_4(self) -> bool:
+        # We can't set any host with the _admin label, but we're
+        # going to warn when calling `ceph orch host rm...`
+        if 'client.admin' not in self.mgr.keys.keys:
+            self.mgr._client_keyring_set(
+                entity='client.admin',
+                placement='label:_admin',
+            )
+        return True
+
+    def migrate_4_5(self) -> bool:
+        registry_url = self.mgr.get_module_option('registry_url')
+        registry_username = self.mgr.get_module_option('registry_username')
+        registry_password = self.mgr.get_module_option('registry_password')
+        if registry_url and registry_username and registry_password:
+
+            registry_credentials = {'url': registry_url,
+                                    'username': registry_username, 'password': registry_password}
+            self.mgr.set_store('registry_credentials', json.dumps(registry_credentials))
+
+            self.mgr.set_module_option('registry_url', None)
+            self.mgr.check_mon_command({
+                'prefix': 'config rm',
+                'who': 'mgr',
+                'key': 'mgr/cephadm/registry_url',
+            })
+            self.mgr.set_module_option('registry_username', None)
+            self.mgr.check_mon_command({
+                'prefix': 'config rm',
+                'who': 'mgr',
+                'key': 'mgr/cephadm/registry_username',
+            })
+            self.mgr.set_module_option('registry_password', None)
+            self.mgr.check_mon_command({
+                'prefix': 'config rm',
+                'who': 'mgr',
+                'key': 'mgr/cephadm/registry_password',
+            })
+
+            self.mgr.log.info('Done migrating registry login info')
+        return True
 
 
 def queue_migrate_nfs_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:

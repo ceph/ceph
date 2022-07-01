@@ -2,8 +2,14 @@ function(build_fio)
   # we use an external project and copy the sources to bin directory to ensure
   # that object files are built outside of the source tree.
   include(ExternalProject)
-  if(ALLOCATOR)
-    set(FIO_EXTLIBS EXTLIBS=-l${ALLOCATOR})
+  if(ALLOC_LIBS)
+    get_target_property(alloc_lib_path
+      ${ALLOC_LIBS} IMPORTED_LOCATION)
+    get_filename_component(alloc_lib_dir
+      ${alloc_lib_path} DIRECTORY)
+    get_filename_component(alloc_lib_name
+      ${alloc_lib_path} NAME)
+    set(FIO_EXTLIBS "EXTLIBS='-L${alloc_lib_dir} -l:${alloc_lib_name}'")
   endif()
 
   include(FindMake)
@@ -20,7 +26,7 @@ function(build_fio)
     SOURCE_DIR ${source_dir}
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
-    BUILD_COMMAND ${make_cmd} fio EXTFLAGS=-Wno-format-truncation ${FIO_EXTLIBS}
+    BUILD_COMMAND ${make_cmd} fio EXTFLAGS=-Wno-format-truncation "${FIO_EXTLIBS}"
     INSTALL_COMMAND cp <BINARY_DIR>/fio ${CMAKE_BINARY_DIR}/bin
     LOG_CONFIGURE ON
     LOG_BUILD ON

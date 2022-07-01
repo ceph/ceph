@@ -107,7 +107,7 @@ Multiple Zabbix servers
 It is possible to instruct zabbix module to send data to multiple Zabbix servers.
 
 Parameter *zabbix_host* can be set with multiple hostnames separated by commas.
-Hosnames (or IP adderesses) can be followed by colon and port number. If a port
+Hostnames (or IP addresses) can be followed by colon and port number. If a port
 number is not present module will use the port number defined in *zabbix_port*.
 
 For example:
