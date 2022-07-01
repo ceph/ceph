@@ -102,12 +102,13 @@ The subcommands are:
         parser = argparse.ArgumentParser(
             description='Bootstrap new realm',
             usage='rgwam realm new-zone-creds [<args>]')
+        parser.add_argument('--realm-name')
         parser.add_argument('--endpoints')
         parser.add_argument('--sys-uid')
 
         args = parser.parse_args(self.args[1:])
 
-        return RGWAM(self.env).realm_new_zone_creds(args.endpoints, args.sys_uid)
+        return RGWAM(self.env).realm_new_zone_creds(args.realm_name, args.endpoints, args.sys_uid)
 
 
 class ZoneCommand:
@@ -229,6 +230,8 @@ def main():
         if retval != 0:
             log.error('stdout: '+ out + '\nstderr: ' + err)
             sys.exit(retval)
+        else:
+            print(out)
     except RGWAMException as e:
         print('ERROR: ' + e.message)
 
