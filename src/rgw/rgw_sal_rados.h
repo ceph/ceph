@@ -86,17 +86,23 @@ public:
   }
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier);
   const RGWZoneGroup& get_group() const { return group; }
+  virtual std::unique_ptr<ZoneGroup> clone() override {
+    return std::make_unique<RadosZoneGroup>(store, group);
+  }
 };
 
 class RadosZone : public StoreZone {
   protected:
     RadosStore* store;
-    RadosZoneGroup group;
+    std::unique_ptr<ZoneGroup> group;
   public:
-    RadosZone(RadosStore* _store, RadosZoneGroup _zg) : store(_store), group(_zg) {}
+    RadosZone(RadosStore* _store, std::unique_ptr<ZoneGroup> _zg) : store(_store), group(std::move(_zg)) {}
     ~RadosZone() = default;
 
-    virtual ZoneGroup& get_zonegroup() override;
+    virtual std::unique_ptr<Zone> clone() override {
+      return std::make_unique<RadosZone>(store, group->clone());
+    }
+    virtual ZoneGroup& get_zonegroup() override { return *(group.get()); }
     virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
     virtual const rgw_zone_id& get_id() override;
     virtual const std::string& get_name() const override;
