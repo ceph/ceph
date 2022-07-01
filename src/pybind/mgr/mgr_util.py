@@ -554,10 +554,13 @@ def verify_cacrt_content(crt):
     try:
         x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
         if x509.has_expired():
-            logger.warning('Certificate has expired: {}'.format(crt))
+            org, cn = get_cert_issuer_info(crt)
+            end_date = datetime.datetime.strptime(x509.get_notAfter().decode('ascii'), '%Y%m%d%H%M%SZ')
+            msg = f'Certificate issued by "{org}/{cn}" expired on {end_date}'
+            logger.warning(msg)
+            raise ServerConfigException(msg)
     except (ValueError, crypto.Error) as e:
-        raise ServerConfigException(
-            'Invalid certificate: {}'.format(str(e)))
+        raise ServerConfigException(f'Invalid certificate: {e}')
 
 
 def verify_cacrt(cert_fname):
@@ -576,6 +579,22 @@ def verify_cacrt(cert_fname):
         raise ServerConfigException(
             'Invalid certificate {}: {}'.format(cert_fname, str(e)))
 
+def get_cert_issuer_info(crt: str) -> Tuple[Optional[str],Optional[str]]:
+    """Basic validation of a ca cert"""
+
+    from OpenSSL import crypto, SSL
+    try:
+        (org_name, cn) = (None, None)
+        cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
+        components = cert.get_issuer().get_components()
+        for c in components:
+            if c[0].decode() == 'O':  # org comp
+                org_name = c[1].decode()
+            elif c[0].decode() == 'CN':  # common name comp
+                cn = c[1].decode()
+        return (org_name, cn)
+    except (ValueError, crypto.Error) as e:
+        raise ServerConfigException(f'Invalid certificate key: {e}')
 
 def verify_tls(crt, key):
     # type: (str, str) -> None
@@ -601,8 +620,10 @@ def verify_tls(crt, key):
         context.use_privatekey(_key)
         context.check_privatekey()
     except crypto.Error as e:
-        logger.warning(
-            'Private key and certificate do not match up: {}'.format(str(e)))
+        logger.warning('Private key and certificate do not match up: {}'.format(str(e)))
+    except SSL.Error as e:
+        raise ServerConfigException(f'Invalid cert/key pair: {e}')
+
 
 
 def verify_tls_files(cert_fname, pkey_fname):
