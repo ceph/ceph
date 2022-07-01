@@ -1210,6 +1210,7 @@ struct omap_root_t {
     return hint;
   }
 };
+std::ostream &operator<<(std::ostream &out, const omap_root_t &root);
 
 class __attribute__((packed)) omap_root_le_t {
   laddr_le_t addr = laddr_le_t(L_ADDR_NULL);
