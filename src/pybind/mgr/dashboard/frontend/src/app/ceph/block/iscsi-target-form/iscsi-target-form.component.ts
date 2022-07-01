@@ -87,7 +87,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    const rbdListContext = new CdTableFetchDataContext(() => {});
+    const rbdListContext = new CdTableFetchDataContext(() => undefined);
     /* limit -1 to specify all images */
     rbdListContext.pageInfo.limit = -1;
     const promises: any[] = [

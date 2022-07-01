@@ -243,11 +243,13 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`Pool`,
         prop: 'pool_name',
+        sortable: false,
         flexGrow: 2
       },
       {
         name: $localize`Namespace`,
         prop: 'namespace',
+        sortable: false,
         flexGrow: 2
       },
       {
@@ -255,6 +257,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         prop: 'size',
         flexGrow: 1,
         cellClass: 'text-right',
+        sortable: false,
         pipe: this.dimlessBinaryPipe
       },
       {
@@ -262,6 +265,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         prop: 'num_objs',
         flexGrow: 1,
         cellClass: 'text-right',
+        sortable: false,
         pipe: this.dimlessPipe
       },
       {
@@ -269,6 +273,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         prop: 'obj_size',
         flexGrow: 1,
         cellClass: 'text-right',
+        sortable: false,
         pipe: this.dimlessBinaryPipe
       },
       {
@@ -277,6 +282,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe,
+        sortable: false,
         cellTemplate: this.provisionedNotAvailableTooltipTpl
       },
       {
@@ -285,18 +291,21 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe,
+        sortable: false,
         cellTemplate: this.totalProvisionedNotAvailableTooltipTpl
       },
       {
         name: $localize`Parent`,
         prop: 'parent',
         flexGrow: 2,
+        sortable: false,
         cellTemplate: this.parentTpl
       },
       {
         name: $localize`Mirroring`,
         prop: 'mirror_mode',
         flexGrow: 3,
+        sortable: false,
         cellTemplate: this.mirroringTpl
       }
     ];
