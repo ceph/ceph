@@ -1012,6 +1012,10 @@ public:
       return;
     }
   }
+
+  uint64_t get_omap_tree_depth() {
+    return stats.omap_tree_depth;
+  }
 private:
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
