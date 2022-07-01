@@ -53,7 +53,7 @@
       "<rootDir>/src/setupJest.ts"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!@ngrx|@progress|simplebar|lodash-es)"
+      "node_modules/(?!@ngrx|@progress|simplebar|lodash-es|react-syntax-highlighter|swagger-client)"
     ],
     "transform": {
       "^.+\\.(ts|html)$": "ts-jest",
@@ -103,7 +103,7 @@
     "ngx-toastr": "14.1.4",
     "rxjs": "6.6.3",
     "simplebar-angular": "2.3.6",
-    "swagger-ui": "4.4.1",
+    "swagger-ui": "4.12.0",
     "tslib": "2.3.1"
   },
   "devDependencies": {
@@ -123,7 +123,7 @@
     "@types/simplebar": "5.1.1",
     "@types/swagger-ui": "3.52.0",
     "codelyzer": "6.0.2",
-    "cypress": "9.0.0",
+    "cypress": "9.7.0",
     "cypress-cucumber-preprocessor": "4.3.1",
     "cypress-iframe": "1.0.1",
     "cypress-multi-reporters": "1.5.0",
