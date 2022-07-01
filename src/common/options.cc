@@ -2527,6 +2527,11 @@ std::vector<Option> get_global_options() {
     .set_default(.02)
     .set_description("slop factor to avoid switching tiering flush and eviction mode"),
 
+    Option("osd_aggregated_slow_ops_logging", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Allow OSD daemon to send an aggregated slow ops to the cluster log")
+    .set_long_description("If set to ``true``, the OSD daemon will send slow ops information in an aggregated format to the cluster log else sends every slow op to the cluster log."),
+
     Option("osd_uuid", Option::TYPE_UUID, Option::LEVEL_ADVANCED)
     .set_default(uuid_d())
     .set_flag(Option::FLAG_CREATE)
