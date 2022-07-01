@@ -2716,6 +2716,12 @@ class CephManager:
              self.log('PG %s is not active' % pg['pgid'])
              self.log(pg)
 
+    def dump_pgs_not_active_peered(self, pgs):
+        for pg in pgs:
+            if (not pg['state'].count('active')) and (not pg['state'].count('peered')):
+                self.log('PG %s is not active or peered' % pg['pgid'])
+                self.log(pg)
+
     def wait_for_clean(self, timeout=1200):
         """
         Returns true when all pgs are clean.
@@ -2901,7 +2907,11 @@ class CephManager:
         Wrapper to check if all PGs are active or peered
         """
         pgs = self.get_pg_stats()
-        return self._get_num_active(pgs) + self._get_num_peered(pgs) == len(pgs)
+        if self._get_num_active(pgs) + self._get_num_peered(pgs) == len(pgs):
+            return True
+        else:
+            self.dump_pgs_not_active_peered(pgs)
+            return False
 
     def wait_till_active(self, timeout=None):
         """
