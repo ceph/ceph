@@ -27,6 +27,7 @@
 #include "mon/MonCommand.h"
 
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrUpdate.h"
 #include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
@@ -267,6 +268,8 @@ bool DaemonServer::ms_dispatch2(const ref_t<Message>& m)
       return handle_report(ref_cast<MMgrReport>(m));
     case MSG_MGR_OPEN:
       return handle_open(ref_cast<MMgrOpen>(m));
+    case MSG_MGR_UPDATE:
+      return handle_update(ref_cast<MMgrUpdate>(m));
     case MSG_MGR_CLOSE:
       return handle_close(ref_cast<MMgrClose>(m));
     case MSG_COMMAND:
@@ -531,6 +534,49 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
   return true;
 }
 
+bool DaemonServer::handle_update(const ref_t<MMgrUpdate>& m)
+{
+  DaemonKey key;
+  if (!m->service_name.empty()) {
+    key.type = m->service_name;
+  } else {
+    key.type = ceph_entity_type_name(m->get_connection()->get_peer_type());
+  }
+  key.name = m->daemon_name;
+
+  dout(10) << "from " << m->get_connection() << " " << key << dendl;
+
+  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT &&
+      m->service_name.empty()) {
+    // Clients should not be sending us update request
+    dout(10) << "rejecting update request from non-daemon client " << m->daemon_name
+	     << dendl;
+    clog->warn() << "rejecting report from non-daemon client " << m->daemon_name
+		 << " at " << m->get_connection()->get_peer_addrs();
+    m->get_connection()->mark_down();
+    return true;
+  }
+
+
+  {
+    std::unique_lock locker(lock);
+
+    DaemonStatePtr daemon;
+    // Look up the DaemonState
+    if (daemon_state.exists(key)) {
+      dout(20) << "updating existing DaemonState for " << key << dendl;
+
+      daemon = daemon_state.get(key);
+      if (m->need_metadata_update == true &&
+          !m->daemon_metadata.empty()) {
+        daemon_state.update_metadata(daemon, m->daemon_metadata);
+      }
+    }
+  }
+
+  return true;
+}
+
 bool DaemonServer::handle_close(const ref_t<MMgrClose>& m)
 {
   std::lock_guard l(lock);
@@ -678,9 +724,11 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
   }
 
   // if there are any schema updates, notify the python modules
+  /* no users currently
   if (!m->declare_types.empty() || !m->undeclare_types.empty()) {
     py_modules.notify_all("perf_schema_update", ceph::to_string(key));
   }
+  */
 
   if (m->get_connection()->peer_is_osd()) {
     osd_perf_metric_collector.process_reports(m->osd_perf_metric_reports);
@@ -2766,15 +2814,24 @@ void DaemonServer::adjust_pgs()
 	    } else {
 	      active = false;
 	    }
+	    unsigned pg_gap = p.get_pg_num() - p.get_pgp_num();
+	    unsigned max_jump = cct->_conf->mgr_max_pg_num_change;
 	    if (!active) {
 	      dout(10) << "pool " << i.first
 		       << " pg_num_target " << p.get_pg_num_target()
 		       << " pg_num " << p.get_pg_num()
 		       << " - not all pgs active"
 		       << dendl;
+	    } else if (pg_gap >= max_jump) {
+	      dout(10) << "pool " << i.first
+		       << " pg_num " << p.get_pg_num()
+		       << " - pgp_num " << p.get_pgp_num()
+		       << " gap >= max_pg_num_change " << max_jump
+		       << " - must scale pgp_num first"
+		       << dendl;
 	    } else {
 	      unsigned add = std::min(
-		left,
+		std::min(left, max_jump - pg_gap),
 		p.get_pg_num_target() - p.get_pg_num());
 	      unsigned target = p.get_pg_num() + add;
 	      left -= add;
@@ -2926,13 +2983,19 @@ void DaemonServer::got_service_map()
       if (pending_service_map.epoch == 0) {
 	// we just started up
 	dout(10) << "got initial map e" << service_map.epoch << dendl;
+	ceph_assert(pending_service_map_dirty == 0);
+	pending_service_map = service_map;
+	pending_service_map.epoch = service_map.epoch + 1;
+      } else if (pending_service_map.epoch <= service_map.epoch) {
+	// we just started up but got one more not our own map
+	dout(10) << "got newer initial map e" << service_map.epoch << dendl;
+	ceph_assert(pending_service_map_dirty == 0);
 	pending_service_map = service_map;
 	pending_service_map.epoch = service_map.epoch + 1;
       } else {
-	// we we already active and therefore must have persisted it,
+	// we already active and therefore must have persisted it,
 	// which means ours is the same or newer.
 	dout(10) << "got updated map e" << service_map.epoch << dendl;
-	ceph_assert(pending_service_map.epoch > service_map.epoch);
       }
     });
 
@@ -3071,6 +3134,11 @@ MetricQueryID DaemonServer::add_mds_perf_query(
 int DaemonServer::remove_mds_perf_query(MetricQueryID query_id)
 {
   return mds_perf_metric_collector.remove_query(query_id);
+}
+
+void DaemonServer::reregister_mds_perf_queries()
+{
+  mds_perf_metric_collector.reregister_queries();
 }
 
 int DaemonServer::get_mds_perf_counters(MDSPerfCollector *collector)

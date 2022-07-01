@@ -121,7 +121,7 @@ class DeltaRecorderT final: public DeltaRecorder {
       ceph::decode(op, delta);
       switch (op) {
       case node_delta_op_t::INSERT: {
-        DEBUG("decoding INSERT ...");
+        SUBDEBUG(seastore_onode, "decoding INSERT ...");
         auto key = key_hobj_t::decode(delta);
         auto value = decode_value(delta);
         auto insert_pos = position_t::decode(delta);
@@ -129,23 +129,24 @@ class DeltaRecorderT final: public DeltaRecorder {
         ceph::decode(insert_stage, delta);
         node_offset_t insert_size;
         ceph::decode(insert_size, delta);
-        DEBUG("apply {}, {}, insert_pos({}), insert_stage={}, "
-              "insert_size={}B ...",
-              key, value, insert_pos, insert_stage, insert_size);
+        SUBDEBUG(seastore_onode,
+            "apply {}, {}, insert_pos({}), insert_stage={}, "
+            "insert_size={}B ...",
+            key, value, insert_pos, insert_stage, insert_size);
         layout_t::template insert<KeyT::HOBJ>(
           mut, stage, key, value, insert_pos, insert_stage, insert_size);
         break;
       }
       case node_delta_op_t::SPLIT: {
-        DEBUG("decoding SPLIT ...");
+        SUBDEBUG(seastore_onode, "decoding SPLIT ...");
         auto split_at = StagedIterator::decode(
             mut.get_read(), mut.get_length(), delta);
-        DEBUG("apply split_at={} ...", split_at);
+        SUBDEBUG(seastore_onode, "apply split_at={} ...", split_at);
         layout_t::split(mut, stage, split_at);
         break;
       }
       case node_delta_op_t::SPLIT_INSERT: {
-        DEBUG("decoding SPLIT_INSERT ...");
+        SUBDEBUG(seastore_onode, "decoding SPLIT_INSERT ...");
         auto split_at = StagedIterator::decode(
             mut.get_read(), mut.get_length(), delta);
         auto key = key_hobj_t::decode(delta);
@@ -155,45 +156,47 @@ class DeltaRecorderT final: public DeltaRecorder {
         ceph::decode(insert_stage, delta);
         node_offset_t insert_size;
         ceph::decode(insert_size, delta);
-        DEBUG("apply split_at={}, {}, {}, insert_pos({}), insert_stage={}, "
-              "insert_size={}B ...",
-              split_at, key, value, insert_pos, insert_stage, insert_size);
+        SUBDEBUG(seastore_onode,
+            "apply split_at={}, {}, {}, insert_pos({}), insert_stage={}, "
+            "insert_size={}B ...",
+            split_at, key, value, insert_pos, insert_stage, insert_size);
         layout_t::template split_insert<KeyT::HOBJ>(
           mut, stage, split_at, key, value, insert_pos, insert_stage, insert_size);
         break;
       }
       case node_delta_op_t::UPDATE_CHILD_ADDR: {
-        DEBUG("decoding UPDATE_CHILD_ADDR ...");
+        SUBDEBUG(seastore_onode, "decoding UPDATE_CHILD_ADDR ...");
         laddr_t new_addr;
         ceph::decode(new_addr, delta);
         node_offset_t update_offset;
         ceph::decode(update_offset, delta);
         auto p_addr = reinterpret_cast<laddr_packed_t*>(
             mut.get_write() + update_offset);
-        DEBUG("apply {:#x} to offset {:#x} ...",
-              new_addr, update_offset);
+        SUBDEBUG(seastore_onode,
+            "apply {:#x} to offset {:#x} ...",
+            new_addr, update_offset);
         layout_t::update_child_addr(mut, new_addr, p_addr);
         break;
       }
       case node_delta_op_t::ERASE: {
-        DEBUG("decoding ERASE ...");
+        SUBDEBUG(seastore_onode, "decoding ERASE ...");
         auto erase_pos = position_t::decode(delta);
-        DEBUG("apply erase_pos({}) ...", erase_pos);
+        SUBDEBUG(seastore_onode, "apply erase_pos({}) ...", erase_pos);
         layout_t::erase(mut, stage, erase_pos);
         break;
       }
       case node_delta_op_t::MAKE_TAIL: {
-        DEBUG("decoded MAKE_TAIL, apply ...");
+        SUBDEBUG(seastore_onode, "decoded MAKE_TAIL, apply ...");
         layout_t::make_tail(mut, stage);
         break;
       }
       case node_delta_op_t::SUBOP_UPDATE_VALUE: {
-        DEBUG("decoding SUBOP_UPDATE_VALUE ...");
+        SUBDEBUG(seastore_onode, "decoding SUBOP_UPDATE_VALUE ...");
         node_offset_t value_header_offset;
         ceph::decode(value_header_offset, delta);
         auto p_header = mut.get_read() + value_header_offset;
         auto p_header_ = reinterpret_cast<const value_header_t*>(p_header);
-        DEBUG("update {} at {:#x} ...", *p_header_, value_header_offset);
+        SUBDEBUG(seastore_onode, "update {} at {:#x} ...", *p_header_, value_header_offset);
         auto payload_mut = p_header_->get_payload_mutable(mut);
         auto value_addr = node.get_laddr() + payload_mut.get_node_offset();
         get_value_replayer(p_header_->magic)->apply_value_delta(
@@ -201,13 +204,15 @@ class DeltaRecorderT final: public DeltaRecorder {
         break;
       }
       default:
-        ERROR("got unknown op {} when replay {}",
-              op, node);
+        SUBERROR(seastore_onode,
+            "got unknown op {} when replay {}",
+            op, node);
         ceph_abort("fatal error");
       }
     } catch (buffer::error& e) {
-      ERROR("got decode error {} when replay {}",
-            e, node);
+      SUBERROR(seastore_onode,
+          "got decode error {} when replay {}",
+          e, node);
       ceph_abort("fatal error");
     }
   }
@@ -520,13 +525,15 @@ class NodeExtentAccessorT {
       eagain_iertr::pass_further{},
       crimson::ct_error::input_output_error::handle(
           [FNAME, c, alloc_size, l_to_discard = extent->get_laddr()] {
-        ERRORT("EIO during allocate -- node_size={}, to_discard={:x}",
-               c.t, alloc_size, l_to_discard);
+        SUBERRORT(seastore_onode,
+            "EIO during allocate -- node_size={}, to_discard={:x}",
+            c.t, alloc_size, l_to_discard);
         ceph_abort("fatal error");
       })
     ).si_then([this, c, FNAME] (auto fresh_extent) {
-      DEBUGT("update addr from {:#x} to {:#x} ...",
-             c.t, extent->get_laddr(), fresh_extent->get_laddr());
+      SUBDEBUGT(seastore_onode,
+          "update addr from {:#x} to {:#x} ...",
+          c.t, extent->get_laddr(), fresh_extent->get_laddr());
       assert(fresh_extent);
       assert(fresh_extent->is_initial_pending());
       assert(fresh_extent->get_recorder() == nullptr);
@@ -548,19 +555,22 @@ class NodeExtentAccessorT {
         crimson::ct_error::input_output_error::handle(
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
-          ERRORT("EIO during retire -- to_disgard={:x}, fresh={:x}",
-                 c.t, l_to_discard, l_fresh);
+          SUBERRORT(seastore_onode,
+              "EIO during retire -- to_disgard={:x}, fresh={:x}",
+              c.t, l_to_discard, l_fresh);
           ceph_abort("fatal error");
         }),
         crimson::ct_error::enoent::handle(
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
-          ERRORT("ENOENT during retire -- to_disgard={:x}, fresh={:x}",
-                 c.t, l_to_discard, l_fresh);
+          SUBERRORT(seastore_onode,
+              "ENOENT during retire -- to_disgard={:x}, fresh={:x}",
+              c.t, l_to_discard, l_fresh);
           ceph_abort("fatal error");
         })
       );
     }).si_then([this, c] {
+      boost::ignore_unused(c);  // avoid clang warning;
       assert(!c.t.is_conflicted());
       return *mut;
     });
@@ -575,12 +585,12 @@ class NodeExtentAccessorT {
       eagain_iertr::pass_further{},
       crimson::ct_error::input_output_error::handle(
           [FNAME, c, addr] {
-        ERRORT("EIO -- addr={:x}", c.t, addr);
+        SUBERRORT(seastore_onode, "EIO -- addr={:x}", c.t, addr);
         ceph_abort("fatal error");
       }),
       crimson::ct_error::enoent::handle(
           [FNAME, c, addr] {
-        ERRORT("ENOENT -- addr={:x}", c.t, addr);
+        SUBERRORT(seastore_onode, "ENOENT -- addr={:x}", c.t, addr);
         ceph_abort("fatal error");
       })
 #ifndef NDEBUG

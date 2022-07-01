@@ -222,6 +222,7 @@ public:
   ceph::mutex balancer_lock = ceph::make_mutex("OSDMonitor::balancer_lock");
 
   std::map<int,double> osd_weight;
+  std::set<int32_t> filestore_osds;
 
   using osdmap_key_t = std::pair<version_t, uint64_t>;
   using osdmap_cache_t = SimpleLRU<osdmap_key_t,
@@ -514,12 +515,13 @@ private:
 				const std::string &erasure_code_profile,
 				unsigned *stripe_width,
 				std::ostream *ss);
-  int check_pg_num(int64_t pool, int pg_num, int size, std::ostream* ss);
+  int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
 		       int crush_rule,
 		       const std::string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
 		       unsigned pg_num_min,
+		       unsigned pg_num_max,
                        uint64_t repl_size,
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
@@ -528,6 +530,7 @@ private:
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
 		       const std::string& pg_autoscale_mode,
+		       bool bulk,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
@@ -628,6 +631,8 @@ private:
 public:
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
   void get_versions(std::map<std::string, std::list<std::string>> &versions);
+  void get_filestore_osd_list();
+  void check_for_filestore_osds(health_check_map_t *checks);
 protected:
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,

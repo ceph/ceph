@@ -26,6 +26,8 @@
 #include "librbd/image/PreRemoveRequest.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -311,14 +313,15 @@ int Image<I>::list_descendants(
     std::vector<librbd::linked_image_spec_t> *images) {
   ImageCtx *ictx = new librbd::ImageCtx("", image_id, nullptr,
                                         io_ctx, true);
+  CephContext *cct = ictx->cct;
   int r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
   if (r < 0) {
     if (r == -ENOENT) {
       return 0;
     }
-    lderr(ictx->cct) << "failed to open descendant " << image_id
-                     << " from pool " << io_ctx.get_pool_name() << ":"
-                     << cpp_strerror(r) << dendl;
+    lderr(cct) << "failed to open descendant " << image_id
+               << " from pool " << io_ctx.get_pool_name() << ":"
+               << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -326,9 +329,9 @@ int Image<I>::list_descendants(
 
   int r1 = ictx->state->close();
   if (r1 < 0) {
-    lderr(ictx->cct) << "error when closing descendant " << image_id
-                     << " from pool " << io_ctx.get_pool_name() << ":"
-                     << cpp_strerror(r) << dendl;
+    lderr(cct) << "error when closing descendant " << image_id
+               << " from pool " << io_ctx.get_pool_name() << ":"
+               << cpp_strerror(r1) << dendl;
   }
 
   return r;
@@ -679,6 +682,22 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
 template <typename I>
 int Image<I>::deep_copy(I *src, I *dest, bool flatten,
                         ProgressContext &prog_ctx) {
+  // ensure previous writes are visible to dest
+  C_SaferCond flush_ctx;
+  {
+    std::shared_lock owner_locker{src->owner_lock};
+    auto aio_comp = io::AioCompletion::create_and_start(&flush_ctx, src,
+                                                        io::AIO_TYPE_FLUSH);
+    auto req = io::ImageDispatchSpec::create_flush(
+      *src, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
+      aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+    req->send();
+  }
+  int r = flush_ctx.wait();
+  if (r < 0) {
+    return r;
+  }
+
   librados::snap_t snap_id_start = 0;
   librados::snap_t snap_id_end;
   {
@@ -695,7 +714,7 @@ int Image<I>::deep_copy(I *src, I *dest, bool flatten,
     src, dest, snap_id_start, snap_id_end, 0U, flatten, boost::none,
     asio_engine.get_work_queue(), &snap_seqs, &progress_handler, &cond);
   req->send();
-  int r = cond.wait();
+  r = cond.wait();
   if (r < 0) {
     return r;
   }

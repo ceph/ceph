@@ -1,5 +1,16 @@
 include(CMakeParseArguments)
 
+# ensure that we are using the exact python version specified by
+# 'WITH_PYTHON3', in case some included 3rd party libraries call
+# 'find_package(Python3 ...) without specifying the exact version number. if
+# the building host happens to have a higher version of python3, that version
+# would be picked up instead by find_package(Python3). and that is not want we
+# expect.
+find_package(Python3 ${WITH_PYTHON3} EXACT
+  QUIET
+  REQUIRED
+  COMPONENTS Interpreter)
+
 function(distutils_install_module name)
   set(py_srcs setup.py README.rst requirements.txt test-requirements.txt bin ${name})
   foreach(src ${py_srcs})
@@ -63,9 +74,8 @@ function(distutils_add_cython_module target name src)
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
 
-  set(suffix_var "EXT_SUFFIX")
   execute_process(COMMAND "${Python3_EXECUTABLE}" -c
-    "from distutils import sysconfig; print(sysconfig.get_config_var('${suffix_var}'))"
+    "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
     RESULT_VARIABLE result
     OUTPUT_VARIABLE ext_suffix
     ERROR_VARIABLE error
@@ -75,6 +85,9 @@ function(distutils_add_cython_module target name src)
   endif()
   set(output_dir "${CYTHON_MODULE_DIR}/lib.3")
   set(setup_py ${CMAKE_CURRENT_SOURCE_DIR}/setup.py)
+  if(DEFINED ENV{VERBOSE})
+    set(maybe_verbose --verbose)
+  endif()
   add_custom_command(
     OUTPUT ${output_dir}/${name}${ext_suffix}
     COMMAND
@@ -89,7 +102,7 @@ function(distutils_add_cython_module target name src)
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     ${Python3_EXECUTABLE} ${setup_py}
-    build --verbose --build-base ${CYTHON_MODULE_DIR}
+    build ${maybe_verbose} --build-base ${CYTHON_MODULE_DIR}
     --build-platlib ${output_dir}
     MAIN_DEPENDENCY ${src}
     DEPENDS ${setup_py}
@@ -106,6 +119,9 @@ function(distutils_install_cython_module name)
   cmake_parse_arguments(DU "DISABLE_VTA" "" "" ${ARGN})
   if(DU_DISABLE_VTA AND HAS_VTA)
     set(CFLAG_DISABLE_VTA -fno-var-tracking-assignments)
+  endif()
+  if(DEFINED ENV{VERBOSE})
+    set(maybe_verbose --verbose)
   endif()
   install(CODE "
     set(ENV{CC} \"${PY_CC}\")
@@ -130,12 +146,12 @@ function(distutils_install_cython_module name)
     execute_process(
        COMMAND
            ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
-           build --verbose --build-base ${CYTHON_MODULE_DIR}
+           build ${maybe_verbose} --build-base ${CYTHON_MODULE_DIR}
            --build-platlib ${CYTHON_MODULE_DIR}/lib.3
            build_ext --cython-c-in-temp --build-temp ${CMAKE_CURRENT_BINARY_DIR} --cython-include-dirs ${PROJECT_SOURCE_DIR}/src/pybind/rados
            install \${options} --single-version-externally-managed --record /dev/null
            egg_info --egg-base ${CMAKE_CURRENT_BINARY_DIR}
-           --verbose
+           ${maybe_verbose}
        WORKING_DIRECTORY \"${CMAKE_CURRENT_SOURCE_DIR}\"
        RESULT_VARIABLE install_res)
     if(NOT \"\${install_res}\" STREQUAL 0)

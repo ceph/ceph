@@ -212,7 +212,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
-    if (!store->get_zone()->get_params().valid_placement(target_rule)) {
+    if (!store->valid_placement(target_rule)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
       return;
@@ -257,7 +257,6 @@ void RGWOp_User_Modify::execute(optional_yield y)
   std::string access_key;
   std::string secret_key;
   std::string key_type_str;
-  std::string caps;
   std::string op_mask_str;
   std::string default_placement_str;
   std::string placement_tags_str;
@@ -278,7 +277,6 @@ void RGWOp_User_Modify::execute(optional_yield y)
   RESTArgs::get_string(s, "email", email, &email, &email_set);
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
-  RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", false, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
   RESTArgs::get_int32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets, &quota_set);
@@ -301,7 +299,6 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (email_set)
     op_state.set_user_email(email);
 
-  op_state.set_caps(caps);
   op_state.set_access_key(access_key);
   op_state.set_secret_key(secret_key);
 
@@ -354,7 +351,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
-    if (!store->get_zone()->get_params().valid_placement(target_rule)) {
+    if (!store->valid_placement(target_rule)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
       return;
@@ -458,7 +455,6 @@ void RGWOp_Subuser_Create::execute(optional_yield y)
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "access", perm_str, &perm_str);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
-  //RESTArgs::get_bool(s, "generate-subuser", false, &gen_subuser);
   RESTArgs::get_bool(s, "generate-secret", false, &gen_secret);
   RESTArgs::get_bool(s, "gen-access-key", false, &gen_access);
   
@@ -784,21 +780,22 @@ void RGWOp_Caps_Remove::execute(optional_yield y)
 }
 
 struct UserQuotas {
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
 
   UserQuotas() {}
 
-  explicit UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota),
-				  user_quota(info.user_quota) {}
+  explicit UserQuotas(RGWUserInfo& info){
+    quota.bucket_quota = info.quota.bucket_quota;
+    quota.user_quota = info.quota.user_quota;
+  }
 
   void dump(Formatter *f) const {
-    encode_json("bucket_quota", bucket_quota, f);
-    encode_json("user_quota", user_quota, f);
+    encode_json("bucket_quota", quota.bucket_quota, f);
+    encode_json("user_quota", quota.user_quota, f);
   }
   void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
-    JSONDecoder::decode_json("user_quota", user_quota, obj);
+    JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
+    JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
   }
 };
 
@@ -866,9 +863,9 @@ void RGWOp_Quota_Info::execute(optional_yield y)
     UserQuotas quotas(info);
     encode_json("quota", quotas, s->formatter);
   } else if (show_user) {
-    encode_json("user_quota", info.user_quota, s->formatter);
+    encode_json("user_quota", info.quota.user_quota, s->formatter);
   } else {
-    encode_json("bucket_quota", info.bucket_quota, s->formatter);
+    encode_json("bucket_quota", info.quota.bucket_quota, s->formatter);
   }
 
   flusher.flush();
@@ -1001,8 +998,8 @@ void RGWOp_Quota_Set::execute(optional_yield y)
       return;
     }
 
-    op_state.set_user_quota(quotas.user_quota);
-    op_state.set_bucket_quota(quotas.bucket_quota);
+    op_state.set_user_quota(quotas.quota.user_quota);
+    op_state.set_bucket_quota(quotas.quota.bucket_quota);
   } else {
     RGWQuotaInfo quota;
 
@@ -1029,9 +1026,9 @@ void RGWOp_Quota_Set::execute(optional_yield y)
       }
       RGWQuotaInfo *old_quota;
       if (set_user) {
-        old_quota = &info.user_quota;
+        old_quota = &info.quota.user_quota;
       } else {
-        old_quota = &info.bucket_quota;
+        old_quota = &info.quota.bucket_quota;
       }
 
       RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);

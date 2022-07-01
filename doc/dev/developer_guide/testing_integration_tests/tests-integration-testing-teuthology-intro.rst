@@ -316,8 +316,8 @@ signifies concatenation.
 Convolution operator
 ^^^^^^^^^^^^^^^^^^^^
 
-The convolution operator, implemented as an empty file called ``%``, tells
-teuthology to construct a test matrix from yaml facets found in
+The convolution operator, implemented as a (typically empty) file called ``%``,
+tells teuthology to construct a test matrix from yaml facets found in
 subdirectories below the directory containing the operator.
 
 For example, the `ceph-deploy suite
@@ -384,6 +384,34 @@ An individual test from the `ceph-deploy suite`_ can be run by adding the
    be combined with ``--filter``. This is because the ``--suite`` option
    understands POSIX relative paths only.
 
+Nested Subsets
+^^^^^^^^^^^^^^
+
+Suites can get quite large with the combinatorial explosion of yaml
+configurations. At the time of writing, the ``rados``` suite is more than
+100,000 jobs. For this reason, scheduling often uses the ``--subset`` option to
+only run a subset of the jobs (see also: :ref:`subset`). However, this applies
+only at the top-level of the suite being run (e.g. ``fs``). That may
+incidentally inflate the ratio of jobs for some larger sub-suites (like
+``fs:workload``) vs.  smaller but critical suites (like ``fs:volumes``).
+
+It is therefore attractive to automatically subset some sub-suites which are
+never run fully. This is done by providing an integer divisor for the ``%``
+convolution operator file instead of leaving it empty. That divisor
+automatically subsets the resulting matrix. For example, if the convolution
+file ``%`` contains ``2``, the matrix will be divided into two using the same
+logic as the ``--subset`` mechanism.
+
+Note the numerator is not specified as with the ``--subset`` option as there is
+no meaningful way to express this when there could be several layers of
+nesting.  Instead, a random subset is selected (1 of 2 in our example). The
+choice is based off the random seed (``--seed``) used for the scheduling.
+Remember that seed is saved in the results so that a ``--rerun`` of failed
+tests will still preserve the correct numerator (subset of subsets).
+
+You can disable nested subsets using the ``--no-nested-subset`` argument to
+``teuthology-suite``.
+
 Concatenation operator
 ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -449,6 +477,34 @@ A single test from the rbd/thrash suite can be run by adding the
       --suite rbd/thrash \
       --filter 'rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}'
 
+Position Independent Linking
+----------------------------
+
+Under the ``qa/suites`` directory are ``.qa`` symbolic links in every
+directory. Each link is recursive by always linking to ``../.qa/``. The final
+terminating link is in the ``qa/`` directory itself as ``qa/.qa -> .``. This
+layout of symbolic links allows a suite to be easily copied or moved without
+breaking a number of symbolic links. For example::
+
+    qa/suites/fs/upgrade/nofs/centos_latest.yaml -> .qa/distros/supported/centos_latest.yaml
+
+If we copy the ``nofs`` suite somewhere else, add a parent directory above
+``nofs``, or move the ``centos_latest.yaml`` fragment into a sub-directory, the
+link will not break. Compare to::
+
+    qa/suites/fs/upgrade/nofs/centos_latest.yaml -> ../../../../distros/supported/centos_latest.yaml
+
+If the link is moved, it is very likely it will break because the number of
+parent directories to reach the ``distros`` directory may change.
+
+When adding new directories or suites, it is recommended to also remember
+adding ``.qa`` symbolic links. A trivial find command may do this for you:
+
+.. prompt:: bash $
+
+   find qa/suites/ -type d -execdir ln -sfT ../.qa/ {}/.qa \;
+
+
 Filtering tests by their description
 ------------------------------------
 
@@ -480,6 +536,9 @@ or
 Each string is looked up anywhere in the test description and has to
 be an exact match: they are not regular expressions.
 
+
+.. _subset:
+
 Reducing the number of tests
 ----------------------------
 
@@ -508,6 +567,11 @@ but no matter how small a ratio is provided in the ``--subset``,
 teuthology will still ensure that all files in the suite are in at
 least one test. Understanding the actual logic that drives this
 requires reading the teuthology source code.
+
+Note: some suites are now using a **nested subset** feature that automatically
+applies a subset to a carefully chosen set of YAML configurations. You may
+disable this behavior (for some custom filtering, perhaps) using the
+``--no-nested-subset`` option.
 
 The ``--limit`` option only runs the first ``N`` tests in the suite:
 this is rarely useful, however, because there is no way to control which

@@ -10,9 +10,9 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
+from ..services.exception import handle_cephfs_error
 from ..tools import ViewCache
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController, \
-    UiApiController, allow_empty_body
+from . import APIDoc, APIRouter, EndpointDoc, RESTController, UIRouter, allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
@@ -20,11 +20,11 @@ GET_QUOTAS_SCHEMA = {
 }
 
 
-@ApiController('/cephfs', Scope.CEPHFS)
-@ControllerDoc("Cephfs Management API", "Cephfs")
+@APIRouter('/cephfs', Scope.CEPHFS)
+@APIDoc("Cephfs Management API", "Cephfs")
 class CephFS(RESTController):
     def __init__(self):  # pragma: no cover
-        super(CephFS, self).__init__()
+        super().__init__()
 
         # Stateful instances of CephFSClients, hold cached results.  Key to
         # dict is FSCID
@@ -131,6 +131,42 @@ class CephFS(RESTController):
             return
         mds_versions[metadata.get('ceph_version', 'unknown')].append(metadata_key)
 
+    def _find_standby_replays(self, mdsmap_info, rank_table):
+        # pylint: disable=unused-variable
+        for gid_str, daemon_info in mdsmap_info.items():
+            if daemon_info['state'] != "up:standby-replay":
+                continue
+
+            inos = mgr.get_latest("mds", daemon_info['name'], "mds_mem.ino")
+            dns = mgr.get_latest("mds", daemon_info['name'], "mds_mem.dn")
+            dirs = mgr.get_latest("mds", daemon_info['name'], "mds_mem.dir")
+            caps = mgr.get_latest("mds", daemon_info['name'], "mds_mem.cap")
+
+            activity = CephService.get_rate(
+                "mds", daemon_info['name'], "mds_log.replay")
+
+            rank_table.append(
+                {
+                    "rank": "{0}-s".format(daemon_info['rank']),
+                    "state": "standby-replay",
+                    "mds": daemon_info['name'],
+                    "activity": activity,
+                    "dns": dns,
+                    "inos": inos,
+                    "dirs": dirs,
+                    "caps": caps
+                }
+            )
+
+    def get_standby_table(self, standbys, mds_versions):
+        standby_table = []
+        for standby in standbys:
+            self._append_mds_metadata(mds_versions, standby['name'])
+            standby_table.append({
+                'name': standby['name']
+            })
+        return standby_table
+
     # pylint: disable=too-many-statements,too-many-branches
     def fs_status(self, fs_id):
         mds_versions: dict = defaultdict(list)
@@ -162,12 +198,9 @@ class CephFS(RESTController):
                 dirs = mgr.get_latest("mds", info['name'], "mds_mem.dir")
                 caps = mgr.get_latest("mds", info['name'], "mds_mem.cap")
 
-                if rank == 0:
-                    client_count = mgr.get_latest("mds", info['name'],
-                                                  "mds_sessions.session_count")
-                elif client_count == 0:
-                    # In case rank 0 was down, look at another rank's
-                    # sessionmap to get an indication of clients.
+                # In case rank 0 was down, look at another rank's
+                # sessionmap to get an indication of clients.
+                if rank == 0 or client_count == 0:
                     client_count = mgr.get_latest("mds", info['name'],
                                                   "mds_sessions.session_count")
 
@@ -215,32 +248,7 @@ class CephFS(RESTController):
                     }
                 )
 
-        # Find the standby replays
-        # pylint: disable=unused-variable
-        for gid_str, daemon_info in mdsmap['info'].items():
-            if daemon_info['state'] != "up:standby-replay":
-                continue
-
-            inos = mgr.get_latest("mds", daemon_info['name'], "mds_mem.ino")
-            dns = mgr.get_latest("mds", daemon_info['name'], "mds_mem.dn")
-            dirs = mgr.get_latest("mds", daemon_info['name'], "mds_mem.dir")
-            caps = mgr.get_latest("mds", daemon_info['name'], "mds_mem.cap")
-
-            activity = CephService.get_rate(
-                "mds", daemon_info['name'], "mds_log.replay")
-
-            rank_table.append(
-                {
-                    "rank": "{0}-s".format(daemon_info['rank']),
-                    "state": "standby-replay",
-                    "mds": daemon_info['name'],
-                    "activity": activity,
-                    "dns": dns,
-                    "inos": inos,
-                    "dirs": dirs,
-                    "caps": caps
-                }
-            )
+        self._find_standby_replays(mdsmap['info'], rank_table)
 
         df = mgr.get("df")
         pool_stats = {p['id']: p['stats'] for p in df['pools']}
@@ -260,12 +268,7 @@ class CephFS(RESTController):
                 "avail": stats['max_avail']
             })
 
-        standby_table = []
-        for standby in fsmap['standbys']:
-            self._append_mds_metadata(mds_versions, standby['name'])
-            standby_table.append({
-                'name': standby['name']
-            })
+        standby_table = self.get_standby_table(fsmap['standbys'], mds_versions)
 
         return {
             "cephfs": {
@@ -364,6 +367,7 @@ class CephFS(RESTController):
         """
         return cfs.get_directory(os.sep.encode())
 
+    @handle_cephfs_error()
     @RESTController.Resource('GET')
     def ls_dir(self, fs_id, path=None, depth=1):
         """
@@ -490,8 +494,8 @@ class CephFSClients(object):
         return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
 
 
-@UiApiController('/cephfs', Scope.CEPHFS)
-@ControllerDoc("Dashboard UI helper function; not part of the public API", "CephFSUi")
+@UIRouter('/cephfs', Scope.CEPHFS)
+@APIDoc("Dashboard UI helper function; not part of the public API", "CephFSUi")
 class CephFsUi(CephFS):
     RESOURCE_ID = 'fs_id'
 
@@ -518,6 +522,7 @@ class CephFsUi(CephFS):
 
         return data
 
+    @handle_cephfs_error()
     @RESTController.Resource('GET')
     def ls_dir(self, fs_id, path=None, depth=1):
         """

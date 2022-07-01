@@ -9,10 +9,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 FSID='00000000-0000-0000-0000-0000deadbeef'
 
 # images that are used
-IMAGE_MASTER=${IMAGE_MASTER:-'quay.ceph.io/ceph-ci/ceph:master'}
+IMAGE_MAIN=${IMAGE_MAIN:-'quay.ceph.io/ceph-ci/ceph:main'}
 IMAGE_PACIFIC=${IMAGE_PACIFIC:-'quay.ceph.io/ceph-ci/ceph:pacific'}
 #IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'quay.ceph.io/ceph-ci/ceph:octopus'}
-IMAGE_DEFAULT=${IMAGE_MASTER}
+IMAGE_DEFAULT=${IMAGE_MAIN}
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -75,6 +75,22 @@ function expect_false()
 {
         set -x
         if eval "$@"; then return 1; else return 0; fi
+}
+
+# expect_return_code $expected_code $command ...
+function expect_return_code()
+{
+  set -x
+  local expected_code="$1"
+  shift
+  local command="$@"
+
+  set +e
+  eval "$command"
+  local return_code="$?"
+  set -e
+
+  if [ ! "$return_code" -eq "$expected_code" ]; then return 1; else return 0; fi
 }
 
 function is_available()
@@ -152,7 +168,7 @@ $SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version \
 #$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
 #$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
 #    | grep 'ceph version 15'
-$SUDO $CEPHADM_BIN --image $IMAGE_MASTER version | grep 'ceph version'
+$SUDO $CEPHADM_BIN --image $IMAGE_MAIN version | grep 'ceph version'
 
 # try force docker; this won't work if docker isn't installed
 systemctl status docker > /dev/null && ( $CEPHADM --docker version | grep 'ceph version' ) || echo "docker not installed"
@@ -186,8 +202,7 @@ $CEPHADM bootstrap \
       --output-pub-ssh-key $TMPDIR/ceph.pub \
       --allow-overwrite \
       --skip-mon-network \
-      --skip-monitoring-stack \
-      --with-exporter
+      --skip-monitoring-stack
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
@@ -360,21 +375,6 @@ is_available "alertmanager.yml" "$cond" 10
 cond="curl 'http://localhost:9093' | grep -q 'Alertmanager'"
 is_available "alertmanager" "$cond" 10
 
-# Fetch the token we need to access the exporter API
-token=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph cephadm get-exporter-config | jq -r '.token')
-[[ ! -z "$token" ]]
-
-# check all exporter threads active
-cond="curl -k -s -H \"Authorization: Bearer $token\" \
-      https://localhost:9443/v1/metadata/health | \
-      jq -r '.tasks | select(.disks == \"active\" and .daemons == \"active\" and .host == \"active\")'"
-is_available "exporter_threads_active" "$cond" 3
-
-# check we deployed for all hosts
-$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json
-host_pattern=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json | jq -r '.[0].placement.host_pattern')
-[[ "$host_pattern" = "*" ]]
-
 ## run
 # WRITE ME
 
@@ -386,6 +386,10 @@ $CEPHADM unit --fsid $FSID --name mon.a -- disable
 expect_false $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
 $CEPHADM unit --fsid $FSID --name mon.a -- enable
 $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
+$CEPHADM unit --fsid $FSID --name mon.a -- status
+$CEPHADM unit --fsid $FSID --name mon.a -- stop
+expect_return_code 3 $CEPHADM unit --fsid $FSID --name mon.a -- status
+$CEPHADM unit --fsid $FSID --name mon.a -- start
 
 ## shell
 $CEPHADM shell --fsid $FSID -- true

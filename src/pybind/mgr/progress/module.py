@@ -194,33 +194,27 @@ class GlobalRecoveryEvent(Event):
         self._active_clean_num = active_clean_num
         self._refresh()
 
-    def global_event_update_progress(self, pg_dump, log):
-        # type: (Dict, logging.Logger) -> None
+    def global_event_update_progress(self, log):
+        # type: (logging.Logger) -> None
         "Update progress of Global Recovery Event"
-        pgs = pg_dump['pg_stats']
-        new_active_clean_num = 0
+        global _module
+        assert _module
         skipped_pgs = 0
-
-        for pg in pgs:
+        active_clean_pgs = _module.get("active_clean_pgs")
+        total_pg_num = active_clean_pgs["total_num_pgs"]
+        new_active_clean_pgs = active_clean_pgs["pg_stats"]
+        new_active_clean_num = len(new_active_clean_pgs)
+        for pg in new_active_clean_pgs:
             # Disregard PGs that are not being reported
             # if the states are active+clean. Since it is
             # possible that some pgs might not have any movement
             # even before the start of the event.
-
-            state = pg['state']
-
-            states = state.split("+")
             if pg['reported_epoch'] < self._start_epoch:
-                if "active" in states and "clean" in states:
-                    log.debug("Skipping pg {0} since reported_epoch {1} < start_epoch {2}"
-                              .format(pg['pgid'], pg['reported_epoch'], self._start_epoch))
-                    skipped_pgs += 1
+                log.debug("Skipping pg {0} since reported_epoch {1} < start_epoch {2}"
+                             .format(pg['pgid'], pg['reported_epoch'], self._start_epoch))
+                skipped_pgs += 1
                 continue
 
-            if "active" in states and "clean" in states:
-                new_active_clean_num += 1
-
-        total_pg_num = len(pgs)
         if self._active_clean_num != new_active_clean_num:
             # Have this case to know when need to update
             # the progress
@@ -229,6 +223,9 @@ class GlobalRecoveryEvent(Event):
                 self._progress = float(new_active_clean_num) / (total_pg_num - skipped_pgs)
             except ZeroDivisionError:
                 self._progress = 0.0
+        else:
+            # No need to update since there is no change
+            return
 
         log.debug("Updated progress to %s", self.summary())
         self._refresh()
@@ -296,7 +293,7 @@ class PgRecoveryEvent(Event):
         self._original_pg_count = len(self._pgs)
         self._original_bytes_recovered = None  # type: Optional[Dict[PgId, float]]
         self._progress = 0.0
-        # self._start_epoch = _module.get_osdmap().get_epoch()
+
         self._start_epoch = start_epoch
         self._refresh()
 
@@ -304,13 +301,13 @@ class PgRecoveryEvent(Event):
     def which_osds(self):
         return self. _which_osds
 
-    def pg_update(self, raw_pg_stats, pg_ready, log):
-        # type: (Dict, bool, Any) -> None
+    def pg_update(self, pg_progress: Dict, log: Any) -> None:
         # FIXME: O(pg_num) in python
-        # FIXME: far more fields getting pythonized than we really care about
         # Sanity check to see if there are any missing PGs and to assign
         # empty array and dictionary if there hasn't been any recovery
-        pg_to_state = dict((p['pgid'], p) for p in raw_pg_stats['pg_stats'])  # type: Dict[str, Any]
+        pg_to_state: Dict[str, Any] = pg_progress["pgs"]
+        pg_ready: bool = pg_progress["pg_ready"]
+
         if self._original_bytes_recovered is None:
             self._original_bytes_recovered = {}
             missing_pgs = []
@@ -318,7 +315,7 @@ class PgRecoveryEvent(Event):
                 pg_str = str(pg)
                 if pg_str in pg_to_state:
                     self._original_bytes_recovered[pg] = \
-                        pg_to_state[pg_str]['stat_sum']['num_bytes_recovered']
+                        pg_to_state[pg_str]['num_bytes_recovered']
                 else:
                     missing_pgs.append(pg)
             if pg_ready:
@@ -355,13 +352,13 @@ class PgRecoveryEvent(Event):
             if "active" in states and "clean" in states:
                 complete.add(pg)
             else:
-                if info['stat_sum']['num_bytes'] == 0:
+                if info['num_bytes'] == 0:
                     # Empty PGs are considered 0% done until they are
                     # in the correct state.
                     pass
                 else:
-                    recovered = info['stat_sum']['num_bytes_recovered']
-                    total_bytes = info['stat_sum']['num_bytes']
+                    recovered = info['num_bytes_recovered']
+                    total_bytes = info['num_bytes']
                     if total_bytes > 0:
                         ratio = float(recovered -
                                       self._original_bytes_recovered[pg]) / \
@@ -453,6 +450,13 @@ class Module(MgrModule):
             'enabled',
             default=True,
             type='bool',
+        ),
+        Option(
+            'allow_pg_recovery_event',
+            default=False,
+            type='bool',
+            desc='allow the module to show pg recovery progress',
+            runtime=True
         )
     ]
 
@@ -479,6 +483,7 @@ class Module(MgrModule):
             self.max_completed_events = 0
             self.sleep_interval = 0
             self.enabled = True
+            self.allow_pg_recovery_event = False
 
     def config_notify(self):
         for opt in self.MODULE_OPTIONS:
@@ -542,12 +547,15 @@ class Module(MgrModule):
         # previous recovery event for that osd
         if marked == "in":
             for ev_id in list(self._events):
-                ev = self._events[ev_id]
-                if isinstance(ev, PgRecoveryEvent) and osd_id in ev.which_osds:
-                    self.log.info("osd.{0} came back in, cancelling event".format(
-                        osd_id
-                    ))
-                    self._complete(ev)
+                try:
+                    ev = self._events[ev_id]
+                    if isinstance(ev, PgRecoveryEvent) and osd_id in ev.which_osds:
+                        self.log.info("osd.{0} came back in, cancelling event".format(
+                            osd_id
+                        ))
+                        self._complete(ev)
+                except KeyError:
+                    self.log.warning("_osd_in_out: ev {0} does not exist".format(ev_id))
 
         if len(affected_pgs) > 0:
             r_ev = PgRecoveryEvent(
@@ -558,7 +566,7 @@ class Module(MgrModule):
                     start_epoch=self.get_osdmap().get_epoch(),
                     add_to_ceph_s=False
                     )
-            r_ev.pg_update(self.get("pg_stats"), self.get("pg_ready"), self.log)
+            r_ev.pg_update(self.get("pg_progress"), self.log)
             self._events[r_ev.id] = r_ev
 
     def _osdmap_changed(self, old_osdmap, new_osdmap):
@@ -584,23 +592,14 @@ class Module(MgrModule):
                     self.log.warning("osd.{0} marked in".format(osd_id))
                     self._osd_in_out(old_osdmap, old_dump, new_osdmap, osd_id, "in")
 
-    def _pg_state_changed(self, pg_dump):
+    def _pg_state_changed(self):
 
         # This function both constructs and updates
         # the global recovery event if one of the
         # PGs is not at active+clean state
-
-        pgs = pg_dump['pg_stats']
-        total_pg_num = len(pgs)
-        active_clean_num = 0
-        for pg in pgs:
-            state = pg['state']
-            # TODO right here we can keep track of epoch as well
-            # and parse it to global_event_update_progress()
-            states = state.split("+")
-
-            if "active" in states and "clean" in states:
-                active_clean_num += 1
+        active_clean_pgs = self.get("active_clean_pgs")
+        total_pg_num = active_clean_pgs["total_num_pgs"]
+        active_clean_num = len(active_clean_pgs["pg_stats"])
         try:
             # There might be a case where there is no pg_num
             progress = float(active_clean_num) / total_pg_num
@@ -615,7 +614,7 @@ class Module(MgrModule):
                     add_to_ceph_s=True,
                     start_epoch=self.get_osdmap().get_epoch(),
                     active_clean_num=active_clean_num)
-            ev.global_event_update_progress(self.get('pg_stats'), self.log)
+            ev.global_event_update_progress(self.log)
             self._events[ev.id] = ev
 
     def _process_osdmap(self):
@@ -635,24 +634,27 @@ class Module(MgrModule):
             return
 
         global_event = False
-        data = self.get("pg_stats")
-        ready = self.get("pg_ready")
+        data = self.get("pg_progress")
         for ev_id in list(self._events):
-            ev = self._events[ev_id]
-            # Check for types of events
-            # we have to update
-            if isinstance(ev, PgRecoveryEvent):
-                ev.pg_update(data, ready, self.log)
-                self.maybe_complete(ev)
-            elif isinstance(ev, GlobalRecoveryEvent):
-                global_event = True
-                ev.global_event_update_progress(data, self.log)
-                self.maybe_complete(ev)
+            try:
+                ev = self._events[ev_id]
+                # Check for types of events
+                # we have to update
+                if isinstance(ev, PgRecoveryEvent):
+                    ev.pg_update(data, self.log)
+                    self.maybe_complete(ev)
+                elif isinstance(ev, GlobalRecoveryEvent):
+                    global_event = True
+                    ev.global_event_update_progress(self.log)
+                    self.maybe_complete(ev)
+            except KeyError:
+                self.log.warning("_process_pg_summary: ev {0} does not exist".format(ev_id))
+                continue
 
         if not global_event:
             # If there is no global event
             # we create one
-            self._pg_state_changed(data)
+            self._pg_state_changed()
 
     def maybe_complete(self, event):
         # type: (Event) -> None
@@ -724,7 +726,8 @@ class Module(MgrModule):
                 self._dirty = False
 
             if self.enabled:
-                self._process_osdmap()
+                if self.allow_pg_recovery_event:
+                    self._process_osdmap()
                 self._process_pg_summary()
 
             self._shutdown.wait(timeout=self.sleep_interval)
@@ -749,6 +752,7 @@ class Module(MgrModule):
             ev = self._events[ev_id]
             assert isinstance(ev, RemoteEvent)
         except KeyError:
+            # if key doesn't exist we create an event
             ev = RemoteEvent(ev_id, ev_msg, refs, add_to_ceph_s)
             self._events[ev_id] = ev
             self.log.info("update: starting ev {0} ({1})".format(

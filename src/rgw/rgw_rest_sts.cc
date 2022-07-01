@@ -528,7 +528,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
   try {
     const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
     if (!s->principal_tags.empty()) {
-      auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, rgw::ARN());
+      auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
       if (res != rgw::IAM::Effect::Allow) {
         ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
         return -EPERM;
@@ -541,7 +541,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
       op = rgw::IAM::stsAssumeRole;
     }
 
-    auto res = p.eval(s->env, *s->auth.identity, op, rgw::ARN());
+    auto res = p.eval(s->env, *s->auth.identity, op, boost::none);
     if (res != rgw::IAM::Effect::Allow) {
       ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
       return -EPERM;
@@ -611,7 +611,7 @@ void RGWSTSGetSessionToken::execute(optional_yield y)
   STS::STSService sts(s->cct, store, s->user->get_id(), s->auth.identity.get());
 
   STS::GetSessionTokenRequest req(duration, serialNumber, tokenCode);
-  const auto& [ret, creds] = sts.getSessionToken(req);
+  const auto& [ret, creds] = sts.getSessionToken(this, req);
   op_ret = std::move(ret);
   //Dump the output
   if (op_ret == 0) {
@@ -663,7 +663,7 @@ void RGWSTSAssumeRoleWithWebIdentity::execute(optional_yield y)
 
   STS::AssumeRoleWithWebIdentityRequest req(s->cct, duration, providerId, policy, roleArn,
                         roleSessionName, iss, sub, aud, s->principal_tags);
-  STS::AssumeRoleWithWebIdentityResponse response = sts.assumeRoleWithWebIdentity(req);
+  STS::AssumeRoleWithWebIdentityResponse response = sts.assumeRoleWithWebIdentity(this, req);
   op_ret = std::move(response.assumeRoleResp.retCode);
 
   //Dump the output
@@ -743,7 +743,7 @@ void RGWSTSAssumeRole::execute(optional_yield y)
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
                             rgw::sal::Store* store,
                             const rgw::auth::StrategyRegistry& auth_registry,
-                            struct req_state *s, optional_yield y)
+                            req_state *s, optional_yield y)
 {
   return rgw::auth::Strategy::apply(dpp, auth_registry.get_sts(), s, y);
 }
@@ -788,7 +788,7 @@ RGWOp *RGWHandler_REST_STS::op_post()
 }
 
 int RGWHandler_REST_STS::init(rgw::sal::Store* store,
-                              struct req_state *s,
+                              req_state *s,
                               rgw::io::BasicClient *cio)
 {
   s->dialect = "sts";
@@ -809,7 +809,7 @@ int RGWHandler_REST_STS::authorize(const DoutPrefixProvider* dpp, optional_yield
   return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
 }
 
-int RGWHandler_REST_STS::init_from_header(struct req_state* s,
+int RGWHandler_REST_STS::init_from_header(req_state* s,
                                           int default_formatter,
                                           bool configurable_format)
 {
@@ -853,7 +853,7 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
 
 RGWHandler_REST*
 RGWRESTMgr_STS::get_handler(rgw::sal::Store* store,
-			    struct req_state* const s,
+			    req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)
 {

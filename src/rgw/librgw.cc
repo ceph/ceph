@@ -25,7 +25,6 @@
 
 #include "include/str_list.h"
 #include "include/stringify.h"
-#include "global/global_init.h"
 #include "global/signal_handler.h"
 #include "common/config.h"
 #include "common/errno.h"
@@ -184,7 +183,7 @@ namespace rgw {
     return ret;
   } /* process_request */
 
-  static inline void abort_req(struct req_state *s, RGWOp *op, int err_no)
+  static inline void abort_req(req_state *s, RGWOp *op, int err_no)
   {
     if (!s)
       return;
@@ -235,16 +234,14 @@ namespace rgw {
     rgw_env.set("HTTP_HOST", "");
 
     /* XXX and -then- bloat up req_state with string copies from it */
-    struct req_state rstate(req->cct, &rgw_env, req->id);
-    struct req_state *s = &rstate;
+    req_state rstate(req->cct, &rgw_env, req->id);
+    req_state *s = &rstate;
 
     // XXX fix this
     s->cio = io;
 
-    RGWObjectCtx rados_ctx(store, s); // XXX holds std::map
-
     /* XXX and -then- stash req_state pointers everywhere they are needed */
-    ret = req->init(rgw_env, &rados_ctx, io, s);
+    ret = req->init(rgw_env, store, io, s);
     if (ret < 0) {
       ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
@@ -340,8 +337,7 @@ namespace rgw {
               << e.what() << dendl;
     }
     if (should_log) {
-      rgw_log_op(store, nullptr /* !rest */, s,
-		 (op ? op->name() : "unknown"), olog);
+      rgw_log_op(nullptr /* !rest */, s, (op ? op->name() : "unknown"), olog);
     }
 
     int http_ret = s->err.http_ret;
@@ -375,14 +371,13 @@ namespace rgw {
       return -EINVAL;
     }
 
-    struct req_state* s = req->get_state();
+    req_state* s = req->get_state();
     RGWLibIO& io_ctx = req->get_io();
     RGWEnv& rgw_env = io_ctx.get_env();
-    RGWObjectCtx& rados_ctx = req->get_octx();
 
     rgw_env.set("HTTP_HOST", "");
 
-    int ret = req->init(rgw_env, &rados_ctx, &io_ctx, s);
+    int ret = req->init(rgw_env, store, &io_ctx, s);
     if (ret < 0) {
       ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
@@ -506,10 +501,10 @@ namespace rgw {
       { "log_file", "/var/log/radosgw/$cluster-$name.log" }
     };
 
-    cct = global_init(&defaults, args,
-		      CEPH_ENTITY_TYPE_CLIENT,
-		      CODE_ENVIRONMENT_DAEMON,
-		      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+    cct = rgw_global_init(&defaults, args,
+			  CEPH_ENTITY_TYPE_CLIENT,
+			  CODE_ENVIRONMENT_DAEMON,
+			  CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
     ceph::mutex mutex = ceph::make_mutex("main");
     SafeTimer init_timer(g_ceph_context, mutex);
@@ -542,8 +537,44 @@ namespace rgw {
       g_conf()->rgw_run_sync_thread &&
       g_conf()->rgw_nfs_run_sync_thread;
 
+    bool rgw_d3n_datacache_enabled =
+        cct->_conf->rgw_d3n_l1_local_datacache_enabled;
+    if (rgw_d3n_datacache_enabled &&
+        (cct->_conf->rgw_max_chunk_size != cct->_conf->rgw_obj_stripe_size)) {
+      lsubdout(cct, rgw_datacache, 0)
+          << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that "
+             "the chunk_size equals stripe_size)"
+          << dendl;
+      rgw_d3n_datacache_enabled = false;
+    }
+    if (rgw_d3n_datacache_enabled && !cct->_conf->rgw_beast_enable_async) {
+      lsubdout(cct, rgw_datacache, 0)
+          << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires yield "
+             "context - rgw_beast_enable_async=true)"
+          << dendl;
+      rgw_d3n_datacache_enabled = false;
+    }
+    lsubdout(cct, rgw, 1) << "D3N datacache enabled: "
+                          << rgw_d3n_datacache_enabled << dendl;
+
+    std::string rgw_store = (!rgw_d3n_datacache_enabled) ? "rados" : "d3n";
+
+    const auto &config_store =
+        g_conf().get_val<std::string>("rgw_backend_store");
+#ifdef WITH_RADOSGW_DBSTORE
+    if (config_store == "dbstore") {
+      rgw_store = "dbstore";
+    }
+#endif
+
+#ifdef WITH_RADOSGW_MOTR
+    if (config_store == "motr") {
+      rgw_store = "motr";
+    }
+#endif
+
     store = StoreManager::get_storage(this, g_ceph_context,
-					 "rados",
+					 rgw_store,
 					 run_gc,
 					 run_lc,
 					 run_quota,
@@ -589,10 +620,20 @@ namespace rgw {
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 
+    OpsLogManifold* olog_manifold = new OpsLogManifold();
     if (!g_conf()->rgw_ops_log_socket_path.empty()) {
-      olog = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
-      olog->init(g_conf()->rgw_ops_log_socket_path);
+      OpsLogSocket* olog_socket = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
+      olog_socket->init(g_conf()->rgw_ops_log_socket_path);
+      olog_manifold->add_sink(olog_socket);
     }
+    OpsLogFile* ops_log_file;
+    if (!g_conf()->rgw_ops_log_file_path.empty()) {
+      ops_log_file = new OpsLogFile(g_ceph_context, g_conf()->rgw_ops_log_file_path, g_conf()->rgw_ops_log_data_backlog);
+      ops_log_file->start();
+      olog_manifold->add_sink(ops_log_file);
+    }
+    olog_manifold->add_sink(new OpsLogRados(store));
+    olog = olog_manifold;
 
     int port = 80;
     RGWProcessEnv env = { store, &rest, olog, port };
@@ -653,7 +694,7 @@ namespace rgw {
     shutdown_async_signal_handler();
 
     rgw_log_usage_finalize();
-
+    
     delete olog;
 
     StoreManager::close_storage(store);

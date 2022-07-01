@@ -13,7 +13,7 @@ Supported Destination
 ---------------------
 
 AWS supports: **SNS**, **SQS** and **Lambda** as possible destinations (AWS internal destinations). 
-Currently, we support: **HTTP/S**, **Kafka** and **AMQP**. And also support pulling and acking of events stored in Ceph (as an intrenal destination).
+Currently, we support: **HTTP/S**, **Kafka** and **AMQP**. And also support pulling and acking of events stored in Ceph (as an internal destination).
 
 We are using the **SNS** ARNs to represent the **HTTP/S**, **Kafka** and **AMQP** destinations.
 
@@ -79,31 +79,51 @@ However, the following fields may be sent empty, under the different deployment 
 Event Types
 -----------
 
-+----------------------------------------------+-----------------+-------------------------------------------+
-| Event                                        | Notification    | PubSub                                    |
-+==============================================+=================+===========================================+
-| ``s3:ObjectCreated:*``                       | Supported                                                   |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectCreated:Put``                     | Supported       | Supported at ``s3:ObjectCreated:*`` level |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectCreated:Post``                    | Supported       | Not Supported                             |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectCreated:Copy``                    | Supported       | Supported at ``s3:ObjectCreated:*`` level |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectCreated:CompleteMultipartUpload`` | Supported       | Supported at ``s3:ObjectCreated:*`` level |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRemoved:*``                       | Supported       | Supported only the specific events below  |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRemoved:Delete``                  | Supported                                                   |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRemoved:DeleteMarkerCreated``     | Supported                                                   |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRestore:Post``                    | Not applicable to Ceph                                      |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRestore:Complete``                | Not applicable to Ceph                                      |
-+----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ReducedRedundancyLostObject``           | Not applicable to Ceph                                      |
-+----------------------------------------------+-----------------+-------------------------------------------+
++------------------------------------------------+-----------------+-------------------------------------------+
+| Event                                          | Notification    | PubSub                                    |
++================================================+=================+===========================================+
+| ``s3:ObjectCreated:*``                         | Supported                                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectCreated:Put``                       | Supported       | Supported at ``s3:ObjectCreated:*`` level |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectCreated:Post``                      | Supported       | Not Supported                             |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectCreated:Copy``                      | Supported       | Supported at ``s3:ObjectCreated:*`` level |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectCreated:CompleteMultipartUpload``   | Supported       | Supported at ``s3:ObjectCreated:*`` level |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectRemoved:*``                         | Supported       | Supported only the specific events below  |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectRemoved:Delete``                    | Supported                                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectRemoved:DeleteMarkerCreated``       | Supported                                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectLifecycle:Expiration:Current``      | Supported, Ceph extension                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectLifecycle:Expiration:NonCurrent``   | Supported, Ceph extension                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectLifecycle:Expiration:DeleteMarker`` | Supported, Ceph extension                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectLifecycle:Expiration:AbortMultipartUpload`` | Defined, Ceph extension (not generated)             |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectLifecycle:Transition:Current``      | Supported, Ceph extension                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectLifecycle:Transition:NonCurrent``   | Supported, Ceph extension                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectSynced:*``                          | Supported, Ceph extension                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectSynced:Create``                     | Supported, Ceph Extension                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectSynced:Delete``                     | Defined, Ceph extension (not generated)                     |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectSynced:DeletionMarkerCreated``      | Defined, Ceph extension (not generated)                     |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectRestore:Post``                      | Not applicable to Ceph                                      |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectRestore:Complete``                  | Not applicable to Ceph                                      |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ReducedRedundancyLostObject``             | Not applicable to Ceph                                      |
++----------------------------------------------+-----------------+---------------------------------------------+
 
 .. note:: 
 
@@ -112,6 +132,10 @@ Event Types
 .. note::
 
    In case of multipart upload, an ``ObjectCreated:CompleteMultipartUpload`` notification will be sent at the end of the process.
+   
+.. note::
+
+   The ``s3:ObjectSynced:Create`` event is sent when an object successfully syncs to a zone. It must be explicitely set for each zone. 
 
 Topic Configuration
 -------------------
@@ -128,7 +152,7 @@ We also have the following extensions to topic configuration:
  - In ``CreateTopic``
 
   - we allow setting endpoint attributes
-  - we allow setting opaque data thta will be sent to the endpoint in the notification
+  - we allow setting opaque data that will be sent to the endpoint in the notification
 
 
 .. _AWS Simple Notification Service API: https://docs.aws.amazon.com/sns/latest/api/API_Operations.html

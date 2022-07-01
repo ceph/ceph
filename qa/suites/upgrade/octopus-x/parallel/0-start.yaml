@@ -29,3 +29,4 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
+        bluestore fsck quick fix on mount: true

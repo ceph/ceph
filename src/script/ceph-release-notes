@@ -289,7 +289,7 @@ def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict
                 )
             )
         elif markdown:
-            markdown_title = title.replace('_', '\_').replace('.', '<!-- breaklink >.')
+            markdown_title = title.replace('_', '\_').replace('.', '<span></span>.')
             print ("- {title} ({issues}[pr#{pr}](https://github.com/ceph/ceph/pull/{pr}), {author})\n".format(
                     title=markdown_title,
                     issues=issues,

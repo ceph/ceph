@@ -150,7 +150,7 @@ int RGWOrphanStore::list_jobs(map <string,RGWOrphanSearchState>& job_list)
 
 int RGWOrphanStore::init(const DoutPrefixProvider *dpp)
 {
-  const rgw_pool& log_pool = store->get_zone()->get_params().log_pool;
+  const rgw_pool& log_pool = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone_params().log_pool;
   int r = rgw_init_ioctx(dpp, static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_rados_handle(), log_pool, ioctx);
   if (r < 0) {
     cerr << "ERROR: failed to open log pool (" << log_pool << " ret=" << r << std::endl;
@@ -520,7 +520,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
     return 0;
   }
 
-  if (cur_bucket->get_info().reshard_status == cls_rgw_reshard_status::IN_PROGRESS) {
+  if (cur_bucket->get_info().layout.resharding != rgw::BucketReshardState::None) {
     ldpp_dout(dpp, 0) << __func__ << ": reshard in progress. Skipping "
                            << orphan_bucket.name << ": "
                            << orphan_bucket.bucket_id << dendl;
@@ -580,9 +580,9 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
         continue;
       }
 
-      rgw_obj obj(cur_bucket->get_key(), entry.key);
+      std::unique_ptr<rgw::sal::Object> obj = cur_bucket->get_object(entry.key);
 
-      RGWRados::Object op_target(store->getRados(), cur_bucket->get_info(), obj_ctx, obj);
+      RGWRados::Object op_target(store->getRados(), cur_bucket.get(), obj_ctx, obj.get());
 
       stat_ops.push_back(RGWRados::Object::Stat(&op_target));
       RGWRados::Object::Stat& op = stat_ops.back();
@@ -1244,14 +1244,16 @@ int RGWRadosList::process_bucket(
 	continue;
       }
 
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      store->get_bucket(nullptr, bucket_info, &bucket);
       // we need to do this in two cases below, so use a lambda
       auto do_stat_key =
 	[&](const rgw_obj_key& key) -> int {
 	  int ret;
 
-	  rgw_obj obj(bucket_info.bucket, key);
-	  RGWRados::Object op_target(store->getRados(), bucket_info,
-				     obj_ctx, obj);
+	  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
+	  RGWRados::Object op_target(store->getRados(), bucket.get(),
+				     obj_ctx, obj.get());
 
 	  stat_ops.push_back(RGWRados::Object::Stat(&op_target));
 	  RGWRados::Object::Stat& op = stat_ops.back();
@@ -1319,7 +1321,8 @@ int RGWRadosList::process_bucket(
 }
 
 
-int RGWRadosList::run(const DoutPrefixProvider *dpp)
+int RGWRadosList::run(const DoutPrefixProvider *dpp,
+		      const bool yes_i_really_mean_it)
 {
   int ret;
   void* handle = nullptr;
@@ -1332,16 +1335,35 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  const int max_keys = 1000;
+  constexpr int max_keys = 1000;
   bool truncated = true;
+  bool warned_indexless = false;
 
   do {
     std::list<std::string> buckets;
     ret = store->meta_list_keys_next(dpp, handle, max_keys, buckets, &truncated);
 
     for (std::string& bucket_id : buckets) {
-      ret = run(dpp, bucket_id);
+      ret = run(dpp, bucket_id, true);
       if (ret == -ENOENT) {
+	continue;
+      } else if (ret == -EINVAL) {
+	if (! warned_indexless) {
+	  if (yes_i_really_mean_it) {
+	    std::cerr <<
+	      "WARNING: because there is at least one indexless bucket (" <<
+	      bucket_id <<
+	      ") the results of radoslist are *incomplete*; continuing due to --yes-i-really-mean-it" <<
+	      std::endl;
+	    warned_indexless = true;
+	  } else {
+	    std::cerr << "ERROR: because there is at least one indexless bucket (" <<
+	      bucket_id <<
+	      ") the results of radoslist are *incomplete*; use --yes-i-really-mean-it to bypass error" <<
+	      std::endl;
+	    return ret;
+	  }
+	}
 	continue;
       } else if (ret < 0) {
 	return ret;
@@ -1350,13 +1372,13 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp)
   } while (truncated);
 
   return 0;
-} // RGWRadosList::run()
+} // RGWRadosList::run(DoutPrefixProvider, bool)
 
 
-int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bucket_name)
+int RGWRadosList::run(const DoutPrefixProvider *dpp,
+		      const std::string& start_bucket_name,
+		      const bool silent_indexless)
 {
-  RGWObjectCtx obj_ctx(store);
-  std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret;
 
   add_bucket_entire(start_bucket_name);
@@ -1380,6 +1402,12 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
       std::cerr << "ERROR: could not get info for bucket " << bucket_name <<
 	" -- " << cpp_strerror(-ret) << std::endl;
       return ret;
+    } else if (bucket->get_info().is_indexless()) {
+      if (! silent_indexless) {
+	std::cerr << "ERROR: unable to run radoslist on indexless bucket " <<
+	  bucket_name << std::endl;
+      }
+      return -EINVAL;
     }
 
     const std::string bucket_id = bucket->get_key().get_key();
@@ -1428,12 +1456,13 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
   } // while (! bucket_process_map.empty())
 
   if (include_rgw_obj_name) {
-    goto done;
+    return 0;
   }
 
   // now handle incomplete multipart uploads by going back to the
   // initial bucket
 
+  std::unique_ptr<rgw::sal::Bucket> bucket;
   ret = store->get_bucket(dpp, nullptr, tenant_name, start_bucket_name, &bucket, null_yield);
   if (ret == -ENOENT) {
     // bucket deletion race?
@@ -1451,10 +1480,8 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
     return ret;
   }
 
-done:
-
   return 0;
-} // RGWRadosList::run(string)
+} // RGWRadosList::run(DoutPrefixProvider, string, bool)
 
 
 int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
@@ -1523,3 +1550,52 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 
   return 0;
 } // RGWRadosList::do_incomplete_multipart
+
+void RGWOrphanSearchStage::dump(Formatter *f) const
+{
+  f->open_object_section("orphan_search_stage");
+  string s;
+  switch(stage){
+  case ORPHAN_SEARCH_STAGE_INIT:
+    s = "init";
+    break;
+  case ORPHAN_SEARCH_STAGE_LSPOOL:
+    s = "lspool";
+    break;
+  case ORPHAN_SEARCH_STAGE_LSBUCKETS:
+    s =  "lsbuckets";
+    break;
+  case ORPHAN_SEARCH_STAGE_ITERATE_BI:
+    s = "iterate_bucket_index";
+    break;
+  case ORPHAN_SEARCH_STAGE_COMPARE:
+    s = "comparing";
+    break;
+  default:
+    s = "unknown";
+  }
+  f->dump_string("search_stage", s);
+  f->dump_int("shard",shard);
+  f->dump_string("marker",marker);
+  f->close_section();
+}
+
+void RGWOrphanSearchInfo::dump(Formatter *f) const
+{
+  f->open_object_section("orphan_search_info");
+  f->dump_string("job_name", job_name);
+  encode_json("pool", pool, f);
+  f->dump_int("num_shards", num_shards);
+  encode_json("start_time", start_time, f);
+  f->close_section();
+}
+
+void RGWOrphanSearchState::dump(Formatter *f) const
+{
+  f->open_object_section("orphan_search_state");
+  encode_json("info", info, f);
+  encode_json("stage", stage, f);
+  f->close_section();
+}
+
+

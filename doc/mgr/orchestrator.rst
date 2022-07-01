@@ -115,6 +115,34 @@ Service Commands::
 
     ceph orch <start|stop|restart|redeploy|reconfig> <service_name>
 
+   .. note:: these commands applies to cephadm containerized daemons only.
+
+Options
+=======
+
+.. option:: start
+
+   Start the daemon on the corresponding host.
+
+.. option:: stop
+
+   Stop the daemon on the corresponding host.
+
+.. option:: restart
+
+   Restart the daemon on the corresponding host.
+
+.. option:: redeploy
+
+   Redeploy the ceph daemon on the corresponding host. This will recreate the daemon directory
+   structure under ``/var/lib/ceph/<fsid>/<daemon-name>`` (if it doesn't exist), refresh its
+   configuration files, regenerate its unit-files and restarts the systemd daemon.
+
+.. option:: reconfig
+
+   Reconfigure the daemon on the corresponding host. This will refresh configuration files then restart the daemon.
+
+   .. note:: this command assumes the daemon directory ``/var/lib/ceph/<fsid>/<daemon-name>`` already exists.
 
 
 Configuring the Orchestrator CLI
@@ -157,11 +185,19 @@ This is an overview of the current implementation status of the orchestrators.
  apply nfs                           ✔      ✔
  apply osd                           ✔      ✔
  apply rbd-mirror                    ✔      ✔
- apply rgw                           ✔      ✔
+ apply cephfs-mirror                 ⚪      ✔
+ apply grafana                       ⚪      ✔
+ apply prometheus                    ❌      ✔
+ apply alertmanager                  ❌      ✔
+ apply node-exporter                 ❌      ✔
+ apply rgw                           ✔       ✔
  apply container                     ⚪      ✔
+ apply snmp-gateway                  ❌      ✔
  host add                            ⚪      ✔
  host ls                             ✔      ✔
  host rm                             ⚪      ✔
+ host maintenance enter              ❌      ✔
+ host maintenance exit               ❌      ✔
  daemon status                       ⚪      ✔
  daemon {stop,start,...}             ⚪      ✔
  device {ident,fault}-(on,off}       ⚪      ✔
@@ -171,7 +207,10 @@ This is an overview of the current implementation status of the orchestrators.
  nfs add                             ⚪      ✔
  rbd-mirror add                      ⚪      ✔
  rgw add                             ⚪     ✔
+ ls                                  ✔      ✔
  ps                                  ✔      ✔
+ status                              ✔      ✔
+ upgrade                             ❌      ✔
 =================================== ====== =========
 
 where

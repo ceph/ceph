@@ -14,11 +14,8 @@
 namespace crimson::os::seastore {
 
 struct onode_layout_t {
-  // around 350 bytes for fixed fields in object_info_t,
-  // the left are for the variable-sized fields like oid
-  // FIXME: object_info_t may need to shrinked, at least
-  // 	    oid doesn't need to be held in it.
-  static constexpr int MAX_OI_LENGTH = 1024;
+  // The expected decode size of object_info_t without oid.
+  static constexpr int MAX_OI_LENGTH = 232;
   // We might want to move the ss field out of onode_layout_t.
   // The reason is that ss_attr may grow to relative large, as
   // its clone_overlap may grow to a large size, if applications
@@ -26,7 +23,9 @@ struct onode_layout_t {
   // the number of objects per OSD, so that all objects' metadata
   // can be cached in memory) and do many modifications between
   // snapshots.
-  static constexpr int MAX_SS_LENGTH = 128;
+  // TODO: implement flexible-sized onode value to store inline ss_attr
+  // effectively.
+  static constexpr int MAX_SS_LENGTH = 1;
 
   ceph_le32 size{0};
   ceph_le32 oi_size{0};
@@ -53,12 +52,30 @@ class Onode : public boost::intrusive_ref_counter<
   Onode,
   boost::thread_unsafe_counter>
 {
+protected:
+  virtual laddr_t get_hint() const = 0;
+  const uint32_t default_metadata_offset = 0;
+  const uint32_t default_metadata_range = 0;
 public:
+  Onode(uint32_t ddr, uint32_t dmr)
+    : default_metadata_offset(ddr),
+      default_metadata_range(dmr)
+  {}
 
   virtual const onode_layout_t &get_layout() const = 0;
   virtual onode_layout_t &get_mutable_layout(Transaction &t) = 0;
   virtual ~Onode() = default;
-  virtual laddr_t get_hint() const = 0;
+
+  laddr_t get_metadata_hint(uint64_t block_size) const {
+    assert(default_metadata_offset);
+    assert(default_metadata_range);
+    uint64_t range_blocks = default_metadata_range / block_size;
+    return get_hint() + default_metadata_offset +
+      (((uint32_t)std::rand() % range_blocks) * block_size);
+  }
+  laddr_t get_data_hint() const {
+    return get_hint();
+  }
 };
 
 

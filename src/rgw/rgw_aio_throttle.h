@@ -45,7 +45,7 @@ class Throttle {
  public:
   Throttle(uint64_t window) : window(window) {}
 
-  ~Throttle() {
+  virtual ~Throttle() {
     // must drain before destructing
     ceph_assert(pending.empty());
     ceph_assert(completed.empty());
@@ -66,6 +66,8 @@ class BlockingAioThrottle final : public Aio, private Throttle {
  public:
   BlockingAioThrottle(uint64_t window) : Throttle(window) {}
 
+  virtual ~BlockingAioThrottle() override {};
+
   AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
                     uint64_t cost, uint64_t id) override final;
 
@@ -82,7 +84,7 @@ class BlockingAioThrottle final : public Aio, private Throttle {
 // functions must be called within the coroutine strand
 class YieldingAioThrottle final : public Aio, private Throttle {
   boost::asio::io_context& context;
-  spawn::yield_context yield;
+  yield_context yield;
   struct Handler;
 
   // completion callback associated with the waiter
@@ -96,9 +98,11 @@ class YieldingAioThrottle final : public Aio, private Throttle {
 
  public:
   YieldingAioThrottle(uint64_t window, boost::asio::io_context& context,
-                      spawn::yield_context yield)
+                      yield_context yield)
     : Throttle(window), context(context), yield(yield)
   {}
+
+  virtual ~YieldingAioThrottle() override {};
 
   AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
                     uint64_t cost, uint64_t id) override final;

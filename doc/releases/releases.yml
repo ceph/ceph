@@ -12,9 +12,24 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
+  quincy:
+    target_eol: 2024-06-01
+    releases:
+      - version: 17.2.0
+        released: 2022-04-19
+    releases:
+      - version: 17.2.1
+        released: 2022-06-23
+
   pacific:
     target_eol: 2023-06-01
     releases:
+      - version: 16.2.8
+        released: 2022-05-16
+      - version: 16.2.7
+        released: 2021-12-14        
+      - version: 16.2.6
+        released: 2021-09-16
       - version: 16.2.5
         released: 2021-07-08
       - version: 16.2.4
@@ -31,6 +46,10 @@ releases:
   octopus:
     target_eol: 2022-06-01
     releases:
+      - version: 15.2.16
+        released: 2022-03-01
+      - version: 15.2.15  
+        released: 2021-10-20
       - version: 15.2.14
         released: 2021-08-05
       - version: 15.2.13
@@ -64,6 +83,7 @@ releases:
 
   nautilus:
     target_eol: 2021-06-01
+    actual_eol: 2021-06-30
     releases:
       - version: 14.2.22
         released: 2021-06-30

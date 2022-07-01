@@ -1,5 +1,7 @@
 upgrade-task:
 - install.upgrade: # leave c2 on octopus, upgrade c1 to current
+    exclude_packages:
+      - ceph-volume
     c1.mon.a:
     c1.mgr.x:
     c1.osd.0:

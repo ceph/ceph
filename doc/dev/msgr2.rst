@@ -104,7 +104,8 @@ Each frame has a 32-byte preamble::
     __le32 segment length
     __le16 segment alignment
   } * 4
-  reserved (2 bytes)
+  __u8 flags
+  reserved (1 byte)
   __le32 preamble crc
 
 An empty frame has one empty segment.  A non-empty frame can have
@@ -113,6 +114,10 @@ empty.
 
 If there are less than four segments, unused (trailing) segment
 length and segment alignment fields are zeroed.
+
+### Currently supported flags
+
+  1. FRAME_EARLY_DATA_COMPRESSED (see :ref:`msgr-post-compression`)
 
 The reserved bytes are zeroed.
 
@@ -527,6 +532,64 @@ where epilogue is::
     zero padding (15 bytes)
 
 late_status has the same meaning as in msgr2.1-crc mode.
+
+Compression
+-----------
+Compression handshake is implemented using msgr2 feature-based handshaking.
+In this phase, the client will indicate the server if on-wire-compression can be used for message transmitting, 
+in addition to the list of supported compression methods. If on-wire-compression is enabled for both client and server, 
+the server will choose a compression method based on client's request and its' own preferences. 
+Once the handshake is completed, both peers have setup their compression handlers (if desired). 
+
+* TAG_COMPRESSION_REQUEST (client->server): declares compression capabilities and requirements::
+
+    bool  is_compress
+    std::vector<uint32_t> preferred_methods 
+
+  - if the client identifies that both peers support compression feature, it initiates the handshake.
+  - is_compress flag indicates whether the client's configuration is to use compression.
+  - preferred_methods is a list of compression algorithms that are supported by the client.
+
+* TAG_COMPRESSION_DONE (server->client) : determines on compression settings::
+
+    bool is_compress
+    uint32_t  method
+
+  - the server determines whether compression is possible according to its' configuration.
+  - if it is possible, it will pick its' most prioritizied compression method that is also supprorted by the client.
+  - if none exists, it will determine that session between the peers will be handled without compression.
+
+.. ditaa::
+
+           +---------+              +--------+
+           | Client  |              | Server |
+           +---------+              +--------+
+                | compression request    |
+                |----------------------->|
+                |<-----------------------|
+                |   compression done     |
+
+# msgr2.x-secure mode
+
+Combining compression with encryption introduces security implications.
+Compression will not be possible when using secure mode, unless configured specifically by an admin. 
+
+.. _msgr-post-compression:
+
+Post-compression frame format 
+-----------------------------
+Depending on the negotiated connection mode from TAG_COMPRESSION_DONE, the connection is able to accept/send compressed frames or process all frames as decompressed.
+
+# msgr2.x-force mode
+
+All subsequent frames that will be sent via the connection will be compressed if compression requirements are met (e.g, the frames size).
+
+For compressed frames, the sending peer will enable the FRAME_EARLY_DATA_COMPRESSED flag, thus allowing the accepting peer to detect it and decompress the frame.
+
+# msgr2.x-none mode
+
+FRAME_EARLY_DATA_COMPRESSED flag will be disabled in preamble.
+
 
 Message flow handshake
 ----------------------

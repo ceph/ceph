@@ -48,7 +48,7 @@ A job failure might be caused by one or more of the following reasons:
 
 * environment setup (`testing on varied
   systems <https://github.com/ceph/ceph/tree/master/qa/distros/supported>`_):
-  testing compatibility with stable realeases for supported versions.
+  testing compatibility with stable releases for supported versions.
 
 * permutation of config values: for instance, `qa/suites/rados/thrash
   <https://github.com/ceph/ceph/tree/master/qa/suites/rados/thrash>`_ ensures
@@ -144,6 +144,8 @@ Suggested Resources
 --------------------
 
   * `Testing Ceph: Pains & Pleasures <https://www.youtube.com/watch?v=gj1OXrKdSrs>`_
+  * `Teuthology Training <https://www.youtube.com/playlist?list=PLrBUGiINAakNsOwHaIM27OBGKezQbUdM->`_
+  * `Intro to Teuthology <https://www.youtube.com/watch?v=WiEUzoS6Nc4>`_
 
 .. _Scheduling Test Run: ../tests-integration-testing-teuthology-workflow/#scheduling-test-run
 .. _detailed test config: https://docs.ceph.com/projects/teuthology/en/latest/detailed_test_config.html

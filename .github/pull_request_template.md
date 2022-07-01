@@ -1,41 +1,48 @@
 
+
+
+
 <!--
-Thank you for opening a pull request!  Here are some tips on creating
-a well formatted contribution.
+  - Please give your pull request a title like
 
-Please give your pull request a title like "[component]: [short description]"
+      [component]: [short description]
 
-This is the format for commit messages:
+  - Please use this format for each git commit message:
 
-"""
-[component]: [short description]
+      [component]: [short description]
 
-[A longer multiline description]
+      [A longer multiline description]
 
-Fixes: [ticket URL on tracker.ceph.com, create one if necessary]
-Signed-off-by: [Your Name] <[your email]>
-"""
+      Fixes: [ticket URL on tracker.ceph.com, create one if necessary]
+      Signed-off-by: [Your Name] <[your email]>
 
-The Signed-off-by line is important, and it is your certification that
-your contributions satisfy the Developers Certificate or Origin.  For
-more detail, see SubmittingPatches.rst.
-
-The component is the short name of a major daemon or subsystem,
-something like "mon", "osd", "mds", "rbd, "rgw", etc. For ceph-mgr modules,
-give the component as "mgr/<module name>" rather than a path into pybind.
-
-For more examples, simply use "git log" and look at some historical commits.
-
-This was just a quick overview.  More information for contributors is available here:
-https://raw.githubusercontent.com/ceph/ceph/master/SubmittingPatches.rst
-
+    For examples, use "git log".
 -->
-## Checklist
-- [ ] References tracker ticket
-- [ ] Updates documentation if necessary
-- [ ] Includes tests for new functionality or reproducer for bug
 
----
+## Contribution Guidelines
+- To sign and title your commits, please refer to [Submitting Patches to Ceph](https://github.com/ceph/ceph/blob/main/SubmittingPatches.rst).
+
+- If you are submitting a fix for a stable branch (e.g. "pacific"), please refer to [Submitting Patches to Ceph - Backports](https://github.com/ceph/ceph/blob/master/SubmittingPatches-backports.rst) for the proper workflow.
+
+## Checklist
+- Tracker (select at least one)
+  - [ ] References tracker ticket
+  - [ ] Very recent bug; references commit where it was introduced
+  - [ ] New feature (ticket optional)
+  - [ ] Doc update (no ticket needed)
+  - [ ] Code cleanup (no ticket needed)
+- Component impact
+  - [ ] Affects [Dashboard](https://tracker.ceph.com/projects/dashboard/issues/new), opened tracker ticket
+  - [ ] Affects [Orchestrator](https://tracker.ceph.com/projects/orchestrator/issues/new), opened tracker ticket
+  - [ ] No impact that needs to be tracked
+- Documentation (select at least one)
+  - [ ] Updates relevant documentation
+  - [ ] No doc update is appropriate
+- Tests (select at least one)
+  - [ ] Includes [unit test(s)](https://docs.ceph.com/en/latest/dev/developer_guide/tests-unit-tests/)
+  - [ ] Includes [integration test(s)](https://docs.ceph.com/en/latest/dev/developer_guide/testing_integration_tests/)
+  - [ ] Includes bug reproducer
+  - [ ] No tests
 
 <details>
 <summary>Show available Jenkins commands</summary>
@@ -54,5 +61,5 @@ https://raw.githubusercontent.com/ceph/ceph/master/SubmittingPatches.rst
 - `jenkins render docs`
 - `jenkins test ceph-volume all`
 - `jenkins test ceph-volume tox`
-
+- `jenkins test windows`
 </details>

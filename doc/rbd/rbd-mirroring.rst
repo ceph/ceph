@@ -310,7 +310,7 @@ For example::
    section of the local or centralized configuration.  Note that these
    settings may allow ``rbd-mirror`` to present a substantial write workload
    to the destination cluster:  monitor cluster performance closely during
-   migrations and test carefuly before running multiple migrations in parallel.
+   migrations and test carefully before running multiple migrations in parallel.
 
 Create Image Mirror-Snapshots
 -----------------------------
@@ -326,7 +326,7 @@ For example::
 
         $ rbd --cluster site-a mirror image snapshot image-pool/image-1
 
-By default only ``3`` mirror-snapshots will be created per-image. The most
+By default up to ``5`` mirror-snapshots will be created per-image. The most
 recent mirror-snapshot is automatically pruned if the limit is reached.
 The limit can be overridden via the ``rbd_mirroring_max_mirroring_snapshots``
 configuration option if required. Additionally, mirror-snapshots are

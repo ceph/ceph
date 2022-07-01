@@ -629,7 +629,7 @@ public:
   const ECUtil::stripe_info_t sinfo;
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
-  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true,
+  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool create = false,
 				    const std::map<std::string, ceph::buffer::ptr, std::less<>> *attr = NULL);
 
 public:
@@ -675,7 +675,8 @@ public:
     ScrubMap &map,
     ScrubMapBuilder &pos,
     ScrubMap::object &o) override;
-  uint64_t be_get_ondisk_size(uint64_t logical_size) override {
+
+  uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
   void _failed_push(const hobject_t &hoid,

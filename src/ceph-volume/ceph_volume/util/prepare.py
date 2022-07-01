@@ -19,7 +19,8 @@ mlogger = terminal.MultiLogger(__name__)
 def create_key():
     stdout, stderr, returncode = process.call(
         ['ceph-authtool', '--gen-print-key'],
-        show_command=True)
+        show_command=True,
+        logfile_verbose=False)
     if returncode != 0:
         raise RuntimeError('Unable to generate a new auth key')
     return ' '.join(stdout).strip()
@@ -40,13 +41,15 @@ def write_keyring(osd_id, secret, keyring_name='keyring', name=None):
     """
     osd_keyring = '/var/lib/ceph/osd/%s-%s/%s' % (conf.cluster, osd_id, keyring_name)
     name = name or 'osd.%s' % str(osd_id)
-    process.run(
+    mlogger.info(f'Creating keyring file for {name}')
+    process.call(
         [
             'ceph-authtool', osd_keyring,
             '--create-keyring',
             '--name', name,
             '--add-key', secret
-        ])
+        ],
+        logfile_verbose=False)
     system.chown(osd_keyring)
 
 
@@ -183,6 +186,7 @@ def osd_id_available(osd_id):
     """
     if osd_id is None:
         return False
+
     bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     stdout, stderr, returncode = process.call(
         [
@@ -202,7 +206,7 @@ def osd_id_available(osd_id):
     output = json.loads(''.join(stdout).strip())
     osds = output['nodes']
     osd = [osd for osd in osds if str(osd['id']) == str(osd_id)]
-    if osd and osd[0].get('status') == "destroyed":
+    if not osd or (osd and osd[0].get('status') == "destroyed"):
         return True
     return False
 

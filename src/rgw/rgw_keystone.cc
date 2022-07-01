@@ -40,6 +40,8 @@ void rgw_get_token_id(const string& token, string& token_id)
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
 
   MD5 hash;
+  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   hash.Update((const unsigned char *)token.c_str(), token.size());
   hash.Final(m);
 
@@ -134,7 +136,8 @@ std::string CephCtxConfig::get_admin_password() const noexcept  {
   return empty;
 }
 
-int Service::get_admin_token(CephContext* const cct,
+int Service::get_admin_token(const DoutPrefixProvider *dpp,
+                             CephContext* const cct,
                              TokenCache& token_cache,
                              const Config& config,
                              std::string& token)
@@ -151,13 +154,13 @@ int Service::get_admin_token(CephContext* const cct,
 
   /* Try cache first before calling Keystone for a new admin token. */
   if (token_cache.find_admin(t)) {
-    ldout(cct, 20) << "found cached admin token" << dendl;
+    ldpp_dout(dpp, 20) << "found cached admin token" << dendl;
     token = t.token.id;
     return 0;
   }
 
   /* Call Keystone now. */
-  const auto ret = issue_admin_token_request(cct, config, t);
+  const auto ret = issue_admin_token_request(dpp, cct, config, t);
   if (! ret) {
     token_cache.add_admin(t);
     token = t.token.id;
@@ -166,7 +169,8 @@ int Service::get_admin_token(CephContext* const cct,
   return ret;
 }
 
-int Service::issue_admin_token_request(CephContext* const cct,
+int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
+                                       CephContext* const cct,
                                        const Config& config,
                                        TokenEnvelope& t)
 {
@@ -217,7 +221,7 @@ int Service::issue_admin_token_request(CephContext* const cct,
     return -EACCES;
   }
 
-  if (t.parse(cct, token_req.get_subject_token(), token_bl,
+  if (t.parse(dpp, cct, token_req.get_subject_token(), token_bl,
               keystone_version) != 0) {
     return -EINVAL;
   }
@@ -225,7 +229,8 @@ int Service::issue_admin_token_request(CephContext* const cct,
   return 0;
 }
 
-int Service::get_keystone_barbican_token(CephContext * const cct,
+int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
+                                         CephContext * const cct,
                                          std::string& token)
 {
   using keystone_config_t = rgw::keystone::CephCtxConfig;
@@ -243,7 +248,7 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
 
   /* Try cache first. */
   if (token_cache.find_barbican(t)) {
-    ldout(cct, 20) << "found cached barbican token" << dendl;
+    ldpp_dout(dpp, 20) << "found cached barbican token" << dendl;
     token = t.token.id;
     return 0;
   }
@@ -279,10 +284,10 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
 
   token_req.set_url(token_url);
 
-  ldout(cct, 20) << "Requesting secret from barbican url=" << token_url << dendl;
+  ldpp_dout(dpp, 20) << "Requesting secret from barbican url=" << token_url << dendl;
   const int ret = token_req.process(null_yield);
   if (ret < 0) {
-    ldout(cct, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
+    ldpp_dout(dpp, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
     return ret;
   }
 
@@ -292,7 +297,7 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
     return -EACCES;
   }
 
-  if (t.parse(cct, token_req.get_subject_token(), token_bl,
+  if (t.parse(dpp, cct, token_req.get_subject_token(), token_bl,
               keystone_version) != 0) {
     return -EINVAL;
   }
@@ -314,14 +319,15 @@ bool TokenEnvelope::has_role(const std::string& r) const
   return false;
 }
 
-int TokenEnvelope::parse(CephContext* const cct,
+int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
+                         CephContext* const cct,
                          const std::string& token_str,
                          ceph::bufferlist& bl,
                          const ApiVersion version)
 {
   JSONParser parser;
   if (! parser.parse(bl.c_str(), bl.length())) {
-    ldout(cct, 0) << "Keystone token parse error: malformed json" << dendl;
+    ldpp_dout(dpp, 0) << "Keystone token parse error: malformed json" << dendl;
     return -EINVAL;
   }
 
@@ -362,7 +368,7 @@ int TokenEnvelope::parse(CephContext* const cct,
       return -ENOTSUP;
     }
   } catch (const JSONDecoder::err& err) {
-    ldout(cct, 0) << "Keystone token parse error: " << err.what() << dendl;
+    ldpp_dout(dpp, 0) << "Keystone token parse error: " << err.what() << dendl;
     return -EINVAL;
   }
 
@@ -465,14 +471,14 @@ void TokenCache::add_barbican(const rgw::keystone::TokenEnvelope& token)
   add_locked(barbican_token_id, token);
 }
 
-void TokenCache::invalidate(const std::string& token_id)
+void TokenCache::invalidate(const DoutPrefixProvider *dpp, const std::string& token_id)
 {
   std::lock_guard l{lock};
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter == tokens.end())
     return;
 
-  ldout(cct, 20) << "invalidating revoked token id=" << token_id << dendl;
+  ldpp_dout(dpp, 20) << "invalidating revoked token id=" << token_id << dendl;
   token_entry& e = iter->second;
   tokens_lru.erase(e.lru_iter);
   tokens.erase(iter);
@@ -485,3 +491,180 @@ bool TokenCache::going_down() const
 
 }; /* namespace keystone */
 }; /* namespace rgw */
+
+void rgw::keystone::TokenEnvelope::Token::decode_json(JSONObj *obj)
+{
+  string expires_iso8601;
+  struct tm t;
+
+  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("tenant", tenant_v2, obj, true);
+  JSONDecoder::decode_json("expires", expires_iso8601, obj, true);
+
+  if (parse_iso8601(expires_iso8601.c_str(), &t)) {
+    expires = internal_timegm(&t);
+  } else {
+    expires = 0;
+    throw JSONDecoder::err("Failed to parse ISO8601 expiration date from Keystone response.");
+  }
+}
+
+void rgw::keystone::TokenEnvelope::Role::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj, true);
+}
+
+void rgw::keystone::TokenEnvelope::Domain::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("name", name, obj, true);
+}
+
+void rgw::keystone::TokenEnvelope::Project::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("name", name, obj, true);
+  JSONDecoder::decode_json("domain", domain, obj);
+}
+
+void rgw::keystone::TokenEnvelope::User::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("name", name, obj, true);
+  JSONDecoder::decode_json("domain", domain, obj);
+  JSONDecoder::decode_json("roles", roles_v2, obj);
+}
+
+void rgw::keystone::TokenEnvelope::decode_v3(JSONObj* const root_obj)
+{
+  std::string expires_iso8601;
+
+  JSONDecoder::decode_json("user", user, root_obj, true);
+  JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
+  JSONDecoder::decode_json("roles", roles, root_obj, true);
+  JSONDecoder::decode_json("project", project, root_obj, true);
+
+  struct tm t;
+  if (parse_iso8601(expires_iso8601.c_str(), &t)) {
+    token.expires = internal_timegm(&t);
+  } else {
+    token.expires = 0;
+    throw JSONDecoder::err("Failed to parse ISO8601 expiration date"
+                           "from Keystone response.");
+  }
+}
+
+void rgw::keystone::TokenEnvelope::decode_v2(JSONObj* const root_obj)
+{
+  JSONDecoder::decode_json("user", user, root_obj, true);
+  JSONDecoder::decode_json("token", token, root_obj, true);
+
+  roles = user.roles_v2;
+  project = token.tenant_v2;
+}
+
+/* This utility function shouldn't conflict with the overload of std::to_string
+ * provided by string_ref since Boost 1.54 as it's defined outside of the std
+ * namespace. I hope we'll remove it soon - just after merging the Matt's PR
+ * for bundled Boost. It would allow us to forget that CentOS 7 has Boost 1.53. */
+static inline std::string to_string(const std::string_view& s)
+{
+  return std::string(s.data(), s.length());
+}
+
+void rgw::keystone::AdminTokenRequestVer2::dump(Formatter* const f) const
+{
+  f->open_object_section("token_request");
+    f->open_object_section("auth");
+      f->open_object_section("passwordCredentials");
+        encode_json("username", ::to_string(conf.get_admin_user()), f);
+        encode_json("password", ::to_string(conf.get_admin_password()), f);
+      f->close_section();
+      encode_json("tenantName", ::to_string(conf.get_admin_tenant()), f);
+    f->close_section();
+  f->close_section();
+}
+
+void rgw::keystone::AdminTokenRequestVer3::dump(Formatter* const f) const
+{
+  f->open_object_section("token_request");
+    f->open_object_section("auth");
+      f->open_object_section("identity");
+        f->open_array_section("methods");
+          f->dump_string("", "password");
+        f->close_section();
+        f->open_object_section("password");
+          f->open_object_section("user");
+            f->open_object_section("domain");
+              encode_json("name", ::to_string(conf.get_admin_domain()), f);
+            f->close_section();
+            encode_json("name", ::to_string(conf.get_admin_user()), f);
+            encode_json("password", ::to_string(conf.get_admin_password()), f);
+          f->close_section();
+        f->close_section();
+      f->close_section();
+      f->open_object_section("scope");
+        f->open_object_section("project");
+          if (! conf.get_admin_project().empty()) {
+            encode_json("name", ::to_string(conf.get_admin_project()), f);
+          } else {
+            encode_json("name", ::to_string(conf.get_admin_tenant()), f);
+          }
+          f->open_object_section("domain");
+            encode_json("name", ::to_string(conf.get_admin_domain()), f);
+          f->close_section();
+        f->close_section();
+      f->close_section();
+    f->close_section();
+  f->close_section();
+}
+
+void rgw::keystone::BarbicanTokenRequestVer2::dump(Formatter* const f) const
+{
+  f->open_object_section("token_request");
+    f->open_object_section("auth");
+      f->open_object_section("passwordCredentials");
+        encode_json("username", cct->_conf->rgw_keystone_barbican_user, f);
+        encode_json("password", cct->_conf->rgw_keystone_barbican_password, f);
+      f->close_section();
+      encode_json("tenantName", cct->_conf->rgw_keystone_barbican_tenant, f);
+    f->close_section();
+  f->close_section();
+}
+
+void rgw::keystone::BarbicanTokenRequestVer3::dump(Formatter* const f) const
+{
+  f->open_object_section("token_request");
+    f->open_object_section("auth");
+      f->open_object_section("identity");
+        f->open_array_section("methods");
+          f->dump_string("", "password");
+        f->close_section();
+        f->open_object_section("password");
+          f->open_object_section("user");
+            f->open_object_section("domain");
+              encode_json("name", cct->_conf->rgw_keystone_barbican_domain, f);
+            f->close_section();
+            encode_json("name", cct->_conf->rgw_keystone_barbican_user, f);
+            encode_json("password", cct->_conf->rgw_keystone_barbican_password, f);
+          f->close_section();
+        f->close_section();
+      f->close_section();
+      f->open_object_section("scope");
+        f->open_object_section("project");
+          if (!cct->_conf->rgw_keystone_barbican_project.empty()) {
+            encode_json("name", cct->_conf->rgw_keystone_barbican_project, f);
+          } else {
+            encode_json("name", cct->_conf->rgw_keystone_barbican_tenant, f);
+          }
+          f->open_object_section("domain");
+            encode_json("name", cct->_conf->rgw_keystone_barbican_domain, f);
+          f->close_section();
+        f->close_section();
+      f->close_section();
+    f->close_section();
+  f->close_section();
+}
+
+

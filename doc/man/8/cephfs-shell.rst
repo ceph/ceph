@@ -32,13 +32,17 @@ Behaviour of CephFS Shell can be tweaked using ``cephfs-shell.conf``. Refer to
 Options
 =======
 
+.. option:: -b, --batch FILE
+
+   Path to batch file.
+
 .. option:: -c, --config FILE
 
    Path to cephfs-shell.conf
 
-.. option:: -b, --batch FILE
+.. option:: -f, --fs FS
 
-   Path to batch file.
+   Name of filesystem to mount.
 
 .. option:: -t, --test FILE
 
@@ -57,6 +61,23 @@ Options
 
 Commands
 ========
+
+.. note::
+
+    Apart from Ceph File System, CephFS Shell commands can also interact
+    directly with the local file system. To achieve this, ``!`` (an
+    exclamation point) must precede the CephFS Shell command.
+
+    Usage :
+
+        !<cephfs_shell_command>
+
+    For example,
+
+    .. code:: bash
+
+        CephFS:~/>>> !ls # Lists the local file system directory contents.
+        CephFS:~/>>> ls  # Lists the Ceph File System directory contents.
 
 mkdir
 -----
@@ -80,7 +101,7 @@ Copy a file/directory to Ceph File System from Local File System.
 
 Usage : 
     
-        put [options] <source_path> [target_path]
+        put [options] <source_path> <target_path>
 
 * source_path - local file/directory path to be copied to cephfs.
     * if `.` copies all the file/directories in the local working directory.
@@ -100,7 +121,7 @@ Copy a file from Ceph File System to Local File System.
 
 Usage : 
 
-    get [options] <source_path> [target_path]
+    get [options] <source_path> <target_path>
 
 * source_path - remote file/directory path which is to be copied to local file system.
     * if `.` copies all the file/directories in the remote working directory.

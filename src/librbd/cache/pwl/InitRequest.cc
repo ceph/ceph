@@ -85,8 +85,8 @@ void InitRequest<I>::get_image_cache_state() {
     return;
   }
 
-  auto cache_type = cache_state->get_image_cache_type();
-  switch(cache_type) {
+  auto mode = cache_state->get_image_cache_mode();
+  switch (mode) {
     #ifdef WITH_RBD_RWL
     case cache::IMAGE_CACHE_TYPE_RWL:
       m_image_cache =
@@ -176,12 +176,6 @@ void InitRequest<I>::handle_set_feature_bit(int r) {
     save_result(r);
 
     shutdown_image_cache();
-  }
-
-  if (m_image_ctx.discard_granularity_bytes) {
-    ldout(cct, 1) << "RWL image cache is enabled and "
-                  << "set discard_granularity_bytes = 0." << dendl;
-    m_image_ctx.discard_granularity_bytes = 0;
   }
 
   // Register RWL dispatch

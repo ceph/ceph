@@ -173,7 +173,7 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
       if (r < 0) {
         return r;
       }
-      len = 8;
+      len = 1;
       encode(len, bl);
       encode(is_protected, bl);
     }
@@ -311,7 +311,6 @@ int execute_diff(const po::variables_map &vm,
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({at::WHOLE_OBJECT});
 Shell::Action action_diff(
   {"export-diff"}, {}, "Export incremental diff to file.", "",
   &get_arguments_diff, &execute_diff);

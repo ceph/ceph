@@ -27,24 +27,23 @@ There are several Ceph daemons in a storage cluster:
 OSD Backends
 ============
 
-There are two ways that OSDs can manage the data they store.  Starting
-with the Luminous 12.2.z release, the new default (and recommended) backend is
-*BlueStore*.  Prior to Luminous, the default (and only option) was
+There are two ways that OSDs manage the data they store. 
+As of the Luminous 12.2.z release, the default (and recommended) backend is
+*BlueStore*.  Prior to the Luminous release, the default (and only option) was
 *Filestore*.
 
 BlueStore
 ---------
 
 BlueStore is a special-purpose storage backend designed specifically for
-managing data on disk for Ceph OSD workloads.  BlueStore is based on over a
-decade of experience supporting and managing OSDs using FileStore.
+managing data on disk for Ceph OSD workloads.  BlueStore's design is based on
+a decade of experience of supporting and managing Filestore OSDs. 
 
 Key BlueStore features include:
 
-* Direct management of storage devices. BlueStore consumes raw block
-  devices or partitions.  This avoids intervening layers of
-  abstraction (such as local file systems like XFS) that can limit
-  performance or add complexity.
+* Direct management of storage devices. BlueStore consumes raw block devices or
+  partitions. This avoids intervening layers of abstraction (such as local file
+  systems like XFS) that can limit performance or add complexity.
 * Metadata management with RocksDB. RocksDB's key/value database is embedded
   in order to manage internal metadata, including the mapping of object
   names to block locations on disk.
@@ -77,7 +76,7 @@ metadata.
 
 FileStore is well-tested and widely used in production. However, it
 suffers from many performance deficiencies due to its overall design
-and its reliance on a traditional file system for storing object data.
+and its reliance on a traditional file system for object data storage.
 
 Although FileStore is capable of functioning on most POSIX-compatible
 file systems (including btrfs and ext4), we recommend that only the

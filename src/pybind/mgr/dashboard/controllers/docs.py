@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
 import logging
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import cherrypy
 
-from .. import DEFAULT_VERSION, mgr
+from .. import mgr
 from ..api.doc import Schema, SchemaInput, SchemaType
-from . import ENDPOINT_MAP, BaseController, Controller, Endpoint
+from . import ENDPOINT_MAP, BaseController, Endpoint, Router
+from ._version import APIVersion
 
 NO_DESCRIPTION_AVAILABLE = "*No description available*"
 
 logger = logging.getLogger('controllers.docs')
 
 
-@Controller('/docs', secure=False)
+@Router('/docs', secure=False)
 class Docs(BaseController):
 
     @classmethod
@@ -183,7 +184,8 @@ class Docs(BaseController):
         return schema.as_dict()
 
     @classmethod
-    def _gen_responses(cls, method, resp_object=None, version=None):
+    def _gen_responses(cls, method, resp_object=None,
+                       version: Optional[APIVersion] = None):
         resp: Dict[str, Dict[str, Union[str, Any]]] = {
             '400': {
                 "description": "Operation exception. Please check the "
@@ -203,37 +205,38 @@ class Docs(BaseController):
         }
 
         if not version:
-            version = DEFAULT_VERSION
+            version = APIVersion.DEFAULT
 
         if method.lower() == 'get':
             resp['200'] = {'description': "OK",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
         if method.lower() == 'post':
             resp['201'] = {'description': "Resource created.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
         if method.lower() == 'put':
             resp['200'] = {'description': "Resource updated.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
         if method.lower() == 'delete':
             resp['204'] = {'description': "Resource deleted.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
         if method.lower() in ['post', 'put', 'delete']:
             resp['202'] = {'description': "Operation is still executing."
                                           " Please check the task queue.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
 
         if resp_object:
             for status_code, response_body in resp_object.items():
                 if status_code in resp:
-                    resp[status_code].update({
-                        'content': {
-                            'application/vnd.ceph.api.v{}+json'.format(version): {
-                                'schema': cls._gen_schema_for_content(response_body)}}})
+                    resp[status_code].update(
+                        {'content':
+                         {version.to_mime_type():
+                          {'schema': cls._gen_schema_for_content(response_body)}
+                          }})
 
         return resp
 
@@ -264,6 +267,51 @@ class Docs(BaseController):
 
         return parameters
 
+    @staticmethod
+    def _process_func_attr(func):
+        summary = ''
+        version = None
+        response = {}
+        p_info = []
+
+        if hasattr(func, '__method_map_method__'):
+            version = func.__method_map_method__['version']
+        elif hasattr(func, '__resource_method__'):
+            version = func.__resource_method__['version']
+        elif hasattr(func, '__collection_method__'):
+            version = func.__collection_method__['version']
+
+        if hasattr(func, 'doc_info'):
+            if func.doc_info['summary']:
+                summary = func.doc_info['summary']
+            response = func.doc_info['response']
+            p_info = func.doc_info['parameters']
+
+        return summary, version, response, p_info
+
+    @classmethod
+    def _get_params(cls, endpoint, para_info):
+        params = []
+
+        def extend_params(endpoint_params, param_name):
+            if endpoint_params:
+                params.extend(
+                    cls._gen_params(
+                        cls._add_param_info(endpoint_params, para_info), param_name))
+
+        extend_params(endpoint.path_params, 'path')
+        extend_params(endpoint.query_params, 'query')
+        return params
+
+    @classmethod
+    def set_request_body_param(cls, endpoint_param, method, methods, p_info):
+        if endpoint_param:
+            params_info = cls._add_param_info(endpoint_param, p_info)
+            methods[method.lower()]['requestBody'] = {
+                'content': {
+                    'application/json': {
+                        'schema': cls._gen_schema_for_content(params_info)}}}
+
     @classmethod
     def gen_paths(cls, all_endpoints):
         # pylint: disable=R0912
@@ -284,34 +332,8 @@ class Docs(BaseController):
                 method = endpoint.method
                 func = endpoint.func
 
-                summary = ''
-                version = ''
-                resp = {}
-                p_info = []
-
-                if hasattr(func, '__method_map_method__'):
-                    version = func.__method_map_method__['version']
-
-                elif hasattr(func, '__resource_method__'):
-                    version = func.__resource_method__['version']
-
-                elif hasattr(func, '__collection_method__'):
-                    version = func.__collection_method__['version']
-
-                if hasattr(func, 'doc_info'):
-                    if func.doc_info['summary']:
-                        summary = func.doc_info['summary']
-                    resp = func.doc_info['response']
-                    p_info = func.doc_info['parameters']
-                params = []
-                if endpoint.path_params:
-                    params.extend(
-                        cls._gen_params(
-                            cls._add_param_info(endpoint.path_params, p_info), 'path'))
-                if endpoint.query_params:
-                    params.extend(
-                        cls._gen_params(
-                            cls._add_param_info(endpoint.query_params, p_info), 'query'))
+                summary, version, resp, p_info = cls._process_func_attr(func)
+                params = cls._get_params(endpoint, p_info)
 
                 methods[method.lower()] = {
                     'tags': [cls._get_tag(endpoint)],
@@ -323,19 +345,8 @@ class Docs(BaseController):
                     methods[method.lower()]['summary'] = summary
 
                 if method.lower() in ['post', 'put']:
-                    if endpoint.body_params:
-                        body_params = cls._add_param_info(endpoint.body_params, p_info)
-                        methods[method.lower()]['requestBody'] = {
-                            'content': {
-                                'application/json': {
-                                    'schema': cls._gen_schema_for_content(body_params)}}}
-
-                    if endpoint.query_params:
-                        query_params = cls._add_param_info(endpoint.query_params, p_info)
-                        methods[method.lower()]['requestBody'] = {
-                            'content': {
-                                'application/json': {
-                                    'schema': cls._gen_schema_for_content(query_params)}}}
+                    cls.set_request_body_param(endpoint.body_params, method, methods, p_info)
+                    cls.set_request_body_param(endpoint.query_params, method, methods, p_info)
 
                 if endpoint.is_secure:
                     methods[method.lower()]['security'] = [{'jwt': []}]
@@ -402,8 +413,6 @@ if __name__ == "__main__":
 
     import yaml
 
-    from . import generate_routes
-
     def fix_null_descr(obj):
         """
         A hot fix for errors caused by null description values when generating
@@ -413,7 +422,7 @@ if __name__ == "__main__":
         return {k: fix_null_descr(v) for k, v in obj.items() if v is not None} \
             if isinstance(obj, dict) else obj
 
-    generate_routes("/api")
+    Router.generate_routes("/api")
     try:
         with open(sys.argv[1], 'w') as f:
             # pylint: disable=protected-access

@@ -8,14 +8,14 @@
 #include "common/debug.h"
 
 #include "objclass/objclass.h"
+#include "osd/osd_internal_types.h"
+
 #include "osd/ClassHandler.h"
 
 #include "auth/Crypto.h"
 #include "common/armor.h"
 
 #define dout_context ClassHandler::get_instance().cct
-
-static constexpr int dout_subsys = ceph_subsys_objclass;
 
 void *cls_alloc(size_t size)
 {
@@ -146,22 +146,4 @@ void cls_cxx_subop_version(cls_method_context_t hctx, std::string *s)
   snprintf(buf, sizeof(buf), "%lld.%d", (long long)ver, subop_num);
 
   *s = buf;
-}
-
-int cls_log(int level, const char *format, ...)
-{
-   int size = 256;
-   va_list ap;
-   while (1) {
-     char buf[size];
-     va_start(ap, format);
-     int n = vsnprintf(buf, size, format, ap);
-     va_end(ap);
-#define MAX_SIZE 8196
-     if ((n > -1 && n < size) || size > MAX_SIZE) {
-       dout(ceph::dout::need_dynamic(level)) << buf << dendl;
-       return n;
-     }
-     size *= 2;
-   }
 }

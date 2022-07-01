@@ -41,13 +41,13 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   temp_contents.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
-    if ((recovery_waiter.pi && recovery_waiter.pi->is_complete())
-	|| (!recovery_waiter.pi
-	  && recovery_waiter.obc && recovery_waiter.obc->obs.exists)) {
-      recovery_waiter.obc->interrupt(
+    if ((recovery_waiter->pi && recovery_waiter->pi->is_complete())
+	|| (!recovery_waiter->pi
+	  && recovery_waiter->obc && recovery_waiter->obc->obs.exists)) {
+      recovery_waiter->obc->interrupt(
 	  ::crimson::common::actingset_changed(
 	      pg.is_primary()));
-      recovery_waiter.interrupt(why);
+      recovery_waiter->interrupt(why);
     }
   }
   recovering.clear();
@@ -103,6 +103,7 @@ RecoveryBackend::handle_backfill_progress(
     m.stats,
     m.op == MOSDPGBackfill::OP_BACKFILL_PROGRESS,
     t);
+  logger().debug("RecoveryBackend::handle_backfill_progress: do_transaction...");
   return shard_services.get_store().do_transaction(
     pg.get_collection_ref(), std::move(t)).or_terminate();
 }
@@ -124,6 +125,10 @@ RecoveryBackend::handle_backfill(
   MOSDPGBackfill& m)
 {
   logger().debug("{}", __func__);
+  if (pg.old_peering_msg(m.map_epoch, m.query_epoch)) {
+    logger().debug("{}: discarding {}", __func__, m);
+    return seastar::now();
+  }
   switch (m.op) {
     case MOSDPGBackfill::OP_BACKFILL_FINISH:
       handle_backfill_finish(m);
@@ -144,13 +149,17 @@ RecoveryBackend::handle_backfill_remove(
 {
   logger().debug("{} m.ls={}", __func__, m.ls);
   assert(m.get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
-
+  if (pg.can_discard_replica_op(m)) {
+    logger().debug("{}: discarding {}", __func__, m);
+    return seastar::now();
+  }
   ObjectStore::Transaction t;
   for ([[maybe_unused]] const auto& [soid, ver] : m.ls) {
     // TODO: the reserved space management. PG::try_reserve_recovery_space().
     t.remove(pg.get_collection_ref()->get_cid(),
 	      ghobject_t(soid, ghobject_t::NO_GEN, pg.get_pg_whoami().shard));
   }
+  logger().debug("RecoveryBackend::handle_backfill_remove: do_transaction...");
   return shard_services.get_store().do_transaction(
     pg.get_collection_ref(), std::move(t)).or_terminate();
 }
@@ -275,6 +284,10 @@ RecoveryBackend::handle_scan(
   MOSDPGScan& m)
 {
   logger().debug("{}", __func__);
+  if (pg.old_peering_msg(m.map_epoch, m.query_epoch)) {
+    logger().debug("{}: discarding {}", __func__, m);
+    return seastar::now();
+  }
   switch (m.op) {
     case MOSDPGScan::OP_SCAN_GET_DIGEST:
       return handle_scan_get_digest(m);

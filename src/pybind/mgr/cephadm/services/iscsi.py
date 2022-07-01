@@ -58,17 +58,23 @@ class IscsiService(CephService):
                 'val': key_data,
             })
 
+        # add active mgr ip address to trusted list so dashboard can access
+        trusted_ip_list = spec.trusted_ip_list if spec.trusted_ip_list else ''
+        if trusted_ip_list:
+            trusted_ip_list += ','
+        trusted_ip_list += self.mgr.get_mgr_ip()
+
         context = {
             'client_name': '{}.{}'.format(utils.name_to_config_section('iscsi'), igw_id),
+            'trusted_ip_list': trusted_ip_list,
             'spec': spec
         }
         igw_conf = self.mgr.template.render('services/iscsi/iscsi-gateway.cfg.j2', context)
 
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'iscsi-gateway.cfg': igw_conf}
-
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-
+        daemon_spec.deps = [self.mgr.get_mgr_ip()]
         return daemon_spec
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
@@ -144,23 +150,23 @@ class IscsiService(CephService):
         warn_message = f'It is presumed safe to stop {names}'
         return HandleCommandResult(0, warn_message, '')
 
-    def post_remove(self, daemon: DaemonDescription) -> None:
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """
         Called after the daemon is removed.
         """
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
-        if 'dashboard' in self.mgr.get('mgr_map')['modules']:
-            # remove config for dashboard iscsi gateways
-            ret, out, err = self.mgr.check_mon_command({
-                'prefix': 'dashboard iscsi-gateway-rm',
-                'name': daemon.hostname,
-            })
+        # remove config for dashboard iscsi gateways
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'dashboard iscsi-gateway-rm',
+            'name': daemon.hostname,
+        })
+        if not ret:
             logger.info(f'{daemon.hostname} removed from iscsi gateways dashboard config')
 
         # needed to know if we have ssl stuff for iscsi in ceph config
         iscsi_config_dict = {}
-        ret, iscsi_config, err = self.mgr.check_mon_command({
+        ret, iscsi_config, err = self.mgr.mon_command({
             'prefix': 'config-key dump',
             'key': 'iscsi',
         })
@@ -170,7 +176,7 @@ class IscsiService(CephService):
         # remove iscsi cert and key from ceph config
         for iscsi_key, value in iscsi_config_dict.items():
             if f'iscsi/client.{daemon.name()}/' in iscsi_key:
-                ret, out, err = self.mgr.check_mon_command({
+                ret, out, err = self.mgr.mon_command({
                     'prefix': 'config-key rm',
                     'key': iscsi_key,
                 })

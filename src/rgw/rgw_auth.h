@@ -6,6 +6,7 @@
 #define CEPH_RGW_AUTH_H
 
 #include <functional>
+#include <optional>
 #include <ostream>
 #include <type_traits>
 #include <system_error>
@@ -17,6 +18,8 @@
 #define RGW_USER_ANON_ID "anonymous"
 
 class RGWCtl;
+struct rgw_log_entry;
+struct req_state;
 
 namespace rgw {
 namespace auth {
@@ -81,6 +84,9 @@ public:
   virtual std::string get_subuser() const = 0;
 
   virtual std::string get_role_tenant() const { return ""; }
+
+  /* write any auth-specific fields that are safe to expose in the ops log */
+  virtual void write_ops_log_entry(rgw_log_entry& entry) const {};
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -541,6 +547,8 @@ public:
     const uint32_t perm_mask;
     const bool is_admin;
     const uint32_t acct_type;
+    const std::string access_key_id;
+    const std::string subuser;
 
   public:
     enum class acct_privilege_t {
@@ -548,16 +556,23 @@ public:
       IS_PLAIN_ACCT
     };
 
+    static const std::string NO_SUBUSER;
+    static const std::string NO_ACCESS_KEY;
+
     AuthInfo(const rgw_user& acct_user,
              const std::string& acct_name,
              const uint32_t perm_mask,
              const acct_privilege_t level,
+             const std::string access_key_id,
+             const std::string subuser,
              const uint32_t acct_type=TYPE_NONE)
     : acct_user(acct_user),
       acct_name(acct_name),
       perm_mask(perm_mask),
       is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),
-      acct_type(acct_type) {
+      acct_type(acct_type),
+      access_key_id(access_key_id),
+      subuser(subuser) {
     }
   };
 
@@ -607,6 +622,7 @@ public:
   uint32_t get_perm_mask() const override { return info.perm_mask; }
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
   uint32_t get_identity_type() const override { return info.acct_type; }
   std::string get_acct_name() const override { return info.acct_name; }
   std::string get_subuser() const override { return {}; }
@@ -635,24 +651,24 @@ protected:
   const RGWUserInfo user_info;
   const std::string subuser;
   uint32_t perm_mask;
+  const std::string access_key_id;
 
   uint32_t get_perm_mask(const std::string& subuser_name,
                          const RGWUserInfo &uinfo) const;
 
 public:
   static const std::string NO_SUBUSER;
+  static const std::string NO_ACCESS_KEY;
 
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
                std::string subuser,
-               const boost::optional<uint32_t>& perm_mask)
+               const std::optional<uint32_t>& perm_mask,
+               const std::string access_key_id)
     : user_info(user_info),
-      subuser(std::move(subuser)) {
-    if (perm_mask) {
-      this->perm_mask = perm_mask.get();
-    } else {
-      this->perm_mask = RGW_PERM_INVALID;
-    }
+      subuser(std::move(subuser)),
+      perm_mask(perm_mask.value_or(RGW_PERM_INVALID)),
+      access_key_id(access_key_id) {
   }
 
 
@@ -672,6 +688,7 @@ public:
   uint32_t get_identity_type() const override { return TYPE_RGW; }
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return subuser; }
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   struct Factory {
     virtual ~Factory() {}
@@ -679,7 +696,8 @@ public:
                                       const req_state* s,
                                       const RGWUserInfo& user_info,
                                       const std::string& subuser,
-                                      const boost::optional<uint32_t>& perm_mask) const = 0;
+                                      const std::optional<uint32_t>& perm_mask,
+                                      const std::string& access_key_id) const = 0;
     };
 };
 

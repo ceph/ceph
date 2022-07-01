@@ -2,6 +2,7 @@ import { ServicesPageHelper } from '../cluster/services.po';
 
 describe('Services page', () => {
   const services = new ServicesPageHelper();
+  const serviceName = 'rgw.foo';
 
   beforeEach(() => {
     cy.login();
@@ -14,16 +15,22 @@ describe('Services page', () => {
       services.navigateTo('create');
       services.addService('rgw');
 
-      services.checkExist('rgw.rgw.foo', true);
+      services.checkExist(serviceName, true);
+    });
+
+    it('should edit a service', () => {
+      const count = '2';
+      services.editService(serviceName, count);
+      services.expectPlacementCount(serviceName, count);
     });
 
     it('should create and delete an ingress service', () => {
       services.navigateTo('create');
       services.addService('ingress');
 
-      services.checkExist('ingress.rgw.rgw.foo', true);
+      services.checkExist('ingress.rgw.foo', true);
 
-      services.deleteService('ingress.rgw.rgw.foo', 5000);
+      services.deleteService('ingress.rgw.foo');
     });
   });
 });

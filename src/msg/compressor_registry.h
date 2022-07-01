@@ -25,10 +25,10 @@ public:
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>& changed) override;
 
-  Compressor::CompressionAlgorithm pick_method(uint32_t peer_type,
+  TOPNSPC::Compressor::CompressionAlgorithm pick_method(uint32_t peer_type,
 					       const std::vector<uint32_t>& preferred_methods);
 
-  Compressor::CompressionMode get_mode(uint32_t peer_type, bool is_secure);
+  TOPNSPC::Compressor::CompressionMode get_mode(uint32_t peer_type, bool is_secure);
 
   const std::vector<uint32_t> get_methods(uint32_t peer_type) { 
     std::scoped_lock l(lock);

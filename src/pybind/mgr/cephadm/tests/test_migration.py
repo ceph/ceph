@@ -4,7 +4,8 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlaceme
 from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
 from cephadm.inventory import SPEC_STORE_PREFIX
-from cephadm.tests.fixtures import _run_cephadm, wait, with_host
+from cephadm.migrations import LAST_MIGRATION
+from cephadm.tests.fixtures import _run_cephadm, wait, with_host, receive_agent_metadata_all_hosts
 from cephadm.serve import CephadmServe
 from tests import mock
 
@@ -29,6 +30,7 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             assert cephadm_module.migration_current == 0
 
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
+            receive_agent_metadata_all_hosts(cephadm_module)
             cephadm_module.migration.migrate()
 
             CephadmServe(cephadm_module)._apply_all_services()
@@ -181,7 +183,7 @@ def test_migrate_nfs_initial(cephadm_module: CephadmOrchestrator):
         assert cephadm_module.migration_current == 2
 
         cephadm_module.migration.migrate()
-        assert cephadm_module.migration_current == 3
+        assert cephadm_module.migration_current == LAST_MIGRATION
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -214,4 +216,15 @@ def test_migrate_nfs_initial_octopus(cephadm_module: CephadmOrchestrator):
         assert cephadm_module.migration_current == 2
 
         cephadm_module.migration.migrate()
-        assert cephadm_module.migration_current == 3
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_admin_client_keyring(cephadm_module: CephadmOrchestrator):
+    assert 'client.admin' not in cephadm_module.keys.keys
+
+    cephadm_module.migration_current = 3
+    cephadm_module.migration.migrate()
+    assert cephadm_module.migration_current == LAST_MIGRATION
+
+    assert cephadm_module.keys.keys['client.admin'].placement.label == '_admin'

@@ -8,24 +8,25 @@ Maintainer: Ceph Maintainers <ceph-maintainers@lists.ceph.com>
 Uploaders: Ken Dreyer <kdreyer@redhat.com>,
            Alfredo Deza <adeza@redhat.com>,
 Build-Depends: automake,
-               bison  <pkg.ceph.jaeger>,
+               bison,
                cmake (>= 3.10.2),
                cpio,
-               cryptsetup-bin | cryptsetup,
                cython3,
-               debhelper (>= 9),
+               debhelper (>= 10),
                default-jdk,
                dh-exec,
                dh-python,
-               dh-systemd,
-               flex  <pkg.ceph.jaeger>,
+               flex,
                git,
+               golang,
                gperf,
                g++ (>= 7),
+               hostname <pkg.ceph.check>,
                javahelper,
                jq <pkg.ceph.check>,
-               jsonnet <pkg.ceph.check>,
                junit4,
+               libarrow-dev <pkg.ceph.arrow>,
+               libparquet-dev <pkg.ceph.arrow>,
                libaio-dev,
                libbabeltrace-ctf-dev,
                libbabeltrace-dev,
@@ -36,7 +37,7 @@ Build-Depends: automake,
                libcap-ng-dev,
                libcunit1-dev,
                libcurl4-openssl-dev,
-               libevent-dev <pkg.ceph.jaeger>,
+               libevent-dev,
                libexpat1-dev,
                libffi-dev [!amd64] <pkg.ceph.check>,
                libfmt-dev (>= 6.1.2),
@@ -49,7 +50,6 @@ Build-Depends: automake,
                librdmacm-dev,
                libkeyutils-dev,
                libldap2-dev,
-               libleveldb-dev,
                liblttng-ust-dev,
                liblua5.3-dev,
                liblz4-dev (>= 0.0~r131),
@@ -67,25 +67,28 @@ Build-Depends: automake,
                libnl-genl-3-dev,
                libxml2-dev,
                librabbitmq-dev,
+               libre2-dev,
+               libutf8proc-dev (>= 2.2.0),
                librdkafka-dev,
                luarocks,
-               libthrift-dev (>= 0.13.0) <pkg.ceph.jaeger>,
-               libyaml-cpp-dev (>= 0.6) <pkg.ceph.crimson> <pkg.ceph.jaeger>,
+               libthrift-dev (>= 0.13.0),
+               libyaml-cpp-dev (>= 0.6),
                libzstd-dev <pkg.ceph.check>,
                libxmlsec1 <pkg.ceph.check>,
                libxmlsec1-nss <pkg.ceph.check>,
                libxmlsec1-openssl <pkg.ceph.check>,
                libxmlsec1-dev <pkg.ceph.check>,
-               ninja-build <pkg.ceph.check>,
-               nlohmann-json3-dev <pkg.ceph.jaeger>,
-               parted,
+               libpmem-dev <pkg.ceph.pmdk>,
+               libpmemobj-dev (>= 1.8) <pkg.ceph.pmdk>,
+               ninja-build,
+               nlohmann-json3-dev,
                patch,
                pkg-config,
                prometheus <pkg.ceph.check>,
                python3-all-dev,
                python3-cherrypy3,
+               python3-natsort,
                python3-jwt <pkg.ceph.check>,
-               python3-nose <pkg.ceph.check>,
                python3-pecan <pkg.ceph.check>,
                python3-bcrypt <pkg.ceph.check>,
                tox <pkg.ceph.check>,
@@ -102,12 +105,12 @@ Build-Depends: automake,
                python3-yaml,
                ragel <pkg.ceph.crimson>,
                socat <pkg.ceph.check>,
+               systemd,
                systemtap-sdt-dev <pkg.ceph.crimson>,
                uuid-dev <pkg.ceph.check>,
                uuid-runtime,
                valgrind,
                xfslibs-dev,
-               xfsprogs <pkg.ceph.check>,
                xmlstarlet <pkg.ceph.check>,
                nasm [amd64],
                zlib1g-dev,
@@ -128,18 +131,15 @@ Package: ceph-base
 Architecture: linux-any
 Depends: binutils,
          ceph-common (= ${binary:Version}),
-         cryptsetup-bin | cryptsetup,
          debianutils,
-         e2fsprogs,
          findutils,
          grep,
          logrotate,
          parted,
          psmisc,
-         xfsprogs,
          ${misc:Depends},
-         ${python:Depends},
          ${shlibs:Depends},
+         ${python3:Depends}
 Recommends: btrfs-tools,
             ceph-mds (= ${binary:Version}),
             librados2 (= ${binary:Version}),
@@ -185,7 +185,7 @@ Package: cephadm
 Architecture: linux-any
 Recommends: podman (>= 2.0.2) | docker.io
 Depends: lvm2,
-	 ${python:Depends},
+	 ${python3:Depends},
 Description: cephadm utility to bootstrap ceph daemons with systemd and containers
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -228,16 +228,8 @@ Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ceph-mgr-modules-core (= ${binary:Version}),
-         python3-bcrypt,
-         python3-cherrypy3,
-         python3-distutils,
-         python3-jwt,
-         python3-openssl,
-         python3-pecan,
-         python3-requests,
-         python3-werkzeug,
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
 Recommends: ceph-mgr-dashboard,
             ceph-mgr-diskprediction-local,
@@ -257,14 +249,7 @@ Description: manager for the ceph distributed storage system
 Package: ceph-mgr-dashboard
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-         python3-cherrypy3,
-         python3-jwt,
-         python3-bcrypt,
-         python3-werkzeug,
-         python3-routes,
-         ${misc:Depends},
-         ${python:Depends},
-         ${shlibs:Depends},
+         ${python3:Depends}
 Description: dashboard module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -280,12 +265,7 @@ Description: dashboard module for ceph-mgr
 Package: ceph-mgr-diskprediction-local
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-         python3-numpy,
-         python3-scipy,
-         python3-sklearn,
-         ${misc:Depends},
-         ${python:Depends},
-         ${shlibs:Depends},
+         ${python3:Depends}
 Description: diskprediction-local module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -297,10 +277,7 @@ Description: diskprediction-local module for ceph-mgr
 Package: ceph-mgr-modules-core
 Architecture: all
 Depends: ${misc:Depends},
-         ${python:Depends},
-         ${shlibs:Depends},
-         python3-dateutil,
-         python3-openssl,
+         ${python3:Depends},
 Replaces: ceph-mgr (<< 15.1.0)
 Breaks: ceph-mgr (<< 15.1.0)
 Description: ceph manager modules which are always enabled
@@ -314,9 +291,8 @@ Description: ceph manager modules which are always enabled
 Package: ceph-mgr-rook
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-         python3-jsonpatch
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
 Description: rook module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
@@ -332,7 +308,7 @@ Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          python3-kubernetes,
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
 Description: kubernetes events module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -347,9 +323,10 @@ Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
 	 cephadm,
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          openssh-client,
-         python3-jinja2
+         python3-jinja2,
+         python3-cherrypy3
 Description: cephadm orchestrator module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -375,7 +352,6 @@ Description: debugging symbols for ceph-mgr
 Package: ceph-mon
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         libjaeger <pkg.ceph.jaeger>,
          ${misc:Depends},
          ${shlibs:Depends},
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
@@ -406,13 +382,19 @@ Description: debugging symbols for ceph-mon
 Package: ceph-osd
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         lvm2,
-	 sudo,
+         sudo,
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
-Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
-Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
+Replaces: ceph (<< 10),
+          ceph-test (<< 12.2.2-14),
+          ceph-osd (<< 17.0.0)
+Breaks: ceph (<< 10),
+        ceph-test (<< 12.2.2-14),
+        ceph-osd (<< 17.0.0)
+Recommends: ceph-volume (= ${binary:Version}),
+            nvme-cli,
+            smartmontools,
 Description: OSD server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -434,6 +416,27 @@ Description: debugging symbols for ceph-osd
  block and file system storage.
  .
  This package contains the debugging symbols for ceph-osd.
+
+Package: ceph-volume
+Architecture: all
+Section: python
+Depends: ceph-osd (= ${binary:Version}),
+         cryptsetup-bin,
+         e2fsprogs,
+         lvm2,
+         parted,
+         util-linux,
+         xfsprogs,
+         ${misc:Depends},
+         ${python3:Depends}
+Description: tool to facilidate OSD deployment
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains a tool to deploy OSD with different devices like
+ lvm or physical disks, and trying to follow a predictable, and robust
+ way of preparing, activating, and starting the deployed OSD.
 
 Package: ceph-fuse
 Architecture: linux-any
@@ -606,7 +609,6 @@ Description: debugging symbols for rbd-nbd
 Package: ceph-common
 Architecture: linux-any
 Depends: librbd1 (= ${binary:Version}),
-         libjaeger (= ${binary:Version}) <pkg.ceph.jaeger>,
          python3-cephfs (= ${binary:Version}),
          python3-ceph-argparse (= ${binary:Version}),
          python3-ceph-common (= ${binary:Version}),
@@ -615,7 +617,7 @@ Depends: librbd1 (= ${binary:Version}),
          python3-rbd (= ${binary:Version}),
          python3-rgw (= ${binary:Version}),
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
 Conflicts: ceph-client-tools,
 Replaces: ceph (<< 10),
@@ -980,14 +982,6 @@ Description: debugging symbols for radosgw
  service as well as the OpenStack Object Storage ("Swift") API.
  .
  This package contains debugging symbols for radosgw.
-
-Package: libjaeger
-Architecture: linux-any
-Section: libs
-Depends: ${misc:Depends},
-         ${shlibs:Depends},
-Build-Profiles: <pkg.ceph.jaeger>
-Description: This package provides libraries needed for distributed tracing for Ceph.
 
 Package: ceph-test
 Architecture: linux-any

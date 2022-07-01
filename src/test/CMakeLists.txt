@@ -1,6 +1,6 @@
 include(AddCephTest)
 
-set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT} 
+set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT}
     ${GSSAPI_LIBRARIES} ${CMAKE_DL_LIBS})
 
 if(WIN32)
@@ -64,7 +64,9 @@ if(NOT WIN32)
   add_subdirectory(libcephsqlite)
   add_subdirectory(client)
   add_subdirectory(mon)
-  add_subdirectory(mgr)
+  if(WITH_MGR)
+    add_subdirectory(mgr)
+  endif()
   add_subdirectory(msgr)
   add_subdirectory(neorados)
   add_subdirectory(objectstore)
@@ -73,7 +75,7 @@ if(NOT WIN32)
   add_subdirectory(osd)
   add_subdirectory(osdc)
   add_subdirectory(immutable_object_cache)
-endif()
+endif(NOT WIN32)
 
 if(WITH_RADOSGW)
   set(rgw_libs rgw_a)
@@ -163,7 +165,7 @@ endif()
 add_executable(ceph_test_mutate
   test_mutate.cc
   )
-target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES} 
+target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
 if(NOT WIN32)
@@ -607,27 +609,6 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 #add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
-
-if(DEFINED PROMTOOL_EXECUTABLE)
-  set(promtool_executable_checked TRUE)
-endif()
-
-find_program(PROMTOOL_EXECUTABLE promtool)
-if(PROMTOOL_EXECUTABLE)
-  execute_process(
-    COMMAND ${PROMTOOL_EXECUTABLE} test rules /dev/null
-    RESULT_VARIABLE rc
-    OUTPUT_QUIET)
-  if(NOT rc)
-    add_ceph_test(run-promtool-unittests
-      ${PROMTOOL_EXECUTABLE} test rules ${CMAKE_SOURCE_DIR}/monitoring/prometheus/alerts/test_alerts.yml)
-  elseif(NOT promtool_executable_checked)
-    message(WARNING "'${PROMTOOL_EXECUTABLE} test rules' does not work, "
-      "please use a newer prometheus")
-  endif()
-elseif(NOT promtool_executable_checked)
-  message(WARNING "run-promtool-unittests is skipped due to missing promtool")
-endif()
 
 set_property(
   TEST ${tox_tests}

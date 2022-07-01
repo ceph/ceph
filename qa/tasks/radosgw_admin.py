@@ -7,7 +7,7 @@ Rgw admin testing against a running instance
 #   grep '^ *# TESTCASE' | sed 's/^ *# TESTCASE //'
 #
 # to run this standalone:
-#	python qa/tasks/radosgw_admin.py [USER] HOSTNAME
+#	python qa/tasks/radosgw_admin.py [--user=uid] --host=host --port=port
 #
 
 import json
@@ -16,7 +16,7 @@ import time
 import datetime
 import sys
 
-from io import BytesIO
+from io import StringIO
 from queue import Queue
 
 import boto.exception
@@ -25,10 +25,21 @@ import boto.s3.acl
 
 import httplib2
 
+#import pdb
 
-from tasks.util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
+import tasks.vstart_runner
+from tasks.rgw import RGWEndpoint
+from tasks.util.rgw import rgwadmin as tasks_util_rgw_rgwadmin
+from tasks.util.rgw import get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
+
+def rgwadmin(*args, **kwargs):
+    ctx = args[0]
+    # Is this a local runner?
+    omit_sudo = hasattr(ctx.rgw, 'omit_sudo') and ctx.rgw.omit_sudo == True
+    omit_tdir = hasattr(ctx.rgw, 'omit_tdir') and ctx.rgw.omit_tdir == True
+    return tasks_util_rgw_rgwadmin(*args, **kwargs, omit_sudo=omit_sudo, omit_tdir=omit_tdir)
 
 def usage_acc_findentry2(entries, user, add=True):
     for e in entries:
@@ -257,6 +268,36 @@ def get_acl(key):
         remove_newlines(raw_acl)
     )
 
+def cleanup(ctx, client):
+    # remove objects and buckets
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'list'], check_status=True)
+    try:
+        for bucket in out:
+            (err, out) = rgwadmin(ctx, client, [
+                'bucket', 'rm', '--bucket', bucket, '--purge-objects'],
+                check_status=True)
+    except:
+        pass
+
+    # remove test user(s)
+    users = ['foo', 'fud', 'bar', 'bud']
+    users.reverse()
+    for user in users:
+        try:
+            (err, out) = rgwadmin(ctx, client, [
+                'user', 'rm', '--uid', user],
+                check_status=True)
+        except:
+            pass
+
+    # remove custom placement
+    try:
+        zonecmd = ['zone', 'placement', 'rm', '--rgw-zone', 'default',
+                   '--placement-id', 'new-placement']
+        (err, out) = rgwadmin(ctx, client, zonecmd, check_status=True)
+    except:
+        pass
+
 def task(ctx, config):
     """
     Test radosgw-admin functionality against a running rgw instance.
@@ -276,6 +317,8 @@ def task(ctx, config):
     # once the client is chosen, pull the host name and  assigned port out of
     # the role_endpoints that were assigned by the rgw task
     endpoint = ctx.rgw.role_endpoints[client]
+
+    cleanup(ctx, client)
 
     ##
     user1='foo'
@@ -309,6 +352,8 @@ def task(ctx, config):
         host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
+    connection.auth_region_name='us-east-1'
+
     connection2 = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key2,
         aws_secret_access_key=secret_key2,
@@ -317,6 +362,8 @@ def task(ctx, config):
         host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
+    connection2.auth_region_name='us-east-1'
+
     connection3 = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key3,
         aws_secret_access_key=secret_key3,
@@ -325,6 +372,7 @@ def task(ctx, config):
         host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
+    connection3.auth_region_name='us-east-1'
 
     acc = usage_acc()
     rl = requestlog_queue(acc.generate_make_entry())
@@ -697,17 +745,21 @@ def task(ctx, config):
             check_status=True)
         assert len(rgwlog) > 0
 
-        # exempt bucket_name2 from checking as it was only used for multi-region tests
-        assert rgwlog['bucket'].find(bucket_name) == 0 or rgwlog['bucket'].find(bucket_name2) == 0
-        assert rgwlog['bucket'] != bucket_name or rgwlog['bucket_id'] == bucket_id
-        assert rgwlog['bucket_owner'] == user1 or rgwlog['bucket'] == bucket_name + '5' or rgwlog['bucket'] == bucket_name2
-        for entry in rgwlog['log_entries']:
-            log.debug('checking log entry: ', entry)
-            assert entry['bucket'] == rgwlog['bucket']
-            possible_buckets = [bucket_name + '5', bucket_name2]
-            user = entry['user']
-            assert user == user1 or user.endswith('system-user') or \
-                rgwlog['bucket'] in possible_buckets
+        # skip any entry for which there is no bucket name--e.g., list_buckets,
+        # since that is valid but cannot pass the following checks
+        entry_bucket_name = rgwlog['bucket']
+        if entry_bucket_name.strip() != "":
+            # exempt bucket_name2 from checking as it was only used for multi-region tests
+            assert rgwlog['bucket'].find(bucket_name) == 0 or rgwlog['bucket'].find(bucket_name2) == 0
+            assert rgwlog['bucket'] != bucket_name or rgwlog['bucket_id'] == bucket_id
+            assert rgwlog['bucket_owner'] == user1 or rgwlog['bucket'] == bucket_name + '5' or rgwlog['bucket'] == bucket_name2
+            for entry in rgwlog['log_entries']:
+                log.debug('checking log entry: ', entry)
+                assert entry['bucket'] == rgwlog['bucket']
+                possible_buckets = [bucket_name + '5', bucket_name2]
+                user = entry['user']
+                assert user == user1 or user.endswith('system-user') or \
+                    rgwlog['bucket'] in possible_buckets
 
         # TESTCASE 'log-rm','log','rm','delete log objects','succeeds'
         (err, out) = rgwadmin(ctx, client, ['log', 'rm', '--object', obj],
@@ -756,17 +808,19 @@ def task(ctx, config):
     # wait a bit to give the garbage collector time to cycle
     time.sleep(15)
 
-    (err, out) = rgwadmin(ctx, client, ['gc', 'list'])
-
+    (err, out) = rgwadmin(ctx, client, ['gc', 'list', '--include-all'])
     assert len(out) > 0
 
     # TESTCASE 'gc-process', 'gc', 'process', 'manually collect garbage'
     (err, out) = rgwadmin(ctx, client, ['gc', 'process'], check_status=True)
 
     #confirm
-    (err, out) = rgwadmin(ctx, client, ['gc', 'list'])
+    (err, out) = rgwadmin(ctx, client, ['gc', 'list', '--include-all'])
 
-    assert len(out) == 0
+    # don't assume rgw_gc_obj_min_wait has been overridden
+    omit_tdir = hasattr(ctx.rgw, 'omit_tdir') and ctx.rgw.omit_tdir == True
+    if omit_tdir==False:
+        assert len(out) == 0
 
     # TESTCASE 'rm-user-buckets','user','rm','existing user','fails, still has buckets'
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user1])
@@ -1019,8 +1073,6 @@ def task(ctx, config):
     assert err
 
     # TESTCASE 'zone-info', 'zone', 'get', 'get zone info', 'succeeds, has default placement rule'
-    #
-
     (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
     orig_placement_pools = len(out['placement_pools'])
 
@@ -1038,7 +1090,7 @@ def task(ctx, config):
     out['placement_pools'].append(rule)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'set'],
-        stdin=BytesIO(json.dumps(out).encode()),
+        stdin=StringIO(json.dumps(out)),
         check_status=True)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
@@ -1055,32 +1107,40 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['zonegroup', 'get'], check_status=True)
 
 from teuthology.config import config
-from teuthology.orchestra import cluster, remote
+from teuthology.orchestra import cluster
+
 import argparse;
 
 def main():
-    if len(sys.argv) == 3:
-        user = sys.argv[1] + "@"
-        host = sys.argv[2]
-    elif len(sys.argv) == 2:
-        user = ""
-        host = sys.argv[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--uid')
+    parser.add_argument('--host', required=True)
+    parser.add_argument('--port', type=int)
+
+    args = parser.parse_args()
+    host = args.host
+    if args.port:
+        port = args.port
     else:
-        sys.stderr.write("usage: radosgw_admin.py [user] host\n")
-        exit(1)
-    client0 = remote.Remote(user + host)
+        port = 80
+
+    client0 = tasks.vstart_runner.LocalRemote()
     ctx = config
     ctx.cluster=cluster.Cluster(remotes=[(client0,
-        [ 'ceph.client.rgw.%s' % (host),  ]),])
+        [ 'ceph.client.rgw.%s' % (port),  ]),])
     ctx.rgw = argparse.Namespace()
     endpoints = {}
-    endpoints['ceph.client.rgw.%s' % host] = (host, 80)
+    endpoints['ceph.client.rgw.%s' % port] = RGWEndpoint(
+        hostname=host,
+        port=port)
     ctx.rgw.role_endpoints = endpoints
     ctx.rgw.realm = None
     ctx.rgw.regions = {'region0': { 'api name': 'api1',
         'is master': True, 'master zone': 'r0z0',
         'zones': ['r0z0', 'r0z1'] }}
-    ctx.rgw.config = {'ceph.client.rgw.%s' % host: {'system user': {'name': '%s-system-user' % host}}}
+    ctx.rgw.omit_sudo = True
+    ctx.rgw.omit_tdir = True
+    ctx.rgw.config = {'ceph.client.rgw.%s' % port: {'system user': {'name': '%s-system-user' % port}}}
     task(config, None)
     exit()
 

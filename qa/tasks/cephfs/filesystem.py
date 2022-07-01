@@ -147,6 +147,13 @@ class FSStatus(object):
             if info['rank'] >= 0 and info['state'] != 'up:standby-replay':
                 yield info
 
+    def get_damaged(self, fscid):
+        """
+        Get the damaged ranks for the given FSCID.
+        """
+        fs = self.get_fsmap(fscid)
+        return fs['mdsmap']['damaged']
+
     def get_rank(self, fscid, rank):
         """
         Get the rank for the given FSCID.
@@ -243,7 +250,7 @@ class CephCluster(object):
 
     def json_asok(self, command, service_type, service_id, timeout=None):
         if timeout is None:
-            timeout = 15*60
+            timeout = 300
         command.insert(0, '--format=json')
         proc = self.mon_manager.admin_socket(service_type, service_id, command, timeout=timeout)
         response_data = proc.stdout.getvalue().strip()
@@ -256,18 +263,12 @@ class CephCluster(object):
             log.debug("_json_asok output empty")
             return None
 
-    def is_addr_blocklisted(self, addr=None):
-        if addr is None:
-            log.warn("Couldn't get the client address, so the blocklisted "
-                     "status undetermined")
-            return False
-
-        blocklist = json.loads(self.mon_manager.run_cluster_cmd(
-            args=["osd", "blocklist", "ls", "--format=json"],
-            stdout=StringIO()).stdout.getvalue())
-        for b in blocklist:
-            if addr == b["addr"]:
-                return True
+    def is_addr_blocklisted(self, addr):
+        blocklist = json.loads(self.mon_manager.raw_cluster_cmd(
+            "osd", "dump", "--format=json"))['blocklist']
+        if addr in blocklist:
+            return True
+        log.warn(f'The address {addr} is not blocklisted')
         return False
 
 
@@ -433,7 +434,7 @@ class MDSCluster(CephCluster):
                 ip_str, port_str = re.match("(.+):(.+)", addr).groups()
                 remote.run(
                     args=["sudo", "iptables", da_flag, "INPUT", "-p", "tcp", "--dport", port_str, "-j", "REJECT", "-m",
-                          "comment", "--comment", "teuthology"])
+                          "comment", "--comment", "teuthology"], omit_sudo=False)
 
 
             mds = mds_ids[1]
@@ -443,10 +444,10 @@ class MDSCluster(CephCluster):
                 ip_str, port_str = re.match("(.+):(.+)", addr).groups()
                 remote.run(
                     args=["sudo", "iptables", da_flag, "OUTPUT", "-p", "tcp", "--sport", port_str, "-j", "REJECT", "-m",
-                          "comment", "--comment", "teuthology"])
+                          "comment", "--comment", "teuthology"], omit_sudo=False)
                 remote.run(
                     args=["sudo", "iptables", da_flag, "INPUT", "-p", "tcp", "--dport", port_str, "-j", "REJECT", "-m",
-                          "comment", "--comment", "teuthology"])
+                          "comment", "--comment", "teuthology"], omit_sudo=False)
 
         self._one_or_all((mds_rank_1, mds_rank_2), set_block, in_parallel=False)
 
@@ -470,6 +471,17 @@ class MDSCluster(CephCluster):
         """
         for fs in self.status().get_filesystems():
             Filesystem(ctx=self._ctx, fscid=fs['id']).destroy()
+
+    @property
+    def beacon_timeout(self):
+        """
+        Generate an acceptable timeout for the mons to drive some MDSMap change
+        because of missed beacons from some MDS. This involves looking up the
+        grace period in use by the mons and adding an acceptable buffer.
+        """
+
+        grace = float(self.get_config("mds_beacon_grace", service_type="mon"))
+        return grace*2+15
 
 
 class Filesystem(MDSCluster):
@@ -681,6 +693,7 @@ class Filesystem(MDSCluster):
                 raise
 
         if self.fs_config is not None:
+            log.debug(f"fs_config: {self.fs_config}")
             max_mds = self.fs_config.get('max_mds', 1)
             if max_mds > 1:
                 self.set_max_mds(max_mds)
@@ -693,6 +706,34 @@ class Filesystem(MDSCluster):
             if session_timeout != 60:
                 self.set_session_timeout(session_timeout)
 
+            if self.fs_config.get('subvols', None) is not None:
+                log.debug(f"Creating {self.fs_config.get('subvols')} subvols "
+                          f"for filesystem '{self.name}'")
+                if not hasattr(self._ctx, "created_subvols"):
+                    self._ctx.created_subvols = dict()
+
+                subvols = self.fs_config.get('subvols')
+                assert(isinstance(subvols, dict))
+                assert(isinstance(subvols['create'], int))
+                assert(subvols['create'] > 0)
+
+                for sv in range(0, subvols['create']):
+                    sv_name = f'sv_{sv}'
+                    self.mon_manager.raw_cluster_cmd(
+                        'fs', 'subvolume', 'create', self.name, sv_name,
+                        self.fs_config.get('subvol_options', ''))
+
+                    if self.name not in self._ctx.created_subvols:
+                        self._ctx.created_subvols[self.name] = []
+                    
+                    subvol_path = self.mon_manager.raw_cluster_cmd(
+                        'fs', 'subvolume', 'getpath', self.name, sv_name)
+                    subvol_path = subvol_path.strip()
+                    self._ctx.created_subvols[self.name].append(subvol_path)
+            else:
+                log.debug(f"Not Creating any subvols for filesystem '{self.name}'")
+
+
         self.getinfo(refresh = True)
 
         # wait pgs to be clean
@@ -701,8 +742,13 @@ class Filesystem(MDSCluster):
     def run_client_payload(self, cmd):
         # avoid circular dep by importing here:
         from tasks.cephfs.fuse_mount import FuseMount
+
+        # Wait for at MDS daemons to be ready before mounting the
+        # ceph-fuse client in run_client_payload()
+        self.wait_for_daemons()
+
         d = misc.get_testdir(self._ctx)
-        m = FuseMount(self._ctx, {}, d, "admin", self.client_remote, cephfs_name=self.name)
+        m = FuseMount(self._ctx, d, "admin", self.client_remote, cephfs_name=self.name)
         m.mount_wait()
         m.run_shell_payload(cmd)
         m.umount_wait(require_clean=True)
@@ -1013,6 +1059,11 @@ class Filesystem(MDSCluster):
             status = self.getinfo()
         return status.get_ranks(self.id)
 
+    def get_damaged(self, status=None):
+        if status is None:
+            status = self.getinfo()
+        return status.get_damaged(self.id)
+
     def get_replays(self, status=None):
         if status is None:
             status = self.getinfo()
@@ -1140,7 +1191,12 @@ class Filesystem(MDSCluster):
         return self.json_asok(command, 'mds', info['name'], timeout=timeout)
 
     def rank_tell(self, command, rank=0, status=None):
-        return json.loads(self.mon_manager.raw_cluster_cmd("tell", f"mds.{self.id}:{rank}", *command))
+        try:
+            out = self.mon_manager.raw_cluster_cmd("tell", f"mds.{self.id}:{rank}", *command)
+            return json.loads(out)
+        except json.decoder.JSONDecodeError:
+            log.error("could not decode: {}".format(out))
+            raise
 
     def ranks_tell(self, command, status=None):
         if status is None:
@@ -1261,6 +1317,9 @@ class Filesystem(MDSCluster):
         obj_name = "{0:x}.00000000".format(ino_no)
         args = ["setxattr", obj_name, xattr_name, data]
         self.rados(args, pool=pool)
+
+    def read_symlink(self, ino_no, pool=None):
+        return self._read_data_xattr(ino_no, "symlink", "string_wrapper", pool)
 
     def read_backtrace(self, ino_no, pool=None):
         """

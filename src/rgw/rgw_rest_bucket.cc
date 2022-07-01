@@ -225,10 +225,13 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
   op_ret = store->get_bucket(s, s->user.get(), string(), bucket_name, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_SUCH_BUCKET;
+    }
     return;
   }
 
-  op_ret = bucket->remove_bucket(s, delete_children, string(), string(), true, &s->info, s->yield);
+  op_ret = bucket->remove_bucket(s, delete_children, true, &s->info, s->yield);
 }
 
 class RGWOp_Set_Bucket_Quota : public RGWRESTOp {
@@ -293,9 +296,12 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
     RGWQuotaInfo *old_quota = &bucket->get_info().quota;
     int64_t old_max_size_kb = rgw_rounded_kb(old_quota->max_size);
     int64_t max_size_kb;
+    bool has_max_size_kb = false;
     RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
-    RESTArgs::get_int64(s, "max-size-kb", old_max_size_kb, &max_size_kb);
-    quota.max_size = max_size_kb * 1024;
+    RESTArgs::get_int64(s, "max-size", old_quota->max_size, &quota.max_size);
+    RESTArgs::get_int64(s, "max-size-kb", old_max_size_kb, &max_size_kb, &has_max_size_kb);
+    if (has_max_size_kb)
+      quota.max_size = max_size_kb * 1024;
     RESTArgs::get_bool(s, "enabled", old_quota->enabled, &quota.enabled);
   }
 
@@ -405,4 +411,3 @@ RGWOp *RGWHandler_Bucket::op_delete()
 
   return new RGWOp_Bucket_Remove;
 }
-

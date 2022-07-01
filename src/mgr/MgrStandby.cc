@@ -24,6 +24,7 @@
 
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
+#include "mgr/mgr_perf_counters.h"
 
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
@@ -201,6 +202,8 @@ int MgrStandby::init()
   timer.init();
 
   py_module_registry.init();
+  mgr_perf_start(g_ceph_context);
+
 
   tick();
 
@@ -275,7 +278,7 @@ void MgrStandby::send_beacon()
 
     m->set_services(active_mgr->get_services());
   }
-                                 
+
   monc.send_mon_message(std::move(m));
 }
 
@@ -289,7 +292,7 @@ void MgrStandby::tick()
       new LambdaContext([this](int r){
           tick();
       }
-  )); 
+  ));
 }
 
 void MgrStandby::shutdown()
@@ -324,6 +327,7 @@ void MgrStandby::shutdown()
   // to touch references to the things we're about to tear down
   finisher.wait_for_empty();
   finisher.stop();
+  mgr_perf_stop(g_ceph_context);
 }
 
 void MgrStandby::respawn()
@@ -375,29 +379,8 @@ void MgrStandby::respawn()
 
 void MgrStandby::_update_log_config()
 {
-  map<string,string> log_to_monitors;
-  map<string,string> log_to_syslog;
-  map<string,string> log_channel;
-  map<string,string> log_prio;
-  map<string,string> log_to_graylog;
-  map<string,string> log_to_graylog_host;
-  map<string,string> log_to_graylog_port;
-  uuid_d fsid;
-  string host;
-
-  if (parse_log_client_options(cct, log_to_monitors, log_to_syslog,
-			       log_channel, log_prio, log_to_graylog,
-			       log_to_graylog_host, log_to_graylog_port,
-			       fsid, host) == 0) {
-    clog->update_config(log_to_monitors, log_to_syslog,
-			log_channel, log_prio, log_to_graylog,
-			log_to_graylog_host, log_to_graylog_port,
-			fsid, host);
-    audit_clog->update_config(log_to_monitors, log_to_syslog,
-			      log_channel, log_prio, log_to_graylog,
-			      log_to_graylog_host, log_to_graylog_port,
-			      fsid, host);
-  }
+  clog->parse_client_options(cct);
+  audit_clog->parse_client_options(cct);
 }
 
 void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
@@ -508,4 +491,3 @@ std::string MgrStandby::state_str()
     return "active (starting)";
   }
 }
-

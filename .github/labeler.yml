@@ -54,6 +54,7 @@ mgr:
   - src/pybind/mgr/ceph_module.pyi
   - src/pybind/mgr/mgr_module.py
   - src/pybind/mgr/mgr_util.py
+  - src/pybind/mgr/object_format.py
   - src/pybind/mgr/requirements.txt
   - src/pybind/mgr/tox.ini
   - src/test/mgr/**
@@ -76,7 +77,7 @@ cephadm:
   - doc/cephadm/**
   - doc/dev/cephadm/**
   - doc/man/8/cephadm.rst
-  - qa/suites/rados/cephadm/**
+  - qa/suites/orch/cephadm/**
   - qa/tasks/cephadm.py
   - qa/tasks/cephadm_cases
   - qa/tasks/mgr/test_cephadm_orchestrator.py
@@ -246,10 +247,9 @@ nfs:
   - src/pybind/mgr/nfs/**
   - src/pybind/mgr/cephadm/services/nfs.py
   - src/pybind/mgr/cephadm/templates/services/nfs/ganesha.conf.j2
-  - src/pybind/mgr/dashboard/services/ganesha.py
-  - src/pybind/mgr/dashboard/tests/test_ganesha.py
+  - src/pybind/mgr/dashboard/controllers/nfs.py
+  - src/pybind/mgr/dashboard/tests/test_nfs.py
   - qa/tasks/cephfs/test_nfs.py
-  - qa/tasks/mgr/dashboard/test_ganesha.py
   - doc/mgr/nfs.rst
   - doc/cephfs/nfs.rst
   - doc/cephadm/nfs.rst

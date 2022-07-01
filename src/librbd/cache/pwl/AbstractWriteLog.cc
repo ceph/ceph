@@ -44,6 +44,9 @@ AbstractWriteLog<I>::AbstractWriteLog(
     plugin::Api<I>& plugin_api)
   : m_builder(builder),
     m_write_log_guard(image_ctx.cct),
+    m_flush_guard(image_ctx.cct),
+    m_flush_guard_lock(ceph::make_mutex(pwl::unique_lock_name(
+      "librbd::cache::pwl::AbstractWriteLog::m_flush_guard_lock", this))),
     m_deferred_dispatch_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_deferred_dispatch_lock", this))),
     m_blockguard_lock(ceph::make_mutex(pwl::unique_lock_name(
@@ -312,7 +315,8 @@ void AbstractWriteLog<I>::log_perf() {
 template <typename I>
 void AbstractWriteLog<I>::periodic_stats() {
   std::lock_guard locker(m_lock);
-  ldout(m_image_ctx.cct, 1) << "STATS: m_log_entries=" << m_log_entries.size()
+  update_image_cache_state();
+  ldout(m_image_ctx.cct, 5) << "STATS: m_log_entries=" << m_log_entries.size()
                             << ", m_dirty_log_entries=" << m_dirty_log_entries.size()
                             << ", m_free_log_entries=" << m_free_log_entries
                             << ", m_bytes_allocated=" << m_bytes_allocated
@@ -329,22 +333,19 @@ void AbstractWriteLog<I>::periodic_stats() {
 template <typename I>
 void AbstractWriteLog<I>::arm_periodic_stats() {
   ceph_assert(ceph_mutex_is_locked(*m_timer_lock));
-  if (m_periodic_stats_enabled) {
-    m_timer_ctx = new LambdaContext(
-      [this](int r) {
-        /* m_timer_lock is held */
-        periodic_stats();
-        arm_periodic_stats();
-      });
-    m_timer->add_event_after(LOG_STATS_INTERVAL_SECONDS, m_timer_ctx);
-  }
+  m_timer_ctx = new LambdaContext([this](int r) {
+      /* m_timer_lock is held */
+      periodic_stats();
+      arm_periodic_stats();
+    });
+  m_timer->add_event_after(LOG_STATS_INTERVAL_SECONDS, m_timer_ctx);
 }
 
 template <typename I>
 void AbstractWriteLog<I>::update_entries(std::shared_ptr<GenericLogEntry> *log_entry,
     WriteLogCacheEntry *cache_entry, std::map<uint64_t, bool> &missing_sync_points,
     std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> &sync_point_entries,
-    int entry_index) {
+    uint64_t entry_index) {
     bool writer = cache_entry->is_writer();
     if (cache_entry->is_sync_point()) {
       ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
@@ -393,7 +394,7 @@ void AbstractWriteLog<I>::update_entries(std::shared_ptr<GenericLogEntry> *log_e
 template <typename I>
 void AbstractWriteLog<I>::update_sync_points(std::map<uint64_t, bool> &missing_sync_points,
     std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> &sync_point_entries,
-    DeferredContexts &later, uint32_t alloc_size ) {
+    DeferredContexts &later) {
   /* Create missing sync points. These must not be appended until the
    * entry reload is complete and the write map is up to
    * date. Currently this is handled by the deferred contexts object
@@ -409,7 +410,7 @@ void AbstractWriteLog<I>::update_sync_points(std::map<uint64_t, bool> &missing_s
     ceph_assert(kv.first == m_current_sync_gen+1);
     init_flush_new_sync_point(later);
     ceph_assert(kv.first == m_current_sync_gen);
-    sync_point_entries[kv.first] = m_current_sync_point->log_entry;;
+    sync_point_entries[kv.first] = m_current_sync_point->log_entry;
   }
 
   /*
@@ -444,15 +445,9 @@ void AbstractWriteLog<I>::update_sync_points(std::map<uint64_t, bool> &missing_s
             gen_write_entry->set_flushed(true);
             sync_point_entry->writes_flushed++;
           }
-          if (log_entry->write_bytes() == log_entry->bytes_dirty()) {
-            /* This entry is a basic write */
-            uint64_t bytes_allocated = alloc_size;
-            if (gen_write_entry->ram_entry.write_bytes > bytes_allocated) {
-              bytes_allocated = gen_write_entry->ram_entry.write_bytes;
-            }
-            m_bytes_allocated += bytes_allocated;
-            m_bytes_cached += gen_write_entry->ram_entry.write_bytes;
-          }
+
+          /* calc m_bytes_allocated & m_bytes_cached */
+          inc_allocated_cached_bytes(log_entry);
         }
       }
     } else {
@@ -522,7 +517,7 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
     ldout(cct, 5) << "There's an existing pool file " << m_log_pool_name
                   << ", While there's no cache in the image metatata." << dendl;
     if (remove(m_log_pool_name.c_str()) != 0) {
-      lderr(cct) << "Failed to remove the pool file " << m_log_pool_name
+      lderr(cct) << "failed to remove the pool file " << m_log_pool_name
                  << dendl;
       on_finish->complete(-errno);
       return;
@@ -531,7 +526,8 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
     }
   } else if ((m_cache_state->present) &&
              (access(m_log_pool_name.c_str(), F_OK) != 0)) {
-    ldout(cct, 5) << "Can't find the existed pool file " << m_log_pool_name << dendl;
+    lderr(cct) << "can't find the existed pool file: " << m_log_pool_name
+               << ". error: " << cpp_strerror(-errno) << dendl;
     on_finish->complete(-errno);
     return;
   }
@@ -562,23 +558,54 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
   // Start the thread
   m_thread_pool.start();
 
-  m_periodic_stats_enabled = m_cache_state->log_periodic_stats;
   /* Do these after we drop lock */
   later.add(new LambdaContext([this](int r) {
-    if (m_periodic_stats_enabled) {
       /* Log stats for the first time */
       periodic_stats();
       /* Arm periodic stats logging for the first time */
       std::lock_guard timer_locker(*m_timer_lock);
       arm_periodic_stats();
-    }
-  }));
+    }));
   m_image_ctx.op_work_queue->queue(on_finish, 0);
 }
 
 template <typename I>
+void AbstractWriteLog<I>::update_image_cache_state() {
+  using klass = AbstractWriteLog<I>;
+  Context *ctx = util::create_context_callback<
+                 klass, &klass::handle_update_image_cache_state>(this);
+  update_image_cache_state(ctx);
+}
+
+template <typename I>
 void AbstractWriteLog<I>::update_image_cache_state(Context *on_finish) {
+  ldout(m_image_ctx.cct, 10) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  m_cache_state->allocated_bytes = m_bytes_allocated;
+  m_cache_state->cached_bytes = m_bytes_cached;
+  m_cache_state->dirty_bytes = m_bytes_dirty;
+  m_cache_state->free_bytes = m_bytes_allocated_cap - m_bytes_allocated;
+  m_cache_state->hits_full = m_perfcounter->get(l_librbd_pwl_rd_hit_req);
+  m_cache_state->hits_partial = m_perfcounter->get(l_librbd_pwl_rd_part_hit_req);
+  m_cache_state->misses = m_perfcounter->get(l_librbd_pwl_rd_req) -
+      m_cache_state->hits_full - m_cache_state->hits_partial;
+  m_cache_state->hit_bytes = m_perfcounter->get(l_librbd_pwl_rd_hit_bytes);
+  m_cache_state->miss_bytes = m_perfcounter->get(l_librbd_pwl_rd_bytes) -
+      m_cache_state->hit_bytes;
   m_cache_state->write_image_cache_state(on_finish);
+}
+
+template <typename I>
+void AbstractWriteLog<I>::handle_update_image_cache_state(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to update image cache state: " << cpp_strerror(r)
+               << dendl;
+    return;
+  }
 }
 
 template <typename I>
@@ -595,6 +622,7 @@ void AbstractWriteLog<I>::init(Context *on_finish) {
   Context *ctx = new LambdaContext(
     [this, on_finish](int r) {
       if (r >= 0) {
+        std::lock_guard locker(m_lock);
         update_image_cache_state(on_finish);
       } else {
         on_finish->complete(r);
@@ -614,6 +642,9 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
 
   Context *ctx = new LambdaContext(
     [this, on_finish](int r) {
+      if (m_perfcounter) {
+        perf_stop();
+      }
       ldout(m_image_ctx.cct, 6) << "shutdown complete" << dendl;
       m_image_ctx.op_work_queue->queue(on_finish, r);
     });
@@ -621,27 +652,24 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
     [this, ctx](int r) {
       ldout(m_image_ctx.cct, 6) << "image cache cleaned" << dendl;
       Context *next_ctx = override_ctx(r, ctx);
-      bool periodic_stats_enabled = m_periodic_stats_enabled;
-      m_periodic_stats_enabled = false;
+      periodic_stats();
 
-      if (periodic_stats_enabled) {
-        /* Log stats one last time if they were enabled */
-        periodic_stats();
-      }
-      {
-        std::lock_guard locker(m_lock);
-        ceph_assert(m_dirty_log_entries.size() == 0);
-        m_wake_up_enabled = false;
-        m_cache_state->clean = true;
-        m_log_entries.clear();
-
-        remove_pool_file();
-
-        if (m_perfcounter) {
-          perf_stop();
-        }
-      }
+      std::lock_guard locker(m_lock);
+      check_image_cache_state_clean();
+      m_wake_up_enabled = false;
+      m_log_entries.clear();
+      m_cache_state->clean = true;
+      m_cache_state->empty = true;
+      remove_pool_file();
       update_image_cache_state(next_ctx);
+    });
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      Context *next_ctx = override_ctx(r, ctx);
+      ldout(m_image_ctx.cct, 6) << "waiting for in flight operations" << dendl;
+      // Wait for in progress IOs to complete
+      next_ctx = util::create_async_context_callback(&m_work_queue, next_ctx);
+      m_async_op_tracker.wait_for_ops(next_ctx);
     });
   ctx = new LambdaContext(
     [this, ctx](int r) {
@@ -653,19 +681,9 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
         /* Flush all writes to OSDs (unless disabled) and wait for all
            in-progress flush writes to complete */
         ldout(m_image_ctx.cct, 6) << "flushing" << dendl;
-        if (m_periodic_stats_enabled) {
-          periodic_stats();
-        }
+        periodic_stats();
       }
       flush_dirty_entries(next_ctx);
-    });
-  ctx = new LambdaContext(
-    [this, ctx](int r) {
-      Context *next_ctx = override_ctx(r, ctx);
-      ldout(m_image_ctx.cct, 6) << "waiting for in flight operations" << dendl;
-      // Wait for in progress IOs to complete
-      next_ctx = util::create_async_context_callback(m_image_ctx, next_ctx);
-      m_async_op_tracker.wait_for_ops(next_ctx);
     });
   ctx = new LambdaContext(
     [this, ctx](int r) {
@@ -692,9 +710,9 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   C_ReadRequest *read_ctx = m_builder->create_read_request(
       cct, now, m_perfcounter, bl, on_finish);
   ldout(cct, 20) << "name: " << m_image_ctx.name << " id: " << m_image_ctx.id
-                 << "image_extents=" << image_extents << ", "
-                 << "bl=" << bl << ", "
-                 << "on_finish=" << on_finish << dendl;
+                 << "image_extents=" << image_extents
+                 << ", bl=" << bl
+                 << ", on_finish=" << on_finish << dendl;
 
   ceph_assert(m_initialized);
   bl->clear();
@@ -811,8 +829,8 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
     }
   }
 
-  ldout(cct, 20) << "miss_extents=" << read_ctx->miss_extents << ", "
-                 << "miss_bl=" << read_ctx->miss_bl << dendl;
+  ldout(cct, 20) << "miss_extents=" << read_ctx->miss_extents
+                 << ", miss_bl=" << read_ctx->miss_bl << dendl;
 
   complete_read(log_entries_to_read, bls_to_read, ctx);
 }
@@ -831,11 +849,9 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
 
   ceph_assert(m_initialized);
 
-  /* Split images because PMDK's space management is not perfect, there are
-   * fragment problems. The larger the block size difference of the block,
-   * the easier the fragmentation problem will occur, resulting in the
-   * remaining space can not be allocated in large size. We plan to manage
-   * pmem space and allocation by ourselves in the future.
+  /* Split image extents larger than 1M. This isn't strictly necessary but
+   * makes libpmemobj allocator's job easier and reduces pmemobj_defrag() cost.
+   * We plan to manage pmem space and allocation by ourselves in the future.
    */
   Extents split_image_extents;
   uint64_t max_extent_size = get_max_extent();
@@ -1252,8 +1268,8 @@ void AbstractWriteLog<I>::append_scheduled(GenericLogOperations &ops, bool &ops_
       std::advance(last_in_batch, ops_to_append);
       ops.splice(ops.end(), m_ops_to_append, m_ops_to_append.begin(), last_in_batch);
       ops_remain = true; /* Always check again before leaving */
-      ldout(m_image_ctx.cct, 20) << "appending " << ops.size() << ", "
-                                 << m_ops_to_append.size() << " remain" << dendl;
+      ldout(m_image_ctx.cct, 20) << "appending " << ops.size() << ", remain "
+                                 << m_ops_to_append.size() << dendl;
     } else if (isRWL) {
       ops_remain = false;
       if (appending) {
@@ -1308,6 +1324,10 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
       std::lock_guard locker(m_lock);
       m_unpublished_reserves -= published_reserves;
       m_dirty_log_entries.splice(m_dirty_log_entries.end(), dirty_entries);
+      if (m_cache_state->clean && !this->m_dirty_log_entries.empty()) {
+        m_cache_state->clean = false;
+        update_image_cache_state();
+      }
     }
     op->complete(result);
     m_perfcounter->tinc(l_librbd_pwl_log_op_dis_to_app_t,
@@ -1398,7 +1418,7 @@ void AbstractWriteLog<I>::dispatch_deferred_writes(void)
       if (allocated_req && front_req && allocated) {
         /* Push dispatch of the first allocated req to a wq */
         m_work_queue.queue(new LambdaContext(
-          [this, allocated_req](int r) {
+          [allocated_req](int r) {
             allocated_req->dispatch();
           }), 0);
         allocated_req = nullptr;
@@ -1446,8 +1466,9 @@ void AbstractWriteLog<I>::alloc_and_dispatch_io_req(C_BlockIORequestT *req)
       std::lock_guard locker(m_lock);
       dispatch_here = m_deferred_ios.empty();
       // Only flush req's total_bytes is the max uint64
-      if ((req->image_extents_summary.total_bytes ==
-          std::numeric_limits<uint64_t>::max())) {
+      if (req->image_extents_summary.total_bytes ==
+          std::numeric_limits<uint64_t>::max() &&
+          static_cast<C_FlushRequestT *>(req)->internal == true) {
         dispatch_here = true;
       }
     }
@@ -1479,7 +1500,6 @@ bool AbstractWriteLog<I>::check_allocation(
   {
     std::lock_guard locker(m_lock);
     if (m_free_lanes < num_lanes) {
-      req->set_io_waited_for_lanes(true);
       ldout(m_image_ctx.cct, 20) << "not enough free lanes (need "
                                  <<  num_lanes
                                  << ", have " << m_free_lanes << ") "
@@ -1488,7 +1508,6 @@ bool AbstractWriteLog<I>::check_allocation(
       /* This isn't considered a "no space" alloc fail. Lanes are a throttling mechanism. */
     }
     if (m_free_log_entries < num_log_entries) {
-      req->set_io_waited_for_entries(true);
       ldout(m_image_ctx.cct, 20) << "not enough free entries (need "
                                  << num_log_entries
                                  << ", have " << m_free_log_entries << ") "
@@ -1498,13 +1517,10 @@ bool AbstractWriteLog<I>::check_allocation(
     }
     /* Don't attempt buffer allocate if we've exceeded the "full" threshold */
     if (m_bytes_allocated + bytes_allocated > m_bytes_allocated_cap) {
-      if (!req->has_io_waited_for_buffers()) {
-        req->set_io_waited_for_buffers(true);
-        ldout(m_image_ctx.cct, 5) << "Waiting for allocation cap (cap="
-                                  << m_bytes_allocated_cap
-                                  << ", allocated=" << m_bytes_allocated
-                                  << ") in write [" << *req << "]" << dendl;
-      }
+      ldout(m_image_ctx.cct, 20) << "Waiting for allocation cap (cap="
+                                 << m_bytes_allocated_cap
+                                 << ", allocated=" << m_bytes_allocated
+                                 << ") in write [" << *req << "]" << dendl;
       alloc_succeeds = false;
       no_space = true; /* Entries must be retired */
     }
@@ -1527,9 +1543,6 @@ bool AbstractWriteLog<I>::check_allocation(
       m_bytes_allocated += bytes_allocated;
       m_bytes_cached += bytes_cached;
       m_bytes_dirty += bytes_dirtied;
-      if (req->has_io_waited_for_buffers()) {
-        req->set_io_waited_for_buffers(false);
-      }
     } else {
       alloc_succeeds = false;
     }
@@ -1632,20 +1645,34 @@ bool AbstractWriteLog<I>::can_flush_entry(std::shared_ptr<GenericLogEntry> log_e
 }
 
 template <typename I>
+void AbstractWriteLog<I>::detain_flush_guard_request(std::shared_ptr<GenericLogEntry> log_entry,
+						     GuardedRequestFunctionContext *guarded_ctx) {
+  ldout(m_image_ctx.cct, 20) << dendl;
+
+  BlockExtent extent;
+  if (log_entry->is_sync_point()) {
+    extent = block_extent(whole_volume_extent());
+  } else {
+    extent = log_entry->ram_entry.block_extent();
+  }
+
+  auto req = GuardedRequest(extent, guarded_ctx, false);
+  BlockGuardCell *cell = nullptr;
+
+  {
+    std::lock_guard locker(m_flush_guard_lock);
+    m_flush_guard.detain(req.block_extent, &req, &cell);
+  }
+  if (cell) {
+    req.guard_ctx->cell = cell;
+    m_image_ctx.op_work_queue->queue(req.guard_ctx, 0);
+  }
+}
+
+template <typename I>
 Context* AbstractWriteLog<I>::construct_flush_entry(std::shared_ptr<GenericLogEntry> log_entry,
                                                       bool invalidating) {
-  CephContext *cct = m_image_ctx.cct;
-
-  ldout(cct, 20) << "" << dendl;
-  ceph_assert(m_entry_reader_lock.is_locked());
-  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
-  if (!m_flush_ops_in_flight ||
-      (log_entry->ram_entry.sync_gen_number < m_lowest_flushing_sync_gen)) {
-    m_lowest_flushing_sync_gen = log_entry->ram_entry.sync_gen_number;
-  }
-  m_flush_ops_in_flight += 1;
-  /* For write same this is the bytes affected by the flush op, not the bytes transferred */
-  m_flush_bytes_in_flight += log_entry->ram_entry.write_bytes;
+  ldout(m_image_ctx.cct, 20) << "" << dendl;
 
   /* Flush write completion action */
   utime_t writeback_start_time = ceph_clock_now();
@@ -1676,7 +1703,24 @@ Context* AbstractWriteLog<I>::construct_flush_entry(std::shared_ptr<GenericLogEn
     });
   /* Flush through lower cache before completing */
   ctx = new LambdaContext(
-    [this, ctx](int r) {
+    [this, ctx, log_entry](int r) {
+      {
+
+        WriteLogGuard::BlockOperations block_reqs;
+	BlockGuardCell *detained_cell = nullptr;
+
+	std::lock_guard locker{m_flush_guard_lock};
+	m_flush_guard.release(log_entry->m_cell, &block_reqs);
+
+	for (auto &req : block_reqs) {
+	  m_flush_guard.detain(req.block_extent, &req, &detained_cell);
+	  if (detained_cell) {
+	    req.guard_ctx->cell = detained_cell;
+	    m_image_ctx.op_work_queue->queue(req.guard_ctx, 0);
+	  }
+        }
+      }
+
       if (r < 0) {
         lderr(m_image_ctx.cct) << "failed to flush log entry"
                                << cpp_strerror(r) << dendl;
@@ -1693,13 +1737,16 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
   CephContext *cct = m_image_ctx.cct;
   bool all_clean = false;
   int flushed = 0;
+  bool has_write_entry = false;
 
   ldout(cct, 20) << "Look for dirty entries" << dendl;
   {
     DeferredContexts post_unlock;
+    GenericLogEntries entries_to_flush;
+
     std::shared_lock entry_reader_locker(m_entry_reader_lock);
+    std::lock_guard locker(m_lock);
     while (flushed < IN_FLIGHT_FLUSH_WRITE_LIMIT) {
-      std::lock_guard locker(m_lock);
       if (m_shutting_down) {
         ldout(cct, 5) << "Flush during shutdown supressed" << dendl;
         /* Do flush complete only when all flush ops are finished */
@@ -1710,19 +1757,39 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
         ldout(cct, 20) << "Nothing new to flush" << dendl;
         /* Do flush complete only when all flush ops are finished */
         all_clean = !m_flush_ops_in_flight;
+        if (!m_cache_state->clean && all_clean) {
+          m_cache_state->clean = true;
+          update_image_cache_state();
+        }
         break;
       }
+
       auto candidate = m_dirty_log_entries.front();
       bool flushable = can_flush_entry(candidate);
       if (flushable) {
-        post_unlock.add(construct_flush_entry_ctx(candidate));
+        entries_to_flush.push_back(candidate);
         flushed++;
+        if (!has_write_entry)
+          has_write_entry = candidate->is_write_entry();
         m_dirty_log_entries.pop_front();
+
+	// To track candidate, we should add m_flush_ops_in_flight in here
+	{
+	  if (!m_flush_ops_in_flight ||
+	      (candidate->ram_entry.sync_gen_number < m_lowest_flushing_sync_gen)) {
+	    m_lowest_flushing_sync_gen = candidate->ram_entry.sync_gen_number;
+	  }
+	  m_flush_ops_in_flight += 1;
+	  /* For write same this is the bytes affected by the flush op, not the bytes transferred */
+	  m_flush_bytes_in_flight += candidate->ram_entry.write_bytes;
+	}
       } else {
         ldout(cct, 20) << "Next dirty entry isn't flushable yet" << dendl;
         break;
       }
     }
+
+    construct_flush_entries(entries_to_flush, post_unlock, has_write_entry);
   }
 
   if (all_clean) {
@@ -1756,11 +1823,11 @@ bool AbstractWriteLog<I>::handle_flushed_sync_point(std::shared_ptr<SyncPointLog
     }
     m_async_op_tracker.start_op();
     m_work_queue.queue(new LambdaContext(
-      [this, log_entry](int r) {
+      [this, next = std::move(log_entry->next_sync_point_entry)](int r) {
         bool handled_by_next;
         {
           std::lock_guard locker(m_lock);
-          handled_by_next = handle_flushed_sync_point(log_entry->next_sync_point_entry);
+          handled_by_next = handle_flushed_sync_point(std::move(next));
         }
         if (!handled_by_next) {
           persist_last_flushed_sync_gen();
@@ -1834,7 +1901,7 @@ void AbstractWriteLog<I>::new_sync_point(DeferredContexts &later) {
     /* This sync point will acquire no more sub-ops. Activation needs
      * to acquire m_lock, so defer to later*/
     later.add(new LambdaContext(
-      [this, old_sync_point](int r) {
+      [old_sync_point](int r) {
         old_sync_point->prior_persisted_gather_activate();
       }));
   }
@@ -1891,7 +1958,7 @@ void AbstractWriteLog<I>::flush_new_sync_point(C_FlushRequestT *flush_req,
    * now has its finisher. If the sub is already complete, activation will
    * complete the Gather. The finisher will acquire m_lock, so we'll activate
    * this when we release m_lock.*/
-  later.add(new LambdaContext([this, to_append](int r) {
+  later.add(new LambdaContext([to_append](int r) {
     to_append->persist_gather_activate();
   }));
 
@@ -1943,6 +2010,10 @@ void AbstractWriteLog<I>::flush_dirty_entries(Context *on_finish) {
     std::lock_guard locker(m_lock);
     flushing = (0 != m_flush_ops_in_flight);
     all_clean = m_dirty_log_entries.empty();
+    if (!m_cache_state->clean && all_clean && !flushing) {
+      m_cache_state->clean = true;
+      update_image_cache_state();
+    }
     stop_flushing = (m_shutting_down);
   }
 
@@ -2009,8 +2080,8 @@ void AbstractWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
                                       << invalidate << ")" << dendl;
             if (m_log_entries.size()) {
               ldout(m_image_ctx.cct, 1) << "m_log_entries.size()="
-                                        << m_log_entries.size() << ", "
-                                        << "front()=" << *m_log_entries.front()
+                                        << m_log_entries.size()
+                                        << ", front()=" << *m_log_entries.front()
                                         << dendl;
             }
             if (invalidate) {
@@ -2081,7 +2152,22 @@ bool AbstractWriteLog<I>::can_retire_entry(std::shared_ptr<GenericLogEntry> log_
 
   ldout(cct, 20) << dendl;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(log_entry);
   return log_entry->can_retire();
+}
+
+template <typename I>
+void AbstractWriteLog<I>::check_image_cache_state_clean() {
+  ceph_assert(m_deferred_ios.empty());
+  ceph_assert(m_ops_to_append.empty());
+  ceph_assert(m_async_flush_ops == 0);
+  ceph_assert(m_async_append_ops == 0);
+  ceph_assert(m_dirty_log_entries.empty());
+  ceph_assert(m_ops_to_flush.empty());
+  ceph_assert(m_flush_ops_in_flight == 0);
+  ceph_assert(m_flush_bytes_in_flight == 0);
+  ceph_assert(m_bytes_dirty == 0);
+  ceph_assert(m_work_queue.empty());
 }
 
 } // namespace pwl

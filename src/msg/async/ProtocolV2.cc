@@ -96,8 +96,10 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       replacing(false),
       can_write(false),
       bannerExchangeCallback(nullptr),
-      tx_frame_asm(&session_stream_handlers, false, &session_compression_handlers),
-      rx_frame_asm(&session_stream_handlers, false, &session_compression_handlers),
+      tx_frame_asm(&session_stream_handlers, false, cct->_conf->ms_crc_data,
+                   &session_compression_handlers),
+      rx_frame_asm(&session_stream_handlers, false, cct->_conf->ms_crc_data,
+                   &session_compression_handlers),
       next_tag(static_cast<Tag>(0)),
       keepalive(false) {
 }
@@ -651,6 +653,13 @@ void ProtocolV2::write_event() {
     auto start = ceph::mono_clock::now();
     bool more;
     do {
+      if (connection->is_queued()) {
+	if (r = connection->_try_send(); r!= 0) {
+	  // either fails to send or not all queued buffer is sent
+	  break;
+	}
+      }
+
       const auto out_entry = _get_next_outgoing();
       if (!out_entry.m) {
         break;
@@ -1081,7 +1090,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
 
   if (r < 0) {
     ldout(cct, 1) << __func__ << " read frame preamble failed r=" << r
-                  << " (" << cpp_strerror(r) << ")" << dendl;
+                  << dendl;
     return _fault();
   }
 
@@ -1116,6 +1125,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
       lderr(cct) << __func__ << " not in ready state!" << dendl;
       return _fault();
     }
+    recv_stamp = ceph_clock_now();
     state = THROTTLE_MESSAGE;
     return CONTINUE(throttle_message);
   } else {
@@ -1348,11 +1358,6 @@ CtPtr ProtocolV2::handle_message() {
   ldout(cct, 20) << __func__ << dendl;
   ceph_assert(state == THROTTLE_DONE);
 
-#if defined(WITH_EVENTTRACE)
-  utime_t ltt_recv_stamp = ceph_clock_now();
-#endif
-  recv_stamp = ceph_clock_now();
-
   const size_t cur_msg_size = get_current_msg_size();
   auto msg_frame = MessageFrame::Decode(rx_segments_data);
 
@@ -1441,7 +1446,7 @@ CtPtr ProtocolV2::handle_message() {
       message->get_type() == CEPH_MSG_OSD_OPREPLY) {
     utime_t ltt_processed_stamp = ceph_clock_now();
     double usecs_elapsed =
-        (ltt_processed_stamp.to_nsec() - ltt_recv_stamp.to_nsec()) / 1000;
+      ((double)(ltt_processed_stamp.to_nsec() - recv_stamp.to_nsec())) / 1000;
     ostringstream buf;
     if (message->get_type() == CEPH_MSG_OSD_OP)
       OID_ELAPSED_WITH_MSG(message, usecs_elapsed, "TIME_TO_DECODE_OSD_OP",
@@ -2598,7 +2603,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
 CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing) {
   ldout(cct, 20) << __func__ << " existing=" << existing << dendl;
 
-  std::lock_guard<std::mutex> l(existing->lock);
+  std::unique_lock<std::mutex> l(existing->lock);
 
   ProtocolV2 *exproto = dynamic_cast<ProtocolV2 *>(existing->protocol.get());
   if (!exproto) {
@@ -2609,6 +2614,7 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
   if (exproto->state == CLOSED) {
     ldout(cct, 1) << __func__ << " existing " << existing << " already closed."
                   << dendl;
+    l.unlock();
     return send_server_ident();
   }
 
@@ -2638,6 +2644,7 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
         << dendl;
     existing->protocol->stop();
     existing->dispatch_queue->queue_reset(existing.get());
+    l.unlock();
     return send_server_ident();
   }
 

@@ -39,66 +39,102 @@ struct CapHitMetric {
 
 struct ReadLatencyMetric {
   utime_t lat;
+  utime_t mean;
+  uint64_t sq_sum;
+  uint64_t count;
   bool updated = false;
 
   DENC(ReadLatencyMetric, v, p) {
-    DENC_START(2, 1, p);
+    DENC_START(3, 1, p);
     denc(v.lat, p);
     if (struct_v >= 2)
       denc(v.updated, p);
+    if (struct_v >= 3) {
+      denc(v.mean, p);
+      denc(v.sq_sum, p);
+      denc(v.count, p);
+    }
     DENC_FINISH(p);
   }
 
   void dump(Formatter *f) const {
     f->dump_object("read_latency", lat);
+    f->dump_object("avg_read_alatency", mean);
+    f->dump_unsigned("sq_sum", sq_sum);
+    f->dump_unsigned("count", count);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const ReadLatencyMetric &metric) {
-    os << "{latency=" << metric.lat << "}";
+    os << "{latency=" << metric.lat << ", avg_latency=" << metric.mean
+       << ", sq_sum=" << metric.sq_sum << ", count=" << metric.count << "}";
     return os;
   }
 };
 
 struct WriteLatencyMetric {
   utime_t lat;
+  utime_t mean;
+  uint64_t sq_sum;
+  uint64_t count;
   bool updated = false;
 
   DENC(WriteLatencyMetric, v, p) {
-    DENC_START(2, 1, p);
+    DENC_START(3, 1, p);
     denc(v.lat, p);
     if (struct_v >= 2)
       denc(v.updated, p);
+    if (struct_v >= 3) {
+      denc(v.mean, p);
+      denc(v.sq_sum, p);
+      denc(v.count, p);
+    }
     DENC_FINISH(p);
   }
 
   void dump(Formatter *f) const {
     f->dump_object("write_latency", lat);
+    f->dump_object("avg_write_alatency", mean);
+    f->dump_unsigned("sq_sum", sq_sum);
+    f->dump_unsigned("count", count);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const WriteLatencyMetric &metric) {
-    os << "{latency=" << metric.lat << "}";
+    os << "{latency=" << metric.lat << ", avg_latency=" << metric.mean
+       << ", sq_sum=" << metric.sq_sum << ", count=" << metric.count  << "}";
     return os;
   }
 };
 
 struct MetadataLatencyMetric {
   utime_t lat;
+  utime_t mean;
+  uint64_t sq_sum;
+  uint64_t count;
   bool updated = false;
 
   DENC(MetadataLatencyMetric, v, p) {
-    DENC_START(2, 1, p);
+    DENC_START(3, 1, p);
     denc(v.lat, p);
     if (struct_v >= 2)
       denc(v.updated, p);
+    if (struct_v >= 3) {
+      denc(v.mean, p);
+      denc(v.sq_sum, p);
+      denc(v.count, p);
+    }
     DENC_FINISH(p);
   }
 
   void dump(Formatter *f) const {
     f->dump_object("metadata_latency", lat);
+    f->dump_object("avg_metadata_alatency", mean);
+    f->dump_unsigned("sq_sum", sq_sum);
+    f->dump_unsigned("count", count);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const MetadataLatencyMetric &metric) {
-    os << "{latency=" << metric.lat << "}";
+    os << "{latency=" << metric.lat << ", avg_latency=" << metric.mean
+       << ", sq_sum=" << metric.sq_sum << ", count=" << metric.count << "}";
     return os;
   }
 };
@@ -202,6 +238,54 @@ struct OpenedInodesMetric {
   }
 };
 
+struct ReadIoSizesMetric {
+  uint64_t total_ops = 0;
+  uint64_t total_size = 0;
+  bool updated = false;
+
+  DENC(ReadIoSizesMetric, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.total_ops, p);
+    denc(v.total_size, p);
+    denc(v.updated, p);
+    DENC_FINISH(p);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("total_ops", total_ops);
+    f->dump_unsigned("total_size", total_size);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const ReadIoSizesMetric &metric) {
+    os << "{total_ops=" << metric.total_ops << ", total_size=" << metric.total_size <<"}";
+    return os;
+  }
+};
+
+struct WriteIoSizesMetric {
+  uint64_t total_ops = 0;
+  uint64_t total_size = 0;
+  bool updated = false;
+
+  DENC(WriteIoSizesMetric, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.total_ops, p);
+    denc(v.total_size, p);
+    denc(v.updated, p);
+    DENC_FINISH(p);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("total_ops", total_ops);
+    f->dump_unsigned("total_size", total_size);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const WriteIoSizesMetric &metric) {
+    os << "{total_ops=" << metric.total_ops << ", total_size=" << metric.total_size <<"}";
+    return os;
+  }
+};
+
 WRITE_CLASS_DENC(CapHitMetric)
 WRITE_CLASS_DENC(ReadLatencyMetric)
 WRITE_CLASS_DENC(WriteLatencyMetric)
@@ -210,6 +294,8 @@ WRITE_CLASS_DENC(DentryLeaseHitMetric)
 WRITE_CLASS_DENC(OpenedFilesMetric)
 WRITE_CLASS_DENC(PinnedIcapsMetric)
 WRITE_CLASS_DENC(OpenedInodesMetric)
+WRITE_CLASS_DENC(ReadIoSizesMetric)
+WRITE_CLASS_DENC(WriteIoSizesMetric)
 
 // metrics that are forwarded to the MDS by client(s).
 struct Metrics {
@@ -222,12 +308,14 @@ struct Metrics {
   OpenedFilesMetric opened_files_metric;
   PinnedIcapsMetric pinned_icaps_metric;
   OpenedInodesMetric opened_inodes_metric;
+  ReadIoSizesMetric read_io_sizes_metric;
+  WriteIoSizesMetric write_io_sizes_metric;
 
   // metric update type
   uint32_t update_type = UpdateType::UPDATE_TYPE_REFRESH;
 
   DENC(Metrics, v, p) {
-    DENC_START(3, 1, p);
+    DENC_START(4, 1, p);
     denc(v.update_type, p);
     denc(v.cap_hit_metric, p);
     denc(v.read_latency_metric, p);
@@ -240,6 +328,10 @@ struct Metrics {
       denc(v.opened_files_metric, p);
       denc(v.pinned_icaps_metric, p);
       denc(v.opened_inodes_metric, p);
+    }
+    if (struct_v >= 4) {
+      denc(v.read_io_sizes_metric, p);
+      denc(v.write_io_sizes_metric, p);
     }
     DENC_FINISH(p);
   }
@@ -254,6 +346,8 @@ struct Metrics {
     f->dump_object("opened_files_metric", opened_files_metric);
     f->dump_object("pinned_icaps_metric", pinned_icaps_metric);
     f->dump_object("opened_inodes_metric", opened_inodes_metric);
+    f->dump_object("read_io_sizes_metric", read_io_sizes_metric);
+    f->dump_object("write_io_sizes_metric", write_io_sizes_metric);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Metrics& metrics) {
@@ -262,10 +356,12 @@ struct Metrics {
        << ", read_latency=" << metrics.read_latency_metric
        << ", write_latency=" << metrics.write_latency_metric
        << ", metadata_latency=" << metrics.metadata_latency_metric
-       << ", dentry_lease =" << metrics.dentry_lease_metric
-       << ", opened_files_metric =" << metrics.opened_files_metric
-       << ", pinned_icaps_metric =" << metrics.pinned_icaps_metric
-       << ", opened_inodes_metric =" << metrics.opened_inodes_metric
+       << ", dentry_lease=" << metrics.dentry_lease_metric
+       << ", opened_files_metric=" << metrics.opened_files_metric
+       << ", pinned_icaps_metric=" << metrics.pinned_icaps_metric
+       << ", opened_inodes_metric=" << metrics.opened_inodes_metric
+       << ", read_io_sizes_metric=" << metrics.read_io_sizes_metric
+       << ", write_io_sizes_metric=" << metrics.write_io_sizes_metric
        << "}]";
     return os;
   }

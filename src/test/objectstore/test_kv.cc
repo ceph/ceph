@@ -1278,7 +1278,7 @@ TEST_F(RocksDBResharding, change_reshard) {
 INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,
   KVTest,
-  ::testing::Values("leveldb", "rocksdb", "memdb"));
+  ::testing::Values("rocksdb", "memdb"));
 
 INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,

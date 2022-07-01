@@ -1,6 +1,7 @@
 -e../../python-common
 asyncmock
 cherrypy
+cryptography
 jsonpatch
 Jinja2
 pecan
@@ -12,3 +13,4 @@ pyyaml
 requests-mock
 scipy
 werkzeug
+natsort

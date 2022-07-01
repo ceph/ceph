@@ -361,6 +361,13 @@ def is_partition(dev):
     return False
 
 
+def is_ceph_rbd(dev):
+    """
+    Boolean to determine if a given device is a ceph RBD device, like /dev/rbd0
+    """
+    return dev.startswith(('/dev/rbd'))
+
+
 class BaseFloatUnit(float):
     """
     Base class to support float representations of size values. Suffix is
@@ -402,6 +409,8 @@ class FloatKB(BaseFloatUnit):
 class FloatTB(BaseFloatUnit):
     pass
 
+class FloatPB(BaseFloatUnit):
+    pass
 
 class Size(object):
     """
@@ -456,10 +465,10 @@ class Size(object):
     @classmethod
     def parse(cls, size):
         if (len(size) > 2 and
-            size[-2].lower() in ['k', 'm', 'g', 't'] and
+            size[-2].lower() in ['k', 'm', 'g', 't', 'p'] and
             size[-1].lower() == 'b'):
             return cls(**{size[-2:].lower(): float(size[0:-2])})
-        elif size[-1].lower() in ['b', 'k', 'm', 'g', 't']:
+        elif size[-1].lower() in ['b', 'k', 'm', 'g', 't', 'p']:
             return cls(**{size[-1].lower(): float(size[0:-1])})
         else:
             return cls(b=float(size))
@@ -474,6 +483,7 @@ class Size(object):
             [('m', 'mb', 'megabytes'), self._multiplier ** 2],
             [('g', 'gb', 'gigabytes'), self._multiplier ** 3],
             [('t', 'tb', 'terabytes'), self._multiplier ** 4],
+            [('p', 'pb', 'petabytes'), self._multiplier ** 5]
         ]
         # and mappings for units-to-formatters, including bytes and aliases for
         # each
@@ -483,6 +493,7 @@ class Size(object):
             [('mb', 'megabytes'), FloatMB],
             [('gb', 'gigabytes'), FloatGB],
             [('tb', 'terabytes'), FloatTB],
+            [('pb', 'petabytes'), FloatPB],
         ]
         self._formatters = {}
         for key, value in format_aliases:
@@ -516,7 +527,7 @@ class Size(object):
         than 1024. This allows to represent size in the most readable format
         available
         """
-        for unit in ['b', 'kb', 'mb', 'gb', 'tb']:
+        for unit in ['b', 'kb', 'mb', 'gb', 'tb', 'pb']:
             if getattr(self, unit) > 1024:
                 continue
             return getattr(self, unit)
@@ -632,14 +643,15 @@ def human_readable_size(size):
     Take a size in bytes, and transform it into a human readable size with up
     to two decimals of precision.
     """
-    suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
-    suffix_index = 0
-    while size > 1024:
-        suffix_index += 1
-        size = size / 1024.0
+    suffixes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+    for suffix in suffixes:
+        if size >= 1024:
+            size = size / 1024
+        else:
+            break
     return "{size:.2f} {suffix}".format(
         size=size,
-        suffix=suffixes[suffix_index])
+        suffix=suffix)
 
 
 def size_from_human_readable(s):
@@ -651,6 +663,8 @@ def size_from_human_readable(s):
     if s[-1].isdigit():
         return Size(b=float(s))
     n = float(s[:-1])
+    if s[-1].lower() == 'p':
+        return Size(pb=n)
     if s[-1].lower() == 't':
         return Size(tb=n)
     if s[-1].lower() == 'g':
@@ -756,6 +770,10 @@ def get_devices(_sys_block_path='/sys/block'):
             continue
         sysdir = os.path.join(_sys_block_path, devname)
         metadata = {}
+
+        # If the device is ceph rbd it gets excluded
+        if is_ceph_rbd(diskname):
+            continue
 
         # If the mapper device is a logical volume it gets excluded
         if is_mapper_device(diskname):

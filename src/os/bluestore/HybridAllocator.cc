@@ -145,11 +145,13 @@ void HybridAllocator::dump()
     << dendl;
 }
 
-void HybridAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
+void HybridAllocator::foreach(
+  std::function<void(uint64_t offset, uint64_t length)> notify)
 {
-  AvlAllocator::dump(notify);
+  std::lock_guard l(lock);
+  AvlAllocator::_foreach(notify);
   if (bmap_alloc) {
-    bmap_alloc->dump(notify);
+    bmap_alloc->foreach(notify);
   }
 }
 
@@ -168,7 +170,7 @@ void HybridAllocator::init_rm_free(uint64_t offset, uint64_t length)
         if (bmap_alloc) {
           bmap_alloc->init_rm_free(o, l);
         } else {
-          lderr(cct) << "init_rm_free lambda" << std::hex
+          lderr(cct) << "init_rm_free lambda " << std::hex
             << "Uexpected extent: "
             << " 0x" << o << "~" << l
             << std::dec << dendl;

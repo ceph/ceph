@@ -11,14 +11,12 @@ from requests import RequestException
 from ..controllers.grafana import Grafana
 from ..grafana import GrafanaRestClient
 from ..settings import Settings
-from . import ControllerTestCase, KVStoreMockMixin  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase, KVStoreMockMixin
 
 
 class GrafanaTest(ControllerTestCase, KVStoreMockMixin):
     @classmethod
     def setup_server(cls):
-        # pylint: disable=protected-access
-        Grafana._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Grafana])
 
     def setUp(self):
@@ -54,6 +52,14 @@ class GrafanaTest(ControllerTestCase, KVStoreMockMixin):
         self._get('/api/grafana/validation/foo')
         self.assertStatus(200)
         self.assertBody(b'"404"')
+
+    @patch('dashboard.controllers.grafana.GrafanaRestClient.url_validation')
+    def test_validation_endpoint_fails(self, url_validation):
+        url_validation.side_effect = RequestException
+        self.server_settings()
+        self._get('/api/grafana/validation/bar')
+        self.assertStatus(400)
+        self.assertJsonBody({'detail': '', 'code': 'Error', 'component': 'grafana'})
 
     def test_dashboards_unavailable_no_url(self):
         self.server_settings(url="")

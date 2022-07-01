@@ -14,11 +14,16 @@ from IPy import IP
 from teuthology.contextutil import safe_while
 from teuthology.misc import get_file, write_file
 from teuthology.orchestra import run
-from teuthology.orchestra.run import CommandFailedError, ConnectionLostError, Raw
+from teuthology.orchestra.run import Raw
+from teuthology.exceptions import CommandFailedError, ConnectionLostError
 
 from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
+
+
+UMOUNT_TIMEOUT = 300
+
 
 class CephFSMount(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
@@ -55,6 +60,8 @@ class CephFSMount(object):
             self.hostfs_mntpt = os.path.join(self.test_dir, f'mnt.{self.client_id}')
         self.cephfs_name = cephfs_name
         self.cephfs_mntpt = cephfs_mntpt
+
+        self.cluster_name = 'ceph' # TODO: use config['cluster']
 
         self.fs = None
 
@@ -124,8 +131,7 @@ class CephFSMount(object):
         self._netns_name = name
 
     def assert_that_ceph_fs_exists(self):
-        output = self.client_remote.run(args='ceph fs ls', stdout=StringIO()).\
-            stdout.getvalue()
+        output = self.ctx.managers[self.cluster_name].raw_cluster_cmd("fs", "ls")
         if self.cephfs_name:
             assert self.cephfs_name in output, \
                 'expected ceph fs is not present on the cluster'
@@ -450,7 +456,8 @@ class CephFSMount(object):
     def umount(self):
         raise NotImplementedError()
 
-    def umount_wait(self, force=False, require_clean=False, timeout=None):
+    def umount_wait(self, force=False, require_clean=False,
+                    timeout=UMOUNT_TIMEOUT):
         """
 
         :param force: Expect that the mount will not shutdown cleanly: kill
@@ -565,16 +572,21 @@ class CephFSMount(object):
         raise NotImplementedError()
 
     def get_keyring_path(self):
+        # N.B.: default keyring is /etc/ceph/ceph.keyring; see ceph.py and generate_caps
         return '/etc/ceph/ceph.client.{id}.keyring'.format(id=self.client_id)
 
     def get_key_from_keyfile(self):
         # XXX: don't call run_shell(), since CephFS might be unmounted.
-        keyring = self.client_remote.run(
-            args=['sudo', 'cat', self.client_keyring_path], stdout=StringIO(),
-            omit_sudo=False).stdout.getvalue()
+        keyring = self.client_remote.read_file(self.client_keyring_path).\
+            decode()
+
         for line in keyring.split('\n'):
             if line.find('key') != -1:
                 return line[line.find('=') + 1 : ].strip()
+
+        raise RuntimeError('Key not found in keyring file '
+                           f'{self.client_keyring_path}. Its contents are -\n'
+                           f'{keyring}')
 
     @property
     def config_path(self):
@@ -685,25 +697,30 @@ class CephFSMount(object):
         if sudo:
             args.append('sudo')
         args += ['adjust-ulimits', 'daemon-helper', 'kill', py_version, '-c', pyscript]
-        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE, stdout=StringIO())
+        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE,
+                                      stdout=StringIO(), omit_sudo=(not sudo))
 
     def run_python(self, pyscript, py_version='python3', sudo=False):
         p = self._run_python(pyscript, py_version, sudo=sudo)
         p.wait()
         return p.stdout.getvalue().strip()
 
-    def run_shell(self, args, timeout=900, **kwargs):
-        args = args.split() if isinstance(args, str) else args
-        kwargs.pop('omit_sudo', False)
+    def run_shell(self, args, timeout=300, **kwargs):
+        omit_sudo = kwargs.pop('omit_sudo', False)
         sudo = kwargs.pop('sudo', False)
         cwd = kwargs.pop('cwd', self.mountpoint)
         stdout = kwargs.pop('stdout', StringIO())
         stderr = kwargs.pop('stderr', StringIO())
 
         if sudo:
-            args.insert(0, 'sudo')
+            if isinstance(args, list):
+                args.insert(0, 'sudo')
+            elif isinstance(args, str):
+                args = 'sudo ' + args
 
-        return self.client_remote.run(args=args, cwd=cwd, timeout=timeout, stdout=stdout, stderr=stderr, **kwargs)
+        return self.client_remote.run(args=args, cwd=cwd, timeout=timeout,
+                                      stdout=stdout, stderr=stderr,
+                                      omit_sudo=omit_sudo, **kwargs)
 
     def run_shell_payload(self, payload, **kwargs):
         return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
@@ -830,6 +847,31 @@ class CephFSMount(object):
         # This wait would not be sufficient if the file had already
         # existed, but it's simple and in practice users of open_background
         # are not using it on existing files.
+        self.wait_for_visible(basename)
+
+        return rproc
+
+    def open_dir_background(self, basename):
+        """
+        Create and hold a capability to a directory.
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.hostfs_mntpt, basename)
+
+        pyscript = dedent("""
+            import time
+            import os
+
+            os.mkdir("{path}")
+            fd = os.open("{path}", os.O_RDONLY)
+            while True:
+                time.sleep(1)
+            """).format(path=path)
+
+        rproc = self._run_python(pyscript)
+        self.background_procs.append(rproc)
+
         self.wait_for_visible(basename)
 
         return rproc
@@ -1061,30 +1103,49 @@ class CephFSMount(object):
         self.background_procs.append(rproc)
         return rproc
 
-    def create_n_files(self, fs_path, count, sync=False):
+    def create_n_files(self, fs_path, count, sync=False, dirsync=False, unlink=False, finaldirsync=False):
+        """
+        Create n files.
+
+        :param sync: sync the file after writing
+        :param dirsync: sync the containing directory after closing the file
+        :param unlink: unlink the file after closing
+        :param finaldirsync: sync the containing directory after closing the last file
+        """
+
         assert(self.is_mounted())
 
         abs_path = os.path.join(self.hostfs_mntpt, fs_path)
 
-        pyscript = dedent("""
-            import sys
-            import time
+        pyscript = dedent(f"""
             import os
 
             n = {count}
-            abs_path = "{abs_path}"
+            path = "{abs_path}"
 
-            if not os.path.exists(os.path.dirname(abs_path)):
-                os.makedirs(os.path.dirname(abs_path))
+            dpath = os.path.dirname(path)
+            fnameprefix = os.path.basename(path)
+            os.makedirs(dpath, exist_ok=True)
 
-            for i in range(0, n):
-                fname = "{{0}}_{{1}}".format(abs_path, i)
-                with open(fname, 'w') as f:
-                    f.write('content')
-                    if {sync}:
-                        f.flush()
-                        os.fsync(f.fileno())
-            """).format(abs_path=abs_path, count=count, sync=str(sync))
+            try:
+                dirfd = os.open(dpath, os.O_DIRECTORY)
+
+                for i in range(n):
+                    fpath = os.path.join(dpath, f"{{fnameprefix}}_{{i}}")
+                    with open(fpath, 'w') as f:
+                        f.write(f"{{i}}")
+                        if {sync}:
+                            f.flush()
+                            os.fsync(f.fileno())
+                    if {unlink}:
+                        os.unlink(fpath)
+                    if {dirsync}:
+                        os.fsync(dirfd)
+                if {finaldirsync}:
+                    os.fsync(dirfd)
+            finally:
+                os.close(dirfd)
+            """)
 
         self.run_python(pyscript)
 
@@ -1133,6 +1194,20 @@ class CephFSMount(object):
 
     def get_op_read_count(self):
         raise NotImplementedError()
+
+    def readlink(self, fs_path):
+        abs_path = os.path.join(self.hostfs_mntpt, fs_path)
+
+        pyscript = dedent("""
+            import os
+
+            print(os.readlink("{path}"))
+            """).format(path=abs_path)
+
+        proc = self._run_python(pyscript)
+        proc.wait()
+        return str(proc.stdout.getvalue().strip())
+
 
     def lstat(self, fs_path, follow_symlinks=False, wait=True):
         return self.stat(fs_path, follow_symlinks=False, wait=True)
@@ -1315,3 +1390,22 @@ class CephFSMount(object):
         checksum_text = self.run_shell(cmd).stdout.getvalue().strip()
         checksum_sorted = sorted(checksum_text.split('\n'), key=lambda v: v.split()[1])
         return hashlib.md5(('\n'.join(checksum_sorted)).encode('utf-8')).hexdigest()
+
+    def validate_subvol_options(self):
+        mount_subvol_num = self.client_config.get('mount_subvol_num', None)
+        if self.cephfs_mntpt and mount_subvol_num is not None:
+            log.warning("You cannot specify both: cephfs_mntpt and mount_subvol_num")
+            log.info(f"Mounting subvol {mount_subvol_num} for now")
+
+        if mount_subvol_num is not None:
+            # mount_subvol must be an index into the subvol path array for the fs
+            if not self.cephfs_name:
+                self.cephfs_name = 'cephfs'
+            assert(hasattr(self.ctx, "created_subvols"))
+            # mount_subvol must be specified under client.[0-9] yaml section
+            subvol_paths = self.ctx.created_subvols[self.cephfs_name]
+            path_to_mount = subvol_paths[mount_subvol_num]
+            self.cephfs_mntpt = path_to_mount
+        elif not self.cephfs_mntpt:
+            # default to the "/" path
+            self.cephfs_mntpt = "/"

@@ -6,6 +6,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
 #include "rgw_rados.h" // RGW_OBJ_NS_SHADOW and RGW_OBJ_NS_MULTIPART
+#include "rgw_bucket.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -117,11 +118,6 @@ int RGWObjManifest::append(const DoutPrefixProvider *dpp, RGWObjManifest& m, con
   set_obj_size(obj_size + m.obj_size);
 
   return 0;
-}
-
-int RGWObjManifest::append(const DoutPrefixProvider *dpp, RGWObjManifest& m, rgw::sal::Zone* zone_svc)
-{
-  return append(dpp, m, zone_svc->get_zonegroup(), zone_svc->get_params());
 }
 
 void RGWObjManifest::append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& miter,
@@ -504,4 +500,110 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
 
   location->set_placement_rule(tail_placement.placement_rule);
   *location = loc;
+}
+
+void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>& o)
+{
+  o.push_back(new RGWObjManifestPart);
+
+  RGWObjManifestPart *p = new RGWObjManifestPart;
+  rgw_bucket b;
+  init_bucket(&b, "tenant", "bucket", ".pool", ".index_pool", "marker_", "12");
+
+  p->loc = rgw_obj(b, "object");
+  p->loc_ofs = 512 * 1024;
+  p->size = 128 * 1024;
+  o.push_back(p);
+}
+
+void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
+{
+  RGWObjManifest *m = new RGWObjManifest;
+  map<uint64_t, RGWObjManifestPart> objs;
+  uint64_t total_size = 0;
+  for (int i = 0; i<10; i++) {
+    RGWObjManifestPart p;
+    rgw_bucket b;
+    init_bucket(&b, "tenant", "bucket", ".pool", ".index_pool", "marker_", "12");
+    p.loc = rgw_obj(b, "object");
+    p.loc_ofs = 0;
+    p.size = 512 * 1024;
+    total_size += p.size;
+    objs[total_size] = p;
+  }
+  m->set_explicit(total_size, objs);
+  o.push_back(m);
+  o.push_back(new RGWObjManifest);
+}
+
+void RGWObjManifestPart::dump(Formatter *f) const
+{
+  f->open_object_section("loc");
+  loc.dump(f);
+  f->close_section();
+  f->dump_unsigned("loc_ofs", loc_ofs);
+  f->dump_unsigned("size", size);
+}
+
+void RGWObjManifest::obj_iterator::dump(Formatter *f) const
+{
+  f->dump_unsigned("part_ofs", part_ofs);
+  f->dump_unsigned("stripe_ofs", stripe_ofs);
+  f->dump_unsigned("ofs", ofs);
+  f->dump_unsigned("stripe_size", stripe_size);
+  f->dump_int("cur_part_id", cur_part_id);
+  f->dump_int("cur_stripe", cur_stripe);
+  f->dump_string("cur_override_prefix", cur_override_prefix);
+  f->dump_object("location", location);
+}
+
+void RGWObjManifest::dump(Formatter *f) const
+{
+  map<uint64_t, RGWObjManifestPart>::const_iterator iter = objs.begin();
+  f->open_array_section("objs");
+  for (; iter != objs.end(); ++iter) {
+    f->dump_unsigned("ofs", iter->first);
+    f->open_object_section("part");
+    iter->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->dump_unsigned("obj_size", obj_size);
+  ::encode_json("explicit_objs", explicit_objs, f);
+  ::encode_json("head_size", head_size, f);
+  ::encode_json("max_head_size", max_head_size, f);
+  ::encode_json("prefix", prefix, f);
+  ::encode_json("rules", rules, f);
+  ::encode_json("tail_instance", tail_instance, f);
+  ::encode_json("tail_placement", tail_placement, f);
+
+  // nullptr being passed into iterators since there
+  // is no cct and we aren't doing anything with these
+  // iterators that would write do the log
+  f->dump_object("begin_iter", obj_begin(nullptr));
+  f->dump_object("end_iter", obj_end(nullptr));
+}
+
+void RGWObjManifestRule::dump(Formatter *f) const
+{
+  encode_json("start_part_num", start_part_num, f);
+  encode_json("start_ofs", start_ofs, f);
+  encode_json("part_size", part_size, f);
+  encode_json("stripe_max_size", stripe_max_size, f);
+  encode_json("override_prefix", override_prefix, f);
+}
+
+void rgw_obj_select::dump(Formatter *f) const
+{
+  f->dump_string("placement_rule", placement_rule.to_str());
+  f->dump_object("obj", obj);
+  f->dump_object("raw_obj", raw_obj);
+  f->dump_bool("is_raw", is_raw);
+}
+
+void RGWObjTier::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("tier_placement", tier_placement, f);
+  encode_json("is_multipart_upload", is_multipart_upload, f);
 }

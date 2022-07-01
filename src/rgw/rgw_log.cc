@@ -17,11 +17,14 @@
 
 #include "services/svc_zone.h"
 
+#include <chrono>
+#include <math.h>
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 
-static void set_param_str(struct req_state *s, const char *name, string& str)
+static void set_param_str(req_state *s, const char *name, string& str)
 {
   const char *p = s->info.env->get(name);
   if (p)
@@ -189,7 +192,7 @@ void rgw_log_usage_finalize()
   usage_logger = NULL;
 }
 
-static void log_usage(struct req_state *s, const string& op_name)
+static void log_usage(req_state *s, const string& op_name)
 {
   if (s->system_request) /* don't log system user operations */
     return;
@@ -313,17 +316,164 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
       formatter->close_section();
     }
   }
-
+  if (!entry.access_key_id.empty()) {
+    formatter->dump_string("access_key_id", entry.access_key_id);
+  }
+  if (!entry.subuser.empty()) {
+    formatter->dump_string("subuser", entry.subuser);
+  }
+  formatter->dump_bool("temp_url", entry.temp_url);
   formatter->close_section();
 }
 
-void OpsLogSocket::formatter_to_bl(bufferlist& bl)
+OpsLogManifold::~OpsLogManifold()
+{
+    for (const auto &sink : sinks) {
+        delete sink;
+    }
+}
+
+void OpsLogManifold::add_sink(OpsLogSink* sink)
+{
+    sinks.push_back(sink);
+}
+
+int OpsLogManifold::log(req_state* s, struct rgw_log_entry& entry)
+{
+  int ret = 0;
+  for (const auto &sink : sinks) {
+    if (sink->log(s, entry) < 0) {
+      ret = -1;
+    }
+  }
+  return ret;
+}
+
+OpsLogFile::OpsLogFile(CephContext* cct, std::string& path, uint64_t max_data_size) :
+  cct(cct), data_size(0), max_data_size(max_data_size), path(path), need_reopen(false)
+{
+}
+
+void OpsLogFile::reopen() {
+  need_reopen = true;
+}
+
+void OpsLogFile::flush()
+{
+  {
+    std::scoped_lock log_lock(mutex);
+    assert(flush_buffer.empty());
+    flush_buffer.swap(log_buffer);
+    data_size = 0;
+  }
+  for (auto bl : flush_buffer) {
+    int try_num = 0;
+    while (true) {
+      if (!file.is_open() || need_reopen) {
+        need_reopen = false;
+        file.close();
+        file.open(path, std::ofstream::app);
+      }
+      bl.write_stream(file);
+      if (!file) {
+        ldpp_dout(this, 0) << "ERROR: failed to log RGW ops log file entry" << dendl;
+        file.clear();
+        if (stopped) {
+          break;
+        }
+        int sleep_time_secs = std::min((int) pow(2, try_num), 60);
+        std::this_thread::sleep_for(std::chrono::seconds(sleep_time_secs));
+        try_num++;
+      } else {
+        break;
+      }
+    }
+  }
+  flush_buffer.clear();
+  file << std::endl;
+}
+
+void* OpsLogFile::entry() {
+  std::unique_lock lock(mutex);
+  while (!stopped) {
+    if (!log_buffer.empty()) {
+      lock.unlock();
+      flush();
+      lock.lock();
+      continue;
+    }
+    cond.wait(lock);
+  }
+  lock.unlock();
+  flush();
+  return NULL;
+}
+
+void OpsLogFile::start() {
+  stopped = false;
+  create("ops_log_file");
+}
+
+void OpsLogFile::stop() {
+  {
+    std::unique_lock lock(mutex);
+    cond.notify_one();
+    stopped = true;
+  }
+  join();
+}
+
+OpsLogFile::~OpsLogFile()
+{
+  if (!stopped) {
+    stop();
+  }
+  file.close();
+}
+
+int OpsLogFile::log_json(req_state* s, bufferlist& bl)
+{
+  std::unique_lock lock(mutex);
+  if (data_size + bl.length() >= max_data_size) {
+    ldout(s->cct, 0) << "ERROR: RGW ops log file buffer too full, dropping log for txn: " << s->trans_id << dendl;
+    return -1;
+  }
+  log_buffer.push_back(bl);
+  data_size += bl.length();
+  cond.notify_all();
+  return 0;
+}
+
+unsigned OpsLogFile::get_subsys() const {
+  return dout_subsys;
+}
+
+JsonOpsLogSink::JsonOpsLogSink() {
+  formatter = new JSONFormatter;
+}
+
+JsonOpsLogSink::~JsonOpsLogSink() {
+  delete formatter;
+}
+
+void JsonOpsLogSink::formatter_to_bl(bufferlist& bl)
 {
   stringstream ss;
   formatter->flush(ss);
   const string& s = ss.str();
-
   bl.append(s);
+}
+
+int JsonOpsLogSink::log(req_state* s, struct rgw_log_entry& entry)
+{
+  bufferlist bl;
+
+  lock.lock();
+  rgw_format_ops_log_entry(entry, formatter);
+  formatter_to_bl(bl);
+  lock.unlock();
+
+  return log_json(s, bl);
 }
 
 void OpsLogSocket::init_connection(bufferlist& bl)
@@ -333,29 +483,43 @@ void OpsLogSocket::init_connection(bufferlist& bl)
 
 OpsLogSocket::OpsLogSocket(CephContext *cct, uint64_t _backlog) : OutputDataSocket(cct, _backlog)
 {
-  formatter = new JSONFormatter;
   delim.append(",\n");
 }
 
-OpsLogSocket::~OpsLogSocket()
+int OpsLogSocket::log_json(req_state* s, bufferlist& bl)
 {
-  delete formatter;
-}
-
-void OpsLogSocket::log(struct rgw_log_entry& entry)
-{
-  bufferlist bl;
-
-  lock.lock();
-  rgw_format_ops_log_entry(entry, formatter);
-  formatter_to_bl(bl);
-  lock.unlock();
-
   append_output(bl);
+  return 0;
 }
 
-int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
-	       const string& op_name, OpsLogSocket *olog)
+OpsLogRados::OpsLogRados(rgw::sal::Store* const& store): store(store)
+{
+}
+
+int OpsLogRados::log(req_state* s, struct rgw_log_entry& entry)
+{
+  if (!s->cct->_conf->rgw_ops_log_rados) {
+    return 0;
+  }
+  bufferlist bl;
+  encode(entry, bl);
+
+  struct tm bdt;
+  time_t t = req_state::Clock::to_time_t(entry.time);
+  if (s->cct->_conf->rgw_log_object_name_utc)
+    gmtime_r(&t, &bdt);
+  else
+    localtime_r(&t, &bdt);
+  string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
+                                      entry.bucket_id, entry.bucket);
+  if (store->log_op(s, oid, bl) < 0) {
+    ldpp_dout(s, 0) << "ERROR: failed to log RADOS RGW ops log entry for txn: " << s->trans_id << dendl;
+    return -1;
+  }
+  return 0;
+}
+
+int rgw_log_op(RGWREST* const rest, req_state *s, const string& op_name, OpsLogSink *olog)
 {
   struct rgw_log_entry entry;
   string bucket_id;
@@ -435,7 +599,12 @@ int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
 
   entry.op = op_name;
 
-  entry.identity_type = s->auth.identity->get_identity_type();
+  if (s->auth.identity) {
+    entry.identity_type = s->auth.identity->get_identity_type();
+    s->auth.identity->write_ops_log_entry(entry);
+  } else {
+    entry.identity_type = TYPE_NONE;
+  }
 
   if (! s->token_claims.empty()) {
     entry.token_claims = std::move(s->token_claims);
@@ -469,37 +638,62 @@ int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
     entry.http_status = buf;
-  } else
+  } else {
     entry.http_status = "200"; // default
-
+  }
   entry.error_code = s->err.err_code;
   entry.bucket_id = bucket_id;
   entry.trans_id = s->trans_id;
-
-  bufferlist bl;
-  encode(entry, bl);
-
-  struct tm bdt;
-  time_t t = req_state::Clock::to_time_t(entry.time);
-  if (s->cct->_conf->rgw_log_object_name_utc)
-    gmtime_r(&t, &bdt);
-  else
-    localtime_r(&t, &bdt);
-
-  int ret = 0;
-
-  if (s->cct->_conf->rgw_ops_log_rados) {
-    string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-				        entry.bucket_id, entry.bucket);
-    ret = store->log_op(s, oid, bl);
-  }
-
   if (olog) {
-    olog->log(entry);
+    return olog->log(s, entry);
   }
-  if (ret < 0)
-    ldpp_dout(s, 0) << "ERROR: failed to log entry" << dendl;
-
-  return ret;
+  return 0;
 }
 
+void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
+{
+  rgw_log_entry *e = new rgw_log_entry;
+  e->object_owner = "object_owner";
+  e->bucket_owner = "bucket_owner";
+  e->bucket = "bucket";
+  e->remote_addr = "1.2.3.4";
+  e->user = "user";
+  e->obj = rgw_obj_key("obj");
+  e->uri = "http://uri/bucket/obj";
+  e->http_status = "200";
+  e->error_code = "error_code";
+  e->bytes_sent = 1024;
+  e->bytes_received = 512;
+  e->obj_size = 2048;
+  e->user_agent = "user_agent";
+  e->referrer = "referrer";
+  e->bucket_id = "10";
+  e->trans_id = "trans_id";
+  e->identity_type = TYPE_RGW;
+  o.push_back(e);
+  o.push_back(new rgw_log_entry);
+}
+
+void rgw_log_entry::dump(Formatter *f) const
+{
+  f->dump_string("object_owner", object_owner.to_str());
+  f->dump_string("bucket_owner", bucket_owner.to_str());
+  f->dump_string("bucket", bucket);
+  f->dump_stream("time") << time;
+  f->dump_string("remote_addr", remote_addr);
+  f->dump_string("user", user);
+  f->dump_stream("obj") << obj;
+  f->dump_string("op", op);
+  f->dump_string("uri", uri);
+  f->dump_string("http_status", http_status);
+  f->dump_string("error_code", error_code);
+  f->dump_unsigned("bytes_sent", bytes_sent);
+  f->dump_unsigned("bytes_received", bytes_received);
+  f->dump_unsigned("obj_size", obj_size);
+  f->dump_stream("total_time") << total_time;
+  f->dump_string("user_agent", user_agent);
+  f->dump_string("referrer", referrer);
+  f->dump_string("bucket_id", bucket_id);
+  f->dump_string("trans_id", trans_id);
+  f->dump_unsigned("identity_type", identity_type);
+}

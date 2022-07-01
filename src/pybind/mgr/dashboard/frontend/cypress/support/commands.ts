@@ -2,13 +2,20 @@ declare global {
   namespace Cypress {
     interface Chainable<Subject> {
       login(): void;
+      logToConsole(message: string, optional?: any): void;
       text(): Chainable<string>;
     }
   }
 }
-
-import { Permissions } from '~/app/shared/models/permissions';
-
+// Disabling tslint rule since cypress-cucumber has
+// issues with absolute import paths.
+// This can be removed when
+// https://github.com/cypress-io/cypress-browserify-preprocessor/issues/53
+// is fixed.
+/* tslint:disable*/
+import { CdHelperClass } from '../../src/app/shared/classes/cd-helper.class';
+import { Permissions } from '../../src/app/shared/models/permissions';
+/* tslint:enable*/
 let auth: any;
 
 const fillAuth = () => {
@@ -20,14 +27,14 @@ const fillAuth = () => {
 };
 
 Cypress.Commands.add('login', () => {
-  const username = Cypress.env('LOGIN_USER') || 'admin';
-  const password = Cypress.env('LOGIN_PWD') || 'admin';
+  const username = Cypress.env('LOGIN_USER');
+  const password = Cypress.env('LOGIN_PWD');
 
   if (auth === undefined) {
     cy.request({
       method: 'POST',
       url: 'api/auth',
-      headers: { Accept: 'application/vnd.ceph.api.v1.0+json' },
+      headers: { Accept: CdHelperClass.cdVersionHeader('1', '0') },
       body: { username: username, password: password }
     }).then((resp) => {
       auth = resp.body;
@@ -42,6 +49,11 @@ Cypress.Commands.add('login', () => {
   }
 });
 
-Cypress.Commands.add('text', { prevSubject: true }, (subject) => {
+// @ts-ignore
+Cypress.Commands.add('text', { prevSubject: true }, (subject: any) => {
   return subject.text();
+});
+
+Cypress.Commands.add('logToConsole', (message: string, optional?: any) => {
+  cy.task('log', { message: `(${new Date().toISOString()}) ${message}`, optional });
 });

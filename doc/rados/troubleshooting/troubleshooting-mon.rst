@@ -1,3 +1,5 @@
+.. _rados-troubleshooting-mon:
+
 =================================
  Troubleshooting Monitors
 =================================
@@ -29,7 +31,7 @@ Initial Troubleshooting
 **Are you able to reach to the mon nodes?**
 
   Doesn't happen often, but sometimes there are ``iptables`` rules that
-  block accesse to mon nodes or TCP ports. These may be leftovers from
+  block access to mon nodes or TCP ports. These may be leftovers from
   prior stress-testing or rule development. Try SSHing into
   the server and, if that succeeds, try connecting to the monitor's ports
   (``tcp/3300`` and ``tcp/6789``) using a ``telnet``, ``nc``, or similar tools.
@@ -359,7 +361,7 @@ Can I increase the maximum tolerated clock skew?
   The maximum tolerated clock skew is configurable via the
   ``mon-clock-drift-allowed`` option, and
   although you *CAN* you almost certainly *SHOULDN'T*. The clock skew mechanism
-  is in place because clock-skewed monitors are liely to misbehave. We, as
+  is in place because clock-skewed monitors are likely to misbehave. We, as
   developers and QA aficionados, are comfortable with the current default
   value, as it will alert the user before the monitors get out hand. Changing
   this value may cause unforeseen effects on the
@@ -524,7 +526,7 @@ Reaching out for help
 ----------------------
 
 You can find us on IRC at #ceph and #ceph-devel at OFTC (server irc.oftc.net)
-and on ``ceph-devel@vger.kernel.org`` and ``ceph-users@lists.ceph.com``. Make
+and on ``dev@ceph.io`` and ``ceph-users@lists.ceph.com``. Make
 sure you have grabbed your logs and have them ready if someone asks: the faster
 the interaction and lower the latency in response, the better chances everyone's
 time is optimized.
@@ -555,8 +557,8 @@ related to your issue. This may not be an easy task for someone unfamiliar
 with troubleshooting Ceph. For most situations, setting the following options
 on your monitors will be enough to pinpoint a potential source of the issue::
 
-      debug mon = 10
-      debug ms = 1
+      debug_mon = 10
+      debug_ms = 1
 
 If we find that these debug levels are not enough, there's a chance we may
 ask you to raise them or even define other debug subsystems to obtain infos

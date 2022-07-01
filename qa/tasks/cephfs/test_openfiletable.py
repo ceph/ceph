@@ -62,7 +62,7 @@ class OpenFileTable(CephFSTestCase):
         
         # Open the file
         p = self.mount_a.open_background("omap_counter_test_file")
-        self.wait_until_true(lambda: self._check_oft_counter('omap_total_updates', 2), timeout=30)
+        self.wait_until_true(lambda: self._check_oft_counter('omap_total_updates', 2), timeout=120)
         
         perf_dump = self.fs.mds_asok(['perf', 'dump'])
         omap_total_updates_1 = perf_dump['oft']['omap_total_updates']
@@ -73,8 +73,8 @@ class OpenFileTable(CephFSTestCase):
         # Now close the file
         self.mount_a.kill_background(p)
         # Ensure that the file does not exist any more
-        self.wait_until_true(lambda: self._check_oft_counter('omap_total_removes', 1), timeout=30)
-        self.wait_until_true(lambda: self._check_oft_counter('omap_total_kv_pairs', 1), timeout=30)
+        self.wait_until_true(lambda: self._check_oft_counter('omap_total_removes', 1), timeout=120)
+        self.wait_until_true(lambda: self._check_oft_counter('omap_total_kv_pairs', 1), timeout=120)
 
         perf_dump = self.fs.mds_asok(['perf', 'dump'])
         omap_total_removes = perf_dump['oft']['omap_total_removes']

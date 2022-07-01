@@ -6,16 +6,10 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
-namespace seastar::alien {
-class instance;
-}
-
 class FSDriver final : public BlockDriver {
 public:
-  FSDriver(config_t config,
-	   seastar::alien::instance& alien)
-  : config(config),
-    alien(alien)
+  FSDriver(config_t config)
+  : config(config)
   {}
   ~FSDriver() final {}
 
@@ -42,7 +36,6 @@ public:
 private:
   size_t size = 0;
   const config_t config;
-  seastar::alien::instance& alien;
   std::unique_ptr<crimson::os::FuturizedStore> fs;
 
   struct pg_analogue_t {
@@ -62,7 +55,7 @@ private:
   offset_mapping_t map_offset(off_t offset);
 
   seastar::future<> mkfs();
-  void init();
+  seastar::future<> init();
 
   friend void populate_log(
     ceph::os::Transaction &,

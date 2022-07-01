@@ -18,6 +18,7 @@
 #include "rgw_multi.h"
 #include "rgw_compression.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone.h"
 #include "rgw_sal_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -76,6 +77,18 @@ static int process_completed(const AioResultList& completed, RawObjSet *written)
   return error.value_or(0);
 }
 
+void RadosWriter::add_write_hint(librados::ObjectWriteOperation& op) {
+  const rgw_obj obj = head_obj->get_obj();
+  const RGWObjStateManifest *sm = obj_ctx.get_state(obj);
+  const bool compressed = sm->state.compressed;
+  uint32_t alloc_hint_flags = 0;
+  if (compressed) {
+    alloc_hint_flags |= librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+  }
+
+  op.set_alloc_hint2(0, 0, alloc_hint_flags);
+}
+
 int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
 {
   stripe_obj = store->svc()->rados->obj(raw_obj);
@@ -90,6 +103,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     return 0;
   }
   librados::ObjectWriteOperation op;
+  add_write_hint(op);
   if (offset == 0) {
     op.write_full(data);
   } else {
@@ -106,6 +120,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
 
   librados::ObjectWriteOperation op;
   op.create(true); // exclusive create
+  add_write_hint(op);
   op.write_full(data);
 
   constexpr uint64_t id = 0; // unused
@@ -161,7 +176,7 @@ RadosWriter::~RadosWriter()
   if (need_to_remove_head) {
     std::string version_id;
     ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
-    int r = head_obj->delete_object(dpp, &obj_ctx, null_yield);
+    int r = head_obj->delete_object(dpp, null_yield);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
     }
@@ -290,11 +305,11 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  head_obj->set_atomic(&obj_ctx);
+  head_obj->set_atomic();
 
   RGWRados::Object op_target(store->getRados(),
-		  head_obj->get_bucket()->get_info(),
-		  obj_ctx, head_obj->get_obj());
+		  head_obj->get_bucket(),
+		  obj_ctx, head_obj.get());
   RGWRados::Object::Write obj_op(&op_target);
 
   /* some object types shouldn't be versioned, e.g., multipart parts */
@@ -429,8 +444,8 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   }
 
   RGWRados::Object op_target(store->getRados(),
-		  head_obj->get_bucket()->get_info(),
-		  obj_ctx, head_obj->get_obj());
+		  head_obj->get_bucket(),
+		  obj_ctx, head_obj.get());
   RGWRados::Object::Write obj_op(&op_target);
 
   op_target.set_versioning_disabled(true);
@@ -506,7 +521,7 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::sal::Data
 int AppendObjectProcessor::prepare(optional_yield y)
 {
   RGWObjState *astate;
-  int r = head_obj->get_obj_state(dpp, &obj_ctx, &astate, y);
+  int r = head_obj->get_obj_state(dpp, &astate, y);
   if (r < 0) {
     return r;
   }
@@ -558,7 +573,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
     if (iter != astate->attrset.end()) {
       tail_placement_rule.storage_class = iter->second.to_str();
     }
-    cur_manifest = &(*astate->manifest);
+    cur_manifest = dynamic_cast<rgw::sal::RadosObject*>(head_obj.get())->get_manifest();
     manifest.set_prefix(cur_manifest->get_prefix());
     astate->keep_tail = true;
   }
@@ -608,15 +623,15 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   if (r < 0) {
     return r;
   }
-  head_obj->set_atomic(&obj_ctx);
+  head_obj->set_atomic();
   RGWRados::Object op_target(store->getRados(),
-		  head_obj->get_bucket()->get_info(),
-		  obj_ctx, head_obj->get_obj());
+		  head_obj->get_bucket(),
+		  obj_ctx, head_obj.get());
   RGWRados::Object::Write obj_op(&op_target);
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);
   if (cur_manifest) {
-    cur_manifest->append(dpp, manifest, store->get_zone());
+    cur_manifest->append(dpp, manifest, store->svc()->zone->get_zonegroup(), store->svc()->zone->get_zone_params());
     obj_op.meta.manifest = cur_manifest;
   } else {
     obj_op.meta.manifest = &manifest;
@@ -639,6 +654,8 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   //calculate the etag
   if (!cur_etag.empty()) {
     MD5 hash;
+    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];

@@ -92,15 +92,18 @@ struct ceph_statx {
 /*
  * Compatibility macros until these defines make their way into glibc
  */
-#ifndef AT_NO_ATTR_SYNC
-#define AT_NO_ATTR_SYNC		0x4000 /* Don't sync attributes with the server */
+#ifndef AT_STATX_DONT_SYNC
+#define AT_STATX_SYNC_TYPE	0x6000
+#define AT_STATX_SYNC_AS_STAT	0x0000
+#define AT_STATX_FORCE_SYNC	0x2000
+#define AT_STATX_DONT_SYNC	0x4000 /* Don't sync attributes with the server */
 #endif
 
 /*
  * The statx interfaces only allow these flags. In order to allow us to add
  * others in the future, we disallow setting any that aren't recognized.
  */
-#define CEPH_REQ_FLAG_MASK		(AT_SYMLINK_NOFOLLOW|AT_NO_ATTR_SYNC)
+#define CEPH_REQ_FLAG_MASK		(AT_SYMLINK_NOFOLLOW|AT_STATX_DONT_SYNC)
 
 /* fallocate mode flags */
 #ifndef FALLOC_FL_KEEP_SIZE
@@ -110,28 +113,78 @@ struct ceph_statx {
 #define FALLOC_FL_PUNCH_HOLE 0x02
 #endif
 
-/* delegation recalls */
+/** ceph_deleg_cb_t: Delegation recalls
+ *
+ * Called when there is an outstanding Delegation and there is conflicting
+ * access, either locally or via cap activity.
+ * @fh: open filehandle
+ * @priv: private info registered when delegation was acquired
+ */
 typedef void (*ceph_deleg_cb_t)(Fh *fh, void *priv);
 
-/* inode data/metadata invalidation */
+/**
+ * client_ino_callback_t: Inode data/metadata invalidation
+ *
+ * Called when the client wants to invalidate the cached data for a range
+ * in the file.
+ * @handle: client callback handle
+ * @ino: vino of inode to be invalidated
+ * @off: starting offset of content to be invalidated
+ * @len: length of region to invalidate
+ */
 typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino,
 	      int64_t off, int64_t len);
 
-/* dentry invalidation */
+/**
+ * client_dentry_callback_t: Dentry invalidation
+ *
+ * Called when the client wants to purge a dentry from its cache.
+ * @handle: client callback handle
+ * @dirino: vino of directory that contains dentry to be invalidate
+ * @ino: vino of inode attached to dentry to be invalidated
+ * @name: name of dentry to be invalidated
+ * @len: length of @name
+ */
 typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, const char *name,
 					 size_t len);
 
-/* remount entire fs */
+/**
+ * client_remount_callback_t: Remount entire fs
+ *
+ * Called when the client needs to purge the dentry cache and the application
+ * doesn't have a way to purge an individual dentry. Mostly used for ceph-fuse
+ * on older kernels.
+ * @handle: client callback handle
+ */
+
 typedef int (*client_remount_callback_t)(void *handle);
 
-/* lock request interrupted */
+/**
+ * client_switch_interrupt_callback_t: Lock request interrupted
+ *
+ * Called before file lock request to set the interrupt handler while waiting
+ * After the wait, called with "data" set to NULL pointer.
+ * @handle: client callback handle
+ * @data: opaque data passed to interrupt before call, NULL pointer after.
+ */
 typedef void (*client_switch_interrupt_callback_t)(void *handle, void *data);
 
-/* fetch umask of actor */
+/**
+ * client_umask_callback_t: Fetch umask of actor
+ *
+ * Called when the client needs the umask of the requestor.
+ * @handle: client callback handle
+ */
 typedef mode_t (*client_umask_callback_t)(void *handle);
 
-/* request that application release Inode references */
+/**
+ * client_ino_release_t: Request that application release Inode references
+ *
+ * Called when the MDS wants to trim caps and Inode records.
+ * @handle: client callback handle
+ * @ino: vino of Inode being released
+ */
 typedef void (*client_ino_release_t)(void *handle, vinodeno_t ino);
 
 /*

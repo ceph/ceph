@@ -1,11 +1,14 @@
 # flake8: noqa
 import json
+import re
+
 import yaml
 
 import pytest
 
 from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
-    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec
+    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec, AlertManagerSpec, \
+    CustomContainerSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
 
@@ -193,8 +196,9 @@ def test_osd_unmanaged():
     dg_spec = ServiceSpec.from_json(osd_spec)
     assert dg_spec.unmanaged == True
 
-def test_yaml():
-    y = """service_type: crash
+
+@pytest.mark.parametrize("y",
+"""service_type: crash
 service_name: crash
 placement:
   host_pattern: '*'
@@ -233,14 +237,161 @@ spec:
   objectstore: bluestore
   wal_devices:
     model: NVME-QQQQ-987
-"""
+---
+service_type: alertmanager
+service_name: alertmanager
+spec:
+  port: 1234
+  user_data:
+    default_webhook_urls:
+    - foo
+---
+service_type: grafana
+service_name: grafana
+spec:
+  port: 1234
+---
+service_type: grafana
+service_name: grafana
+spec:
+  initial_admin_password: secure
+  port: 1234
+---
+service_type: ingress
+service_id: rgw.foo
+service_name: ingress.rgw.foo
+placement:
+  hosts:
+  - host1
+  - host2
+  - host3
+spec:
+  backend_service: rgw.foo
+  frontend_port: 8080
+  monitor_port: 8081
+  virtual_ip: 192.168.20.1/24
+---
+service_type: nfs
+service_id: mynfs
+service_name: nfs.mynfs
+spec:
+  port: 1234
+---
+service_type: iscsi
+service_id: iscsi
+service_name: iscsi.iscsi
+networks:
+- ::0/8
+spec:
+  api_user: api_user
+  pool: pool
+  trusted_ip_list:
+  - ::1
+  - ::2
+---
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
 
-    for y in y.split('---\n'):
-        data = yaml.safe_load(y)
-        object = ServiceSpec.from_json(data)
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V2c
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  auth_protocol: MD5
+  credentials:
+    snmp_v3_auth_password: mypassword
+    snmp_v3_auth_username: myuser
+  engine_id: 8000C53F00000000
+  port: 9464
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_password: mypassword
+    snmp_v3_auth_username: myuser
+    snmp_v3_priv_password: mysecret
+  engine_id: 8000C53F00000000
+  privacy_protocol: AES
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+""".split('---\n'))
+def test_yaml(y):
+    data = yaml.safe_load(y)
+    object = ServiceSpec.from_json(data)
 
-        assert yaml.dump(object) == y
-        assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+    assert yaml.dump(object) == y
+    assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+
+
+def test_alertmanager_spec_1():
+    spec = AlertManagerSpec()
+    assert spec.service_type == 'alertmanager'
+    assert isinstance(spec.user_data, dict)
+    assert len(spec.user_data.keys()) == 0
+    assert spec.get_port_start() == [9093, 9094]
+
+
+def test_alertmanager_spec_2():
+    spec = AlertManagerSpec(user_data={'default_webhook_urls': ['foo']})
+    assert isinstance(spec.user_data, dict)
+    assert 'default_webhook_urls' in spec.user_data.keys()
+
+
+
+def test_repr():
+    val = """ServiceSpec.from_json(yaml.safe_load('''service_type: crash
+service_name: crash
+placement:
+  count: 42
+'''))"""
+    obj = eval(val)
+    assert obj.service_type == 'crash'
+    assert val == repr(obj)
 
 @pytest.mark.parametrize("spec1, spec2, eq",
                          [
@@ -324,7 +475,9 @@ def test_service_name(s_type, s_id, s_name):
 @pytest.mark.parametrize(
     's_type,s_id',
     [
-        ('mds', 's:id'),
+        ('mds', 's:id'), # MDS service_id cannot contain an invalid char ':'
+        ('mds', '1abc'), # MDS service_id cannot start with a numeric digit
+        ('mds', ''),     # MDS service_id cannot be empty
         ('rgw', '*s_id'),
         ('nfs', 's/id'),
         ('iscsi', 's@id'),
@@ -335,3 +488,379 @@ def test_service_id_raises_invalid_char(s_type, s_id):
     with pytest.raises(SpecValidationError):
         spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
         spec.validate()
+
+def test_custom_container_spec():
+    spec = CustomContainerSpec(service_id='hello-world',
+                               image='docker.io/library/hello-world:latest',
+                               entrypoint='/usr/bin/bash',
+                               uid=1000,
+                               gid=2000,
+                               volume_mounts={'foo': '/foo'},
+                               args=['--foo'],
+                               envs=['FOO=0815'],
+                               bind_mounts=[
+                                   [
+                                       'type=bind',
+                                       'source=lib/modules',
+                                       'destination=/lib/modules',
+                                       'ro=true'
+                                   ]
+                               ],
+                               ports=[8080, 8443],
+                               dirs=['foo', 'bar'],
+                               files={
+                                   'foo.conf': 'foo\nbar',
+                                   'bar.conf': ['foo', 'bar']
+                               })
+    assert spec.service_type == 'container'
+    assert spec.entrypoint == '/usr/bin/bash'
+    assert spec.uid == 1000
+    assert spec.gid == 2000
+    assert spec.volume_mounts == {'foo': '/foo'}
+    assert spec.args == ['--foo']
+    assert spec.envs == ['FOO=0815']
+    assert spec.bind_mounts == [
+        [
+            'type=bind',
+            'source=lib/modules',
+            'destination=/lib/modules',
+            'ro=true'
+        ]
+    ]
+    assert spec.ports == [8080, 8443]
+    assert spec.dirs == ['foo', 'bar']
+    assert spec.files == {
+        'foo.conf': 'foo\nbar',
+        'bar.conf': ['foo', 'bar']
+    }
+
+
+def test_custom_container_spec_config_json():
+    spec = CustomContainerSpec(service_id='foo', image='foo', dirs=None)
+    config_json = spec.config_json()
+    for key in ['entrypoint', 'uid', 'gid', 'bind_mounts', 'dirs']:
+        assert key not in config_json
+
+
+def test_ingress_spec():
+    yaml_str = """service_type: ingress
+service_id: rgw.foo
+placement:
+  hosts:
+    - host1
+    - host2
+    - host3
+spec:
+  virtual_ip: 192.168.20.1/24
+  backend_service: rgw.foo
+  frontend_port: 8080
+  monitor_port: 8081
+"""
+    yaml_file = yaml.safe_load(yaml_str)
+    spec = ServiceSpec.from_json(yaml_file)
+    assert spec.service_type == "ingress"
+    assert spec.service_id == "rgw.foo"
+    assert spec.virtual_ip == "192.168.20.1/24"
+    assert spec.frontend_port == 8080
+    assert spec.monitor_port == 8081
+
+
+@pytest.mark.parametrize("y, error_match", [
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count_per_host: "twelve"
+""", "count-per-host must be a numeric value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count_per_host: "2"
+""", "count-per-host must be an integer value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count_per_host: 7.36
+""", "count-per-host must be an integer value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count: "fifteen"
+""", "num/count must be a numeric value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count: "4"
+""", "num/count must be an integer value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count: 7.36
+""", "num/count must be an integer value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count: 0
+""", "num/count must be >= 1",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count_per_host: 0
+""", "count-per-host must be >= 1",),
+    ("""
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_password: mypassword
+    snmp_v3_auth_username: myuser
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  engine_id: 8000c53f0000000000
+  privacy_protocol: WEIRD
+  snmp_destination: 192.168.122.1:162
+  auth_protocol: BIZARRE
+  snmp_version: V3
+""", "auth_protocol unsupported. Must be one of MD5, SHA"),
+    ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V4
+""", 'snmp_version unsupported. Must be one of V2c, V3'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+  port: 9464
+  snmp_destination: 192.168.1.42:162
+""", re.escape('Missing SNMP version (snmp_version)')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+  port: 9464
+  auth_protocol: wah
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+""", 'auth_protocol unsupported. Must be one of MD5, SHA'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: weewah
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+""", 'privacy_protocol unsupported. Must be one of DES, AES'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+""", 'Must provide an engine_id for SNMP V3 notifications'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+  port: 9464
+  snmp_destination: 192.168.1.42
+  snmp_version: V2c
+""", re.escape('SNMP destination (snmp_destination) type (IPv4) is invalid. Must be either: IPv4:Port, Name:Port')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: bogus
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+  port: 9464
+  auth_protocol: SHA
+  engine_id: 8000C53F0000000000
+  snmp_version: V3
+""", re.escape('SNMP destination (snmp_destination) must be provided')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53F0000000000
+  snmp_destination: my.imaginary.snmp-host
+  snmp_version: V3
+""", re.escape('SNMP destination (snmp_destination) is invalid: DNS lookup failed')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53F0000000000
+  snmp_destination: 10.79.32.10:fred
+  snmp_version: V3
+""", re.escape('SNMP destination (snmp_destination) is invalid: Port must be numeric')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53
+  snmp_destination: 10.79.32.10:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53DOH!
+  snmp_destination: 10.79.32.10:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53FCA7344403DC611EC9B985254002537A6C53FCA7344403DC6112537A60
+  snmp_destination: 10.79.32.10:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53F00000
+  snmp_destination: 10.79.32.10:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
+    ])
+def test_service_spec_validation_error(y, error_match):
+    data = yaml.safe_load(y)
+    with pytest.raises(SpecValidationError) as err:
+        specObj = ServiceSpec.from_json(data)
+    assert err.match(error_match)

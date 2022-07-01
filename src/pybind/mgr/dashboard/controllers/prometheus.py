@@ -8,10 +8,10 @@ import requests
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..settings import Settings
-from . import ApiController, BaseController, Controller, ControllerDoc, Endpoint, RESTController
+from . import APIDoc, APIRouter, BaseController, Endpoint, RESTController, Router
 
 
-@Controller('/api/prometheus_receiver', secure=False)
+@Router('/api/prometheus_receiver', secure=False)
 class PrometheusReceiver(BaseController):
     """
     The receiver is needed in order to receive alert notifications (reports)
@@ -51,7 +51,12 @@ class PrometheusRESTController(RESTController):
                 "Could not reach {}'s API on {}".format(api_name, base_url),
                 http_status_code=404,
                 component='prometheus')
-        content = json.loads(response.content)
+        try:
+            content = json.loads(response.content, strict=False)
+        except json.JSONDecodeError as e:
+            raise DashboardException(
+                "Error parsing Prometheus Alertmanager response: {}".format(e.msg),
+                component='prometheus')
         if content['status'] == 'success':
             if 'data' in content:
                 return content['data']
@@ -59,8 +64,8 @@ class PrometheusRESTController(RESTController):
         raise DashboardException(content, http_status_code=400, component='prometheus')
 
 
-@ApiController('/prometheus', Scope.PROMETHEUS)
-@ControllerDoc("Prometheus Management API", "Prometheus")
+@APIRouter('/prometheus', Scope.PROMETHEUS)
+@APIDoc("Prometheus Management API", "Prometheus")
 class Prometheus(PrometheusRESTController):
     def list(self, **params):
         return self.alert_proxy('GET', '/alerts', params)
@@ -82,8 +87,8 @@ class Prometheus(PrometheusRESTController):
         return self.alert_proxy('DELETE', '/silence/' + s_id) if s_id else None
 
 
-@ApiController('/prometheus/notifications', Scope.PROMETHEUS)
-@ControllerDoc("Prometheus Notifications Management API", "PrometheusNotifications")
+@APIRouter('/prometheus/notifications', Scope.PROMETHEUS)
+@APIDoc("Prometheus Notifications Management API", "PrometheusNotifications")
 class PrometheusNotifications(RESTController):
 
     def list(self, **params):

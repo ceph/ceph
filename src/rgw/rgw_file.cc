@@ -754,6 +754,7 @@ namespace rgw {
         rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL))); 
 
 	get<0>(mkr) = rgw_fh;
+	rgw_fh->file_ondisk_version = 0; // inital version
 	rgw_fh->mtx.unlock();
       } else
 	rc = -EIO;
@@ -1198,7 +1199,7 @@ namespace rgw {
 
     RGWSetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
-    rgw_fh->encode_attrs(ux_key, ux_attrs);
+    rgw_fh->encode_attrs(ux_key, ux_attrs, false);
 
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
@@ -1432,12 +1433,23 @@ namespace rgw {
   }
 
   void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
-				   ceph::buffer::list& ux_attrs1)
+				   ceph::buffer::list& ux_attrs1,
+				   bool inc_ov)
   {
     using ceph::encode;
     fh_key fhk(this->fh.fh_hk);
     encode(fhk, ux_key1);
+    bool need_ondisk_version =
+      (fh.fh_type == RGW_FS_TYPE_FILE ||
+       fh.fh_type == RGW_FS_TYPE_SYMBOLIC_LINK);
+    if (need_ondisk_version &&
+	file_ondisk_version < 0) {
+      file_ondisk_version = 0;
+    }
     encode(*this, ux_attrs1);
+    if (need_ondisk_version && inc_ov) {
+      file_ondisk_version++;
+    }
   } /* RGWFileHandle::encode_attrs */
 
   DecodeAttrsResult RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
@@ -1450,8 +1462,35 @@ namespace rgw {
     decode(fhk, bl_iter_key1);
     get<0>(dar) = true;
 
+    // decode to a temporary file handle which may not be
+    // copied to the current file handle if its file_ondisk_version
+    // is not newer
+    RGWFileHandle tmp_fh(fs);
+    tmp_fh.fh.fh_type = fh.fh_type;
     auto bl_iter_unix1 = ux_attrs1->cbegin();
-    decode(*this, bl_iter_unix1);
+    decode(tmp_fh, bl_iter_unix1);
+
+    fh.fh_type = tmp_fh.fh.fh_type;
+    // for file handles that represent files and whose file_ondisk_version
+    // is newer, no updates are need, otherwise, go updating the current
+    // file handle
+    if (!((fh.fh_type == RGW_FS_TYPE_FILE ||
+	    fh.fh_type == RGW_FS_TYPE_SYMBOLIC_LINK) &&
+	  file_ondisk_version >= tmp_fh.file_ondisk_version)) {
+      // make sure the following "encode" always encode a greater version
+      file_ondisk_version = tmp_fh.file_ondisk_version + 1;
+      state.dev = tmp_fh.state.dev;
+      state.size = tmp_fh.state.size;
+      state.nlink = tmp_fh.state.nlink;
+      state.owner_uid = tmp_fh.state.owner_uid;
+      state.owner_gid = tmp_fh.state.owner_gid;
+      state.unix_mode = tmp_fh.state.unix_mode;
+      state.ctime = tmp_fh.state.ctime;
+      state.mtime = tmp_fh.state.mtime;
+      state.atime = tmp_fh.state.atime;
+      state.version = tmp_fh.state.version;
+    }
+
     if (this->state.version < 2) {
       get<1>(dar) = true;
     }
@@ -1781,14 +1820,13 @@ namespace rgw {
   }
 
   int RGWWriteRequest::exec_start() {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
 
     /* Object needs a bucket from this point */
     state->object->set_bucket(state->bucket.get());
 
     auto compression_type =
-      get_store()->get_zone()->get_params().get_compression_type(
-	state->bucket->get_placement_rule());
+      get_store()->get_compression_type(state->bucket->get_placement_rule());
 
     /* not obviously supportable */
     ceph_assert(! dlo_manifest);
@@ -1827,7 +1865,7 @@ namespace rgw {
       }
     }
     processor = get_store()->get_atomic_writer(this, state->yield, state->object->clone(),
-					 state->bucket_owner.get_id(), *state->obj_ctx,
+					 state->bucket_owner.get_id(),
 					 &state->dest_placement, 0, state->req_id);
 
     op_ret = processor->prepare(state->yield);
@@ -1854,7 +1892,7 @@ namespace rgw {
 
   int RGWWriteRequest::exec_continue()
   {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     op_ret = 0;
 
     /* check guards (e.g., contig write) */
@@ -1866,7 +1904,7 @@ namespace rgw {
       return -EIO;
     }
 
-    op_ret = state->bucket->check_quota(this, user_quota, bucket_quota, real_ofs, null_yield, true);
+    op_ret = state->bucket->check_quota(this, quota, real_ofs, null_yield, true);
     /* max_size exceed */
     if (op_ret < 0)
       return -EIO;
@@ -1892,7 +1930,7 @@ namespace rgw {
     map<string, string>::iterator iter;
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    struct req_state* state = get_state();
+    req_state* state = get_state();
 
     size_t osize = rgw_fh->get_size();
     struct timespec octime = rgw_fh->get_ctime();
@@ -1908,7 +1946,7 @@ namespace rgw {
       goto done;
     }
 
-    op_ret = state->bucket->check_quota(this, user_quota, bucket_quota, state->obj_size, null_yield, true);
+    op_ret = state->bucket->check_quota(this, quota, state->obj_size, null_yield, true);
     /* max_size exceed */
     if (op_ret < 0) {
       goto done;
@@ -2043,10 +2081,21 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
 {
   int rc = 0;
 
-  /* stash access data for "mount" */
-  RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
-				  sec_key, root);
-  ceph_assert(new_fs);
+  /* if the config has no value for path/root, choose "/" */
+  RGWLibFS* new_fs{nullptr};
+  if(root &&
+     (!strcmp(root, ""))) {
+    /* stash access data for "mount" */
+    new_fs = new RGWLibFS(
+      static_cast<CephContext*>(rgw), uid, acc_key, sec_key, "/");
+  }
+  else {
+    /* stash access data for "mount" */
+    new_fs = new RGWLibFS(
+      static_cast<CephContext*>(rgw), uid, acc_key, sec_key, root);
+  }
+
+  ceph_assert(new_fs); /* should we be using ceph_assert? */
 
   const DoutPrefix dp(rgwlib.get_store()->ctx(), dout_subsys, "rgw mount2: ");
   rc = new_fs->authorize(&dp, rgwlib.get_store());

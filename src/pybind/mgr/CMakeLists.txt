@@ -13,7 +13,7 @@ if(WITH_MGR_ROOK_CLIENT)
 endif()
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(mgr ${CMAKE_CURRENT_SOURCE_DIR} TOX_ENVS py3 mypy flake8 jinjalint nooptional)
+  add_tox_test(mgr ${CMAKE_CURRENT_SOURCE_DIR} TOX_ENVS py3 py37 mypy flake8 jinjalint nooptional)
 endif()
 
 # Location needs to match default setting for mgr_module_path, currently:
@@ -58,5 +58,5 @@ set(mgr_modules
 install(DIRECTORY ${mgr_modules}
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr
   ${mgr_module_install_excludes})
-install(FILES mgr_module.py mgr_util.py
+install(FILES mgr_module.py mgr_util.py object_format.py
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr)

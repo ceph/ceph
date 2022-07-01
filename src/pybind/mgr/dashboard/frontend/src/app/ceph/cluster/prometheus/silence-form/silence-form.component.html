@@ -63,9 +63,7 @@
         novalidate>
     <div class="card">
       <div class="card-header">
-        <span i18n="@@formTitle">
-          {{ action | titlecase }} {{ resource | upperFirst }}
-        </span>
+        <span i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
         <cd-helper *ngIf="edit"
                    i18n>Editing a silence will expire the old silence and recreate it as a new silence</cd-helper>
       </div>

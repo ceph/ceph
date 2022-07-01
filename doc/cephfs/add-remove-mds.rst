@@ -1,3 +1,10 @@
+.. note::
+   It is highly recommended to use :doc:`/cephadm/index` or another Ceph
+   orchestrator for setting up the ceph cluster. Use this approach only if you
+   are setting up the ceph cluster manually. If one still intends to use the
+   manual way for deploying MDS daemons, :doc:`/cephadm/services/mds/` can
+   also be used.
+
 ============================
  Deploying Metadata Servers
 ============================
@@ -62,7 +69,7 @@ means limiting its cache size.
 Adding an MDS
 =============
 
-#. Create an mds data point ``/var/lib/ceph/mds/ceph-${id}``. The daemon only uses this directory to store its keyring.
+#. Create an mds directory ``/var/lib/ceph/mds/ceph-${id}``. The daemon only uses this directory to store its keyring.
 
 #. Create the authentication key, if you use CephX: ::
 

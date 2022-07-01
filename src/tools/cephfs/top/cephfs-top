@@ -6,6 +6,8 @@ import curses
 import errno
 import json
 import signal
+import time
+import math
 
 from collections import OrderedDict
 from datetime import datetime
@@ -28,6 +30,8 @@ class MetricType(Enum):
     METRIC_TYPE_NONE = 0
     METRIC_TYPE_PERCENTAGE = 1
     METRIC_TYPE_LATENCY = 2
+    METRIC_TYPE_SIZE = 3
+    METRIC_TYPE_STDEV = 4
 
 
 FS_TOP_PROG_STR = 'cephfs-top'
@@ -51,6 +55,11 @@ MAIN_WINDOW_TOP_LINE_ITEMS_START = [ITEMS_PAD,
                                     FS_TOP_MAIN_WINDOW_COL_MNT_ROOT]
 MAIN_WINDOW_TOP_LINE_ITEMS_END = [FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR]
 
+MAIN_WINDOW_TOP_LINE_METRICS_LEGACY = ["READ_LATENCY",
+                                       "WRITE_LATENCY",
+                                       "METADATA_LATENCY"
+                                       ]
+
 # adjust this map according to stats version and maintain order
 # as emitted by mgr/stast
 MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
@@ -62,6 +71,14 @@ MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
     ("OPENED_FILES", MetricType.METRIC_TYPE_NONE),
     ("PINNED_ICAPS", MetricType.METRIC_TYPE_NONE),
     ("OPENED_INODES", MetricType.METRIC_TYPE_NONE),
+    ("READ_IO_SIZES", MetricType.METRIC_TYPE_SIZE),
+    ("WRITE_IO_SIZES", MetricType.METRIC_TYPE_SIZE),
+    ("AVG_READ_LATENCY", MetricType.METRIC_TYPE_LATENCY),
+    ("STDEV_READ_LATENCY", MetricType.METRIC_TYPE_STDEV),
+    ("AVG_WRITE_LATENCY", MetricType.METRIC_TYPE_LATENCY),
+    ("STDEV_WRITE_LATENCY", MetricType.METRIC_TYPE_STDEV),
+    ("AVG_METADATA_LATENCY", MetricType.METRIC_TYPE_LATENCY),
+    ("STDEV_METADATA_LATENCY", MetricType.METRIC_TYPE_STDEV),
 ])
 MGR_STATS_COUNTERS = list(MAIN_WINDOW_TOP_LINE_METRICS.keys())
 
@@ -79,6 +96,10 @@ CLIENT_METADATA_VALID_METRICS_KEY = "valid_metrics"
 GLOBAL_METRICS_KEY = "global_metrics"
 GLOBAL_COUNTERS_KEY = "global_counters"
 
+last_time = time.time()
+last_read_size = {}
+last_write_size = {}
+
 
 def calc_perc(c):
     if c[0] == 0 and c[1] == 0:
@@ -87,7 +108,33 @@ def calc_perc(c):
 
 
 def calc_lat(c):
-    return round(c[0] + c[1] / 1000000000, 2)
+    return round(c[0] * 1000 + c[1] / 1000000, 2)
+
+
+def calc_stdev(c):
+    stdev = 0.0
+    if c[1] > 1:
+        stdev = math.sqrt(c[0] / (c[1] - 1)) / 1000000
+    return round(stdev, 2)
+
+
+# in MB
+def calc_size(c):
+    return round(c[1] / (1024 * 1024), 2)
+
+
+# in MB
+def calc_avg_size(c):
+    if c[0] == 0:
+        return 0.0
+    return round(c[1] / (c[0] * 1024 * 1024), 2)
+
+
+# in MB/s
+def calc_speed(size, duration):
+    if duration == 0:
+        return 0.0
+    return round(size / (duration * 1024 * 1024), 2)
 
 
 def wrap(s, sl):
@@ -197,6 +244,22 @@ class FSTop(object):
             return "oicaps"
         if item == "OPENED_INODES":
             return "oinodes"
+        if item == "READ_IO_SIZES":
+            return "rtio"
+        if item == "WRITE_IO_SIZES":
+            return "wtio"
+        if item == 'AVG_READ_LATENCY':
+            return 'rlatavg'
+        if item == 'STDEV_READ_LATENCY':
+            return 'rlatsd'
+        if item == 'AVG_WRITE_LATENCY':
+            return 'wlatavg'
+        if item == 'STDEV_WRITE_LATENCY':
+            return 'wlatsd'
+        if item == 'AVG_METADATA_LATENCY':
+            return 'mlatavg'
+        if item == 'STDEV_METADATA_LATENCY':
+            return 'mlatsd'
         else:
             # return empty string for none type
             return ''
@@ -205,7 +268,36 @@ class FSTop(object):
         if typ == MetricType.METRIC_TYPE_PERCENTAGE:
             return "(%)"
         elif typ == MetricType.METRIC_TYPE_LATENCY:
-            return "(s)"
+            return "(ms)"
+        elif typ == MetricType.METRIC_TYPE_SIZE:
+            return "(MB)"
+        elif typ == MetricType.METRIC_TYPE_STDEV:
+            return "(ms)"
+        else:
+            # return empty string for none type
+            return ''
+
+    def avg_items(self, item):
+        if item == "READ_IO_SIZES":
+            return "raio"
+        if item == "WRITE_IO_SIZES":
+            return "waio"
+        else:
+            # return empty string for none type
+            return ''
+
+    def speed_items(self, item):
+        if item == "READ_IO_SIZES":
+            return "rsp"
+        if item == "WRITE_IO_SIZES":
+            return "wsp"
+        else:
+            # return empty string for none type
+            return ''
+
+    def speed_mtype(self, typ):
+        if typ == MetricType.METRIC_TYPE_SIZE:
+            return "(MB/s)"
         else:
             # return empty string for none type
             return ''
@@ -225,11 +317,34 @@ class FSTop(object):
             xp += nlen
 
         for item, typ in MAIN_WINDOW_TOP_LINE_METRICS.items():
+            if item in MAIN_WINDOW_TOP_LINE_METRICS_LEGACY:
+                continue
             it = f'{self.items(item)}{self.mtype(typ)}'
             heading.append(it)
             nlen = len(it) + len(ITEMS_PAD)
             x_coord_map[item] = (xp, nlen)
             xp += nlen
+
+            if item == "READ_IO_SIZES" or item == "WRITE_IO_SIZES":
+                # average io sizes
+                it = f'{self.avg_items(item)}{self.mtype(typ)}'
+                heading.append(it)
+                nlen = len(it) + len(ITEMS_PAD)
+                if item == "READ_IO_SIZES":
+                    x_coord_map["READ_IO_AVG"] = (xp, nlen)
+                if item == "WRITE_IO_SIZES":
+                    x_coord_map["WRITE_IO_AVG"] = (xp, nlen)
+                xp += nlen
+
+                # io speeds
+                it = f'{self.speed_items(item)}{self.speed_mtype(typ)}'
+                heading.append(it)
+                nlen = len(it) + len(ITEMS_PAD)
+                if item == "READ_IO_SIZES":
+                    x_coord_map["READ_IO_SPEED"] = (xp, nlen)
+                if item == "WRITE_IO_SIZES":
+                    x_coord_map["WRITE_IO_SPEED"] = (xp, nlen)
+                xp += nlen
 
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_END:
             heading.append(item)
@@ -254,6 +369,11 @@ class FSTop(object):
         return True
 
     def refresh_client(self, client_id, metrics, counters, client_meta, x_coord_map, y_coord):
+        global last_time
+        size = 0
+        cur_time = time.time()
+        duration = cur_time - last_time
+        last_time = cur_time
         remaining_hlen = self.width - 1
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_START:
             coord = x_coord_map[item]
@@ -279,7 +399,11 @@ class FSTop(object):
                 return
 
         cidx = 0
+        client_id = x_coord_map[FS_TOP_MAIN_WINDOW_COL_CLIENT_ID]
         for item in counters:
+            if item in MAIN_WINDOW_TOP_LINE_METRICS_LEGACY:
+                cidx += 1
+                continue
             coord = x_coord_map[item]
             hlen = coord[1] - len(ITEMS_PAD)
             hlen = min(hlen, remaining_hlen)
@@ -288,12 +412,59 @@ class FSTop(object):
             else:
                 remaining_hlen -= coord[1]
             m = metrics[cidx]
-            typ = MAIN_WINDOW_TOP_LINE_METRICS[MGR_STATS_COUNTERS[cidx]]
+            key = MGR_STATS_COUNTERS[cidx]
+            typ = MAIN_WINDOW_TOP_LINE_METRICS[key]
             if item.lower() in client_meta.get(CLIENT_METADATA_VALID_METRICS_KEY, []):
                 if typ == MetricType.METRIC_TYPE_PERCENTAGE:
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_perc(m)}', hlen)
                 elif typ == MetricType.METRIC_TYPE_LATENCY:
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_lat(m)}', hlen)
+                elif typ == MetricType.METRIC_TYPE_STDEV:
+                    self.mainw.addnstr(y_coord, coord[0], f'{calc_stdev(m)}', hlen)
+                elif typ == MetricType.METRIC_TYPE_SIZE:
+                    self.mainw.addnstr(y_coord, coord[0], f'{calc_size(m)}', hlen)
+
+                    # average io sizes
+                    if remaining_hlen == 0:
+                        return
+                    if key == "READ_IO_SIZES":
+                        coord = x_coord_map["READ_IO_AVG"]
+                    elif key == "WRITE_IO_SIZES":
+                        coord = x_coord_map["WRITE_IO_AVG"]
+                    hlen = coord[1] - len(ITEMS_PAD)
+                    hlen = min(hlen, remaining_hlen)
+                    if remaining_hlen < coord[1]:
+                        remaining_hlen = 0
+                    else:
+                        remaining_hlen -= coord[1]
+                    self.mainw.addnstr(y_coord, coord[0], f'{calc_avg_size(m)}', hlen)
+
+                    # io speeds
+                    if remaining_hlen == 0:
+                        return
+                    if key == "READ_IO_SIZES":
+                        coord = x_coord_map["READ_IO_SPEED"]
+                    elif key == "WRITE_IO_SIZES":
+                        coord = x_coord_map["WRITE_IO_SPEED"]
+                    hlen = coord[1] - len(ITEMS_PAD)
+                    hlen = min(hlen, remaining_hlen)
+                    if remaining_hlen < coord[1]:
+                        remaining_hlen = 0
+                    else:
+                        remaining_hlen -= coord[1]
+                    if key == "READ_IO_SIZES":
+                        global last_read_size
+                        last_size = last_read_size.get(client_id, 0)
+                        size = m[1] - last_size
+                        last_read_size[client_id] = m[1]
+                    if key == "WRITE_IO_SIZES":
+                        global last_write_size
+                        last_size = last_write_size.get(client_id, 0)
+                        size = m[1] - last_size
+                        last_write_size[client_id] = m[1]
+                    self.mainw.addnstr(y_coord, coord[0],
+                                       f'{calc_speed(size, duration)}',
+                                       hlen)
                 else:
                     # display 0th element from metric tuple
                     self.mainw.addnstr(y_coord, coord[0], f'{m[0]}', hlen)
@@ -416,8 +587,8 @@ if __name__ == '__main__':
     def float_greater_than(x):
         value = float(x)
         if value < MIN_REFRESH_INTERVAL:
-            raise argparse.ArgumentTypeError(f'{value} should be greater than '
-                                             f'{MIN_REFRESH_INTERVAL}')
+            raise argparse.ArgumentTypeError(
+                f'Refresh interval should be greater than or equal to {MIN_REFRESH_INTERVAL}')
         return value
 
     parser = argparse.ArgumentParser(description='Ceph Filesystem top utility')

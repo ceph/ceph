@@ -163,9 +163,7 @@ options:
   type: str
   level: basic
   desc: list of hosts or addresses to search for a monitor
-  long_desc: This is a comma, whitespace, or semicolon separated list of IP addresses
-    or hostnames. Hostnames are resolved via DNS and all A or AAAA records are included
-    in the search list.
+  long_desc: This is a list of IP addresses or hostnames that are separated by commas, whitespace, or semicolons. Hostnames are resolved via DNS. All A and AAAA records are included in the search list.
   services:
   - common
   flags:
@@ -175,11 +173,7 @@ options:
   type: str
   level: advanced
   desc: monitor(s) to use overriding the MonMap
-  fmt_desc: the list of monitors for the cluster to
-    **initially** contact when beginning a new instance of communication with the
-    Ceph cluster.  This overrides the known monitor list derived from MonMap
-    updates sent to older Ceph instances (like librados cluster handles).  It is
-    expected this option is primarily useful for debugging.
+  fmt_desc: This is the list of monitors that the Ceph process **initially** contacts when first establishing communication with the Ceph cluster. This overrides the known monitor list that is derived from MonMap updates sent to older Ceph instances (like librados cluster handles). This option is expected to be useful primarily for debugging.
   services:
   - common
   flags:
@@ -767,6 +761,11 @@ options:
   desc: Enable Intel QAT acceleration support for compression if available
   default: false
   with_legacy: true
+- name: qat_compressor_session_max_number
+  type: uint
+  level: advanced
+  desc: Set the maximum number of session within Qatzip when using QAT compressor
+  default: 256
 - name: plugin_crypto_accelerator
   type: str
   level: advanced
@@ -1268,6 +1267,12 @@ options:
   desc: Inject various internal delays to induce races (seconds)
   default: 0
   with_legacy: true
+- name: ms_inject_network_congestion
+  type: uint
+  level: dev
+  desc: Inject a network congestions that stuck with N times operations
+  default: 0
+  with_legacy: true
 - name: ms_blackhole_osd
   type: bool
   level: dev
@@ -1447,6 +1452,13 @@ options:
   type: str
   level: advanced
   with_legacy: true
+- name: ms_dpdk_devs_allowlist
+  type: str
+  level: advanced
+  desc: NIC's PCIe address are allowed to use
+  long_desc: for a single NIC use ms_dpdk_devs_allowlist=-a 0000:7d:010 or --allow=0000:7d:010;
+    for a bond nics use ms_dpdk_devs_allowlist=--allow=0000:7d:01.0 --allow=0000:7d:02.6
+    --vdev=net_bonding0,mode=2,slave=0000:7d:01.0,slave=0000:7d:02.6.
 - name: ms_dpdk_host_ipv4_addr
   type: str
   level: advanced
@@ -1464,6 +1476,10 @@ options:
   level: advanced
   default: true
   with_legacy: true
+- name: ms_dpdk_enable_tso
+  type: bool
+  level: advanced
+  default: true
 - name: ms_dpdk_hw_flow_control
   type: bool
   level: advanced
@@ -1516,6 +1532,8 @@ options:
     at which some pools' pg_num may be shrunk in order to enable increasing the pg_num
     of others.
   default: 250
+  flags:
+  - runtime
   services:
   - mgr
   - mon
@@ -2375,6 +2393,14 @@ options:
   default: true
   flags:
   - runtime
+- name: osd_calc_pg_upmaps_aggressively_fast
+  type: bool
+  level: advanced
+  desc: Prevent very long (>10 minutes) calculations in some extreme cases (applicable
+    only to aggressive mode)
+  default: true
+  flags:
+  - runtime
 - name: osd_calc_pg_upmaps_local_fallback_retries
   type: uint
   level: advanced
@@ -2566,6 +2592,15 @@ options:
   level: advanced
   desc: set nosizechange flag on new pools
   fmt_desc: Set the ``nosizechange`` flag on new pools. Does not allow the ``size`` to be changed.
+  default: false
+  services:
+  - mon
+  with_legacy: true
+- name: osd_pool_default_flag_bulk
+  type: bool
+  level: advanced
+  desc: set bulk flag on new pools
+  fmt_desc: Set the ``bulk`` flag on new pools. Allowing autoscaler to use scale-down mode.
   default: false
   services:
   - mon
@@ -2801,6 +2836,7 @@ options:
   type: uint
   level: advanced
   default: 2
+  min: 1
   with_legacy: true
 # max number of trimming pgs
 - name: osd_max_trimming_pgs
@@ -3178,7 +3214,7 @@ options:
   type: bool
   level: dev
   default: false
-  with_legacy: truen
+  with_legacy: true
 - name: osd_debug_pretend_recovery_active
   type: bool
   level: dev
@@ -3243,13 +3279,20 @@ options:
     slow shutdown is primarilyy useful for doing memory leak checking with valgrind.
   default: true
   with_legacy: true
+- name: osd_fast_shutdown_timeout
+  type: int
+  level: advanced
+  desc: timeout in seconds for osd fast-shutdown (0 is unlimited)
+  default: 15
+  with_legacy: true
+  min: 0
 - name: osd_fast_shutdown_notify_mon
   type: bool
   level: advanced
   desc: Tell mon about OSD shutdown on immediate shutdown
   long_desc: Tell the monitor the OSD is shutting down on immediate shutdown. This
     helps with cluster log messages from other OSDs reporting it immediately failed.
-  default: false
+  default: true
   see_also:
   - osd_fast_shutdown
   - osd_mon_shutdown_timeout
@@ -3899,6 +3942,31 @@ options:
   level: advanced
   default: 4_K
   with_legacy: true
+- name: bdev_read_buffer_alignment
+  type: size
+  level: advanced
+  default: 4_K
+  with_legacy: true
+- name: bdev_read_preallocated_huge_buffers
+  type: str
+  level: advanced
+  desc: description of pools arrangement for huge page-based read buffers
+  long_desc: Arrangement of preallocated, huge pages-based pools for reading
+    from a KernelDevice. Applied to minimize size of scatter-gather lists
+    sent to NICs. Targets really  big buffers (>= 2 or 4 MBs).
+    Keep in mind the system must be configured accordingly (see /proc/sys/vm/nr_hugepages).
+    Otherwise the OSD wil fail early.
+    Beware BlueStore, by default, stores large chunks across many smaller blobs.
+    Increasing bluestore_max_blob_size changes that, and thus allows the data to
+    be read back into small number of huge page-backed buffers.
+  fmt_desc: List of key=value pairs delimited by comma, semicolon or tab.
+    key specifies the targeted read size and must be expressed in bytes.
+    value specifies the number of preallocated buffers.
+    For instance, to preallocate 64 buffers that will be used to serve
+    2 MB-sized read requests and 128 for 4 MB, someone needs to set
+    "2097152=64,4194304=128".
+  see_also:
+  - bluestore_max_blob_size
 - name: bdev_debug_aio
   type: bool
   level: dev
@@ -4061,6 +4129,28 @@ options:
   - bluestore_retry_disk_reads
   flags:
   - runtime
+  with_legacy: true
+- name: bluefs_check_volume_selector_on_umount
+  type: bool
+  level: dev
+  desc: Check validity of volume selector on umount
+  long_desc: Checks if volume selector did not diverge from the state it should be in.
+    Reference is constructed from bluefs inode table. Asserts on inconsistency.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluefs_check_volume_selector_often
+  type: bool
+  level: dev
+  desc: Periodically check validity of volume selector
+  long_desc: Periodically checks if current volume selector does not diverge from the valid state.
+    Reference is constructed from bluefs inode table. Asserts on inconsistency. This is debug feature.
+  default: false
+  see_also:
+  - bluefs_check_volume_selector_on_umount
+  flags:
+  - startup
   with_legacy: true
 - name: bluestore_bluefs
   type: bool
@@ -4285,6 +4375,16 @@ options:
   flags:
   - create
   with_legacy: true
+- name: bluestore_use_optimal_io_size_for_min_alloc_size 
+  type: bool
+  level: advanced
+  desc: Discover media optimal IO Size and use for min_alloc_size
+  default: false
+  see_also:
+  - bluestore_min_alloc_size
+  flags:
+  - create
+  with_legacy: true
 - name: bluestore_max_alloc_size
   type: size
   level: advanced
@@ -4402,7 +4502,7 @@ options:
     state) media
   fmt_desc: Default value of ``bluestore compression min blob size``
     for non-rotational (solid state) media.
-  default: 8_K
+  default: 64_K
   see_also:
   - bluestore_compression_min_blob_size
   flags:
@@ -4644,13 +4744,112 @@ options:
   level: dev
   desc: The number of seconds to wait between rebalances when cache autotune is enabled.
   fmt_desc: |
-    The number of seconds to wait between rebalances when cache autotune
-    is enabled.  This setting changes how quickly the allocation ratios of
-    various caches are recomputed.  Note:  Setting this interval too small
-    can result in high CPU usage and lower performance.
+    The number of seconds to wait between rebalances when cache autotune is
+    enabled.  `bluestore_cache_autotune_interval` sets the speed at which Ceph
+    recomputes the allocation ratios of various caches. Note: Setting this
+    interval too small can result in high CPU usage and lower performance.
   default: 5
   see_also:
   - bluestore_cache_autotune
+- name: bluestore_cache_age_bin_interval
+  type: float
+  level: dev
+  desc: The duration (in seconds) represented by a single cache age bin.
+  fmt_desc: |
+    The caches used by bluestore will assign cache entries to an 'age bin'
+    that represents a period of time during which that cache entry was most
+    recently updated.  By binning the caches in this way, Ceph's priority
+    cache balancing code can make better decisions about which caches should
+    receive priority based on the relative ages of items in the caches.  By
+    default, a single cache age bin represents 1 second of time.  Note:
+    Setting this interval too small can result in high CPU usage and lower
+    performance.
+  default: 1
+  see_also:
+  - bluestore_cache_age_bins_kv
+  - bluestore_cache_age_bins_kv_onode
+  - bluestore_cache_age_bins_meta
+  - bluestore_cache_age_bins_data
+- name: bluestore_cache_age_bins_kv
+  type: str
+  level: dev
+  desc: A 10 element, space separated list of age bins for kv cache
+  fmt_desc: |
+    A 10 element, space separated list of cache age bins grouped by
+    priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ...
+    PRI10=[n+8,n+9).  Values represent the starting and ending bin for each
+    priority level.  A 0 in the 2nd term will prevent any items from being
+    associated with that priority.  bin duration is based on the
+    bluestore_cache_age_bin_interval value.  For example,
+    "1 5 0 0 0 0 0 0 0 0" defines bin ranges for two priority levels. PRI1
+    contains 1 age bin.  Assuming the default age bin interval of 1 second,
+    PRI1 represents cache items that are less than 1 second old. PRI2 has 4
+    bins representing cache items that are 1 to less than 5 seconds old. All
+    other cache items in this example are associated with the lowest priority
+    level as PRI3-PRI10 all have 0s in their second term.
+  default: "1 2 6 24 120 720 0 0 0 0"
+  see_also:
+  - bluestore_cache_age_bin_interval
+- name: bluestore_cache_age_bins_kv_onode
+  type: str
+  level: dev
+  desc: A 10 element, space separated list of age bins for kv onode cache
+  fmt_desc: |
+    A 10 element, space separated list of cache age bins grouped by
+    priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ...
+    PRI10=[n+8,n+9).  Values represent the starting and ending bin for each
+    priority level.  A 0 in the 2nd term will prevent any items from being
+    associated with that priority.  bin duration is based on the
+    bluestore_cache_age_bin_interval value.  For example,
+    "1 5 0 0 0 0 0 0 0 0" defines bin ranges for two priority levels. PRI1
+    contains 1 age bin.  Assuming the default age bin interval of 1 second,
+    PRI1 represents cache items that are less than 1 second old. PRI2 has 4
+    bins representing cache items that are 1 to less than 5 seconds old. All
+    other cache items in this example are associated with the lowest priority
+    level as PRI3-PRI10 all have 0s in their second term.
+  default: "0 0 0 0 0 0 0 0 0 720"
+  see_also:
+  - bluestore_cache_age_bin_interval
+- name: bluestore_cache_age_bins_meta
+  type: str
+  level: dev
+  desc: A 10 element, space separated list of age bins for onode cache
+  fmt_desc: |
+    A 10 element, space separated list of cache age bins grouped by
+    priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ...
+    PRI10=[n+8,n+9).  Values represent the starting and ending bin for each
+    priority level.  A 0 in the 2nd term will prevent any items from being
+    associated with that priority.  bin duration is based on the
+    bluestore_cache_age_bin_interval value.  For example,
+    "1 5 0 0 0 0 0 0 0 0" defines bin ranges for two priority levels. PRI1
+    contains 1 age bin.  Assuming the default age bin interval of 1 second,
+    PRI1 represents cache items that are less than 1 second old. PRI2 has 4
+    bins representing cache items that are 1 to less than 5 seconds old. All
+    other cache items in this example are associated with the lowest priority
+    level as PRI3-PRI10 all have 0s in their second term.
+  default: "1 2 6 24 120 720 0 0 0 0"
+  see_also:
+  - bluestore_cache_age_bin_interval
+- name: bluestore_cache_age_bins_data
+  type: str
+  level: dev
+  desc: A 10 element, space separated list of age bins for data cache
+  fmt_desc: |
+    A 10 element, space separated list of cache age bins grouped by
+    priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ...
+    PRI10=[n+8,n+9).  Values represent the starting and ending bin for each
+    priority level.  A 0 in the 2nd term will prevent any items from being
+    associated with that priority.  bin duration is based on the
+    bluestore_cache_age_bin_interval value.  For example,
+    "1 5 0 0 0 0 0 0 0 0" defines bin ranges for two priority levels. PRI1
+    contains 1 age bin.  Assuming the default age bin interval of 1 second,
+    PRI1 represents cache items that are less than 1 second old. PRI2 has 4
+    bins representing cache items that are 1 to less than 5 seconds old. All
+    other cache items in this example are associated with the lowest priority
+    level as PRI3-PRI10 all have 0s in their second term.
+  default: "1 2 6 24 120 720 0 0 0 0"
+  see_also:
+  - bluestore_cache_age_bin_interval
 - name: bluestore_alloc_stats_dump_interval
   type: float
   level: dev
@@ -4758,6 +4957,12 @@ options:
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P
+- name: bluestore_qfsck_on_mount
+  type: bool
+  level: dev
+  desc: Run quick-fsck at mount comparing allocation-file to RocksDB allocation state
+  default: true
+  with_legacy: true
 - name: bluestore_fsck_on_mount
   type: bool
   level: dev
@@ -4826,6 +5031,15 @@ options:
   desc: Number of additional threads to perform quick-fix (shallow fsck) command
   default: 2
   with_legacy: true
+- name: bluestore_fsck_shared_blob_tracker_size
+  type: float
+  level: dev
+  desc: Size(a fraction of osd_memory_target, defaults to 128MB) of a hash table to track shared blobs ref counts. Higher the size, more precise is the tracker -> less overhead during the repair.
+  default: 0.03125
+  see_also:
+  - osd_memory_target
+  flags:
+  - runtime
 - name: bluestore_throttle_bytes
   type: size
   level: advanced
@@ -5018,6 +5232,15 @@ options:
   desc: inject crc verification errors into bluestore device reads
   default: 0
   with_legacy: true
+- name: bluestore_debug_legacy_omap
+  type: bool
+  level: dev
+  desc: Allows mkfs to create OSD in legacy OMAP naming mode (neither per-pool nor per-pg).
+    This is intended primarily for developers' purposes. The resulting OSD might/would
+    be transformed to the currrently default 'per-pg' format when BlueStore's quick-fix or
+    repair are applied.
+  default: false
+  with_legacy: true
 - name: bluestore_fsck_error_on_no_per_pool_stats
   type: bool
   level: advanced
@@ -5149,7 +5372,7 @@ options:
   type: str
   level: dev
   desc: Determines bluefs volume selection policy
-  long_desc: Determines bluefs volume selection policy. 'use_some_extra' policy allows
+  long_desc: Determines bluefs volume selection policy. 'use_some_extra*' policy allows
     to override RocksDB level granularity and put high level's data to faster device
     even when the level doesn't completely fit there. 'fit_to_fast' policy enables
     using 100% of faster disk capacity and allows the user to turn on 'level_compaction_dynamic_level_bytes'
@@ -5158,6 +5381,7 @@ options:
   enum_values:
   - rocksdb_original
   - use_some_extra
+  - use_some_extra_enforced
   - fit_to_fast
   with_legacy: true
 - name: bluestore_volume_selection_reserved_factor
@@ -5202,6 +5426,26 @@ options:
   long_desc: How often (in seconds) to print KV sync thread utilization, not logged
     when set to 0 or when utilization is 0%
   default: 10
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_fail_eio
+  type: bool
+  level: dev
+  desc: fail/crash on EIO
+  long_desc: whether bluestore osd fails on eio
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_zero_block_detection
+  type: bool
+  level: dev
+  desc: punch holes instead of writing zeros
+  long_desc: Intended for large-scale synthetic testing. Currently this is implemented
+    with punch hole semantics, affecting the logical extent map of the object. This does
+    not interact well with some RBD and CephFS features.
+  default: false
   flags:
   - runtime
   with_legacy: true
@@ -6058,3 +6302,25 @@ options:
   - spdk
   - pmem
   - hm_smr
+- name: bluestore_cleaner_sleep_interval
+  type: float
+  level: advanced
+  desc: How long cleaner should sleep before re-checking utilization
+  default: 5
+  with_legacy: true
+- name: jaeger_tracing_enable
+  type: bool
+  level: advanced
+  desc: Ceph should use jaeger tracing system
+  default: false
+  services:
+  - rgw
+  - osd
+  with_legacy: true
+- name: mgr_ttl_cache_expire_seconds
+  type: uint
+  level: dev
+  desc: Set the time to live in seconds - set to 0 to disable the cache.
+  default: 0
+  services:
+  - mgr

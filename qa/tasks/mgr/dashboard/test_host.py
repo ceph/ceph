@@ -32,11 +32,11 @@ class HostControllerTest(DashboardTestCase):
 
     @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
     def test_access_permissions(self):
-        self._get(self.URL_HOST)
+        self._get(self.URL_HOST, version='1.1')
         self.assertStatus(403)
 
     def test_host_list(self):
-        data = self._get(self.URL_HOST)
+        data = self._get(self.URL_HOST, version='1.1')
         self.assertStatus(200)
 
         orch_hostnames = {inventory_node['name'] for inventory_node in
@@ -65,14 +65,14 @@ class HostControllerTest(DashboardTestCase):
                 self.assertIn(server['hostname'], orch_hostnames)
 
     def test_host_list_with_sources(self):
-        data = self._get('{}?sources=orchestrator'.format(self.URL_HOST))
+        data = self._get('{}?sources=orchestrator'.format(self.URL_HOST), version='1.1')
         self.assertStatus(200)
         test_hostnames = {inventory_node['name'] for inventory_node in
                           self.ORCHESTRATOR_TEST_DATA['inventory']}
         resp_hostnames = {host['hostname'] for host in data}
         self.assertEqual(test_hostnames, resp_hostnames)
 
-        data = self._get('{}?sources=ceph'.format(self.URL_HOST))
+        data = self._get('{}?sources=ceph'.format(self.URL_HOST), version='1.1')
         self.assertStatus(200)
         test_hostnames = {inventory_node['name'] for inventory_node in
                           self.ORCHESTRATOR_TEST_DATA['inventory']}
@@ -80,7 +80,7 @@ class HostControllerTest(DashboardTestCase):
         self.assertEqual(len(test_hostnames.intersection(resp_hostnames)), 0)
 
     def test_host_devices(self):
-        hosts = self._get('{}'.format(self.URL_HOST))
+        hosts = self._get('{}'.format(self.URL_HOST), version='1.1')
         hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
         assert hosts[0]
         data = self._get('{}/devices'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
@@ -88,7 +88,7 @@ class HostControllerTest(DashboardTestCase):
         self.assertSchema(data, devices_schema)
 
     def test_host_daemons(self):
-        hosts = self._get('{}'.format(self.URL_HOST))
+        hosts = self._get('{}'.format(self.URL_HOST), version='1.1')
         hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
         assert hosts[0]
         data = self._get('{}/daemons'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
@@ -100,7 +100,7 @@ class HostControllerTest(DashboardTestCase):
         })))
 
     def test_host_smart(self):
-        hosts = self._get('{}'.format(self.URL_HOST))
+        hosts = self._get('{}'.format(self.URL_HOST), version='1.1')
         hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
         assert hosts[0]
         self._get('{}/smart'.format('{}/{}'.format(self.URL_HOST, hosts[0])))

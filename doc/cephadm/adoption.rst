@@ -4,7 +4,7 @@ Converting an existing cluster to cephadm
 =========================================
 
 It is possible to convert some existing clusters so that they can be managed
-with ``cephadm``. This statment applies to some clusters that were deployed
+with ``cephadm``. This statement applies to some clusters that were deployed
 with ``ceph-deploy``, ``ceph-ansible``, or ``DeepSea``.
 
 This section of the documentation explains how to determine whether your
@@ -34,7 +34,7 @@ Preparation
    latest stable release of Ceph is the default. You might be upgrading from an
    earlier Ceph release at the same time that you're performing this
    conversion; if you are upgrading from an earlier release, make sure to
-   follow any upgrade-releated instructions for that release.
+   follow any upgrade-related instructions for that release.
 
    Pass the image to cephadm with the following command:
 
@@ -51,7 +51,7 @@ Preparation
 
       cephadm ls
 
-   Before starting the converstion process, ``cephadm ls`` shows all existing
+   Before starting the conversion process, ``cephadm ls`` shows all existing
    daemons to have a style of ``legacy``. As the adoption process progresses,
    adopted daemons will appear with a style of ``cephadm:v1``.
 
@@ -117,6 +117,12 @@ Adoption process
      :ref:`ssh errors <cephadm-ssh-errors>` in the troubleshooting
      document for instructions that describe how to import existing
      ssh keys.
+
+   .. note::
+     It is also possible to have cephadm use a non-root user to ssh
+     into cluster hosts. This user needs to have passwordless sudo access.
+     Use ``ceph cephadm set-user <user>`` and copy the ssh key to that user.
+     See :ref:`cephadm-ssh-user`
 
 #. Tell cephadm which hosts to manage:
 

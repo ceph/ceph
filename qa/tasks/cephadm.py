@@ -11,6 +11,7 @@ import re
 import uuid
 import yaml
 
+from copy import deepcopy
 from io import BytesIO, StringIO
 from tarfile import ReadError
 from tasks.ceph_manager import CephManager
@@ -19,6 +20,8 @@ from teuthology import contextutil
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
+from textwrap import dedent
+from tasks.cephfs.filesystem import MDSCluster, Filesystem
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
@@ -67,6 +70,18 @@ def build_initial_config(ctx, config):
     return conf
 
 
+def distribute_iscsi_gateway_cfg(ctx, conf_data):
+    """
+    Distribute common gateway config to get the IPs.
+    These will help in iscsi clients with finding trusted_ip_list.
+    """
+    log.info('Distributing iscsi-gateway.cfg...')
+    for remote, roles in ctx.cluster.remotes.items():
+        remote.write_file(
+            path='/etc/ceph/iscsi-gateway.cfg',
+            data=conf_data,
+            sudo=True)
+
 def update_archive_setting(ctx, key, value):
     """
     Add logs directory to job's info log file
@@ -90,7 +105,8 @@ def normalize_hostnames(ctx):
     remote.shortname and socket.gethostname() in cephadm.
     """
     log.info('Normalizing hostnames...')
-    ctx.cluster.run(args=[
+    cluster = ctx.cluster.filter(lambda r: '.' in r.hostname)
+    cluster.run(args=[
         'sudo',
         'hostname',
         run.Raw('$(hostname -s)'),
@@ -283,7 +299,7 @@ def ceph_log(ctx, config):
             except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
-                sub = os.path.join(path, remote.name)
+                sub = os.path.join(path, remote.shortname)
                 try:
                     os.makedirs(sub)
                 except OSError:
@@ -317,7 +333,7 @@ def ceph_crash(ctx, config):
             except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
-                sub = os.path.join(path, remote.name)
+                sub = os.path.join(path, remote.shortname)
                 try:
                     os.makedirs(sub)
                 except OSError:
@@ -328,6 +344,28 @@ def ceph_crash(ctx, config):
                                               os.path.join(sub, 'crash'))
                 except ReadError:
                     pass
+
+
+@contextlib.contextmanager
+def pull_image(ctx, config):
+    cluster_name = config['cluster']
+    log.info(f'Pulling image {ctx.ceph[cluster_name].image} on all hosts...')
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'sudo',
+                ctx.cephadm,
+                '--image', ctx.ceph[cluster_name].image,
+                'pull',
+            ],
+            wait=False,
+        )
+    )
+
+    try:
+        yield
+    finally:
+        pass
 
 
 @contextlib.contextmanager
@@ -492,11 +530,11 @@ def ceph_bootstrap(ctx, config):
                 data=ctx.ceph[cluster_name].admin_keyring)
 
             log.info('Adding host %s to orchestrator...' % remote.shortname)
-            _shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, bootstrap_remote, [
                 'ceph', 'orch', 'host', 'add',
                 remote.shortname
             ])
-            r = _shell(ctx, cluster_name, remote,
+            r = _shell(ctx, cluster_name, bootstrap_remote,
                        ['ceph', 'orch', 'host', 'ls', '--format=json'],
                        stdout=StringIO())
             hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
@@ -756,6 +794,36 @@ def ceph_osds(ctx, config):
             )
             cur += 1
 
+        if cur == 0:
+            _shell(ctx, cluster_name, remote, [
+                'ceph', 'orch', 'apply', 'osd', '--all-available-devices',
+            ])
+            # expect the number of scratch devs
+            num_osds = sum(map(len, devs_by_remote.values()))
+            assert num_osds
+        else:
+            # expect the number of OSDs we created
+            num_osds = cur
+
+        log.info(f'Waiting for {num_osds} OSDs to come up...')
+        with contextutil.safe_while(sleep=1, tries=120) as proceed:
+            while proceed():
+                p = _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
+                           ['ceph', 'osd', 'stat', '-f', 'json'], stdout=StringIO())
+                j = json.loads(p.stdout.getvalue())
+                if int(j.get('num_up_osds', 0)) == num_osds:
+                    break;
+
+        if not hasattr(ctx, 'managers'):
+            ctx.managers = {}
+        ctx.managers[cluster_name] = CephManager(
+            ctx.ceph[cluster_name].bootstrap_remote,
+            ctx=ctx,
+            logger=log.getChild('ceph_manager.' + cluster_name),
+            cluster=cluster_name,
+            cephadm=True,
+        )
+
         yield
     finally:
         pass
@@ -797,6 +865,46 @@ def ceph_mdss(ctx, config):
 
     yield
 
+@contextlib.contextmanager
+def cephfs_setup(ctx, config):
+    mdss = list(teuthology.all_roles_of_type(ctx.cluster, 'mds'))
+
+    # If there are any MDSs, then create a filesystem for them to use
+    # Do this last because requires mon cluster to be up and running
+    if len(mdss) > 0:
+        log.info('Setting up CephFS filesystem(s)...')
+        cephfs_config = config.get('cephfs', {})
+        fs_configs =  cephfs_config.pop('fs', [{'name': 'cephfs'}])
+        set_allow_multifs = len(fs_configs) > 1
+
+        # wait for standbys to become available (slow due to valgrind, perhaps)
+        mdsc = MDSCluster(ctx)
+        with contextutil.safe_while(sleep=2,tries=150) as proceed:
+            while proceed():
+                if len(mdsc.get_standby_daemons()) >= len(mdss):
+                    break
+
+        fss = []
+        for fs_config in fs_configs:
+            assert isinstance(fs_config, dict)
+            name = fs_config.pop('name')
+            temp = deepcopy(cephfs_config)
+            teuthology.deep_merge(temp, fs_config)
+            subvols = config.get('subvols', None)
+            if subvols:
+                teuthology.deep_merge(temp, {'subvols': subvols})
+            fs = Filesystem(ctx, fs_config=temp, name=name, create=True)
+            if set_allow_multifs:
+                fs.set_allow_multifs()
+                set_allow_multifs = False
+            fss.append(fs)
+
+        yield
+
+        for fs in fss:
+            fs.destroy()
+    else:
+        yield
 
 @contextlib.contextmanager
 def ceph_monitoring(daemon_type, ctx, config):
@@ -885,32 +993,44 @@ def ceph_iscsi(ctx, config):
 
     nodes = []
     daemons = {}
+    ips = []
+
     for remote, roles in ctx.cluster.remotes.items():
         for role in [r for r in roles
-                    if teuthology.is_type('iscsi', cluster_name)(r)]:
+                     if teuthology.is_type('iscsi', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
             log.info('Adding %s on %s' % (role, remote.shortname))
             nodes.append(remote.shortname + '=' + id_)
             daemons[role] = (remote, id_)
+            ips.append(remote.ip_address)
+    trusted_ip_list = ','.join(ips)
     if nodes:
-        poolname = 'iscsi'
-        # ceph osd pool create iscsi 3 3 replicated
+        poolname = 'datapool'
+        # ceph osd pool create datapool 3 3 replicated
         _shell(ctx, cluster_name, remote, [
             'ceph', 'osd', 'pool', 'create',
             poolname, '3', '3', 'replicated']
         )
 
         _shell(ctx, cluster_name, remote, [
-            'ceph', 'osd', 'pool', 'application', 'enable',
-            poolname, 'rbd']
+            'rbd', 'pool', 'init', poolname]
         )
 
-        # ceph orch apply iscsi iscsi user password
+        # ceph orch apply iscsi datapool (admin)user (admin)password
         _shell(ctx, cluster_name, remote, [
             'ceph', 'orch', 'apply', 'iscsi',
-            poolname, 'user', 'password',
+            poolname, 'admin', 'admin',
+            '--trusted_ip_list', trusted_ip_list,
             '--placement', str(len(nodes)) + ';' + ';'.join(nodes)]
         )
+
+        # used by iscsi client to identify valid gateway ip's
+        conf_data = dedent(f"""
+        [config]
+        trusted_ip_list = {trusted_ip_list}
+        """)
+        distribute_iscsi_gateway_cfg(ctx, conf_data)
+
     for role, i in daemons.items():
         remote, id_ = i
         ctx.daemons.register_daemon(
@@ -1308,11 +1428,15 @@ def initialize_config(ctx, config):
     if config.get('roleless', False):
         # mons will be named after hosts
         first_mon = None
+        max_mons = config.get('max_mons', 5)
         for remote, _ in remotes_and_roles:
             ctx.cluster.remotes[remote].append('mon.' + remote.shortname)
             if not first_mon:
                 first_mon = remote.shortname
                 bootstrap_remote = remote
+            max_mons -= 1
+            if not max_mons:
+                break
         log.info('No mon roles; fabricating mons')
 
     roles = [role_list for (remote, role_list) in ctx.cluster.remotes.items()]
@@ -1444,6 +1568,7 @@ def task(ctx, config):
                               else download_cephadm(ctx=ctx, config=config, ref=ref),
             lambda: ceph_log(ctx=ctx, config=config),
             lambda: ceph_crash(ctx=ctx, config=config),
+            lambda: pull_image(ctx=ctx, config=config),
             lambda: _bypass() if (ctx.ceph[cluster_name].bootstrapped)\
                               else ceph_bootstrap(ctx, config),
             lambda: crush_setup(ctx=ctx, config=config),
@@ -1452,6 +1577,7 @@ def task(ctx, config):
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
+            lambda: cephfs_setup(ctx=ctx, config=config),
             lambda: ceph_rgw(ctx=ctx, config=config),
             lambda: ceph_iscsi(ctx=ctx, config=config),
             lambda: ceph_monitoring('prometheus', ctx=ctx, config=config),
@@ -1461,16 +1587,6 @@ def task(ctx, config):
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: create_rbd_pool(ctx=ctx, config=config),
     ):
-        if not hasattr(ctx, 'managers'):
-            ctx.managers = {}
-        ctx.managers[cluster_name] = CephManager(
-            ctx.ceph[cluster_name].bootstrap_remote,
-            ctx=ctx,
-            logger=log.getChild('ceph_manager.' + cluster_name),
-            cluster=cluster_name,
-            cephadm=True,
-        )
-
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=config)

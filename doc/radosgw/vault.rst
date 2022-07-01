@@ -90,7 +90,7 @@ Gateway can be configured to authenticate to Vault using the
 
 Most tokens in Vault have limited lifetimes and powers.  The only
 sort of Vault token that does not have a lifetime are root tokens.
-For all other tokens, it is necesary to periodically refresh them,
+For all other tokens, it is necessary to periodically refresh them,
 either by performing initial authentication, or by renewing the token.
 Ceph does not have any logic to perform either operation.
 The simplest best way to use Vault tokens with ceph is to
@@ -111,7 +111,7 @@ Token policies for the object gateway
 
 All Vault tokens have powers as specified by the polices attached
 to that token.  Multiple policies may be associated with one
-token.  You should only use the policy necessary for your
+token.  You should only use the policies necessary for your
 configuration.
 
 When using the kv secret engine with the object gateway::
@@ -156,6 +156,18 @@ transit secret engine, you might need the following policy::
     }
   EOF
 
+If you are using both sse-kms and sse-s3, then you should point
+each to separate containers.  You could either use separate
+vault instances, or you could use either separately mounted
+transit instances, or different branches under a common transit
+pointpoint.  If you are not using separate vault instances, you can
+Use these to point kms and sse-s3 to separate containers:
+``rgw_crypt_vault_prefix``
+and/or
+``rgw_crypt_sse_s3_vault_prefix``.
+When granting vault permissions to sse-kms bucket owners, you should
+not give them permission to muck around with sse-s3 keys;
+only ceph itself should be doing that.
 
 Token authentication
 --------------------
@@ -170,7 +182,7 @@ with the following settings::
   rgw crypt vault token file = /run/.rgw-vault-token
   rgw crypt vault addr = https://vault-server-fqdn:8200
 
-Adjust these settinsg to match your configuration.
+Adjust these settings to match your configuration.
 For security reasons, the token file must be readable by the Object Gateway
 only.
 
@@ -409,23 +421,23 @@ following options::
   rgw crypt vault ssl clientkey = /etc/ceph/vault.key
 
 where vault.ca is CA certificate and vault.key/vault.crt are private key and ssl
-ceritificate generated for RGW to access the vault server. It highly recommended to
+certificate generated for RGW to access the vault server. It highly recommended to
 set this option true, setting false is very dangerous and need to avoid since this
-runs in very secured enviroments.
+runs in very secured environments.
 
 Transit engine compatibility support
 ------------------------------------
 The transit engine has compatibility support for previous
 versions of ceph, which used the transit engine as a simple key store.
 
-There is a a "compat" option which can be given to the transit
+There is a "compat" option which can be given to the transit
 engine to configure the compatibility support,
 
 To entirely disable backwards support, use::
 
   rgw crypt vault secret engine = transit compat=0
 
-This will be the default in future verisons. and is safe to use
+This will be the default in future versions. and is safe to use
 for new installs using the current version.
 
 This is the normal default with the current version::

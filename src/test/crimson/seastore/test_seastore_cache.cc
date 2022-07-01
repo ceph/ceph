@@ -21,38 +21,43 @@ namespace {
 
 struct cache_test_t : public seastar_test_suite_t {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
-  Cache cache;
-  paddr_t current{0, 0};
+  ExtentPlacementManagerRef epm;
+  CacheRef cache;
+  paddr_t current;
   journal_seq_t seq;
 
-  cache_test_t()
-    : segment_manager(segment_manager::create_test_ephemeral()),
-      cache(*segment_manager) {}
+  cache_test_t() = default;
 
   seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
-    auto record = cache.prepare_record(*t);
+    auto record = cache->prepare_record(*t, nullptr);
 
     bufferlist bl;
     for (auto &&block : record.extents) {
       bl.append(block.bl);
     }
 
-    ceph_assert((segment_off_t)bl.length() <
+    ceph_assert((seastore_off_t)bl.length() <
 		segment_manager->get_segment_size());
-    if (current.offset + (segment_off_t)bl.length() >
+    if (current.as_seg_paddr().get_segment_off() + (seastore_off_t)bl.length() >
 	segment_manager->get_segment_size())
-      current = paddr_t{current.segment + 1, 0};
+      current = paddr_t::make_seg_paddr(
+	segment_id_t(
+	  current.as_seg_paddr().get_segment_id().device_id(),
+	  current.as_seg_paddr().get_segment_id().device_segment_id() + 1),
+	0);
 
     auto prev = current;
-    current.offset += bl.length();
+    current.as_seg_paddr().set_segment_off(
+      current.as_seg_paddr().get_segment_off()
+      + bl.length());
     return segment_manager->segment_write(
       prev,
       std::move(bl),
       true
     ).safe_then(
       [this, prev, t=std::move(t)]() mutable {
-	cache.complete_commit(*t, prev, seq /* TODO */);
+	cache->complete_commit(*t, prev, seq /* TODO */);
         return prev;
       },
       crimson::ct_error::all_same_way([](auto e) {
@@ -62,7 +67,8 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   auto get_transaction() {
-    return cache.create_transaction(Transaction::src_t::MUTATE);
+    return cache->create_transaction(
+        Transaction::src_t::MUTATE, "test_cache", false);
   }
 
   template <typename T, typename... Args>
@@ -70,20 +76,28 @@ struct cache_test_t : public seastar_test_suite_t {
     return with_trans_intr(
       t,
       [this](auto &&... args) {
-	return cache.get_extent<T>(args...);
+	return cache->get_extent<T>(args...);
       },
       std::forward<Args>(args)...);
   }
 
   seastar::future<> set_up_fut() final {
+    segment_manager = segment_manager::create_test_ephemeral();
     return segment_manager->init(
     ).safe_then([this] {
+      return segment_manager->mkfs(
+        segment_manager::get_ephemeral_device_config(0, 1));
+    }).safe_then([this] {
+      epm.reset(new ExtentPlacementManager(false));
+      cache.reset(new Cache(*epm));
+      current = paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0);
+      epm->add_device(segment_manager.get(), true);
       return seastar::do_with(
           get_transaction(),
           [this](auto &ref_t) {
-        cache.init();
+        cache->init();
         return with_trans_intr(*ref_t, [&](auto &t) {
-          return cache.mkfs(t);
+          return cache->mkfs(t);
         }).safe_then([this, &ref_t] {
           return submit_transaction(std::move(ref_t)
           ).then([](auto p) {});
@@ -97,8 +111,14 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   seastar::future<> tear_down_fut() final {
-    return cache.close().handle_error(
-      Cache::close_ertr::assert_all{});
+    return cache->close(
+    ).safe_then([this] {
+      segment_manager.reset();
+      epm.reset();
+      cache.reset();
+    }).handle_error(
+      Cache::close_ertr::assert_all{}
+    );
   }
 };
 
@@ -109,9 +129,11 @@ TEST_F(cache_test_t, test_addr_fixup)
     int csum = 0;
     {
       auto t = get_transaction();
-      auto extent = cache.alloc_new_extent<TestBlockPhysical>(
+      auto extent = cache->alloc_new_extent<TestBlockPhysical>(
 	*t,
-	TestBlockPhysical::SIZE);
+	TestBlockPhysical::SIZE,
+	placement_hint_t::HOT,
+	0);
       extent->set_contents('c');
       csum = extent->get_crc32c();
       submit_transaction(std::move(t)).get0();
@@ -138,9 +160,11 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // write out initial test block
       auto t = get_transaction();
-      auto extent = cache.alloc_new_extent<TestBlockPhysical>(
+      auto extent = cache->alloc_new_extent<TestBlockPhysical>(
 	*t,
-	TestBlockPhysical::SIZE);
+	TestBlockPhysical::SIZE,
+	placement_hint_t::HOT,
+	0);
       extent->set_contents('c');
       csum = extent->get_crc32c();
       auto reladdr = extent->get_paddr();
@@ -183,7 +207,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
       // duplicate and reset contents
-      extent = cache.duplicate_for_write(*t, extent)->cast<TestBlockPhysical>();
+      extent = cache->duplicate_for_write(*t, extent)->cast<TestBlockPhysical>();
       extent->set_contents('c');
       csum2 = extent->get_crc32c();
       ASSERT_EQ(extent->get_paddr(), addr);

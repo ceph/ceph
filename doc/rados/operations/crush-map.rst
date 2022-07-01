@@ -128,6 +128,8 @@ Since the Luminous release, devices may also have a *device class* assigned (e.g
 ``hdd`` or ``ssd`` or ``nvme``), allowing them to be conveniently targeted by
 CRUSH rules.  This is especially useful when mixing device types within hosts.
 
+.. _crush_map_default_types:
+
 Types and Buckets
 -----------------
 
@@ -894,7 +896,7 @@ To make this warning go away, you have two options:
 2. You can make the warning go away without making any changes to CRUSH by
    adding the following option to your ceph.conf ``[mon]`` section::
 
-      mon warn on legacy crush tunables = false
+      mon_warn_on_legacy_crush_tunables = false
 
    For the change to take effect, you will need to restart the monitors, or
    apply the option to running monitors with::
@@ -951,8 +953,7 @@ release notes and documentation carefully before changing the profile on a
 running cluster, and consider throttling recovery/backfill parameters to
 limit the impact of a bolus of backfill.
 
-
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/wp-content/uploads/2016/08/weil-crush-sc06.pdf
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/assets/pdfs/weil-crush-sc06.pdf
 
 
 Primary Affinity
@@ -1014,8 +1015,6 @@ For example, the CRUSH rule below::
 	rule mixed_replicated_rule {
 	        id 11
 	        type replicated
-	        min_size 1
-	        max_size 10
 	        step take default class ssd
 	        step chooseleaf firstn 1 type host
 	        step emit
@@ -1039,8 +1038,6 @@ must not contain the same servers::
         rule mixed_replicated_rule_two {
                id 1
                type replicated
-               min_size 1
-               max_size 10
                step take ssd_hosts class ssd
                step chooseleaf firstn 1 type host
                step emit

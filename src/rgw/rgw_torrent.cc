@@ -19,7 +19,6 @@
 using namespace std;
 using namespace librados;
 using namespace boost;
-using ceph::crypto::MD5;
 using ceph::crypto::SHA1;
 
 seed::seed()
@@ -38,7 +37,7 @@ seed::~seed()
   store = NULL;
 }
 
-void seed::init(struct req_state *p_req, rgw::sal::Store* p_store)
+void seed::init(req_state *p_req, rgw::sal::Store* p_store)
 {
   s = p_req;
   store = p_store;

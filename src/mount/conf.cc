@@ -46,6 +46,9 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
   conf.parse_env(cct->get_module_type()); // environment variables override
   conf.apply_changes(nullptr);
 
+  auto fsid = conf.get_val<uuid_d>("fsid");
+  fsid.print(cci->cci_fsid);
+
   ceph::async::io_context_pool ioc(1);
   MonClient monc = MonClient(cct.get(), ioc);
   err = monc.build_initial_monmap();
@@ -67,10 +70,7 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
 	continue;
     }
 
-    std::string addr;
-    addr += eaddr.ip_only_to_str();
-    addr += ":";
-    addr += std::to_string(eaddr.get_port());
+    std::string addr = eaddr.ip_n_port_to_str();
     /* If this will overrun cci_mons, stop here */
     if (monaddrs.length() + 1 + addr.length() + 1 > sizeof(cci->cci_mons))
       break;

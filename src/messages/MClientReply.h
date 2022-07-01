@@ -146,7 +146,8 @@ struct InodeStat {
   mds_rank_t dir_pin;
   std::map<std::string,std::string> snap_metadata;
 
-  bool fscrypt = false; // fscrypt enabled ?
+  std::vector<uint8_t> fscrypt_auth;
+  std::vector<uint8_t> fscrypt_file;
 
  public:
   InodeStat() {}
@@ -157,7 +158,7 @@ struct InodeStat {
   void decode(ceph::buffer::list::const_iterator &p, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(6, p);
+      DECODE_START(7, p);
       decode(vino.ino, p);
       decode(vino.snapid, p);
       decode(rdev, p);
@@ -212,7 +213,13 @@ struct InodeStat {
         decode(snap_metadata, p);
       }
       if (struct_v >= 6) {
-        decode(fscrypt, p);
+        bool fscrypt_flag;
+
+        decode(fscrypt_flag, p); // ignore this
+      }
+      if (struct_v >= 7) {
+        decode(fscrypt_auth, p);
+        decode(fscrypt_file, p);
       }
       DECODE_FINISH(p);
     }

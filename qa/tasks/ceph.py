@@ -46,8 +46,8 @@ def generate_caps(type_):
     """
     defaults = dict(
         osd=dict(
-            mon='allow *',
-            mgr='allow *',
+            mon='allow profile osd',
+            mgr='allow profile osd',
             osd='allow *',
         ),
         mgr=dict(
@@ -377,6 +377,20 @@ def crush_setup(ctx, config):
 
 
 @contextlib.contextmanager
+def setup_manager(ctx, config):
+    first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
+    if not hasattr(ctx, 'managers'):
+        ctx.managers = {}
+    ctx.managers[config['cluster']] = CephManager(
+        mon,
+        ctx=ctx,
+        logger=log.getChild('ceph_manager.' + config['cluster']),
+        cluster=config['cluster'],
+    )
+    yield
+
+@contextlib.contextmanager
 def create_rbd_pool(ctx, config):
     cluster_name = config['cluster']
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
@@ -430,6 +444,9 @@ def cephfs_setup(ctx, config):
             name = fs_config.pop('name')
             temp = deepcopy(cephfs_config)
             teuthology.deep_merge(temp, fs_config)
+            subvols = config.get('subvols', None)
+            if subvols:
+                teuthology.deep_merge(temp, {'subvols': subvols})
             fs = Filesystem(ctx, fs_config=temp, name=name, create=True)
             fss.append(fs)
 
@@ -1866,6 +1883,7 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='mgr'),
         lambda: crush_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
+        lambda: setup_manager(ctx=ctx, config=config),
         lambda: create_rbd_pool(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
         lambda: cephfs_setup(ctx=ctx, config=config),
@@ -1873,17 +1891,6 @@ def task(ctx, config):
     ]
 
     with contextutil.nested(*subtasks):
-        first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
-        (mon,) = ctx.cluster.only(first_mon).remotes.keys()
-        if not hasattr(ctx, 'managers'):
-            ctx.managers = {}
-        ctx.managers[config['cluster']] = CephManager(
-            mon,
-            ctx=ctx,
-            logger=log.getChild('ceph_manager.' + config['cluster']),
-            cluster=config['cluster'],
-        )
-
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))

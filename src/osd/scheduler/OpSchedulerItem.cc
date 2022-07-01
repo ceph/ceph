@@ -14,11 +14,15 @@
 
 #include "osd/scheduler/OpSchedulerItem.h"
 #include "osd/OSD.h"
-#ifdef HAVE_JAEGER
-#include "common/tracer.h"
-#endif
+#include "osd/osd_tracer.h"
+
 
 namespace ceph::osd::scheduler {
+
+std::ostream& operator<<(std::ostream& out, const op_scheduler_class& class_id) {
+  out << static_cast<size_t>(class_id);
+  return out;
+}
 
 void PGOpItem::run(
   OSD *osd,
@@ -26,9 +30,6 @@ void PGOpItem::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
-#ifdef HAVE_JAEGER
-  auto PGOpItem_span = jaeger_tracing::child_span("PGOpItem::run", op->osd_parent_span);
-#endif
   osd->dequeue_op(pg, op, handle);
   pg->unlock();
 }
@@ -159,7 +160,7 @@ void PGScrubMapsCompared::run(OSD* osd,
 
 void PGRepScrub::run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle)
 {
-  pg->replica_scrub(epoch_queued, handle);
+  pg->replica_scrub(epoch_queued, activation_index, handle);
   pg->unlock();
 }
 
@@ -168,7 +169,7 @@ void PGRepScrubResched::run(OSD* osd,
 			    PGRef& pg,
 			    ThreadPool::TPHandle& handle)
 {
-  pg->replica_scrub_resched(epoch_queued, handle);
+  pg->replica_scrub_resched(epoch_queued, activation_index, handle);
   pg->unlock();
 }
 

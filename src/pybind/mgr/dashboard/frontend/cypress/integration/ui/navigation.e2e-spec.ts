@@ -10,12 +10,12 @@ describe('Shared pages', () => {
   });
 
   it('should display the vertical menu by default', () => {
-    shared.getVerticalMenu().should('be.visible');
+    shared.getVerticalMenu().should('not.have.class', 'active');
   });
 
   it('should hide the vertical menu', () => {
     shared.getMenuToggler().click();
-    shared.getVerticalMenu().should('not.be.visible');
+    shared.getVerticalMenu().should('have.class', 'active');
   });
 
   it('should navigate to the correct page', () => {

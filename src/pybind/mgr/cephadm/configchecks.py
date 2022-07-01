@@ -671,7 +671,7 @@ class CephadmConfigChecks:
                 self.log.warning(f"Host gather facts for {hostname} is missing kernel information")
 
             # NOTE: if daemondescription had systemd enabled state, we could check for systemd 'tampering'
-            self.host_to_role[hostname] = self.mgr.cache.get_daemon_types(hostname)
+            self.host_to_role[hostname] = list(self.mgr.cache.get_daemon_types(hostname))
 
     def run_checks(self) -> None:
         checks_enabled = self.mgr.get_module_option('config_checks_enabled')
@@ -701,13 +701,5 @@ class CephadmConfigChecks:
             if check_config.get(health_check.name, '') != 'disabled':
                 self.active_checks.append(health_check.name)
                 health_check.func()
-
-        if self.health_check_raised:
-            self.log.warning("CEPHADM checks have detected configuration anomalies")
-        else:
-            self.log.info(
-                f"CEPHADM {self.active_checks_count}/{self.defined_checks} checks enabled "
-                f"and executed ({self.skipped_checks_count} bypassed, "
-                f"{self.defined_checks - self.active_checks_count} disabled). No issues detected")
 
         self.mgr.set_health_checks(self.mgr.health_checks)

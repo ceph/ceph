@@ -58,10 +58,9 @@ bool StateBuilder<I>::is_disconnected() const {
 }
 
 template <typename I>
-bool StateBuilder<I>::is_linked() const {
+bool StateBuilder<I>::is_linked_impl() const {
   ceph_assert(!this->remote_mirror_uuid.empty());
-  return (image_replayer::StateBuilder<I>::is_linked() &&
-          local_primary_mirror_uuid == this->remote_mirror_uuid);
+  return (local_primary_mirror_uuid == this->remote_mirror_uuid);
 }
 
 template <typename I>
@@ -98,8 +97,8 @@ BaseRequest* StateBuilder<I>::create_prepare_replay_request(
     bool* syncing,
     Context* on_finish) {
   return PrepareReplayRequest<I>::create(
-    local_mirror_uuid, this->remote_promotion_state, progress_ctx, this,
-    resync_requested, syncing, on_finish);
+    local_mirror_uuid, progress_ctx, this, resync_requested, syncing,
+    on_finish);
 }
 
 template <typename I>

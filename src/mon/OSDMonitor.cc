@@ -214,6 +214,16 @@ struct OSDMemCache : public PriorityCache::PriCache {
   virtual void set_cache_ratio(double ratio) {
     cache_ratio = ratio;
   }
+  virtual void shift_bins() {
+  }
+  virtual void import_bins(const std::vector<uint64_t> &bins) {
+  }
+  virtual void set_bins(PriorityCache::Priority pri, uint64_t end_bin) {
+  }
+  virtual uint64_t get_bins(PriorityCache::Priority pri) const {
+    return 0;
+  }
+
   virtual string get_cache_name() const = 0;
 };
 
@@ -889,17 +899,13 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       t = MonitorDBStore::TransactionRef();
       tx_size = 0;
     }
-    for (const auto [osd, state] : inc.new_state) {
+    for (auto [osd, state] : inc.new_state) {
       if (state & CEPH_OSD_UP) {
 	// could be marked up *or* down, but we're too lazy to check which
 	last_osd_report.erase(osd);
       }
-      if (state & CEPH_OSD_OUT) {
-        // could be marked in *or* out, but we can safely drop it
-        osd_epochs.erase(osd);
-      }
     }
-    for (const auto [osd, weight] : inc.new_weight) {
+    for (auto [osd, weight] : inc.new_weight) {
       if (weight == CEPH_OSD_OUT) {
         // manually marked out, so drop it
         osd_epochs.erase(osd);
@@ -2024,12 +2030,26 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // metadata, too!
   for (map<int,bufferlist>::iterator p = pending_metadata.begin();
        p != pending_metadata.end();
-       ++p)
+       ++p) {
+    Metadata m;
+    auto mp = p->second.cbegin();
+    decode(m, mp);
+    auto it = m.find("osd_objectstore");
+    if (it != m.end()) {
+      if (it->second == "filestore") {
+        filestore_osds.insert(p->first);
+      } else {
+        filestore_osds.erase(p->first);
+      }
+    }
     t->put(OSD_METADATA_PREFIX, stringify(p->first), p->second);
+  }
   for (set<int>::iterator p = pending_metadata_rm.begin();
        p != pending_metadata_rm.end();
-       ++p)
+       ++p) {
+    filestore_osds.erase(*p);
     t->erase(OSD_METADATA_PREFIX, stringify(*p));
+  }
   pending_metadata.clear();
   pending_metadata_rm.clear();
 
@@ -2062,6 +2082,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   health_check_map_t next;
   tmp.check_health(cct, &next);
+  // OSD_FILESTORE
+  check_for_filestore_osds(&next);
   encode_health(next, t);
 }
 
@@ -2135,6 +2157,39 @@ int OSDMonitor::get_osd_objectstore_type(int osd, string *type)
     return -ENOENT;
   *type = it->second;
   return 0;
+}
+
+void OSDMonitor::get_filestore_osd_list()
+{
+  for (unsigned osd = 0; osd < osdmap.get_num_osds(); ++osd) {
+    string objectstore_type;
+    int r = get_osd_objectstore_type(osd, &objectstore_type);
+    if (r == 0 && objectstore_type == "filestore") {
+      filestore_osds.insert(osd);
+    }
+  }
+}
+
+void OSDMonitor::check_for_filestore_osds(health_check_map_t *checks)
+{
+  if (g_conf()->mon_warn_on_filestore_osds &&
+      filestore_osds.size() > 0) {
+    ostringstream ss, deprecated_tip;
+    list<string> detail;
+    ss << filestore_osds.size()
+       << " osd(s) "
+       << (filestore_osds.size() == 1 ? "is" : "are")
+       << " running Filestore";
+    deprecated_tip << ss.str();
+    ss << " [Deprecated]";
+    auto& d = checks->add("OSD_FILESTORE", HEALTH_WARN, ss.str(),
+                          filestore_osds.size());
+    deprecated_tip << ", which has been deprecated and"
+                   << " not been optimized for QoS"
+                   << " (Filestore OSDs will use 'osd_op_queue = wpq' strictly)";
+    detail.push_back(deprecated_tip.str());
+    d.detail.swap(detail);
+  }
 }
 
 bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
@@ -3003,8 +3058,14 @@ bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
   ceph_assert(osdmap.is_up(target_osd));
   ceph_assert(osdmap.get_addrs(target_osd) == m->target_addrs);
 
-  mon.clog->info() << "osd." << target_osd << " marked itself down";
+  mon.clog->info() << "osd." << target_osd << " marked itself " << ((m->down_and_dead) ? "down and dead" : "down");
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
+  if (m->down_and_dead) {
+    if (!pending_inc.new_xinfo.count(target_osd)) {
+      pending_inc.new_xinfo[target_osd] = osdmap.osd_xinfo[target_osd];
+    }
+    pending_inc.new_xinfo[target_osd].dead_epoch = m->get_epoch();
+  }
   if (m->request_ack)
     wait_for_finished_proposal(op, new C_AckMarkedDown(this, op));
   return true;
@@ -4871,6 +4932,8 @@ void OSDMonitor::do_set_pool_opt(int64_t pool_id,
 				 pool_opts_t::key_t opt,
 				 pool_opts_t::value_t val)
 {
+  dout(10) << __func__ << " pool: " << pool_id << " option: " << opt
+	   << " val: " << val << dendl;
   auto p = pending_inc.new_pools.try_emplace(
     pool_id, *osdmap.get_pg_pool(pool_id));
   p.first->second.opts.set(opt, val);
@@ -5190,6 +5253,16 @@ void OSDMonitor::tick()
       do_propose = true;
     }
   }
+  for (auto p = osdmap.range_blocklist.begin();
+       p != osdmap.range_blocklist.end();
+       ++p) {
+    if (p->second < now) {
+      dout(10) << "expiring range_blocklist item " << p->first
+	       << " expired " << p->second << " < now " << now << dendl;
+      pending_inc.old_range_blocklist.push_back(p->first);
+      do_propose = true;
+    }
+  }
 
   if (try_prune_purged_snaps()) {
     do_propose = true;
@@ -5357,7 +5430,7 @@ namespace {
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
-    DEDUP_CDC_CHUNK_SIZE };
+    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -5969,7 +6042,31 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
       f->flush(rdata);
     }
-    ss << "listed " << osdmap.blocklist.size() << " entries";
+    if (f)
+      f->open_array_section("range_blocklist");
+
+    for (auto p = osdmap.range_blocklist.begin();
+	 p != osdmap.range_blocklist.end();
+	 ++p) {
+      if (f) {
+	f->open_object_section("entry");
+	f->dump_string("range", p->first.get_legacy_str());
+	f->dump_stream("until") << p->second;
+	f->close_section();
+      } else {
+	stringstream ss;
+	string s;
+	ss << p->first << " " << p->second;
+	getline(ss, s);
+	s += "\n";
+	rdata.append(s);
+      }
+    }
+    if (f) {
+      f->close_section();
+      f->flush(rdata);
+    }
+    ss << "listed " << osdmap.blocklist.size() + osdmap.range_blocklist.size() << " entries";
 
   } else if (prefix == "osd pool ls") {
     string detail;
@@ -6046,7 +6143,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"size", SIZE},
       {"min_size", MIN_SIZE},
       {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM},
-      {"crush_rule", CRUSH_RULE}, {"hashpspool", HASHPSPOOL},
+      {"crush_rule", CRUSH_RULE},
+      {"hashpspool", HASHPSPOOL},
+      {"eio", POOL_EIO},
       {"allow_ec_overwrites", EC_OVERWRITES}, {"nodelete", NODELETE},
       {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
       {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
@@ -6084,12 +6183,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"fingerprint_algorithm", FINGERPRINT_ALGORITHM},
       {"pg_autoscale_mode", PG_AUTOSCALE_MODE},
       {"pg_num_min", PG_NUM_MIN},
+      {"pg_num_max", PG_NUM_MAX},
       {"target_size_bytes", TARGET_SIZE_BYTES},
       {"target_size_ratio", TARGET_SIZE_RATIO},
       {"pg_autoscale_bias", PG_AUTOSCALE_BIAS},
       {"dedup_tier", DEDUP_TIER},
       {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
+      {"bulk", BULK}
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6205,7 +6306,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 			     p->pg_autoscale_mode));
 	    break;
 	  case HASHPSPOOL:
+	  case POOL_EIO:
 	  case NODELETE:
+	  case BULK:
 	  case NOPGCHANGE:
 	  case NOSIZECHANGE:
 	  case WRITE_FADVISE_DONTNEED:
@@ -6310,6 +6413,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
 	  case PG_NUM_MIN:
+	  case PG_NUM_MAX:
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
@@ -6432,7 +6536,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      "\n";
 	    break;
 	  case HASHPSPOOL:
+	  case POOL_EIO:
 	  case NODELETE:
+	  case BULK:
 	  case NOPGCHANGE:
 	  case NOSIZECHANGE:
 	  case WRITE_FADVISE_DONTNEED:
@@ -6470,6 +6576,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
 	  case PG_NUM_MIN:
+	  case PG_NUM_MAX:
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
@@ -6513,6 +6620,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     const pg_pool_t *p = osdmap.get_pg_pool(poolid);
     const pool_stat_t* pstat = mon.mgrstatmon()->get_pool_stat(poolid);
+    if (!pstat) {
+      ss << "no stats for pool '" << pool_name << "'";
+      r = -ENOENT;
+      goto reply;
+    }
     const object_stat_sum_t& sum = pstat->stats.sum;
     if (f) {
       f->open_object_section("pool_quotas");
@@ -7255,11 +7367,12 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   string erasure_code_profile;
   stringstream ss;
   string rule_name;
+  bool bulk = false;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0, 0, 0, 0, 0.0,
+			 0, 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
-			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {},
+			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 &ss);
 
   if (ret < 0) {
@@ -7789,22 +7902,55 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
   return 0;
 }
 
-int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
+int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, ostream *ss)
 {
   auto max_pgs_per_osd = g_conf().get_val<uint64_t>("mon_max_pg_per_osd");
-  auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);   // assume min cluster size 3
-  auto max_pgs = max_pgs_per_osd * num_osds;
   uint64_t projected = 0;
+  unsigned osd_num = 0;
+  // assume min cluster size 3
+  auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);
   if (pool < 0) {
+    // a new pool
     projected += pg_num * size;
   }
-  for (const auto& i : osdmap.get_pools()) {
-    if (i.first == pool) {
+  if (mapping.get_epoch() >= osdmap.get_epoch()) {
+    set<int> roots;
+    CrushWrapper newcrush = _get_pending_crush();
+    newcrush.find_takes_by_rule(crush_rule, &roots);
+    int max_osd = osdmap.get_max_osd();
+    for (auto root : roots) {
+      const char *rootname = newcrush.get_item_name(root);
+      set<int> osd_ids;
+      newcrush.get_leaves(rootname, &osd_ids);
+      unsigned out_osd = 0;
+      for (auto id : osd_ids) {
+	if (id > max_osd) { 
+	  out_osd++;
+	  continue;
+	}
+	projected += mapping.get_osd_acting_pgs(id).size();
+      }
+      osd_num += osd_ids.size() - out_osd;
+    }
+    if (pool >= 0) {
+      // update an existing pool's pg num.
+      // already counted the pgs of this `pool` by iterating crush map, so
+      // remove them using adding the specified pg num
       projected += pg_num * size;
-    } else {
-      projected += i.second.get_pg_num_target() * i.second.get_size();
+      projected -= mapping.get_num_acting_pgs(pool);
+    }
+    num_osds = std::max(osd_num, 3u);  // assume min cluster size 3
+  } else {
+    // use pg_num target for evaluating the projected pg num
+    for (const auto& [pool_id, pool_info] : osdmap.get_pools()) {
+      if (pool_id == pool) {
+	projected += pg_num * size;
+      } else {
+	projected += pool_info.get_pg_num_target() * pool_info.get_size();
+      }
     }
   }
+  auto max_pgs = max_pgs_per_osd * num_osds;
   if (projected > max_pgs) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
@@ -7825,6 +7971,8 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
  * @param crush_rule_name The crush rule to use, if crush_rulset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
+ * @param pg_num_min min pg_num
+ * @param pg_num_max max pg_num
  * @param repl_size Replication factor, or 0 for default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, or TYPE_REP
@@ -7839,6 +7987,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
 				 unsigned pg_num_min,
+				 unsigned pg_num_max,
                                  const uint64_t repl_size,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
@@ -7847,6 +7996,7 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  const uint64_t expected_num_objects,
                                  FastReadType fast_read,
 				 const string& pg_autoscale_mode,
+				 bool bulk,
 				 ostream *ss)
 {
   if (name.length() == 0)
@@ -7915,7 +8065,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << __func__ << " crush smoke test duration: "
              << duration << dendl;
   }
-  r = check_pg_num(-1, pg_num, size, ss);
+  r = check_pg_num(-1, pg_num, size, crush_rule, ss);
   if (r) {
     dout(10) << "check_pg_num returns " << r << dendl;
     return r;
@@ -7967,6 +8117,11 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->type = pool_type;
   pi->fast_read = fread; 
   pi->flags = g_conf()->osd_pool_default_flags;
+  if (bulk) {
+    pi->set_flag(pg_pool_t::FLAG_BULK);
+  } else if (g_conf()->osd_pool_default_flag_bulk) {
+      pi->set_flag(pg_pool_t::FLAG_BULK);
+  }
   if (g_conf()->osd_pool_default_flag_hashpspool)
     pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
   if (g_conf()->osd_pool_default_flag_nodelete)
@@ -8020,6 +8175,10 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (osdmap.require_osd_release >= ceph_release_t::nautilus &&
       pg_num_min) {
     pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int64_t>(pg_num_min));
+  }
+  if (osdmap.require_osd_release >= ceph_release_t::quincy &&
+      pg_num_max) {
+    pi->opts.set(pool_opts_t::PG_NUM_MAX, static_cast<int64_t>(pg_num_max));
   }
   if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
 	pg_autoscale_mode); m != pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
@@ -8184,7 +8343,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "crush rule " << p.get_crush_rule() << " type does not match pool";
       return -EINVAL;
     }
-    int r = check_pg_num(pool, p.get_pg_num(), n, &ss);
+    int r = check_pg_num(pool, p.get_pg_num(), n, p.get_crush_rule(), &ss);
     if (r < 0) {
       return r;
     }
@@ -8290,7 +8449,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -ERANGE;
     }
     if (n > (int)p.get_pg_num_target()) {
-      int r = check_pg_num(pool, n, p.get_size(), &ss);
+      int r = check_pg_num(pool, n, p.get_size(), p.get_crush_rule(), &ss);
       if (r) {
 	return r;
       }
@@ -8305,6 +8464,19 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	ss << "nautilus OSDs are required to decrease pg_num";
 	return -EPERM;
       }
+    }
+    int64_t pg_min = 0, pg_max = 0;
+    p.opts.get(pool_opts_t::PG_NUM_MIN, &pg_min);
+    p.opts.get(pool_opts_t::PG_NUM_MAX, &pg_max);
+    if (pg_min && n < pg_min) {
+      ss << "specified pg_num " << n
+	 << " < pg_num_min " << pg_min;
+      return -EINVAL;
+    }
+    if (pg_max && n > pg_max) {
+      ss << "specified pg_num " << n
+	 << " < pg_num_max " << pg_max;
+      return -EINVAL;
     }
     if (osdmap.require_osd_release < ceph_release_t::nautilus) {
       // pre-nautilus osdmap format; increase pg_num directly
@@ -8400,8 +8572,20 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     p.crush_rule = id;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
-	     var == "noscrub" || var == "nodeep-scrub") {
+	     var == "noscrub" || var == "nodeep-scrub" || var == "bulk") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
+    // make sure we only compare against 'n' if we didn't receive a string
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.set_flag(flag);
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.unset_flag(flag);
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
+    }
+  } else if (var == "eio") {
+    uint64_t flag = pg_pool_t::get_flag_by_name(var);
+
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
       p.set_flag(flag);
@@ -8671,6 +8855,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
            << "later before setting target_size_bytes";
         return -EINVAL;
       }
+    } else if (var == "target_size_ratio") {
+      if (f < 0.0) {
+	ss << "target_size_ratio cannot be negative";
+	return -EINVAL;
+      }
     } else if (var == "pg_num_min") {
       if (interr.length()) {
         ss << "error parsing int value '" << val << "': " << interr;
@@ -8679,6 +8868,16 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       if (n > (int)p.get_pg_num_target()) {
 	ss << "specified pg_num_min " << n
 	   << " > pg_num " << p.get_pg_num_target();
+	return -EINVAL;
+      }
+    } else if (var == "pg_num_max") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n && n < (int)p.get_pg_num_target()) {
+	ss << "specified pg_num_max " << n
+	   << " < pg_num " << p.get_pg_num_target();
 	return -EINVAL;
       }
     } else if (var == "recovery_priority") {
@@ -10236,6 +10435,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto update;
   } else if (prefix == "osd crush weight-set create" ||
 	     prefix == "osd crush weight-set create-compat") {
+    if (_have_pending_crush()) {
+      dout(10) << " first waiting for pending crush changes to commit" << dendl;
+      goto wait;
+    }
     CrushWrapper newcrush = _get_pending_crush();
     int64_t pool;
     int positions;
@@ -12396,6 +12599,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return false;
     }
 
+    // make sure kvmon is writeable.
+    if (!mon.kvmon()->is_writeable()) {
+      dout(10) << __func__ << " waiting for kv mon to be writeable for "
+               << "osd new" << dendl;
+      mon.kvmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
+
     map<string,string> param_map;
 
     bufferlist bl = m->get_data();
@@ -12506,9 +12717,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     prefix == "osd blacklist clear") {
     pending_inc.new_blocklist.clear();
     std::list<std::pair<entity_addr_t,utime_t > > blocklist;
-    osdmap.get_blocklist(&blocklist);
+    std::list<std::pair<entity_addr_t,utime_t > > range_b;
+    osdmap.get_blocklist(&blocklist, &range_b);
     for (const auto &entry : blocklist) {
       pending_inc.old_blocklist.push_back(entry.first);
+    }
+    for (const auto &entry : range_b) {
+      pending_inc.old_range_blocklist.push_back(entry.first);
     }
     ss << " removed all blocklist entries";
     getline(ss, rs);
@@ -12517,8 +12732,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd blocklist" ||
 	     prefix == "osd blacklist") {
-    string addrstr;
+    string addrstr, rangestr;
+    bool range = false;
     cmd_getval(cmdmap, "addr", addrstr);
+    if (cmd_getval(cmdmap, "range", rangestr)) {
+      if (rangestr == "range") {
+	range = true;
+      } else {
+	ss << "Did you mean to specify \"osd blocklist range\"?";
+	err = -EINVAL;
+	goto reply;
+      }
+    }
     entity_addr_t addr;
     if (!addr.parse(addrstr)) {
       ss << "unable to parse address " << addrstr;
@@ -12526,11 +12751,31 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     else {
-      if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
-	// always blocklist type ANY
-	addr.set_type(entity_addr_t::TYPE_ANY);
+      if (range) {
+	if (!addr.maybe_cidr()) {
+	  ss << "You specified a range command, but " << addr
+	     << " does not parse as a CIDR range";
+	  err = -EINVAL;
+	  goto reply;
+	}
+	addr.type = entity_addr_t::TYPE_CIDR;
+	err = check_cluster_features(CEPH_FEATUREMASK_RANGE_BLOCKLIST, ss);
+	if (err) {
+	  goto reply;
+	}
+	if ((addr.is_ipv4() && addr.get_nonce() > 32) ||
+	    (addr.is_ipv6() && addr.get_nonce() > 128)) {
+	  ss << "Too many bits in range for that protocol!";
+	  err = -EINVAL;
+	  goto reply;
+	}
       } else {
-	addr.set_type(entity_addr_t::TYPE_LEGACY);
+	if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
+	  // always blocklist type ANY
+	  addr.set_type(entity_addr_t::TYPE_ANY);
+	} else {
+	  addr.set_type(entity_addr_t::TYPE_LEGACY);
+	}
       }
 
       string blocklistop;
@@ -12544,16 +12789,27 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           g_conf()->mon_osd_blocklist_default_expire);
 	expires += d;
 
-	pending_inc.new_blocklist[addr] = expires;
+	auto add_to_pending_blocklists = [](auto& nb, auto& ob,
+					    const auto& addr,
+					    const auto& expires) {
+	  nb[addr] = expires;
+	  // cancel any pending un-blocklisting request too
+	  auto it = std::find(ob.begin(),
+			      ob.end(), addr);
+	  if (it != ob.end()) {
+	    ob.erase(it);
+	  }
+	};
+	if (range) {
+	  add_to_pending_blocklists(pending_inc.new_range_blocklist,
+				    pending_inc.old_range_blocklist,
+				    addr, expires);
 
-        {
-          // cancel any pending un-blocklisting request too
-          auto it = std::find(pending_inc.old_blocklist.begin(),
-            pending_inc.old_blocklist.end(), addr);
-          if (it != pending_inc.old_blocklist.end()) {
-            pending_inc.old_blocklist.erase(it);
-          }
-        }
+	} else {
+	  add_to_pending_blocklists(pending_inc.new_blocklist,
+				    pending_inc.old_blocklist,
+				    addr, expires);
+	}
 
 	ss << "blocklisting " << addr << " until " << expires << " (" << d << " sec)";
 	getline(ss, rs);
@@ -12561,12 +12817,24 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						  get_last_committed() + 1));
 	return true;
       } else if (blocklistop == "rm") {
-	if (osdmap.is_blocklisted(addr) ||
-	    pending_inc.new_blocklist.count(addr)) {
-	  if (osdmap.is_blocklisted(addr))
-	    pending_inc.old_blocklist.push_back(addr);
-	  else
-	    pending_inc.new_blocklist.erase(addr);
+	auto rm_from_pending_blocklists = [](const auto& addr,
+					     auto& blocklist,
+					     auto& ob, auto& pb) {
+	  if (blocklist.count(addr)) {
+	    ob.push_back(addr);
+	    return true;
+	  } else if (pb.count(addr)) {
+	    pb.erase(addr);
+	    return true;
+	  }
+	  return false;
+	};
+	if ((!range && rm_from_pending_blocklists(addr, osdmap.blocklist,
+						  pending_inc.old_blocklist,
+						  pending_inc.new_blocklist)) ||
+	    (range && rm_from_pending_blocklists(addr, osdmap.range_blocklist,
+						 pending_inc.old_range_blocklist,
+						 pending_inc.new_range_blocklist))) {
 	  ss << "un-blocklisting " << addr;
 	  getline(ss, rs);
 	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
@@ -12664,6 +12932,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool create") {
     int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
     int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
+    int64_t pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
     int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
     string pool_type_str;
     cmd_getval(cmdmap, "pool_type", pool_type_str);
@@ -12672,6 +12941,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
+    bool confirm = false;
+    //confirmation may be set to true only by internal operations.
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+    if (poolstr[0] == '.' && !confirm) {
+      ss << "pool names beginning with . are not allowed";
+      err = 0;
+      goto reply;
+    }
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id >= 0) {
       const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
@@ -12826,15 +13103,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pg_autoscale_mode;
     cmd_getval(cmdmap, "autoscale_mode", pg_autoscale_mode);
 
+    bool bulk = cmd_getval_or<bool>(cmdmap, "bulk", 0);
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
-			   pg_num, pgp_num, pg_num_min,
+			   pg_num, pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
 			   pg_autoscale_mode,
+			   bulk,
 			   &ss);
     if (err < 0) {
       switch(err) {
@@ -12897,7 +13176,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "destpool", destpoolstr);
     int64_t pool_src = osdmap.lookup_pg_pool_name(srcpoolstr.c_str());
     int64_t pool_dst = osdmap.lookup_pg_pool_name(destpoolstr.c_str());
-
+    bool confirm = false;
+    //confirmation may be set to true only by internal operations.
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+    if (destpoolstr[0] == '.' && !confirm) {
+      ss << "pool names beginning with . are not allowed";
+      err = 0;
+      goto reply;
+    }
     if (pool_src < 0) {
       if (pool_dst >= 0) {
         // src pool doesn't exist, dst pool does exist: to ensure idempotency
@@ -13261,6 +13547,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
          << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
          << "' pool; only '"
+         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_PROXY)
+         << "','"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_READPROXY)
         << "' allowed.";
       err = -EINVAL;
@@ -14447,7 +14735,7 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
       newp.peering_crush_bucket_count = new_site_count;
       newp.peering_crush_mandatory_member = remaining_site;
       newp.min_size = pgi.second.min_size / 2; // only support 2 zones now
-      newp.last_force_op_resend = pending_inc.epoch;
+      newp.set_last_force_op_resend(pending_inc.epoch);
     }
   }
   propose_pending();
@@ -14467,7 +14755,7 @@ void OSDMonitor::trigger_recovery_stretch_mode()
   for (auto pgi : osdmap.pools) {
     if (pgi.second.peering_crush_bucket_count) {
       pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
-      newp.last_force_op_resend = pending_inc.epoch;
+      newp.set_last_force_op_resend(pending_inc.epoch);
     }
   }
   propose_pending();
@@ -14553,7 +14841,7 @@ void OSDMonitor::trigger_healthy_stretch_mode()
       newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
       newp.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
       newp.min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
-      newp.last_force_op_resend = pending_inc.epoch;
+      newp.set_last_force_op_resend(pending_inc.epoch);
     }
   }
   propose_pending();

@@ -22,13 +22,6 @@ Crimson is not enabled by default. To enable it::
 Please note, `ASan`_ is enabled by default if crimson is built from a source
 cloned using git.
 
-Also, Seastar uses its own lockless allocator which does not play well with
-the alien threads. So, to use alienstore / bluestore backend, you might want to
-pass ``-DSeastar_CXX_FLAGS=-DSEASTAR_DEFAULT_ALLOCATOR`` to ``cmake`` when
-configuring this project to use the libc allocator, like::
-
-  $ cmake -DWITH_SEASTAR=ON -DSeastar_CXX_FLAGS=-DSEASTAR_DEFAULT_ALLOCATOR ..
-
 .. _ASan: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
 Running Crimson
@@ -171,7 +164,7 @@ pg stats reported to mgr
 ------------------------
 
 Crimson collects the per-pg, per-pool, and per-osd stats in a `MPGStats`
-messsage, and send it over to mgr, so that the mgr modules can query
+message, and send it over to mgr, so that the mgr modules can query
 them using the `MgrModule.get()` method.
 
 asock command

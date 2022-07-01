@@ -102,20 +102,10 @@ void BitmapAllocator::dump()
   auto it = bins_overall.begin();
   while (it != bins_overall.end()) {
     ldout(cct, 0) << __func__
-	            << " bin " << it->first
-		    << "(< " << byte_u_t((1 << (it->first + 1)) * get_min_alloc_size()) << ")"
-		    << " : " << it->second << " extents"
-		    << dendl;
+                  << " bin " << it->first
+                  << "(< " << byte_u_t((1 << (it->first + 1)) * get_min_alloc_size()) << ")"
+                  << " : " << it->second << " extents"
+                  << dendl;
     ++it;
   }
-}
-
-void BitmapAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
-{
-  size_t alloc_size = get_min_alloc_size();
-  auto multiply_by_alloc_size = [alloc_size, notify](size_t off, size_t len) {
-    notify(off * alloc_size, len * alloc_size);
-  };
-  std::lock_guard lck(lock);
-  l1.dump(multiply_by_alloc_size);
 }

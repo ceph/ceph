@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
-import { take } from 'rxjs/operators';
-
+import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -18,7 +17,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 })
 export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[] = [];
-  daemons: object[] = [];
+  daemons: RgwDaemon[] = [];
   grafanaPermission: Permission;
   isMultiSite: boolean;
 
@@ -45,13 +44,18 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       },
       {
+        name: $localize`Zone`,
+        prop: 'zone_name',
+        flexGrow: 2
+      },
+      {
         name: $localize`Zone Group`,
         prop: 'zonegroup_name',
         flexGrow: 2
       },
       {
-        name: $localize`Zone`,
-        prop: 'zone_name',
+        name: $localize`Realm`,
+        prop: 'realm_name',
         flexGrow: 2
       },
       {
@@ -67,13 +71,12 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
   }
 
   getDaemonList(context: CdTableFetchDataContext) {
-    this.rgwDaemonService.daemons$.pipe(take(1)).subscribe(
-      (resp: object[]) => {
-        this.daemons = resp;
-      },
-      () => {
-        context.error();
-      }
-    );
+    this.rgwDaemonService.list().subscribe(this.updateDaemons, () => {
+      context.error();
+    });
   }
+
+  private updateDaemons = (daemons: RgwDaemon[]) => {
+    this.daemons = daemons;
+  };
 }

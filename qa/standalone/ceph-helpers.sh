@@ -906,9 +906,14 @@ function test_activate_osd() {
     kill_daemons $dir TERM osd || return 1
 
     activate_osd $dir 0 --osd-max-backfills 20 || return 1
+    local scheduler=$(get_op_scheduler 0)
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
         config get osd_max_backfills)
-    test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
+    if [ "$scheduler" = "mclock_scheduler" ]; then
+      test "$backfills" = '{"osd_max_backfills":"1000"}' || return 1
+    else
+      test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
+    fi
 
     teardown $dir || return 1
 }
@@ -939,6 +944,41 @@ function test_activate_osd_after_mark_down() {
     else
       test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
     fi
+
+    teardown $dir || return 1
+}
+
+function test_activate_osd_skip_benchmark() {
+    local dir=$1
+
+    setup $dir || return 1
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+
+    # Skip the osd benchmark during first osd bring-up.
+    run_osd $dir 0 --osd-op-queue=mclock_scheduler \
+        --osd-mclock-skip-benchmark=true || return 1
+    local max_iops_hdd_def=$(CEPH_ARGS='' ceph --format=json daemon \
+        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_hdd)
+    local max_iops_ssd_def=$(CEPH_ARGS='' ceph --format=json daemon \
+        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_ssd)
+
+    kill_daemons $dir TERM osd || return 1
+    ceph osd down 0 || return 1
+    wait_for_osd down 0 || return 1
+
+    # Skip the osd benchmark during activation as well. Validate that
+    # the max osd capacities are left unchanged.
+    activate_osd $dir 0 --osd-op-queue=mclock_scheduler \
+        --osd-mclock-skip-benchmark=true || return 1
+    local max_iops_hdd_after_boot=$(CEPH_ARGS='' ceph --format=json daemon \
+        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_hdd)
+    local max_iops_ssd_after_boot=$(CEPH_ARGS='' ceph --format=json daemon \
+        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_ssd)
+
+    test "$max_iops_hdd_def" = "$max_iops_hdd_after_boot" || return 1
+    test "$max_iops_ssd_def" = "$max_iops_ssd_after_boot" || return 1
 
     teardown $dir || return 1
 }

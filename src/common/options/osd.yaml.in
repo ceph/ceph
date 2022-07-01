@@ -30,7 +30,7 @@ options:
 - name: osd_smart_report_timeout
   type: uint
   level: advanced
-  desc: Timeout (in seconds) for smarctl to run, default is set to 5
+  desc: Timeout (in seconds) for smartctl to run, default is set to 5
   default: 5
 # verify backend can support configured max object name length
 - name: osd_check_max_object_name_len_on_startup
@@ -80,7 +80,8 @@ options:
 - name: osd_recovery_sleep
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next recovery or backfill op
+  desc: Time in seconds to sleep before next recovery or backfill op. This setting
+    overrides _ssd, _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before the next recovery or backfill op.
     Increasing this value will slow down recovery operation while
     client operations will be less impacted.
@@ -125,7 +126,8 @@ options:
 - name: osd_snap_trim_sleep
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next snap trim (overrides values below)
+  desc: Time in seconds to sleep before next snap trim. This setting overrides _ssd,
+    _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before next snap trim op.
     Increasing this value will slow down snap trimming.
     This option overrides backend specific variants.
@@ -447,6 +449,14 @@ options:
   see_also:
   - osd_deep_scrub_large_omap_object_key_threshold
   with_legacy: true
+# when scrubbing blocks on a locked object
+- name: osd_blocked_scrub_grace_period
+  type: int
+  level: advanced
+  desc: Time (seconds) before issuing a cluster-log warning
+  long_desc: Waiting too long for an object in the scrubbed chunk to be unlocked.
+  default: 120
+  with_legacy: true
 # where rados plugins are stored
 - name: osd_class_dir
   type: str
@@ -739,6 +749,15 @@ options:
   default: 32
   flags:
   - startup
+- name: osd_aggregated_slow_ops_logging
+  type: bool
+  level: advanced
+  desc: Allow OSD daemon to send an aggregated slow ops to the cluster log
+  fmt_desc: If set to ``true``, the OSD daemon will send slow ops information in 
+    an aggregated format to the cluster log else sends every slow op to the
+    cluster log.
+  default: true
+  with_legacy: true
 - name: osd_op_num_threads_per_shard
   type: int
   level: advanced
@@ -1061,6 +1080,19 @@ options:
   - osd_mclock_max_capacity_iops_ssd
   flags:
   - startup
+- name: osd_mclock_skip_benchmark
+  type: bool
+  level: dev
+  desc: Skip the OSD benchmark on OSD initialization/boot-up
+  long_desc: This option specifies whether the OSD benchmark must be skipped during
+    the OSD boot-up sequence. Only considered for osd_op_queue = mclock_scheduler.
+  fmt_desc: Skip the OSD benchmark on OSD initialization/boot-up
+  default: false
+  see_also:
+  - osd_mclock_max_capacity_iops_hdd
+  - osd_mclock_max_capacity_iops_ssd
+  flags:
+  - runtime
 - name: osd_mclock_profile
   type: str
   level: advanced
@@ -1227,8 +1259,8 @@ options:
 - name: osd_delete_sleep
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next removal transaction (overrides values
-    below)
+  desc: Time in seconds to sleep before next removal transaction. This setting
+    overrides _ssd, _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before the next removal transaction. This
     throttles the PG deletion process.
   default: 0
@@ -1256,3 +1288,9 @@ options:
   default: 1
   flags:
   - runtime
+- name: osd_rocksdb_iterator_bounds_enabled
+  desc: Whether omap iterator bounds are applied to rocksdb iterator ReadOptions
+  type: bool
+  level: dev
+  default: true
+  with_legacy: true

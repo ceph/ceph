@@ -53,11 +53,12 @@ def task(ctx, config):
     runtype = config.get('type', 'write')
 
     create_pool = config.get('create_pool', True)
-    for role in config.get('clients', ['client.0']):
+    for role in config.get(
+            'clients',
+            list(map(lambda x: 'client.' + x,
+                     teuthology.all_roles_of_type(ctx.cluster, 'client')))):
         assert isinstance(role, str)
-        PREFIX = 'client.'
-        assert role.startswith(PREFIX)
-        id_ = role[len(PREFIX):]
+        (_, id_) = role.split('.', 1)
         (remote,) = ctx.cluster.only(role).remotes.keys()
 
         if config.get('ec_pool', False):

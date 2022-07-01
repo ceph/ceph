@@ -24,6 +24,7 @@
 
 #include "crimson/net/chained_dispatchers.h"
 #include "Messenger.h"
+#include "Socket.h"
 #include "SocketConnection.h"
 
 namespace crimson::net {
@@ -48,7 +49,11 @@ class SocketMessenger final : public Messenger {
   uint32_t global_seq = 0;
   bool started = false;
 
-  bind_ertr::future<> do_bind(const entity_addrvec_t& addr);
+  listen_ertr::future<> do_listen(const entity_addrvec_t& addr);
+  /// try to bind to the first unused port of given address
+  bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
+                               uint32_t min_port, uint32_t max_port);
+
 
  public:
   SocketMessenger(const entity_name_t& myname,
@@ -58,12 +63,10 @@ class SocketMessenger final : public Messenger {
 
   seastar::future<> set_myaddrs(const entity_addrvec_t& addr) override;
 
+  bool set_addr_unknowns(const entity_addrvec_t &addr) override;
   // Messenger interfaces are assumed to be called from its own shard, but its
   // behavior should be symmetric when called from any shard.
   bind_ertr::future<> bind(const entity_addrvec_t& addr) override;
-
-  bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
-                               uint32_t min_port, uint32_t max_port) override;
 
   seastar::future<> start(const dispatchers_t& dispatchers) override;
 

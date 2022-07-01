@@ -6,17 +6,15 @@ from orchestrator import Orchestrator as OrchestratorBase
 
 from ..controllers.orchestrator import Orchestrator
 from ..services.orchestrator import OrchFeature
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase
 
 
 class OrchestratorControllerTest(ControllerTestCase):
-    URL_STATUS = '/api/orchestrator/status'
+    URL_STATUS = '/ui-api/orchestrator/status'
     URL_INVENTORY = '/api/orchestrator/inventory'
 
     @classmethod
     def setup_server(cls):
-        # pylint: disable=protected-access
-        Orchestrator._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Orchestrator])
 
     @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')

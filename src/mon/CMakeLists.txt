@@ -24,7 +24,11 @@ set(lib_mon_srcs
   ../mds/MDSAuthCaps.cc
   ../mgr/mgr_commands.cc
   ../osd/OSDCap.cc
-  $<TARGET_OBJECTS:mgr_cap_obj>)
+  ../mgr/MgrCap.cc)
+
+if(TARGET mgr_cap_obj)
+  list(APPEND lib_mon_srcs $<TARGET_OBJECTS:mgr_cap_obj>)
+endif()
 
 if(HAVE_GSSAPI)
   list(APPEND lib_mon_srcs
@@ -38,5 +42,5 @@ target_link_libraries(mon
   heap_profiler
   fmt::fmt)
 if(WITH_JAEGER)
-  target_link_libraries(mon jaeger-base)
+  target_link_libraries(mon jaeger_base)
 endif()

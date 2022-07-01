@@ -12,8 +12,10 @@ from ..group import Group
 
 log = logging.getLogger(__name__)
 
+
 class AuthMetadataError(Exception):
     pass
+
 
 class AuthMetadataManager(object):
 
@@ -51,7 +53,7 @@ class AuthMetadataManager(object):
             msg = ("The current version of AuthMetadataManager, version {0} "
                    "does not support the required feature. Need version {1} "
                    "or greater".format(self.version, compat_version)
-                  )
+                   )
             log.error(msg)
             raise AuthMetadataError(msg)
 

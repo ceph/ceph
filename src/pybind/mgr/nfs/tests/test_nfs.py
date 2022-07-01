@@ -1,17 +1,20 @@
 # flake8: noqa
 import json
 import pytest
-from typing import Optional, Tuple, Iterator, List, Any, Dict
+from typing import Optional, Tuple, Iterator, List, Any
 
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import MagicMock
-from mgr_module import NFS_POOL_NAME
+from mgr_module import MgrModule, NFS_POOL_NAME
+
+from rados import ObjectNotFound
 
 from ceph.deployment.service_spec import NFSServiceSpec
 from nfs import Module
-from nfs.export import ExportMgr
-from nfs.export_utils import GaneshaConfParser, Export, RawBlock
+from nfs.export import ExportMgr, normalize_path
+from nfs.ganesha_conf import GaneshaConfParser, Export, RawBlock
+from nfs.cluster import NFSCluster
 from orchestrator import ServiceDescription, DaemonDescription, OrchResult
 
 
@@ -123,6 +126,8 @@ EXPORT {
         return self.temp_store[self.temp_store_namespace][key].stat()
 
     def _ioctl_read_mock(self, key: str, size: Optional[Any] = None) -> bytes:
+        if key not in self.temp_store[self.temp_store_namespace]:
+            raise ObjectNotFound
         return self.temp_store[self.temp_store_namespace][key].read(size)
 
     def _ioctx_set_namespace_mock(self, namespace: str) -> None:
@@ -153,7 +158,16 @@ EXPORT {
             ServiceDescription(spec=NFSServiceSpec(service_id=self.cluster_id))
         ] if enable else []
 
+        orch_nfs_daemons = [
+            DaemonDescription('nfs', 'foo.mydaemon', 'myhostname')
+        ] if enable else []
+
         def mock_exec(cls, args):
+            if args[1:3] == ['bucket', 'stats']:
+                bucket_info = {
+                    "owner": "bucket_owner_user",
+                }
+                return 0, json.dumps(bucket_info), ''
             u = {
                 "user_id": "abc",
                 "display_name": "foo",
@@ -196,21 +210,31 @@ EXPORT {
                 return 0, json.dumps([u]), ''
             return 0, json.dumps(u), ''
 
-        with mock.patch('nfs.module.Module.describe_service') as describe_service, \
+        def mock_describe_service(cls, *args, **kwargs):
+            if kwargs['service_type'] == 'nfs':
+                return OrchResult(orch_nfs_services)
+            return OrchResult([])
+
+        def mock_list_daemons(cls, *args, **kwargs):
+            if kwargs['daemon_type'] == 'nfs':
+                return OrchResult(orch_nfs_daemons)
+            return OrchResult([])
+
+        with mock.patch('nfs.module.Module.describe_service', mock_describe_service) as describe_service, \
+             mock.patch('nfs.module.Module.list_daemons', mock_list_daemons) as list_daemons, \
                 mock.patch('nfs.module.Module.rados') as rados, \
                 mock.patch('nfs.export.available_clusters',
                            return_value=[self.cluster_id]), \
                 mock.patch('nfs.export.restart_nfs_service'), \
-                mock.patch('nfs.export.ExportMgr._exec', mock_exec), \
+                mock.patch('nfs.cluster.restart_nfs_service'), \
+                mock.patch.object(MgrModule, 'tool_exec', mock_exec), \
                 mock.patch('nfs.export.check_fs', return_value=True), \
-                mock.patch('nfs.export_utils.check_fs', return_value=True), \
+                mock.patch('nfs.ganesha_conf.check_fs', return_value=True), \
                 mock.patch('nfs.export.ExportMgr._create_user_key',
                            return_value='thekeyforclientabc'):
 
             rados.open_ioctx.return_value.__enter__.return_value = self.io_mock
             rados.open_ioctx.return_value.__exit__ = mock.Mock(return_value=None)
-
-            describe_service.return_value = OrchResult(orch_nfs_services)
 
             self._reset_temp_store()
 
@@ -324,9 +348,9 @@ NFS_CORE_PARAM {
         assert export.protocols == [4, 3]
         assert set(export.transports) == {"TCP", "UDP"}
         assert export.fsal.name == "RGW"
-        # assert export.fsal.rgw_user_id == "testuser"  # probably correct value
-        # assert export.fsal.access_key == "access_key"  # probably correct value
-        # assert export.fsal.secret_key == "secret_key"  # probably correct value
+        assert export.fsal.user_id == "nfs.foo.bucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 0
         assert export.cluster_id == 'foo'
 
@@ -474,7 +498,9 @@ NFS_CORE_PARAM {
             'clients': [],
             'fsal': {
                 'name': 'RGW',
-                'rgw_user_id': 'rgw.foo.bucket'
+                'user_id': 'rgw.foo.bucket',
+                'access_key_id': 'the_access_key',
+                'secret_access_key': 'the_secret_key'
             }
         })
 
@@ -486,9 +512,9 @@ NFS_CORE_PARAM {
         assert set(export.protocols) == {4, 3}
         assert set(export.transports) == {"TCP", "UDP"}
         assert export.fsal.name == "RGW"
-#        assert export.fsal.rgw_user_id == "testuser"
-#        assert export.fsal.access_key is None
-#        assert export.fsal.secret_key is None
+        assert export.fsal.user_id == "rgw.foo.bucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 0
         assert export.cluster_id == self.cluster_id
 
@@ -533,7 +559,7 @@ NFS_CORE_PARAM {
         blocks = GaneshaConfParser(block).parse()
         export = Export.from_export_block(blocks[0], self.cluster_id)
         nfs_mod = Module('nfs', '', '')
-        with mock.patch('nfs.export_utils.check_fs', return_value=True):
+        with mock.patch('nfs.ganesha_conf.check_fs', return_value=True):
             export.validate(nfs_mod)
 
     def test_update_export(self):
@@ -769,10 +795,10 @@ NFS_CORE_PARAM {
         assert len(exports) == 1
         assert exports[0].export_id == 1
 
-    def test_create_export_rgw(self):
-        self._do_mock_test(self._do_test_create_export_rgw)
+    def test_create_export_rgw_bucket(self):
+        self._do_mock_test(self._do_test_create_export_rgw_bucket)
 
-    def _do_test_create_export_rgw(self):
+    def _do_test_create_export_rgw_bucket(self):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
@@ -804,6 +830,7 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
+        assert export.fsal.user_id == "bucket_owner_user"
         assert export.fsal.access_key_id == "the_access_key"
         assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
@@ -812,6 +839,95 @@ NFS_CORE_PARAM {
         assert export.clients[0].addresses == ["192.168.0.0/16"]
         assert export.cluster_id == self.cluster_id
 
+    def test_create_export_rgw_bucket_user(self):
+        self._do_mock_test(self._do_test_create_export_rgw_bucket_user)
+
+    def _do_test_create_export_rgw_bucket_user(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        exports = conf.list_exports(cluster_id=self.cluster_id)
+        ls = json.loads(exports[1])
+        assert len(ls) == 2
+
+        r = conf.create_export(
+            fsal_type='rgw',
+            cluster_id=self.cluster_id,
+            bucket='bucket',
+            user_id='other_user',
+            pseudo_path='/mybucket',
+            read_only=False,
+            squash='root',
+            addr=["192.168.0.0/16"]
+        )
+        assert r[0] == 0
+
+        exports = conf.list_exports(cluster_id=self.cluster_id)
+        ls = json.loads(exports[1])
+        assert len(ls) == 3
+
+        export = conf._fetch_export('foo', '/mybucket')
+        assert export.export_id
+        assert export.path == "bucket"
+        assert export.pseudo == "/mybucket"
+        assert export.access_type == "none"
+        assert export.squash == "none"
+        assert export.protocols == [4]
+        assert export.transports == ["TCP"]
+        assert export.fsal.name == "RGW"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
+        assert len(export.clients) == 1
+        assert export.clients[0].squash == 'root'
+        assert export.fsal.user_id == "other_user"
+        assert export.clients[0].access_type == 'rw'
+        assert export.clients[0].addresses == ["192.168.0.0/16"]
+        assert export.cluster_id == self.cluster_id
+        
+    def test_create_export_rgw_user(self):
+        self._do_mock_test(self._do_test_create_export_rgw_user)
+
+    def _do_test_create_export_rgw_user(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        exports = conf.list_exports(cluster_id=self.cluster_id)
+        ls = json.loads(exports[1])
+        assert len(ls) == 2
+
+        r = conf.create_export(
+            fsal_type='rgw',
+            cluster_id=self.cluster_id,
+            user_id='some_user',
+            pseudo_path='/mybucket',
+            read_only=False,
+            squash='root',
+            addr=["192.168.0.0/16"]
+        )
+        assert r[0] == 0
+
+        exports = conf.list_exports(cluster_id=self.cluster_id)
+        ls = json.loads(exports[1])
+        assert len(ls) == 3
+
+        export = conf._fetch_export('foo', '/mybucket')
+        assert export.export_id
+        assert export.path == "/"
+        assert export.pseudo == "/mybucket"
+        assert export.access_type == "none"
+        assert export.squash == "none"
+        assert export.protocols == [4]
+        assert export.transports == ["TCP"]
+        assert export.fsal.name == "RGW"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
+        assert len(export.clients) == 1
+        assert export.clients[0].squash == 'root'
+        assert export.fsal.user_id == "some_user"
+        assert export.clients[0].access_type == 'rw'
+        assert export.clients[0].addresses == ["192.168.0.0/16"]
+        assert export.cluster_id == self.cluster_id
+        
     def test_create_export_cephfs(self):
         self._do_mock_test(self._do_test_create_export_cephfs)
 
@@ -855,3 +971,87 @@ NFS_CORE_PARAM {
         assert export.clients[0].access_type == 'rw'
         assert export.clients[0].addresses == ["192.168.1.0/8"]
         assert export.cluster_id == self.cluster_id
+
+    def _do_test_cluster_ls(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        rc, out, err = cluster.list_nfs_cluster()
+        assert rc == 0
+        assert out == self.cluster_id
+
+    def test_cluster_ls(self):
+        self._do_mock_test(self._do_test_cluster_ls)
+
+    def _do_test_cluster_info(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        rc, out, err = cluster.show_nfs_cluster_info(self.cluster_id)
+        assert rc == 0
+        assert json.loads(out) == {"foo": {"virtual_ip": None, "backend": []}}
+
+    def test_cluster_info(self):
+        self._do_mock_test(self._do_test_cluster_info)
+
+    def _do_test_cluster_config(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
+        assert rc == 0
+        assert out == ""
+
+        rc, out, err = cluster.set_nfs_cluster_config(self.cluster_id, '# foo\n')
+        assert rc == 0
+
+        rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
+        assert rc == 0
+        assert out == "# foo\n"
+
+        rc, out, err = cluster.reset_nfs_cluster_config(self.cluster_id)
+        assert rc == 0
+
+        rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
+        assert rc == 0
+        assert out == ""
+
+    def test_cluster_config(self):
+        self._do_mock_test(self._do_test_cluster_config)
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("/foo/bar/baz", "/foo/bar/baz"),
+        ("/foo/bar/baz/", "/foo/bar/baz"),
+        ("/foo/bar/baz ", "/foo/bar/baz"),
+        ("/foo/./bar/baz", "/foo/bar/baz"),
+        ("/foo/bar/baz/..", "/foo/bar"),
+        ("//foo/bar/baz", "/foo/bar/baz"),
+        ("", ""),
+    ]
+)
+def test_normalize_path(path, expected):
+    assert normalize_path(path) == expected
+
+
+def test_ganesha_validate_squash():
+    """Check error handling of internal validation function for squash value."""
+    from nfs.ganesha_conf import _validate_squash
+    from nfs.exception import NFSInvalidOperation
+
+    _validate_squash("root")
+    with pytest.raises(NFSInvalidOperation):
+        _validate_squash("toot")
+
+
+def test_ganesha_validate_access_type():
+    """Check error handling of internal validation function for access type value."""
+    from nfs.ganesha_conf import _validate_access_type
+    from nfs.exception import NFSInvalidOperation
+
+    for ok in ("rw", "ro", "none"):
+        _validate_access_type(ok)
+    with pytest.raises(NFSInvalidOperation):
+        _validate_access_type("any")

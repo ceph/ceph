@@ -421,6 +421,11 @@ int Monitor::do_admin_command(
     cmd_getval(cmdmap, "devid", want_devid);
 
     string devname = store->get_devname();
+    if (devname.empty()) {
+      err << "could not determine device name for " << store->get_path();
+      r = -ENOENT;
+      goto abort;
+    }
     set<string> devnames;
     get_raw_devices(devname, &devnames);
     json_spirit::mObject json_map;
@@ -496,6 +501,7 @@ void Monitor::handle_signal(int signum)
   derr << "*** Got Signal " << sig_str(signum) << " ***" << dendl;
   if (signum == SIGHUP) {
     sighup_handler(signum);
+    logmon()->reopen_logs();
   } else {
     ceph_assert(signum == SIGINT || signum == SIGTERM);
     shutdown();
@@ -674,31 +680,8 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
 
 void Monitor::update_log_clients()
 {
-  map<string,string> log_to_monitors;
-  map<string,string> log_to_syslog;
-  map<string,string> log_channel;
-  map<string,string> log_prio;
-  map<string,string> log_to_graylog;
-  map<string,string> log_to_graylog_host;
-  map<string,string> log_to_graylog_port;
-  uuid_d fsid;
-  string host;
-
-  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
-			       log_channel, log_prio, log_to_graylog,
-			       log_to_graylog_host, log_to_graylog_port,
-			       fsid, host))
-    return;
-
-  clog->update_config(log_to_monitors, log_to_syslog,
-		      log_channel, log_prio, log_to_graylog,
-		      log_to_graylog_host, log_to_graylog_port,
-		      fsid, host);
-
-  audit_clog->update_config(log_to_monitors, log_to_syslog,
-			    log_channel, log_prio, log_to_graylog,
-			    log_to_graylog_host, log_to_graylog_port,
-			    fsid, host);
+  clog->parse_client_options(g_ceph_context);
+  audit_clog->parse_client_options(g_ceph_context);
 }
 
 int Monitor::sanitize_options()
@@ -953,6 +936,9 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(&mgr_client);
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
   mgrmon()->prime_mgr_client();
+
+  // generate list of filestore OSDs
+  osdmon()->get_filestore_osd_list();
 
   state = STATE_PROBING;
   bootstrap();
@@ -2614,8 +2600,7 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
   if (!quorum.empty()) {
     f->dump_int(
       "quorum_age",
-      std::chrono::duration_cast<std::chrono::seconds>(
-	mono_clock::now() - quorum_since).count());
+      quorum_age());
   }
 
   f->open_object_section("features");
@@ -2650,8 +2635,7 @@ void Monitor::get_mon_status(Formatter *f)
   if (!quorum.empty()) {
     f->dump_int(
       "quorum_age",
-      std::chrono::duration_cast<std::chrono::seconds>(
-	mono_clock::now() - quorum_since).count());
+      quorum_age());
   }
 
   f->open_object_section("features");
@@ -2982,6 +2966,19 @@ void Monitor::log_health(
   }
 }
 
+void Monitor::update_pending_metadata()
+{
+  Metadata metadata;
+  collect_metadata(&metadata);
+  size_t version_size = mon_metadata[rank]["ceph_version_short"].size();
+  const std::string current_version = mon_metadata[rank]["ceph_version_short"];
+  const std::string pending_version = metadata["ceph_version_short"];
+
+  if (current_version.compare(0, version_size, pending_version) < 0) {
+    mgr_client.update_daemon_metadata("mon", name, metadata);
+  }
+}
+
 void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
 				 MonSession *session)
 {
@@ -2990,7 +2987,6 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
 
   const auto&& fs_names = session->get_allowed_fs_names();
 
-  mono_clock::time_point now = mono_clock::now();
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
     healthmon()->get_health_status(false, f, nullptr);
@@ -3006,8 +3002,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
       f->close_section();
       f->dump_int(
 	"quorum_age",
-	std::chrono::duration_cast<std::chrono::seconds>(
-	  mono_clock::now() - quorum_since).count());
+        quorum_age());
     }
     f->open_object_section("monmap");
     monmap->dump_summary(f);
@@ -3060,8 +3055,9 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
       string spacing(maxlen - 3, ' ');
       const auto quorum_names = get_quorum_names();
       const auto mon_count = monmap->mon_info.size();
+      auto mnow = ceph::mono_clock::now();
       ss << "    mon: " << spacing << mon_count << " daemons, quorum "
-	 << quorum_names << " (age " << timespan_str(now - quorum_since) << ")";
+	 << quorum_names << " (age " << timespan_str(mnow - quorum_since) << ")";
       if (quorum_names.size() != mon_count) {
 	std::list<std::string> out_of_q;
 	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
@@ -3442,7 +3438,15 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   // validate user's permissions for requested command
   map<string,string> param_str_map;
-  _generate_command_map(cmdmap, param_str_map);
+
+  // Catch bad_cmd_get exception if _generate_command_map() throws it
+  try {
+    _generate_command_map(cmdmap, param_str_map);
+  }
+  catch(bad_cmd_get& e) {
+    reply_command(op, -EINVAL, e.what(), 0);
+  }
+
   if (!_allowed_command(session, service, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
@@ -3674,7 +3678,16 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "report") {
-
+    // some of the report data is only known by leader, e.g. osdmap_clean_epochs
+    if (!is_leader() && !is_peon()) {
+      dout(10) << " waiting for quorum" << dendl;
+      waitfor_quorum.push_back(new C_RetryMessage(this, op));
+      return;
+    }
+    if (!is_leader()) {
+      forward_request_leader(op);
+      return;
+    }
     // this must be formatted, in its current form
     if (!f)
       f.reset(Formatter::create("json-pretty"));
@@ -3698,6 +3711,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     mdsmon()->dump_info(f.get());
     authmon()->dump_info(f.get());
     mgrstatmon()->dump_info(f.get());
+    logmon()->dump_info(f.get());
 
     paxos->dump_info(f.get());
 
@@ -3838,7 +3852,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "mon ok-to-stop") {
-    vector<string> ids;
+    vector<string> ids, invalid_ids;
     if (!cmd_getval(cmdmap, "ids", ids)) {
       r = -EINVAL;
       goto out;
@@ -3850,8 +3864,16 @@ void Monitor::handle_command(MonOpRequestRef op)
     for (auto& n : ids) {
       if (monmap->contains(n)) {
 	wouldbe.erase(n);
+      } else {
+        invalid_ids.push_back(n);
       }
     }
+    if (!invalid_ids.empty()) {
+      r = 0;
+      rs = "invalid mon(s) specified: " + stringify(invalid_ids);
+      goto out;
+    }
+
     if (wouldbe.size() < monmap->min_quorum_size()) {
       r = -EBUSY;
       rs = "not enough monitors would be available (" + stringify(wouldbe) +
@@ -6030,8 +6052,6 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
     r = ceph_resolve_file_search(g_conf()->keyring, keyring_filename);
     if (r) {
-      derr << "unable to find a keyring file on " << g_conf()->keyring
-	   << ": " << cpp_strerror(r) << dendl;
       if (g_conf()->key != "") {
 	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf()->key +
 	  "\n\tcaps mon = \"allow *\"\n";
@@ -6047,7 +6067,9 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 	  return -EINVAL;
 	}
       } else {
-	return -ENOENT;
+	derr << "unable to find a keyring on " << g_conf()->keyring
+	     << ": " << cpp_strerror(r) << dendl;
+	return r;
       }
     } else {
       r = keyring.load(g_ceph_context, keyring_filename);
@@ -6469,12 +6491,17 @@ void Monitor::ms_handle_accept(Connection *con)
     dout(10) << __func__ << " con " << con << " session " << s
 	     << " already on list" << dendl;
   } else {
+    std::lock_guard l(session_map_lock);
+    if (state == STATE_SHUTDOWN) {
+      dout(10) << __func__ << " ignoring new con " << con << " (shutdown)" << dendl;
+      con->mark_down();
+      return;
+    }
     dout(10) << __func__ << " con " << con << " session " << s
 	     << " registering session for "
 	     << con->get_peer_addrs() << dendl;
     s->_ident(entity_name_t(con->get_peer_type(), con->get_peer_id()),
 	      con->get_peer_addrs());
-    std::lock_guard l(session_map_lock);
     session_map.add_session(s);
   }
 }
@@ -6647,7 +6674,7 @@ void Monitor::do_stretch_mode_election_work()
   dout(20) << "prior dead_mon_buckets: " << old_dead_buckets
 	   << "; down_mon_buckets: " << down_mon_buckets
 	   << "; up_mon_buckets: " << up_mon_buckets << dendl;
-  for (auto di : down_mon_buckets) {
+  for (const auto& di : down_mon_buckets) {
     if (!up_mon_buckets.count(di.first)) {
       dead_mon_buckets[di.first] = di.second;
     }

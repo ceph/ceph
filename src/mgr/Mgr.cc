@@ -113,17 +113,20 @@ void MetadataUpdate::finish(int r)
 
       if (daemon_state.exists(key)) {
         DaemonStatePtr state = daemon_state.get(key);
-        state->hostname = daemon_meta.at("hostname").get_str();
-
-        if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
-          daemon_meta.erase("name");
-        } else if (key.type == "osd") {
-          daemon_meta.erase("id");
-        }
-        daemon_meta.erase("hostname");
 	map<string,string> m;
-        for (const auto &[key, val] : daemon_meta) {
-          m.emplace(key, val.get_str());
+	{
+	  std::lock_guard l(state->lock);
+	  state->hostname = daemon_meta.at("hostname").get_str();
+
+	  if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
+	    daemon_meta.erase("name");
+	  } else if (key.type == "osd") {
+	    daemon_meta.erase("id");
+	  }
+	  daemon_meta.erase("hostname");
+	  for (const auto &[key, val] : daemon_meta) {
+	    m.emplace(key, val.get_str());
+	  }
 	}
 	daemon_state.update_metadata(state, m);
       } else {
@@ -595,7 +598,7 @@ void Mgr::handle_mon_map()
       continue;
     }
     auto c = new MetadataUpdate(daemon_state, k);
-    const char* cmd = R"({{"prefix": "mon metadata", "id": "{}"}})";
+    constexpr std::string_view cmd = R"({{"prefix": "mon metadata", "id": "{}"}})";
     monc->start_mon_command({fmt::format(cmd, name)}, {},
 			    &c->outbl, &c->outs, c);
   }
@@ -630,7 +633,7 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
       break;
     case MSG_SERVICE_MAP:
       handle_service_map(ref_cast<MServiceMap>(m));
-      py_module_registry->notify_all("service_map", "");
+      //no users: py_module_registry->notify_all("service_map", "");
       break;
     case MSG_LOG:
       handle_log(ref_cast<MLog>(m));
@@ -778,7 +781,7 @@ void Mgr::handle_mgr_digest(ref_t<MMgrDigest> m)
   dout(10) << m->mon_status_json.length() << dendl;
   dout(10) << m->health_json.length() << dendl;
   cluster_state.load_digest(m.get());
-  py_module_registry->notify_all("mon_status", "");
+  //no users: py_module_registry->notify_all("mon_status", "");
   py_module_registry->notify_all("health", "");
 
   // Hack: use this as a tick/opportunity to prompt python-land that

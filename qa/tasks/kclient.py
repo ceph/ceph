@@ -5,7 +5,7 @@ import contextlib
 import logging
 
 from teuthology.misc import deep_merge
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology import misc
 from teuthology.contextutil import MaxWhileTries
 from tasks.cephfs.kernel_mount import KernelMount
@@ -100,7 +100,7 @@ def task(ctx, config):
             client_id=id_,
             client_remote=remote,
             brxnet=ctx.teuthology_config.get('brxnet', None),
-            config=client_config,
+            client_config=client_config,
             cephfs_name=cephfs_name)
 
         mounts[id_] = kernel_mount

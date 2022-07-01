@@ -95,6 +95,14 @@ options:
   default: false
   services:
   - mgr
+- name: mgr_max_pg_num_change
+  type: int
+  level: advanced
+  desc: maximum change in pg_num
+  default: 128
+  services:
+  - mgr
+  with_legacy: true
 - name: mgr_module_path
   type: str
   level: advanced

@@ -355,7 +355,7 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() override {}
 
-  int get_policy_from_state(rgw::sal::Store* store, struct req_state *s, std::stringstream& ss) override;
+  int get_policy_from_state(rgw::sal::Store* store, req_state *s, std::stringstream& ss) override;
   void send_response() override;
   int get_params(optional_yield y) override;
 };
@@ -617,7 +617,7 @@ public:
   static int authorize(const DoutPrefixProvider *dpp,
                        rgw::sal::Store* store,
                        const rgw::auth::StrategyRegistry& auth_registry,
-                       struct req_state *s, optional_yield y);
+                       req_state *s, optional_yield y);
 };
 
 class RGWHandler_Auth_S3 : public RGWHandler_REST {
@@ -636,7 +636,7 @@ public:
   static int validate_object_name(const std::string& bucket);
 
   int init(rgw::sal::Store* store,
-           struct req_state *s,
+           req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override {
     return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
@@ -649,7 +649,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
-  static int init_from_header(rgw::sal::Store* store, struct req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(rgw::sal::Store* store, req_state *s, int default_formatter, bool configurable_format);
 
   explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
@@ -658,7 +658,7 @@ public:
   ~RGWHandler_REST_S3() override = default;
 
   int init(rgw::sal::Store* store,
-           struct req_state *s,
+           req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield y) override;
@@ -793,7 +793,7 @@ public:
   ~RGWRESTMgr_S3() override = default;
 
   RGWHandler_REST *get_handler(rgw::sal::Store* store,
-			       struct req_state* s,
+			       req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
@@ -907,76 +907,6 @@ inline int valid_s3_bucket_name(const std::string& name, bool relaxed=false)
 
   return 0;
 }
-
-namespace s3selectEngine
-{
-class s3select;
-class csv_object;
-}
-
-class RGWSelectObj_ObjStore_S3 : public RGWGetObj_ObjStore_S3
-{
-
-private:
-  std::unique_ptr<s3selectEngine::s3select> s3select_syntax;
-  std::string m_s3select_query;
-  std::string m_result;
-  std::unique_ptr<s3selectEngine::csv_object> m_s3_csv_object;
-  std::string m_column_delimiter;
-  std::string m_quot;
-  std::string m_row_delimiter;
-  std::string m_compression_type;
-  std::string m_escape_char;
-  std::unique_ptr<char[]>  m_buff_header;
-  std::string m_header_info;
-  std::string m_sql_query;
-
-public:
-  unsigned int chunk_number;
-
-  enum header_name_En
-  {
-    EVENT_TYPE,
-    CONTENT_TYPE,
-    MESSAGE_TYPE
-  };
-  static const char* header_name_str[3];
-
-  enum header_value_En
-  {
-    RECORDS,
-    OCTET_STREAM,
-    EVENT
-  };
-  static const char* header_value_str[3];
-
-  RGWSelectObj_ObjStore_S3();
-  virtual ~RGWSelectObj_ObjStore_S3();
-
-  virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
-
-  virtual int get_params(optional_yield y) override;
-
-private:
-  void encode_short(char* buff, uint16_t s, int& i);
-
-  void encode_int(char* buff, u_int32_t s, int& i);
-
-  int create_header_records(char* buff);
-
-  std::unique_ptr<boost::crc_32_type> crc32;
-
-  int create_message(std::string&, u_int32_t result_len, u_int32_t header_len);
-
-  int run_s3select(const char* query, const char* input, size_t input_length);
-
-  int extract_by_tag(std::string tag_name, std::string& result);
-
-  void convert_escape_seq(std::string& esc);
-
-  int handle_aws_cli_parameters(std::string& sql_query);
-};
-
 
 namespace rgw::auth::s3 {
 
