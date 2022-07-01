@@ -233,7 +233,7 @@ private:
   }
 
   template <class Func>
-  auto do_write_op(Func&& f, bool um);
+  auto do_write_op(Func&& f, bool um=true);
 
   decltype(auto) dont_do_legacy_op() {
     return crimson::ct_error::operation_not_supported::make();
