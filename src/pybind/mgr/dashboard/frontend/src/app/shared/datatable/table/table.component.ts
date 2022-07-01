@@ -342,6 +342,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!(this.userConfig.offset >= 0)) {
       this.userConfig.offset = this.table.offset;
     }
+    if (!this.userConfig.search) {
+      this.userConfig.search = this.search;
+    }
     if (!this.userConfig.sorts) {
       this.userConfig.sorts = this.sorts;
     }
@@ -647,6 +650,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       });
       context.pageInfo.offset = this.userConfig.offset;
       context.pageInfo.limit = this.userConfig.limit;
+      context.search = this.userConfig.search;
       this.fetchData.emit(context);
       this.updating = true;
     }
@@ -801,19 +805,32 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   updateFilter() {
-    let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
+    if (this.serverSide) {
+      if (this.userConfig.search !== this.search) {
+        // if we don't go back to the first page it will try load
+        // a page which could not exists with an especific search
+        this.userConfig.offset = 0;
+        this.userConfig.limit = this.limit;
+        this.userConfig.search = this.search;
+        this.updating = false;
+        this.reloadData();
+      }
+      this.rows = this.data;
+    } else {
+      let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
 
-    if (this.search.length > 0 && rows) {
-      const columns = this.localColumns.filter(
-        (c) => c.cellTransformation !== CellTemplate.sparkline
-      );
-      // update the rows
-      rows = this.subSearch(rows, TableComponent.prepareSearch(this.search), columns);
-      // Whenever the filter changes, always go back to the first page
-      this.table.offset = 0;
+      if (this.search.length > 0 && rows) {
+        const columns = this.localColumns.filter(
+          (c) => c.cellTransformation !== CellTemplate.sparkline
+        );
+        // update the rows
+        rows = this.subSearch(rows, TableComponent.prepareSearch(this.search), columns);
+        // Whenever the filter changes, always go back to the first page
+        this.table.offset = 0;
+      }
+
+      this.rows = rows;
     }
-
-    this.rows = rows;
   }
 
   subSearch(data: any[], currentSearch: string[], columns: CdTableColumn[]): any[] {
