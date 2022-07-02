@@ -3,8 +3,13 @@ name: "Pull Request Needs Rebase?"
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+
 jobs:
   needs-rebase:
+    permissions:
+      pull-requests: write  # for eps1lon/actions-label-merge-conflict to label PRs
     runs-on: ubuntu-latest
     steps:
       # eps1lon/actions-label-merge-conflict@v2.0.1

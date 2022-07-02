@@ -3,8 +3,15 @@ name: "Pull Request Triage"
 on: pull_request_target
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+permissions:
+  contents: read
+
 jobs:
   pr-triage:
+    permissions:
+      contents: read  # for actions/labeler to determine modified files
+      pull-requests: write  # for actions/labeler to add labels to PRs
+      repository-projects: write  # for srggrs/assign-one-project-github-action to assign issues and PRs to repo project
     runs-on: ubuntu-latest
     steps:
       - name: Assign labels based on modified files
