@@ -1,7 +1,13 @@
 name: Check PR dependencies
 on: [pull_request_target]
+permissions:
+  contents: read
+
 jobs:
   check_dependencies:
+    permissions:
+      issues: read  # for gregsdennis/dependencies-action to check issues for dependencies
+      pull-requests: read  # for gregsdennis/dependencies-action to check PRs for dependencies
     runs-on: ubuntu-latest
     name: Check PR Dependencies
     steps:
