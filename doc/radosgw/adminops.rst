@@ -2131,9 +2131,10 @@ Binding libraries
 
 ``Golang``
 
+ - `ceph/go-ceph`_
  - `IrekFasikhov/go-rgwadmin`_
  - `QuentinPerez/go-radosgw`_
-
+ 
 ``Java``
 
  - `twonote/radosgw-admin4j`_
@@ -2152,6 +2153,9 @@ Binding libraries
 
 .. _Admin Guide: ../admin
 .. _Quota Management: ../admin#quota-management
+.. _IrekFasikhov/go-rgwadmin: https://github.com/IrekFasikhov/go-rgwadmin
+.. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
+.. _ceph/go-ceph: https://github.com/ceph/go-ceph/
 .. _Rate Limit Management: ../admin#rate-limit-management
 .. _IrekFasikhov/go-rgwadmin: https://github.com/IrekFasikhov/go-rgwadmin
 .. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
