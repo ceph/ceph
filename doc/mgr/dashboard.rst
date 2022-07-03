@@ -1369,6 +1369,36 @@ something like this::
     ...
     $ ceph config reset 11
 
+.. _centralized-logging:
+
+Enable Centralized Logging in Dashboard
+"""""""""""""""""""""""""""""""""""""""
+
+To learn more about centralized logging, see :ref:`cephadm-monitoring-centralized-logs`
+
+1. Create the Loki service on any particular host using "Create Services" option.
+
+2. Similarly create the Promtail service which will be by default deployed 
+   on all the running hosts.
+
+3. To see debug-level messages as well as info-level events, run the following command via CLI::
+
+    $ ceph config set mgr mgr/cephadm/log_to_cluster_level debug
+
+4. To enable logging to files, run the following commands via CLI::
+
+    $ ceph config set global log_to_file true
+
+    $ ceph config set global mon_cluster_log_to_file true
+
+5. Click on the Daemon Logs tab under Cluster -> Logs.
+
+6. You can find some pre-defined labels there on clicking the Log browser button such as filename,
+   job etc that can help you query the logs at one go.
+
+7. You can query the logs with LogQL for advanced search and perform some
+   calculations as well - https://grafana.com/docs/loki/latest/logql/.
+
 
 Reporting issues from Dashboard
 """""""""""""""""""""""""""""""
