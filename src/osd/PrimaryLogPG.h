@@ -1152,7 +1152,7 @@ protected:
   void _make_clone(
     OpContext *ctx,
     PGTransaction* t,
-    ObjectContextRef obc,
+    ObjectContextRef clone_obc,
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
   void execute_ctx(OpContext *ctx);
