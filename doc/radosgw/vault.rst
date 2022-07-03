@@ -186,58 +186,6 @@ Adjust these settings to match your configuration.
 For security reasons, the token file must be readable by the Object Gateway
 only.
 
-You might set up vault agent as follows::
-
-  vault write auth/approle/role/rgw-ap \
-    token_policies=rgw-transit-policy,default \
-    token_max_ttl=60m
-
-Change the policy here to match your configuration.
-
-Get the role-id::
-
-  vault read auth/approle/role/rgw-ap/role-id -format=json | \
-    jq -r .data.role_id
-
-Store the output in some file, such as /usr/local/etc/vault/.rgw-ap-role-id
-
-Get the secret-id::
-
-  vault read auth/approle/role/rgw-ap/role-id -format=json | \
-    jq -r .data.role_id
-
-Store the output in some file, such as /usr/local/etc/vault/.rgw-ap-secret-id
-
-Create configuration for the Vault agent, such as::
-
-  pid_file = "/run/rgw-vault-agent-pid"
-  auto_auth {
-    method "AppRole" {
-      mount_path = "auth/approle"
-      config = {
-        role_id_file_path ="/usr/local/etc/vault/.rgw-ap-role-id"
-        secret_id_file_path ="/usr/local/etc/vault/.rgw-ap-secret-id"
-        remove_secret_id_file_after_reading ="false"
-      }
-    }
-    sink "file" {
-      config = {
-        path = "/run/.rgw-vault-token"
-      }
-    }
-  }
-  vault {
-    address = "https://vault-server-fqdn:8200"
-  }
-
-Then use systemctl or another method of your choice to run
-a persistent daemon with the following arguments::
-
-    /usr/local/bin/vault agent -config=/usr/local/etc/vault/rgw-agent.hcl
-
-Once the vault agent is running, the token file should be populated
-with a valid token.
-
 Vault agent
 -----------
 
@@ -357,7 +305,7 @@ The command above creates a keyring, which contains a key of type
 ``aes256-gcm96`` by default. To verify that the key was correctly created, use
 the following command::
 
-  vault read transit/mybucketkey
+  vault read transit/keys/mybucketkey
 
 Sample output::
 
