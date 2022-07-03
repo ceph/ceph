@@ -1,5 +1,5 @@
 {
-  "baseUrl": "http://localhost:4200/",
+  "baseUrl": "https://localhost:4200/",
   "ignoreTestFiles": [
     "*.po.ts",
     "**/orchestrator/**"
