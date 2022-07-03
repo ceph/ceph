@@ -159,6 +159,10 @@ register an account. Registering gives you a unique IRC identity and allows you
 to access channels where unregistered users have been locked out for technical
 reasons.
 
+See ``the official OFTC (Open and Free Technology Community) documentation's
+registration instructions
+<https://www.oftc.net/Services/#register-your-account>`` to learn how to
+register your IRC account.
 
 Channels
 ~~~~~~~~
