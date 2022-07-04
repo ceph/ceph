@@ -22,6 +22,7 @@ export class RbdSnapshotFormModalComponent {
   namespace: string;
   imageName: string;
   snapName: string;
+  mirroring: string;
 
   snapshotForm: CdFormGroup;
 
@@ -53,7 +54,11 @@ export class RbdSnapshotFormModalComponent {
 
   setSnapName(snapName: string) {
     this.snapName = snapName;
-    this.snapshotForm.get('snapshotName').setValue(snapName);
+    if (this.mirroring !== 'snapshot') {
+      this.snapshotForm.get('snapshotName').setValue(snapName);
+    } else {
+      this.snapshotForm.get('snapshotName').clearValidators();
+    }
   }
 
   /**
