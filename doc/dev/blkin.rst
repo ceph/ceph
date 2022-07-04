@@ -55,7 +55,7 @@ Create tracing session, enable tracepoints and start trace::
   lttng enable-event --userspace osd:*
   lttng start
 
-Perform some ceph operatin::
+Perform some Ceph operation::
 
   rados bench -p ec 5 write
 

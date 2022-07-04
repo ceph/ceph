@@ -348,7 +348,7 @@ CEPHADM_CHECK_KERNEL_LSM
 Each host within the cluster is expected to operate within the same Linux
 Security Module (LSM) state. For example, if the majority of the hosts are
 running with SELINUX in enforcing mode, any host not running in this mode is
-flagged as an anomaly and a healtcheck (WARNING) state raised.
+flagged as an anomaly and a healthcheck (WARNING) state raised.
 
 CEPHADM_CHECK_SUBSCRIPTION
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

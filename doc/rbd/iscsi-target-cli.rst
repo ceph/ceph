@@ -110,7 +110,7 @@ For rpm based instructions execute the following commands:
           cluster_name = ceph
 
           # Place a copy of the ceph cluster's admin keyring in the gateway's /etc/ceph
-          # drectory and reference the filename here
+          # directory and reference the filename here
           gateway_keyring = ceph.client.admin.keyring
 
 

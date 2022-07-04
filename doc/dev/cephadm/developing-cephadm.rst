@@ -127,7 +127,7 @@ main advantages:
     an almost "real" environment.
   - Safe and isolated. Does not depend of the things you have installed in
     your machine. And the vms are isolated from your environment.
-  - Easy to work "dev" environment. For "not compilated" software pieces,
+  - Easy to work "dev" environment. For "not compiled" software pieces,
     for example any mgr module. It is an environment that allow you to test your
     changes interactively.
 
@@ -137,7 +137,7 @@ Complete documentation in `kcli installation <https://kcli.readthedocs.io/en/lat
 but we suggest to use the container image approach.
 
 So things to do:
-  - 1. Review `requeriments <https://kcli.readthedocs.io/en/latest/#libvirt-hypervisor-requisites>`_
+  - 1. Review `requirements <https://kcli.readthedocs.io/en/latest/#libvirt-hypervisor-requisites>`_
     and install/configure whatever is needed to meet them.
   - 2. get the kcli image and create one alias for executing the kcli command
     ::
@@ -282,8 +282,8 @@ of the cluster.
    create loopback devices capable of holding osds.
 .. note::  Each osd will require 5GiB of space.
 
-After bootstraping the cluster you can go inside the seed box in which you'll be
-able to run cehpadm commands::
+After bootstrapping the cluster you can go inside the seed box in which you'll be
+able to run cephadm commands::
 
   box -v cluster sh
   [root@8d52a7860245] cephadm --help

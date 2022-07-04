@@ -269,7 +269,7 @@ Positional arguments:
 Arguments:
 
 * [--fsid FSID]                    cluster FSID
-* [--config-json CONFIG_JSON]      JSON file with config and (client.bootrap-osd) key
+* [--config-json CONFIG_JSON]      JSON file with config and (client.bootstrap-osd) key
 * [--config CONFIG, -c CONFIG]     ceph conf file
 * [--keyring KEYRING, -k KEYRING]  ceph.keyring to pass through to the container
 

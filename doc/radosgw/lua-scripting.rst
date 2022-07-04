@@ -318,7 +318,7 @@ during execution so that it may be read and used later during other executions, 
 - Each RGW instance has its own private and ephemeral ``RGW`` Lua table that is lost when the daemon restarts. Note that ``background`` context scripts will run on every instance.
 - The maximum number of entries in the table is 100,000. Each entry has a string key a value with a combined length of no more than 1KB.
 A Lua script will abort with an error if the number of entries or entry size exceeds these limits.
-- The ``RGW`` Lua table uses string indeces and can store values of type: string, integer, double and boolean
+- The ``RGW`` Lua table uses string indices and can store values of type: string, integer, double and boolean
 
 Increment/Decrement Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

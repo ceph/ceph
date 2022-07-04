@@ -65,7 +65,7 @@ steps below:
      ceph orch apply alertmanager
 
 #. Deploy Prometheus. A single Prometheus instance is sufficient, but
-   for high availablility (HA) you might want to deploy two:
+   for high availability (HA) you might want to deploy two:
 
    .. prompt:: bash #
 

@@ -555,8 +555,8 @@ Once the handshake is completed, both peers have setup their compression handler
     bool is_compress
     uint32_t  method
 
-  - the server determines whether compression is possible according to its' configuration.
-  - if it is possible, it will pick its' most prioritizied compression method that is also supprorted by the client.
+  - the server determines whether compression is possible according to the configuration.
+  - if it is possible, it will pick the most prioritized compression method that is also supported by the client.
   - if none exists, it will determine that session between the peers will be handled without compression.
 
 .. ditaa::
@@ -614,7 +614,7 @@ an established session.
   - the target addr is who the client is trying to connect *to*, so
     that the server side can close the connection if the client is
     talking to the wrong daemon.
-  - type.gid (entity_name_t) is set here, by combinging the type shared in the hello
+  - type.gid (entity_name_t) is set here, by combining the type shared in the hello
     frame with the gid here.  this means we don't need it
     in the header of every message.  it also means that we can't send
     messages "from" other entity_name_t's.  the current
@@ -622,7 +622,7 @@ an established session.
     shouldn't break any existing functionality.  implementation will
     likely want to mask this against what the authenticated credential
     allows.
-  - cookie is the client coookie used to identify a session, and can be used
+  - cookie is the client cookie used to identify a session, and can be used
     to reconnect to an existing session.
   - we've dropped the 'protocol_version' field from msgr1
 
