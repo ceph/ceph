@@ -61,7 +61,6 @@ class CircularBoundedJournal : public Journal {
 public:
   struct mkfs_config_t {
     std::string path;
-    rbm_abs_addr start = 0;
     size_t block_size = 0;
     size_t total_size = 0;
     device_id_t device_id = 0;
@@ -70,7 +69,6 @@ public:
       device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
       return mkfs_config_t {
 	"",
-	0,
 	DEFAULT_BLOCK_SIZE,
 	DEFAULT_SIZE,
 	d_id,
@@ -83,7 +81,7 @@ public:
   ~CircularBoundedJournal() {}
 
   open_for_write_ret open_for_write() final;
-  open_for_write_ret open_device_read_header(rbm_abs_addr start);
+  open_for_write_ret open_device_read_header();
   close_ertr::future<> close() final;
 
   journal_type_t get_type() final {
@@ -159,7 +157,7 @@ public:
    * @param absolute address
    *
    */
-  read_header_ret read_header(rbm_abs_addr start);
+  read_header_ret read_header();
 
   ceph::bufferlist encode_header();
 
@@ -252,7 +250,7 @@ public:
     return header.size;
   }
   rbm_abs_addr get_start_addr() const {
-    return get_block_size();
+    return CBJOURNAL_START_ADDRESS + get_block_size();
   }
   size_t get_available_size() const {
     return get_total_size() - get_used_size();
@@ -287,7 +285,7 @@ public:
     return header.block_size;
   }
   rbm_abs_addr get_journal_end() const {
-    return header.size + get_block_size(); // journal size + header length
+    return get_start_addr() + header.size; // journal size + header length
   }
   void add_device(NVMeBlockDevice* dev) {
     device = dev;
@@ -305,7 +303,6 @@ private:
    */
   bool initialized = false;
   segment_seq_t cur_segment_seq = 0; // segment seq to track the sequence to written records
-  rbm_abs_addr start_dev_addr = 0; // cbjournal start address in device
   // start address where the newest record will be written
   rbm_abs_addr written_to = 0;
 };

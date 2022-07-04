@@ -45,7 +45,6 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
     head.journal_tail = device->get_block_size();
     head.applied_to = head.journal_tail;
     head.device_id = config.device_id;
-    start_dev_addr = config.start;
     encode(head, bl);
     header = head;
     written_to = head.journal_tail;
@@ -130,25 +129,24 @@ CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
 }
 
 CircularBoundedJournal::open_for_write_ret
-CircularBoundedJournal::open_device_read_header(rbm_abs_addr start)
+CircularBoundedJournal::open_device_read_header()
 {
   LOG_PREFIX(CircularBoundedJournal::open_for_write);
   ceph_assert(!initialized);
   return _open_device(path
-  ).safe_then([this, start, FNAME]() {
-    return read_header(start
+  ).safe_then([this, FNAME]() {
+    return read_header(
     ).handle_error(
       open_for_write_ertr::pass_further{},
       crimson::ct_error::assert_all{
 	"Invalid error read_header"
-    }).safe_then([this, start, FNAME](auto p) mutable {
+    }).safe_then([this, FNAME](auto p) mutable {
       auto &[head, bl] = *p;
       header = head;
       DEBUG("header : {}", header);
       paddr_t paddr = convert_abs_addr_to_paddr(
 	get_written_to(),
 	header.device_id);
-      start_dev_addr = start;
       initialized = true;
       return open_for_write_ret(
 	open_for_write_ertr::ready_future_marker{},
@@ -314,15 +312,15 @@ CircularBoundedJournal::write_ertr::future<> CircularBoundedJournal::device_writ
 }
 
 CircularBoundedJournal::read_header_ret
-CircularBoundedJournal::read_header(rbm_abs_addr start)
+CircularBoundedJournal::read_header()
 {
   LOG_PREFIX(CircularBoundedJournal::read_header);
   auto bptr = bufferptr(ceph::buffer::create_page_aligned(
 			device->get_block_size()));
-  return device->read(start, bptr
-  ).safe_then([start, bptr, FNAME]() mutable
+  DEBUG("reading {}", CBJOURNAL_START_ADDRESS);
+  return device->read(CBJOURNAL_START_ADDRESS, bptr
+  ).safe_then([bptr, FNAME]() mutable
     -> read_header_ret {
-    DEBUG("read_header: reading {}", start);
     bufferlist bl;
     bl.append(bptr);
     auto bp = bl.cbegin();
@@ -360,7 +358,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
    * read records from last applied record prior to written_to, and replay
    */
   LOG_PREFIX(CircularBoundedJournal::replay);
-  auto fut = open_device_read_header(CBJOURNAL_START_ADDRESS);
+  auto fut = open_device_read_header();
   return fut.safe_then([this, FNAME, delta_handler=std::move(delta_handler)] (auto addr) {
     return seastar::do_with(
       rbm_abs_addr(get_journal_tail()),
@@ -579,11 +577,11 @@ CircularBoundedJournal::write_header()
     DEBUG("unable to encode header block from underlying deivce");
     return crimson::ct_error::input_output_error::make();
   }
-  ceph_assert(bl.length() + sizeof(checksum_t) < get_block_size());
+  ceph_assert(bl.length() <= get_block_size());
   DEBUG(
     "sync header of CircularBoundedJournal, length {}",
     bl.length());
-  return device_write_bl(start_dev_addr, bl);
+  return device_write_bl(CBJOURNAL_START_ADDRESS, bl);
 }
 
 }
