@@ -24,6 +24,7 @@ from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
     Task, UIRouter, UpdatePermission, allow_empty_body
+from ._version import APIVersion
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ class Rbd(RESTController):
                      'offset': (int, 'offset'),
                  },
                  responses={200: RBD_SCHEMA})
+    @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
     def list(self, pool_name=None, offset: int = 0, limit: int = 5,
              search: str = ''):
         return self._rbd_list(pool_name, offset=offset, limit=limit, search=search)

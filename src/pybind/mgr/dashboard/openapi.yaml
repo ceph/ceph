@@ -166,10 +166,15 @@ paths:
         name: limit
         schema:
           type: integer
+      - default: ''
+        in: query
+        name: search
+        schema:
+          type: string
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               schema:
                 items:
                   properties:
