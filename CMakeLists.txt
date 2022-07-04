@@ -244,6 +244,9 @@ if(WITH_BLUESTORE_PMEM)
   set(HAVE_LIBDML ${DML_FOUND})
 endif()
 
+CMAKE_DEPENDENT_OPTION(WITH_RBD_MIRROR "Enable build for rbd-mirror daemon executable" OFF
+    "WITH_RBD" OFF)
+
 CMAKE_DEPENDENT_OPTION(WITH_RBD_MIGRATION_FORMAT_QCOW_V1
   "Enable librbd QCOW v1 migration format support" ON
   "WITH_RBD" OFF)
