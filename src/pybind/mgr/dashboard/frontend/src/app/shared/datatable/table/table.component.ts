@@ -656,6 +656,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       context.pageInfo.offset = this.userConfig.offset;
       context.pageInfo.limit = this.userConfig.limit;
       context.search = this.userConfig.search;
+      if (this.userConfig.sorts?.length) {
+        const sort = this.userConfig.sorts[0];
+        context.sort = `${sort.dir == 'desc' ? '<' : '>'}${sort.prop}`;
+      }
       this.fetchData.emit(context);
       this.updating = true;
     }
@@ -794,6 +798,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   changeSorting({ sorts }: any) {
     this.userConfig.sorts = sorts;
+    if (this.serverSide) {
+      this.reloadData();
+    }
   }
 
   onClearSearch() {

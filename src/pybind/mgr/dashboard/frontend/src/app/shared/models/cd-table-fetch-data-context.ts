@@ -16,6 +16,7 @@ export class CdTableFetchDataContext {
   error: Function;
   pageInfo: PageInfo = new PageInfo();
   search = '';
+  sort = '>name';
 
   constructor(error: () => void) {
     this.error = error;
@@ -25,14 +26,18 @@ export class CdTableFetchDataContext {
     if (this.pageInfo.limit === null) {
       this.pageInfo.limit = 0;
     }
-    if (this.search === null) {
+    if (!this.search) {
       this.search = '';
+    }
+    if (!this.sort) {
+      this.sort = '>name';
     }
     return new HttpParams({
       fromObject: {
         offset: String(this.pageInfo.offset * this.pageInfo.limit),
         limit: String(this.pageInfo.limit),
-        search: this.search
+        search: this.search,
+        sort: this.sort
       }
     });
   }
