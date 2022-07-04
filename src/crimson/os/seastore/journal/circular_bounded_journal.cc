@@ -21,6 +21,7 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", size=" << header.size
 	     << ", journal_tail=" << header.journal_tail
 	     << ", applied_to="<< header.applied_to
+	     << ", "<< device_id_printer_t{header.device_id}
              << ")";
 }
 

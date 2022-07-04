@@ -37,19 +37,19 @@ std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id)
 {
   auto _id = id.id;
   if (_id == DEVICE_ID_NULL) {
-    return out << "DEVICE_ID_NULL";
+    return out << "Dev(NULL)";
   } else if (_id == DEVICE_ID_RECORD_RELATIVE) {
-    return out << "DEVICE_ID_RR";
+    return out << "Dev(RR)";
   } else if (_id == DEVICE_ID_BLOCK_RELATIVE) {
-    return out << "DEVICE_ID_BR";
+    return out << "Dev(BR)";
   } else if (_id == DEVICE_ID_DELAYED) {
-    return out << "DEVICE_ID_DELAYED";
+    return out << "Dev(DELAYED)";
   } else if (_id == DEVICE_ID_FAKE) {
-    return out << "DEVICE_ID_FAKE";
+    return out << "Dev(FAKE)";
   } else if (_id == DEVICE_ID_ZERO) {
-    return out << "DEVICE_ID_ZERO";
+    return out << "Dev(ZERO)";
   } else {
-    return out << (unsigned)_id;
+    return out << "Dev(" << (unsigned)_id << ")";
   }
 }
 
