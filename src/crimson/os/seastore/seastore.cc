@@ -1181,6 +1181,11 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
         extent_len_t len = op->len;
         return _zero(ctx, onodes[op->oid], off, len);
       }
+      case Transaction::OP_SETALLOCHINT:
+      {
+        WARN("OP_SETALLOCHINT ignored as not-implemented-yet");
+        return tm_iertr::now();
+      }
       default:
         ERROR("bad op {}", static_cast<unsigned>(op->op));
         return crimson::ct_error::input_output_error::make();
