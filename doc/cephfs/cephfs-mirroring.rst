@@ -129,7 +129,7 @@ e.g.::
   {"token": "eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ=="}
 
 `site-name` refers to a user-defined string to identify the remote filesystem. In context
-of `peer_add` interface, `site-name` is the passed in `cluster` name from `remote_cluster_spec`.
+of `peer_add` interface, `site-name` is the `cluster` name from `remote_cluster_spec`.
 
 Import the bootstrap token in the primary cluster via::
 
