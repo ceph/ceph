@@ -324,6 +324,8 @@ public:
 
   const object_info_t prepare_clone(
     const hobject_t& coid);
+
+  void apply_stats();
 };
 
 template <class Context, class MainFunc, class EffectFunc>
@@ -381,6 +383,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     fill_op_params_bump_pg_version();
     auto log_entries = prepare_transaction(ops);
     make_writeable(log_entries);
+    apply_stats();
     auto [submitted, all_completed] = std::forward<MutFunc>(mut_func)(std::move(txn),
                                                     std::move(obc),
                                                     std::move(*osd_op_params),
