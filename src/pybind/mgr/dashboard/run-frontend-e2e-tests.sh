@@ -33,7 +33,12 @@ start_ceph() {
     ceph_all dashboard set-rgw-api-ssl-verify False
 
     CYPRESS_BASE_URL=$(ceph mgr services | jq -r .dashboard)
-    CEPH2_DASHBOARD_URL=$(ceph2 mgr services | jq -r .dashboard)
+    CYPRESS_CEPH2_URL=$(ceph2 mgr services | jq -r .dashboard)
+
+    # start rbd-mirror daemon in the cluster
+    KEY=$(ceph auth get client.admin --format=json | jq -r .[0].key)
+    MON_CLUSTER_1=$(grep "mon host" ${FULL_PATH_BUILD_DIR}/run/1/ceph.conf | awk '{print $4}')
+    ${FULL_PATH_BUILD_DIR}/bin/rbd-mirror --mon_host $MON_CLUSTER_1 --key $KEY -c ${FULL_PATH_BUILD_DIR}/run/1/ceph.conf &
 
     set +x
 }
@@ -76,7 +81,7 @@ check_device_available() {
 }
 
 : ${CYPRESS_BASE_URL:=''}
-: ${CEPH2_DASHBOARD_URL:=''}
+: ${CYPRESS_CEPH2_URL:=''}
 : ${CYPRESS_LOGIN_PWD:=''}
 : ${CYPRESS_LOGIN_USER:=''}
 : ${DEVICE:="chrome"}
@@ -103,7 +108,7 @@ FULL_PATH_BUILD_DIR=`pwd`
 
 : ${CYPRESS_CACHE_FOLDER:="${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/cypress"}
 
-export CYPRESS_BASE_URL CYPRESS_CACHE_FOLDER CYPRESS_LOGIN_USER CYPRESS_LOGIN_PWD NO_COLOR CEPH2_DASHBOARD_URL
+export CYPRESS_BASE_URL CYPRESS_CACHE_FOLDER CYPRESS_LOGIN_USER CYPRESS_LOGIN_PWD NO_COLOR CYPRESS_CEPH2_URL
 
 check_device_available
 
@@ -126,7 +131,7 @@ case "$DEVICE" in
             --env CYPRESS_BASE_URL \
             --env CYPRESS_LOGIN_USER \
             --env CYPRESS_LOGIN_PWD \
-            --env CEPH2_DASHBOARD_URL \
+            --env CYPRESS_CEPH2_URL \
             --name=e2e \
             --network=host \
             cypress/included:${CYPRESS_VERSION} || failed=1
