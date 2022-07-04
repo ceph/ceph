@@ -83,7 +83,7 @@ Towards an object store highly optimized for CPU consumption, three design choic
 * **PoseidonStore uses hybrid update strategies for different data size, similar to BlueStore.**
 
   As we discussed, both in-place and out-of-place update strategies have their pros and cons.
-  Since CPU is only bottlenecked under small I/O workloads, we chose update-in-place for small I/Os to mininize CPU consumption
+  Since CPU is only bottlenecked under small I/O workloads, we chose update-in-place for small I/Os to minimize CPU consumption
   while choosing update-out-of-place for large I/O to avoid double write. Double write for small data may be better than host-GC overhead
   in terms of CPU consumption in the long run. Although it leaves GC entirely up to SSDs,
 
@@ -230,7 +230,7 @@ Crash consistency
   #. Crash occurs right after writing Data blocks
 
      - Data partition --> | Data blocks |
-     - We don't need to care this case. Data is not alloacted yet in reality. The blocks will be reused.
+     - We don't need to care this case. Data is not allocated yet. The blocks will be reused.
   #. Crash occurs right after WAL
 
      - Data partition --> | Data blocks |

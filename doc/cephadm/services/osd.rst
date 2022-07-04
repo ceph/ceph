@@ -565,7 +565,7 @@ To include disks equal to or greater than 40G in size:
 
 Sizes don't have to be specified exclusively in Gigabytes(G).
 
-Other units of size are supported: Megabyte(M), Gigabyte(G) and Terrabyte(T).
+Other units of size are supported: Megabyte(M), Gigabyte(G) and Terabyte(T).
 Appending the (B) for byte is also supported: ``MB``, ``GB``, ``TB``.
 
 

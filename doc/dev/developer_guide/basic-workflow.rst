@@ -43,7 +43,7 @@ no tracker issue exists, create one. There is only one case in which you do not
 have to create a Redmine tracker issue: the case of minor documentation changes.
 
 Simple documentation cleanup does not require a corresponding tracker issue.
-Major documenatation changes do require a tracker issue. Major documentation
+Major documentation changes do require a tracker issue. Major documentation
 changes include adding new documentation chapters or files, and making 
 substantial changes to the structure or content of the documentation.
 
@@ -220,7 +220,7 @@ upstream repository.
 
 The second command (git checkout -b fix_1) creates a "bugfix branch" called
 "fix_1" in your local working copy of the repository. The changes that you make
-in order to fix the bug will be commited to this branch.
+in order to fix the bug will be committed to this branch.
 
 The third command (git push -u origin fix_1) pushes the bugfix branch from
 your local working repository to your fork of the upstream repository.
@@ -479,13 +479,13 @@ This consists of two parts:
 Using a browser extension to auto-fill the merge  message
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-If you use a browser for merging Github PRs, the easiest way to fill in
-the merge message is with the `"Ceph Github Helper Extension"
+If you use a browser for merging GitHub PRs, the easiest way to fill in
+the merge message is with the `"Ceph GitHub Helper Extension"
 <https://github.com/tspmelo/ceph-github-helper>`_ (available for `Chrome
 <https://chrome.google.com/webstore/detail/ceph-github-helper/ikpfebikkeabmdnccbimlomheocpgkmn>`_
 and `Firefox <https://addons.mozilla.org/en-US/firefox/addon/ceph-github-helper/>`_).
 
-After enabling this extension, if you go to a Github PR page, a vertical helper
+After enabling this extension, if you go to a GitHub PR page, a vertical helper
 will be displayed at the top-right corner. If you click on the user silhouette button
 the merge message input will be automatically populated.
 

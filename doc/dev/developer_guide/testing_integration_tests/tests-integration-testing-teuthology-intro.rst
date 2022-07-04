@@ -144,7 +144,7 @@ teuthology-describe
 documentation and better understanding of integration tests.
 
 Tests can be documented by embedding ``meta:`` annotations in the yaml files
-used to define the tests. The results can be seen in the `teuthology-desribe
+used to define the tests. The results can be seen in the `teuthology-describe
 usecases`_
 
 Since this is a new feature, many yaml files have yet to be annotated.
@@ -581,5 +581,5 @@ test will be first.
 .. _Sepia Lab: https://wiki.sepia.ceph.com/doku.php
 .. _teuthology repository: https://github.com/ceph/teuthology
 .. _teuthology framework: https://github.com/ceph/teuthology
-.. _teuthology-desribe usecases: https://gist.github.com/jdurgin/09711d5923b583f60afc
+.. _teuthology-describe usecases: https://gist.github.com/jdurgin/09711d5923b583f60afc
 .. _ceph-deploy man page: ../../../../man/8/ceph-deploy

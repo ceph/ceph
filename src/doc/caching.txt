@@ -32,7 +32,7 @@ preventing it from being trimmed from the cache.  Notification of
 expiration of the replicas is required to allow previously replicated
 objects from eventually being trimmed from the cache as well.
 
-Each metdata object has a authority bit that indicates whether it is
+Each metadata object has a authority bit that indicates whether it is
 authoritative or a replica.  
 
 
@@ -272,7 +272,7 @@ authoritative.
 
 The exporter walks the subtree hierarchy and packages up an MExport
 message containing all metadata and important state (\eg, information
-about metadata replicas).  At the same time, the expoter's metadata
+about metadata replicas).  At the same time, the exporter's metadata
 objects are flagged as non-authoritative.  The MExport message sends
 the actual subtree metadata to the importer.  Upon receipt, the
 importer inserts the data into its cache, marks all objects as

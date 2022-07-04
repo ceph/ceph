@@ -240,7 +240,7 @@ you are balancing in a hurry to remedy ``full`` or ``nearful`` OSDs or
 when some OSDs are being evacuated or slowly brought into service.
 
 Deployments utilizing Nautilus (or later revisions of Luminous and Mimic)
-that have no pre-Luminous cients may instead wish to instead enable the
+that have no pre-Luminous clients may instead wish to instead enable the
 `balancer`` module for ``ceph-mgr``.
 
 Add/remove an IP address or CIDR range to/from the blocklist.

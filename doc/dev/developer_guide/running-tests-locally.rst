@@ -93,7 +93,7 @@ vstart_runner.py can take the following options -
 --interactive               drops a Python shell when a test fails
 --log-ps-output             logs ps output; might be useful while debugging
 --teardown                  tears Ceph cluster down after test(s) has finished
-                            runnng
+                            running
 --kclient                   use the kernel cephfs client instead of FUSE
 --brxnet=<net/mask>         specify a new net/mask for the mount clients' network
                             namespace container (Default: 192.168.0.0/16)

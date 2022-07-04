@@ -63,7 +63,7 @@ is the time to live of the cached python objects.
 It is recommended to enable the cache with a 10 seconds TTL when there are 500+
 osds or 10k+ pgs as internal structures might increase in size, and cause latency
 issues when requesting large structures. As an example, an OSDMap with 1000 osds
-has a aproximate size of 4MiB. With heavy load, on a 3000 osd cluster there has
+has a approximate size of 4MiB. With heavy load, on a 3000 osd cluster there has
 been a 1.5x improvement enabling the cache.
 
 Furthermore, you can run ``ceph daemon mgr.${MGRNAME} perf dump`` to retrieve perf

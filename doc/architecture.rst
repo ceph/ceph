@@ -603,7 +603,7 @@ name the Ceph OSD Daemons specifically (e.g., ``osd.0``, ``osd.1``, etc.), but
 rather refer to them as *Primary*, *Secondary*, and so forth. By convention, 
 the *Primary* is the first OSD in the *Acting Set*, and is responsible for 
 coordinating the peering process for each placement group where it acts as 
-the *Primary*, and is the **ONLY** OSD that that will accept client-initiated 
+the *Primary*, and is the **ONLY** OSD that will accept client-initiated 
 writes to objects for a given placement group where it acts as the *Primary*.
 
 When a series of OSDs are responsible for a placement group, that series of
