@@ -35,13 +35,14 @@ $dark: #777 !default;
 
 // Extra theme colors.
 $accent: $red !default;
+$accent-wcag-aa-regular-text: #25828e !default;
 $warning-dark: $orange !default;
 
 $fg-color-over-dark-bg: $white !default;
 $fg-hover-color-over-dark-bg: $gray-500 !default;
 
 $theme-colors: (
-  'accent': $accent,
+  'accent': $accent-wcag-aa-regular-text,
   'warning-dark': $warning-dark
 ) !default;
 

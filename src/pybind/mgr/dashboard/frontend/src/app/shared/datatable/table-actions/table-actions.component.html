@@ -5,11 +5,12 @@
             class="btn btn-{{btnColor}}"
             [ngClass]="{'disabled': disableSelectionAction(currentAction)}"
             (click)="useClickAction(currentAction)"
+            [disabled]="disableSelectionAction(currentAction)"
             [routerLink]="useRouterLink(currentAction)"
             [attr.aria-label]="currentAction.name"
             [preserveFragment]="currentAction.preserveFragment ? '' : null">
       <i [ngClass]="[currentAction.icon]"></i>
-      <span>{{ currentAction.name }}</span>
+      <span class="action-label">{{ currentAction.name }}</span>
     </button>
   </ng-container>
   <div class="btn-group"
@@ -17,7 +18,8 @@
        role="group"
        *ngIf="dropDownActions.length > 1"
        aria-label="Button group with nested dropdown">
-    <button class="btn btn-{{btnColor}} dropdown-toggle-split"
+    <button aria-label="dropdown-menu-toggle"
+            class="btn btn-{{btnColor}} dropdown-toggle-split"
             ngbDropdownToggle>
       <ng-container *ngIf="dropDownOnly">{{ dropDownOnly }} </ng-container>
       <span *ngIf="!dropDownOnly"

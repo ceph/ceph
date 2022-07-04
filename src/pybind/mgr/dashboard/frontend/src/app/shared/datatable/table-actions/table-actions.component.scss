@@ -1,8 +1,19 @@
+@use './src/styles/vendor/variables' as vv;
+
 button.disabled {
+  color: vv.$gray-500;
   cursor: default !important;
   pointer-events: auto;
 }
 
+button.dropdown-item:hover {
+  background-color: vv.$gray-300;
+}
+
 .action-icon {
   padding-right: 1.5rem;
+}
+
+.action-label {
+  font-weight: bold;
 }
