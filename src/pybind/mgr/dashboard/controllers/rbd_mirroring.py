@@ -4,19 +4,23 @@ import json
 import logging
 import re
 from functools import partial
-from typing import no_type_check
+from typing import NamedTuple, Optional, no_type_check
 
 import cherrypy
 import rbd
 
 from .. import mgr
+from ..controllers.pool import RBDPool
+from ..controllers.service import Service
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
+from ..services.orchestrator import OrchClient
 from ..services.rbd import rbd_call
 from ..tools import ViewCache
-from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, Task, UpdatePermission, allow_empty_body
+from . import APIDoc, APIRouter, BaseController, CreatePermission, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UIRouter, \
+    UpdatePermission, allow_empty_body
 
 logger = logging.getLogger('controllers.rbd_mirror')
 
@@ -199,6 +203,13 @@ def get_daemons_and_pools():  # pylint: disable=R0915
     }
 
 
+class ReplayingData(NamedTuple):
+    bytes_per_second: Optional[int] = None
+    seconds_until_synced: Optional[int] = None
+    syncing_percent: Optional[float] = None
+    entries_behind_primary: Optional[int] = None
+
+
 @ViewCache()
 @no_type_check
 def _get_pool_datum(pool_name):
@@ -228,15 +239,17 @@ def _get_pool_datum(pool_name):
             'state': 'Error'
         },
         rbd.MIRROR_IMAGE_STATUS_STATE_SYNCING: {
-            'health': 'syncing'
+            'health': 'syncing',
+            'state_color': 'success',
+            'state': 'Syncing'
         },
         rbd.MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY: {
-            'health': 'ok',
+            'health': 'syncing',
             'state_color': 'success',
             'state': 'Starting'
         },
         rbd.MIRROR_IMAGE_STATUS_STATE_REPLAYING: {
-            'health': 'ok',
+            'health': 'syncing',
             'state_color': 'success',
             'state': 'Replaying'
         },
@@ -248,8 +261,9 @@ def _get_pool_datum(pool_name):
         rbd.MIRROR_IMAGE_STATUS_STATE_STOPPED: {
             'health': 'ok',
             'state_color': 'info',
-            'state': 'Primary'
+            'state': 'Stopped'
         }
+
     }
 
     rbdctx = rbd.RBD()
@@ -269,6 +283,29 @@ def _get_pool_datum(pool_name):
         raise
 
     return data
+
+
+def _update_syncing_image_data(mirror_image, image):
+    if mirror_image['state'] == 'Replaying':
+        p = re.compile("replaying, ({.*})")
+        replaying_data = p.findall(mirror_image['description'])
+        assert len(replaying_data) == 1
+        replaying_data = json.loads(replaying_data[0])
+        if 'replay_state' in replaying_data and replaying_data['replay_state'] == 'idle':
+            image.update({
+                'state_color': 'info',
+                'state': 'Idle'
+            })
+        for field in ReplayingData._fields:
+            try:
+                image[field] = replaying_data[field]
+            except KeyError:
+                pass
+    else:
+        p = re.compile("bootstrapping, IMAGE_COPY/COPY_OBJECT (.*)%")
+        image.update({
+            'progress': (p.findall(mirror_image['description']) or [0])[0]
+        })
 
 
 @ViewCache()
@@ -296,26 +333,21 @@ def _get_content_data():  # pylint: disable=R0914
         for mirror_image in mirror_images:
             image = {
                 'pool_name': pool_name,
-                'name': mirror_image['name']
+                'name': mirror_image['name'],
+                'state_color': mirror_image['state_color'],
+                'state': mirror_image['state']
             }
 
             if mirror_image['health'] == 'ok':
                 image.update({
-                    'state_color': mirror_image['state_color'],
-                    'state': mirror_image['state'],
                     'description': mirror_image['description']
                 })
                 image_ready.append(image)
             elif mirror_image['health'] == 'syncing':
-                p = re.compile("bootstrapping, IMAGE_COPY/COPY_OBJECT (.*)%")
-                image.update({
-                    'progress': (p.findall(mirror_image['description']) or [0])[0]
-                })
+                _update_syncing_image_data(mirror_image, image)
                 image_syncing.append(image)
             else:
                 image.update({
-                    'state_color': mirror_image['state_color'],
-                    'state': mirror_image['state'],
                     'description': mirror_image['description']
                 })
                 image_error.append(image)
@@ -574,3 +606,41 @@ class RbdMirroringPoolPeer(RESTController):
             rbd.RBD().mirror_peer_set_attributes(ioctx, peer_uuid, attributes)
 
         _reset_view_cache()
+
+
+@UIRouter('/block/mirroring', Scope.RBD_MIRRORING)
+class RbdMirroringStatus(BaseController):
+    @EndpointDoc('Display RBD Mirroring Status')
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status = {'available': True, 'message': None}
+        orch_status = OrchClient.instance().status()
+
+        # if the orch is not available we can't create the service
+        # using dashboard.
+        if not orch_status['available']:
+            return status
+        if not CephService.get_service_list('rbd-mirror') or not CephService.get_pool_list('rbd'):
+            status['available'] = False
+            status['message'] = 'RBD mirroring is not configured'  # type: ignore
+        return status
+
+    @Endpoint('POST')
+    @EndpointDoc('Configure RBD Mirroring')
+    @CreatePermission
+    def configure(self):
+        rbd_pool = RBDPool()
+        service = Service()
+
+        service_spec = {
+            'service_type': 'rbd-mirror',
+            'placement': {},
+            'unmanaged': False
+        }
+
+        if not CephService.get_service_list('rbd-mirror'):
+            service.create(service_spec, 'rbd-mirror')
+
+        if not CephService.get_pool_list('rbd'):
+            rbd_pool.create()
