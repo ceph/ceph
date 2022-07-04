@@ -141,7 +141,6 @@ struct cbjournal_test_t : public seastar_test_suite_t
     device = new nvme_device::TestMemory(CBTEST_DEFAULT_TEST_SIZE);
     cbj.reset(new CircularBoundedJournal(device, std::string()));
     device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
-    config.start = 0;
     config.block_size = CBTEST_DEFAULT_BLOCK_SIZE;
     config.total_size = CBTEST_DEFAULT_TEST_SIZE;
     config.device_id = d_id;
@@ -234,7 +233,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
     return cbj->mkfs(config).unsafe_get0();
   }
   auto open() {
-    return cbj->open_device_read_header(config.start).unsafe_get0();
+    return cbj->open_device_read_header().unsafe_get0();
   }
   auto get_available_size() {
     return cbj->get_available_size();
@@ -385,7 +384,7 @@ TEST_F(cbjournal_test_t, update_header)
   run_async([this] {
     mkfs();
     open();
-    auto [header, _buf] = *(cbj->read_header(0).unsafe_get0());
+    auto [header, _buf] = *(cbj->read_header().unsafe_get0());
     record_t rec {
      { generate_extent(1), generate_extent(2) },
      { generate_delta(20), generate_delta(21) }
@@ -396,7 +395,7 @@ TEST_F(cbjournal_test_t, update_header)
 
     update_journal_tail(entries.front().addr, record_total_size);
     cbj->write_header().unsafe_get0();
-    auto [update_header, update_buf2] = *(cbj->read_header(0).unsafe_get0());
+    auto [update_header, update_buf2] = *(cbj->read_header().unsafe_get0());
     cbj->close().unsafe_get0();
     replay();
 
