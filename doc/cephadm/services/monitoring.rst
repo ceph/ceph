@@ -217,6 +217,8 @@ set``:
 - ``services/grafana/ceph-dashboard.yml``
 - ``services/grafana/grafana.ini``
 - ``services/prometheus/prometheus.yml``
+- ``services/loki.yml``
+- ``services/promtail.yml``
 
 You can look up the file templates that are currently used by cephadm in
 ``src/pybind/mgr/cephadm/templates``:
@@ -225,6 +227,8 @@ You can look up the file templates that are currently used by cephadm in
 - ``services/grafana/ceph-dashboard.yml.j2``
 - ``services/grafana/grafana.ini.j2``
 - ``services/prometheus/prometheus.yml.j2``
+- ``services/loki.yml.j2``
+- ``services/promtail.yml.j2``
 
 Usage
 """""
