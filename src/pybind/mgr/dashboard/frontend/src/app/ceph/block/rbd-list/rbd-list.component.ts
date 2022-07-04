@@ -398,8 +398,11 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       }
     });
 
-    this.count = CdTableServerSideService.getCount(resp[0]);
-    this.images = images;
+    if (images.length > 0) {
+      this.count = CdTableServerSideService.getCount(resp[0]);
+    } else {
+      this.count = 0;
+    }
     return images;
   }
 
