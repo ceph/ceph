@@ -266,6 +266,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   ngOnInit() {
     this.localColumns = _.clone(this.columns);
+    // debounce reloadData method so that search doesn't run api requests
+    // for every keystroke
+    if (this.serverSide) {
+      this.reloadData = _.debounce(this.reloadData, 1000);
+    }
 
     // ngx-datatable triggers calculations each time mouse enters a row,
     // this will prevent that.
