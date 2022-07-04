@@ -21,7 +21,8 @@
            placement="bottom-right"
            class="tc_filter_name">
         <button ngbDropdownToggle
-                class="btn btn-light">
+                class="btn btn-light"
+                title="Filter">
           <i [ngClass]="[icons.large, icons.filter]"></i>
           {{ selectedFilter.column.name }}
         </button>
@@ -63,13 +64,15 @@
           <i [ngClass]="[icons.search]"></i>
         </span>
       </span>
-      <input class="form-control"
+      <input aria-label="search"
+             class="form-control"
              type="text"
              [(ngModel)]="search"
              (keyup)="updateFilter()">
       <div class="input-group-append">
         <button type="button"
                 class="btn btn-light"
+                title="Clear"
                 (click)="onClearSearch()">
           <i class="icon-prepend {{ icons.destroy }}"></i>
         </button>
@@ -80,7 +83,8 @@
     <!-- pagination limit -->
     <div class="input-group dataTables_paginate"
          *ngIf="limit">
-      <input class="form-control"
+      <input aria-label="table pagination"
+             class="form-control"
              type="number"
              min="1"
              max="9999"
@@ -97,7 +101,8 @@
            autoClose="outside"
            class="tc_menuitem">
         <button ngbDropdownToggle
-                class="btn btn-light tc_columnBtn">
+                class="btn btn-light tc_columnBtn"
+                title="toggle columns">
           <i [ngClass]="[icons.large, icons.table]"></i>
         </button>
         <div ngbDropdownMenu>
@@ -128,7 +133,8 @@
       <button type="button"
               [class]="'btn btn-' + status.type"
               [ngbTooltip]="status.msg"
-              (click)="refreshBtn()">
+              (click)="refreshBtn()"
+              title="Refresh">
         <i [ngClass]="[icons.large, icons.refresh]"
            [class.fa-spin]="updating || loadingIndicator"></i>
       </button>
@@ -181,6 +187,17 @@
                  [loadingIndicator]="loadingIndicator"
                  [rowIdentity]="rowIdentity()"
                  [rowHeight]="'auto'">
+
+    <!-- Row Selection Template-->
+    <ng-template #rowSelectionTpl
+                 let-value="value"
+                 let-isSelected="isSelected"
+                 ngx-datatable-cell-template>
+      <input type="checkbox"
+             [attr.aria-label]="isSelected ? 'selected' : 'select'"
+             [checked]="isSelected"
+             class="cd-datatable-checkbox" />
+    </ng-template>
 
     <!-- Row Detail Template -->
     <ngx-datatable-row-detail rowHeight="auto"
