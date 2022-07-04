@@ -243,13 +243,11 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`Pool`,
         prop: 'pool_name',
-        sortable: false,
         flexGrow: 2
       },
       {
         name: $localize`Namespace`,
         prop: 'namespace',
-        sortable: false,
         flexGrow: 2
       },
       {
@@ -374,6 +372,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   getRbdImages(context: CdTableFetchDataContext) {
     if (context !== null) {
       this.tableContext = context;
+    }
+    if (this.tableContext == null) {
+      this.tableContext = new CdTableFetchDataContext(() => undefined);
     }
     return this.rbdService.list(this.tableContext?.toParams());
   }

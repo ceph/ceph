@@ -59,7 +59,7 @@ describe('RbdService', () => {
     /* tslint:disable:no-empty */
     const context = new CdTableFetchDataContext(() => {});
     service.list(context.toParams()).subscribe();
-    const req = httpTesting.expectOne('api/block/image?offset=0&limit=10');
+    const req = httpTesting.expectOne('api/block/image?offset=0&limit=10?search=&sort=<name');
     expect(req.request.method).toBe('GET');
   });
 
