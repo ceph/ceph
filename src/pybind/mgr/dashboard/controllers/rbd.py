@@ -80,14 +80,14 @@ class Rbd(RESTController):
     ALLOW_DISABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "deep-flatten",
                               "journaling"}
 
-    def _rbd_list(self, pool_name=None, offset=0, limit=5, search=''):
+    def _rbd_list(self, pool_name=None, offset=0, limit=5, search='', sort=''):
         if pool_name:
             pools = [pool_name]
         else:
             pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
 
         images, num_total_images = RbdService.rbd_pool_list(
-            pools, offset=offset, limit=limit, search=search)
+            pools, offset=offset, limit=limit, search=search, sort=sort)
         cherrypy.response.headers['X-Total-Count'] = num_total_images
         pool_result = {}
         for i, image in enumerate(images):
@@ -111,8 +111,8 @@ class Rbd(RESTController):
                  responses={200: RBD_SCHEMA})
     @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
     def list(self, pool_name=None, offset: int = 0, limit: int = 5,
-             search: str = ''):
-        return self._rbd_list(pool_name, offset=offset, limit=limit, search=search)
+             search: str = '', sort: str = ''):
+        return self._rbd_list(pool_name, offset=offset, limit=limit, search=search, sort=sort)
 
     @handle_rbd_error()
     @handle_rados_error('pool')

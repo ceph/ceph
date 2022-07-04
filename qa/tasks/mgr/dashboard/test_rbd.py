@@ -13,7 +13,7 @@ class RbdTest(DashboardTestCase):
 
     @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
-        self._get('/api/block/image')
+        self._get('/api/block/image?offset=0&limit=5&search=&sort=%3Cname')
         self.assertStatus(403)
         self.get_image('pool', None, 'image')
         self.assertStatus(403)

@@ -11,6 +11,7 @@ import rbd
 
 from .. import mgr
 from ..exceptions import DashboardException
+from ..plugins.ttl_cache import ttl_cache
 from .ceph_service import CephService
 
 try:
@@ -391,6 +392,7 @@ class RbdService(object):
             return stat
 
     @classmethod
+    @ttl_cache(10)
     def _rbd_image_refs(cls, ioctx):
         rbd_inst = rbd.RBD()
         return rbd_inst.list2(ioctx)
@@ -437,7 +439,7 @@ class RbdService(object):
         return joint_refs
 
     @classmethod
-    def rbd_pool_list(cls, pool_names: List[str], namespace=None, offset=0, limit=0, search=''):
+    def rbd_pool_list(cls, pool_names: List[str], namespace=None, offset=0, limit=0, search='', sort=''):
         offset = int(offset)
         limit = int(limit)
         # let's use -1 to denotate we want ALL images for now. Iscsi currently gathers
@@ -451,12 +453,23 @@ class RbdService(object):
         for ref in refs:
             if search in ref['name']:
                 image_refs.append(ref)
+            elif search in ref['pool']:
+                image_refs.append(ref)
+            elif search in ref['namespace']:
+                image_refs.append(ref)
 
         result = []
         end = offset + limit
+        descending = sort[0] == '<'
+        sort_by = sort[1:]
+        if sort_by == 'pool_name':
+            sort_by = 'pool'
+        if sort_by not in ['name', 'pool', 'namespace']:
+            sort_by = 'name'
         if limit == -1:
             end = len(image_refs)
-        for image_ref in sorted(image_refs, key=lambda v: v['name'])[offset:end]:
+        for image_ref in sorted(image_refs, key=lambda v: v[sort_by],
+                                reverse=descending)[offset:end]:
             with mgr.rados.open_ioctx(image_ref['pool']) as ioctx:
                 ioctx.set_namespace(image_ref['namespace'])
                 try:
