@@ -24,7 +24,7 @@ void RGWSI_BILog_RADOS_InIndex::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
   svc.bi = bi_rados_svc;
 }
 
-int RGWSI_BILog_RADOS_InIndex::log_trim(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+int RGWSI_BILog_RADOS_InIndex::log_trim(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
                                         const int shard_id,
                                         std::string& end_marker)
 {

@@ -457,6 +457,8 @@ void rgw_bucket_olh_entry::generate_test_instances(list<rgw_bucket_olh_entry*>& 
   entry->pending_removal = true;
   o.push_back(entry);
   o.push_back(new rgw_bucket_olh_entry);
+}
+
 void rgw_bucket_olh_log_bi_log_entry::dump(Formatter *f) const
 {
   encode_json("timestamp", timestamp, f);
@@ -603,7 +605,6 @@ void rgw_bi_log_entry::generate_test_instances(list<rgw_bi_log_entry*>& ls)
   ls.back()->id = "midf";
   ls.back()->object = "obj";
   ls.back()->timestamp = ceph::real_clock::from_ceph_timespec({ceph_le32(2), ceph_le32(3)});
-  ls.back()->index_ver = 4323;
   ls.back()->tag = "tagasdfds";
   ls.back()->op = CLS_RGW_OP_DEL;
   ls.back()->state = CLS_RGW_STATE_PENDING_MODIFY;

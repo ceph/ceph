@@ -1253,24 +1253,24 @@ public:
   int bucket_index_trim_olh_log(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
   int bucket_index_clear_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance);
   template <class BILogHandlerT>
-  int apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& ctx,
+  int apply_olh_log(const DoutPrefixProvider *dpp,
                     RGWObjState& obj_state,
                     const RGWBucketInfo& bucket_info,
-                    const rgw_obj& obj,
+                    const rgw::sal::Object* obj,
                     bufferlist& obj_tag,
-                    map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
+                    std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
                     BILogHandlerT&& bilog_handler,
                     uint64_t *plast_ver,
                     rgw_zone_set *zones_trace = nullptr);
   template <class BILogHandlerT>
-  int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
+  int update_olh(const DoutPrefixProvider *dpp,
                  RGWObjState *state,
                  const RGWBucketInfo& bucket_info,
-                 const rgw_obj& obj,
+                 const rgw::sal::Object* obj,
                  BILogHandlerT&& bilog_handler,
                  rgw_zone_set *zones_trace = nullptr);
   template <bool DeleteMarkerV>
-  int set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& target_obj, rgw_bucket_dir_entry_meta *meta,
+  int set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, rgw::sal::Object* target_obj, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
               optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_data_change = false);
   int repair_olh(const DoutPrefixProvider *dpp, RGWObjState* state, const RGWBucketInfo& bucket_info,
@@ -1307,7 +1307,7 @@ public:
       map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = nullptr);
   int get_bucket_stats(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats) {
-    return get_bucket_stats_and_bilog_meta(bucket_info, shard_id, bucket_ver, master_ver, stats, nullptr, nullptr);
+    return get_bucket_stats_and_bilog_meta(dpp, bucket_info, idx_layout, shard_id, bucket_ver, master_ver, stats, nullptr, nullptr);
   }
   int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB *cb);
 
@@ -1345,7 +1345,7 @@ public:
                            RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_del(const RGWBucketInfo& bucket_info, BucketShard& bs, std::string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
                            ceph::real_time& removed_mtime, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
-  int cls_obj_complete_cancel(const RGWBucketInfo& bucket_info, BucketShard& bs, std::string& tag, rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
+  int cls_obj_complete_cancel(const RGWBucketInfo& bucket_info, BucketShard& bs, std::string& tag, rgw_obj& obj, std::list<rgw_obj_index_key> *remove_objs, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_set_bucket_tag_timeout(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, uint64_t timeout);
 
   using ent_map_t =
@@ -1354,11 +1354,11 @@ public:
   using check_filter_t = bool (*)(const std::string&);
 
   template <class BILogHandlerT>
-  int _do_cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
+  int _do_cls_bucket_list_ordered(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout,
 				  const int shard_id,
 				  const rgw_obj_index_key& start_after,
-				  const string& prefix,
-				  const string& delimiter,
+				  const std::string& prefix,
+				  const std::string& delimiter,
 				  const uint32_t num_entries,
 				  const bool list_versions,
 				  const uint16_t exp_factor, // 0 means ignore
@@ -1367,7 +1367,7 @@ public:
 				  bool* cls_filtered,
 				  rgw_obj_index_key *last_entry,
 				  optional_yield y,
-				  check_filter_t force_check_filter,
+				  RGWBucketListNameFilter force_check_filter,
 				  BILogHandlerT&& bilog_handler);
   int cls_bucket_list_ordered(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout,
 			      const int shard_id,
@@ -1384,17 +1384,17 @@ public:
                               optional_yield y,
 			      check_filter_t force_check_filter = nullptr);
   template <class BILogHandlerT>
-  int _do_cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
+  int _do_cls_bucket_list_unordered(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout,
 				    int shard_id,
 				    const rgw_obj_index_key& start_after,
-				    const string& prefix,
+				    const std::string& prefix,
 				    uint32_t num_entries,
 				    bool list_versions,
-				    vector<rgw_bucket_dir_entry>& ent_list,
+				    std::vector<rgw_bucket_dir_entry>& ent_list,
 				    bool *is_truncated,
 				    rgw_obj_index_key *last_entry,
 				    optional_yield y,
-				    check_filter_t,
+                                    RGWBucketListNameFilter force_check_filter = {},
 				    BILogHandlerT&& bilog_handler);
   int cls_bucket_list_unordered(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout,
 				int shard_id,
@@ -1512,7 +1512,7 @@ public:
    */
   template <class BILogHandlerT>
   int check_disk_state(const DoutPrefixProvider *dpp, librados::IoCtx io_ctx,
-                       const RGWBucketInfo& bucket_info,
+                       RGWBucketInfo& bucket_info,
                        rgw_bucket_dir_entry& list_state,
                        rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates,

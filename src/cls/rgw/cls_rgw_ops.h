@@ -1593,5 +1593,3 @@ struct CLSRGWUnlinkInstance : cls_rgw_bi_log_related_op {
                        uint64_t olh_epoch) const;
 };
 
-
-#endif /* CEPH_CLS_RGW_OPS_H */

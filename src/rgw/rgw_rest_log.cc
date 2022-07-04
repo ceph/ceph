@@ -540,18 +540,6 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
       ldpp_dout(s, 5) << "ERROR: cannot parse bucket_instance" << dendl;
       return;
     }
-    rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
-    op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
-    if (op_ret < 0) {
-      ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
-      return;
-    }
-  } else { /* !bucket_name.empty() */
-    op_ret = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
-    if (op_ret < 0) {
-      ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
-      return;
-    }
   }
   op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
   if (op_ret < 0) {
@@ -649,7 +637,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
   bool gen_specified = false;
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
-         bucket_instance = s->info.args.get("bucket-instance");
+         bucket_instance = s->info.args.get("bucket-instance"),
          gen_str = s->info.args.get("generation", &gen_specified);
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -658,7 +646,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
   op_ret = 0;
   if ((bucket_name.empty() && bucket_instance.empty()) ||
       marker.empty()) {
-    ldpp_dout(this, 5) << "ERROR: one of bucket and bucket instance, and also marker is mandatory" << dendl;
+    ldpp_dout(this, 5) << "ERROR: one of bucket or bucket instance, and also marker is mandatory" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -689,10 +677,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
   op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
-    return; }
-  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, marker);
-  if (op_ret < 0) {
-    ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
+    return;
   }
 
   op_ret = bilog_trim(this, static_cast<rgw::sal::RadosStore*>(driver),

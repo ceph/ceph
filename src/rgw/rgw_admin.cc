@@ -9845,7 +9845,6 @@ next:
 	return -EINVAL;
       }
     }
-    RGWBucketInfo bucket_info;
     int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
@@ -9888,7 +9887,7 @@ next:
 
     {
       std::map<int, rgw_bucket_dir_header> headers;
-      ret = store->svc()->bi->get_dir_headers(bucket_info, shard_id, &headers,
+      ret = store->svc()->bi->get_dir_headers(dpp(), bucket->get_info(), log_layout, shard_id, &headers,
                                               null_yield);
       if (ret < 0) {
         cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
