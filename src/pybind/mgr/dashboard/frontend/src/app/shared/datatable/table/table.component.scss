@@ -264,6 +264,10 @@
 
   .cd-datatable-checkbox {
     text-align: center;
+
+    &:checked {
+      accent-color: vv.$primary;
+    }
   }
 }
 
