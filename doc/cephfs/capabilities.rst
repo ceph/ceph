@@ -2,8 +2,8 @@
 Capabilities in CephFS
 ======================
 When a client wants to operate on an inode, it will query the MDS in various
-ways, which will then grant the client a set of **capabilities**. These
-grant the client permissions to operate on the inode in various ways. One
+ways, which will then grant the client a set of **capabilities**. This
+grants the client permissions to operate on the inode in various ways. One
 of the major differences from other network file systems (e.g NFS or SMB) is
 that the capabilities granted are quite granular, and it's possible that
 multiple clients can hold different capabilities on the same inodes.
@@ -16,7 +16,7 @@ the capability grants.
 ::
 
         /* generic cap bits */
-        #define CEPH_CAP_GSHARED     1  /* (metadata) client can reads (s) */
+        #define CEPH_CAP_GSHARED     1  /* (metadata) client can read (s) */
         #define CEPH_CAP_GEXCL       2  /* (metadata) client can read and update (x) */
         #define CEPH_CAP_GCACHE      4  /* (file) client can cache reads (c) */
         #define CEPH_CAP_GRD         8  /* (file) client can read (r) */
@@ -80,21 +80,21 @@ Abilities granted by each cap
 While that is how capabilities are granted (and communicated), the important
 bit is what they actually allow the client to do:
 
-* **PIN**: this just pins the inode into memory. This is sufficient to allow
+* **PIN**: This just pins the inode into memory. This is sufficient to allow
   the client to get to the inode number, as well as other immutable things like
   major or minor numbers in a device inode, or symlink contents.
 
-* **AUTH**: this grants the ability to get to the authentication-related metadata.
+* **AUTH**: This grants the ability to get to the authentication-related metadata.
   In particular, the owner, group and mode. Note that doing a full permission
   check may require getting at ACLs as well, which are stored in xattrs.
 
-* **LINK**: the link count of the inode
+* **LINK**: The link count of the inode.
 
-* **XATTR**: ability to access or manipulate xattrs. Note that since ACLs are
+* **XATTR**: Ability to access or manipulate xattrs. Note that since ACLs are
   stored in xattrs, it's also sometimes necessary to access them when checking
   permissions.
 
-* **FILE**: this is the big one. These allow the client to access and manipulate
+* **FILE**: This is the big one. This allows the client to access and manipulate
   file data. It also covers certain metadata relating to file data -- the
   size, mtime, atime and ctime, in particular.
 
