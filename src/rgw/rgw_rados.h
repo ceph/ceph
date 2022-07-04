@@ -1270,7 +1270,7 @@ public:
                  BILogHandlerT&& bilog_handler,
                  rgw_zone_set *zones_trace = nullptr);
   template <bool DeleteMarkerV>
-  int set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw::sal::Object* target_obj, rgw_bucket_dir_entry_meta *meta,
+  int set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, rgw::sal::Object* target_obj, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
               optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_data_change = false);
   int repair_olh(const DoutPrefixProvider *dpp, RGWObjState* state, const RGWBucketInfo& bucket_info,
