@@ -121,7 +121,7 @@ public:
   Journaler *get_journaler() { return journaler; }
   bool empty() const { return segments.empty(); }
 
-  bool is_capped() const { return capped; }
+  bool is_capped() const { return mds_is_shutting_down; }
   void cap();
 
   void kick_submitter();
@@ -258,7 +258,7 @@ protected:
 
   int num_events = 0; // in events
   int unflushed = 0;
-  bool capped = false;
+  bool mds_is_shutting_down = false;
 
   // Log position which is persistent *and* for which
   // submit_entry wait_for_safe callbacks have already
@@ -297,6 +297,8 @@ private:
   void _start_new_segment();
   void _prepare_new_segment();
   void _journal_segment_subtree_map(MDSContext *onsync);
+
+  void try_to_commit_open_file_table(uint64_t last_seq);
 
   void try_expire(LogSegment *ls, int op_prio);
   void _maybe_expired(LogSegment *ls, int op_prio);
