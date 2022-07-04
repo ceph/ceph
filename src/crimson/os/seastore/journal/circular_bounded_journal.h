@@ -208,8 +208,6 @@ public:
 
     // start offset of CircularBoundedJournal in the device
     rbm_abs_addr journal_tail = 0;
-    // address to represent where last appllied record is written
-    rbm_abs_addr applied_to = 0;
 
     device_id_t device_id;
 
@@ -221,8 +219,6 @@ public:
       denc(v.size, p);
 
       denc(v.journal_tail, p);
-
-      denc(v.applied_to, p);
 
       denc(v.device_id, p);
 
