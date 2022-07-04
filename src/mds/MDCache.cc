@@ -10141,6 +10141,7 @@ void MDCache::_send_discover(discover_info_t& d)
 {
   auto dis = make_message<MDiscover>(d.ino, d.frag, d.snap, d.want_path,
 				     d.want_base_dir, d.path_locked);
+  logger->inc(l_mdc_dir_send_discover);
   dis->set_tid(d.tid);
   mds->send_message_mds(dis, d.mds);
 }
@@ -10330,6 +10331,8 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
   auto reply = make_message<MDiscoverReply>(*dis);
 
   snapid_t snapid = dis->get_snapid();
+
+  logger->inc(l_mdc_dir_handle_discover);
 
   // get started.
   if (MDS_INO_IS_BASE(dis->get_base_ino()) &&
@@ -11041,6 +11044,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
     //if (*it == except) continue;
     dout(7) << "sending dir_update on " << *dir << " to " << *it << dendl;
 
+    logger->inc(l_mdc_dir_update);
     mds->send_message_mds(make_message<MDirUpdate>(mds->get_nodeid(), dir->dirfrag(), dir->dir_rep, dir_rep_set, path, bcast), *it);
   }
 
@@ -11051,6 +11055,7 @@ void MDCache::handle_dir_update(const cref_t<MDirUpdate> &m)
 {
   dirfrag_t df = m->get_dirfrag();
   CDir *dir = get_dirfrag(df);
+  logger->inc(l_mdc_dir_update_receipt);
   if (!dir) {
     dout(5) << "dir_update on " << df << ", don't have it" << dendl;
 
@@ -11063,6 +11068,7 @@ void MDCache::handle_dir_update(const cref_t<MDirUpdate> &m)
       CInode *in;
       filepath path = m->get_path();
       dout(5) << "trying discover on dir_update for " << path << dendl;
+      logger->inc(l_mdc_dir_try_discover);
       CF_MDS_RetryMessageFactory cf(mds, m);
       MDRequestRef null_ref;
       int r = path_traverse(null_ref, cf, path, MDS_TRAVERSE_DISCOVER, &trace, &in);
@@ -13285,6 +13291,17 @@ void MDCache::flush_dentry_work(MDRequestRef& mdr)
 void MDCache::register_perfcounters()
 {
     PerfCountersBuilder pcb(g_ceph_context, "mds_cache", l_mdc_first, l_mdc_last);
+
+    pcb.add_u64_counter(l_mdc_dir_update, "dir_update",
+                        "Directory replication directives");
+    pcb.add_u64_counter(l_mdc_dir_update_receipt, "dir_update_receipt",
+                        "Directory replication directives received");
+    pcb.add_u64_counter(l_mdc_dir_try_discover, "dir_try_discover",
+                        "Directory replication attempt to discover");
+    pcb.add_u64_counter(l_mdc_dir_send_discover, "dir_send_discover",
+                        "Directory replication discovery message sent");
+    pcb.add_u64_counter(l_mdc_dir_handle_discover, "dir_handle_discover",
+                        "Directory replication discovery message handled");
 
     // Stray/purge statistics
     pcb.add_u64(l_mdc_num_strays, "num_strays", "Stray dentries", "stry",
