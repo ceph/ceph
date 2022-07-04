@@ -648,8 +648,6 @@ PG::do_osd_ops_execute(
             crimson::ct_error::eagain::make()));
       }
     }
-
-    peering_state.apply_op_stats(ox->get_target(), ox->get_stats());
     return std::move(*ox).flush_changes_n_do_ops_effects(ops,
       [this] (auto&& txn,
               auto&& obc,

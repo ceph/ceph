@@ -832,6 +832,12 @@ const object_info_t OpsExecuter::prepare_clone(
   return static_snap_oi;
 }
 
+void OpsExecuter::apply_stats()
+{
+  pg->get_peering_state().apply_op_stats(get_target(), delta_stats);
+  pg->publish_stats_to_osd();
+}
+
 static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   const std::string& type,
   bufferlist::const_iterator& iter)
