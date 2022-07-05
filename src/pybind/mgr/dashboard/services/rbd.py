@@ -453,8 +453,8 @@ class RbdService(object):
         result = []
         end = offset + limit
         if len(sort) < 2:
-            sort = '>name'
-        descending = sort[0] == '<'
+            sort = '+name'
+        descending = sort[0] == '-'
         sort_by = sort[1:]
         if sort_by == 'pool_name':
             sort_by = 'pool'
