@@ -105,6 +105,36 @@ $grid-breakpoints: (
   color: $gray-700;
 }
 
+.badge-cd-label-green {
+  background-color: $green-300;
+  color: $white;
+}
+
+.badge-cd-label-cyan {
+  background-color: $cyan-300;
+  color: $white;
+}
+
+.badge-cd-label-purple {
+  background-color: $purple-300;
+  color: $white;
+}
+
+.badge-cd-label-light-blue {
+  background-color: $light-blue-300;
+  color: $white;
+}
+
+.badge-cd-label-gold {
+  background-color: $gold-300;
+  color: $white;
+}
+
+.badge-cd-label-light-green {
+  background-color: $light-green-300;
+  color: $white;
+}
+
 // angular-tree-component
 tree-root {
   tree-viewport {
