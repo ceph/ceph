@@ -22,9 +22,9 @@ RGWMetadataHandler *RGWSyncModuleInstance::alloc_bucket_meta_handler()
   return RGWBucketMetaHandlerAllocator::alloc();
 }
 
-RGWBucketInstanceMetadataHandlerBase *RGWSyncModuleInstance::alloc_bucket_instance_meta_handler()
+RGWBucketInstanceMetadataHandlerBase* RGWSyncModuleInstance::alloc_bucket_instance_meta_handler(rgw::sal::Store* store)
 {
-  return RGWBucketInstanceMetaHandlerAllocator::alloc();
+  return RGWBucketInstanceMetaHandlerAllocator::alloc(store);
 }
 
 RGWStatRemoteObjCBCR::RGWStatRemoteObjCBCR(RGWDataSyncCtx *_sc,
