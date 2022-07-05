@@ -39,11 +39,17 @@ class PG;
 
 template <class T>
 class PeeringEvent : public PhasedOperationT<T> {
+  T* that() {
+    return static_cast<T*>(this);
+  }
+  const T* that() const {
+    return static_cast<const T*>(this);
+  }
+
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
 
 protected:
-  PipelineHandle handle;
   PGPeeringPipeline &pp(PG &pg);
 
   ShardServices &shard_services;
@@ -102,6 +108,8 @@ public:
 class RemotePeeringEvent : public PeeringEvent<RemotePeeringEvent> {
 protected:
   crimson::net::ConnectionRef conn;
+  // must be after conn due to ConnectionPipeline's life-time
+  PipelineHandle handle;
 
   void on_pg_absent() final;
   PeeringEvent::interruptible_future<> complete_rctx(Ref<PG> pg) override;
@@ -163,6 +171,7 @@ public:
 class LocalPeeringEvent final : public PeeringEvent<LocalPeeringEvent> {
 protected:
   Ref<PG> pg;
+  PipelineHandle handle;
 
 public:
   template <typename... Args>
@@ -173,6 +182,8 @@ public:
 
   seastar::future<> start();
   virtual ~LocalPeeringEvent();
+
+  PipelineHandle &get_handle() { return handle; }
 
   std::tuple<
     StartEvent,

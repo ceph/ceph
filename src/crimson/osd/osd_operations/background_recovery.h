@@ -114,6 +114,7 @@ public:
     const EventT& evt);
 
   static BackfillRecoveryPipeline &bp(PG &pg);
+  PipelineHandle& get_handle() { return handle; }
 
   std::tuple<
     OperationThrottler::BlockingEvent,
@@ -123,6 +124,7 @@ public:
 private:
   boost::intrusive_ptr<const boost::statechart::event_base> evt;
   PipelineHandle handle;
+
   interruptible_future<bool> do_recovery() override;
 };
 

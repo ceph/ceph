@@ -56,6 +56,8 @@ public:
 
 private:
   crimson::net::ConnectionRef conn;
+  // must be after `conn` to ensure the ConnectionPipeline's is alive
+  PipelineHandle handle;
   Ref<MOSDFastDispatchOp> m;
 };
 
