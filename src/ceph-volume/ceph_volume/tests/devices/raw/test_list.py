@@ -48,19 +48,19 @@ def _devices_side_effect():
         "/dev/mapper/ceph--osd--block--2": {},
     }
 
-def _lsblk_list_output():
+def _lsblk_all_devices(abspath=True):
     return [
-        '/dev/sda',
-        '/dev/sda1',
-        '/dev/sda2',
-        '/dev/sda3',
-        '/dev/sdb',
-        '/dev/sdb2',
-        '/dev/sdb3',
-        '/dev/sdc',
-        '/dev/sdd',
-        '/dev/mapper/ceph--osd--block--1',
-        '/dev/mapper/ceph--osd--block--2',
+        {"NAME": "/dev/sda", "KNAME": "/dev/sda", "PKNAME": ""},
+        {"NAME": "/dev/sda1", "KNAME": "/dev/sda1", "PKNAME": "/dev/sda"},
+        {"NAME": "/dev/sda2", "KNAME": "/dev/sda2", "PKNAME": "/dev/sda"},
+        {"NAME": "/dev/sda3", "KNAME": "/dev/sda3", "PKNAME": "/dev/sda"},
+        {"NAME": "/dev/sdb", "KNAME": "/dev/sdb", "PKNAME": ""},
+        {"NAME": "/dev/sdb2", "KNAME": "/dev/sdb2", "PKNAME": "/dev/sdb"},
+        {"NAME": "/dev/sdb3", "KNAME": "/dev/sdb3", "PKNAME": "/dev/sdb"},
+        {"NAME": "/dev/sdc", "KNAME": "/dev/sdc", "PKNAME": ""},
+        {"NAME": "/dev/sdd", "KNAME": "/dev/sdd", "PKNAME": ""},
+        {"NAME": "/dev/mapper/ceph--osd--block--1", "KNAME": "/dev/mapper/ceph--osd--block--1", "PKNAME": "/dev/sdd"},
+        {"NAME": "/dev/mapper/ceph--osd--block--2", "KNAME": "/dev/mapper/ceph--osd--block--2", "PKNAME": "/dev/sdd"},
     ]
 
 # dummy lsblk output for device with optional parent output
@@ -153,7 +153,7 @@ def _process_call_side_effect(command, **kw):
                 return _lsblk_output(dev, parent="/dev/sdd"), '', 0
             pytest.fail('dev {} needs behavior specified for it'.format(dev))
         if "/dev/" not in command:
-            return _lsblk_list_output(), '', 0
+            return _lsblk_all_devices(), '', 0
         pytest.fail('command {} needs behavior specified for it'.format(command))
 
     if "ceph-bluestore-tool" in command:
@@ -192,15 +192,16 @@ class TestList(object):
     @patch('ceph_volume.util.device.disk.get_devices')
     @patch('ceph_volume.util.disk.has_bluestore_label')
     @patch('ceph_volume.process.call')
-    def test_raw_list(self, patched_call, patched_bluestore_label, patched_get_devices):
+    @patch('ceph_volume.util.disk.lsblk_all')
+    def test_raw_list(self, patched_disk_lsblk, patched_call, patched_bluestore_label, patched_get_devices):
         raw.list.logger.setLevel("DEBUG")
         patched_call.side_effect = _process_call_side_effect
+        patched_disk_lsblk.side_effect = _lsblk_all_devices
         patched_bluestore_label.side_effect = _has_bluestore_label_side_effect
         patched_get_devices.side_effect = _devices_side_effect
 
         result = raw.list.List([]).generate()
-        patched_call.assert_any_call(['lsblk', '--paths', '--output=NAME', '--noheadings', '--list'])
-        assert len(result) == 2
+        assert len(result) == 3
 
         sdb = result['sdb-uuid']
         assert sdb['osd_uuid'] == 'sdb-uuid'
@@ -219,17 +220,19 @@ class TestList(object):
     @patch('ceph_volume.util.device.disk.get_devices')
     @patch('ceph_volume.util.disk.has_bluestore_label')
     @patch('ceph_volume.process.call')
-    def test_raw_list_with_OSError(self, patched_call, patched_bluestore_label, patched_get_devices):
+    @patch('ceph_volume.util.disk.lsblk_all')
+    def test_raw_list_with_OSError(self, patched_disk_lsblk, patched_call, patched_bluestore_label, patched_get_devices):
         def _has_bluestore_label_side_effect_with_OSError(device_path):
             if device_path == "/dev/sdd":
                 raise OSError('fake OSError')
             return _has_bluestore_label_side_effect(device_path)
 
         raw.list.logger.setLevel("DEBUG")
+        patched_disk_lsblk.side_effect = _lsblk_all_devices
         patched_call.side_effect = _process_call_side_effect
         patched_bluestore_label.side_effect = _has_bluestore_label_side_effect_with_OSError
         patched_get_devices.side_effect = _devices_side_effect
 
         result = raw.list.List([]).generate()
-        assert len(result) == 1
+        assert len(result) == 3
         assert 'sdb-uuid' in result
