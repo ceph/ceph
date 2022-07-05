@@ -59,7 +59,7 @@ seastar::future<> PeeringEvent<T>::with_pg(
   if (!pg) {
     logger().warn("{}: pg absent, did not create", *this);
     on_pg_absent();
-    handle.exit();
+    that()->get_handle().exit();
     return complete_rctx_no_pg();
   }
 
@@ -83,7 +83,7 @@ seastar::future<> PeeringEvent<T>::with_pg(
 	BackfillRecovery::bp(*pg).process);
     }).then_interruptible([this, pg] {
       pg->do_peering_event(evt, ctx);
-      handle.exit();
+      that()->get_handle().exit();
       return complete_rctx(pg);
     }).then_interruptible([pg, &shard_services]()
 			  -> typename T::template interruptible_future<> {
