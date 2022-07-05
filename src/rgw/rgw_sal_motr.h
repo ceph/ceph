@@ -461,18 +461,18 @@ class MotrZone : public StoreZone {
     friend class MotrStore;
 };
 
-class MotrLuaScriptManager : public StoreLuaScriptManager {
+class MotrLuaManager : public StoreLuaManager {
   MotrStore* store;
 
   public:
-  MotrLuaScriptManager(MotrStore* _s) : store(_s)
+  MotrLuaManager(MotrStore* _s) : store(_s)
   {
   }
-  virtual ~MotrLuaScriptManager() = default;
+  virtual ~MotrLuaManager() = default;
 
-  virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override { return -ENOENT; }
-  virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override { return -ENOENT; }
-  virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override { return -ENOENT; }
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override { return -ENOENT; }
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override { return -ENOENT; }
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override { return -ENOENT; }
 };
 
 class MotrOIDCProvider : public RGWOIDCProvider {
@@ -963,7 +963,7 @@ class MotrStore : public StoreStore {
     virtual const RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
     virtual std::string get_host_id() { return ""; }
 
-    virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
+    virtual std::unique_ptr<LuaManager> get_lua_manager() override;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
         std::string tenant,
         std::string path="",

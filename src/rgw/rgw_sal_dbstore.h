@@ -337,18 +337,18 @@ protected:
       virtual const std::string& get_realm_id() override;
   };
 
-  class DBLuaScriptManager : public StoreLuaScriptManager {
+  class DBLuaManager : public StoreLuaManager {
     DBStore* store;
 
     public:
-    DBLuaScriptManager(DBStore* _s) : store(_s)
+    DBLuaManager(DBStore* _s) : store(_s)
     {
     }
-    virtual ~DBLuaScriptManager() = default;
+    virtual ~DBLuaManager() = default;
 
-    virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override { return -ENOENT; }
-    virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override { return -ENOENT; }
-    virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override { return -ENOENT; }
+    virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override { return -ENOENT; }
+    virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override { return -ENOENT; }
+    virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override { return -ENOENT; }
   };
 
   class DBOIDCProvider : public RGWOIDCProvider {
@@ -826,7 +826,7 @@ public:
       virtual const RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
       virtual std::string get_host_id() { return ""; }
 
-      virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
+      virtual std::unique_ptr<LuaManager> get_lua_manager() override;
       virtual std::unique_ptr<RGWRole> get_role(std::string name,
           std::string tenant,
           std::string path="",

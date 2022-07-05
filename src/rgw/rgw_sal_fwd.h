@@ -30,7 +30,7 @@ namespace rgw { namespace sal {
   class PlacementTier;
   class ZoneGroup;
   class Zone;
-  class LuaScriptManager;
+  class LuaManager;
   struct RGWRoleInfo;
 
 } } // namespace rgw::sal
