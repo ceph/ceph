@@ -27,6 +27,7 @@ public:
 protected:
   OSD &osd;
   Ref<PG> pg;
+  PipelineHandle handle;
 
   epoch_t from;
   epoch_t to;
@@ -43,6 +44,7 @@ public:
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter *f) const final;
   seastar::future<> start();
+  PipelineHandle &get_handle() { return handle; }
 
   std::tuple<
     PGPeeringPipeline::Process::BlockingEvent
