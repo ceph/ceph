@@ -6,12 +6,7 @@
 
 #include "rgw_realm_watcher.h"
 #include "common/Cond.h"
-
-namespace rgw {
-namespace sal {
-class Store;
-}
-}
+#include "rgw_sal_fwd.h"
 
 /**
  * RGWRealmReloader responds to new period notifications by recreating RGWRados

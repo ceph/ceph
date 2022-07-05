@@ -41,15 +41,13 @@
 #include "include/rados/librados.hpp"
 #include "rgw_public_access.h"
 #include "common/tracer.h"
+#include "rgw_sal_fwd.h"
 
 namespace ceph {
   class Formatter;
 }
 
 namespace rgw::sal {
-  class User;
-  class Bucket;
-  class Object;
   using Attrs = std::map<std::string, ceph::buffer::list>;
 }
 

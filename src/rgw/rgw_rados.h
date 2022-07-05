@@ -38,6 +38,7 @@
 #include "common/Throttle.h"
 #include "common/ceph_mutex.h"
 #include "rgw_cache.h"
+#include "rgw_sal_fwd.h"
 
 struct D3nDataCache;
 
@@ -303,7 +304,6 @@ class RGWCoroutinesManagerRegistry;
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
 namespace rgw { namespace sal {
-  class Store;
   class RadosStore;
   class MPRadosSerializer;
   class LCRadosSerializer;
@@ -1483,7 +1483,8 @@ public:
 
   int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);
   int list_lc_progress(std::string& marker, uint32_t max_entries,
-		       std::vector<rgw::sal::Lifecycle::LCEntry>& progress_map, int& index);
+		       std::vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>& progress_map,
+		       int& index);
 
   int bucket_check_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
                          std::map<RGWObjCategory, RGWStorageStats> *existing_stats,

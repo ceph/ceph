@@ -67,7 +67,7 @@ public:
   }
 };
 
-class TestUser : public sal::User {
+class TestUser : public sal::StoreUser {
 public:
   virtual std::unique_ptr<User> clone() override {
     return std::unique_ptr<User>(new TestUser(*this));
