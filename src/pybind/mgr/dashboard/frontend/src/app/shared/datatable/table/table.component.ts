@@ -658,7 +658,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       context.search = this.userConfig.search;
       if (this.userConfig.sorts?.length) {
         const sort = this.userConfig.sorts[0];
-        context.sort = `${sort.dir == 'desc' ? '<' : '>'}${sort.prop}`;
+        context.sort = `${sort.dir === 'desc' ? '<' : '>'}${sort.prop}`;
       }
       this.fetchData.emit(context);
       this.updating = true;
