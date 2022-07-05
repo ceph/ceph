@@ -567,9 +567,9 @@ static int list_lc_entry(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_st
     return -1;
 
   op.lc_entry.index = (const char*)sqlite3_column_text(stmt, LCEntryIndex);
-  op.lc_entry.entry.bucket = (const char*)sqlite3_column_text(stmt, LCEntryBucketName);
-  op.lc_entry.entry.start_time = sqlite3_column_int(stmt, LCEntryStartTime);
-  op.lc_entry.entry.status = sqlite3_column_int(stmt, LCEntryStatus);
+  op.lc_entry.entry.set_bucket((const char*)sqlite3_column_text(stmt, LCEntryBucketName));
+  op.lc_entry.entry.set_start_time(sqlite3_column_int(stmt, LCEntryStartTime));
+  op.lc_entry.entry.set_status(sqlite3_column_int(stmt, LCEntryStatus));
  
   op.lc_entry.list_entries.push_back(op.lc_entry.entry);
 
@@ -581,9 +581,9 @@ static int list_lc_head(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stm
     return -1;
 
   op.lc_head.index = (const char*)sqlite3_column_text(stmt, LCHeadIndex);
-  op.lc_head.head.marker = (const char*)sqlite3_column_text(stmt, LCHeadMarker);
+  op.lc_head.head.set_marker((const char*)sqlite3_column_text(stmt, LCHeadMarker));
  
-  SQL_DECODE_BLOB_PARAM(dpp, stmt, LCHeadStartDate, op.lc_head.head.start_date, sdb);
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, LCHeadStartDate, op.lc_head.head.get_start_date(), sdb);
 
   return 0;
 }
@@ -2600,13 +2600,13 @@ int SQLInsertLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.get_bucket().c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.status, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.status, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.get_status(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.start_time, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.start_time, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.get_start_time(), sdb);
 
 out:
   return rc;
@@ -2649,7 +2649,7 @@ int SQLRemoveLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.get_bucket().c_str(), sdb);
 
 out:
   return rc;
@@ -2704,7 +2704,7 @@ int SQLGetLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.index.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.bucket_name, sdb);
-  SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.entry.get_bucket().c_str(), sdb);
 
 out:
   return rc;
@@ -2800,10 +2800,10 @@ int SQLInsertLCHead::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.index.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.marker, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.head.marker.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.head.get_marker().c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.start_date, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.lc_head.head.start_date, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.lc_head.head.get_start_date(), sdb);
 
 out:
   return rc;

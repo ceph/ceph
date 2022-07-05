@@ -1251,7 +1251,7 @@ namespace rgw::sal {
     		    const rgw_user& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
                 uint64_t _part_num, const std::string& _part_num_str):
-    			Writer(dpp, y),
+			StoreWriter(dpp, y),
 	    		store(_store),
                 owner(_owner),
                 ptail_placement_rule(_ptail_placement_rule),
@@ -1400,7 +1400,7 @@ namespace rgw::sal {
 	    	    const rgw_placement_rule *_ptail_placement_rule,
 		        uint64_t _olh_epoch,
 		        const std::string& _unique_tag) :
-    			Writer(dpp, y),
+			StoreWriter(dpp, y),
 	    		store(_store),
                 owner(_owner),
                 ptail_placement_rule(_ptail_placement_rule),
@@ -1766,39 +1766,39 @@ namespace rgw::sal {
   }
 
   int DBLifecycle::get_entry(const std::string& oid, const std::string& marker,
-			      LCEntry& entry)
+			      std::unique_ptr<LCEntry>* entry)
   {
     return store->getDB()->get_entry(oid, marker, entry);
   }
 
-  int DBLifecycle::get_next_entry(const std::string& oid, std::string& marker,
-				   LCEntry& entry)
+  int DBLifecycle::get_next_entry(const std::string& oid, const std::string& marker,
+				  std::unique_ptr<LCEntry>* entry)
   {
     return store->getDB()->get_next_entry(oid, marker, entry);
   }
 
-  int DBLifecycle::set_entry(const std::string& oid, const LCEntry& entry)
+  int DBLifecycle::set_entry(const std::string& oid, LCEntry& entry)
   {
     return store->getDB()->set_entry(oid, entry);
   }
 
   int DBLifecycle::list_entries(const std::string& oid, const std::string& marker,
-  				 uint32_t max_entries, vector<LCEntry>& entries)
+  				 uint32_t max_entries, vector<std::unique_ptr<LCEntry>>& entries)
   {
     return store->getDB()->list_entries(oid, marker, max_entries, entries);
   }
 
-  int DBLifecycle::rm_entry(const std::string& oid, const LCEntry& entry)
+  int DBLifecycle::rm_entry(const std::string& oid, LCEntry& entry)
   {
     return store->getDB()->rm_entry(oid, entry);
   }
 
-  int DBLifecycle::get_head(const std::string& oid, LCHead& head)
+  int DBLifecycle::get_head(const std::string& oid, std::unique_ptr<LCHead>* head)
   {
     return store->getDB()->get_head(oid, head);
   }
 
-  int DBLifecycle::put_head(const std::string& oid, const LCHead& head)
+  int DBLifecycle::put_head(const std::string& oid, LCHead& head)
   {
     return store->getDB()->put_head(oid, head);
   }

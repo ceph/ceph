@@ -8367,7 +8367,7 @@ int RGWRados::process_gc(bool expired_only)
 }
 
 int RGWRados::list_lc_progress(string& marker, uint32_t max_entries,
-			       vector<rgw::sal::Lifecycle::LCEntry>& progress_map,
+			       vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>& progress_map,
 			       int& index)
 {
   return lc->list_lc_progress(marker, max_entries, progress_map, index);

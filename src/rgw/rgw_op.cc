@@ -6467,10 +6467,10 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
 void RGWCompleteMultipart::complete()
 {
   /* release exclusive lock iff not already */
-  if (unlikely(serializer && serializer->locked)) {
+  if (unlikely(serializer && serializer->is_locked())) {
     int r = serializer->unlock();
     if (r < 0) {
-      ldpp_dout(this, 0) << "WARNING: failed to unlock " << serializer->oid << dendl;
+      ldpp_dout(this, 0) << "WARNING: failed to unlock " << serializer << dendl;
     }
   }
   send_response();
