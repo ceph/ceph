@@ -77,7 +77,7 @@ public:
     }
   };
 
-  CircularBoundedJournal(NVMeBlockDevice* device, const std::string path);
+  CircularBoundedJournal(NVMeBlockDevice* device, const std::string &path);
   ~CircularBoundedJournal() {}
 
   open_for_write_ret open_for_write() final;
@@ -100,14 +100,12 @@ public:
     return seastar::now();
   }
 
-  replay_ret replay(delta_handler_t &&delta_handler);
+  replay_ret replay(delta_handler_t &&delta_handler) final;
 
-  open_for_write_ertr::future<> _open_device(const std::string path);
+  open_for_write_ertr::future<> _open_device(const std::string &path);
 
   struct cbj_header_t;
-  using write_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::erange>;
+  using write_ertr = submit_record_ertr;
   /*
    * device_write_bl
    *
@@ -301,6 +299,7 @@ private:
 };
 
 std::ostream &operator<<(std::ostream &out, const CircularBoundedJournal::cbj_header_t &header);
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal::CircularBoundedJournal::cbj_header_t)
