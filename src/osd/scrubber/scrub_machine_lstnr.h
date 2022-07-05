@@ -80,6 +80,10 @@ struct ScrubMachineListener {
 
   virtual ~ScrubMachineListener() = default;
 
+  /// set the string we'd use in logs to convey the current state-machine
+  /// state.
+  virtual void set_state_name(const char* name) = 0;
+
   [[nodiscard]] virtual bool is_primary() const = 0;
 
   virtual void select_range_n_notify() = 0;
