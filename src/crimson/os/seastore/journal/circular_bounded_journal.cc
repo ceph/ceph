@@ -15,7 +15,7 @@ namespace crimson::os::seastore::journal {
 std::ostream &operator<<(std::ostream &out,
     const CircularBoundedJournal::cbj_header_t &header)
 {
-  return out << "cbj_header_t(magin=" << header.magic
+  return out << "cbj_header_t(magic=" << header.magic
 	     << ", uuid=" << header.uuid
 	     << ", block_size=" << header.block_size
 	     << ", size=" << header.size
@@ -24,9 +24,8 @@ std::ostream &operator<<(std::ostream &out,
              << ")";
 }
 
-
 CircularBoundedJournal::CircularBoundedJournal(NVMeBlockDevice* device,
-    const std::string path)
+    const std::string &path)
   : device(device), path(path) {}
 
 CircularBoundedJournal::mkfs_ret
@@ -53,23 +52,19 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
     ).handle_error(
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
-      "Invalid error device_write during CircularBoundedJournal::mkfs"
-    }).safe_then([]() {
-      return mkfs_ertr::now();
-    });
-  }).safe_then([this]() {
+        "Invalid error in CircularBoundedJournal::mkfs"
+      }
+    );
+  }).safe_then([this]() -> mkfs_ret {
     if (device) {
-      return device->close(
-      ).safe_then([]() {
-	return mkfs_ertr::now();
-      });
+      return device->close();
     }
     return mkfs_ertr::now();
   });
 }
 
 CircularBoundedJournal::open_for_write_ertr::future<>
-CircularBoundedJournal::_open_device(const std::string path)
+CircularBoundedJournal::_open_device(const std::string &path)
 {
   ceph_assert(device);
   return device->open(path, seastar::open_flags::rw
@@ -132,7 +127,7 @@ CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
 CircularBoundedJournal::open_for_write_ret
 CircularBoundedJournal::open_device_read_header()
 {
-  LOG_PREFIX(CircularBoundedJournal::open_for_write);
+  LOG_PREFIX(CircularBoundedJournal::open_device_read_header);
   ceph_assert(!initialized);
   return _open_device(path
   ).safe_then([this, FNAME]() {
@@ -173,11 +168,8 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
   auto r_size = record_group_size_t(record.size, get_block_size());
   auto encoded_size = r_size.get_encoded_length();
   if (encoded_size > get_available_size()) {
-    ERROR(
-      "CircularBoundedJournal::submit_record: record size {}, but available size {}",
-      encoded_size,
-      get_available_size()
-      );
+    ERROR("record size {}, but available size {}",
+          encoded_size, get_available_size());
     return crimson::ct_error::erange::make();
   }
   if (encoded_size + get_written_to() > get_journal_end()) {
@@ -199,8 +191,9 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
   ceph::bufferlist to_write = encode_record(
     std::move(record), device->get_block_size(),
     j_seq, 0);
+  assert(to_write.length() == encoded_size);
   auto target = get_written_to();
-  auto new_written_to = target + to_write.length();
+  auto new_written_to = target + encoded_size;
   if (new_written_to >= get_journal_end()) {
     assert(new_written_to == get_journal_end());
     DEBUG("roll");
@@ -209,15 +202,11 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
   } else {
     set_written_to(new_written_to);
   }
-  DEBUG(
-    "submit_record: mdlength {}, dlength {}, target {}",
-    r_size.get_mdlength(),
-    r_size.dlength,
-    target);
+  DEBUG("{}, target {}", r_size, target);
 
   auto write_result = write_result_t{
     j_seq,
-    (seastore_off_t)to_write.length()
+    (seastore_off_t)encoded_size
   };
   auto write_fut = device_write_bl(target, to_write);
   return handle.enter(write_pipeline->device_submission
@@ -226,13 +215,12 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
   }).safe_then([this, &handle] {
     return handle.enter(write_pipeline->finalize);
   }).safe_then([this, target,
-    length=to_write.length(),
+    length=encoded_size,
     write_result,
     r_size,
     FNAME] {
-    DEBUG(
-      "append_record: commit target {} used_size {} written length {}",
-      target, get_used_size(), length);
+    DEBUG("commit target {} used_size {} written length {}",
+          target, get_used_size(), length);
 
     paddr_t paddr = convert_abs_addr_to_paddr(
       target + r_size.get_mdlength(),
@@ -261,9 +249,7 @@ CircularBoundedJournal::write_ertr::future<> CircularBoundedJournal::device_writ
   ).handle_error(
     write_ertr::pass_further{},
     crimson::ct_error::assert_all{ "Invalid error device->write" }
-  ).safe_then([] {
-    return write_ertr::now();
-  });
+  );
 }
 
 CircularBoundedJournal::read_header_ret
@@ -283,7 +269,7 @@ CircularBoundedJournal::read_header()
     try {
       decode(cbj_header, bp);
     } catch (ceph::buffer::error &e) {
-      ERROR("read_header: unable to read header block");
+      ERROR("unable to read header block");
       return crimson::ct_error::enoent::make();
     }
     auto bliter = bl.cbegin();
@@ -294,7 +280,7 @@ CircularBoundedJournal::read_header()
     decode(recorded_crc_le, bliter);
     uint32_t recorded_crc = recorded_crc_le;
     if (test_crc != recorded_crc) {
-      ERROR("read_header: error, header crc mismatch.");
+      ERROR("error, header crc mismatch.");
       return read_header_ret(
 	read_header_ertr::ready_future_marker{},
 	std::nullopt);
@@ -444,8 +430,7 @@ CircularBoundedJournal::read_record(paddr_t off, segment_seq_t expected_seq)
   rbm_abs_addr addr = convert_paddr_to_abs_addr(off);
   auto read_length = get_block_size();
   assert(addr + read_length <= get_journal_end());
-  DEBUG("read_record: reading record from abs addr {} read length {}",
-      addr, read_length);
+  DEBUG("reading record from abs addr {} read length {}", addr, read_length);
   auto bptr = bufferptr(ceph::buffer::create_page_aligned(read_length));
   return device->read(addr, bptr
   ).safe_then([this, addr, bptr, expected_seq, FNAME]() mutable
