@@ -109,16 +109,6 @@ public:
     crimson::ct_error::input_output_error,
     crimson::ct_error::erange>;
   /*
-   * append_record
-   *
-   * append data to current write position of CircularBoundedJournal
-   *
-   * @param bufferlist to write
-   * @param rbm_abs_addr where data is written
-   *
-   */
-  write_ertr::future<> append_record(ceph::bufferlist bl, rbm_abs_addr addr);
-  /*
    * device_write_bl
    *
    * @param device address to write
@@ -146,9 +136,10 @@ public:
    * read record from given address
    *
    * @param paddr_t to read
+   * @param last_seq
    *
    */
-  read_record_ret read_record(paddr_t offset);
+  read_record_ret read_record(paddr_t offset, segment_seq_t last_seq);
   /*
    * read_header
    *
@@ -240,7 +231,7 @@ public:
   size_t get_used_size() const {
     return get_written_to() >= get_journal_tail() ?
       get_written_to() - get_journal_tail() :
-      get_written_to() + get_total_size() - get_journal_tail();
+      get_written_to() + header.size + get_block_size() - get_journal_tail();
   }
   size_t get_total_size() const {
     return header.size;
@@ -272,6 +263,8 @@ public:
     return written_to;
   }
   void set_written_to(rbm_abs_addr addr) {
+    assert(addr >= get_start_addr());
+    assert(addr < get_journal_end());
     written_to = addr;
   }
   device_id_t get_device_id() const {
@@ -281,7 +274,7 @@ public:
     return header.block_size;
   }
   rbm_abs_addr get_journal_end() const {
-    return get_start_addr() + header.size; // journal size + header length
+    return get_start_addr() + header.size + get_block_size(); // journal size + header length
   }
   void add_device(NVMeBlockDevice* dev) {
     device = dev;
@@ -300,6 +293,7 @@ private:
   bool initialized = false;
   segment_seq_t cur_segment_seq = 0; // segment seq to track the sequence to written records
   // start address where the newest record will be written
+  // should be in range [get_start_addr(), get_journal_end())
   rbm_abs_addr written_to = 0;
 };
 
