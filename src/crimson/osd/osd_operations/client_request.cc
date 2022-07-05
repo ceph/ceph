@@ -54,8 +54,8 @@ void ClientRequest::complete_request()
 ClientRequest::ClientRequest(
   OSD &osd, crimson::net::ConnectionRef conn, Ref<MOSDOp> &&m)
   : osd(osd),
-    conn(conn),
-    m(m)
+    conn(std::move(conn)),
+    m(std::move(m))
 {}
 
 ClientRequest::~ClientRequest()
