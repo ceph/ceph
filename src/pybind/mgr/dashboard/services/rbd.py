@@ -156,8 +156,13 @@ class RbdConfiguration(object):
         def _list(ioctx):
             if self._image_name:  # image config
                 try:
-                    with rbd.Image(ioctx, self._image_name) as image:
-                        result = image.config_list()
+                    # No need to open the context of the image again
+                    # if we already did open it.
+                    if self._image_ioctx:
+                        result = self._image_ioctx.config_list()
+                    else:
+                        with rbd.Image(ioctx, self._image_name) as image:
+                            result = image.config_list()
                 except rbd.ImageNotFound:
                     result = []
             else:  # pool config
@@ -387,7 +392,8 @@ class RbdService(object):
                 stat['total_disk_usage'] = None
                 stat['disk_usage'] = None
 
-            stat['configuration'] = RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).list()
+            stat['configuration'] = RbdConfiguration(
+                pool_ioctx=ioctx, image_name=image_name, image_ioctx=img).list()
 
             return stat
 
