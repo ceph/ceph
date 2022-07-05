@@ -2477,7 +2477,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   mds_rank_t mds = session->mds_num;
   ldout(cct, 10) << __func__ << " rebuilding request " << request->get_tid()
 		 << " for mds." << mds << dendl;
-  auto r = build_client_request(request);
+  auto r = build_client_request(request, mds);
   if (!r)
     return;
 
@@ -2522,8 +2522,11 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   session->con->send_message2(std::move(r));
 }
 
-ref_t<MClientRequest> Client::build_client_request(MetaRequest *request)
+ref_t<MClientRequest> Client::build_client_request(MetaRequest *request, mds_rank_t mds)
 {
+  auto session = mds_sessions.at(mds);
+  bool old_version = !session->mds_features.test(CEPHFS_FEATURE_32BITS_RETRY_FWD);
+
   /*
    * The type of 'retry_attempt' in 'MetaRequest' is 'int',
    * while in 'ceph_mds_request_head' the type of 'num_retry'
@@ -2546,7 +2549,7 @@ ref_t<MClientRequest> Client::build_client_request(MetaRequest *request)
     return nullptr;
   }
 
-  auto req = make_message<MClientRequest>(request->get_op());
+  auto req = make_message<MClientRequest>(request->get_op(), old_version);
   req->set_tid(request->tid);
   req->set_stamp(request->op_stamp);
   memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));

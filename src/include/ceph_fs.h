@@ -621,7 +621,7 @@ union ceph_mds_request_args {
 	} __attribute__ ((packed)) lookupino;
 } __attribute__ ((packed));
 
-#define CEPH_MDS_REQUEST_HEAD_VERSION	1
+#define CEPH_MDS_REQUEST_HEAD_VERSION	2
 
 /*
  * Note that any change to this structure must ensure that it is compatible
@@ -632,29 +632,42 @@ struct ceph_mds_request_head {
 	__le64 oldest_client_tid;
 	__le32 mdsmap_epoch;           /* on client */
 	__le32 flags;                  /* CEPH_MDS_FLAG_* */
-	__u8 num_retry, num_fwd;       /* count retry, fwd attempts */
+	__u8 num_retry, num_fwd;       /* legacy count retry and fwd attempts */
 	__le16 num_releases;           /* # include cap/lease release records */
 	__le32 op;                     /* mds op code */
 	__le32 caller_uid, caller_gid;
 	__le64 ino;                    /* use this ino for openc, mkdir, mknod,
 					  etc. (if replaying) */
 	union ceph_mds_request_args args;
+
+	__le32 ext_num_retry;          /* new count retry attempts */
+	__le32 ext_num_fwd;            /* new count fwd attempts */
 } __attribute__ ((packed));
 
-void inline encode(const struct ceph_mds_request_head& h, ceph::buffer::list& bl) {
+void inline encode(const struct ceph_mds_request_head& h, ceph::buffer::list& bl, bool old_version) {
   using ceph::encode;
   encode(h.version, bl);
   encode(h.oldest_client_tid, bl);
   encode(h.mdsmap_epoch, bl);
   encode(h.flags, bl);
-  encode(h.num_retry, bl);
-  encode(h.num_fwd, bl);
+
+  // For old MDS daemons
+  __u8 num_retry = __u32(h.ext_num_retry);
+  __u8 num_fwd = __u32(h.ext_num_fwd);
+  encode(num_retry, bl);
+  encode(num_fwd, bl);
+
   encode(h.num_releases, bl);
   encode(h.op, bl);
   encode(h.caller_uid, bl);
   encode(h.caller_gid, bl);
   encode(h.ino, bl);
   bl.append((char*)&h.args, sizeof(h.args));
+
+  if (!old_version) {
+    encode(h.ext_num_retry, bl);
+    encode(h.ext_num_fwd, bl);
+  }
 }
 
 void inline decode(struct ceph_mds_request_head& h, ceph::buffer::list::const_iterator& bl) {
@@ -671,6 +684,14 @@ void inline decode(struct ceph_mds_request_head& h, ceph::buffer::list::const_it
   decode(h.caller_gid, bl);
   decode(h.ino, bl);
   bl.copy(sizeof(h.args), (char*)&(h.args));
+
+  if (h.version >= 2) {
+    decode(h.ext_num_retry, bl);
+    decode(h.ext_num_fwd, bl);
+  } else {
+    h.ext_num_retry = h.num_retry;
+    h.ext_num_fwd = h.num_fwd;
+  }
 }
 
 /* cap/lease release record */
