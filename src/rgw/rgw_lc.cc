@@ -2455,16 +2455,21 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
                          const rgw::sal::Attrs& bucket_attrs,
                          RGWLifecycleConfiguration *config)
 {
+  int ret{0};
   rgw::sal::Attrs attrs = bucket_attrs;
-  bufferlist lc_bl;
-  config->encode(lc_bl);
+  if (config) {
+    /* if no RGWLifecycleconfiguration provided, it means
+     * RGW_ATTR_LC is already valid and present */
+    bufferlist lc_bl;
+    config->encode(lc_bl);
+    attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
-  attrs[RGW_ATTR_LC] = std::move(lc_bl);
-
-  int ret =
-    bucket->merge_and_store_attrs(this, attrs, null_yield);
-  if (ret < 0)
-    return ret;
+    ret =
+      bucket->merge_and_store_attrs(this, attrs, null_yield);
+    if (ret < 0) {
+      return ret;
+    }
+  }
 
   rgw_bucket& b = bucket->get_key();
 
