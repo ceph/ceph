@@ -136,10 +136,10 @@ public:
    * read record from given address
    *
    * @param paddr_t to read
-   * @param last_seq
+   * @param expected_seq
    *
    */
-  read_record_ret read_record(paddr_t offset, segment_seq_t last_seq);
+  read_record_ret read_record(paddr_t offset, segment_seq_t expected_seq);
   /*
    * read_header
    *
@@ -291,7 +291,10 @@ private:
    * Indicates that device is open and in-memory header is valid.
    */
   bool initialized = false;
-  segment_seq_t cur_segment_seq = 0; // segment seq to track the sequence to written records
+
+  // circulation seq to track the sequence to written records
+  segment_seq_t circulation_seq = NULL_SEG_SEQ;
+
   // start address where the newest record will be written
   // should be in range [get_start_addr(), get_journal_end())
   rbm_abs_addr written_to = 0;
