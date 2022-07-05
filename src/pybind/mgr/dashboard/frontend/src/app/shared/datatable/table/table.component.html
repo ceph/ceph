@@ -212,10 +212,10 @@
             {{ data?.length || 0 }} <ng-container i18n="X total">total</ng-container>
           </span>
         </div>
-        <datatable-pager [pagerLeftArrowIcon]="paginationClasses.pagerLeftArrow"
-                         [pagerRightArrowIcon]="paginationClasses.pagerRightArrow"
-                         [pagerPreviousIcon]="paginationClasses.pagerPrevious"
-                         [pagerNextIcon]="paginationClasses.pagerNext"
+        <datatable-pager [pagerLeftArrowIcon]="paginationClasses.pagerPrevious"
+                         [pagerRightArrowIcon]="paginationClasses.pagerNext"
+                         [pagerPreviousIcon]="paginationClasses.pagerLeftArrow"
+                         [pagerNextIcon]="paginationClasses.pagerRightArrow"
                          [page]="curPage"
                          [size]="pageSize"
                          [count]="rowCount"
