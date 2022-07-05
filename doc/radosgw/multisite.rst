@@ -1322,7 +1322,7 @@ Next, delete the zone. Execute the following:
 
 ::
 
-    # radosgw-admin zone rm --rgw-zone<name>
+    # radosgw-admin zone delete --rgw-zone<name>
 
 Finally, update the period:
 
