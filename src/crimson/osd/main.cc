@@ -202,7 +202,6 @@ int main(int argc, const char* argv[])
     ("mkfs", "create a [new] data directory")
     ("debug", "enable debug output on all loggers")
     ("trace", "enable trace output on all loggers")
-    ("no-mon-config", "do not retrieve configuration from monitors on boot")
     ("prometheus_port", bpo::value<uint16_t>()->default_value(0),
      "Prometheus port. Set to zero to disable")
     ("prometheus_address", bpo::value<std::string>()->default_value("0.0.0.0"),
@@ -313,10 +312,10 @@ int main(int argc, const char* argv[])
           if (config.count("mkkey")) {
             make_keyring().get();
           }
-          if (config.count("no-mon-config") == 0) {
-            fetch_config().get();
-          } else {
+          if (local_conf()->no_mon_config) {
             logger().info("bypassing the config fetch due to --no-mon-config");
+          } else {
+            fetch_config().get();
           }
           if (config.count("mkfs")) {
             auto osd_uuid = local_conf().get_val<uuid_d>("osd_uuid");
