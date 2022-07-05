@@ -20,7 +20,8 @@
           <div class="input-group-append">
             <button class="btn btn-light"
                     id="editSiteName"
-                    (click)="updateSiteName()">
+                    (click)="updateSiteName()"
+                    [attr.title]="editing ? 'Save' : 'Edit'">
               <i [ngClass]="icons.edit"
                  *ngIf="!editing"></i>
               <i [ngClass]="icons.check"
