@@ -14,6 +14,8 @@
 
 #include "msgr.h"
 #include "rados.h"
+#include "include/encoding.h"
+#include "include/denc.h"
 
 /*
  * The data structures defined here are shared between Linux kernel and
@@ -638,6 +640,38 @@ struct ceph_mds_request_head {
 					  etc. (if replaying) */
 	union ceph_mds_request_args args;
 } __attribute__ ((packed));
+
+void inline encode(const struct ceph_mds_request_head& h, ceph::buffer::list& bl) {
+  using ceph::encode;
+  encode(h.version, bl);
+  encode(h.oldest_client_tid, bl);
+  encode(h.mdsmap_epoch, bl);
+  encode(h.flags, bl);
+  encode(h.num_retry, bl);
+  encode(h.num_fwd, bl);
+  encode(h.num_releases, bl);
+  encode(h.op, bl);
+  encode(h.caller_uid, bl);
+  encode(h.caller_gid, bl);
+  encode(h.ino, bl);
+  bl.append((char*)&h.args, sizeof(h.args));
+}
+
+void inline decode(struct ceph_mds_request_head& h, ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
+  decode(h.version, bl);
+  decode(h.oldest_client_tid, bl);
+  decode(h.mdsmap_epoch, bl);
+  decode(h.flags, bl);
+  decode(h.num_retry, bl);
+  decode(h.num_fwd, bl);
+  decode(h.num_releases, bl);
+  decode(h.op, bl);
+  decode(h.caller_uid, bl);
+  decode(h.caller_gid, bl);
+  decode(h.ino, bl);
+  bl.copy(sizeof(h.args), (char*)&(h.args));
+}
 
 /* cap/lease release record */
 struct ceph_mds_request_release {
