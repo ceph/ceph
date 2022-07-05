@@ -799,8 +799,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   changeSorting({ sorts }: any) {
     this.userConfig.sorts = sorts;
     if (this.serverSide) {
-			this.userConfig.offset = 0;
-			this.reloadData();
+      this.userConfig.offset = 0;
+      this.reloadData();
     }
   }
 
