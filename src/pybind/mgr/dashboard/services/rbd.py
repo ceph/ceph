@@ -15,7 +15,7 @@ from ..plugins.ttl_cache import ttl_cache
 from .ceph_service import CephService
 
 try:
-    from typing import List
+    from typing import List, Optional
 except ImportError:
     pass  # For typing only
 
@@ -424,7 +424,7 @@ class RbdService(object):
                                 errno=errno.ENOENT)
 
     @classmethod
-    def _rbd_pool_image_refs(cls, pool_names: List[str], namespace=None):
+    def _rbd_pool_image_refs(cls, pool_names: List[str], namespace: Optional[str] = None):
         joint_refs = []
         rbd_inst = rbd.RBD()
         for pool in pool_names:
@@ -445,14 +445,14 @@ class RbdService(object):
         return joint_refs
 
     @classmethod
-    def rbd_pool_list(cls, pool_names: List[str], namespace=None, offset=0, limit=0,
-                      search='', sort=''):
+    def rbd_pool_list(cls, pool_names: List[str], namespace: Optional[str] = None, offset: int = 0,
+                      limit: int = 5, search: str = '', sort: str = ''):
         offset = int(offset)
         limit = int(limit)
         # let's use -1 to denotate we want ALL images for now. Iscsi currently gathers
         # all images therefore, we need this.
         if limit < -1:
-            return []
+            raise DashboardException(msg=f'Wrong limit value {limit}', code=400)
 
         refs = cls._rbd_pool_image_refs(pool_names, namespace)
         image_refs = []

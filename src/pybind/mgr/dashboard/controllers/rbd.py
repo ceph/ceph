@@ -80,7 +80,9 @@ class Rbd(RESTController):
     ALLOW_DISABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "deep-flatten",
                               "journaling"}
 
-    def _rbd_list(self, pool_name=None, offset=0, limit=5, search='', sort=''):
+    DEFAULT_LIMIT = 5
+
+    def _rbd_list(self, pool_name=None, offset=0, limit=DEFAULT_LIMIT, search='', sort=''):
         if pool_name:
             pools = [pool_name]
         else:
@@ -110,7 +112,7 @@ class Rbd(RESTController):
                  },
                  responses={200: RBD_SCHEMA})
     @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
-    def list(self, pool_name=None, offset: int = 0, limit: int = 5,
+    def list(self, pool_name=None, offset: int = 0, limit: int = DEFAULT_LIMIT,
              search: str = '', sort: str = ''):
         return self._rbd_list(pool_name, offset=offset, limit=limit, search=search, sort=sort)
 
