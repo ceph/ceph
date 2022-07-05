@@ -87,7 +87,20 @@ Service Specification
 =====================
 
 A *Service Specification* is a data structure that is used to specify the
-deployment of services.  Here is an example of a service specification in YAML:
+deployment of services. In addition to parameters such as `placement` or
+`networks`, the user can set initial values of service configuration parameters
+by means of the `config` section. For each param/value configuration pair,
+cephadm calls the following command to set its value:
+
+   .. prompt:: bash #
+
+    ceph config set <service-name> <param> <value>
+
+cephadm raises health warnings in case invalid configuration parameters are
+found in the spec (`CEPHADM_INVALID_CONFIG_OPTION`) or if any error while
+trying to apply the new configuration option(s) (`CEPHADM_FAILED_SET_OPTION`).
+
+Here is an example of a service specification in YAML:
 
 .. code-block:: yaml
 
@@ -98,6 +111,10 @@ deployment of services.  Here is an example of a service specification in YAML:
         - host1
         - host2
         - host3
+    config:
+      param_1: val_1
+      ...
+      param_N: val_N
     unmanaged: false
     networks:
     - 192.169.142.0/24
