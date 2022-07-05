@@ -2530,25 +2530,22 @@ ref_t<MClientRequest> Client::build_client_request(MetaRequest *request, mds_ran
   bool old_version = !session->mds_features.test(CEPHFS_FEATURE_32BITS_RETRY_FWD);
 
   /*
-   * The type of 'retry_attempt' in 'MetaRequest' is 'int',
-   * while in 'ceph_mds_request_head' the type of 'num_retry'
-   * is '__u8'. So in case the request retries exceeding 256
-   * times, the MDS will receive a incorrect retry seq.
+   * Avoid inifinite retrying after overflow.
    *
-   * In this case it's ususally a bug in MDS and continue
-   * retrying the request makes no sense.
-   *
-   * In future this could be fixed in ceph code, so avoid
-   * using the hardcode here.
+   * The client will increase the retry count and if the MDS is
+   * old version, so we limit to retry at most 256 times.
    */
-  int max_retry = sizeof(((struct ceph_mds_request_head*)0)->num_retry);
-  max_retry = 1 << (max_retry * CHAR_BIT);
-  if (request->retry_attempt >= max_retry) {
-    request->abort(-EMULTIHOP);
-    request->caller_cond->notify_all();
-    ldout(cct, 1) << __func__ << " request tid " << request->tid
-                  << " seq overflow" << ", abort it" << dendl;
-    return nullptr;
+  if (request->retry_attempt) {
+    int old_max_retry = sizeof(((struct ceph_mds_request_head*)0)->num_retry);
+    old_max_retry = 1 << (old_max_retry * CHAR_BIT);
+    if ((old_version && request->retry_attempt >= old_max_retry) ||
+        (uint32_t)request->retry_attempt >= UINT32_MAX) {
+      request->abort(-EMULTIHOP);
+      request->caller_cond->notify_all();
+      ldout(cct, 1) << __func__ << " request tid " << request->tid
+                    << " retry seq overflow" << ", abort it" << dendl;
+      return nullptr;
+    }
   }
 
   auto req = make_message<MClientRequest>(request->get_op(), old_version);
