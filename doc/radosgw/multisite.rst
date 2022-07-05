@@ -387,9 +387,9 @@ the master zone of the master zone group. Execute the following:
 
 ::
 
-    # radosgw-admin zone create --rgw-zonegroup={zone-group-name}\
-                                --rgw-zone={zone-name} --endpoints={url} \
-                                --access-key={system-key} --secret={secret}\
+    # radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
+                                --rgw-zone={zone-name} \
+                                --access-key={system-key} --secret={secret} \
                                 --endpoints=http://{fqdn}:80 \
                                 [--read-only]
 
