@@ -13,7 +13,7 @@ class RbdTest(DashboardTestCase):
 
     @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
-        self._get('/api/block/image?offset=0&limit=5&search=&sort=%3Cname')
+        self._get('/api/block/image?offset=0&limit=-1&search=&sort=+name')
         self.assertStatus(403)
         self.get_image('pool', None, 'image')
         self.assertStatus(403)
@@ -282,7 +282,7 @@ class RbdTest(DashboardTestCase):
             self.fail("Snapshot {} not found".format(snap_name))
 
     def test_list(self):
-        data = self._view_cache_get('/api/block/image')
+        data = self._get('/api/block/image?offset=0&limit=-1&search=&sort=+name')
         self.assertStatus(200)
         self.assertEqual(len(data), 2)
 
