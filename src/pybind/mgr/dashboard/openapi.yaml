@@ -171,6 +171,11 @@ paths:
         name: search
         schema:
           type: string
+      - default: ''
+        in: query
+        name: sort
+        schema:
+          type: string
       responses:
         '200':
           content:
