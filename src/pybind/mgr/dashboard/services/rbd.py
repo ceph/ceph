@@ -439,7 +439,8 @@ class RbdService(object):
         return joint_refs
 
     @classmethod
-    def rbd_pool_list(cls, pool_names: List[str], namespace=None, offset=0, limit=0, search='', sort=''):
+    def rbd_pool_list(cls, pool_names: List[str], namespace=None, offset=0, limit=0,
+                      search='', sort=''):
         offset = int(offset)
         limit = int(limit)
         # let's use -1 to denotate we want ALL images for now. Iscsi currently gathers
@@ -460,6 +461,8 @@ class RbdService(object):
 
         result = []
         end = offset + limit
+        if len(sort) < 2:
+            sort = '>name'
         descending = sort[0] == '<'
         sort_by = sort[1:]
         if sort_by == 'pool_name':
