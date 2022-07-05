@@ -15,7 +15,9 @@
   "reporterOptions": {
     "reporterEnabled": "spec, mocha-junit-reporter",
     "mochaJunitReporterReporterOptions": {
-      "mochaFile": "cypress/reports/results-[hash].xml"
+      "mochaFile": "cypress/reports/results-[hash].xml",
+      "attachments": true,
+      "suiteTitleSeparatedBy": "."
     }
   },
   "retries": 1,
