@@ -315,6 +315,8 @@ int main(int argc, const char* argv[])
           }
           if (config.count("no-mon-config") == 0) {
             fetch_config().get();
+          } else {
+            logger().info("bypassing the config fetch due to --no-mon-config");
           }
           if (config.count("mkfs")) {
             auto osd_uuid = local_conf().get_val<uuid_d>("osd_uuid");
