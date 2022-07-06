@@ -1511,6 +1511,8 @@ class RGWDataFullSyncSingleEntryCR : public RGWCoroutine {
   uint32_t sid;
   std::vector<store_gen_shards>::iterator each;
   uint64_t i{0};
+  RGWCoroutine* shard_cr = nullptr;
+  bool first_shard = true;
 
 public:
   RGWDataFullSyncSingleEntryCR(RGWDataSyncCtx *_sc, const rgw_bucket_shard& _source_bs,
@@ -1542,66 +1544,29 @@ public:
       //wait to sync the first shard of the oldest generation and then sync all other shards.
       //if any of the operations fail at any time, write them into error repo for later retry.
 
-      source_bs.shard_id = 0;
-      yield call(data_sync_single_entry(sc, source_bs, remote_info.oldest_gen, key, timestamp,
-                                  lease_cr, bucket_shard_cache, nullptr, error_repo, tn, false));
-      if (retcode < 0) {
-        tn->log(10, SSTR("full sync: failed to sync " << source_bs.shard_id << " of gen "
-                        << remote_info.oldest_gen << ". Writing to error repo for retry"));
-        yield call(rgw::error_repo::write_cr(sync_env->store->svc()->rados, error_repo,
-                                            rgw::error_repo::encode_key(source_bs, remote_info.oldest_gen),
-                                            timestamp));
-        if (retcode < 0) {
-          tn->log(0, SSTR("ERROR: failed to write " << remote_info.oldest_gen << ":" << source_bs.shard_id
-                         << " in error repo: retcode=" << retcode));
-          return set_cr_error(retcode);
-        }
-      }
       each = remote_info.generations.begin();
       for (; each != remote_info.generations.end(); each++) {
         for (sid = 0; sid < each->num_shards; sid++) {
-          if (retcode < 0) {
-            sid = source_bs.shard_id;
-            for (; sid < each->num_shards; sid++) {
-              source_bs.shard_id = sid;
-              yield_spawn_window(rgw::error_repo::write_cr(sync_env->store->svc()->rados, error_repo,
-                      rgw::error_repo::encode_key(source_bs, each->gen),
-                      timestamp), cct->_conf->rgw_data_sync_spawn_window,
-                      [&](uint64_t stack_id, int ret) {
-                        if (ret < 0) {
-                          tn->log(0, SSTR("ERROR: failed to write " << each->gen << ":"
-                          << sid << " to error repo: retcode=" << ret));
-                        }
-                        return ret;
-                      });
-            }
-            i = std::distance(remote_info.generations.begin(), each);
-            for (each[i]; each != remote_info.generations.end(); each++) {
-              for (sid = 0; sid < each->num_shards; sid++){
-                yield_spawn_window(rgw::error_repo::write_cr(sync_env->store->svc()->rados, error_repo,
-                        rgw::error_repo::encode_key(source_bs, each->gen),
-                        timestamp), cct->_conf->rgw_data_sync_spawn_window,
-                        [&](uint64_t stack_id, int ret) {
-                          if (ret < 0) {
-                            tn->log(0, SSTR("ERROR: failed to write " << each->gen << ":"
-                            << sid << " to error repo: retcode=" << ret));
-                          }
-                          return ret;
-                        });
-              }
-            }
-          } else {
           source_bs.shard_id = sid;
+          if (retcode < 0) {
+            yield_spawn_window(rgw::error_repo::write_cr(sync_env->store->svc()->rados, error_repo,
+                rgw::error_repo::encode_key(source_bs, each->gen),
+                timestamp), cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
+          }
+          shard_cr = data_sync_single_entry(sc, source_bs, each->gen, key, timestamp,
+                      lease_cr, bucket_shard_cache, nullptr, error_repo, tn, false);
           tn->log(10, SSTR("full sync: syncing shard_id " << sid << " of gen " << each->gen));
-          yield_spawn_window(data_sync_single_entry(sc, source_bs, each->gen, key, timestamp,
-                            lease_cr, bucket_shard_cache, nullptr, error_repo, tn, false),
-                            cct->_conf->rgw_data_sync_spawn_window,
-                            [&](uint64_t stack_id, int ret) {
-                              if (ret < 0) {
-                                retcode = ret;
-                              }
-                              return retcode;
-                              });
+          if (first_shard) {
+            yield call(shard_cr);
+            first_shard = false;
+          } else {
+            yield_spawn_window(shard_cr, cct->_conf->rgw_data_sync_spawn_window,
+                              [&](uint64_t stack_id, int ret) {
+                                if (ret < 0) {
+                                  retcode = ret;
+                                }
+                                return retcode;
+                                });
           }
         }
       }
