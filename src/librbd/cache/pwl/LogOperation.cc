@@ -266,7 +266,7 @@ WriteLogOperationSet::~WriteLogOperationSet() { }
 
 std::ostream &operator<<(std::ostream &os,
                          const WriteLogOperationSet &s) {
-  os << "cell=" << (void*)s.cell
+  os << "cell=" << reinterpret_cast<void *>(s.cell)
      << ", extent_ops_appending=" << s.extent_ops_appending
      << ", extent_ops_persist=" << s.extent_ops_persist;
   return os;

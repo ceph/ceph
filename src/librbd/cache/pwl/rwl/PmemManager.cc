@@ -96,9 +96,9 @@ char *PmemDev::create_dev(const char *path, const uint64_t size) {
   char *head_addr = nullptr;
 
   /* create a pmem file and memory map it */
-  head_addr = (char *)pmem_map_file(path, size,
+  head_addr = static_cast<char *>(pmem_map_file(path, size,
               PMEM_FILE_CREATE | PMEM_FILE_SPARSE,
-              0666, &m_mapped_len, &is_pmem);
+              0666, &m_mapped_len, &is_pmem));
   if (head_addr) {
     m_is_pmem = is_pmem;
   } else {
@@ -113,7 +113,8 @@ char *PmemDev::open_dev(const char *path) {
   char *head_addr = nullptr;
 
   /* Memory map an existing file */
-  head_addr = (char *)pmem_map_file(path, 0, 0, 0, &m_mapped_len, &is_pmem);
+  head_addr = static_cast<char *>(pmem_map_file(path, 0, 0, 0,
+                                                &m_mapped_len, &is_pmem));
   if (head_addr) {
     m_is_pmem = is_pmem;
   } else {

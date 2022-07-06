@@ -42,7 +42,7 @@ const unsigned long int OPS_APPENDED_TOGETHER = MAX_ALLOC_PER_TRANSACTION;
 template <typename I>
 void WriteLog<I>::persist_pmem_superblock() {
   struct WriteLogSuperblock *new_superblock;
-  new_superblock = (struct WriteLogSuperblock *)m_pool_head;
+  new_superblock = reinterpret_cast<struct WriteLogSuperblock *>(m_pool_head);
   uint32_t crc = 0;
   uint64_t flushed_sync_gen;
 
@@ -52,8 +52,8 @@ void WriteLog<I>::persist_pmem_superblock() {
     flushed_sync_gen = this->m_flushed_sync_gen;
   }
   if (m_sequence_num % 2) {
-    new_superblock = (struct WriteLogSuperblock *)(m_pool_head +
-                     SECOND_SUPERBLOCK_OFFSET);
+    new_superblock = reinterpret_cast<struct WriteLogSuperblock *>(
+                     m_pool_head + SECOND_SUPERBLOCK_OFFSET);
   }
   /* Don't move the flushed sync gen num backwards. */
   if (new_superblock->flushed_sync_gen < flushed_sync_gen) {
@@ -65,8 +65,9 @@ void WriteLog<I>::persist_pmem_superblock() {
   new_superblock->sequence_num = m_sequence_num;
   new_superblock->first_free_entry = this->m_first_free_entry;
   new_superblock->first_valid_entry = this->m_first_valid_entry;
-  crc = ceph_crc32c(crc, (unsigned char*)&new_superblock->sequence_num,
-                    m_superblock_crc_len);
+  crc = ceph_crc32c(crc,
+      reinterpret_cast<unsigned char *>(&new_superblock->sequence_num),
+      m_superblock_crc_len);
   new_superblock->crc = crc;
   pmem_persist(new_superblock, MAX_SUPERBLOCK_LEN);
   ++m_sequence_num;
@@ -303,9 +304,9 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     m_first_valid_entry = 0;
     m_sequence_num = 0;
     m_pool_head = m_log_pool->get_head_addr();
-    superblock = (struct WriteLogSuperblock *)m_pool_head;
-    m_pmem_log_entries = (struct WriteLogCacheEntry *)(m_pool_head +
-                         FIRST_ENTRY_OFFSET);
+    superblock = reinterpret_cast<struct WriteLogSuperblock *>(m_pool_head);
+    m_pmem_log_entries = reinterpret_cast<struct WriteLogCacheEntry *>(
+                         m_pool_head + FIRST_ENTRY_OFFSET);
     {
       superblock->sequence_num = m_sequence_num;
       superblock->header.layout_version = RWL_LAYOUT_VERSION;
@@ -315,11 +316,13 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       superblock->num_log_entries = num_small_writes;
       superblock->first_free_entry = m_first_free_entry;
       superblock->first_valid_entry = m_first_valid_entry;
-      m_superblock_crc_len = (char *)&superblock->first_valid_entry -
-                             (char *)&superblock->sequence_num +
-                             sizeof(superblock->first_valid_entry);
-      crc = ceph_crc32c(crc, (unsigned char*)&superblock->sequence_num,
-                        m_superblock_crc_len);
+      m_superblock_crc_len =
+          reinterpret_cast<char *>(&superblock->first_valid_entry) -
+          reinterpret_cast<char *>(&superblock->sequence_num) +
+          sizeof(superblock->first_valid_entry);
+      crc = ceph_crc32c(crc,
+          reinterpret_cast<unsigned char*>(&superblock->sequence_num),
+          m_superblock_crc_len);
       superblock->crc = crc;
       pmem_flush(superblock, MAX_SUPERBLOCK_LEN);
       /* copy initialized superblock1 to superblock2
@@ -349,17 +352,19 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     uint32_t second_superblock_crc = 0;
     struct WriteLogSuperblock *second_superblock = nullptr;
     m_pool_head = m_log_pool->get_head_addr();
-    superblock = (struct WriteLogSuperblock *)m_pool_head;
-    second_superblock = (struct WriteLogSuperblock *)(m_pool_head +
-                        SECOND_SUPERBLOCK_OFFSET);
-    m_superblock_crc_len = (char *)&superblock->first_valid_entry -
-                           (char *)&superblock->sequence_num +
-                           sizeof(superblock->first_valid_entry);
-    crc = ceph_crc32c(crc, (unsigned char*)&superblock->sequence_num,
-                      m_superblock_crc_len);
+    superblock = reinterpret_cast<struct WriteLogSuperblock *>(m_pool_head);
+    second_superblock = reinterpret_cast<struct WriteLogSuperblock *>(
+                        m_pool_head + SECOND_SUPERBLOCK_OFFSET);
+    m_superblock_crc_len =
+        reinterpret_cast<char *>(&superblock->first_valid_entry) -
+        reinterpret_cast<char *>(&superblock->sequence_num) +
+        sizeof(superblock->first_valid_entry);
+    crc = ceph_crc32c(crc,
+        reinterpret_cast<unsigned char *>(&superblock->sequence_num),
+        m_superblock_crc_len);
     second_superblock_crc = ceph_crc32c(second_superblock_crc,
-                            (unsigned char*)&second_superblock->sequence_num,
-                            m_superblock_crc_len);
+        reinterpret_cast<unsigned char *>(&second_superblock->sequence_num),
+        m_superblock_crc_len);
     if (superblock->crc != crc && second_superblock->crc == crc) {
         superblock = second_superblock;
     } else if (superblock->crc == crc &&
@@ -397,8 +402,8 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     m_first_valid_entry = superblock->first_valid_entry;
     /* run time write num is next write operation */
     m_sequence_num = superblock->sequence_num + 1;
-    m_pmem_log_entries = (struct WriteLogCacheEntry *)(m_pool_head +
-                         FIRST_ENTRY_OFFSET);
+    m_pmem_log_entries = reinterpret_cast<struct WriteLogCacheEntry *>(
+                         m_pool_head + FIRST_ENTRY_OFFSET);
     if (m_first_free_entry < m_first_valid_entry) {
       /* Valid entries wrap around the end of the ring, so first_free is lower
        * than first_valid.  If first_valid was == first_free+1, the entry at
