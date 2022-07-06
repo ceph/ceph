@@ -36,7 +36,7 @@ private:
   tcp::socket socket_;
   beast::flat_buffer buffer_{8192};
   http::request<http::dynamic_body> request_;
-  http::response<http::string_body> response_;
+  http::response<http::buffer_body> response_;
 
   net::steady_timer deadline_{socket_.get_executor(), std::chrono::seconds(60)};
 
@@ -79,6 +79,7 @@ private:
 
   // Construct a response message based on the program state.
   void create_response() {
+    std::cout << request_.body() << std::endl;
     if (request_.target() == "/") {
       response_.set(http::field::content_type, "text/html; charset=utf-8");
       std::string body("<html>\n"
@@ -149,6 +150,7 @@ void http_server_thread_entrypoint() {
     http_server(acceptor, socket);
     std::cout << "Http server running on " << exporter_addr << ":" << port << std::endl;
     ioc.run();
+    return EXIT_SUCCESS;
   } catch (std::exception const &e) {
     std::cerr << "Error: " << e.what() << std::endl;
     exit(EXIT_FAILURE);

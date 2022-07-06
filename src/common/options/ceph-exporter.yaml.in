@@ -15,7 +15,7 @@ options:
   type: str
   level: advanced
   desc: Host ip address where exporter is deployed
-  default: 127.0.0.1
+  default: 0.0.0.0
   services:
   - ceph-exporter
 - name: exporter_port
@@ -29,7 +29,7 @@ options:
   type: int
   level: advanced
   desc: Only perf counters greater than or equal to exporter_prio_limit are fetched
-  default: 10
+  default: 5
   services:
   - ceph-exporter
   flags:
