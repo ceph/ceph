@@ -93,9 +93,9 @@ class Rbd(RESTController):
         cherrypy.response.headers['X-Total-Count'] = num_total_images
         pool_result = {}
         for i, image in enumerate(images):
-            pool = image['pool']
+            pool = image['pool_name']
             if pool not in pool_result:
-                pool_result[pool] = {'value': [], 'pool_name': image['pool']}
+                pool_result[pool] = {'value': [], 'pool_name': image['pool_name']}
             pool_result[pool]['value'].append(image)
 
             images[i]['configuration'] = RbdConfiguration(

@@ -138,7 +138,6 @@ class RbdServiceTest(unittest.TestCase):
             'source': 'REMOVING',
             'deletion_time': '{}Z'.format(time.isoformat()),
             'deferment_end_time': '{}Z'.format(time.isoformat()),
-            'pool': 'test_pool',
             'pool_name': 'test_pool',
             'namespace': ''
         }], 1))

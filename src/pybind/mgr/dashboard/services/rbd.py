@@ -7,6 +7,7 @@ import json
 from enum import IntEnum
 
 import cherrypy
+import rados
 import rbd
 
 from .. import mgr
@@ -136,9 +137,8 @@ def rbd_image_call(pool_name, namespace, image_name, func, *args, **kwargs):
 class RbdConfiguration(object):
     _rbd = rbd.RBD()
 
-    def __init__(self, pool_name='', namespace='', image_name='', pool_ioctx=None,
-                 image_ioctx=None):
-        # type: (str, str, str, object, object) -> None
+    def __init__(self, pool_name: str = '', namespace: str = '', image_name: str = '',
+                 pool_ioctx: Optional[rados.Ioctx] = None, image_ioctx: Optional[rbd.Image] = None):
         assert bool(pool_name) != bool(pool_ioctx)  # xor
         self._pool_name = pool_name
         self._namespace = namespace if namespace is not None else ''
@@ -440,7 +440,7 @@ class RbdService(object):
                     image_refs = cls._rbd_image_refs(ioctx)
                     for image in image_refs:
                         image['namespace'] = current_namespace
-                        image['pool'] = pool
+                        image['pool_name'] = pool
                         joint_refs.append(image)
         return joint_refs
 
@@ -460,7 +460,7 @@ class RbdService(object):
         for ref in refs:
             if search in ref['name']:
                 image_refs.append(ref)
-            elif search in ref['pool']:
+            elif search in ref['pool_name']:
                 image_refs.append(ref)
             elif search in ref['namespace']:
                 image_refs.append(ref)
@@ -471,28 +471,25 @@ class RbdService(object):
             sort = '+name'
         descending = sort[0] == '-'
         sort_by = sort[1:]
-        if sort_by == 'pool_name':
-            sort_by = 'pool'
-        if sort_by not in ['name', 'pool', 'namespace']:
+        if sort_by not in ['name', 'pool_name', 'namespace']:
             sort_by = 'name'
         if limit == -1:
             end = len(image_refs)
         for image_ref in sorted(image_refs, key=lambda v: v[sort_by],
                                 reverse=descending)[offset:end]:
-            with mgr.rados.open_ioctx(image_ref['pool']) as ioctx:
+            with mgr.rados.open_ioctx(image_ref['pool_name']) as ioctx:
                 ioctx.set_namespace(image_ref['namespace'])
                 try:
                     stat = cls._rbd_image_stat(
-                        ioctx, image_ref['pool'], image_ref['namespace'], image_ref['name'])
+                        ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['name'])
                 except rbd.ImageNotFound:
                     # Check if the RBD has been deleted partially. This happens for example if
                     # the deletion process of the RBD has been started and was interrupted.
                     try:
                         stat = cls._rbd_image_stat_removing(
-                            ioctx, image_ref['pool'], image_ref['namespace'], image_ref['id'])
+                            ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['id'])
                     except rbd.ImageNotFound:
                         continue
-                stat['pool'] = image_ref['pool']
                 result.append(stat)
         return result, len(image_refs)
 
