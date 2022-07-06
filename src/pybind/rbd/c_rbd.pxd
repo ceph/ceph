@@ -265,6 +265,7 @@ cdef extern from "rbd/librbd.h" nogil:
     ctypedef enum rbd_encryption_format_t:
         _RBD_ENCRYPTION_FORMAT_LUKS1 "RBD_ENCRYPTION_FORMAT_LUKS1"
         _RBD_ENCRYPTION_FORMAT_LUKS2 "RBD_ENCRYPTION_FORMAT_LUKS2"
+        _RBD_ENCRYPTION_FORMAT_LUKS "RBD_ENCRYPTION_FORMAT_LUKS"
 
     ctypedef enum rbd_encryption_algorithm_t:
         _RBD_ENCRYPTION_ALGORITHM_AES128 "RBD_ENCRYPTION_ALGORITHM_AES128"
@@ -277,6 +278,10 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef struct rbd_encryption_luks2_format_options_t:
         rbd_encryption_algorithm_t alg
+        const char* passphrase
+        size_t passphrase_size
+
+    ctypedef struct rbd_encryption_luks_format_options_t:
         const char* passphrase
         size_t passphrase_size
 

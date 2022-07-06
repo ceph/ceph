@@ -24,10 +24,9 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 LoadRequest<I>::LoadRequest(
-        I* image_ctx, encryption_format_t format, std::string&& passphrase,
+        I* image_ctx, std::string&& passphrase,
         ceph::ref_t<CryptoInterface>* result_crypto,
         Context* on_finish) : m_image_ctx(image_ctx),
-                              m_format(format),
                               m_passphrase(std::move(passphrase)),
                               m_on_finish(on_finish),
                               m_result_crypto(result_crypto),
@@ -95,23 +94,8 @@ void LoadRequest<I>::handle_read_header(int r) {
     return;
   }
 
-  const char* type;
-  switch (m_format) {
-    case RBD_ENCRYPTION_FORMAT_LUKS1:
-      type = CRYPT_LUKS1;
-      break;
-    case RBD_ENCRYPTION_FORMAT_LUKS2:
-      type = CRYPT_LUKS2;
-      break;
-    default:
-      lderr(m_image_ctx->cct) << "unsupported format type: " << m_format
-                              << dendl;
-      finish(-EINVAL);
-      return;
-  }
-
   // parse header via libcryptsetup
-  r = m_header.load(type);
+  r = m_header.load(CRYPT_LUKS);
   if (r != 0) {
     if (m_offset < MAXIMUM_HEADER_SIZE) {
       // perhaps we did not feed the entire header to libcryptsetup, retry

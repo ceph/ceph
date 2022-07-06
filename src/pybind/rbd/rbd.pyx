@@ -161,6 +161,7 @@ RBD_SNAP_REMOVE_FORCE = _RBD_SNAP_REMOVE_FORCE
 
 RBD_ENCRYPTION_FORMAT_LUKS1 = _RBD_ENCRYPTION_FORMAT_LUKS1
 RBD_ENCRYPTION_FORMAT_LUKS2 = _RBD_ENCRYPTION_FORMAT_LUKS2
+RBD_ENCRYPTION_FORMAT_LUKS = _RBD_ENCRYPTION_FORMAT_LUKS
 RBD_ENCRYPTION_ALGORITHM_AES128 = _RBD_ENCRYPTION_ALGORITHM_AES128
 RBD_ENCRYPTION_ALGORITHM_AES256 = _RBD_ENCRYPTION_ALGORITHM_AES256
 
@@ -5205,7 +5206,8 @@ written." % (self.name, ret, length))
         passphrase = cstr(passphrase, "passphrase")
         cdef rbd_encryption_format_t _format = format
         cdef rbd_encryption_luks1_format_options_t _luks1_opts
-        cdef rbd_encryption_luks1_format_options_t _luks2_opts
+        cdef rbd_encryption_luks2_format_options_t _luks2_opts
+        cdef rbd_encryption_luks_format_options_t _luks_opts
         cdef char* _passphrase = passphrase
 
         if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
@@ -5230,6 +5232,17 @@ written." % (self.name, ret, length))
                     ret,
                     ('error loading encryption on image %s '
                      'with format luks2') % self.name)
+        elif (format == RBD_ENCRYPTION_FORMAT_LUKS):
+            _luks_opts.passphrase = _passphrase
+            _luks_opts.passphrase_size = len(passphrase)
+            with nogil:
+                ret = rbd_encryption_load(self.image, _format, &_luks_opts,
+                                          sizeof(_luks_opts))
+            if ret != 0:
+                raise make_ex(
+                    ret,
+                    ('error loading encryption on image %s '
+                     'with format luks') % self.name)
         else:
             raise make_ex(-errno.ENOTSUP, 'Unsupported encryption format')
 

@@ -228,6 +228,10 @@ namespace librbd {
     std::string passphrase;
   } encryption_luks2_format_options_t;
 
+  typedef struct {
+    std::string passphrase;
+  } encryption_luks_format_options_t;
+
 class CEPH_RBD_API RBD
 {
 public:

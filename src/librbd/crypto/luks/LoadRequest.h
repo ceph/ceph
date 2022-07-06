@@ -25,14 +25,13 @@ template <typename I>
 class LoadRequest {
 public:
     static LoadRequest* create(
-            I* image_ctx, encryption_format_t format, std::string&& passphrase,
+            I* image_ctx, std::string&& passphrase,
             ceph::ref_t<CryptoInterface>* result_crypto, Context* on_finish) {
-      return new LoadRequest(image_ctx, format, std::move(passphrase),
+      return new LoadRequest(image_ctx, std::move(passphrase),
                              result_crypto, on_finish);
     }
 
-    LoadRequest(I* image_ctx, encryption_format_t format,
-                std::string&& passphrase,
+    LoadRequest(I* image_ctx, std::string&& passphrase,
                 ceph::ref_t<CryptoInterface>* result_crypto,
                 Context* on_finish);
     void send();
@@ -41,7 +40,6 @@ public:
 
 private:
     I* m_image_ctx;
-    encryption_format_t m_format;
     std::string m_passphrase;
     Context* m_on_finish;
     ceph::bufferlist m_bl;

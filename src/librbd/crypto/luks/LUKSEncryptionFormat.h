@@ -14,12 +14,15 @@ struct ImageCtx;
 namespace crypto {
 namespace luks {
 
+// This class is derived from only for the sake of the 'format' operation.
+// The 'load' operation is handled the same for all three variants.
 template <typename ImageCtxT>
-class EncryptionFormat : public crypto::EncryptionFormat<ImageCtxT> {
+class LUKSEncryptionFormat : public crypto::EncryptionFormat<ImageCtxT> {
 
 public:
-    EncryptionFormat(encryption_algorithm_t alg, std::string&& passphrase);
-    ~EncryptionFormat();
+    LUKSEncryptionFormat(std::string&& passphrase);
+    LUKSEncryptionFormat(encryption_algorithm_t alg, std::string&& passphrase);
+    ~LUKSEncryptionFormat();
 
     void format(ImageCtxT* ictx, Context* on_finish) override;
     void load(ImageCtxT* ictx, Context* on_finish) override;
@@ -28,28 +31,30 @@ public:
       return m_crypto;
     }
 
-private:
-    virtual encryption_format_t get_format() = 0;
+protected:
+    virtual encryption_format_t get_format() const {
+      return RBD_ENCRYPTION_FORMAT_LUKS;
+    }
 
-    encryption_algorithm_t m_alg;
     std::string m_passphrase;
+    encryption_algorithm_t m_alg;
     ceph::ref_t<CryptoInterface> m_crypto;
 };
 
 template <typename ImageCtxT>
-class LUKS1EncryptionFormat : public EncryptionFormat<ImageCtxT> {
-    using EncryptionFormat<ImageCtxT>::EncryptionFormat;
+class LUKS1EncryptionFormat : public LUKSEncryptionFormat<ImageCtxT> {
+    using LUKSEncryptionFormat<ImageCtxT>::LUKSEncryptionFormat;
 
-    encryption_format_t get_format() override {
+    encryption_format_t get_format() const override {
       return RBD_ENCRYPTION_FORMAT_LUKS1;
     }
 };
 
 template <typename ImageCtxT>
-class LUKS2EncryptionFormat : public EncryptionFormat<ImageCtxT> {
-    using EncryptionFormat<ImageCtxT>::EncryptionFormat;
+class LUKS2EncryptionFormat : public LUKSEncryptionFormat<ImageCtxT> {
+    using LUKSEncryptionFormat<ImageCtxT>::LUKSEncryptionFormat;
 
-    encryption_format_t get_format() override {
+    encryption_format_t get_format() const override {
       return RBD_ENCRYPTION_FORMAT_LUKS2;
     }
 };
@@ -58,7 +63,8 @@ class LUKS2EncryptionFormat : public EncryptionFormat<ImageCtxT> {
 } // namespace crypto
 } // namespace librbd
 
-extern template class librbd::crypto::luks::EncryptionFormat<librbd::ImageCtx>;
+extern template class librbd::crypto::luks::LUKSEncryptionFormat<
+        librbd::ImageCtx>;
 extern template class librbd::crypto::luks::LUKS1EncryptionFormat<
         librbd::ImageCtx>;
 extern template class librbd::crypto::luks::LUKS2EncryptionFormat<

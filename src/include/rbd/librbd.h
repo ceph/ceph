@@ -375,7 +375,8 @@ enum {
 
 typedef enum {
     RBD_ENCRYPTION_FORMAT_LUKS1 = 0,
-    RBD_ENCRYPTION_FORMAT_LUKS2 = 1
+    RBD_ENCRYPTION_FORMAT_LUKS2 = 1,
+    RBD_ENCRYPTION_FORMAT_LUKS  = 2
 } rbd_encryption_format_t;
 
 typedef enum {
@@ -396,6 +397,11 @@ typedef struct {
     const char* passphrase;
     size_t passphrase_size;
 } rbd_encryption_luks2_format_options_t;
+
+typedef struct {
+    const char* passphrase;
+    size_t passphrase_size;
+} rbd_encryption_luks_format_options_t;
 
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
 CEPH_RBD_API void rbd_image_options_destroy(rbd_image_options_t opts);

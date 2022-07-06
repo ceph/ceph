@@ -43,7 +43,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_SNAP_CREATE_SKIP_QUIESCE,
                  RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
                  RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
-                 RBD_ENCRYPTION_FORMAT_LUKS1, RBD_ENCRYPTION_FORMAT_LUKS2)
+                 RBD_ENCRYPTION_FORMAT_LUKS1, RBD_ENCRYPTION_FORMAT_LUKS2,
+                 RBD_ENCRYPTION_FORMAT_LUKS)
 
 rados = None
 ioctx = None
@@ -1376,7 +1377,7 @@ class TestImage(object):
             assert_not_equal(data, image.read(offset, len(data)))
             image.write(data, offset)
         with Image(ioctx, image_name) as image:
-            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, "password")
             eq(data, image.read(offset, len(data)))
 
     @require_linux()
@@ -1396,7 +1397,7 @@ class TestImage(object):
             assert_not_equal(data, image.read(offset, len(data)))
             image.write(data, offset)
         with Image(ioctx, image_name) as image:
-            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, "password")
             eq(data, image.read(offset, len(data)))
 
 
