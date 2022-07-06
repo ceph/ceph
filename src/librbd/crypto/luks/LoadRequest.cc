@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "librbd/Utils.h"
 #include "librbd/crypto/Utils.h"
+#include "librbd/crypto/luks/Magic.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ReadResult.h"
@@ -41,13 +42,6 @@ void LoadRequest<I>::set_initial_read_size(uint64_t read_size) {
 
 template <typename I>
 void LoadRequest<I>::send() {
-  // setup interface with libcryptsetup
-  auto r = m_header.init();
-  if (r < 0) {
-    finish(r);
-    return;
-  }
-
   auto ctx = create_context_callback<
           LoadRequest<I>, &LoadRequest<I>::handle_read_header>(this);
   read(m_initial_read_size, ctx);
@@ -78,6 +72,39 @@ bool LoadRequest<I>::handle_read(int r) {
     return false;
   }
 
+  m_offset += m_bl.length();
+
+  if (m_last_read_bl.length() > 0) {
+    m_last_read_bl.claim_append(m_bl);
+    m_bl = std::move(m_last_read_bl);
+  }
+
+  if (m_image_ctx->parent != nullptr && m_bl.length() == m_offset &&
+      Magic::is_rbd_clone(m_bl) > 0) {
+    r = Magic::replace_magic(m_image_ctx->cct, m_bl);
+    if (r < 0) {
+      if (r == -EINVAL && m_offset < MAXIMUM_HEADER_SIZE) {
+        m_last_read_bl = std::move(m_bl);
+        auto ctx = create_context_callback<
+              LoadRequest<I>, &LoadRequest<I>::handle_read_header>(this);
+        read(MAXIMUM_HEADER_SIZE, ctx);
+        return false;
+      }
+
+      lderr(m_image_ctx->cct) << "error replacing rbd clone magic: "
+                              << cpp_strerror(r) << dendl;
+      finish(r);
+      return false;
+    }
+  }
+  
+  // setup interface with libcryptsetup
+  r = m_header.init();
+  if (r < 0) {
+    finish(r);
+    return false;
+  }
+
   // write header to libcryptsetup interface
   r = m_header.write(m_bl);
   if (r < 0) {
@@ -85,8 +112,8 @@ bool LoadRequest<I>::handle_read(int r) {
     return false;
   }
 
-  m_offset += m_bl.length();
   m_bl.clear();
+
   return true;
 }
 

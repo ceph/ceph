@@ -44,6 +44,7 @@ private:
     std::string_view m_passphrase;
     Context* m_on_finish;
     ceph::bufferlist m_bl;
+    ceph::bufferlist m_last_read_bl;
     std::unique_ptr<CryptoInterface>* m_result_crypto;
     uint64_t m_initial_read_size;
     Header m_header;

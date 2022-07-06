@@ -11,6 +11,7 @@
 #include "librbd/Utils.h"
 #include "librbd/crypto/Utils.h"
 #include "librbd/crypto/luks/Header.h"
+#include "librbd/crypto/luks/Magic.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
 
@@ -136,6 +137,18 @@ void FormatRequest<I>::send() {
   if (r < 0) {
     finish(r);
     return;
+  }
+
+  if (m_image_ctx->parent != nullptr) {
+    // parent is not encrypted with same key
+    // change LUKS magic to prevent decryption by other LUKS implementations
+    r = Magic::replace_magic(m_image_ctx->cct, bl);
+    if (r < 0) {
+      lderr(m_image_ctx->cct) << "error replacing LUKS magic: "
+                              << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
   }
 
   // pad header to stripe period alignment to prevent copyup of parent data
