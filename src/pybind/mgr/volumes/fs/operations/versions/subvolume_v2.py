@@ -385,8 +385,8 @@ class SubvolumeV2(SubvolumeV1):
 
         return {'type': self.subvol_type.value, 'features': self.features, 'state': SubvolumeStates.STATE_RETAINED.value}
 
-    def remove_snapshot(self, snapname):
-        super(SubvolumeV2, self).remove_snapshot(snapname)
+    def remove_snapshot(self, snapname, force=False):
+        super(SubvolumeV2, self).remove_snapshot(snapname, force)
         if self.purgeable:
             self.trash_base_dir()
             # tickle the volume purge job to purge this entry, using ESTALE
