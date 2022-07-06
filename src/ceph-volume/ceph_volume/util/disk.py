@@ -329,7 +329,7 @@ def lsblk_all(device='', columns=None, abspath=False):
         if dev['NAME'] == os.path.basename(device):
             return dev
 
-    raise RuntimeError(f"{device} not found in lsblk output")
+    return {}
 
 def is_device(dev):
     """
