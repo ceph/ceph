@@ -52,3 +52,7 @@ jobs:
           
           # Max number of operations per run
           operations-per-run: 30
+
+          # Change the order used to fetch the issues and pull requests from GitHub
+          # So we now start with the oldest PRs and work our way backwards
+          ascending: true
