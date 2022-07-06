@@ -5,7 +5,7 @@
 The Filestore back end is no longer the default when creating new OSDs,
 though Filestore OSDs are still supported.
 
-``filestore debug omap check``
+``filestore_debug_omap_check``
 
 :Description: Debugging check on synchronization. Expensive. For debugging only.
 :Type: Boolean

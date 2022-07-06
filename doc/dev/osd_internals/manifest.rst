@@ -31,7 +31,7 @@ RBD
 
 For RBD, the primary goal is for either an OSD-internal agent or a
 cluster-external agent to be able to transparently shift portions
-of the consituent 4MB extents between a dedup pool and a hot base
+of the constituent 4MB extents between a dedup pool and a hot base
 pool.
 
 As such, RBD operations (including class operations and snapshots)
@@ -229,7 +229,7 @@ refcounts on backing objects (or risk a reference to a dead object)
 Thus, we introduce a simple convention: consecutive clones which
 share a reference at the same offset share the same refcount.  This
 means that a write that invokes ``make_writeable`` may decrease refcounts,
-but not increase them.  This has some conquences for removing clones.
+but not increase them.  This has some consequences for removing clones.
 Consider the following sequence ::
 
   write foo [0, 1024)

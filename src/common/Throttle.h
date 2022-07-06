@@ -15,7 +15,11 @@
 #include "common/ThrottleInterface.h"
 #include "common/Timer.h"
 #include "common/convenience.h"
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
 #include "common/perf_counters_collection.h"
+#endif
 
 /**
  * @class Throttle
@@ -150,7 +154,6 @@ public:
  * delay = e + (r - h)((m - e)/(1 - h))
  */
 class BackoffThrottle {
-  CephContext *cct;
   const std::string name;
   PerfCountersRef logger;
 

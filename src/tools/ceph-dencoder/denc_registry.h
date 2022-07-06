@@ -5,6 +5,8 @@
 
 #include <iostream>
 #include <string>
+#include <string_view>
+
 #include "include/buffer_fwd.h"
 #include "msg/Message.h"
 
@@ -40,7 +42,7 @@ template<class T>
 class DencoderBase : public Dencoder {
 protected:
   T* m_object;
-  list<T*> m_list;
+  std::list<T*> m_list;
   bool stray_okay;
   bool nondeterministic;
 
@@ -64,7 +66,7 @@ public:
       return e.what();
     }
     if (!stray_okay && !p.end()) {
-      ostringstream ss;
+      std::ostringstream ss;
       ss << "stray data at end of buffer, offset " << p.get_off();
       return ss.str();
     }
@@ -82,14 +84,14 @@ public:
   int num_generated() override {
     return m_list.size();
   }
-  string select_generated(unsigned i) override {
+  std::string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
     m_object = *(std::next(m_list.begin(), i-1));
-    return string();
+    return {};
   }
 
   bool is_deterministic() override {
@@ -160,13 +162,13 @@ public:
 template<class T>
 class MessageDencoderImpl : public Dencoder {
   ref_t<T> m_object;
-  list<ref_t<T>> m_list;
+  std::list<ref_t<T>> m_list;
 
 public:
   MessageDencoderImpl() : m_object{make_message<T>()} {}
   ~MessageDencoderImpl() override {}
 
-  string decode(bufferlist bl, uint64_t seek) override {
+  std::string decode(bufferlist bl, uint64_t seek) override {
     auto p = bl.cbegin();
     p.seek(seek);
     try {
@@ -174,7 +176,7 @@ public:
       if (!n)
 	throw std::runtime_error("failed to decode");
       if (n->get_type() != m_object->get_type()) {
-	stringstream ss;
+	std::stringstream ss;
 	ss << "decoded type " << n->get_type() << " instead of expected " << m_object->get_type();
 	throw std::runtime_error(ss.str());
       }
@@ -184,11 +186,11 @@ public:
       return e.what();
     }
     if (!p.end()) {
-      ostringstream ss;
+      std::ostringstream ss;
       ss << "stray data at end of buffer, offset " << p.get_off();
       return ss.str();
     }
-    return string();
+    return {};
   }
 
   void encode(bufferlist& out, uint64_t features) override {
@@ -205,14 +207,14 @@ public:
   int num_generated() override {
     return m_list.size();
   }
-  string select_generated(unsigned i) override {
+  std::string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
     m_object = *(std::next(m_list.begin(), i-1));
-    return string();
+    return {};
   }
   bool is_deterministic() override {
     return true;
@@ -225,36 +227,15 @@ public:
 
 class DencoderRegistry
 {
-  using dencoders_t = std::map<std::string, std::unique_ptr<Dencoder>>;
+  using dencoders_t = std::map<std::string_view, Dencoder*>;
+
 public:
-  void add(const char* name, std::unique_ptr<Dencoder>&& denc);
   dencoders_t& get() {
     return dencoders;
   }
-  static DencoderRegistry& instance();
+  void register_dencoder(std::string_view name, Dencoder* denc) {
+    dencoders.emplace(name, denc);
+  }
 private:
   dencoders_t dencoders;
 };
-
-template<typename DencoderT, typename...Args>
-void make_and_register_dencoder(const char* name, Args&&...args)
-{
-  auto dencoder = std::make_unique<DencoderT>(std::forward<Args>(args)...);
-  DencoderRegistry::instance().add(name, std::move(dencoder));
-}
-
-#define TYPE(t) make_and_register_dencoder<DencoderImplNoFeature<t>>(#t, false, false);
-#define TYPE_STRAYDATA(t) make_and_register_dencoder<DencoderImplNoFeature<t>>(#t, true, false);
-#define TYPE_NONDETERMINISTIC(t) make_and_register_dencoder<DencoderImplNoFeature<t>>(#t, false, true);
-#define TYPE_FEATUREFUL(t) make_and_register_dencoder<DencoderImplFeatureful<t>>(#t, false, false);
-#define TYPE_FEATUREFUL_STRAYDATA(t) make_and_register_dencoder<DencoderImplFeatureful<t>>(#t, true, false);
-#define TYPE_FEATUREFUL_NONDETERMINISTIC(t) make_and_register_dencoder<DencoderImplFeatureful<t>>(#t, false, true);
-#define TYPE_FEATUREFUL_NOCOPY(t) make_and_register_dencoder<DencoderImplFeaturefulNoCopy<t>>(#t, false, false);
-#define TYPE_NOCOPY(t) make_and_register_dencoder<DencoderImplNoFeatureNoCopy<t>>(#t, false, false);
-#define MESSAGE(t) make_and_register_dencoder<MessageDencoderImpl<t>>(#t);
-
-void register_common_dencoders();
-void register_mds_dencoders();
-void register_osd_dencoders();
-void register_rbd_dencoders();
-void register_rgw_dencoders();

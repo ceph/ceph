@@ -717,6 +717,8 @@ Context *ImageWatcher<I>::remove_async_request(const AsyncRequestId &id,
                                                ceph::shared_mutex &lock) {
   ceph_assert(ceph_mutex_is_locked(lock));
 
+  ldout(m_image_ctx.cct, 20) << __func__ << ": " << id << dendl;
+
   auto it = m_async_requests.find(id);
   if (it != m_async_requests.end()) {
     Context *on_complete = it->second.first;
@@ -1148,7 +1150,7 @@ bool ImageWatcher<I>::handle_payload(const SnapCreatePayload &payload,
   auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
 
   // rbd-mirror needs to accept forced promotion orphan snap create requests
-  auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+  auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
     &payload.snap_namespace);
   if (mirror_ns != nullptr && mirror_ns->is_orphan()) {
     request_type = exclusive_lock::OPERATION_REQUEST_TYPE_FORCE_PROMOTION;

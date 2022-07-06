@@ -36,10 +36,6 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 
    Mount options.
 
-.. option:: -d
-
-   Run in foreground, send all log output to stderr and enable FUSE debugging (-o debug).
-
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use *ceph.conf* configuration file instead of the default
@@ -53,6 +49,12 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 
    Pass the name of CephX user whose secret key is be to used for mounting.
 
+.. option:: --id <client-id>
+
+   Pass the name of CephX user whose secret key is be to used for mounting.
+   ``--id`` takes just the ID of the client in contrast to ``-n``. For
+   example, ``--id 0`` for using ``client.0``.
+
 .. option:: -k <path-to-keyring>
 
    Provide path to keyring; useful when it's absent in standard locations.
@@ -65,15 +67,25 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 
    Foreground: do not daemonize after startup (run in foreground). Do not generate a pid file.
 
+.. option:: -d
+
+   Run in foreground, send all log output to stderr and enable FUSE debugging
+   (-o debug).
+
 .. option:: -s
 
    Disable multi-threaded operation.
+
+.. option:: --client_fs
+
+   Pass the name of Ceph FS to be mounted. Not passing this option mounts the
+   default Ceph FS on the Ceph cluster.
 
 Availability
 ============
 
 **ceph-fuse** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the Ceph documentation at http://ceph.com/docs for more information.
+the Ceph documentation at https://docs.ceph.com for more information.
 
 
 See also

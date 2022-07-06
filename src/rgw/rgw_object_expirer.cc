@@ -32,16 +32,16 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static rgw::sal::RGWRadosStore *store = NULL;
+static rgw::sal::Store* store = NULL;
 
 class StoreDestructor {
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::Store* store;
 
 public:
-  explicit StoreDestructor(rgw::sal::RGWRadosStore *_s) : store(_s) {}
+  explicit StoreDestructor(rgw::sal::Store* _s) : store(_s) {}
   ~StoreDestructor() {
     if (store) {
-      RGWStoreManager::close_storage(store);
+      StoreManager::close_storage(store);
     }
   }
 };
@@ -53,10 +53,9 @@ static void usage()
 
 int main(const int argc, const char **argv)
 {
-  vector<const char *> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
-    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    std::cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
   }
   if (ceph_argparse_need_usage(args)) {
@@ -80,7 +79,8 @@ int main(const int argc, const char **argv)
 
   common_init_finish(g_ceph_context);
 
-  store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false);
+  const DoutPrefix dp(cct.get(), dout_subsys, "rgw object expirer: ");
+  store = StoreManager::get_storage(&dp, g_ceph_context, "rados", false, false, false, false, false);
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;

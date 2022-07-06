@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_CRYPTO_CRYPTO_CONTEXT_POOL_H
 
 #include "librbd/crypto/DataCryptor.h"
-#include "common/allocator.h"
 #include "include/ceph_assert.h"
 #include <boost/lockfree/queue.hpp>
 
@@ -28,6 +27,12 @@ public:
     inline uint32_t get_iv_size() const override {
       return m_data_cryptor->get_iv_size();
     }
+    inline int get_key_length() const override {
+      return m_data_cryptor->get_key_length();
+    }
+    inline const unsigned char* get_key() const override {
+      return m_data_cryptor->get_key();
+    }
     inline int init_context(T* ctx, const unsigned char* iv,
                             uint32_t iv_length) const override {
       return m_data_cryptor->init_context(ctx, iv, iv_length);
@@ -38,9 +43,7 @@ public:
       return m_data_cryptor->update_context(ctx, in, out, len);
     }
 
-    typedef boost::lockfree::queue<
-            T*,
-            boost::lockfree::allocator<ceph::allocator<void>>> ContextQueue;
+    using ContextQueue = boost::lockfree::queue<T*>;
 
 private:
     DataCryptor<T>* m_data_cryptor;

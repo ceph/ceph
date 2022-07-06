@@ -123,6 +123,8 @@ Then provide the zone placement info for that target:
         --index-pool default.rgw.temporary.index \
         --data-extra-pool default.rgw.temporary.non-ec
 
+.. _adding_a_storage_class:
+
 Adding a Storage Class
 ----------------------
 
@@ -239,8 +241,8 @@ name in an HTTP header with the request. The S3 protocol uses the
 ``X-Amz-Storage-Class`` header, while the Swift protocol uses the
 ``X-Object-Storage-Class`` header.
 
-When using AWS S3 SDKs such as python boto3, it is important that the non-default
-storage class will be called as one on of the AWS S3 allowed storage classes, or else the SDK
+When using AWS S3 SDKs such as ``boto3``, it is important that non-default
+storage class names match those provided by AWS S3, or else the SDK
 will drop the request and raise an exception.
 
 S3 Object Lifecycle Management can then be used to move object data between

@@ -30,11 +30,6 @@ describe('Manager modules page', () => {
     it('should test editing on dashboard module', () => {
       const dashboardArr: Input[] = [
         {
-          id: 'RGW_API_USER_ID',
-          newValue: 'rq',
-          oldValue: ''
-        },
-        {
           id: 'GRAFANA_API_PASSWORD',
           newValue: 'rafa',
           oldValue: ''
@@ -53,7 +48,7 @@ describe('Manager modules page', () => {
         {
           id: 'pool_name',
           newValue: 'sox',
-          oldValue: 'device_health_metrics'
+          oldValue: '.mgr'
         },
         {
           id: 'retention_period',

@@ -24,23 +24,12 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
+namespace rgw { namespace sal {
+
 const string RGWOIDCProvider::oidc_url_oid_prefix = "oidc_url.";
 const string RGWOIDCProvider::oidc_arn_prefix = "arn:aws:iam::";
-
-int RGWOIDCProvider::store_url(const string& url, bool exclusive,
-			       optional_yield y)
-{
-  using ceph::encode;
-  string oid = tenant + get_url_oid_prefix() + url;
-
-  auto svc = ctl->svc;
-
-  bufferlist bl;
-  encode(*this, bl);
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().oidc_pool, oid,
-                            bl, exclusive, NULL, real_time(), y);
-}
 
 int RGWOIDCProvider::get_tenant_url_from_arn(string& tenant, string& url)
 {
@@ -57,24 +46,24 @@ int RGWOIDCProvider::get_tenant_url_from_arn(string& tenant, string& url)
   return 0;
 }
 
-int RGWOIDCProvider::create(bool exclusive, optional_yield y)
+int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
   int ret;
 
-  if (! validate_input()) {
+  if (! validate_input(dpp)) {
     return -EINVAL;
   }
 
   string idp_url = url_remove_prefix(provider_url);
 
   /* check to see the name is not used */
-  ret = read_url(idp_url, tenant);
+  ret = read_url(dpp, idp_url, tenant);
   if (exclusive && ret == 0) {
-    ldout(cct, 0) << "ERROR: url " << provider_url << " already in use"
+    ldpp_dout(dpp, 0) << "ERROR: url " << provider_url << " already in use"
                     << id << dendl;
     return -EEXIST;
   } else if ( ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) << "failed reading provider url  " << provider_url << ": "
+    ldpp_dout(dpp, 0) << "failed reading provider url  " << provider_url << ": "
                   << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -95,12 +84,9 @@ int RGWOIDCProvider::create(bool exclusive, optional_yield y)
   sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
   creation_date.assign(buf, strlen(buf));
 
-  auto svc = ctl->svc;
-
-  auto& pool = svc->zone->get_zone_params().oidc_pool;
-  ret = store_url(idp_url, exclusive, y);
+  ret = store_url(dpp, idp_url, exclusive, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR:  storing role info in OIDC pool: "
                   << provider_url << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -108,51 +94,22 @@ int RGWOIDCProvider::create(bool exclusive, optional_yield y)
   return 0;
 }
 
-int RGWOIDCProvider::delete_obj(optional_yield y)
-{
-  auto svc = ctl->svc;
-  auto& pool = svc->zone->get_zone_params().oidc_pool;
-
-  string url, tenant;
-  auto ret = get_tenant_url_from_arn(tenant, url);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to parse arn" << dendl;
-    return -EINVAL;
-  }
-
-  if (this->tenant != tenant) {
-    ldout(cct, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
-                  << tenant << ": " << dendl;
-    return -EINVAL;
-  }
-
-  // Delete url
-  string oid = tenant + get_url_oid_prefix() + url;
-  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: deleting oidc url from pool: " << pool.name << ": "
-                  << provider_url << ": " << cpp_strerror(-ret) << dendl;
-  }
-
-  return ret;
-}
-
-int RGWOIDCProvider::get()
+int RGWOIDCProvider::get(const DoutPrefixProvider *dpp)
 {
   string url, tenant;
   auto ret = get_tenant_url_from_arn(tenant, url);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to parse arn" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to parse arn" << dendl;
     return -EINVAL;
   }
 
   if (this->tenant != tenant) {
-    ldout(cct, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
+    ldpp_dout(dpp, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
                   << tenant << ": " << dendl;
     return -EINVAL;
   }
 
-  ret = read_url(url, tenant);
+  ret = read_url(dpp, url, tenant);
   if (ret < 0) {
     return ret;
   }
@@ -186,40 +143,14 @@ void RGWOIDCProvider::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("OpenIDConnectProviderArn", arn, obj);
 }
 
-int RGWOIDCProvider::read_url(const string& url, const string& tenant)
-{
-  auto svc = ctl->svc;
-  auto& pool = svc->zone->get_zone_params().oidc_pool;
-  string oid = tenant + get_url_oid_prefix() + url;
-  bufferlist bl;
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
-
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
-  if (ret < 0) {
-    return ret;
-  }
-
-  try {
-    using ceph::decode;
-    auto iter = bl.cbegin();
-    decode(*this, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
-                  ": " << url << dendl;
-    return -EIO;
-  }
-
-  return 0;
-}
-
-bool RGWOIDCProvider::validate_input()
+bool RGWOIDCProvider::validate_input(const DoutPrefixProvider *dpp)
 {
   if (provider_url.length() > MAX_OIDC_URL_LEN) {
-    ldout(cct, 0) << "ERROR: Invalid length of url " << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Invalid length of url " << dendl;
     return false;
   }
   if (client_ids.size() > MAX_OIDC_NUM_CLIENT_IDS) {
-    ldout(cct, 0) << "ERROR: Invalid number of client ids " << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Invalid number of client ids " << dendl;
     return false;
   }
 
@@ -230,7 +161,7 @@ bool RGWOIDCProvider::validate_input()
   }
 
   if (thumbprints.size() > MAX_OIDC_NUM_THUMBPRINTS) {
-    ldout(cct, 0) << "ERROR: Invalid number of thumbprints " << thumbprints.size() << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Invalid number of thumbprints " << thumbprints.size() << dendl;
     return false;
   }
 
@@ -243,55 +174,9 @@ bool RGWOIDCProvider::validate_input()
   return true;
 }
 
-int RGWOIDCProvider::get_providers(RGWRados *store,
-                                    const string& tenant,
-                                    vector<RGWOIDCProvider>& providers)
-{
-  auto ctl = store->pctl;
-  auto svc = ctl->svc;
-  auto pool = store->svc.zone->get_zone_params().oidc_pool;
-  string prefix = tenant + oidc_url_oid_prefix;
-
-  //Get the filtered objects
-  list<string> result;
-  bool is_truncated;
-  RGWListRawObjsCtx ctx;
-  do {
-    list<string> oids;
-    int r = store->list_raw_objects(pool, prefix, 1000, ctx, oids, &is_truncated);
-    if (r < 0) {
-      ldout(ctl->cct, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
-                  << prefix << ": " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-    for (const auto& iter : oids) {
-      RGWOIDCProvider provider(ctl->cct, store->pctl);
-      bufferlist bl;
-      auto obj_ctx = svc->sysobj->init_obj_ctx();
-
-      int ret = rgw_get_system_obj(obj_ctx, pool, iter, bl, NULL, NULL, null_yield);
-      if (ret < 0) {
-        return ret;
-      }
-
-      try {
-        using ceph::decode;
-        auto iter = bl.cbegin();
-        decode(provider, iter);
-      } catch (buffer::error& err) {
-        ldout(ctl->cct, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
-                    ": " << iter << dendl;
-        return -EIO;
-      }
-
-      providers.push_back(std::move(provider));
-    }
-  } while (is_truncated);
-
-  return 0;
-}
-
 const string& RGWOIDCProvider::get_url_oid_prefix()
 {
   return oidc_url_oid_prefix;
 }
+
+} } // namespace rgw::sal

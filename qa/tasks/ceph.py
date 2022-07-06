@@ -21,9 +21,9 @@ import socket
 import yaml
 
 from paramiko import SSHException
-from tasks.ceph_manager import CephManager, write_conf
+from tasks.ceph_manager import CephManager, write_conf, get_valgrind_args
 from tarfile import ReadError
-from tasks.cephfs.filesystem import Filesystem
+from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology import exceptions
@@ -46,8 +46,8 @@ def generate_caps(type_):
     """
     defaults = dict(
         osd=dict(
-            mon='allow *',
-            mgr='allow *',
+            mon='allow profile osd',
+            mgr='allow profile osd',
             osd='allow *',
         ),
         mgr=dict(
@@ -78,6 +78,8 @@ def update_archive_setting(ctx, key, value):
     """
     Add logs directory to job's info log file
     """
+    if ctx.archive is None:
+        return
     with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
@@ -375,6 +377,20 @@ def crush_setup(ctx, config):
 
 
 @contextlib.contextmanager
+def setup_manager(ctx, config):
+    first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
+    if not hasattr(ctx, 'managers'):
+        ctx.managers = {}
+    ctx.managers[config['cluster']] = CephManager(
+        mon,
+        ctx=ctx,
+        logger=log.getChild('ceph_manager.' + config['cluster']),
+        cluster=config['cluster'],
+    )
+    yield
+
+@contextlib.contextmanager
 def create_rbd_pool(ctx, config):
     cluster_name = config['cluster']
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
@@ -413,19 +429,33 @@ def cephfs_setup(ctx, config):
         log.info('Setting up CephFS filesystem(s)...')
         cephfs_config = config.get('cephfs', {})
         fs_configs =  cephfs_config.pop('fs', [{'name': 'cephfs'}])
-        set_allow_multifs = len(fs_configs) > 1
 
+        # wait for standbys to become available (slow due to valgrind, perhaps)
+        mdsc = MDSCluster(ctx)
+        mds_count = len(list(teuthology.all_roles_of_type(ctx.cluster, 'mds')))
+        with contextutil.safe_while(sleep=2,tries=150) as proceed:
+            while proceed():
+                if len(mdsc.get_standby_daemons()) >= mds_count:
+                    break
+
+        fss = []
         for fs_config in fs_configs:
             assert isinstance(fs_config, dict)
             name = fs_config.pop('name')
             temp = deepcopy(cephfs_config)
             teuthology.deep_merge(temp, fs_config)
+            subvols = config.get('subvols', None)
+            if subvols:
+                teuthology.deep_merge(temp, {'subvols': subvols})
             fs = Filesystem(ctx, fs_config=temp, name=name, create=True)
-            if set_allow_multifs:
-                fs.set_allow_multifs()
-                set_allow_multifs = False
+            fss.append(fs)
 
-    yield
+        yield
+
+        for fs in fss:
+            fs.destroy()
+    else:
+        yield
 
 @contextlib.contextmanager
 def watchdog_setup(ctx, config):
@@ -726,6 +756,7 @@ def cluster(ctx, config):
         path=monmap_path,
         mon_bind_addrvec=config.get('mon_bind_addrvec'),
     )
+    ctx.ceph[cluster_name].fsid = fsid
     if not 'global' in conf:
         conf['global'] = {}
     conf['global']['fsid'] = fsid
@@ -1369,15 +1400,16 @@ def run_daemon(ctx, config, type_):
                 profile_path = '/var/log/ceph/profiling-logger/%s.prof' % (role)
                 run_cmd.extend(['env', 'CPUPROFILE=%s' % profile_path])
 
-            if config.get('valgrind') is not None:
+            vc = config.get('valgrind')
+            if vc is not None:
                 valgrind_args = None
-                if type_ in config['valgrind']:
-                    valgrind_args = config['valgrind'][type_]
-                if role in config['valgrind']:
-                    valgrind_args = config['valgrind'][role]
-                run_cmd = teuthology.get_valgrind_args(testdir, role,
-                                                       run_cmd,
-                                                       valgrind_args)
+                if type_ in vc:
+                    valgrind_args = vc[type_]
+                if role in vc:
+                    valgrind_args = vc[role]
+                exit_on_first_error = vc.get('exit_on_first_error', True)
+                run_cmd = get_valgrind_args(testdir, role, run_cmd, valgrind_args,
+                    exit_on_first_error=exit_on_first_error)
 
             run_cmd.extend(run_cmd_tail)
             log_path = f'/var/log/ceph/{cluster_name}-{type_}.{id_}.log'
@@ -1851,6 +1883,7 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='mgr'),
         lambda: crush_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
+        lambda: setup_manager(ctx=ctx, config=config),
         lambda: create_rbd_pool(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
         lambda: cephfs_setup(ctx=ctx, config=config),
@@ -1858,17 +1891,6 @@ def task(ctx, config):
     ]
 
     with contextutil.nested(*subtasks):
-        first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
-        (mon,) = ctx.cluster.only(first_mon).remotes.keys()
-        if not hasattr(ctx, 'managers'):
-            ctx.managers = {}
-        ctx.managers[config['cluster']] = CephManager(
-            mon,
-            ctx=ctx,
-            logger=log.getChild('ceph_manager.' + config['cluster']),
-            cluster=config['cluster'],
-        )
-
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))
@@ -1880,6 +1902,9 @@ def task(ctx, config):
             ctx.managers[config['cluster']].stop_pg_num_changes()
 
             if config.get('wait-for-scrub', True):
+                # wait for pgs to become active+clean in case any
+                # recoveries were triggered since the last health check
+                ctx.managers[config['cluster']].wait_for_clean()
                 osd_scrub_pgs(ctx, config)
 
             # stop logging health to clog during shutdown, or else we generate

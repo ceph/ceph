@@ -4,15 +4,14 @@
 class entity_addr_t;
 
 /*
- * Find an IP address that is in the wanted subnet.
- *
- * If there are multiple matches, the first one is returned; this order
- * is system-dependent and should not be relied on.
+ * Check if an IP address that is in the wanted subnet.
  */
-const struct ifaddrs *find_ip_in_subnet(const struct ifaddrs *addrs,
-					const struct sockaddr *net,
-					unsigned int prefix_len,
-					int numa_node = -1);
+bool matches_ipv4_in_subnet(const struct ifaddrs& addrs,
+                            const struct sockaddr_in* net,
+                            unsigned int prefix_len);
+bool matches_ipv6_in_subnet(const struct ifaddrs& addrs,
+                            const struct sockaddr_in6* net,
+                            unsigned int prefix_len);
 
 /*
  * Validate and parse IPv4 or IPv6 network

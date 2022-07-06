@@ -29,14 +29,14 @@ protected:
   } start_state{StateInit};
 
   virtual void shutdown() {}
-  virtual int do_start(optional_yield) {
+  virtual int do_start(optional_yield, const DoutPrefixProvider *dpp) {
     return 0;
   }
 public:
   RGWServiceInstance(CephContext *_cct) : cct(_cct) {}
-  virtual ~RGWServiceInstance() {}
+  virtual ~RGWServiceInstance();
 
-  int start(optional_yield y);
+  int start(optional_yield y, const DoutPrefixProvider *dpp);
   bool is_started() {
     return (start_state == StateStarted);
   }
@@ -75,6 +75,7 @@ class RGWSI_SysObj_Cache;
 class RGWSI_User;
 class RGWSI_User_RADOS;
 class RGWDataChangesLog;
+class RGWSI_Role_RADOS;
 
 struct RGWServices_Def
 {
@@ -104,11 +105,12 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
   std::unique_ptr<RGWSI_User_RADOS> user_rados;
   std::unique_ptr<RGWDataChangesLog> datalog_rados;
+  std::unique_ptr<RGWSI_Role_RADOS> role_rados;
 
   RGWServices_Def();
   ~RGWServices_Def();
 
-  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y);
+  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
   void shutdown();
 };
 
@@ -146,15 +148,16 @@ struct RGWServices
   RGWSI_SysObj_Cache *cache{nullptr};
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
+  RGWSI_Role_RADOS *role{nullptr};
 
-  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y);
+  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
 
-  int init(CephContext *cct, bool have_cache, bool run_sync, optional_yield y) {
-    return do_init(cct, have_cache, false, run_sync, y);
+  int init(CephContext *cct, bool have_cache, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, have_cache, false, run_sync, y, dpp);
   }
 
-  int init_raw(CephContext *cct, bool have_cache, optional_yield y) {
-    return do_init(cct, have_cache, true, false, y);
+  int init_raw(CephContext *cct, bool have_cache, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, have_cache, true, false, y, dpp);
   }
   void shutdown() {
     _svc.shutdown();
@@ -174,6 +177,7 @@ struct RGWCtlDef {
     std::unique_ptr<RGWMetadataHandler> bucket_instance;
     std::unique_ptr<RGWMetadataHandler> user;
     std::unique_ptr<RGWMetadataHandler> otp;
+    std::unique_ptr<RGWMetadataHandler> role;
 
     _meta();
     ~_meta();
@@ -186,7 +190,7 @@ struct RGWCtlDef {
   RGWCtlDef();
   ~RGWCtlDef();
 
-  int init(RGWServices& svc);
+  int init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixProvider *dpp);
 };
 
 struct RGWCtl {
@@ -202,13 +206,14 @@ struct RGWCtl {
     RGWMetadataHandler *bucket_instance{nullptr};
     RGWMetadataHandler *user{nullptr};
     RGWMetadataHandler *otp{nullptr};
+    RGWMetadataHandler *role{nullptr};
   } meta;
 
   RGWUserCtl *user{nullptr};
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
 
-  int init(RGWServices *_svc);
+  int init(RGWServices *_svc, rgw::sal::Store* store, const DoutPrefixProvider *dpp);
 };
 
 #endif

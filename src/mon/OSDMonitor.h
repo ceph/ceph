@@ -53,7 +53,8 @@ struct failure_reporter_t {
   MonOpRequestRef op;       ///< failure op request
 
   failure_reporter_t() {}
-  explicit failure_reporter_t(utime_t s) : failed_since(s) {}
+  failure_reporter_t(utime_t s, MonOpRequestRef op)
+    : failed_since(s), op(op) {}
   ~failure_reporter_t() { }
 };
 
@@ -74,20 +75,15 @@ struct failure_info_t {
     return max_failed_since;
   }
 
-  // set the message for the latest report.  return any old op request we had,
-  // if any, so we can discard it.
-  MonOpRequestRef add_report(int who, utime_t failed_since,
-			     MonOpRequestRef op) {
-    auto p = reporters.find(who);
-    if (p == reporters.end()) {
-      if (max_failed_since != utime_t() && max_failed_since < failed_since)
+  // set the message for the latest report.
+  void add_report(int who, utime_t failed_since, MonOpRequestRef op) {
+    [[maybe_unused]] auto [it, new_reporter] =
+      reporters.insert_or_assign(who, failure_reporter_t{failed_since, op});
+    if (new_reporter) {
+      if (max_failed_since != utime_t() && max_failed_since < failed_since) {
 	max_failed_since = failed_since;
-      p = reporters.insert(std::map<int, failure_reporter_t>::value_type(who, failure_reporter_t(failed_since))).first;
+      }
     }
-
-    MonOpRequestRef ret = p->second.op;
-    p->second.op = op;
-    return ret;
   }
 
   void take_report_messages(std::list<MonOpRequestRef>& ls) {
@@ -99,14 +95,9 @@ struct failure_info_t {
     }
   }
 
-  MonOpRequestRef cancel_report(int who) {
-    auto p = reporters.find(who);
-    if (p == reporters.end())
-      return MonOpRequestRef();
-    MonOpRequestRef ret = p->second.op;
-    reporters.erase(p);
+  void cancel_report(int who) {
+    reporters.erase(who);
     max_failed_since = utime_t();
-    return ret;
   }
 };
 
@@ -116,11 +107,11 @@ class LastEpochClean {
     std::vector<epoch_t> epoch_by_pg;
     ps_t next_missing = 0;
     epoch_t floor = std::numeric_limits<epoch_t>::max();
-    void report(ps_t pg, epoch_t last_epoch_clean);
+    void report(unsigned pg_num, ps_t pg, epoch_t last_epoch_clean);
   };
   std::map<uint64_t, Lec> report_by_pool;
 public:
-  void report(const pg_t& pg, epoch_t last_epoch_clean);
+  void report(unsigned pg_num, const pg_t& pg, epoch_t last_epoch_clean);
   void remove_pool(uint64_t pool);
   epoch_t get_lower_bound(const OSDMap& latest) const;
 
@@ -231,6 +222,7 @@ public:
   ceph::mutex balancer_lock = ceph::make_mutex("OSDMonitor::balancer_lock");
 
   std::map<int,double> osd_weight;
+  std::set<int32_t> filestore_osds;
 
   using osdmap_key_t = std::pair<version_t, uint64_t>;
   using osdmap_cache_t = SimpleLRU<osdmap_key_t,
@@ -245,11 +237,13 @@ public:
 
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
+  utime_t get_grace_time(utime_t now, int target_osd, failure_info_t& fi) const;
+  bool is_failure_stale(utime_t now, failure_info_t& fi) const;
   void force_failure(int target_osd, int by);
 
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
-  void _get_pending_crush(CrushWrapper& newcrush);
+  CrushWrapper _get_pending_crush();
 
   enum FastReadType {
     FAST_READ_OFF,
@@ -521,12 +515,13 @@ private:
 				const std::string &erasure_code_profile,
 				unsigned *stripe_width,
 				std::ostream *ss);
-  int check_pg_num(int64_t pool, int pg_num, int size, std::ostream* ss);
+  int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
 		       int crush_rule,
 		       const std::string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
 		       unsigned pg_num_min,
+		       unsigned pg_num_max,
                        uint64_t repl_size,
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
@@ -535,6 +530,7 @@ private:
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
 		       const std::string& pg_autoscale_mode,
+		       bool bulk,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
@@ -635,6 +631,8 @@ private:
 public:
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
   void get_versions(std::map<std::string, std::list<std::string>> &versions);
+  void get_filestore_osd_list();
+  void check_for_filestore_osds(health_check_map_t *checks);
 protected:
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
@@ -795,9 +793,10 @@ public:
    * This does not make any changes to the pools or state; it's just
    * a safety-check-and-collect function.
    */
-  void try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
+  void try_enable_stretch_mode_pools(std::stringstream& ss, bool *okay,
 				     int *errcode,
-				     set<pg_pool_t*>* pools, const string& new_crush_rule);
+				     std::set<pg_pool_t*>* pools,
+				     const std::string& new_crush_rule);
   /**
    * Check validity of inputs and OSD/CRUSH state to
    * engage stretch mode. Designed to be used with
@@ -814,30 +813,42 @@ public:
    *   from try_enable_stretch_mode_pools()).
    * @param new_crush_rule: The crush rule to set the pools to.
    */
-  void try_enable_stretch_mode(stringstream& ss, bool *okay,
+  void try_enable_stretch_mode(std::stringstream& ss, bool *okay,
 			       int *errcode, bool commit,
-			       const string& dividing_bucket,
+			       const std::string& dividing_bucket,
 			       uint32_t bucket_count,
-			       const set<pg_pool_t*>& pools,
-			       const string& new_crush_rule);
+			       const std::set<pg_pool_t*>& pools,
+			       const std::string& new_crush_rule);
   /**
    * Check the input dead_buckets mapping (buckets->dead monitors) to see
    * if the OSDs are also down. If so, fill in really_down_buckets and
    * really_down_mons and return true; else return false.
    */
-  bool check_for_dead_crush_zones(const map<string,set<string>>& dead_buckets,
-				  set<int> *really_down_buckets,
-				  set<string> *really_down_mons);
+  bool check_for_dead_crush_zones(const std::map<std::string,std::set<std::string>>& dead_buckets,
+				  std::set<int> *really_down_buckets,
+				  std::set<std::string> *really_down_mons);
   /**
    * Set degraded mode in the OSDMap, adding the given dead buckets to the dead set
    * and using the live_zones (should presently be size 1)
    */
-  void trigger_degraded_stretch_mode(const set<int>& dead_buckets,
-				     const set<string>& live_zones);
+  void trigger_degraded_stretch_mode(const std::set<int>& dead_buckets,
+				     const std::set<std::string>& live_zones);
+  /**
+   * This is just to maintain stretch_recovery_triggered; below
+   */
+  void set_degraded_stretch_mode();
   /**
    * Set recovery stretch mode in the OSDMap, resetting pool size back to normal
    */
   void trigger_recovery_stretch_mode();
+  /**
+   * This is just to maintain stretch_recovery_triggered; below
+   */
+  void set_recovery_stretch_mode();
+  /**
+   * This is just to maintain stretch_recovery_triggered; below
+   */
+  void set_healthy_stretch_mode();
   /**
    * Tells the OSD there's a new pg digest, in case it's interested.
    * (It's interested when in recovering stretch mode.)
@@ -853,6 +864,13 @@ public:
    * Sets the osdmap and pg_pool_t values back to healthy stretch mode status.
    */
   void trigger_healthy_stretch_mode();
+  /**
+   * Obtain the crush rule being used for stretch pools.
+   * Note that right now this is heuristic and simply selects the
+   * most-used rule on replicated stretch pools.
+   * @return the crush rule ID, or a negative errno
+   */
+  int get_replicated_stretch_crush_rule();
 private:
   utime_t stretch_recovery_triggered; // what time we committed a switch to recovery mode
 };

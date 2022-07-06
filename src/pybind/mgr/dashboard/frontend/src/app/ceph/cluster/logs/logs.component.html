@@ -13,14 +13,13 @@
              *ngIf="clog">
           <div class="btn-group"
                role="group"
-               (click)="logToText(clog)"
                *ngIf="clog.length">
             <cd-download-button [objectItem]="clog"
-                                [textItem]="logText"
+                                [textItem]="clogText"
                                 fileName="cluster_log">
             </cd-download-button>
             <cd-copy-2-clipboard-button
-                    [source]="logText"
+                    [source]="clogText"
                     [byId]="false">
             </cd-copy-2-clipboard-button>
           </div>
@@ -28,7 +27,8 @@
             <p *ngFor="let line of clog">
               <span class="timestamp">{{ line.stamp | cdDate }}</span>
               <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
-              <span class="message">{{ line.message }}</span>
+              <span class="message"
+                    [innerHTML]="line.message | searchHighlight: search"></span>
             </p>
 
             <ng-container *ngIf="clog.length != 0 else noEntriesTpl"></ng-container>
@@ -44,14 +44,13 @@
              *ngIf="audit_log">
           <div class="btn-group"
                role="group"
-               (click)="logToText(audit_log)"
                *ngIf="audit_log.length">
             <cd-download-button [objectItem]="audit_log"
-                                [textItem]="logText"
+                                [textItem]="auditLogText"
                                 fileName="audit_log">
             </cd-download-button>
             <cd-copy-2-clipboard-button
-                    [source]="logText"
+                    [source]="auditLogText"
                     [byId]="false">
             </cd-copy-2-clipboard-button>
           </div>
@@ -59,12 +58,28 @@
             <p *ngFor="let line of audit_log">
               <span class="timestamp">{{ line.stamp | cdDate }}</span>
               <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
-              <span class="message">{{ line.message }}</span>
+              <span class="message"
+                    [innerHTML]="line.message | searchHighlight: search"></span>
             </p>
 
             <ng-container *ngIf="audit_log.length != 0 else noEntriesTpl"></ng-container>
           </div>
         </div>
+      </ng-template>
+    </li>
+    <li ngbNavItem="daemon-logs">
+      <a ngbNavLink
+         i18n>Daemon Logs</a>
+      <ng-template ngbNavContent>
+        <ng-container *ngIf="lokiServiceStatus$ | async as lokiServiceStatus; else daemonLogsTpl">
+          <div *ngIf="promtailServiceStatus$ | async as promtailServiceStatus; else daemonLogsTpl">
+            <cd-grafana [grafanaPath]="'explore?'"
+                        [type]="'logs'"
+                        uid="CrAHE0iZz"
+                        grafanaStyle="two">
+            </cd-grafana>
+          </div>
+        </ng-container>
       </ng-template>
     </li>
   </ul>
@@ -78,7 +93,7 @@
       <label for="logs-priority"
              i18n>Priority:</label>
       <select id="logs-priority"
-              class="form-control custom-select"
+              class="form-control"
               [(ngModel)]="priority"
               (ngModelChange)="filterLogs()">
         <option *ngFor="let prio of priorities"
@@ -156,4 +171,12 @@
   <a href="#"
      (click)="resetFilter()"
      i18n>Reset filter.</a>
+</ng-template>
+
+<ng-template #daemonLogsTpl>
+  <cd-alert-panel type="info"
+                  title="Loki/Promtail service not running"
+                  i18n-title>
+  <ng-container i18n>Please start the loki and promtail service to see these logs.</ng-container>
+  </cd-alert-panel>
 </ng-template>

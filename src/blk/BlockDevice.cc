@@ -47,6 +47,20 @@
 
 using std::string;
 
+
+blk_access_mode_t buffermode(bool buffered) 
+{
+  return buffered ? blk_access_mode_t::BUFFERED : blk_access_mode_t::DIRECT;
+}
+
+std::ostream& operator<<(std::ostream& os, const blk_access_mode_t buffered) 
+{
+  os << (buffered == blk_access_mode_t::BUFFERED ? "(buffered)" : "(direct)");
+  return os;
+}
+
+
+
 void IOContext::aio_wait()
 {
   std::unique_lock l(lock);
@@ -104,8 +118,11 @@ BlockDevice::detect_device_type(const std::string& path)
     return block_device_t::hm_smr;
   }
 #endif
-
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   return block_device_t::aio;
+#else
+  return block_device_t::unknown;
+#endif
 }
 
 BlockDevice::block_device_t
@@ -174,27 +191,6 @@ BlockDevice *BlockDevice::create(
     device_type = device_type_from_name(blk_dev_name);
   }
   return create_with_type(device_type, cct, path, cb, cbpriv, d_cb, d_cbpriv);
-}
-
-void BlockDevice::queue_reap_ioc(IOContext *ioc)
-{
-  std::lock_guard l(ioc_reap_lock);
-  if (ioc_reap_count.load() == 0)
-    ++ioc_reap_count;
-  ioc_reap_queue.push_back(ioc);
-}
-
-void BlockDevice::reap_ioc()
-{
-  if (ioc_reap_count.load()) {
-    std::lock_guard l(ioc_reap_lock);
-    for (auto p : ioc_reap_queue) {
-      dout(20) << __func__ << " reap ioc " << p << dendl;
-      delete p;
-    }
-    ioc_reap_queue.clear();
-    --ioc_reap_count;
-  }
 }
 
 bool BlockDevice::is_valid_io(uint64_t off, uint64_t len) const {

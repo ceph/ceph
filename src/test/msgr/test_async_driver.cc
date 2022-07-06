@@ -58,6 +58,7 @@
 
 #include <gtest/gtest.h>
 
+using namespace std;
 
 class EventDriverTest : public ::testing::TestWithParam<const char*> {
  public:

@@ -76,7 +76,7 @@ struct objv {
   }
 };
 WRITE_CLASS_ENCODER(objv)
-inline ostream& operator <<(std::ostream& os, const objv& objv)
+inline std::ostream& operator <<(std::ostream& os, const objv& objv)
 {
   return os << objv.to_str();
 }
@@ -145,10 +145,10 @@ struct journal_entry {
   }
   void dump(ceph::Formatter* f) const;
 
-  bool operator ==(const journal_entry& e) {
-    return (op == e.op &&
-	    part_num == e.part_num &&
-	    part_tag == e.part_tag);
+  friend bool operator ==(const journal_entry& lhs, const journal_entry& rhs) {
+    return (lhs.op == rhs.op &&
+	    lhs.part_num == rhs.part_num &&
+	    lhs.part_tag == rhs.part_tag);
   }
 };
 WRITE_CLASS_ENCODER(journal_entry)
@@ -310,7 +310,7 @@ struct info {
   std::int64_t max_push_part_num{-1};
 
   std::string head_tag;
-  std::map<int64_t, string> tags;
+  std::map<int64_t, std::string> tags;
 
   std::multimap<int64_t, journal_entry> journal;
 

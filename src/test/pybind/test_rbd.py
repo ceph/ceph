@@ -6,6 +6,7 @@ import functools
 import json
 import socket
 import os
+import platform
 import time
 import sys
 
@@ -41,7 +42,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED,
                  RBD_SNAP_CREATE_SKIP_QUIESCE,
                  RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
-                 RBD_WRITE_ZEROES_FLAG_THICK_PROVISION)
+                 RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
+                 RBD_ENCRYPTION_FORMAT_LUKS1, RBD_ENCRYPTION_FORMAT_LUKS2)
 
 rados = None
 ioctx = None
@@ -149,6 +151,15 @@ def require_features(required_features):
                     raise SkipTest
             return fn(*args, **kwargs)
         return functools.wraps(fn)(_require_features)
+    return wrapper
+
+def require_linux():
+    def wrapper(fn):
+        def _require_linux(*args, **kwargs):
+            if platform.system() != "Linux":
+                raise SkipTest
+            return fn(*args, **kwargs)
+        return functools.wraps(fn)(_require_linux)
     return wrapper
 
 def blocklist_features(blocklisted_features):
@@ -1347,6 +1358,47 @@ class TestImage(object):
     def test_sparsify(self):
         assert_raises(InvalidArgument, self.image.sparsify, 16)
         self.image.sparsify(4096)
+
+    @require_linux()
+    @blocklist_features([RBD_FEATURE_JOURNALING])
+    def test_encryption_luks1(self):
+        data = b'hello world'
+        offset = 16<<20
+        image_size = 32<<20
+
+        with Image(ioctx, image_name) as image:
+            image.resize(image_size)
+            image.write(data, offset)
+            image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+            image.write(data, offset)
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS1, "password")
+            eq(data, image.read(offset, len(data)))
+
+    @require_linux()
+    @blocklist_features([RBD_FEATURE_JOURNALING])
+    def test_encryption_luks2(self):
+        data = b'hello world'
+        offset = 16<<20
+        image_size = 256<<20
+
+        with Image(ioctx, image_name) as image:
+            image.resize(image_size)
+            image.write(data, offset)
+            image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            assert_not_equal(data, image.read(offset, len(data)))
+            image.write(data, offset)
+        with Image(ioctx, image_name) as image:
+            image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS2, "password")
+            eq(data, image.read(offset, len(data)))
+
 
 class TestImageId(object):
 
@@ -2644,13 +2696,15 @@ class TestMigration(object):
         create_image()
         with Image(ioctx, image_name) as image:
             image_id = image.id()
+            image.create_snap('snap')
 
         source_spec = json.dumps(
             {'type': 'native',
              'pool_id': ioctx.get_pool_id(),
              'pool_namespace': '',
              'image_name': image_name,
-             'image_id': image_id})
+             'image_id': image_id,
+             'snap_name': 'snap'})
         dst_image_name = get_temp_image_name()
         RBD().migration_prepare_import(source_spec, ioctx, dst_image_name,
                                        features=63, order=23, stripe_unit=1<<23,
@@ -2667,6 +2721,12 @@ class TestMigration(object):
 
         RBD().migration_execute(ioctx, dst_image_name)
         RBD().migration_commit(ioctx, dst_image_name)
+
+        with Image(ioctx, image_name) as image:
+            image.remove_snap('snap')
+        with Image(ioctx, dst_image_name) as image:
+            image.remove_snap('snap')
+
         RBD().remove(ioctx, dst_image_name)
         RBD().remove(ioctx, image_name)
 

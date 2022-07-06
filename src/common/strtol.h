@@ -15,9 +15,7 @@
 #ifndef CEPH_COMMON_STRTOL_H
 #define CEPH_COMMON_STRTOL_H
 
-#if __has_include(<charconv>)
 #include <charconv>
-#endif // __has_include(<charconv>)
 #include <cinttypes>
 #include <cstdlib>
 #include <optional>
@@ -28,7 +26,6 @@
 
 
 namespace ceph {
-#if __has_include(<charconv>)
 // Wrappers around std::from_chars.
 //
 // Why do we want this instead of strtol and friends? Because the
@@ -38,6 +35,7 @@ namespace ceph {
 //
 // Returns the found number on success. Returns an empty optional on
 // failure OR on trailing characters.
+// Sadly GCC < 11 is missing the floating point versions.
 template<typename T>
 auto parse(std::string_view s, int base = 10)
   -> std::enable_if_t<std::is_integral_v<T>, std::optional<T>>
@@ -69,90 +67,25 @@ auto consume(std::string_view& s, int base = 10)
   }
   return t;
 }
-// Sadly GCC is missing the floating point versions.
-#else // __has_include(<charconv>)
-template<typename T>
-auto parse(std::string_view sv, int base = 10)
-  -> std::enable_if_t<std::is_integral_v<T>, std::optional<T>>
-{
-  std::string s(sv);
-  char* end = nullptr;
-  std::conditional_t<std::is_signed_v<T>, std::intmax_t, std::uintmax_t> v;
-  errno = 0;
-
-  if (s.size() > 0 && std::isspace(s[0]))
-    return std::nullopt;
-
-  if constexpr (std::is_signed_v<T>) {
-    v = std::strtoimax(s.data(), &end, base);
-  } else {
-    if (s.size() > 0 && s[0] == '-')
-      return std::nullopt;
-    v = std::strtoumax(s.data(), &end, base);
-  }
-  if (errno != 0 ||
-      end != s.data() + s.size() ||
-      v > std::numeric_limits<T>::max() ||
-      v < std::numeric_limits<T>::min())
-    return std::nullopt;
-  return static_cast<T>(v);
-}
-
-template<typename T>
-auto consume(std::string_view& sv, int base = 10)
-  -> std::enable_if_t<std::is_integral_v<T>, std::optional<T>>
-{
-  std::string s(sv);
-  char* end = nullptr;
-  std::conditional_t<std::is_signed_v<T>, std::intmax_t, std::uintmax_t> v;
-  errno = 0;
-
-  if (s.size() > 0 && std::isspace(s[0]))
-    return std::nullopt;
-
-  if constexpr (std::is_signed_v<T>) {
-    v = std::strtoimax(s.data(), &end, base);
-  } else {
-    if (s.size() > 0 && s[0] == '-')
-      return std::nullopt;
-    v = std::strtoumax(s.data(), &end, base);
-  }
-  if (errno != 0 ||
-      end == s.data() ||
-      v > std::numeric_limits<T>::max() ||
-      v < std::numeric_limits<T>::min())
-    return std::nullopt;
-  if (end == s.data() + s.size()) {
-    sv = std::string_view{};
-  } else {
-    sv.remove_prefix(end - s.data());
-  }
-  return static_cast<T>(v);
-}
-#endif // __has_include(<charconv>)
 } // namespace ceph
 
 bool strict_strtob(const char* str, std::string *err);
 
 long long strict_strtoll(std::string_view str, int base, std::string *err);
-long long strict_strtoll(const char *str, int base, std::string *err);
 
 int strict_strtol(std::string_view str, int base, std::string *err);
-int strict_strtol(const char *str, int base, std::string *err);
 
-double strict_strtod(const char *str, std::string *err);
+double strict_strtod(std::string_view str, std::string *err);
 
-float strict_strtof(const char *str, std::string *err);
+float strict_strtof(std::string_view str, std::string *err);
 
-uint64_t strict_iecstrtoll(const char *str, std::string *err);
-
-template<typename T>
-T strict_iec_cast(const char *str, std::string *err);
-
-uint64_t strict_sistrtoll(const char *str, std::string *err);
+uint64_t strict_iecstrtoll(std::string_view str, std::string *err);
 
 template<typename T>
-T strict_si_cast(const char *str, std::string *err);
+T strict_iec_cast(std::string_view str, std::string *err);
+
+template<typename T>
+T strict_si_cast(std::string_view str, std::string *err);
 
 /* On enter buf points to the end of the buffer, e.g. where the least
  * significant digit of the input number will be printed. Returns pointer to

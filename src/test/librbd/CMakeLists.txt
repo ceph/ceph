@@ -11,7 +11,6 @@ set(librbd_test
   test_ImageWatcher.cc
   test_internal.cc
   test_mirroring.cc
-  test_BlockGuard.cc
   test_DeepCopy.cc
   test_Groups.cc
   test_Migration.cc
@@ -41,6 +40,7 @@ target_link_libraries(rbd_test_mock PUBLIC
 # unittest_librbd
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
+  test_BlockGuard.cc
   test_main.cc
   test_mock_fixture.cc
   test_mock_ConfigWatcher.cc
@@ -56,6 +56,9 @@ set(unittest_librbd_srcs
   crypto/test_mock_BlockCrypto.cc
   crypto/test_mock_CryptoContextPool.cc
   crypto/test_mock_CryptoObjectDispatch.cc
+  crypto/test_mock_FormatRequest.cc
+  crypto/test_mock_LoadRequest.cc
+  crypto/test_mock_ShutDownCryptoRequest.cc
   crypto/openssl/test_DataCryptor.cc
   deep_copy/test_mock_ImageCopyRequest.cc
   deep_copy/test_mock_MetadataCopyRequest.cc
@@ -94,6 +97,7 @@ set(unittest_librbd_srcs
   migration/test_mock_HttpStream.cc
   migration/test_mock_RawFormat.cc
   migration/test_mock_RawSnapshot.cc
+  migration/test_mock_QCOWFormat.cc
   migration/test_mock_S3Stream.cc
   migration/test_mock_Utils.cc
   mirror/snapshot/test_mock_CreateNonPrimaryRequest.cc
@@ -128,12 +132,18 @@ set(unittest_librbd_srcs
   watcher/test_mock_RewatchRequest.cc
   )
 
-if(WITH_RBD_RWL)
-   set(unittest_librbd_srcs
-     ${unittest_librbd_srcs}
-     cache/pwl/test_mock_ReplicatedWriteLog.cc
+if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
+   list(APPEND unittest_librbd_srcs
      cache/pwl/test_WriteLogMap.cc)
-endif(WITH_RBD_RWL)
+   if(WITH_RBD_RWL)
+     list(APPEND unittest_librbd_srcs
+       cache/pwl/test_mock_ReplicatedWriteLog.cc)
+   endif()
+   if(WITH_RBD_SSD_CACHE)
+     list(APPEND unittest_librbd_srcs
+       cache/pwl/test_mock_SSDWriteLog.cc)
+   endif()
+endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND unittest_librbd_srcs
@@ -145,6 +155,9 @@ add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_compile_definitions(unittest_librbd PRIVATE "TEST_LIBRBD_INTERNALS")
+set_target_properties(unittest_librbd PROPERTIES
+  JOB_POOL_COMPILE heavy_compile_job_pool
+  JOB_POOL_LINK heavy_link_job_pool)
 add_dependencies(unittest_librbd
   cls_journal
   cls_lock

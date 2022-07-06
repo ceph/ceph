@@ -27,6 +27,7 @@
 #include "include/scope_guard.h"
 
 using std::string;
+using std::ostream;
 using std::vector;
 
 // -----------------------------------------------------------------------------
@@ -55,7 +56,7 @@ string construct_engine_conf(const string &opts)
   vector<string> confs = get_str_vec(opts, ":");
   for (auto conf : confs) {
     // Construct engine section statement like "engine1=engine1_section"
-    engine_id = id_prefix + to_string(index++);
+    engine_id = id_prefix + std::to_string(index++);
     engine_statement += engine_id + "=" + engine_id + suffix + delimiter;
 
     // Adapt to OpenSSL parser
@@ -112,7 +113,14 @@ void load_module(const string &engine_conf)
   }
 
   OPENSSL_load_builtin_modules();
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   ENGINE_load_builtin_engines();
+#pragma clang diagnostic pop
+#pragma GCC diagnostic pop
 
   if (CONF_modules_load(
           conf, nullptr,

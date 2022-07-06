@@ -5,6 +5,8 @@ overrides:
     mon_bind_msgr2: false
     conf:
       global:
+        cephx require version: 1
+        cephx service require version: 1
         ms bind msgr2: false
 tasks:
 - install:

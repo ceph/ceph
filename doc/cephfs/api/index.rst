@@ -1,3 +1,5 @@
+.. _cephfs api:
+
 ============
  CephFS APIs
 ============

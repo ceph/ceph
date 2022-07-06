@@ -68,6 +68,7 @@
 
 #define rbd_howmany(x, y)  (((x) + (y) - 1) / (y))
 
+using std::istringstream;
 using std::map;
 using std::pair;
 using std::set;
@@ -181,7 +182,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int obj_order = ictx->order;
     {
       std::shared_lock locker{ictx->image_lock};
-      info.size = ictx->get_image_size(ictx->snap_id);
+      info.size = ictx->get_effective_image_size(ictx->snap_id);
     }
     info.obj_size = 1ULL << obj_order;
     info.num_objs = Striper::get_num_objects(ictx->layout, info.size);
@@ -858,7 +859,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0)
       return r;
     std::shared_lock l2{ictx->image_lock};
-    *size = ictx->get_image_size(ictx->snap_id);
+    *size = ictx->get_effective_image_size(ictx->snap_id);
     return 0;
   }
 
@@ -1280,12 +1281,27 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EINVAL;
     }
 
+    // ensure previous writes are visible to dest
+    C_SaferCond flush_ctx;
+    {
+      auto aio_comp = io::AioCompletion::create_and_start(&flush_ctx, src,
+	  io::AIO_TYPE_FLUSH);
+      auto req = io::ImageDispatchSpec::create_flush(
+	  *src, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
+	  aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+      req->send();
+    }
+    int r = flush_ctx.wait();
+    if (r < 0) {
+      return r;
+    }
+
     C_SaferCond ctx;
     auto req = deep_copy::MetadataCopyRequest<>::create(
       src, dest, &ctx);
     req->send();
 
-    int r = ctx.wait();
+    r = ctx.wait();
     if (r < 0) {
       lderr(cct) << "failed to copy metadata: " << cpp_strerror(r) << dendl;
       return r;
@@ -1325,7 +1341,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
         }
       }
 
-      uint64_t len = min(period, src_size - offset);
+      uint64_t len = std::min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
       auto ctx = new C_CopyRead(&throttle, dest, offset, bl, sparse_size);
       auto comp = io::AioCompletion::create_and_start<Context>(
@@ -1536,7 +1552,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     start_time = coarse_mono_clock::now();
     while (left > 0) {
       uint64_t period_off = off - (off % period);
-      uint64_t read_len = min(period_off + period - off, left);
+      uint64_t read_len = std::min(period_off + period - off, left);
 
       bufferlist bl;
 
@@ -1576,16 +1592,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   {
     ceph_assert(ceph_mutex_is_locked(ictx->image_lock));
 
-    uint64_t image_size;
-    if (ictx->snap_id == CEPH_NOSNAP) {
-      image_size = ictx->get_image_size(CEPH_NOSNAP);
-    } else {
-      auto snap_info = ictx->get_snap_info(ictx->snap_id);
-      if (snap_info == nullptr) {
-	return -ENOENT;
-      }
-      image_size = snap_info->size;
+    if (ictx->snap_id != CEPH_NOSNAP &&
+        ictx->get_snap_info(ictx->snap_id) == nullptr) {
+      return -ENOENT;
     }
+    uint64_t image_size = ictx->get_effective_image_size(ictx->snap_id);
 
     // special-case "len == 0" requests: always valid
     if (*len == 0)

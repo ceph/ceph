@@ -152,7 +152,7 @@ void BreakRequest<I>::send_blocklist() {
   }
 
   entity_addr_t locker_addr;
-  if (!locker_addr.parse(m_locker.address.c_str(), 0)) {
+  if (!locker_addr.parse(m_locker.address)) {
     lderr(m_cct) << "unable to parse locker address: " << m_locker.address
                  << dendl;
     finish(-EINVAL);

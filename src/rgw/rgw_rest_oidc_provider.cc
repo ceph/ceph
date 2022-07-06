@@ -16,9 +16,11 @@
 #include "rgw_role.h"
 #include "rgw_rest_oidc_provider.h"
 #include "rgw_oidc_provider.h"
-#include "rgw_sal_rados.h"
+#include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 int RGWRestOIDCProvider::verify_permission(optional_yield y)
 {
@@ -28,7 +30,7 @@ int RGWRestOIDCProvider::verify_permission(optional_yield y)
 
   provider_arn = s->info.args.get("OpenIDConnectProviderArn");
   if (provider_arn.empty()) {
-    ldout(s->cct, 20) << "ERROR: Provider ARN is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: Provider ARN is empty"<< dendl;
     return -EINVAL;
   }
 
@@ -107,7 +109,7 @@ int RGWCreateOIDCProvider::get_params()
   }
 
   if (provider_url.empty() || thumbprints.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of url or thumbprints is empty" << dendl;
+    ldpp_dout(this, 20) << "ERROR: one of url or thumbprints is empty" << dendl;
     return -EINVAL;
   }
 
@@ -121,14 +123,17 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
     return;
   }
 
-  RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_url,
-                            s->user->get_tenant(), client_ids, thumbprints);
-  op_ret = provider.create(true, y);
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = store->get_oidc_provider();
+  provider->set_url(provider_url);
+  provider->set_tenant(s->user->get_tenant());
+  provider->set_client_ids(client_ids);
+  provider->set_thumbprints(thumbprints);
+  op_ret = provider->create(s, true, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("CreateOpenIDConnectProviderResponse");
     s->formatter->open_object_section("CreateOpenIDConnectProviderResult");
-    provider.dump(s->formatter);
+    provider->dump(s->formatter);
     s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
@@ -140,8 +145,10 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
 
 void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
-  RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
-  op_ret = provider.delete_obj(y);
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = store->get_oidc_provider();
+  provider->set_arn(provider_arn);
+  provider->set_tenant(s->user->get_tenant());
+  op_ret = provider->delete_obj(s, y);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
@@ -158,8 +165,10 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
 
 void RGWGetOIDCProvider::execute(optional_yield y)
 {
-  RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
-  op_ret = provider.get();
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = store->get_oidc_provider();
+  provider->set_arn(provider_arn);
+  provider->set_tenant(s->user->get_tenant());
+  op_ret = provider->get(s);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
@@ -171,7 +180,7 @@ void RGWGetOIDCProvider::execute(optional_yield y)
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     s->formatter->open_object_section("GetOpenIDConnectProviderResult");
-    provider.dump_all(s->formatter);
+    provider->dump_all(s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
   }
@@ -199,8 +208,8 @@ int RGWListOIDCProviders::verify_permission(optional_yield y)
 
 void RGWListOIDCProviders::execute(optional_yield y)
 {
-  vector<RGWOIDCProvider> result;
-  op_ret = RGWOIDCProvider::get_providers(store->getRados(), s->user->get_tenant(), result);
+  vector<std::unique_ptr<rgw::sal::RGWOIDCProvider>> result;
+  op_ret = store->get_oidc_providers(s, s->user->get_tenant(), result);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListOpenIDConnectProvidersResponse");
@@ -211,8 +220,8 @@ void RGWListOIDCProviders::execute(optional_yield y)
     s->formatter->open_array_section("OpenIDConnectProviderList");
     for (const auto& it : result) {
       s->formatter->open_object_section("Arn");
-      auto& arn = it.get_arn();
-      ldout(s->cct, 0) << "ARN: " << arn << dendl;
+      auto& arn = it->get_arn();
+      ldpp_dout(s, 0) << "ARN: " << arn << dendl;
       s->formatter->dump_string("Arn", arn);
       s->formatter->close_section();
     }

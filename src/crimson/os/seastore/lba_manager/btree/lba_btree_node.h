@@ -7,17 +7,24 @@
 #include <memory>
 #include <string.h>
 
-#include "crimson/common/log.h"
-#include "crimson/os/seastore/lba_manager/btree/btree_range_pin.h"
+
+#include "include/buffer.h"
+
+#include "crimson/common/fixed_kv_node_layout.h"
+#include "crimson/common/errorator.h"
 #include "crimson/os/seastore/lba_manager.h"
+#include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/cached_extent.h"
+
+#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/fixed_kv_btree.h"
+#include "crimson/os/seastore/btree/fixed_kv_node.h"
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-struct op_context_t {
-  Cache &cache;
-  btree_pin_set_t &pins;
-  Transaction &trans;
-};
+using base_iertr = LBAManager::base_iertr;
+using LBANode = FixedKVNode<laddr_t>;
 
 /**
  * lba_map_val_t
@@ -30,6 +37,7 @@ struct lba_map_val_t {
   uint32_t refcount = 0; ///< refcount
   uint32_t checksum = 0; ///< checksum of original block written at paddr (TODO)
 
+  lba_map_val_t() = default;
   lba_map_val_t(
     extent_len_t len,
     paddr_t paddr,
@@ -37,233 +45,180 @@ struct lba_map_val_t {
     uint32_t checksum)
     : len(len), paddr(paddr), refcount(refcount), checksum(checksum) {}
 };
+WRITE_EQ_OPERATORS_4(
+  lba_map_val_t,
+  len,
+  paddr,
+  refcount,
+  checksum);
 
-class BtreeLBAPin;
-using BtreeLBAPinRef = std::unique_ptr<BtreeLBAPin>;
+std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
+
+constexpr size_t LBA_BLOCK_SIZE = 4096;
+
+using lba_node_meta_t = fixed_kv_node_meta_t<laddr_t>;
+
+using lba_node_meta_le_t = fixed_kv_node_meta_le_t<laddr_le_t>;
 
 /**
- * LBANode
+ * LBAInternalNode
  *
- * Base class enabling recursive lookup between internal and leaf nodes.
+ * Abstracts operations on and layout of internal nodes for the
+ * LBA Tree.
+ *
+ * Layout (4k):
+ *   size       : uint32_t[1]                4b
+ *   (padding)  :                            4b
+ *   meta       : lba_node_meta_le_t[3]      (1*24)b
+ *   keys       : laddr_t[255]               (254*8)b
+ *   values     : paddr_t[255]               (254*8)b
+ *                                           = 4096
+
+ * TODO: make the above capacity calculation part of FixedKVNodeLayout
+ * TODO: the above alignment probably isn't portable without further work
  */
-struct LBANode : CachedExtent {
-  using LBANodeRef = TCachedExtentRef<LBANode>;
-  using lookup_range_ertr = LBAManager::get_mapping_ertr;
-  using lookup_range_ret = LBAManager::get_mapping_ret;
+constexpr size_t INTERNAL_NODE_CAPACITY = 254;
+struct LBAInternalNode
+  : FixedKVInternalNode<
+      INTERNAL_NODE_CAPACITY,
+      laddr_t, laddr_le_t,
+      LBA_BLOCK_SIZE,
+      LBAInternalNode> {
+  using Ref = TCachedExtentRef<LBAInternalNode>;
+  using internal_iterator_t = const_iterator;
+  template <typename... T>
+  LBAInternalNode(T&&... t) :
+    FixedKVInternalNode(std::forward<T>(t)...) {}
 
-  btree_range_pin_t pin;
+  static constexpr extent_types_t TYPE = extent_types_t::LADDR_INTERNAL;
 
-  LBANode(ceph::bufferptr &&ptr) : CachedExtent(std::move(ptr)), pin(this) {}
-  LBANode(const LBANode &rhs)
-    : CachedExtent(rhs), pin(rhs.pin, this) {}
-
-  virtual lba_node_meta_t get_node_meta() const = 0;
-
-  /**
-   * lookup
-   *
-   * Returns the node at the specified depth responsible
-   * for laddr
-   */
-  using lookup_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using lookup_ret = lookup_ertr::future<LBANodeRef>;
-  virtual lookup_ret lookup(
-    op_context_t c,
-    laddr_t addr,
-    depth_t depth) = 0;
-
-  /**
-   * lookup_range
-   *
-   * Returns mappings within range [addr, addr+len)
-   */
-  virtual lookup_range_ret lookup_range(
-    op_context_t c,
-    laddr_t addr,
-    extent_len_t len) = 0;
-
-  /**
-   * insert
-   *
-   * Recursively inserts into subtree rooted at *this.  Caller
-   * must already have handled splitting if at_max_capacity().
-   *
-   * Precondition: !at_max_capacity()
-   */
-  using insert_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error
-    >;
-  using insert_ret = insert_ertr::future<LBAPinRef>;
-  virtual insert_ret insert(
-    op_context_t c,
-    laddr_t laddr,
-    lba_map_val_t val) = 0;
-
-  /**
-   * find_hole
-   *
-   * Finds minimum hole of size len in [min, max)
-   *
-   * @return addr of hole, L_ADDR_NULL if unfound
-   */
-  using find_hole_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using find_hole_ret = find_hole_ertr::future<laddr_t>;
-  virtual find_hole_ret find_hole(
-    op_context_t c,
-    laddr_t min,
-    laddr_t max,
-    extent_len_t len) = 0;
-
-  /**
-   * scan_mappings
-   *
-   * Call f for all mappings in [begin, end)
-   */
-  using scan_mappings_ertr = LBAManager::scan_mappings_ertr;
-  using scan_mappings_ret = LBAManager::scan_mappings_ret;
-  using scan_mappings_func_t = LBAManager::scan_mappings_func_t;
-  virtual scan_mappings_ret scan_mappings(
-    op_context_t c,
-    laddr_t begin,
-    laddr_t end,
-    scan_mappings_func_t &f) = 0;
-
-  using scan_mapped_space_ertr = LBAManager::scan_mapped_space_ertr;
-  using scan_mapped_space_ret = LBAManager::scan_mapped_space_ret;
-  using scan_mapped_space_func_t = LBAManager::scan_mapped_space_func_t;
-  virtual scan_mapped_space_ret scan_mapped_space(
-    op_context_t c,
-    scan_mapped_space_func_t &f) = 0;
-
-  /**
-   * mutate_mapping
-   *
-   * Lookups up laddr, calls f on value. If f returns a value, inserts it.
-   * If it returns nullopt, removes the value.
-   * Caller must already have merged if at_min_capacity().
-   *
-   * Recursive calls use mutate_mapping_internal.
-   *
-   * Precondition: !at_min_capacity()
-   */
-  using mutate_mapping_ertr = crimson::errorator<
-    crimson::ct_error::enoent,            ///< mapping does not exist
-    crimson::ct_error::input_output_error
-    >;
-  using mutate_mapping_ret = mutate_mapping_ertr::future<
-    lba_map_val_t>;
-  using mutate_func_t = std::function<
-    lba_map_val_t(const lba_map_val_t &v)
-    >;
-  virtual mutate_mapping_ret mutate_mapping(
-    op_context_t c,
-    laddr_t laddr,
-    mutate_func_t &&f) = 0;
-  virtual mutate_mapping_ret mutate_mapping_internal(
-    op_context_t c,
-    laddr_t laddr,
-    bool is_root,
-    mutate_func_t &&f) = 0;
-
-  /**
-   * mutate_internal_address
-   *
-   * Looks up internal node mapping at laddr, depth and
-   * updates the mapping to paddr.  Returns previous paddr
-   * (for debugging purposes).
-   */
-  using mutate_internal_address_ertr = crimson::errorator<
-    crimson::ct_error::enoent,            ///< mapping does not exist
-    crimson::ct_error::input_output_error
-    >;
-  using mutate_internal_address_ret = mutate_internal_address_ertr::future<
-    paddr_t>;
-  virtual mutate_internal_address_ret mutate_internal_address(
-    op_context_t c,
-    depth_t depth,
-    laddr_t laddr,
-    paddr_t paddr) = 0;
-
-  /**
-   * make_split_children
-   *
-   * Generates appropriately typed left and right nodes formed from the
-   * contents of *this.
-   *
-   * Returns <left, right, pivot> where pivot is the first value of right.
-   */
-  virtual std::tuple<
-    LBANodeRef,
-    LBANodeRef,
-    laddr_t>
-  make_split_children(
-    op_context_t c) = 0;
-
-  /**
-   * make_full_merge
-   *
-   * Returns a single node formed from merging *this and right.
-   * Precondition: at_min_capacity() && right.at_min_capacity()
-   */
-  virtual LBANodeRef make_full_merge(
-    op_context_t c,
-    LBANodeRef &right) = 0;
-
-  /**
-   * make_balanced
-   *
-   * Returns nodes formed by balancing the contents of *this and right.
-   *
-   * Returns <left, right, pivot> where pivot is the first value of right.
-   */
-  virtual std::tuple<
-    LBANodeRef,
-    LBANodeRef,
-    laddr_t>
-  make_balanced(
-    op_context_t c,
-    LBANodeRef &right,
-    bool prefer_left) = 0;
-
-  virtual bool at_max_capacity() const = 0;
-  virtual bool at_min_capacity() const = 0;
-
-  virtual ~LBANode() = default;
-
-  void on_delta_write(paddr_t record_block_offset) final {
-    // All in-memory relative addrs are necessarily record-relative
-    assert(get_prior_instance());
-    pin.take_pin(get_prior_instance()->cast<LBANode>()->pin);
-    resolve_relative_addrs(record_block_offset);
+  extent_types_t get_type() const final {
+    return TYPE;
   }
-
-  void on_initial_write() final {
-    // All in-memory relative addrs are necessarily block-relative
-    resolve_relative_addrs(get_paddr());
-  }
-
-  void on_clean_read() final {
-    // From initial write of block, relative addrs are necessarily block-relative
-    resolve_relative_addrs(get_paddr());
-  }
-
-  virtual void resolve_relative_addrs(paddr_t base) = 0;
 };
-using LBANodeRef = LBANode::LBANodeRef;
+using LBAInternalNodeRef = LBAInternalNode::Ref;
 
 /**
- * get_lba_btree_extent
+ * LBALeafNode
  *
- * Fetches node at depth of the appropriate type.
+ * Abstracts operations on and layout of leaf nodes for the
+ * LBA Tree.
+ *
+ * Layout (4k):
+ *   size       : uint32_t[1]                4b
+ *   (padding)  :                            4b
+ *   meta       : lba_node_meta_le_t[3]      (1*24)b
+ *   keys       : laddr_t[170]               (145*8)b
+ *   values     : lba_map_val_t[170]         (145*20)b
+ *                                           = 4092
+ *
+ * TODO: update FixedKVNodeLayout to handle the above calculation
+ * TODO: the above alignment probably isn't portable without further work
  */
-Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
-  op_context_t c, ///< [in] context structure
-  depth_t depth,  ///< [in] depth of node to fetch
-  paddr_t offset, ///< [in] physical addr of node
-  paddr_t base    ///< [in] depending on user, block addr or record addr
-                  ///       in case offset is relative
-);
+constexpr size_t LEAF_NODE_CAPACITY = 145;
+
+/**
+ * lba_map_val_le_t
+ *
+ * On disk layout for lba_map_val_t.
+ */
+struct lba_map_val_le_t {
+  extent_len_le_t len = init_extent_len_le(0);
+  paddr_le_t paddr;
+  ceph_le32 refcount{0};
+  ceph_le32 checksum{0};
+
+  lba_map_val_le_t() = default;
+  lba_map_val_le_t(const lba_map_val_le_t &) = default;
+  explicit lba_map_val_le_t(const lba_map_val_t &val)
+    : len(init_extent_len_le(val.len)),
+      paddr(paddr_le_t(val.paddr)),
+      refcount(val.refcount),
+      checksum(val.checksum) {}
+
+  operator lba_map_val_t() const {
+    return lba_map_val_t{ len, paddr, refcount, checksum };
+  }
+};
+
+struct LBALeafNode
+  : FixedKVLeafNode<
+      LEAF_NODE_CAPACITY,
+      laddr_t, laddr_le_t,
+      lba_map_val_t, lba_map_val_le_t,
+      LBA_BLOCK_SIZE,
+      LBALeafNode> {
+  using Ref = TCachedExtentRef<LBALeafNode>;
+  using internal_iterator_t = const_iterator;
+  template <typename... T>
+  LBALeafNode(T&&... t) :
+    FixedKVLeafNode(std::forward<T>(t)...) {}
+
+  static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
+
+  void update(
+    const_iterator iter,
+    lba_map_val_t val) final {
+    val.paddr = maybe_generate_relative(val.paddr);
+    return journal_update(
+      iter,
+      val,
+      maybe_get_delta_buffer());
+  }
+
+  const_iterator insert(
+    const_iterator iter,
+    laddr_t addr,
+    lba_map_val_t val) final {
+    val.paddr = maybe_generate_relative(val.paddr);
+    journal_insert(
+      iter,
+      addr,
+      val,
+      maybe_get_delta_buffer());
+    return iter;
+  }
+
+  void remove(const_iterator iter) final {
+    return journal_remove(
+      iter,
+      maybe_get_delta_buffer());
+  }
+
+  // See LBAInternalNode, same concept
+  void resolve_relative_addrs(paddr_t base);
+  void node_resolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	auto val = i->get_val();
+	if (val.paddr.is_relative()) {
+	  assert(val.paddr.is_block_relative());
+	  val.paddr = get_paddr().add_relative(val.paddr);
+	  i->set_val(val);
+	}
+      }
+    }
+  }
+  void node_unresolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	auto val = i->get_val();
+	if (val.paddr.is_relative()) {
+	  auto val = i->get_val();
+	  assert(val.paddr.is_record_relative());
+	  val.paddr = val.paddr - get_paddr();
+	  i->set_val(val);
+	}
+      }
+    }
+  }
+
+  extent_types_t get_type() const final {
+    return TYPE;
+  }
+
+  std::ostream &print_detail(std::ostream &out) const final;
+};
+using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 
 }

@@ -10,6 +10,7 @@
 #include "mon/MonClient.h"
 
 #include "ClusterWatcher.h"
+#include "ServiceDaemon.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror
@@ -19,9 +20,11 @@
 namespace cephfs {
 namespace mirror {
 
-ClusterWatcher::ClusterWatcher(CephContext *cct, MonClient *monc, Listener &listener)
+ClusterWatcher::ClusterWatcher(CephContext *cct, MonClient *monc, ServiceDaemon *service_daemon,
+                               Listener &listener)
   : Dispatcher(cct),
     m_monc(monc),
+    m_service_daemon(service_daemon),
     m_listener(listener) {
 }
 
@@ -65,6 +68,7 @@ int ClusterWatcher::init() {
 void ClusterWatcher::shutdown() {
   dout(20) << dendl;
   std::scoped_lock locker(m_lock);
+  m_stopping = true;
   m_monc->sub_unwant("fsmap");
 }
 
@@ -81,6 +85,10 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
   std::map<Filesystem, uint64_t> fs_metadata_pools;
   {
     std::scoped_lock locker(m_lock);
+    if (m_stopping) {
+      return;
+    }
+
     // deleted filesystems are considered mirroring disabled
     for (auto it = m_filesystem_peers.begin(); it != m_filesystem_peers.end();) {
       if (!fsmap.filesystem_exists(it->first.fscid)) {
@@ -141,9 +149,11 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
   dout(5) << ": mirroring enabled=" << mirroring_enabled << ", mirroring_disabled="
           << mirroring_disabled << dendl;
   for (auto &fs : mirroring_enabled) {
+    m_service_daemon->add_filesystem(fs.fscid, fs.fs_name);
     m_listener.handle_mirroring_enabled(FilesystemSpec(fs, fs_metadata_pools.at(fs)));
   }
   for (auto &fs : mirroring_disabled) {
+    m_service_daemon->remove_filesystem(fs.fscid);
     m_listener.handle_mirroring_disabled(fs);
   }
 
@@ -151,16 +161,21 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
 
   for (auto &[fs, peers] : peers_added) {
     for (auto &peer : peers) {
+      m_service_daemon->add_peer(fs.fscid, peer);
       m_listener.handle_peers_added(fs, peer);
     }
   }
   for (auto &[fs, peers] : peers_removed) {
     for (auto &peer : peers) {
+      m_service_daemon->remove_peer(fs.fscid, peer);
       m_listener.handle_peers_removed(fs, peer);
     }
   }
 
-  m_monc->sub_got("fsmap", fsmap.get_epoch());
+  std::scoped_lock locker(m_lock);
+  if (!m_stopping) {
+    m_monc->sub_got("fsmap", fsmap.get_epoch());
+  } // else we have already done a sub_unwant()
 }
 
 } // namespace mirror

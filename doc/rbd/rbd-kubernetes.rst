@@ -114,6 +114,49 @@ Once generated, store the new `ConfigMap` object in Kubernetes::
 
         $ kubectl apply -f csi-config-map.yaml
 
+Recent versions of `ceph-csi` also require an additional `ConfigMap` object to
+define Key Management Service (KMS) provider details.  If KMS isn't set up, put
+an empty configuration in a `csi-kms-config-map.yaml` file or refer to examples
+at https://github.com/ceph/ceph-csi/tree/master/examples/kms::
+
+        $ cat <<EOF > csi-kms-config-map.yaml
+        ---
+        apiVersion: v1
+        kind: ConfigMap
+        data:
+          config.json: |-
+            {}
+        metadata:
+          name: ceph-csi-encryption-kms-config
+        EOF
+
+Once generated, store the new `ConfigMap` object in Kubernetes::
+
+        $ kubectl apply -f csi-kms-config-map.yaml
+
+Recent versions of `ceph-csi` also require yet another `ConfigMap` object
+to define Ceph configuration to add to ceph.conf file inside CSI containers::
+
+        $ cat <<EOF > ceph-config-map.yaml
+        ---
+        apiVersion: v1
+        kind: ConfigMap
+        data:
+          ceph.conf: |
+            [global]
+            auth_cluster_required = cephx
+            auth_service_required = cephx
+            auth_client_required = cephx
+          # keyring is a required key and its value should be empty
+          keyring: |
+        metadata:
+          name: ceph-config
+        EOF
+
+Once generated, store the new `ConfigMap` object in Kubernetes::
+
+        $ kubectl apply -f ceph-config-map.yaml
+
 Generate `ceph-csi` cephx `Secret`
 ----------------------------------
 
@@ -188,15 +231,22 @@ pool created above, the following YAML file can be used after ensuring that the
         parameters:
            clusterID: b9127830-b0cc-4e34-aa47-9d1a2e9949a8
            pool: kubernetes
+           imageFeatures: layering
            csi.storage.k8s.io/provisioner-secret-name: csi-rbd-secret
            csi.storage.k8s.io/provisioner-secret-namespace: default
+           csi.storage.k8s.io/controller-expand-secret-name: csi-rbd-secret
+           csi.storage.k8s.io/controller-expand-secret-namespace: default
            csi.storage.k8s.io/node-stage-secret-name: csi-rbd-secret
            csi.storage.k8s.io/node-stage-secret-namespace: default
         reclaimPolicy: Delete
+        allowVolumeExpansion: true
         mountOptions:
            - discard
         EOF
         $ kubectl apply -f csi-rbd-sc.yaml
+
+Note that in Kubernetes v1.14 and v1.15 volume expansion feature was in alpha
+status and required enabling `ExpandCSIVolumes` feature gate.
 
 Create a `PersistentVolumeClaim`
 --------------------------------

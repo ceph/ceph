@@ -12,7 +12,7 @@ Synopsis
 | **cephadm**** [-h] [--image IMAGE] [--docker] [--data-dir DATA_DIR]
 |               [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |               [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
-|               [--retry RETRY]
+|               [--retry RETRY] [--no-container-init]
 |               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install}
 |               ...
 
@@ -28,7 +28,6 @@ Synopsis
 | **cephadm** **adopt** [-h] --name NAME --style STYLE [--cluster CLUSTER]
 |                       [--legacy-dir LEGACY_DIR] [--config-json CONFIG_JSON]
 |                       [--skip-firewalld] [--skip-pull]
-|                       [--container-init]
 
 | **cephadm** **rm-daemon** [-h] --name NAME --fsid FSID [--force]
 |                           [--force-delete-data]
@@ -54,6 +53,7 @@ Synopsis
 | **cephadm** **bootstrap** [-h] [--config CONFIG] [--mon-id MON_ID]
 |                           [--mon-addrv MON_ADDRV] [--mon-ip MON_IP]
 |                           [--mgr-id MGR_ID] [--fsid FSID]
+|                           [--log-to-file] [--single-host-defaults]
 |                           [--output-dir OUTPUT_DIR]
 |                           [--output-keyring OUTPUT_KEYRING]
 |                           [--output-config OUTPUT_CONFIG]
@@ -78,7 +78,6 @@ Synopsis
 |                           [--registry-username REGISTRY_USERNAME]
 |                           [--registry-password REGISTRY_PASSWORD]
 |                           [--registry-json REGISTRY_JSON]
-|                           [--container-init]
 
 
 
@@ -86,7 +85,6 @@ Synopsis
 |                        [--config-json CONFIG_JSON] [--keyring KEYRING]
 |                        [--key KEY] [--osd-fsid OSD_FSID] [--skip-firewalld]
 |                        [--tcp-ports TCP_PORTS] [--reconfig] [--allow-ptrace]
-|                        [--container-init]
 
 | **cephadm** **check-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
 
@@ -129,13 +127,14 @@ Options
 .. option:: --docker
 
    use docker instead of podman (default: False)
-.. option::data-dir DATA_DIR
 
-   base directory for daemon data (default:/var/lib/ceph)
+.. option:: --data-dir DATA_DIR
+
+   base directory for daemon data (default: /var/lib/ceph)
 
 .. option:: --log-dir LOG_DIR
 
-   base directory for daemon logs (default:.. option:: /var/log/ceph)
+   base directory for daemon logs (default: /var/log/ceph)
 
 .. option:: --logrotate-dir LOGROTATE_DIR
 
@@ -156,6 +155,10 @@ Options
 .. option:: --retry RETRY
 
    max number of retries (default: 10)
+
+.. option:: --no-container-init
+
+   do not run podman/docker with `--init` (default: False)
 
 
 Commands
@@ -191,6 +194,17 @@ Arguments:
 * [--skip-firewalld]           Do not configure firewalld
 * [--skip-pull]                do not pull the latest image before adopting
 
+Configuration:
+
+When starting the shell, cephadm looks for configuration in the following order.
+Only the first values found are used:
+
+1. An explicit, user provided path to a config file (``-c/--config`` option)
+2. Config file for daemon specified with ``--name`` parameter (``/var/lib/ceph/<fsid>/<daemon-name>/config``)
+3. ``/var/lib/ceph/<fsid>/config/ceph.conf`` if it exists
+4. The config file for a ``mon`` daemon (``/var/lib/ceph/<fsid>/mon.<mon-id>/config``) if it exists
+5. Finally: fallback to the default file ``/etc/ceph/ceph.conf``
+
 
 bootstrap
 ---------
@@ -207,6 +221,8 @@ Arguments:
 * [--mon-ip MON_IP]               mon IP
 * [--mgr-id MGR_ID]               mgr id (default: randomly generated)
 * [--fsid FSID]                   cluster FSID
+* [--log-to-file]                 configure cluster to log to traditional log files
+* [--single-host-defaults]        configure cluster to run on a single host
 * [--output-dir OUTPUT_DIR]       directory to write config, keyring, and pub key files
 * [--output-keyring OUTPUT_KEYRING] location to write keyring file with new cluster admin and mon keys
 * [--output-config OUTPUT_CONFIG] location to write conf file to connect to new cluster
@@ -238,7 +254,6 @@ Arguments:
 * [--registry-username REGISTRY_USERNAME] username of account to login to on custom registry
 * [--registry-password REGISTRY_PASSWORD] password of account to login to on custom registry
 * [--registry-json REGISTRY_JSON] JSON file containing registry login info (see registry-login command documentation)
-* [--container-init]              Run podman/docker with `--init`
 
 
 ceph-volume
@@ -254,7 +269,7 @@ Positional arguments:
 Arguments:
 
 * [--fsid FSID]                    cluster FSID
-* [--config-json CONFIG_JSON]      JSON file with config and (client.bootrap-osd) key
+* [--config-json CONFIG_JSON]      JSON file with config and (client.bootstrap-osd) key
 * [--config CONFIG, -c CONFIG]     ceph conf file
 * [--keyring KEYRING, -k KEYRING]  ceph.keyring to pass through to the container
 
@@ -289,7 +304,6 @@ Arguments:
 * [--tcp-ports                List of tcp ports to open in the host firewall
 * [--reconfig]                Reconfigure a previously deployed daemon
 * [--allow-ptrace]            Allow SYS_PTRACE on daemon container
-* [--container-init]          Run podman/docker with `--init`
 
 
 enter

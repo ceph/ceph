@@ -142,11 +142,12 @@ void DPDKWorker::initialize()
   }
 }
 
-using AvailableIPAddress = std::tuple<string, string, string>;
+using AvailableIPAddress = std::tuple<std::string, std::string, std::string>;
 static bool parse_available_address(
-        const string &ips, const string &gates, const string &masks, vector<AvailableIPAddress> &res)
+        const std::string &ips, const std::string &gates,
+	const std::string &masks, std::vector<AvailableIPAddress> &res)
 {
-  vector<string> ip_vec, gate_vec, mask_vec;
+  std::vector<std::string> ip_vec, gate_vec, mask_vec;
   string_to_vec(ip_vec, ips);
   string_to_vec(gate_vec, gates);
   string_to_vec(mask_vec, masks);
@@ -159,7 +160,7 @@ static bool parse_available_address(
   return true;
 }
 
-static bool match_available_address(const vector<AvailableIPAddress> &avails,
+static bool match_available_address(const std::vector<AvailableIPAddress> &avails,
                                     const entity_addr_t &ip, int &res)
 {
   for (size_t i = 0; i < avails.size(); ++i) {
@@ -178,7 +179,7 @@ static bool match_available_address(const vector<AvailableIPAddress> &avails,
 DPDKWorker::Impl::Impl(CephContext *cct, unsigned i, EventCenter *c, std::shared_ptr<DPDKDevice> dev)
     : id(i), _netif(cct, dev, c), _dev(dev), _inet(cct, c, &_netif)
 {
-  vector<AvailableIPAddress> tuples;
+  std::vector<AvailableIPAddress> tuples;
   bool parsed = parse_available_address(cct->_conf.get_val<std::string>("ms_dpdk_host_ipv4_addr"),
                                         cct->_conf.get_val<std::string>("ms_dpdk_gateway_ipv4_addr"),
                                         cct->_conf.get_val<std::string>("ms_dpdk_netmask_ipv4_addr"), tuples);
@@ -242,29 +243,30 @@ int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
   return r;
 }
 
-void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
+void DPDKStack::spawn_worker(std::function<void ()> &&func)
 {
   // create a extra master thread
   //
-  funcs[i] = std::move(func);
+  funcs.push_back(std::move(func));
   int r = 0;
-  r = dpdk::eal::init(cct);
+  r = eal.start();
   if (r < 0) {
-    lderr(cct) << __func__ << " init dpdk rte failed, r=" << r << dendl;
+    lderr(cct) << __func__ << " start dpdk rte failed, r=" << r << dendl;
     ceph_abort();
   }
-  // if dpdk::eal::init already called by NVMEDevice, we will select 1..n
+  // if eal.start already called by NVMEDevice, we will select 1..n
   // cores
-  ceph_assert(rte_lcore_count() >= i + 1);
+  unsigned nr_worker = funcs.size();
+  ceph_assert(rte_lcore_count() >= nr_worker);
   unsigned core_id;
-  int j = i;
   RTE_LCORE_FOREACH_SLAVE(core_id) {
-    if (i-- == 0) {
+    if (--nr_worker == 0) {
       break;
     }
   }
-  dpdk::eal::execute_on_master([&]() {
-    r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&funcs[j]), core_id);
+  void *adapted_func = static_cast<void*>(&funcs.back());
+  eal.execute_on_master([adapted_func, core_id, this]() {
+    int r = rte_eal_remote_launch(dpdk_thread_adaptor, adapted_func, core_id);
     if (r < 0) {
       lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
       ceph_abort();
@@ -274,7 +276,9 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
 
 void DPDKStack::join_worker(unsigned i)
 {
-  dpdk::eal::execute_on_master([&]() {
+  eal.execute_on_master([&]() {
     rte_eal_wait_lcore(i+1);
   });
+  if (i+1 == get_num_worker())
+    eal.stop();
 }

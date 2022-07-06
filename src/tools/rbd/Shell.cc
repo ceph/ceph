@@ -28,8 +28,7 @@ static const std::string BASH_COMPLETION_SPEC("bash-completion");
 boost::intrusive_ptr<CephContext> global_init(
     int argc, const char **argv, std::vector<std::string> *command_args,
     std::vector<std::string> *global_init_args) {
-  std::vector<const char*> cmd_args;
-  argv_to_vec(argc, argv, cmd_args);
+  auto cmd_args = argv_to_vec(argc, argv);
   std::vector<const char*> args(cmd_args);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY,
@@ -126,7 +125,7 @@ void print_deprecated_warning(po::option_description option, std::string descrip
   auto pos = description.find_first_of(":");
   if (pos != std::string::npos) {
   std::string param = description.substr(pos + 1, description.size() - pos - 2);
-  std::cout << "rbd: " << option.format_name() << " is deprecated, use --"
+  std::cerr << "rbd: " << option.format_name() << " is deprecated, use --"
             << param << std::endl;
   }
 }
@@ -221,7 +220,7 @@ int Shell::execute(int argc, const char **argv) {
           if (!result.empty()) {
             print_deprecated_warning(option, description);
           }
-        } catch (exception& e) {
+        } catch (std::exception& e) {
           continue;
         }
       }

@@ -47,7 +47,7 @@ their initial connection to the cluster as they may need to try more
 addresses before they reach an operating monitor.
 
 The down monitor daemon should generally be restarted as soon as
-possible to reduce the risk of a subsequen monitor failure leading to
+possible to reduce the risk of a subsequent monitor failure leading to
 a service outage.
 
 MON_CLOCK_SKEW
@@ -68,7 +68,7 @@ order for monitor cluster to function properly.
 MON_MSGR2_NOT_ENABLED
 _____________________
 
-The ``ms_bind_msgr2`` option is enabled but one or more monitors is
+The :confval:`ms_bind_msgr2` option is enabled but one or more monitors is
 not configured to bind to a v2 port in the cluster's monmap.  This
 means that features specific to the msgr2 protocol (e.g., encryption)
 are not available on some or all connections.
@@ -133,6 +133,73 @@ problem persists, please report a bug.
 The warning threshold may be adjusted with::
 
   ceph config set global mon_data_size_warn <size>
+
+AUTH_INSECURE_GLOBAL_ID_RECLAIM
+_______________________________
+
+One or more clients or daemons are connected to the cluster that are
+not securely reclaiming their global_id (a unique number identifying
+each entity in the cluster) when reconnecting to a monitor.  The
+client is being permitted to connect anyway because the
+``auth_allow_insecure_global_id_reclaim`` option is set to true (which may
+be necessary until all ceph clients have been upgraded), and the
+``auth_expose_insecure_global_id_reclaim`` option set to ``true`` (which
+allows monitors to detect clients with insecure reclaim early by forcing them to
+reconnect right after they first authenticate).
+
+You can identify which client(s) are using unpatched ceph client code with::
+
+  ceph health detail
+
+Clients' global_id reclaim behavior can also seen in the
+``global_id_status`` field in the dump of clients connected to an
+individual monitor (``reclaim_insecure`` means the client is
+unpatched and is contributing to this health alert)::
+
+  ceph tell mon.\* sessions
+
+We strongly recommend that all clients in the system are upgraded to a
+newer version of Ceph that correctly reclaims global_id values.  Once
+all clients have been updated, you can stop allowing insecure reconnections
+with::
+
+  ceph config set mon auth_allow_insecure_global_id_reclaim false
+
+If it is impractical to upgrade all clients immediately, you can silence
+this warning temporarily with::
+
+  ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM 1w   # 1 week
+
+Although we do NOT recommend doing so, you can also disable this warning indefinitely
+with::
+
+  ceph config set mon mon_warn_on_insecure_global_id_reclaim false
+
+AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED
+_______________________________________
+
+Ceph is currently configured to allow clients to reconnect to monitors using
+an insecure process to reclaim their previous global_id because the setting
+``auth_allow_insecure_global_id_reclaim`` is set to ``true``.  It may be necessary to
+leave this setting enabled while existing Ceph clients are upgraded to newer
+versions of Ceph that correctly and securely reclaim their global_id.
+
+If the ``AUTH_INSECURE_GLOBAL_ID_RECLAIM`` health alert has not also been raised and
+the ``auth_expose_insecure_global_id_reclaim`` setting has not been disabled (it is
+on by default), then there are currently no clients connected that need to be
+upgraded, and it is safe to disallow insecure global_id reclaim with::
+
+  ceph config set mon auth_allow_insecure_global_id_reclaim false
+
+If there are still clients that need to be upgraded, then this alert can be
+silenced temporarily with::
+
+  ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED 1w   # 1 week
+
+Although we do NOT recommend doing so, you can also disable this warning indefinitely
+with::
+
+  ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
 
 
 Manager
@@ -372,6 +439,25 @@ OSDs can start.  You can safely set the flag with::
 
   ceph osd set sortbitwise
 
+OSD_FILESTORE
+__________________
+
+Filestore has been deprecated, considering that Bluestore has been the default
+objectstore for quite some time. Warn if OSDs are running Filestore.
+
+The 'mclock_scheduler' is not supported for filestore OSDs. Therefore, the
+default 'osd_op_queue' is set to 'wpq' for filestore OSDs and is enforced
+even if the user attempts to change it.
+
+Filestore OSDs can be listed with::
+
+  ceph report | jq -c '."osd_metadata" | .[] | select(.osd_objectstore | contains("filestore")) | {id, osd_objectstore}'
+
+If it is not feasible to migrate Filestore OSDs to Bluestore immediately, you can silence
+this warning temporarily with::
+
+  ceph health mute OSD_FILESTORE
+
 POOL_FULL
 _________
 
@@ -510,6 +596,25 @@ running a repair operation, and the restarting it.  For example, if
 This warning can be disabled with::
 
   ceph config set global bluestore_warn_on_no_per_pool_omap false
+
+BLUESTORE_NO_PER_PG_OMAP
+__________________________
+
+Starting with the Pacific release, BlueStore tracks omap space utilization
+by PG, and one or more OSDs have volumes that were created prior to
+Pacific.  Per-PG omap enables faster PG removal when PGs migrate.
+
+The older OSDs can be updated to track by PG by stopping each OSD,
+running a repair operation, and the restarting it.  For example, if
+``osd.123`` needed to be updated,::
+
+  systemctl stop ceph-osd@123
+  ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
+  systemctl start ceph-osd@123
+
+This warning can be disabled with::
+
+  ceph config set global bluestore_warn_on_no_per_pg_omap false
 
 
 BLUESTORE_DISK_SIZE_MISMATCH
@@ -673,7 +778,7 @@ Detailed information about which PGs are affected is available from::
   ceph health detail
 
 In most cases the root cause is that one or more OSDs is currently
-down; see the dicussion for ``OSD_DOWN`` above.
+down; see the discussion for ``OSD_DOWN`` above.
 
 The state of specific problematic PGs can be queried with::
 
@@ -945,6 +1050,8 @@ not contain as much data have too many PGs.  See the discussion of
 The threshold can be raised to silence the health warning by adjusting
 the ``mon_pg_warn_max_object_skew`` config option on the managers.
 
+The health warning will be silenced for a particular pool if
+``pg_autoscale_mode`` is set to ``on``.
 
 POOL_APP_NOT_ENABLED
 ____________________
@@ -1055,9 +1162,9 @@ _______________
 
 One or more PGs has not been scrubbed recently.  PGs are normally scrubbed
 within every configured interval specified by
-:ref:`osd_scrub_max_interval <osd_scrub_max_interval>` globally. This
-interval can be overriden on per-pool basis with
-:ref:`scrub_max_interval <scrub_max_interval>`. The warning triggers when
+:confval:`osd_scrub_max_interval` globally. This
+interval can be overridden on per-pool basis with
+:confval:`scrub_max_interval`. The warning triggers when
 ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed without a
 scrub since it was due.
 
@@ -1073,7 +1180,7 @@ PG_NOT_DEEP_SCRUBBED
 ____________________
 
 One or more PGs has not been deep scrubbed recently.  PGs are normally
-scrubbed every ``osd_deep_scrub_interval`` seconds, and this warning
+scrubbed every :confval:`osd_deep_scrub_interval` seconds, and this warning
 triggers when ``mon_warn_pg_not_deep_scrubbed_ratio`` percentage of interval has elapsed
 without a scrub since it was due.
 
@@ -1124,6 +1231,40 @@ New crashes can be listed with::
 Information about a specific crash can be examined with::
 
   ceph crash info <crash-id>
+
+This warning can be silenced by "archiving" the crash (perhaps after
+being examined by an administrator) so that it does not generate this
+warning::
+
+  ceph crash archive <crash-id>
+
+Similarly, all new crashes can be archived with::
+
+  ceph crash archive-all
+
+Archived crashes will still be visible via ``ceph crash ls`` but not
+``ceph crash ls-new``.
+
+The time period for what "recent" means is controlled by the option
+``mgr/crash/warn_recent_interval`` (default: two weeks).
+
+These warnings can be disabled entirely with::
+
+  ceph config set mgr/crash/warn_recent_interval 0
+
+RECENT_MGR_MODULE_CRASH
+_______________________
+
+One or more ceph-mgr modules has crashed recently, and the crash as
+not yet been archived (acknowledged) by the administrator.  This
+generally indicates a software bug in one of the software modules run
+inside the ceph-mgr daemon.  Although the module that experienced the
+problem maybe be disabled as a result, the function of other modules
+is normally unaffected.
+
+As with the *RECENT_CRASH* health alert, the crash can be inspected with::
+
+    ceph crash info <crash-id>
 
 This warning can be silenced by "archiving" the crash (perhaps after
 being examined by an administrator) so that it does not generate this

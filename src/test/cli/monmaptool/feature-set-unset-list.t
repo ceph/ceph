@@ -1,6 +1,7 @@
   $ monmaptool --create --add a 10.10.10.10:1234 /tmp/test.monmap.1234
   monmaptool: monmap file /tmp/test.monmap.1234
   monmaptool: generated fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
+  setting min_mon_release = octopus
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ monmaptool --feature-list --feature-list plain --feature-list parseable /tmp/test.monmap.1234
@@ -11,21 +12,21 @@
       required:   [none]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
   MONMAP FEATURES:
       persistent: [none]
       optional:   [none]
       required:   [none]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
   monmap:persistent:[none]
   monmap:optional:[none]
   monmap:required:[none]
-  available:supported:[kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
-  available:persistent:[kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
+  available:supported:[kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
+  available:persistent:[kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
 
   $ monmaptool --feature-set foo /tmp/test.monmap.1234
   unknown features name 'foo' or unable to parse value: Expected option value to be integer, got 'foo'
@@ -44,8 +45,8 @@
       required:   [kraken(1),octopus(32),unknown(4096)]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
 
   $ monmaptool --feature-unset 32 --optional --feature-list /tmp/test.monmap.1234
   monmaptool: monmap file /tmp/test.monmap.1234
@@ -55,8 +56,8 @@
       required:   [kraken(1),octopus(32),unknown(4096)]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ monmaptool --feature-unset 32 --persistent --feature-unset 4096 --optional --feature-list /tmp/test.monmap.1234
@@ -67,8 +68,8 @@
       required:   [kraken(1)]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ monmaptool --feature-unset kraken --feature-list /tmp/test.monmap.1234
@@ -79,8 +80,8 @@
       required:   [none]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ rm /tmp/test.monmap.1234

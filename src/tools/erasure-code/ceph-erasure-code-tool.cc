@@ -19,6 +19,8 @@
 
 #include <boost/algorithm/string.hpp>
 
+using namespace std;
+
 std::vector<std::string> display_params = {
   "chunk_count", "data_chunk_count", "coding_chunk_count"
 };
@@ -285,8 +287,7 @@ int do_decode(const std::vector<const char*> &args) {
 }
 
 int main(int argc, const char **argv) {
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY,
                          CINIT_FLAG_NO_MON_CONFIG);

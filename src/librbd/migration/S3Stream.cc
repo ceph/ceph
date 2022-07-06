@@ -89,8 +89,31 @@ void S3Stream<I>::open(Context* on_finish) {
   }
 
   m_url = url_value.get_str();
+
+  librados::Rados rados(m_image_ctx->md_ctx);
+  int r = 0;
   m_access_key = access_key.get_str();
+  if (util::is_config_key_uri(m_access_key)) {
+    r = util::get_config_key(rados, m_access_key, &m_access_key);
+    if (r < 0) {
+      lderr(m_cct) << "failed to retrieve access key from config: "
+                   << cpp_strerror(r) << dendl;
+      on_finish->complete(r);
+      return;
+    }
+  }
+
   m_secret_key = secret_key.get_str();
+  if (util::is_config_key_uri(m_secret_key)) {
+    r = util::get_config_key(rados, m_secret_key, &m_secret_key);
+    if (r < 0) {
+      lderr(m_cct) << "failed to retrieve secret key from config: "
+                   << cpp_strerror(r) << dendl;
+      on_finish->complete(r);
+      return;
+    }
+  }
+
   ldout(m_cct, 10) << "url=" << m_url << ", "
                    << "access_key=" << m_access_key << dendl;
 
@@ -105,6 +128,7 @@ void S3Stream<I>::close(Context* on_finish) {
 
   if (!m_http_client) {
     on_finish->complete(0);
+    return;
   }
 
   m_http_client->close(on_finish);
@@ -147,7 +171,7 @@ void S3Stream<I>::process_request(HttpRequest& http_request) {
 
   // create HMAC-SHA1 signature from secret key + string-to-sign
   sha1_digest_t digest;
-  crypto::HMACSHA1 hmac(
+  ceph::crypto::HMACSHA1 hmac(
     reinterpret_cast<const unsigned char*>(m_secret_key.data()),
     m_secret_key.size());
   hmac.Update(reinterpret_cast<const unsigned char*>(string_to_sign.data()),

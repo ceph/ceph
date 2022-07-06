@@ -15,11 +15,10 @@
 #include <string_view>
 
 #include <errno.h>
-#include <fcntl.h>
 
 #include <boost/spirit/include/qi.hpp>
-#include <boost/spirit/include/phoenix_operator.hpp>
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix/operator.hpp>
+#include <boost/phoenix.hpp>
 
 #include "common/debug.h"
 #include "MDSAuthCaps.h"
@@ -64,7 +63,7 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
       lexeme[lit("'") >> *(char_ - '\'') >> '\''];
     unquoted_path %= +char_("a-zA-Z0-9_./-");
     network_str %= +char_("/.:a-fA-F0-9][");
-    fs_name_str %= +char_("a-zA-Z0-9-_.");
+    fs_name_str %= +char_("a-zA-Z0-9_.-");
 
     // match := [path=<path>] [uid=<uid> [gids=<gid>[,<gid>...]]
     // TODO: allow fsname, and root_squash to be specified with uid, and gidlist
@@ -86,17 +85,25 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
              (fs_name)[_val = phoenix::construct<MDSCapMatch>(std::string(),
 							      _1)]);
 
-    // capspec = * | r[w][p][s]
+    // capspec = * | r[w][f][p][s]
     capspec = spaces >> (
         lit("*")[_val = MDSCapSpec(MDSCapSpec::ALL)]
         |
         lit("all")[_val = MDSCapSpec(MDSCapSpec::ALL)]
         |
+        (lit("rwfps"))[_val = MDSCapSpec(MDSCapSpec::RWFPS)]
+        |
         (lit("rwps"))[_val = MDSCapSpec(MDSCapSpec::RWPS)]
+        |
+        (lit("rwfp"))[_val = MDSCapSpec(MDSCapSpec::RWFP)]
+        |
+        (lit("rwfs"))[_val = MDSCapSpec(MDSCapSpec::RWFS)]
         |
         (lit("rwp"))[_val = MDSCapSpec(MDSCapSpec::RWP)]
         |
         (lit("rws"))[_val = MDSCapSpec(MDSCapSpec::RWS)]
+        |
+        (lit("rwf"))[_val = MDSCapSpec(MDSCapSpec::RWF)]
         |
         (lit("rw"))[_val = MDSCapSpec(MDSCapSpec::RW)]
         |
@@ -272,6 +279,12 @@ bool MDSAuthCaps::is_capable(std::string_view inode_path,
         }
       }
 
+      if (mask & MAY_FULL) {
+        if (!grant.spec.allow_full()) {
+          continue;
+        }
+      }
+
       // check unix permissions?
       if (grant.match.uid == MDSCapMatch::MDS_AUTH_UID_ANY) {
         return true;
@@ -412,6 +425,9 @@ ostream &operator<<(ostream &out, const MDSCapSpec &spec)
     }
     if (spec.allow_write()) {
       out << "w";
+    }
+    if (spec.allow_full()) {
+      out << "f";
     }
     if (spec.allow_set_vxattr()) {
       out << "p";

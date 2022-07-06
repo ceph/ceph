@@ -27,6 +27,8 @@
 #include "include/stringify.h"
 #include <gtest/gtest.h>
 
+using namespace std;
+
 class KVTest : public ::testing::TestWithParam<const char*> {
 public:
   boost::scoped_ptr<KeyValueDB> db;
@@ -1276,7 +1278,7 @@ TEST_F(RocksDBResharding, change_reshard) {
 INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,
   KVTest,
-  ::testing::Values("leveldb", "rocksdb", "memdb"));
+  ::testing::Values("rocksdb", "memdb"));
 
 INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,
@@ -1287,9 +1289,7 @@ INSTANTIATE_TEST_SUITE_P(
 		    "Betelgeuse(3) D(3)"));
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);

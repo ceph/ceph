@@ -3,6 +3,7 @@
 
 #include "MgrStatMonitor.h"
 #include "mon/OSDMonitor.h"
+#include "mon/MgrMonitor.h"
 #include "mon/PGMap.h"
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
@@ -211,7 +212,14 @@ bool MgrStatMonitor::prepare_update(MonOpRequestRef op)
 
 bool MgrStatMonitor::preprocess_report(MonOpRequestRef op)
 {
+  auto m = op->get_req<MMonMgrReport>();
   mon.no_reply(op);
+  if (m->gid &&
+      m->gid != mon.mgrmon()->get_map().get_active_gid()) {
+    dout(10) << "ignoring report from non-active mgr " << m->gid
+	     << dendl;
+    return true;
+  }
   return false;
 }
 
@@ -324,10 +332,9 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
 
 void MgrStatMonitor::check_sub(Subscription *sub)
 {
-  const auto epoch = mon.monmap->get_epoch();
   dout(10) << __func__
 	   << " next " << sub->next
-	   << " have " << epoch << dendl;
+	   << " vs service_map.epoch " << service_map.epoch << dendl;
   if (sub->next <= service_map.epoch) {
     auto m = new MServiceMap(service_map);
     sub->session->con->send_message(m);
@@ -336,7 +343,7 @@ void MgrStatMonitor::check_sub(Subscription *sub)
 	  session_map.remove_sub(sub);
 	});
     } else {
-      sub->next = epoch + 1;
+      sub->next = service_map.epoch + 1;
     }
   }
 }

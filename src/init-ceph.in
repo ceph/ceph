@@ -36,9 +36,11 @@ else
 	ETCDIR=.
 	ASSUME_DEV=1
 	CEPH_LIB=$CEPH_ROOT/${BUILD_DIR}/lib
-	echo "$PYTHONPATH" | grep -q $CEPH_LIB || export PYTHONPATH=$CEPH_LIB/cython_modules/lib.3:$PYTHONPATH
-	echo "$LD_LIBRARY_PATH" | grep -q $CEPH_LIB || export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
-	echo "$DYLD_LIBRARY_PATH" | grep -q $CEPH_LIB || export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
+	# mgr shells out to radosgw-admin; give it a proper path
+	export PATH=$BINDIR:$PATH
+	echo "$PYTHONPATH" | grep -q $CEPH_LIB || export PYTHONPATH=$CEPH_ROOT/src/pybind:$CEPH_LIB/cython_modules/lib.3:$CEPH_ROOT/src/python-common:$PYTHONPATH
+	echo "$LD_LIBRARY_PATH" | grep -q $CEPH_LIB || export LD_LIBRARY_PATH=$CEPH_LIB:$CEPH_ROOT/${BUILD_DIR}/external/lib:$LD_LIBRARY_PATH
+	echo "$DYLD_LIBRARY_PATH" | grep -q $CEPH_LIB || export DYLD_LIBRARY_PATH=$CEPH_LIB:$CEPH_ROOT/${BUILD_DIR}/external/lib:$DYLD_LIBRARY_PATH
     else
 	BINDIR=@bindir@
 	SBINDIR=@sbindir@
@@ -293,9 +295,12 @@ for name in $what; do
 
     get_conf pid_file "$run_dir/$type.$id.pid" "pid file"
 
+    if [ ! -d $run_dir ]; then
+        install -d -m0770 -o ceph -g ceph /var/run/ceph
+    fi
+
     if [ "$command" = "start" -o "$command" = "onestart" ]; then
 	if [ -n "$pid_file" ]; then
-	    do_cmd "mkdir -p "`dirname $pid_file`
 	    cmd="$cmd --pid-file $pid_file"
 	fi
 
@@ -421,10 +426,6 @@ for name in $what; do
 	    fi
 
 	    echo Starting Ceph $name on $host...
-	    if [ ! -d $run_dir ]; then
-		# assume /var/run exists
-		install -d -m0770 -o ceph -g ceph /var/run/ceph
-	    fi
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
 	    get_conf pre_start "" "pre start command"

@@ -5,7 +5,6 @@
 #define CEPH_RGW_HTTP_CLIENT_H
 
 #include "common/async/yield_context.h"
-#include "common/RWLock.h"
 #include "common/Cond.h"
 #include "rgw_common.h"
 #include "rgw_string.h"
@@ -13,8 +12,8 @@
 
 #include <atomic>
 
-using param_pair_t = pair<string, string>;
-using param_vec_t = vector<param_pair_t>;
+using param_pair_t = std::pair<std::string, std::string>;
+using param_vec_t = std::vector<param_pair_t>;
 
 void rgw_http_client_init(CephContext *cct);
 void rgw_http_client_cleanup();
@@ -22,7 +21,8 @@ void rgw_http_client_cleanup();
 struct rgw_http_req_data;
 class RGWHTTPManager;
 
-class RGWHTTPClient : public RGWIOProvider
+class RGWHTTPClient : public RGWIOProvider,
+                      public NoDoutPrefix
 {
   friend class RGWHTTPManager;
 
@@ -40,20 +40,32 @@ class RGWHTTPClient : public RGWIOProvider
 
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
+  std::string ca_path;
+
+  std::string client_cert;
+
+  std::string client_key;
+
   std::atomic<unsigned> stopped { 0 };
 
 
 protected:
   CephContext *cct;
 
-  string method;
-  string url;
+  std::string method;
+  std::string url;
+
+  std::string protocol;
+  std::string host;
+  std::string resource_prefix;
 
   size_t send_len{0};
 
   param_vec_t headers;
 
   long  req_timeout{0L};
+
+  void init();
 
   RGWHTTPManager *get_manager();
 
@@ -102,19 +114,14 @@ public:
 
   virtual ~RGWHTTPClient();
   explicit RGWHTTPClient(CephContext *cct,
-                         const string& _method,
-                         const string& _url)
-    : has_send_len(false),
-      http_status(HTTP_STATUS_NOSTATUS),
-      req_data(nullptr),
-      verify_ssl(cct->_conf->rgw_verify_ssl),
-      cct(cct),
-      method(_method),
-      url(_url) {
-  }
+                         const std::string& _method,
+                         const std::string& _url);
 
-  void append_header(const string& name, const string& val) {
-    headers.push_back(pair<string, string>(name, val));
+  std::ostream& gen_prefix(std::ostream& out) const override;
+
+
+  void append_header(const std::string& name, const std::string& val) {
+    headers.push_back(std::pair<std::string, std::string>(name, val));
   }
 
   void set_send_length(size_t len) {
@@ -152,15 +159,15 @@ public:
 
   rgw_http_req_data *get_req_data() { return req_data; }
 
-  string to_str();
+  std::string to_str();
 
   int get_req_retcode();
 
-  void set_url(const string& _url) {
+  void set_url(const std::string& _url) {
     url = _url;
   }
 
-  void set_method(const string& _method) {
+  void set_method(const std::string& _method) {
     method = _method;
   }
 
@@ -170,6 +177,18 @@ public:
 
   void *get_io_user_info() override {
     return user_info;
+  }
+
+  void set_ca_path(const std::string& _ca_path) {
+    ca_path = _ca_path;
+  }
+
+  void set_client_cert(const std::string& _client_cert) {
+    client_cert = _client_cert;
+  }
+
+  void set_client_key(const std::string& _client_key) {
+    client_key = _client_key;
   }
 };
 
@@ -181,8 +200,8 @@ public:
   typedef std::set<header_name_t, ltstr_nocase> header_spec_t;
 
   RGWHTTPHeadersCollector(CephContext * const cct,
-                          const string& method,
-                          const string& url,
+                          const std::string& method,
+                          const std::string& url,
                           const header_spec_t &relevant_headers)
     : RGWHTTPClient(cct, method, url),
       relevant_headers(relevant_headers) {
@@ -213,8 +232,8 @@ class RGWHTTPTransceiver : public RGWHTTPHeadersCollector {
 
 public:
   RGWHTTPTransceiver(CephContext * const cct,
-                     const string& method,
-                     const string& url,
+                     const std::string& method,
+                     const std::string& url,
                      bufferlist * const read_bl,
                      const header_spec_t intercept_headers = {})
     : RGWHTTPHeadersCollector(cct, method, url, intercept_headers),
@@ -223,8 +242,8 @@ public:
   }
 
   RGWHTTPTransceiver(CephContext * const cct,
-                     const string& method,
-                     const string& url,
+                     const std::string& method,
+                     const std::string& url,
                      bufferlist * const read_bl,
                      const bool verify_ssl,
                      const header_spec_t intercept_headers = {})
@@ -275,10 +294,10 @@ class RGWHTTPManager {
   std::atomic<unsigned> is_stopped { 0 };
 
   ceph::shared_mutex reqs_lock = ceph::make_shared_mutex("RGWHTTPManager::reqs_lock");
-  map<uint64_t, rgw_http_req_data *> reqs;
-  list<rgw_http_req_data *> unregistered_reqs;
-  list<set_state> reqs_change_state;
-  map<uint64_t, rgw_http_req_data *> complete_reqs;
+  std::map<uint64_t, rgw_http_req_data *> reqs;
+  std::list<rgw_http_req_data *> unregistered_reqs;
+  std::list<set_state> reqs_change_state;
+  std::map<uint64_t, rgw_http_req_data *> complete_reqs;
   int64_t num_reqs = 0;
   int64_t max_threaded_req = 0;
   int thread_pipe[2];

@@ -177,3 +177,4 @@ def task(ctx, config):
     manager.wait_till_osd_is_up(1)
     manager.wait_for_clean()
     run.wait(procs)
+    manager.wait_for_clean()

@@ -36,7 +36,10 @@ enum {
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
-static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
+
+using namespace std;
+
+static std::ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".openfiles ";
 }
 
@@ -268,13 +271,14 @@ public:
 
 void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSContext *fin)
 {
-  dout(10) << __func__ << " log_seq " << log_seq << dendl;
+  dout(10) << __func__ << " log_seq " << log_seq << " committed_log_seq " << committed_log_seq
+           << " committing_log_seq " << committing_log_seq << dendl;
   if (r < 0) {
     mds->handle_write_error(r);
     return;
   }
 
-  ceph_assert(log_seq <= committing_log_seq);
+  ceph_assert(log_seq == committing_log_seq);
   ceph_assert(log_seq >= committed_log_seq);
   committed_log_seq = log_seq;
   num_pending_commit--;
@@ -317,7 +321,7 @@ void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
 			 new C_OnFinisher(new C_IO_OFT_Save(this, log_seq, c),
 			 mds->finisher));
   SnapContext snapc;
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
   for (auto& [idx, vops] : ops_map) {
     object_t oid = get_object_name(idx);
     for (auto& op : vops) {
@@ -333,7 +337,8 @@ void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
 
 void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 {
-  dout(10) << __func__ << " log_seq " << log_seq << dendl;
+  dout(10) << __func__ << " log_seq " << log_seq << " committing_log_seq:"
+          << committing_log_seq << dendl;
 
   ceph_assert(num_pending_commit == 0);
   num_pending_commit++;
@@ -345,7 +350,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
   C_GatherBuilder gather(g_ceph_context);
 
   SnapContext snapc;
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
 
   const unsigned max_write_size = mds->mdcache->max_dir_commit_size;
 
@@ -728,7 +733,7 @@ void OpenFileTable::_read_omap_values(const std::string& key, unsigned idx,
 {
     object_t oid = get_object_name(idx);
     dout(10) << __func__ << ": load from '" << oid << ":" << key << "'" << dendl;
-    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+    object_locator_t oloc(mds->get_metadata_pool());
     C_IO_OFT_Load *c = new C_IO_OFT_Load(this, idx, first);
     ObjectOperation op;
     if (first)
@@ -745,7 +750,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 				 std::map<std::string, bufferlist> &values)
 {
   using ceph::decode;
-  int err = -EINVAL;
+  int err = -CEPHFS_EINVAL;
 
   auto decode_func = [this](unsigned idx, inodeno_t ino, bufferlist &bl) {
     auto p = bl.cbegin();
@@ -867,7 +872,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
     C_GatherBuilder gather(g_ceph_context,
 			   new C_OnFinisher(new C_IO_OFT_Recover(this),
 					    mds->finisher));
-    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+    object_locator_t oloc(mds->get_metadata_pool());
     SnapContext snapc;
 
     for (unsigned omap_idx = 0; omap_idx < loaded_journals.size(); omap_idx++) {
@@ -1056,6 +1061,12 @@ void OpenFileTable::_prefetch_dirfrags()
     CInode *diri = mdcache->get_inode(ino);
     if (!diri)
       continue;
+
+    if (!diri->is_dir()) {
+      dout(10) << " " << *diri << " is not dir" << dendl;
+      continue;
+    }
+
     if (diri->state_test(CInode::STATE_REJOINUNDEF))
       continue;
 
@@ -1087,7 +1098,7 @@ void OpenFileTable::_prefetch_dirfrags()
       ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
 
-    if (!(++num_opening_dirfrags % 1000))
+    if (!(++num_opening_dirfrags % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -1113,7 +1124,7 @@ void OpenFileTable::_prefetch_inodes()
 
   int64_t pool;
   if (prefetch_state == DIR_INODES)
-    pool = mds->mdsmap->get_metadata_pool();
+    pool = mds->get_metadata_pool();
   else if (prefetch_state == FILE_INODES)
     pool = mds->mdsmap->get_first_data_pool();
   else
@@ -1125,6 +1136,8 @@ void OpenFileTable::_prefetch_inodes()
     for (auto& it : logseg_destroyed_inos)
       destroyed_inos_set.insert(it.second.begin(), it.second.end());
   }
+
+  mdcache->open_ino_batch_start();
 
   for (auto& [ino, anchor] : loaded_anchor_map) {
     if (destroyed_inos_set.count(ino))
@@ -1161,9 +1174,11 @@ void OpenFileTable::_prefetch_inodes()
       mdcache->open_ino(ino, pool, fin, false);
     }
 
-    if (!(num_opening_inodes % 1000))
+    if (!(num_opening_inodes % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
+
+  mdcache->open_ino_batch_submit();
 
   _open_ino_finish(inodeno_t(0), 0);
 }

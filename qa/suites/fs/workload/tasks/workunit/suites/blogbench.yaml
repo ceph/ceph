@@ -1,1 +1,10 @@
-.qa/cephfs/tasks/cfuse_workunit_suites_blogbench.yaml
+overrides:
+  check-counter:
+    counters:
+      mds:
+        - "mds.dir_split"
+tasks:
+- workunit:
+    clients:
+      all:
+        - suites/blogbench.sh

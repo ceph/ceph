@@ -14,7 +14,7 @@ def create_parser(prog, description):
     parser.add_argument(
         '--data',
         required=True,
-    type=arg_validators.ValidDevice(as_string=True),
+        type=arg_validators.ValidRawDevice(as_string=True),
         help='a raw device to use for the OSD',
     )
     parser.add_argument(
@@ -25,6 +25,7 @@ def create_parser(prog, description):
         '--crush-device-class',
         dest='crush_device_class',
         help='Crush device class to assign this OSD to',
+        default=""
     )
     parser.add_argument(
         '--no-tmpfs',
@@ -34,12 +35,14 @@ def create_parser(prog, description):
     parser.add_argument(
         '--block.db',
         dest='block_db',
-        help='Path to bluestore block.db block device'
+        help='Path to bluestore block.db block device',
+        type=arg_validators.ValidRawDevice(as_string=True)
     )
     parser.add_argument(
         '--block.wal',
         dest='block_wal',
-        help='Path to bluestore block.wal block device'
+        help='Path to bluestore block.wal block device',
+        type=arg_validators.ValidRawDevice(as_string=True)
     )
     parser.add_argument(
         '--dmcrypt',

@@ -46,10 +46,12 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     void ceph_shutdown(ceph_mount_info *cmount)
 
     int ceph_getaddrs(ceph_mount_info* cmount, char** addrs)
+    int64_t ceph_get_fs_cid(ceph_mount_info *cmount)
     int ceph_conf_read_file(ceph_mount_info *cmount, const char *path_list)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_conf_get(ceph_mount_info *cmount, const char *option, char *buf, size_t len)
     int ceph_conf_set(ceph_mount_info *cmount, const char *option, const char *value)
+    int ceph_set_mount_timeout(ceph_mount_info *cmount, uint32_t timeout)
 
     int ceph_mount(ceph_mount_info *cmount, const char *root)
     int ceph_select_filesystem(ceph_mount_info *cmount, const char *fs_name)
@@ -118,6 +120,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_lazyio_synchronize(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
     int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode)
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)

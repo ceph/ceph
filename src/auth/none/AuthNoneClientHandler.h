@@ -26,6 +26,10 @@ public:
   AuthNoneClientHandler(CephContext *cct_)
     : AuthClientHandler(cct_) {}
 
+  AuthNoneClientHandler* clone() const override {
+    return new AuthNoneClientHandler(*this);
+  }
+
   void reset() override { }
 
   void prepare_build_request() override {}

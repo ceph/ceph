@@ -11,7 +11,7 @@ License version 2, as published by the Free Software
 Foundation.  See file COPYING.
 """
 
-from unittest import TestCase
+import unittest
 
 from ceph_daemon import DaemonWatcher
 
@@ -21,7 +21,7 @@ except ImportError:
     from io import StringIO
 
 
-class TestDaemonWatcher(TestCase):
+class TestDaemonWatcher(unittest.TestCase):
     def test_format(self):
         dw = DaemonWatcher(None)
 
@@ -39,10 +39,14 @@ class TestDaemonWatcher(TestCase):
     def test_supports_color(self):
         dw = DaemonWatcher(None)
         # Can't count on having a tty available during tests, so only test the false case
-        self.assertEqual(dw.supports_color(StringIO()), False)
+        self.assertFalse(dw.supports_color(StringIO()))
+
+
+if __name__ == '__main__':
+    unittest.main()
+
 
 # Local Variables:
 # compile-command: "cd ../../..;
-#  PYTHONPATH=src/pybind nosetests --stop \
-#  src/test/pybind/test_ceph_daemon.py"
+#  PYTHONPATH=src/pybind python3 src/test/pybind/test_ceph_daemon.py"
 # End:

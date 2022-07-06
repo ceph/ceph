@@ -7,6 +7,7 @@ import logging
 from teuthology.exceptions import ConfigError
 from teuthology.parallel import parallel
 from teuthology import misc as teuthology
+from tasks.ceph_manager import get_valgrind_args
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def _run_one_client(ctx, config, role):
     teuthology.deep_merge(config, overrides.get('rbd_fsx', {}))
 
     if config.get('valgrind'):
-        args = teuthology.get_valgrind_args(
+        args = get_valgrind_args(
             testdir,
             'fsx_{id}'.format(id=role),
             args,

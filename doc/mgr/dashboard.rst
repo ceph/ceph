@@ -83,7 +83,7 @@ The Ceph Dashboard offers the following monitoring and management capabilities:
   their descriptions, types, default and currently set values.  These may be edited as well.
 * **Pools**: List Ceph pools and their details (e.g. applications,
   pg-autoscaling, placement groups, replication size, EC profile, CRUSH
-  rulesets, quotas etc.)
+  rules, quotas etc.)
 * **OSDs**: List OSDs, their status and usage statistics as well as
   detailed information like attributes (OSD map), metadata, performance
   counters and usage histograms for read/write operations. Mark OSDs
@@ -376,42 +376,18 @@ password.
 Enabling the Object Gateway Management Frontend
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To use the Object Gateway management functionality of the dashboard, you will
-need to provide the login credentials of a user with the ``system`` flag
-enabled. If you do not have a ``system`` user already, you must create one::
+When RGW is deployed with cephadm, the RGW credentials used by the
+dashboard will be automatically configured. You can also manually force the
+credentials to be set up with::
 
-  $ radosgw-admin user create --uid=<user_id> --display-name=<display_name> \
-      --system
+  $ ceph dashboard set-rgw-credentials
 
-Take note of the keys ``access_key`` and ``secret_key`` in the output.
+This will create an RGW user with uid ``dashboard`` for each realm in
+the system.
 
-To obtain the credentials of an existing user via `radosgw-admin`::
+If you've configured a custom 'admin' resource in your RGW admin API, you should set it here also::
 
-  $ radosgw-admin user info --uid=<user_id>
-
-Finally, provide the credentials to the dashboard::
-
-  $ ceph dashboard set-rgw-api-access-key -i <file-containing-access-key>
-  $ ceph dashboard set-rgw-api-secret-key -i <file-containing-secret-key>
-
-In a simple configuration with a single RGW endpoint, this is all you
-have to do to get the Object Gateway management functionality working. The
-dashboard will try to automatically determine the host and port
-from the Ceph Manager's service map.
-
-If multiple zones are used, it will automatically determine the host within the
-master zone group and master zone. This should be sufficient for most setups,
-but in some circumstances you might want to set the host and port manually::
-
-  $ ceph dashboard set-rgw-api-host <host>
-  $ ceph dashboard set-rgw-api-port <port>
-
-In addition to the settings mentioned so far, the following settings do also
-exist and you may find yourself in the situation that you have to use them::
-
-  $ ceph dashboard set-rgw-api-scheme <scheme>  # http or https
   $ ceph dashboard set-rgw-api-admin-resource <admin_resource>
-  $ ceph dashboard set-rgw-api-user-id <user_id>
 
 If you are using a self-signed certificate in your Object Gateway setup,
 you should disable certificate verification in the dashboard to avoid refused
@@ -558,14 +534,14 @@ on appropriate hosts, proceed with the following steps.
     Dashboards can be added to Grafana by importing dashboard JSON files.
     Use the following command to download the JSON files::
 
-      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
+      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/ceph-mixin/dashboards_out/<Dashboard-name>.json
 
     You can find various dashboard JSON files `here <https://github.com/ceph/ceph/tree/
-    master/monitoring/grafana/dashboards>`_ .
+    master/monitoring/ceph-mixin/dashboards_out>`_ .
 
     For Example, for ceph-cluster overview you can use::
 
-      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
+      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/ceph-mixin/dashboards_out/ceph-cluster.json
 
     You may also author your own dashboards.
 
@@ -620,7 +596,7 @@ The format of url is : `<protocol>:<IP-address>:<port>`
 If you are using a self-signed certificate for Grafana,
 disable certificate verification in the dashboard to avoid refused connections,
 which can be a result of certificates signed by an unknown CA or that do not
-matchn the host name::
+match the host name::
 
   $ ceph dashboard set-grafana-api-ssl-verify False
 
@@ -693,7 +669,7 @@ Parameters:
 * **<idp_metadata>**: URL to remote (`http://`, `https://`) or local (`file://`) path or content of the IdP metadata XML (e.g., `https://myidp/metadata`, `file:///home/myuser/metadata.xml`).
 * **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
 * **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
-* **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
+* **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption (these file paths should be accessible from the active ceph-mgr instance).
 
 .. note::
 
@@ -966,6 +942,7 @@ scopes are:
 - **iscsi**: includes all features related to iSCSI management.
 - **rgw**: includes all features related to RADOS Gateway (RGW) management.
 - **cephfs**: includes all features related to CephFS management.
+- **nfs-ganesha**: includes all features related to NFS Ganesha management.
 - **manager**: include all features related to Ceph Manager
   management.
 - **log**: include all features related to Ceph logs management.
@@ -1202,88 +1179,8 @@ A log entry may look like this::
 NFS-Ganesha Management
 ----------------------
 
-The Ceph Dashboard can manage `NFS Ganesha <http://nfs-ganesha.github.io/>`_ exports that use
-CephFS or RGW as their backstore.
-
-To enable this feature in Ceph Dashboard there are some assumptions that need
-to be met regarding the way NFS-Ganesha services are configured.
-
-The dashboard manages NFS-Ganesha config files stored in RADOS objects on the Ceph Cluster.
-NFS-Ganesha must store part of their configuration in the Ceph cluster.
-
-These configuration files follow the below conventions.
-Each export block must be stored in its own RADOS object named
-``export-<id>``, where ``<id>`` must match the ``Export_ID`` attribute of the
-export configuration. Then, for each NFS-Ganesha service daemon there should
-exist a RADOS object named ``conf-<daemon_id>``, where ``<daemon_id>`` is an
-arbitrary string that should uniquely identify the daemon instance (e.g., the
-hostname where the daemon is running).
-Each ``conf-<daemon_id>`` object contains the RADOS URLs to the exports that
-the NFS-Ganesha daemon should serve. These URLs are of the form::
-
-  %url rados://<pool_name>[/<namespace>]/export-<id>
-
-Both the ``conf-<daemon_id>`` and ``export-<id>`` objects must be stored in the
-same RADOS pool/namespace.
-
-
-Configuring NFS-Ganesha in the Dashboard
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-To enable management of NFS-Ganesha exports in the Ceph Dashboard, we
-need to tell the Dashboard the RADOS pool and namespace in which
-configuration objects are stored. The Ceph Dashboard can then access them
-by following the naming convention described above.
-
-The Dashboard command to configure the NFS-Ganesha configuration objects
-location is::
-
-  $ ceph dashboard set-ganesha-clusters-rados-pool-namespace <pool_name>[/<namespace>]
-
-After running the above command, the Ceph Dashboard is able to find the NFS-Ganesha
-configuration objects and we can manage exports through the Web UI.
-
-.. note::
-
-    A dedicated pool for the NFS shares should be used. Otherwise it can cause the
-    `known issue <https://tracker.ceph.com/issues/46176>`_ with listing of shares
-    if the NFS objects are stored together with a lot of other objects in a single
-    pool.
-
-
-Support for Multiple NFS-Ganesha Clusters
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The Ceph Dashboard also supports management of NFS-Ganesha exports belonging
-to other NFS-Ganesha clusters. An NFS-Ganesha cluster is a group of
-NFS-Ganesha service daemons sharing the same exports. NFS-Ganesha
-clusters are independent and don't share the exports configuration among each
-other.
-
-Each NFS-Ganesha cluster should store its configuration objects in a
-unique RADOS pool/namespace to isolate the configuration.
-
-To specify the the configuration location of each NFS-Ganesha cluster we
-can use the same command as above but with a different value pattern::
-
-  $ ceph dashboard set-ganesha-clusters-rados-pool-namespace <cluster_id>:<pool_name>[/<namespace>](,<cluster_id>:<pool_name>[/<namespace>])*
-
-The ``<cluster_id>`` is an arbitrary string that should uniquely identify the
-NFS-Ganesha cluster.
-
-When configuring the Ceph Dashboard with multiple NFS-Ganesha clusters, the
-Web UI will allow you to choose to which cluster an export belongs.
-
-
-Support for NFS-Ganesha Clusters Deployed by the Orchestrator
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The Ceph Dashboard can be used to manage NFS-Ganesha clusters deployed by the
-Orchestrator and will detect them automatically. For more details
-on deploying NFS-Ganesha clusters with the Orchestrator, please see :ref:`orchestrator-cli-stateless-services`.
-Or particularly, see :ref:`deploy-cephadm-nfs-ganesha` for how to deploy
-NFS-Ganesha clusters with the Cephadm backend.
-
+The dashboard requires enabling the NFS module which will be used to manage
+NFS clusters and NFS exports. For more information check :ref:`mgr-nfs`.
 
 Plug-ins
 --------
@@ -1295,6 +1192,7 @@ and loosely coupled fashion.
 
 .. include:: dashboard_plugins/feature_toggles.inc.rst
 .. include:: dashboard_plugins/debug.inc.rst
+.. include:: dashboard_plugins/motd.inc.rst
 
 
 Troubleshooting the Dashboard
@@ -1314,7 +1212,7 @@ The command returns the URL where the Ceph Dashboard is located: ``https://<host
 
     Many Ceph tools return results in JSON format. We suggest that
     you install the `jq <https://stedolan.github.io/jq>`_ command-line
-    utility to faciliate working with JSON data.
+    utility to facilitate working with JSON data.
 
 
 Accessing the Dashboard
@@ -1421,7 +1319,7 @@ notification on the frontend. Run through the following scenarios to debug.
    found by searching for keywords, such as *500 Internal Server Error*,
    followed by ``traceback``. The end of a traceback contains more details about
    what exact error occurred.
-#. Check your web browser's Javascript Console for any errors.
+#. Check your web browser's JavaScript Console for any errors.
 
 
 Ceph Dashboard Logs
@@ -1471,3 +1369,73 @@ something like this::
     ...
     $ ceph config reset 11
 
+.. _centralized-logging:
+
+Enable Centralized Logging in Dashboard
+"""""""""""""""""""""""""""""""""""""""
+
+To learn more about centralized logging, see :ref:`cephadm-monitoring-centralized-logs`
+
+1. Create the Loki service on any particular host using "Create Services" option.
+
+2. Similarly create the Promtail service which will be by default deployed 
+   on all the running hosts.
+
+3. To see debug-level messages as well as info-level events, run the following command via CLI::
+
+    $ ceph config set mgr mgr/cephadm/log_to_cluster_level debug
+
+4. To enable logging to files, run the following commands via CLI::
+
+    $ ceph config set global log_to_file true
+
+    $ ceph config set global mon_cluster_log_to_file true
+
+5. Click on the Daemon Logs tab under Cluster -> Logs.
+
+6. You can find some pre-defined labels there on clicking the Log browser button such as filename,
+   job etc that can help you query the logs at one go.
+
+7. You can query the logs with LogQL for advanced search and perform some
+   calculations as well - https://grafana.com/docs/loki/latest/logql/.
+
+
+Reporting issues from Dashboard
+"""""""""""""""""""""""""""""""
+
+Ceph-Dashboard provides two ways to create an issue in the Ceph Issue Tracker,
+either using the Ceph command line interface or by using the Ceph Dashboard
+user interface.
+
+To create an issue in the Ceph Issue Tracker, a user needs to have an account
+on the issue tracker. Under the ``my account`` tab in the Ceph Issue Tracker,
+the user can see their API access key. This key is used for authentication
+when creating a new issue. To store the Ceph API access key, in the CLI run:
+
+``ceph dashboard set-issue-tracker-api-key -i <file-containing-key>``
+
+Then on successful update, you can create an issue using:
+
+``ceph dashboard create issue <project> <tracker_type> <subject> <description>``
+
+The available projects to create an issue on are:
+#. dashboard
+#. block
+#. object
+#. file_system
+#. ceph_manager
+#. orchestrator
+#. ceph_volume
+#. core_ceph
+
+The available tracker types are:
+#. bug
+#. feature
+
+The subject and description are then set by the user.
+
+The user can also create an issue using the Dashboard user interface. The settings
+icon drop down menu on the top right of the navigation bar has the option to
+``Raise an issue``. On clicking it, a modal dialog opens that has the option to
+select the project and tracker from their respective drop down menus. The subject
+and multiline description are added by the user. The user can then submit the issue.

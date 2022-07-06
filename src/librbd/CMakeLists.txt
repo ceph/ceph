@@ -1,7 +1,3 @@
-if(Boost_VERSION VERSION_GREATER_EQUAL 1.74)
-  add_definitions(-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
-endif()
-
 set(librbd_types_srcs
   journal/Types.cc
   mirroring_watcher/Types.cc
@@ -16,9 +12,9 @@ endif()
 add_library(rbd_types STATIC
   ${librbd_types_srcs})
 
-if (WITH_RBD_RWL AND WITH_RBD_SSD_CACHE)
+if (WITH_RBD_RWL)
   target_link_libraries(rbd_types
-    PRIVATE pmem::pmemobj)
+    PUBLIC pmdk::pmemobj)
 endif()
 
 set(librbd_internal_srcs
@@ -54,6 +50,7 @@ set(librbd_internal_srcs
   api/PoolMetadata.cc
   api/Snapshot.cc
   api/Trash.cc
+  api/Utils.cc
   asio/ContextWQ.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
@@ -63,6 +60,10 @@ set(librbd_internal_srcs
   crypto/CryptoContextPool.cc
   crypto/CryptoImageDispatch.cc
   crypto/CryptoObjectDispatch.cc
+  crypto/FormatRequest.cc
+  crypto/LoadRequest.cc
+  crypto/ShutDownCryptoRequest.cc
+  crypto/Utils.cc
   crypto/openssl/DataCryptor.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
@@ -115,6 +116,7 @@ set(librbd_internal_srcs
   io/Types.cc
   io/Utils.cc
   io/WriteBlockImageDispatch.cc
+  io/IoOperations.cc
   journal/CreateRequest.cc
   journal/DemoteRequest.cc
   journal/ObjectDispatch.cc
@@ -137,6 +139,7 @@ set(librbd_internal_srcs
   migration/ImageDispatch.cc
   migration/NativeFormat.cc
   migration/OpenSourceImageRequest.cc
+  migration/QCOWFormat.cc
   migration/RawFormat.cc
   migration/RawSnapshot.cc
   migration/S3Stream.cc
@@ -209,6 +212,7 @@ endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND librbd_internal_srcs
+          crypto/luks/EncryptionFormat.cc
           crypto/luks/Header.cc
           crypto/luks/FormatRequest.cc
           crypto/luks/LoadRequest.cc)
@@ -265,7 +269,6 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     cache/pwl/LogEntry.cc
     cache/pwl/LogMap.cc
     cache/pwl/LogOperation.cc
-    cache/pwl/ReadRequest.cc
     cache/pwl/Request.cc
     cache/pwl/ShutdownRequest.cc
     cache/pwl/SyncPoint.cc
@@ -275,12 +278,20 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     if(WITH_RBD_SSD_CACHE)
       set(rbd_plugin_pwl_srcs
         ${rbd_plugin_pwl_srcs}
-        cache/pwl/SSDWriteLog.cc)
+        cache/pwl/ssd/LogEntry.cc
+        cache/pwl/ssd/LogOperation.cc
+        cache/pwl/ssd/ReadRequest.cc
+        cache/pwl/ssd/Request.cc
+        cache/pwl/ssd/WriteLog.cc)
     endif()
     if(WITH_RBD_RWL)
       set(rbd_plugin_pwl_srcs
         ${rbd_plugin_pwl_srcs}
-        cache/pwl/ReplicatedWriteLog.cc)
+        cache/pwl/rwl/WriteLog.cc
+        cache/pwl/rwl/LogEntry.cc
+        cache/pwl/rwl/LogOperation.cc
+        cache/pwl/rwl/ReadRequest.cc
+        cache/pwl/rwl/Request.cc)
     endif()
 
   add_library(librbd_plugin_pwl_cache SHARED
@@ -289,12 +300,14 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     blk
     ceph-common
     cls_rbd_client
+    libneorados
+    librados
     StdFilesystem::filesystem)
 
   if(WITH_RBD_RWL)
     target_link_libraries(librbd_plugin_pwl_cache
-      PUBLIC pmem::pmemobj
-      PRIVATE pmem::pmem)
+      PUBLIC pmdk::pmemobj
+      PRIVATE pmdk::pmem)
   endif()
 
   set_target_properties(librbd_plugin_pwl_cache PROPERTIES
@@ -315,11 +328,11 @@ target_link_libraries(librbd PRIVATE
   rbd_internal
   rbd_types
   journal
-  libneorados
-  librados
   cls_rbd_client
   cls_lock_client
   cls_journal_client
+  libneorados
+  librados
   ceph-common
   pthread
   ${CMAKE_DL_LIBS}
@@ -331,7 +344,7 @@ endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd
-    VERSION 1.12.0
+    VERSION 1.17.0
     SOVERSION 1
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)

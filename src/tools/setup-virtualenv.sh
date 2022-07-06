@@ -40,15 +40,20 @@ TEMP=$($GETOPT --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
 test $? != 0 && usage
 eval set -- "$TEMP"
 
-PYTHON_OPTION=""
+PYTHON=python3
 while true ; do
     case "$1" in
         -h|--help) usage ;;  # does not return
-        --python) PYTHON_OPTION="--python=$2" ; shift ; shift ;;
+        --python) PYTHON="$2" ; shift ; shift ;;
         --) shift ; break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
 done
+
+if ! $PYTHON -VV; then
+    echo "$SCRIPTNAME: unable to locate a valid PYTHON_BINARY"
+    usage
+fi
 
 DIR=$1
 if [ -z "$DIR" ] ; then
@@ -57,7 +62,7 @@ if [ -z "$DIR" ] ; then
 fi
 rm -fr $DIR
 mkdir -p $DIR
-virtualenv $PYTHON_OPTION $DIR
+$PYTHON -m venv $DIR
 . $DIR/bin/activate
 
 if pip --help | grep -q disable-pip-version-check; then
@@ -66,17 +71,9 @@ else
     DISABLE_PIP_VERSION_CHECK=
 fi
 
-if pip --help | grep -q use-feature; then
-    USE_FEATURE=--use-feature=2020-resolver
-else
-    USE_FEATURE=
-fi
-
 # older versions of pip will not install wrap_console scripts
 # when using wheel packages
-pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install \
-    $USE_FEATURE \
-    --upgrade 'pip >= 6.1'
+pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install --upgrade 'pip >= 6.1'
 
 if pip --help | grep -q disable-pip-version-check; then
     DISABLE_PIP_VERSION_CHECK=--disable-pip-version-check
@@ -85,13 +82,11 @@ else
 fi
 
 if test -d wheelhouse ; then
-    export NO_INDEX=--no-index
+    NO_INDEX=--no-index
+    FIND_LINKS_OPT=--find-links=file://$(pwd)/wheelhouse
 fi
 
-pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install \
-    $USE_FEATURE \
-    $NO_INDEX \
-    --find-links=file://$(pwd)/wheelhouse 'tox >=2.9.1'
+pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX $FIND_LINKS_OPT 'tox >=2.9.1'
 
 require_files=$(ls *requirements*.txt 2>/dev/null) || true
 constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
@@ -101,9 +96,8 @@ md5=wheelhouse/md5
 if test "$require"; then
     if ! test -f $md5 || ! md5sum -c wheelhouse/md5 > /dev/null; then
         NO_INDEX=''
+        FIND_LINKS_OPT=''
     fi
     pip --exists-action i $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install \
-        $USE_FEATURE \
-        $NO_INDEX \
-        --find-links=file://$(pwd)/wheelhouse $require $constraint
+        $NO_INDEX $FIND_LINKS_OPT $require $constraint
 fi

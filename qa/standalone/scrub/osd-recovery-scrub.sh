@@ -42,6 +42,7 @@ function TEST_recovery_scrub_1() {
     OSDS=4
     PGS=1
     OBJECTS=100
+    ERRORS=0
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true \
@@ -131,6 +132,99 @@ function TEST_recovery_scrub_1() {
     return 0
 }
 
+##
+# a modified version of wait_for_scrub(), which terminates if the Primary
+# of the to-be-scrubbed PG changes
+#
+# Given the *last_scrub*, wait for scrub to happen on **pgid**. It
+# will fail if scrub does not complete within $TIMEOUT seconds. The
+# repair is complete whenever the **get_last_scrub_stamp** function
+# reports a timestamp different from the one given in argument.
+#
+# @param pgid the id of the PG
+# @param the primary OSD when started
+# @param last_scrub timestamp of the last scrub for *pgid*
+# @return 0 on success, 1 on error
+#
+function wait_for_scrub_mod() {
+    local pgid=$1
+    local orig_primary=$2
+    local last_scrub="$3"
+    local sname=${4:-last_scrub_stamp}
+
+    for ((i=0; i < $TIMEOUT; i++)); do
+        sleep 0.2
+        if test "$(get_last_scrub_stamp $pgid $sname)" '>' "$last_scrub" ; then
+            return 0
+        fi
+        sleep 1
+        # are we still the primary?
+        local current_primary=`bin/ceph pg $pgid query | jq '.acting[0]' `
+        if [ $orig_primary != $current_primary ]; then
+            echo $orig_primary no longer primary for $pgid
+            return 0
+        fi
+    done
+    return 1
+}
+
+##
+# A modified version of pg_scrub()
+#
+# Run scrub on **pgid** and wait until it completes. The pg_scrub
+# function will fail if repair does not complete within $TIMEOUT
+# seconds. The pg_scrub is complete whenever the
+# **get_last_scrub_stamp** function reports a timestamp different from
+# the one stored before starting the scrub, or whenever the Primary
+# changes.
+#
+# @param pgid the id of the PG
+# @return 0 on success, 1 on error
+#
+function pg_scrub_mod() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    # locate the primary
+    local my_primary=`bin/ceph pg $pgid query | jq '.acting[0]' `
+    local recovery=false
+    ceph pg scrub $pgid
+    #ceph --format json pg dump pgs | jq ".pg_stats | .[] | select(.pgid == \"$pgid\") | .state"
+    if ceph --format json pg dump pgs | jq ".pg_stats | .[] | select(.pgid == \"$pgid\") | .state" | grep -q recovering
+    then
+      recovery=true
+    fi
+    wait_for_scrub_mod $pgid $my_primary "$last_scrub" || return 1
+    if test $recovery = "true"
+    then
+      return 2
+    fi
+}
+
+# Same as wait_background() except that it checks for exit code 2 and bumps recov_scrub_count
+function wait_background_check() {
+    # We extract the PIDS from the variable name
+    pids=${!1}
+
+    return_code=0
+    for pid in $pids; do
+        wait $pid
+	retcode=$?
+	if test $retcode -eq 2
+	then
+	  recov_scrub_count=$(expr $recov_scrub_count + 1)
+	elif test $retcode -ne 0
+	then
+            # If one process failed then return 1
+            return_code=1
+        fi
+    done
+
+    # We empty the variable reporting that all process ended
+    eval "$1=''"
+
+    return $return_code
+}
+
 # osd_scrub_during_recovery=true make sure scrub happens
 function TEST_recovery_scrub_2() {
     local dir=$1
@@ -139,7 +233,7 @@ function TEST_recovery_scrub_2() {
     TESTDATA="testdata.$$"
     OSDS=8
     PGS=32
-    OBJECTS=4
+    OBJECTS=40
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true \
@@ -147,7 +241,7 @@ function TEST_recovery_scrub_2() {
     run_mgr $dir x || return 1
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-        run_osd $dir $osd --osd_scrub_during_recovery=true || return 1
+        run_osd $dir $osd --osd_scrub_during_recovery=true --osd_recovery_sleep=10 || return 1
     done
 
     # Create a pool with $PGS pgs
@@ -167,37 +261,42 @@ function TEST_recovery_scrub_2() {
     ceph pg dump pgs
 
     # Wait for recovery to start
-    set -o pipefail
     count=0
     while(true)
     do
-      if ceph --format json pg dump pgs |
-        jq '.pg_stats | [.[] | .state | contains("recovering")]' | grep -q true
+      #ceph --format json pg dump pgs | jq '.pg_stats | [.[].state]'
+      if test $(ceph --format json pg dump pgs |
+	      jq '.pg_stats | [.[].state]'| grep recovering | wc -l) -ge 2
       then
         break
       fi
       sleep 2
       if test "$count" -eq "10"
       then
-        echo "Recovery never started"
+        echo "Not enough recovery started simultaneously"
         return 1
       fi
       count=$(expr $count + 1)
     done
-    set +o pipefail
     ceph pg dump pgs
 
     pids=""
+    recov_scrub_count=0
     for pg in $(seq 0 $(expr $PGS - 1))
     do
-        run_in_background pids pg_scrub $poolid.$(printf "%x" $pg)
+        run_in_background pids pg_scrub_mod $poolid.$(printf "%x" $pg)
     done
-    ceph pg dump pgs
-    wait_background pids
+    wait_background_check pids
     return_code=$?
     if [ $return_code -ne 0 ]; then return $return_code; fi
 
     ERRORS=0
+    if test $recov_scrub_count -eq 0
+    then
+      echo "No scrubs occurred while PG recovering"
+      ERRORS=$(expr $ERRORS + 1)
+    fi
+
     pidfile=$(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid')
     pid=$(cat $pidfile)
     if ! kill -0 $pid

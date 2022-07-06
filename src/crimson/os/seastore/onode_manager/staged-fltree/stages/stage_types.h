@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -9,7 +9,7 @@
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/fwd.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_types.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/tree_types.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/value.h"
 
 namespace crimson::os::seastore::onode {
 
@@ -140,7 +140,7 @@ struct staged_position_t {
       return false;
     }
   }
-  size_t& index_by_stage(match_stage_t stage) {
+  index_t& index_by_stage(match_stage_t stage) {
     assert(stage <= STAGE);
     if (STAGE == stage) {
       return index;
@@ -149,21 +149,37 @@ struct staged_position_t {
     }
   }
 
-  int cmp(const me_t& o) const {
+  MatchKindCMP compare_to(const me_t& o) const {
     if (index > o.index) {
-      return 1;
+      return MatchKindCMP::GT;
     } else if (index < o.index) {
-      return -1;
+      return MatchKindCMP::LT;
     } else {
-      return nxt.cmp(o.nxt);
+      return nxt.compare_to(o.nxt);
     }
   }
-  bool operator>(const me_t& o) const { return cmp(o) > 0; }
-  bool operator>=(const me_t& o) const { return cmp(o) >= 0; }
-  bool operator<(const me_t& o) const { return cmp(o) < 0; }
-  bool operator<=(const me_t& o) const { return cmp(o) <= 0; }
-  bool operator==(const me_t& o) const { return cmp(o) == 0; }
-  bool operator!=(const me_t& o) const { return cmp(o) != 0; }
+  bool operator>(const me_t& o) const { return (int)compare_to(o) > 0; }
+  bool operator>=(const me_t& o) const { return (int)compare_to(o) >= 0; }
+  bool operator<(const me_t& o) const { return (int)compare_to(o) < 0; }
+  bool operator<=(const me_t& o) const { return (int)compare_to(o) <= 0; }
+  bool operator==(const me_t& o) const { return (int)compare_to(o) == 0; }
+  bool operator!=(const me_t& o) const { return (int)compare_to(o) != 0; }
+
+  void assert_next_to(const me_t& prv) const {
+#ifndef NDEBUG
+    if (is_end()) {
+      assert(!prv.is_end());
+    } else if (index == prv.index) {
+      assert(!nxt.is_end());
+      nxt.assert_next_to(prv.nxt);
+    } else if (index == prv.index + 1) {
+      assert(!prv.nxt.is_end());
+      assert(nxt == nxt_t::begin());
+    } else {
+      assert(false);
+    }
+#endif
+  }
 
   me_t& operator-=(const me_t& o) {
     assert(is_valid_index(o.index));
@@ -178,12 +194,32 @@ struct staged_position_t {
     return *this;
   }
 
+  me_t& operator+=(const me_t& o) {
+    assert(is_valid_index(index));
+    assert(is_valid_index(o.index));
+    index += o.index;
+    nxt += o.nxt;
+    return *this;
+  }
+
+  void encode(ceph::bufferlist& encoded) const {
+    ceph::encode(index, encoded);
+    nxt.encode(encoded);
+  }
+
+  static me_t decode(ceph::bufferlist::const_iterator& delta) {
+    me_t ret;
+    ceph::decode(ret.index, delta);
+    ret.nxt = nxt_t::decode(delta);
+    return ret;
+  }
+
   static me_t begin() { return {0u, nxt_t::begin()}; }
   static me_t end() {
     return {INDEX_END, nxt_t::end()};
   }
 
-  size_t index;
+  index_t index;
   nxt_t nxt;
 };
 template <match_stage_t STAGE>
@@ -210,26 +246,26 @@ struct staged_position_t<STAGE_BOTTOM> {
       return false;
     }
   }
-  size_t& index_by_stage(match_stage_t stage) {
+  index_t& index_by_stage(match_stage_t stage) {
     assert(stage == STAGE_BOTTOM);
     return index;
   }
 
-  int cmp(const staged_position_t<STAGE_BOTTOM>& o) const {
+  MatchKindCMP compare_to(const staged_position_t<STAGE_BOTTOM>& o) const {
     if (index > o.index) {
-      return 1;
+      return MatchKindCMP::GT;
     } else if (index < o.index) {
-      return -1;
+      return MatchKindCMP::LT;
     } else {
-      return 0;
+      return MatchKindCMP::EQ;
     }
   }
-  bool operator>(const me_t& o) const { return cmp(o) > 0; }
-  bool operator>=(const me_t& o) const { return cmp(o) >= 0; }
-  bool operator<(const me_t& o) const { return cmp(o) < 0; }
-  bool operator<=(const me_t& o) const { return cmp(o) <= 0; }
-  bool operator==(const me_t& o) const { return cmp(o) == 0; }
-  bool operator!=(const me_t& o) const { return cmp(o) != 0; }
+  bool operator>(const me_t& o) const { return (int)compare_to(o) > 0; }
+  bool operator>=(const me_t& o) const { return (int)compare_to(o) >= 0; }
+  bool operator<(const me_t& o) const { return (int)compare_to(o) < 0; }
+  bool operator<=(const me_t& o) const { return (int)compare_to(o) <= 0; }
+  bool operator==(const me_t& o) const { return (int)compare_to(o) == 0; }
+  bool operator!=(const me_t& o) const { return (int)compare_to(o) != 0; }
 
   me_t& operator-=(const me_t& o) {
     assert(is_valid_index(o.index));
@@ -241,10 +277,37 @@ struct staged_position_t<STAGE_BOTTOM> {
     return *this;
   }
 
+  me_t& operator+=(const me_t& o) {
+    assert(is_valid_index(index));
+    assert(is_valid_index(o.index));
+    index += o.index;
+    return *this;
+  }
+
+  void assert_next_to(const me_t& prv) const {
+#ifndef NDEBUG
+    if (is_end()) {
+      assert(!prv.is_end());
+    } else {
+      assert(index == prv.index + 1);
+    }
+#endif
+  }
+
+  void encode(ceph::bufferlist& encoded) const {
+    ceph::encode(index, encoded);
+  }
+
+  static me_t decode(ceph::bufferlist::const_iterator& delta) {
+    me_t ret;
+    ceph::decode(ret.index, delta);
+    return ret;
+  }
+
   static me_t begin() { return {0u}; }
   static me_t end() { return {INDEX_END}; }
 
-  size_t index;
+  index_t index;
 };
 template <>
 inline std::ostream& operator<<(std::ostream& os, const staged_position_t<STAGE_BOTTOM>& pos) {
@@ -332,11 +395,23 @@ struct memory_range_t {
   const char* p_end;
 };
 
+struct container_range_t {
+  memory_range_t range;
+  extent_len_t node_size;
+};
+
 enum class ContainerType { ITERATIVE, INDEXABLE };
+
+// the input type to construct the value during insert.
+template <node_type_t> struct value_input_type;
+template<> struct value_input_type<node_type_t::INTERNAL> { using type = laddr_t; };
+template<> struct value_input_type<node_type_t::LEAF> { using type = value_config_t; };
+template <node_type_t NODE_TYPE>
+using value_input_type_t = typename value_input_type<NODE_TYPE>::type;
 
 template <node_type_t> struct value_type;
 template<> struct value_type<node_type_t::INTERNAL> { using type = laddr_packed_t; };
-template<> struct value_type<node_type_t::LEAF> { using type = onode_t; };
+template<> struct value_type<node_type_t::LEAF> { using type = value_header_t; };
 template <node_type_t NODE_TYPE>
 using value_type_t = typename value_type<NODE_TYPE>::type;
 
@@ -350,7 +425,7 @@ struct staged_result_t {
   }
   template <typename T = me_t>
   static std::enable_if_t<STAGE != STAGE_BOTTOM, T> from_nxt(
-      size_t index, const staged_result_t<NODE_TYPE, STAGE - 1>& nxt_stage_result) {
+      index_t index, const staged_result_t<NODE_TYPE, STAGE - 1>& nxt_stage_result) {
     return {{index, nxt_stage_result.position},
             nxt_stage_result.p_value,
             nxt_stage_result.mstat};

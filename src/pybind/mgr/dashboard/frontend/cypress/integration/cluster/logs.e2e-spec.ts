@@ -27,8 +27,8 @@ describe('Logs page', () => {
       logs.expectBreadcrumbText('Logs');
     });
 
-    it('should show two tabs', () => {
-      logs.getTabsCount().should('eq', 2);
+    it('should show three tabs', () => {
+      logs.getTabsCount().should('eq', 3);
     });
 
     it('should show cluster logs tab at first', () => {
@@ -38,6 +38,10 @@ describe('Logs page', () => {
     it('should show audit logs as a second tab', () => {
       logs.getTabText(1).should('eq', 'Audit Logs');
     });
+
+    it('should show daemon logs as a third tab', () => {
+      logs.getTabText(2).should('eq', 'Daemon Logs');
+    });
   });
 
   describe('audit logs respond to pool creation and deletion test', () => {
@@ -45,7 +49,7 @@ describe('Logs page', () => {
       pools.navigateTo('create');
       pools.create(poolname, 8);
       pools.navigateTo();
-      pools.exist(poolname, true);
+      pools.existTableCell(poolname, true);
       logs.checkAuditForPoolFunction(poolname, 'create', hour, minute);
     });
 

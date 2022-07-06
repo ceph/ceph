@@ -1,3 +1,10 @@
+========
+Luminous
+========
+
+Luminous is the 12th stable release of Ceph.  It is named after the
+luminous squid (watasenia scintillans, aka firefly squid).
+
 v12.2.13 Luminous
 =================
 
@@ -655,7 +662,7 @@ Notable Changes
 
 OSD
 
-* 12.2.9 contains the pg hard hard limit patches (https://tracker.ceph.com/issues/23979).
+* 12.2.9 contains the pg hard limit patches (https://tracker.ceph.com/issues/23979).
   A partial upgrade during recovery/backfill, can cause the osds on the
   previous version, to fail with assert(trim_to <= info.last_complete). The
   workaround for users is to upgrade and restart all OSDs to a version with the
@@ -2039,7 +2046,7 @@ Major Changes from Kraken
     metadata. New APIs that allow control of custom metadata fields
     were also added.
   * RGW now supports *dynamic bucket index sharding*. This has to be enabled via
-    the `rgw dyamic resharding` configurable. As the number of objects in a
+    the `rgw dynamic resharding` configurable. As the number of objects in a
     bucket grows, RGW will automatically reshard the bucket index in response.
     No user intervention or bucket size capacity planning is required.
   * RGW introduces *server side encryption* of uploaded objects with

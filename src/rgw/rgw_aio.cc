@@ -18,6 +18,7 @@
 #include "librados/librados_asio.h"
 
 #include "rgw_aio.h"
+#include "rgw_d3n_cacherequest.h"
 
 namespace rgw {
 
@@ -79,12 +80,12 @@ struct Handler {
 
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op, boost::asio::io_context& context,
-                         spawn::yield_context yield) {
+                         yield_context yield) {
   return [op = std::move(op), &context, yield] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
       using namespace boost::asio;
-      async_completion<spawn::yield_context, void()> init(yield);
+      async_completion<yield_context, void()> init(yield);
       auto ex = get_associated_executor(init.completion_handler);
 
       auto& ref = r.obj.get_ref();
@@ -92,6 +93,19 @@ Aio::OpFunc aio_abstract(Op&& op, boost::asio::io_context& context,
                               bind_executor(ex, Handler{aio, r}));
     };
 }
+
+
+Aio::OpFunc d3n_cache_aio_abstract(const DoutPrefixProvider *dpp, optional_yield y, off_t read_ofs, off_t read_len, std::string& location) {
+  return [dpp, y, read_ofs, read_len, location] (Aio* aio, AioResult& r) mutable {
+    // d3n data cache requires yield context (rgw_beast_enable_async=true)
+    ceph_assert(y);
+    auto& ref = r.obj.get_ref();
+    auto c = std::make_unique<D3nL1CacheRequest>();
+    lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: d3n_cache_aio_abstract(): libaio Read From Cache, oid=" << ref.obj.oid << dendl;
+    c->file_aio_read_abstract(dpp, y.get_io_context(), y.get_yield_context(), location, read_ofs, read_len, aio, r);
+  };
+}
+
 
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op, optional_yield y) {
@@ -114,6 +128,11 @@ Aio::OpFunc Aio::librados_op(librados::ObjectReadOperation&& op,
 Aio::OpFunc Aio::librados_op(librados::ObjectWriteOperation&& op,
                              optional_yield y) {
   return aio_abstract(std::move(op), y);
+}
+
+Aio::OpFunc Aio::d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
+                              off_t read_ofs, off_t read_len, std::string& location) {
+  return d3n_cache_aio_abstract(dpp, y, read_ofs, read_len, location);
 }
 
 } // namespace rgw

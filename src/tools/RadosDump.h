@@ -219,15 +219,15 @@ struct data_section {
 };
 
 struct attr_section {
-  map<string,bufferlist> data;
-  explicit attr_section(const map<string,bufferlist> &data) : data(data) { }
-  explicit attr_section(map<string, bufferptr> &data_)
+  using data_t = std::map<std::string,bufferlist,std::less<>>;
+  data_t data;
+  explicit attr_section(const data_t &data) : data(data) { }
+  explicit attr_section(std::map<std::string, bufferptr, std::less<>> &data_)
   {
-    for (std::map<std::string, bufferptr>::iterator i = data_.begin();
-         i != data_.end(); ++i) {
+    for (auto& [k, v] : data_) {
       bufferlist bl;
-      bl.push_back(i->second);
-      data[i->first] = bl;
+      bl.push_back(v);
+      data.emplace(k, std::move(bl));
     }
   }
 
@@ -263,8 +263,8 @@ struct omap_hdr_section {
 };
 
 struct omap_section {
-  map<string, bufferlist> omap;
-  explicit omap_section(const map<string, bufferlist> &omap) :
+  std::map<std::string, bufferlist> omap;
+  explicit omap_section(const std::map<std::string, bufferlist> &omap) :
     omap(omap) { }
   omap_section() { }
 
@@ -289,7 +289,7 @@ struct metadata_section {
   PastIntervals past_intervals;
   OSDMap osdmap;
   bufferlist osdmap_bl;  // Used in lieu of encoding osdmap due to crc checking
-  map<eversion_t, hobject_t> divergent_priors;
+  std::map<eversion_t, hobject_t> divergent_priors;
   pg_missing_t missing;
 
   metadata_section(
@@ -332,14 +332,14 @@ struct metadata_section {
     if (struct_v >= 6) {
       decode(past_intervals, bl);
     } else if (struct_v > 1) {
-      cout << "NOTICE: Older export with classic past_intervals" << std::endl;
+      std::cout << "NOTICE: Older export with classic past_intervals" << std::endl;
     } else {
-      cout << "NOTICE: Older export without past_intervals" << std::endl;
+      std::cout << "NOTICE: Older export without past_intervals" << std::endl;
     }
     if (struct_v > 2) {
       osdmap.decode(bl);
     } else {
-      cout << "WARNING: Older export without OSDMap information" << std::endl;
+      std::cout << "WARNING: Older export without OSDMap information" << std::endl;
     }
     if (struct_v > 3) {
       decode(divergent_priors, bl);

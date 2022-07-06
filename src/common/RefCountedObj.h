@@ -193,6 +193,14 @@ static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
 static inline void intrusive_ptr_release(const RefCountedObject *p) {
   p->put();
 }
+struct UniquePtrDeleter
+{
+  void operator()(RefCountedObject *p) const
+  {
+    // Don't expect a call to `get()` in the ctor as we manually set nref to 1
+    p->put();
+  }
+};
 }
 using RefCountedPtr = ceph::ref_t<TOPNSPC::common::RefCountedObject>;
 

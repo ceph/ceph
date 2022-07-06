@@ -35,7 +35,7 @@ Synopsis
 
 | **ceph** **mds** [ *compat* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *repaired* ] ...
 
-| **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
+| **ceph** **mon** [ *add* \| *dump* \| *enable_stretch_mode* \| *getmap* \| *remove* \| *stat* ] ...
 
 | **ceph** **osd** [ *blocklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
@@ -232,7 +232,7 @@ Usage::
     ceph config rm <who> <option>
 
 Subcommand ``log`` to show recent history of config changes. If `count` option
-is omitted it defeaults to 10.
+is omitted it defaults to 10.
 
 Usage::
 
@@ -543,6 +543,23 @@ Subcommand ``getmap`` gets monmap.
 Usage::
 
 	ceph mon getmap {<int[0-]>}
+
+Subcommand ``enable_stretch_mode`` enables stretch mode, changing the peering
+rules and failure handling on all pools. For a given PG to successfully peer
+and be marked active, ``min_size`` replicas will now need to be active under all
+(currently two) CRUSH buckets of type <dividing_bucket>.
+
+<tiebreaker_mon> is the tiebreaker mon to use if a network split happens.
+
+<dividing_bucket> is the bucket type across which to stretch.
+This will typically be ``datacenter`` or other CRUSH hierarchy bucket type that
+denotes physically or logically distant subdivisions.
+
+<new_crush_rule> will be set as CRUSH rule for all pools.
+
+Usage::
+
+	ceph mon enable_stretch_mode <tiebreaker_mon> <new_crush_rule> <dividing_bucket>
 
 Subcommand ``remove`` removes monitor named <name>.
 
@@ -992,11 +1009,16 @@ data should remain readable and writeable, although data redundancy
 may be reduced as some PGs may end up in a degraded (but active)
 state.  It will return a success code if it is okay to stop the
 OSD(s), or an error code and informative message if it is not or if no
-conclusion can be drawn at the current time.
+conclusion can be drawn at the current time.  When ``--max <num>`` is
+provided, up to <num> OSDs IDs will return (including the provided
+OSDs) that can all be stopped simultaneously.  This allows larger sets
+of stoppable OSDs to be generated easily by providing a single
+starting OSD and a max.  Additional OSDs are drawn from adjacent locations
+in the CRUSH hierarchy.
 
 Usage::
 
-  ceph osd ok-to-stop <id> [<ids>...]
+  ceph osd ok-to-stop <id> [<ids>...] [--max <num>]
 
 Subcommand ``pause`` pauses osd.
 
@@ -1309,7 +1331,7 @@ Subcommand ``cache-mode`` specifies the caching mode for cache tier <pool>.
 
 Usage::
 
-	ceph osd tier cache-mode <poolname> writeback|readproxy|readonly|none
+	ceph osd tier cache-mode <poolname> writeback|proxy|readproxy|readonly|none
 
 Subcommand ``remove`` removes the tier <tierpool> (the second one) from base pool
 <pool> (the first one).
@@ -1610,9 +1632,9 @@ Options
 
 	Make less verbose.
 
-.. option:: -f {json,json-pretty,xml,xml-pretty,plain}, --format
+.. option:: -f {json,json-pretty,xml,xml-pretty,plain,yaml}, --format
 
-	Format of output.
+	Format of output. Note: yaml is only valid for orch commands. 
 
 .. option:: --connect-timeout CLUSTER_TIMEOUT
 
@@ -1633,7 +1655,7 @@ Availability
 ============
 
 :program:`ceph` is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the Ceph documentation at http://ceph.com/docs for more information.
+the Ceph documentation at https://docs.ceph.com for more information.
 
 
 See also

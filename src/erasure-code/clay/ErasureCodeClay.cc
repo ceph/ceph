@@ -499,7 +499,6 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
   }
   assert((unsigned)plane_ind == repair_subchunks);
 
-  int plane_count = 0;
   for (int i = 0; i < q*t; i++) {
     if (U_buf[i].length() == 0) {
       bufferptr buf(buffer::create_aligned(sub_chunk_no*sub_chunksize, SIMD_ALIGN));
@@ -529,7 +528,6 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
     if (ordered_planes.count(order) == 0) {
       break;
     }
-    plane_count += ordered_planes[order].size();
     for (auto z : ordered_planes[order]) {
       get_plane_vector(z, z_vec);
 

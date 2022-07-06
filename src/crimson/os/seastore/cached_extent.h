@@ -17,8 +17,13 @@
 
 namespace crimson::os::seastore {
 
+class ool_record_t;
+class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
+class SegmentedAllocator;
+class TransactionManager;
+class ExtentPlacementManager;
 
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
@@ -36,13 +41,49 @@ using TCachedExtentRef = boost::intrusive_ptr<T>;
  */
 namespace onode {
   class DummyNodeExtent;
+  class TestReplayExtent;
 }
+
+template <typename T>
+class read_set_item_t {
+  boost::intrusive::list_member_hook<> list_hook;
+  using list_hook_options = boost::intrusive::member_hook<
+    read_set_item_t,
+    boost::intrusive::list_member_hook<>,
+    &read_set_item_t::list_hook>;
+
+public:
+  struct cmp_t {
+    using is_transparent = paddr_t;
+    bool operator()(const read_set_item_t<T> &lhs, const read_set_item_t &rhs) const;
+    bool operator()(const paddr_t &lhs, const read_set_item_t<T> &rhs) const;
+    bool operator()(const read_set_item_t<T> &lhs, const paddr_t &rhs) const;
+  };
+
+  using list =  boost::intrusive::list<
+    read_set_item_t,
+    list_hook_options>;
+
+  T *t = nullptr;
+  CachedExtentRef ref;
+
+  read_set_item_t(T *t, CachedExtentRef ref);
+  read_set_item_t(const read_set_item_t &) = delete;
+  read_set_item_t(read_set_item_t &&) = default;
+  ~read_set_item_t();
+};
+template <typename T>
+using read_set_t = std::set<
+  read_set_item_t<T>,
+  typename read_set_item_t<T>::cmp_t>;
+
 class ExtentIndex;
 class CachedExtent : public boost::intrusive_ref_counter<
   CachedExtent, boost::thread_unsafe_counter> {
   enum class extent_state_t : uint8_t {
     INITIAL_WRITE_PENDING, // In Transaction::write_set and fresh_block_list
     MUTATION_PENDING,      // In Transaction::write_set and mutated_block_list
+    CLEAN_PENDING,         // CLEAN, but not yet read out
     CLEAN,                 // In Cache::extent_index, Transaction::read_set
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
@@ -50,23 +91,37 @@ class CachedExtent : public boost::intrusive_ref_counter<
     INVALID                // Part of no ExtentIndex set
   } state = extent_state_t::INVALID;
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
-  // allow a dummy onode extent to pretend it is a fresh block
+  // allow a dummy extent to pretend it is at a specific state
   friend class onode::DummyNodeExtent;
+  friend class onode::TestReplayExtent;
 
   uint32_t last_committed_crc = 0;
 
   // Points at current version while in state MUTATION_PENDING
   CachedExtentRef prior_instance;
 
-  /**
-   * dirty_from
-   *
-   * When dirty, indiciates the oldest journal entry which mutates
-   * this extent.
-   */
-  journal_seq_t dirty_from;
+  // time of the last modification
+  sea_time_point modify_time = NULL_TIME;
 
 public:
+  void init(extent_state_t _state,
+            paddr_t paddr,
+            placement_hint_t hint,
+            reclaim_gen_t gen) {
+    state = _state;
+    set_paddr(paddr);
+    user_hint = hint;
+    reclaim_generation = gen;
+  }
+
+  void set_modify_time(sea_time_point t) {
+    modify_time = t;
+  }
+
+  sea_time_point get_modify_time() const {
+    return modify_time;
+  }
+
   /**
    *  duplicate_for_write
    *
@@ -129,18 +184,29 @@ public:
     return false;
   }
 
+  virtual bool may_conflict() const {
+    return true;
+  }
+
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
     out << "CachedExtent(addr=" << this
 	<< ", type=" << get_type()
 	<< ", version=" << version
-	<< ", dirty_from=" << dirty_from
+	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
+	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
 	<< ", paddr=" << get_paddr()
+	<< ", length=" << get_length()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
-	<< ", refcount=" << use_count();
-    print_detail(out);
+	<< ", refcount=" << use_count()
+	<< ", user_hint=" << user_hint
+	<< ", reclaim_gen=" << reclaim_generation;
+    if (state != extent_state_t::INVALID &&
+        state != extent_state_t::CLEAN_PENDING) {
+      print_detail(out);
+    }
     return out << ")";
   }
 
@@ -219,7 +285,8 @@ public:
   bool is_clean() const {
     ceph_assert(is_valid());
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
-      state == extent_state_t::CLEAN;
+           state == extent_state_t::CLEAN ||
+           state == extent_state_t::CLEAN_PENDING;
   }
 
   /// Returns true if extent is dirty (has deltas on disk)
@@ -233,13 +300,31 @@ public:
     return state != extent_state_t::INVALID;
   }
 
-  /**
-   * get_dirty_from
-   *
-   * Return journal location of oldest relevant delta.
-   */
-  auto get_dirty_from() const { return dirty_from; }
+  /// Returns true if extent or prior_instance has been invalidated
+  bool has_been_invalidated() const {
+    return !is_valid() || (prior_instance && !prior_instance->is_valid());
+  }
 
+  /// Returns true if extent is a plcaeholder
+  bool is_placeholder() const {
+    return get_type() == extent_types_t::RETIRED_PLACEHOLDER;
+  }
+
+  bool is_pending_io() const {
+    return !!io_wait_promise;
+  }
+
+  /// Return journal location of oldest relevant delta, only valid while DIRTY
+  auto get_dirty_from() const {
+    ceph_assert(is_dirty());
+    return dirty_from_or_retired_at;
+  }
+
+  /// Return journal location of oldest relevant delta, only valid while RETIRED
+  auto get_retired_at() const {
+    ceph_assert(!is_valid());
+    return dirty_from_or_retired_at;
+  }
 
   /**
    * get_paddr
@@ -250,7 +335,7 @@ public:
   paddr_t get_paddr() const { return poffset; }
 
   /// Returns length of extent
-  extent_len_t get_length() const { return ptr.length(); }
+  virtual extent_len_t get_length() const { return ptr.length(); }
 
   /// Returns version, get_version() == 0 iff is_clean()
   extent_version_t get_version() const {
@@ -282,7 +367,32 @@ public:
 
   virtual ~CachedExtent();
 
+  placement_hint_t get_user_hint() const {
+    return user_hint;
+  }
+
+  reclaim_gen_t get_reclaim_generation() const {
+    return reclaim_generation;
+  }
+
+  void invalidate_hints() {
+    user_hint = placement_hint_t::NUM_HINTS;
+    reclaim_generation = NULL_GENERATION;
+  }
+
+  void set_reclaim_generation(reclaim_gen_t gen) {
+    assert(gen < RECLAIM_GENERATIONS);
+    user_hint = placement_hint_t::REWRITE;
+    reclaim_generation = gen;
+  }
+
+  bool is_inline() const {
+    return poffset.is_relative();
+  }
 private:
+  template <typename T>
+  friend class read_set_item_t;
+
   friend struct paddr_cmp;
   friend struct ref_paddr_cmp;
   friend class ExtentIndex;
@@ -300,6 +410,10 @@ private:
   friend class ExtentIndex;
   friend class Transaction;
 
+  bool is_linked() {
+    return extent_index_hook.is_linked();
+  }
+
   /// hook for intrusive ref list (mainly dirty or lru list)
   boost::intrusive::list_member_hook<> primary_ref_list_hook;
   using primary_ref_list_member_options = boost::intrusive::member_hook<
@@ -310,11 +424,19 @@ private:
     CachedExtent,
     primary_ref_list_member_options>;
 
+  /**
+   * dirty_from_or_retired_at
+   *
+   * Encodes ordering token for primary_ref_list -- dirty_from when
+   * dirty or retired_at if retired.
+   */
+  journal_seq_t dirty_from_or_retired_at;
+
   /// Actual data contents
   ceph::bufferptr ptr;
 
   /// number of deltas since initial write
-  extent_version_t version = EXTENT_VERSION_NULL;
+  extent_version_t version = 0;
 
   /// address of original block -- relative iff is_pending() and is_clean()
   paddr_t poffset;
@@ -330,6 +452,7 @@ private:
     io_wait_promise->set_value();
     io_wait_promise = std::nullopt;
   }
+
   seastar::future<> wait_io() {
     if (!io_wait_promise) {
       return seastar::now();
@@ -338,12 +461,19 @@ private:
     }
   }
 
+  read_set_item_t<Transaction>::list transactions;
+
+  placement_hint_t user_hint;
+
+  /// > 0 and not null means the extent is under reclaimming
+  reclaim_gen_t reclaim_generation;
+
 protected:
   CachedExtent(CachedExtent &&other) = delete;
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
   CachedExtent(const CachedExtent &other)
     : state(other.state),
-      dirty_from(other.dirty_from),
+      dirty_from_or_retired_at(other.dirty_from_or_retired_at),
       ptr(other.ptr.c_str(), other.ptr.length()),
       version(other.version),
       poffset(other.poffset) {}
@@ -351,16 +481,19 @@ protected:
   struct share_buffer_t {};
   CachedExtent(const CachedExtent &other, share_buffer_t) :
     state(other.state),
-    dirty_from(other.dirty_from),
+    dirty_from_or_retired_at(other.dirty_from_or_retired_at),
     ptr(other.ptr),
     version(other.version),
     poffset(other.poffset) {}
 
+  struct retired_placeholder_t{};
+  CachedExtent(retired_placeholder_t) : state(extent_state_t::INVALID) {}
 
   friend class Cache;
-  template <typename T>
-  static TCachedExtentRef<T> make_cached_extent_ref(bufferptr &&ptr) {
-    return new T(std::move(ptr));
+  template <typename T, typename... Args>
+  static TCachedExtentRef<T> make_cached_extent_ref(
+    Args&&... args) {
+    return new T(std::forward<Args>(args)...);
   }
 
   CachedExtentRef get_prior_instance() {
@@ -393,21 +526,24 @@ protected:
    * reference.
    */
   paddr_t maybe_generate_relative(paddr_t addr) {
-    if (!addr.is_relative()) {
-      return addr;
-    } else if (is_mutation_pending()) {
-      return addr;
-    } else {
-      ceph_assert(is_initial_pending());
-      ceph_assert(get_paddr().is_record_relative());
+    if (is_initial_pending() && addr.is_record_relative()) {
       return addr - get_paddr();
+    } else {
+      ceph_assert(!addr.is_record_relative() || is_mutation_pending());
+      return addr;
     }
   }
 
+  friend class crimson::os::seastore::ool_record_t;
+  friend class crimson::os::seastore::SegmentedAllocator;
+  friend class crimson::os::seastore::TransactionManager;
+  friend class crimson::os::seastore::ExtentPlacementManager;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
 std::ostream &operator<<(std::ostream &, const CachedExtent&);
+
+bool is_backref_mapped_extent_node(const CachedExtentRef &extent);
 
 /// Compare extents by paddr
 struct paddr_cmp {
@@ -462,7 +598,7 @@ class ExtentIndex {
   friend class Cache;
   CachedExtent::index extent_index;
 public:
-  auto get_overlap(paddr_t addr, segment_off_t len) {
+  auto get_overlap(paddr_t addr, seastore_off_t len) {
     auto bottom = extent_index.upper_bound(addr, paddr_cmp());
     if (bottom != extent_index.begin())
       --bottom;
@@ -478,26 +614,43 @@ public:
   }
 
   void clear() {
-    extent_index.clear();
+    struct cached_extent_disposer {
+      void operator() (CachedExtent* extent) {
+	extent->parent_index = nullptr;
+      }
+    };
+    extent_index.clear_and_dispose(cached_extent_disposer());
+    bytes = 0;
   }
 
   void insert(CachedExtent &extent) {
     // sanity check
+    ceph_assert(!extent.parent_index);
     auto [a, b] = get_overlap(
       extent.get_paddr(),
       extent.get_length());
     ceph_assert(a == b);
 
-    extent_index.insert(extent);
+    [[maybe_unused]] auto [iter, inserted] = extent_index.insert(extent);
+    assert(inserted);
     extent.parent_index = this;
+
+    bytes += extent.get_length();
   }
 
   void erase(CachedExtent &extent) {
-    extent_index.erase(extent);
+    assert(extent.parent_index);
+    assert(extent.is_linked());
+    [[maybe_unused]] auto erased = extent_index.erase(
+      extent_index.s_iterator_to(extent));
     extent.parent_index = nullptr;
+
+    assert(erased);
+    bytes -= extent.get_length();
   }
 
   void replace(CachedExtent &to, CachedExtent &from) {
+    assert(to.get_length() == from.get_length());
     extent_index.replace_node(extent_index.s_iterator_to(from), to);
     from.parent_index = nullptr;
     to.parent_index = this;
@@ -519,45 +672,113 @@ public:
     return extent_index.end();
   }
 
-  void merge(ExtentIndex &&other) {
-    for (auto it = other.extent_index.begin();
-	 it != other.extent_index.end();
-	 ) {
-      auto &ext = *it;
-      ++it;
-      other.extent_index.erase(ext);
-      extent_index.insert(ext);
-    }
+  auto size() const {
+    return extent_index.size();
   }
 
-  template <typename T>
-  void remove(T &l) {
-    for (auto &ext : l) {
-      extent_index.erase(l);
-    }
+  auto get_bytes() const {
+    return bytes;
   }
+
+  ~ExtentIndex() {
+    assert(extent_index.empty());
+    assert(bytes == 0);
+  }
+
+private:
+  uint64_t bytes = 0;
 };
 
 class LogicalCachedExtent;
-class LBAPin;
-using LBAPinRef = std::unique_ptr<LBAPin>;
-class LBAPin {
+
+template <typename key_t, typename>
+class PhysicalNodePin;
+
+template <typename key_t, typename val_t>
+using PhysicalNodePinRef = std::unique_ptr<PhysicalNodePin<key_t, val_t>>;
+
+template <typename key_t, typename val_t>
+class PhysicalNodePin {
 public:
   virtual void link_extent(LogicalCachedExtent *ref) = 0;
-  virtual void take_pin(LBAPin &pin) = 0;
+  virtual void take_pin(PhysicalNodePin<key_t, val_t> &pin) = 0;
   virtual extent_len_t get_length() const = 0;
-  virtual paddr_t get_paddr() const = 0;
-  virtual laddr_t get_laddr() const = 0;
-  virtual LBAPinRef duplicate() const = 0;
+  virtual extent_types_t get_type() const = 0;
+  virtual val_t get_val() const = 0;
+  virtual key_t get_key() const = 0;
+  virtual PhysicalNodePinRef<key_t, val_t> duplicate() const = 0;
+  virtual bool has_been_invalidated() const = 0;
 
-  virtual ~LBAPin() {}
+  virtual ~PhysicalNodePin() {}
 };
+
+using LBAPin = PhysicalNodePin<laddr_t, paddr_t>;
+using LBAPinRef = PhysicalNodePinRef<laddr_t, paddr_t>;
+
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
 
 using lba_pin_list_t = std::list<LBAPinRef>;
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
 
+using BackrefPin = PhysicalNodePin<paddr_t, laddr_t>;
+using BackrefPinRef = PhysicalNodePinRef<paddr_t, laddr_t>;
+
+using backref_pin_list_t = std::list<BackrefPinRef>;
+
+/**
+ * RetiredExtentPlaceholder
+ *
+ * Cache::retire_extent_addr(Transaction&, paddr_t, extent_len_t) can retire an
+ * extent not currently in cache. In that case, in order to detect transaction
+ * invalidation, we need to add a placeholder to the cache to create the
+ * mapping back to the transaction. And whenever there is a transaction tries
+ * to read the placeholder extent out, Cache is responsible to replace the
+ * placeholder by the real one. Anyway, No placeholder extents should escape
+ * the Cache interface boundary.
+ */
+class RetiredExtentPlaceholder : public CachedExtent {
+  extent_len_t length;
+
+public:
+  RetiredExtentPlaceholder(extent_len_t length)
+    : CachedExtent(CachedExtent::retired_placeholder_t{}),
+      length(length) {}
+
+  extent_len_t get_length() const final { return length; }
+
+  CachedExtentRef duplicate_for_write() final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return CachedExtentRef();
+  }
+
+  ceph::bufferlist get_delta() final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+    return ceph::bufferlist();
+  }
+
+  static constexpr extent_types_t TYPE = extent_types_t::RETIRED_PLACEHOLDER;
+  extent_types_t get_type() const final {
+    return TYPE;
+  }
+
+  void apply_delta_and_adjust_crc(
+    paddr_t base, const ceph::bufferlist &bl) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+  }
+
+  bool is_logical() const final {
+    return false;
+  }
+
+  std::ostream &print_detail(std::ostream &out) const final {
+    return out << ", RetiredExtentPlaceholder";
+  }
+
+  void on_delta_write(paddr_t record_block_offset) final {
+    ceph_assert(0 == "Should never happen for a placeholder");
+  }
+};
 
 /**
  * LogicalCachedExtent
@@ -575,7 +796,7 @@ public:
   void set_pin(LBAPinRef &&npin) {
     assert(!pin);
     pin = std::move(npin);
-    laddr = pin->get_laddr();
+    laddr = pin->get_key();
     pin->link_extent(this);
   }
 
@@ -643,6 +864,35 @@ struct ref_laddr_cmp {
     return lhs->get_laddr() < rhs;
   }
 };
+
+template <typename T>
+read_set_item_t<T>::read_set_item_t(T *t, CachedExtentRef ref)
+  : t(t), ref(ref)
+{
+  ref->transactions.push_back(*this);
+}
+
+template <typename T>
+read_set_item_t<T>::~read_set_item_t()
+{
+  ref->transactions.erase(ref->transactions.s_iterator_to(*this));
+}
+
+template <typename T>
+inline bool read_set_item_t<T>::cmp_t::operator()(
+  const read_set_item_t<T> &lhs, const read_set_item_t<T> &rhs) const {
+  return lhs.ref->poffset < rhs.ref->poffset;
+}
+template <typename T>
+inline bool read_set_item_t<T>::cmp_t::operator()(
+  const paddr_t &lhs, const read_set_item_t<T> &rhs) const {
+  return lhs < rhs.ref->poffset;
+}
+template <typename T>
+inline bool read_set_item_t<T>::cmp_t::operator()(
+  const read_set_item_t<T> &lhs, const paddr_t &rhs) const {
+  return lhs.ref->poffset < rhs;
+}
 
 using lextent_set_t = addr_extent_set_base_t<
   laddr_t,

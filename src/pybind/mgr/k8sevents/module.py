@@ -40,7 +40,7 @@ from urllib3.exceptions import MaxRetryError,ProtocolError
 from collections import OrderedDict
 
 import rados
-from mgr_module import MgrModule
+from mgr_module import MgrModule, NotifyType
 from mgr_util import verify_cacrt, ServerConfigException
 
 try:
@@ -1026,12 +1026,12 @@ class Module(MgrModule):
         },
         {
             "cmd": "k8sevents set-access name=key,type=CephString",
-            "desc": "Set kubernetes access credentials. <key> must be cacrt or token and use -i <filename> syntax.\ne.g. ceph k8sevents set-access cacrt -i /root/ca.crt",
+            "desc": "Set kubernetes access credentials. <key> must be cacrt or token and use -i <filename> syntax (e.g., ceph k8sevents set-access cacrt -i /root/ca.crt).",
             "perm": "rw"
         },
         {
             "cmd": "k8sevents set-config name=key,type=CephString name=value,type=CephString",
-            "desc": "Set kubernetes config paramters. <key> must be server or namespace.\ne.g. ceph k8sevents set-config server https://localhost:30433",
+            "desc": "Set kubernetes config paramters. <key> must be server or namespace (e.g., ceph k8sevents set-config server https://localhost:30433).",
             "perm": "rw"
         },
         {
@@ -1051,6 +1051,7 @@ class Module(MgrModule):
          'default': 7,
          'desc': "Days to hold ceph event information within local cache"}
     ]
+    NOTIFY_TYPES = [NotifyType.clog]
 
     def __init__(self, *args, **kwargs):
         self.run = True
@@ -1138,7 +1139,7 @@ class Module(MgrModule):
         else:
             self.log.warning("Unexpected clog message format received - skipped: {}".format(log_message))
 
-    def notify(self, notify_type, notify_id):
+    def notify(self, notify_type: NotifyType, notify_id):
         """
         Called by the ceph-mgr service to notify the Python plugin
         that new state is available.
@@ -1153,7 +1154,7 @@ class Module(MgrModule):
         """
         
         # only interested in cluster log (clog) messages for now
-        if notify_type == 'clog':
+        if notify_type == NotifyType.clog:
             self.log.debug("received a clog entry from mgr.notify")
             if isinstance(notify_id, dict):
                 # create a log object to process

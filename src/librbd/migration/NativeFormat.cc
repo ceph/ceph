@@ -4,6 +4,7 @@
 #include "librbd/migration/NativeFormat.h"
 #include "include/neorados/RADOS.hpp"
 #include "common/dout.h"
+#include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
@@ -29,6 +30,8 @@ const std::string POOL_NAME_KEY{"pool_name"};
 const std::string POOL_NAMESPACE_KEY{"pool_namespace"};
 const std::string IMAGE_NAME_KEY{"image_name"};
 const std::string IMAGE_ID_KEY{"image_id"};
+const std::string SNAP_NAME_KEY{"snap_name"};
+const std::string SNAP_ID_KEY{"snap_id"};
 
 } // anonymous namespace
 
@@ -123,6 +126,43 @@ void NativeFormat<I>::open(Context* on_finish) {
     return;
   }
 
+  auto& snap_name_val = m_json_object[SNAP_NAME_KEY];
+  if (snap_name_val.type() == json_spirit::str_type) {
+    m_snap_name = snap_name_val.get_str();
+  } else if (snap_name_val.type() != json_spirit::null_type) {
+    lderr(cct) << "invalid snap name" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  auto& snap_id_val = m_json_object[SNAP_ID_KEY];
+  if (!m_snap_name.empty() && snap_id_val.type() != json_spirit::null_type) {
+    lderr(cct) << "cannot specify both snap name and snap id" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  } else if (snap_id_val.type() == json_spirit::str_type) {
+    try {
+      m_snap_id = boost::lexical_cast<uint64_t>(snap_id_val.get_str());
+    } catch (boost::bad_lexical_cast &) {
+    }
+  } else if (snap_id_val.type() == json_spirit::int_type) {
+    m_snap_id = snap_id_val.get_uint64();
+  }
+
+  if (snap_id_val.type() != json_spirit::null_type &&
+      m_snap_id == CEPH_NOSNAP) {
+    lderr(cct) << "invalid snap id" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  // snapshot is required for import to keep source read-only
+  if (m_import_only && m_snap_name.empty() && m_snap_id == CEPH_NOSNAP) {
+    lderr(cct) << "snapshot required for import" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
   // TODO add support for external clusters
   librados::IoCtx io_ctx;
   int r = util::create_ioctx(m_image_ctx->md_ctx, "source image",
@@ -153,7 +193,61 @@ void NativeFormat<I>::open(Context* on_finish) {
   }
 
   // open the source RBD image
+  on_finish = new LambdaContext([this, on_finish](int r) {
+    handle_open(r, on_finish); });
   m_image_ctx->state->open(flags, on_finish);
+}
+
+template <typename I>
+void NativeFormat<I>::handle_open(int r, Context* on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to open image: " << cpp_strerror(r) << dendl;
+    on_finish->complete(r);
+    return;
+  }
+
+  if (m_snap_id == CEPH_NOSNAP && m_snap_name.empty()) {
+    on_finish->complete(0);
+    return;
+  }
+
+  if (!m_snap_name.empty()) {
+    std::shared_lock image_locker{m_image_ctx->image_lock};
+    m_snap_id = m_image_ctx->get_snap_id(cls::rbd::UserSnapshotNamespace{},
+                                         m_snap_name);
+  }
+
+  if (m_snap_id == CEPH_NOSNAP) {
+    lderr(cct) << "failed to locate snapshot " << m_snap_name << dendl;
+    on_finish = new LambdaContext([on_finish](int) {
+      on_finish->complete(-ENOENT); });
+    m_image_ctx->state->close(on_finish);
+    return;
+  }
+
+  on_finish = new LambdaContext([this, on_finish](int r) {
+    handle_snap_set(r, on_finish); });
+  m_image_ctx->state->snap_set(m_snap_id, on_finish);
+}
+
+template <typename I>
+void NativeFormat<I>::handle_snap_set(int r, Context* on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to set snapshot " << m_snap_id << ": "
+               << cpp_strerror(r) << dendl;
+    on_finish = new LambdaContext([r, on_finish](int) {
+      on_finish->complete(r); });
+    m_image_ctx->state->close(on_finish);
+    return;
+  }
+
+  on_finish->complete(0);
 }
 
 template <typename I>

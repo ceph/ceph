@@ -24,7 +24,8 @@ The most important methods to override are:
 * a ``notify`` member function if your module needs to
   take action when new cluster data is available.
 * a ``handle_command`` member function if your module
-  exposes CLI commands.
+  exposes CLI commands. But this approach for exposing commands
+  is deprecated. For more details, see :ref:`mgr-module-exposing-commands`.
 
 Some modules interface with external orchestrators to deploy
 Ceph services.  These also inherit from ``Orchestrator``, which adds
@@ -44,6 +45,8 @@ via the ``ceph mgr module enable`` command::
 Note that the MgrModule interface is not stable, so any modules maintained
 outside of the Ceph tree are liable to break when run against any newer
 or older versions of Ceph.
+
+.. _mgr module dev logging:
 
 Logging
 -------
@@ -100,12 +103,69 @@ following commands::
 
 
 
+.. _mgr-module-exposing-commands:
 
 Exposing commands
 -----------------
 
-Set the ``COMMANDS`` class attribute of your module to a list of dicts
-like this::
+There are two approaches for exposing a command. The first one is to
+use the ``@CLICommand`` decorator to decorate the method which handles
+the command. like this
+
+.. code:: python
+
+   @CLICommand('antigravity send to blackhole',
+               perm='rw')
+   def send_to_blackhole(self, oid: str, blackhole: Optional[str] = None, inbuf: Optional[str] = None):
+       '''
+       Send the specified object to black hole
+       '''
+       obj = self.find_object(oid)
+       if obj is None:
+           return HandleCommandResult(-errno.ENOENT, stderr=f"object '{oid}' not found")
+       if blackhole is not None and inbuf is not None:
+           try:
+               location = self.decrypt(blackhole, passphrase=inbuf)
+           except ValueError:
+               return HandleCommandResult(-errno.EINVAL, stderr='unable to decrypt location')
+       else:
+           location = blackhole
+       self.send_object_to(obj, location)
+       return HandleCommandResult(stdout=f'the black hole swallowed '{oid}'")
+
+The first parameter passed to ``CLICommand`` is the "name" of the command.
+Since there are lots of commands in Ceph, we tend to group related commands
+with a common prefix. In this case, "antigravity" is used for this purpose.
+As the author is probably designing a module which is also able to launch
+rockets into the deep space.
+
+The `type annotations <https://www.python.org/dev/peps/pep-0484/>`_ for the
+method parameters are mandatory here, so the usage of the command can be
+properly reported to the ``ceph`` CLI, and the manager daemon can convert
+the serialized command parameters sent by the clients to the expected type
+before passing them to the handler method. With properly implemented types,
+one can also perform some sanity checks against the parameters!
+
+The names of the parameters are part of the command interface, so please
+try to take the backward compatibility into consideration when changing
+them. But you **cannot** change name of ``inbuf`` parameter, it is used
+to pass the content of the file specified by ``ceph --in-file`` option.
+
+The docstring of the method is used for the description of the command.
+
+The manager daemon cooks the usage of the command from these ingredients,
+like::
+
+  antigravity send to blackhole <oid> [<blackhole>]  Send the specified object to black hole
+
+as part of the output of ``ceph --help``.
+
+In addition to ``@CLICommand``, you could also use ``@CLIReadCommand`` or
+``@CLIWriteCommand`` if your command only requires read permissions or
+write permissions respectively.
+
+The second one is to set the ``COMMANDS`` class attribute of your module to
+a list of dicts like this::
 
     COMMANDS = [
         {
@@ -151,12 +211,10 @@ Modules can load and store configuration options using the
 You must declare your available configuration options in the
 ``MODULE_OPTIONS`` class attribute, like this:
 
-::
+.. code-block:: python
 
     MODULE_OPTIONS = [
-        {
-            "name": "my_option"
-        }
+        Option(name="my_option")
     ]
 
 If you try to use set_module_option or get_module_option on options not declared
@@ -408,6 +466,68 @@ It is not possible to call back into C++ code from a module's
 this point will result in an assertion failure in ceph-mgr.  For modules
 that implement the ``serve()`` method, it usually makes sense to do most
 initialization inside that method instead.
+
+Debugging
+---------
+
+Apparently, we can always use the :ref:`mgr module dev logging` facility
+for debugging a ceph-mgr module. But some of us might miss `PDB`_ and the
+interactive Python interpreter. Yes, we can have them as well when developing
+ceph-mgr modules! ``ceph_mgr_repl.py`` can drop you into an interactive shell
+talking to ``selftest`` module. With this tool, one can peek and poke the
+ceph-mgr module, and use all the exposed facilities in quite the same way
+how we use the Python command line interpreter. For using ``ceph_mgr_repl.py``,
+we need to
+
+#. ready a Ceph cluster
+#. enable the ``selftest`` module
+#. setup the necessary environment variables
+#. launch the tool
+
+.. _PDB: https://docs.python.org/3/library/pdb.html
+
+Following is a sample session, in which the Ceph version is queried by
+inputting ``print(mgr.version)`` at the prompt. And later
+``timeit`` module is imported to measure the execution time of
+`mgr.get_mgr_id()`.
+
+.. code-block:: console
+
+   $ cd build
+   $ MDS=0 MGR=1 OSD=3 MON=1 ../src/vstart.sh -n -x
+   $ bin/ceph mgr module enable selftest
+   $ ../src/pybind/ceph_mgr_repl.py --show-env
+      $ export PYTHONPATH=/home/me/ceph/src/pybind:/home/me/ceph/build/lib/cython_modules/lib.3:/home/me/ceph/src/python-common:$PYTHONPATH
+      $ export LD_LIBRARY_PATH=/home/me/ceph/build/lib:$LD_LIBRARY_PATH
+   $ export PYTHONPATH=/home/me/ceph/src/pybind:/home/me/ceph/build/lib/cython_modules/lib.3:/home/me/ceph/src/python-common:$PYTHONPATH
+   $ export LD_LIBRARY_PATH=/home/me/ceph/build/lib:$LD_LIBRARY_PATH
+   $ ../src/pybind/ceph_mgr_repl.py
+   $ ../src/pybind/ceph_mgr_repl.py
+   Python 3.9.2 (default, Feb 28 2021, 17:03:44)
+   [GCC 10.2.1 20210110] on linux
+   Type "help", "copyright", "credits" or "license" for more information.
+   (MgrModuleInteractiveConsole)
+   [mgr self-test eval] >>> print(mgr.version)
+   ceph version Development (no_version) quincy (dev)
+   [mgr self-test eval] >>> from timeit import timeit
+   [mgr self-test eval] >>> timeit(mgr.get_mgr_id)
+   0.16303414600042743
+   [mgr self-test eval] >>>
+
+If you want to "talk" to a ceph-mgr module other than ``selftest`` using
+this tool, you can either add a command to the module you want to debug
+exactly like how ``mgr self-test eval`` command was added to ``selftest``. Or
+we can make this simpler by promoting the ``eval()`` method to a dedicated
+`Mixin`_ class and inherit your ``MgrModule`` subclass from it. And define
+a command with it. Assuming the prefix of the command is ``mgr my-module eval``,
+one can just put
+
+.. prompt:: bash $
+
+   ../src/pybind/ceph_mgr_repl.py --prefix "mgr my-module eval"
+
+
+.. _Mixin: _https://en.wikipedia.org/wiki/Mixin
 
 Is something missing?
 ---------------------

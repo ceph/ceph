@@ -5,6 +5,7 @@
 
 #include "mon/Monitor.h"
 #include "mon/ConfigMonitor.h"
+#include "mon/KVMonitor.h"
 #include "mon/MgrMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "messages/MConfig.h"
@@ -95,7 +96,14 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << " " << (version+1) << dendl;
   put_last_committed(t, version+1);
+  // NOTE: caller should have done encode_pending_to_kvmon() and
+  // kvmon->propose_pending() to commit the actual config changes.
+}
 
+void ConfigMonitor::encode_pending_to_kvmon()
+{
+  // we need to pass our data through KVMonitor so that it is properly
+  // versioned and shared with subscribers.
   for (auto& [key, value] : pending_cleanup) {
     if (pending.count(key) == 0) {
       derr << __func__ << " repair: adjusting config key '" << key << "'"
@@ -112,7 +120,7 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     bufferlist metabl;
     ::encode(ceph_clock_now(), metabl);
     ::encode(pending_description, metabl);
-    t->put(CONFIG_PREFIX, history, metabl);
+    mon.kvmon()->enqueue_set(history, metabl);
   }
   for (auto& p : pending) {
     string key = KEY_PREFIX + p.first;
@@ -121,17 +129,17 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       if (p.second && *p.second == q->second) {
 	continue;
       }
-      t->put(CONFIG_PREFIX, history + "-" + p.first, q->second);
+      mon.kvmon()->enqueue_set(history + "-" + p.first, q->second);
     } else if (!p.second) {
       continue;
     }
     if (p.second) {
       dout(20) << __func__ << " set " << key << dendl;
-      t->put(CONFIG_PREFIX, key, *p.second);
-      t->put(CONFIG_PREFIX, history + "+" + p.first, *p.second);
-    } else {
+      mon.kvmon()->enqueue_set(key, *p.second);
+      mon.kvmon()->enqueue_set(history + "+" + p.first, *p.second);
+   } else {
       dout(20) << __func__ << " rm " << key << dendl;
-      t->erase(CONFIG_PREFIX, key);
+      mon.kvmon()->enqueue_rm(key);
     }
   }
 }
@@ -160,17 +168,6 @@ bool ConfigMonitor::preprocess_query(MonOpRequestRef op)
   return false;
 }
 
-static string indent_who(const string& who)
-{
-  if (who == "global") {
-    return who;
-  }
-  if (who.find('.') == string::npos) {
-    return "  " + who;
-  }
-  return "    " + who;
-}
-
 bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonCommand>();
@@ -183,8 +180,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
@@ -195,6 +191,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     stringstream ss;
     string name;
     cmd_getval(cmdmap, "key", name);
+    name = ConfFile::normalize_key_name(name);
     const Option *opt = g_conf().find_option(name);
     if (!opt) {
       opt = mon.mgrmon()->find_module_option(name);
@@ -270,7 +267,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     for (auto s : sections) {
       for (auto& i : s.second->options) {
 	if (!f) {
-	  tbl << indent_who(s.first);
+	  tbl << s.first;
 	  tbl << i.second.mask.to_str();
 	  tbl << Option::level_to_str(i.second.opt->level);
           tbl << i.first;
@@ -325,11 +322,13 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       &src);
 
     if (cmd_getval(cmdmap, "key", name)) {
+      name = ConfFile::normalize_key_name(name);
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon.mgrmon()->find_module_option(name);
       }
       if (!opt) {
+        ss << "unrecognized key '" << name << "'";
 	err = -ENOENT;
 	goto reply;
       }
@@ -352,7 +351,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	goto reply;
       }
       if (!entity.is_client() &&
-	  !boost::get<boost::blank>(&opt->daemon_value)) {
+	  opt->daemon_value != Option::value_t{}) {
 	odata.append(Option::to_str(opt->daemon_value));
       } else {
 	odata.append(Option::to_str(opt->value));
@@ -512,6 +511,13 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
   std::stringstream ss;
   int err = -EINVAL;
 
+  // make sure kv is writeable.
+  if (!mon.kvmon()->is_writeable()) {
+    dout(10) << __func__ << " waiting for kv mon to be writeable" << dendl;
+    mon.kvmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+    return false;
+  }
+
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
@@ -532,7 +538,8 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     cmd_getval(cmdmap, "name", name);
     cmd_getval(cmdmap, "value", value);
     cmd_getval(cmdmap, "force", force);
-
+    name = ConfFile::normalize_key_name(name);
+    
     if (prefix == "config set" && !force) {
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
@@ -584,7 +591,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       bl.append(value);
       pending[key] = bl;
     } else {
-      pending[key] = boost::none;
+      pending[key].reset();
     }
     goto update;
   } else if (prefix == "config reset") {
@@ -611,7 +618,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	  bl.append(*i.second.first);
 	  pending[i.first] = bl;
 	} else if (i.second.second) {
-	  pending[i.first] = boost::none;
+	  pending[i.first].reset();
 	}
       }
     }
@@ -723,7 +730,12 @@ update:
     err = 0;
     goto reply;
   }
-  force_immediate_propose();  // faster response
+  // immediately propose *with* KV mon
+  encode_pending_to_kvmon();
+  paxos.plug();
+  mon.kvmon()->propose_pending();
+  paxos.unplug();
+  force_immediate_propose();
   wait_for_finished_proposal(
     op,
     new Monitor::C_Command(
@@ -742,7 +754,11 @@ void ConfigMonitor::tick()
   if (!pending_cleanup.empty()) {
     changed = true;
   }
-  if (changed) {
+  if (changed && mon.kvmon()->is_writeable()) {
+    paxos.plug();
+    encode_pending_to_kvmon();
+    mon.kvmon()->propose_pending();
+    paxos.unplug();
     propose_pending();
   }
 }
@@ -764,7 +780,7 @@ void ConfigMonitor::load_config()
   };
 
   unsigned num = 0;
-  KeyValueDB::Iterator it = mon.store->get_iterator(CONFIG_PREFIX);
+  KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
   it->lower_bound(KEY_PREFIX);
   config_map.clear();
   current.clear();
@@ -776,18 +792,9 @@ void ConfigMonitor::load_config()
 
     current[key] = it->value();
 
-    auto last_slash = key.rfind('/');
     string name;
     string who;
-    if (last_slash == std::string::npos) {
-      name = key;
-    } else if (auto mgrpos = key.find("/mgr/"); mgrpos != std::string::npos) {
-      name = key.substr(mgrpos + 1);
-      who = key.substr(0, mgrpos);
-    } else {
-      name = key.substr(last_slash + 1);
-      who = key.substr(0, last_slash);
-    }
+    config_map.parse_key(key, &name, &who);
 
     // has this option been renamed?
     {
@@ -795,7 +802,7 @@ void ConfigMonitor::load_config()
       if (p != renamed_pacific.end()) {
 	if (mon.monmap->min_mon_release >= ceph_release_t::pacific) {
 	  // schedule a cleanup
-	  pending_cleanup[key] = boost::none;
+	  pending_cleanup[key].reset();
 	  pending_cleanup[who + "/" + p->second] = it->value();
 	}
 	// continue loading under the new name
@@ -809,8 +816,10 @@ void ConfigMonitor::load_config()
     }
     if (!opt) {
       dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
-      opt = new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN);
-      // FIXME: this will be leaked!
+      config_map.stray_options.push_back(
+	std::unique_ptr<Option>(
+	  new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+      opt = config_map.stray_options.back().get();
     }
 
     string err;
@@ -826,18 +835,18 @@ void ConfigMonitor::load_config()
     if (who.size() &&
 	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
       derr << __func__ << " invalid mask for key " << key << dendl;
-      pending_cleanup[key] = boost::none;
+      pending_cleanup[key].reset();
     } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
       dout(10) << __func__ << " NO_MON_UPDATE option '"
 	       << name << "' = '" << value << "' for " << name
 	       << dendl;
-      pending_cleanup[key] = boost::none;
+      pending_cleanup[key].reset();
     } else {
       if (section_name.empty()) {
 	// we prefer global/$option instead of just $option
 	derr << __func__ << " adding global/ prefix to key '" << key << "'"
 	     << dendl;
-	pending_cleanup[key] = boost::none;
+	pending_cleanup[key].reset();
 	pending_cleanup["global/"s + key] = it->value();
       }
       Section *section = &config_map.global;;
@@ -873,7 +882,7 @@ void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
 {
   ch->version = v;
   string prefix = HISTORY_PREFIX + stringify(v) + "/";
-  KeyValueDB::Iterator it = mon.store->get_iterator(CONFIG_PREFIX);
+  KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
   it->lower_bound(prefix);
   while (it->valid() && it->key().find(prefix) == 0) {
     if (it->key() == prefix) {

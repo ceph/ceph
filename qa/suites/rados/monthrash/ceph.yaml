@@ -1,6 +1,9 @@
 overrides:
   ceph:
     conf:
+      client:
+        debug monc: 20
+        debug ms: 1
       mon:
         mon min osdmap epochs: 25
         paxos service trim min: 5

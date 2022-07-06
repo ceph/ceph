@@ -38,19 +38,19 @@ public:
   void print(std::ostream& o) const override {
     cmdmap_t cmdmap;
     std::ostringstream ss;
-    string prefix;
+    std::string prefix;
     cmdmap_from_json(cmd, &cmdmap, ss);
     cmd_getval(cmdmap, "prefix", prefix);
     // Some config values contain sensitive data, so don't log them
     o << "mon_command_ack(";
     if (prefix == "config set") {
-      string name;
+      std::string name;
       cmd_getval(cmdmap, "name", name);
       o << "[{prefix=" << prefix
         << ", name=" << name << "}]"
         << "=" << r << " " << rs << " v" << version << ")";
     } else if (prefix == "config-key set") {
-      string key;
+      std::string key;
       cmd_getval(cmdmap, "key", key);
       o << "[{prefix=" << prefix << ", key=" << key << "}]"
         << "=" << r << " " << rs << " v" << version << ")";

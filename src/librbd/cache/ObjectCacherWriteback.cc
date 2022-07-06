@@ -32,6 +32,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::ObjectCacherWriteback: "
 
+using namespace std;
+
 namespace librbd {
 namespace cache {
 

@@ -6,7 +6,7 @@ Refcount
 Introduction
 ============
 
-Dedupliation, as described in ../deduplication.rst, needs a way to
+Deduplication, as described in ../deduplication.rst, needs a way to
 maintain a target pool of deduplicated chunks with atomic ref
 refcounting.  To that end, there exists an osd object class 
 refcount responsible for using the object class machinery to

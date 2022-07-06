@@ -13,6 +13,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 RGWCRHTTPGetDataCB::RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, RGWHTTPStreamRWRequest *_req) : env(_env), cr(_cr), req(_req) {
   io_id = req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ |RGWHTTPClient::HTTPCLIENT_IO_CONTROL);
   req->set_in_cb(this);
@@ -87,7 +89,7 @@ RGWStreamReadHTTPResourceCRF::~RGWStreamReadHTTPResourceCRF()
   }
 }
 
-int RGWStreamReadHTTPResourceCRF::init()
+int RGWStreamReadHTTPResourceCRF::init(const DoutPrefixProvider *dpp)
 {
   env->stack->init_new_io(req);
 
@@ -125,7 +127,7 @@ void RGWStreamReadHTTPResourceCRF::get_attrs(std::map<string, string> *attrs)
   req->get_out_headers(attrs);
 }
 
-int RGWStreamReadHTTPResourceCRF::decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) {
+int RGWStreamReadHTTPResourceCRF::decode_rest_obj(const DoutPrefixProvider *dpp, map<string, string>& headers, bufferlist& extra_data) {
   /* basic generic implementation */
   for (auto header : headers) {
     const string& val = header.second;
@@ -136,7 +138,7 @@ int RGWStreamReadHTTPResourceCRF::decode_rest_obj(map<string, string>& headers, 
   return 0;
 }
 
-int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool *io_pending)
+int RGWStreamReadHTTPResourceCRF::read(const DoutPrefixProvider *dpp, bufferlist *out, uint64_t max_size, bool *io_pending)
 {
     reenter(&read_state) {
     io_read_mask = req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ | RGWHTTPClient::HTTPCLIENT_IO_CONTROL);
@@ -154,7 +156,7 @@ int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool 
         extra_data.claim_append(in_cb->get_extra_data());
         map<string, string> attrs;
         req->get_out_headers(&attrs);
-        int ret = decode_rest_obj(attrs, extra_data);
+        int ret = decode_rest_obj(dpp, attrs, extra_data);
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: " << __func__ << " decode_rest_obj() returned ret=" << ret << dendl;
           return ret;
@@ -191,7 +193,7 @@ RGWStreamWriteHTTPResourceCRF::~RGWStreamWriteHTTPResourceCRF()
   }
 }
 
-void RGWStreamWriteHTTPResourceCRF::send_ready(const rgw_rest_obj& rest_obj)
+void RGWStreamWriteHTTPResourceCRF::send_ready(const DoutPrefixProvider *dpp, const rgw_rest_obj& rest_obj)
 {
   req->set_send_length(rest_obj.content_len);
   for (auto h : rest_obj.attrs) {
@@ -264,10 +266,10 @@ RGWStreamSpliceCR::RGWStreamSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
                                                                in_crf(_in_crf), out_crf(_out_crf) {}
 RGWStreamSpliceCR::~RGWStreamSpliceCR() { }
 
-int RGWStreamSpliceCR::operate() {
+int RGWStreamSpliceCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
     {
-      int ret = in_crf->init();
+      int ret = in_crf->init(dpp);
       if (ret < 0) {
         return set_cr_error(ret);
       }
@@ -279,7 +281,7 @@ int RGWStreamSpliceCR::operate() {
 
       do {
         yield {
-          ret = in_crf->read(&bl, 4 * 1024 * 1024, &need_retry);
+          ret = in_crf->read(dpp, &bl, 4 * 1024 * 1024, &need_retry);
           if (ret < 0)  {
             return set_cr_error(ret);
           }
@@ -303,7 +305,7 @@ int RGWStreamSpliceCR::operate() {
         if (ret < 0) {
           return set_cr_error(ret);
         }
-        out_crf->send_ready(in_crf->get_rest_obj());
+        out_crf->send_ready(dpp, in_crf->get_rest_obj());
         ret = out_crf->send();
         if (ret < 0) {
           return set_cr_error(ret);

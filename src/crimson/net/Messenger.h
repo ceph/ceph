@@ -36,12 +36,14 @@ using Throttle = crimson::common::Throttle;
 using SocketPolicy = ceph::net::Policy<Throttle>;
 
 class Messenger {
-  entity_name_t my_name;
-  entity_addrvec_t my_addrs;
   uint32_t crc_flags = 0;
   crimson::auth::AuthClient* auth_client = nullptr;
   crimson::auth::AuthServer* auth_server = nullptr;
   bool require_authorizer = true;
+
+protected:
+  entity_name_t my_name;
+  entity_addrvec_t my_addrs;
 
 public:
   Messenger(const entity_name_t& name)
@@ -61,16 +63,14 @@ public:
     my_addrs = addrs;
     return seastar::now();
   }
+  virtual bool set_addr_unknowns(const entity_addrvec_t &addrs) = 0;
 
   using bind_ertr = crimson::errorator<
-    crimson::ct_error::address_in_use // The address (range) is already bound
+    crimson::ct_error::address_in_use, // The address (range) is already bound
+    crimson::ct_error::address_not_available
     >;
   /// bind to the given address
   virtual bind_ertr::future<> bind(const entity_addrvec_t& addr) = 0;
-
-  /// try to bind to the first unused port of given address
-  virtual bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
-                                       uint32_t min_port, uint32_t max_port) = 0;
 
   /// start the messenger
   virtual seastar::future<> start(const dispatchers_t&) = 0;
@@ -118,7 +118,7 @@ public:
     auth_server = as;
   }
 
-  virtual void print(ostream& out) const = 0;
+  virtual void print(std::ostream& out) const = 0;
 
   virtual SocketPolicy get_policy(entity_type_t peer_type) const = 0;
 
@@ -144,7 +144,7 @@ public:
          const uint64_t nonce);
 };
 
-inline ostream& operator<<(ostream& out, const Messenger& msgr) {
+inline std::ostream& operator<<(std::ostream& out, const Messenger& msgr) {
   out << "[";
   msgr.print(out);
   out << "]";

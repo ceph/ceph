@@ -100,12 +100,23 @@ if ! $use_existing; then
            --without-dashboard
     else
         MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
-           --without-dashboard --memstore \
+           --without-dashboard --cyanstore \
            -o "memstore_device_bytes=34359738368" \
            --crimson --nodaemon --redirect-output \
            --osd-args "--memory 4G"
     fi
     cd - || exit
+fi
+
+# i need to read the performance events,
+# see https://www.kernel.org/doc/Documentation/sysctl/kernel.txt
+if /sbin/capsh --supports=cap_sys_admin; then
+    perf_event_paranoid=$(/sbin/sysctl --values kernel.perf_event_paranoid)
+    if test $perf_event_paranoid -gt 0; then
+        sudo /sbin/sysctl -q -w kernel.perf_event_paranoid=0
+    fi
+else
+    echo "without cap_sys_admin, $(whoami) cannot read the perf events"
 fi
 
 for config_file in $config_files; do
@@ -121,6 +132,11 @@ for config_file in $config_files; do
         $cbt_config
     rm -f $cbt_config
 done
+
+if test -n "$perf_event_paranoid"; then
+    # restore the setting
+    sudo /sbin/sysctl -q -w kernel.perf_event_paranoid=$perf_event_paranoid
+fi
 
 if ! $use_existing; then
     cd $build_dir || exit

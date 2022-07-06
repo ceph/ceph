@@ -1,105 +1,76 @@
+import errno
 import json
 import logging
+import os
 import re
 
 from io import StringIO
 from textwrap import dedent
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
 
-from tasks.cephfs.mount import CephFSMount
+from tasks.cephfs.mount import CephFSMount, UMOUNT_TIMEOUT
 
 log = logging.getLogger(__name__)
 
 
-UMOUNT_TIMEOUT = 300
-
+# internal metadata directory
+DEBUGFS_META_DIR = 'meta'
 
 class KernelMount(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None, config={}):
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
+                 client_config={}):
         super(KernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
             client_id=client_id, client_remote=client_remote,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
-        self.rbytes = config.get('rbytes', False)
+        self.client_config = client_config
+        self.dynamic_debug = client_config.get('dynamic_debug', False)
+        self.rbytes = client_config.get('rbytes', False)
+        self.syntax_style = client_config.get('syntax', 'v2')
         self.inst = None
         self.addr = None
+        self._mount_bin = ['adjust-ulimits', 'ceph-coverage', self.test_dir +\
+                           '/archive/coverage', '/bin/mount', '-t', 'ceph']
 
-    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
+    def mount(self, mntopts=[], check_status=True, **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 
         self.setup_netns()
 
-        # TODO: don't call setupfs() from within mount(), since it's
-        # absurd. The proper order should be: create FS first and then
-        # call mount().
-        if createfs:
-            self.setupfs(name=self.cephfs_name)
-        if not self.cephfs_mntpt:
-            self.cephfs_mntpt = '/'
+        if not self.cephfs_name:
+            self.cephfs_name = 'cephfs'
 
-        stderr = StringIO()
-        try:
-            self.client_remote.run(args=['mkdir', '-p', self.hostfs_mntpt],
-                                   timeout=(5*60), stderr=stderr)
-        except CommandFailedError:
-            if 'file exists' not in stderr.getvalue().lower():
-                raise
+        self._create_mntpt()
 
         retval = self._run_mount_cmd(mntopts, check_status)
         if retval:
             return retval
 
-        stderr = StringIO()
-        try:
-            self.client_remote.run(
-                args=['sudo', 'chmod', '1777', self.hostfs_mntpt],
-                stderr=stderr, timeout=(5*60))
-        except CommandFailedError:
-            # the client does not have write permissions in the caps it holds
-            # for the Ceph FS that was just mounted.
-            if 'permission denied' in stderr.getvalue().lower():
-                pass
+        self._set_filemode_on_mntpt()
 
+        if self.dynamic_debug:
+            kmount_count = self.ctx.get(f'kmount_count.{self.client_remote.hostname}', 0)
+            if kmount_count == 0:
+                self.enable_dynamic_debug()
+            self.ctx[f'kmount_count.{self.client_remote.hostname}'] = kmount_count + 1
 
         self.mounted = True
 
     def _run_mount_cmd(self, mntopts, check_status):
-        opts = 'norequire_active_mds'
-        if self.client_id:
-            opts += ',name=' + self.client_id
-        if self.client_keyring_path and self.client_id:
-            opts += ',secret=' + self.get_key_from_keyfile()
-        if self.config_path:
-            opts += ',conf=' + self.config_path
-        if self.cephfs_name:
-            opts += ",mds_namespace=" + self.cephfs_name
-        if self.rbytes:
-            opts += ",rbytes"
-        else:
-            opts += ",norbytes"
-        if mntopts:
-            opts += ',' + ','.join(mntopts)
-
-        mount_dev = ':' + self.cephfs_mntpt
-        prefix = ['sudo', 'adjust-ulimits', 'ceph-coverage',
-                  self.test_dir + '/archive/coverage',
-                  'nsenter',
-                  '--net=/var/run/netns/{0}'.format(self.netns_name)]
-        cmdargs = prefix + ['/bin/mount', '-t', 'ceph', mount_dev,
-                            self.hostfs_mntpt, '-v', '-o', opts]
-
+        mount_cmd = self._get_mount_cmd(mntopts)
         mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
+
         try:
-            self.client_remote.run(args=cmdargs, timeout=(30*60),
+            self.client_remote.run(args=mount_cmd, timeout=300,
                                    stdout=mountcmd_stdout,
-                                   stderr=mountcmd_stderr)
+                                   stderr=mountcmd_stderr, omit_sudo=False)
         except CommandFailedError as e:
             log.info('mount command failed')
             if check_status:
@@ -108,6 +79,53 @@ class KernelMount(CephFSMount):
                 return (e, mountcmd_stdout.getvalue(),
                         mountcmd_stderr.getvalue())
         log.info('mount command passed')
+
+    def _make_mount_cmd_old_or_new_style(self):
+        optd = {}
+        mnt_stx = ''
+
+        self.validate_subvol_options()
+
+        assert(self.cephfs_mntpt)
+        if self.syntax_style == 'v1':
+            mnt_stx = f':{self.cephfs_mntpt}'
+            if self.client_id:
+                optd['name'] = self.client_id
+            if self.cephfs_name:
+                optd['mds_namespace'] = self.cephfs_name
+        elif self.syntax_style == 'v2':
+            mnt_stx = f'{self.client_id}@.{self.cephfs_name}={self.cephfs_mntpt}'
+        else:
+            assert 0, f'invalid syntax style: {self.syntax_style}'
+        return (mnt_stx, optd)
+
+    def _get_mount_cmd(self, mntopts):
+        opts = 'norequire_active_mds'
+        if self.client_keyring_path and self.client_id:
+            opts += ',secret=' + self.get_key_from_keyfile()
+        if self.config_path:
+            opts += ',conf=' + self.config_path
+        if self.rbytes:
+            opts += ",rbytes"
+        else:
+            opts += ",norbytes"
+
+        mount_cmd = ['sudo'] + self._nsenter_args
+        stx_opt = self._make_mount_cmd_old_or_new_style()
+        for opt_name, opt_val in stx_opt[1].items():
+            opts += f',{opt_name}={opt_val}'
+        if mntopts:
+            opts += ',' + ','.join(mntopts)
+        log.info(f'mounting using device: {stx_opt[0]}')
+        # do not fall-back to old-style mount (catch new-style
+        # mount syntax bugs in the kernel). exclude this config
+        # when using v1-style syntax, since old mount helpers
+        # (pre-quincy) would pass this option to the kernel.
+        if self.syntax_style != 'v1':
+            opts += ",nofallback"
+        mount_cmd += self._mount_bin + [stx_opt[0], self.hostfs_mntpt, '-v',
+                                        '-o', opts]
+        return mount_cmd
 
     def umount(self, force=False):
         if not self.is_mounted():
@@ -120,18 +138,27 @@ class KernelMount(CephFSMount):
             cmd=['sudo', 'umount', self.hostfs_mntpt]
             if force:
                 cmd.append('-f')
-            self.client_remote.run(args=cmd, timeout=(15*60), omit_sudo=False)
+            self.client_remote.run(args=cmd, timeout=UMOUNT_TIMEOUT, omit_sudo=False)
         except Exception as e:
+            log.debug('Killing processes on client.{id}...'.format(id=self.client_id))
             self.client_remote.run(
                 args=['sudo', run.Raw('PATH=/usr/sbin:$PATH'), 'lsof',
                       run.Raw(';'), 'ps', 'auxf'],
-                timeout=(15*60), omit_sudo=False)
+                timeout=UMOUNT_TIMEOUT, omit_sudo=False)
             raise e
+
+        if self.dynamic_debug:
+            kmount_count = self.ctx.get(f'kmount_count.{self.client_remote.hostname}')
+            assert kmount_count
+            if kmount_count == 1:
+                self.disable_dynamic_debug()
+            self.ctx[f'kmount_count.{self.client_remote.hostname}'] = kmount_count - 1
 
         self.mounted = False
         self.cleanup()
 
-    def umount_wait(self, force=False, require_clean=False, timeout=900):
+    def umount_wait(self, force=False, require_clean=False,
+                    timeout=UMOUNT_TIMEOUT):
         """
         Unlike the fuse client, the kernel client's umount is immediate
         """
@@ -146,9 +173,10 @@ class KernelMount(CephFSMount):
                 raise
 
             # force delete the netns and umount
+            log.debug('Force/lazy unmounting on client.{id}...'.format(id=self.client_id))
             self.client_remote.run(args=['sudo', 'umount', '-f', '-l',
-                                         self.mountpoint],
-                                   timeout=(15*60), omit_sudo=False)
+                                         self.mountpoint], timeout=timeout,
+                                   omit_sudo=False)
 
             self.mounted = False
             self.cleanup()
@@ -165,63 +193,107 @@ class KernelMount(CephFSMount):
         if self.mounted:
             self.umount()
 
-    def _find_debug_dir(self):
+    def _get_debug_dir(self):
         """
-        Find the debugfs folder for this mount
+        Get the debugfs folder for this mount
         """
-        pyscript = dedent("""
-            import glob
-            import os
-            import json
 
-            def get_id_to_dir():
-                result = {}
-                for dir in glob.glob("/sys/kernel/debug/ceph/*"):
-                    mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
-                    client_id = mds_sessions_lines[1].split()[1].strip('"')
+        cluster_name = 'ceph'
+        fsid = self.ctx.ceph[cluster_name].fsid
 
-                    result[client_id] = dir
-                return result
+        global_id = self._get_global_id()
 
-            print(json.dumps(get_id_to_dir()))
-            """)
-
-        output = self.client_remote.sh([
-            'sudo', 'python3', '-c', pyscript
-        ], timeout=(5*60))
-        client_id_to_dir = json.loads(output)
-
-        try:
-            return client_id_to_dir[self.client_id]
-        except KeyError:
-            log.error("Client id '{0}' debug dir not found (clients seen were: {1})".format(
-                self.client_id, ",".join(client_id_to_dir.keys())
-            ))
-            raise
+        return os.path.join("/sys/kernel/debug/ceph/", f"{fsid}.client{global_id}")
 
     def read_debug_file(self, filename):
         """
         Read the debug file "filename", return None if the file doesn't exist.
         """
-        debug_dir = self._find_debug_dir()
 
-        pyscript = dedent("""
-            import os
+        path = os.path.join(self._get_debug_dir(), filename)
 
-            print(open(os.path.join("{debug_dir}", "{filename}")).read())
-            """).format(debug_dir=debug_dir, filename=filename)
-
+        stdout = StringIO()
         stderr = StringIO()
         try:
-            output = self.client_remote.sh([
-                'sudo', 'python3', '-c', pyscript
-            ], stderr=stderr, timeout=(5*60))
-
-            return output
+            self.run_shell_payload(f"sudo dd if={path}", timeout=(5 * 60),
+                                   stdout=stdout, stderr=stderr)
+            return stdout.getvalue()
         except CommandFailedError:
             if 'no such file or directory' in stderr.getvalue().lower():
-                return None
+                return errno.ENOENT
+            elif 'not a directory' in stderr.getvalue().lower():
+                return errno.ENOTDIR
+            elif 'permission denied' in stderr.getvalue().lower():
+                return errno.EACCES
             raise
+
+    def _get_global_id(self):
+        try:
+            p = self.run_shell_payload("getfattr --only-values -n ceph.client_id .", stdout=StringIO())
+            v = p.stdout.getvalue()
+            prefix = "client"
+            assert v.startswith(prefix)
+            return int(v[len(prefix):])
+        except CommandFailedError:
+            # Probably this fallback can be deleted in a few releases when the kernel xattr is widely available.
+            log.debug("Falling back to messy global_id lookup via /sys...")
+
+            pyscript = dedent("""
+                import glob
+                import os
+                import json
+
+                def get_id_to_dir():
+                    result = {}
+                    for dir in glob.glob("/sys/kernel/debug/ceph/*"):
+                        if os.path.basename(dir) == DEBUGFS_META_DIR:
+                            continue
+                        mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
+                        global_id = mds_sessions_lines[0].split()[1].strip('"')
+                        client_id = mds_sessions_lines[1].split()[1].strip('"')
+                        result[client_id] = global_id
+                    return result
+                print(json.dumps(get_id_to_dir()))
+            """)
+
+            output = self.client_remote.sh([
+                'sudo', 'python3', '-c', pyscript
+            ], timeout=(5*60))
+            client_id_to_global_id = json.loads(output)
+
+            try:
+                return client_id_to_global_id[self.client_id]
+            except KeyError:
+                log.error("Client id '{0}' debug dir not found (clients seen were: {1})".format(
+                    self.client_id, ",".join(client_id_to_global_id.keys())
+                ))
+                raise
+
+    def _dynamic_debug_control(self, enable):
+        """
+        Write to dynamic debug control file.
+        """
+        if enable:
+            fdata = "module ceph +p"
+        else:
+            fdata = "module ceph -p"
+
+        self.run_shell_payload(f"""
+sudo modprobe ceph
+echo '{fdata}' | sudo tee /sys/kernel/debug/dynamic_debug/control
+""")
+
+    def enable_dynamic_debug(self):
+        """
+        Enable the dynamic debug.
+        """
+        self._dynamic_debug_control(True)
+
+    def disable_dynamic_debug(self):
+        """
+        Disable the dynamic debug.
+        """
+        self._dynamic_debug_control(False)
 
     def get_global_id(self):
         """
@@ -230,11 +302,7 @@ class KernelMount(CephFSMount):
 
         assert self.mounted
 
-        mds_sessions = self.read_debug_file("mds_sessions")
-        assert mds_sessions 
-
-        lines = mds_sessions.split("\n")
-        return int(lines[0].split()[1])
+        return self._get_global_id()
 
     @property
     def _global_addr(self):
@@ -288,8 +356,23 @@ class KernelMount(CephFSMount):
         return epoch, barrier
 
     def get_op_read_count(self):
-        buf = self.read_debug_file("metrics")
-        if buf is None:
-            return 0
-        else:
-            return int(re.findall(r'read.*', buf)[0].split()[1])
+        stdout = StringIO()
+        stderr = StringIO()
+        try:
+            path = os.path.join(self._get_debug_dir(), "metrics/size")
+            self.run_shell(f"sudo stat {path}", stdout=stdout,
+                           stderr=stderr, cwd=None)
+            buf = self.read_debug_file("metrics/size")
+        except CommandFailedError:
+            if 'no such file or directory' in stderr.getvalue().lower() \
+                    or 'not a directory' in stderr.getvalue().lower():
+                try:
+                    path = os.path.join(self._get_debug_dir(), "metrics")
+                    self.run_shell(f"sudo stat {path}", stdout=stdout,
+                                   stderr=stderr, cwd=None)
+                    buf = self.read_debug_file("metrics")
+                except CommandFailedError:
+                    return errno.ENOENT
+            else:
+                return 0
+        return int(re.findall(r'read.*', buf)[0].split()[1])

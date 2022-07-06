@@ -1,3 +1,4 @@
+from io import BytesIO, StringIO
 import json
 import logging
 import errno
@@ -51,10 +52,9 @@ class TestDamage(CephFSTestCase):
         for mds_name in self.fs.get_active_names():
             self.fs.mds_asok(["flush", "journal"], mds_name)
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
-        self.fs.rados(['export', '/tmp/metadata.bin'])
+        serialized = self.fs.radosmo(['export', '-'])
 
         def is_ignored(obj_id, dentry=None):
             """
@@ -84,13 +84,13 @@ class TestDamage(CephFSTestCase):
             # None means ls will do an "ls -R" in hope of seeing some errors
             return None
 
-        objects = self.fs.rados(["ls"]).split("\n")
+        objects = self.fs.radosmo(["ls"], stdout=StringIO()).strip().split("\n")
         objects = [o for o in objects if not is_ignored(o)]
 
         # Find all objects with an OMAP header
         omap_header_objs = []
         for o in objects:
-            header = self.fs.rados(["getomapheader", o])
+            header = self.fs.radosmo(["getomapheader", o], stdout=StringIO())
             # The rados CLI wraps the header output in a hex-printed style
             header_bytes = int(re.match("header \((.+) bytes\)", header).group(1))
             if header_bytes > 0:
@@ -99,16 +99,16 @@ class TestDamage(CephFSTestCase):
         # Find all OMAP key/vals
         omap_keys = []
         for o in objects:
-            keys_str = self.fs.rados(["listomapkeys", o])
+            keys_str = self.fs.radosmo(["listomapkeys", o], stdout=StringIO())
             if keys_str:
-                for key in keys_str.split("\n"):
+                for key in keys_str.strip().split("\n"):
                     if not is_ignored(o, key):
                         omap_keys.append((o, key))
 
         # Find objects that have data in their bodies
         data_objects = []
         for obj_id in objects:
-            stat_out = self.fs.rados(["stat", obj_id])
+            stat_out = self.fs.radosmo(["stat", obj_id], stdout=StringIO())
             size = int(re.match(".+, size (.+)$", stat_out).group(1))
             if size > 0:
                 data_objects.append(obj_id)
@@ -157,7 +157,7 @@ class TestDamage(CephFSTestCase):
             mutations.append(MetadataMutation(
                 o,
                 "Delete {0}".format(o),
-                lambda o=o: self.fs.rados(["rm", o]),
+                lambda o=o: self.fs.radosm(["rm", o]),
                 expectation
             ))
 
@@ -168,14 +168,14 @@ class TestDamage(CephFSTestCase):
                 mutations.append(MetadataMutation(
                     obj_id,
                     "Corrupt {0}".format(obj_id),
-                    lambda o=obj_id: self.fs.rados(["put", o, "-"], stdin_data=junk),
+                    lambda o=obj_id: self.fs.radosm(["put", o, "-"], stdin=StringIO(junk)),
                     READONLY
                 ))
             else:
                 mutations.append(MetadataMutation(
                     obj_id,
                     "Corrupt {0}".format(obj_id),
-                    lambda o=obj_id: self.fs.rados(["put", o, "-"], stdin_data=junk),
+                    lambda o=obj_id: self.fs.radosm(["put", o, "-"], stdin=StringIO(junk)),
                     DAMAGED_ON_START
                 ))
 
@@ -192,7 +192,7 @@ class TestDamage(CephFSTestCase):
                 MetadataMutation(
                     o,
                     "Truncate {0}".format(o),
-                    lambda o=o: self.fs.rados(["truncate", o, "0"]),
+                    lambda o=o: self.fs.radosm(["truncate", o, "0"]),
                     expectation
             ))
 
@@ -208,7 +208,7 @@ class TestDamage(CephFSTestCase):
                 MetadataMutation(
                     o,
                     "Corrupt omap key {0}:{1}".format(o, k),
-                    lambda o=o,k=k: self.fs.rados(["setomapval", o, k, junk]),
+                    lambda o=o,k=k: self.fs.radosm(["setomapval", o, k, junk]),
                     expectation,
                     get_path(o, k)
                 )
@@ -230,7 +230,7 @@ class TestDamage(CephFSTestCase):
                 MetadataMutation(
                     o,
                     "Corrupt omap header on {0}".format(o),
-                    lambda o=o: self.fs.rados(["setomapheader", o, junk]),
+                    lambda o=o: self.fs.radosm(["setomapheader", o, junk]),
                     expectation
                 )
             )
@@ -242,18 +242,17 @@ class TestDamage(CephFSTestCase):
 
             # Reset MDS state
             self.mount_a.umount_wait(force=True)
-            self.fs.mds_stop()
-            self.fs.mds_fail()
+            self.fs.fail()
             self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
 
             # Reset RADOS pool state
-            self.fs.rados(['import', '/tmp/metadata.bin'])
+            self.fs.radosm(['import', '-'], stdin=BytesIO(serialized))
 
             # Inject the mutation
             mutation.mutate_fn()
 
             # Try starting the MDS
-            self.fs.mds_restart()
+            self.fs.set_joinable()
 
             # How long we'll wait between starting a daemon and expecting
             # it to make it through startup, and potentially declare itself
@@ -388,16 +387,15 @@ class TestDamage(CephFSTestCase):
         for mds_name in self.fs.get_active_names():
             self.fs.mds_asok(["flush", "journal"], mds_name)
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # Corrupt a dentry
         junk = "deadbeef" * 10
         dirfrag_obj = "{0:x}.00000000".format(subdir_ino)
-        self.fs.rados(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
+        self.fs.radosm(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
 
         # Start up and try to list it
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         self.mount_a.mount_wait()
@@ -451,12 +449,12 @@ class TestDamage(CephFSTestCase):
         self.mount_a.umount_wait()
 
         # Now repair the stats
-        scrub_json = self.fs.rank_tell(["scrub", "start", "/subdir", "repair"])
+        scrub_json = self.fs.run_scrub(["start", "/subdir", "repair"])
         log.info(json.dumps(scrub_json, indent=2))
 
-        self.assertEqual(scrub_json["passed_validation"], False)
-        self.assertEqual(scrub_json["raw_stats"]["checked"], True)
-        self.assertEqual(scrub_json["raw_stats"]["passed"], False)
+        self.assertNotEqual(scrub_json, None)
+        self.assertEqual(scrub_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=scrub_json["scrub_tag"]), True)
 
         # Check that the file count is now correct
         self.mount_a.mount_wait()
@@ -464,7 +462,7 @@ class TestDamage(CephFSTestCase):
         self.assertEqual(nfiles, "1")
 
         # Clean up the omap object
-        self.fs.rados(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
+        self.fs.radosm(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
 
         # Clean up the damagetable entry
         self.fs.mon_manager.raw_cluster_cmd(
@@ -497,9 +495,9 @@ class TestDamage(CephFSTestCase):
         self.fs.mds_asok(["flush", "journal"])
 
         # Drop everything from the MDS cache
-        self.mds_cluster.mds_stop()
+        self.fs.fail()
         self.fs.journal_tool(['journal', 'reset'], 0)
-        self.mds_cluster.mds_fail_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         self.mount_a.mount_wait()
@@ -535,7 +533,7 @@ class TestDamage(CephFSTestCase):
 
         # Case 2: missing dirfrag for the target inode
 
-        self.fs.rados(["rm", "{0:x}.00000000".format(dir2_ino)])
+        self.fs.radosm(["rm", "{0:x}.00000000".format(dir2_ino)])
 
         # Check that touching the hardlink gives EIO
         ran = self.mount_a.run_shell(["stat", "testdir/hardlink2"], wait=False)

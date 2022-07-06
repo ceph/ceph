@@ -84,6 +84,7 @@ void sighup_handler(int signum)
 static void reraise_fatal(int signum)
 {
   // Use default handler to dump core
+  signal(signum, SIG_DFL);
   int ret = raise(signum);
 
   // Normally, we won't get here. If we do, something is very weird.
@@ -144,40 +145,14 @@ static int parse_from_os_release(
   return 0;
 }
 
-static void handle_fatal_signal(int signum)
+
+void generate_crash_dump(char *base,
+			 const BackTrace& bt,
+			 std::map<std::string,std::string> *extra)
 {
-  // This code may itself trigger a SIGSEGV if the heap is corrupt. In that
-  // case, SA_RESETHAND specifies that the default signal handler--
-  // presumably dump core-- will handle it.
-  char buf[1024];
-  char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
-  int r = ceph_pthread_getname(pthread_self(), pthread_name, sizeof(pthread_name));
-  (void)r;
-#if defined(__sun)
-  char message[SIG2STR_MAX];
-  sig2str(signum,message);
-  snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
-	    "in thread %llx thread_name:%s\n", message, (unsigned long long)pthread_self(),
-	    pthread_name);
-#else
-  snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
-	    "in thread %llx thread_name:%s\n", sig_str(signum), (unsigned long long)pthread_self(),
-	    pthread_name);
-#endif
-  dout_emergency(buf);
-  pidfile_remove();
-
-  // TODO: don't use an ostringstream here. It could call malloc(), which we
-  // don't want inside a signal handler.
-  // Also fix the backtrace code not to allocate memory.
-  BackTrace bt(1);
-  ostringstream oss;
-  bt.print(oss);
-  dout_emergency(oss.str());
-
-  char base[PATH_MAX] = { 0 };
   if (g_ceph_context &&
       g_ceph_context->_conf->crash_dir.size()) {
+
     // -- crash dump --
     // id
     ostringstream idss;
@@ -189,7 +164,7 @@ static void handle_fatal_signal(int signum)
     string id = idss.str();
     std::replace(id.begin(), id.end(), ' ', '_');
 
-    snprintf(base, sizeof(base), "%s/%s",
+    snprintf(base, PATH_MAX, "%s/%s",
 	     g_ceph_context->_conf->crash_dir.c_str(),
 	     id.c_str());
     int r = ::mkdir(base, 0700);
@@ -284,8 +259,13 @@ static void handle_fatal_signal(int signum)
 	  }
 	}
 
-	// backtrace
 	bt.dump(&jf);
+
+	if (extra) {
+	  for (auto& i : *extra) {
+	    jf.dump_string(i.first, i.second);
+	  }
+	}
 
 	jf.close_section();
 	ostringstream oss;
@@ -299,6 +279,57 @@ static void handle_fatal_signal(int signum)
       ::creat(fn, 0444);
     }
   }
+}
+
+static void handle_oneshot_fatal_signal(int signum)
+{
+  constexpr static pid_t NULL_TID{0};
+  static std::atomic<pid_t> handler_tid{NULL_TID};
+  if (auto expected{NULL_TID};
+      !handler_tid.compare_exchange_strong(expected, ceph_gettid())) {
+    if (expected == ceph_gettid()) {
+      // The handler code may itself trigger a SIGSEGV if the heap is corrupt.
+      // In that case, SIG_DFL followed by return specifies that the default
+      // signal handler -- presumably dump core -- will handle it.
+      signal(signum, SIG_DFL);
+    } else {
+      // Huh, another thread got into troubles while we are handling the fault.
+      // If this is i.e. SIGSEGV handler, returning means retrying the faulty
+      // instruction one more time, and thus all those extra threads will run
+      // into a busy-wait basically.
+    }
+    return;
+  }
+
+  char buf[1024];
+  char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
+  int r = ceph_pthread_getname(pthread_self(), pthread_name, sizeof(pthread_name));
+  (void)r;
+#if defined(__sun)
+  char message[SIG2STR_MAX];
+  sig2str(signum,message);
+  snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
+	    "in thread %llx thread_name:%s\n", message, (unsigned long long)pthread_self(),
+	    pthread_name);
+#else
+  snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
+	    "in thread %llx thread_name:%s\n", sig_str(signum), (unsigned long long)pthread_self(),
+	    pthread_name);
+#endif
+  dout_emergency(buf);
+  pidfile_remove();
+
+  // TODO: don't use an ostringstream here. It could call malloc(), which we
+  // don't want inside a signal handler.
+  // Also fix the backtrace code not to allocate memory.
+  ClibBackTrace bt(1);
+  ostringstream oss;
+  bt.print(oss);
+  dout_emergency(oss.str());
+
+  char crash_base[PATH_MAX] = { 0 };
+  
+  generate_crash_dump(crash_base, bt);
 
   // avoid recursion back into logging code if that is where
   // we got the SEGV.
@@ -315,9 +346,9 @@ static void handle_fatal_signal(int signum)
 
     g_ceph_context->_log->dump_recent();
 
-    if (base[0]) {
+    if (crash_base[0]) {
       char fn[PATH_MAX*2];
-      snprintf(fn, sizeof(fn)-1, "%s/log", base);
+      snprintf(fn, sizeof(fn)-1, "%s/log", crash_base);
       g_ceph_context->_log->set_log_file(fn);
       g_ceph_context->_log->reopen_log_file();
       g_ceph_context->_log->dump_recent();
@@ -335,14 +366,14 @@ static void handle_fatal_signal(int signum)
 
 void install_standard_sighandlers(void)
 {
-  install_sighandler(SIGSEGV, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGABRT, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGBUS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGILL, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGFPE, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGSEGV, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGABRT, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGBUS, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGILL, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGFPE, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGXCPU, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGXFSZ, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGSYS, handle_oneshot_fatal_signal, SA_NODEFER);
 }
 
 

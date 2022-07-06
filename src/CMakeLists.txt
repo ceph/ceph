@@ -22,6 +22,55 @@ set(pkgdatadir ${CMAKE_INSTALL_FULL_DATADIR})
 set(datadir ${CEPH_INSTALL_DATADIR})
 set(prefix ${CMAKE_INSTALL_PREFIX})
 
+configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
+
+configure_file(ceph-post-file.in
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file @ONLY)
+
+configure_file(ceph-crash.in
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash @ONLY)
+
+# the src/.git_version file may be written out by make-dist; otherwise
+# we pull the git version from .git
+option(ENABLE_GIT_VERSION "build Ceph with git version string" ON)
+if(ENABLE_GIT_VERSION)
+  get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
+  git_describe(CEPH_GIT_NICE_VER_WITH_V --always)
+  # remove leading 'v'
+  string(SUBSTRING ${CEPH_GIT_NICE_VER_WITH_V} 1 -1 CEPH_GIT_NICE_VER)
+  #if building from a source tarball via make-dist
+  if(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
+    message(STATUS "Ceph/.git directory not found, parsing ${CMAKE_CURRENT_SOURCE_DIR}/.git_version for CEPH_GIT_VER and CEPH_GIT_NICE_VER")
+    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/.git_version CEPH_GIT_SHA_AND_TAG)
+    list(GET CEPH_GIT_SHA_AND_TAG 0 CEPH_GIT_VER)
+    list(GET CEPH_GIT_SHA_AND_TAG 1 CEPH_GIT_NICE_VER)
+  endif(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
+else(ENABLE_GIT_VERSION)
+  set(CEPH_GIT_VER "no_version")
+  set(CEPH_GIT_NICE_VER "Development")
+endif(ENABLE_GIT_VERSION)
+
+# the src/ceph_release file is 3 lines,
+#   <release number, e.g. '12' for luminous>
+#   <release name, e.g. 'luminous'>
+#   <release type: 'dev' for x.0.z, 'rc' or x.1.z, or 'stable' or x.2.z>
+# note that the release name is semi-redundant and must match CEPH_RELEASE_*
+# definitions in include/rados.h and common/ceph_strings.c.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/ceph_release CEPH_RELEASE_FILE)
+list(GET CEPH_RELEASE_FILE 0 CEPH_RELEASE)
+list(GET CEPH_RELEASE_FILE 1 CEPH_RELEASE_NAME)
+list(GET CEPH_RELEASE_FILE 2 CEPH_RELEASE_TYPE)
+
+configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
+
+# Common infrastructure
+configure_file(
+  ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
+  ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
+  @ONLY)
+
 add_definitions(
   -DHAVE_CONFIG_H
   -D__CEPH__
@@ -30,6 +79,10 @@ add_definitions(
   -D__STDC_FORMAT_MACROS
   -D_FILE_OFFSET_BITS=64
   -DBOOST_ASIO_DISABLE_THREAD_KEYWORD_EXTENSION)
+if(Boost_VERSION VERSION_GREATER_EQUAL 1.74)
+  add_definitions(-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
+endif()
+
 if(LINUX)
   add_definitions("-D_GNU_SOURCE")
 endif()
@@ -64,10 +117,11 @@ endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   if(MINGW)
     # The MINGW headers are missing some "const" qualifiers.
-    add_compile_options($<$<OR:$<COMPILE_LANGUAGE:C>,$<COMPILE_LANGUAGE:CXX>>:-fpermissive>)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fpermissive>)
   else()
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -rdynamic")
   endif()
+  string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-Og ")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wstrict-null-sentinel>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-new-ttp-matching>)
@@ -75,12 +129,13 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   # CMAKE_POSITION_INDEPENDENT_CODE is TRUE.
   if(EXE_LINKER_USE_PIE)
     if (NOT WITH_OSD_INSTRUMENT_FUNCTIONS AND NOT HAVE_SEASTAR)
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+      string(APPEND CMAKE_EXE_LINKER_FLAGS " -pie")
     endif()
   endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_EXPORTS_C_FLAG}")
   string(APPEND CMAKE_LINKER_FLAGS " -rdynamic -export-dynamic ${CMAKE_EXE_EXPORTS_C_FLAG}")
+  string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-g ")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-inconsistent-missing-override>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-mismatched-tags>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-private-field>)
@@ -103,17 +158,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
-if(NOT CMAKE_BUILD_TYPE)
-  if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    set(default_build_type "Debug")
-  else()
-    set(default_build_type "RelWithDebInfo")
-  endif()
-  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
-      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
-endif()
-
-if(WITH_CEPH_DEBUG_MUTEX OR CMAKE_BUILD_TYPE STREQUAL Debug)
+if(WITH_CEPH_DEBUG_MUTEX)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DCEPH_DEBUG_MUTEX>)
 endif()
 
@@ -187,7 +232,9 @@ set(DIAGNOSTICS_COLOR "auto"
   CACHE STRING "Used if the C/C++ compiler supports the -fdiagnostics-color option. May have one of three values -- 'auto' (default), 'always', or 'never'. If set to 'always' and the compiler supports the option, 'make [...] | less -R' will make visible diagnostics colorization of compiler output.")
 
 if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
-  add_compile_options(-fdiagnostics-color=${DIAGNOSTICS_COLOR})
+  add_compile_options(
+    "$<$<COMPILE_LANGUAGE:C>:-fdiagnostics-color=${DIAGNOSTICS_COLOR}>"
+    "$<$<COMPILE_LANGUAGE:CXX>:-fdiagnostics-color=${DIAGNOSTICS_COLOR}>")
 endif()
 
 set(EXTRALIBS ${CMAKE_DL_LIBS})
@@ -211,38 +258,13 @@ if(${ENABLE_COVERAGE})
   list(APPEND EXTRALIBS gcov)
 endif(${ENABLE_COVERAGE})
 
-set(GCOV_PREFIX_STRIP 4)
-
-# the src/.git_version file may be written out by make-dist; otherwise
-# we pull the git version from .git
-option(ENABLE_GIT_VERSION "build Ceph with git version string" ON)
-if(${ENABLE_GIT_VERSION})
-  get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
-  git_describe(CEPH_GIT_NICE_VER_WITH_V --always)
-  # remove leading 'v'
-  string(SUBSTRING ${CEPH_GIT_NICE_VER_WITH_V} 1 -1 CEPH_GIT_NICE_VER)
-  #if building from a source tarball via make-dist
-  if(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
-    message(STATUS "Ceph/.git directory not found, parsing ${CMAKE_CURRENT_SOURCE_DIR}/.git_version for CEPH_GIT_VER and CEPH_GIT_NICE_VER")
-    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/.git_version CEPH_GIT_SHA_AND_TAG)
-    list(GET CEPH_GIT_SHA_AND_TAG 0 CEPH_GIT_VER)
-    list(GET CEPH_GIT_SHA_AND_TAG 1 CEPH_GIT_NICE_VER)
-  endif(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
-else(${ENABLE_GIT_VERSION})
-  set(CEPH_GIT_VER "no_version")
-  set(CEPH_GIT_NICE_VER "Development")
-endif(${ENABLE_GIT_VERSION})
-
-# the src/ceph_release file is 3 lines,
-#   <release number, e.g. '12' for luminous>
-#   <release name, e.g. 'luminous'>
-#   <release type: 'dev' for x.0.z, 'rc' or x.1.z, or 'stable' or x.2.z>
-# note that the release name is semi-redundant and must match CEPH_RELEASE_*
-# definitions in include/rados.h and common/ceph_strings.c.
-file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/ceph_release CEPH_RELEASE_FILE)
-list(GET CEPH_RELEASE_FILE 0 CEPH_RELEASE)
-list(GET CEPH_RELEASE_FILE 1 CEPH_RELEASE_NAME)
-list(GET CEPH_RELEASE_FILE 2 CEPH_RELEASE_TYPE)
+if(WITH_TESTS)
+  set(GCOV_PREFIX_STRIP 4)
+  configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/src/ceph-debugpack.in
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
+endif()
 
 option(WITH_OCF "build OCF-compliant cluster resource agent" OFF)
 if(WITH_OCF)
@@ -254,36 +276,9 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
-# sort out which allocator to use
-if(ALLOCATOR STREQUAL "tcmalloc")
-  set(ALLOC_LIBS gperftools::tcmalloc)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
-elseif(ALLOCATOR STREQUAL "tcmalloc_minimal")
-  set(ALLOC_LIBS gperftools::tcmalloc_minimal)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
-elseif(ALLOCATOR STREQUAL "jemalloc")
-  set(ALLOC_LIBS JeMalloc::JeMalloc)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
-endif()
-
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
-
-# Common infrastructure
-configure_file(
-  ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
-  ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
-  @ONLY)
 
 set(mds_files)
 list(APPEND mds_files
@@ -300,12 +295,17 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
+option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
 find_package(fmt 6.0.0 QUIET)
 if(fmt_FOUND)
   include_directories(SYSTEM "${fmt_INCLUDE_DIR}")
 else()
   message(STATUS "Could not find fmt, will build it")
+  set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+  set(BUILD_SHARED_LIBS FALSE)
   add_subdirectory(fmt)
+  set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
+  unset(old_BUILD_SHARED_LIBS)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 endif()
 
@@ -342,6 +342,7 @@ if(WITH_SEASTAR)
     endif()
   endif()
   list(APPEND Seastar_CXX_FLAGS
+    "-DSEASTAR_NO_EXCEPTION_HACK"
     "-Wno-error"
     "-Wno-sign-compare"
     "-Wno-attributes"
@@ -356,12 +357,18 @@ if(WITH_SEASTAR)
   add_subdirectory(crimson)
 endif()
 
+include(CheckTypeSize)
+set(CMAKE_EXTRA_INCLUDE_FILES "sys/time.h")
+CHECK_TYPE_SIZE(suseconds_t SUSECONDS_T)
+unset(CMAKE_EXTRA_INCLUDE_FILES)
+
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
   global/global_context.cc
   xxHash/xxhash.c
   common/error_code.cc
+  common/tracer.cc
   log/Log.cc
   mon/MonCap.cc
   mon/MonClient.cc
@@ -385,49 +392,25 @@ set(libcommon_files
   osdc/Objecter.cc
   osdc/error_code.cc
   librbd/Features.cc
+  librbd/io/IoOperations.cc
   ${mds_files})
-if(WITH_JAEGER)
-  list(APPEND libcommon_files common/tracer.cc)
-endif()
+
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
+target_compile_definitions(common-objs PRIVATE
+  $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
+add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
-  find_package(yaml-cpp 0.6.0)
-  if(NOT yaml-cpp_FOUND)
-    set(jaeger_libs ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so
-		    ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6
-		    ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6.2)
-    #customize libjaeger.install
-    execute_process(COMMAND bash -c "sed -i 's/#//' debian/libjaeger.install"
-		    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-    execute_process(COMMAND bash -c "grep -q 'yaml-cpp' debian/libjaeger.install || echo 'usr/lib/libyaml-cpp.so.*' >> debian/libjaeger.install"
-		    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-  endif()
-  include(IncludeJaeger)
-  add_library(jaeger-base INTERFACE)
-  add_dependencies(common-objs
-  yaml-cpp::yaml-cpp
-  opentracing::libopentracing
-  thrift::libthrift
-  jaegertracing::libjaegertracing)
-  target_link_libraries(jaeger-base INTERFACE
-  yaml-cpp::yaml-cpp
-  opentracing::libopentracing
-  thrift::libthrift
-  jaegertracing::libjaegertracing)
-  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
-  #with CMake 3.12+ the following can be replaced by:
-  #target_link_libraries(common-objs jaeger-base)
-   list(APPEND jaeger_libs
-    ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0
-    ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0.6.1
-    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1
-    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0
-    ${CMAKE_BINARY_DIR}/external/lib/libthrift.so.0.13.0)
-  install(FILES ${jaeger_libs}
-    DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  find_package(thrift 0.13.0 REQUIRED)
+  include(BuildOpentelemetry)
+  build_opentelemetry()
+  add_library(jaeger_base INTERFACE)
+  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry
+    thrift::libthrift)
+  add_dependencies(common-objs jaeger_base)
+  target_link_libraries(common-objs jaeger_base)
 endif()
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
@@ -440,6 +423,7 @@ add_subdirectory(arch)
 set(ceph_common_objs
   $<TARGET_OBJECTS:common-auth-objs>
   $<TARGET_OBJECTS:common-common-objs>
+  $<TARGET_OBJECTS:common-options-objs>
   $<TARGET_OBJECTS:common-msg-objs>
   $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>
@@ -456,7 +440,6 @@ set(ceph_common_deps
   Boost::program_options
   Boost::date_time
   Boost::iostreams
-  fmt::fmt
   StdFilesystem::filesystem
   fmt::fmt
   ${BLKID_LIBRARIES}
@@ -483,7 +466,7 @@ if(NOT WITH_SYSTEM_BOOST)
 endif()
 
 if(HAVE_QATZIP)
-  list(APPEND ceph_common_deps ${QATZIP_LIBRARIES})
+  list(APPEND ceph_common_deps ${qatzip_LIBRARIES})
 endif()
 
 if(WITH_DPDK)
@@ -491,7 +474,7 @@ if(WITH_DPDK)
 endif()
 
 if(WITH_JAEGER)
-  list(APPEND ceph_common_deps jaeger-base)
+  list(APPEND ceph_common_deps jaeger_base)
 endif()
 
 if(WIN32)
@@ -501,23 +484,46 @@ endif()
 
 if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
   if(WITH_SYSTEM_PMDK)
+    set(pmdk_COMPONENTS)
     if(WITH_BLUESTORE_PMEM)
-      find_package(pmem REQUIRED COMPONENTS pmem)
+      list(APPEND pmdk_COMPONENTS pmem)
     endif()
     if(WITH_RBD_RWL)
-      find_package(pmem REQUIRED COMPONENTS pmemobj)
+      list(APPEND pmdk_COMPONENTS pmemobj)
     endif()
+    find_package(pmdk 1.8 REQUIRED COMPONENTS ${pmdk_COMPONENTS})
   else()
-    include(Buildpmem)
-    build_pmem()
+    include(Buildpmdk)
+    build_pmdk()
   endif()
 endif()
 
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
+add_dependencies(common legacy-option-headers)
+if(WITH_JAEGER)
+add_dependencies(common jaeger_base)
+endif()
 
-add_library(ceph-common SHARED ${ceph_common_objs})
+if (WIN32)
+  # Statically building ceph-common on Windows fails. We're temporarily
+  # reverting this: 22fefb2338cfc4fcb03ece3cbf77aa964a7f17f2
+  add_library(ceph-common SHARED ${ceph_common_objs})
+else()
+  add_library(ceph-common ${CEPH_SHARED} ${ceph_common_objs})
+endif()
+
 target_link_libraries(ceph-common ${ceph_common_deps})
+if(ENABLE_COVERAGE)
+  target_link_libraries(ceph-common gcov)
+endif(ENABLE_COVERAGE)
+
+add_dependencies(ceph-common legacy-option-headers)
+
+if(WITH_JAEGER)
+add_dependencies(ceph-common jaeger_base)
+endif()
+
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 2
@@ -556,7 +562,10 @@ endif(${WITH_LTTNG})
 
 add_subdirectory(global)
 
-find_package(Lua 5.3 REQUIRED)
+# RGW also support Lua scripting
+if(WITH_CEPHFS OR WITH_RADOSGW)
+  find_package(Lua 5.3 REQUIRED)
+endif()
 
 # rados object classes
 add_subdirectory(cls)
@@ -579,7 +588,16 @@ if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
 
-add_subdirectory(mgr)
+# make rocksdb statically
+
+if(NOT WITH_SYSTEM_ROCKSDB)
+  include(BuildRocksDB)
+  build_rocksdb()
+endif(NOT WITH_SYSTEM_ROCKSDB)
+
+if(WITH_MGR)
+  add_subdirectory(mgr)
+endif()
 
 set(librados_config_srcs
   librados-config.cc)
@@ -594,10 +612,12 @@ if(NOT CEPH_BUILD_VIRTUALENV)
   set(CEPH_BUILD_VIRTUALENV ${CMAKE_BINARY_DIR})
 endif()
 
+if(NOT WIN32)
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
 add_subdirectory(python-common)
 add_subdirectory(cephadm)
+endif(NOT WIN32)
 
 # Monitor
 add_subdirectory(mon)
@@ -607,17 +627,13 @@ add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon os global-static ceph-common
+  ${ALLOC_LIBS}
   ${EXTRALIBS}
-  ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
+  ${CMAKE_DL_LIBS}
+  ${GSSAPI_LIBRARIES})
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
-# make rocksdb statically
-
-if(NOT WITH_SYSTEM_ROCKSDB)
-  include(BuildRocksDB)
-  build_rocksdb()
-endif(NOT WITH_SYSTEM_ROCKSDB)
 
 include(TestBigEndian)
 test_big_endian(CEPH_BIG_ENDIAN)
@@ -627,10 +643,9 @@ endif()
 
 add_subdirectory(kv)
 add_subdirectory(os)
+
 if(NOT WIN32)
 add_subdirectory(blk)
-endif()
-
 add_subdirectory(osd)
 
 set(ceph_osd_srcs
@@ -639,12 +654,11 @@ set(ceph_osd_srcs
   osd/objclass.cc
   objclass/class_api.cc
   ceph_osd.cc)
-if(WITH_JAEGER)
-  list(APPEND ceph_osd_srcs common/tracer.cc)
-endif()
+
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
+  ${ALLOC_LIBS}
   ${BLKID_LIBRARIES})
 if(WITH_FUSE)
   target_link_libraries(ceph-osd FUSE::FUSE)
@@ -654,13 +668,16 @@ set_target_properties(ceph-osd PROPERTIES
   INSTALL_RPATH "")
 install(TARGETS ceph-osd DESTINATION bin)
 
+endif(NOT WIN32)
+
 if (WITH_CEPHFS)
   add_subdirectory(mds)
   set(ceph_mds_srcs
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs})
   target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
-    Boost::thread)
+    Boost::thread
+    ${ALLOC_LIBS})
   install(TARGETS ceph-mds DESTINATION bin)
 endif()
 
@@ -708,25 +725,6 @@ endif()
 add_subdirectory(crypto)
 
 if(WITH_TESTS)
-  configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
-  configure_file(${CMAKE_SOURCE_DIR}/src/ceph-debugpack.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
-endif()
-
-configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
-
-configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
-
-configure_file(ceph-post-file.in
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file @ONLY)
-
-configure_file(ceph-crash.in
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash @ONLY)
-
-if(WITH_TESTS)
   install(PROGRAMS
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
@@ -737,8 +735,8 @@ install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash
-  ${CMAKE_SOURCE_DIR}/src/ceph-run
-  ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
+  ceph-run
+  ceph-clsinfo
   DESTINATION bin)
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
@@ -757,7 +755,7 @@ install(PROGRAMS
   DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/ceph)
 
 install(PROGRAMS
-  ${CMAKE_SOURCE_DIR}/src/ceph-create-keys
+  ceph-create-keys
   DESTINATION sbin)
 
 add_subdirectory(bash_completion)
@@ -782,7 +780,7 @@ if(WITH_LIBCEPHFS)
   endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
-    "${CMAKE_SOURCE_DIR}/src/include/cephfs"
+    "include/cephfs"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   set(ceph_syn_srcs
     ceph_syn.cc
@@ -794,6 +792,20 @@ if(WITH_LIBCEPHFS)
     add_subdirectory(mount)
   endif()
 endif(WITH_LIBCEPHFS)
+
+if(WITH_LIBCEPHSQLITE)
+  set(cephsqlite_srcs libcephsqlite.cc SimpleRADOSStriper.cc)
+  add_library(cephsqlite ${CEPH_SHARED} ${cephsqlite_srcs})
+  target_link_libraries(cephsqlite PRIVATE cls_lock_client librados ceph-common SQLite3::SQLite3 ${EXTRALIBS})
+  set_target_properties(cephsqlite PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
+  if(NOT APPLE AND NOT WIN32)
+    set_property(TARGET cephsqlite APPEND_STRING PROPERTY
+      LINK_FLAGS " -Wl,--exclude-libs,ALL")
+  endif()
+  install(TARGETS cephsqlite DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif(WITH_LIBCEPHSQLITE)
 
 if(WITH_FUSE)
   set(ceph_fuse_srcs
@@ -807,6 +819,10 @@ if(WITH_FUSE)
   install(TARGETS ceph-fuse DESTINATION bin)
   install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 endif(WITH_FUSE)
+
+if(WITH_DOKAN)
+  add_subdirectory(dokan)
+endif(WITH_DOKAN)
 
 add_subdirectory(journal)
 
@@ -822,9 +838,9 @@ if(WITH_RBD)
   endif()
 
   install(PROGRAMS
-    ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer
-    ${CMAKE_SOURCE_DIR}/src/rbd-replay-many
-    ${CMAKE_SOURCE_DIR}/src/rbdmap
+    ceph-rbdnamer
+    rbd-replay-many
+    rbdmap
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_subdirectory(rbd_replay)
 endif(WITH_RBD)
@@ -839,30 +855,27 @@ if(WITH_KVS)
 endif(WITH_KVS)
 
 if(WITH_RADOSGW)
-  set(civetweb_common_files civetweb/src/civetweb.c)
-  add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
-  target_include_directories(civetweb_common_objs SYSTEM PRIVATE
-	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
-  set_property(TARGET civetweb_common_objs
-    APPEND PROPERTY COMPILE_DEFINITIONS USE_IPV6=1)
-  if (LIBSSL_SONAME)
-    set_property(TARGET civetweb_common_objs
-      APPEND PROPERTY COMPILE_DEFINITIONS SSL_LIB="${LIBSSL_SONAME}")
-    set_property(TARGET civetweb_common_objs
-      APPEND PROPERTY COMPILE_DEFINITIONS CRYPTO_LIB="${LIBCRYPTO_SONAME}")
+  if(WITH_RADOSGW_SELECT_PARQUET)
+    if(WITH_SYSTEM_ARROW)
+      find_package(Arrow 4 REQUIRED QUIET)
+      find_package(Parquet 4 REQUIRED QUIET)
+    else()
+      # find arrow's dependencies
+      if (WITH_SYSTEM_UTF8PROC)
+        find_package(utf8proc 2.2.0 REQUIRED)
+      else()
+        include(BuildUtf8proc)
+        build_utf8proc()
+      endif()
+      find_package(thrift 0.13 REQUIRED)
+
+      include(BuildArrow)
+      build_arrow()
+    endif()
   endif()
 
-  if (OPENSSL_FOUND)
-    # Use cmake to determine openssl version, a TODO is to make
-    # civetweb itself do this based on openssl_api_compat strings
-    if (NOT (OPENSSL_VERSION VERSION_LESS "1.1"))
-      message(STATUS "Setting civetweb to use OPENSSL >= 1.1")
-      set_property(TARGET civetweb_common_objs
-        APPEND PROPERTY COMPILE_DEFINITIONS OPENSSL_API_1_1=1)
-    endif()
-  endif(OPENSSL_FOUND)
+  add_subdirectory(libkmip)
   add_subdirectory(rgw)
-
 endif(WITH_RADOSGW)
 
 install(FILES
@@ -883,14 +896,20 @@ add_custom_target(vstart-base DEPENDS
     ceph-conf
     monmaptool
     crushtool
-    rados
+    rados)
+if(NOT WIN32)
+  # WIN32 port does not build python bindings
+  # TODO: introduce an option for enabling python binding
+  add_dependencies(vstart-base
     cython_rados)
+endif()
+
 if (WITH_MGR)
   add_dependencies(vstart-base ceph-mgr)
 endif()
 
 add_custom_target(vstart DEPENDS vstart-base)
-if(WITH_RBD)
+if(WITH_RBD AND NOT WIN32)
   add_dependencies(vstart cython_rbd)
 endif()
 if (WITH_CEPHFS)
@@ -921,6 +940,7 @@ add_custom_target(cephfs_testing DEPENDS
     cls_cephfs
     ceph-fuse
     ceph-dencoder
+    ceph-dencoder-modules
     cephfs-journal-tool
     cephfs-meta-injection
     cephfs-data-scan
@@ -995,4 +1015,3 @@ if(DOXYGEN_FOUND)
     rgw
     COMMENT "Generate C++ documentation")
 endif()
-

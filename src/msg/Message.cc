@@ -36,6 +36,7 @@
 #include "messages/MMonPaxos.h"
 #include "messages/MConfig.h"
 #include "messages/MGetConfig.h"
+#include "messages/MKVData.h"
 
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
@@ -189,6 +190,7 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MMgrReport.h"
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrUpdate.h"
 #include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
@@ -403,6 +405,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_GET_CONFIG:
     m = make_message<MGetConfig>();
+    break;
+  case MSG_KV_DATA:
+    m = make_message<MKVData>();
     break;
 
   case MSG_MON_PROBE:
@@ -887,6 +892,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MGR_OPEN:
     m = make_message<MMgrOpen>();
+    break;
+
+  case MSG_MGR_UPDATE:
+    m = make_message<MMgrUpdate>();
     break;
 
   case MSG_MGR_CLOSE:

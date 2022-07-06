@@ -20,6 +20,7 @@
 #endif
 #include <utime.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/statvfs.h>
 #include <sys/socket.h>
@@ -39,7 +40,7 @@ extern "C" {
 
 #define LIBCEPHFS_VER_MAJOR 10
 #define LIBCEPHFS_VER_MINOR 0
-#define LIBCEPHFS_VER_EXTRA 2
+#define LIBCEPHFS_VER_EXTRA 3
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -83,7 +84,7 @@ struct ceph_file_layout {
 
 	/* object -> pg layout */
 	uint32_t fl_pg_preferred; /* preferred primary for pg (-1 for none) */
-	uint32_t fl_pg_pool;      /* namespace, crush ruleset, rep level */
+	uint32_t fl_pg_pool;      /* namespace, crush rule, rep level */
 } __attribute__ ((packed));
 
 struct CephContext;
@@ -111,18 +112,21 @@ struct snap_info {
   struct snap_metadata *snap_metadata;
 };
 
-/* setattr mask bits */
+/* setattr mask bits (up to an int in size) */
 #ifndef CEPH_SETATTR_MODE
-# define CEPH_SETATTR_MODE	1
-# define CEPH_SETATTR_UID	2
-# define CEPH_SETATTR_GID	4
-# define CEPH_SETATTR_MTIME	8
-# define CEPH_SETATTR_ATIME	16
-# define CEPH_SETATTR_SIZE	32
-# define CEPH_SETATTR_CTIME	64
-# define CEPH_SETATTR_MTIME_NOW	128
-# define CEPH_SETATTR_ATIME_NOW	256
-# define CEPH_SETATTR_BTIME	512
+#define CEPH_SETATTR_MODE		(1 << 0)
+#define CEPH_SETATTR_UID		(1 << 1)
+#define CEPH_SETATTR_GID		(1 << 2)
+#define CEPH_SETATTR_MTIME		(1 << 3)
+#define CEPH_SETATTR_ATIME		(1 << 4)
+#define CEPH_SETATTR_SIZE		(1 << 5)
+#define CEPH_SETATTR_CTIME		(1 << 6)
+#define CEPH_SETATTR_MTIME_NOW		(1 << 7)
+#define CEPH_SETATTR_ATIME_NOW		(1 << 8)
+#define CEPH_SETATTR_BTIME		(1 << 9)
+#define CEPH_SETATTR_KILL_SGUID		(1 << 10)
+#define CEPH_SETATTR_FSCRYPT_AUTH	(1 << 11)
+#define CEPH_SETATTR_FSCRYPT_FILE	(1 << 12)
 #endif
 
 /* define error codes for the mount function*/
@@ -456,6 +460,15 @@ int ceph_conf_parse_env(struct ceph_mount_info *cmount, const char *var);
  */
 int ceph_conf_set(struct ceph_mount_info *cmount, const char *option, const char *value);
 
+/** Set mount timeout.
+ *
+ * @param cmount mount handle to set the configuration value on
+ * @param timeout mount timeout interval
+ *
+ * @returns 0 on success, negative error code otherwise.
+ */
+int ceph_set_mount_timeout(struct ceph_mount_info *cmount, uint32_t timeout);
+
 /**
  * Gets the configuration value as a string.
  *
@@ -532,6 +545,16 @@ int ceph_chdir(struct ceph_mount_info *cmount, const char *path);
  * @returns 0 on success or negative error code otherwise.
  */
 int ceph_opendir(struct ceph_mount_info *cmount, const char *name, struct ceph_dir_result **dirpp);
+
+/**
+ * Open a directory referred to by a file descriptor
+ *
+ * @param cmount the ceph mount handle to use to open the directory
+ * @param dirfd open file descriptor for the directory
+ * @param dirpp the directory result pointer structure to fill in
+ * @returns 0 on success or negative error code otherwise
+ */
+int ceph_fdopendir(struct ceph_mount_info *cmount, int dirfd, struct ceph_dir_result **dirpp);
 
 /**
  * Close the open directory.
@@ -652,6 +675,17 @@ void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, 
 int ceph_mkdir(struct ceph_mount_info *cmount, const char *path, mode_t mode);
 
 /**
+ * Create a directory relative to a file descriptor
+ *
+ * @param cmount the ceph mount handle to use for making the directory.
+ * @param dirfd open file descriptor for a directory (or CEPHFS_AT_FDCWD)
+ * @param relpath the path of the directory to create.
+ * @param mode the permissions the directory should have once created.
+ * @returns 0 on success or a negative return code on error.
+ */
+int ceph_mkdirat(struct ceph_mount_info *cmount, int dirfd, const char *relpath, mode_t mode);
+
+/**
  * Create a snapshot
  *
  * @param cmount the ceph mount handle to use for making the directory.
@@ -728,6 +762,19 @@ int ceph_link(struct ceph_mount_info *cmount, const char *existing, const char *
 int ceph_readlink(struct ceph_mount_info *cmount, const char *path, char *buf, int64_t size);
 
 /**
+ * Read a symbolic link relative to a file descriptor
+ *
+ * @param cmount the ceph mount handle to use for creating the link.
+ * @param dirfd open file descriptor (or CEPHFS_AT_FDCWD)
+ * @param relpath the path to the symlink to read
+ * @param buf the buffer to hold the path of the file that the symlink points to.
+ * @param size the length of the buffer
+ * @returns number of bytes copied on success or negative error code on failure
+ */
+int ceph_readlinkat(struct ceph_mount_info *cmount, int dirfd, const char *relpath, char *buf,
+                    int64_t size);
+
+/**
  * Creates a symbolic link.
  *
  * @param cmount the ceph mount handle to use for creating the symbolic link.
@@ -736,6 +783,18 @@ int ceph_readlink(struct ceph_mount_info *cmount, const char *path, char *buf, i
  * @returns 0 on success or a negative return code on failure.
  */
 int ceph_symlink(struct ceph_mount_info *cmount, const char *existing, const char *newname);
+
+/**
+ * Creates a symbolic link relative to a file descriptor
+ *
+ * @param cmount the ceph mount handle to use for creating the symbolic link.
+ * @param dirfd open file descriptor (or CEPHFS_AT_FDCWD)
+ * @param existing the path to the existing file/directory to link to.
+ * @param newname the path to the new file/directory to link from.
+ * @returns 0 on success or a negative return code on failure.
+ */
+int ceph_symlinkat(struct ceph_mount_info *cmount, const char *existing, int dirfd,
+                   const char *newname);
 
 /** @} links */
 
@@ -746,6 +805,16 @@ int ceph_symlink(struct ceph_mount_info *cmount, const char *existing, const cha
  * @{
  */
 
+
+/**
+ * Checks if deleting a file, link or directory is allowed.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param path the path of the file, link or directory.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_may_delete(struct ceph_mount_info *cmount, const char *path);
+
 /**
  * Removes a file, link, or symbolic link.  If the file/link has multiple links to it, the
  * file will not disappear from the namespace until all references to it are removed.
@@ -755,6 +824,19 @@ int ceph_symlink(struct ceph_mount_info *cmount, const char *existing, const cha
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_unlink(struct ceph_mount_info *cmount, const char *path);
+
+/**
+ * Removes a file, link, or symbolic link relative to a file descriptor.
+ * If the file/link has multiple links to it, the file will not
+ * disappear from the namespace until all references to it are removed.
+ *
+ * @param cmount the ceph mount handle to use for performing the unlink.
+ * @param dirfd open file descriptor (or CEPHFS_AT_FDCWD)
+ * @param relpath the path of the file or link to unlink.
+ * @param flags bitfield that can be used to set AT_* modifier flags (only AT_REMOVEDIR)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_unlinkat(struct ceph_mount_info *cmount, int dirfd, const char *relpath, int flags);
 
 /**
  * Rename a file or directory.
@@ -773,11 +855,25 @@ int ceph_rename(struct ceph_mount_info *cmount, const char *from, const char *to
  * @param fd the file descriptor of the file to get statistics of.
  * @param stx the ceph_statx struct that will be filled in with the file's statistics.
  * @param want bitfield of CEPH_STATX_* flags showing designed attributes
- * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_STATX_SYNC_AS_STAT, AT_STATX_FORCE_SYNC, AT_STATX_DONT_SYNC and AT_SYMLINK_NOFOLLOW)
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
 		unsigned int want, unsigned int flags);
+
+/**
+ * Get attributes of a file relative to a file descriptor
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param dirfd open file descriptor (or CEPHFS_AT_FDCWD)
+ * @param relpath to the file/directory to get statistics of
+ * @param stx the ceph_statx struct that will be filled in with the file's statistics.
+ * @param want bitfield of CEPH_STATX_* flags showing designed attributes
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_STATX_SYNC_AS_STAT, AT_STATX_FORCE_SYNC, AT_STATX_DONT_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_statxat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
+                 struct ceph_statx *stx, unsigned int want, unsigned int flags);
 
 /**
  * Get a file's extended statistics and attributes.
@@ -786,7 +882,7 @@ int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
  * @param path the file or directory to get the statistics of.
  * @param stx the ceph_statx struct that will be filled in with the file's statistics.
  * @param want bitfield of CEPH_STATX_* flags showing designed attributes
- * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_STATX_SYNC_AS_STAT, AT_STATX_FORCE_SYNC, AT_STATX_DONT_SYNC and AT_SYMLINK_NOFOLLOW)
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_statx(struct ceph_mount_info *cmount, const char *path, struct ceph_statx *stx,
@@ -866,6 +962,17 @@ int ceph_fsetattrx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *st
 int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode_t mode);
 
 /**
+ * Change the mode bits (permissions) of a file/directory. If the path is a
+ * symbolic link, it's not de-referenced.
+ *
+ * @param cmount the ceph mount handle to use for performing the chmod.
+ * @param path the path of file/directory to change the mode bits on.
+ * @param mode the new permissions to set.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_lchmod(struct ceph_mount_info *cmount, const char *path, mode_t mode);
+
+/**
  * Change the mode bits (permissions) of an open file.
  *
  * @param cmount the ceph mount handle to use for performing the chmod.
@@ -874,6 +981,19 @@ int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode_t mode);
  * @returns 0 on success or a negative error code on failure.
  */
 int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode);
+
+/**
+ * Change the mode bits (permissions) of a file relative to a file descriptor.
+ *
+ * @param cmount the ceph mount handle to use for performing the chown.
+ * @param dirfd open file descriptor (or CEPHFS_AT_FDCWD)
+ * @param relpath the relpath of the file/directory to change the ownership of.
+ * @param mode the new permissions to set.
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_chmodat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
+                 mode_t mode, int flags);
 
 /**
  * Change the ownership of a file/directory.
@@ -907,6 +1027,20 @@ int ceph_fchown(struct ceph_mount_info *cmount, int fd, int uid, int gid);
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
+
+/**
+ * Change the ownership of a file/directory releative to a file descriptor.
+ *
+ * @param cmount the ceph mount handle to use for performing the chown.
+ * @param dirfd open file descriptor (or CEPHFS_AT_FDCWD)
+ * @param relpath the relpath of the file/directory to change the ownership of.
+ * @param uid the user id to set on the file/directory.
+ * @param gid the group id to set on the file/directory.
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_chownat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
+                 uid_t uid, gid_t gid, int flags);
 
 /**
  * Change file/directory last access and modification times.
@@ -969,6 +1103,21 @@ int ceph_futimes(struct ceph_mount_info *cmount, int fd, struct timeval times[2]
 int ceph_futimens(struct ceph_mount_info *cmount, int fd, struct timespec times[2]);
 
 /**
+ * Change file/directory last access and modification times relative
+ * to a file descriptor.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param dirfd open file descriptor (or CEPHFS_AT_FDCWD)
+ * @param relpath the relpath of the file/directory to change the ownership of.
+ * @param dirfd the fd of the open file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_utimensat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
+                   struct timespec times[2], int flags);
+
+/**
  * Apply or remove an advisory lock.
  *
  * @param cmount the ceph mount handle to use for performing the lock.
@@ -1019,6 +1168,20 @@ int ceph_mknod(struct ceph_mount_info *cmount, const char *path, mode_t mode, de
  * @returns a non-negative file descriptor number on success or a negative error code on failure.
  */
 int ceph_open(struct ceph_mount_info *cmount, const char *path, int flags, mode_t mode);
+
+/**
+ * Create and/or open a file relative to a directory
+ *
+ * @param cmount the ceph mount handle to use for performing the open.
+ * @param dirfd open file descriptor (or CEPHFS_AT_FDCWD)
+ * @param relpath the path of the file to open.  If the flags parameter includes O_CREAT,
+ *        the file will first be created before opening.
+ * @param flags a set of option masks that control how the file is created/opened.
+ * @param mode the permissions to place on the file if the file does not exist and O_CREAT
+ *        is specified in the flags.
+ * @returns a non-negative file descriptor number on success or a negative error code on failure.
+ */
+int ceph_openat(struct ceph_mount_info *cmount, int dirfd, const char *relpath, int flags, mode_t mode);
 
 /**
  * Create and/or open a file with a specific file layout.
@@ -1666,6 +1829,10 @@ int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path);
 /* Low Level */
 struct Inode *ceph_ll_get_inode(struct ceph_mount_info *cmount,
 				vinodeno_t vino);
+
+int ceph_ll_lookup_vino(struct ceph_mount_info *cmount, vinodeno_t vino,
+			Inode **inode);
+
 int ceph_ll_lookup_inode(
     struct ceph_mount_info *cmount,
     struct inodeno_t ino,
@@ -1930,6 +2097,9 @@ void ceph_finish_reclaim(struct ceph_mount_info *cmount);
 
 /**
  * Register a set of callbacks to be used with this cmount
+ *
+ * This is deprecated, use ceph_ll_register_callbacks2() instead.
+ *
  * @param cmount the ceph mount handle on which the cb's should be registerd
  * @param args   callback arguments to register with the cmount
  *
@@ -1937,6 +2107,19 @@ void ceph_finish_reclaim(struct ceph_mount_info *cmount);
  * unregister these callbacks, so this is a one-way change.
  */
 void ceph_ll_register_callbacks(struct ceph_mount_info *cmount,
+				struct ceph_client_callback_args *args);
+
+/**
+ * Register a set of callbacks to be used with this cmount
+ * @param cmount the ceph mount handle on which the cb's should be registerd
+ * @param args   callback arguments to register with the cmount
+ *
+ * Any fields set to NULL will be ignored. There currently is no way to
+ * unregister these callbacks, so this is a one-way change.
+ *
+ * Returns 0 on success or -EBUSY if the cmount is mounting or already mounted.
+ */
+int ceph_ll_register_callbacks2(struct ceph_mount_info *cmount,
 				struct ceph_client_callback_args *args);
 
 /**

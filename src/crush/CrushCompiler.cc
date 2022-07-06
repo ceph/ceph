@@ -88,7 +88,7 @@ static void print_rule_name(ostream& out, int t, CrushWrapper &crush)
 static void print_fixedpoint(ostream& out, int i)
 {
   char s[20];
-  snprintf(s, sizeof(s), "%.3f", (float)i / (float)0x10000);
+  snprintf(s, sizeof(s), "%.5f", (float)i / (float)0x10000);
   out << s;
 }
 
@@ -361,11 +361,8 @@ int CrushCompiler::decompile(ostream &out)
       print_rule_name(out, i, crush);
     out << " {\n";
     out << "\tid " << i << "\n";
-    if (i != crush.get_rule_mask_ruleset(i)) {
-      out << "\t# WARNING: ruleset " << crush.get_rule_mask_ruleset(i) << " != id " << i << "; this will not recompile to the same map\n";
-    }
 
-    switch (crush.get_rule_mask_type(i)) {
+    switch (crush.get_rule_type(i)) {
     case CEPH_PG_TYPE_REPLICATED:
       out << "\ttype replicated\n";
       break;
@@ -373,11 +370,8 @@ int CrushCompiler::decompile(ostream &out)
       out << "\ttype erasure\n";
       break;
     default:
-      out << "\ttype " << crush.get_rule_mask_type(i) << "\n";
+      out << "\ttype " << crush.get_rule_type(i) << "\n";
     }
-
-    out << "\tmin_size " << crush.get_rule_mask_min_size(i) << "\n";
-    out << "\tmax_size " << crush.get_rule_mask_max_size(i) << "\n";
 
     for (int j=0; j<crush.get_rule_len(i); j++) {
       switch (crush.get_rule_op(i, j)) {
@@ -793,17 +787,29 @@ int CrushCompiler::parse_rule(iter_t const& i)
   else 
     ceph_abort();
 
-  int minsize = int_node(i->children[start+4]);
-  int maxsize = int_node(i->children[start+6]);
-  
-  int steps = i->children.size() - start - 8;
-  //err << "num steps " << steps << std::endl;
+  // ignore min_size+max_size and find first step
+  int step_start = 0;
+  int steps = 0;
+  for (unsigned p = start + 3; p < i->children.size()-1; ++p) {
+    string tag = string_node(i->children[p]);
+    if (tag == "min_size" || tag == "max_size") {
+      std::cerr << "WARNING: " << tag << " is no longer supported, ignoring" << std::endl;
+      ++p;
+      continue;
+    }
+    // has to be a step--grammer doesn't recognized anything else
+    assert(i->children[p].value.id().to_long() == crush_grammar::_step);
+    step_start = p;
+    steps = i->children.size() - p - 1;
+    break;
+  }
+  //err << "num steps " << steps << " start " << step_start << std::endl;
 
   if (crush.rule_exists(ruleno)) {
     err << "rule " << ruleno << " already exists" << std::endl;
     return -1;
   }
-  int r = crush.add_rule(ruleno, steps, type, minsize, maxsize);
+  int r = crush.add_rule(ruleno, steps, type);
   if (r != ruleno) {
     err << "unable to add rule id " << ruleno << " for rule '" << rname
 	<< "'" << std::endl;
@@ -815,7 +821,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
   }
 
   int step = 0;
-  for (iter_t p = i->children.begin() + start + 7; step < steps; p++) {
+  for (iter_t p = i->children.begin() + step_start; step < steps; p++) {
     iter_t s = p->children.begin() + 1;
     int stepid = s->value.id().to_long();
     switch (stepid) {

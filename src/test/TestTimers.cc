@@ -13,6 +13,8 @@
  */
 #define MAX_TEST_CONTEXTS 5
 
+using namespace std;
+
 class TestContext;
 
 namespace
@@ -244,10 +246,9 @@ static int safe_timer_cancellation_test(SafeTimer &safe_timer,
 
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
@@ -255,6 +256,7 @@ int main(int argc, const char **argv)
   int ret;
   ceph::mutex safe_timer_lock = ceph::make_mutex("safe_timer_lock");
   SafeTimer safe_timer(g_ceph_context, safe_timer_lock);
+  safe_timer.init();
 
   ret = basic_timer_test <SafeTimer>(safe_timer, &safe_timer_lock);
   if (ret)
@@ -273,6 +275,7 @@ int main(int argc, const char **argv)
     goto done;
 
 done:
+  safe_timer.shutdown();
   print_status(argv[0], ret);
   return ret;
 }

@@ -49,12 +49,14 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
     mock_image_ctx = new MockImageCtx(*ictx);
     crypto = nullptr;
     mock_load_request = MockLoadRequest::create(
-            mock_image_ctx, std::move(passphrase), &crypto, on_finish);
+            mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2, std::move(passphrase),
+            &crypto, on_finish);
   }
 
   void TearDown() override {
     delete mock_image_ctx;
     if (crypto != nullptr) {
+      crypto->put();
       crypto = nullptr;
     }
     TestMockFixture::TearDown();
@@ -66,20 +68,15 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
     Header header(mock_image_ctx->cct);
 
     ASSERT_EQ(0, header.init());
-    ASSERT_EQ(0, header.format(type, alg, key_size, cipher_mode, sector_size,
-                               OBJECT_SIZE, true));
+    ASSERT_EQ(0, header.format(type, alg, nullptr, key_size, cipher_mode,
+                               sector_size, OBJECT_SIZE, true));
     ASSERT_EQ(0, header.add_keyslot(passphrase_cstr, strlen(passphrase_cstr)));
     ASSERT_LE(0, header.read(&header_bl));
 
     data_offset = header.get_data_offset();
   }
 
-    void expect_crypto_layer_exists_check(bool exists = false) {
-      EXPECT_CALL(*mock_image_ctx->io_object_dispatcher, exists(
-              io::OBJECT_DISPATCH_LAYER_CRYPTO)).WillOnce(Return(exists));
-    }
-
-    void expect_image_read(uint64_t offset, uint64_t length) {
+  void expect_image_read(uint64_t offset, uint64_t length) {
     EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, send(_))
             .WillOnce(Invoke([this, offset,
                               length](io::ImageDispatchSpec* spec) {
@@ -109,7 +106,6 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
 
 TEST_F(TestMockCryptoLuksLoadRequest, AES128) {
   generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096);
-  expect_crypto_layer_exists_check();
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -119,7 +115,6 @@ TEST_F(TestMockCryptoLuksLoadRequest, AES128) {
 
 TEST_F(TestMockCryptoLuksLoadRequest, AES256) {
   generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096);
-  expect_crypto_layer_exists_check();
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -128,8 +123,11 @@ TEST_F(TestMockCryptoLuksLoadRequest, AES256) {
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, LUKS1) {
+  delete mock_load_request;
+  mock_load_request = MockLoadRequest::create(
+          mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1, {passphrase_cstr},
+          &crypto, on_finish);
   generate_header(CRYPT_LUKS1, "aes", 32, "xts-plain64", 512);
-  expect_crypto_layer_exists_check();
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -137,9 +135,23 @@ TEST_F(TestMockCryptoLuksLoadRequest, LUKS1) {
   ASSERT_NE(crypto, nullptr);
 }
 
+TEST_F(TestMockCryptoLuksLoadRequest, WrongFormat) {
+  generate_header(CRYPT_LUKS1, "aes", 32, "xts-plain64", 512);
+  expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
+  mock_load_request->send();
+
+  expect_image_read(DEFAULT_INITIAL_READ_SIZE,
+                    MAXIMUM_HEADER_SIZE - DEFAULT_INITIAL_READ_SIZE);
+  image_read_request->complete(DEFAULT_INITIAL_READ_SIZE); // complete 1st read
+
+  image_read_request->complete(
+          MAXIMUM_HEADER_SIZE - DEFAULT_INITIAL_READ_SIZE);
+  ASSERT_EQ(-EINVAL, finished_cond.wait());
+  ASSERT_EQ(crypto, nullptr);
+}
+
 TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedAlgorithm) {
   generate_header(CRYPT_LUKS2, "twofish", 32, "xts-plain64", 4096);
-  expect_crypto_layer_exists_check();
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -149,7 +161,6 @@ TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedAlgorithm) {
 
 TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedCipherMode) {
   generate_header(CRYPT_LUKS2, "aes", 32, "cbc-essiv:sha256", 4096);
-  expect_crypto_layer_exists_check();
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -160,7 +171,6 @@ TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedCipherMode) {
 TEST_F(TestMockCryptoLuksLoadRequest, HeaderBiggerThanInitialRead) {
   generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096);
   mock_load_request->set_initial_read_size(4096);
-  expect_crypto_layer_exists_check();
   expect_image_read(0, 4096);
   mock_load_request->send();
 
@@ -175,7 +185,6 @@ TEST_F(TestMockCryptoLuksLoadRequest, HeaderBiggerThanInitialRead) {
 TEST_F(TestMockCryptoLuksLoadRequest, KeyslotsBiggerThanInitialRead) {
   generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096);
   mock_load_request->set_initial_read_size(16384);
-  expect_crypto_layer_exists_check();
   expect_image_read(0, 16384);
   mock_load_request->send();
 
@@ -190,10 +199,10 @@ TEST_F(TestMockCryptoLuksLoadRequest, KeyslotsBiggerThanInitialRead) {
 TEST_F(TestMockCryptoLuksLoadRequest, WrongPassphrase) {
   delete mock_load_request;
   mock_load_request = MockLoadRequest::create(
-        mock_image_ctx, "wrong", &crypto, on_finish);
+        mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2, "wrong", &crypto,
+        on_finish);
 
   generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096);
-  expect_crypto_layer_exists_check();
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
 
@@ -204,14 +213,6 @@ TEST_F(TestMockCryptoLuksLoadRequest, WrongPassphrase) {
 
   image_read_request->complete(data_offset - DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(-EPERM, finished_cond.wait());
-  ASSERT_EQ(crypto, nullptr);
-}
-
-TEST_F(TestMockCryptoLuksLoadRequest, CryptoAlreadyLoaded) {
-  generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096);
-  expect_crypto_layer_exists_check(true);
-  mock_load_request->send();
-  ASSERT_EQ(-EEXIST, finished_cond.wait());
   ASSERT_EQ(crypto, nullptr);
 }
 

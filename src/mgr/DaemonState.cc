@@ -24,6 +24,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
+using std::list;
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::string;
+using std::stringstream;
+using std::unique_ptr;
+
 void DeviceState::set_metadata(map<string,string>&& m)
 {
   metadata = std::move(m);
@@ -39,6 +48,10 @@ void DeviceState::set_metadata(map<string,string>&& m)
   if (p != metadata.end()) {
     life_expectancy_stamp.parse(p->second);
   }
+  p = metadata.find("wear_level");
+  if (p != metadata.end()) {
+    wear_level = atof(p->second.c_str());
+  }
 }
 
 void DeviceState::set_life_expectancy(utime_t from, utime_t to, utime_t now)
@@ -46,12 +59,12 @@ void DeviceState::set_life_expectancy(utime_t from, utime_t to, utime_t now)
   life_expectancy = make_pair(from, to);
   life_expectancy_stamp = now;
   if (from != utime_t()) {
-    metadata["life_expectancy_min"] = from;
+    metadata["life_expectancy_min"] = stringify(from);
   } else {
     metadata["life_expectancy_min"] = "";
   }
   if (to != utime_t()) {
-    metadata["life_expectancy_max"] = to;
+    metadata["life_expectancy_max"] = stringify(to);
   } else {
     metadata["life_expectancy_max"] = "";
   }
@@ -69,6 +82,16 @@ void DeviceState::rm_life_expectancy()
   metadata.erase("life_expectancy_min");
   metadata.erase("life_expectancy_max");
   metadata.erase("life_expectancy_stamp");
+}
+
+void DeviceState::set_wear_level(float wear)
+{
+  wear_level = wear;
+  if (wear >= 0) {
+    metadata["wear_level"] = stringify(wear);
+  } else {
+    metadata.erase("wear_level");
+  }
 }
 
 string DeviceState::get_life_expectancy_str(utime_t now) const
@@ -115,6 +138,9 @@ void DeviceState::dump(Formatter *f) const
     f->dump_stream("life_expectancy_stamp")
       << life_expectancy_stamp;
   }
+  if (wear_level >= 0) {
+    f->dump_float("wear_level", wear_level);
+  }
 }
 
 void DeviceState::print(ostream& out) const
@@ -133,6 +159,53 @@ void DeviceState::print(ostream& out) const
 	<< life_expectancy.second
 	<< " (as of " << life_expectancy_stamp << ")\n";
   }
+  if (wear_level >= 0) {
+    out << "wear_level " << wear_level << "\n";
+  }
+}
+
+void DaemonState::set_metadata(const std::map<std::string,std::string>& m)
+{
+  devices.clear();
+  devices_bypath.clear();
+  metadata = m;
+  if (auto found = m.find("device_ids"); found != m.end()) {
+    auto& device_ids = found->second;
+    std::map<std::string,std::string> paths; // devname -> id or path
+    if (auto found = m.find("device_paths"); found != m.end()) {
+      get_str_map(found->second, &paths, ",; ");
+    }
+    for_each_pair(
+      device_ids, ",; ",
+      [&paths, this](std::string_view devname, std::string_view id) {
+	// skip blank ids
+	if (id.empty()) {
+	  return;
+	}
+	// id -> devname
+	devices.emplace(id, devname);
+	if (auto path = paths.find(std::string(id)); path != paths.end()) {
+	  // id -> path
+	  devices_bypath.emplace(id, path->second);
+	}
+      });
+  }
+  if (auto found = m.find("hostname"); found != m.end()) {
+    hostname = found->second;
+  }
+}
+
+const std::map<std::string,std::string>& DaemonState::_get_config_defaults()
+{
+  if (config_defaults.empty() &&
+      config_defaults_bl.length()) {
+    auto p = config_defaults_bl.cbegin();
+    try {
+      decode(config_defaults, p);
+    } catch (buffer::error& e) {
+    }
+  }
+  return config_defaults;
 }
 
 void DaemonStateIndex::insert(DaemonStatePtr dm)

@@ -11,6 +11,7 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/pg.h"
 #include "include/denc.h"
 
 namespace crimson::osd {
@@ -32,32 +33,39 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   // used by create().
   struct private_ctag_t{};
 
-  struct NotifyCmp {
-    inline bool operator()(NotifyRef lhs, NotifyRef rhs) const;
-  };
-  std::set<NotifyRef, NotifyCmp> in_progress_notifies;
+  std::set<NotifyRef, std::less<>> in_progress_notifies;
   crimson::net::ConnectionRef conn;
   crimson::osd::ObjectContextRef obc;
 
   watch_info_t winfo;
   entity_name_t entity_name;
 
+  seastar::timer<seastar::lowres_clock> timeout_timer;
+
   seastar::future<> start_notify(NotifyRef);
   seastar::future<> send_notify_msg(NotifyRef);
   seastar::future<> send_disconnect_msg();
   void discard_state();
+  void do_watch_timeout(Ref<PG> pg);
 
   friend Notify;
+  friend class WatchTimeoutRequest;
 
 public:
   Watch(private_ctag_t,
         crimson::osd::ObjectContextRef obc,
         const watch_info_t& winfo,
-        const entity_name_t& entity_name)
+        const entity_name_t& entity_name,
+        Ref<PG> pg)
     : obc(std::move(obc)),
       winfo(winfo),
-      entity_name(entity_name) {
+      entity_name(entity_name),
+      timeout_timer([this, pg=std::move(pg)] {
+        assert(pg);
+        return do_watch_timeout(pg);
+      }) {
   }
+  ~Watch();
 
   seastar::future<> connect(crimson::net::ConnectionRef, bool);
   bool is_alive() const {
@@ -66,11 +74,9 @@ public:
   bool is_connected() const {
     return static_cast<bool>(conn);
   }
-  void got_ping(utime_t) {
-    // NOP
-  }
+  void got_ping(utime_t);
 
-  seastar::future<> remove(bool send_disconnect);
+  seastar::future<> remove();
 
   /// Call when notify_ack received on notify_id
   seastar::future<> notify_ack(
@@ -89,6 +95,7 @@ public:
   uint64_t get_cookie() const {
     return winfo.cookie;
   }
+  void cancel_notify(const uint64_t notify_id);
 };
 
 using WatchRef = seastar::shared_ptr<Watch>;
@@ -100,29 +107,42 @@ struct notify_reply_t {
 
   bool operator<(const notify_reply_t& rhs) const;
   DENC(notify_reply_t, v, p) {
-    DENC_START(1, 1, p);
+    // there is no versioning / preamble
     denc(v.watcher_gid, p);
     denc(v.watcher_cookie, p);
     denc(v.bl, p);
-    DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs);
 
-class Notify {
+class Notify : public seastar::enable_shared_from_this<Notify> {
   std::set<WatchRef> watchers;
-  notify_info_t ninfo;
+  const notify_info_t ninfo;
   crimson::net::ConnectionRef conn;
-  uint64_t client_gid;
-  uint64_t user_version;
-  bool complete = false;
-  bool discarded = false;
+  const uint64_t client_gid;
+  const uint64_t user_version;
+  bool complete{false};
+  bool discarded{false};
+  seastar::timer<seastar::lowres_clock> timeout_timer{
+    [this] { do_notify_timeout(); }
+  };
 
   /// (gid,cookie) -> reply_bl for everyone who acked the notify
   std::multiset<notify_reply_t> notify_replies;
 
   uint64_t get_id() const { return ninfo.notify_id; }
-  seastar::future<> maybe_send_completion();
 
+  /// Sends notify completion if watchers.empty() or timeout
+  seastar::future<> send_completion(
+    std::set<WatchRef> timedout_watchers = {});
+
+  /// Called on Notify timeout
+  void do_notify_timeout();
+
+  Notify(crimson::net::ConnectionRef conn,
+         const notify_info_t& ninfo,
+         const uint64_t client_gid,
+         const uint64_t user_version);
   template <class WatchIteratorT>
   Notify(WatchIteratorT begin,
          WatchIteratorT end,
@@ -134,6 +154,21 @@ class Notify {
   // de facto private one. The motivation behind the hack is make_shared
   // used by create_n_propagate factory.
   struct private_ctag_t{};
+
+  using ptr_t = seastar::shared_ptr<Notify>;
+  friend bool operator<(const ptr_t& lhs, const ptr_t& rhs) {
+    assert(lhs);
+    assert(rhs);
+    return lhs->get_id() < rhs->get_id();
+  }
+  friend bool operator<(const ptr_t& ptr, const uint64_t id) {
+    assert(ptr);
+    return ptr->get_id() < id;
+  }
+  friend bool operator<(const uint64_t id, const ptr_t& ptr) {
+    assert(ptr);
+    return id < ptr->get_id();
+  }
 
   friend Watch;
 
@@ -166,6 +201,10 @@ Notify::Notify(WatchIteratorT begin,
     conn(std::move(conn)),
     client_gid(client_gid),
     user_version(user_version) {
+  assert(!std::empty(watchers));
+  if (ninfo.timeout) {
+    timeout_timer.arm(std::chrono::seconds{ninfo.timeout});
+  }
 }
 
 template <class WatchIteratorT, class... Args>
@@ -177,16 +216,20 @@ seastar::future<> Notify::create_n_propagate(
   static_assert(
     std::is_same_v<typename std::iterator_traits<WatchIteratorT>::value_type,
                    crimson::osd::WatchRef>);
-  auto notify = seastar::make_shared<Notify>(
-    private_ctag_t{},
-    begin,
-    end,
-    std::forward<Args>(args)...);
-  return seastar::do_for_each(begin, end, [=] (auto& watchref) {
-    return watchref->start_notify(notify);
-  }).then([notify = std::move(notify)] {
-    return notify->maybe_send_completion();
-  });
+  if (begin == end) {
+    auto notify = seastar::make_shared<Notify>(
+      private_ctag_t{},
+      std::forward<Args>(args)...);
+    return notify->send_completion();
+  } else {
+    auto notify = seastar::make_shared<Notify>(
+      private_ctag_t{},
+      begin, end,
+      std::forward<Args>(args)...);
+    return seastar::do_for_each(begin, end, [=] (auto& watchref) {
+      return watchref->start_notify(notify);
+    });
+  }
 }
 
 } // namespace crimson::osd

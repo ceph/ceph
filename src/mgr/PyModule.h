@@ -26,7 +26,9 @@
 
 class MonClient;
 
-std::string handle_pyerror();
+std::string handle_pyerror(bool generate_crash_dump = false,
+			   std::string module = {},
+			   std::string caller = {});
 
 std::string peek_pyerror();
 
@@ -85,8 +87,11 @@ private:
   int load_options();
   std::map<std::string, MgrMap::ModuleOption> options;
 
+  int load_notify_types();
+  std::set<std::string> notify_types;
+
 public:
-  static std::string config_prefix;
+  static std::string mgr_store_prefix;
 
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
@@ -152,6 +157,10 @@ public:
   bool is_loaded() const { std::lock_guard l(lock) ; return loaded; }
   bool is_always_on() const { std::lock_guard l(lock) ; return always_on; }
 
+  bool should_notify(const std::string& notify_type) const {
+    return notify_types.count(notify_type);
+  }
+
   const std::string &get_name() const {
     std::lock_guard l(lock) ; return module_name;
   }
@@ -176,9 +185,9 @@ public:
   
   ~PyModuleConfig();
 
-  void set_config(
+  std::pair<int, std::string> set_config(
     MonClient *monc,
     const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val);
+    const std::string &key, const std::optional<std::string>& val);
 
 };

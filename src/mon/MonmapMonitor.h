@@ -89,17 +89,17 @@ private:
    * @param tiebreaker_mon: the name of the monitor to declare tiebreaker
    * @param dividing_bucket: the bucket type (eg 'dc') that divides the cluster
    */
-  void try_enable_stretch_mode(stringstream& ss, bool *okay,
+  void try_enable_stretch_mode(std::stringstream& ss, bool *okay,
 			       int *errcode, bool commit,
-			       const string& tiebreaker_mon,
-			       const string& dividing_bucket);
+			       const std::string& tiebreaker_mon,
+			       const std::string& dividing_bucket);
 
 public:
   /**
    * Set us to degraded stretch mode. Put the dead_mons in
    * the MonMap.
    */
-  void trigger_degraded_stretch_mode(const set<string>& dead_mons);
+  void trigger_degraded_stretch_mode(const std::set<std::string>& dead_mons);
   /**
    * Set us to healthy stretch mode: clear out the
    * down list to allow any non-tiebreaker mon to be the leader again.

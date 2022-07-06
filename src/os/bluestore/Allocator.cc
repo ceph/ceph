@@ -5,6 +5,7 @@
 #include "StupidAllocator.h"
 #include "BitmapAllocator.h"
 #include "AvlAllocator.h"
+#include "BtreeAllocator.h"
 #include "HybridAllocator.h"
 #ifdef HAVE_LIBZBD
 #include "ZonedAllocator.h"
@@ -25,8 +26,7 @@ class Allocator::SocketHook : public AdminSocketHook {
   friend class Allocator;
   std::string name;
 public:
-  explicit SocketHook(Allocator *alloc,
-                      const std::string& _name) :
+  SocketHook(Allocator *alloc, std::string_view _name) :
     alloc(alloc), name(_name)
   {
     AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
@@ -81,13 +81,13 @@ public:
         f->open_object_section("free");
         char off_hex[30];
         char len_hex[30];
-        snprintf(off_hex, sizeof(off_hex) - 1, "0x%lx", off);
-        snprintf(len_hex, sizeof(len_hex) - 1, "0x%lx", len);
+        snprintf(off_hex, sizeof(off_hex) - 1, "0x%zx", off);
+        snprintf(len_hex, sizeof(len_hex) - 1, "0x%zx", len);
         f->dump_string("offset", off_hex);
         f->dump_string("length", len_hex);
         f->close_section();
       };
-      alloc->dump(iterated_allocation);
+      alloc->foreach(iterated_allocation);
       f->close_section();
       f->close_section();
     } else if (command == "bluestore allocator score " + name) {
@@ -106,10 +106,11 @@ public:
   }
 
 };
-Allocator::Allocator(const std::string& name,
+Allocator::Allocator(std::string_view name,
                      int64_t _capacity,
                      int64_t _block_size)
-  : capacity(_capacity), block_size(_block_size)
+ : device_size(_capacity),
+   block_size(_block_size)
 {
   asok_hook = new SocketHook(this, name);
 }
@@ -124,23 +125,32 @@ const string& Allocator::get_name() const {
   return asok_hook->name;
 }
 
-Allocator *Allocator::create(CephContext* cct, string type,
-                             int64_t size, int64_t block_size, const std::string& name)
+Allocator *Allocator::create(
+  CephContext* cct,
+  std::string_view type,
+  int64_t size,
+  int64_t block_size,
+  int64_t zone_size,
+  int64_t first_sequential_zone,
+  std::string_view name)
 {
   Allocator* alloc = nullptr;
   if (type == "stupid") {
-    alloc = new StupidAllocator(cct, name, size, block_size);
+    alloc = new StupidAllocator(cct, size, block_size, name);
   } else if (type == "bitmap") {
     alloc = new BitmapAllocator(cct, size, block_size, name);
   } else if (type == "avl") {
     return new AvlAllocator(cct, size, block_size, name);
+  } else if (type == "btree") {
+    return new BtreeAllocator(cct, size, block_size, name);
   } else if (type == "hybrid") {
     return new HybridAllocator(cct, size, block_size,
       cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
       name);
 #ifdef HAVE_LIBZBD
   } else if (type == "zoned") {
-    return new ZonedAllocator(cct, size, block_size, name);
+    return new ZonedAllocator(cct, size, block_size, zone_size, first_sequential_zone,
+			      name);
 #endif
   }
   if (alloc == nullptr) {
@@ -203,7 +213,7 @@ double Allocator::get_fragmentation_score()
     score_sum += get_score(len);
     sum += len;
   };
-  dump(iterated_allocation);
+  foreach(iterated_allocation);
 
 
   double ideal = get_score(sum);

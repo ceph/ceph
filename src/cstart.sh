@@ -18,6 +18,7 @@ fi
 echo "fsid $fsid"
 
 shortid=`echo $fsid | cut -c 1-8`
+echo $shortid > shortid
 echo "shortid $shortid"
 
 # ip
@@ -35,17 +36,21 @@ fi
 echo "ip $ip"
 
 # port
-if [ -z "$port" ]; then
+if [ -e port ] ; then
+    port=`cat port`
+else
     while [ true ]
     do
         port="$(echo $(( RANDOM % 1000 + 40000 )))"
-        ss -a -n | grep LISTEN | grep "${ip}:${port} " 1>/dev/null 2>&1 || break
+        ss -a -n | grep LISTEN | grep "${ip}:${port} " 2>&1 >/dev/null || break
     done
+    echo $port > port
 fi
-echo "port $port"
+echo "mon port $port"
+
 
 # make sure we have an image
-if ! $runtime image inspect $image_base:$shortid 2>/dev/null; then
+if ! sudo $runtime image inspect $image_base:$shortid 1>/dev/null 2>/dev/null; then
     echo "building initial $image_base:$shortid image..."
     sudo ../src/script/cpatch -t $image_base:$shortid
 fi
@@ -56,11 +61,15 @@ sudo ../src/cephadm/cephadm --image ${image_base}:${shortid} bootstrap \
      --fsid $fsid \
      --mon-addrv "[v2:$ip:$port]" \
      --output-dir . \
-     --allow-overwrite
+     --allow-overwrite \
+     $@
 
 # kludge to make 'bin/ceph ...' work
 sudo chmod 755 ceph.client.admin.keyring
 echo 'keyring = ceph.client.admin.keyring' >> ceph.conf
+
+# don't use repo digests; this implicitly does a pull and we don't want that
+bin/ceph config set mgr mgr/cephadm/use_repo_digest false
 
 echo
 echo "sudo ../src/script/cpatch -t $image_base:$shortid"

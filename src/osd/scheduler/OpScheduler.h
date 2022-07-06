@@ -50,6 +50,9 @@ public:
   // Print human readable brief description with relevant parameters
   virtual void print(std::ostream &out) const = 0;
 
+  // Apply config changes to the scheduler (if any)
+  virtual void update_configuration() = 0;
+
   // Destructor
   virtual ~OpScheduler() {};
 };
@@ -57,7 +60,9 @@ public:
 std::ostream &operator<<(std::ostream &lhs, const OpScheduler &);
 using OpSchedulerRef = std::unique_ptr<OpScheduler>;
 
-OpSchedulerRef make_scheduler(CephContext *cct);
+OpSchedulerRef make_scheduler(
+  CephContext *cct, uint32_t num_shards, bool is_rotational,
+  std::string_view osd_objectstore);
 
 /**
  * Implements OpScheduler in terms of OpQueue
@@ -131,6 +136,10 @@ public:
     out << "ClassedOpQueueScheduler(queue=";
     queue.print(out);
     out << ", cutoff=" << cutoff << ")";
+  }
+
+  void update_configuration() final {
+    // no-op
   }
 
   ~ClassedOpQueueScheduler() final {};

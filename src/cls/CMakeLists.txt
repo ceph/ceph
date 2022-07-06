@@ -231,21 +231,23 @@ if (WITH_CEPHFS)
 
 endif (WITH_CEPHFS)
 
-# cls_lua
-set(cls_lua_srcs
-    lua/cls_lua.cc
-    lua/lua_bufferlist.cc)
-add_library(cls_lua SHARED ${cls_lua_srcs})
-set_target_properties(cls_lua PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
-  INSTALL_RPATH ""
-  CXX_VISIBILITY_PRESET hidden)
-install(TARGETS cls_lua DESTINATION ${cls_dir})
-target_link_libraries(cls_lua
-    ${LUA_LIBRARIES}
-    json_spirit)
-target_include_directories(cls_lua PRIVATE "${LUA_INCLUDE_DIR}")
+if (NOT WIN32)
+  # cls_lua
+  set(cls_lua_srcs
+      lua/cls_lua.cc
+      lua/lua_bufferlist.cc)
+  add_library(cls_lua SHARED ${cls_lua_srcs})
+  set_target_properties(cls_lua PROPERTIES
+    VERSION "1.0.0"
+    SOVERSION "1"
+    INSTALL_RPATH ""
+    CXX_VISIBILITY_PRESET hidden)
+  install(TARGETS cls_lua DESTINATION ${cls_dir})
+  target_link_libraries(cls_lua
+      ${LUA_LIBRARIES}
+      json_spirit)
+  target_include_directories(cls_lua PRIVATE "${LUA_INCLUDE_DIR}")
+endif (NOT WIN32)
 
 set(cls_lua_client_srcs
     lua/cls_lua_client.cc)
@@ -338,3 +340,13 @@ set_target_properties(cls_fifo PROPERTIES
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_fifo DESTINATION ${cls_dir})
+
+# cls_test_remote_reads
+set(cls_test_remote_reads_srcs test_remote_reads/cls_test_remote_reads.cc)
+add_library(cls_test_remote_reads SHARED ${cls_test_remote_reads_srcs})
+set_target_properties(cls_test_remote_reads PROPERTIES
+  VERSION "1.0.0"
+  SOVERSION "1"
+  INSTALL_RPATH ""
+  CXX_VISIBILITY_PRESET hidden)
+install(TARGETS cls_test_remote_reads DESTINATION ${cls_dir})

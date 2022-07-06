@@ -44,16 +44,15 @@ public:
   virtual bool is_disconnected() const = 0;
 
   bool is_local_primary() const;
-  virtual bool is_linked() const;
+  bool is_remote_primary() const;
+  bool is_linked() const;
 
   virtual cls::rbd::MirrorImageMode get_mirror_image_mode() const = 0;
 
   virtual image_sync::SyncPointHandler* create_sync_point_handler() = 0;
   void destroy_sync_point_handler();
 
-  virtual bool replay_requires_remote_image() const {
-    return false;
-  }
+  virtual bool replay_requires_remote_image() const = 0;
 
   void close_remote_image(Context* on_finish);
 
@@ -83,13 +82,13 @@ public:
 
   std::string local_image_id;
   librbd::mirror::PromotionState local_promotion_state =
-    librbd::mirror::PROMOTION_STATE_PRIMARY;
+    librbd::mirror::PROMOTION_STATE_UNKNOWN;
   ImageCtxT* local_image_ctx = nullptr;
 
   std::string remote_mirror_uuid;
   std::string remote_image_id;
   librbd::mirror::PromotionState remote_promotion_state =
-    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
+    librbd::mirror::PROMOTION_STATE_UNKNOWN;
   ImageCtxT* remote_image_ctx = nullptr;
 
 protected:
@@ -100,6 +99,8 @@ protected:
   void close_local_image(Context* on_finish);
 
 private:
+  virtual bool is_linked_impl() const = 0;
+
   void handle_close_local_image(int r, Context* on_finish);
   void handle_close_remote_image(int r, Context* on_finish);
 };

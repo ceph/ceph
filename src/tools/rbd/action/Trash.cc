@@ -101,6 +101,9 @@ int execute_move(const po::variables_map &vm,
               << std::endl;
   }
 
+  if (expires_at != "now") {
+    std::cout << "rbd: image " << image_name << " will expire at " << exp_time << std::endl;
+  }
   return r;
 }
 
@@ -146,6 +149,9 @@ int execute_remove(const po::variables_map &vm,
     if (r == -ENOTEMPTY) {
       std::cerr << "rbd: image has snapshots - these must be deleted"
                 << " with 'rbd snap purge' before the image can be removed."
+                << std::endl;
+    } else if (r == -EUCLEAN) {
+      std::cerr << "rbd: error: image not fully moved to trash."
                 << std::endl;
     } else if (r == -EBUSY) {
       std::cerr << "rbd: error: image still has watchers"
@@ -397,8 +403,8 @@ void get_purge_arguments(po::options_description *positional,
        "value range: 0.0-1.0");
 }
 
-int execute_purge (const po::variables_map &vm,
-                   const std::vector<std::string> &ceph_global_init_args) {
+int execute_purge(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
   std::string pool_name;
   std::string namespace_name;
   size_t arg_index = 0;
@@ -443,10 +449,19 @@ int execute_purge (const po::variables_map &vm,
   r = rbd.trash_purge_with_progress(io_ctx, expire_ts, threshold, pc);
   if (r < 0) {
     pc.fail();
-  } else {
-    pc.finish();
+    if (r == -ENOTEMPTY || r == -EBUSY || r == -EMLINK || r == -EUCLEAN) {
+      std::cerr << "rbd: some expired images could not be removed"
+                << std::endl
+                << "Ensure that they are closed/unmapped, do not have "
+                << "snapshots (including trashed snapshots with linked "
+                << "clones), are not in a group and were moved to the "
+                << "trash successfully."
+                << std::endl;
+    }
+    return r;
   }
 
+  pc.finish();
   return 0;
 }
 
@@ -503,7 +518,6 @@ int execute_restore(const po::variables_map &vm,
   return r;
 }
 
-
 Shell::Action action_move(
   {"trash", "move"}, {"trash", "mv"}, "Move an image to the trash.", "",
   &get_move_arguments, &execute_move);
@@ -516,7 +530,6 @@ Shell::Action action_purge(
   {"trash", "purge"}, {}, "Remove all expired images from trash.", "",
   &get_purge_arguments, &execute_purge);
 
-Shell::SwitchArguments switched_arguments({"long", "l"});
 Shell::Action action_list(
   {"trash", "list"}, {"trash", "ls"}, "List trash images.", "",
   &get_list_arguments, &execute_list);

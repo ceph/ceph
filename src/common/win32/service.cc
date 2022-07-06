@@ -74,14 +74,14 @@ void WINAPI ServiceBase::run()
   if (err) {
     lderr(s_service->cct) << "Failed to start service. Error code: "
                           << err << dendl;
-    s_service->set_status(SERVICE_STOPPED);
+    s_service->shutdown(true);
   } else {
     ldout(s_service->cct, 5) << "Successfully started service." << dendl;
     s_service->set_status(SERVICE_RUNNING);
   }
 }
 
-void ServiceBase::shutdown()
+void ServiceBase::shutdown(bool ignore_errors)
 {
   DWORD original_state = status.dwCurrentState;
   set_status(SERVICE_STOP_PENDING);
@@ -89,7 +89,14 @@ void ServiceBase::shutdown()
   int err = shutdown_hook();
   if (err) {
     derr << "Shutdown service hook failed. Error code: " << err << dendl;
-    set_status(original_state);
+    if (ignore_errors) {
+      derr << "Ignoring shutdown hook failure, marking the service as stopped."
+           << dendl;
+      set_status(SERVICE_STOPPED);
+    } else {
+      derr << "Reverting to original service state." << dendl;
+      set_status(original_state);
+    }
   } else {
     dout(5) << "Shutdown hook completed." << dendl;
     set_status(SERVICE_STOPPED);

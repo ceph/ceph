@@ -1,5 +1,5 @@
 <cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title|Example: Create Pool@@formTitle"
+  <ng-container i18n="form title"
                 class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
 
   <ng-container class="modal-content">
@@ -43,7 +43,7 @@
             <span class="required"></span>
           </label>
           <div class="cd-col-form-input">
-            <select class="form-control custom-select"
+            <select class="form-control"
                     id="root"
                     name="root"
                     formControlName="root">
@@ -71,7 +71,7 @@
             <span class="required"></span>
           </label>
           <div class="cd-col-form-input">
-            <select class="form-control custom-select"
+            <select class="form-control"
                     id="failure_domain"
                     name="failure_domain"
                     formControlName="failure_domain">
@@ -98,7 +98,7 @@
             </cd-helper>
           </label>
           <div class="cd-col-form-input">
-            <select class="form-control custom-select"
+            <select class="form-control"
                     id="device_class"
                     name="device_class"
                     formControlName="device_class">

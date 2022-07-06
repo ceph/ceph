@@ -69,7 +69,7 @@ TEST(Arch, all)
   expected = strstr(flags, " sse4_1 ") ? 1 : 0;
   EXPECT_EQ(expected, ceph_arch_intel_sse41);
 
-  expected = (strstr(flags, " sse3 ") || strstr(flags, " ssse3 ")) ? 1 : 0;
+  expected = (strstr(flags, " sse3 ") || strstr(flags, " ssse3 ") || strstr(flags, " pni ")) ? 1 : 0;
   EXPECT_EQ(expected, ceph_arch_intel_sse3);
 
   expected = strstr(flags, " ssse3 ") ? 1 : 0;

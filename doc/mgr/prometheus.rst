@@ -29,6 +29,17 @@ Configuration
 
     The Prometheus manager module needs to be restarted for configuration changes to be applied.
 
+.. mgr_module:: prometheus
+.. confval:: server_addr
+.. confval:: server_port
+.. confval:: scrape_interval
+.. confval:: cache
+.. confval:: stale_cache_strategy
+.. confval:: rbd_stats_pools
+.. confval:: rbd_stats_pools_refresh_interval
+.. confval:: standby_behaviour
+.. confval:: standby_error_status_code
+
 By default the module will accept HTTP requests on port ``9283`` on all IPv4
 and IPv6 addresses on the host.  The port and listen address are both
 configurable with ``ceph config set``, with keys
@@ -43,11 +54,10 @@ is registered with Prometheus's `registry
 
 .. warning::
 
-    The ``scrape_interval`` of this module should always be set to match
+    The :confval:`mgr/prometheus/scrape_interval` of this module should always be set to match
     Prometheus' scrape interval to work properly and not cause any issues.
-    
-The Prometheus manager module is, by default, configured with a scrape interval
-of 15 seconds.  The scrape interval in the module is used for caching purposes
+
+The scrape interval in the module is used for caching purposes
 and to determine when a cache is stale.
 
 It is not recommended to use a scrape interval below 10 seconds.  It is
@@ -60,13 +70,12 @@ To set a different scrape interval in the Prometheus module, set
     ceph config set mgr mgr/prometheus/scrape_interval 20
 
 On large clusters (>1000 OSDs), the time to fetch the metrics may become
-significant.  Without the cache, the Prometheus manager module could,
-especially in conjunction with multiple Prometheus instances, overload the
-manager and lead to unresponsive or crashing Ceph manager instances.  Hence,
-the cache is enabled by default and cannot be disabled.  This means that there
-is a possibility that the cache becomes stale.  The cache is considered stale
-when the time to fetch the metrics from Ceph exceeds the configured
-``scrape_interval``.
+significant.  Without the cache, the Prometheus manager module could, especially
+in conjunction with multiple Prometheus instances, overload the manager and lead
+to unresponsive or crashing Ceph manager instances.  Hence, the cache is enabled
+by default.  This means that there is a possibility that the cache becomes
+stale.  The cache is considered stale when the time to fetch the metrics from
+Ceph exceeds the configured :confval:``mgr/prometheus/scrape_interval``.
 
 If that is the case, **a warning will be logged** and the module will either
 
@@ -85,7 +94,66 @@ To tell the module to respond with "service unavailable", set it to ``fail``::
 
     ceph config set mgr mgr/prometheus/stale_cache_strategy fail
 
+If you are confident that you don't require the cache, you can disable it::
+
+    ceph config set mgr mgr/prometheus/cache false
+
+If you are using the prometheus module behind some kind of reverse proxy or
+loadbalancer, you can simplify discovering the active instance by switching
+to ``error``-mode::
+
+    ceph config set mgr mgr/prometheus/standby_behaviour error
+
+If set, the prometheus module will respond with a HTTP error when requesting ``/``
+from the standby instance. The default error code is 500, but you can configure
+the HTTP response code with::
+
+    ceph config set mgr mgr/prometheus/standby_error_status_code 503
+
+Valid error codes are between 400-599.
+
+To switch back to the default behaviour, simply set the config key to ``default``::
+
+    ceph config set mgr mgr/prometheus/standby_behaviour default
+
 .. _prometheus-rbd-io-statistics:
+
+Ceph Health Checks
+------------------
+
+The mgr/prometheus module also tracks and maintains a history of Ceph health checks,
+exposing them to the Prometheus server as discrete metrics. This allows Prometheus
+alert rules to be configured for specific health check events.
+
+The metrics take the following form;
+
+::
+
+    # HELP ceph_health_detail healthcheck status by type (0=inactive, 1=active)
+    # TYPE ceph_health_detail gauge
+    ceph_health_detail{name="OSDMAP_FLAGS",severity="HEALTH_WARN"} 0.0
+    ceph_health_detail{name="OSD_DOWN",severity="HEALTH_WARN"} 1.0
+    ceph_health_detail{name="PG_DEGRADED",severity="HEALTH_WARN"} 1.0
+
+The health check history is made available through the following commands;
+
+::
+
+    healthcheck history ls [--format {plain|json|json-pretty}]
+    healthcheck history clear
+
+The ``ls`` command provides an overview of the health checks that the cluster has
+encountered, or since the last ``clear`` command was issued. The example below;
+
+::
+
+    [ceph: root@c8-node1 /]# ceph healthcheck history ls
+    Healthcheck Name          First Seen (UTC)      Last seen (UTC)       Count  Active
+    OSDMAP_FLAGS              2021/09/16 03:17:47   2021/09/16 22:07:40       2    No
+    OSD_DOWN                  2021/09/17 00:11:59   2021/09/17 00:11:59       1   Yes
+    PG_DEGRADED               2021/09/17 00:11:59   2021/09/17 00:11:59       1   Yes
+    3 health check(s) listed
+
 
 RBD IO statistics
 -----------------
@@ -100,6 +168,10 @@ statistics are collected for all namespaces in the pool.
 Example to activate the RBD-enabled pools ``pool1``, ``pool2`` and ``poolN``::
 
   ceph config set mgr mgr/prometheus/rbd_stats_pools "pool1,pool2,poolN"
+
+The wildcard can be used to indicate all pools or namespaces::
+
+  ceph config set mgr mgr/prometheus/rbd_stats_pools "*"
 
 The module makes the list of all available images scanning the specified
 pools and namespaces and refreshes it periodically. The period is
@@ -168,11 +240,11 @@ drive statistics, special series are output like this:
 
 ::
 
-    ceph_disk_occupation{ceph_daemon="osd.0",device="sdd", exported_instance="myhost"}
+    ceph_disk_occupation_human{ceph_daemon="osd.0", device="sdd", exported_instance="myhost"}
 
 To use this to get disk statistics by OSD ID, use either the ``and`` operator or
 the ``*`` operator in your prometheus query. All metadata metrics (like ``
-ceph_disk_occupation`` have the value 1 so they act neutral with ``*``. Using ``*``
+ceph_disk_occupation_human`` have the value 1 so they act neutral with ``*``. Using ``*``
 allows to use ``group_left`` and ``group_right`` grouping modifiers, so that
 the resulting metric has additional labels from one side of the query.
 
@@ -185,13 +257,24 @@ The goal is to run a query like
 
 ::
 
-    rate(node_disk_bytes_written[30s]) and on (device,instance) ceph_disk_occupation{ceph_daemon="osd.0"}
+    rate(node_disk_written_bytes_total[30s]) and
+    on (device,instance) ceph_disk_occupation_human{ceph_daemon="osd.0"}
 
 Out of the box the above query will not return any metrics since the ``instance`` labels of
-both metrics don't match. The ``instance`` label of ``ceph_disk_occupation``
+both metrics don't match. The ``instance`` label of ``ceph_disk_occupation_human``
 will be the currently active MGR node.
 
- The following two section outline two approaches to remedy this.
+The following two section outline two approaches to remedy this.
+
+.. note::
+
+    If you need to group on the `ceph_daemon` label instead of `device` and
+    `instance` labels, using `ceph_disk_occupation_human` may not work reliably.
+    It is advised that you use `ceph_disk_occupation` instead.
+
+    The difference is that `ceph_disk_occupation_human` may group several OSDs
+    into the value of a single `ceph_daemon` label in cases where multiple OSDs
+    share a disk.
 
 Use label_replace
 =================
@@ -204,7 +287,13 @@ To correlate an OSD and its disks write rate, the following query can be used:
 
 ::
 
-    label_replace(rate(node_disk_bytes_written[30s]), "exported_instance", "$1", "instance", "(.*):.*") and on (device,exported_instance) ceph_disk_occupation{ceph_daemon="osd.0"}
+    label_replace(
+        rate(node_disk_written_bytes_total[30s]),
+        "exported_instance",
+        "$1",
+        "instance",
+        "(.*):.*"
+    ) and on (device, exported_instance) ceph_disk_occupation_human{ceph_daemon="osd.0"}
 
 Configuring Prometheus server
 =============================
@@ -300,8 +389,8 @@ node_targets.yml
 Notes
 =====
 
-Counters and gauges are exported; currently histograms and long-running 
-averages are not.  It's possible that Ceph's 2-D histograms could be 
+Counters and gauges are exported; currently histograms and long-running
+averages are not.  It's possible that Ceph's 2-D histograms could be
 reduced to two separate 1-D histograms, and that long-running averages
 could be exported as Prometheus' Summary type.
 

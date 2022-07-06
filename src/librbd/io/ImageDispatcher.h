@@ -37,6 +37,7 @@ public:
   void apply_qos_schedule_tick_min(uint64_t tick) override;
   void apply_qos_limit(uint64_t flag, uint64_t limit, uint64_t burst,
                        uint64_t burst_seconds) override;
+  void apply_qos_exclude_ops(uint64_t exclude_ops) override;
 
   bool writes_blocked() const override;
   int block_writes() override;
@@ -45,7 +46,7 @@ public:
   void unblock_writes() override;
   void wait_on_writes_unblocked(Context *on_unblocked) override;
 
-  void remap_extents(Extents&& image_extents,
+  void remap_extents(Extents& image_extents,
                      ImageExtentsMapType type) override;
 
 protected:

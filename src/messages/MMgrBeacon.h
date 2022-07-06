@@ -126,13 +126,8 @@ public:
     using ceph::encode;
     paxos_encode();
 
-    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-      header.version = 7;
-      header.compat_version = 1;
-      encode(server_addrs.legacy_addr(), payload, features);
-    } else {
-      encode(server_addrs, payload, features);
-    }
+    assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
+    encode(server_addrs, payload, features);
     encode(gid, payload);
     encode(available, payload);
     encode(name, payload);
@@ -158,38 +153,18 @@ public:
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
+    assert(header.version >= 8);
     decode(server_addrs, p);  // entity_addr_t for version < 8
     decode(gid, p);
     decode(available, p);
     decode(name, p);
-    if (header.version >= 2) {
-      decode(fsid, p);
-    }
-    if (header.version >= 3) {
-      std::set<std::string> module_name_list;
-      decode(module_name_list, p);
-      // Only need to unpack this field if we won't have the full
-      // ModuleInfo structures added in v7
-      if (header.version < 7) {
-        for (const auto &i : module_name_list) {
-          MgrMap::ModuleInfo info;
-          info.name = i;
-          modules.push_back(std::move(info));
-        }
-      }
-    }
-    if (header.version >= 4) {
-      decode(command_descs, p);
-    }
-    if (header.version >= 5) {
-      decode(metadata, p);
-    }
-    if (header.version >= 6) {
-      decode(services, p);
-    }
-    if (header.version >= 7) {
-      decode(modules, p);
-    }
+    decode(fsid, p);
+    std::set<std::string> module_name_list;
+    decode(module_name_list, p);
+    decode(command_descs, p);
+    decode(metadata, p);
+    decode(services, p);
+    decode(modules, p);
     if (header.version >= 9) {
       decode(mgr_features, p);
     }

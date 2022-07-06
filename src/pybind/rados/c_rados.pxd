@@ -32,6 +32,14 @@ cdef extern from "rados/librados.h" nogil:
 
 
     enum:
+        _LIBRADOS_CMPXATTR_OP_EQ "LIBRADOS_CMPXATTR_OP_EQ"
+        _LIBRADOS_CMPXATTR_OP_NE "LIBRADOS_CMPXATTR_OP_NE"
+        _LIBRADOS_CMPXATTR_OP_GT "LIBRADOS_CMPXATTR_OP_GT"
+        _LIBRADOS_CMPXATTR_OP_GTE "LIBRADOS_CMPXATTR_OP_GTE"
+        _LIBRADOS_CMPXATTR_OP_LT "LIBRADOS_CMPXATTR_OP_LT"
+        _LIBRADOS_CMPXATTR_OP_LTE "LIBRADOS_CMPXATTR_OP_LTE"
+
+    enum:
         _LIBRADOS_OPERATION_NOFLAG "LIBRADOS_OPERATION_NOFLAG"
         _LIBRADOS_OPERATION_BALANCE_READS "LIBRADOS_OPERATION_BALANCE_READS"
         _LIBRADOS_OPERATION_LOCALIZE_READS "LIBRADOS_OPERATION_LOCALIZE_READS"
@@ -190,7 +198,13 @@ cdef extern from "rados/librados.h" nogil:
     void rados_getxattrs_end(rados_xattrs_iter_t iter)
 
     int rados_nobjects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx)
-    int rados_nobjects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key, const char **nspace)
+    int rados_nobjects_list_next2(rados_list_ctx_t ctx,
+                                  const char **entry,
+                                  const char **key,
+                                  const char **nspace,
+                                  size_t *entry_size,
+                                  size_t *key_size,
+                                  size_t *nspace)
     void rados_nobjects_list_close(rados_list_ctx_t ctx)
 
     int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io, int * requires)
@@ -258,6 +272,8 @@ cdef extern from "rados/librados.h" nogil:
 
     int rados_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, const char * oid, time_t * mtime, int flags)
     int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags)
+    void rados_write_op_cmpext(rados_write_op_t write_op, const char *cmp_buf, size_t cmp_len, uint64_t off, int *prval)
+    void rados_write_op_omap_cmp(rados_write_op_t write_op, const char *key, uint8_t comparison_operator, const char *val, size_t val_len, int *prval)
     void rados_write_op_omap_set(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * lens, size_t num)
     void rados_write_op_omap_rm_keys(rados_write_op_t write_op, const char * const* keys, size_t keys_len)
     void rados_write_op_omap_clear(rados_write_op_t write_op)
@@ -276,6 +292,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_zero(rados_write_op_t write_op, uint64_t offset, uint64_t len)
     void rados_write_op_exec(rados_write_op_t write_op, const char *cls, const char *method, const char *in_buf, size_t in_len, int *prval)
     void rados_write_op_writesame(rados_write_op_t write_op, const char *buffer, size_t data_len, size_t write_len, uint64_t offset)
+    void rados_read_op_cmpext(rados_read_op_t read_op, const char *cmp_buf, size_t cmp_len, uint64_t off, int *prval)
     void rados_read_op_omap_get_vals2(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
     void rados_read_op_omap_get_keys2(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
     void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op, const char * const* keys, size_t keys_len, rados_omap_iter_t * iter, int * prval)

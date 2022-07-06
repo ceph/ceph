@@ -9,7 +9,8 @@
 #include <iostream>
 #include <string>
 
-PerfCounters *g_perf_counters = nullptr;
+PerfCounters *g_journal_perf_counters = nullptr;
+PerfCounters *g_snapshot_perf_counters = nullptr;
 
 extern void register_test_cluster_watcher();
 extern void register_test_image_policy();
@@ -46,8 +47,7 @@ int main(int argc, char **argv)
 
   int r = rados.conf_set("lockdep", "true");
   if (r < 0) {
-    std::cerr << "failed to enable lockdep" << std::endl;
-    return -r;
+    std::cerr << "warning: failed to enable lockdep" << std::endl;
   }
   return RUN_ALL_TESTS();
 }

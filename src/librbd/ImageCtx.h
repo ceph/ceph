@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "common/allocator.h"
+#include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/config_proxy.h"
 #include "common/event_socket.h"
@@ -36,8 +36,6 @@
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
 
-class SafeTimer;
-
 namespace neorados {
 class IOContext;
 class RADOS;
@@ -57,6 +55,7 @@ namespace librbd {
   template <typename> class PluginRegistry;
 
   namespace asio { struct ContextWQ; }
+  namespace crypto { class CryptoInterface; }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -76,14 +75,14 @@ namespace librbd {
     struct SnapKeyComparator {
       inline bool operator()(const SnapKey& lhs, const SnapKey& rhs) const {
         // only compare by namespace type and name
-        if (lhs.first.which() != rhs.first.which()) {
-          return lhs.first.which() < rhs.first.which();
+        if (lhs.first.index() != rhs.first.index()) {
+          return lhs.first.index() < rhs.first.index();
         }
         return lhs.second < rhs.second;
       }
     };
 
-    static const string METADATA_CONF_PREFIX;
+    static const std::string METADATA_CONF_PREFIX;
 
     CephContext *cct;
     ConfigProxy config;
@@ -199,9 +198,7 @@ namespace librbd {
 
     PluginRegistry<ImageCtx>* plugin_registry;
 
-    typedef boost::lockfree::queue<
-      io::AioCompletion*,
-      boost::lockfree::allocator<ceph::allocator<void>>> Completions;
+    using Completions = boost::lockfree::queue<io::AioCompletion*>;
 
     Completions event_socket_completions;
     EventSocket event_socket;
@@ -232,6 +229,8 @@ namespace librbd {
     journal::Policy *journal_policy = nullptr;
 
     ZTracer::Endpoint trace_endpoint;
+
+    crypto::CryptoInterface* crypto = nullptr;
 
     // unit test mock helpers
     static ImageCtx* create(const std::string &image_name,
@@ -281,7 +280,7 @@ namespace librbd {
 
     uint64_t get_current_size() const;
     uint64_t get_object_size() const;
-    string get_object_name(uint64_t num) const;
+    std::string get_object_name(uint64_t num) const;
     uint64_t get_stripe_unit() const;
     uint64_t get_stripe_count() const;
     uint64_t get_stripe_period() const;
@@ -301,6 +300,7 @@ namespace librbd {
 		 std::string in_snap_name,
 		 librados::snap_t id);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
+    uint64_t get_effective_image_size(librados::snap_t in_snap_id) const;
     uint64_t get_object_count(librados::snap_t in_snap_id) const;
     bool test_features(uint64_t test_features) const;
     bool test_features(uint64_t test_features,
@@ -323,7 +323,7 @@ namespace librbd {
     int get_parent_overlap(librados::snap_t in_snap_id,
 			   uint64_t *overlap) const;
     void register_watch(Context *on_finish);
-    uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
+    uint64_t prune_parent_extents(std::vector<std::pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
 
     void cancel_async_requests();

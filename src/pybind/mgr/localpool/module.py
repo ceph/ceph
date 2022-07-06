@@ -1,71 +1,71 @@
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, CommandResult, Option, NotifyType
 import json
 import threading
+from typing import cast, Any
+
 
 class Module(MgrModule):
 
     MODULE_OPTIONS = [
-        {
-            'name': 'subtree',
-            'type': 'str',
-            'default': 'rack',
-            'desc': 'CRUSH level for which to create a local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'failure_domain',
-            'type': 'str',
-            'default': 'host',
-            'desc': 'failure domain for any created local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'min_size',
-            'type': 'int',
-            'desc': 'default min_size for any created local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'num_rep',
-            'type': 'int',
-            'default': 3,
-            'desc': 'default replica count for any created local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'pg_num',
-            'type': 'int',
-            'default': 128,
-            'desc': 'default pg_num for any created local pool',
-            'runtime': True,
-        },
-        {
-            'name': 'prefix',
-            'type': 'str',
-            'default': '',
-            'desc': 'name prefix for any created local pool',
-            'runtime': True,
-        },
+        Option(
+            name='subtree',
+            type='str',
+            default='rack',
+            desc='CRUSH level for which to create a local pool',
+            long_desc='which CRUSH subtree type the module should create a pool for.',
+            runtime=True),
+        Option(
+            name='failure_domain',
+            type='str',
+            default='host',
+            desc='failure domain for any created local pool',
+            long_desc='what failure domain we should separate data replicas across.',
+            runtime=True),
+        Option(
+            name='min_size',
+            type='int',
+            desc='default min_size for any created local pool',
+            long_desc='value to set min_size to (unchanged from Ceph\'s default if this option is not set)',
+            runtime=True),
+        Option(
+            name='num_rep',
+            type='int',
+            default=3,
+            desc='default replica count for any created local pool',
+            runtime=True),
+        Option(
+            name='pg_num',
+            type='int',
+            default=128,
+            desc='default pg_num for any created local pool',
+            runtime=True),
+        Option(
+            name='prefix',
+            type='str',
+            default='',
+            desc='name prefix for any created local pool',
+            runtime=True),
     ]
+    NOTIFY_TYPES = [NotifyType.osd_map]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
         self.serve_event = threading.Event()
 
-    def notify(self, notify_type, notify_id):
-        if notify_type == 'osd_map':
+    def notify(self, notify_type: NotifyType, notify_id: str) -> None:
+        if notify_type == NotifyType.osd_map:
             self.handle_osd_map()
 
-    def handle_osd_map(self):
+    def handle_osd_map(self) -> None:
         """
         Check pools on each OSDMap change
         """
-        subtree_type = self.get_module_option('subtree')
+        subtree_type = cast(str, self.get_module_option('subtree'))
         failure_domain = self.get_module_option('failure_domain')
         pg_num = self.get_module_option('pg_num')
         num_rep = self.get_module_option('num_rep')
         min_size = self.get_module_option('min_size')
-        prefix = self.get_module_option('prefix') or 'by-' + subtree_type + '-'
+        prefix = cast(str, self.get_module_option('prefix')) or 'by-' + subtree_type + '-'
 
         osdmap = self.get("osd_map")
         lpools = []
@@ -127,10 +127,10 @@ class Module(MgrModule):
 
         # TODO remove pools for hosts that don't exist?
 
-    def serve(self):
+    def serve(self) -> None:
         self.handle_osd_map()
         self.serve_event.wait()
         self.serve_event.clear()
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self.serve_event.set()

@@ -145,7 +145,7 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
     return;
   }
 
-  uint64_t image_size = ictx->get_image_size(ictx->snap_id);
+  uint64_t image_size = ictx->get_effective_image_size(ictx->snap_id);
   ictx->image_lock.unlock_shared();
 
   auto readahead_extent = ictx->readahead.update(image_extents, image_size);
@@ -527,7 +527,8 @@ ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
   I &image_ctx = this->m_image_ctx;
 
   bufferlist bl;
-  if (single_extent && object_extent.buffer_extents.size() == 1) {
+  if (single_extent && object_extent.buffer_extents.size() == 1 &&
+      m_bl.length() == object_extent.length) {
     // optimization for single object/buffer extent writes
     bl = std::move(m_bl);
   } else {

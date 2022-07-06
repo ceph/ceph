@@ -72,7 +72,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
     struct timespec timestamp;
     bool snap_protected = false;
     image.snap_get_timestamp(s->id, &timestamp);
-    string tt_str = "";
+    std::string tt_str = "";
     if(timestamp.tv_sec != 0) {
       time_t tt = timestamp.tv_sec;
       tt_str = ctime(&tt);
@@ -186,7 +186,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       t << s->id << s->name << stringify(byte_u_t(s->size)) << protected_str << tt_str;
 
       if (all_snaps) {
-        ostringstream oss;
+        std::ostringstream oss;
         oss << snap_namespace_name;
 
         if (get_group_res == 0) {
@@ -291,7 +291,7 @@ int do_purge_snaps(librbd::Image& image, bool no_progress)
   } else if (0 == snaps.size()) {
     return 0;
   } else {
-    list<std::string> protect;
+    std::list<std::string> protect;
     snaps.erase(remove_if(snaps.begin(),
                           snaps.end(),
                           boost::bind(utils::is_not_user_snap_namespace, &image, _1)),
@@ -415,7 +415,7 @@ int execute_list(const po::variables_map &vm,
   bool all_snaps = vm[ALL_NAME].as<bool>();
   r = do_list_snaps(image, formatter.get(), all_snaps, rados);
   if (r < 0) {
-    cerr << "rbd: failed to list snapshots: " << cpp_strerror(r)
+    std::cerr << "rbd: failed to list snapshots: " << cpp_strerror(r)
          << std::endl;
     return r;
   }
@@ -462,8 +462,8 @@ int execute_create(const po::variables_map &vm,
   r = do_add_snap(image, snap_name.c_str(), flags,
                   vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
-    cerr << "rbd: failed to create snapshot: " << cpp_strerror(r)
-         << std::endl;
+    std::cerr << "rbd: failed to create snapshot: " << cpp_strerror(r)
+	      << std::endl;
     return r;
   }
   return 0;

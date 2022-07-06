@@ -1,3 +1,5 @@
+.. _rados-troubleshooting-mon:
+
 =================================
  Troubleshooting Monitors
 =================================
@@ -29,7 +31,7 @@ Initial Troubleshooting
 **Are you able to reach to the mon nodes?**
 
   Doesn't happen often, but sometimes there are ``iptables`` rules that
-  block accesse to mon nodes or TCP ports. These may be leftovers from
+  block access to mon nodes or TCP ports. These may be leftovers from
   prior stress-testing or rule development. Try SSHing into
   the server and, if that succeeds, try connecting to the monitor's ports
   (``tcp/3300`` and ``tcp/6789``) using a ``telnet``, ``nc``, or similar tools.
@@ -359,7 +361,7 @@ Can I increase the maximum tolerated clock skew?
   The maximum tolerated clock skew is configurable via the
   ``mon-clock-drift-allowed`` option, and
   although you *CAN* you almost certainly *SHOULDN'T*. The clock skew mechanism
-  is in place because clock-skewed monitors are liely to misbehave. We, as
+  is in place because clock-skewed monitors are likely to misbehave. We, as
   developers and QA aficionados, are comfortable with the current default
   value, as it will alert the user before the monitors get out hand. Changing
   this value may cause unforeseen effects on the
@@ -433,6 +435,8 @@ If there are any survivors, we can always :ref:`replace <adding-and-removing-mon
 new one. After booting up, the new joiner will sync up with a healthy
 peer, and once it is fully sync'ed, it will be able to serve the clients.
 
+.. _mon-store-recovery-using-osds:
+
 Recovery using OSDs
 -------------------
 
@@ -441,7 +445,9 @@ deploy at least three (and preferably five) monitors in a Ceph cluster, the chan
 failure is rare. But unplanned power-downs in a data center with improperly
 configured disk/fs settings could fail the underlying file system, and hence
 kill all the monitors. In this case, we can recover the monitor store with the
-information stored in OSDs.::
+information stored in OSDs.
+
+.. code-block:: bash
 
   ms=/root/mon-store
   mkdir $ms
@@ -472,7 +478,10 @@ information stored in OSDs.::
   # deployed
   ceph-authtool /path/to/admin.keyring --add-key 'AQDN8kBe9PLWARAAZwxXMr+n85SBYbSlLcZnMA==' -n mgr.x \
     --cap mon 'allow profile mgr' --cap osd 'allow *' --cap mds 'allow *'
-  # if your monitors' ids are not single characters like 'a', 'b', 'c', please
+  # If your monitors' ids are not sorted by ip address, please specify them in order.
+  # For example. if mon 'a' is 10.0.0.3, mon 'b' is 10.0.0.2, and mon 'c' is  10.0.0.4,
+  # please passing "--mon-ids b a c".
+  # In addition, if your monitors' ids are not single characters like 'a', 'b', 'c', please
   # specify them in the command line by passing them as arguments of the "--mon-ids"
   # option. if you are not sure, please check your ceph.conf to see if there is any
   # sections named like '[mon.foo]'. don't pass the "--mon-ids" option, if you are
@@ -517,7 +526,7 @@ Reaching out for help
 ----------------------
 
 You can find us on IRC at #ceph and #ceph-devel at OFTC (server irc.oftc.net)
-and on ``ceph-devel@vger.kernel.org`` and ``ceph-users@lists.ceph.com``. Make
+and on ``dev@ceph.io`` and ``ceph-users@lists.ceph.com``. Make
 sure you have grabbed your logs and have them ready if someone asks: the faster
 the interaction and lower the latency in response, the better chances everyone's
 time is optimized.
@@ -548,8 +557,8 @@ related to your issue. This may not be an easy task for someone unfamiliar
 with troubleshooting Ceph. For most situations, setting the following options
 on your monitors will be enough to pinpoint a potential source of the issue::
 
-      debug mon = 10
-      debug ms = 1
+      debug_mon = 10
+      debug_ms = 1
 
 If we find that these debug levels are not enough, there's a chance we may
 ask you to raise them or even define other debug subsystems to obtain infos

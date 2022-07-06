@@ -4,12 +4,17 @@ NFS
 
 .. versionadded:: Jewel
 
-Ceph Object Gateway namespaces can now be exported over file-based
-access protocols such as NFSv3 and NFSv4, alongside traditional HTTP access
+.. note:: Only the NFSv4 protocol is supported when using a cephadm or rook based deployment.
+
+Ceph Object Gateway namespaces can be exported over the file-based
+NFSv4 protocols, alongside traditional HTTP access
 protocols (S3 and Swift).
 
 In particular, the Ceph Object Gateway can now be configured to
 provide file-based access when embedded in the NFS-Ganesha NFS server.
+
+The simplest and preferred way of managing nfs-ganesha clusters and rgw exports
+is using ``ceph nfs ...`` commands. See :doc:`/mgr/nfs` for more details.
 
 librgw
 ======
@@ -61,22 +66,22 @@ Supported Operations
 The RGW NFS interface supports most operations on files and
 directories, with the following restrictions:
 
-- Links, including symlinks, are not supported
-- NFS ACLs are not supported
+- Links, including symlinks, are not supported.
+- NFS ACLs are not supported.
 
-  + Unix user and group ownership and permissions *are* supported
+  + Unix user and group ownership and permissions *are* supported.
 
-- Directories may not be moved/renamed
+- Directories may not be moved/renamed.
 
-  + files may be moved between directories
+  + Files may be moved between directories.
 
-- Only full, sequential *write* i/o is supported
+- Only full, sequential *write* I/O is supported
 
-  + i.e., write operations are constrained to be **uploads**
-  + many typical i/o operations such as editing files in place will necessarily fail as they perform non-sequential stores
-  + some file utilities *apparently* writing sequentially (e.g., some versions of GNU tar) may fail due to infrequent non-sequential stores
-  + When mounting via NFS, sequential application i/o can generally be constrained to be written sequentially to the NFS server via a synchronous mount option (e.g. -osync in Linux)
-  + NFS clients which cannot mount synchronously (e.g., MS Windows) will not be able to upload files
+  + i.e., write operations are constrained to be **uploads**.
+  + Many typical I/O operations such as editing files in place will necessarily fail as they perform non-sequential stores.
+  + Some file utilities *apparently* writing sequentially (e.g., some versions of GNU tar) may fail due to infrequent non-sequential stores.
+  + When mounting via NFS, sequential application I/O can generally be constrained to be written sequentially to the NFS server via a synchronous mount option (e.g. -osync in Linux).
+  + NFS clients which cannot mount synchronously (e.g., MS Windows) will not be able to upload files.
 
 Security
 ========
@@ -98,10 +103,10 @@ following characteristics:
 
     * additional RGW authentication types such as Keystone are not currently supported
 
-Configuring an NFS-Ganesha Instance
-===================================
+Manually configuring an NFS-Ganesha Instance
+============================================
 
-Each NFS RGW instance is an NFS-Ganesha server instance *embeddding*
+Each NFS RGW instance is an NFS-Ganesha server instance *embedding*
 a full Ceph RGW instance.
 
 Therefore, the RGW NFS configuration includes Ceph and Ceph Object
@@ -114,7 +119,7 @@ ceph.conf
 
 Required ceph.conf configuration for RGW NFS includes:
 
-* valid [client.radosgw.{instance-name}] section
+* valid [client.rgw.{instance-name}] section
 * valid values for minimal instance configuration, in particular, an installed and correct ``keyring``
 
 Other config variables are optional, front-end-specific and front-end
@@ -301,7 +306,7 @@ Ceph configuration file to change the refresh rate.
 
 If exporting Swift containers that do not conform to valid S3 bucket
 naming requirements, set ``rgw_relaxed_s3_bucket_names`` to true in the
-[client.radosgw] section of the Ceph configuration file. For example,
+[client.rgw] section of the Ceph configuration file. For example,
 if a Swift container name contains underscores, it is not a valid S3
 bucket name and will be rejected unless ``rgw_relaxed_s3_bucket_names``
 is set to true.

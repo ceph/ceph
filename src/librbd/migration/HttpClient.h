@@ -9,7 +9,8 @@
 #include "librbd/io/Types.h"
 #include "librbd/migration/HttpProcessorInterface.h"
 #include "librbd/migration/Types.h"
-#include <boost/asio/io_context_strand.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/context.hpp>
 #include <boost/beast/version.hpp>
@@ -171,7 +172,7 @@ private:
 
   HttpProcessorInterface* m_http_processor = nullptr;
 
-  boost::asio::io_context::strand m_strand;
+  boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
 
   boost::asio::ssl::context m_ssl_context;
   std::unique_ptr<HttpSessionInterface> m_http_session;

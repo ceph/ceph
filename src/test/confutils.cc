@@ -18,13 +18,18 @@
 #include "include/buffer.h"
 
 #include <errno.h>
+#include <filesystem>
 #include <iostream>
-#include <stdlib.h>
 #include <sstream>
+
+#include <stdlib.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
+namespace fs = std::filesystem;
+
+using namespace std;
 using ceph::bufferlist;
 using std::cerr;
 using std::ostringstream;
@@ -47,10 +52,14 @@ static std::string get_temp_dir()
     ostringstream oss;
     oss << tmpdir << "/confutils_test_dir." << rand() << "." << getpid();
     umask(022);
-    int res = mkdir(oss.str().c_str(), 01777);
-    if (res) {
-      cerr << "failed to create temp directory '" << temp_dir << "'" << std::endl;
-      return "";
+    if (!fs::exists(oss.str())) {
+      std::error_code ec;
+      if (!fs::create_directory(oss.str(), ec)) {
+        cerr << "failed to create temp directory '" << temp_dir << "' "
+             << ec.message() << std::endl;
+        return "";
+      }
+      fs::permissions(oss.str(), fs::perms::sticky_bit | fs::perms::all);
     }
     temp_dir = oss.str();
   }

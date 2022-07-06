@@ -75,15 +75,9 @@ public:
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
-    if (header.version < 4) {
-      entity_inst_t i;
-      decode(i, p);
-      target_osd = i.name.num();
-      target_addrs.v.push_back(i.addr);
-    } else {
-      decode(target_osd, p);
-      decode(target_addrs, p);
-    }
+    assert(header.version >= 4);
+    decode(target_osd, p);
+    decode(target_addrs, p);
     decode(epoch, p);
     decode(flags, p);
     decode(failed_for, p);
@@ -92,17 +86,7 @@ public:
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     paxos_encode();
-    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-      header.version = 3;
-      header.compat_version = 3;
-      encode(fsid, payload);
-      encode(entity_inst_t(entity_name_t::OSD(target_osd),
-			   target_addrs.legacy_addr()), payload, features);
-      encode(epoch, payload);
-      encode(flags, payload);
-      encode(failed_for, payload);
-      return;
-    }
+    assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
     header.version = HEAD_VERSION;
     header.compat_version = COMPAT_VERSION;
     encode(fsid, payload);

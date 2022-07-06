@@ -158,7 +158,7 @@ struct MonClientPinger : public Dispatcher,
   int wait_for_reply(double timeout = 0.0) {
     std::unique_lock locker{lock};
     if (timeout <= 0) {
-      timeout = cct->_conf->client_mount_timeout;
+      timeout = std::chrono::duration<double>(cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout")).count();
     }
     done = false;
     if (ping_recvd_cond.wait_for(locker,
@@ -340,7 +340,6 @@ private:
 
   std::list<MessageRef> waiting_for_session;
   utime_t last_rotating_renew_sent;
-  std::unique_ptr<Context> session_established_context;
   bool had_a_connection;
   double reopen_interval_multiplier;
 
@@ -351,9 +350,9 @@ private:
   void _finish_hunting(int auth_err);
   void _finish_auth(int auth_err);
   void _reopen_session(int rank = -1);
-  void _add_conn(unsigned rank, uint64_t global_id);
+  void _add_conn(unsigned rank);
+  void _add_conns();
   void _un_backoff();
-  void _add_conns(uint64_t global_id);
   void _send_mon_message(MessageRef m);
 
   std::map<entity_addrvec_t, MonConnection>::iterator _find_pending_con(
@@ -504,18 +503,9 @@ public:
     send_mon_message(MessageRef{m, false});
   }
   void send_mon_message(MessageRef m);
-  /**
-   * If you specify a callback, you should not call
-   * reopen_session() again until it has been triggered. The MonClient
-   * will behave, but the first callback could be triggered after
-   * the session has been killed and the MonClient has started trying
-   * to reconnect to another monitor.
-   */
-  void reopen_session(Context *cb=NULL) {
+
+  void reopen_session() {
     std::lock_guard l(monc_lock);
-    if (cb) {
-      session_established_context.reset(cb);
-    }
     _reopen_session();
   }
 
@@ -708,20 +698,20 @@ public:
     }
   };
 
-  void start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
-			 bufferlist *outbl, string *outs,
+  void start_mon_command(const std::vector<std::string>& cmd, const bufferlist& inbl,
+			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
     start_mon_command(cmd, inbl, ContextVerter(outs, outbl, onfinish));
   }
   void start_mon_command(int mon_rank,
-			 const vector<string>& cmd, const bufferlist& inbl,
-			 bufferlist *outbl, string *outs,
+			 const std::vector<std::string>& cmd, const bufferlist& inbl,
+			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
     start_mon_command(mon_rank, cmd, inbl, ContextVerter(outs, outbl, onfinish));
   }
-  void start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
-			 const vector<string>& cmd, const bufferlist& inbl,
-			 bufferlist *outbl, string *outs,
+  void start_mon_command(const std::string &mon_name,  ///< mon name, with mon. prefix
+			 const std::vector<std::string>& cmd, const bufferlist& inbl,
+			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
     start_mon_command(mon_name, cmd, inbl, ContextVerter(outs, outbl, onfinish));
   }

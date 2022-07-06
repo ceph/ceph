@@ -140,13 +140,13 @@ public:
      return TestMemIoCtxImpl::sparse_read(oid, off, len, m, bl, snap_id);
   }
 
-  MOCK_METHOD5(read, int(const std::string& oid,
+  MOCK_METHOD6(read, int(const std::string& oid,
                          size_t len,
                          uint64_t off,
-                         bufferlist *bl, uint64_t snap_id));
+                         bufferlist *bl, uint64_t snap_id, uint64_t* objver));
   int do_read(const std::string& oid, size_t len, uint64_t off,
-              bufferlist *bl, uint64_t snap_id) {
-    return TestMemIoCtxImpl::read(oid, len, off, bl, snap_id);
+              bufferlist *bl, uint64_t snap_id, uint64_t* objver) {
+    return TestMemIoCtxImpl::read(oid, len, off, bl, snap_id, objver);
   }
 
   MOCK_METHOD2(remove, int(const std::string& oid, const SnapContext &snapc));
@@ -226,7 +226,7 @@ public:
     ON_CALL(*this, list_snaps(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_list_snaps));
     ON_CALL(*this, list_watchers(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_list_watchers));
     ON_CALL(*this, notify(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_notify));
-    ON_CALL(*this, read(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_read));
+    ON_CALL(*this, read(_, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_read));
     ON_CALL(*this, set_snap_read(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_set_snap_read));
     ON_CALL(*this, sparse_read(_, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_sparse_read));
     ON_CALL(*this, remove(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_remove));

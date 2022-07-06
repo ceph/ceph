@@ -14,6 +14,13 @@ from .. import mgr
 from ..rest_client import RequestException, RestClient
 
 
+class RestClientTestClass(RestClient):
+    """RestClient subclass for testing purposes."""
+    @RestClient.api_get('/')
+    def fake_endpoint_method_with_annotation(self, request=None) -> bool:
+        pass
+
+
 class RestClientTest(unittest.TestCase):
     def setUp(self):
         settings = {'REST_REQUESTS_TIMEOUT': 45}
@@ -56,7 +63,10 @@ class RestClientDoRequestTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.mock_requests = patch('requests.Session').start()
-        cls.rest_client = RestClient('localhost', 8000, 'UnitTest')
+        cls.rest_client = RestClientTestClass('localhost', 8000, 'UnitTest')
+
+    def test_endpoint_method_with_annotation(self):
+        self.assertEqual(self.rest_client.fake_endpoint_method_with_annotation(), None)
 
     def test_do_request_exception_no_args(self):
         self.mock_requests().get.side_effect = requests.exceptions.ConnectionError()

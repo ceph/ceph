@@ -14,14 +14,23 @@
 
 
 #include <errno.h>
+
+#include <filesystem>
+#include <iomanip>
+
 #include "ceph_ver.h"
 #include "include/types.h"
 #include "common/Formatter.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "denc_plugin.h"
 #include "denc_registry.h"
 
 #define MB(m) ((m) * 1024 * 1024)
+
+namespace fs = std::filesystem;
+
+using namespace std;
 
 void usage(ostream &out)
 {
@@ -52,19 +61,46 @@ void usage(ostream &out)
   out << "  select_test <n>     select generated test object as in-memory object\n";
   out << "  is_deterministic    exit w/ success if type encodes deterministically\n";
 }
-  
+
+vector<DencoderPlugin> load_plugins()
+{
+  fs::path mod_dir{CEPH_DENC_MOD_DIR};
+  if (auto ceph_lib = getenv("CEPH_LIB"); ceph_lib) {
+    mod_dir = ceph_lib;
+  }
+  if (!fs::is_directory(mod_dir)) {
+    std::cerr << "unable to load dencoders from "
+	      << std::quoted(mod_dir.native()) << ". "
+	      << "it is not a directory." << std::endl;
+    return {};
+  }
+  vector<DencoderPlugin> dencoder_plugins;
+  for (auto& entry : fs::directory_iterator(mod_dir)) {
+    static const string_view DENC_MOD_PREFIX = "denc-mod-";
+    if (entry.path().stem().string().compare(0, DENC_MOD_PREFIX.size(),
+					     DENC_MOD_PREFIX) != 0) {
+      continue;
+    }
+    DencoderPlugin plugin(entry);
+    if (!plugin.good()) {
+      continue;
+    }
+    dencoder_plugins.push_back(std::move(plugin));
+  }
+  return dencoder_plugins;
+}
+
 int main(int argc, const char **argv)
 {
-  register_common_dencoders();
-  register_mds_dencoders();
-  register_osd_dencoders();
-  register_rbd_dencoders();
-  register_rgw_dencoders();
+  vector<DencoderPlugin> plugins = load_plugins();
+  DencoderRegistry registry;
+  for (auto& plugin : plugins) {
+    for (auto& [name, denc] : plugin.register_dencoders()) {
+      registry.register_dencoder(name, denc);
+    }
+  }
 
-  auto& dencoders = DencoderRegistry::instance().get();
-
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
   Dencoder *den = NULL;
@@ -74,78 +110,79 @@ int main(int argc, const char **argv)
 
   if (args.empty()) {
     cerr << "-h for help" << std::endl;
-    exit(1);
+    return 1;
   }
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
     string err;
 
+    auto& dencoders = registry.get();
     if (*i == string("help") || *i == string("-h") || *i == string("--help")) {
       usage(cout);
-      exit(0);
+      return 0;
     } else if (*i == string("version")) {
       cout << CEPH_GIT_NICE_VER << std::endl;
     } else if (*i == string("list_types")) {
       for (auto& dencoder : dencoders)
 	cout << dencoder.first << std::endl;
-      exit(0);
+      return 0;
     } else if (*i == string("type")) {
       ++i;
       if (i == args.end()) {
 	cerr << "expecting type" << std::endl;
-	exit(1);
+	return 1;
       }
       string cname = *i;
       if (!dencoders.count(cname)) {
 	cerr << "class '" << cname << "' unknown" << std::endl;
-	exit(1);
+	return 1;
       }
-      den = dencoders[cname].get();
+      den = dencoders[cname];
       den->generate();
     } else if (*i == string("skip")) {
       ++i;
       if (i == args.end()) {
 	cerr << "expecting byte count" << std::endl;
-	exit(1);
+	return 1;
       }
       skip = atoi(*i);
     } else if (*i == string("get_features")) {
       cout << CEPH_FEATURES_SUPPORTED_DEFAULT << std::endl;
-      exit(0);
+      return 0;
     } else if (*i == string("set_features")) {
       ++i;
       if (i == args.end()) {
 	cerr << "expecting features" << std::endl;
-	exit(1);
+	return 1;
       }
       features = atoll(*i);
     } else if (*i == string("encode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	exit(1);
+	return 1;
       }
       den->encode(encbl, features | CEPH_FEATURE_RESERVED); // hack for OSDMap
     } else if (*i == string("decode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	exit(1);
+	return 1;
       }
       err = den->decode(encbl, skip);
     } else if (*i == string("copy_ctor")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	exit(1);
+	return 1;
       }
       den->copy_ctor();
     } else if (*i == string("copy")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	exit(1);
+	return 1;
       }
       den->copy();
     } else if (*i == string("dump_json")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	exit(1);
+	return 1;
       }
       JSONFormatter jf(true);
       jf.open_object_section("object");
@@ -164,7 +201,7 @@ int main(int argc, const char **argv)
       ++i;
       if (i == args.end()) {
 	cerr << "expecting filename" << std::endl;
-	exit(1);
+	return 1;
       }
       int r;
       if (*i == string("-")) {
@@ -176,61 +213,61 @@ int main(int argc, const char **argv)
       }
       if (r < 0) {
         cerr << "error reading " << *i << ": " << err << std::endl;
-        exit(1);
+        return 1;
       }
 
     } else if (*i == string("export")) {
       ++i;
       if (i == args.end()) {
 	cerr << "expecting filename" << std::endl;
-	exit(1);
+	return 1;
       }
       int fd = ::open(*i, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0644);
       if (fd < 0) {
 	cerr << "error opening " << *i << " for write: " << cpp_strerror(errno) << std::endl;
-	exit(1);
+	return 1;
       }
       int r = encbl.write_fd(fd);
       if (r < 0) {
 	cerr << "error writing " << *i << ": " << cpp_strerror(errno) << std::endl;
-	exit(1);
+	return 1;
       }
       ::close(fd);
 
     } else if (*i == string("count_tests")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	exit(1);
+	return 1;
       }
       cout << den->num_generated() << std::endl;
     } else if (*i == string("select_test")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	exit(1);
+	return 1;
       }
       ++i;
       if (i == args.end()) {
 	cerr << "expecting instance number" << std::endl;
-	exit(1);
+	return 1;
       }
       int n = atoi(*i);
       err = den->select_generated(n);
     } else if (*i == string("is_deterministic")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	exit(1);
+	return 1;
       }
       if (den->is_deterministic())
-	exit(0);
+	return 0;
       else
-	exit(1);
+	return 1;
     } else {
       cerr << "unknown option '" << *i << "'" << std::endl;
-      exit(1);
+      return 1;
     }      
     if (err.length()) {
       cerr << "error: " << err << std::endl;
-      exit(1);
+      return 1;
     }
   }
   return 0;

@@ -31,6 +31,8 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 unsigned int count_num = 0;
 unsigned int unexpected_count = 0;
 unsigned int value_count = 0;
@@ -367,10 +369,7 @@ TEST(ParameterTest, combination_all)
 
 int main(int argc, char **argv)
 {
-  int r;
-
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **) argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
@@ -381,7 +380,7 @@ int main(int argc, char **argv)
 
   create_table_shec432();
 
-  r = RUN_ALL_TESTS();
+  int r = RUN_ALL_TESTS();
 
   std::cout << "minimum_to_decode:total_num = " << count_num
       << std::endl;

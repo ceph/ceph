@@ -253,7 +253,7 @@ be used in the lrcpool.::
              layers='[ [ "DDc", "plugin=isa technique=cauchy" ] ]'
         $ ceph osd pool create lrcpool erasure LRCprofile
 
-You could also use a different erasure code profile for for each
+You could also use a different erasure code profile for each
 layer.::
 
         $ ceph osd erasure-code-profile set LRCprofile \

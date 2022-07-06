@@ -94,9 +94,8 @@ struct KeyServerData {
   }
 
   bool get_service_secret(CephContext *cct, uint32_t service_id,
-			  ExpiringCryptoKey& secret, uint64_t& secret_id) const;
-  bool get_service_secret(CephContext *cct, uint32_t service_id,
-			  CryptoKey& secret, uint64_t& secret_id) const;
+			  CryptoKey& secret, uint64_t& secret_id,
+			  double& ttl) const;
   bool get_service_secret(CephContext *cct, uint32_t service_id,
 			  uint64_t secret_id, CryptoKey& secret) const;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
@@ -196,12 +195,12 @@ class KeyServer : public KeyStore {
   KeyServerData data;
   mutable ceph::mutex lock;
 
-  int _rotate_secret(uint32_t service_id);
-  bool _check_rotating_secrets();
+  int _rotate_secret(uint32_t service_id, KeyServerData &pending_data);
   void _dump_rotating_secrets();
   int _build_session_auth_info(uint32_t service_id, 
 			       const AuthTicket& parent_ticket,
-			       CephXSessionAuthInfo& info);
+			       CephXSessionAuthInfo& info,
+			       double ttl);
   bool _get_service_caps(const EntityName& name, uint32_t service_id,
 	AuthCapsInfo& caps) const;
 public:
@@ -215,18 +214,20 @@ public:
   int start_server();
   void rotate_timeout(double timeout);
 
+  void dump();
+  
   int build_session_auth_info(uint32_t service_id,
 			      const AuthTicket& parent_ticket,
 			      CephXSessionAuthInfo& info);
   int build_session_auth_info(uint32_t service_id,
 			      const AuthTicket& parent_ticket,
-			      CephXSessionAuthInfo& info,
-			      CryptoKey& service_secret,
-			      uint64_t secret_id);
+			      const CryptoKey& service_secret,
+			      uint64_t secret_id,
+			      CephXSessionAuthInfo& info);
 
   /* get current secret for specific service type */
-  bool get_service_secret(uint32_t service_id, CryptoKey& service_key, 
-			  uint64_t& secret_id) const;
+  bool get_service_secret(uint32_t service_id, CryptoKey& secret,
+			  uint64_t& secret_id, double& ttl) const;
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
 			  CryptoKey& secret) const override;
 
@@ -297,7 +298,7 @@ public:
     }
   }
 
-  bool updated_rotating(ceph::buffer::list& rotating_bl, version_t& rotating_ver);
+  bool prepare_rotating_update(ceph::buffer::list& rotating_bl);
 
   bool get_rotating_encrypted(const EntityName& name, ceph::buffer::list& enc_bl) const;
 

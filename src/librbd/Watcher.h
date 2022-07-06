@@ -44,7 +44,7 @@ public:
   void unblock_notifies();
 
   std::string get_oid() const;
-  void set_oid(const string& oid);
+  void set_oid(const std::string& oid);
 
   uint64_t get_watch_handle() const {
     std::shared_lock watch_locker{m_watch_lock};

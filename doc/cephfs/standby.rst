@@ -3,53 +3,50 @@
 Terminology
 -----------
 
-A Ceph cluster may have zero or more CephFS *file systems*.  CephFS
-file systems have a human readable name (set in ``fs new``)
-and an integer ID.  The ID is called the file system cluster ID,
-or *FSCID*.
+A Ceph cluster may have zero or more CephFS *file systems*.  Each CephFS has
+a human readable name (set at creation time with ``fs new``) and an integer
+ID.  The ID is called the file system cluster ID, or *FSCID*.
 
-Each CephFS file system has a number of *ranks*, one by default,
-which start at zero.  A rank may be thought of as a metadata shard.
-Controlling the number of ranks in a file system is described
-in :doc:`/cephfs/multimds`
+Each CephFS file system has a number of *ranks*, numbered beginning with zero.
+By default there is one rank per file system.  A rank may be thought of as a
+metadata shard.  Management of ranks is described in :doc:`/cephfs/multimds` .
 
-Each CephFS ceph-mds process (a *daemon*) initially starts up
-without a rank.  It may be assigned one by the monitor cluster.
-A daemon may only hold one rank at a time.  Daemons only give up
-a rank when the ceph-mds process stops.
+Each CephFS ``ceph-mds`` daemon starts without a rank.  It may be assigned one
+by the cluster's monitors. A daemon may only hold one rank at a time, and only
+give up a rank when the ``ceph-mds`` process stops.
 
-If a rank is not associated with a daemon, the rank is
-considered *failed*.  Once a rank is assigned to a daemon,
-the rank is considered *up*.
+If a rank is not associated with any daemon, that rank is considered ``failed``.
+Once a rank is assigned to a daemon, the rank is considered ``up``.
 
-A daemon has a *name* that is set statically by the administrator
-when the daemon is first configured.  Typical configurations
-use the hostname where the daemon runs as the daemon name.
+Each ``ceph-mds`` daemon has a *name* that is assigned statically by the
+administrator when the daemon is first configured.  Each daemon's *name* is
+typically that of the hostname where the process runs.
 
-A ceph-mds daemons can be assigned to a particular file system by
-setting the `mds_join_fs` configuration option to the file system
-name.
+A ``ceph-mds`` daemon may be assigned to a specific file system by
+setting its ``mds_join_fs`` configuration option to the file system's
+``name``.
 
-Each time a daemon starts up, it is also assigned a *GID*, which
-is unique to this particular process lifetime of the daemon.  The
-GID is an integer.
+When a ``ceph-mds`` daemon starts, it is also assigned an integer ``GID``,
+which is unique to this current daemon's process.  In other words, when a
+``ceph-mds`` daemon is restarted, it runs as a new process and is assigned a
+*new* ``GID`` that is different from that of the previous process.
 
 Referring to MDS daemons
 ------------------------
 
-Most of the administrative commands that refer to an MDS daemon
-accept a flexible argument format that may contain a rank, a GID
-or a name.
+Most administrative commands that refer to a ``ceph-mds`` daemon (MDS)
+accept a flexible argument format that may specify a ``rank``, a ``GID``
+or a ``name``.
 
-Where a rank is used, this may optionally be qualified with
-a leading file system name or ID.  If a daemon is a standby (i.e.
-it is not currently assigned a rank), then it may only be
-referred to by GID or name.
+Where a ``rank`` is used, it  may optionally be qualified by
+a leading file system ``name`` or ``GID``.  If a daemon is a standby (i.e.
+it is not currently assigned a ``rank``), then it may only be
+referred to by ``GID`` or ``name``.
 
-For example, if we had an MDS daemon which was called 'myhost',
-had GID 5446, and was assigned rank 0 in the file system 'myfs'
-which had FSCID 3, then any of the following would be suitable
-forms of the 'fail' command:
+For example, say we have an MDS daemon with ``name`` 'myhost' and
+``GID`` 5446, and which is assigned ``rank`` 0 for the file system 'myfs'
+with ``FSCID`` 3.  Any of the following are suitable forms of the ``fail``
+command:
 
 ::
 
@@ -62,17 +59,18 @@ forms of the 'fail' command:
 Managing failover
 -----------------
 
-If an MDS daemon stops communicating with the monitor, the monitor will wait
-``mds_beacon_grace`` seconds (default 15 seconds) before marking the daemon as
-*laggy*. If a standby is available, the monitor will immediately replace the
+If an MDS daemon stops communicating with the cluster's monitors, the monitors
+will wait ``mds_beacon_grace`` seconds (default 15) before marking the daemon as
+*laggy*.  If a standby MDS is available, the monitor will immediately replace the
 laggy daemon.
 
-Each file system may specify a number of standby daemons to be considered
-healthy. This number includes daemons in standby-replay waiting for a rank to
-fail (remember that a standby-replay daemon will not be assigned to take over a
-failure for another rank or a failure in a another CephFS file system). The
-pool of standby daemons not in replay count towards any file system count.
-Each file system may set the number of standby daemons wanted using:
+Each file system may specify a minimum number of standby daemons in order to be
+considered healthy. This number includes daemons in the ``standby-replay`` state
+waiting for a ``rank`` to fail. Note that a ``standby-replay`` daemon will not
+be assigned to take over a failure for another ``rank`` or a failure in a
+different CephFS file system). The pool of standby daemons not in ``replay``
+counts towards any file system count.
+Each file system may set the desired number of standby daemons by:
 
 ::
 
@@ -86,12 +84,12 @@ Setting ``count`` to 0 will disable the health check.
 Configuring standby-replay
 --------------------------
 
-Each CephFS file system may be configured to add standby-replay daemons.  These
-standby daemons follow the active MDS's metadata journal to reduce failover
-time in the event the active MDS becomes unavailable. Each active MDS may have
-only one standby-replay daemon following it.
+Each CephFS file system may be configured to add ``standby-replay`` daemons.
+These standby daemons follow the active MDS's metadata journal in order to
+reduce failover time in the event that the active MDS becomes unavailable. Each
+active MDS may have only one ``standby-replay`` daemon following it.
 
-Configuring standby-replay on a file system is done using:
+Configuration of ``standby-replay`` on a file system is done using the below:
 
 ::
 
@@ -100,35 +98,35 @@ Configuring standby-replay on a file system is done using:
 Once set, the monitors will assign available standby daemons to follow the
 active MDSs in that file system.
 
-Once an MDS has entered the standby-replay state, it will only be used as a
-standby for the rank that it is following. If another rank fails, this
-standby-replay daemon will not be used as a replacement, even if no other
-standbys are available. For this reason, it is advised that if standby-replay
-is used then every active MDS should have a standby-replay daemon.
+Once an MDS has entered the ``standby-replay`` state, it will only be used as a
+standby for the ``rank`` that it is following. If another ``rank`` fails, this
+``standby-replay`` daemon will not be used as a replacement, even if no other
+standbys are available. For this reason, it is advised that if ``standby-replay``
+is used then *every* active MDS should have a ``standby-replay`` daemon.
 
 .. _mds-join-fs:
 
 Configuring MDS file system affinity
 ------------------------------------
 
-You may want to have an MDS used for a particular file system. Or, perhaps you
-have larger MDSs on better hardware that should be preferred over a last-resort
-standby on lesser or over-provisioned hardware. To express this preference,
+You might elect to dedicate an MDS to a particular file system. Or, perhaps you
+have MDSs that run on better hardware that should be preferred over a last-resort
+standby on modest or over-provisioned systems. To configure this preference,
 CephFS provides a configuration option for MDS called ``mds_join_fs`` which
-enforces this `affinity`.
+enforces this affinity.
 
-As part of any failover, the Ceph monitors will prefer standby daemons with
-``mds_join_fs`` equal to the file system name with the failed rank.  If no
-standby exists with ``mds_join_fs`` equal to the file system name, it will
-choose a `vanilla` standby (no setting for ``mds_join_fs``) for the replacement
-or any other available standby as a last resort. Note, this does not change the
-behavior that ``standby-replay`` daemons are always selected before looking at
+When failing over MDS daemons, a cluster's monitors will prefer standby daemons with
+``mds_join_fs`` equal to the file system ``name`` with the failed ``rank``.  If no
+standby exists with ``mds_join_fs`` equal to the file system ``name``, it will
+choose an unqualified standby (no setting for ``mds_join_fs``) for the replacement,
+or any other available standby, as a last resort. Note, this does not change the
+behavior that ``standby-replay`` daemons are always selected before
 other standbys.
 
-Even further, the monitors will regularly examine the CephFS file systems when
+Even further, the monitors will regularly examine the CephFS file systems even when
 stable to check if a standby with stronger affinity is available to replace an
-MDS with lower affinity. This process is also done for standby-replay daemons:
-if a regular standby has stronger affinity than the standby-replay MDS, it will
+MDS with lower affinity. This process is also done for ``standby-replay`` daemons:
+if a regular standby has stronger affinity than the ``standby-replay`` MDS, it will
 replace the standby-replay MDS.
 
 For example, given this stable and healthy file system:

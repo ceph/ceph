@@ -1,11 +1,6 @@
 #!/bin/sh
 set -e
 
-if ! command -v virtualenv >/dev/null; then
-    echo "$0: virtualenv not installed, skipping python-using tests." 1>&2
-    exit 1
-fi
-
 SRCDIR="$(dirname "$0")"
 
 # build directory, if different, can be passed as an argument;
@@ -30,7 +25,8 @@ if [ ! -e "$CRAM_BIN" ]; then
     # patched cram to support that. See upstream ticket at
     # https://bitbucket.org/brodie/cram/issue/9/allow-read-only-directories-for-t
     # -- tv@inktank.com
-    virtualenv "$VENV" && $VENV/bin/pip --log "$VENV"/log.txt install "$SRCDIR/downloads/cram-0.5.0ceph.2011-01-14.tar.gz"
+    python3 -m venv "$VENV" && $VENV/bin/pip --log "$VENV"/log.txt \
+        install git+https://github.com/ceph/cram.git@0.7-error-dir#egg=cram
 fi
 
 SRCDIR_ABS="$(readlink -f "$SRCDIR")"

@@ -18,7 +18,6 @@
 #include "os/ObjectStore.h"
 #include "Journal.h"
 #include "FileJournal.h"
-#include "common/RWLock.h"
 #include "osd/OpRequest.h"
 
 class JournalingObjectStore : public ObjectStore {

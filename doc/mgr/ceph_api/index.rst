@@ -1,4 +1,4 @@
-.. _mgr-ceph-api:
+.. _mgr ceph api:
 
 ================
 Ceph RESTful API

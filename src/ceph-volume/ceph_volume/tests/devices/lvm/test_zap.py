@@ -7,6 +7,11 @@ from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import zap
 
 
+class TestZap(object):
+    def test_invalid_osd_id_passed(self):
+        with pytest.raises(SystemExit):
+            zap.Zap(argv=['--osd-id', 'foo']).main()
+
 class TestFindAssociatedDevices(object):
 
     def test_no_lvs_found_that_match_id(self, monkeypatch, device_info):
@@ -100,7 +105,7 @@ class TestEnsureAssociatedLVs(object):
         result = zap.ensure_associated_lvs(volumes)
         assert result == []
 
-    def test_data_is_found(self):
+    def test_data_is_found(self, fake_call):
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/data', lv_tags=tags)
@@ -109,7 +114,7 @@ class TestEnsureAssociatedLVs(object):
         result = zap.ensure_associated_lvs(volumes)
         assert result == ['/dev/VolGroup/data']
 
-    def test_block_is_found(self):
+    def test_block_is_found(self, fake_call):
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=block'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/block', lv_tags=tags)
@@ -145,7 +150,7 @@ class TestEnsureAssociatedLVs(object):
         assert '/dev/sdb1' in result
         assert '/dev/VolGroup/block' in result
 
-    def test_journal_is_found(self):
+    def test_journal_is_found(self, fake_call):
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=journal'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/lv', lv_tags=tags)

@@ -11,7 +11,7 @@
 BitmapAllocator::BitmapAllocator(CephContext* _cct,
 					 int64_t capacity,
 					 int64_t alloc_unit,
-					 const std::string& name) :
+					 std::string_view name) :
     Allocator(name, capacity, alloc_unit),
     cct(_cct)
 {
@@ -36,12 +36,14 @@ int64_t BitmapAllocator::allocate(
   if (!allocated) {
     return -ENOSPC;
   }
-  for (auto i = old_size; i < extents->size(); ++i) {
-    auto& e = (*extents)[i];
-    ldout(cct, 10) << __func__
-                   << " extent: 0x" << std::hex << e.offset << "~" << e.length
-		   << "/" << alloc_unit << "," << max_alloc_size << "," << hint
-		   << std::dec << dendl;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    for (auto i = old_size; i < extents->size(); ++i) {
+      auto& e = (*extents)[i];
+      ldout(cct, 10) << __func__
+                     << " extent: 0x" << std::hex << e.offset << "~" << e.length
+		     << "/" << alloc_unit << "," << max_alloc_size << "," << hint
+		     << std::dec << dendl;
+    }
   }
   return int64_t(allocated);
 }
@@ -49,9 +51,12 @@ int64_t BitmapAllocator::allocate(
 void BitmapAllocator::release(
   const interval_set<uint64_t>& release_set)
 {
-  for (auto r : release_set) {
-    ldout(cct, 10) << __func__ << " 0x" << std::hex << r.first << "~" << r.second
-		  << std::dec << dendl;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    for (auto& [offset, len] : release_set) {
+      ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << len
+                     << std::dec << dendl;
+      ceph_assert(offset + len <= (uint64_t)device_size);
+    }
   }
   _free_l2(release_set);
   ldout(cct, 10) << __func__ << " done" << dendl;
@@ -66,6 +71,7 @@ void BitmapAllocator::init_add_free(uint64_t offset, uint64_t length)
   auto mas = get_min_alloc_size();
   uint64_t offs = round_up_to(offset, mas);
   uint64_t l = p2align(offset + length - offs, mas);
+  ceph_assert(offs + l <= (uint64_t)device_size);
 
   _mark_free(offs, l);
   ldout(cct, 10) << __func__ << " done" << dendl;
@@ -77,6 +83,7 @@ void BitmapAllocator::init_rm_free(uint64_t offset, uint64_t length)
   auto mas = get_min_alloc_size();
   uint64_t offs = round_up_to(offset, mas);
   uint64_t l = p2align(offset + length - offs, mas);
+  ceph_assert(offs + l <= (uint64_t)device_size);
   _mark_allocated(offs, l);
   ldout(cct, 10) << __func__ << " done" << dendl;
 }
@@ -95,20 +102,10 @@ void BitmapAllocator::dump()
   auto it = bins_overall.begin();
   while (it != bins_overall.end()) {
     ldout(cct, 0) << __func__
-	            << " bin " << it->first
-		    << "(< " << byte_u_t((1 << (it->first + 1)) * get_min_alloc_size()) << ")"
-		    << " : " << it->second << " extents"
-		    << dendl;
+                  << " bin " << it->first
+                  << "(< " << byte_u_t((1 << (it->first + 1)) * get_min_alloc_size()) << ")"
+                  << " : " << it->second << " extents"
+                  << dendl;
     ++it;
   }
-}
-
-void BitmapAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
-{
-  size_t alloc_size = get_min_alloc_size();
-  auto multiply_by_alloc_size = [alloc_size, notify](size_t off, size_t len) {
-    notify(off * alloc_size, len * alloc_size);
-  };
-  std::lock_guard lck(lock);
-  l1.dump(multiply_by_alloc_size);
 }

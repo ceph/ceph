@@ -61,6 +61,8 @@ protected:
   LogChannelRef clog;
   LogChannelRef audit_clog;
 
+  std::map<std::string, std::string> pre_init_store;
+
   void load_all_metadata();
   std::map<std::string, std::string> load_store();
   void init();

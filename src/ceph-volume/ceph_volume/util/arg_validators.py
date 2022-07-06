@@ -1,10 +1,13 @@
 import argparse
 import os
-from ceph_volume import terminal
-from ceph_volume import decorators
-from ceph_volume.util import disk
+import math
+from ceph_volume import terminal, decorators, process
 from ceph_volume.util.device import Device
+from ceph_volume.util import disk
 
+
+def valid_osd_id(val):
+    return str(int(val))
 
 class ValidDevice(object):
 
@@ -13,8 +16,13 @@ class ValidDevice(object):
         self.gpt_ok = gpt_ok
 
     def __call__(self, dev_path):
-        device = self._is_valid_device(dev_path)
-        return self._format_device(device)
+        self.get_device(dev_path)
+        self._validated_device = self._is_valid_device()
+        return self._format_device(self._validated_device)
+
+    def get_device(self, dev_path):
+        self._device = Device(dev_path)
+        self.dev_path = dev_path
 
     def _format_device(self, device):
         if self.as_string:
@@ -24,36 +32,101 @@ class ValidDevice(object):
             return device.path
         return device
 
-    def _is_valid_device(self, dev_path):
-        device = Device(dev_path)
+    def _is_valid_device(self):
         error = None
-        if not device.exists:
-            error = "Unable to proceed with non-existing device: %s" % dev_path
+        if not self._device.exists:
+            error = "Unable to proceed with non-existing device: %s" % self.dev_path
         # FIXME this is not a nice API, this validator was meant to catch any
         # non-existing devices upfront, not check for gpt headers. Now this
         # needs to optionally skip checking gpt headers which is beyond
         # verifying if the device exists. The better solution would be to
         # configure this with a list of checks that can be excluded/included on
         # __init__
-        elif device.has_gpt_headers and not self.gpt_ok:
-            error = "GPT headers found, they must be removed on: %s" % dev_path
-
+        elif self._device.has_gpt_headers and not self.gpt_ok:
+            error = "GPT headers found, they must be removed on: %s" % self.dev_path
+        if self._device.has_partitions:
+            raise RuntimeError("Device {} has partitions.".format(self.dev_path))
         if error:
             raise argparse.ArgumentError(None, error)
+        return self._device
 
-        return device
 
+class ValidZapDevice(ValidDevice):
+    def __call__(self, dev_path):
+        super().get_device(dev_path)
+        return self._format_device(self._is_valid_device())
+
+    def _is_valid_device(self, raise_sys_exit=True):
+        super()._is_valid_device()
+        return self._device
+
+
+class ValidDataDevice(ValidDevice):
+    def __call__(self, dev_path):
+        super().get_device(dev_path)
+        return self._format_device(self._is_valid_device())
+
+    def _is_valid_device(self, raise_sys_exit=True):
+        super()._is_valid_device()
+        if self._device.used_by_ceph:
+            terminal.info('Device {} is already prepared'.format(self.dev_path))
+            if raise_sys_exit:
+                raise SystemExit(0)
+        if self._device.has_fs and not self._device.used_by_ceph:
+            raise RuntimeError("Device {} has a filesystem.".format(self.dev_path))
+        if self.dev_path[0] == '/' and disk.has_bluestore_label(self.dev_path):
+            raise RuntimeError("Device {} has bluestore signature.".format(self.dev_path))
+        return self._device
+
+class ValidRawDevice(ValidDevice):
+    def __call__(self, dev_path):
+        super().get_device(dev_path)
+        return self._format_device(self._is_valid_device())
+
+    def _is_valid_device(self, raise_sys_exit=True):
+        out, err, rc = process.call([
+	    'ceph-bluestore-tool', 'show-label',
+	    '--dev', self.dev_path], verbose_on_failure=False)
+        if not rc:
+            terminal.info("Raw device {} is already prepared.".format(self.dev_path))
+            raise SystemExit(0)
+        if disk.blkid(self.dev_path).get('TYPE') == 'crypto_LUKS':
+            terminal.info("Raw device {} might already be in use for a dmcrypt OSD, skipping.".format(self.dev_path))
+            raise SystemExit(0)
+        super()._is_valid_device()
+        return self._device
 
 class ValidBatchDevice(ValidDevice):
-
     def __call__(self, dev_path):
-        dev = self._is_valid_device(dev_path)
-        if dev.is_partition:
+        super().get_device(dev_path)
+        return self._format_device(self._is_valid_device())
+
+    def _is_valid_device(self, raise_sys_exit=False):
+        super()._is_valid_device()
+        if self._device.is_partition:
             raise argparse.ArgumentError(
                 None,
                 '{} is a partition, please pass '
-                'LVs or raw block devices'.format(dev_path))
-        return self._format_device(dev)
+                'LVs or raw block devices'.format(self.dev_path))
+        return self._device
+
+
+class ValidBatchDataDevice(ValidBatchDevice, ValidDataDevice):
+    def __call__(self, dev_path):
+        super().get_device(dev_path)
+        return self._format_device(self._is_valid_device())
+
+    def _is_valid_device(self):
+        # if device is already used by ceph,
+        # leave the validation to Batch.get_deployment_layout()
+        # This way the idempotency isn't broken (especially when using --osds-per-device)
+        for lv in self._device.lvs:
+            if lv.tags.get('ceph.type') in ['db', 'wal', 'journal']:
+                return self._device
+        if self._device.used_by_ceph:
+            return self._device
+        super()._is_valid_device(raise_sys_exit=False)
+        return self._device
 
 
 class OSDPath(object):
@@ -148,3 +221,14 @@ def exclude_group_options(parser, groups, argv=None):
                     terminal.warning(msg)
             last_group = group_name
         last_flag = flag
+
+class ValidFraction(object):
+    """
+    Validate fraction is in (0, 1.0]
+    """
+
+    def __call__(self, fraction):
+        fraction_float = float(fraction)
+        if math.isnan(fraction_float) or fraction_float <= 0.0 or fraction_float > 1.0:
+            raise argparse.ArgumentError(None, 'Fraction %f not in (0,1.0]' % fraction_float)
+        return fraction_float

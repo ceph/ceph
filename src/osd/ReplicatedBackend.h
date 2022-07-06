@@ -280,7 +280,7 @@ private:
 			const interval_set<uint64_t> &intervals_included,
 			ceph::buffer::list data_included,
 			ceph::buffer::list omap_header,
-			const std::map<std::string, ceph::buffer::list> &attrs,
+			const std::map<std::string, ceph::buffer::list, std::less<>> &attrs,
 			const std::map<std::string, ceph::buffer::list> &omap_entries,
 			ObjectStore::Transaction *t);
   void submit_push_complete(const ObjectRecoveryInfo &recovery_info,
@@ -431,7 +431,10 @@ private:
     ScrubMap &map,
     ScrubMapBuilder &pos,
     ScrubMap::object &o) override;
-  uint64_t be_get_ondisk_size(uint64_t logical_size) override { return logical_size; }
+
+  uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
+    return logical_size;
+  }
 };
 
 #endif

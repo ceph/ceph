@@ -17,7 +17,6 @@
 #include "mon/AuthMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/MonitorDBStore.h"
-#include "mon/ConfigKeyService.h"
 #include "mon/OSDMonitor.h"
 #include "mon/MDSMonitor.h"
 #include "mon/ConfigMonitor.h"
@@ -84,11 +83,12 @@ bool AuthMonitor::check_rotate()
 {
   KeyServerData::Incremental rot_inc;
   rot_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
-  if (!mon.key_server.updated_rotating(rot_inc.rotating_bl, last_rotating_ver))
-    return false;
-  dout(10) << __func__ << " updated rotating" << dendl;
-  push_cephx_inc(rot_inc);
-  return true;
+  if (mon.key_server.prepare_rotating_update(rot_inc.rotating_bl)) {
+    dout(10) << __func__ << " updating rotating" << dendl;
+    push_cephx_inc(rot_inc);
+    return true;
+  }
+  return false;
 }
 
 /*
@@ -140,16 +140,26 @@ void AuthMonitor::on_active()
 
   if (!mon.is_leader())
     return;
+
   mon.key_server.start_server();
 
-  bool increase;
-  {
-    std::lock_guard l(mon.auth_lock);
-    increase = _should_increase_max_global_id();
-  }
-  if (is_writeable() && increase) {
-    increase_max_global_id();
-    propose_pending();
+  if (is_writeable()) {
+    bool propose = false;
+    if (check_rotate()) {
+      propose = true;
+    }
+    bool increase;
+    {
+      std::lock_guard l(mon.auth_lock);
+      increase = _should_increase_max_global_id();
+    }
+    if (increase) {
+      increase_max_global_id();
+      propose = true;
+    }
+    if (propose) {
+      propose_pending();
+    }
   }
 }
 
@@ -242,7 +252,6 @@ void AuthMonitor::create_initial()
 
   // initialize rotating keys
   mon.key_server.clear_secrets();
-  last_rotating_ver = 0;
   check_rotate();
   ceph_assert(pending_auth.size() == 1);
 
@@ -360,6 +369,8 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
   dout(10) << __func__ << " max_global_id=" << max_global_id
 	   << " format_version " << format_version
 	   << dendl;
+
+  mon.key_server.dump();
 }
 
 bool AuthMonitor::_should_increase_max_global_id()
@@ -616,6 +627,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   bool start = false;
   bool finished = false;
   EntityName entity_name;
+  bool is_new_global_id = false;
 
   // set up handler?
   if (m->protocol == 0 && !s->auth_handler) {
@@ -735,23 +747,23 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       ceph_assert(!paxos_writable);
       return false;
     }
+    is_new_global_id = true;
   }
 
   try {
     if (start) {
       // new session
       ret = s->auth_handler->start_session(entity_name,
-					   0, // no connection_secret needed
+					   s->con->peer_global_id,
+					   is_new_global_id,
 					   &response_bl,
-					   &s->con->peer_caps_info,
-					   nullptr, nullptr);
+					   &s->con->peer_caps_info);
     } else {
       // request
       ret = s->auth_handler->handle_request(
 	indata,
 	0, // no connection_secret needed
 	&response_bl,
-	&s->con->peer_global_id,
 	&s->con->peer_caps_info,
 	nullptr, nullptr);
     }
@@ -829,8 +841,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "auth export") {
@@ -1345,8 +1356,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
   cmd_getval(cmdmap, "prefix", prefix);
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   MonSession *session = op->get_session();

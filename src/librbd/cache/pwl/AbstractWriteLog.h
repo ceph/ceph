@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CACHE_PARENT_WRITE_LOG
 #define CEPH_LIBRBD_CACHE_PARENT_WRITE_LOG
 
+#include "common/Timer.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "common/AsyncOpTracker.h"
@@ -12,13 +13,14 @@
 #include "librbd/BlockGuard.h"
 #include "librbd/cache/Types.h"
 #include "librbd/cache/pwl/LogOperation.h"
+#include "librbd/cache/pwl/ReadRequest.h"
 #include "librbd/cache/pwl/Request.h"
 #include "librbd/cache/pwl/LogMap.h"
+#include "librbd/cache/pwl/Builder.h"
 #include <functional>
 #include <list>
 
 class Context;
-class SafeTimer;
 
 namespace librbd {
 
@@ -27,14 +29,13 @@ struct ImageCtx;
 namespace plugin { template <typename> struct Api; }
 
 namespace cache {
-
 namespace pwl {
 
 class GenericLogEntry;
 class GenericWriteLogEntry;
 class SyncPointLogEntry;
 class WriteLogEntry;
-struct WriteLogPmemEntry;
+struct WriteLogCacheEntry;
 
 typedef std::list<std::shared_ptr<WriteLogEntry>> WriteLogEntries;
 typedef std::list<std::shared_ptr<GenericLogEntry>> GenericLogEntries;
@@ -49,7 +50,11 @@ typedef LogMap<GenericWriteLogEntry> WriteLogMap;
 typedef librbd::BlockGuard<GuardedRequest> WriteLogGuard;
 
 class DeferredContexts;
-template <typename> class ImageCacheState;
+template <typename>
+class ImageCacheState;
+
+template<typename T>
+class Builder;
 
 template <typename T>
 struct C_BlockIORequest;
@@ -64,9 +69,13 @@ template <typename ImageCtxT>
 class AbstractWriteLog {
 public:
   typedef io::Extent Extent;
-  typedef io::Extents Extents; 
+  typedef io::Extents Extents;
+  using This = AbstractWriteLog<ImageCtxT>;
+  Builder<This> *m_builder;
 
-  AbstractWriteLog(ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state,
+  AbstractWriteLog(ImageCtxT &image_ctx,
+                   librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state,
+                   Builder<This> *builder,
                    cache::ImageWritebackInterface& image_writeback,
 		   plugin::Api<ImageCtxT>& plugin_api);
   virtual ~AbstractWriteLog();
@@ -103,23 +112,23 @@ public:
   void invalidate(Context *on_finish);
   void flush(Context *on_finish);
 
-  using This = AbstractWriteLog<ImageCtxT>;
   using C_WriteRequestT = pwl::C_WriteRequest<This>;
   using C_BlockIORequestT = pwl::C_BlockIORequest<This>;
   using C_FlushRequestT = pwl::C_FlushRequest<This>;
   using C_DiscardRequestT = pwl::C_DiscardRequest<This>;
   using C_WriteSameRequestT = pwl::C_WriteSameRequest<This>;
-  using C_CompAndWriteRequestT = pwl::C_CompAndWriteRequest<This>;
 
   CephContext * get_context();
   void release_guarded_request(BlockGuardCell *cell);
   void release_write_lanes(C_BlockIORequestT *req);
   virtual bool alloc_resources(C_BlockIORequestT *req) = 0;
   virtual void setup_schedule_append(
-      pwl::GenericLogOperationsVector &ops, bool do_early_flush) = 0;
-  void schedule_append(pwl::GenericLogOperationsVector &ops);
-  void schedule_append(pwl::GenericLogOperationSharedPtr op);
-  void flush_new_sync_point(C_FlushRequestT *flush_req, pwl::DeferredContexts &later);
+      pwl::GenericLogOperationsVector &ops, bool do_early_flush,
+      C_BlockIORequestT *req) = 0;
+  void schedule_append(pwl::GenericLogOperationsVector &ops, C_BlockIORequestT *req = nullptr);
+  void schedule_append(pwl::GenericLogOperationSharedPtr op, C_BlockIORequestT *req = nullptr);
+  void flush_new_sync_point(C_FlushRequestT *flush_req,
+                            pwl::DeferredContexts &later);
 
   std::shared_ptr<pwl::SyncPoint> get_current_sync_point() {
     return m_current_sync_point;
@@ -145,6 +154,10 @@ public:
   }
   void add_into_log_map(pwl::GenericWriteLogEntries &log_entries,
                         C_BlockIORequestT *req);
+  virtual void complete_user_request(Context *&user_req, int r) = 0;
+  virtual void copy_bl_to_buffer(
+      WriteRequestResources *resources,
+      std::unique_ptr<WriteLogOperationSet> &op_set) {}
 
 private:
  typedef std::list<pwl::C_WriteRequest<This> *> C_WriteRequests;
@@ -165,8 +178,10 @@ private:
 
   bool m_persist_on_write_until_flush = true;
 
+  pwl::WriteLogGuard m_flush_guard;
+  mutable ceph::mutex m_flush_guard_lock;
+
  /* Debug counters for the places m_async_op_tracker is used */
-  std::atomic<int> m_async_append_ops = {0};
   std::atomic<int> m_async_complete_ops = {0};
   std::atomic<int> m_async_null_flush_finish = {0};
   std::atomic<int> m_async_process_work = {0};
@@ -186,7 +201,7 @@ private:
   Contexts m_flush_complete_contexts;
 
   std::shared_ptr<pwl::SyncPoint> m_current_sync_point = nullptr;
-  bool m_persist_on_flush = false; /* If false, persist each write before completion */
+  bool m_persist_on_flush = false; //If false, persist each write before completion
 
   int m_flush_ops_in_flight = 0;
   int m_flush_bytes_in_flight = 0;
@@ -197,8 +212,6 @@ private:
   /* Throttle writes concurrently allocating & replicating */
   unsigned int m_free_lanes = pwl::MAX_CONCURRENT_WRITES;
 
-  /* Initialized from config, then set false during shutdown */
-  std::atomic<bool> m_periodic_stats_enabled = {false};
   SafeTimer *m_timer = nullptr; /* Used with m_timer_lock */
   mutable ceph::mutex *m_timer_lock = nullptr; /* Used with and by m_timer */
   Context *m_timer_ctx = nullptr;
@@ -208,11 +221,11 @@ private:
   uint32_t m_discard_granularity_bytes;
 
   BlockGuardCell* detain_guarded_request_helper(pwl::GuardedRequest &req);
-  BlockGuardCell* detain_guarded_request_barrier_helper(pwl::GuardedRequest &req);
+  BlockGuardCell* detain_guarded_request_barrier_helper(
+      pwl::GuardedRequest &req);
   void detain_guarded_request(C_BlockIORequestT *request,
                               pwl::GuardedRequestFunctionContext *guarded_ctx,
                               bool is_barrier);
-
   void perf_start(const std::string name);
   void perf_stop();
   void log_perf();
@@ -221,19 +234,26 @@ private:
 
   void pwl_init(Context *on_finish, pwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
+  void handle_update_image_cache_state(int r);
+  void check_image_cache_state_clean();
 
   void flush_dirty_entries(Context *on_finish);
   bool can_flush_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
-  bool handle_flushed_sync_point(std::shared_ptr<pwl::SyncPointLogEntry> log_entry);
-  void sync_point_writer_flushed(std::shared_ptr<pwl::SyncPointLogEntry> log_entry);
+  bool handle_flushed_sync_point(
+      std::shared_ptr<pwl::SyncPointLogEntry> log_entry);
+  void sync_point_writer_flushed(
+      std::shared_ptr<pwl::SyncPointLogEntry> log_entry);
 
   void init_flush_new_sync_point(pwl::DeferredContexts &later);
   void new_sync_point(pwl::DeferredContexts &later);
-  pwl::C_FlushRequest<AbstractWriteLog<ImageCtxT>>* make_flush_req(Context *on_finish);
-  void flush_new_sync_point_if_needed(C_FlushRequestT *flush_req, pwl::DeferredContexts &later);
+  pwl::C_FlushRequest<AbstractWriteLog<ImageCtxT>>* make_flush_req(
+      Context *on_finish);
+  void flush_new_sync_point_if_needed(C_FlushRequestT *flush_req,
+                                      pwl::DeferredContexts &later);
 
   void alloc_and_dispatch_io_req(C_BlockIORequestT *write_req);
-  void schedule_complete_op_log_entries(pwl::GenericLogOperations &&ops, const int r);
+  void schedule_complete_op_log_entries(pwl::GenericLogOperations &&ops,
+                                        const int r);
   void internal_flush(bool invalidate, Context *on_finish);
 
 protected:
@@ -245,8 +265,7 @@ protected:
   ImageCtxT &m_image_ctx;
 
   std::string m_log_pool_name;
-  uint64_t m_log_pool_config_size; /* Configured size of RWL */
-  uint64_t m_log_pool_actual_size = 0; /* Actual size of RWL pool */
+  uint64_t m_log_pool_size;
 
   uint32_t m_total_log_entries = 0;
   uint32_t m_free_log_entries = 0;
@@ -274,6 +293,7 @@ protected:
   AsyncOpTracker m_async_op_tracker;
   /* Debug counters for the places m_async_op_tracker is used */
   std::atomic<int> m_async_flush_ops = {0};
+  std::atomic<int> m_async_append_ops = {0};
 
   /* Acquire locks in order declared here */
 
@@ -313,46 +333,72 @@ protected:
   void wake_up();
 
   void update_entries(
-      std::shared_ptr<pwl::GenericLogEntry> log_entry,
-      pwl::WriteLogPmemEntry *pmem_entry, std::map<uint64_t, bool> &missing_sync_points,
-      std::map<uint64_t, std::shared_ptr<pwl::SyncPointLogEntry>> &sync_point_entries,
-      int entry_index);
+      std::shared_ptr<pwl::GenericLogEntry> *log_entry,
+      pwl::WriteLogCacheEntry *cache_entry,
+      std::map<uint64_t, bool> &missing_sync_points,
+      std::map<uint64_t,
+      std::shared_ptr<pwl::SyncPointLogEntry>> &sync_point_entries,
+      uint64_t entry_index);
   void update_sync_points(
       std::map<uint64_t, bool> &missing_sync_points,
-      std::map<uint64_t, std::shared_ptr<pwl::SyncPointLogEntry>> &sync_point_entries,
+      std::map<uint64_t,
+      std::shared_ptr<pwl::SyncPointLogEntry>> &sync_point_entries,
       pwl::DeferredContexts &later);
+  virtual void inc_allocated_cached_bytes(
+      std::shared_ptr<pwl::GenericLogEntry> log_entry) = 0;
   Context *construct_flush_entry(
       const std::shared_ptr<pwl::GenericLogEntry> log_entry, bool invalidating);
+  void detain_flush_guard_request(std::shared_ptr<GenericLogEntry> log_entry,
+                                  GuardedRequestFunctionContext *guarded_ctx);
   void process_writeback_dirty_entries();
   bool can_retire_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
 
   void dispatch_deferred_writes(void);
-  void enlist_op_appender();
   void complete_op_log_entries(pwl::GenericLogOperations &&ops, const int r);
 
   bool check_allocation(
-      C_BlockIORequestT *req,
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
-      uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves, uint64_t bytes_allocated_cap);
+      C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
+      uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
+      uint32_t num_unpublished_reserves);
   void append_scheduled(
-      pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending, bool isRWL=false);
-  
+      pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,
+      bool isRWL=false);
+
   virtual void process_work() = 0;
   virtual void append_scheduled_ops(void) = 0;
-  virtual void schedule_append_ops(pwl::GenericLogOperations &ops) = 0;
+  virtual void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) = 0;
   virtual void remove_pool_file() = 0;
-  virtual void initialize_pool(Context *on_finish, pwl::DeferredContexts &later) = 0;
+  virtual bool initialize_pool(Context *on_finish,
+                               pwl::DeferredContexts &later) = 0;
+  virtual void collect_read_extents(
+      uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
+      std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
+      std::vector<bufferlist*> &bls_to_read, uint64_t entry_hit_length,
+      Extent hit_extent, pwl::C_ReadRequest *read_ctx) = 0;
+  virtual void complete_read(
+      std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
+      std::vector<bufferlist*> &bls_to_read, Context *ctx) = 0;
   virtual void write_data_to_buffer(
-      std::shared_ptr<pwl::WriteLogEntry> ws_entry, pwl::WriteLogPmemEntry *pmem_entry) {}
+      std::shared_ptr<pwl::WriteLogEntry> ws_entry,
+      pwl::WriteLogCacheEntry *cache_entry) {}
+  virtual void release_ram(
+      const std::shared_ptr<pwl::GenericLogEntry> log_entry) {}
   virtual void alloc_op_log_entries(pwl::GenericLogOperations &ops) {}
-  virtual bool retire_entries(const unsigned long int frees_per_tx) {return false;}
-  virtual void schedule_flush_and_append(pwl::GenericLogOperationsVector &ops) {}
-  virtual void copy_pmem(C_BlockIORequestT *req) {}
+  virtual bool retire_entries(const unsigned long int frees_per_tx) {
+    return false;
+  }
+  virtual void schedule_flush_and_append(
+      pwl::GenericLogOperationsVector &ops) {}
   virtual void persist_last_flushed_sync_gen() {}
-  virtual void reserve_pmem(C_BlockIORequestT *req, bool &alloc_succeeds, bool &no_space) {}
-  virtual Context *construct_flush_entry_ctx(
-      const std::shared_ptr<pwl::GenericLogEntry> log_entry) {return nullptr;}
+  virtual void reserve_cache(C_BlockIORequestT *req, bool &alloc_succeeds,
+                             bool &no_space) {}
+  virtual void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
+					DeferredContexts &post_unlock,
+					bool has_write_entry) = 0;
+  virtual uint64_t get_max_extent() {
+    return 0;
+  }
+  void update_image_cache_state(void);
 };
 
 } // namespace pwl

@@ -127,7 +127,7 @@ public:
 
   void expect_close(MockTestImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(*mock_image_ctx.state, close(_))
-      .WillOnce(Invoke([this, r](Context* ctx) {
+      .WillOnce(Invoke([r](Context* ctx) {
                   ctx->complete(r);
                 }));
   }

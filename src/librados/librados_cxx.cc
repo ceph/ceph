@@ -54,11 +54,13 @@
 #define tracepoint(...)
 #endif
 
-using std::string;
-using std::map;
-using std::set;
-using std::vector;
 using std::list;
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -222,11 +224,13 @@ void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *p
 
 void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
 						std::map<uint64_t,uint64_t> *m,
-						bufferlist *data_bl, int *prval)
+						bufferlist *data_bl, int *prval,
+						uint64_t truncate_size,
+						uint32_t truncate_seq)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
-  o->sparse_read(off, len, m, data_bl, prval);
+  o->sparse_read(off, len, m, data_bl, prval, truncate_size, truncate_seq);
 }
 
 void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,
@@ -850,22 +854,24 @@ void librados::NObjectIteratorImpl::set_filter(const bufferlist &bl)
 void librados::NObjectIteratorImpl::get_next()
 {
   const char *entry, *key, *nspace;
+  size_t entry_size, key_size, nspace_size;
   if (ctx->nlc->at_end())
     return;
-  int ret = rados_nobjects_list_next(ctx.get(), &entry, &key, &nspace);
+  int ret = rados_nobjects_list_next2(ctx.get(), &entry, &key, &nspace,
+                                      &entry_size, &key_size, &nspace_size);
   if (ret == -ENOENT) {
     return;
   }
   else if (ret) {
     throw std::system_error(-ret, std::system_category(),
-                            "rados_nobjects_list_next");
+                            "rados_nobjects_list_next2");
   }
 
   if (cur_obj.impl == NULL)
     cur_obj.impl = new ListObjectImpl();
-  cur_obj.impl->nspace = nspace;
-  cur_obj.impl->oid = entry;
-  cur_obj.impl->locator = key ? key : string();
+  cur_obj.impl->nspace = string{nspace, nspace_size};
+  cur_obj.impl->oid = string{entry, entry_size};
+  cur_obj.impl->locator = key ? string(key, key_size) : string();
 }
 
 uint32_t librados::NObjectIteratorImpl::get_pg_hash_position() const
@@ -1199,9 +1205,9 @@ bool librados::IoCtx::pool_requires_alignment()
   return io_ctx_impl->client->pool_requires_alignment(get_id());
 }
 
-int librados::IoCtx::pool_requires_alignment2(bool *requires)
+int librados::IoCtx::pool_requires_alignment2(bool *req)
 {
-  return io_ctx_impl->client->pool_requires_alignment2(get_id(), requires);
+  return io_ctx_impl->client->pool_requires_alignment2(get_id(), req);
 }
 
 uint64_t librados::IoCtx::pool_required_alignment()
@@ -2306,22 +2312,27 @@ librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
 
 void librados::IoCtx::set_osdmap_full_try()
 {
-  io_ctx_impl->objecter->set_pool_full_try();
+  io_ctx_impl->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::unset_osdmap_full_try()
 {
-  io_ctx_impl->objecter->unset_pool_full_try();
+  io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
+}
+
+bool librados::IoCtx::get_pool_full_try()
+{
+  return (io_ctx_impl->extra_op_flags & CEPH_OSD_FLAG_FULL_TRY) != 0;
 }
 
 void librados::IoCtx::set_pool_full_try()
 {
-  io_ctx_impl->objecter->set_pool_full_try();
+  io_ctx_impl->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::unset_pool_full_try()
 {
-  io_ctx_impl->objecter->unset_pool_full_try();
+  io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
 
 ///////////////////////////// Rados //////////////////////////////
@@ -2587,7 +2598,7 @@ int64_t librados::Rados::pool_lookup(const char *name)
 
 int librados::Rados::pool_reverse_lookup(int64_t id, std::string *name)
 {
-  return client->pool_get_name(id, name);
+  return client->pool_get_name(id, name, true);
 }
 
 int librados::Rados::mon_command(string cmd, const bufferlist& inbl,

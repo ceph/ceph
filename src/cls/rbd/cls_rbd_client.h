@@ -478,6 +478,10 @@ void mirror_image_status_get_summary_start(
 int mirror_image_status_get_summary_finish(
     ceph::buffer::list::const_iterator *iter,
     std::map<cls::rbd::MirrorImageStatusState, int32_t> *states);
+int mirror_image_status_remove(librados::IoCtx *ioctx,
+                               const std::string &global_image_id);
+void mirror_image_status_remove(librados::ObjectWriteOperation *op,
+                                const std::string &global_image_id);
 int mirror_image_status_remove_down(librados::IoCtx *ioctx);
 void mirror_image_status_remove_down(librados::ObjectWriteOperation *op);
 
@@ -652,9 +656,9 @@ int sparse_copyup(librados::IoCtx *ioctx, const std::string &oid,
                   const std::map<uint64_t, uint64_t> &extent_map,
                   ceph::buffer::list data);
 
-void sparsify(librados::ObjectWriteOperation *op, size_t sparse_size,
+void sparsify(librados::ObjectWriteOperation *op, uint64_t sparse_size,
               bool remove_empty);
-int sparsify(librados::IoCtx *ioctx, const std::string &oid, size_t sparse_size,
+int sparsify(librados::IoCtx *ioctx, const std::string &oid, uint64_t sparse_size,
              bool remove_empty);
 
 } // namespace cls_client

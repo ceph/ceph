@@ -94,6 +94,11 @@ public:
     return m_error_description;
   }
 
+  std::string get_image_spec() const {
+    std::unique_lock locker(m_lock);
+    return m_image_spec;
+  }
+
 private:
   /**
    * @verbatim
@@ -129,6 +134,9 @@ private:
    *    |                       |                     | |
    *    |                       v                     | |
    *    |                 CREATE_NON_PRIMARY_SNAPSHOT | |
+   *    |                       |                     | |
+   *    |                       v (skip if not needed)| |
+   *    |                 UPDATE_MIRROR_IMAGE_STATE   | |
    *    |                       |                     | |
    *    |                       |/--------------------/ |
    *    |                       |                       |
@@ -202,13 +210,14 @@ private:
 
   State m_state = STATE_INIT;
 
+  std::string m_image_spec;
   Context* m_on_init_shutdown = nullptr;
 
   bool m_resync_requested = false;
   int m_error_code = 0;
   std::string m_error_description;
 
-  C_UpdateWatchCtx* m_update_watch_ctx;
+  C_UpdateWatchCtx* m_update_watch_ctx = nullptr;
   uint64_t m_local_update_watcher_handle = 0;
   uint64_t m_remote_update_watcher_handle = 0;
   bool m_image_updated = false;
@@ -235,12 +244,15 @@ private:
     uint64_t, boost::accumulators::stats<
       boost::accumulators::tag::rolling_mean>> m_bytes_per_snapshot{
     boost::accumulators::tag::rolling_window::window_size = 2};
+  utime_t m_snapshot_replay_start;
 
   uint32_t m_pending_snapshots = 0;
 
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
   bool m_sync_in_progress = false;
+
+  PerfCounters *m_perf_counters = nullptr;
 
   void load_local_image_meta();
   void handle_load_local_image_meta(int r);
@@ -268,6 +280,9 @@ private:
 
   void create_non_primary_snapshot();
   void handle_create_non_primary_snapshot(int r);
+
+  void update_mirror_image_state();
+  void handle_update_mirror_image_state(int r);
 
   void request_sync();
   void handle_request_sync(int r);
@@ -317,6 +332,8 @@ private:
   bool is_replay_interrupted();
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* lock);
 
+  void register_perf_counters();
+  void unregister_perf_counters();
 };
 
 } // namespace snapshot

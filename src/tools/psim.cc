@@ -4,6 +4,8 @@
 #include "osd/OSDMap.h"
 #include "include/buffer.h"
 
+using namespace std;
+
 int main(int argc, char **argv)
 {
   /*

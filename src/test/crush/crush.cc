@@ -20,6 +20,8 @@
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 
+using namespace std;
+
 std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
                               int num_host, int num_osd)
 {
@@ -53,7 +55,7 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
   }
   int ret;
   int ruleno = 0;
-  ret = c->add_rule(ruleno, 4, 123, 1, 20);
+  ret = c->add_rule(ruleno, 4, 123);
   ceph_assert(ret == ruleno);
   ret = c->set_rule_step(ruleno, 0, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 10, 0);
   ceph_assert(ret == 0);

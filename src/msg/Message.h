@@ -67,6 +67,8 @@
 #define MSG_CONFIG           62
 #define MSG_GET_CONFIG       63
 
+#define MSG_KV_DATA          54
+
 #define MSG_MON_GET_PURGED_SNAPS 76
 #define MSG_MON_GET_PURGED_SNAPS_REPLY 77
 
@@ -232,6 +234,9 @@
 #define MSG_MGR_CLOSE             0x708
 #define MSG_MGR_COMMAND           0x709
 #define MSG_MGR_COMMAND_REPLY     0x70a
+
+// *** ceph-mgr <-> MON daemons ***
+#define MSG_MGR_UPDATE     0x70b
 
 // ======================================================
 
@@ -428,7 +433,7 @@ public:
       byte_throttler->put(data.length());
     bl = std::move(data);
   }
-  off_t get_data_len() const { return data.length(); }
+  uint32_t get_data_len() const { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   const utime_t& get_recv_stamp() const { return recv_stamp; }
@@ -551,4 +556,10 @@ ceph::ref_t<T> make_message(Args&&... args) {
 }
 }
 
+namespace crimson {
+template<class T, typename... Args>
+MURef<T> make_message(Args&&... args) {
+  return {new T(std::forward<Args>(args)...), TOPNSPC::common::UniquePtrDeleter{}};
+}
+}
 #endif

@@ -24,13 +24,13 @@ struct test_val_t {
 };
 
 struct test_val_le_t {
-  ceph_le32 t1 = init_le32(0);
-  ceph_les32 t2 = init_les32(0);
+  ceph_le32 t1{0};
+  ceph_les32 t2{0};
 
   test_val_le_t() = default;
   test_val_le_t(const test_val_le_t &) = default;
   test_val_le_t(const test_val_t &nv)
-    : t1(init_le32(nv.t1)), t2(init_les32(nv.t2)) {}
+    : t1(nv.t1), t2(nv.t2) {}
 
   operator test_val_t() const {
     return test_val_t{t1, t2};
@@ -67,13 +67,13 @@ struct test_meta_t {
 };
 
 struct test_meta_le_t {
-  ceph_le32 t1 = init_le32(0);
-  ceph_le32 t2 = init_le32(0);
+  ceph_le32 t1{0};
+  ceph_le32 t2{0};
 
   test_meta_le_t() = default;
   test_meta_le_t(const test_meta_le_t &) = default;
   test_meta_le_t(const test_meta_t &nv)
-    : t1(init_le32(nv.t1)), t2(init_le32(nv.t2)) {}
+    : t1(nv.t1), t2(nv.t2) {}
 
   operator test_meta_t() const {
     return test_meta_t{t1, t2};

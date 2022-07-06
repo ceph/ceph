@@ -34,6 +34,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds.beacon." << name << ' '
 
+using std::map;
+using std::string;
+
 using namespace std::chrono_literals;
 
 Beacon::Beacon(CephContext *cct, MonClient *monc, std::string_view name)
@@ -41,7 +44,8 @@ Beacon::Beacon(CephContext *cct, MonClient *monc, std::string_view name)
     Dispatcher(cct),
     beacon_interval(g_conf()->mds_beacon_interval),
     monc(monc),
-    name(name)
+    name(name),
+    compat(MDSMap::get_compat_set_all())
 {
 }
 
@@ -233,10 +237,8 @@ void Beacon::_notify_mdsmap(const MDSMap &mdsmap)
 {
   ceph_assert(mdsmap.get_epoch() >= epoch);
 
-  if (mdsmap.get_epoch() != epoch) {
+  if (mdsmap.get_epoch() >= epoch) {
     epoch = mdsmap.get_epoch();
-    compat = MDSMap::get_compat_set_default();
-    compat.merge(mdsmap.compat);
   }
 }
 
@@ -361,7 +363,7 @@ void Beacon::notify_health(MDSRank const *mds)
   //
   // Detect clients failing to advance their old_client_tid
   {
-    set<Session*> sessions;
+    std::set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
 
     const auto min_caps_working_set = g_conf().get_val<uint64_t>("mds_min_caps_working_set");

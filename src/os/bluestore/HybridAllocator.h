@@ -13,7 +13,7 @@ class HybridAllocator : public AvlAllocator {
 public:
   HybridAllocator(CephContext* cct, int64_t device_size, int64_t _block_size,
                   uint64_t max_mem,
-	          const std::string& name) :
+	          std::string_view name) :
       AvlAllocator(cct, device_size, _block_size, max_mem, name) {
   }
   const char* get_type() const override
@@ -31,7 +31,8 @@ public:
   double get_fragmentation() override;
 
   void dump() override;
-  void dump(std::function<void(uint64_t offset, uint64_t length)> notify) override;
+  void foreach(
+    std::function<void(uint64_t offset, uint64_t length)> notify) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
   void shutdown() override;
 

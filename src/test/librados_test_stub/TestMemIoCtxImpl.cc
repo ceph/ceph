@@ -4,7 +4,6 @@
 #include "test/librados_test_stub/TestMemIoCtxImpl.h"
 #include "test/librados_test_stub/TestMemRadosClient.h"
 #include "common/Clock.h"
-#include "common/RWLock.h"
 #include "include/err.h"
 #include <functional>
 #include <boost/algorithm/string/predicate.hpp>
@@ -356,7 +355,8 @@ int TestMemIoCtxImpl::omap_set(const std::string& oid,
 }
 
 int TestMemIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
-                           bufferlist *bl, uint64_t snap_id) {
+                           bufferlist *bl, uint64_t snap_id,
+                           uint64_t* objver) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -379,6 +379,9 @@ int TestMemIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
     bufferlist bit;
     bit.substr_of(file->data, off, len);
     append_clone(bit, bl);
+  }
+  if (objver != nullptr) {
+    *objver = file->objver;
   }
   return len;
 }

@@ -27,19 +27,20 @@ if(WITH_BLUESTORE)
     bluestore/bluefs_types.cc
     bluestore/BlueRocksEnv.cc
     bluestore/BlueStore.cc
+    bluestore/simple_bitmap.cc
     bluestore/bluestore_types.cc
     bluestore/fastbmap_allocator_impl.cc
     bluestore/FreelistManager.cc
     bluestore/StupidAllocator.cc
     bluestore/BitmapAllocator.cc
     bluestore/AvlAllocator.cc
+    bluestore/BtreeAllocator.cc
     bluestore/HybridAllocator.cc
   )
 endif(WITH_BLUESTORE)
 
 if(WITH_ZBD)
   list(APPEND libos_srcs
-    bluestore/zoned_types.cc
     bluestore/ZonedFreelistManager.cc
     bluestore/ZonedAllocator.cc)
 endif()
@@ -92,7 +93,8 @@ if(WITH_LTTNG)
 endif()
 
 if(WITH_JAEGER)
-  target_link_libraries(os jaeger-base)
+  add_dependencies(os jaeger_base)
+  target_link_libraries(os jaeger_base)
 endif()
 
 target_link_libraries(os kv)

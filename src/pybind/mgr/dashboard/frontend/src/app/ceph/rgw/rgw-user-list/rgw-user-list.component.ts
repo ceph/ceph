@@ -1,10 +1,9 @@
-import { Component, NgZone, ViewChild } from '@angular/core';
+import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { TableStatus } from '~/app/shared/classes/table-status';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -27,15 +26,18 @@ const BASE_URL = 'rgw/user';
   styleUrls: ['./rgw-user-list.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class RgwUserListComponent extends ListWithDetails {
+export class RgwUserListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
+  @ViewChild('userSizeTpl', { static: true })
+  userSizeTpl: TemplateRef<any>;
+  @ViewChild('userObjectTpl', { static: true })
+  userObjectTpl: TemplateRef<any>;
   permission: Permission;
   tableActions: CdTableAction[];
   columns: CdTableColumn[] = [];
   users: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  tableStatus = new TableStatus();
   staleTimeout: number;
 
   constructor(
@@ -44,14 +46,22 @@ export class RgwUserListComponent extends ListWithDetails {
     private modalService: ModalService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
-    private ngZone: NgZone
+    protected ngZone: NgZone
   ) {
-    super();
+    super(ngZone);
+  }
+
+  ngOnInit() {
     this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {
         name: $localize`Username`,
         prop: 'uid',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Tenant`,
+        prop: 'tenant',
         flexGrow: 1
       },
       {
@@ -80,6 +90,18 @@ export class RgwUserListComponent extends ListWithDetails {
           '-1': $localize`Disabled`,
           0: $localize`Unlimited`
         }
+      },
+      {
+        name: $localize`Capacity Limit %`,
+        prop: 'size_usage',
+        cellTemplate: this.userSizeTpl,
+        flexGrow: 0.8
+      },
+      {
+        name: $localize`Object Limit %`,
+        prop: 'object_usage',
+        cellTemplate: this.userObjectTpl,
+        flexGrow: 0.8
       }
     ];
     const getUserUri = () =>
@@ -106,26 +128,11 @@ export class RgwUserListComponent extends ListWithDetails {
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
     this.tableActions = [addAction, editAction, deleteAction];
-    this.timeConditionReached();
-  }
-
-  timeConditionReached() {
-    clearTimeout(this.staleTimeout);
-    this.ngZone.runOutsideAngular(() => {
-      this.staleTimeout = window.setTimeout(() => {
-        this.ngZone.run(() => {
-          this.tableStatus = new TableStatus(
-            'warning',
-            $localize`The user list data might be stale. If needed, you can manually reload it.`
-          );
-        });
-      }, 10000);
-    });
+    this.setTableRefreshTimeout();
   }
 
   getUserList(context: CdTableFetchDataContext) {
-    this.tableStatus = new TableStatus();
-    this.timeConditionReached();
+    this.setTableRefreshTimeout();
     this.rgwUserService.list().subscribe(
       (resp: object[]) => {
         this.users = resp;

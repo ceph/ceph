@@ -27,10 +27,7 @@ Members
 Premier
 -------
 
-* `Amihan <https://amihan.net>`_
 * `Bloomberg <https://bloomberg.com>`_
-* `Canonical <https://www.canonical.com/>`_
-* `China Mobile <https://www.chinamobileltd.com/>`_
 * `DigitalOcean <https://www.digitalocean.com/>`_
 * `Intel <http://www.intel.com/>`_
 * `OVH <https://www.ovh.com/>`_
@@ -39,21 +36,21 @@ Premier
 * `SoftIron <https://www.softiron.com/>`_
 * `SUSE <https://www.suse.com/>`_
 * `Western Digital <https://www.wdc.com/>`_
-* `XSKY <https://www.xsky.com/en/>`_
 * `ZTE <https://www.zte.com.cn/global/>`_
 
 General
 -------
 
 * `ARM <http://www.arm.com/>`_
-* `Catalyst Cloud <https://catalystcloud.nz/>`_
+* `ArvanCloud <https://www.arvancloud.com>`_
+* `Canonical <https://www.canonical.com/>`_
 * `Cloudbase Solutions <https://cloudbase.it/>`_
 * `Clyso <https://www.clyso.com/en/>`_
 * `croit <http://www.croit.io/>`_
-* `DiDi <https://www.didiglobal.com/>`_
 * `EasyStack <https://www.easystack.io/>`_
 * `ISS <http://iss-integration.com/>`_
-* `QCT <https://www.qct.io/>`_
+* `Linode <https://linode.com/>`_
+* `OSNexus <https://osnexus.com/>`_
 * `SinoRail <http://www.sinorail.com/>`_
 * `Vexxhost <https://vexxhost.com>`_
 
@@ -67,7 +64,7 @@ Associate
 * `grnet <https://grnet.gr/>`_
 * `Monash University <http://www.monash.edu/>`_
 * `NRF SARAO <http://www.ska.ac.za/about/sarao/>`_
-* `Science & Technology Facilities Councel (STFC) <https://stfc.ukri.org/>`_
+* `Science & Technology Facilities Council (STFC) <https://stfc.ukri.org/>`_
 * `University of Michigan <http://www.osris.org/>`_
 * `SWITCH <https://switch.ch/>`_
 
@@ -107,12 +104,10 @@ Members
 * Matthew Leonard (Bloomberg)
 * Mike Perez (Red Hat) - Ceph community manager
 * Myoungwon Oh (Samsung Electronics)
-* Paul Emmerich (croit) - General member representative
+* Martin Verges (croit) - General member representative
 * Pawel Sadowski (OVH)
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
-* Sage Weil (Red Hat) - Ceph project leader
-* Winston Damarillio (Amihan)
 * Xie Xingguo (ZTE)
 * Zhang Shaowen (China Mobile)
 

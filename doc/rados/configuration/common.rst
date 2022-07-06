@@ -183,13 +183,13 @@ Example ceph.conf
 
 
 
-Running Multiple Clusters (DEPRECATED)
-======================================
+Naming Clusters (deprecated)
+============================
 
 Each Ceph cluster has an internal name that is used as part of configuration
 and log file names as well as directory and mountpoint names.  This name
 defaults to "ceph".  Previous releases of Ceph allowed one to specify a custom
-name instead, for example "ceph2".  This was intended to faciliate running
+name instead, for example "ceph2".  This was intended to facilitate running
 multiple logical clusters on the same physical hardware, but in practice this
 was rarely exploited and should no longer be attempted.  Prior documentation
 could also be misinterpreted as requiring unique cluster names in order to
@@ -202,7 +202,7 @@ custom names may be progressively removed by future Ceph releases, so it is
 strongly recommended to deploy all new clusters with the default name "ceph".
 
 Some Ceph CLI commands accept an optional ``--cluster`` (cluster name) option. This
-option is present purely for backward compatibility and need not be accomodated
+option is present purely for backward compatibility and need not be accommodated
 by new tools and deployments.
 
 If you do need to allow multiple clusters to exist on the same host, please use

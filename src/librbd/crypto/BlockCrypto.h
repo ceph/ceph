@@ -21,6 +21,7 @@ public:
     }
     BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
                 uint64_t block_size, uint64_t data_offset);
+    ~BlockCrypto();
 
     int encrypt(ceph::bufferlist* data, uint64_t image_offset) override;
     int decrypt(ceph::bufferlist* data, uint64_t image_offset) override;
@@ -31,6 +32,14 @@ public:
 
     uint64_t get_data_offset() const override {
       return m_data_offset;
+    }
+
+    const unsigned char* get_key() const override {
+      return m_data_cryptor->get_key();
+    }
+
+    int get_key_length() const override {
+      return m_data_cryptor->get_key_length();
     }
 
 private:

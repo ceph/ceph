@@ -4,10 +4,12 @@ import logging
 import threading
 import traceback
 from collections import deque
+from mgr_util import lock_timeout_log, CephfsClient
 
 from .exception import NotImplementedException
 
 log = logging.getLogger(__name__)
+
 
 class JobThread(threading.Thread):
     # this is "not" configurable and there is no need for it to be
@@ -54,7 +56,7 @@ class JobThread(threading.Thread):
                 # unless the jobs fetching and execution routines are not implemented
                 # retry till we hit cap limit.
                 retries += 1
-                log.warning("thread [{0}] encountered fatal error: (attempt#" \
+                log.warning("thread [{0}] encountered fatal error: (attempt#"
                             " {1}/{2})".format(thread_name, retries, JobThread.MAX_RETRIES_ON_EXCEPTION))
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 log.warning("traceback: {0}".format("".join(
@@ -83,7 +85,8 @@ class JobThread(threading.Thread):
     def reset_cancel(self):
         self.cancel_event.clear()
 
-class AsyncJobs(object):
+
+class AsyncJobs(threading.Thread):
     """
     Class providing asynchronous execution of jobs via worker threads.
     `jobs` are grouped by `volume`, so a `volume` can have N number of
@@ -103,9 +106,10 @@ class AsyncJobs(object):
     """
 
     def __init__(self, volume_client, name_pfx, nr_concurrent_jobs):
+        threading.Thread.__init__(self, name="{0}.tick".format(name_pfx))
         self.vc = volume_client
         # queue of volumes for starting async jobs
-        self.q = deque() # type: deque
+        self.q = deque()  # type: deque
         # volume => job tracking
         self.jobs = {}
         # lock, cv for kickstarting jobs
@@ -113,28 +117,48 @@ class AsyncJobs(object):
         self.cv = threading.Condition(self.lock)
         # cv for job cancelation
         self.waiting = False
+        self.stopping = threading.Event()
         self.cancel_cv = threading.Condition(self.lock)
         self.nr_concurrent_jobs = nr_concurrent_jobs
+        self.name_pfx = name_pfx
+        # each async job group uses its own libcephfs connection (pool)
+        self.fs_client = CephfsClient(self.vc.mgr)
 
         self.threads = []
-        for i in range(nr_concurrent_jobs):
-            self.threads.append(JobThread(self, volume_client, name="{0}.{1}".format(name_pfx, i)))
+        for i in range(self.nr_concurrent_jobs):
+            self.threads.append(JobThread(self, volume_client, name="{0}.{1}".format(self.name_pfx, i)))
             self.threads[-1].start()
+        self.start()
 
-    def reconfigure_max_concurrent_clones(self, name_pfx, nr_concurrent_jobs):
+    def run(self):
+        log.debug("tick thread {} starting".format(self.name))
+        with lock_timeout_log(self.lock):
+            while not self.stopping.is_set():
+                c = len(self.threads)
+                if c > self.nr_concurrent_jobs:
+                    # Decrease concurrency: notify threads which are waiting for a job to terminate.
+                    log.debug("waking threads to terminate due to job reduction")
+                    self.cv.notifyAll()
+                elif c < self.nr_concurrent_jobs:
+                    # Increase concurrency: create more threads.
+                    log.debug("creating new threads to job increase")
+                    for i in range(c, self.nr_concurrent_jobs):
+                        self.threads.append(JobThread(self, self.vc, name="{0}.{1}.{2}".format(self.name_pfx, time.time(), i)))
+                        self.threads[-1].start()
+                self.cv.wait(timeout=5)
+
+    def shutdown(self):
+        self.stopping.set()
+        self.cancel_all_jobs()
+        with self.lock:
+            self.cv.notifyAll()
+        self.join()
+
+    def reconfigure_max_async_threads(self, nr_concurrent_jobs):
         """
         reconfigure number of cloner threads
         """
-        with self.lock:
-            self.nr_concurrent_jobs = nr_concurrent_jobs
-            # Decrease in concurrency. Notify threads which are waiting for a job to terminate.
-            if len(self.threads) > nr_concurrent_jobs:
-                self.cv.notifyAll()
-            # Increase in concurrency
-            if len(self.threads) < nr_concurrent_jobs:
-                for i in range(len(self.threads), nr_concurrent_jobs):
-                    self.threads.append(JobThread(self, self.vc, name="{0}.{1}.{2}".format(name_pfx, time.time(), i)))
-                    self.threads[-1].start()
+        self.nr_concurrent_jobs = nr_concurrent_jobs
 
     def get_job(self):
         log.debug("processing {0} volume entries".format(len(self.q)))
@@ -192,8 +216,8 @@ class AsyncJobs(object):
         queue a volume for asynchronous job execution.
         """
         log.info("queuing job for volume '{0}'".format(volname))
-        with self.lock:
-            if not volname in self.q:
+        with lock_timeout_log(self.lock):
+            if volname not in self.q:
                 self.q.append(volname)
                 self.jobs[volname] = []
             self.cv.notifyAll()
@@ -206,7 +230,7 @@ class AsyncJobs(object):
         """
         log.info("cancelling jobs for volume '{0}'".format(volname))
         try:
-            if not volname in self.q and not volname in self.jobs:
+            if volname not in self.q and volname not in self.jobs:
                 return
             self.q.remove(volname)
             # cancel in-progress operation and wait until complete
@@ -214,7 +238,7 @@ class AsyncJobs(object):
                 j[1].cancel_job()
             # wait for cancellation to complete
             while self.jobs[volname]:
-                log.debug("waiting for {0} in-progress jobs for volume '{1}' to " \
+                log.debug("waiting for {0} in-progress jobs for volume '{1}' to "
                           "cancel".format(len(self.jobs[volname]), volname))
                 self.cancel_cv.wait()
             self.jobs.pop(volname)
@@ -229,7 +253,8 @@ class AsyncJobs(object):
         canceled = False
         log.info("canceling job {0} for volume {1}".format(job, volname))
         try:
-            if not volname in self.q and not volname in self.jobs and not job in self.jobs[volname]:
+            vol_jobs = [j[0] for j in self.jobs.get(volname, [])]
+            if volname not in self.q and job not in vol_jobs:
                 return canceled
             for j in self.jobs[volname]:
                 if j[0] == job:
@@ -244,21 +269,21 @@ class AsyncJobs(object):
         return canceled
 
     def cancel_job(self, volname, job):
-        with self.lock:
+        with lock_timeout_log(self.lock):
             return self._cancel_job(volname, job)
 
     def cancel_jobs(self, volname):
         """
         cancel all executing jobs for a given volume.
         """
-        with self.lock:
+        with lock_timeout_log(self.lock):
             self._cancel_jobs(volname)
 
     def cancel_all_jobs(self):
         """
         call all executing jobs for all volumes.
         """
-        with self.lock:
+        with lock_timeout_log(self.lock):
             for volname in list(self.q):
                 self._cancel_jobs(volname)
 
@@ -276,4 +301,3 @@ class AsyncJobs(object):
         hours and do all kinds of synchronous work. called outside `self.lock`.
         """
         raise NotImplementedException()
-

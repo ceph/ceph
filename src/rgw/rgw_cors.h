@@ -41,15 +41,15 @@ protected:
   uint32_t       max_age;
   uint8_t        allowed_methods;
   std::string         id;
-  std::set<string> allowed_hdrs; /* If you change this, you need to discard lowercase_allowed_hdrs */
-  std::set<string> lowercase_allowed_hdrs; /* Not built until needed in RGWCORSRule::is_header_allowed */
-  std::set<string> allowed_origins;
-  std::list<string> exposable_hdrs;
+  std::set<std::string> allowed_hdrs; /* If you change this, you need to discard lowercase_allowed_hdrs */
+  std::set<std::string> lowercase_allowed_hdrs; /* Not built until needed in RGWCORSRule::is_header_allowed */
+  std::set<std::string> allowed_origins;
+  std::list<std::string> exposable_hdrs;
 
 public:
   RGWCORSRule() : max_age(CORS_MAX_AGE_INVALID),allowed_methods(0) {}
-  RGWCORSRule(std::set<string>& o, std::set<string>& h, 
-              std::list<string>& e, uint8_t f, uint32_t a)
+  RGWCORSRule(std::set<std::string>& o, std::set<std::string>& h,
+              std::list<std::string>& e, uint8_t f, uint32_t a)
       :max_age(a),
        allowed_methods(f),
        allowed_hdrs(h),
@@ -116,7 +116,7 @@ class RGWCORSConfiguration
   bool is_empty() {
     return rules.empty();
   }
-  void get_origins_list(const char *origin, std::list<string>& origins);
+  void get_origins_list(const char *origin, std::list<std::string>& origins);
   RGWCORSRule * host_name_rule(const char *origin);
   void erase_host_name_rule(std::string& origin);
   void dump();

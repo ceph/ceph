@@ -55,6 +55,8 @@ cdef nogil:
 
     int ceph_getaddrs(ceph_mount_info* cmount, char** addrs):
         pass
+    int64_t ceph_get_fs_cid(ceph_mount_info *cmount):
+        pass
     int ceph_conf_read_file(ceph_mount_info *cmount, const char *path_list):
         pass
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv):
@@ -62,6 +64,8 @@ cdef nogil:
     int ceph_conf_get(ceph_mount_info *cmount, const char *option, char *buf, size_t len):
         pass
     int ceph_conf_set(ceph_mount_info *cmount, const char *option, const char *value):
+        pass
+    int ceph_set_mount_timeout(ceph_mount_info *cmount, uint32_t timeout):
         pass
 
     int ceph_mount(ceph_mount_info *cmount, const char *root):
@@ -188,6 +192,8 @@ cdef nogil:
     int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length):
         pass
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode):
+        pass
+    int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode):
         pass

@@ -83,7 +83,7 @@ Towards an object store highly optimized for CPU consumption, three design choic
 * **PoseidonStore uses hybrid update strategies for different data size, similar to BlueStore.**
 
   As we discussed, both in-place and out-of-place update strategies have their pros and cons.
-  Since CPU is only bottlenecked under small I/O workloads, we chose update-in-place for small I/Os to mininize CPU consumption
+  Since CPU is only bottlenecked under small I/O workloads, we chose update-in-place for small I/Os to minimize CPU consumption
   while choosing update-out-of-place for large I/O to avoid double write. Double write for small data may be better than host-GC overhead
   in terms of CPU consumption in the long run. Although it leaves GC entirely up to SSDs,
 
@@ -108,7 +108,7 @@ Two data types in Ceph
 * Data (object data)
 
   - The cost of double write is high
-  - The best mehod to store this data is in-place update
+  - The best method to store this data is in-place update
 
     - At least two operations required to store the data: 1) data and 2) location of
       data. Nevertheless, a constant number of operations would be better than out-of-place
@@ -230,7 +230,7 @@ Crash consistency
   #. Crash occurs right after writing Data blocks
 
      - Data partition --> | Data blocks |
-     - We don't need to care this case. Data is not alloacted yet in reality. The blocks will be reused.
+     - We don't need to care this case. Data is not allocated yet. The blocks will be reused.
   #. Crash occurs right after WAL
 
      - Data partition --> | Data blocks |
@@ -254,7 +254,7 @@ Comparison
 * Worst case
 
   - At least three writes are required additionally on WAL, object metadata, and data blocks.
-  - If the flush from WAL to the data parition occurs frequently, radix tree onode structure needs to be update
+  - If the flush from WAL to the data partition occurs frequently, radix tree onode structure needs to be update
     in many times. To minimize such overhead, we can make use of batch processing to minimize the update on the tree
     (the data related to the object has a locality because it will have the same parent node, so updates can be minimized)
 
@@ -285,7 +285,7 @@ Detailed Design
 
     .. code-block:: c
 
-            stuct onode {
+            struct onode {
               extent_tree block_maps;
               b+_tree omaps;
               map xattrs;
@@ -380,7 +380,7 @@ Detailed Design
 
 * Omap and xattr
   In this design, omap and xattr data is tracked by b+tree in onode. The onode only has the root node of b+tree.
-  The root node contains entires which indicate where the key onode exists.
+  The root node contains entries which indicate where the key onode exists.
   So, if we know the onode, omap can be found via omap b+tree.
 
 * Fragmentation
@@ -437,7 +437,7 @@ Detailed Design
 WAL
 ---
 Each SP has a WAL.
-The datas written to the WAL are metadata updates, free space update and small data.
+The data written to the WAL are metadata updates, free space update and small data.
 Note that only data smaller than the predefined threshold needs to be written to the WAL.
 The larger data is written to the unallocated free space and its onode's extent_tree is updated accordingly
 (also on-disk extent tree). We statically allocate WAL partition aside from data partition pre-configured.

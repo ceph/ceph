@@ -233,6 +233,23 @@ bool ConfigMap::parse_mask(
   return true;
 }
 
+void ConfigMap::parse_key(
+  const std::string& key,
+  std::string *name,
+  std::string *who)
+{
+  auto last_slash = key.rfind('/');
+  if (last_slash == std::string::npos) {
+    *name = key;
+  } else if (auto mgrpos = key.find("/mgr/"); mgrpos != std::string::npos) {
+    *name = key.substr(mgrpos + 1);
+    *who = key.substr(0, mgrpos);
+  } else {
+    *name = key.substr(last_slash + 1);
+    *who = key.substr(0, last_slash);
+  }
+}
+
 
 // --------------
 

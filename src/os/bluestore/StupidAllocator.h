@@ -18,7 +18,6 @@ class StupidAllocator : public Allocator {
   ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 
   int64_t num_free;     ///< total bytes in freelist
-  uint64_t bdev_block_size;
 
   template <typename K, typename V> using allocator_t =
     mempool::bluestore_alloc::pool_allocator<std::pair<const K, V>>;
@@ -38,9 +37,9 @@ class StupidAllocator : public Allocator {
 
 public:
   StupidAllocator(CephContext* cct,
-                  const std::string& name,
                   int64_t size,
-                  int64_t block_size);
+                  int64_t block_size,
+		  std::string_view name);
   ~StupidAllocator() override;
   const char* get_type() const override
   {
@@ -62,7 +61,7 @@ public:
   double get_fragmentation() override;
 
   void dump() override;
-  void dump(std::function<void(uint64_t offset, uint64_t length)> notify) override;
+  void foreach(std::function<void(uint64_t offset, uint64_t length)> notify) override;
 
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;

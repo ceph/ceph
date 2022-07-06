@@ -46,8 +46,9 @@ describe('RoleService', () => {
 
   it('should call clone', () => {
     service.clone('foo', 'bar').subscribe();
-    const req = httpTesting.expectOne('api/role/foo/clone?new_name=bar');
+    const req = httpTesting.expectOne('api/role/foo/clone');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ new_name: 'bar' });
   });
 
   it('should check if role name exists', () => {

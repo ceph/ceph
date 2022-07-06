@@ -307,7 +307,8 @@ static int delete_bucket(void){
 
 RGWCORSRule *xml_to_cors_rule(string s){
   RGWCORSConfiguration_S3 *cors_config;
-  RGWCORSXMLParser_S3 parser(g_ceph_context);
+  const DoutPrefix dp(g_ceph_context, 1, "test cors: ");
+  RGWCORSXMLParser_S3 parser(&dp, g_ceph_context);
   const string *data = g_test->get_response_data();
   if (!parser.init()) {
     return NULL;
@@ -868,8 +869,7 @@ TEST(TestCORS, deletecors_test){
 }
 
 int main(int argc, char *argv[]){
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY,

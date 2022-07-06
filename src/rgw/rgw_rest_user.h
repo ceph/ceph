@@ -27,8 +27,8 @@ public:
   RGWRESTMgr_User() = default;
   ~RGWRESTMgr_User() override = default;
 
-  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
-			       struct req_state*,
+  RGWHandler_REST *get_handler(rgw::sal::Store* store,
+			       req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_User(auth_registry);

@@ -24,6 +24,8 @@
 
 #include <atomic>
 
+using namespace std;
+
 // XXX: Only tests default namespace
 struct op_data {
   op_data(const std::string &oid, uint64_t offset, uint64_t len, bool read)
@@ -351,9 +353,8 @@ int correctness_test(uint64_t delay_ns)
 
 int main(int argc, const char **argv)
 {
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto args = argv_to_vec(argc, argv);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 

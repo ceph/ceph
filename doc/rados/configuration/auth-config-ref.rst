@@ -144,38 +144,9 @@ Enablement
 ----------
 
 
-``auth_cluster_required``
-
-:Description: If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
-              ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
-              each other. Valid settings are ``cephx`` or ``none``.
-
-:Type: String
-:Required: No
-:Default: ``cephx``.
-
-
-``auth_service_required``
-
-:Description: If enabled, the Ceph Storage Cluster daemons require Ceph Clients
-              to authenticate with the Ceph Storage Cluster in order to access
-              Ceph services. Valid settings are ``cephx`` or ``none``.
-
-:Type: String
-:Required: No
-:Default: ``cephx``.
-
-
-``auth_client_required``
-
-:Description: If enabled, the Ceph Client requires the Ceph Storage Cluster to
-              authenticate with the Ceph Client. Valid settings are ``cephx``
-              or ``none``.
-
-:Type: String
-:Required: No
-:Default: ``cephx``.
-
+.. confval:: auth_cluster_required
+.. confval:: auth_service_required
+.. confval:: auth_client_required
 
 .. index:: keys; keyring
 
@@ -205,79 +176,10 @@ To perform this step manually, execute the following::
 You may specify the key itself in the Ceph configuration file using the ``key``
 setting (not recommended), or a path to a keyfile using the ``keyfile`` setting.
 
-
-``keyring``
-
-:Description: The path to the keyring file.
-:Type: String
-:Required: No
-:Default: ``/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin``
-
-
-``keyfile``
-
-:Description: The path to a key file (i.e,. a file containing only the key).
-:Type: String
-:Required: No
-:Default: None
-
-
-``key``
-
-:Description: The key (i.e., the text string of the key itself). Not recommended.
-:Type: String
-:Required: No
-:Default: None
-
-
-Daemon Keyrings
----------------
-
-Administrative users or deployment tools  (e.g., ``cephadm``) may generate
-daemon keyrings in the same way as generating user keyrings.  By default, Ceph
-stores daemons keyrings inside their data directory. The default keyring
-locations, and the capabilities necessary for the daemon to function, are shown
-below.
-
-``ceph-mon``
-
-:Location: ``$mon_data/keyring``
-:Capabilities: ``mon 'allow *'``
-
-``ceph-osd``
-
-:Location: ``$osd_data/keyring``
-:Capabilities: ``mgr 'allow profile osd' mon 'allow profile osd' osd 'allow *'``
-
-``ceph-mds``
-
-:Location: ``$mds_data/keyring``
-:Capabilities: ``mds 'allow' mgr 'allow profile mds' mon 'allow profile mds' osd 'allow rwx'``
-
-``ceph-mgr``
-
-:Location: ``$mgr_data/keyring``
-:Capabilities: ``mon 'allow profile mgr' mds 'allow *' osd 'allow *'``
-
-``radosgw``
-
-:Location: ``$rgw_data/keyring``
-:Capabilities: ``mon 'allow rwx' osd 'allow rwx'``
-
-
-.. note:: The monitor keyring (i.e., ``mon.``) contains a key but no
-   capabilities, and is not part of the cluster ``auth`` database.
-
-The daemon data directory locations default to directories of the form::
-
-  /var/lib/ceph/$type/$cluster-$id
-
-For example, ``osd.12`` would be::
-
-  /var/lib/ceph/osd/ceph-12
-
-You can override these locations, but it is not recommended.
-
+.. confval:: keyring
+   :default: /etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin
+.. confval:: keyfile
+.. confval:: key
 
 .. index:: signatures
 
@@ -295,62 +197,15 @@ Ceph, and so you can enable/disable signatures for messages between Ceph daemons
 Note that even with signatures enabled data is not encrypted in
 flight.
 
-``cephx_require_signatures``
-
-:Description: If set to ``true``, Ceph requires signatures on all message
-              traffic between the Ceph Client and the Ceph Storage Cluster, and
-              between daemons comprising the Ceph Storage Cluster.
-
-	      Ceph Argonaut and Linux kernel versions prior to 3.19 do
-	      not support signatures; if such clients are in use this
-	      option can be turned off to allow them to connect.
-
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``cephx_cluster_require_signatures``
-
-:Description: If set to ``true``, Ceph requires signatures on all message
-              traffic between Ceph daemons comprising the Ceph Storage Cluster.
-
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``cephx_service_require_signatures``
-
-:Description: If set to ``true``, Ceph requires signatures on all message
-              traffic between Ceph Clients and the Ceph Storage Cluster.
-
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``cephx_sign_messages``
-
-:Description: If the Ceph version supports message signing, Ceph will sign
-              all messages so they are more difficult to spoof.
-
-:Type: Boolean
-:Default: ``true``
-
+.. confval:: cephx_require_signatures
+.. confval:: cephx_cluster_require_signatures
+.. confval:: cephx_service_require_signatures
+.. confval:: cephx_sign_messages
 
 Time to Live
 ------------
 
-``auth_service_ticket_ttl``
-
-:Description: When the Ceph Storage Cluster sends a Ceph Client a ticket for
-              authentication, the Ceph Storage Cluster assigns the ticket a
-              time to live.
-
-:Type: Double
-:Default: ``60*60``
-
+.. confval:: auth_service_ticket_ttl
 
 .. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping
 .. _Operating a Cluster: ../../operations/operating

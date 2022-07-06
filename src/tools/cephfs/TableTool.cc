@@ -27,6 +27,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << __func__ << ": "
 
+using namespace std;
+
 void TableTool::usage()
 {
   std::cout << "Usage: \n"

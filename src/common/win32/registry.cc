@@ -112,7 +112,17 @@ int RegistryKey::set(LPCTSTR lpValue, std::string data)
   return 0;
 }
 
-int RegistryKey::get(LPCTSTR lpValue, DWORD* value)
+int RegistryKey::get(LPCTSTR lpValue, bool& value)
+{
+  DWORD value_dw = 0;
+  int r = get(lpValue, value_dw);
+  if (!r) {
+    value = !!value_dw;
+  }
+  return r;
+}
+
+int RegistryKey::get(LPCTSTR lpValue, DWORD& value)
 {
   DWORD data;
   DWORD size = sizeof(data);
@@ -125,7 +135,7 @@ int RegistryKey::get(LPCTSTR lpValue, DWORD* value)
          << (char*)lpValue << dendl;
     return -EINVAL;
   }
-  *value = data;
+  value = data;
 
   return 0;
 }

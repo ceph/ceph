@@ -86,26 +86,36 @@ def _socket_command(ctx, remote, socket_path, command, args):
     """
     testdir = teuthology.get_testdir(ctx)
     max_tries = 120
-    while True:
-        try:
-            out = remote.sh([
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                '{tdir}/archive/coverage'.format(tdir=testdir),
-                'ceph',
-                '--admin-daemon', socket_path,
-                ] + command.split(' ') + args)
-        except CommandFailedError:
-            assert max_tries > 0
-            max_tries -= 1
-            log.info('ceph cli returned an error, command not registered yet?')
+    sub_commands = [c.strip() for c in command.split('||')]
+    ex = None
+    for _ in range(max_tries):
+        for sub_command in sub_commands:
+            try:
+                out = remote.sh([
+                    'sudo',
+                    'adjust-ulimits',
+                    'ceph-coverage',
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    'ceph',
+                    '--admin-daemon', socket_path,
+                    ] + sub_command.split(' ') + args)
+            except CommandFailedError as e:
+                ex = e
+                log.info('ceph cli "%s" returned an error %s, '
+                         'command not registered yet?', sub_command, e)
+            else:
+                log.debug('admin socket command %s returned %s',
+                          sub_command, out)
+                return json.loads(out)
+        else:
+            # exhausted all commands
             log.info('sleeping and retrying ...')
             time.sleep(1)
-            continue
-        break
-    log.debug('admin socket command %s returned %s', command, out)
-    return json.loads(out)
+    else:
+        # i tried max_tries times..
+        assert ex is not None
+        raise ex
+
 
 def _run_tests(ctx, client, tests):
     """

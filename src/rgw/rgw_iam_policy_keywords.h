@@ -29,6 +29,9 @@ enum class TokenID {
   // String!
   StringEquals, StringNotEquals, StringEqualsIgnoreCase,
   StringNotEqualsIgnoreCase, StringLike, StringNotLike,
+  ForAllValuesStringEquals, ForAnyValueStringEquals,
+  ForAllValuesStringLike, ForAnyValueStringLike,
+  ForAllValuesStringEqualsIgnoreCase, ForAnyValueStringEqualsIgnoreCase,
 
   // Numeric!
   NumericEquals, NumericNotEquals, NumericLessThan, NumericLessThanEquals,

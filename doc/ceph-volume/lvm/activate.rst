@@ -2,6 +2,7 @@
 
 ``activate``
 ============
+          
 Once :ref:`ceph-volume-lvm-prepare` is completed, and all the various steps
 that entails are done, the volume is ready to get "activated".
 
@@ -11,6 +12,9 @@ understand what OSD is enabled and needs to be mounted.
 
 .. note:: The execution of this call is fully idempotent, and there is no
           side-effects when running multiple times
+
+For OSDs deployed by cephadm, please refer to :ref:cephadm-osd-activate: 
+instead.
 
 New OSDs
 --------
@@ -24,6 +28,10 @@ need to be supplied. For example::
 
 Activating all OSDs
 -------------------
+
+.. note:: For OSDs deployed by cephadm, please refer to :ref:cephadm-osd-activate: 
+          instead.
+
 It is possible to activate all existing OSDs at once by using the ``--all``
 flag. For example::
 
@@ -70,16 +78,16 @@ Would start the discovery process for the OSD with an id of ``0`` and a UUID of
 The systemd unit will look for the matching OSD device, and by looking at its
 :term:`LVM tags` will proceed to:
 
-# mount the device in the corresponding location (by convention this is
-  ``/var/lib/ceph/osd/<cluster name>-<osd id>/``)
+#. Mount the device in the corresponding location (by convention this is
+``/var/lib/ceph/osd/<cluster name>-<osd id>/``)
 
-# ensure that all required devices are ready for that OSD. In the case of
+#. Ensure that all required devices are ready for that OSD. In the case of
 a journal (when ``--filestore`` is selected) the device will be queried (with
 ``blkid`` for partitions, and lvm for logical volumes) to ensure that the
 correct device is being linked. The symbolic link will *always* be re-done to
 ensure that the correct device is linked.
 
-# start the ``ceph-osd@0`` systemd unit
+#. Start the ``ceph-osd@0`` systemd unit
 
 .. note:: The system infers the objectstore type (filestore or bluestore) by
           inspecting the LVM tags applied to the OSD devices
@@ -88,7 +96,7 @@ Existing OSDs
 -------------
 For existing OSDs that have been deployed with ``ceph-disk``, they need to be
 scanned and activated :ref:`using the simple sub-command <ceph-volume-simple>`.
-If a different tooling was used then the only way to port them over to the new
+If a different tool was used then the only way to port them over to the new
 mechanism is to prepare them again (losing data). See
 :ref:`ceph-volume-lvm-existing-osds` for details on how to proceed.
 
@@ -96,18 +104,18 @@ Summary
 -------
 To recap the ``activate`` process for :term:`bluestore`:
 
-#. require both :term:`OSD id` and :term:`OSD uuid`
-#. enable the system unit with matching id and uuid
+#. Require both :term:`OSD id` and :term:`OSD uuid`
+#. Enable the system unit with matching id and uuid
 #. Create the ``tmpfs`` mount at the OSD directory in
    ``/var/lib/ceph/osd/$cluster-$id/``
 #. Recreate all the files needed with ``ceph-bluestore-tool prime-osd-dir`` by
    pointing it to the OSD ``block`` device.
-#. the systemd unit will ensure all devices are ready and linked
-#. the matching ``ceph-osd`` systemd unit will get started
+#. The systemd unit will ensure all devices are ready and linked
+#. The matching ``ceph-osd`` systemd unit will get started
 
 And for :term:`filestore`:
 
-#. require both :term:`OSD id` and :term:`OSD uuid`
-#. enable the system unit with matching id and uuid
-#. the systemd unit will ensure all devices are ready and mounted (if needed)
-#. the matching ``ceph-osd`` systemd unit will get started
+#. Require both :term:`OSD id` and :term:`OSD uuid`
+#. Enable the system unit with matching id and uuid
+#. The systemd unit will ensure all devices are ready and mounted (if needed)
+#. The matching ``ceph-osd`` systemd unit will get started

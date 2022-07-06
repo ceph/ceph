@@ -61,6 +61,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd: "
 
+using std::list;
+using std::map;
+using std::pair;
+using std::set;
 using std::string;
 using std::vector;
 
@@ -101,6 +105,40 @@ static auto create_write_raw(librbd::ImageCtx *ictx, const char *buf,
     buffer::claim_buffer(
       len, const_cast<char*>(buf),
       deleter(new UserBufferDeleter(ictx->cct, aio_completion))));
+}
+
+static int get_iovec_length(const struct iovec *iov, int iovcnt, size_t &len)
+{
+  len = 0;
+
+  if (iovcnt <= 0) {
+    return -EINVAL;
+  }
+
+  for (int i = 0; i < iovcnt; ++i) {
+    const struct iovec &io = iov[i];
+    // check for overflow
+    if (len + io.iov_len < len) {
+      return -EINVAL;
+    }
+    len += io.iov_len;
+  }
+
+  return 0;
+}
+
+static bufferlist iovec_to_bufferlist(librbd::ImageCtx *ictx,
+                                      const struct iovec *iov,
+                                      int iovcnt,
+                                      librbd::io::AioCompletion* aio_completion)
+{
+  bufferlist bl;
+  for (int i = 0; i < iovcnt; ++i) {
+    const struct iovec &io = iov[i];
+    bl.push_back(create_write_raw(ictx, static_cast<char*>(io.iov_base),
+                                  io.iov_len, aio_completion));
+  }
+  return bl;
 }
 
 CephContext* get_cct(IoCtx &io_ctx) {
@@ -2045,6 +2083,24 @@ namespace librbd {
     return r;
   }
 
+  int Image::encryption_format(encryption_format_t format,
+                               encryption_options_t opts,
+                               size_t opts_size)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Image<>::encryption_format(
+            ictx, format, opts, opts_size, false);
+  }
+
+  int Image::encryption_load(encryption_format_t format,
+                             encryption_options_t opts,
+                             size_t opts_size)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Image<>::encryption_load(
+            ictx, format, opts, opts_size, false);
+  }
+
   int Image::flatten()
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -2457,8 +2513,6 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-    bufferptr ptr(len);
-    bl.push_back(std::move(ptr));
 
     int r = api::Io<>::read(*ictx, ofs, len, io::ReadResult{&bl}, 0);
     tracepoint(librbd, read_exit, r);
@@ -2470,8 +2524,6 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
 		ictx->read_only, ofs, len, op_flags);
-    bufferptr ptr(len);
-    bl.push_back(std::move(ptr));
 
     int r = api::Io<>::read(*ictx, ofs, len, io::ReadResult{&bl}, op_flags);
     tracepoint(librbd, read_exit, r);
@@ -4314,6 +4366,26 @@ extern "C" int rbd_deep_copy_with_progress(rbd_image_t image,
   return ret;
 }
 
+extern "C" int rbd_encryption_format(rbd_image_t image,
+                                     rbd_encryption_format_t format,
+                                     rbd_encryption_options_t opts,
+                                     size_t opts_size)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::Image<>::encryption_format(
+          ictx, format, opts, opts_size, true);
+}
+
+extern "C" int rbd_encryption_load(rbd_image_t image,
+                                   rbd_encryption_format_t format,
+                                   rbd_encryption_options_t opts,
+                                   size_t opts_size)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::Image<>::encryption_load(
+          ictx, format, opts, opts_size, true);
+}
+
 extern "C" int rbd_flatten(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
@@ -6108,30 +6180,16 @@ extern "C" int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
 
-  // convert the scatter list into a bufferlist
-  auto aio_completion = get_aio_completion(comp);
-  ssize_t len = 0;
-  bufferlist bl;
-  for (int i = 0; i < iovcnt; ++i) {
-    const struct iovec &io = iov[i];
-    len += io.iov_len;
-    if (len < 0) {
-      break;
-    }
-
-    bl.push_back(create_write_raw(ictx, static_cast<char*>(io.iov_base),
-                                  io.iov_len, aio_completion));
-  }
-
-  int r = 0;
-  if (iovcnt <= 0 || len < 0) {
-    r = -EINVAL;
-  }
+  size_t len;
+  int r = get_iovec_length(iov, iovcnt, len);
 
   tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, off, len, NULL,
              comp->pc);
+
   if (r == 0) {
+    auto aio_completion = get_aio_completion(comp);
+    auto bl = iovec_to_bufferlist(ictx, iov, iovcnt, aio_completion);
     librbd::api::Io<>::aio_write(
       *ictx, aio_completion, off, len, std::move(bl), 0, true);
   }
@@ -6172,18 +6230,8 @@ extern "C" int rbd_aio_readv(rbd_image_t image, const struct iovec *iov,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
 
-  ssize_t len = 0;
-  for (int i = 0; i < iovcnt; ++i) {
-    len += iov[i].iov_len;
-    if (len < 0) {
-      break;
-    }
-  }
-
-  int r = 0;
-  if (iovcnt == 0 || len < 0) {
-    r = -EINVAL;
-  }
+  size_t len;
+  int r = get_iovec_length(iov, iovcnt, len);
 
   tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, off, len, NULL,

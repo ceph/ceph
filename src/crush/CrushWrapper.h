@@ -33,8 +33,6 @@ namespace CrushTreeDumper {
 typedef mempool::osdmap::map<int64_t,std::string> name_map_t;
 }
 
-WRITE_RAW_ENCODER(crush_rule_mask)   // it's all u8's
-
 inline void encode(const crush_rule_step &s, ceph::buffer::list &bl)
 {
   using ceph::encode;
@@ -71,8 +69,6 @@ public:
 
 private:
   struct crush_map *crush = nullptr;
-
-  bool have_uniform_rules = false;
 
   /* reverse maps */
   mutable bool have_rmaps = false;
@@ -116,26 +112,6 @@ public:
 
     set_tunables_default();
   }
-
-  /**
-   * true if any rule has a rule id != its position in the array
-   *
-   * These indicate "ruleset" IDs that were created by older versions
-   * of Ceph.  They are cleaned up in renumber_rules so that eventually
-   * we can remove the code for handling them.
-   */
-  bool has_legacy_rule_ids() const;
-
-  /**
-   * fix rules whose ruleid != ruleset
-   *
-   * These rules were created in older versions of Ceph.  The concept
-   * of a ruleset no longer exists.
-   *
-   * Return a map of old ID -> new ID.  Caller must update OSDMap
-   * to use new IDs.
-   */
-  std::map<int, int> renumber_rules();
 
   /// true if any buckets that aren't straw2
   bool has_non_straw2_buckets() const;
@@ -398,17 +374,20 @@ public:
   }
   int get_type_id(const std::string& name) const {
     build_rmaps();
-    if (type_rmap.count(name))
-      return type_rmap[name];
-    return -1;
-  }
-  int get_validated_type_id(const std::string& name, int *id) const {
-    int retval = get_type_id(name);
-    if (retval == -1 && !type_rmap.count(name)) {
+    auto found = type_rmap.find(name);
+    if (found != type_rmap.end()) {
+      return found->second;
+    } else {
       return -1;
     }
-    *id = retval;
-    return 0;
+  }
+  std::optional<int> get_validated_type_id(const std::string& name) const {
+    int retval = get_type_id(name);
+    if (retval == -1 && !type_rmap.count(name)) {
+      return {};
+    } else {
+      return retval;
+    }
   }
   const char *get_type_name(int t) const {
     auto p = type_map.find(t);
@@ -1084,25 +1063,10 @@ public:
     if (IS_ERR(r)) return PTR_ERR(r);
     return r->len;
   }
-  int get_rule_mask_ruleset(unsigned ruleno) const {
+  int get_rule_type(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return -1;
-    return r->mask.ruleset;
-  }
-  int get_rule_mask_type(unsigned ruleno) const {
-    crush_rule *r = get_rule(ruleno);
-    if (IS_ERR(r)) return -1;
-    return r->mask.type;
-  }
-  int get_rule_mask_min_size(unsigned ruleno) const {
-    crush_rule *r = get_rule(ruleno);
-    if (IS_ERR(r)) return -1;
-    return r->mask.min_size;
-  }
-  int get_rule_mask_max_size(unsigned ruleno) const {
-    crush_rule *r = get_rule(ruleno);
-    if (IS_ERR(r)) return -1;
-    return r->mask.max_size;
+    return r->type;
   }
   int get_rule_op(unsigned ruleno, unsigned step) const {
     crush_rule_step *s = get_rule_step(ruleno, step);
@@ -1152,17 +1116,12 @@ public:
 
   /* modifiers */
 
-  int add_rule(int ruleno, int len, int type, int minsize, int maxsize) {
+  int add_rule(int ruleno, int len, int type) {
     if (!crush) return -ENOENT;
-    crush_rule *n = crush_make_rule(len, ruleno, type, minsize, maxsize);
+    crush_rule *n = crush_make_rule(len, type);
     ceph_assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;
-  }
-  int set_rule_mask_max_size(unsigned ruleno, int max_size) {
-    crush_rule *r = get_rule(ruleno);
-    if (IS_ERR(r)) return -1;
-    return r->mask.max_size = max_size;
   }
   int set_rule_step(unsigned ruleno, unsigned step, int op, int arg1, int arg2) {
     if (!crush) return -ENOENT;
@@ -1338,7 +1297,6 @@ public:
 	name_map.rbegin()->first >= crush->max_devices) {
       crush->max_devices = name_map.rbegin()->first + 1;
     }
-    have_uniform_rules = !has_legacy_rule_ids();
     build_rmaps();
   }
   int bucket_set_alg(int id, int alg);
@@ -1402,46 +1360,19 @@ public:
     crush->max_devices = m;
   }
 
-  int find_rule(int ruleset, int type, int size) const {
-    if (!crush) return -1;
-    if (have_uniform_rules &&
-	ruleset < (int)crush->max_rules &&
-	crush->rules[ruleset] &&
-	crush->rules[ruleset]->mask.type == type &&
-	crush->rules[ruleset]->mask.min_size <= size &&
-	crush->rules[ruleset]->mask.max_size >= size) {
-      return ruleset;
-    }
-    return crush_find_rule(crush, ruleset, type, size);
-  }
-
-  bool ruleset_exists(const int ruleset) const {
-    for (size_t i = 0; i < crush->max_rules; ++i) {
-      if (rule_exists(i) && crush->rules[i]->mask.ruleset == ruleset) {
-	return true;
-      }
-    }
-
-    return false;
-  }
-
   /**
-   * Return the lowest numbered ruleset of type `type`
+   * Return the lowest numbered rule of type `type`
    *
-   * @returns a ruleset ID, or -1 if no matching rules found.
+   * @returns a rule ID, or -1 if no matching rules found.
    */
-  int find_first_ruleset(int type) const {
-    int result = -1;
-
+  int find_first_rule(int type) const {
     for (size_t i = 0; i < crush->max_rules; ++i) {
       if (crush->rules[i]
-          && crush->rules[i]->mask.type == type
-          && (crush->rules[i]->mask.ruleset < result || result == -1)) {
-        result = crush->rules[i]->mask.ruleset;
+          && crush->rules[i]->type == type) {
+	return i;
       }
     }
-
-    return result;
+    return -1;
   }
 
   bool have_choose_args(int64_t choose_args_index) const {
@@ -1619,38 +1550,13 @@ public:
     const std::vector<int>& orig,
     std::vector<int> *out) const;
 
-  bool check_crush_rule(int ruleset, int type, int size, std::ostream& ss) {
-    ceph_assert(crush);
-
-    __u32 i;
-    for (i = 0; i < crush->max_rules; i++) {
-      if (crush->rules[i] &&
-	  crush->rules[i]->mask.ruleset == ruleset &&
-	  crush->rules[i]->mask.type == type) {
-
-        if (crush->rules[i]->mask.min_size <= size &&
-            crush->rules[i]->mask.max_size >= size) {
-          return true;
-        } else if (size < crush->rules[i]->mask.min_size) {
-          ss << "pool size is smaller than the crush rule min size";
-          return false;
-        } else {
-          ss << "pool size is bigger than the crush rule max size";
-          return false;
-        }
-      }
-    }
-
-    return false;
-  }
-
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &blp);
   void decode_crush_bucket(crush_bucket** bptr,
 			   ceph::buffer::list::const_iterator &blp);
   void dump(ceph::Formatter *f) const;
   void dump_rules(ceph::Formatter *f) const;
-  void dump_rule(int ruleset, ceph::Formatter *f) const;
+  void dump_rule(int rule, ceph::Formatter *f) const;
   void dump_tunables(ceph::Formatter *f) const;
   void dump_choose_args(ceph::Formatter *f) const;
   void list_rules(ceph::Formatter *f) const;
@@ -1666,7 +1572,7 @@ public:
 		 const CrushTreeDumper::name_map_t& ws) const;
   static void generate_test_instances(std::list<CrushWrapper*>& o);
 
-  int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
+  int get_osd_pool_default_crush_replicated_rule(CephContext *cct);
 
   static bool is_valid_crush_name(const std::string& s);
   static bool is_valid_crush_loc(CephContext *cct,

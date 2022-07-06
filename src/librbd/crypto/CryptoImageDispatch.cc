@@ -12,7 +12,7 @@ CryptoImageDispatch::CryptoImageDispatch(
 
 
 void CryptoImageDispatch::remap_extents(
-        io::Extents&& image_extents, io::ImageExtentsMapType type) {
+        io::Extents& image_extents, io::ImageExtentsMapType type) {
   if (type == io::IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL) {
     for (auto& extent: image_extents) {
       extent.first += m_data_offset;

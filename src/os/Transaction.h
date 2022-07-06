@@ -185,11 +185,11 @@ public:
     ceph_le32 fadvise_flags;
 
     TransactionData() noexcept :
-      ops(init_le64(0)),
-      largest_data_len(init_le32(0)),
-      largest_data_off(init_le32(0)),
-      largest_data_off_in_data_bl(init_le32(0)),
-      fadvise_flags(init_le32(0)) { }
+      ops(0),
+      largest_data_len(0),
+      largest_data_off(0),
+      largest_data_off_in_data_bl(0),
+      fadvise_flags(0) { }
 
     // override default move operations to reset default values
     TransactionData(TransactionData&& other) noexcept :
@@ -744,7 +744,7 @@ public:
 	return t->get_fadvise_flags();
     }
 
-    const vector<ghobject_t> &get_objects() const {
+    const std::vector<ghobject_t> &get_objects() const {
       return objects;
     }
   };
@@ -912,7 +912,9 @@ public:
     data.ops = data.ops + 1;
   }
   /// Set multiple xattrs of an object
-  void setattrs(const coll_t& cid, const ghobject_t& oid, const std::map<std::string,ceph::buffer::ptr>& attrset) {
+  void setattrs(const coll_t& cid,
+		const ghobject_t& oid,
+		const std::map<std::string,ceph::buffer::ptr,std::less<>>& attrset) {
     using ceph::encode;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTRS;
@@ -922,7 +924,9 @@ public:
     data.ops = data.ops + 1;
   }
   /// Set multiple xattrs of an object
-  void setattrs(const coll_t& cid, const ghobject_t& oid, const std::map<std::string,ceph::buffer::list>& attrset) {
+  void setattrs(const coll_t& cid,
+		const ghobject_t& oid,
+		const std::map<std::string,ceph::buffer::list,std::less<>>& attrset) {
     using ceph::encode;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTRS;

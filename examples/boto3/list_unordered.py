@@ -20,6 +20,6 @@ client = boto3.client('s3',
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key)
 
-# geting an unordered list of objets is an extension to AWS S3 API
+# getting an unordered list of objects is an extension to AWS S3 API
 
 print(client.list_objects(Bucket=bucketname, AllowUnordered=True))

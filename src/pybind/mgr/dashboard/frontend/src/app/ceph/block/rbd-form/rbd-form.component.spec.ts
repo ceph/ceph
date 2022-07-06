@@ -304,12 +304,7 @@ describe('RbdFormComponent', () => {
   });
 
   describe('tests for feature flags', () => {
-    let deepFlatten: any,
-      layering: any,
-      exclusiveLock: any,
-      objectMap: any,
-      journaling: any,
-      fastDiff: any;
+    let deepFlatten: any, layering: any, exclusiveLock: any, objectMap: any, fastDiff: any;
     const defaultFeatures = [
       // Supposed to be enabled by default
       'deep-flatten',
@@ -323,7 +318,6 @@ describe('RbdFormComponent', () => {
       'layering',
       'exclusive-lock',
       'object-map',
-      'journaling',
       'fast-diff'
     ];
     const setFeatures = (features: Record<string, RbdImageFeature>) => {
@@ -359,14 +353,7 @@ describe('RbdFormComponent', () => {
         spyOn(rbdService, 'defaultFeatures').and.returnValue(of(defaultFeatures));
         setRouterUrl('edit', pool, image);
         fixture.detectChanges();
-        [
-          deepFlatten,
-          layering,
-          exclusiveLock,
-          objectMap,
-          journaling,
-          fastDiff
-        ] = getFeatureNativeElements();
+        [deepFlatten, layering, exclusiveLock, objectMap, fastDiff] = getFeatureNativeElements();
       };
 
       it('should have the interlock feature for flags disabled, if one feature is not set', () => {
@@ -409,14 +396,7 @@ describe('RbdFormComponent', () => {
         spyOn(rbdService, 'defaultFeatures').and.returnValue(of(defaultFeatures));
         setRouterUrl('create');
         fixture.detectChanges();
-        [
-          deepFlatten,
-          layering,
-          exclusiveLock,
-          objectMap,
-          journaling,
-          fastDiff
-        ] = getFeatureNativeElements();
+        [deepFlatten, layering, exclusiveLock, objectMap, fastDiff] = getFeatureNativeElements();
       });
 
       it('should initialize the checkboxes correctly', () => {
@@ -424,27 +404,58 @@ describe('RbdFormComponent', () => {
         expect(layering.disabled).toBe(false);
         expect(exclusiveLock.disabled).toBe(false);
         expect(objectMap.disabled).toBe(false);
-        expect(journaling.disabled).toBe(false);
         expect(fastDiff.disabled).toBe(false);
 
         expect(deepFlatten.checked).toBe(true);
         expect(layering.checked).toBe(true);
         expect(exclusiveLock.checked).toBe(true);
         expect(objectMap.checked).toBe(true);
-        expect(journaling.checked).toBe(false);
         expect(fastDiff.checked).toBe(true);
       });
 
       it('should disable features if their requirements are not met (exclusive-lock)', () => {
         exclusiveLock.click(); // unchecks exclusive-lock
         expect(objectMap.disabled).toBe(true);
-        expect(journaling.disabled).toBe(true);
         expect(fastDiff.disabled).toBe(true);
       });
 
       it('should disable features if their requirements are not met (object-map)', () => {
         objectMap.click(); // unchecks object-map
         expect(fastDiff.disabled).toBe(true);
+      });
+    });
+
+    describe('test mirroring options', () => {
+      beforeEach(() => {
+        component.ngOnInit();
+        fixture.detectChanges();
+        const mirroring = fixture.debugElement.query(By.css('#mirroring')).nativeElement;
+        mirroring.click();
+        fixture.detectChanges();
+      });
+
+      it('should verify two mirroring options are shown', () => {
+        const journal = fixture.debugElement.query(By.css('#journal')).nativeElement;
+        const snapshot = fixture.debugElement.query(By.css('#snapshot')).nativeElement;
+        expect(journal).not.toBeNull();
+        expect(snapshot).not.toBeNull();
+      });
+
+      it('should verify only snapshot is disabled for pools that are in pool mirror mode', () => {
+        component.poolMirrorMode = 'pool';
+        fixture.detectChanges();
+        const journal = fixture.debugElement.query(By.css('#journal')).nativeElement;
+        const snapshot = fixture.debugElement.query(By.css('#snapshot')).nativeElement;
+        expect(journal.disabled).toBe(false);
+        expect(snapshot.disabled).toBe(true);
+      });
+
+      it('should set and disable exclusive-lock only for the journal mode', () => {
+        component.poolMirrorMode = 'pool';
+        fixture.detectChanges();
+        const exclusiveLocks = fixture.debugElement.query(By.css('#exclusive-lock')).nativeElement;
+        expect(exclusiveLocks.checked).toBe(true);
+        expect(exclusiveLocks.disabled).toBe(true);
       });
     });
   });

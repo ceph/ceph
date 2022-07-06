@@ -278,7 +278,7 @@ TEST(StrictIECCast, Error) {
 static void test_strict_sistrtoll(const char *str)
 {
   std::string err;
-  strict_sistrtoll(str, &err);
+  strict_si_cast<uint64_t>(str, &err);
   ASSERT_EQ(err, "");
 }
 
@@ -289,7 +289,7 @@ static void test_strict_sistrtoll_units(const std::string& foo,
   s.append(u);
   const char *str = s.c_str();
   std::string err;
-  uint64_t r = strict_sistrtoll(str, &err);
+  uint64_t r = strict_si_cast<uint64_t>(str, &err);
   ASSERT_EQ(err, "");
 
   str = foo.c_str();
@@ -327,7 +327,7 @@ TEST(SIStrToLL, WithoutUnits) {
 static void test_strict_sistrtoll_err(const char *str)
 {
   std::string err;
-  strict_sistrtoll(str, &err);
+  strict_si_cast<uint64_t>(str, &err);
   ASSERT_NE(err, "");
 }
 

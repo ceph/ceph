@@ -51,7 +51,7 @@ def task(ctx, config):
     # set versions for cloning the repo
     apache_maven = 'apache-maven-{maven_version}-bin.tar.gz'.format(
         maven_version=maven_version)
-    maven_link = 'http://www-us.apache.org/dist/maven/' + \
+    maven_link = 'http://archive.apache.org/dist/maven/' + \
         '{maven_major}/{maven_version}/binaries/'.format(maven_major=maven_major, maven_version=maven_version) + apache_maven
     hadoop_git = 'https://github.com/apache/hadoop'
     hadoop_rel = 'hadoop-{ver} rel/release-{ver}'.format(ver=hadoop_ver)
@@ -144,7 +144,9 @@ def setup_user_bucket(client, dns_name, access_key, secret_key, bucket_name, tes
     )
     client.run(
         args=[
-            'virtualenv',
+            'python3',
+            '-m',
+            'venv',
             '{testdir}/venv'.format(testdir=testdir),
             run.Raw('&&'),
             run.Raw('{testdir}/venv/bin/pip'.format(testdir=testdir)),

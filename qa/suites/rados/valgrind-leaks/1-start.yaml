@@ -6,7 +6,6 @@ openstack:
 overrides:
   install:
     ceph:
-      flavor: notcmalloc
       debuginfo: true
   ceph:
     log-ignorelist:

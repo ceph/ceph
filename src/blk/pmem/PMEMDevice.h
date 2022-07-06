@@ -18,6 +18,8 @@
 #define CEPH_BLK_PMEMDEVICE_H
 
 #include <atomic>
+#include <map>
+#include <string>
 
 #include "os/fs/FS.h"
 #include "include/interval_set.h"
@@ -28,6 +30,7 @@ class PMEMDevice : public BlockDevice {
   int fd;
   char *addr; //the address of mmap
   std::string path;
+  bool devdax_device = false;
 
   ceph::mutex debug_lock = ceph::make_mutex("PMEMDevice::debug_lock");
   interval_set<uint64_t> debug_inflight;
@@ -38,10 +41,10 @@ class PMEMDevice : public BlockDevice {
 public:
   PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv);
 
-
+  bool supported_bdev_label() override { return !devdax_device; }
   void aio_submit(IOContext *ioc) override;
 
-  int collect_metadata(const std::string& prefix, map<std::string,std::string> *pm) const override;
+  int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const override;
 
   static bool support(const std::string& path);
 

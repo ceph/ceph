@@ -4,6 +4,7 @@
 #include "librbd/crypto/BlockCrypto.h"
 #include "include/byteorder.h"
 #include "include/ceph_assert.h"
+#include "include/scope_guard.h"
 
 #include <stdlib.h>
 
@@ -17,6 +18,15 @@ BlockCrypto<T>::BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
        m_data_offset(data_offset), m_iv_size(data_cryptor->get_iv_size()) {
   ceph_assert(isp2(block_size));
   ceph_assert((block_size % data_cryptor->get_block_size()) == 0);
+  ceph_assert((block_size % 512) == 0);
+}
+
+template <typename T>
+BlockCrypto<T>::~BlockCrypto() {
+  if (m_data_cryptor != nullptr) {
+    delete m_data_cryptor;
+    m_data_cryptor = nullptr;
+  }
 }
 
 template <typename T>
@@ -44,16 +54,21 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
     lderr(m_cct) << "unable to get crypt context" << dendl;
     return -EIO;
   }
-  auto block_offset = image_offset / m_block_size;
+
+  auto sg = make_scope_guard([&] {
+      m_data_cryptor->return_context(ctx, mode); });
+
+  auto sector_number = image_offset / 512;
   auto appender = data->get_contiguous_appender(src.length());
   unsigned char* out_buf_ptr = nullptr;
-  uint32_t remaining_block_bytes = 0;
+  unsigned char* leftover_block = (unsigned char*)alloca(m_block_size);
+  uint32_t leftover_size = 0;
   for (auto buf = src.buffers().begin(); buf != src.buffers().end(); ++buf) {
     auto in_buf_ptr = reinterpret_cast<const unsigned char*>(buf->c_str());
     auto remaining_buf_bytes = buf->length();
     while (remaining_buf_bytes > 0) {
-      if (remaining_block_bytes == 0) {
-        auto block_offset_le = init_le64(block_offset);
+      if (leftover_size == 0) {
+        auto block_offset_le = ceph_le64(sector_number);
         memcpy(iv, &block_offset_le, sizeof(block_offset_le));
         auto r = m_data_cryptor->init_context(ctx, iv, m_iv_size);
         if (r != 0) {
@@ -63,27 +78,39 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
 
         out_buf_ptr = reinterpret_cast<unsigned char*>(
                 appender.get_pos_add(m_block_size));
-        remaining_block_bytes = m_block_size;
-        ++block_offset;
+        sector_number += m_block_size / 512;
       }
 
-      auto crypto_input_length = std::min(remaining_buf_bytes,
-                                          remaining_block_bytes);
-      auto crypto_output_length = m_data_cryptor->update_context(
-              ctx, in_buf_ptr, out_buf_ptr, crypto_input_length);
+      if (leftover_size > 0 || remaining_buf_bytes < m_block_size) {
+        auto copy_size = std::min(
+                (uint32_t)m_block_size - leftover_size, remaining_buf_bytes);
+        memcpy(leftover_block + leftover_size, in_buf_ptr, copy_size);
+        in_buf_ptr += copy_size;
+        leftover_size += copy_size;
+        remaining_buf_bytes -= copy_size;
+      }
+
+      int crypto_output_length = 0;
+      if (leftover_size == 0) {
+        crypto_output_length = m_data_cryptor->update_context(
+              ctx, in_buf_ptr, out_buf_ptr, m_block_size);
+
+        in_buf_ptr += m_block_size;
+        remaining_buf_bytes -= m_block_size;
+      } else if (leftover_size == m_block_size) {
+        crypto_output_length = m_data_cryptor->update_context(
+              ctx, leftover_block, out_buf_ptr, m_block_size);
+        leftover_size = 0;
+      }
+
       if (crypto_output_length < 0) {
         lderr(m_cct) << "crypt update failed" << dendl;
         return crypto_output_length;
       }
 
       out_buf_ptr += crypto_output_length;
-      in_buf_ptr += crypto_input_length;
-      remaining_buf_bytes -= crypto_input_length;
-      remaining_block_bytes -= crypto_input_length;
     }
   }
-
-  m_data_cryptor->return_context(ctx, mode);
 
   return 0;
 }

@@ -8,7 +8,41 @@
 #include <string.h>
 #include <netdb.h>
 
+#include <fmt/format.h>
+
 #include "common/Formatter.h"
+
+bool entity_name_t::parse(std::string_view s)
+{
+  const char* start = s.data();
+  if (s.find("mon.") == 0) {
+    _type = TYPE_MON;
+    start += 4;
+  } else if (s.find("osd.") == 0) {
+    _type = TYPE_OSD;
+    start += 4;
+  } else if (s.find("mds.") == 0) {
+    _type = TYPE_MDS;
+    start += 4;
+  } else if (s.find("client.") == 0) {
+    _type = TYPE_CLIENT;
+    start += 7;
+  } else if (s.find("mgr.") == 0) {
+    _type = TYPE_MGR;
+    start += 4;
+  } else {
+    return false;
+  }
+  if (isspace(*start))
+    return false;
+  char *end = nullptr;
+  _num = strtoll(start, &end, 10);
+  if (end == nullptr || end == start) {
+    return false;
+  } else {
+    return end == s.data() + s.size();
+  }
+}
 
 void entity_name_t::dump(ceph::Formatter *f) const
 {
@@ -64,6 +98,14 @@ void entity_inst_t::generate_test_instances(std::list<entity_inst_t*>& o)
   o.push_back(a);
 }
 
+bool entity_addr_t::parse(const std::string_view s, int default_type)
+{
+  const char* start = s.data();
+  const char* end = nullptr;
+  bool got = parse(start, &end, default_type);
+  return got && end == start + s.size();
+}
+
 bool entity_addr_t::parse(const char *s, const char **end, int default_type)
 {
   *this = entity_addr_t();
@@ -73,7 +115,7 @@ bool entity_addr_t::parse(const char *s, const char **end, int default_type)
     *end = s;
   }
 
-  int newtype;
+  int newtype = default_type;
   if (strncmp("v1:", s, 3) == 0) {
     start += 3;
     newtype = TYPE_LEGACY;
@@ -89,8 +131,6 @@ bool entity_addr_t::parse(const char *s, const char **end, int default_type)
       *end = s + 1;
     }
     return true;
-  } else {
-    newtype = default_type ? default_type : TYPE_DEFAULT;
   }
 
   bool brackets = false;
@@ -371,4 +411,13 @@ std::string entity_addr_t::ip_only_to_str() const
     break;
   }
   return host_ip ? host_ip : "";
+}
+
+std::string entity_addr_t::ip_n_port_to_str() const
+{
+  if (is_ipv6()) {
+    return fmt::format("[{}]:{}", ip_only_to_str(), get_port());
+  } else {
+    return fmt::format("{}:{}", ip_only_to_str(), get_port());
+  }
 }

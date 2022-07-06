@@ -215,7 +215,7 @@ WRITE_CLASS_ENCODER(trim_part)
 
 struct list_part
 {
-  std::optional<string> tag;
+  std::optional<std::string> tag;
   std::uint64_t ofs{0};
   int max_entries{100};
 

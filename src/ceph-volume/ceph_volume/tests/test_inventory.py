@@ -111,6 +111,7 @@ def device_data(device_info):
 class TestInventory(object):
 
     expected_keys = [
+        'ceph_device',
         'path',
         'rejected_reasons',
         'sys_api',
@@ -152,30 +153,30 @@ class TestInventory(object):
         'errors',
     ]
 
-    def test_json_inventory_keys_unexpected(self, device_report_keys):
+    def test_json_inventory_keys_unexpected(self, fake_call, device_report_keys):
         for k in device_report_keys:
             assert k in self.expected_keys, "unexpected key {} in report".format(k)
 
-    def test_json_inventory_keys_missing(self, device_report_keys):
+    def test_json_inventory_keys_missing(self, fake_call, device_report_keys):
         for k in self.expected_keys:
             assert k in device_report_keys, "expected key {} in report".format(k)
 
-    def test_sys_api_keys_unexpected(self, device_sys_api_keys):
+    def test_sys_api_keys_unexpected(self, fake_call, device_sys_api_keys):
         for k in device_sys_api_keys:
             assert k in self.expected_sys_api_keys, "unexpected key {} in sys_api field".format(k)
 
-    def test_sys_api_keys_missing(self, device_sys_api_keys):
+    def test_sys_api_keys_missing(self, fake_call, device_sys_api_keys):
         for k in self.expected_sys_api_keys:
             assert k in device_sys_api_keys, "expected key {} in sys_api field".format(k)
 
-    def test_lsm_data_type_unexpected(self, device_data):
+    def test_lsm_data_type_unexpected(self, fake_call, device_data):
         assert isinstance(device_data['lsm_data'], dict), "lsm_data field must be of type dict"
 
-    def test_lsm_data_keys_unexpected(self, device_data):
+    def test_lsm_data_keys_unexpected(self, fake_call, device_data):
         for k in device_data['lsm_data'].keys():
             assert k in self.expected_lsm_keys, "unexpected key {} in lsm_data field".format(k)
 
-    def test_lsm_data_keys_missing(self, device_data):
+    def test_lsm_data_keys_missing(self, fake_call, device_data):
         lsm_keys = device_data['lsm_data'].keys()
         assert lsm_keys
         for k in self.expected_lsm_keys:
@@ -196,7 +197,7 @@ def lsm_info(monkeypatch):
         return query_map.get(func, 'Unknown')
 
     # mocked states and settings taken from the libstoragemgmt code base
-    # c_binding/include/libstoragemgmt/libstoragemgmt_types.h at 
+    # c_binding/include/libstoragemgmt/libstoragemgmt_types.h at
     # https://github.com/libstorage/libstoragemgmt/
     mock_health_map = {
             -1: "Unknown",
@@ -222,7 +223,7 @@ def lsm_info(monkeypatch):
         LED_STATUS_UNKNOWN = 1
         LED_STATUS_IDENT_ON = 2
         LED_STATUS_IDENT_OFF = 4
-        LED_STATUS_IDENT_UNKNOWN = 8 
+        LED_STATUS_IDENT_UNKNOWN = 8
         LED_STATUS_FAULT_ON = 16
         LED_STATUS_FAULT_OFF = 32
         LED_STATUS_FAULT_UNKNOWN = 64
@@ -249,6 +250,6 @@ class TestLSM(object):
     def test_lsmdisk_led_fault_support(self, lsm_info):
         assert lsm_info.led_fault_support == 'Supported'
     def test_lsmdisk_led_fault(self, lsm_info):
-        assert lsm_info.led_fault_state == 'Off'    
+        assert lsm_info.led_fault_state == 'Off'
     def test_lsmdisk_report(self, lsm_info):
         assert isinstance(lsm_info.json_report(), dict)

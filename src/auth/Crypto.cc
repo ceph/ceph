@@ -33,11 +33,11 @@
 #include "common/debug.h"
 #include <errno.h>
 
-// use getentropy() if available. it uses the same source of randomness
-// as /dev/urandom without the filesystem overhead
-#ifdef HAVE_GETENTROPY
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-#include <unistd.h>
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 using std::ostringstream;
 using std::string;
@@ -45,6 +45,13 @@ using std::string;
 using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
+
+
+// use getentropy() if available. it uses the same source of randomness
+// as /dev/urandom without the filesystem overhead
+#ifdef HAVE_GETENTROPY
+
+#include <unistd.h>
 
 static bool getentropy_works()
 {
@@ -603,3 +610,6 @@ CryptoHandler *CryptoHandler::create(int type)
     return NULL;
   }
 }
+
+#pragma clang diagnostic pop
+#pragma GCC diagnostic pop

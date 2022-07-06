@@ -28,7 +28,6 @@
 #include <iosfwd>
 
 #include "include/types.h"
-#include "common/Tub.h"
 #include "common/deleter.h"
 #include "msg/async/Event.h"
 
@@ -49,7 +48,7 @@ struct offload_info {
   bool reassembled = false;
   uint16_t tso_seg_size = 0;
   // HW stripped VLAN header (CPU order)
-  Tub<uint16_t> vlan_tci;
+  std::optional<uint16_t> vlan_tci;
 };
 
 // Zero-copy friendly packet class
@@ -97,7 +96,7 @@ class Packet {
     uint16_t _nr_frags = 0;
     uint16_t _allocated_frags;
     offload_info _offload_info;
-    Tub<uint32_t> rss_hash;
+    std::optional<uint32_t> rss_hash;
     char data[internal_data_size]; // only frags[0] may use
     unsigned headroom = internal_data_size; // in data
     // FIXME: share data/frags space
@@ -122,7 +121,7 @@ class Packet {
       n->_nr_frags = old->_nr_frags;
       n->headroom = old->headroom;
       n->_offload_info = old->_offload_info;
-      n->rss_hash.construct(old->rss_hash);
+      n->rss_hash = old->rss_hash;
       std::copy(old->frags, old->frags + old->_nr_frags, n->frags);
       old->copy_internal_fragment_to(n.get());
       return n;
@@ -268,11 +267,11 @@ public:
       _impl = impl::allocate_if_needed(std::move(_impl), extra);
     }
   }
-  Tub<uint32_t> rss_hash() {
+  std::optional<uint32_t> rss_hash() {
     return _impl->rss_hash;
   }
   void set_rss_hash(uint32_t hash) {
-    _impl->rss_hash.construct(hash);
+    _impl->rss_hash = hash;
   }
 private:
   void linearize(size_t at_frag, size_t desired_size);

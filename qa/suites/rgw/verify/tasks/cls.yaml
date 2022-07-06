@@ -1,7 +1,3 @@
-overrides:
-  ceph:
-    log-ignorelist:
-    - \(PG_AVAILABILITY\)
 tasks:
 - workunit:
     clients:
@@ -10,8 +6,11 @@ tasks:
         - cls/test_cls_log.sh
         - cls/test_cls_refcount.sh
         - cls/test_cls_rgw.sh
+        - cls/test_cls_rgw_gc.sh
+        - cls/test_cls_rgw_stats.sh
         - cls/test_cls_cmpomap.sh
         - cls/test_cls_2pc_queue.sh
         - rgw/test_rgw_gc_log.sh
         - rgw/test_rgw_obj.sh
         - rgw/test_rgw_throttle.sh
+        - rgw/test_librgw_file.sh

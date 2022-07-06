@@ -22,6 +22,9 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 
+using std::cerr;
+using std::string;
+
 namespace rbd {
 namespace action {
 namespace import {
@@ -324,7 +327,7 @@ static int skip_tag(int fd, uint64_t length)
   if (fd == STDIN_FILENO) {
     // read the appending data out to skip this tag.
     char buf[4096];
-    uint64_t len = min<uint64_t>(length, sizeof(buf));
+    uint64_t len = std::min<uint64_t>(length, sizeof(buf));
     while (len > 0) {
       r = safe_read_exact(fd, buf, len);
       if (r < 0) {
@@ -332,7 +335,7 @@ static int skip_tag(int fd, uint64_t length)
         return r;
       }
       length -= len;
-      len = min<uint64_t>(length, sizeof(buf));
+      len = std::min<uint64_t>(length, sizeof(buf));
     }
   } else {
     // lseek to skip this tag
@@ -739,7 +742,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
       g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"), false));
   }
 
-  reqlen = min<uint64_t>(reqlen, size);
+  reqlen = std::min<uint64_t>(reqlen, size);
   // loop body handles 0 return, as we may have a block to flush
   while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
     if (throttle->pending_error()) {

@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { Title } from '@angular/platform-browser';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -12,6 +13,7 @@ describe('BreadcrumbsComponent', () => {
   let component: BreadcrumbsComponent;
   let fixture: ComponentFixture<BreadcrumbsComponent>;
   let router: Router;
+  let titleService: Title;
 
   @Component({ selector: 'cd-fake', template: '' })
   class FakeComponent {}
@@ -42,6 +44,11 @@ describe('BreadcrumbsComponent', () => {
           ]
         }
       ]
+    },
+    {
+      path: 'error',
+      component: FakeComponent,
+      data: { breadcrumbs: '' }
     }
   ];
 
@@ -54,6 +61,7 @@ describe('BreadcrumbsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(BreadcrumbsComponent);
     router = TestBed.inject(Router);
+    titleService = TestBed.inject(Title);
     component = fixture.componentInstance;
     fixture.detectChanges();
     expect(component.crumbs).toEqual([]);
@@ -128,4 +136,36 @@ describe('BreadcrumbsComponent', () => {
     component.ngOnDestroy();
     expect(component.subscription.closed).toBeTruthy();
   });
+
+  it('should display no breadcrumbs in page title when navigating to dashboard', fakeAsync(() => {
+    fixture.ngZone.run(() => {
+      router.navigateByUrl('');
+    });
+    tick();
+    expect(titleService.getTitle()).toEqual('Ceph');
+  }));
+
+  it('should display no breadcrumbs in page title when a page is not found', fakeAsync(() => {
+    fixture.ngZone.run(() => {
+      router.navigateByUrl('/error');
+    });
+    tick();
+    expect(titleService.getTitle()).toEqual('Ceph');
+  }));
+
+  it('should display 2 breadcrumbs in page title when navigating to hosts', fakeAsync(() => {
+    fixture.ngZone.run(() => {
+      router.navigateByUrl('/hosts');
+    });
+    tick();
+    expect(titleService.getTitle()).toEqual('Ceph: Cluster > Hosts');
+  }));
+
+  it('should display 3 breadcrumbs in page title when navigating to RBD Add', fakeAsync(() => {
+    fixture.ngZone.run(() => {
+      router.navigateByUrl('/block/rbd/add');
+    });
+    tick();
+    expect(titleService.getTitle()).toEqual('Ceph: Block > Images > Add');
+  }));
 });

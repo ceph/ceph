@@ -22,6 +22,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 using namespace librados;
 
 static string gc_oid_prefix = "gc";
@@ -50,7 +51,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
     op.create(false);
     const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size, num_deferred_entries = cct->_conf->rgw_gc_max_deferred;
     gc_log_init2(op, queue_size, num_deferred_entries);
-    store->gc_operate(obj_names[i], &op);
+    store->gc_operate(this, obj_names[i], &op);
   }
 }
 
@@ -64,7 +65,57 @@ int RGWGC::tag_index(const string& tag)
   return rgw_shards_mod(XXH64(tag.c_str(), tag.size(), seed), max_objs);
 }
 
-int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag)
+std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag)
+{
+  ldpp_dout(this, 20) << "RGWGC::send_split_chain - tag is: " << tag << dendl;
+
+  if (cct->_conf->rgw_max_chunk_size) {
+    cls_rgw_obj_chain broken_chain;
+    ldpp_dout(this, 20) << "RGWGC::send_split_chain - rgw_max_chunk_size is: " << cct->_conf->rgw_max_chunk_size << dendl;
+
+    for (auto it = chain.objs.begin(); it != chain.objs.end(); it++) {
+      ldpp_dout(this, 20) << "RGWGC::send_split_chain - adding obj with name: " << it->key << dendl;
+      broken_chain.objs.emplace_back(*it);
+      cls_rgw_gc_obj_info info;
+      info.tag = tag;
+      info.chain = broken_chain;
+      cls_rgw_gc_set_entry_op op;
+      op.info = info;
+      size_t total_encoded_size = op.estimate_encoded_size();
+      ldpp_dout(this, 20) << "RGWGC::send_split_chain - total_encoded_size is: " << total_encoded_size << dendl;
+
+      if (total_encoded_size > cct->_conf->rgw_max_chunk_size) { //dont add to chain, and send to gc
+        broken_chain.objs.pop_back();
+        --it;
+        ldpp_dout(this, 20) << "RGWGC::send_split_chain - more than, dont add to broken chain and send chain" << dendl;
+        auto ret = send_chain(broken_chain, tag);
+        if (ret < 0) {
+          broken_chain.objs.insert(broken_chain.objs.end(), it, chain.objs.end()); // add all the remainder objs to the list to be deleted inline
+          ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
+          return {ret, {broken_chain}};
+        }
+        broken_chain.objs.clear();
+      }
+    }
+    if (!broken_chain.objs.empty()) { //when the chain is smaller than or equal to rgw_max_chunk_size
+      ldpp_dout(this, 20) << "RGWGC::send_split_chain - sending leftover objects" << dendl;
+      auto ret = send_chain(broken_chain, tag);
+      if (ret < 0) {
+        ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
+        return {ret, {broken_chain}};
+      }
+    }
+  } else {
+    auto ret = send_chain(chain, tag);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
+      return {ret, {std::move(chain)}};
+    }
+  }
+  return {0, {}};
+}
+
+int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag)
 {
   ObjectWriteOperation op;
   cls_rgw_gc_obj_info info;
@@ -76,13 +127,13 @@ int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag)
 
   ldpp_dout(this, 20) << "RGWGC::send_chain - on object name: " << obj_names[i] << "tag is: " << tag << dendl;
 
-  auto ret = store->gc_operate(obj_names[i], &op);
+  auto ret = store->gc_operate(this, obj_names[i], &op);
   if (ret != -ECANCELED && ret != -EPERM) {
     return ret;
   }
   ObjectWriteOperation set_entry_op;
   cls_rgw_gc_set_entry(set_entry_op, cct->_conf->rgw_gc_obj_min_wait, info);
-  return store->gc_operate(obj_names[i], &set_entry_op);
+  return store->gc_operate(this, obj_names[i], &set_entry_op);
 }
 
 struct defer_chain_state {
@@ -188,7 +239,7 @@ int RGWGC::remove(int index, int num_entries)
   ObjectWriteOperation op;
   cls_rgw_gc_queue_remove_entries(op, num_entries);
 
-  return store->gc_operate(obj_names[index], &op);
+  return store->gc_operate(this, obj_names[index], &op);
 }
 
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
@@ -313,11 +364,11 @@ class RGWGCIOManager {
 
 public:
   RGWGCIOManager(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWGC *_gc) : dpp(_dpp),
-                                                  cct(_cct),
-                                                  gc(_gc),
-                                                  remove_tags(cct->_conf->rgw_gc_max_objs),
-                                                  tag_io_size(cct->_conf->rgw_gc_max_objs) {
+                                                                                  cct(_cct),
+                                                                                  gc(_gc) {
     max_aio = cct->_conf->rgw_gc_max_concurrent_io;
+    remove_tags.resize(min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max()));
+    tag_io_size.resize(min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max()));
   }
 
   ~RGWGCIOManager() {
@@ -606,7 +657,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	  if (obj.pool != last_pool) {
 	    delete ctx;
 	    ctx = new IoCtx;
-	    ret = rgw_init_ioctx(store->get_rados_handle(), obj.pool, *ctx);
+	    ret = rgw_init_ioctx(this, store->get_rados_handle(), obj.pool, *ctx);
 	    if (ret < 0) {
         if (transitioned_objects_cache[index]) {
           goto done;

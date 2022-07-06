@@ -2,9 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 //
-// A freelist manager for zoned devices.  This iteration just keeps the write
-// pointer per zone.  Following iterations will add enough information to enable
-// cleaning of zones.
+// A freelist manager for zoned devices.
 //
 // Copyright (C) 2020 Abutalib Aghayev
 //
@@ -20,6 +18,7 @@
 #include "common/ceph_mutex.h"
 #include "include/buffer.h"
 #include "kv/KeyValueDB.h"
+#include "zoned_types.h"
 
 using cfg_reader_t = std::function<int(const std::string&, std::string*)>;
 
@@ -37,9 +36,12 @@ class ZonedFreelistManager : public FreelistManager {
   KeyValueDB::Iterator enumerate_p;
   uint64_t enumerate_zone_num;
 
-  void write_zone_state_to_db(uint64_t zone_num,
-			      const zone_state_t &zone_state,
-			      KeyValueDB::Transaction txn);
+  void write_zone_state_delta_to_db(uint64_t zone_num,
+				    const zone_state_t &zone_state,
+				    KeyValueDB::Transaction txn);
+  void write_zone_state_reset_to_db(uint64_t zone_num,
+				    const zone_state_t &zone_state,
+				    KeyValueDB::Transaction txn);
   void load_zone_state_from_db(uint64_t zone_num,
 			       zone_state_t &zone_state,
 			       KeyValueDB::Iterator &it) const;
@@ -62,6 +64,8 @@ public:
 
   int create(uint64_t size,
 	     uint64_t granularity,
+	     uint64_t zone_size,
+	     uint64_t first_sequential_zone,
 	     KeyValueDB::Transaction txn) override;
 
   int init(KeyValueDB *kvdb,
@@ -98,9 +102,12 @@ public:
   }
 
   void get_meta(uint64_t target_size,
-		std::vector<std::pair<string, string>>*) const override;
+		std::vector<std::pair<std::string, std::string>>*) const override;
 
-  std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const override;
+  std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const;
+
+  void mark_zone_to_clean_free(uint64_t zone,
+			       KeyValueDB *kvdb);
 };
 
 #endif

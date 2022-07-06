@@ -14,6 +14,8 @@
 
 #include "SocketMessenger.h"
 
+#include <seastar/core/sleep.hh>
+
 #include <tuple>
 #include <boost/functional/hash.hpp>
 
@@ -38,6 +40,38 @@ SocketMessenger::SocketMessenger(const entity_name_t& myname,
     nonce{nonce}
 {}
 
+SocketMessenger::~SocketMessenger()
+{
+  ceph_assert(!listener);
+}
+
+bool SocketMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
+{
+  bool ret = false;
+
+  entity_addrvec_t newaddrs = my_addrs;
+  for (auto& a : newaddrs.v) {
+    if (a.is_blank_ip()) {
+      int type = a.get_type();
+      int port = a.get_port();
+      uint32_t nonce = a.get_nonce();
+      for (auto& b : addrs.v) {
+       if (a.get_family() == b.get_family()) {
+         logger().debug(" assuming my addr {} matches provided addr {}", a, b);
+         a = b;
+         a.set_nonce(nonce);
+         a.set_type(type);
+         a.set_port(port);
+         ret = true;
+         break;
+       }
+      }
+    }
+  }
+  my_addrs = newaddrs;
+  return ret;
+}
+
 seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 {
   assert(seastar::this_shard_id() == master_sid);
@@ -48,7 +82,8 @@ seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
   return Messenger::set_myaddrs(my_addrs);
 }
 
-SocketMessenger::bind_ertr::future<> SocketMessenger::do_bind(const entity_addrvec_t& addrs)
+crimson::net::listen_ertr::future<>
+SocketMessenger::do_listen(const entity_addrvec_t& addrs)
 {
   assert(seastar::this_shard_id() == master_sid);
   ceph_assert(addrs.front().get_family() == AF_INET);
@@ -60,22 +95,14 @@ SocketMessenger::bind_ertr::future<> SocketMessenger::do_bind(const entity_addrv
     } else {
       return seastar::now();
     }
-  }).then([this] () -> bind_ertr::future<> {
+  }).then([this] () -> listen_ertr::future<> {
     const entity_addr_t listen_addr = get_myaddr();
-    logger().debug("{} do_bind: try listen {}...", *this, listen_addr);
+    logger().debug("{} do_listen: try listen {}...", *this, listen_addr);
     if (!listener) {
-      logger().warn("{} do_bind: listener doesn't exist", *this);
-      return bind_ertr::now();
+      logger().warn("{} do_listen: listener doesn't exist", *this);
+      return listen_ertr::now();
     }
     return listener->listen(listen_addr);
-  });
-}
-
-SocketMessenger::bind_ertr::future<>
-SocketMessenger::bind(const entity_addrvec_t& addrs)
-{
-  return do_bind(addrs).safe_then([this] {
-    logger().info("{} bind: done", *this);
   });
 }
 
@@ -83,9 +110,13 @@ SocketMessenger::bind_ertr::future<>
 SocketMessenger::try_bind(const entity_addrvec_t& addrs,
                           uint32_t min_port, uint32_t max_port)
 {
-  auto addr = addrs.front();
+  // the classical OSD iterates over the addrvec and tries to listen on each
+  // addr. crimson doesn't need to follow as there is a consensus we need to
+  // worry only about proto v2.
+  assert(addrs.size() == 1);
+  auto addr = addrs.msgr2_addr();
   if (addr.get_port() != 0) {
-    return do_bind(addrs).safe_then([this] {
+    return do_listen(addrs).safe_then([this] {
       logger().info("{} try_bind: done", *this);
     });
   }
@@ -95,29 +126,78 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
     return seastar::repeat_until_value([this, max_port, addr, &port] {
       auto to_bind = addr;
       to_bind.set_port(port);
-      return do_bind(entity_addrvec_t{to_bind}
-      ).safe_then([this] () -> seastar::future<std::optional<bool>> {
+      return do_listen(entity_addrvec_t{to_bind}
+      ).safe_then([this] () -> seastar::future<std::optional<std::error_code>> {
         logger().info("{} try_bind: done", *this);
-        return seastar::make_ready_future<std::optional<bool>>(
-            std::make_optional<bool>(true));
-      }, bind_ertr::all_same_way([this, max_port, &port]
-                                 (const std::error_code& e) mutable
-                                 -> seastar::future<std::optional<bool>> {
-        assert(e == std::errc::address_in_use);
-        logger().trace("{} try_bind: {} already used", *this, port);
+        return seastar::make_ready_future<std::optional<std::error_code>>(
+          std::make_optional<std::error_code>(std::error_code{/* success! */}));
+      }, listen_ertr::all_same_way([this, max_port, &port]
+                                   (const std::error_code& e) mutable
+                                   -> seastar::future<std::optional<std::error_code>> {
+        logger().trace("{} try_bind: {} got error {}", *this, port, e);
         if (port == max_port) {
-          return seastar::make_ready_future<std::optional<bool>>(
-              std::make_optional<bool>(false));
+          return seastar::make_ready_future<std::optional<std::error_code>>(
+            std::make_optional<std::error_code>(e));
         }
         ++port;
-        return seastar::make_ready_future<std::optional<bool>>();
+        return seastar::make_ready_future<std::optional<std::error_code>>(
+          std::optional<std::error_code>{std::nullopt});
       }));
-    }).then([] (bool success) -> bind_ertr::future<> {
-      if (success) {
-        return bind_ertr::now();
-      } else {
+    }).then([] (const std::error_code e) -> bind_ertr::future<> {
+      if (!e) {
+        return bind_ertr::now(); // success!
+      } else if (e == std::errc::address_in_use) {
         return crimson::ct_error::address_in_use::make();
+      } else if (e == std::errc::address_not_available) {
+        return crimson::ct_error::address_not_available::make();
       }
+      ceph_abort();
+    });
+  });
+}
+
+SocketMessenger::bind_ertr::future<>
+SocketMessenger::bind(const entity_addrvec_t& addrs)
+{
+  using crimson::common::local_conf;
+  return seastar::do_with(int64_t{local_conf()->ms_bind_retry_count},
+                          [this, addrs] (auto& count) {
+    return seastar::repeat_until_value([this, addrs, &count] {
+      assert(count >= 0);
+      return try_bind(addrs,
+                      local_conf()->ms_bind_port_min,
+                      local_conf()->ms_bind_port_max)
+      .safe_then([this] {
+        logger().info("{} try_bind: done", *this);
+        return seastar::make_ready_future<std::optional<std::error_code>>(
+          std::make_optional<std::error_code>(std::error_code{/* success! */}));
+      }, bind_ertr::all_same_way([this, &count] (const std::error_code error) {
+        if (count-- > 0) {
+	  logger().info("{} was unable to bind. Trying again in {} seconds",
+                        *this, local_conf()->ms_bind_retry_delay);
+          return seastar::sleep(
+            std::chrono::seconds(local_conf()->ms_bind_retry_delay)
+          ).then([] {
+            // one more time, please
+            return seastar::make_ready_future<std::optional<std::error_code>>(
+              std::optional<std::error_code>{std::nullopt});
+          });
+        } else {
+          logger().info("{} was unable to bind after {} attempts: {}",
+                        *this, local_conf()->ms_bind_retry_count, error);
+          return seastar::make_ready_future<std::optional<std::error_code>>(
+            std::make_optional<std::error_code>(error));
+        }
+      }));
+    }).then([] (const std::error_code error) -> bind_ertr::future<> {
+      if (!error) {
+        return bind_ertr::now(); // success!
+      } else if (error == std::errc::address_in_use) {
+        return crimson::ct_error::address_in_use::make();
+      } else if (error == std::errc::address_not_available) {
+        return crimson::ct_error::address_not_available::make();
+      }
+      ceph_abort();
     });
   });
 }
@@ -129,13 +209,14 @@ seastar::future<> SocketMessenger::start(
   dispatchers.assign(_dispatchers);
   if (listener) {
     // make sure we have already bound to a valid address
-    ceph_assert(get_myaddr().is_legacy() || get_myaddr().is_msgr2());
+    ceph_assert(get_myaddr().is_msgr2());
     ceph_assert(get_myaddr().get_port() > 0);
 
     return listener->accept([this] (SocketRef socket, entity_addr_t peer_addr) {
       assert(seastar::this_shard_id() == master_sid);
-      SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
-          *this, dispatchers, get_myaddr().is_msgr2());
+      assert(get_myaddr().is_msgr2());
+      SocketConnectionRef conn =
+        seastar::make_shared<SocketConnection>(*this, dispatchers);
       conn->start_accept(std::move(socket), peer_addr);
       return seastar::now();
     });
@@ -149,15 +230,17 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
   assert(seastar::this_shard_id() == master_sid);
 
   // make sure we connect to a valid peer_addr
-  ceph_assert(peer_addr.is_legacy() || peer_addr.is_msgr2());
+  if (!peer_addr.is_msgr2()) {
+    ceph_abort_msg("ProtocolV1 is no longer supported");
+  }
   ceph_assert(peer_addr.get_port() > 0);
 
   if (auto found = lookup_conn(peer_addr); found) {
     logger().debug("{} connect to existing", *found);
     return found->shared_from_this();
   }
-  SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
-      *this, dispatchers, peer_addr.is_msgr2());
+  SocketConnectionRef conn =
+    seastar::make_shared<SocketConnection>(*this, dispatchers);
   conn->start_connect(peer_addr, peer_name);
   return conn->shared_from_this();
 }
@@ -194,6 +277,29 @@ seastar::future<> SocketMessenger::shutdown()
   });
 }
 
+static entity_addr_t choose_addr(
+  const entity_addr_t &peer_addr_for_me,
+  const SocketConnection& conn)
+{
+  using crimson::common::local_conf;
+  // XXX: a syscall is here
+  if (const auto local_addr = conn.get_local_address();
+      local_conf()->ms_learn_addr_from_peer) {
+    logger().info("{} peer {} says I am {} (socket says {})",
+                  conn, conn.get_peer_socket_addr(), peer_addr_for_me,
+                  local_addr);
+    return peer_addr_for_me;
+  } else {
+    const auto local_addr_for_me = conn.get_local_address();
+    logger().info("{} socket to {} says I am {} (peer says {})",
+                  conn, conn.get_peer_socket_addr(),
+                  local_addr, peer_addr_for_me);
+    entity_addr_t addr;
+    addr.set_sockaddr(&local_addr_for_me.as_posix_sockaddr());
+    return addr;
+  }
+}
+
 seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me, const SocketConnection& conn)
 {
   assert(seastar::this_shard_id() == master_sid);
@@ -212,14 +318,13 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
 
   if (get_myaddr().get_type() == entity_addr_t::TYPE_NONE) {
     // Not bound
-    entity_addr_t addr = peer_addr_for_me;
+    auto addr = choose_addr(peer_addr_for_me, conn);
     addr.set_type(entity_addr_t::TYPE_ANY);
     addr.set_port(0);
     need_addr = false;
     return set_myaddrs(entity_addrvec_t{addr}
-    ).then([this, &conn, peer_addr_for_me] {
-      logger().info("{} learned myaddr={} (unbound) from {}",
-                    conn, get_myaddr(), peer_addr_for_me);
+    ).then([this, &conn] {
+      logger().info("{} learned myaddr={} (unbound)", conn, get_myaddr());
     });
   } else {
     // Already bound
@@ -237,14 +342,13 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
           make_error_code(crimson::net::error::bad_peer_address));
     }
     if (get_myaddr().is_blank_ip()) {
-      entity_addr_t addr = peer_addr_for_me;
+      auto addr = choose_addr(peer_addr_for_me, conn);
       addr.set_type(get_myaddr().get_type());
       addr.set_port(get_myaddr().get_port());
       need_addr = false;
       return set_myaddrs(entity_addrvec_t{addr}
-      ).then([this, &conn, peer_addr_for_me] {
-        logger().info("{} learned myaddr={} (blank IP) from {}",
-                      conn, get_myaddr(), peer_addr_for_me);
+      ).then([this, &conn] {
+        logger().info("{} learned myaddr={} (blank IP)", conn, get_myaddr());
       });
     } else if (!get_myaddr().is_same_host(peer_addr_for_me)) {
       logger().warn("{} peer_addr_for_me {} IP doesn't match myaddr {}",

@@ -19,13 +19,13 @@ To enable the local predictor::
 
     ceph config set global device_failure_prediction_mode local
 
-To disable prediction,::
+To disable prediction::
 
     ceph config set global device_failure_prediction_mode none
 
 
 *diskprediction_local* requires at least six datasets of device health metrics to
-make prediction of the devices' life expentancy. And these health metrics are
+make prediction of the devices' life expectancy. And these health metrics are
 collected only if health monitoring is :ref:`enabled <enabling-monitoring>`.
 
 Run the following command to retrieve the life expectancy of given device.

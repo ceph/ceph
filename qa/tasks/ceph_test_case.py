@@ -1,8 +1,12 @@
+from typing import Optional, TYPE_CHECKING
 import unittest
 import time
 import logging
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
+
+if TYPE_CHECKING:
+    from tasks.mgr.mgr_test_case import MgrCluster
 
 log = logging.getLogger(__name__)
 
@@ -20,9 +24,10 @@ class CephTestCase(unittest.TestCase):
     mounts = None
     fs = None
     recovery_fs = None
+    backup_fs = None
     ceph_cluster = None
     mds_cluster = None
-    mgr_cluster = None
+    mgr_cluster: Optional['MgrCluster'] = None
     ctx = None
 
     mon_manager = None
@@ -80,6 +85,11 @@ class CephTestCase(unittest.TestCase):
        key = self._fix_key(key)
        self._mon_configs_set.add((section, key))
        self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "set", section, key, str(value))
+
+    def cluster_cmd(self, command: str):
+        assert self.ceph_cluster is not None
+        return self.ceph_cluster.mon_manager.raw_cluster_cmd(*(command.split(" ")))
+
 
     def assert_cluster_log(self, expected_pattern, invert_match=False,
                            timeout=10, watch_channel=None):
@@ -151,6 +161,7 @@ class CephTestCase(unittest.TestCase):
             log.debug("Not found expected summary strings yet ({0})".format(summary_strings))
             return False
 
+        log.info(f"waiting {timeout}s for health warning matching {pattern}")
         self.wait_until_true(seen_health_warning, timeout)
 
     def wait_for_health_clear(self, timeout):
@@ -184,16 +195,22 @@ class CephTestCase(unittest.TestCase):
         log.debug("wait_until_equal: success")
 
     @classmethod
-    def wait_until_true(cls, condition, timeout, period=5):
+    def wait_until_true(cls, condition, timeout, check_fn=None, period=5):
         elapsed = 0
+        retry_count = 0
         while True:
             if condition():
-                log.debug("wait_until_true: success in {0}s".format(elapsed))
+                log.debug("wait_until_true: success in {0}s and {1} retries".format(elapsed, retry_count))
                 return
             else:
                 if elapsed >= timeout:
-                    raise TestTimeoutError("Timed out after {0}s".format(elapsed))
+                    if check_fn and check_fn() and retry_count < 5:
+                        elapsed = 0
+                        retry_count += 1
+                        log.debug("wait_until_true: making progress, waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
+                    else:
+                        raise TestTimeoutError("Timed out after {0}s and {1} retries".format(elapsed, retry_count))
                 else:
-                    log.debug("wait_until_true: waiting (timeout={0})...".format(timeout))
+                    log.debug("wait_until_true: waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
                 time.sleep(period)
                 elapsed += period

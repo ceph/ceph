@@ -1,4 +1,4 @@
-
+---
 - hosts: osds
   become: yes
   tasks:
@@ -10,8 +10,8 @@
     - name: tell lvm to ignore loop devices
       lineinfile:
         path: /etc/lvm/lvm.conf
-        line: '        global_filter = [ "r|loop|", "a|.*|" ]'
-        insertafter: '^devices {'
+        line: "\tfilter = [ 'r|loop.*|' ]"
+        insertafter: 'devices {'
     - name: lvm allow changes depsite duplicate PVIDs
       lineinfile:
         path: /etc/lvm/lvm.conf
@@ -119,8 +119,8 @@
         - /opt/vdd/loop0_nvme0
         - /opt/vde/loop1_nvme1
 
-    - name: create 11GB sparse files for NVMe
-      command: "fallocate -l 11G {{ item }}"
+    - name: create 20GB sparse files for NVMe
+      command: "fallocate -l 20G {{ item }}"
       loop:
         - /opt/vdd/loop0_nvme0
         - /opt/vde/loop1_nvme1

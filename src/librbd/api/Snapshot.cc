@@ -26,7 +26,7 @@ namespace api {
 
 namespace {
 
-class GetGroupVisitor : public boost::static_visitor<int> {
+class GetGroupVisitor {
 public:
   CephContext* cct;
   librados::IoCtx *image_ioctx;
@@ -62,7 +62,7 @@ public:
       return r;
     }
 
-    string group_header_oid = util::group_header_name(snap_namespace.group_id);
+    std::string group_header_oid = util::group_header_name(snap_namespace.group_id);
     r = cls_client::group_snap_get_by_id(&group_ioctx,
 					 group_header_oid,
 					 snap_namespace.group_snapshot_id,
@@ -80,7 +80,7 @@ public:
   }
 };
 
-class GetTrashVisitor : public boost::static_visitor<int> {
+class GetTrashVisitor {
 public:
   std::string* original_name;
 
@@ -100,7 +100,7 @@ public:
   }
 };
 
-class GetMirrorVisitor : public boost::static_visitor<int> {
+class GetMirrorVisitor {
 public:
   snap_mirror_namespace_t *mirror_snap;
 
@@ -143,7 +143,7 @@ int Snapshot<I>::get_group_namespace(I *ictx, uint64_t snap_id,
   }
 
   GetGroupVisitor ggv = GetGroupVisitor(ictx->cct, &ictx->md_ctx, group_snap);
-  r = boost::apply_visitor(ggv, snap_info->snap_namespace);
+  r = snap_info->snap_namespace.visit(ggv);
   if (r < 0) {
     return r;
   }
@@ -166,7 +166,7 @@ int Snapshot<I>::get_trash_namespace(I *ictx, uint64_t snap_id,
   }
 
   auto visitor = GetTrashVisitor(original_name);
-  r = boost::apply_visitor(visitor, snap_info->snap_namespace);
+  r = snap_info->snap_namespace.visit(visitor);
   if (r < 0) {
     return r;
   }
@@ -189,7 +189,7 @@ int Snapshot<I>::get_mirror_namespace(
   }
 
   auto gmv = GetMirrorVisitor(mirror_snap);
-  r = boost::apply_visitor(gmv, snap_info->snap_namespace);
+  r = snap_info->snap_namespace.visit(gmv);
   if (r < 0) {
     return r;
   }
@@ -277,7 +277,7 @@ int Snapshot<I>::get_id(I *ictx, const std::string& snap_name, uint64_t *snap_id
   }
 
 template <typename I>
-int Snapshot<I>::list(I *ictx, vector<snap_info_t>& snaps) {
+int Snapshot<I>::list(I *ictx, std::vector<snap_info_t>& snaps) {
   ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
 
   int r = ictx->state->refresh_if_required();

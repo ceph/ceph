@@ -28,12 +28,12 @@ bool get_rollback_snap_id(
     uint64_t *rollback_snap_id) {
 
   for (; it != end; it++) {
-    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
-      &it->second.snap_namespace);
-    if (mirror_ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY) {
+    auto mirror_ns = std::get<cls::rbd::MirrorSnapshotNamespace>(
+      it->second.snap_namespace);
+    if (mirror_ns.state != cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY) {
       break;
     }
-    if (mirror_ns->complete) {
+    if (mirror_ns.complete) {
       break;
     }
   }
@@ -69,7 +69,7 @@ bool can_create_primary_snapshot(I *image_ctx, bool demoted, bool force,
 
   for (auto it = image_ctx->snap_info.rbegin();
        it != image_ctx->snap_info.rend(); it++) {
-    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+    auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
       &it->second.snap_namespace);
     if (mirror_ns == nullptr) {
       continue;
@@ -133,7 +133,7 @@ bool can_create_non_primary_snapshot(I *image_ctx) {
 
   for (auto it = image_ctx->snap_info.rbegin();
        it != image_ctx->snap_info.rend(); it++) {
-    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+    auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
       &it->second.snap_namespace);
     if (mirror_ns != nullptr) {
       ldout(cct, 20) << "previous mirror snapshot snap_id=" << it->first << " "

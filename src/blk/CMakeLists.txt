@@ -25,25 +25,31 @@ if(WITH_ZBD)
     zoned/HMSMRDevice.cc)
 endif()
 
-add_library(blk ${libblk_srcs})
-target_include_directories(blk PRIVATE "./")
+if(libblk_srcs)
+  add_library(blk STATIC ${libblk_srcs})
+  target_include_directories(blk PRIVATE "./")
+endif()
 
 if(HAVE_LIBAIO)
   target_link_libraries(blk PUBLIC ${AIO_LIBRARIES})
 endif(HAVE_LIBAIO)
 
 if(WITH_SPDK)
-  target_link_libraries(blk PRIVATE ${SPDK_LIBRARIES})
+  target_link_libraries(blk
+    PRIVATE spdk::spdk)
 endif()
 
 if(WITH_ZBD)
   target_link_libraries(blk PRIVATE ${ZBD_LIBRARIES})
 endif()
 
-if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
+if(WITH_BLUESTORE_PMEM)
+  if(HAVE_LIBDML)
+    target_link_libraries(blk PRIVATE dml::dml dml::dmlhl)
+  endif()
+
   target_link_libraries(blk
-    PUBLIC pmem::pmemobj
-    PRIVATE pmem::pmem)
+    PRIVATE pmdk::pmem)
 endif()
 
 if(WITH_EVENTTRACE)

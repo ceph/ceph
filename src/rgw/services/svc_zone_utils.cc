@@ -7,7 +7,9 @@
 
 #include "rgw/rgw_zone.h"
 
-int RGWSI_ZoneUtils::do_start(optional_yield)
+using namespace std;
+
+int RGWSI_ZoneUtils::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   init_unique_trans_id_deps();
 

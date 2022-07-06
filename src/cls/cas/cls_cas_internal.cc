@@ -129,7 +129,8 @@ void chunk_refs_t::decode(ceph::buffer::list::const_iterator& p)
     break;
   default:
     throw ceph::buffer::malformed_input(
-      "unrecognized chunk ref encoding type "s + stringify((int)t));
+      std::string("unrecognized chunk ref encoding type ") +
+      stringify((int)t));
   }
   DECODE_FINISH(p);
 }

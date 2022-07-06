@@ -11,28 +11,25 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
 """
-from __future__ import absolute_import
 
 import inspect
 import logging
 import re
 
 import requests
+from requests.auth import AuthBase
 from requests.exceptions import ConnectionError, InvalidURL, Timeout
 
 from .settings import Settings
-from .tools import build_url
 
 try:
     from requests.packages.urllib3.exceptions import SSLError
 except ImportError:
     from urllib3.exceptions import SSLError  # type: ignore
 
-try:
-    from typing import List
-except ImportError:
-    pass  # Just for type checking
+from typing import List, Optional
 
+from mgr_util import build_url
 
 logger = logging.getLogger('rest_client')
 
@@ -214,16 +211,12 @@ class _ResponseValidator(object):
                 _ResponseValidator._validate_array(array_seq[1:], level_next,
                                                    resp[idx])
             elif array_seq[0] == '*':
-                for r in resp:
-                    _ResponseValidator._validate_array(array_seq[1:],
-                                                       level_next, r)
+                _ResponseValidator.validate_all_resp(resp, array_seq, level_next)
             elif array_seq[0] == '+':
                 if len(resp) < 1:
                     raise BadResponseFormatException(
                         "array should not be empty")
-                for r in resp:
-                    _ResponseValidator._validate_array(array_seq[1:],
-                                                       level_next, r)
+                _ResponseValidator.validate_all_resp(resp, array_seq, level_next)
             else:
                 raise Exception(
                     "Response structure is invalid: only <int> | '*' are "
@@ -231,6 +224,12 @@ class _ResponseValidator(object):
         else:
             if level_next:
                 _ResponseValidator._validate_level(level_next, resp)
+
+    @staticmethod
+    def validate_all_resp(resp, array_seq, level_next):
+        for r in resp:
+            _ResponseValidator._validate_array(array_seq[1:],
+                                               level_next, r)
 
     @staticmethod
     def _validate_key(key, level_next, resp):
@@ -331,7 +330,13 @@ class _Request(object):
 
 
 class RestClient(object):
-    def __init__(self, host, port, client_name=None, ssl=False, auth=None, ssl_verify=True):
+    def __init__(self,
+                 host: str,
+                 port: int,
+                 client_name: Optional[str] = None,
+                 ssl: bool = False,
+                 auth: Optional[AuthBase] = None,
+                 ssl_verify: bool = True) -> None:
         super(RestClient, self).__init__()
         self.client_name = client_name if client_name else ''
         self.host = host
@@ -390,33 +395,7 @@ class RestClient(object):
         if headers:
             request_headers.update(headers)
         try:
-            if method.lower() == 'get':
-                resp = self.session.get(
-                    url, headers=request_headers, params=params, auth=self.auth)
-            elif method.lower() == 'post':
-                resp = self.session.post(
-                    url,
-                    headers=request_headers,
-                    params=params,
-                    data=data,
-                    auth=self.auth)
-            elif method.lower() == 'put':
-                resp = self.session.put(
-                    url,
-                    headers=request_headers,
-                    params=params,
-                    data=data,
-                    auth=self.auth)
-            elif method.lower() == 'delete':
-                resp = self.session.delete(
-                    url,
-                    headers=request_headers,
-                    params=params,
-                    data=data,
-                    auth=self.auth)
-            else:
-                raise RequestException('Method "{}" not supported'.format(
-                    method.upper()), None)
+            resp = self.send_request(method, url, request_headers, params, data)
             if resp.ok:
                 logger.debug("%s REST API %s res status: %s content: %s",
                              self.client_name, method.upper(),
@@ -445,56 +424,10 @@ class RestClient(object):
                     "{}"  # TODO remove
                     .format(self.client_name, resp.status_code, pf(
                         resp.content)),
-                    resp.status_code,
+                    self._handle_response_status_code(resp.status_code),
                     resp.content)
         except ConnectionError as ex:
-            if ex.args:
-                if isinstance(ex.args[0], SSLError):
-                    errno = "n/a"
-                    strerror = "SSL error. Probably trying to access a non " \
-                               "SSL connection."
-                    logger.error("%s REST API failed %s, SSL error (url=%s).",
-                                 self.client_name, method.upper(), ex.request.url)
-                else:
-                    try:
-                        match = re.match(r'.*: \[Errno (-?\d+)\] (.+)',
-                                         ex.args[0].reason.args[0])
-                    except AttributeError:
-                        match = None
-                    if match:
-                        errno = match.group(1)
-                        strerror = match.group(2)
-                        logger.error(
-                            "%s REST API failed %s, connection error (url=%s): "
-                            "[errno: %s] %s",
-                            self.client_name, method.upper(), ex.request.url,
-                            errno, strerror)
-                    else:
-                        errno = "n/a"
-                        strerror = "n/a"
-                        logger.error(
-                            "%s REST API failed %s, connection error (url=%s).",
-                            self.client_name, method.upper(), ex.request.url)
-            else:
-                errno = "n/a"
-                strerror = "n/a"
-                logger.error("%s REST API failed %s, connection error (url=%s).",
-                             self.client_name, method.upper(), ex.request.url)
-
-            if errno != "n/a":
-                ex_msg = (
-                    "{} REST API cannot be reached: {} [errno {}]. "
-                    "Please check your configuration and that the API endpoint"
-                    " is accessible"
-                    .format(self.client_name, strerror, errno))
-            else:
-                ex_msg = (
-                    "{} REST API cannot be reached. Please check "
-                    "your configuration and that the API endpoint is"
-                    " accessible"
-                    .format(self.client_name))
-            raise RequestException(
-                ex_msg, conn_errno=errno, conn_strerror=strerror)
+            self.handle_connection_error(ex, method)
         except InvalidURL as ex:
             logger.exception("%s REST API failed %s: %s", self.client_name,
                              method.upper(), str(ex))
@@ -506,13 +439,98 @@ class RestClient(object):
             logger.exception(msg)
             raise RequestException(msg)
 
+    def send_request(self, method, url, request_headers, params, data):
+        if method.lower() == 'get':
+            resp = self.session.get(
+                url, headers=request_headers, params=params, auth=self.auth)
+        elif method.lower() == 'post':
+            resp = self.session.post(
+                url,
+                headers=request_headers,
+                params=params,
+                data=data,
+                auth=self.auth)
+        elif method.lower() == 'put':
+            resp = self.session.put(
+                url,
+                headers=request_headers,
+                params=params,
+                data=data,
+                auth=self.auth)
+        elif method.lower() == 'delete':
+            resp = self.session.delete(
+                url,
+                headers=request_headers,
+                params=params,
+                data=data,
+                auth=self.auth)
+        else:
+            raise RequestException('Method "{}" not supported'.format(
+                method.upper()), None)
+        return resp
+
+    def handle_connection_error(self, exception, method):
+        if exception.args:
+            if isinstance(exception.args[0], SSLError):
+                errno = "n/a"
+                strerror = "SSL error. Probably trying to access a non " \
+                           "SSL connection."
+                logger.error("%s REST API failed %s, SSL error (url=%s).",
+                             self.client_name, method.upper(), exception.request.url)
+            else:
+                try:
+                    match = re.match(r'.*: \[Errno (-?\d+)\] (.+)',
+                                     exception.args[0].reason.args[0])
+                except AttributeError:
+                    match = None
+                if match:
+                    errno = match.group(1)
+                    strerror = match.group(2)
+                    logger.error(
+                        "%s REST API failed %s, connection error (url=%s): "
+                        "[errno: %s] %s",
+                        self.client_name, method.upper(), exception.request.url,
+                        errno, strerror)
+                else:
+                    errno = "n/a"
+                    strerror = "n/a"
+                    logger.error(
+                        "%s REST API failed %s, connection error (url=%s).",
+                        self.client_name, method.upper(), exception.request.url)
+        else:
+            errno = "n/a"
+            strerror = "n/a"
+            logger.error("%s REST API failed %s, connection error (url=%s).",
+                         self.client_name, method.upper(), exception.request.url)
+        if errno != "n/a":
+            exception_msg = (
+                "{} REST API cannot be reached: {} [errno {}]. "
+                "Please check your configuration and that the API endpoint"
+                " is accessible"
+                .format(self.client_name, strerror, errno))
+        else:
+            exception_msg = (
+                "{} REST API cannot be reached. Please check "
+                "your configuration and that the API endpoint is"
+                " accessible"
+                .format(self.client_name))
+        raise RequestException(
+            exception_msg, conn_errno=errno, conn_strerror=strerror)
+
+    @staticmethod
+    def _handle_response_status_code(status_code: int) -> int:
+        """
+        Method to be overridden by subclasses that need specific handling.
+        """
+        return status_code
+
     @staticmethod
     def api(path, **api_kwargs):
         def call_decorator(func):
             def func_wrapper(self, *args, **kwargs):
                 method = api_kwargs.get('method', None)
                 resp_structure = api_kwargs.get('resp_structure', None)
-                args_name = inspect.getargspec(func).args
+                args_name = inspect.getfullargspec(func).args
                 args_dict = dict(zip(args_name[1:], args))
                 for key, val in kwargs.items():
                     args_dict[key] = val

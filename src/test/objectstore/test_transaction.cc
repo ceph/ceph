@@ -18,6 +18,8 @@
 #include "include/utime.h"
 #include <boost/tuple/tuple.hpp>
 
+using namespace std;
+
 TEST(Transaction, MoveConstruct)
 {
   auto a = ObjectStore::Transaction{};

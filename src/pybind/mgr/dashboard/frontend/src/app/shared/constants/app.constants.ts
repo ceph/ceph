@@ -7,6 +7,7 @@ export class AppConstants {
   public static readonly projectName = 'Ceph Dashboard';
   public static readonly license = 'Free software (LGPL 2.1).';
   public static readonly copyright = 'Copyright(c) ' + environment.year + ' Ceph contributors.';
+  public static readonly cephLogo = 'assets/Ceph_Logo.svg';
 }
 
 export enum URLVerbs {
@@ -34,7 +35,10 @@ export enum URLVerbs {
 
   /* Prometheus wording */
   RECREATE = 'recreate',
-  EXPIRE = 'expire'
+  EXPIRE = 'expire',
+
+  /* Daemons */
+  RESTART = 'Restart'
 }
 
 export enum ActionLabels {
@@ -67,7 +71,13 @@ export enum ActionLabels {
 
   /* Prometheus wording */
   RECREATE = 'Recreate',
-  EXPIRE = 'Expire'
+  EXPIRE = 'Expire',
+
+  /* Daemons */
+  START = 'Start',
+  STOP = 'Stop',
+  REDEPLOY = 'Redeploy',
+  RESTART = 'Restart'
 }
 
 @Injectable({
@@ -115,6 +125,18 @@ export class ActionLabelsI18n {
   UNSET: string;
   UPDATE: string;
   FLAGS: string;
+  ENTER_MAINTENANCE: string;
+  EXIT_MAINTENANCE: string;
+  REMOVE_SCHEDULING: string;
+  PROMOTE: string;
+  DEMOTE: string;
+  START_DRAIN: string;
+  STOP_DRAIN: string;
+  START: string;
+  STOP: string;
+  REDEPLOY: string;
+  RESTART: string;
+  RESYNC: string;
 
   constructor() {
     /* Create a new item */
@@ -166,10 +188,24 @@ export class ActionLabelsI18n {
     this.UNPROTECT = $localize`Unprotect`;
     this.CHANGE = $localize`Change`;
     this.FLAGS = $localize`Flags`;
+    this.ENTER_MAINTENANCE = $localize`Enter Maintenance`;
+    this.EXIT_MAINTENANCE = $localize`Exit Maintenance`;
 
+    this.START_DRAIN = $localize`Start Drain`;
+    this.STOP_DRAIN = $localize`Stop Drain`;
+    this.RESYNC = $localize`Resync`;
     /* Prometheus wording */
     this.RECREATE = $localize`Recreate`;
     this.EXPIRE = $localize`Expire`;
+
+    this.START = $localize`Start`;
+    this.STOP = $localize`Stop`;
+    this.REDEPLOY = $localize`Redeploy`;
+    this.RESTART = $localize`Restart`;
+
+    this.REMOVE_SCHEDULING = $localize`Remove Scheduling`;
+    this.PROMOTE = $localize`Promote`;
+    this.DEMOTE = $localize`Demote`;
   }
 }
 
@@ -210,6 +246,11 @@ export class SucceededActionLabelsI18n {
   CHANGE: string;
   RECREATED: string;
   EXPIRED: string;
+  MOVE: string;
+  START: string;
+  STOP: string;
+  REDEPLOY: string;
+  RESTART: string;
 
   constructor() {
     /* Create a new item */
@@ -255,5 +296,10 @@ export class SucceededActionLabelsI18n {
     /* Prometheus wording */
     this.RECREATED = $localize`Recreated`;
     this.EXPIRED = $localize`Expired`;
+
+    this.START = $localize`Start`;
+    this.STOP = $localize`Stop`;
+    this.REDEPLOY = $localize`Redeploy`;
+    this.RESTART = $localize`Restart`;
   }
 }

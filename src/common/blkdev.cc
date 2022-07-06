@@ -217,6 +217,11 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return ioctl(fd, BLKDISCARD, range);
 }
 
+int BlkDev::get_optimal_io_size() const
+{
+	return get_int_property("queue/optimal_io_size");
+}
+
 bool BlkDev::is_rotational() const
 {
   return get_int_property("queue/rotational") > 0;
@@ -429,6 +434,14 @@ std::string _decode_model_enc(const std::string& in)
     v.erase(found + 1);
   }
   std::replace(v.begin(), v.end(), ' ', '_');
+
+  // remove "__", which seems to come up on by ubuntu box for some reason.
+  while (true) {
+    auto p = v.find("__");
+    if (p == std::string::npos) break;
+    v.replace(p, 2, "_");
+  }
+
   return v;
 }
 
@@ -533,7 +546,7 @@ std::string get_device_id(const std::string& devname,
   }
   if (err) {
     if (model.empty() && serial.empty()) {
-      *err = std::string("fallback method has no model nor serial'");
+      *err = std::string("fallback method has no model nor serial");
       return {};
     } else if (model.empty()) {
       *err = std::string("fallback method has serial '") + serial
@@ -700,8 +713,8 @@ static int block_device_run_smartctl(const string& devname, int timeout,
     timeout);
   smartctl.add_cmd_args(
     "smartctl",
-    "-a",
-    //"-x",
+    //"-a",    // all SMART info
+    "-x",    // all SMART and non-SMART info
     "--json=o",
     device.c_str(),
     NULL);
@@ -851,6 +864,11 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return -EOPNOTSUPP;
 }
 
+int BlkDev::get_optimal_io_size() const
+{
+  return 0;
+}
+
 bool BlkDev::is_rotational() const
 {
   return false;
@@ -978,6 +996,11 @@ bool BlkDev::support_discard() const
 int BlkDev::discard(int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
+}
+
+int BlkDev::get_optimal_io_size() const
+{
+  return 0;
 }
 
 bool BlkDev::is_rotational() const

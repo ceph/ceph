@@ -1,6 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { ComponentFixture, fakeAsync, TestBed } from '@angular/core/testing';
+import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -54,95 +54,12 @@ describe('RgwBucketFormComponent', () => {
   });
 
   describe('bucketNameValidator', () => {
-    const testValidator = (name: string, valid: boolean) => {
-      const validatorFn = component.bucketNameValidator();
-      const ctrl = new FormControl(name);
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          if (valid) {
-            expect(resp).toBe(null);
-          } else {
-            expect(resp instanceof Object).toBeTruthy();
-            expect(resp.bucketNameInvalid).toBeTruthy();
-          }
-        });
-      }
-    };
+    it('should validate empty name', fakeAsync(() => {
+      formHelper.expectErrorChange('bid', '', 'required', true);
+    }));
+  });
 
-    it('should validate empty name', () => {
-      testValidator('', true);
-    });
-
-    it('bucket names cannot be formatted as IP address', () => {
-      testValidator('172.10.4.51', false);
-    });
-
-    it('bucket name must be >= 3 characters long (1/2)', () => {
-      testValidator('ab', false);
-    });
-
-    it('bucket name must be >= 3 characters long (2/2)', () => {
-      testValidator('abc', true);
-    });
-
-    it('bucket name must be <= than 63 characters long (1/2)', () => {
-      testValidator(_.repeat('a', 64), false);
-    });
-
-    it('bucket name must be <= than 63 characters long (2/2)', () => {
-      testValidator(_.repeat('a', 63), true);
-    });
-
-    it('bucket names must not contain uppercase characters or underscores (1/2)', () => {
-      testValidator('iAmInvalid', false);
-    });
-
-    it('bucket names must not contain uppercase characters or underscores (2/2)', () => {
-      testValidator('i_am_invalid', false);
-    });
-
-    it('bucket names with invalid labels (1/3)', () => {
-      testValidator('abc.1def.Ghi2', false);
-    });
-
-    it('bucket names with invalid labels (2/3)', () => {
-      testValidator('abc.1-xy', false);
-    });
-
-    it('bucket names with invalid labels (3/3)', () => {
-      testValidator('abc.*def', false);
-    });
-
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (1/3)', () => {
-      testValidator('xyz.abc', true);
-    });
-
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (2/3)', () => {
-      testValidator('abc.1-def', true);
-    });
-
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (3/3)', () => {
-      testValidator('abc.ghi2', true);
-    });
-
-    it('bucket names must be unique', () => {
-      spyOn(rgwBucketService, 'enumerate').and.returnValue(observableOf(['abcd']));
-      const validatorFn = component.bucketNameValidator();
-      const ctrl = new FormControl('abcd');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp instanceof Object).toBeTruthy();
-          expect(resp.bucketNameExists).toBeTruthy();
-        });
-      }
-    });
-
+  describe('zonegroup and placement targets', () => {
     it('should get zonegroup and placement targets', () => {
       const payload: Record<string, any> = {
         zonegroup: 'default',
@@ -325,29 +242,17 @@ describe('RgwBucketFormComponent', () => {
   });
 
   describe('object locking', () => {
-    const setDaysAndYears = (fn: (name: string) => void) => {
-      ['lock_retention_period_days', 'lock_retention_period_years'].forEach(fn);
-    };
-
     const expectPatternLockError = (value: string) => {
       formHelper.setValue('lock_enabled', true, true);
-      setDaysAndYears((name: string) => {
-        formHelper.setValue(name, value);
-        formHelper.expectError(name, 'pattern');
-      });
+      formHelper.setValue('lock_retention_period_days', value);
+      formHelper.expectError('lock_retention_period_days', 'pattern');
     };
 
-    const expectValidLockInputs = (enabled: boolean, mode: string, days: string, years: string) => {
+    const expectValidLockInputs = (enabled: boolean, mode: string, days: string) => {
       formHelper.setValue('lock_enabled', enabled);
       formHelper.setValue('lock_mode', mode);
       formHelper.setValue('lock_retention_period_days', days);
-      formHelper.setValue('lock_retention_period_years', years);
-      [
-        'lock_enabled',
-        'lock_mode',
-        'lock_retention_period_days',
-        'lock_retention_period_years'
-      ].forEach((name) => {
+      ['lock_enabled', 'lock_mode', 'lock_retention_period_days'].forEach((name) => {
         const control = component.bucketForm.get(name);
         expect(control.valid).toBeTruthy();
         expect(control.errors).toBeNull();
@@ -367,15 +272,13 @@ describe('RgwBucketFormComponent', () => {
       expect(control.disabled).toBeTruthy();
     });
 
-    it('should have the "eitherDaysOrYears" error', () => {
+    it('should have the "lockDays" error', () => {
       formHelper.setValue('lock_enabled', true);
-      setDaysAndYears((name: string) => {
-        const control = component.bucketForm.get(name);
-        control.updateValueAndValidity();
-        expect(control.value).toBe(0);
-        expect(control.invalid).toBeTruthy();
-        formHelper.expectError(control, 'eitherDaysOrYears');
-      });
+      const control = component.bucketForm.get('lock_retention_period_days');
+      control.updateValueAndValidity();
+      expect(control.value).toBe(0);
+      expect(control.invalid).toBeTruthy();
+      formHelper.expectError(control, 'lockDays');
     });
 
     it('should have the "pattern" error [1]', () => {
@@ -387,11 +290,11 @@ describe('RgwBucketFormComponent', () => {
     });
 
     it('should have valid values [1]', () => {
-      expectValidLockInputs(true, 'Governance', '0', '1');
+      expectValidLockInputs(true, 'Governance', '1');
     });
 
     it('should have valid values [2]', () => {
-      expectValidLockInputs(false, 'Compliance', '100', '0');
+      expectValidLockInputs(false, 'Compliance', '2');
     });
   });
 });

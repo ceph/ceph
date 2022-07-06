@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=dangerous-default-value,too-many-public-methods
-from __future__ import absolute_import
 
 import errno
 import json
+import tempfile
 import time
 import unittest
 from datetime import datetime, timedelta
@@ -15,7 +15,7 @@ from ..security import Permission, Scope
 from ..services.access_control import SYSTEM_ROLES, AccessControlDB, \
     PasswordPolicy, load_access_control_db, password_hash
 from ..settings import Settings
-from . import CLICommandTestMixin, CmdException  # pylint: disable=no-name-in-module
+from ..tests import CLICommandTestMixin, CmdException
 
 
 class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
@@ -154,7 +154,10 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_show_system_role(self):
         role = self.exec_cmd('ac-role-show', rolename="read-only")
         self.assertEqual(role['name'], 'read-only')
-        self.assertEqual(role['description'], 'Read-Only')
+        self.assertEqual(
+            role['description'],
+            'allows read permission for all security scope except dashboard settings and config-opt'
+        )
 
     def test_delete_system_role(self):
         with self.assertRaises(CmdException) as ctx:
@@ -581,6 +584,18 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                                       'admin@user.com')
         self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
 
+    def test_sanitize_password(self):
+        self.test_create_user()
+        password = 'myPass\\n\\r\\n'
+        with tempfile.TemporaryFile(mode='w+') as pwd_file:
+            # Add new line separators (like some text editors when a file is saved).
+            pwd_file.write('{}{}'.format(password, '\n\r\n\n'))
+            pwd_file.seek(0)
+            user = self.exec_cmd('ac-user-set-password', username='admin',
+                                 inbuf=pwd_file.read(), force_password=True)
+            pass_hash = password_hash(password, user['password'])
+            self.assertEqual(user['password'], pass_hash)
+
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('ac-user-set-password', username='admin',
@@ -595,7 +610,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                           force_password=True)
 
         self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
-        self.assertEqual(str(ctx.exception), ERROR_MSG_EMPTY_INPUT_FILE)
+        self.assertIn(ERROR_MSG_EMPTY_INPUT_FILE, str(ctx.exception))
 
     def test_set_user_password_hash(self):
         user_orig = self.test_create_user()
@@ -779,25 +794,6 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'test_role'],
-            'enabled': True
-        })
-
-    def test_update_from_previous_version_v1(self):
-        self.CONFIG_KEY_DICT['username'] = 'admin'
-        self.CONFIG_KEY_DICT['password'] = \
-            '$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK'
-        load_access_control_db()
-        user = self.exec_cmd('ac-user-show', username="admin")
-        self.assertDictEqual(user, {
-            'username': 'admin',
-            'lastUpdate': user['lastUpdate'],
-            'password':
-                "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
-            'pwdExpirationDate': None,
-            'pwdUpdateRequired': False,
-            'name': None,
-            'email': None,
-            'roles': ['administrator'],
             'enabled': True
         })
 

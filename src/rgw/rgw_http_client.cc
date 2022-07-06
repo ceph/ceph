@@ -24,6 +24,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 RGWHTTPManager *rgw_http_manager;
 
 struct RGWCurlHandle;
@@ -294,6 +296,51 @@ void RGWIOProvider::assign_io(RGWIOIDProvider& io_id_provider, int io_type)
   }
 }
 
+RGWHTTPClient::RGWHTTPClient(CephContext *cct,
+                             const string& _method,
+                             const string& _url)
+    : NoDoutPrefix(cct, dout_subsys),
+      has_send_len(false),
+      http_status(HTTP_STATUS_NOSTATUS),
+      req_data(nullptr),
+      verify_ssl(cct->_conf->rgw_verify_ssl),
+      cct(cct),
+      method(_method),
+      url(_url) {
+  init();
+}
+
+std::ostream& RGWHTTPClient::gen_prefix(std::ostream& out) const
+{
+  out << "http_client[" << method << "/" << url << "]";
+  return out;
+}
+
+void RGWHTTPClient::init()
+{
+  auto pos = url.find("://");
+  if (pos == string::npos) {
+    host = url;
+    return;
+  }
+
+  protocol = url.substr(0, pos);
+
+  pos += 3;
+
+  auto host_end_pos = url.find("/", pos);
+  if (host_end_pos == string::npos) {
+    host = url.substr(pos);
+    return;
+  }
+
+  host = url.substr(pos, host_end_pos - pos);
+  resource_prefix = url.substr(host_end_pos + 1);
+  if (resource_prefix.size() > 0 && resource_prefix[resource_prefix.size() - 1] != '/') {
+    resource_prefix.append("/");
+  }
+}
+
 /*
  * the following set of callbacks will be called either on RGWHTTPManager::process(),
  * or via the RGWHTTPManager async processing.
@@ -541,6 +588,7 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
   curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_LIMIT, cct->_conf->rgw_curl_low_speed_limit);
   curl_easy_setopt(easy_handle, CURLOPT_READFUNCTION, send_http_data);
   curl_easy_setopt(easy_handle, CURLOPT_READDATA, (void *)req_data);
+  curl_easy_setopt(easy_handle, CURLOPT_BUFFERSIZE, cct->_conf->rgw_curl_buffersize);
   if (send_data_hint || is_upload_request(method)) {
     curl_easy_setopt(easy_handle, CURLOPT_UPLOAD, 1L);
   }
@@ -556,6 +604,11 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
       h = curl_slist_append(h, "Expect:");
     }
   }
+
+  if (method == "HEAD") {
+    curl_easy_setopt(easy_handle, CURLOPT_NOBODY, 1L);
+  }
+
   if (h) {
     curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
@@ -563,6 +616,21 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYHOST, 0L);
     dout(20) << "ssl verification is set to off" << dendl;
+  } else {
+    if (!ca_path.empty()) {
+      curl_easy_setopt(easy_handle, CURLOPT_CAINFO, ca_path.c_str());
+      dout(20) << "using custom ca cert "<< ca_path.c_str() << " for ssl" << dendl;
+    }
+    if (!client_cert.empty()) {
+      if (!client_key.empty()) {
+	curl_easy_setopt(easy_handle, CURLOPT_SSLCERT, client_cert.c_str());
+	curl_easy_setopt(easy_handle, CURLOPT_SSLKEY, client_key.c_str());
+	dout(20) << "using custom client cert " << client_cert.c_str()
+	  << " and private key " << client_key.c_str() << dendl;
+      } else {
+	dout(5) << "private key is missing for client certificate" << dendl;
+      }
+    }
   }
   curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_TIMEOUT, req_timeout);
@@ -653,77 +721,14 @@ int RGWHTTPTransceiver::send_data(void* ptr, size_t len, bool* pause)
 static int clear_signal(int fd)
 {
   // since we're in non-blocking mode, we can try to read a lot more than
-  // one signal from signal_thread() to avoid later wakeups. non-blocking reads
-  // are also required to support the curl_multi_wait bug workaround
-  std::array<char, 256> buf;
+  // one signal from signal_thread() to avoid later wakeups
+  std::array<char, 256> buf{};
   int ret = ::read(fd, (void *)buf.data(), buf.size());
   if (ret < 0) {
     ret = -errno;
     return ret == -EAGAIN ? 0 : ret; // clear EAGAIN
   }
   return 0;
-}
-
-#if HAVE_CURL_MULTI_WAIT
-
-static std::once_flag detect_flag;
-static bool curl_multi_wait_bug_present = false;
-
-static int detect_curl_multi_wait_bug(CephContext *cct, CURLM *handle,
-                                      int write_fd, int read_fd)
-{
-  int ret = 0;
-
-  // write to write_fd so that read_fd becomes readable
-  uint32_t buf = 0;
-  ret = ::write(write_fd, &buf, sizeof(buf));
-  if (ret < 0) {
-    ret = -errno;
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): write() returned " << ret << dendl;
-    return ret;
-  }
-
-  // pass read_fd in extra_fds for curl_multi_wait()
-  int num_fds;
-  struct curl_waitfd wait_fd;
-
-  wait_fd.fd = read_fd;
-  wait_fd.events = CURL_WAIT_POLLIN;
-  wait_fd.revents = 0;
-
-  ret = curl_multi_wait(handle, &wait_fd, 1, 0, &num_fds);
-  if (ret != CURLM_OK) {
-    ldout(cct, 0) << "ERROR: curl_multi_wait() returned " << ret << dendl;
-    return -EIO;
-  }
-
-  // curl_multi_wait should flag revents when extra_fd is readable. if it
-  // doesn't, the bug is present and we can't rely on revents
-  if (wait_fd.revents == 0) {
-    curl_multi_wait_bug_present = true;
-    ldout(cct, 0) << "WARNING: detected a version of libcurl which contains a "
-        "bug in curl_multi_wait(). enabling a workaround that may degrade "
-        "performance slightly." << dendl;
-  }
-
-  return clear_signal(read_fd);
-}
-
-static bool is_signaled(const curl_waitfd& wait_fd)
-{
-  if (wait_fd.fd < 0) {
-    // no fd to signal
-    return false;
-  }
-
-  if (curl_multi_wait_bug_present) {
-    // we can't rely on revents, so we always return true if a wait_fd is given.
-    // this means we'll be trying a non-blocking read on this fd every time that
-    // curl_multi_wait() wakes up
-    return true;
-  }
-
-  return wait_fd.revents > 0;
 }
 
 static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
@@ -741,7 +746,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
     return -EIO;
   }
 
-  if (is_signaled(wait_fd)) {
+  if (wait_fd.revents > 0) {
     ret = clear_signal(signal_fd);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
@@ -750,62 +755,6 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
   }
   return 0;
 }
-
-#else
-
-static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
-{
-  fd_set fdread;
-  fd_set fdwrite;
-  fd_set fdexcep;
-  int maxfd = -1;
- 
-  FD_ZERO(&fdread);
-  FD_ZERO(&fdwrite);
-  FD_ZERO(&fdexcep);
-
-  /* get file descriptors from the transfers */ 
-  int ret = curl_multi_fdset(handle, &fdread, &fdwrite, &fdexcep, &maxfd);
-  if (ret) {
-    ldout(cct, 0) << "ERROR: curl_multi_fdset returned " << ret << dendl;
-    return -EIO;
-  }
-
-  if (signal_fd > 0) {
-    FD_SET(signal_fd, &fdread);
-    if (signal_fd >= maxfd) {
-      maxfd = signal_fd + 1;
-    }
-  }
-
-  /* forcing a strict timeout, as the returned fdsets might not reference all fds we wait on */
-  uint64_t to = cct->_conf->rgw_curl_wait_timeout_ms;
-#define RGW_CURL_TIMEOUT 1000
-  if (!to)
-    to = RGW_CURL_TIMEOUT;
-  struct timeval timeout;
-  timeout.tv_sec = to / 1000;
-  timeout.tv_usec = to % 1000;
-
-  ret = select(maxfd+1, &fdread, &fdwrite, &fdexcep, &timeout);
-  if (ret < 0) {
-    ret = -errno;
-    ldout(cct, 0) << "ERROR: select returned " << ret << dendl;
-    return ret;
-  }
-
-  if (signal_fd > 0 && FD_ISSET(signal_fd, &fdread)) {
-    ret = clear_signal(signal_fd);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
-      return ret;
-    }
-  }
-
-  return 0;
-}
-
-#endif
 
 void *RGWHTTPManager::ReqsThread::entry()
 {
@@ -1106,14 +1055,6 @@ int RGWHTTPManager::start()
     return -e;
   }
 
-#ifdef HAVE_CURL_MULTI_WAIT
-  // on first initialization, use this pipe to detect whether we're using a
-  // buggy version of libcurl
-  std::call_once(detect_flag, detect_curl_multi_wait_bug, cct,
-                 static_cast<CURLM*>(multi_handle),
-                 thread_pipe[1], thread_pipe[0]);
-#endif
-
   is_started = true;
   reqs_thread = new ReqsThread(this);
   reqs_thread->create("http_manager");
@@ -1211,7 +1152,7 @@ void *RGWHTTPManager::reqs_thread_entry()
               << cct->_conf->rgw_curl_low_speed_limit << " Bytes per second during " << cct->_conf->rgw_curl_low_speed_time << " seconds." << dendl;
           default:
             dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
-            dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << dendl;
+            dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << " req_data->error_buf=" << req_data->error_buf << dendl;
 	    break;
         }
       }

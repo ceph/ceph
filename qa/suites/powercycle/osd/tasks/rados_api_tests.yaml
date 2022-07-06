@@ -7,6 +7,9 @@ overrides:
     conf:
       mon:
         mon warn on pool no app: false
+      osd:
+        osd class load list: "*"
+        osd class default list: "*"
 tasks:
 - ceph-fuse:
 - workunit:

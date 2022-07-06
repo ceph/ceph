@@ -226,7 +226,7 @@ TEST(LibRadosAio, RoundTrip3) {
   rados_read_op_read(op2, 0, sizeof(buf2), buf2, NULL, NULL);
   rados_read_op_set_flags(op2, LIBRADOS_OP_FLAG_FADVISE_NOCACHE |
 			       LIBRADOS_OP_FLAG_FADVISE_RANDOM);
-  ceph_le32 init_value = init_le32(-1);
+  ceph_le32 init_value(-1);
   ceph_le32 checksum[2];
   rados_read_op_checksum(op2, LIBRADOS_CHECKSUM_TYPE_CRC32C,
 			 reinterpret_cast<char *>(&init_value),
@@ -1147,9 +1147,9 @@ TEST(LibRadosAioEC, RoundTripAppend) {
   ASSERT_EQ("", test_data.init());
   ASSERT_EQ(0, rados_aio_create_completion2(nullptr,
 	      nullptr, &my_completion));
-  int requires;
-  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(test_data.m_ioctx, &requires));
-  ASSERT_NE(0, requires);
+  int req;
+  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(test_data.m_ioctx, &req));
+  ASSERT_NE(0, req);
   uint64_t alignment;
   ASSERT_EQ(0, rados_ioctx_pool_required_alignment2(test_data.m_ioctx, &alignment));
   ASSERT_NE(0U, alignment);

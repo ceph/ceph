@@ -603,8 +603,9 @@ protected:
 
     m_stream.async_connect(
       results,
-      asio::util::get_callback_adapter(
-        [on_finish](int r, auto endpoint) { on_finish->complete(r); }));
+      [on_finish](boost::system::error_code ec, const auto& endpoint) {
+        on_finish->complete(-ec.value());
+      });
   }
 
   void disconnect(Context* on_finish) override {
@@ -646,9 +647,9 @@ protected:
 
     boost::beast::get_lowest_layer(m_stream).async_connect(
       results,
-      asio::util::get_callback_adapter(
-        [this, on_finish](int r, auto endpoint) {
-          handle_connect(r, on_finish); }));
+      [this, on_finish](boost::system::error_code ec, const auto& endpoint) {
+        handle_connect(-ec.value(), on_finish);
+      });
   }
 
   void disconnect(Context* on_finish) override {
@@ -764,7 +765,8 @@ private:
 template <typename I>
 HttpClient<I>::HttpClient(I* image_ctx, const std::string& url)
   : m_cct(image_ctx->cct), m_image_ctx(image_ctx),
-    m_asio_engine(image_ctx->asio_engine), m_url(url), m_strand(*m_asio_engine),
+    m_asio_engine(image_ctx->asio_engine), m_url(url),
+    m_strand(boost::asio::make_strand(*m_asio_engine)),
     m_ssl_context(boost::asio::ssl::context::sslv23_client) {
     m_ssl_context.set_default_verify_paths();
 }

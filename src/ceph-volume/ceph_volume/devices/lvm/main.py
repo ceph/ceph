@@ -9,6 +9,7 @@ from . import trigger
 from . import listing
 from . import zap
 from . import batch
+from . import migrate
 
 
 class LVM(object):
@@ -30,6 +31,9 @@ class LVM(object):
         'trigger': trigger.Trigger,
         'list': listing.List,
         'zap': zap.Zap,
+        'migrate': migrate.Migrate,
+        'new-wal': migrate.NewWAL,
+        'new-db': migrate.NewDB,
     }
 
     def __init__(self, argv):

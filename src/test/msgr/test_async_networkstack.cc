@@ -30,6 +30,7 @@
 #include "msg/async/Event.h"
 #include "msg/async/Stack.h"
 
+using namespace std;
 
 class NoopConfigObserver : public md_config_obs_t {
   std::list<std::string> options;
@@ -75,15 +76,11 @@ class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
       addr = "127.0.0.1:15000";
       port_addr = "127.0.0.1:15001";
     } else {
-      g_ceph_context->_conf.set_val_or_die("ms_type", "async+dpdk");
       g_ceph_context->_conf.set_val_or_die("ms_dpdk_debug_allow_loopback", "true");
       g_ceph_context->_conf.set_val_or_die("ms_async_op_threads", "2");
-      g_ceph_context->_conf.set_val_or_die("ms_dpdk_coremask", "0x7");
-      g_ceph_context->_conf.set_val_or_die("ms_dpdk_host_ipv4_addr", "172.16.218.3");
-      g_ceph_context->_conf.set_val_or_die("ms_dpdk_gateway_ipv4_addr", "172.16.218.2");
-      g_ceph_context->_conf.set_val_or_die("ms_dpdk_netmask_ipv4_addr", "255.255.255.0");
-      addr = "172.16.218.3:15000";
-      port_addr = "172.16.218.3:15001";
+      string ipv4_addr = g_ceph_context->_conf.get_val<std::string>("ms_dpdk_host_ipv4_addr");
+      addr = ipv4_addr + std::string(":15000");
+      port_addr = ipv4_addr + std::string(":15001");
     }
     stack = NetworkStack::create(g_ceph_context, GetParam());
     stack->start();

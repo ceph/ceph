@@ -9,7 +9,6 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { BootstrapCreateModalComponent } from './bootstrap-create-modal/bootstrap-create-modal.component';
 import { BootstrapImportModalComponent } from './bootstrap-import-modal/bootstrap-import-modal.component';
 import { DaemonListComponent } from './daemon-list/daemon-list.component';
-import { EditSiteNameModalComponent } from './edit-site-name-modal/edit-site-name-modal.component';
 import { ImageListComponent } from './image-list/image-list.component';
 import { MirrorHealthColorPipe } from './mirror-health-color.pipe';
 import { OverviewComponent } from './overview/overview.component';
@@ -31,7 +30,6 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     BootstrapCreateModalComponent,
     BootstrapImportModalComponent,
     DaemonListComponent,
-    EditSiteNameModalComponent,
     ImageListComponent,
     OverviewComponent,
     PoolEditModeModalComponent,

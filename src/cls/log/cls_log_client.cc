@@ -113,8 +113,8 @@ public:
   }
 };
 
-void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, utime_t& to,
-                  const string& in_marker, int max_entries,
+void cls_log_list(librados::ObjectReadOperation& op, const utime_t& from,
+		  const utime_t& to, const string& in_marker, int max_entries,
 		  list<cls_log_entry>& entries,
                   string *out_marker, bool *truncated)
 {

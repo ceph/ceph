@@ -19,6 +19,10 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "acconfig.h"
+#ifdef HAVE_MEMSET_S
+# define __STDC_WANT_LIB_EXT1__ 1
+#endif
 #include <string.h>
 #include <thread>
 #ifndef _WIN32
@@ -233,7 +237,7 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen)
 }
 
 int ceph_memzero_s(void *dest, size_t destsz, size_t count) {
-#ifdef __STDC_LIB_EXT1__
+#ifdef HAVE_MEMSET_S
     return memset_s(dest, destsz, 0, count);
 #elif defined(_WIN32)
     SecureZeroMemory(dest, count);
@@ -527,6 +531,26 @@ int setenv(const char *name, const char *value, int overwrite) {
 
 ssize_t get_self_exe_path(char* path, int buff_length) {
   return GetModuleFileName(NULL, path, buff_length - 1);
+}
+
+int geteuid()
+{
+  return 0;
+}
+
+int getegid()
+{
+  return 0;
+}
+
+int getuid()
+{
+  return 0;
+}
+
+int getgid()
+{
+  return 0;
 }
 
 #else

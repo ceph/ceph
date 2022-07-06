@@ -61,6 +61,8 @@ std::string TestFixture::get_temp_image_name() {
 void TestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
+  librados::Rados rados(m_ioctx);
+  rados.conf_set("rbd_persistent_cache_path", ".");
 
   m_image_name = get_temp_image_name();
   m_image_size = 2 << 20;
@@ -73,7 +75,6 @@ void TestFixture::TearDown() {
        iter != m_ictxs.end(); ++iter) {
     (*iter)->state->close();
   }
-
   m_ioctx.close();
 }
 

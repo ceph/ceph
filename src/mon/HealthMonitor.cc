@@ -280,8 +280,7 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
@@ -571,6 +570,7 @@ bool HealthMonitor::check_member_health()
 {
   dout(20) << __func__ << dendl;
   bool changed = false;
+  const auto max = g_conf().get_val<uint64_t>("mon_health_max_detail");
 
   // snapshot of usage
   DataStats stats;
@@ -638,6 +638,44 @@ bool HealthMonitor::check_member_health()
       ds << "mon." << mon.name << " has mon_osd_down_out_interval set to 0";
       d.detail.push_back(ds.str());
     }
+  }
+
+  // AUTH_INSECURE_GLOBAL_ID_RECLAIM
+  if (g_conf().get_val<bool>("mon_warn_on_insecure_global_id_reclaim") &&
+      g_conf().get_val<bool>("auth_allow_insecure_global_id_reclaim")) {
+    // Warn if there are any clients that are insecurely renewing their global_id
+    std::lock_guard l(mon.session_map_lock);
+    list<std::string> detail;
+    for (auto p = mon.session_map.sessions.begin();
+	 p != mon.session_map.sessions.end();
+	 ++p) {
+      if ((*p)->global_id_status == global_id_status_t::RECLAIM_INSECURE) {
+	ostringstream ds;
+	ds << (*p)->entity_name << " at " << (*p)->addrs
+	   << " is using insecure global_id reclaim";
+	detail.push_back(ds.str());
+	if (detail.size() >= max) {
+	  detail.push_back("...");
+	  break;
+	}
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << "client%plurals% %isorare% using insecure global_id reclaim";
+      auto& d = next.add("AUTH_INSECURE_GLOBAL_ID_RECLAIM", HEALTH_WARN, ss.str(),
+			 detail.size());
+      d.detail.swap(detail);
+    }
+  }
+  // AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED
+  if (g_conf().get_val<bool>("mon_warn_on_insecure_global_id_reclaim_allowed") &&
+      g_conf().get_val<bool>("auth_allow_insecure_global_id_reclaim")) {
+    ostringstream ss, ds;
+    ss << "mon%plurals% %isorare% allowing insecure global_id reclaim";
+    auto& d = next.add("AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED", HEALTH_WARN, ss.str(), 1);
+    ds << "mon." << mon.name << " has auth_allow_insecure_global_id_reclaim set to true";
+    d.detail.push_back(ds.str());
   }
 
   auto p = quorum_checks.find(mon.rank);
@@ -759,7 +797,9 @@ void HealthMonitor::check_for_mon_down(health_check_map_t *checks)
 {
   int max = mon.monmap->size();
   int actual = mon.get_quorum().size();
-  if (actual < max) {
+  const auto now = ceph::real_clock::now();
+  if (actual < max &&
+      now > mon.monmap->created.to_real_time() + g_conf().get_val<std::chrono::seconds>("mon_down_mkfs_grace")) {
     ostringstream ss;
     ss << (max-actual) << "/" << max << " mons down, quorum "
        << mon.get_quorum_names();

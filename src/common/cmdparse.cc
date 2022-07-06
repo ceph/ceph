@@ -26,6 +26,8 @@ using std::stringstream;
 using std::string_view;
 using std::vector;
 
+using namespace std::literals;
+
 /**
  * Given a cmddesc like "foo baz name=bar,type=CephString",
  * return the prefix "foo baz".
@@ -92,7 +94,7 @@ std::string cmddesc_get_prenautilus_compat(const std::string &cmddesc)
       // Instruct legacy clients or mons to send --foo-bar string in place
       // of a 'true'/'false' value
       std::ostringstream oss;
-      oss << std::string("--") << desckv["name"];
+      oss << "--" << desckv["name"];
       std::string val = oss.str();
       std::replace(val.begin(), val.end(), '_', '-');
       desckv["type"] = "CephChoices";
@@ -138,13 +140,20 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
 
   stringstream ss(cmd);
   std::string word;
+  bool positional = true;
 
   while (std::getline(ss, word, ' ')) {
+    if (word == "--") {
+      positional = false;
+      continue;
+    }
+
     // if no , or =, must be a plain word to put out
     if (word.find_first_of(",=") == string::npos) {
       f->dump_string("arg", word);
       continue;
     }
+
     // accumulate descriptor keywords in desckv
     auto desckv = cmddesc_get_args(word);
     // name the individual desc object based on the name key
@@ -158,7 +167,7 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
         // Instruct legacy clients to send --foo-bar string in place
         // of a 'true'/'false' value
         std::ostringstream oss;
-        oss << std::string("--") << desckv["name"];
+        oss << "--" << desckv["name"];
         val = oss.str();
         std::replace(val.begin(), val.end(), '_', '-');
 
@@ -168,8 +177,20 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
     }
 
     // dump all the keys including name into the array
+    if (!positional) {
+      desckv["positional"] = "false";
+    }
     for (auto [key, value] : desckv) {
-      f->dump_string(key, value);
+      if (key == "positional") {
+	if (!HAVE_FEATURE(features, SERVER_QUINCY)) {
+	  continue;
+	}
+	f->dump_bool(key, value == "true" || value == "True");
+      } else if (key == "req" && HAVE_FEATURE(features, SERVER_QUINCY)) {
+	f->dump_bool(key, value == "true" || value == "True");
+      } else {
+	f->dump_string(key, value);
+      }
     }
     f->close_section(); // attribute object for individual desc
   }
@@ -419,7 +440,7 @@ handle_bad_get(CephContext *cct, const string& k, const char *tname)
   lderr(cct) << errstr.str() << dendl;
 
   ostringstream oss;
-  oss << BackTrace(1);
+  oss << ClibBackTrace(1);
   lderr(cct) << oss.str() << dendl;
 
   if (status == 0)
@@ -526,7 +547,7 @@ bool validate_str_arg(std::string_view value,
 {
   if (type == "CephIPAddr") {
     entity_addr_t addr;
-    if (addr.parse(string(value).c_str())) {
+    if (addr.parse(value)) {
       return true;
     } else {
       os << "failed to parse addr '" << value << "', should be ip:[port]";
@@ -550,6 +571,30 @@ bool validate_str_arg(std::string_view value,
   }
 }
 
+bool validate_bool(CephContext *cct,
+		  const cmdmap_t& cmdmap,
+		  const arg_desc_t& desc,
+		  const std::string_view name,
+		  const std::string_view type,
+		  std::ostream& os)
+{
+  bool v;
+  try {
+    if (!cmd_getval(cmdmap, name, v)) {
+      if (auto req = desc.find("req");
+	  req != end(desc) && req->second == "false") {
+	return true;
+      } else {
+	os << "missing required parameter: '" << name << "'";
+	return false;
+      }
+    }
+    return true;
+  } catch (const bad_cmd_get& e) {
+    return false;
+  }
+}
+
 template<bool is_vector,
 	 typename T,
 	 typename Value = std::conditional_t<is_vector,
@@ -564,7 +609,7 @@ bool validate_arg(CephContext* cct,
 {
   Value v;
   try {
-    if (!cmd_getval(cmdmap, string(name), v)) {
+    if (!cmd_getval(cmdmap, name, v)) {
       if constexpr (is_vector) {
 	  // an empty list is acceptable.
 	  return true;
@@ -629,6 +674,9 @@ bool validate_cmd(CephContext* cct,
       } else if (type == "CephFloat") {
 	return !validate_arg<false, double>(cct, cmdmap, arg_desc,
 					    name, type, os);
+      } else if (type == "CephBool") {
+	return !validate_bool(cct, cmdmap, arg_desc,
+			      name, type, os);
       } else {
 	return !validate_arg<false, string>(cct, cmdmap, arg_desc,
 					    name, type, os);
@@ -638,35 +686,56 @@ bool validate_cmd(CephContext* cct,
 }
 
 bool cmd_getval(const cmdmap_t& cmdmap,
-		const std::string& k, bool& val)
+		std::string_view k, bool& val)
 {
   /*
    * Specialized getval for booleans.  CephBool didn't exist before Nautilus,
    * so earlier clients are sent a CephChoices argdesc instead, and will
    * send us a "--foo-bar" value string for boolean arguments.
    */
-  if (cmdmap.count(k)) {
+  auto found = cmdmap.find(k);
+  if (found == cmdmap.end()) {
+    return false;
+  }
+  try {
+    val = boost::get<bool>(found->second);
+    return true;
+  } catch (boost::bad_get&) {
     try {
-      val = boost::get<bool>(cmdmap.find(k)->second);
-      return true;
-    } catch (boost::bad_get&) {
-      try {
-        std::string expected = "--" + k;
-        std::replace(expected.begin(), expected.end(), '_', '-');
+      std::string expected{"--"};
+      expected += k;
+      std::replace(expected.begin(), expected.end(), '_', '-');
 
-        std::string v_str = boost::get<std::string>(cmdmap.find(k)->second);
-        if (v_str == expected) {
-          val = true;
-          return true;
-        } else {
-          throw bad_cmd_get(k, cmdmap);
-        }
-      } catch (boost::bad_get&) {
-        throw bad_cmd_get(k, cmdmap);
+      std::string v_str = boost::get<std::string>(found->second);
+      if (v_str == expected) {
+	val = true;
+	return true;
+      } else {
+	throw bad_cmd_get(k, cmdmap);
       }
+    } catch (boost::bad_get&) {
+      throw bad_cmd_get(k, cmdmap);
     }
   }
-  return false;
+}
+
+bool cmd_getval_compat_cephbool(
+  const cmdmap_t& cmdmap,
+  const std::string& k, bool& val)
+{
+  try {
+    return cmd_getval(cmdmap, k, val);
+  } catch (bad_cmd_get& e) {
+    // try as legacy/compat CephChoices
+    std::string t;
+    if (!cmd_getval(cmdmap, k, t)) {
+      return false;
+    }
+    std::string expected = "--"s + k;
+    std::replace(expected.begin(), expected.end(), '_', '-');
+    val = (t == expected);
+    return true;
+  }
 }
 
 }

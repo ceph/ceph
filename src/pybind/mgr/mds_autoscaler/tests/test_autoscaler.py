@@ -2,7 +2,7 @@ import pytest
 from unittest import mock
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
-from orchestrator import DaemonDescription, Completion, ServiceDescription
+from orchestrator import DaemonDescription, OrchResult, ServiceDescription
 
 try:
     from typing import Any, List
@@ -12,14 +12,10 @@ except ImportError:
 from mds_autoscaler.module import MDSAutoscaler
 
 
-
-@pytest.yield_fixture()
+@pytest.fixture()
 def mds_autoscaler_module():
 
-    with mock.patch("mds_autoscaler.module.MDSAutoscaler._orchestrator_wait"):
-        m = MDSAutoscaler('cephadm', 0, 0)
-
-        yield m
+    yield MDSAutoscaler('mds_autoscaler', 0, 0)
 
 
 class TestCephadm(object):
@@ -29,7 +25,7 @@ class TestCephadm(object):
     @mock.patch("mds_autoscaler.module.MDSAutoscaler.describe_service")
     @mock.patch("mds_autoscaler.module.MDSAutoscaler.apply_mds")
     def test_scale_up(self, _apply_mds, _describe_service, _list_daemons, _get, mds_autoscaler_module: MDSAutoscaler):
-        daemons = Completion(value=[
+        daemons = OrchResult(result=[
             DaemonDescription(
                 hostname='myhost',
                 daemon_type='mds',
@@ -41,10 +37,9 @@ class TestCephadm(object):
                 daemon_id='fs_name.myhost.b'
             ),
         ])
-        daemons.finalize()
         _list_daemons.return_value = daemons
 
-        services = Completion(value=[
+        services = OrchResult(result=[
             ServiceDescription(
                 spec=ServiceSpec(
                     service_type='mds',
@@ -55,13 +50,10 @@ class TestCephadm(object):
                 )
             )
         ])
-        services.finalize()
         _describe_service.return_value = services
 
-        apply = Completion(value='')
-        apply.finalize()
+        apply = OrchResult(result='')
         _apply_mds.return_value = apply
-
 
         _get.return_value = {
             'filesystems': [
@@ -74,6 +66,7 @@ class TestCephadm(object):
                             }
                         ],
                         'standby_count_wanted': 2,
+                        'max_mds': 1
                     }
                 }
             ],

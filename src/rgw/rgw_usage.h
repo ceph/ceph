@@ -8,23 +8,26 @@
 #include <map>
 
 #include "common/Formatter.h"
+#include "common/dout.h"
 #include "rgw_formats.h"
 #include "rgw_user.h"
-
-class RGWRados;
+#include "rgw_sal_fwd.h"
 
 
 class RGWUsage
 {
 public:
-  static int show(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
-	          uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
+  static int show(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		  rgw::sal::User* user , rgw::sal::Bucket* bucket,
+		  uint64_t start_epoch, uint64_t end_epoch, bool show_log_entries,
+		  bool show_log_sum,
 		  std::map<std::string, bool> *categories, RGWFormatterFlusher& flusher);
 
-  static int trim(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
-	          uint64_t end_epoch);
+  static int trim(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		  rgw::sal::User* user , rgw::sal::Bucket* bucket,
+		  uint64_t start_epoch, uint64_t end_epoch);
 
-  static int clear(RGWRados *store);
+  static int clear(const DoutPrefixProvider *dpp, rgw::sal::Store* store);
 };
 
 

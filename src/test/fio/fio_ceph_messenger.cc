@@ -22,6 +22,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 
+using namespace std;
+
 enum ceph_msgr_type {
   CEPH_MSGR_TYPE_UNDEF,
   CEPH_MSGR_TYPE_POSIX,
@@ -78,7 +80,8 @@ struct ceph_msgr_reply_io {
 
 static void *str_to_ptr(const std::string &str)
 {
-  return (void *)strtoul(str.c_str(), NULL, 16);
+  // str is assumed to be a valid ptr string
+  return reinterpret_cast<void*>(ceph::parse<uintptr_t>(str, 16).value());
 }
 
 static std::string ptr_to_str(void *ptr)

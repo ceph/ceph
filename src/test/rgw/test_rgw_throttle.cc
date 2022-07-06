@@ -29,8 +29,9 @@ struct RadosEnv : public ::testing::Environment {
 
   void SetUp() override {
     rados.emplace(g_ceph_context);
-    ASSERT_EQ(0, rados->start(null_yield));
-    int r = rados->pool({poolname}).create();
+    const NoDoutPrefix no_dpp(g_ceph_context, 1);
+    ASSERT_EQ(0, rados->start(null_yield, &no_dpp));
+    int r = rados->pool({poolname}).create(&no_dpp);
     if (r == -EEXIST)
       r = 0;
     ASSERT_EQ(0, r);
@@ -49,7 +50,8 @@ class RadosFixture : public ::testing::Test {
  protected:
   RGWSI_RADOS::Obj make_obj(const std::string& oid) {
     auto obj = RadosEnv::rados->obj({{RadosEnv::poolname}, oid});
-    ceph_assert_always(0 == obj.open());
+    const NoDoutPrefix no_dpp(g_ceph_context, 1);
+    ceph_assert_always(0 == obj.open(&no_dpp));
     return obj;
   }
 };
@@ -170,7 +172,7 @@ TEST_F(Aio_Throttle, YieldCostOverWindow)
 
   boost::asio::io_context context;
   spawn::spawn(context,
-    [&] (spawn::yield_context yield) {
+    [&] (yield_context yield) {
       YieldingAioThrottle throttle(4, context, yield);
       scoped_completion op;
       auto c = throttle.get(obj, wait_on(op), 8, 0);
@@ -192,7 +194,7 @@ TEST_F(Aio_Throttle, YieldingThrottleOverMax)
 
   boost::asio::io_context context;
   spawn::spawn(context,
-    [&] (spawn::yield_context yield) {
+    [&] (yield_context yield) {
       YieldingAioThrottle throttle(window, context, yield);
       for (uint64_t i = 0; i < total; i++) {
         using namespace std::chrono_literals;

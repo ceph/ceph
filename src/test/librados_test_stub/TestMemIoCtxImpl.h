@@ -48,7 +48,7 @@ public:
   int omap_set(const std::string& oid, const std::map<std::string,
                bufferlist> &map) override;
   int read(const std::string& oid, size_t len, uint64_t off,
-           bufferlist *bl, uint64_t snap_id) override;
+           bufferlist *bl, uint64_t snap_id, uint64_t* objver) override;
   int remove(const std::string& oid, const SnapContext &snapc) override;
   int selfmanaged_snap_create(uint64_t *snapid) override;
   int selfmanaged_snap_remove(uint64_t snapid) override;

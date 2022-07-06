@@ -1,3 +1,5 @@
+.. _radosgw s3:
+
 ============================
  Ceph Object Gateway S3 API
 ============================
@@ -39,6 +41,8 @@ The following table describes the support status for current Amazon S3 functiona
 | **Create Bucket**               | Supported       | Different set of canned ACLs           |
 +---------------------------------+-----------------+----------------------------------------+
 | **Bucket Lifecycle**            | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Bucket Replication**          | Partial         | Only permitted across zones            |
 +---------------------------------+-----------------+----------------------------------------+
 | **Policy (Buckets, Objects)**   | Supported       | ACLs & bucket policies are supported   |
 +---------------------------------+-----------------+----------------------------------------+

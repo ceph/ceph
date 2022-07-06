@@ -45,7 +45,7 @@
                  for="poolType"
                  i18n>Pool type</label>
           <div class="cd-col-form-input">
-            <select class="form-control custom-select"
+            <select class="form-control"
                     id="poolType"
                     formControlName="poolType"
                     name="poolType">
@@ -69,7 +69,7 @@
                    class="cd-col-form-label"
                    for="pgAutoscaleMode">PG Autoscale</label>
             <div class="cd-col-form-input">
-              <select class="form-control custom-select"
+              <select class="form-control"
                       id="pgAutoscaleMode"
                       name="pgAutoscaleMode"
                       formControlName="pgAutoscaleMode">
@@ -184,9 +184,13 @@
                               [selectionLimit]="4"
                               (selection)="appSelection()">
             </cd-select-badges>
+            <i *ngIf="data.applications.selected <= 0"
+               i18n-title
+               title="Pools should be associated with an application tag"
+               class="{{icons.warning}} icon-warning-color">
+            </i>
           </div>
         </div>
-
         <!-- CRUSH -->
         <div *ngIf="isErasure || isReplicated">
 
@@ -200,7 +204,7 @@
                    for="erasureProfile">Erasure code profile</label>
             <div class="cd-col-form-input">
               <div class="input-group">
-                <select class="form-control custom-select"
+                <select class="form-control"
                         id="erasureProfile"
                         name="erasureProfile"
                         formControlName="erasureProfile">
@@ -309,7 +313,7 @@
               </ng-template>
               <div *ngIf="current.rules.length > 0; else noRules">
                 <div class="input-group">
-                  <select class="form-control custom-select"
+                  <select class="form-control"
                           id="crushRule"
                           formControlName="crushRule"
                           name="crushSet">
@@ -365,7 +369,7 @@
                          i18n>Crush rule</a>
                       <ng-template ngbNavContent>
                         <cd-table-key-value [renderObjects]="false"
-                                            [hideKeys]="['steps', 'ruleset', 'type', 'rule_name']"
+                                            [hideKeys]="['steps', 'type', 'rule_name']"
                                             [data]="form.getValue('crushRule')"
                                             [autoReload]="false">
                         </cd-table-key-value>
@@ -425,7 +429,7 @@
                    class="cd-col-form-label"
                    for="mode">Mode</label>
             <div class="cd-col-form-input">
-              <select class="form-control custom-select"
+              <select class="form-control"
                       id="mode"
                       name="mode"
                       formControlName="mode">
@@ -443,7 +447,7 @@
                      class="cd-col-form-label"
                      for="algorithm">Algorithm</label>
               <div class="cd-col-form-input">
-                <select class="form-control custom-select"
+                <select class="form-control"
                         id="algorithm"
                         name="algorithm"
                         formControlName="algorithm">

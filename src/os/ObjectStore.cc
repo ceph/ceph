@@ -19,8 +19,8 @@
 
 #ifndef  WITH_SEASTAR
 #include "filestore/FileStore.h"
-#include "memstore/MemStore.h"
 #endif
+#include "memstore/MemStore.h"
 #if defined(WITH_BLUESTORE)
 #include "bluestore/BlueStore.h"
 #endif
@@ -30,48 +30,40 @@
 
 using std::string;
 
-ObjectStore *ObjectStore::create(CephContext *cct,
-				 const string& type,
-				 const string& data,
-				 const string& journal,
-				 osflagbits_t flags)
+std::unique_ptr<ObjectStore> ObjectStore::create(
+  CephContext *cct,
+  const string& type,
+  const string& data)
 {
-#ifndef WITH_SEASTAR
-  if (type == "filestore") {
-    return new FileStore(cct, data, journal, flags);
-  }
   if (type == "memstore") {
-    return new MemStore(cct, data);
+    return std::make_unique<MemStore>(cct, data);
   }
-#endif
 #if defined(WITH_BLUESTORE)
-  if (type == "bluestore") {
-    return new BlueStore(cct, data);
-  }
-#ifndef WITH_SEASTAR
-  if (type == "random") {
-    if (rand() % 2) {
-      return new FileStore(cct, data, journal, flags);
-    } else {
-      return new BlueStore(cct, data);
-    }
+  if (type == "bluestore" || type == "random") {
+    return std::make_unique<BlueStore>(cct, data);
   }
 #endif
-#else
+  return nullptr;
+}
+
 #ifndef WITH_SEASTAR
-  if (type == "random") {
-    return new FileStore(cct, data, journal, flags);
+std::unique_ptr<ObjectStore> ObjectStore::create(
+  CephContext *cct,
+  const string& type,
+  const string& data,
+  const string& journal,
+  osflagbits_t flags)
+{
+  if (type == "filestore" || (type == "random" && rand() % 2)) {
+    return std::make_unique<FileStore>(cct, data, journal, flags);
   }
-#endif
-#endif
-#ifndef WITH_SEASTAR
   if (type == "kstore" &&
       cct->check_experimental_feature_enabled("kstore")) {
-    return new KStore(cct, data);
+    return std::make_unique<KStore>(cct, data);
   }
-#endif
-  return NULL;
+  return create(cct, type, data);
 }
+#endif
 
 int ObjectStore::probe_block_device_fsid(
   CephContext *cct,

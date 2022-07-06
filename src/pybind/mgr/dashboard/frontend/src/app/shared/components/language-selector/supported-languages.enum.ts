@@ -3,7 +3,7 @@
 export enum SupportedLanguages {
   'cs' = 'Čeština',
   'de' = 'Deutsch',
-  'en' = 'English',
+  'en-US' = 'English',
   'es' = 'Español',
   'fr' = 'Français',
   'id' = 'Bahasa Indonesia',

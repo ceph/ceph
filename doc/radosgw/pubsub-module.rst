@@ -38,6 +38,8 @@ be accessed directly, but need to be pulled and acked using the new REST API.
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
+.. note:: To enable bucket notifications API, the `rgw_enable_apis` configuration parameter should contain: "notifications".
+
 PubSub Zone Configuration
 -------------------------
 
@@ -149,7 +151,7 @@ And removed using:
    # radosgw-admin subscription rm --subscription={topic-name} [--tenant={tenant}]
 
 
-To fetch all of the events stored in a subcription, use:
+To fetch all of the events stored in a subscription, use:
 
 ::
    
@@ -208,7 +210,7 @@ To update a topic, use the same command used for topic creation, with the topic 
 Request parameters:
 
 - push-endpoint: URI of an endpoint to send push notification to
-- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic
+- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic
 
 The endpoint URI may include parameters depending with the type of endpoint:
 
@@ -220,11 +222,13 @@ The endpoint URI may include parameters depending with the type of endpoint:
 
 - AMQP0.9.1 endpoint
 
- - URI: ``amqp://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
+ - URI: ``amqp[s]://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
  - user/password defaults to: guest/guest
  - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
- - port defaults to: 5672
+ - port defaults to: 5672/5671 for unencrypted/SSL-encrypted connections
  - vhost defaults to: "/"
+ - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
+ - if ``ca-location`` is provided, and secure connection is used, the specified CA will be used, instead of the default one, to authenticate the broker
  - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1). Different topics pointing to the same endpoint must use the same exchange
  - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
 
@@ -276,8 +280,8 @@ Response will have the following format (JSON):
                "push_endpoint":"",
                "push_endpoint_args":"",
                "push_endpoint_topic":"",
-               "stored_secret":"",
-               "persistent":""
+               "stored_secret":false,
+               "persistent":true,
            },
            "arn":""
            "opaqueData":""
@@ -515,7 +519,7 @@ The response will hold information on the current marker and whether there are m
 
 ::
 
-   {"next_marker":"","is_truncated":"",...}
+   {"next_marker":"","is_truncated":false,...}
 
 
 The actual content of the response is depended with how the subscription was created.
@@ -586,7 +590,7 @@ the events will have an S3-compatible record format (JSON):
 - s3.object.metadata: not supported (an extension to the S3 notification API)
 - s3.object.tags: not supported (an extension to the S3 notification API)
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
-- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic (an extension to the S3 notification API)
+- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic (an extension to the S3 notification API)
 
 In case that the subscription was not created via a non S3-compatible notification, 
 the events will have the following event format (JSON):

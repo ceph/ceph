@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 
-try:
-    from typing import Tuple, Optional, Any
-except ImportError:
-    pass
+from typing import Tuple, Optional, Any, Union, Iterator
 
 from ceph.deployment.inventory import Device
 
@@ -11,6 +8,10 @@ import re
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class _MatchInvalid(Exception):
+    pass
 
 
 # pylint: disable=too-few-public-methods
@@ -53,7 +54,7 @@ class Matcher(object):
         # hence, make it a dict.
         disk = device.to_json()
 
-        def findkeys(node, key_val):
+        def findkeys(node: Union[list, dict], key_val: str) -> Iterator[str]:
             """ Find keys in non-flat dict recursively """
             if isinstance(node, list):
                 for i in node:
@@ -73,7 +74,7 @@ class Matcher(object):
         if disk_value:
             return disk_value[0]
         else:
-            raise Exception("No value found for {} or {}".format(
+            raise _MatchInvalid("No value found for {} or {}".format(
                 self.key, self.fallback_key))
 
     def compare(self, disk):
@@ -259,7 +260,7 @@ class SizeMatcher(Matcher):
         """
         suffix = suffix.upper()
         if suffix not in cls.supported_suffixes:
-            raise ValueError("Unit '{}' not supported".format(suffix))
+            raise _MatchInvalid("Unit '{}' not supported".format(suffix))
         return dict(zip(
             cls.SUFFIXES[1],
             cls.SUFFIXES[0],
@@ -289,9 +290,9 @@ class SizeMatcher(Matcher):
         :return: A Tuple with normalized output (10, 'GB')
         :rtype: tuple
         """
-        return re.findall(r"\d+", data)[0], cls._parse_suffix(data)
+        return re.findall(r"\d+\.?\d*", data)[0], cls._parse_suffix(data)
 
-    def _parse_filter(self):
+    def _parse_filter(self) -> None:
         """ Identifies which type of 'size' filter is applied
 
         There are four different filtering modes:
@@ -325,12 +326,12 @@ class SizeMatcher(Matcher):
         if high:
             self.high = self._get_k_v(high.group())
 
-        exact = re.match(r"^\d+[A-Z]{1,2}$", self.value)
+        exact = re.match(r"^\d+\.?\d*[A-Z]{1,2}$", self.value)
         if exact:
             self.exact = self._get_k_v(exact.group())
 
         if not self.low and not self.high and not self.exact:
-            raise Exception("Couldn't parse {}".format(self.value))
+            raise _MatchInvalid("Couldn't parse {}".format(self.value))
 
     @staticmethod
     # pylint: disable=inconsistent-return-statements
@@ -407,5 +408,5 @@ class SizeMatcher(Matcher):
             logger.debug("Disk didn't match for 'exact' filter")
         else:
             logger.debug("Neither high, low, nor exact was given")
-            raise Exception("No filters applied")
+            raise _MatchInvalid("No filters applied")
         return False

@@ -2,7 +2,8 @@
 
 #adds makes target/script into a test, test to check target, sets necessary environment variables
 function(add_ceph_test test_name test_path)
-  add_test(NAME ${test_name} COMMAND ${test_path} ${ARGN})
+  add_test(NAME ${test_name} COMMAND ${test_path} ${ARGN}
+    COMMAND_EXPAND_LISTS)
   if(TARGET ${test_name})
     add_dependencies(tests ${test_name})
     set_property(TARGET ${test_name}
@@ -37,7 +38,6 @@ if(WITH_GTEST_PARALLEL)
       BUILD_COMMAND ""
       INSTALL_COMMAND "")
     add_dependencies(tests gtest-parallel_ext)
-    find_package(Python3 QUIET REQUIRED)
     set(GTEST_PARALLEL_COMMAND
       ${Python3_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
   endif()
@@ -46,11 +46,11 @@ endif()
 #sets uniform compiler flags and link libraries
 function(add_ceph_unittest unittest_name)
   set(UNITTEST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${unittest_name}")
-  # If the second argument is "parallel", it means we want a parallel run
-  if(WITH_GTEST_PARALLEL AND "${ARGV1}" STREQUAL "parallel")
+  cmake_parse_arguments(UT "PARALLEL" "" "" ${ARGN})
+  if(WITH_GTEST_PARALLEL AND UT_PARALLEL)
     set(UNITTEST ${GTEST_PARALLEL_COMMAND} ${UNITTEST})
   endif()
-  add_ceph_test(${unittest_name} "${UNITTEST}")
+  add_ceph_test(${unittest_name} "${UNITTEST}" ${UT_UNPARSED_ARGUMENTS})
   target_link_libraries(${unittest_name} ${UNITTEST_LIBS})
 endfunction()
 
@@ -69,15 +69,17 @@ function(add_tox_test name)
     list(APPEND tox_envs py3)
   endif()
   string(REPLACE ";" "," tox_envs "${tox_envs}")
-  find_package(Python3 QUIET REQUIRED)
-  add_custom_command(
-    OUTPUT ${venv_path}/bin/activate
-    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python="${Python3_EXECUTABLE}" ${venv_path}
-    WORKING_DIRECTORY ${tox_path}
-    COMMENT "preparing venv for ${name}")
-  add_custom_target(${name}-venv
-    DEPENDS ${venv_path}/bin/activate)
-  add_dependencies(tests ${name}-venv)
+  add_test(
+    NAME setup-venv-for-${name}
+    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${Python3_EXECUTABLE} ${venv_path}
+    WORKING_DIRECTORY ${tox_path})
+  set_tests_properties(setup-venv-for-${name} PROPERTIES
+    FIXTURES_SETUP venv-for-${name})
+  add_test(
+    NAME teardown-venv-for-${name}
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${venv_path})
+  set_tests_properties(teardown-venv-for-${name} PROPERTIES
+    FIXTURES_CLEANUP venv-for-${name})
   add_test(
     NAME ${test_name}
     COMMAND ${CMAKE_SOURCE_DIR}/src/script/run_tox.sh
@@ -86,6 +88,8 @@ function(add_tox_test name)
               --tox-path ${tox_path}
               --tox-envs ${tox_envs}
               --venv-path ${venv_path})
+  set_tests_properties(${test_name} PROPERTIES
+    FIXTURES_REQUIRED venv-for-${name})
   set_property(
     TEST ${test_name}
     PROPERTY ENVIRONMENT

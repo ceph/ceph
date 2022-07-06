@@ -7,6 +7,7 @@
 #include <ostream>
 #include <set>
 #include <map>
+#include <optional>
 #include <string>
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
@@ -17,7 +18,7 @@
 /**
  * Defines virtual interface to be implemented by key value store
  *
- * Kyoto Cabinet or LevelDB should implement this
+ * Kyoto Cabinet should implement this
  */
 class KeyValueDB {
 public:
@@ -153,7 +154,7 @@ public:
 
   virtual void close() { }
 
-  /// Try to repair K/V database. leveldb and rocksdb require that database must be not opened.
+  /// Try to repair K/V database. rocksdb requires that database must be not opened.
   virtual int repair(std::ostream &out) { return 0; }
 
   virtual Transaction get_transaction() = 0;
@@ -264,6 +265,8 @@ public:
 
 private:
   // This class filters a WholeSpaceIterator by a prefix.
+  // Performs as a dummy wrapper over WholeSpaceIterator
+  // if prefix is empty
   class PrefixIteratorImpl : public IteratorImpl {
     const std::string prefix;
     WholeSpaceIterator generic_iter;
@@ -273,10 +276,14 @@ private:
     ~PrefixIteratorImpl() override { }
 
     int seek_to_first() override {
-      return generic_iter->seek_to_first(prefix);
+      return prefix.empty() ?
+	generic_iter->seek_to_first() :
+	generic_iter->seek_to_first(prefix);
     }
     int seek_to_last() override {
-      return generic_iter->seek_to_last(prefix);
+      return prefix.empty() ?
+	generic_iter->seek_to_last() :
+	generic_iter->seek_to_last(prefix);
     }
     int upper_bound(const std::string &after) override {
       return generic_iter->upper_bound(prefix, after);
@@ -287,7 +294,11 @@ private:
     bool valid() override {
       if (!generic_iter->valid())
 	return false;
-      return generic_iter->raw_key_is_prefixed(prefix);
+      if (prefix.empty())
+        return true;
+      return prefix.empty() ?
+	      true :
+	      generic_iter->raw_key_is_prefixed(prefix);
     }
     int next() override {
       return generic_iter->next();
@@ -314,8 +325,14 @@ private:
 public:
   typedef uint32_t IteratorOpts;
   static const uint32_t ITERATOR_NOCACHE = 1;
+
+  struct IteratorBounds {
+    std::optional<std::string> lower_bound;
+    std::optional<std::string> upper_bound;
+  };
+
   virtual WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) = 0;
-  virtual Iterator get_iterator(const std::string &prefix, IteratorOpts opts = 0) {
+  virtual Iterator get_iterator(const std::string &prefix, IteratorOpts opts = 0, IteratorBounds bounds = IteratorBounds()) {
     return std::make_shared<PrefixIteratorImpl>(
       prefix,
       get_wholespace_iterator(opts));
@@ -338,9 +355,19 @@ public:
     return -EOPNOTSUPP;
   }
 
+  virtual int64_t get_cache_usage(std::string prefix) const {
+    return -EOPNOTSUPP;
+  }
+
   virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() const {
     return nullptr;
   }
+
+  virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache(std::string prefix) const {
+    return nullptr;
+  }
+
+
 
   virtual ~KeyValueDB() {}
 

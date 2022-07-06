@@ -134,10 +134,7 @@
           {
               "rule_id": 3,
               "rule_name": "data",
-              "ruleset": 3,
               "type": 1,
-              "min_size": 2,
-              "max_size": 2,
               "steps": [
                   {
                       "op": "take",

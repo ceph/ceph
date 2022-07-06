@@ -5,7 +5,7 @@
   "projects": {
     "ceph-dashboard": {
       "i18n": {
-        "sourceLocale": { "code": "en", "baseHref": "" },
+        "sourceLocale": { "code": "en-US", "baseHref": "" },
         "locales": {
           "cs": { "translation": "src/locale/messages.cs.xlf", "baseHref": "" },
           "de": { "translation": "src/locale/messages.de-DE.xlf", "baseHref": "" },
@@ -29,12 +29,12 @@
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
             "allowedCommonJsDependencies": [
+              "brace-expansion",
               "chart.js",
               "core-js",
               "file-saver",
               "lodash"
             ],
-            "aot": true,
             "i18nMissingTranslation": "ignore",
             "outputPath": "dist",
             "index": "src/index.html",
@@ -56,6 +56,7 @@
               }
             ],
             "styles": [
+              "node_modules/swagger-ui/dist/swagger-ui.css",
               "node_modules/ngx-toastr/toastr.css",
               "src/styles.scss"
             ],
@@ -64,7 +65,13 @@
               "includePaths": [
                 "src"
               ]
-            }
+            },
+            "vendorChunk": true,
+            "extractLicenses": false,
+            "buildOptimizer": false,
+            "sourceMap": true,
+            "optimization": false,
+            "namedChunks": true
           },
           "configurations": {
             "production": {
@@ -77,7 +84,6 @@
               "optimization": true,
               "outputHashing": "all",
               "sourceMap": false,
-              "extractCss": true,
               "namedChunks": false,
               "extractLicenses": true,
               "vendorChunk": false,
@@ -95,8 +101,8 @@
             "de": {
               "localize": ["de"]
             },
-            "en": {
-              "localize": ["en"]
+            "en-US": {
+              "localize": ["en-US"]
             },
             "es": {
               "localize": ["es"]
@@ -128,7 +134,8 @@
             "zh-Hant": {
               "localize": ["zh-Hant"]
             }
-          }
+          },
+          "defaultConfiguration": ""
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
@@ -146,8 +153,8 @@
             "de": {
               "browserTarget": "ceph-dashboard:build:de"
             },
-            "en": {
-              "browserTarget": "ceph-dashboard:build:en"
+            "en-US": {
+              "browserTarget": "ceph-dashboard:build:en-US"
             },
             "es": {
               "browserTarget": "ceph-dashboard:build:es"

@@ -60,7 +60,9 @@ Consider the following invocation::
 This will deploy three OSDs with external ``db`` and ``wal`` volumes on
 an NVME device.
 
-**pretty reporting**
+Pretty reporting
+----------------
+
 The ``pretty`` report format (the default) would
 look like this::
 
@@ -83,10 +85,9 @@ look like this::
       block_db        /dev/nvme0n1                                           66.67 GB         33.33%
 
 
+JSON reporting
+--------------
 
-
-
-**JSON reporting**
 Reporting can produce a structured output with ``--format json`` or
 ``--format json-pretty``::
 
@@ -130,7 +131,7 @@ If one requires a different sizing policy for wal, db or journal devices,
 
 Implicit sizing
 ---------------
-Scenarios in which either devices are under-comitted or not all data devices are
+Scenarios in which either devices are under-committed or not all data devices are
 currently ready for use (due to a broken disk for example), one can still rely
 on `ceph-volume` automatic sizing.
 Users can provide hints to `ceph-volume` as to how many data devices should have

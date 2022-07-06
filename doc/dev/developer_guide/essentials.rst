@@ -7,9 +7,9 @@ to know.
 Leads
 -----
 
-The Ceph project is led by Sage Weil. In addition, each major project
-component has its own lead. The following table shows all the leads and
-their nicks on `GitHub`_:
+The Ceph project was created by Sage Weil and is led by the Ceph Leadership
+Team (CLT). In addition, each major project component has its own lead. The
+following table shows all the leads and their nicks on `GitHub`_:
 
 .. _github: https://github.com/
 
@@ -20,9 +20,9 @@ Ceph      Sage Weil        liewegas
 RADOS     Neha Ojha        neha-ojha
 RGW       Yehuda Sadeh     yehudasa
 RGW       Matt Benjamin    mattbenjamin
-RBD       Jason Dillaman   dillaman
-CephFS    Patrick Donnelly batrick
-Dashboard Lenz Grimmer     LenzGr
+RBD       Ilya Dryomov     dis 
+CephFS    Venky Shankar    vshankar
+Dashboard Ernesto Puerta   epuertat
 MON       Joao Luis        jecluis
 Build/Ops Ken Dreyer       ktdreyer
 Docs      Zac Dover        zdover23
@@ -95,7 +95,7 @@ Mailing lists
 -------------
 
 Ceph Development Mailing List
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The ``dev@ceph.io`` list is for discussion about the development of Ceph,
 its interoperability with other technology, and the operations of the
 project itself.
@@ -108,7 +108,7 @@ body of the message::
 
 
 Ceph Client Patch Review Mailing List
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The ``ceph-devel@vger.kernel.org`` list is for discussion and patch review
 for the Linux kernel Ceph client component. Note that this list used to
 be an all-encompassing list for developers. When searching the archives, 
@@ -122,7 +122,7 @@ of the message::
 
 
 Other Ceph Mailing Lists
-^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 There are also `other Ceph-related mailing lists`_.
 
@@ -139,8 +139,47 @@ using `Internet Relay Chat`_.
 
 .. _`Internet Relay Chat`: http://www.irchelp.org/
 
-See ``https://ceph.com/irc/`` for how to set up your IRC
-client and a list of channels.
+The Ceph community gathers in the #ceph channel of the Open and Free Technology
+Community (OFTC) IRC network.
+
+Created in 1988, Internet Relay Chat (IRC) is a relay-based, real-time chat
+protocol. It is mainly designed for group (many-to-many) communication in
+discussion forums called channels, but also allows one-to-one communication via
+private message. On IRC you can talk to many other members using Ceph, on
+topics ranging from idle chit-chat to support questions. Though a channel might
+have many people in it at any one time, they might not always be at their
+keyboard; so if no-one responds, just wait around and someone will hopefully
+answer soon enough.
+
+Registration
+~~~~~~~~~~~~
+
+If you intend to use the IRC service on a continued basis, you are advised to
+register an account. Registering gives you a unique IRC identity and allows you
+to access channels where unregistered users have been locked out for technical
+reasons.
+
+See ``the official OFTC (Open and Free Technology Community) documentation's
+registration instructions
+<https://www.oftc.net/Services/#register-your-account>`` to learn how to
+register your IRC account.
+
+Channels
+~~~~~~~~
+
+To connect to the OFTC IRC network, download an IRC client and configure it to
+connect to ``irc.oftc.net``. Then join one or more of the channels. Discussions
+inside #ceph are logged and archives are available online.
+
+Here are the real-time discussion channels for the Ceph community:
+
+  -  #ceph
+  -  #ceph-devel
+  -  #cephfs
+  -  #ceph-dashboard
+  -  #ceph-orchestrators
+  -  #sepia
+
 
 .. _submitting-patches:
 
@@ -152,7 +191,7 @@ file `CONTRIBUTING.rst`_ in the top-level directory of the source-code
 tree. There may be some overlap between this guide and that file.
 
 .. _`CONTRIBUTING.rst`:
-  https://github.com/ceph/ceph/blob/master/CONTRIBUTING.rst
+  https://github.com/ceph/ceph/blob/main/CONTRIBUTING.rst
 
 All newcomers are encouraged to read that file carefully.
 
@@ -176,11 +215,11 @@ build errors when you attempt a local build, follow the procedure below to
 clean your source tree.
 
 Cleaning the Source Tree
-^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. prompt:: bash $
 
-  make clean
+  ninja clean
   
 .. note:: The following commands will remove everything in the source tree 
           that isn't tracked by git. Make sure to back up your log files 
@@ -191,7 +230,8 @@ Cleaning the Source Tree
    git clean -fdx; git submodule foreach git clean -fdx
 
 Building Ceph with ccache
-^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
 ``ccache`` is available as a package in most distros. To build ceph with
 ccache, run the following command.
 
@@ -200,7 +240,8 @@ ccache, run the following command.
   cmake -DWITH_CCACHE=ON ..
 
 Using ccache to Speed Up Build Times
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 ``ccache`` can be used for speeding up all builds of the system. For more
 details, refer to the `run modes`_ section of the ccache manual. The default
 settings of ``ccache`` can be displayed with the ``ccache -s`` command.
@@ -252,7 +293,7 @@ See :ref:`kubernetes-dev`
 Backporting
 -----------
 
-All bugfixes should be merged to the ``master`` branch before being
+All bugfixes should be merged to the ``main`` branch before being
 backported. To flag a bugfix for backporting, make sure it has a
 `tracker issue`_ associated with it and set the ``Backport`` field to a
 comma-separated list of previous releases (e.g. "hammer,jewel") that you think

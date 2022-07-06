@@ -6,11 +6,9 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
-#include "librbd/crypto/BlockCrypto.h"
-#include "librbd/crypto/openssl/DataCryptor.h"
+#include "librbd/crypto/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ReadResult.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -26,13 +24,15 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 LoadRequest<I>::LoadRequest(
-        I* image_ctx, std::string&& passphrase,
+        I* image_ctx, encryption_format_t format, std::string&& passphrase,
         ceph::ref_t<CryptoInterface>* result_crypto,
-        Context* on_finish) : m_image_ctx(image_ctx), m_on_finish(on_finish),
+        Context* on_finish) : m_image_ctx(image_ctx),
+                              m_format(format),
+                              m_passphrase(std::move(passphrase)),
+                              m_on_finish(on_finish),
                               m_result_crypto(result_crypto),
                               m_initial_read_size(DEFAULT_INITIAL_READ_SIZE),
-                              m_header(image_ctx->cct), m_offset(0),
-                              m_passphrase(std::move(passphrase)) {
+                              m_header(image_ctx->cct), m_offset(0) {
 }
 
 template <typename I>
@@ -42,12 +42,6 @@ void LoadRequest<I>::set_initial_read_size(uint64_t read_size) {
 
 template <typename I>
 void LoadRequest<I>::send() {
-  if (m_image_ctx->io_object_dispatcher->exists(
-          io::OBJECT_DISPATCH_LAYER_CRYPTO)) {
-    finish(-EEXIST);
-    return;
-  }
-
   // setup interface with libcryptsetup
   auto r = m_header.init();
   if (r < 0) {
@@ -64,7 +58,8 @@ template <typename I>
 void LoadRequest<I>::read(uint64_t end_offset, Context* on_finish) {
   auto length = end_offset - m_offset;
   auto aio_comp = io::AioCompletion::create_and_start(
-          on_finish, util::get_image_ctx(m_image_ctx), io::AIO_TYPE_READ);
+          on_finish, librbd::util::get_image_ctx(m_image_ctx),
+          io::AIO_TYPE_READ);
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_read(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
@@ -100,8 +95,23 @@ void LoadRequest<I>::handle_read_header(int r) {
     return;
   }
 
+  const char* type;
+  switch (m_format) {
+    case RBD_ENCRYPTION_FORMAT_LUKS1:
+      type = CRYPT_LUKS1;
+      break;
+    case RBD_ENCRYPTION_FORMAT_LUKS2:
+      type = CRYPT_LUKS2;
+      break;
+    default:
+      lderr(m_image_ctx->cct) << "unsupported format type: " << m_format
+                              << dendl;
+      finish(-EINVAL);
+      return;
+  }
+
   // parse header via libcryptsetup
-  r = m_header.load();
+  r = m_header.load(type);
   if (r != 0) {
     if (m_offset < MAXIMUM_HEADER_SIZE) {
       // perhaps we did not feed the entire header to libcryptsetup, retry
@@ -165,44 +175,16 @@ void LoadRequest<I>::read_volume_key() {
     return;
   }
 
-  const char* cipher_suite;
-  switch (volume_key_size) {
-    case 32:
-      cipher_suite = "aes-128-xts";
-      break;
-    case 64:
-      cipher_suite = "aes-256-xts";
-      break;
-    default:
-      lderr(m_image_ctx->cct) << "unsupported volume key size: "
-                              << volume_key_size << dendl;
-      finish(-ENOTSUP);
-      return;
-  }
-
-
-  auto data_cryptor = new openssl::DataCryptor(m_image_ctx->cct);
-  r = data_cryptor->init(
-          cipher_suite, reinterpret_cast<unsigned char*>(volume_key),
-          volume_key_size);
-  if (r != 0) {
-    lderr(m_image_ctx->cct) << "error initializing data cryptor: " << r
-                            << dendl;
-    delete data_cryptor;
-    finish(r);
-    return;
-  }
-
-  auto sector_size = m_header.get_sector_size();
-  auto data_offset = m_header.get_data_offset();
-  *m_result_crypto = BlockCrypto<EVP_CIPHER_CTX>::create(
-          m_image_ctx->cct, data_cryptor, sector_size, data_offset);
-  finish(0);
+  r = util::build_crypto(
+          m_image_ctx->cct, reinterpret_cast<unsigned char*>(volume_key),
+          volume_key_size, m_header.get_sector_size(),
+          m_header.get_data_offset(), m_result_crypto);
+  finish(r);
 }
 
 template <typename I>
 void LoadRequest<I>::finish(int r) {
-  explicit_bzero(&m_passphrase[0], m_passphrase.size());
+  ceph_memzero_s(&m_passphrase[0], m_passphrase.size(), m_passphrase.size());
   m_on_finish->complete(r);
   delete this;
 }

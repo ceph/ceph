@@ -15,15 +15,17 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 template<>
-int RGWUserCreateCR::Request::_send_request()
+int RGWUserCreateCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   CephContext *cct = store->ctx();
 
   const int32_t default_max_buckets =
     cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
 
-  RGWUserAdminOpState op_state;
+  RGWUserAdminOpState op_state(store);
 
   auto& user = params.user;
 
@@ -54,57 +56,55 @@ int RGWUserCreateCR::Request::_send_request()
 
 
   if (params.apply_quota) {
-    RGWQuotaInfo bucket_quota;
-    RGWQuotaInfo user_quota;
+    RGWQuota quota;
 
     if (cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-      bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
-      bucket_quota.enabled = true;
+      quota.bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
+      quota.bucket_quota.enabled = true;
     }
 
     if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
-      bucket_quota.enabled = true;
+      quota.bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
+      quota.bucket_quota.enabled = true;
     }
 
     if (cct->_conf->rgw_user_default_quota_max_objects >= 0) {
-      user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
-      user_quota.enabled = true;
+      quota.user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
+      quota.user_quota.enabled = true;
     }
 
     if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
-      user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
-      user_quota.enabled = true;
+      quota.user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
+      quota.user_quota.enabled = true;
     }
 
-    if (bucket_quota.enabled) {
-      op_state.set_bucket_quota(bucket_quota);
+    if (quota.bucket_quota.enabled) {
+      op_state.set_bucket_quota(quota.bucket_quota);
     }
 
-    if (user_quota.enabled) {
-      op_state.set_user_quota(user_quota);
+    if (quota.user_quota.enabled) {
+      op_state.set_user_quota(quota.user_quota);
     }
   }
 
   RGWNullFlusher flusher;
-  return RGWUserAdminOp_User::create(store, op_state, flusher, null_yield);
+  return RGWUserAdminOp_User::create(dpp, store, op_state, flusher, null_yield);
 }
 
 template<>
-int RGWGetUserInfoCR::Request::_send_request()
+int RGWGetUserInfoCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
-  return store->ctl()->user->get_info_by_uid(params.user, result.get(), null_yield);
+  return store->ctl()->user->get_info_by_uid(dpp, params.user, result.get(), null_yield);
 }
 
 template<>
-int RGWGetBucketInfoCR::Request::_send_request()
+int RGWGetBucketInfoCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
-  return store->getRados()->get_bucket_info(store->svc(), params.tenant, params.bucket_name,
-                                result->bucket_info, &result->mtime, null_yield, &result->attrs);
+  return store->get_bucket(dpp, nullptr, params.tenant, params.bucket_name, &result->bucket, null_yield);
 }
 
 template<>
-int RGWBucketCreateLocalCR::Request::_send_request()
+int RGWBucketCreateLocalCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   CephContext *cct = store->ctx();
   auto& zone_svc = store->svc()->zone;
@@ -116,7 +116,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
 
   if (!placement_rule.empty() &&
       !zone_svc->get_zone_params().valid_placement(placement_rule)) {
-    ldout(cct, 0) << "placement target (" << placement_rule << ")"
+    ldpp_dout(dpp, 0) << "placement target (" << placement_rule << ")"
       << " doesn't exist in the placement targets of zonegroup"
       << " (" << zone_svc->get_zonegroup().api_name << ")" << dendl;
     return -ERR_INVALID_LOCATION_CONSTRAINT;
@@ -128,7 +128,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   map<string, bufferlist> bucket_attrs;
 
   int ret = store->getRados()->get_bucket_info(store->svc(), user.tenant, bucket_name,
-				  bucket_info, nullptr, null_yield, &bucket_attrs);
+				  bucket_info, nullptr, null_yield, dpp, &bucket_attrs);
   if (ret < 0 && ret != -ENOENT)
     return ret;
   bool bucket_exists = (ret != -ENOENT);
@@ -138,7 +138,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   bucket_owner.set_id(user);
   bucket_owner.set_name(user_info->display_name);
   if (bucket_exists) {
-    ret = rgw_op_get_bucket_policy_from_attr(cct, store, bucket_info,
+    ret = rgw_op_get_bucket_policy_from_attr(dpp, cct, store, bucket_info,
                                              bucket_attrs, &old_policy, null_yield);
     if (ret >= 0)  {
       if (old_policy.get_owner().get_id().compare(user) != 0) {
@@ -159,11 +159,11 @@ int RGWBucketCreateLocalCR::Request::_send_request()
     rgw_bucket bucket;
     bucket.tenant = user.tenant;
     bucket.name = bucket_name;
-    ret = zone_svc->select_bucket_placement(*user_info, zonegroup_id,
+    ret = zone_svc->select_bucket_placement(dpp, *user_info, zonegroup_id,
 					    placement_rule,
 					    &selected_placement_rule, nullptr, null_yield);
     if (selected_placement_rule != bucket_info.placement_rule) {
-      ldout(cct, 0) << "bucket already exists on a different placement rule: "
+      ldpp_dout(dpp, 0) << "bucket already exists on a different placement rule: "
         << " selected_rule= " << selected_placement_rule
         << " existing_rule= " << bucket_info.placement_rule << dendl;
       return -EEXIST;
@@ -194,7 +194,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
                                 placement_rule, bucket_info.swift_ver_location,
                                 pquota_info, attrs,
                                 info, nullptr, &ep_objv, creation_time,
-				pmaster_bucket, pmaster_num_shards, null_yield, true);
+				pmaster_bucket, pmaster_num_shards, null_yield, dpp, true);
 
 
   if (ret && ret != -EEXIST)
@@ -204,32 +204,32 @@ int RGWBucketCreateLocalCR::Request::_send_request()
 
   if (existed) {
     if (info.owner != user) {
-      ldout(cct, 20) << "NOTICE: bucket already exists under a different user (bucket=" << bucket << " user=" << user << " bucket_owner=" << info.owner << dendl;
+      ldpp_dout(dpp, 20) << "NOTICE: bucket already exists under a different user (bucket=" << bucket << " user=" << user << " bucket_owner=" << info.owner << dendl;
       return -EEXIST;
     }
     bucket = info.bucket;
   }
 
-  ret = store->ctl()->bucket->link_bucket(user, bucket, info.creation_time, null_yield, false);
+  ret = store->ctl()->bucket->link_bucket(user, bucket, info.creation_time, null_yield, dpp, false);
   if (ret && !existed && ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    int r = store->ctl()->bucket->unlink_bucket(user, bucket, null_yield);
+    int r = store->ctl()->bucket->unlink_bucket(user, bucket, null_yield, dpp);
     if (r < 0) {
-      ldout(cct, 0) << "WARNING: failed to unlink bucket: ret=" << r << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << r << dendl;
     }
   } else if (ret == -EEXIST || (ret == 0 && existed)) {
     ret = -ERR_BUCKET_EXISTS;
   }
 
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: bucket creation (bucket=" << bucket << ") return ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: bucket creation (bucket=" << bucket << ") return ret=" << ret << dendl;
   }
 
   return ret;
 }
 
 template<>
-int RGWObjectSimplePutCR::Request::_send_request()
+int RGWObjectSimplePutCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   RGWDataAccess::ObjectRef obj;
 
@@ -247,14 +247,14 @@ int RGWObjectSimplePutCR::Request::_send_request()
 
   ret = obj->put(params.data, params.attrs, dpp, null_yield);
   if (ret < 0) {
-    lderr(cct) << "ERROR: put object returned error: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: put object returned error: " << cpp_strerror(-ret) << dendl;
   }
 
   return 0;
 }
 
 template<>
-int RGWBucketLifecycleConfigCR::Request::_send_request()
+int RGWBucketLifecycleConfigCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   CephContext *cct = store->ctx();
 
@@ -264,7 +264,7 @@ int RGWBucketLifecycleConfigCR::Request::_send_request()
     return -EIO;
   }
 
-  int ret = lc->set_bucket_config(params.bucket_info,
+  int ret = lc->set_bucket_config(params.bucket,
                                   params.bucket_attrs,
                                   &params.config);
   if (ret < 0) {
@@ -276,16 +276,15 @@ int RGWBucketLifecycleConfigCR::Request::_send_request()
 }
 
 template<>
-int RGWBucketGetSyncPolicyHandlerCR::Request::_send_request()
+int RGWBucketGetSyncPolicyHandlerCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
-  CephContext *cct = store->ctx();
-
   int r = store->ctl()->bucket->get_sync_policy_handler(params.zone,
                                                         params.bucket,
                                                         &result->policy_handler,
-                                                        null_yield);
+                                                        null_yield,
+                                                        dpp);
   if (r < 0) {
-    lderr(cct) << "ERROR: " << __func__ << "(): get_sync_policy_handler() returned " << r << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: " << __func__ << "(): get_sync_policy_handler() returned " << r << dendl;
     return  r;
   }
 

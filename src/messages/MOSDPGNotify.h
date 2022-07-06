@@ -26,7 +26,7 @@
 class MOSDPGNotify final : public Message {
 private:
   static constexpr int HEAD_VERSION = 7;
-  static constexpr int COMPAT_VERSION = 6;
+  static constexpr int COMPAT_VERSION = 7;
 
   epoch_t epoch = 0;
   /// query_epoch is the epoch of the query being responded to, or
@@ -61,16 +61,7 @@ public:
     using ceph::encode;
     header.version = HEAD_VERSION;
     encode(epoch, payload);
-    if (!HAVE_FEATURE(features, SERVER_OCTOPUS)) {
-      // pretend to be vector<pair<pg_notify_t,PastIntervals>>
-      header.version = 6;
-      encode((uint32_t)pg_list.size(), payload);
-      for (auto& i : pg_list) {
-	encode(i, payload);   // this embeds a dup (ignored) PastIntervals
-	encode(i.past_intervals, payload);
-      }
-      return;
-    }
+    assert(HAVE_FEATURE(features, SERVER_OCTOPUS));
     encode(pg_list, payload);
   }
 
@@ -78,17 +69,6 @@ public:
     auto p = payload.cbegin();
     using ceph::decode;
     decode(epoch, p);
-    if (header.version == 6) {
-      // decode legacy vector<pair<pg_notify_t,PastIntervals>>
-      uint32_t num;
-      decode(num, p);
-      pg_list.resize(num);
-      for (unsigned i = 0; i < num; ++i) {
-	decode(pg_list[i], p);
-	decode(pg_list[i].past_intervals, p);
-      }
-      return;
-    }
     decode(pg_list, p);
   }
   void print(std::ostream& out) const override {

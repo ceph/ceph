@@ -1,4 +1,3 @@
-pytest
 pytest-cov
 pytest-instafail
-pyfakefs
+pyfakefs==4.5.0

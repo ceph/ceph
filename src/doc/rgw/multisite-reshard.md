@@ -27,7 +27,15 @@ This change also affects the rados object names of the bucket index shards, curr
 
 ## Bucket Index Log Resharding
 
-The bucket replication logs for multisite are stored in the same bucket index shards as the keys that they modify. However, we can't reshard these log entries like we do with with normal keys, because other zones need to track their position in the logs. If we shuffle the log entries around between shards, other zones no longer have a way to associate their old shard marker positions with the new shards, and their only recourse would be to restart a full sync. So when resharding buckets, we need to preserve the old bucket index logs so that other zones can finish processing their log entries, while any new events are recorded in the new bucket index logs.
+The bucket replication logs for multisite are stored in the same bucket index
+shards as the keys that they modify. However, we can't reshard these log
+entries like we do with normal keys, because other zones need to track their
+position in the logs. If we shuffle the log entries around between shards,
+other zones no longer have a way to associate their old shard marker positions
+with the new shards, and their only recourse would be to restart a full sync.
+So when resharding buckets, we need to preserve the old bucket index logs so
+that other zones can finish processing their log entries, while any new events
+are recorded in the new bucket index logs.
 
 An additional goal is to move replication logs out of omap (so out of the bucket index) into separate rados objects. To enable this, the bucket instance metadata should be able to describe a bucket whose *index layout* is different from its *log layout*. For existing buckets, the two layouts would be identical and share the bucket index objects. Alternate log layouts are otherwise out of scope for this design.
 

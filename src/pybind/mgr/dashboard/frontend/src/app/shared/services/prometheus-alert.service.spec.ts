@@ -131,17 +131,23 @@ describe('PrometheusAlertService', () => {
     });
 
     it('should notify on alert change', () => {
-      alerts = [prometheus.createAlert('alert0', 'suppressed')];
+      alerts = [prometheus.createAlert('alert0', 'resolved')];
       service.refresh();
       expect(notificationService.show).toHaveBeenCalledWith(
         new CdNotificationConfig(
-          NotificationType.info,
-          'alert0 (suppressed)',
-          'alert0 is suppressed ' + prometheus.createLink('http://alert0'),
+          NotificationType.success,
+          'alert0 (resolved)',
+          'alert0 is resolved ' + prometheus.createLink('http://alert0'),
           undefined,
           'Prometheus'
         )
       );
+    });
+
+    it('should not notify on change to suppressed', () => {
+      alerts = [prometheus.createAlert('alert0', 'suppressed')];
+      service.refresh();
+      expect(notificationService.show).not.toHaveBeenCalled();
     });
 
     it('should notify on a new alert', () => {
@@ -181,6 +187,28 @@ describe('PrometheusAlertService', () => {
       alerts = [alert1, prometheus.createAlert('alert2')];
       service.refresh();
       expect(notificationService.show).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('alert badge', () => {
+    beforeEach(() => {
+      service = TestBed.inject(PrometheusAlertService);
+
+      prometheusService = TestBed.inject(PrometheusService);
+      spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
+      spyOn(prometheusService, 'getAlerts').and.callFake(() => of(alerts));
+
+      alerts = [
+        prometheus.createAlert('alert0', 'active'),
+        prometheus.createAlert('alert1', 'suppressed'),
+        prometheus.createAlert('alert2', 'suppressed')
+      ];
+      service.refresh();
+    });
+
+    it('should count active alerts', () => {
+      service.refresh();
+      expect(service.activeAlerts).toBe(1);
     });
   });
 });

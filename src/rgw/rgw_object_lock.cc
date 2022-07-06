@@ -3,6 +3,8 @@
 //
 #include "rgw_object_lock.h"
 
+using namespace std;
+
 void DefaultRetention::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("Mode", mode, obj, true);
   if (mode.compare("GOVERNANCE") != 0 && mode.compare("COMPLIANCE") != 0) {

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
-# version 2020-10-20
+# version 2021-02-04
 
 # IMPORTANT: affects order produced by 'sort' and 'ceph-diff-sorted'
 # relies on this ordering
-export LANG=C
+export LC_ALL=C
+
+# If your ceph.conf is not in /etc/ceph, then set CEPH_CONF="-c /path/to/ceph.conf"
 
 out_dir="."
 temp_file=/tmp/temp.$$
@@ -34,12 +36,12 @@ error_out() {
 prompt_pool() {
     # note: all prompts go to stderr so stdout contains just the result
     >&2 echo "Available pools:"
-    rados lspools >"$temp_file" 2>"$lspools_err"
+    rados ${CEPH_CONF} lspools >"$temp_file" 2>"$lspools_err"
     if [ "$?" -ne 0 ] ;then
 	error_out "rados lspools" "$lspools_err"
     fi
     >&2 sed 's/^/    /' "$temp_file" # list pools and indent
-    >&2 printf "Which pool do you want to search for orphans? "
+    >&2 printf "Which pool do you want to search for orphans (for multiple, use space-separated list)? "
     local mypool
     read mypool
     echo $mypool
@@ -47,10 +49,8 @@ prompt_pool() {
 
 if [ $# -eq 0 ] ;then
     pool="$(prompt_pool)"
-elif [ $# -eq 1 ] ;then
-    pool="$1"
 else
-    error_out "Usage: $0 [pool]"
+    pool="$*"
 fi
 
 echo "Pool is \"$pool\"."
@@ -59,10 +59,15 @@ echo "Note: output files produced will be tagged with the current timestamp -- $
 
 echo "running 'rados ls' at $(date)"
 # since --format is not specified, plain should be used
-rados ls --pool="$pool" --all >"$rados_out" 2>"$rados_err"
-if [ "$?" -ne 0 ] ;then
-    error_out "rados ls" "$rados_err"
-fi
+
+rm -f "$rados_out" &> /dev/null
+for mypool in $pool ; do
+    echo "running 'rados ls' on pool ${mypool}."
+    rados ${CEPH_CONF} ls --pool="$mypool" --all >>"$rados_out" 2>"$rados_err"
+    if [ "$?" -ne 0 ] ;then
+	error_out "rados ls" "$rados_err"
+    fi
+done
 
 # NOTE: Each entry (line of output) of `rados ls --all` should be in
 # one of four formats depending on whether or not an entry has a
@@ -83,7 +88,7 @@ fi
 # check for namespaces -- any line that does not begin with a tab
 # indicates a namespace; add those to "odd" file and set flag; note:
 # this also picks up entries with namespace and locator
-grep $'^[^\t]' "$rados_out" >"$rados_odd"
+grep --text $'^[^\t]' "$rados_out" >"$rados_odd"
 if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
     namespace_found=1
 fi
@@ -92,7 +97,7 @@ fi
 # past the empty namespace (i.e., one TAB), skipping past the oid,
 # then looking for a TAB; note we use egrep to get the '+' character
 # and the $ in front of the ' allows the \t to be interpreted as a TAB
-egrep $'^\t[[:graph:]]+\t' "$rados_out" >>"$rados_odd"
+egrep --text $'^\t[[:graph:]]+\t' "$rados_out" >>"$rados_odd"
 if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
     locator_found=1
 fi
@@ -101,14 +106,14 @@ fi
 # locator) for further processing; only look at lines that begin with
 # a TAB and do not contain a second TAB, and then grab everything
 # after the initial TAB
-grep $'^\t' "$rados_out" | grep -v $'^\t.*\t' | sed -E 's/^\t//' >"$temp_file"
+grep --text $'^\t' "$rados_out" | grep --text -v $'^\t.*\t' | sed -E 's/^\t//' >"$temp_file"
 mv -f "$temp_file" "$rados_out"
 
 sort -u "$rados_out" >"$temp_file"
 mv -f "$temp_file" "$rados_out"
 
 echo "running 'radosgw-admin bucket radoslist' at $(date)"
-radosgw-admin bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
+radosgw-admin ${CEPH_CONF} bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
 if [ "$?" -ne 0 ] ;then
     error_out "radosgw-admin radoslist" "$rgwadmin_err"
 fi
@@ -116,7 +121,7 @@ sort -u "$rgwadmin_out" >"$temp_file"
 mv -f "$temp_file" "$rgwadmin_out"
 
 echo "computing delta at $(date)"
-ceph-diff-sorted "$rados_out" "$rgwadmin_out" | grep "^<" | sed 's/^< *//' >"$delta_out"
+ceph-diff-sorted "$rados_out" "$rgwadmin_out" | grep --text "^<" | sed 's/^< *//' >"$delta_out"
 # use PIPESTATUS to get at exit status of first process in above pipe;
 # 0 means same, 1 means different, >1 means error
 if [ "${PIPESTATUS[0]}" -gt 1 ] ;then

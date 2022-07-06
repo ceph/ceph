@@ -205,12 +205,14 @@ class RbdTest(DashboardTestCase):
         {
             "size": 1073741824,
             "obj_size": 4194304,
+            "mirror_mode": "journal",
             "num_objs": 256,
             "order": 22,
             "block_name_prefix": "rbd_data.10ae2ae8944a",
             "name": "img1",
             "pool_name": "rbd",
             "features": 61,
+            "primary": true,
             "features_name": ["deep-flatten", "exclusive-lock", "fast-diff", "layering",
                               "object-map"]
         }
@@ -227,6 +229,7 @@ class RbdTest(DashboardTestCase):
             'image_format': JLeaf(int),
             'pool_name': JLeaf(str),
             'namespace': JLeaf(str, none=True),
+            'primary': JLeaf(bool, none=True),
             'features': JLeaf(int),
             'features_name': JList(JLeaf(str)),
             'stripe_count': JLeaf(int, none=True),
@@ -245,6 +248,7 @@ class RbdTest(DashboardTestCase):
                 'source': JLeaf(int),
                 'value': JLeaf(str),
             })),
+            'mirror_mode': JLeaf(str),
         })
         self.assertSchema(img, schema)
 

@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 
 import logging
 import os
@@ -10,7 +9,7 @@ except ImportError:
 
 from .. import mgr
 from ..controllers.home import HomeController, LanguageMixin
-from . import ControllerTestCase, FakeFsMixin  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase, FakeFsMixin
 
 logger = logging.getLogger()
 
@@ -65,3 +64,10 @@ class HomeTest(ControllerTestCase, FakeFsMixin):
         self.assertStatus(200)
         logger.info(self.body)
         self.assertIn('<html lang="en">', self.body.decode('utf-8'))
+
+    @mock.patch(FakeFsMixin.builtins_open, new=FakeFsMixin.f_open)
+    @mock.patch('os.stat', new=FakeFsMixin.f_os.stat)
+    @mock.patch('os.listdir', new=FakeFsMixin.f_os.listdir)
+    def test_home_multiple_subtags_lang(self):
+        self._get('/', headers=[('Accept-Language', 'zh-Hans-CN')])
+        self.assertStatus(200)

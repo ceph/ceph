@@ -6,37 +6,42 @@
 #include "rgw_sal.h"
 #include "rgw_rados.h"
 
-#include "services/svc_zone.h"
-
 #define dout_subsys ceph_subsys_rgw
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
+using namespace std;
+
+RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Store* store,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
+                         std::optional<string> _api_name,
                          HostStyle _host_style)
   : cct(_cct),
     endpoints(remote_endpoints.begin(), remote_endpoints.end()),
-    remote_id(_remote_id), host_style(_host_style)
+    remote_id(_remote_id),
+    api_name(_api_name),
+    host_style(_host_style)
 {
-  if (zone_svc) {
-    key = zone_svc->get_zone_params().system_key;
-    self_zone_group = zone_svc->get_zonegroup().get_id();
+  if (store) {
+    key = store->get_zone()->get_system_key();
+    self_zone_group = store->get_zone()->get_zonegroup().get_id();
   }
 }
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
+RGWRESTConn::RGWRESTConn(CephContext *_cct,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
                          RGWAccessKey _cred,
+                         std::string _zone_group,
+                         std::optional<string> _api_name,
                          HostStyle _host_style)
   : cct(_cct),
     endpoints(remote_endpoints.begin(), remote_endpoints.end()),
-    key(std::move(_cred)),
-    remote_id(_remote_id), host_style(_host_style)
+    key(_cred),
+    self_zone_group(_zone_group),
+    remote_id(_remote_id),
+    api_name(_api_name),
+    host_style(_host_style)
 {
-  if (zone_svc) {
-    self_zone_group = zone_svc->get_zonegroup().get_id();
-  }
 }
 
 RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
@@ -86,7 +91,7 @@ void RGWRESTConn::populate_params(param_vec_t& params, const rgw_user *uid, cons
   populate_zonegroup(params, zonegroup);
 }
 
-int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
 {
   string url;
   int ret = get_url(url);
@@ -100,17 +105,29 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
     snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
   }
-  RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params);
-  return req.forward_request(key, info, max_response, inbl, outbl, y);
+  RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params, api_name);
+  return req.forward_request(dpp, key, info, max_response, inbl, outbl, y);
 }
 
-class StreamObjData : public RGWGetDataCB {
-  rgw_obj obj;
-public:
-    explicit StreamObjData(rgw_obj& _obj) : obj(_obj) {}
-};
+int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+{
+  string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+  param_vec_t params;
+  if (objv) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
+  }
+  std::string service = "iam";
+  RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params, api_name);
+  return req.forward_request(dpp, key, info, max_response, inbl, outbl, y, service);
+}
 
-int RGWRESTConn::put_obj_send_init(rgw::sal::RGWObject* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
+int RGWRESTConn::put_obj_send_init(rgw::sal::Object* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
 {
   string url;
   int ret = get_url(url);
@@ -125,15 +142,15 @@ int RGWRESTConn::put_obj_send_init(rgw::sal::RGWObject* obj, const rgw_http_para
     append_param_list(params, extra_params);
   }
 
-  RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, host_style);
+  RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, api_name, host_style);
   wr->send_init(obj);
   *req = wr;
   return 0;
 }
 
-int RGWRESTConn::put_obj_async(const rgw_user& uid, rgw::sal::RGWObject* obj, uint64_t obj_size,
-                               map<string, bufferlist>& attrs, bool send,
-                               RGWRESTStreamS3PutObj **req)
+int RGWRESTConn::put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, rgw::sal::Object* obj,
+                                    map<string, bufferlist>& attrs,
+                                    RGWRESTStreamS3PutObj **req)
 {
   string url;
   int ret = get_url(url);
@@ -142,12 +159,8 @@ int RGWRESTConn::put_obj_async(const rgw_user& uid, rgw::sal::RGWObject* obj, ui
 
   param_vec_t params;
   populate_params(params, &uid, self_zone_group);
-  RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, host_style);
-  ret = wr->put_obj_init(key, obj, obj_size, attrs, send);
-  if (ret < 0) {
-    delete wr;
-    return ret;
-  }
+  RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, api_name, host_style);
+  wr->put_obj_init(dpp, key, obj, attrs);
   *req = wr;
   return 0;
 }
@@ -185,7 +198,7 @@ static void set_header(T val, map<string, string>& headers, const string& header
 }
 
 
-int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw::sal::RGWObject* obj,
+int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw::sal::Object* obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
@@ -203,10 +216,10 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, con
   params.sync_manifest = sync_manifest;
   params.skip_decrypt = skip_decrypt;
   params.cb = cb;
-  return get_obj(obj, params, send, req);
+  return get_obj(dpp, obj, params, send, req);
 }
 
-int RGWRESTConn::get_obj(const rgw::sal::RGWObject* obj, const get_obj_params& in_params, bool send, RGWRESTStreamRWRequest **req)
+int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw::sal::Object* obj, const get_obj_params& in_params, bool send, RGWRESTStreamRWRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -232,9 +245,9 @@ int RGWRESTConn::get_obj(const rgw::sal::RGWObject* obj, const get_obj_params& i
     params.push_back(param_pair_t("versionId", instance));
   }
   if (in_params.get_op) {
-    *req = new RGWRESTStreamReadRequest(cct, url, in_params.cb, NULL, &params, host_style);
+    *req = new RGWRESTStreamReadRequest(cct, url, in_params.cb, NULL, &params, api_name, host_style);
   } else {
-    *req = new RGWRESTStreamHeadRequest(cct, url, in_params.cb, NULL, &params);
+    *req = new RGWRESTStreamHeadRequest(cct, url, in_params.cb, NULL, &params, api_name);
   }
   map<string, string> extra_headers;
   if (in_params.info) {
@@ -269,7 +282,7 @@ int RGWRESTConn::get_obj(const rgw::sal::RGWObject* obj, const get_obj_params& i
     set_header(buf, extra_headers, "RANGE");
   }
 
-  int r = (*req)->send_prepare(key, extra_headers, obj->get_obj());
+  int r = (*req)->send_prepare(dpp, key, extra_headers, obj->get_obj());
   if (r < 0) {
     goto done_err;
   }
@@ -303,7 +316,8 @@ int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req,
   return ret;
 }
 
-int RGWRESTConn::get_resource(const string& resource,
+int RGWRESTConn::get_resource(const DoutPrefixProvider *dpp,
+                     const string& resource,
 		     param_vec_t *extra_params,
 		     map<string, string> *extra_headers,
 		     bufferlist& bl,
@@ -326,16 +340,52 @@ int RGWRESTConn::get_resource(const string& resource,
 
   RGWStreamIntoBufferlist cb(bl);
 
-  RGWRESTStreamReadRequest req(cct, url, &cb, NULL, &params, host_style);
+  RGWRESTStreamReadRequest req(cct, url, &cb, NULL, &params, api_name, host_style);
 
   map<string, string> headers;
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());
   }
 
-  ret = req.send_request(&key, headers, resource, mgr, send_data);
+  ret = req.send_request(dpp, &key, headers, resource, mgr, send_data);
   if (ret < 0) {
-    ldout(cct, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return req.complete_request(y);
+}
+
+int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const std::string& method,
+                        const std::string& resource, rgw_http_param_pair *extra_params,
+		                std::map<std::string, std::string> *extra_headers, bufferlist& bl,
+                        bufferlist *send_data, RGWHTTPManager *mgr, optional_yield y)
+{
+  std::string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+
+  param_vec_t params;
+
+  if (extra_params) {
+    params = make_param_list(extra_params);
+  }
+
+  populate_params(params, nullptr, self_zone_group);
+
+  RGWStreamIntoBufferlist cb(bl);
+
+  RGWRESTStreamSendRequest req(cct, method, url, &cb, NULL, &params, api_name, host_style);
+
+  std::map<std::string, std::string> headers;
+  if (extra_headers) {
+    headers.insert(extra_headers->begin(), extra_headers->end());
+  }
+
+  ret = req.send_request(dpp, &key, headers, resource, mgr, send_data);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -349,7 +399,7 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
                                          RGWHTTPManager *_mgr)
   : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
     params(make_param_list(pp)), cb(bl), mgr(_mgr),
-    req(cct, conn->get_url(), &cb, NULL, NULL)
+    req(cct, conn->get_url(), &cb, NULL, NULL, _conn->get_api_name())
 {
   init_common(extra_headers);
 }
@@ -360,7 +410,7 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
 					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
   : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(_params),
-    cb(bl), mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL)
+    cb(bl), mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL, _conn->get_api_name())
 {
   init_common(extra_headers);
 }
@@ -376,22 +426,22 @@ void RGWRESTReadResource::init_common(param_vec_t *extra_headers)
   req.set_params(&params);
 }
 
-int RGWRESTReadResource::read(optional_yield y)
+int RGWRESTReadResource::read(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  int ret = req.send_request(&conn->get_key(), headers, resource, mgr);
+  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
-    ldout(cct, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 
   return req.complete_request(y);
 }
 
-int RGWRESTReadResource::aio_read()
+int RGWRESTReadResource::aio_read(const DoutPrefixProvider *dpp)
 {
-  int ret = req.send_request(&conn->get_key(), headers, resource, mgr);
+  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
-    ldout(cct, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -406,7 +456,7 @@ RGWRESTSendResource::RGWRESTSendResource(RGWRESTConn *_conn,
                                          RGWHTTPManager *_mgr)
   : cct(_conn->get_ctx()), conn(_conn), method(_method), resource(_resource),
     params(make_param_list(pp)), cb(bl), mgr(_mgr),
-    req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL, _conn->get_host_style())
+    req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL, _conn->get_api_name(), _conn->get_host_style())
 {
   init_common(extra_headers);
 }
@@ -418,7 +468,7 @@ RGWRESTSendResource::RGWRESTSendResource(RGWRESTConn *_conn,
 					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
   : cct(_conn->get_ctx()), conn(_conn), method(_method), resource(_resource), params(params),
-    cb(bl), mgr(_mgr), req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL, _conn->get_host_style())
+    cb(bl), mgr(_mgr), req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL, _conn->get_api_name(), _conn->get_host_style())
 {
   init_common(extra_headers);
 }
@@ -434,28 +484,28 @@ void RGWRESTSendResource::init_common(param_vec_t *extra_headers)
   req.set_params(&params);
 }
 
-int RGWRESTSendResource::send(bufferlist& outbl, optional_yield y)
+int RGWRESTSendResource::send(const DoutPrefixProvider *dpp, bufferlist& outbl, optional_yield y)
 {
   req.set_send_length(outbl.length());
   req.set_outbl(outbl);
 
-  int ret = req.send_request(&conn->get_key(), headers, resource, mgr);
+  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
-    ldout(cct, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 
   return req.complete_request(y);
 }
 
-int RGWRESTSendResource::aio_send(bufferlist& outbl)
+int RGWRESTSendResource::aio_send(const DoutPrefixProvider *dpp, bufferlist& outbl)
 {
   req.set_send_length(outbl.length());
   req.set_outbl(outbl);
 
-  int ret = req.send_request(&conn->get_key(), headers, resource, mgr);
+  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
-    ldout(cct, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 

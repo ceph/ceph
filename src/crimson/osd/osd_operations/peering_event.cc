@@ -2,12 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <seastar/core/future.hh>
+#include <seastar/core/sleep.hh>
 
 #include "messages/MOSDPGLog.h"
 
 #include "common/Formatter.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_connection_priv.h"
 
@@ -19,7 +21,8 @@ namespace {
 
 namespace crimson::osd {
 
-void PeeringEvent::print(std::ostream &lhs) const
+template <class T>
+void PeeringEvent<T>::print(std::ostream &lhs) const
 {
   lhs << "PeeringEvent("
       << "from=" << from
@@ -30,7 +33,8 @@ void PeeringEvent::print(std::ostream &lhs) const
       << ")";
 }
 
-void PeeringEvent::dump_detail(Formatter *f) const
+template <class T>
+void PeeringEvent<T>::dump_detail(Formatter *f) const
 {
   f->open_object_section("PeeringEvent");
   f->dump_stream("from") << from;
@@ -42,67 +46,68 @@ void PeeringEvent::dump_detail(Formatter *f) const
 }
 
 
-PeeringEvent::PGPipeline &PeeringEvent::pp(PG &pg)
+template <class T>
+PGPeeringPipeline &PeeringEvent<T>::pp(PG &pg)
 {
   return pg.peering_request_pg_pipeline;
 }
 
-seastar::future<> PeeringEvent::start()
+template <class T>
+seastar::future<> PeeringEvent<T>::with_pg(
+  ShardServices &shard_services, Ref<PG> pg)
 {
+  if (!pg) {
+    logger().warn("{}: pg absent, did not create", *this);
+    on_pg_absent();
+    that()->get_handle().exit();
+    return complete_rctx_no_pg();
+  }
 
-  logger().debug("{}: start", *this);
-
-  IRef ref = this;
-  return [this] {
-    if (delay) {
-      return seastar::sleep(std::chrono::milliseconds(
-		std::lround(delay*1000)));
-    } else {
-      return seastar::now();
-    }
-  }().then([this] {
-    return get_pg();
-  }).then([this](Ref<PG> pg) {
-    if (!pg) {
-      logger().warn("{}: pg absent, did not create", *this);
-      on_pg_absent();
-      handle.exit();
+  using interruptor = typename T::interruptor;
+  return interruptor::with_interruption([this, pg, &shard_services] {
+    logger().debug("{}: pg present", *this);
+    return this->template enter_stage<interruptor>(pp(*pg).await_map
+    ).then_interruptible([this, pg] {
+      return this->template with_blocking_event<
+	PG_OSDMapGate::OSDMapBlocker::BlockingEvent
+	>([this, pg](auto &&trigger) {
+	  return pg->osdmap_gate.wait_for_map(
+	    std::move(trigger), evt.get_epoch_sent());
+	});
+    }).then_interruptible([this, pg](auto) {
+      return this->template enter_stage<interruptor>(pp(*pg).process);
+    }).then_interruptible([this, pg] {
+      // TODO: likely we should synchronize also with the pg log-based
+      // recovery.
+      return this->template enter_stage<interruptor>(
+	BackfillRecovery::bp(*pg).process);
+    }).then_interruptible([this, pg] {
+      pg->do_peering_event(evt, ctx);
+      that()->get_handle().exit();
       return complete_rctx(pg);
-    } else {
-      logger().debug("{}: pg present", *this);
-      return with_blocking_future(handle.enter(pp(*pg).await_map)
-      ).then([this, pg] {
-	return with_blocking_future(
-	  pg->osdmap_gate.wait_for_map(evt.get_epoch_sent()));
-      }).then([this, pg](auto) {
-	return with_blocking_future(handle.enter(pp(*pg).process));
-      }).then([this, pg] {
-        // TODO: likely we should synchronize also with the pg log-based
-        // recovery.
-	return with_blocking_future(
-          handle.enter(BackfillRecovery::bp(*pg).process));
-      }).then([this, pg] {
-	pg->do_peering_event(evt, ctx);
-	handle.exit();
-	return complete_rctx(pg);
-      }).then([this, pg] {
-	return pg->get_need_up_thru() ? shard_services.send_alive(pg->get_same_interval_since())
-                               : seastar::now();
+    }).then_interruptible([pg, &shard_services]()
+			  -> typename T::template interruptible_future<> {
+        if (!pg->get_need_up_thru()) {
+          return seastar::now();
+        }
+        return shard_services.send_alive(pg->get_same_interval_since());
+      }).then_interruptible([&shard_services] {
+        return shard_services.send_pg_temp();
       });
-    }
-  }).then([this] {
-    return shard_services.send_pg_temp();
-  }).then([this, ref=std::move(ref)] {
-    logger().debug("{}: complete", *this);
-  });
+  }, [this](std::exception_ptr ep) {
+    logger().debug("{}: interrupted with {}", *this, ep);
+  }, pg);
 }
 
-void PeeringEvent::on_pg_absent()
+template <class T>
+void PeeringEvent<T>::on_pg_absent()
 {
   logger().debug("{}: pg absent, dropping", *this);
 }
 
-seastar::future<> PeeringEvent::complete_rctx(Ref<PG> pg)
+template <class T>
+typename PeeringEvent<T>::template interruptible_future<>
+PeeringEvent<T>::complete_rctx(Ref<PG> pg)
 {
   logger().debug("{}: submitting ctx", *this);
   return shard_services.dispatch_context(
@@ -110,7 +115,7 @@ seastar::future<> PeeringEvent::complete_rctx(Ref<PG> pg)
     std::move(ctx));
 }
 
-RemotePeeringEvent::ConnectionPipeline &RemotePeeringEvent::cp()
+ConnectionPipeline &RemotePeeringEvent::get_connection_pipeline()
 {
   return get_osd_priv(conn.get()).peering_request_conn_pipeline;
 }
@@ -125,7 +130,7 @@ void RemotePeeringEvent::on_pg_absent()
     const pg_info_t empty{spg_t{pgid.pgid, q.query.to}};
     if (q.query.type == q.query.LOG ||
 	q.query.type == q.query.FULLLOG)  {
-      auto m = ceph::make_message<MOSDPGLog>(q.query.from, q.query.to,
+      auto m = crimson::make_message<MOSDPGLog>(q.query.from, q.query.to,
 					     map_epoch, empty,
 					     q.query.epoch_sent);
       ctx.send_osd_message(q.from.osd, std::move(m));
@@ -138,7 +143,7 @@ void RemotePeeringEvent::on_pg_absent()
   }
 }
 
-seastar::future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
+RemotePeeringEvent::interruptible_future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
 {
   if (pg) {
     return PeeringEvent::complete_rctx(pg);
@@ -147,27 +152,32 @@ seastar::future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
   }
 }
 
-seastar::future<Ref<PG>> RemotePeeringEvent::get_pg()
+seastar::future<> RemotePeeringEvent::complete_rctx_no_pg()
 {
-  return with_blocking_future(
-    handle.enter(cp().await_map)
-  ).then([this] {
-    return with_blocking_future(
-      osd.osdmap_gate.wait_for_map(evt.get_epoch_sent()));
-  }).then([this](auto epoch) {
-    logger().debug("{}: got map {}", *this, epoch);
-    return with_blocking_future(handle.enter(cp().get_pg));
-  }).then([this] {
-    return with_blocking_future(
-      osd.get_or_create_pg(
-	pgid, evt.get_epoch_sent(), std::move(evt.create_info)));
+  return shard_services.dispatch_context_messages(std::move(ctx));
+}
+
+seastar::future<> LocalPeeringEvent::start()
+{
+  logger().debug("{}: start", *this);
+
+  IRef ref = this;
+  auto maybe_delay = seastar::now();
+  if (delay) {
+    maybe_delay = seastar::sleep(
+      std::chrono::milliseconds(std::lround(delay * 1000)));
+  }
+  return maybe_delay.then([this] {
+    return with_pg(shard_services, pg);
+  }).finally([ref=std::move(ref)] {
+    logger().debug("{}: complete", *ref);
   });
 }
 
-seastar::future<Ref<PG>> LocalPeeringEvent::get_pg() {
-  return seastar::make_ready_future<Ref<PG>>(pg);
-}
 
 LocalPeeringEvent::~LocalPeeringEvent() {}
+
+template class PeeringEvent<RemotePeeringEvent>;
+template class PeeringEvent<LocalPeeringEvent>;
 
 }

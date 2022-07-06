@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 #pragma once
 
 #include <atomic>
@@ -14,6 +14,15 @@
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/sharded.hh>
 
+#if __cplusplus > 201703L
+#include <semaphore>
+namespace crimson {
+  using std::counting_semaphore;
+}
+#else
+#include "semaphore.h"
+#endif
+
 namespace crimson::os {
 
 struct WorkItem {
@@ -26,8 +35,8 @@ struct Task final : WorkItem {
   using T = std::invoke_result_t<Func>;
   using future_stored_type_t =
     std::conditional_t<std::is_void_v<T>,
-		       seastar::internal::future_stored_type_t<>,
-		       seastar::internal::future_stored_type_t<T>>;
+                       seastar::internal::future_stored_type_t<>,
+                       seastar::internal::future_stored_type_t<T>>;
   using futurator_t = seastar::futurize<T>;
 public:
   explicit Task(Func&& f)
@@ -49,9 +58,9 @@ public:
   typename futurator_t::type get_future() {
     return on_done.wait().then([this](size_t) {
       if (state.failed()) {
-	return futurator_t::make_exception_future(state.get_exception());
+        return futurator_t::make_exception_future(state.get_exception());
       } else {
-	return futurator_t::from_tuple(state.get_value());
+        return futurator_t::from_tuple(state.get_value());
       }
     });
   }
@@ -72,26 +81,40 @@ struct SubmitQueue {
   }
 };
 
+struct ShardedWorkQueue {
+public:
+  WorkItem* pop_front(std::chrono::milliseconds& queue_max_wait) {
+    if (sem.try_acquire_for(queue_max_wait)) {
+      if (!is_stopping()) {
+        WorkItem* work_item = nullptr;
+        [[maybe_unused]] bool popped = pending.pop(work_item);
+        assert(popped);
+        return work_item;
+      }
+    }
+    return nullptr;
+  }
+  void stop() {
+    stopping = true;
+    sem.release();
+  }
+  void push_back(WorkItem* work_item) {
+    [[maybe_unused]] bool pushed = pending.push(work_item);
+    assert(pushed);
+    sem.release();
+  }
+private:
+  bool is_stopping() const {
+    return stopping;
+  }
+  std::atomic<bool> stopping = false;
+  static constexpr unsigned QUEUE_SIZE = 128;
+  crimson::counting_semaphore<QUEUE_SIZE> sem{0};
+  boost::lockfree::queue<WorkItem*> pending{QUEUE_SIZE};
+};
+
 /// an engine for scheduling non-seastar tasks from seastar fibers
 class ThreadPool {
-  std::atomic<bool> stopping = false;
-  std::mutex mutex;
-  std::condition_variable cond;
-  std::vector<std::thread> threads;
-  seastar::sharded<SubmitQueue> submit_queue;
-  const size_t queue_size;
-  boost::lockfree::queue<WorkItem*> pending;
-
-  void loop(std::chrono::milliseconds queue_max_wait);
-  bool is_stopping() const {
-    return stopping.load(std::memory_order_relaxed);
-  }
-  static void pin(unsigned cpu_id);
-  seastar::semaphore& local_free_slots() {
-    return submit_queue.local().free_slots;
-  }
-  ThreadPool(const ThreadPool&) = delete;
-  ThreadPool& operator=(const ThreadPool&) = delete;
 public:
   /**
    * @param queue_sz the depth of pending queue. before a task is scheduled,
@@ -102,24 +125,26 @@ public:
    * @note each @c Task has its own crimson::thread::Condition, which possesses
    * an fd, so we should keep the size of queue under a reasonable limit.
    */
-  ThreadPool(size_t n_threads, size_t queue_sz, long cpu);
+  ThreadPool(size_t n_threads, size_t queue_sz, std::vector<uint64_t> cpus);
   ~ThreadPool();
   seastar::future<> start();
   seastar::future<> stop();
+  size_t size() {
+    return n_threads;
+  }
   template<typename Func, typename...Args>
-  auto submit(Func&& func, Args&&... args) {
+  auto submit(int shard, Func&& func, Args&&... args) {
     auto packaged = [func=std::move(func),
                      args=std::forward_as_tuple(args...)] {
       return std::apply(std::move(func), std::move(args));
     };
     return seastar::with_gate(submit_queue.local().pending_tasks,
-      [packaged=std::move(packaged), this] {
+      [packaged=std::move(packaged), shard, this] {
         return local_free_slots().wait()
-          .then([packaged=std::move(packaged), this] {
+          .then([packaged=std::move(packaged), shard, this] {
             auto task = new Task{std::move(packaged)};
             auto fut = task->get_future();
-            pending.push(task);
-            cond.notify_one();
+            pending_queues[shard].push_back(task);
             return fut.finally([task, this] {
               local_free_slots().signal();
               delete task;
@@ -127,6 +152,32 @@ public:
           });
         });
   }
+
+  template<typename Func>
+  auto submit(Func&& func) {
+    return submit(::rand() % n_threads, std::forward<Func>(func));
+  }
+
+private:
+  void loop(std::chrono::milliseconds queue_max_wait, size_t shard);
+  bool is_stopping() const {
+    return stopping.load(std::memory_order_relaxed);
+  }
+  static void pin(const std::vector<uint64_t>& cpus);
+  static void block_sighup();
+  seastar::semaphore& local_free_slots() {
+    return submit_queue.local().free_slots;
+  }
+  ThreadPool(const ThreadPool&) = delete;
+  ThreadPool& operator=(const ThreadPool&) = delete;
+
+private:
+  size_t n_threads;
+  std::atomic<bool> stopping = false;
+  std::vector<std::thread> threads;
+  seastar::sharded<SubmitQueue> submit_queue;
+  const size_t queue_size;
+  std::vector<ShardedWorkQueue> pending_queues;
 };
 
 } // namespace crimson::os

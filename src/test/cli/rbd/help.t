@@ -26,7 +26,10 @@
       config pool set                   Set a pool-level configuration override.
       copy (cp)                         Copy src image to dest.
       create                            Create an empty image.
-      deep copy (deep cp)               Deep copy src image to dest.
+      deep copy (deep cp)               Deep copy (including snapshots) src image
+                                        to dest.
+      device attach                     Attach image to device.
+      device detach                     Detach image from device.
       device list (showmapped)          List mapped rbd images.
       device map (map)                  Map an image to a block device.
       device unmap (unmap)              Unmap a rbd device.
@@ -34,6 +37,7 @@
                                         previous snap, or image creation.
       disk-usage (du)                   Show disk usage stats for pool, image or
                                         snapshot.
+      encryption format                 Format image to an encrypted format.
       export                            Export image to file.
       export-diff                       Export incremental diff to file.
       feature disable                   Disable the specified image feature.
@@ -52,7 +56,6 @@
       group snap remove (... rm)        Remove a snapshot from a group.
       group snap rename                 Rename group's snapshot.
       group snap rollback               Rollback group to snapshot.
-      image-cache invalidate            Discard existing / dirty image cache
       image-meta get                    Image metadata get the value associated
                                         with the key.
       image-meta list (image-meta ls)   Image metadata list keys with values.
@@ -121,6 +124,9 @@
       object-map rebuild                Rebuild an invalid object map.
       perf image iostat                 Display image IO statistics.
       perf image iotop                  Display a top-like IO monitor.
+      persistent-cache flush            Flush persistent cache.
+      persistent-cache invalidate       Invalidate (discard) existing / dirty
+                                        persistent cache.
       pool init                         Initialize pool for use by RBD.
       pool stats                        Display pool statistics.
       remove (rm)                       Delete an image.
@@ -179,7 +185,7 @@
     -p [ --pool ] arg    pool name
     --namespace arg      namespace name
     --image arg          image name
-    --io-size arg        IO size (in B/K/M/G/T) [default: 4K]
+    --io-size arg        IO size (in B/K/M/G) (< 4G) [default: 4K]
     --io-threads arg     ios in flight [default: 16]
     --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
     --io-pattern arg     IO pattern (rand, seq, or full-seq) [default: seq]
@@ -530,7 +536,7 @@
                        [--no-progress] 
                        <source-image-or-snap-spec> <dest-image-spec> 
   
-  Deep copy src image to dest.
+  Deep copy (including snapshots) src image to dest.
   
   Positional arguments
     <source-image-or-snap-spec>  source image or snapshot specification
@@ -569,6 +575,59 @@
     (-) supports disabling-only on existing images
     (+) enabled by default for new images if features not specified
   
+  rbd help device attach
+  usage: rbd device attach [--device-type <device-type>] [--pool <pool>] 
+                           [--namespace <namespace>] [--image <image>] 
+                           [--snap <snap>] --device <device> [--show-cookie] 
+                           [--cookie <cookie>] [--read-only] [--force] 
+                           [--exclusive] [--quiesce] 
+                           [--quiesce-hook <quiesce-hook>] [--options <options>] 
+                           <image-or-snap-spec> 
+  
+  Attach image to device.
+  
+  Positional arguments
+    <image-or-snap-spec>     image or snapshot specification
+                             (example:
+                             [<pool-name>/[<namespace>/]]<image-name>[@<snap-name>
+                             ])
+  
+  Optional arguments
+    -t [ --device-type ] arg device type [ggate, krbd (default), nbd]
+    -p [ --pool ] arg        pool name
+    --namespace arg          namespace name
+    --image arg              image name
+    --snap arg               snapshot name
+    --device arg             specify device path
+    --show-cookie            show device cookie
+    --cookie arg             specify device cookie
+    --read-only              attach read-only
+    --force                  force attach
+    --exclusive              disable automatic exclusive lock transitions
+    --quiesce                use quiesce hooks
+    --quiesce-hook arg       quiesce hook path
+    -o [ --options ] arg     device specific options
+  
+  rbd help device detach
+  usage: rbd device detach [--device-type <device-type>] [--pool <pool>] 
+                           [--image <image>] [--snap <snap>] 
+                           [--options <options>] 
+                           <image-or-snap-or-device-spec> 
+  
+  Detach image from device.
+  
+  Positional arguments
+    <image-or-snap-or-device-spec>  image, snapshot, or device specification
+                                    [<pool-name>/]<image-name>[@<snap-name>] or
+                                    <device-path>
+  
+  Optional arguments
+    -t [ --device-type ] arg        device type [ggate, krbd (default), nbd]
+    -p [ --pool ] arg               pool name
+    --image arg                     image name
+    --snap arg                      snapshot name
+    -o [ --options ] arg            device specific options
+  
   rbd help device list
   usage: rbd device list [--device-type <device-type>] [--format <format>] 
                          [--pretty-format] 
@@ -583,7 +642,8 @@
   rbd help device map
   usage: rbd device map [--device-type <device-type>] [--pool <pool>] 
                         [--namespace <namespace>] [--image <image>] 
-                        [--snap <snap>] [--read-only] [--exclusive] [--quiesce] 
+                        [--snap <snap>] [--show-cookie] [--cookie <cookie>] 
+                        [--read-only] [--exclusive] [--quiesce] 
                         [--quiesce-hook <quiesce-hook>] [--options <options>] 
                         <image-or-snap-spec> 
   
@@ -601,6 +661,8 @@
     --namespace arg          namespace name
     --image arg              image name
     --snap arg               snapshot name
+    --show-cookie            show device cookie
+    --cookie arg             specify device cookie
     --read-only              map read-only
     --exclusive              disable automatic exclusive lock transitions
     --quiesce                use quiesce hooks
@@ -673,6 +735,27 @@
     --from-snap arg       snapshot starting point
     --exact               compute exact disk usage (slow)
     --merge-snapshots     merge snapshot sizes with its image
+  
+  rbd help encryption format
+  usage: rbd encryption format [--pool <pool>] [--namespace <namespace>] 
+                               [--image <image>] [--cipher-alg <cipher-alg>] 
+                               <image-spec> <format> <passphrase-file> 
+  
+  Format image to an encrypted format.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <format>             encryption format [possible values: luks1, luks2]
+    <passphrase-file>    path of file containing passphrase for unlocking the
+                         image
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --cipher-alg arg     encryption algorithm [possible values: aes-128, aes-256
+                         (default)]
   
   rbd help export
   usage: rbd export [--pool <pool>] [--namespace <namespace>] [--image <image>] 
@@ -1025,23 +1108,6 @@
     --namespace arg      namespace name
     --group arg          group name
     --snap arg           snapshot name
-  
-  rbd help image-cache invalidate
-  usage: rbd image-cache invalidate [--pool <pool>] [--namespace <namespace>] 
-                                    [--image <image>] [--image-id <image-id>] 
-                                    <image-spec> 
-  
-  Discard existing / dirty image cache
-  
-  Positional arguments
-    <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace>/]]<image-name>)
-  
-  Optional arguments
-    -p [ --pool ] arg    pool name
-    --namespace arg      namespace name
-    --image arg          image name
-    --image-id arg       image id
   
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--namespace <namespace>] 
@@ -1491,7 +1557,7 @@
                                [--source-spec-path <source-spec-path>] 
                                [--source-spec <source-spec>] [--pool <pool>] 
                                [--namespace <namespace>] [--image <image>] 
-                               [--dest-pool <dest-pool>] 
+                               [--snap <snap>] [--dest-pool <dest-pool>] 
                                [--dest-namespace <dest-namespace>] 
                                [--dest <dest>] [--image-format <image-format>] 
                                [--new-format] [--order <order>] 
@@ -1504,40 +1570,44 @@
                                [--journal-splay-width <journal-splay-width>] 
                                [--journal-object-size <journal-object-size>] 
                                [--journal-pool <journal-pool>] [--flatten] 
-                               <source-image-spec> <dest-image-spec> 
+                               <source-image-or-snap-spec> <dest-image-spec> 
   
   Prepare image migration.
   
   Positional arguments
-    <source-image-spec>       source image specification
-                              (example: [<pool-name>/[<namespace>/]]<image-name>)
-    <dest-image-spec>         destination image specification
-                              (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <source-image-or-snap-spec>  source image or snapshot specification
+                                 (example:
+                                 [<pool-name>/[<namespace>/]]<image-name>[@<snap-n
+                                 ame>])
+    <dest-image-spec>            destination image specification
+                                 (example:
+                                 [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
-    --import-only             only import data from source
-    --source-spec-path arg    source-spec file (or '-' for stdin)
-    --source-spec arg         source-spec
-    -p [ --pool ] arg         source pool name
-    --namespace arg           source namespace name
-    --image arg               source image name
-    --dest-pool arg           destination pool name
-    --dest-namespace arg      destination namespace name
-    --dest arg                destination image name
-    --image-format arg        image format [default: 2]
-    --object-size arg         object size in B/K/M [4K <= object size <= 32M]
-    --image-feature arg       image features
-                              [layering(+), exclusive-lock(+*), object-map(+*),
-                              deep-flatten(+-), journaling(*)]
-    --image-shared            shared image
-    --stripe-unit arg         stripe unit in B/K/M
-    --stripe-count arg        stripe count
-    --data-pool arg           data pool
-    --mirror-image-mode arg   mirror image mode [journal or snapshot]
-    --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects [4K <= size <= 64M]
-    --journal-pool arg        pool for journal objects
-    --flatten                 fill clone with parent data (make it independent)
+    --import-only                only import data from source
+    --source-spec-path arg       source-spec file (or '-' for stdin)
+    --source-spec arg            source-spec
+    -p [ --pool ] arg            source pool name
+    --namespace arg              source namespace name
+    --image arg                  source image name
+    --snap arg                   source snapshot name
+    --dest-pool arg              destination pool name
+    --dest-namespace arg         destination namespace name
+    --dest arg                   destination image name
+    --image-format arg           image format [default: 2]
+    --object-size arg            object size in B/K/M [4K <= object size <= 32M]
+    --image-feature arg          image features
+                                 [layering(+), exclusive-lock(+*),
+                                 object-map(+*), deep-flatten(+-), journaling(*)]
+    --image-shared               shared image
+    --stripe-unit arg            stripe unit in B/K/M
+    --stripe-count arg           stripe count
+    --data-pool arg              data pool
+    --mirror-image-mode arg      mirror image mode [journal or snapshot]
+    --journal-splay-width arg    number of active journal objects
+    --journal-object-size arg    size of journal objects [4K <= size <= 64M]
+    --journal-pool arg           pool for journal objects
+    --flatten                    fill clone with parent data (make it independent)
   
   Image Features:
     (*) supports enabling/disabling on existing images
@@ -1580,7 +1650,7 @@
   rbd help mirror image enable
   usage: rbd mirror image enable [--pool <pool>] [--namespace <namespace>] 
                                  [--image <image>] 
-                                 <image-spec> <mode> 
+                                 <image-spec> [<mode>] 
   
   Enable RBD mirroring for an image.
   
@@ -1858,7 +1928,7 @@
                                         [--pool <pool>] 
                                         [--namespace <namespace>] 
                                         [--image <image>] 
-                                        <interval> <start-time> 
+                                        <interval> [<start-time>] 
   
   Add mirror snapshot schedule.
   
@@ -1893,7 +1963,7 @@
                                         [--pool <pool>] 
                                         [--namespace <namespace>] 
                                         [--image <image>] 
-                                        <interval> <start-time> 
+                                        [<interval>] [<start-time>] 
   
   Remove mirror snapshot schedule.
   
@@ -2038,6 +2108,42 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --namespace arg      namespace name
+  
+  rbd help persistent-cache flush
+  usage: rbd persistent-cache flush [--pool <pool>] [--namespace <namespace>] 
+                                    [--image <image>] [--image-id <image-id>] 
+                                    <image-spec> 
+  
+  Flush persistent cache.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --image-id arg       image id
+  
+  rbd help persistent-cache invalidate
+  usage: rbd persistent-cache invalidate
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--image <image>] [--image-id <image-id>] 
+                                        <image-spec> 
+  
+  Invalidate (discard) existing / dirty persistent cache.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --image-id arg       image id
   
   rbd help pool init
   usage: rbd pool init [--pool <pool>] [--force] 
@@ -2429,7 +2535,7 @@
   
   rbd help trash purge schedule add
   usage: rbd trash purge schedule add [--pool <pool>] [--namespace <namespace>] 
-                                      <interval> <start-time> 
+                                      <interval> [<start-time>] 
   
   Add trash purge schedule.
   
@@ -2458,7 +2564,7 @@
   rbd help trash purge schedule remove
   usage: rbd trash purge schedule remove
                                         [--pool <pool>] [--namespace <namespace>] 
-                                        <interval> <start-time> 
+                                        [<interval>] [<start-time>] 
   
   Remove trash purge schedule.
   

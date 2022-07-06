@@ -41,9 +41,7 @@ static std::string map_option_uuid_cb(const char *value_char)
 static std::string map_option_ip_cb(const char *value_char)
 {
   entity_addr_t a;
-  const char *endptr;
-  if (!a.parse(value_char, &endptr) ||
-      endptr != value_char + strlen(value_char)) {
+  if (!a.parse(value_char)) {
     return "";
   }
 
@@ -78,6 +76,16 @@ static std::string map_option_compression_hint_cb(const char *value_char)
 {
   if (!strcmp(value_char, "none") || !strcmp(value_char, "compressible") ||
       !strcmp(value_char, "incompressible")) {
+    return value_char;
+  }
+  return "";
+}
+
+static std::string map_option_ms_mode_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "legacy") || !strcmp(value_char, "crc") ||
+      !strcmp(value_char, "secure") || !strcmp(value_char, "prefer-crc") ||
+      !strcmp(value_char, "prefer-secure")) {
     return value_char;
   }
   return "";
@@ -196,6 +204,12 @@ static int parse_map_options(const std::string &options_string,
       if (put_map_option_value("compression_hint", value_char,
                                map_option_compression_hint_cb, map_options))
         return -EINVAL;
+    } else if (!strcmp(this_char, "ms_mode")) {
+      if (put_map_option_value("ms_mode", value_char, map_option_ms_mode_cb,
+                               map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "rxbounce")) {
+      put_map_option("rxbounce", this_char, map_options);
     } else if (!strcmp(this_char, "udev") || !strcmp(this_char, "noudev")) {
       put_map_option("udev", this_char, map_options);
     } else {
@@ -535,14 +549,33 @@ int execute_map(const po::variables_map &vm,
 
   utils::normalize_pool_name(&pool_name);
 
-  MapOptions default_map_options;
-  r = parse_map_options(
-      g_conf().get_val<std::string>("rbd_default_map_options"),
-      &default_map_options);
+  librados::IoCtx ioctx;
+  librbd::Image image;
+  r = utils::init_io_ctx(rados, pool_name, nspace_name, &ioctx);
   if (r < 0) {
-    std::cerr << "rbd: couldn't parse default map options" << std::endl;
     return r;
   }
+
+  r = utils::open_image(ioctx, image_name, true, &image);
+  if (r < 0) {
+    return r;
+  }
+
+  MapOptions default_map_options;
+  std::vector<librbd::config_option_t> options;
+  image.config_list(&options);
+  for (const auto &option : options) {
+    if (option.name == "rbd_default_map_options") {
+      r = parse_map_options(option.value, &default_map_options);
+      if (r < 0) {
+        std::cerr << "rbd: couldn't parse default map options" << std::endl;
+        return r;
+      }
+
+      break;
+    }
+  }
+
   for (auto& [key, value] : default_map_options) {
     if (map_options.count(key) == 0) {
       map_options[key] = value;
@@ -619,6 +652,26 @@ int execute_unmap(const po::variables_map &vm,
     return r;
   }
   return 0;
+}
+
+int execute_attach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+#if defined(WITH_KRBD)
+  std::cerr << "rbd: krbd does not support attach" << std::endl;
+#else
+  std::cerr << "rbd: kernel device is not supported" << std::endl;
+#endif
+  return -EOPNOTSUPP;
+}
+
+int execute_detach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+#if defined(WITH_KRBD)
+  std::cerr << "rbd: krbd does not support detach" << std::endl;
+#else
+  std::cerr << "rbd: kernel device is not supported" << std::endl;
+#endif
+  return -EOPNOTSUPP;
 }
 
 } // namespace kernel
