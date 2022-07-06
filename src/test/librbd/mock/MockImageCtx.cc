@@ -4,6 +4,7 @@
 #include "include/neorados/RADOS.hpp"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockSafeTimer.h"
+#include "test/librbd/mock/crypto/MockEncryptionFormat.h"
 #include "librbd/io/AsyncOperation.h"
 
 static MockSafeTimer *s_timer;

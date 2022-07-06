@@ -38,7 +38,7 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
   Context *on_finish = &finished_cond;
   io::AioCompletion* aio_comp;
   ceph::bufferlist header_bl;
-  ceph::ref_t<CryptoInterface> crypto;
+  std::unique_ptr<CryptoInterface> crypto;
 
   void SetUp() override {
     TestMockFixture::SetUp();
@@ -46,14 +46,9 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
     librbd::ImageCtx *ictx;
     ASSERT_EQ(0, open_image(m_image_name, &ictx));
     mock_image_ctx = new MockImageCtx(*ictx);
-    crypto = nullptr;
   }
 
   void TearDown() override {
-    if (crypto != nullptr) {
-      crypto->put();
-      crypto = nullptr;
-    }
     delete mock_image_ctx;
     TestMockFixture::TearDown();
   }

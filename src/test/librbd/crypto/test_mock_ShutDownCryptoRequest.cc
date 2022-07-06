@@ -5,7 +5,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
-#include "test/librbd/mock/crypto/MockCryptoInterface.h"
+#include "test/librbd/mock/crypto/MockEncryptionFormat.h"
 
 #include "librbd/crypto/ShutDownCryptoRequest.cc"
 
@@ -35,7 +35,6 @@ struct TestMockShutDownCryptoRequest : public TestMockFixture {
   C_SaferCond finished_cond;
   Context *on_finish = &finished_cond;
   MockShutDownCryptoRequest* mock_shutdown_crypto_request;
-  MockCryptoInterface* crypto;
   Context* shutdown_object_dispatch_context;
   Context* shutdown_image_dispatch_context;
 
@@ -45,14 +44,12 @@ struct TestMockShutDownCryptoRequest : public TestMockFixture {
     librbd::ImageCtx *ictx;
     ASSERT_EQ(0, open_image(m_image_name, &ictx));
     mock_image_ctx = new MockTestImageCtx(*ictx);
-    crypto = new MockCryptoInterface();
-    mock_image_ctx->crypto = crypto;
+    mock_image_ctx->encryption_format.reset(new MockEncryptionFormat());
     mock_shutdown_crypto_request = MockShutDownCryptoRequest::create(
           mock_image_ctx, on_finish);
   }
 
   void TearDown() override {
-    crypto->put();
     delete mock_image_ctx;
     TestMockFixture::TearDown();
   }
@@ -88,7 +85,7 @@ TEST_F(TestMockShutDownCryptoRequest, NoCryptoObjectDispatch) {
   expect_crypto_object_layer_exists_check(false);
   mock_shutdown_crypto_request->send();
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_EQ(nullptr, mock_image_ctx->crypto);
+  ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
 }
 
 TEST_F(TestMockShutDownCryptoRequest, FailShutdownObjectDispatch) {
@@ -98,7 +95,7 @@ TEST_F(TestMockShutDownCryptoRequest, FailShutdownObjectDispatch) {
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   shutdown_object_dispatch_context->complete(-EIO);
   ASSERT_EQ(-EIO, finished_cond.wait());
-  ASSERT_NE(nullptr, mock_image_ctx->crypto);
+  ASSERT_NE(nullptr, mock_image_ctx->encryption_format.get());
 }
 
 TEST_F(TestMockShutDownCryptoRequest, NoCryptoImageDispatch) {
@@ -109,7 +106,7 @@ TEST_F(TestMockShutDownCryptoRequest, NoCryptoImageDispatch) {
   expect_crypto_image_layer_exists_check(false);
   shutdown_object_dispatch_context->complete(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_EQ(nullptr, mock_image_ctx->crypto);
+  ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
 }
 
 TEST_F(TestMockShutDownCryptoRequest, FailShutdownImageDispatch) {
@@ -123,7 +120,7 @@ TEST_F(TestMockShutDownCryptoRequest, FailShutdownImageDispatch) {
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   shutdown_image_dispatch_context->complete(-EIO);
   ASSERT_EQ(-EIO, finished_cond.wait());
-  ASSERT_NE(nullptr, mock_image_ctx->crypto);
+  ASSERT_NE(nullptr, mock_image_ctx->encryption_format.get());
 }
 
 TEST_F(TestMockShutDownCryptoRequest, Success) {
@@ -137,7 +134,7 @@ TEST_F(TestMockShutDownCryptoRequest, Success) {
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   shutdown_image_dispatch_context->complete(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_EQ(nullptr, mock_image_ctx->crypto);
+  ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
 }
 
 } // namespace crypto

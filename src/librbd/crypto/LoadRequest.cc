@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "librbd/Utils.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/crypto/EncryptionFormat.h"
 #include "librbd/crypto/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -21,15 +22,16 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 LoadRequest<I>::LoadRequest(
-        I* image_ctx, std::unique_ptr<EncryptionFormat<I>> format,
+        I* image_ctx, EncryptionFormat format,
         Context* on_finish) : m_image_ctx(image_ctx),
-                              m_format(std::move(format)),
-                              m_on_finish(on_finish) {
+                              m_on_finish(on_finish),
+                              m_format_idx(0) {
+  m_formats.push_back(std::move(format));
 }
 
 template <typename I>
 void LoadRequest<I>::send() {
-  if (m_image_ctx->crypto != nullptr) {
+  if (m_image_ctx->encryption_format.get() != nullptr) {
     lderr(m_image_ctx->cct) << "encryption already loaded" << dendl;
     finish(-EEXIST);
     return;
@@ -46,20 +48,49 @@ void LoadRequest<I>::send() {
     ictx = ictx->parent;
   }
 
+  m_current_image_ctx = m_image_ctx;
+  load();
+}
+
+template <typename I>
+void LoadRequest<I>::load() {
+  ldout(m_image_ctx->cct, 20) << "format_idx=" << m_format_idx << dendl;
+
   auto ctx = create_context_callback<
-          LoadRequest<I>, &LoadRequest<I>::finish>(this);
-  m_format->load(m_image_ctx, ctx);
+          LoadRequest<I>, &LoadRequest<I>::handle_load>(this);
+  m_formats[m_format_idx]->load(m_current_image_ctx, ctx);
+}
+
+template <typename I>
+void LoadRequest<I>::handle_load(int r) {
+  if (r < 0) {
+    lderr(m_image_ctx->cct) << "failed to load encryption. image name: "
+                            << m_current_image_ctx->name << dendl;
+    finish(r);
+    return;
+  }
+
+  m_current_image_ctx = m_current_image_ctx->parent;
+  if (m_current_image_ctx != nullptr) {
+    // move on to loading parent
+    m_format_idx++;
+    if (m_format_idx >= m_formats.size()) {
+      // try to load next ancestor using the same format
+      m_formats.push_back(m_formats[m_formats.size() - 1]->clone());
+    }
+
+    load();
+  } else {
+    finish(r);
+  }
 }
 
 template <typename I>
 void LoadRequest<I>::finish(int r) {
-
   if (r == 0) {
-    // load crypto layers to image and its ancestors
-    auto crypto = m_format->get_crypto();
     auto ictx = m_image_ctx;
-    while (ictx != nullptr) {
-      util::set_crypto(ictx, crypto);
+    for (auto& format : m_formats) {
+      util::set_crypto(ictx, std::move(format));
       ictx = ictx->parent;
     }
   }

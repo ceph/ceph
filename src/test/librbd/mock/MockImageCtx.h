@@ -30,6 +30,11 @@ namespace operation {
 template <typename> class ResizeRequest;
 }
 
+
+namespace crypto {
+  class MockEncryptionFormat;
+}
+
 struct MockImageCtx {
   static MockImageCtx *s_instance;
   static MockImageCtx *create(const std::string &image_name,
@@ -228,7 +233,7 @@ struct MockImageCtx {
 
   ZTracer::Endpoint trace_endpoint;
 
-  crypto::CryptoInterface* crypto = nullptr;
+  std::unique_ptr<crypto::MockEncryptionFormat> encryption_format;
 
   uint64_t sparse_read_threshold_bytes;
   uint32_t discard_granularity_bytes;
