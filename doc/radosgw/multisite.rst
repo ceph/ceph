@@ -387,9 +387,9 @@ the master zone of the master zone group. Execute the following:
 
 ::
 
-    # radosgw-admin zone create --rgw-zonegroup={zone-group-name}\
-                                --rgw-zone={zone-name} --endpoints={url} \
-                                --access-key={system-key} --secret={secret}\
+    # radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
+                                --rgw-zone={zone-name} \
+                                --access-key={system-key} --secret={secret} \
                                 --endpoints=http://{fqdn}:80 \
                                 [--read-only]
 
@@ -1322,7 +1322,7 @@ Next, delete the zone. Execute the following:
 
 ::
 
-    # radosgw-admin zone rm --rgw-zone<name>
+    # radosgw-admin zone delete --rgw-zone<name>
 
 Finally, update the period:
 
@@ -1348,10 +1348,12 @@ with the deleted zone’s name.
 ::
 
     # ceph osd pool rm <del-zone>.rgw.control <del-zone>.rgw.control --yes-i-really-really-mean-it
-    # ceph osd pool rm <del-zone>.rgw.data.root <del-zone>.rgw.data.root --yes-i-really-really-mean-it
-    # ceph osd pool rm <del-zone>.rgw.gc <del-zone>.rgw.gc --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.meta <del-zone>.rgw.meta --yes-i-really-really-mean-it
     # ceph osd pool rm <del-zone>.rgw.log <del-zone>.rgw.log --yes-i-really-really-mean-it
-    # ceph osd pool rm <del-zone>.rgw.users.uid <del-zone>.rgw.users.uid --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.otp <del-zone>.rgw.otp --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.buckets.index <del-zone>.rgw.buckets.index --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.buckets.non-ec <del-zone>.rgw.buckets.non-ec --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.buckets.data <del-zone>.rgw.buckets.data --yes-i-really-really-mean-it
 
 Modify a Zone
 ~~~~~~~~~~~~~
