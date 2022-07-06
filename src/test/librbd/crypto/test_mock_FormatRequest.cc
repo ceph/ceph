@@ -32,7 +32,6 @@ struct MockTestImageCtx : public MockImageCtx {
 } // anonymous namespace
 
 namespace crypto {
-
 namespace util {
 
 template <>
@@ -53,7 +52,9 @@ struct ShutDownCryptoRequest<MockTestImageCtx> {
   Context *on_finish = nullptr;
   static ShutDownCryptoRequest *s_instance;
   static ShutDownCryptoRequest *create(
-          MockTestImageCtx* image_ctx, Context *on_finish) {
+          MockTestImageCtx *image_ctx,
+          std::unique_ptr<MockEncryptionFormat>* format,
+          Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;

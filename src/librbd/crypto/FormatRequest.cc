@@ -48,7 +48,7 @@ void FormatRequest<I>::send() {
 
   auto ctx = create_context_callback<
           FormatRequest<I>, &FormatRequest<I>::handle_shutdown_crypto>(this);
-  auto *req = ShutDownCryptoRequest<I>::create(m_image_ctx, ctx);
+  auto *req = ShutDownCryptoRequest<I>::create(m_image_ctx, nullptr, ctx);
   req->send();
 }
 

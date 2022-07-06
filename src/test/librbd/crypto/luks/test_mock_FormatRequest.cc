@@ -101,7 +101,7 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
       ASSERT_EQ(0, non_switched_header.init());
       ASSERT_EQ(0, non_switched_header.write(header_bl));
       ASSERT_EQ(-EINVAL, non_switched_header.load(expected_format));
-      ASSERT_LT(0, Magic::replace_magic(mock_image_ctx->cct, header_bl));
+      ASSERT_EQ(0, Magic::replace_magic(mock_image_ctx->cct, header_bl));
     }
     ASSERT_EQ(0, header.write(header_bl));
     ASSERT_EQ(0, header.load(expected_format));
