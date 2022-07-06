@@ -215,7 +215,8 @@ if(LINUX AND HAVE_LIBCRYPTSETUP)
           crypto/luks/LUKSEncryptionFormat.cc
           crypto/luks/Header.cc
           crypto/luks/FormatRequest.cc
-          crypto/luks/LoadRequest.cc)
+          crypto/luks/LoadRequest.cc
+          crypto/luks/Magic.cc)
 endif()
 
 add_library(rbd_api STATIC librbd.cc)
