@@ -46,6 +46,7 @@ set(crimson_seastore_srcs
   journal/circular_bounded_journal.cc
   allocator.cc
   allocator/fastbmap_allocator_impl.cc
+  allocator/bitmap_allocator.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
