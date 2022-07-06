@@ -44,6 +44,7 @@ set(crimson_seastore_srcs
   device.cc
   segment_manager_group.cc
   journal/circular_bounded_journal.cc
+  allocator.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
