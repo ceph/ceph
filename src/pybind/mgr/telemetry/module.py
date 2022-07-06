@@ -787,6 +787,9 @@ class Module(MgrModule):
         self.set_module_option('enabled', True)
         self.set_module_option('last_opt_revision', REVISION)
 
+        # wake up serve() to reset health warning
+        self.event.set()
+
     def off(self):
         self.set_module_option('enabled', False)
         self.set_module_option('last_opt_revision', 1)
