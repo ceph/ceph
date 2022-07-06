@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/crypto/EncryptionFormat.h"
 #include "librbd/crypto/ShutDownCryptoRequest.h"
 #include "librbd/crypto/Utils.h"
 #include "librbd/io/AioCompletion.h"
@@ -26,7 +27,7 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 FormatRequest<I>::FormatRequest(
-        I* image_ctx, std::unique_ptr<EncryptionFormat<I>> format,
+        I* image_ctx, EncryptionFormat format,
         Context* on_finish) : m_image_ctx(image_ctx),
                               m_format(std::move(format)),
                               m_on_finish(on_finish) {
@@ -39,8 +40,8 @@ void FormatRequest<I>::send() {
     finish(-ENOTSUP);
     return;
   }
-
-  if (m_image_ctx->crypto == nullptr) {
+  
+  if (m_image_ctx->encryption_format.get() == nullptr) {
     format();
     return;
   }
@@ -107,7 +108,7 @@ void FormatRequest<I>::handle_flush(int r) {
 template <typename I>
 void FormatRequest<I>::finish(int r) {
   if (r == 0) {
-    util::set_crypto(m_image_ctx, m_format->get_crypto());
+    util::set_crypto(m_image_ctx, std::move(m_format));
   }
   m_on_finish->complete(r);
   delete this;

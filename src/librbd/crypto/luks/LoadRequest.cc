@@ -24,10 +24,10 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 LoadRequest<I>::LoadRequest(
-        I* image_ctx, std::string&& passphrase,
-        ceph::ref_t<CryptoInterface>* result_crypto,
+        I* image_ctx, std::string_view passphrase,
+        std::unique_ptr<CryptoInterface>* result_crypto,
         Context* on_finish) : m_image_ctx(image_ctx),
-                              m_passphrase(std::move(passphrase)),
+                              m_passphrase(passphrase),
                               m_on_finish(on_finish),
                               m_result_crypto(result_crypto),
                               m_initial_read_size(DEFAULT_INITIAL_READ_SIZE),
@@ -143,7 +143,7 @@ void LoadRequest<I>::read_volume_key() {
   size_t volume_key_size = sizeof(volume_key);
 
   auto r = m_header.read_volume_key(
-          m_passphrase.c_str(), m_passphrase.size(),
+          m_passphrase.data(), m_passphrase.size(),
           reinterpret_cast<char*>(volume_key), &volume_key_size);
   if (r != 0) {
     auto keyslots_end_offset = m_header.get_data_offset();
@@ -168,7 +168,6 @@ void LoadRequest<I>::read_volume_key() {
 
 template <typename I>
 void LoadRequest<I>::finish(int r) {
-  ceph_memzero_s(&m_passphrase[0], m_passphrase.size(), m_passphrase.size());
   m_on_finish->complete(r);
   delete this;
 }

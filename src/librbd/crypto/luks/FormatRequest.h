@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CRYPTO_LUKS_FORMAT_REQUEST_H
 #define CEPH_LIBRBD_CRYPTO_LUKS_FORMAT_REQUEST_H
 
+#include <string_view>
 #include "include/rbd/librbd.hpp"
 #include "librbd/ImageCtx.h"
 #include "librbd/crypto/CryptoInterface.h"
@@ -21,16 +22,16 @@ class FormatRequest {
 public:
     static FormatRequest* create(
             I* image_ctx, encryption_format_t format,
-            encryption_algorithm_t alg, std::string&& passphrase,
-            ceph::ref_t<CryptoInterface>* result_crypto, Context* on_finish,
+            encryption_algorithm_t alg, std::string_view passphrase,
+            std::unique_ptr<CryptoInterface>* result_crypto, Context* on_finish,
             bool insecure_fast_mode) {
-      return new FormatRequest(image_ctx, format, alg, std::move(passphrase),
+      return new FormatRequest(image_ctx, format, alg, passphrase,
                                result_crypto, on_finish, insecure_fast_mode);
     }
 
     FormatRequest(I* image_ctx, encryption_format_t format,
-                  encryption_algorithm_t alg, std::string&& passphrase,
-                  ceph::ref_t<CryptoInterface>* result_crypto,
+                  encryption_algorithm_t alg, std::string_view passphrase,
+                  std::unique_ptr<CryptoInterface>* result_crypto,
                   Context* on_finish, bool insecure_fast_mode);
     void send();
     void finish(int r);
@@ -40,8 +41,8 @@ private:
 
     encryption_format_t m_format;
     encryption_algorithm_t m_alg;
-    std::string m_passphrase;
-    ceph::ref_t<CryptoInterface>* m_result_crypto;
+    std::string_view m_passphrase;
+    std::unique_ptr<CryptoInterface>* m_result_crypto;
     Context* m_on_finish;
     bool m_insecure_fast_mode;
     Header m_header;

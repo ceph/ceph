@@ -4,7 +4,9 @@
 #ifndef CEPH_LIBRBD_CRYPTO_LUKS_ENCRYPTION_FORMAT_H
 #define CEPH_LIBRBD_CRYPTO_LUKS_ENCRYPTION_FORMAT_H
 
+#include <string_view>
 #include "include/rbd/librbd.hpp"
+#include "librbd/crypto/CryptoInterface.h"
 #include "librbd/crypto/EncryptionFormat.h"
 
 namespace librbd {
@@ -20,15 +22,24 @@ template <typename ImageCtxT>
 class LUKSEncryptionFormat : public crypto::EncryptionFormat<ImageCtxT> {
 
 public:
-    LUKSEncryptionFormat(std::string&& passphrase);
-    LUKSEncryptionFormat(encryption_algorithm_t alg, std::string&& passphrase);
-    ~LUKSEncryptionFormat();
+    LUKSEncryptionFormat(std::string_view passphrase);
+    LUKSEncryptionFormat(encryption_algorithm_t alg,
+                         std::string_view passphrase);
+
+    std::unique_ptr<crypto::EncryptionFormat<ImageCtxT>>
+    clone() const override {
+      // clone() should be called only when handling the 'load' operation,
+      // so decaying LUKS{1,2}EncryptionFormat into LUKSEncryptionFormat is fine
+      return std::unique_ptr<crypto::EncryptionFormat<ImageCtxT>>(
+              new LUKSEncryptionFormat(m_passphrase));
+    }
 
     void format(ImageCtxT* ictx, Context* on_finish) override;
     void load(ImageCtxT* ictx, Context* on_finish) override;
 
-    ceph::ref_t<CryptoInterface> get_crypto() override {
-      return m_crypto;
+    CryptoInterface* get_crypto() override {
+      ceph_assert(m_crypto);
+      return m_crypto.get();
     }
 
 protected:
@@ -36,9 +47,9 @@ protected:
       return RBD_ENCRYPTION_FORMAT_LUKS;
     }
 
-    std::string m_passphrase;
+    std::string_view m_passphrase;
     encryption_algorithm_t m_alg;
-    ceph::ref_t<CryptoInterface> m_crypto;
+    std::unique_ptr<CryptoInterface> m_crypto;
 };
 
 template <typename ImageCtxT>

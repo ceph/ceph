@@ -5,22 +5,26 @@
 #define CEPH_LIBRBD_CRYPTO_UTILS_H
 
 #include "include/Context.h"
-#include "librbd/crypto/CryptoInterface.h"
 
 namespace librbd {
 
 struct ImageCtx;
 
 namespace crypto {
+
+class CryptoInterface;
+template <typename> class EncryptionFormat;
+
 namespace util {
 
 template <typename ImageCtxT = librbd::ImageCtx>
-void set_crypto(ImageCtxT *image_ctx, ceph::ref_t<CryptoInterface> crypto);
+void set_crypto(ImageCtxT *image_ctx,
+                decltype(ImageCtxT::encryption_format) encryption_format);
 
 int build_crypto(
         CephContext* cct, const unsigned char* key, uint32_t key_length,
         uint64_t block_size, uint64_t data_offset,
-        ceph::ref_t<CryptoInterface>* result_crypto);
+        std::unique_ptr<CryptoInterface>* result_crypto);
 
 } // namespace util
 } // namespace crypto

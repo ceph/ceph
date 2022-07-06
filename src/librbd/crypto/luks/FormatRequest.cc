@@ -28,11 +28,11 @@ using librbd::util::create_context_callback;
 template <typename I>
 FormatRequest<I>::FormatRequest(
         I* image_ctx, encryption_format_t format, encryption_algorithm_t alg,
-        std::string&& passphrase, ceph::ref_t<CryptoInterface>* result_crypto,
-        Context* on_finish,
+        std::string_view passphrase,
+        std::unique_ptr<CryptoInterface>* result_crypto, Context* on_finish,
         bool insecure_fast_mode) : m_image_ctx(image_ctx), m_format(format),
                                    m_alg(alg),
-                                   m_passphrase(std::move(passphrase)),
+                                   m_passphrase(passphrase),
                                    m_result_crypto(result_crypto),
                                    m_on_finish(on_finish),
                                    m_insecure_fast_mode(insecure_fast_mode),
@@ -114,7 +114,7 @@ void FormatRequest<I>::send() {
   }
 
   // add keyslot (volume key encrypted with passphrase)
-  r = m_header.add_keyslot(m_passphrase.c_str(), m_passphrase.size());
+  r = m_header.add_keyslot(m_passphrase.data(), m_passphrase.size());
   if (r != 0) {
     finish(r);
     return;
@@ -165,8 +165,6 @@ void FormatRequest<I>::handle_write_header(int r) {
 
 template <typename I>
 void FormatRequest<I>::finish(int r) {
-  ceph_memzero_s(
-          &m_passphrase[0], m_passphrase.capacity(), m_passphrase.size());
   m_on_finish->complete(r);
   delete this;
 }

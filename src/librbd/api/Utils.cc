@@ -37,7 +37,7 @@ int create_encryption_format(
         if (expected_opts_size == opts_size) {
           auto cpp_opts = (encryption_luks1_format_options_t*)opts;
           *result_format = new crypto::luks::LUKS1EncryptionFormat<I>(
-                  cpp_opts->alg, std::move(cpp_opts->passphrase));
+                  cpp_opts->alg, cpp_opts->passphrase);
         }
       }
       break;
@@ -55,7 +55,7 @@ int create_encryption_format(
         if (expected_opts_size == opts_size) {
           auto cpp_opts = (encryption_luks2_format_options_t*)opts;
           *result_format = new crypto::luks::LUKS2EncryptionFormat<I>(
-                  cpp_opts->alg, std::move(cpp_opts->passphrase));
+                  cpp_opts->alg, cpp_opts->passphrase);
         }
       }
       break;
@@ -73,7 +73,7 @@ int create_encryption_format(
         if (expected_opts_size == opts_size) {
           auto cpp_opts = (encryption_luks_format_options_t*)opts;
           *result_format = new crypto::luks::LUKSEncryptionFormat<I>(
-                  std::move(cpp_opts->passphrase));
+                  cpp_opts->passphrase);
         }
       }
       break;

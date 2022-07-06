@@ -21,13 +21,24 @@ inline ImageCtx *get_image_ctx(MockImageCtx *image_ctx) {
 #include "librbd/crypto/FormatRequest.cc"
 
 namespace librbd {
+
+namespace {
+
+struct MockTestImageCtx : public MockImageCtx {
+  MockTestImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
+  }
+};
+
+} // anonymous namespace
+
 namespace crypto {
 
 namespace util {
 
-template <> void set_crypto(
-        MockImageCtx *image_ctx, ceph::ref_t<CryptoInterface> crypto) {
-  image_ctx->crypto = crypto.get();
+template <>
+void set_crypto(MockTestImageCtx *image_ctx,
+                std::unique_ptr<MockEncryptionFormat> encryption_format) {
+  image_ctx->encryption_format = std::move(encryption_format);
 }
 
 } // namespace util
@@ -38,11 +49,11 @@ using ::testing::Return;
 using ::testing::WithArg;
 
 template <>
-struct ShutDownCryptoRequest<MockImageCtx> {
+struct ShutDownCryptoRequest<MockTestImageCtx> {
   Context *on_finish = nullptr;
   static ShutDownCryptoRequest *s_instance;
   static ShutDownCryptoRequest *create(
-          MockImageCtx* image_ctx, Context *on_finish) {
+          MockTestImageCtx* image_ctx, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -55,20 +66,20 @@ struct ShutDownCryptoRequest<MockImageCtx> {
   }
 };
 
-ShutDownCryptoRequest<MockImageCtx> *ShutDownCryptoRequest<
-        MockImageCtx>::s_instance = nullptr;
+ShutDownCryptoRequest<MockTestImageCtx> *ShutDownCryptoRequest<
+        MockTestImageCtx>::s_instance = nullptr;
 
 struct TestMockCryptoFormatRequest : public TestMockFixture {
-  typedef FormatRequest<librbd::MockImageCtx> MockFormatRequest;
-  typedef ShutDownCryptoRequest<MockImageCtx> MockShutDownCryptoRequest;
+  typedef FormatRequest<librbd::MockTestImageCtx> MockFormatRequest;
+  typedef ShutDownCryptoRequest<MockTestImageCtx> MockShutDownCryptoRequest;
 
-  MockImageCtx* mock_image_ctx;
+  MockTestImageCtx* mock_image_ctx;
   C_SaferCond finished_cond;
   Context *on_finish = &finished_cond;
-  MockEncryptionFormat* mock_encryption_format;
+  MockShutDownCryptoRequest mock_shutdown_crypto_request;
+  MockEncryptionFormat* old_encryption_format;
+  MockEncryptionFormat* new_encryption_format;
   Context* format_context;
-  MockCryptoInterface* crypto;
-  MockCryptoInterface* old_crypto;
   MockFormatRequest* mock_format_request;
   std::string key = std::string(64, '0');
 
@@ -77,20 +88,17 @@ struct TestMockCryptoFormatRequest : public TestMockFixture {
 
     librbd::ImageCtx *ictx;
     ASSERT_EQ(0, open_image(m_image_name, &ictx));
-    mock_image_ctx = new MockImageCtx(*ictx);
-    mock_encryption_format = new MockEncryptionFormat();
-    crypto = new MockCryptoInterface();
-    old_crypto = new MockCryptoInterface();
-    mock_image_ctx->crypto = old_crypto;
+    mock_image_ctx = new MockTestImageCtx(*ictx);
+    old_encryption_format = new MockEncryptionFormat();
+    new_encryption_format = new MockEncryptionFormat();
+    mock_image_ctx->encryption_format.reset(old_encryption_format);
     mock_format_request = MockFormatRequest::create(
           mock_image_ctx,
-          std::unique_ptr<MockEncryptionFormat>(mock_encryption_format),
+          std::unique_ptr<MockEncryptionFormat>(new_encryption_format),
           on_finish);
   }
 
   void TearDown() override {
-    crypto->put();
-    old_crypto->put();
     delete mock_image_ctx;
     TestMockFixture::TearDown();
   }
@@ -100,8 +108,18 @@ struct TestMockCryptoFormatRequest : public TestMockFixture {
             RBD_FEATURE_JOURNALING)).WillOnce(Return(has_journal));
   }
 
+  void expect_shutdown_crypto(int r = 0) {
+    EXPECT_CALL(mock_shutdown_crypto_request, send()).WillOnce(
+                    Invoke([this, r]() {
+                      if (r == 0) {
+                        mock_image_ctx->encryption_format.reset();
+                      }
+                      mock_shutdown_crypto_request.on_finish->complete(r);
+    }));
+  }
+
   void expect_encryption_format() {
-    EXPECT_CALL(*mock_encryption_format, format(
+    EXPECT_CALL(*new_encryption_format, format(
             mock_image_ctx, _)).WillOnce(
                     WithArg<1>(Invoke([this](Context* ctx) {
                       format_context = ctx;
@@ -125,70 +143,62 @@ TEST_F(TestMockCryptoFormatRequest, JournalEnabled) {
   expect_test_journal_feature(true);
   mock_format_request->send();
   ASSERT_EQ(-ENOTSUP, finished_cond.wait());
-  ASSERT_EQ(old_crypto, mock_image_ctx->crypto);
+  ASSERT_EQ(old_encryption_format, mock_image_ctx->encryption_format.get());
 }
 
 TEST_F(TestMockCryptoFormatRequest, FailShutDownCrypto) {
   expect_test_journal_feature(false);
-  MockShutDownCryptoRequest mock_shutdown_crypto_request;
-  EXPECT_CALL(mock_shutdown_crypto_request, send());
+  expect_shutdown_crypto(-EIO);
   mock_format_request->send();
-  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  mock_shutdown_crypto_request.on_finish->complete(-EIO);
   ASSERT_EQ(-EIO, finished_cond.wait());
-  ASSERT_EQ(old_crypto, mock_image_ctx->crypto);
+  ASSERT_EQ(old_encryption_format, mock_image_ctx->encryption_format.get());
 }
 
 TEST_F(TestMockCryptoFormatRequest, FormatFail) {
-  mock_image_ctx->crypto = nullptr;
+  mock_image_ctx->encryption_format = nullptr;
   expect_test_journal_feature(false);
   expect_encryption_format();
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   format_context->complete(-EIO);
   ASSERT_EQ(-EIO, finished_cond.wait());
-  ASSERT_EQ(nullptr, mock_image_ctx->crypto);
+  ASSERT_EQ(nullptr, mock_image_ctx->encryption_format);
 }
 
 TEST_F(TestMockCryptoFormatRequest, Success) {
-  mock_image_ctx->crypto = nullptr;
+  mock_image_ctx->encryption_format = nullptr;
   expect_test_journal_feature(false);
   expect_encryption_format();
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   expect_image_flush(0);
-  EXPECT_CALL(*mock_encryption_format, get_crypto()).WillOnce(Return(crypto));
   format_context->complete(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_EQ(crypto, mock_image_ctx->crypto);
+  ASSERT_EQ(new_encryption_format, mock_image_ctx->encryption_format.get());
 }
 
 TEST_F(TestMockCryptoFormatRequest, FailFlush) {
-  mock_image_ctx->crypto = nullptr;
   expect_test_journal_feature(false);
+  expect_shutdown_crypto();
   expect_encryption_format();
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   expect_image_flush(-EIO);
   format_context->complete(0);
   ASSERT_EQ(-EIO, finished_cond.wait());
-  ASSERT_EQ(nullptr, mock_image_ctx->crypto);
+  ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
 }
 
 TEST_F(TestMockCryptoFormatRequest, CryptoAlreadyLoaded) {
   expect_test_journal_feature(false);
-  MockShutDownCryptoRequest mock_shutdown_crypto_request;
-  EXPECT_CALL(mock_shutdown_crypto_request, send());
+  expect_shutdown_crypto();
+  expect_encryption_format();
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  expect_encryption_format();
-  mock_shutdown_crypto_request.on_finish->complete(0);
-  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   expect_image_flush(0);
-  EXPECT_CALL(*mock_encryption_format, get_crypto()).WillOnce(Return(crypto));
   format_context->complete(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_EQ(crypto, mock_image_ctx->crypto);
+  ASSERT_EQ(new_encryption_format, mock_image_ctx->encryption_format.get());
 }
 
 } // namespace crypto

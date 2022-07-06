@@ -29,6 +29,7 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
+#include "librbd/crypto/EncryptionFormat.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageDispatcher.h"

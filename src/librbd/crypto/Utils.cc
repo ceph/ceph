@@ -8,7 +8,9 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/crypto/BlockCrypto.h"
 #include "librbd/crypto/CryptoImageDispatch.h"
+#include "librbd/crypto/CryptoInterface.h"
 #include "librbd/crypto/CryptoObjectDispatch.h"
+#include "librbd/crypto/EncryptionFormat.h"
 #include "librbd/crypto/openssl/DataCryptor.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
@@ -22,22 +24,25 @@ namespace crypto {
 namespace util {
 
 template <typename I>
-void set_crypto(I *image_ctx, ceph::ref_t<CryptoInterface> crypto) {
-  {
-    std::unique_lock image_locker{image_ctx->image_lock};
-    ceph_assert(image_ctx->crypto == nullptr);
-    image_ctx->crypto = crypto.get();
-  }
+void set_crypto(I *image_ctx,
+                decltype(I::encryption_format) encryption_format) {
+  std::unique_lock image_locker{image_ctx->image_lock};
+  ceph_assert(!image_ctx->encryption_format);
+
+  auto crypto = encryption_format->get_crypto();
+
   auto object_dispatch = CryptoObjectDispatch<I>::create(image_ctx, crypto);
   auto image_dispatch = CryptoImageDispatch::create(crypto->get_data_offset());
   image_ctx->io_object_dispatcher->register_dispatch(object_dispatch);
   image_ctx->io_image_dispatcher->register_dispatch(image_dispatch);
+
+  image_ctx->encryption_format = std::move(encryption_format);
 }
 
 int build_crypto(
         CephContext* cct, const unsigned char* key, uint32_t key_length,
         uint64_t block_size, uint64_t data_offset,
-        ceph::ref_t<CryptoInterface>* result_crypto) {
+        std::unique_ptr<CryptoInterface>* result_crypto) {
   const char* cipher_suite;
   switch (key_length) {
     case 32:
@@ -60,8 +65,8 @@ int build_crypto(
     return r;
   }
 
-  *result_crypto = BlockCrypto<EVP_CIPHER_CTX>::create(
-          cct, data_cryptor, block_size, data_offset);
+  result_crypto->reset(BlockCrypto<EVP_CIPHER_CTX>::create(
+          cct, data_cryptor, block_size, data_offset));
   return 0;
 }
 
@@ -70,4 +75,5 @@ int build_crypto(
 } // namespace librbd
 
 template void librbd::crypto::util::set_crypto(
-    librbd::ImageCtx *image_ctx, ceph::ref_t<CryptoInterface> crypto);
+    librbd::ImageCtx *image_ctx,
+    std::unique_ptr<EncryptionFormat<librbd::ImageCtx>> encryption_format);

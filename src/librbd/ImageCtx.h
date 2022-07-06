@@ -55,7 +55,7 @@ namespace librbd {
   template <typename> class PluginRegistry;
 
   namespace asio { struct ContextWQ; }
-  namespace crypto { class CryptoInterface; }
+  namespace crypto { template <typename> class EncryptionFormat; }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -144,6 +144,7 @@ namespace librbd {
                        // lockers
                        // object_map
                        // parent_md and parent
+                       // encryption_format
 
     ceph::shared_mutex timestamp_lock; // protects (create/access/modify)_timestamp
     ceph::mutex async_ops_lock; // protects async_ops and async_requests
@@ -230,7 +231,7 @@ namespace librbd {
 
     ZTracer::Endpoint trace_endpoint;
 
-    crypto::CryptoInterface* crypto = nullptr;
+    std::unique_ptr<crypto::EncryptionFormat<ImageCtx>> encryption_format;
 
     // unit test mock helpers
     static ImageCtx* create(const std::string &image_name,

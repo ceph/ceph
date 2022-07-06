@@ -113,7 +113,7 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
   typedef io::CopyupRequest<librbd::MockImageCtx> MockCopyupRequest;
   typedef io::util::Mock MockUtils;
 
-  MockCryptoInterface* crypto;
+  MockCryptoInterface crypto;
   MockImageCtx* mock_image_ctx;
   MockCryptoObjectDispatch* mock_crypto_object_dispatch;
 
@@ -134,10 +134,9 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
 
     librbd::ImageCtx *ictx;
     ASSERT_EQ(0, open_image(m_image_name, &ictx));
-    crypto = new MockCryptoInterface();
     mock_image_ctx = new MockImageCtx(*ictx);
     mock_crypto_object_dispatch = new MockCryptoObjectDispatch(
-            mock_image_ctx, crypto);
+            mock_image_ctx, &crypto);
     data.append(std::string(4096, '1'));
   }
 
@@ -258,11 +257,11 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
   }
 
   void expect_encrypt(int count = 1) {
-    EXPECT_CALL(*crypto, encrypt(_, _)).Times(count);
+    EXPECT_CALL(crypto, encrypt(_, _)).Times(count);
   }
 
   void expect_decrypt(int count = 1) {
-    EXPECT_CALL(*crypto, decrypt(_, _)).Times(count);
+    EXPECT_CALL(crypto, decrypt(_, _)).Times(count);
   }
 };
 
