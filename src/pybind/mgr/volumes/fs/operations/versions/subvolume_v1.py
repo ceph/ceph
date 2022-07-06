@@ -806,7 +806,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         return pending_clones_info
 
-    def remove_snapshot(self, snapname):
+    def remove_snapshot(self, snapname, force=False):
         if self.has_pending_clones(snapname):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
         snappath = self.snapshot_path(snapname)
@@ -814,9 +814,16 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             self.metadata_mgr.remove_section(self.get_snap_section_name(snapname))
             self.metadata_mgr.flush()
         except MetadataMgrException as me:
-            log.error(f"Failed to remove snapshot metadata on snap={snapname} subvol={self.subvol_name} "
-                      f"group={self.group_name} reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
-            raise VolumeException(-errno.EAGAIN, f"failed to remove snapshot metadata on snap={snapname} reason={me.args[0]} {me.args[1]}")
+            if force:
+                log.info(f"Allowing snapshot removal on failure of it's metadata removal with force on "
+                         f"snap={snapname} subvol={self.subvol_name} group={self.group_name} reason={me.args[1]}, "
+                         f"errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
+                pass
+            else:
+                log.error(f"Failed to remove snapshot metadata on snap={snapname} subvol={self.subvol_name} "
+                          f"group={self.group_name} reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
+                raise VolumeException(-errno.EAGAIN,
+                                      f"failed to remove snapshot metadata on snap={snapname} reason={me.args[0]} {me.args[1]}")
         rmsnap(self.fs, snappath)
 
     def snapshot_info(self, snapname):
