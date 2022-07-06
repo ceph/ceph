@@ -16,7 +16,7 @@ namespace pwl {
 
 std::ostream& GenericLogEntry::format(std::ostream &os) const {
   os << "ram_entry=[" << ram_entry
-     << "], cache_entry=" << (void*)cache_entry
+     << "], cache_entry=" << reinterpret_cast<void *>(cache_entry)
      << ", log_entry_index=" << log_entry_index
      << ", completed=" << completed;
   return os;
@@ -88,7 +88,7 @@ void WriteLogEntry::init(bool has_data,
 std::ostream& WriteLogEntry::format(std::ostream &os) const {
   os << "(Write) ";
   GenericWriteLogEntry::format(os);
-  os << ", cache_buffer=" << (void*)cache_buffer;
+  os << ", cache_buffer=" << reinterpret_cast<void *>(cache_buffer);
   os << ", cache_bp=" << cache_bp;
   os << ", bl_refs=" << bl_refs;
   return os;
