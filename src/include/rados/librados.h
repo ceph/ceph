@@ -1813,9 +1813,7 @@ CEPH_RADOS_API unsigned int rados_omap_iter_size(rados_omap_iter_t iter);
 CEPH_RADOS_API void rados_omap_get_end(rados_omap_iter_t iter);
 
 /**
- * Get object stats (size/mtime)
- *
- * TODO: when are these set, and by whom? can they be out of date?
+ * Get object size and most recent update time from the OSD.
  *
  * @param io ioctx
  * @param o object name
