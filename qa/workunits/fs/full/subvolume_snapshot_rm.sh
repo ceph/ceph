@@ -66,9 +66,11 @@ echo "After write"
 df $CEPH_MNT
 ceph osd df
 
+# Snapshot removal with force option should succeed
+ceph fs subvolume snapshot rm cephfs sub_0 snap_0 --force
+
 #Cleanup from backend
 ignore_failure sudo rm -f /tmp/error_${PID}_file
-ignore_failure sudo rmdir $CEPH_MNT/volumes/_nogroup/sub_0/.snap/snap_0
 ignore_failure sudo rm -rf $CEPH_MNT/volumes/_nogroup/sub_0
 
 #Set the ratios back for other full tests to run
