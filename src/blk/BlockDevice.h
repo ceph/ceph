@@ -64,9 +64,19 @@
 #define  WRITE_LIFE_MAX  	1
 #endif
 
+enum struct blk_access_mode_t {
+  DIRECT,
+  BUFFERED
+};
+blk_access_mode_t buffermode(bool buffered);
+std::ostream& operator<<(std::ostream& os, const blk_access_mode_t buffered);
 
 /// track in-flight io
 struct IOContext {
+  enum {
+    FLAG_DONT_CACHE = 1
+  };
+
 private:
   ceph::mutex lock = ceph::make_mutex("IOContext::lock");
   ceph::condition_variable cond;
@@ -88,6 +98,7 @@ public:
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};
   bool allow_eio;
+  uint32_t flags = 0;               // FLAG_*
 
   explicit IOContext(CephContext* cct, void *p, bool allow_eio = false)
     : cct(cct), priv(p), allow_eio(allow_eio)
@@ -125,6 +136,10 @@ public:
   int get_return_value() const {
     return r;
   }
+
+  bool skip_cache() const {
+    return flags & FLAG_DONT_CACHE;
+  }
 };
 
 
@@ -160,6 +175,7 @@ private:
 protected:
   uint64_t size = 0;
   uint64_t block_size = 0;
+  uint64_t optimal_io_size = 0;
   bool support_discard = false;
   bool rotational = true;
   bool lock_exclusive = true;
@@ -199,6 +215,16 @@ public:
     ceph_assert(is_smr());
     return conventional_region_size;
   }
+  virtual void reset_all_zones() {
+    ceph_assert(is_smr());
+  }
+  virtual void reset_zone(uint64_t zone) {
+    ceph_assert(is_smr());
+  }
+  virtual std::vector<uint64_t> get_zones() {
+    ceph_assert(is_smr());
+    return std::vector<uint64_t>();
+  }
 
   virtual void aio_submit(IOContext *ioc) = 0;
 
@@ -208,6 +234,7 @@ public:
   
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }
+  uint64_t get_optimal_io_size() const { return optimal_io_size; }
 
   /// hook to provide utilization of thinly-provisioned device
   virtual bool get_thin_utilization(uint64_t *total, uint64_t *avail) const {
@@ -263,13 +290,12 @@ public:
   virtual int queue_discard(interval_set<uint64_t> &to_release) { return -1; }
   virtual void discard_drain() { return; }
 
-  void queue_reap_ioc(IOContext *ioc);
-  void reap_ioc();
-
   // for managing buffered readers/writers
   virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;
   virtual int open(const std::string& path) = 0;
   virtual void close() = 0;
+
+  struct hugepaged_raw_marker_t {};
 
 protected:
   bool is_valid_io(uint64_t off, uint64_t len) const;

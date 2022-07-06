@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# SHELL_TRACE=true ./run-backend-api-tests.sh to enable debugging
+[ -v SHELL_TRACE ] && set -x
+
 # cross shell: Are we sourced?
 # Source: https://stackoverflow.com/a/28776166/3185053
 ([[ -n $ZSH_EVAL_CONTEXT && $ZSH_EVAL_CONTEXT =~ :file$ ]] ||
@@ -41,10 +44,10 @@ setup_teuthology() {
     TEMP_DIR=`mktemp -d`
     cd $TEMP_DIR
 
-    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python3} venv
+    ${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python3} -m venv venv
     source venv/bin/activate
-    pip install 'setuptools >= 12'
-    pip install git+https://github.com/ceph/teuthology#egg=teuthology[test]
+    pip install -U pip 'setuptools>=12,<60'
+    pip install "git+https://github.com/ceph/teuthology@7039075#egg=teuthology[test]"
     pushd $CURR_DIR
     pip install -r requirements.txt -c constraints.txt
     popd
@@ -56,7 +59,7 @@ setup_coverage() {
     # In CI environment we cannot install coverage in system, so we install it in a dedicated venv
     # so only coverage is available when adding this path.
     cd $TEMP_DIR
-    virtualenv --python=/usr/bin/python3 coverage-venv
+    /usr/bin/python3 -m venv coverage-venv
     source coverage-venv/bin/activate
     cd $CURR_DIR
     pip install coverage==4.5.2
@@ -122,7 +125,9 @@ run_teuthology_tests() {
         pybind_dir+=":$LOCAL_BUILD_DIR/src/pybind"
     fi
     export PYTHONPATH=$source_dir/qa:$LOCAL_BUILD_DIR/lib/cython_modules/lib.3/:$pybind_dir:$python_common_dir:${COVERAGE_PATH}
-    export RGW=${RGW:-1}
+    export DASHBOARD_SSL=1
+    export NFS=0
+    export RGW=1
 
     export COVERAGE_ENABLED=true
     export COVERAGE_FILE=.coverage.mgr.dashboard
@@ -160,6 +165,8 @@ cleanup_teuthology() {
     unset run_teuthology_tests
     unset cleanup_teuthology
 }
+
+export LC_ALL=en_US.UTF-8
 
 setup_teuthology
 setup_coverage

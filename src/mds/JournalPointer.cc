@@ -61,7 +61,7 @@ int JournalPointer::load(Objecter *objecter)
     try {
       decode(q);
     } catch (const buffer::error &e) {
-      return -EINVAL;
+      return -CEPHFS_EINVAL;
     }
   } else {
     dout(1) << "Journal pointer '" << object_id << "' read failed: " << cpp_strerror(r) << dendl;

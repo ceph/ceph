@@ -17,14 +17,19 @@ class DaemonWatchdog(Greenlet):
     SIGTERM to all daemons. The duration of an extended failure is configurable
     with watchdog_daemon_timeout.
 
-    watchdog_daemon_timeout [default: 300]: number of seconds a daemon
-        is allowed to be failed before the watchdog will bark.
+    ceph:
+      watchdog:
+        daemon_restart [default: no]: restart daemon if "normal" exit (status==0).
+
+        daemon_timeout [default: 300]: number of seconds a daemon
+                                              is allowed to be failed before the
+                                              watchdog will bark.
     """
 
     def __init__(self, ctx, config, thrashers):
         super(DaemonWatchdog, self).__init__()
+        self.config = ctx.config.get('watchdog', {})
         self.ctx = ctx
-        self.config = config
         self.e = None
         self.logger = log.getChild('daemon_watchdog')
         self.cluster = config.get('cluster', 'ceph')
@@ -50,11 +55,12 @@ class DaemonWatchdog(Greenlet):
 
     def bark(self):
         self.log("BARK! unmounting mounts and killing all daemons")
-        for mount in self.ctx.mounts.values():
-            try:
-                mount.umount_wait(force=True)
-            except:
-                self.logger.exception("ignoring exception:")
+        if hasattr(self.ctx, 'mounts'):
+            for mount in self.ctx.mounts.values():
+                try:
+                    mount.umount_wait(force=True)
+                except:
+                    self.logger.exception("ignoring exception:")
         daemons = []
         daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('osd', cluster=self.cluster)))
         daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.cluster)))
@@ -70,7 +76,8 @@ class DaemonWatchdog(Greenlet):
 
     def watch(self):
         self.log("watchdog starting")
-        daemon_timeout = int(self.config.get('watchdog_daemon_timeout', 300))
+        daemon_timeout = int(self.config.get('daemon_timeout', 300))
+        daemon_restart = self.config.get('daemon_restart', False)
         daemon_failure_time = {}
         while not self.stopping.is_set():
             bark = False
@@ -97,6 +104,9 @@ class DaemonWatchdog(Greenlet):
                 self.log("daemon {name} is failed for ~{t:.0f}s".format(name=name, t=delta))
                 if delta > daemon_timeout:
                     bark = True
+                if daemon_restart == 'normal' and daemon.proc.exitstatus == 0:
+                    self.log(f"attempting to restart daemon {name}")
+                    daemon.restart()
 
             # If a daemon is no longer failed, remove it from tracking:
             for name in list(daemon_failure_time.keys()):

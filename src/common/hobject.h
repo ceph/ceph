@@ -130,8 +130,8 @@ public:
     return hobject_t_max();
   }
 
-  hobject_t(object_t oid, const std::string& key, snapid_t snap, uint32_t hash,
-	    int64_t pool, std::string nspace)
+  hobject_t(const object_t& oid, const std::string& key, snapid_t snap,
+            uint32_t hash, int64_t pool, const std::string& nspace)
     : oid(oid), snap(snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
       key(oid.name == key ? std::string() : key) {
@@ -139,11 +139,18 @@ public:
   }
 
   hobject_t(const sobject_t &soid, const std::string &key, uint32_t hash,
-	    int64_t pool, std::string nspace)
+	    int64_t pool, const std::string& nspace)
     : oid(soid.oid), snap(soid.snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
       key(soid.oid.name == key ? std::string() : key) {
     build_hash_cache();
+  }
+
+  // used by Crimson
+  hobject_t(const std::string &key, snapid_t snap, uint32_t reversed_hash,
+            int64_t pool, const std::string& nspace)
+    : oid(key), snap(snap), max(false), pool(pool), nspace(nspace) {
+    set_bitwise_key_u32(reversed_hash);
   }
 
   /// @return min hobject_t ret s.t. ret.hash == this->hash
@@ -397,10 +404,11 @@ public:
       shard_id(shard),
       max(false) {}
 
-  ghobject_t(shard_id_t shard, int64_t pool, uint32_t hash,
+  // used by Crimson
+  ghobject_t(shard_id_t shard, int64_t pool, uint32_t reversed_hash,
              const std::string& nspace, const std::string& oid,
              snapid_t snap, gen_t gen)
-    : hobj(object_t(oid), "", snap, hash, pool, nspace),
+    : hobj(oid, snap, reversed_hash, pool, nspace),
       generation(gen),
       shard_id(shard),
       max(false) {}

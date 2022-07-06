@@ -64,4 +64,4 @@ class PublicAccessBlockConfiguration {
   void dump_xml(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(PublicAccessBlockConfiguration)
-ostream& operator<< (ostream& os, const PublicAccessBlockConfiguration& access_conf);
+std::ostream& operator<< (std::ostream& os, const PublicAccessBlockConfiguration& access_conf);

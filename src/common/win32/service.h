@@ -24,7 +24,7 @@ protected:
   static void run();
   static void control_handler(DWORD request);
 
-  void shutdown();
+  void shutdown(bool ignore_errors = false);
   void stop();
 
   void set_status(DWORD current_state, DWORD exit_code = NO_ERROR);

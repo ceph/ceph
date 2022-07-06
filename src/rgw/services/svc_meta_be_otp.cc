@@ -9,6 +9,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 RGWSI_MetaBackend_OTP::RGWSI_MetaBackend_OTP(CephContext *cct) : RGWSI_MetaBackend_SObj(cct) {
 }
@@ -44,11 +45,13 @@ int RGWSI_MetaBackend_OTP::get_entry(RGWSI_MetaBackend::Context *_ctx,
                                      const string& key,
                                      RGWSI_MetaBackend::GetParams& _params,
                                      RGWObjVersionTracker *objv_tracker,
-                                     optional_yield y)
+                                     optional_yield y,
+                                     const DoutPrefixProvider *dpp,
+                                     bool get_raw_attrs)
 {
   RGWSI_MBOTP_GetParams& params = static_cast<RGWSI_MBOTP_GetParams&>(_params);
 
-  int r = cls_svc->mfa.list_mfa(key, params.pdevices, objv_tracker, params.pmtime, y);
+  int r = cls_svc->mfa.list_mfa(dpp, key, params.pdevices, objv_tracker, params.pmtime, y);
   if (r < 0) {
     return r;
   }
@@ -56,7 +59,8 @@ int RGWSI_MetaBackend_OTP::get_entry(RGWSI_MetaBackend::Context *_ctx,
   return 0;
 }
 
-int RGWSI_MetaBackend_OTP::put_entry(RGWSI_MetaBackend::Context *_ctx,
+int RGWSI_MetaBackend_OTP::put_entry(const DoutPrefixProvider *dpp, 
+                                     RGWSI_MetaBackend::Context *_ctx,
                                      const string& key,
                                      RGWSI_MetaBackend::PutParams& _params,
                                      RGWObjVersionTracker *objv_tracker,
@@ -64,6 +68,6 @@ int RGWSI_MetaBackend_OTP::put_entry(RGWSI_MetaBackend::Context *_ctx,
 {
   RGWSI_MBOTP_PutParams& params = static_cast<RGWSI_MBOTP_PutParams&>(_params);
 
-  return cls_svc->mfa.set_mfa(key, params.devices, true, objv_tracker, params.mtime, y);
+  return cls_svc->mfa.set_mfa(dpp, key, params.devices, true, objv_tracker, params.mtime, y);
 }
 

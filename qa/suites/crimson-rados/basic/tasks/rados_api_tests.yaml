@@ -16,6 +16,10 @@ overrides:
         debug ms: 1
       mon:
         mon warn on pool no app: false
+      osd:
+        osd class load list: "*"
+        osd class default list: "*"
+        osd blocked scrub grace period: 3600
 tasks:
 - workunit:
     clients:

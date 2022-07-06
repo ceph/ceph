@@ -16,25 +16,17 @@
 #pragma once
 
 #include "include/buffer.h"
+#include "rgw_sal.h"
 
 namespace rgw::putobj {
 
-// a simple streaming data processing abstraction
-class DataProcessor {
- public:
-  virtual ~DataProcessor() {}
-
-  // consume a bufferlist in its entirety at the given object offset. an
-  // empty bufferlist is given to request that any buffered data be flushed,
-  // though this doesn't wait for completions
-  virtual int process(bufferlist&& data, uint64_t offset) = 0;
-};
-
 // for composing data processors into a pipeline
-class Pipe : public DataProcessor {
-  DataProcessor *next;
+class Pipe : public rgw::sal::DataProcessor {
+  rgw::sal::DataProcessor *next;
  public:
-  explicit Pipe(DataProcessor *next) : next(next) {}
+  explicit Pipe(rgw::sal::DataProcessor *next) : next(next) {}
+
+  virtual ~Pipe() override {}
 
   // passes the data on to the next processor
   int process(bufferlist&& data, uint64_t offset) override {
@@ -47,9 +39,10 @@ class ChunkProcessor : public Pipe {
   uint64_t chunk_size;
   bufferlist chunk; // leftover bytes from the last call to process()
  public:
-  ChunkProcessor(DataProcessor *next, uint64_t chunk_size)
+  ChunkProcessor(rgw::sal::DataProcessor *next, uint64_t chunk_size)
     : Pipe(next), chunk_size(chunk_size)
   {}
+  virtual ~ChunkProcessor() override {}
 
   int process(bufferlist&& data, uint64_t offset) override;
 };
@@ -68,10 +61,11 @@ class StripeProcessor : public Pipe {
   StripeGenerator *gen;
   std::pair<uint64_t, uint64_t> bounds; // bounds of current stripe
  public:
-  StripeProcessor(DataProcessor *next, StripeGenerator *gen,
+  StripeProcessor(rgw::sal::DataProcessor *next, StripeGenerator *gen,
                   uint64_t first_stripe_size)
     : Pipe(next), gen(gen), bounds(0, first_stripe_size)
   {}
+  virtual ~StripeProcessor() override {}
 
   int process(bufferlist&& data, uint64_t data_offset) override;
 };

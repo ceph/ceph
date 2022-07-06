@@ -75,6 +75,9 @@ using ceph::encode;
 using ceph::Formatter;
 
 using std::defer_lock;
+using std::scoped_lock;
+using std::shared_lock;
+using std::unique_lock;
 
 using ceph::real_time;
 using ceph::real_clock;
@@ -106,6 +109,8 @@ enum {
   l_osdc_op_send_bytes,
   l_osdc_op_resend,
   l_osdc_op_reply,
+  l_osdc_op_latency,
+  l_osdc_op_inflight,
   l_osdc_oplen_avg,
 
   l_osdc_op,
@@ -258,6 +263,8 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes", "Sent data", NULL, 0, unit_t(UNIT_BYTES));
     pcb.add_u64_counter(l_osdc_op_resend, "op_resend", "Resent operations");
     pcb.add_u64_counter(l_osdc_op_reply, "op_reply", "Operation reply");
+    pcb.add_time_avg(l_osdc_op_latency, "op_latency", "Operation latency");
+    pcb.add_u64(l_osdc_op_inflight, "op_inflight", "Operations in flight");
     pcb.add_u64_avg(l_osdc_oplen_avg, "oplen_avg", "Average length of operation vector");
 
     pcb.add_u64_counter(l_osdc_op, "op", "Operations");
@@ -868,10 +875,15 @@ void Objecter::_linger_submit(LingerOp *info,
 
   // Populate Op::target
   OSDSession *s = NULL;
-  _calc_target(&info->target, nullptr);
+  int r = _calc_target(&info->target, nullptr);
+  switch (r) {
+  case RECALC_OP_TARGET_POOL_EIO:
+    _check_linger_pool_eio(info);
+    return;
+  }
 
   // Create LingerOp<->OSDSession relation
-  int r = _get_session(info->target.osd, &s, sul);
+  r = _get_session(info->target.osd, &s, sul);
   ceph_assert(r == 0);
   unique_lock sl(s->lock);
   _session_linger_op_assign(s, info);
@@ -1063,6 +1075,13 @@ void Objecter::_scan_requests(
 	unregister_lingers.push_back(op);
       }
       break;
+    case RECALC_OP_TARGET_POOL_EIO:
+      _check_linger_pool_eio(op);
+      ldout(cct, 10) << " need to unregister linger op "
+		     << op->linger_id << dendl;
+      op->get();
+      unregister_lingers.push_back(op);
+      break;
     }
   }
 
@@ -1091,6 +1110,9 @@ void Objecter::_scan_requests(
       break;
     case RECALC_OP_TARGET_POOL_DNE:
       _check_op_pool_dne(op, &sl);
+      break;
+    case RECALC_OP_TARGET_POOL_EIO:
+      _check_op_pool_eio(op, &sl);
       break;
     }
   }
@@ -1408,13 +1430,19 @@ void Objecter::emit_blocklist_events(const OSDMap &old_osd_map,
 
   std::set<entity_addr_t> old_set;
   std::set<entity_addr_t> new_set;
+  std::set<entity_addr_t> old_range_set;
+  std::set<entity_addr_t> new_range_set;
 
-  old_osd_map.get_blocklist(&old_set);
-  new_osd_map.get_blocklist(&new_set);
+  old_osd_map.get_blocklist(&old_set, &old_range_set);
+  new_osd_map.get_blocklist(&new_set, &new_range_set);
 
   std::set<entity_addr_t> delta_set;
   std::set_difference(
       new_set.begin(), new_set.end(), old_set.begin(), old_set.end(),
+      std::inserter(delta_set, delta_set.begin()));
+  std::set_difference(
+      new_range_set.begin(), new_range_set.end(),
+      old_range_set.begin(), old_range_set.end(),
       std::inserter(delta_set, delta_set.begin()));
   blocklist_events.insert(delta_set.begin(), delta_set.end());
 }
@@ -1562,6 +1590,37 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
   }
 }
 
+// sl may be unlocked.
+void Objecter::_check_op_pool_eio(Op *op, std::unique_lock<std::shared_mutex> *sl)
+{
+  // rwlock is locked unique
+
+  // we had a new enough map
+  ldout(cct, 10) << "check_op_pool_eio tid " << op->tid
+		 << " concluding pool " << op->target.base_pgid.pool()
+		 << " has eio" << dendl;
+  if (op->has_completion()) {
+    num_in_flight--;
+    op->complete(osdc_errc::pool_eio, -EIO);
+  }
+
+  OSDSession *s = op->session;
+  if (s) {
+    ceph_assert(s != NULL);
+    ceph_assert(sl->mutex() == &s->lock);
+    bool session_locked = sl->owns_lock();
+    if (!session_locked) {
+      sl->lock();
+    }
+    _finish_op(op, 0);
+    if (!session_locked) {
+      sl->unlock();
+    }
+  } else {
+    _finish_op(op, 0);	// no session
+  }
+}
+
 void Objecter::_send_op_map_check(Op *op)
 {
   // rwlock is locked unique
@@ -1653,6 +1712,23 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
     }
   } else {
     _send_linger_map_check(op);
+  }
+}
+
+void Objecter::_check_linger_pool_eio(LingerOp *op)
+{
+  // rwlock is locked unique
+
+  std::unique_lock wl{op->watch_lock};
+  if (op->on_reg_commit) {
+    op->on_reg_commit->defer(std::move(op->on_reg_commit),
+			     osdc_errc::pool_dne, cb::list{});
+    op->on_reg_commit = nullptr;
+  }
+  if (op->on_notify_finish) {
+    op->on_notify_finish->defer(std::move(op->on_notify_finish),
+				osdc_errc::pool_dne, cb::list{});
+    op->on_notify_finish = nullptr;
   }
 }
 
@@ -2313,11 +2389,21 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   ceph_assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool check_for_latest_map = _calc_target(&op->target, nullptr)
-    == RECALC_OP_TARGET_POOL_DNE;
+  bool check_for_latest_map = false;
+  int r = _calc_target(&op->target, nullptr);
+  switch(r) {
+  case RECALC_OP_TARGET_POOL_DNE:
+    check_for_latest_map = true;
+    break;
+  case RECALC_OP_TARGET_POOL_EIO:
+    if (op->has_completion()) {
+      op->complete(osdc_errc::pool_eio, -EIO);
+    }
+    return;
+  }
 
   // Try to get a session, including a retry if we need to take write lock
-  int r = _get_session(op->target.osd, &s, sul);
+  r = _get_session(op->target.osd, &s, sul);
   if (r == -EAGAIN ||
       (check_for_latest_map && sul.owns_lock_shared()) ||
       cct->_conf->objecter_debug_inject_relock_delay) {
@@ -2352,10 +2438,6 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   // send?
 
   ceph_assert(op->target.flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
-
-  if (pool_full_try) {
-    op->target.flags |= CEPH_OSD_FLAG_FULL_TRY;
-  }
 
   bool need_send = false;
   if (op->target.paused) {
@@ -2708,6 +2790,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->osd = -1;
     return RECALC_OP_TARGET_POOL_DNE;
   }
+
+  if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
+    return RECALC_OP_TARGET_POOL_EIO;
+  }
+
   ldout(cct,30) << __func__ << "  base pi " << pi
 		<< " pg_num " << pi->get_pg_num() << dendl;
 
@@ -2765,14 +2852,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   vector<int> up, acting;
   ps_t actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
   pg_t actual_pgid(actual_ps, pgid.pool());
-  pg_mapping_t pg_mapping;
-  pg_mapping.epoch = osdmap->get_epoch();
-  if (lookup_pg_mapping(actual_pgid, &pg_mapping)) {
-    up = pg_mapping.up;
-    up_primary = pg_mapping.up_primary;
-    acting = pg_mapping.acting;
-    acting_primary = pg_mapping.acting_primary;
-  } else {
+  if (!lookup_pg_mapping(actual_pgid, osdmap->get_epoch(), &up, &up_primary,
+                         &acting, &acting_primary)) {
     osdmap->pg_to_up_acting_osds(actual_pgid, &up, &up_primary,
                                  &acting, &acting_primary);
     pg_mapping_t pg_mapping(osdmap->get_epoch(),
@@ -2842,10 +2923,10 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 
   if (legacy_change || split_or_merge || force_resend) {
     t->pgid = pgid;
-    t->acting = acting;
+    t->acting = std::move(acting);
     t->acting_primary = acting_primary;
     t->up_primary = up_primary;
-    t->up = up;
+    t->up = std::move(up);
     t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
@@ -2853,8 +2934,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
     if (pi->is_erasure()) {
-      for (uint8_t i = 0; i < acting.size(); ++i) {
-        if (acting[i] == acting_primary) {
+      for (uint8_t i = 0; i < t->acting.size(); ++i) {
+        if (t->acting[i] == acting_primary) {
           spgid.reset_shard(shard_id_t(i));
           break;
         }
@@ -2869,31 +2950,31 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->peering_crush_mandatory_member = pi->peering_crush_mandatory_member;
     ldout(cct, 10) << __func__ << " "
 		   << " raw pgid " << pgid << " -> actual " << t->actual_pgid
-		   << " acting " << acting
+		   << " acting " << t->acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
     if ((t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
                      CEPH_OSD_FLAG_LOCALIZE_READS)) &&
-        !is_write && pi->is_replicated() && acting.size() > 1) {
+        !is_write && pi->is_replicated() && t->acting.size() > 1) {
       int osd;
-      ceph_assert(is_read && acting[0] == acting_primary);
+      ceph_assert(is_read && t->acting[0] == acting_primary);
       if (t->flags & CEPH_OSD_FLAG_BALANCE_READS) {
-	int p = rand() % acting.size();
+	int p = rand() % t->acting.size();
 	if (p)
 	  t->used_replica = true;
-	osd = acting[p];
-	ldout(cct, 10) << " chose random osd." << osd << " of " << acting
+	osd = t->acting[p];
+	ldout(cct, 10) << " chose random osd." << osd << " of " << t->acting
 		       << dendl;
       } else {
 	// look for a local replica.  prefer the primary if the
 	// distance is the same.
 	int best = -1;
 	int best_locality = 0;
-	for (unsigned i = 0; i < acting.size(); ++i) {
+	for (unsigned i = 0; i < t->acting.size(); ++i) {
 	  int locality = osdmap->crush->get_common_ancestor_distance(
-		 cct, acting[i], crush_location);
+		 cct, t->acting[i], crush_location);
 	  ldout(cct, 20) << __func__ << " localize: rank " << i
-			 << " osd." << acting[i]
+			 << " osd." << t->acting[i]
 			 << " locality " << locality << dendl;
 	  if (i == 0 ||
 	      (locality >= 0 && best_locality >= 0 &&
@@ -2906,7 +2987,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	  }
 	}
 	ceph_assert(best >= 0);
-	osd = acting[best];
+	osd = t->acting[best];
       }
       t->osd = osd;
     } else {
@@ -3110,6 +3191,7 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
+  flags |= CEPH_OSD_FLAG_SUPPORTSPOOLEIO;
 
   // Nothing checks this any longer, but needed for compatibility with
   // pre-luminous osds
@@ -3484,6 +3566,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->onfinish = nullptr;
   }
   logger->inc(l_osdc_op_reply);
+  logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
+  logger->set(l_osdc_op_inflight, num_in_flight);
 
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
@@ -4215,7 +4299,7 @@ void Objecter::_finish_pool_stat_op(PoolStatOp *op, int r)
   delete op;
 }
 
-void Objecter::get_fs_stats(boost::optional<int64_t> poolid,
+void Objecter::get_fs_stats(std::optional<int64_t> poolid,
 			    decltype(StatfsOp::onfinish)&& onfinish)
 {
   ldout(cct, 10) << "get_fs_stats" << dendl;
@@ -4725,6 +4809,13 @@ void Objecter::handle_command_reply(MCommandReply *m)
 
   m->put();
 }
+
+Objecter::LingerOp::LingerOp(Objecter *o, uint64_t linger_id)
+  : objecter(o),
+    linger_id(linger_id),
+    watch_lock(ceph::make_shared_mutex(
+		 fmt::format("LingerOp::watch_lock #{}", linger_id)))
+{}
 
 void Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
 {

@@ -202,7 +202,7 @@ Buckets are either a bucket name, or '*' (wildcard). Wildcard bucket means the c
 Prefix can be defined to filter source objects.
 Tags are passed by a comma separated list of 'key=value'.
 Destination owner can be set to force a destination owner of the objects. If user mode is selected, only the destination bucket owner can be set.
-Destinatino storage class can also be condfigured.
+Destination storage class can also be configured.
 User id can be set for user mode, and will be the user under which the sync operation will be executed (for permissions validation).
 
 

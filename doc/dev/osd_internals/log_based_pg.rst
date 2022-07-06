@@ -35,7 +35,7 @@ concept of interval changes) and an increasing per-PG version number
 ``pg_info_t::last_update``.  Furthermore, we maintain a log of "recent"
 operations extending back at least far enough to include any
 *unstable* writes (writes which have been started but not committed)
-and objects which aren't uptodate locally (see recovery and
+and objects which aren't up-to-date locally (see recovery and
 backfill).  In practice, the log will extend much further
 (``osd_min_pg_log_entries`` when clean and ``osd_max_pg_log_entries`` when not
 clean) because it's handy for quickly performing recovery.

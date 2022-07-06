@@ -17,12 +17,16 @@ function(build_uring)
   include(ExternalProject)
   ExternalProject_Add(liburing_ext
     ${source_dir_args}
-    CONFIGURE_COMMAND <SOURCE_DIR>/configure
-    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} "CFLAGS=${CMAKE_C_FLAGS} -fPIC" ${make_cmd} -C src -s
+    CONFIGURE_COMMAND env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} <SOURCE_DIR>/configure
+    BUILD_COMMAND ${make_cmd} "CFLAGS=${CMAKE_C_FLAGS} -fPIC" -C src -s
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS "<SOURCE_DIR>/src/liburing.a"
     INSTALL_COMMAND ""
-    UPDATE_COMMAND "")
+    UPDATE_COMMAND ""
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_MERGED_STDOUTERR ON
+    LOG_OUTPUT_ON_FAILURE ON)
   unset(make_cmd)
 
   ExternalProject_Get_Property(liburing_ext source_dir)

@@ -15,8 +15,12 @@
 #ifndef CEPH_LOGMONITOR_H
 #define CEPH_LOGMONITOR_H
 
+#include <atomic>
 #include <map>
 #include <set>
+
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #include "include/types.h"
 #include "PaxosService.h"
@@ -32,6 +36,7 @@ static const std::string LOG_META_CHANNEL = "$channel";
 namespace ceph {
 namespace logging {
   class Graylog;
+  class JournaldClusterLogger;
 }
 }
 
@@ -39,7 +44,15 @@ class LogMonitor : public PaxosService,
                    public md_config_obs_t {
 private:
   std::multimap<utime_t,LogEntry> pending_log;
-  LogSummary pending_summary, summary;
+  unordered_set<LogEntryKey> pending_keys;
+
+  LogSummary summary;
+
+  version_t external_log_to = 0;
+  std::map<std::string, int> channel_fds;
+
+  fmt::memory_buffer file_log_buffer;
+  std::atomic<bool> log_rotated = false;
 
   struct log_channel_info {
 
@@ -52,23 +65,17 @@ private:
     std::map<std::string,std::string> log_to_graylog;
     std::map<std::string,std::string> log_to_graylog_host;
     std::map<std::string,std::string> log_to_graylog_port;
+    std::map<std::string,std::string> log_to_journald;
 
     std::map<std::string, std::shared_ptr<ceph::logging::Graylog>> graylogs;
+    std::unique_ptr<ceph::logging::JournaldClusterLogger> journald;
     uuid_d fsid;
     std::string host;
 
-    void clear() {
-      log_to_syslog.clear();
-      syslog_level.clear();
-      syslog_facility.clear();
-      log_file.clear();
-      expanded_log_file.clear();
-      log_file_level.clear();
-      log_to_graylog.clear();
-      log_to_graylog_host.clear();
-      log_to_graylog_port.clear();
-      graylogs.clear();
-    }
+    log_channel_info();
+    ~log_channel_info();
+
+    void clear();
 
     /** expands $channel meta variable on all maps *EXCEPT* log_file
      *
@@ -110,6 +117,13 @@ private:
     }
 
     std::shared_ptr<ceph::logging::Graylog> get_graylog(const std::string &channel);
+
+    bool do_log_to_journald(const std::string &channel) {
+      return (get_str_map_key(log_to_journald, channel,
+			      &CLOG_CONFIG_DEFAULT_KEY) == "true");
+    }
+
+    ceph::logging::JournaldClusterLogger &get_journald();
   } channels;
 
   void update_log_channels();
@@ -118,6 +132,7 @@ private:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
   // propose pending update to peers
+  void generate_logentry_key(const std::string& channel, version_t v, std::string *out);
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void encode_full(MonitorDBStore::TransactionRef t) override;
   version_t get_trim_to() const override;
@@ -130,10 +145,7 @@ private:
 
   bool should_propose(double& delay) override;
 
-  bool should_stash_full() override {
-    // commit a LogSummary on every commit
-    return true;
-  }
+  bool should_stash_full() override;
 
   struct C_Log;
 
@@ -154,8 +166,16 @@ private:
   
   void tick() override;  // check state, take actions
 
+  void dump_info(Formatter *f);
   void check_subs();
   void check_sub(Subscription *s);
+
+  void reopen_logs() {
+    this->log_rotated.store(true);
+  }
+  void log_external_close_fds();
+  void log_external(const LogEntry& le);
+  void log_external_backlog();
 
   /**
    * translate log sub name ('log-info') to integer id
@@ -179,6 +199,7 @@ private:
       "mon_cluster_log_to_graylog",
       "mon_cluster_log_to_graylog_host",
       "mon_cluster_log_to_graylog_port",
+      "mon_cluster_log_to_journald",
       NULL
     };
     return KEYS;

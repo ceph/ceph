@@ -109,6 +109,7 @@
 #define __FUNC__ __func__ << "(" << __LINE__ << ")"
 
 using std::cerr;
+using std::less;
 using std::list;
 using std::make_pair;
 using std::map;
@@ -3861,7 +3862,7 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
 
   {
     char buf[2];
-    map<string, bufferptr> aset;
+    map<string, bufferptr, less<>> aset;
     r = _fgetattrs(**o, aset);
     if (r < 0)
       goto out3;
@@ -4134,7 +4135,7 @@ public:
   }
 
   void finish(int r) override {
-    BackTrace *bt = new BackTrace(1);
+    BackTrace *bt = new ClibBackTrace(1);
     generic_dout(-1) << "FileStore: sync_entry timed out after "
 	   << m_commit_timeo << " seconds.\n";
     bt->print(*_dout);
@@ -4271,7 +4272,7 @@ void FileStore::sync_entry()
       dout(10) << __FUNC__ << ": commit took " << lat << ", interval was " << dur << dendl;
       utime_t max_pause_lat = logger->tget(l_filestore_sync_pause_max_lat);
       if (max_pause_lat < utime_t{dur - lat}) {
-        logger->tinc(l_filestore_sync_pause_max_lat, dur - lat);
+        logger->tset(l_filestore_sync_pause_max_lat, utime_t{dur - lat});
       }
 
       logger->inc(l_filestore_commitcycle);
@@ -4469,7 +4470,7 @@ int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
   return l;
 }
 
-int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
+int FileStore::_fgetattrs(int fd, map<string,bufferptr,less<>>& aset)
 {
   // get attr list
   char names1[100];
@@ -4520,7 +4521,7 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
   return 0;
 }
 
-int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
+int FileStore::_fsetattrs(int fd, map<string, bufferptr, less<>> &aset)
 {
   for (map<string, bufferptr>::iterator p = aset.begin();
        p != aset.end();
@@ -4635,7 +4636,9 @@ int FileStore::getattr(CollectionHandle& ch, const ghobject_t& oid, const char *
   }
 }
 
-int FileStore::getattrs(CollectionHandle& ch, const ghobject_t& oid, map<string,bufferptr>& aset)
+int FileStore::getattrs(CollectionHandle& ch,
+			const ghobject_t& oid,
+			std::map<std::string,bufferptr,std::less<>>& aset)
 {
   tracepoint(objectstore, getattrs_enter, ch->cid.c_str());
   const coll_t& cid = !_need_temp_object_collection(ch->cid, oid) ? ch->cid : ch->cid.get_temp();
@@ -4718,8 +4721,8 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
 {
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
-  map<string, bufferptr> inline_set;
-  map<string, bufferptr> inline_to_set;
+  map<string, bufferptr, less<>> inline_set;
+  map<string, bufferptr, less<>> inline_to_set;
   FDRef fd;
   int spill_out = -1;
   bool incomplete_inline = false;
@@ -4862,7 +4865,7 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
 {
   dout(15) << __FUNC__ << ": " << cid << "/" << oid << dendl;
 
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   FDRef fd;
   set<string> omap_attrs;
   Index index;
@@ -4987,7 +4990,17 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
   }
 
   struct dirent *de = nullptr;
-  while ((de = ::readdir(dir))) {
+  while (true) {
+    errno = 0;
+    de = ::readdir(dir);
+    if (de == nullptr) {
+      if (errno != 0) {
+        r = -errno;
+        derr << "readdir failed " << fn << ": " << cpp_strerror(-r) << dendl;
+        if (r == -EIO && m_filestore_fail_eio) handle_eio();
+      }
+      break;
+    }
     if (de->d_type == DT_UNKNOWN) {
       // d_type not supported (non-ext[234], btrfs), must stat
       struct stat sb;
@@ -6092,6 +6105,8 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_sloppy_crc",
     "filestore_sloppy_crc_block_size",
     "filestore_max_alloc_hint_size",
+    "filestore_op_thread_suicide_timeout",
+    "filestore_op_thread_timeout",
     NULL
   };
   return KEYS;
@@ -6159,6 +6174,12 @@ void FileStore::handle_conf_change(const ConfigProxy& conf,
     } else {
       dump_stop();
     }
+  }
+  if (changed.count("filestore_op_thread_timeout")){
+    op_wq.set_timeout(g_conf().get_val<int64_t>("filestore_op_thread_timeout"));
+  }
+  if (changed.count("filestore_op_thread_suicide_timeout")){
+    op_wq.set_suicide_timeout(g_conf().get_val<int64_t>("filestore_op_thread_suicide_timeout"));
   }
 }
 

@@ -170,7 +170,7 @@ void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
 
   std::unique_lock locker{m_cache_map_lock};
   // check free ratio, pop entries from LRU
-  if ((double)m_cache_size / m_max_cache_size > (1 - m_watermark)) {
+  if ((double)m_cache_size > m_max_cache_size * m_watermark) {
     // TODO(dehao): make this configurable
     int evict_num = m_cache_map.size() * 0.1;
     for (int i = 0; i < evict_num; i++) {

@@ -25,10 +25,13 @@ There are three ways to get packages:
 Install packages with cephadm
 =============================
 
-#. Download the cephadm script::
+#. Download the cephadm script
 
-    curl --silent --remote-name --location https://github.com/ceph/ceph/raw/octopus/src/cephadm/cephadm
-    chmod +x cephadm
+.. prompt:: bash $
+   :substitutions:
+
+   curl --silent --remote-name --location https://github.com/ceph/ceph/raw/|stable-release|/src/cephadm/cephadm
+   chmod +x cephadm
 
 #. Configure the Ceph repository based on the release name::
 
@@ -222,7 +225,7 @@ use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
 
 .. prompt:: bash $
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el7.noarch.rpm'
+    su -c 'rpm -Uvh https://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el8.noarch.rpm'
 
 You can download the RPMs directly from
 
@@ -294,15 +297,15 @@ of a repo file. It can be retrieved via an HTTP request, for example
 
 .. prompt:: bash $
 
-    curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/centos/7/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
+    curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/centos/8/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
 
 The use of ``latest`` in the url, means it will figure out which is the last
 commit that has been built. Alternatively, a specific sha1 can be specified.
-For CentOS 7 and the master branch of Ceph, it would look like
+For CentOS 8 and the master branch of Ceph, it would look like
 
 .. prompt:: bash $
 
-    curl -L https://shaman.ceph.com/api/repos/ceph/master/53e772a45fdf2d211c0c383106a66e1feedec8fd/centos/7/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
+    curl -L https://shaman.ceph.com/api/repos/ceph/master/488e6be0edff7eb18343fd5c7e2d7ed56435888f/centos/8/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
 
 .. warning:: Development repositories are no longer available after two weeks.
@@ -318,17 +321,6 @@ before attempting an install.
 
 Debian Packages
 ~~~~~~~~~~~~~~~
-
-Ceph requires additional third party libraries.
-
-- libaio1
-- libsnappy1
-- libcurl3
-- curl
-- libgoogle-perftools4
-- google-perftools
-- libleveldb1
-
 
 The repository package installs the repository details on your local system for
 use with ``apt``. Replace ``{release}`` with the latest Ceph release. Replace
@@ -348,18 +340,9 @@ To add the EPEL repository, execute the following
 
 .. prompt:: bash $
 
-   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
 
-Ceph requires the following packages:
-
-- snappy
-- leveldb
-- gdisk
-- python-argparse
-- gperftools-libs
-
-
-Packages are currently built for the RHEL/CentOS7 (``el7``) platforms.  The
+Packages are currently built for the RHEL/CentOS8 (``el8``) platforms.  The
 repository package installs the repository details on your local system for use
 with ``yum``. Replace ``{distro}`` with your distribution.
 

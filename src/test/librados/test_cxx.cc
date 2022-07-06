@@ -49,15 +49,15 @@ std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster,
   return "";
 }
 
-int destroy_ruleset_pp(Rados &cluster,
-                       const std::string &ruleset,
+int destroy_rule_pp(Rados &cluster,
+                       const std::string &rule,
                        std::ostream &oss)
 {
   bufferlist inbl;
   int ret = cluster.mon_command("{\"prefix\": \"osd crush rule rm\", \"name\":\"" +
-                                ruleset + "\"}", inbl, NULL, NULL);
+                                rule + "\"}", inbl, NULL, NULL);
   if (ret)
-    oss << "mon_command: osd crush rule rm " + ruleset + " failed with error " << ret << std::endl;
+    oss << "mon_command: osd crush rule rm " + rule + " failed with error " << ret << std::endl;
   return ret;
 }
 
@@ -72,15 +72,15 @@ int destroy_ec_profile_pp(Rados &cluster, const std::string& pool_name,
   return ret;
 }
 
-int destroy_ec_profile_and_ruleset_pp(Rados &cluster,
-                                      const std::string &ruleset,
+int destroy_ec_profile_and_rule_pp(Rados &cluster,
+                                      const std::string &rule,
                                       std::ostream &oss)
 {
   int ret;
-  ret = destroy_ec_profile_pp(cluster, ruleset, oss);
+  ret = destroy_ec_profile_pp(cluster, rule, oss);
   if (ret)
     return ret;
-  return destroy_ruleset_pp(cluster, ruleset, oss);
+  return destroy_rule_pp(cluster, rule, oss);
 }
 
 std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
@@ -90,7 +90,7 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
     return err;
 
   std::ostringstream oss;
-  int ret = destroy_ec_profile_and_ruleset_pp(cluster, pool_name, oss);
+  int ret = destroy_ec_profile_and_rule_pp(cluster, pool_name, oss);
   if (ret) {
     cluster.shutdown();
     return oss.str();
@@ -190,7 +190,7 @@ int destroy_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
   CephContext *cct = static_cast<CephContext*>(cluster.cct());
   if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
     std::ostringstream oss;
-    ret = destroy_ec_profile_and_ruleset_pp(cluster, pool_name, oss);
+    ret = destroy_ec_profile_and_rule_pp(cluster, pool_name, oss);
     if (ret) {
       cluster.shutdown();
       return ret;

@@ -39,6 +39,12 @@ class TestDashboard(MgrTestCase):
         self.wait_until_true(_check_connection, timeout=30)
 
     def test_standby(self):
+        # skip this test if mgr_standby_modules=false
+        if self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "config", "get", "mgr", "mgr_standby_modules").strip() == "false":
+            log.info("Skipping test_standby since mgr_standby_modules=false")
+            return
+
         original_active_id = self.mgr_cluster.get_active_id()
         original_uri = self._get_uri("dashboard")
         log.info("Originally running manager '{}' at {}".format(

@@ -3,7 +3,8 @@ set(msg_srcs
   Message.cc
   Messenger.cc
   Connection.cc
-  msg_types.cc)
+  msg_types.cc
+  compressor_registry.cc)
 
 list(APPEND msg_srcs
   async/AsyncConnection.cc
@@ -16,6 +17,7 @@ list(APPEND msg_srcs
   async/PosixStack.cc
   async/Stack.cc
   async/crypto_onwire.cc
+  async/compression_onwire.cc
   async/frames_v2.cc
   async/net_handler.cc)
 
@@ -38,6 +40,8 @@ if(HAVE_RDMA)
 endif()
 
 add_library(common-msg-objs OBJECT ${msg_srcs})
+target_compile_definitions(common-msg-objs PRIVATE
+  $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
 target_include_directories(common-msg-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 
 if(WITH_DPDK)

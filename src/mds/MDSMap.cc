@@ -12,7 +12,7 @@
  * 
  */
 
-#include <sstream>
+#include <ostream>
 
 #include "common/debug.h"
 #include "mon/health_check.h"
@@ -27,8 +27,9 @@ using std::map;
 using std::multimap;
 using std::ostream;
 using std::pair;
-using std::string;
 using std::set;
+using std::string;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::Formatter;
@@ -82,6 +83,24 @@ CompatSet MDSMap::get_compat_set_base() {
   return CompatSet(feature_compat_base, feature_ro_compat_base, feature_incompat_base);
 }
 
+// pre-v16.2.5 CompatSet in MDS beacon
+CompatSet MDSMap::get_compat_set_v16_2_4() {
+  CompatSet::FeatureSet feature_compat;
+  CompatSet::FeatureSet feature_ro_compat;
+  CompatSet::FeatureSet feature_incompat;
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_BASE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_CLIENTRANGES);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILELAYOUT);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_DIRINODE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_ENCODING);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_OMAPDIRFRAG);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_NOANCHOR);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_SNAPREALM_V2);
+  return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
+}
+
 void MDSMap::mds_info_t::dump(Formatter *f) const
 {
   f->dump_unsigned("gid", global_id);
@@ -104,6 +123,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->close_section();
   f->dump_unsigned("features", mds_features);
   f->dump_unsigned("flags", flags);
+  f->dump_object("compat", compat);
 }
 
 void MDSMap::mds_info_t::dump(std::ostream& o) const
@@ -123,7 +143,10 @@ void MDSMap::mds_info_t::dump(std::ostream& o) const
   if (join_fscid != FS_CLUSTER_ID_NONE) {
     o << " join_fscid=" << join_fscid;
   }
-  o << " addr " << addrs << "]";
+  o << " addr " << addrs;
+  o << " compat ";
+  compat.printlite(o);
+  o << "]";
 }
 
 void MDSMap::mds_info_t::generate_test_instances(std::list<mds_info_t*>& ls)
@@ -141,6 +164,7 @@ void MDSMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", epoch);
   f->dump_unsigned("flags", flags);
+  dump_flags_state(f);
   f->dump_unsigned("ever_allowed_features", ever_allowed_features);
   f->dump_unsigned("explicitly_allowed_features", explicitly_allowed_features);
   f->dump_stream("created") << created;
@@ -202,6 +226,16 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("standby_count_wanted", std::max(0, standby_count_wanted));
 }
 
+void MDSMap::dump_flags_state(Formatter *f) const
+{
+    f->open_object_section("flags_state");
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_NOT_JOINABLE), joinable());
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_SNAPS), allows_snaps());
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS), allows_multimds_snaps());
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY), allows_standby_replay());
+    f->close_section();
+}
+
 void MDSMap::generate_test_instances(std::list<MDSMap*>& ls)
 {
   MDSMap *m = new MDSMap();
@@ -222,7 +256,9 @@ void MDSMap::print(ostream& out) const
 {
   out << "fs_name\t" << fs_name << "\n";
   out << "epoch\t" << epoch << "\n";
-  out << "flags\t" << hex << flags << dec << "\n";
+  out << "flags\t" << hex << flags << dec;
+  print_flags(out);
+  out << "\n";
   out << "created\t" << created << "\n";
   out << "modified\t" << modified << "\n";
   out << "tableserver\t" << tableserver << "\n";
@@ -324,6 +360,17 @@ void MDSMap::print_summary(Formatter *f, ostream *out) const
   }
   //if (stopped.size())
   //out << ", " << stopped.size() << " stopped";
+}
+
+void MDSMap::print_flags(std::ostream& out) const {
+ if (joinable())
+    out << " " << flag_display.at(CEPH_MDSMAP_NOT_JOINABLE);
+  if (allows_snaps())
+    out << " " << flag_display.at(CEPH_MDSMAP_ALLOW_SNAPS);
+  if (allows_multimds_snaps())
+    out << " " << flag_display.at(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS);
+  if (allows_standby_replay())
+    out << " " << flag_display.at(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY);
 }
 
 void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
@@ -522,7 +569,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  __u8 v = 9;
+  __u8 v = 10;
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 7;
   }
@@ -548,6 +595,9 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   if (v >= 9) {
     encode(flags, bl);
   }
+  if (v >= 10) {
+    encode(compat, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -571,7 +621,7 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
 
 void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(9, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(10, 4, 4, bl);
   decode(global_id, bl);
   decode(name, bl);
   decode(rank, bl);
@@ -603,6 +653,11 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
   }
   if (struct_v >= 9) {
     decode(flags, bl);
+  }
+  if (struct_v >= 10) {
+    decode(compat, bl);
+  } else {
+    compat = MDSMap::get_compat_set_v16_2_4();
   }
   DECODE_FINISH(bl);
 }
@@ -877,6 +932,22 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     }
   }
 
+  /* All MDS since at least v14.0.0 understand INLINE */
+  /* TODO: remove after R is released */
+  compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
+
+  for (auto& p: mds_info) {
+    static const CompatSet empty;
+    auto& info = p.second;
+    if (empty.compare(info.compat) == 0) {
+      /* bootstrap old compat; mds_info_t::decode does not have access to MDSMap */
+      info.compat = compat;
+    }
+    /* All MDS since at least v14.0.0 understand INLINE */
+    /* TODO: remove after R is released */
+    info.compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
+  }
+
   DECODE_FINISH(p);
 }
 
@@ -1064,7 +1135,7 @@ bool MDSMap::is_degraded() const {
 
 void MDSMap::set_min_compat_client(ceph_release_t version)
 {
-  vector<size_t> bits = CEPHFS_FEATURES_MDS_REQUIRED;
+  vector<size_t> bits;
 
   if (version >= ceph_release_t::octopus)
     bits.push_back(CEPHFS_FEATURE_OCTOPUS);

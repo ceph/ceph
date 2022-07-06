@@ -17,6 +17,8 @@ class Messenger;
 namespace cephfs {
 namespace mirror {
 
+class FSMirror;
+
 // watch for notifications via cephfs_mirror object (in metadata
 // pool). this is used sending keepalived with keepalive payload
 // being the rados instance address (used by the manager module
@@ -24,12 +26,12 @@ namespace mirror {
 
 class MirrorWatcher : public Watcher {
 public:
-  static MirrorWatcher *create(librados::IoCtx &ioctx, std::string_view addrs,
+  static MirrorWatcher *create(librados::IoCtx &ioctx, FSMirror *fs_mirror,
                                ContextWQ *work_queue) {
-    return new MirrorWatcher(ioctx, addrs, work_queue);
+    return new MirrorWatcher(ioctx, fs_mirror, work_queue);
   }
 
-  MirrorWatcher(librados::IoCtx &ioctx, std::string_view addrs,
+  MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror,
                 ContextWQ *work_queue);
   ~MirrorWatcher();
 
@@ -45,9 +47,14 @@ public:
     return m_blocklisted;
   }
 
+  bool is_failed() {
+    std::scoped_lock locker(m_lock);
+    return m_failed;
+  }
+
 private:
   librados::IoCtx &m_ioctx;
-  std::string m_addrs;
+  FSMirror *m_fs_mirror;
   ContextWQ *m_work_queue;
 
   ceph::mutex m_lock;
@@ -57,6 +64,7 @@ private:
   Context *m_on_shutdown_finish = nullptr;
 
   bool m_blocklisted = false;
+  bool m_failed = false;
 
   void register_watcher();
   void handle_register_watcher(int r);

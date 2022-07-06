@@ -1,30 +1,29 @@
-# Only works on os_type: centos
-# See http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
-
 overrides:
   install:
     ceph:
-      flavor: notcmalloc
       debuginfo: true
   ceph:
     # Valgrind makes everything slow, so ignore slow requests and extend heartbeat grace
     log-ignorelist:
-      - slow requests are blocked
+      - slow request
+      - SLOW_OPS
+      - MON_DOWN
     conf:
       global:
-        osd heartbeat grace: 40
-      mds:
+        osd heartbeat grace: 60
         mds heartbeat grace: 60
+        mds beacon grace: 60
+      mds:
+        mds valgrind exit: true
       mon:
         mon osd crush smoke test: false
       osd:
         osd fast shutdown: false
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
-      osd: [--tool=memcheck]
       mds: [--tool=memcheck]
-# see https://tracker.ceph.com/issues/38621
-#      mgr: [--tool=memcheck]
+    watchdog:
+      daemon_restart: normal
   ceph-fuse:
     client.0:
       valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]

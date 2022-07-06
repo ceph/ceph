@@ -35,12 +35,11 @@ enum {
   PAXOS_MGRSTAT,
   PAXOS_HEALTH,
   PAXOS_CONFIG,
+  PAXOS_KV,
   PAXOS_NUM
 };
 
 #define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
-
-extern const std::string CONFIG_PREFIX;
 
 // map of entity_type -> features -> count
 struct FeatureMap {
@@ -488,6 +487,7 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_PACIFIC(    (1ULL << 6));
       // elector pinging and CONNECTIVITY mode:
       constexpr mon_feature_t FEATURE_PINGING(    (1ULL << 7));
+      constexpr mon_feature_t FEATURE_QUINCY(    (1ULL << 8));
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -507,6 +507,7 @@ namespace ceph {
 	  FEATURE_OCTOPUS |
 	  FEATURE_PACIFIC |
 	  FEATURE_PINGING |
+	  FEATURE_QUINCY |
 	  FEATURE_NONE
 	  );
       }
@@ -530,6 +531,7 @@ namespace ceph {
 	  FEATURE_OCTOPUS |
 	  FEATURE_PACIFIC |
 	  FEATURE_PINGING |
+	  FEATURE_QUINCY |
 	  FEATURE_NONE
 	  );
       }
@@ -548,6 +550,9 @@ namespace ceph {
 
 static inline ceph_release_t infer_ceph_release_from_mon_features(mon_feature_t f)
 {
+  if (f.contains_all(ceph::features::mon::FEATURE_QUINCY)) {
+    return ceph_release_t::quincy;
+  }
   if (f.contains_all(ceph::features::mon::FEATURE_PACIFIC)) {
     return ceph_release_t::pacific;
   }
@@ -588,6 +593,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "octopus";
   } else if (f == FEATURE_PACIFIC) {
     return "pacific";
+  } else if (f == FEATURE_QUINCY) {
+    return "quincy";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -612,6 +619,8 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_OCTOPUS;
   } else if (n == "pacific") {
     return FEATURE_PACIFIC;
+  } else if (n == "quincy") {
+    return FEATURE_QUINCY;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }

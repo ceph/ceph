@@ -11,6 +11,7 @@
 
 #define dout_subsys ceph_subsys_rados
 
+using namespace std;
 /**
  * calculate intervals/extents that vary between two snapshots
  */

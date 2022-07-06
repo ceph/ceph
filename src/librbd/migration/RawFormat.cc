@@ -11,6 +11,7 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/migration/SnapshotInterface.h"
 #include "librbd/migration/SourceSpecBuilder.h"
+#include "librbd/migration/Utils.h"
 
 namespace librbd {
 namespace migration {
@@ -205,26 +206,8 @@ void RawFormat<I>::list_snaps(io::Extents&& image_extents,
     // zero out any space between the previous snapshot end and this
     // snapshot's end
     auto& snap_info = snapshot->get_snap_info();
-    if (previous_size && *previous_size > snap_info.size) {
-      ldout(cct, 20) << "snapshot resize " << *previous_size << " -> "
-                     << snap_info.size << dendl;
-      interval_set<uint64_t> zero_interval;
-      zero_interval.insert(snap_info.size, *previous_size - snap_info.size);
-
-      for (auto& image_extent : image_extents) {
-        interval_set<uint64_t> image_interval;
-        image_interval.insert(image_extent.first, image_extent.second);
-
-        image_interval.intersection_of(zero_interval);
-        for (auto [image_offset, image_length] : image_interval) {
-          ldout(cct, 20) << "zeroing extent " << image_offset << "~"
-                         << image_length << " at snapshot " << snap_id << dendl;
-          sparse_extents.insert(image_offset, image_length,
-                                {io::SPARSE_EXTENT_STATE_ZEROED, image_length});
-        }
-      }
-    }
-    previous_size = snap_info.size;
+    util::zero_shrunk_snapshot(cct, image_extents, snap_id, snap_info.size,
+                               &previous_size, &sparse_extents);
 
     // build set of data/zeroed extents for the current snapshot
     snapshot->list_snap(io::Extents{image_extents}, list_snaps_flags,
@@ -242,45 +225,7 @@ void RawFormat<I>::handle_list_snaps(int r, io::SnapIds&& snap_ids,
   ldout(cct, 20) << "r=" << r << ", "
                  << "snapshot_delta=" << snapshot_delta << dendl;
 
-  io::SnapshotDelta orig_snapshot_delta = std::move(*snapshot_delta);
-  snapshot_delta->clear();
-
-  auto snap_id_it = snap_ids.begin();
-  ceph_assert(snap_id_it != snap_ids.end());
-
-  // merge any snapshot intervals that were not requested
-  std::list<io::SparseExtents*> pending_sparse_extents;
-  for (auto& [snap_key, sparse_extents] : orig_snapshot_delta) {
-    // advance to next valid requested snap id
-    while (snap_id_it != snap_ids.end() && *snap_id_it < snap_key.first) {
-      ++snap_id_it;
-    }
-    if (snap_id_it == snap_ids.end()) {
-      break;
-    }
-
-    // loop through older write/read snapshot sparse extents to remove any
-    // overlaps with the current sparse extent
-    for (auto prev_sparse_extents : pending_sparse_extents) {
-      for (auto& sparse_extent : sparse_extents) {
-        prev_sparse_extents->erase(sparse_extent.get_off(),
-                                   sparse_extent.get_len());
-      }
-    }
-
-    auto write_read_snap_ids = std::make_pair(*snap_id_it, snap_key.second);
-    (*snapshot_delta)[write_read_snap_ids] = std::move(sparse_extents);
-
-    if (write_read_snap_ids.first > snap_key.first) {
-      // the current snapshot wasn't requested so it might need to get
-      // merged with a later snapshot
-      pending_sparse_extents.push_back(&(*snapshot_delta)[write_read_snap_ids]);
-    } else {
-      // we don't merge results passed a valid requested snapshot
-      pending_sparse_extents.clear();
-    }
-  }
-
+  util::merge_snapshot_delta(snap_ids, snapshot_delta);
   on_finish->complete(r);
 }
 

@@ -30,6 +30,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".sessionmap "
 
+using namespace std;
+
 namespace {
 class SessionMapIOContext : public MDSIOContextBase
 {
@@ -78,9 +80,8 @@ void SessionMap::dump()
     dout(10) << p->first << " " << p->second
 	     << " state " << p->second->get_state_name()
 	     << " completed " << p->second->info.completed_requests
-	     << " prealloc_inos " << p->second->info.prealloc_inos
+	     << " free_prealloc_inos " << p->second->free_prealloc_inos
 	     << " delegated_inos " << p->second->delegated_inos
-	     << " used_inos " << p->second->info.used_inos
 	     << dendl;
 }
 
@@ -238,7 +239,7 @@ void SessionMap::_load_finish(
     dout(10) << __func__ << ": continue omap load from '"
              << last_key << "'" << dendl;
     object_t oid = get_object_name();
-    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+    object_locator_t oloc(mds->get_metadata_pool());
     C_IO_SM_Load *c = new C_IO_SM_Load(this, false);
     ObjectOperation op;
     op.omap_get_vals(last_key, "", g_conf()->mds_sessionmap_keys_per_op,
@@ -280,7 +281,7 @@ void SessionMap::load(MDSContext *onload)
   
   C_IO_SM_Load *c = new C_IO_SM_Load(this, true);
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
 
   ObjectOperation op;
   op.omap_get_header(&c->header_bl, &c->header_r);
@@ -317,7 +318,7 @@ void SessionMap::load_legacy()
 
   C_IO_SM_LoadLegacy *c = new C_IO_SM_LoadLegacy(this);
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
 
   mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0,
 			   new C_OnFinisher(c, mds->finisher));
@@ -389,7 +390,7 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
   committing = version;
   SnapContext snapc;
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
 
   ObjectOperation op;
 
@@ -590,7 +591,8 @@ void Session::dump(Formatter *f, bool cap_dump) const
   }
   f->dump_float("uptime", get_session_uptime());
   f->dump_unsigned("requests_in_flight", get_request_count());
-  f->dump_unsigned("completed_requests", get_num_completed_requests());
+  f->dump_unsigned("num_completed_requests", get_num_completed_requests());
+  f->dump_unsigned("num_completed_flushes", get_num_completed_flushes());
   f->dump_bool("reconnecting", reconnecting);
   f->dump_object("recall_caps", recall_caps);
   f->dump_object("release_caps", release_caps);
@@ -598,6 +600,16 @@ void Session::dump(Formatter *f, bool cap_dump) const
   f->dump_object("recall_caps_throttle2o", recall_caps_throttle2o);
   f->dump_object("session_cache_liveness", session_cache_liveness);
   f->dump_object("cap_acquisition", cap_acquisition);
+
+  f->open_array_section("delegated_inos");
+  for (const auto& [start, len] : delegated_inos) {
+    f->open_object_section("ino_range");
+    f->dump_stream("start") << start;
+    f->dump_unsigned("length", len);
+    f->close_section();
+  }
+  f->close_section();
+
   info.dump(f);
 }
 
@@ -636,9 +648,9 @@ void SessionMap::wipe_ino_prealloc()
        p != session_map.end(); 
        ++p) {
     p->second->pending_prealloc_inos.clear();
+    p->second->free_prealloc_inos.clear();
     p->second->delegated_inos.clear();
     p->second->info.prealloc_inos.clear();
-    p->second->info.used_inos.clear();
   }
   projected = ++version;
 }
@@ -875,7 +887,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
 
       SnapContext snapc;
       object_t oid = get_object_name();
-      object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+      object_locator_t oloc(mds->get_metadata_pool());
       MDSContext *on_safe = gather_bld->new_sub();
       mds->objecter->mutate(oid, oloc, op, snapc,
 			    ceph::real_clock::now(), 0,
@@ -983,6 +995,8 @@ void Session::decode(bufferlist::const_iterator &p)
 {
   info.decode(p);
 
+  free_prealloc_inos = info.prealloc_inos;
+
   _update_human_name();
 }
 
@@ -1011,14 +1025,14 @@ int Session::check_access(CInode *in, unsigned mask,
       inode->layout.pool_ns.length() &&
       !connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     dout(10) << __func__ << " client doesn't support FS_FILE_LAYOUT_V2" << dendl;
-    return -EIO;
+    return -CEPHFS_EIO;
   }
 
   if (!auth_caps.is_capable(path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid,
 			    info.inst.addr)) {
-    return -EACCES;
+    return -CEPHFS_EACCES;
   }
   return 0;
 }
@@ -1123,7 +1137,7 @@ int SessionFilter::parse(
       id = strict_strtoll(s.c_str(), 10, &err);
       if (!err.empty()) {
 	*ss << "Invalid filter '" << s << "'";
-	return -EINVAL;
+	return -CEPHFS_EINVAL;
       }
       return 0;
     }
@@ -1153,13 +1167,13 @@ int SessionFilter::parse(
       id = strict_strtoll(v.c_str(), 10, &err);
       if (!err.empty()) {
         *ss << err;
-        return -EINVAL;
+        return -CEPHFS_EINVAL;
       }
     } else if (k == "reconnecting") {
 
       /**
        * Strict boolean parser.  Allow true/false/0/1.
-       * Anything else is -EINVAL.
+       * Anything else is -CEPHFS_EINVAL.
        */
       auto is_true = [](std::string_view bstr, bool *out) -> bool
       {
@@ -1172,7 +1186,7 @@ int SessionFilter::parse(
           *out = false;
           return 0;
         } else {
-          return -EINVAL;
+          return -CEPHFS_EINVAL;
         }
       };
 
@@ -1182,11 +1196,11 @@ int SessionFilter::parse(
         set_reconnecting(bval);
       } else {
         *ss << "Invalid boolean value '" << v << "'";
-        return -EINVAL;
+        return -CEPHFS_EINVAL;
       }
     } else {
       *ss << "Invalid filter key '" << k << "'";
-      return -EINVAL;
+      return -CEPHFS_EINVAL;
     }
   }
 

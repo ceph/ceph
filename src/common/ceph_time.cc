@@ -14,6 +14,10 @@
 
 // For ceph_timespec
 #include "ceph_time.h"
+
+#include <fmt/chrono.h>
+#include <fmt/ostream.h>
+
 #include "log/LogClock.h"
 #include "config.h"
 #include "strtol.h"
@@ -22,7 +26,6 @@
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 
-#include <ostringstream>
 
 #ifndef NSEC_PER_SEC
 #define NSEC_PER_SEC 1000000000ULL
@@ -102,18 +105,6 @@ std::ostream& operator<<(std::ostream& m,
 	   << 's';
 }
 
-std::ostream& operator<<(std::ostream& m, const timespan& t) {
-  static_assert(std::is_unsigned_v<timespan::rep>);
-  m << std::chrono::duration_cast<std::chrono::seconds>(t).count();
-  if (auto ns = (t % 1s).count(); ns > 0) {
-    char oldfill = m.fill();
-    m.fill('0');
-    m << '.' << std::setw(9) << ns;
-    m.fill(oldfill);
-  }
-  return m << 's';
-}
-
 template<typename Clock,
 	 typename std::enable_if<!Clock::is_steady>::type*>
 std::ostream& operator<<(std::ostream& m,
@@ -158,11 +149,11 @@ std::string timespan_str(timespan t)
   // that isn't as lame as this one!
   uint64_t nsec = std::chrono::nanoseconds(t).count();
   std::ostringstream ss;
-  if (nsec < 2000000000) {
-    ss << ((float)nsec / 1000000000) << "s";
+  if (nsec < 2'000'000'000) {
+    ss << ((float)nsec / 1'000'000'000) << "s";
     return ss.str();
   }
-  uint64_t sec = nsec / 1000000000;
+  uint64_t sec = nsec / 1'000'000'000;
   if (sec < 120) {
     ss << sec << "s";
     return ss.str();
@@ -200,8 +191,8 @@ std::string timespan_str(timespan t)
 std::string exact_timespan_str(timespan t)
 {
   uint64_t nsec = std::chrono::nanoseconds(t).count();
-  uint64_t sec = nsec / 1000000000;
-  nsec %= 1000000000;
+  uint64_t sec = nsec / 1'000'000'000;
+  nsec %= 1'000'000'000;
   uint64_t yr = sec / (60 * 60 * 24 * 365);
   std::ostringstream ss;
   if (yr) {
@@ -233,14 +224,12 @@ std::string exact_timespan_str(timespan t)
     ss << min << "m";
     sec -= min * 60;
   }
-  if (sec) {
-    ss << sec;
-  }
-  if (nsec) {
-    ss << ((float)nsec / 1000000000);
-  }
   if (sec || nsec) {
-    ss << "s";
+    if (nsec) {
+      ss << (((float)nsec / 1'000'000'000) + sec) << "s";
+    } else {
+      ss << sec << "s";
+    }
   }
   return ss.str();
 }
@@ -328,3 +317,34 @@ std::chrono::seconds parse_timespan(const std::string& s)
 }
 
 }
+
+namespace std {
+template<typename Rep, typename Period>
+ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t) {
+  if constexpr (chrono::treat_as_floating_point_v<Rep> ||
+                Period::den > 1) {
+    using seconds_t = chrono::duration<float>;
+    ::fmt::print(m, "{:.9}", chrono::duration_cast<seconds_t>(t));
+  } else {
+    ::fmt::print(m, "{}", t);
+  }
+  return m;
+}
+
+template ostream&
+operator<< <::ceph::timespan::rep,
+            ::ceph::timespan::period> (ostream&, const ::ceph::timespan&);
+
+template ostream&
+operator<< <::ceph::signedspan::rep,
+            ::ceph::signedspan::period> (ostream&, const ::ceph::signedspan&);
+
+template ostream&
+operator<< <chrono::seconds::rep,
+            chrono::seconds::period> (ostream&, const chrono::seconds&);
+
+template ostream&
+operator<< <chrono::milliseconds::rep,
+            chrono::milliseconds::period> (ostream&, const chrono::milliseconds&);
+
+} // namespace std

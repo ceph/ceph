@@ -64,10 +64,8 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
 
 int NetHandler::set_nonblock(int sd)
 {
-  int flags;
   int r = 0;
-
-  #ifdef _WIN32
+#ifdef _WIN32
   ULONG mode = 1;
   r = ioctlsocket(sd, FIONBIO, &mode);
   if (r) {
@@ -75,7 +73,9 @@ int NetHandler::set_nonblock(int sd)
                            << " " << WSAGetLastError() << dendl;
     return -r;
   }
-  #else
+#else
+  int flags;
+
   /* Set the socket nonblocking.
    * Note that fcntl(2) for F_GETFL and F_SETFL can't be
    * interrupted by a signal. */
@@ -89,7 +89,7 @@ int NetHandler::set_nonblock(int sd)
     lderr(cct) << __func__ << " fcntl(F_SETFL,O_NONBLOCK): " << cpp_strerror(r) << dendl;
     return -r;
   }
-  #endif
+#endif
 
   return 0;
 }

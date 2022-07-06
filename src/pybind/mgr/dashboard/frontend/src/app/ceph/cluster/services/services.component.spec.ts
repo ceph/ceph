@@ -32,8 +32,6 @@ describe('ServicesComponent', () => {
       service_type: 'osd',
       service_name: 'osd',
       status: {
-        container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-        container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
         size: 3,
         running: 3,
         last_refresh: '2020-02-25T04:33:26.465699'
@@ -43,8 +41,6 @@ describe('ServicesComponent', () => {
       service_type: 'crash',
       service_name: 'crash',
       status: {
-        container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-        container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
         size: 1,
         running: 1,
         last_refresh: '2020-02-25T04:33:26.465766'

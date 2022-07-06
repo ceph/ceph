@@ -237,9 +237,5 @@ TEST(MonMapBuildInitial, build_initial_mon_host_from_dns_fail) {
   cct->_conf.set_val("mon_host", "ceph.noname");
   MonMap monmap;
   int r = monmap.build_initial(cct.get(), false, std::cerr);
-#if defined(__FreeBSD__)
-  ASSERT_EQ(r, -ENOENT);
-#else
   ASSERT_EQ(r, -EINVAL);
-#endif
 }

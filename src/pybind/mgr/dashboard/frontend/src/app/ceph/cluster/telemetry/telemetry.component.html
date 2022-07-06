@@ -126,12 +126,36 @@
                   <input type="checkbox"
                          class="custom-control-input"
                          id="channel_ident"
-                         formControlName="channel_ident">
+                         formControlName="channel_ident"
+                         (click)="toggleIdent()">
                   <label class="custom-control-label"
                          for="channel_ident"></label>
                 </div>
               </div>
             </div>
+
+            <!-- Channel perf -->
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="channel_perf">
+                <ng-container i18n>Perf</ng-container>
+                <cd-helper>
+                  <ng-container i18n>Includes various performance metrics of a cluster.</ng-container>
+                </cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox"
+                         class="custom-control-input"
+                         id="channel_perf"
+                         formControlName="channel_perf">
+                  <label class="custom-control-label"
+                         for="channel_perf"></label>
+                </div>
+              </div>
+            </div>
+
+            <ng-container *ngIf="showContactInfo">
             <legend>
               <ng-container i18n>Contact Information</ng-container>
               <cd-helper i18n>Submitting any contact information is completely optional and disabled by default.</cd-helper>
@@ -161,6 +185,20 @@
                        i18n-placeholder>
               </div>
             </div>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="organization"
+                     i18n>Organization</label>
+              <div class="cd-col-form-input">
+                <input id="organization"
+                       class="form-control"
+                       type="text"
+                       formControlName="organization"
+                       placeholder="Organization name"
+                       i18n-placeholder>
+              </div>
+            </div>
+          </ng-container>
             <legend i18n>Advanced Settings</legend>
             <div class="form-group row">
               <label class="cd-col-form-label"
@@ -173,7 +211,8 @@
                 <input id="interval"
                        class="form-control"
                        type="number"
-                       formControlName="interval">
+                       formControlName="interval"
+                       min="8">
                 <span class="invalid-feedback"
                       *ngIf="configForm.showError('interval', formDir, 'min')"
                       i18n>The entered value is too low! It must be greater or equal to 8.</span>
@@ -249,7 +288,8 @@
                      for="report"
                      class="cd-col-form-label">Report preview
                 <cd-helper i18n-html
-                           html="The actual telemetry data that will be submitted.">
+                           html="The actual telemetry data that will be submitted."><em>Note: Please select 'Download' to
+                                   view the full report, including metrics from the perf channel.</em>
                 </cd-helper>
               </label>
               <div class="cd-col-form-input">

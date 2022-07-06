@@ -16,12 +16,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
+#include <memory>
 #include <time.h>
 #include <sys/mount.h>
-#include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "os/ObjectStore.h"
@@ -31,24 +32,31 @@
 #include "os/bluestore/BlueFS.h"
 #endif
 #include "include/Context.h"
+#include "common/buffer_instrumentation.h"
 #include "common/ceph_argparse.h"
 #include "common/admin_socket.h"
 #include "global/global_init.h"
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "common/options.h" // for the size literals
+#include "common/pretty_binary.h"
 #include "include/stringify.h"
 #include "include/coredumpctl.h"
-
 #include "include/unordered_map.h"
+#include "os/kv.h"
 #include "store_test_fixture.h"
 
+
+using namespace std;
 using namespace std::placeholders;
 
 typedef boost::mt11213b gen_type;
 
 const uint64_t DEF_STORE_TEST_BLOCKDEV_SIZE = 10240000000;
 #define dout_context g_ceph_context
+
+bool smr = false;
 
 static bool bl_eq(bufferlist& expected, bufferlist& actual)
 {
@@ -152,6 +160,7 @@ protected:
 public:
 };
 
+
 class StoreTestSpecificAUSize : public StoreTestDeferredSetup {
 
 public:
@@ -254,6 +263,139 @@ protected:
 
 };
 
+class StoreTestOmapUpgrade : public StoreTestDeferredSetup {
+protected:
+  void StartDeferred() {
+    DeferredSetup();
+  }
+
+public:
+  struct generator {
+    double r = 3.6;
+    double x = 0.5;
+    double operator()(){
+      double v = x;
+      x = r * x * (1 - x);
+      return v;
+    }
+  };
+
+  std::string generate_monotonic_name(uint32_t SUM, uint32_t i, double r, double x)
+  {
+    generator gen{r, x};
+    //std::cout << "r=" << r << " x=" << x << std::endl;
+    std::string s;
+    while (SUM > 1) {
+      uint32_t lo = 0;
+      uint32_t hi = 1 + gen() * 10;
+      uint32_t start = ('z' - 'a' + 1 - hi) * gen();
+      while (hi - lo > 0) {
+	uint32_t mid = (lo + hi + 1 + (SUM&1)) / 2; // round up or down, depending on SUM
+	//      std::cout << "SUM=" << SUM << " x=" << gen.x << std::endl;
+	uint32_t mid_val = gen() * (SUM - 1) + 1;
+	// LEFT  = lo  .. mid - 1
+	// RIGHT = mid .. hi
+	//      std::cout << "lo=" << lo << " hi=" << hi << " mid=" << mid
+	//	<< " SUM=" << SUM << " i=" << i << " x=" << gen.x << " mid_val=" << mid_val << std::endl;
+	if (i < mid_val) {
+	  hi = mid - 1;
+	  SUM = mid_val;
+	} else {
+	  lo = mid;
+	  SUM = SUM - mid_val;
+	  i = i - mid_val;
+	}
+      }
+      //std::cout << "lo=" << lo << " hi=" << hi
+      //  	      << " SUM=" << SUM << " i=" << i << std::endl;
+
+      s.push_back('a' + lo  + start); // to keep alphabetic order
+      uint32_t cnt = gen() * 8;
+      for (uint32_t j = 0; j < cnt; j++) {
+	s.push_back('a' + ('z' - 'a' + 1) * gen());
+      }
+      s.push_back('.');
+    }
+    return s;
+  }
+
+  std::string gen_string(size_t size, generator& gen) {
+    std::string s;
+    for (size_t i = 0; i < size; i++) {
+      s.push_back('a' + ('z' - 'a' + 1 ) * gen());
+    }
+    return s;
+  }
+
+  void make_omap_data(size_t object_count,
+		      int64_t poolid,
+		      coll_t cid) {
+    int r;
+    ObjectStore::CollectionHandle ch = store->open_collection(cid);
+    for (size_t o = 0; o < object_count; o++)
+    {
+      ObjectStore::Transaction t;
+      std::string oid = generate_monotonic_name(object_count, o, 3.71, 0.5);
+      ghobject_t hoid(hobject_t(oid, "", CEPH_NOSNAP, 0, poolid, ""));
+      t.touch(cid, hoid);
+      generator gen{3.85 + 0.1 * o / object_count, 1 - double(o) / object_count};
+
+      map<string, bufferlist> start_set;
+      size_t omap_count = 1 + gen() * 20;
+      bool do_omap_header = gen() > 0.5;
+      if (do_omap_header) {
+	bufferlist header;
+	header.append(gen_string(50, gen));
+	t.omap_setheader(cid, hoid, header);
+      }
+      for (size_t i = 0; i < omap_count; i++) {
+	std::string name = generate_monotonic_name(omap_count, i, 3.66 + 0.22 * o / object_count, 0.5);
+	bufferlist val;
+	val.append(gen_string(100, gen));
+	start_set.emplace(name, val);
+      }
+      t.omap_setkeys(cid, hoid, start_set);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+
+  void check_omap_data(size_t object_count,
+		       int64_t poolid,
+		       coll_t cid) {
+    int r;
+    ObjectStore::CollectionHandle ch = store->open_collection(cid);
+
+    for (size_t o = 0; o < object_count; o++)
+    {
+      ObjectStore::Transaction t;
+      std::string oid = generate_monotonic_name(object_count, o, 3.71, 0.5);
+      ghobject_t hoid(hobject_t(oid, "", CEPH_NOSNAP, 0, poolid, ""));
+      generator gen{3.85 + 0.1 * o / object_count, 1 - double(o) / object_count};
+
+      bufferlist omap_header;
+      map<string, bufferlist> omap_set;
+      r = store->omap_get(ch, hoid, &omap_header, &omap_set);
+      ASSERT_EQ(r, 0);
+      size_t omap_count = 1 + gen() * 20;
+      bool do_omap_header = gen() > 0.5;
+      if (do_omap_header) {
+	std::string header_str = gen_string(50, gen);
+	ASSERT_EQ(header_str, omap_header.to_str());
+      }
+      auto it = omap_set.begin();
+      for (size_t i = 0; i < omap_count; i++) {
+	ASSERT_TRUE(it != omap_set.end());
+	std::string name = generate_monotonic_name(omap_count, i, 3.66 + 0.22 * o / object_count, 0.5);
+	std::string val_gen = gen_string(100, gen);
+	ASSERT_EQ(it->first, name);
+	ASSERT_EQ(it->second.to_str(), val_gen);
+	++it;
+      }
+    }
+  }
+};
+
 TEST_P(StoreTest, collect_metadata) {
   map<string,string> pm;
   store->collect_metadata(&pm);
@@ -270,6 +412,17 @@ TEST_P(StoreTest, Trivial) {
 
 TEST_P(StoreTest, TrivialRemount) {
   int r = store->umount();
+  ASSERT_EQ(0, r);
+  r = store->mount();
+  ASSERT_EQ(0, r);
+}
+
+TEST_P(StoreTest, TrivialRemountFsck) {
+  if(string(GetParam()) != "bluestore")
+    return;
+  int r = store->umount();
+  ASSERT_EQ(0, r);
+  r = store->fsck(false);
   ASSERT_EQ(0, r);
   r = store->mount();
   ASSERT_EQ(0, r);
@@ -1097,6 +1250,10 @@ void StoreTest::doCompressionTest()
 TEST_P(StoreTest, CompressionTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "TODO: need to adjust statfs check for smr" << std::endl;
+    return;
+  }
 
   SetVal(g_conf(), "bluestore_compression_algorithm", "snappy");
   SetVal(g_conf(), "bluestore_compression_mode", "force");
@@ -1329,7 +1486,11 @@ TEST_P(StoreTest, SimpleObjectTest) {
 TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
   if(string(GetParam()) != "bluestore")
     return;
-      
+  if (smr) {
+    cout << "SKIP (smr)" << std::endl;
+    return;
+  }
+
   SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
   g_conf().apply_changes(nullptr);
@@ -1424,6 +1585,10 @@ TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
 TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "TODO: fix this for smr" << std::endl;
+    return;
+  }
   SetVal(g_conf(), "bluestore_block_db_path", "");
   StartDeferred(65536);
   SetVal(g_conf(), "bluestore_compression_mode", "force");
@@ -1954,6 +2119,10 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
 TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   if(string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "TODO: fix this for smr" << std::endl;
+    return;
+  }
   SetVal(g_conf(), "bluestore_block_db_path", "");
   StartDeferred(0x10000);
 
@@ -2805,7 +2974,7 @@ TEST_P(StoreTest, SimpleAttrTest) {
     bl.append(bp);
     ASSERT_TRUE(bl_eq(val, bl));
 
-    map<string,bufferptr> bm;
+    map<string,bufferptr,less<>> bm;
     r = store->getattrs(ch, hoid, bm);
     ASSERT_EQ(0, r);
 
@@ -2929,6 +3098,61 @@ TEST_P(StoreTest, ListEndTest) {
     cerr << "Cleaning" << std::endl;
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, List_0xfffffff_Hash_Test_in_meta) {
+  int r = 0;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    ghobject_t hoid(hobject_t(sobject_t("obj", CEPH_NOSNAP),
+			      "", UINT32_C(0xffffffff), -1, "nspace"));
+    t.touch(cid, hoid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    vector<ghobject_t> objects;
+    r = collection_list(store, ch, ghobject_t(), ghobject_t::get_max(), INT_MAX,
+			&objects, nullptr, true);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(objects.size(), 1);
+  }
+}
+
+TEST_P(StoreTest, List_0xfffffff_Hash_Test_in_PG) {
+  int r = 0;
+  const int64_t poolid = 1;
+  coll_t cid(spg_t(pg_t(0, poolid), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    ghobject_t hoid(hobject_t(sobject_t("obj", CEPH_NOSNAP),
+			      "", UINT32_C(0xffffffff), poolid, "nspace"));
+    t.touch(cid, hoid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    vector<ghobject_t> objects;
+    r = collection_list(store, ch, ghobject_t(), ghobject_t::get_max(), INT_MAX,
+			&objects, nullptr, true);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(objects.size(), 1);
   }
 }
 
@@ -3530,6 +3754,10 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
 TEST_P(StoreTest, BlueStoreUnshareBlobTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: non-deterministic behavior with smr" << std::endl;
+    return;
+  }
   int r;
   coll_t cid;
   auto ch = store->create_new_collection(cid);
@@ -3583,6 +3811,13 @@ TEST_P(StoreTest, BlueStoreUnshareBlobTest) {
     cerr << "Deleting dest object" << hoid2 << std::endl;
     r = queue_transaction(store, ch, std::move(t4));
     ASSERT_EQ(r, 0);
+
+    {
+      // this ensures remove operation submitted to kv store
+      EXPECT_EQ(store->umount(), 0);
+      EXPECT_EQ(store->mount(), 0);
+      ch = store->open_collection(cid);
+    }
 
     bufferlist resdata;
     r = store->read(ch, hoid, 0, 0x2000, resdata);
@@ -4565,7 +4800,7 @@ public:
     boost::uniform_int<> u3(0, 100);
     uint64_t size = u0(*rng);
     uint64_t name_len;
-    map<string, bufferlist> attrs;
+    map<string, bufferlist, less<>> attrs;
     set<string> keys;
     for (map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
          it != contents[obj].attrs.end(); ++it)
@@ -4607,7 +4842,7 @@ public:
     available_objects.erase(obj);
     ObjectStore::Transaction t;
 
-    map<string, bufferlist> attrs;
+    map<string, bufferlist, less<>> attrs;
     set<string> keys;
 
     while (entries--) {
@@ -4644,7 +4879,7 @@ public:
       } while (contents[obj].attrs.empty());
       expected = contents[obj].attrs;
     }
-    map<string, bufferlist> attrs;
+    map<string, bufferlist, less<>> attrs;
     int r = store->getattrs(ch, obj, attrs);
     ASSERT_TRUE(r == 0);
     ASSERT_TRUE(attrs.size() == expected.size());
@@ -5736,7 +5971,7 @@ TEST_P(StoreTest, XattrTest) {
     ASSERT_EQ(r, 0);
   }
 
-  map<string, bufferptr> aset;
+  map<string, bufferptr, less<>> aset;
   store->getattrs(ch, hoid, aset);
   ASSERT_EQ(aset.size(), attrs.size());
   for (map<string, bufferptr>::iterator i = aset.begin();
@@ -6622,7 +6857,27 @@ INSTANTIATE_TEST_SUITE_P(
 #endif
     "kstore"));
 
-void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
+// Note: instantiate all stores to preserve store numbering order only
+INSTANTIATE_TEST_SUITE_P(
+  ObjectStore,
+  StoreTestOmapUpgrade,
+  ::testing::Values(
+    "memstore",
+    "filestore",
+#if defined(WITH_BLUESTORE)
+    "bluestore",
+#endif
+    "kstore"));
+
+#if defined(WITH_BLUESTORE)
+INSTANTIATE_TEST_SUITE_P(
+  ObjectStore,
+  StoreTestDeferredSetup,
+  ::testing::Values(
+    "bluestore"));
+#endif
+
+void doMany4KWritesTest(ObjectStore* store,
                         unsigned max_objects,
                         unsigned max_ops,
                         unsigned max_object_size,
@@ -6634,7 +6889,7 @@ void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
   store_statfs_t res_stat;
 
-  SyntheticWorkloadState test_obj(store.get(),
+  SyntheticWorkloadState test_obj(store,
                                   &gen,
                                   &rng,
                                   cid,
@@ -6671,30 +6926,45 @@ void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
 TEST_P(StoreTestSpecificAUSize, Many4KWritesTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: no deferred; assertions around res_stat.allocated don't apply"
+	 << std::endl;
+    return;
+  }
 
   StartDeferred(0x10000);
 
   const unsigned max_object = 4*1024*1024;
-  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0);
+  doMany4KWritesTest(store.get(), 1, 1000, max_object, 4*1024, 0);
 }
 
 TEST_P(StoreTestSpecificAUSize, Many4KWritesNoCSumTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: no deferred; assertions around res_stat.allocated don't apply"
+	 << std::endl;
+    return;
+  }
   StartDeferred(0x10000);
   SetVal(g_conf(), "bluestore_csum_type", "none");
   g_ceph_context->_conf.apply_changes(nullptr);
   const unsigned max_object = 4*1024*1024;
 
-  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0 );
+  doMany4KWritesTest(store.get(), 1, 1000, max_object, 4*1024, 0 );
 }
 
 TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: no deferred; assertions around res_stat.allocated don't apply"
+	 << std::endl;
+    return;
+  }
   StartDeferred(0x10000);
   const unsigned max_object = 4*1024*1024;
-  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0);
+  doMany4KWritesTest(store.get(), 1, 1000, max_object, 4*1024, 0);
 }
 
 #if defined(WITH_BLUESTORE)
@@ -6988,10 +7258,374 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallAppend) {
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  if (string(GetParam()) != "bluestore" || !cct->_conf->bluestore_zero_block_detection) {
+    GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
+  }
+
+  size_t block_size = 65536;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // [1] append zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append_zero(4096);
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 4096u);
+
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096, r);
+    ASSERT_TRUE(in.is_zero());
+  }
+
+  {
+    // [2] append non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(4096, 'c'));
+
+    t.write(cid, hoid, 4096, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u*2);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 4096u);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096 * 2, r);
+    _exp.append_zero(4096);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallOverwrite) {
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  if (string(GetParam()) != "bluestore" || !cct->_conf->bluestore_zero_block_detection) {
+    GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
+  }
+  if (smr) {
+    GTEST_SKIP() << "smr, skipping";
+  }
+
+  size_t block_size = 65536;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  
+  {
+    // {setting up the scenario} append non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(4096, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 0u);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096, r);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  { 
+    // [1] overwrite non-zeros with zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append_zero(4096);
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u*2);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 0u);
+    
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096, r);
+    ASSERT_TRUE(in.is_zero());
+  }
+
+  {
+    // [2] overwrite zeros with non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(4096, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 3u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u*3);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 0u);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096, r);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionBigAppend) {
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  if (string(GetParam()) != "bluestore" || !cct->_conf->bluestore_zero_block_detection) {
+    GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
+  }
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  
+  {
+    // [1] append zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append_zero(block_size * 2);
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*2);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 4096u*2);
+
+    bufferlist in;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 2, r);
+    ASSERT_TRUE(in.is_zero());
+  }
+
+  {
+    // [2] append non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'c'));
+
+    t.write(cid, hoid, block_size * 2, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*4);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 4096u*2);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 4, r);
+    _exp.append_zero(block_size * 2);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionBigOverwrite) {
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  if (string(GetParam()) != "bluestore" || !cct->_conf->bluestore_zero_block_detection) {
+    GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
+  }
+  if (smr) {
+    GTEST_SKIP() << "smr, skipping";
+  }
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  
+  {
+    // {setting up the scenario} append non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*2);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 0u);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 2, r);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    // [1] overwrite non-zeros with zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append_zero(block_size * 2);
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*4);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 4096u*2);
+
+    bufferlist in;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 2, r);
+    ASSERT_TRUE(in.is_zero());
+  }
+
+  {
+    // [2] overwrite zeros with non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 3u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*6);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 4096u*2);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 2, r);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
 
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: no deferred" << std::endl;
+    return;
+  }
 
   size_t block_size = 4096;
   StartDeferred(block_size);
@@ -7005,7 +7639,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
   ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
   ghobject_t hoid2(hobject_t("test2", "", CEPH_NOSNAP, 0, -1, ""));
 
-  const PerfCounters* logger = store->get_perf_counters();
+  PerfCounters* logger = const_cast<PerfCounters*>(store->get_perf_counters());
 
   auto ch = store->create_new_collection(cid);
   {
@@ -7386,9 +8020,9 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     ASSERT_LE(statfs.allocated, (unsigned)block_size * 64);
   }
 
-  // check whether overwrite (2 * prefer_deferred_size) partially
-  // overlapping two adjacent blobs goes non-deferred if one of the part is 
-  // above prefer_deferred_size
+  logger->reset();
+  // check whether overwrite (prefer_deferred_size < 120K < 2 * prefer_defer_size) partially
+  // overlapping two adjacent blobs goes partly deferred
   {
     ObjectStore::Transaction t;
     bufferlist bl;
@@ -7399,8 +8033,10 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     ASSERT_EQ(r, 0);
   }
   sleep(2);
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 13u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 8u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
+  ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 1u);
+  ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), block_size);
 
   {
     struct store_statfs_t statfs;
@@ -7421,17 +8057,174 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+  if (smr) {
+    cout << "SKIP: no deferred" << std::endl;
+    return;
+  }
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+  SetVal(g_conf(), "bluestore_max_blob_size", "65536");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  PerfCounters* logger = const_cast<PerfCounters*>(store->get_perf_counters());
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(128 * 1024, 'c'));
+
+    t.write(cid, hoid, 0x1000, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 3u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), 0);
+  }
+
+  logger->reset();
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(128 * 1024, 'c'));
+
+    t.write(cid, hoid, 0x2000, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 3u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), 57344);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+  if (smr) {
+    cout << "SKIP: no deferred" << std::endl;
+    return;
+  }
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+  SetVal(g_conf(), "bluestore_max_blob_size", "65536");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  PerfCounters* logger = const_cast<PerfCounters*>(store->get_perf_counters());
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  logger->reset();
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(4096 * 1024, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 64u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), 0u);
+  }
+  logger->reset();
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(4096 * 1024, 'c'));
+
+    t.write(cid, hoid, 0x1000, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 65u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), 61440);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
 
 TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
 
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: no deferred" << std::endl;
+    return;
+  }
 
   size_t alloc_size = 4096;
   size_t large_object_size = 1 * 1024 * 1024;
+  size_t prefer_deferred_size = 65536;
   StartDeferred(alloc_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "131072");
-  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size",
+    stringify(prefer_deferred_size).c_str());
   g_conf().apply_changes(nullptr);
 
   int r;
@@ -7447,7 +8240,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  for (size_t expected_write_size = 1024; expected_write_size <= 65536; expected_write_size *= 2) {
+  for (size_t expected_write_size = 1024; expected_write_size <= prefer_deferred_size; expected_write_size *= 2) {
     //create object with hint
     ghobject_t hoid(hobject_t("test-"+to_string(expected_write_size), "", CEPH_NOSNAP, 0, -1, ""));
     {
@@ -7483,7 +8276,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
 	      CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
       r = queue_transaction(store, ch, std::move(t));
       ++exp_bluestore_write_big;
-      ++exp_bluestore_write_big_deferred;
+      if (expected_write_size < prefer_deferred_size)
+	++exp_bluestore_write_big_deferred;
       ASSERT_EQ(r, 0);
     }
     ASSERT_EQ(logger->get(l_bluestore_write_big), exp_bluestore_write_big);
@@ -7522,6 +8316,10 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
 
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: no overwrite" << std::endl;
+    return;
+  }
 
   size_t block_size = 4096;
   StartDeferred(block_size);
@@ -7703,6 +8501,10 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
 
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: no overwrite" << std::endl;
+    return;
+  }
 
   size_t block_size = 4096;
   StartDeferred(block_size);
@@ -7952,6 +8754,10 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
   int write_offset = buf_len;
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: assertions about allocations need to be adjusted" << std::endl;
+    return;
+  }
 
 #define WRITE_AT(offset, _length) {\
       ObjectStore::Transaction t;\
@@ -8147,6 +8953,10 @@ namespace {
 TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "TODO: repair mismatched write pointer (+ dead bytes mismatch)" << std::endl;
+    return;
+  }
   const size_t offs_base = 65536 / 2;
 
 
@@ -8206,24 +9016,36 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   }
 
   bstore->umount();
+  bool err_was_injected = false;
   //////////// leaked pextent fix ////////////
   cerr << "fix leaked pextents" << std::endl;
   ASSERT_EQ(bstore->fsck(false), 0);
   ASSERT_EQ(bstore->repair(false), 0);
   bstore->mount();
-  bstore->inject_leaked(0x30000);
+  if (!bstore->has_null_fm()) {
+    bstore->inject_leaked(0x30000);
+    err_was_injected = true;
+  }
+
   bstore->umount();
-  ASSERT_EQ(bstore->fsck(false), 1);
+  if (err_was_injected) {
+    ASSERT_EQ(bstore->fsck(false), 1);
+  }
   ASSERT_EQ(bstore->repair(false), 0);
   ASSERT_EQ(bstore->fsck(false), 0);
 
   //////////// false free fix ////////////
   cerr << "fix false free pextents" << std::endl;
   bstore->mount();
-  bstore->inject_false_free(cid, hoid);
+  if (!bstore->has_null_fm()) {
+    bstore->inject_false_free(cid, hoid);
+    err_was_injected = true;
+  }
   bstore->umount();
-  ASSERT_EQ(bstore->fsck(false), 2);
-  ASSERT_EQ(bstore->repair(false), 0);
+  if (err_was_injected) {
+    ASSERT_EQ(bstore->fsck(false), 2);
+    ASSERT_EQ(bstore->repair(false), 0);
+  }
   ASSERT_EQ(bstore->fsck(false), 0);
 
   //////////// verify invalid statfs ///////////
@@ -8266,9 +9088,9 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   bstore->inject_misreference(cid, hoid, cid, hoid_dup, 0);
   bstore->inject_misreference(cid, hoid, cid, hoid_dup, (offs_base * repeats) / 2);
   bstore->inject_misreference(cid, hoid, cid, hoid_dup, offs_base * (repeats -1) );
-  
+  int expected_errors = bstore->has_null_fm() ? 3 : 6;
   bstore->umount();
-  ASSERT_EQ(bstore->fsck(false), 6);
+  ASSERT_EQ(bstore->fsck(false), expected_errors);
   ASSERT_EQ(bstore->repair(false), 0);
 
   ASSERT_EQ(bstore->fsck(true), 0);
@@ -8300,7 +9122,36 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     }
 
     bstore->umount();
-    ASSERT_EQ(bstore->fsck(false), 3);
+    ASSERT_EQ(bstore->fsck(false), 4);
+    ASSERT_LE(bstore->repair(false), 0);
+    ASSERT_EQ(bstore->fsck(false), 0);
+  }
+
+  cerr << "Zombie spanning blob" << std::endl;
+  {
+    bstore->mount();
+    ghobject_t hoid4 = make_object("Object 4", pool);
+    auto ch = store->open_collection(cid);
+    {
+      bufferlist bl;
+      string s(0x1000, 'a');
+      bl.append(s);
+      ObjectStore::Transaction t;
+      for(size_t i = 0; i < 0x10; i++) {
+              t.write(cid, hoid4, i * bl.length(), bl.length(), bl);
+      }
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    sleep(5);
+    {
+      bstore->inject_zombie_spanning_blob(cid, hoid4, 12345);
+      bstore->inject_zombie_spanning_blob(cid, hoid4, 23456);
+      bstore->inject_zombie_spanning_blob(cid, hoid4, 23457);
+    }
+
+    bstore->umount();
+    ASSERT_EQ(bstore->fsck(false), 1);
     ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
@@ -8310,8 +9161,237 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
 
 }
 
-TEST_P(StoreTest, BluestoreRepairGlobalStats)
-{
+TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  if (smr) {
+    cout << "SKIP: smr repair is different" << std::endl;
+    return;
+  }
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+
+  StartDeferred(0x10000);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  int r;
+
+  cerr << "initializing" << std::endl;
+  {
+    const size_t col_count = 16;
+    const size_t obj_count = 1024;
+    ObjectStore::CollectionHandle ch[col_count];
+    ghobject_t hoid[col_count][obj_count];
+
+    unique_ptr<coll_t> cid[col_count];
+
+    for (size_t i = 0; i < col_count; i++) {
+      cid[i].reset(new coll_t(spg_t(pg_t(0, i), shard_id_t::NO_SHARD)));
+      ch[i] = store->create_new_collection(*cid[i]);
+      for (size_t j = 0; j < obj_count; j++) {
+	hoid[i][j] = make_object(stringify(j).c_str(), i);
+      }
+    }
+
+    for (size_t i = 0; i < col_count; i++) {
+      ObjectStore::Transaction t;
+      t.create_collection(*cid[i], 0);
+      r = queue_transaction(store, ch[i], std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    cerr << "onode preparing" << std::endl;
+    bufferlist bl;
+    string s(0x1000, 'a');
+    bl.append(s);
+
+    for (size_t i = 0; i < col_count; i++) {
+      for (size_t j = 0; j < obj_count; j++) {
+	ObjectStore::Transaction t;
+	t.write(*cid[i], hoid[i][j], bl.length(), bl.length(), bl);
+	r = queue_transaction(store, ch[i], std::move(t));
+	ASSERT_EQ(r, 0);
+      }
+    }
+    cerr << "Zombie spanning blob injection" << std::endl;
+
+    sleep(5);
+
+    for (size_t i = 0; i < col_count; i++) {
+      for (size_t j = 0; j < obj_count; j++) {
+	bstore->inject_zombie_spanning_blob(*cid[i], hoid[i][j], 12345);
+      }
+    }
+
+    cerr << "fscking/fixing" << std::endl;
+    bstore->umount();
+    ASSERT_EQ(bstore->fsck(false), col_count * obj_count);
+    ASSERT_LE(bstore->quick_fix(), 0);
+    ASSERT_EQ(bstore->fsck(false), 0);
+  }
+
+  cerr << "Completing" << std::endl;
+  bstore->mount();
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreRepairSharedBlobTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  if (smr) {
+    cout << "TODO: repair mismatched write pointer (+ dead bytes mismatch)" << std::endl;
+    return;
+  }
+
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+
+  const size_t block_size = 0x1000;
+  StartDeferred(block_size);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  // fill the store with some data
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+
+  ghobject_t hoid = make_object("Object 1", pool);
+  ghobject_t hoid_cloned = hoid;
+  hoid_cloned.hobj.snap = 1;
+  ghobject_t hoid2 = make_object("Object 2", pool);
+
+  string s(block_size, 1);
+  bufferlist bl;
+  bl.append(s);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // check the scenario when shared blob contains
+  // references to extents from two objects which don't overlapp
+  // o1 -> 0x2000~1K
+  // o2 -> 0x4000~1k
+  cerr << "introduce 2 non-overlapped extents in a shared blob"
+       << std::endl;
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid2, 0, bl.length(), bl); // to make a gap in allocations
+    t.write(cid, hoid, block_size * 2 , bl.length(), bl);
+    t.clone(cid, hoid, hoid_cloned);
+    t.zero(cid, hoid, 0, bl.length());
+    t.zero(cid, hoid_cloned, block_size * 2, bl.length());
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bstore->umount();
+  bstore->mount();
+  {
+    string key;
+    _key_encode_u64(1, &key);
+    bluestore_shared_blob_t sb(1);
+    sb.ref_map.get(0x2000, block_size);
+    sb.ref_map.get(0x4000, block_size);
+    sb.ref_map.get(0x4000, block_size);
+    bufferlist bl;
+    encode(sb, bl);
+    bstore->inject_broken_shared_blob_key(key, bl);
+  }
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 2);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+
+  cerr << "Completing" << std::endl;
+  bstore->mount();
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  if (smr) {
+    cout << "SKIP: smr repair is different" << std::endl;
+    return;
+  }
+
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+
+  StartDeferred(0x10000);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  int r;
+
+  // initializing
+  cerr << "initializing" << std::endl;
+  {
+    const uint64_t pool = 555;
+    coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+    auto ch = store->create_new_collection(cid);
+
+    ghobject_t hoid = make_object("Object", pool);
+    ghobject_t hoid_cloned = hoid;
+    hoid_cloned.hobj.snap = 1;
+
+    {
+      ObjectStore::Transaction t;
+      t.create_collection(cid, 0);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append("0123456789012345");
+      t.write(cid, hoid, 0, bl.length(), bl);
+
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.clone(cid, hoid, hoid_cloned);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+  // injecting an error and checking
+  cerr << "injecting" << std::endl;
+  sleep(3); // need some time for the previous write to land
+  bstore->inject_no_shared_blob_key();
+  bstore->inject_stray_shared_blob_key(12345678);
+
+  {
+    cerr << "fscking/fixing" << std::endl;
+    // we need to check for null-manager before umount()
+    bool has_null_manager = bstore->has_null_manager();
+    bstore->umount();
+    // depending on the allocation map's source we can
+    // either observe or don't observe an additional 
+    // extent leak detection. Hence adjusting the expected
+    // value
+    size_t expected_error_count =
+      has_null_manager ?
+      5: // 4 sb ref mismatch errors + 1 statfs mismatch
+      7; // 4 sb ref mismatch errors + 1 statfs + 1 block leak + 1 non-free
+    ASSERT_EQ(bstore->fsck(false), expected_error_count);
+    // repair might report less errors than fsck above showed
+    // as some errors, e.g. statfs mismatch, are implicitly fixed
+    // before the detection during the previous repair steps...
+    ASSERT_LE(bstore->repair(false), expected_error_count);
+    ASSERT_EQ(bstore->fsck(false), 0);
+  }
+
+  cerr << "Completing" << std::endl;
+  bstore->mount();
+}
+
+TEST_P(StoreTest, BluestoreRepairGlobalStats) {
   if (string(GetParam()) != "bluestore")
     return;
   const size_t offs_base = 65536 / 2;
@@ -8373,8 +9453,7 @@ TEST_P(StoreTest, BluestoreRepairGlobalStats)
   bstore->mount();
 }
 
-TEST_P(StoreTest, BluestoreRepairGlobalStatsFixOnMount)
-{
+TEST_P(StoreTest, BluestoreRepairGlobalStatsFixOnMount) {
   if (string(GetParam()) != "bluestore")
     return;
   const size_t offs_base = 65536 / 2;
@@ -8488,6 +9567,42 @@ TEST_P(StoreTest, BluestoreStatistics) {
   cout << std::endl;
 }
 
+TEST_P(StoreTest, BluestoreStrayOmapDetection)
+{
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+  ghobject_t oid = make_object("Object 1", pool);
+  ghobject_t oid2 = make_object("Object 2", pool);
+  // fill the store with some data
+  auto ch = store->create_new_collection(cid);
+  bufferlist h;
+  h.append("header");
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, oid);
+    t.omap_setheader(cid, oid, h);
+    t.touch(cid, oid2);
+    t.omap_setheader(cid, oid2, h);
+    int r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // inject stray omap
+  bstore->inject_stray_omap(123456, "somename");
+
+  bstore->umount();
+  // check we detect injected stray omap..
+
+  ASSERT_EQ(bstore->fsck(false), 1);
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  bstore->mount();
+}
+
 TEST_P(StoreTest, BluestorePerPoolOmapFixOnMount)
 {
   if (string(GetParam()) != "bluestore")
@@ -8573,6 +9688,99 @@ TEST_P(StoreTest, BluestorePerPoolOmapFixOnMount)
   ASSERT_EQ(bstore->fsck(false), 0); // this will fail without fix for #43824
 
   bstore->mount();
+}
+
+class hugepaged_raw;
+
+static bool is_hugepaged(const bufferptr& bp)
+{
+  const auto& ibp =
+    static_cast<const ceph::buffer_instrumentation::instrumented_bptr&>(bp);
+  return ibp.is_raw_marked<BlockDevice::hugepaged_raw_marker_t>();
+}
+
+// disabled by default b/c of the dependency on huge page ssome test
+// environments might not offer without extra configuration.
+TEST_P(StoreTestDeferredSetup, DISABLED_BluestoreHugeReads)
+{
+  if (string(GetParam()) != "bluestore") {
+    return;
+  }
+
+  constexpr static size_t HUGE_BUFFER_SIZE{2_M};
+  cout << "Configuring huge page pools" << std::endl;
+  {
+    SetVal(g_conf(), "bdev_read_preallocated_huge_buffers",
+           fmt::format("{}=2", HUGE_BUFFER_SIZE).c_str());
+    SetVal(g_conf(), "bluestore_max_blob_size",
+           std::to_string(HUGE_BUFFER_SIZE).c_str());
+    // let's verify the per-IOContext no-cache override
+    SetVal(g_conf(), "bluestore_default_buffered_read", "true");
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+  DeferredSetup();
+
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test_huge_buffers", "", CEPH_NOSNAP, 0, 0, ""));
+  auto ch = store->create_new_collection(cid);
+
+  bufferlist bl;
+  {
+    bufferptr bp{HUGE_BUFFER_SIZE};
+    // non-zeros! Otherwise the deduplication will take place.
+    ::memset(bp.c_str(), 0x42, HUGE_BUFFER_SIZE);
+    bl.push_back(std::move(bp));
+    ASSERT_EQ(bl.get_num_buffers(), 1);
+    ASSERT_EQ(bl.length(), HUGE_BUFFER_SIZE);
+  }
+
+  cout << "Write object" << std::endl;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, hoid);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    const auto r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // force cache clear
+  {
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+
+  // we want to extend the life-time of all huge paged-backed
+  // bufferlists to validate the behaviour on pool exhaustion.
+  bufferlist bl_1_huge, bl_2_huge, bl_3_plain;
+
+  cout << "Read object 1st time" << std::endl;
+  {
+    const auto r = store->read(ch, hoid, 0, HUGE_BUFFER_SIZE, bl_1_huge);
+    ASSERT_EQ(static_cast<int>(HUGE_BUFFER_SIZE), r);
+    ASSERT_TRUE(bl_eq(bl, bl_1_huge));
+    ASSERT_EQ(bl_1_huge.get_num_buffers(), 1);
+    ASSERT_TRUE(is_hugepaged(bl_1_huge.front()));
+  }
+
+  cout << "Read object 2nd time" << std::endl;
+  {
+    const auto r = store->read(ch, hoid, 0, HUGE_BUFFER_SIZE, bl_2_huge);
+    ASSERT_EQ(static_cast<int>(HUGE_BUFFER_SIZE), r);
+    ASSERT_TRUE(bl_eq(bl, bl_2_huge));
+    ASSERT_EQ(bl_2_huge.get_num_buffers(), 1);
+    ASSERT_TRUE(is_hugepaged(bl_2_huge.front()));
+  }
+
+  cout << "Read object 3rd time" << std::endl;
+  {
+    const auto r = store->read(ch, hoid, 0, HUGE_BUFFER_SIZE, bl_3_plain);
+    ASSERT_EQ(static_cast<int>(HUGE_BUFFER_SIZE), r);
+    ASSERT_TRUE(bl_eq(bl, bl_3_plain));
+    ASSERT_EQ(bl_3_plain.get_num_buffers(), 1);
+    ASSERT_FALSE(is_hugepaged(bl_3_plain.front()));
+  }
 }
 
 TEST_P(StoreTest, SpuriousReadErrorTest) {
@@ -8722,6 +9930,41 @@ TEST_P(StoreTest, mergeRegionTest) {
   }
 }
 
+TEST_P(StoreTest, FixSMRWritePointer) {
+  if(string(GetParam()) != "bluestore")
+    return;
+  if (!smr)
+    return;
+  int r = store->umount();
+  ASSERT_EQ(0, r);
+
+  // copied from StoreTestFixture
+  std::string path = GetParam() + ".test_temp_dir"s;
+
+  std::string p = path + "/block";
+  BlockDevice* bdev = BlockDevice::create(g_ceph_context, p, nullptr, nullptr, nullptr, nullptr);
+  r = bdev->open(p);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(true, bdev->is_smr());
+
+  std::vector<uint64_t> wp = bdev->get_zones();
+  uint64_t first_seq_zone = bdev->get_conventional_region_size() / bdev->get_zone_size();
+
+  IOContext ioc(g_ceph_context, NULL, true);
+  bufferlist bl;
+  bl.append(std::string(1024 * 1024, 'x'));
+  r = bdev->aio_write(wp[first_seq_zone], bl, &ioc, false);
+  ASSERT_EQ(0, r);
+  bdev->aio_submit(&ioc);
+  ioc.aio_wait();
+  bdev->close();
+  delete bdev;
+
+  r = store->mount();
+  ASSERT_EQ(0, r);
+}
+
+
 TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -8792,6 +10035,10 @@ TEST_P(StoreTestSpecificAUSize, ReproNoBlobMultiTest) {
 
   if(string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP (FIXME): bluestore gc does not seem to do the trick here" << std::endl;
+    return;
+  }
 
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "4294967296");
@@ -8908,6 +10155,10 @@ void doManySetAttr(ObjectStore* store,
 TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: (FIXME?) adjust me for smr at some point?" << std::endl;
+    return;
+  }
 
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
@@ -8936,6 +10187,10 @@ TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
 TEST_P(StoreTestSpecificAUSize, SpilloverFixedTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: (FIXME?) adjust me for smr at some point?" << std::endl;
+    return;
+  }
 
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
@@ -8960,6 +10215,10 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixedTest) {
 TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: (FIXME?) adjust me for smr at some point?" << std::endl;
+    return;
+  }
 
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
@@ -8986,6 +10245,10 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
 TEST_P(StoreTestSpecificAUSize, SpilloverFixed3Test) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: (FIXME?) adjust me for smr at some point?" << std::endl;
+    return;
+  }
 
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
@@ -9009,6 +10272,9 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed3Test) {
 TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    return;
+  }
 
   SetVal(g_conf(), "bluestore_default_buffered_write", "true");
   SetVal(g_conf(), "bluestore_max_blob_size", "65536");
@@ -9090,16 +10356,285 @@ TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
   ASSERT_EQ(r, 0x10000);
 }
 
+TEST_P(StoreTestOmapUpgrade, WithOmapHeader) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "true");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred();
+  int64_t poolid = 11;
+  coll_t cid(spg_t(pg_t(1, poolid), shard_id_t::NO_SHARD));
+  ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, poolid, ""));
+  auto ch = store->create_new_collection(cid);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  map<string, bufferlist> attrs;
+  bufferlist expected_header;
+  expected_header.append("this is a header");
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    bufferlist header;
+    header.append(expected_header);
+    t.omap_setheader(cid, hoid, header);
+    map<string, bufferlist> start_set;
+    bufferlist bl;
+    bl.append(string("value"));
+    start_set.emplace(string("key1"), bl);
+    t.omap_setkeys(cid, hoid, start_set);
+    r = queue_transaction(store, ch, std::move(t));
+  }
+  {
+    map<string,bufferlist> res;
+    bufferlist h;
+    r = store->omap_get(ch, hoid, &h, &res);
+    ASSERT_EQ(r, 0);
+    ASSERT_TRUE(bl_eq(h, expected_header));
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_EQ(res.begin()->first, "key1");
+  }
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0);
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
+  g_conf().apply_changes(nullptr);
+  ASSERT_EQ(store->fsck(false), 2);
+  ASSERT_EQ(store->quick_fix(), 0);
+  store->mount();
+  ch = store->open_collection(cid);
+  {
+    map<string,bufferlist> res;
+    bufferlist h;
+    r = store->omap_get(ch, hoid, &h, &res);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_EQ(res.begin()->first, "key1");
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, BluefsWriteInSingleDiskEnvTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  bstore->inject_bluefs_file("db.slow", "store_test_injection_slow", 1 << 20ul);
+  bstore->inject_bluefs_file("db.wal", "store_test_injection_wal", 1 << 20ul);
+  bstore->inject_bluefs_file("db", "store_test_injection_wal", 1 << 20ul);
+
+  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+  ceph_assert(admin_socket);
+
+  ceph::bufferlist in, out;
+  ostringstream err;
+  auto r = admin_socket->execute_command(
+    { "{\"prefix\": \"bluefs stats\"}" },
+    in, err, &out);
+  if (r != 0) {
+    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
+  }  else {
+    std::cout << std::string(out.c_str(), out.length()) << std::endl;
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, BluefsWriteInNoWalDiskEnvTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_block_db_path", "db");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(1ull << 31).c_str());
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  bstore->inject_bluefs_file("db.slow", "store_test_injection_slow", 1 << 20ul);
+  bstore->inject_bluefs_file("db.wal", "store_test_injection_wal", 1 << 20ul);
+  bstore->inject_bluefs_file("db", "store_test_injection_wal", 1 << 20ul);
+
+  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+  ceph_assert(admin_socket);
+
+  ceph::bufferlist in, out;
+  ostringstream err;
+  auto r = admin_socket->execute_command(
+    { "{\"prefix\": \"bluefs stats\"}" },
+    in, err, &out);
+  if (r != 0) {
+    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
+  }
+  else {
+    std::cout << std::string(out.c_str(), out.length()) << std::endl;
+  }
+}
+
+TEST_P(StoreTestOmapUpgrade, NoOmapHeader) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "true");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred();
+  int64_t poolid = 11;
+  coll_t cid(spg_t(pg_t(1, poolid), shard_id_t::NO_SHARD));
+  ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, poolid, ""));
+  auto ch = store->create_new_collection(cid);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  map<string, bufferlist> attrs;
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    map<string, bufferlist> start_set;
+    bufferlist bl;
+    bl.append(string("value"));
+    start_set.emplace(string("key1"), bl);
+    t.omap_setkeys(cid, hoid, start_set);
+    r = queue_transaction(store, ch, std::move(t));
+  }
+  {
+    map<string,bufferlist> res;
+    bufferlist h;
+    r = store->omap_get(ch, hoid, &h, &res);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(h.length(), 0);
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_EQ(res.begin()->first, "key1");
+  }
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0);
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
+  g_conf().apply_changes(nullptr);
+  ASSERT_EQ(store->fsck(false), 2);
+  ASSERT_EQ(store->quick_fix(), 0);
+  store->mount();
+  ch = store->open_collection(cid);
+  {
+    map<string,bufferlist> res;
+    bufferlist h;
+    r = store->omap_get(ch, hoid, &h, &res);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_EQ(res.begin()->first, "key1");
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "true");
+  g_conf().apply_changes(nullptr);
+
+  int64_t poolid;
+  coll_t cid;
+  ghobject_t hoid;
+  ObjectStore::CollectionHandle ch;
+  StartDeferred();
+  poolid = 11;
+  cid = coll_t(spg_t(pg_t(1, poolid), shard_id_t::NO_SHARD));
+  ch = store->create_new_collection(cid);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  //ASSERT_EQ(false, g_conf().get_val<bool>("bluestore_debug_inject_upgrade_bug53062"));
+  map<string, bufferlist> attrs;
+  bufferlist expected_header;
+  expected_header.append("this is a header");
+
+  size_t object_count = 1000;
+  make_omap_data(object_count, poolid, cid);
+  //checking just written data
+  check_omap_data(object_count, poolid, cid);
+
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0);
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
+  g_conf().apply_changes(nullptr);
+  ASSERT_EQ(store->fsck(false), 1001);
+  ASSERT_EQ(store->quick_fix(), 0);
+  store->mount();
+  ch = store->open_collection(cid);
+
+  //checking quick_fix() data
+  check_omap_data(object_count, poolid, cid);
+
+  {
+    ObjectStore::Transaction t;
+    for (size_t o = 0; o < object_count; o++)
+    {
+      std::string oid = generate_monotonic_name(object_count, o, 3.71, 0.5);
+      ghobject_t hoid(hobject_t(oid, "", CEPH_NOSNAP, 0, poolid, ""));
+      t.remove(cid, hoid);
+    }
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
+
+  for (auto& i : args) {
+    if (i == "--smr"s) {
+#if defined(HAVE_LIBZBD)
+      derr << "Adjusting tests for smr mode." << dendl;
+      smr = true;
+#else
+      derr << "smr mode selected, but support not compiled in" << dendl;
+      return 1;
+#endif
+    }
+  }
 
   // make sure we can adjust any config settings
   g_ceph_context->_conf._clear_safe_to_start_threads();

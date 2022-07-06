@@ -20,7 +20,7 @@ void PublicAccessBlockConfiguration::dump_xml(Formatter *f) const {
 }
 
 
-ostream& operator<< (ostream& os, const PublicAccessBlockConfiguration& access_conf)
+std::ostream& operator<< (std::ostream& os, const PublicAccessBlockConfiguration& access_conf)
 {
     os << std::boolalpha
        << "BlockPublicAcls: " << access_conf.block_public_acls() << std::endl

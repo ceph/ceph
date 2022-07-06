@@ -18,6 +18,8 @@
 #include <chrono>
 #include <atomic>
 
+using namespace std;
+
 class TestClsQueue : public ::testing::Test {
 protected:
   librados::Rados rados;

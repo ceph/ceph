@@ -90,7 +90,7 @@ class Deploy(object):
     def get_dg_spec(self, dg):
         dg_spec = DriveGroupSpec._from_json_impl(dg)
         dg_spec.validate()
-        i = Inventory([])
+        i = Inventory(['--filter-for-batch'])
         i.main()
         inventory = i.get_report()
         devices = [Device.from_json(i) for i in inventory]

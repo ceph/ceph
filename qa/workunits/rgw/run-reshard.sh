@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -ex
 
+# this test uses fault injection to abort during 'radosgw-admin bucket reshard'
+# disable coredumps so teuthology won't mark a failure
+ulimit -c 0
+
 #assume working ceph environment (radosgw-admin in path) and rgw on localhost:80
 # localhost::443 for ssl
 

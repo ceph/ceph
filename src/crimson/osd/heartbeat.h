@@ -45,6 +45,8 @@ public:
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
 
+  crimson::net::MessengerRef get_front_msgr() const;
+  crimson::net::MessengerRef get_back_msgr() const;
   void set_require_authorizer(bool);
 
   // Dispatcher methods
@@ -189,7 +191,7 @@ class Heartbeat::Connection {
   void accepted(crimson::net::ConnectionRef);
   void replaced();
   void reset();
-  seastar::future<> send(MessageRef msg);
+  seastar::future<> send(MessageURef msg);
   void validate();
   // retry connection if still pending
   void retry();

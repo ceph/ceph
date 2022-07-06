@@ -62,7 +62,7 @@ class TestPrettyReport(object):
 
 class TestList(object):
 
-    def test_empty_full_json_zero_exit_status(self, is_root,factory,capsys):
+    def test_empty_full_json_zero_exit_status(self, fake_call, is_root, factory, capsys):
         args = factory(format='json', device=None)
         lvm.listing.List([]).list(args)
         stdout, stderr = capsys.readouterr()
@@ -74,7 +74,7 @@ class TestList(object):
         stdout, stderr = capsys.readouterr()
         assert stdout == '{}\n'
 
-    def test_empty_full_zero_exit_status(self, is_root, factory):
+    def test_empty_full_zero_exit_status(self, fake_call, is_root, factory):
         args = factory(format='pretty', device=None)
         with pytest.raises(SystemExit):
             lvm.listing.List([]).list(args)
@@ -106,7 +106,7 @@ class TestFullReport(object):
                          lv_path='/dev/VolGroup/lv', vg_name='VolGroup')
         volumes = []
         volumes.append(osd)
-        monkeypatch.setattr(lvm.listing.api, 'get_first_pv', lambda **kwargs: pv)
+        monkeypatch.setattr(lvm.listing.api, 'get_single_pv', lambda **kwargs: pv)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
                             volumes)
 
@@ -126,7 +126,7 @@ class TestFullReport(object):
         volumes = []
         volumes.append(osd)
         volumes.append(journal)
-        monkeypatch.setattr(lvm.listing.api,'get_first_pv',lambda **kwargs:pv)
+        monkeypatch.setattr(lvm.listing.api,'get_single_pv',lambda **kwargs:pv)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
                             volumes)
 
@@ -241,6 +241,93 @@ class TestSingleReport(object):
         assert result['0'][0]['lv_tags'] == tags
         assert result['0'][0]['path'] == '/dev/VolGroup/lv'
         assert result['0'][0]['devices'] == ['/dev/sda1', '/dev/sdb1']
+
+    def test_report_by_osd_id_for_just_block_dev(self, monkeypatch):
+        tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=block'
+        lvs = [ api.Volume(lv_name='lv1', lv_tags=tags, lv_path='/dev/vg/lv1',
+                           lv_uuid='aaaa', vg_name='vg')
+              ]
+        monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs: lvs)
+
+        listing = lvm.listing.List([])
+        result = listing.single_report(0)
+        assert result['0'][0]['name'] == 'lv1'
+        assert result['0'][0]['lv_tags'] == tags
+        assert result['0'][0]['lv_path'] == '/dev/vg/lv1'
+        assert result['0'][0]['vg_name'] == 'vg'
+
+    def test_report_by_osd_id_for_just_data_dev(self, monkeypatch):
+        tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
+        lvs = [ api.Volume(lv_name='lv1', lv_tags=tags, lv_path='/dev/vg/lv1',
+                           lv_uuid='bbbb', vg_name='vg'),
+                ]
+        monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs: lvs)
+
+        listing = lvm.listing.List([])
+        result = listing.single_report(0)
+        assert result['0'][0]['name'] == 'lv1'
+        assert result['0'][0]['lv_tags'] == tags
+        assert result['0'][0]['lv_path'] == '/dev/vg/lv1'
+        assert result['0'][0]['vg_name'] == 'vg'
+
+    def test_report_by_osd_id_for_just_block_wal_and_db_dev(self, monkeypatch):
+        tags1 = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=block'
+        tags2 = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=wal'
+        tags3 = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=db'
+        lvs = [ api.Volume(lv_name='lv1', lv_tags=tags1, lv_path='/dev/vg/lv1',
+                           lv_uuid='aaaa', vg_name='vg'),
+                api.Volume(lv_name='lv2', lv_tags=tags2, lv_path='/dev/vg/lv2',
+                           lv_uuid='bbbb', vg_name='vg'),
+                api.Volume(lv_name='lv3', lv_tags=tags3, lv_path='/dev/vg/lv3',
+                           lv_uuid='cccc', vg_name='vg'),
+              ]
+        monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs: lvs)
+
+        listing = lvm.listing.List([])
+        result = listing.single_report(0)
+        assert result['0'][0]['name'] == 'lv1'
+        assert result['0'][0]['lv_tags'] == tags1
+        assert result['0'][0]['lv_path'] == '/dev/vg/lv1'
+        assert result['0'][0]['vg_name'] == 'vg'
+        assert result['0'][1]['name'] == 'lv2'
+        assert result['0'][1]['lv_tags'] == tags2
+        assert result['0'][1]['lv_path'] == '/dev/vg/lv2'
+        assert result['0'][1]['vg_name'] == 'vg'
+        assert result['0'][2]['name'] == 'lv3'
+        assert result['0'][2]['lv_tags'] == tags3
+        assert result['0'][2]['lv_path'] == '/dev/vg/lv3'
+        assert result['0'][2]['vg_name'] == 'vg'
+
+
+    def test_report_by_osd_id_for_data_and_journal_dev(self, monkeypatch):
+        tags1 = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
+        tags2 = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=journal'
+        lvs = [ api.Volume(lv_name='lv1', lv_tags=tags1, lv_path='/dev/vg/lv1',
+                    lv_uuid='aaaa', vg_name='vg'),
+                api.Volume(lv_name='lv2', lv_tags=tags2, lv_path='/dev/vg/lv2',
+                    lv_uuid='bbbb', vg_name='vg'),
+              ]
+        monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs: lvs)
+
+        listing = lvm.listing.List([])
+        result = listing.single_report(0)
+        assert result['0'][0]['name'] == 'lv1'
+        assert result['0'][0]['lv_tags'] == tags1
+        assert result['0'][0]['lv_path'] == '/dev/vg/lv1'
+        assert result['0'][0]['vg_name'] == 'vg'
+        assert result['0'][1]['name'] == 'lv2'
+        assert result['0'][1]['lv_tags'] == tags2
+        assert result['0'][1]['lv_path'] == '/dev/vg/lv2'
+        assert result['0'][1]['vg_name'] == 'vg'
+
+    def test_report_by_nonexistent_osd_id(self, monkeypatch):
+        lv = api.Volume(lv_name='lv', lv_tags={}, lv_path='/dev/VolGroup/lv',
+                        vg_name='VolGroup')
+        monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
+                            [lv])
+
+        result = lvm.listing.List([]).single_report('1')
+        assert result == {}
 
     def test_report_a_ceph_lv_with_no_matching_devices(self, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.type=data'

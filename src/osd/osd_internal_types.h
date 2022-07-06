@@ -41,7 +41,7 @@ public:
   std::map<std::pair<uint64_t, entity_name_t>, WatchRef> watchers;
 
   // attr cache
-  std::map<std::string, ceph::buffer::list> attr_cache;
+  std::map<std::string, ceph::buffer::list, std::less<>> attr_cache;
 
   RWState rwstate;
   std::list<OpRequestRef> waiters;  ///< ops waiting on state change

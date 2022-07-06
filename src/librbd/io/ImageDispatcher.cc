@@ -236,6 +236,11 @@ void ImageDispatcher<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
 }
 
 template <typename I>
+void ImageDispatcher<I>::apply_qos_exclude_ops(uint64_t exclude_ops) {
+  m_qos_image_dispatch->apply_qos_exclude_ops(exclude_ops);
+}
+
+template <typename I>
 bool ImageDispatcher<I>::writes_blocked() const {
   return m_write_block_dispatch->writes_blocked();
 }
@@ -261,13 +266,13 @@ void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
 }
 
 template <typename I>
-void ImageDispatcher<I>::remap_extents(Extents&& image_extents,
+void ImageDispatcher<I>::remap_extents(Extents& image_extents,
                                        ImageExtentsMapType type) {
   auto loop = [&image_extents, type](auto begin, auto end) {
       for (auto it = begin; it != end; ++it) {
         auto& image_dispatch_meta = it->second;
         auto image_dispatch = image_dispatch_meta.dispatch;
-        image_dispatch->remap_extents(std::move(image_extents), type);
+        image_dispatch->remap_extents(image_extents, type);
       }
   };
 

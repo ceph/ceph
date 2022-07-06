@@ -8,9 +8,9 @@ overrides:
       osd:
         osd objectstore: bluestore
         bluestore block size: 96636764160
-        debug bluestore: 20
-        debug bluefs: 20
-        debug rocksdb: 10
+        debug bluestore: 1/20
+        debug bluefs: 1/20
+        debug rocksdb: 4/10
         bluestore compression mode: aggressive
         bluestore fsck on mount: true
         bluestore compression algorithm: zlib

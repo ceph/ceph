@@ -5,7 +5,29 @@ import pytest
 from textwrap import dedent
 from ceph_volume.util import system
 from mock.mock import patch
+from ceph_volume.tests.conftest import Factory
 
+
+@pytest.fixture
+def mock_find_executable_on_host(monkeypatch):
+    """
+    Monkeypatches util.system.find_executable_on_host, so that a caller can add behavior to the response
+    """
+    def apply(stdout=None, stderr=None, returncode=0):
+        stdout_stream = Factory(read=lambda: stdout)
+        stderr_stream = Factory(read=lambda: stderr)
+        return_value = Factory(
+            stdout=stdout_stream,
+            stderr=stderr_stream,
+            wait=lambda: returncode,
+            communicate=lambda x: (stdout, stderr, returncode)
+        )
+
+        monkeypatch.setattr(
+            'ceph_volume.util.system.subprocess.Popen',
+            lambda *a, **kw: return_value)
+
+    return apply
 
 class TestMkdirP(object):
 
@@ -217,6 +239,14 @@ class TestWhich(object):
         system.which('exedir')
         cap = capsys.readouterr()
         assert 'Executable exedir not in PATH' in cap.err
+
+    def test_run_on_host_found(self, mock_find_executable_on_host):
+        mock_find_executable_on_host(stdout="/sbin/lvs\n", stderr="some stderr message\n")
+        assert system.which('lvs', run_on_host=True) == '/sbin/lvs'
+
+    def test_run_on_host_not_found(self, mock_find_executable_on_host):
+        mock_find_executable_on_host(stdout="", stderr="some stderr message\n")
+        assert system.which('lvs', run_on_host=True) == 'lvs'
 
 @pytest.fixture
 def stub_which(monkeypatch):

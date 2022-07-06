@@ -64,6 +64,11 @@ void excl_lock_from_excl::unlock()
 {
 }
 
+tri_mutex::~tri_mutex()
+{
+  assert(!is_acquired());
+}
+
 seastar::future<> tri_mutex::lock_for_read()
 {
   if (try_lock_for_read()) {
@@ -159,7 +164,7 @@ seastar::future<> tri_mutex::lock_for_excl()
 
 bool tri_mutex::try_lock_for_excl() noexcept
 {
-  if (!readers && !writers && !exclusively_used) {
+  if (readers == 0u && writers == 0u && !exclusively_used) {
     exclusively_used = true;
     return true;
   } else {
@@ -176,9 +181,9 @@ void tri_mutex::unlock_for_excl()
 
 bool tri_mutex::is_acquired() const
 {
-  if (readers) {
+  if (readers != 0u) {
     return true;
-  } else if (writers) {
+  } else if (writers != 0u) {
     return true;
   } else if (exclusively_used) {
     return true;

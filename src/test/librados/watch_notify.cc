@@ -16,12 +16,12 @@ typedef RadosTestEC LibRadosWatchNotifyEC;
 int notify_sleep = 0;
 
 // notify
-static sem_t *sem;
+static sem_t sem;
 
 static void watch_notify_test_cb(uint8_t opcode, uint64_t ver, void *arg)
 {
   std::cout << __func__ << std::endl;
-  sem_post(sem);
+  sem_post(&sem);
 }
 
 class LibRadosWatchNotify : public RadosTest
@@ -33,6 +33,7 @@ protected:
   rados_ioctx_t notify_io;
   const char *notify_oid = nullptr;
   int notify_err = 0;
+  rados_completion_t notify_comp;
 
   static void watch_notify2_test_cb(void *arg,
                                     uint64_t notify_id,
@@ -41,6 +42,8 @@ protected:
                                     void *data,
                                     size_t data_len);
   static void watch_notify2_test_errcb(void *arg, uint64_t cookie, int err);
+  static void watch_notify2_test_errcb_reconnect(void *arg, uint64_t cookie, int err);
+  static void watch_notify2_test_errcb_aio_reconnect(void *arg, uint64_t cookie, int err);
 };
 
 
@@ -61,6 +64,7 @@ void LibRadosWatchNotify::watch_notify2_test_cb(void *arg,
   thiz->notify_bl.append((char*)data, data_len);
   if (notify_sleep)
     sleep(notify_sleep);
+  thiz->notify_err = 0;
   rados_notify_ack(thiz->notify_io, thiz->notify_oid, notify_id, cookie,
                    "reply", 5);
 }
@@ -76,6 +80,49 @@ void LibRadosWatchNotify::watch_notify2_test_errcb(void *arg,
   thiz->notify_err = err;
 }
 
+void LibRadosWatchNotify::watch_notify2_test_errcb_reconnect(void *arg,
+                                                   uint64_t cookie,
+                                                   int err)
+{
+  std::cout << __func__ << " cookie " << cookie << " err " << err << std::endl;
+  ceph_assert(cookie > 1000);
+  auto thiz = reinterpret_cast<LibRadosWatchNotify*>(arg);
+  ceph_assert(thiz);
+  thiz->notify_err = rados_unwatch2(thiz->ioctx, cookie);
+  thiz->notify_cookies.erase(cookie); //delete old cookie
+  thiz->notify_err = rados_watch2(thiz->ioctx, thiz->notify_oid, &cookie,
+                  watch_notify2_test_cb, watch_notify2_test_errcb_reconnect, thiz);
+  if (thiz->notify_err < 0) {
+    std::cout << __func__ << " reconnect watch failed with error " << thiz->notify_err << std::endl;
+    return;
+  }
+  return;
+}
+
+
+void LibRadosWatchNotify::watch_notify2_test_errcb_aio_reconnect(void *arg,
+                                                   uint64_t cookie,
+                                                   int err)
+{
+  std::cout << __func__ << " cookie " << cookie << " err " << err << std::endl;
+  ceph_assert(cookie > 1000);
+  auto thiz = reinterpret_cast<LibRadosWatchNotify*>(arg);
+  ceph_assert(thiz);
+  thiz->notify_err = rados_aio_unwatch(thiz->ioctx, cookie, thiz->notify_comp);
+  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &thiz->notify_comp));
+  thiz->notify_cookies.erase(cookie); //delete old cookie
+  thiz->notify_err = rados_aio_watch(thiz->ioctx, thiz->notify_oid, thiz->notify_comp, &cookie,
+                  watch_notify2_test_cb, watch_notify2_test_errcb_aio_reconnect, thiz);
+  ASSERT_EQ(0, rados_aio_wait_for_complete(thiz->notify_comp));
+  ASSERT_EQ(0, rados_aio_get_return_value(thiz->notify_comp));
+  rados_aio_release(thiz->notify_comp);
+  if (thiz->notify_err < 0) {
+    std::cout << __func__ << " reconnect watch failed with error " << thiz->notify_err << std::endl;
+    return;
+  }
+  return;
+}
+
 class WatchNotifyTestCtx2;
 
 // --
@@ -85,7 +132,7 @@ class WatchNotifyTestCtx2;
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 TEST_F(LibRadosWatchNotify, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -102,18 +149,18 @@ TEST_F(LibRadosWatchNotify, WatchNotify) {
     }
   }
   TestAlarm alarm;
-  sem_wait(sem);
+  sem_wait(&sem);
   rados_unwatch(ioctx, "foo", handle);
 
   // when dne ...
   ASSERT_EQ(-ENOENT,
       rados_watch(ioctx, "dne", 0, &handle, watch_notify_test_cb, NULL));
 
-  sem_close(sem);
+  sem_destroy(&sem);
 }
 
 TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -130,9 +177,9 @@ TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
     }
   }
   TestAlarm alarm;
-  sem_wait(sem);
+  sem_wait(&sem);
   rados_unwatch(ioctx, "foo", handle);
-  sem_close(sem);
+  sem_destroy(&sem);
 }
 
 #pragma GCC diagnostic pop
@@ -162,7 +209,10 @@ TEST_F(LibRadosWatchNotify, Watch2Delete) {
   }
   ASSERT_TRUE(left > 0);
   ASSERT_EQ(-ENOTCONN, notify_err);
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  int rados_watch_check_err = rados_watch_check(ioctx, handle);
+  // We may hit ENOENT due to socket failure and a forced reconnect
+  EXPECT_TRUE(rados_watch_check_err == -ENOTCONN || rados_watch_check_err == -ENOENT)
+    << "Where rados_watch_check_err = " << rados_watch_check_err;
   rados_unwatch2(ioctx, handle);
   rados_watch_flush(cluster);
 }
@@ -214,7 +264,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   ASSERT_EQ(0,
       rados_watch2(ioctx, notify_oid, &handle,
 		   watch_notify2_test_cb,
-		   watch_notify2_test_errcb, this));
+		   watch_notify2_test_errcb_reconnect, this));
   ASSERT_GT(rados_watch_check(ioctx, handle), 0);
   char *reply_buf = 0;
   size_t reply_buf_len;
@@ -231,6 +281,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   ASSERT_EQ(1u, reply_map.size());
   ASSERT_EQ(0u, missed_map.size());
   ASSERT_EQ(1u, notify_cookies.size());
+  handle = *notify_cookies.begin();
   ASSERT_EQ(1u, notify_cookies.count(handle));
   ASSERT_EQ(5u, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
@@ -256,15 +307,14 @@ TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
-
-  rados_completion_t comp;
   uint64_t handle;
-  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &comp));
-  rados_aio_watch(ioctx, notify_oid, comp, &handle,
-                  watch_notify2_test_cb, watch_notify2_test_errcb, this);
-  ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
-  ASSERT_EQ(0, rados_aio_get_return_value(comp));
-  rados_aio_release(comp);
+  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &notify_comp));
+  rados_aio_watch(ioctx, notify_oid, notify_comp, &handle,
+                  watch_notify2_test_cb, watch_notify2_test_errcb_aio_reconnect, this);
+  
+  ASSERT_EQ(0, rados_aio_wait_for_complete(notify_comp));
+  ASSERT_EQ(0, rados_aio_get_return_value(notify_comp));
+  rados_aio_release(notify_comp);
 
   ASSERT_GT(rados_watch_check(ioctx, handle), 0);
   char *reply_buf = 0;
@@ -282,6 +332,7 @@ TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
   ASSERT_EQ(1u, reply_map.size());
   ASSERT_EQ(0u, missed_map.size());
   ASSERT_EQ(1u, notify_cookies.size());
+  handle = *notify_cookies.begin();
   ASSERT_EQ(1u, notify_cookies.count(handle));
   ASSERT_EQ(5u, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
@@ -296,11 +347,11 @@ TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
   ASSERT_EQ((char*)0, reply_buf);
   ASSERT_EQ(0u, reply_buf_len);
 
-  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &comp));
-  rados_aio_unwatch(ioctx, handle, comp);
-  ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
-  ASSERT_EQ(0, rados_aio_get_return_value(comp));
-  rados_aio_release(comp);
+  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &notify_comp));
+  rados_aio_unwatch(ioctx, handle, notify_comp);
+  ASSERT_EQ(0, rados_aio_wait_for_complete(notify_comp));
+  ASSERT_EQ(0, rados_aio_get_return_value(notify_comp));
+  rados_aio_release(notify_comp);
 }
 
 TEST_F(LibRadosWatchNotify, AioNotify) {
@@ -493,7 +544,7 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
   rados_conf_set(cluster, "objecter_inject_no_watch_ping", "true");
   // allow a long time here since an osd peering event will renew our
   // watch.
-  int left = 16 * timeout;
+  int left = 256 * timeout;
   std::cout << "waiting up to " << left << " for osd to time us out ..."
 	    << std::endl;
   while (notify_err == 0 && --left) {
@@ -589,7 +640,10 @@ TEST_F(LibRadosWatchNotify, AioWatchDelete2) {
   }
   ASSERT_TRUE(left > 0);
   ASSERT_EQ(-ENOTCONN, notify_err);
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  int rados_watch_check_err = rados_watch_check(ioctx, handle);
+  // We may hit ENOENT due to socket failure injection and a forced reconnect
+  EXPECT_TRUE(rados_watch_check_err == -ENOTCONN || rados_watch_check_err == -ENOENT)
+    << "Where rados_watch_check_err = " << rados_watch_check_err;
   ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &comp));
   rados_aio_unwatch(ioctx, handle, comp);
   ASSERT_EQ(0, rados_aio_wait_for_complete(comp));

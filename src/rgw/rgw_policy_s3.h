@@ -19,10 +19,10 @@ class RGWPolicyEnv {
   std::map<std::string, std::string, ltstr_nocase> vars;
 
 public:
-  void add_var(const string& name, const string& value);
-  bool get_var(const string& name, string& val);
-  bool get_value(const string& s, string& val, std::map<std::string, bool, ltstr_nocase>& checked_vars);
-  bool match_policy_vars(map<string, bool, ltstr_nocase>& policy_vars, string& err_msg);
+  void add_var(const std::string& name, const std::string& value);
+  bool get_var(const std::string& name, std::string& val);
+  bool get_value(const std::string& s, std::string& val, std::map<std::string, bool, ltstr_nocase>& checked_vars);
+  bool match_policy_vars(std::map<std::string, bool, ltstr_nocase>& policy_vars, std::string& err_msg);
 };
 
 class RGWPolicyCondition;
@@ -30,9 +30,9 @@ class RGWPolicyCondition;
 
 class RGWPolicy {
   uint64_t expires;
-  string expiration_str;
+  std::string expiration_str;
   std::list<RGWPolicyCondition *> conditions;
-  std::list<pair<std::string, std::string> > var_checks;
+  std::list<std::pair<std::string, std::string> > var_checks;
   std::map<std::string, bool, ltstr_nocase> checked_vars;
 
 public:
@@ -42,18 +42,18 @@ public:
   RGWPolicy() : expires(0), min_length(0), max_length(LLONG_MAX) {}
   ~RGWPolicy();
 
-  int set_expires(const string& e);
+  int set_expires(const std::string& e);
 
   void set_var_checked(const std::string& var) {
     checked_vars[var] = true;
   }
 
-  int add_condition(const std::string& op, const std::string& first, const std::string& second, string& err_msg);
+  int add_condition(const std::string& op, const std::string& first, const std::string& second, std::string& err_msg);
   void add_simple_check(const std::string& var, const std::string& value) {
-    var_checks.push_back(pair<string, string>(var, value));
+    var_checks.emplace_back(var, value);
   }
 
-  int check(RGWPolicyEnv *env, string& err_msg);
-  int from_json(bufferlist& bl, string& err_msg);
+  int check(RGWPolicyEnv *env, std::string& err_msg);
+  int from_json(bufferlist& bl, std::string& err_msg);
 };
 #endif

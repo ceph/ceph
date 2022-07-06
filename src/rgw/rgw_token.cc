@@ -48,6 +48,8 @@ namespace {
 
 }
 
+using namespace std;
+
 void usage()
 {
   cout << "usage: radosgw-token --encode --ttype=<token type> [options...]" << std::endl;
@@ -60,9 +62,8 @@ void usage()
 
 int main(int argc, char **argv)
 {
+  auto args = argv_to_vec(argc, argv);
   std::string val;
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
@@ -72,7 +73,7 @@ int main(int argc, char **argv)
     exit(0);
   }
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 

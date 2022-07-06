@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 from enum import Enum
+from typing import List, Optional, Set, no_type_check
 
 import cherrypy
 from mgr_module import CLICommand, Option
 
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
-from ..controllers.nfsganesha import NFSGanesha, NFSGaneshaExports, NFSGaneshaService
+from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
 from ..controllers.rbd_mirroring import RbdMirroringPoolMode, \
     RbdMirroringPoolPeer, RbdMirroringSummary
@@ -16,11 +16,6 @@ from ..controllers.rgw import Rgw, RgwBucket, RgwDaemon, RgwUser
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
 from .ttl_cache import ttl_cache
-
-try:
-    from typing import Set, no_type_check
-except ImportError:
-    no_type_check = object()  # Just for type checking
 
 
 class Features(Enum):
@@ -41,7 +36,7 @@ Feature2Controller = {
     Features.ISCSI: [Iscsi, IscsiTarget],
     Features.CEPHFS: [CephFS],
     Features.RGW: [Rgw, RgwDaemon, RgwBucket, RgwUser],
-    Features.NFS: [NFSGanesha, NFSGaneshaService, NFSGaneshaExports],
+    Features.NFS: [NFSGaneshaUi, NFSGaneshaExports],
 }
 
 
@@ -56,7 +51,7 @@ class Actions(Enum):
 class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
                      I.HasCommands, I.FilterRequest.BeforeHandler,
                      I.HasControllers):
-    OPTION_FMT = 'FEATURE_TOGGLE_{}'
+    OPTION_FMT = 'FEATURE_TOGGLE_{.name}'
     CACHE_MAX_SIZE = 128  # Optimum performance with 2^N sizes
     CACHE_TTL = 10  # seconds
 
@@ -71,23 +66,22 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
     @PM.add_hook
     def get_options(self):
         return [Option(
-            name=self.OPTION_FMT.format(feature.value),
+            name=self.OPTION_FMT.format(feature),
             default=(feature not in PREDISABLED_FEATURES),
             type='bool',) for feature in Features]
 
     @PM.add_hook
     def register_commands(self):
-        @CLICommand(
-            "dashboard feature",
-            "name=action,type=CephChoices,strings={} ".format(
-                "|".join(a.value for a in Actions))
-            + "name=features,type=CephChoices,strings={},req=false,n=N".format(
-                "|".join(f.value for f in Features)),
-            "Enable or disable features in Ceph-Mgr Dashboard")
-        def cmd(mgr, action, features=None):
+        @CLICommand("dashboard feature")
+        def cmd(mgr,
+                action: Actions = Actions.STATUS,
+                features: Optional[List[Features]] = None):
+            '''
+            Enable or disable features in Ceph-Mgr Dashboard
+            '''
             ret = 0
             msg = []
-            if action in [Actions.ENABLE.value, Actions.DISABLE.value]:
+            if action in [Actions.ENABLE, Actions.DISABLE]:
                 if features is None:
                     ret = 1
                     msg = ["At least one feature must be specified"]
@@ -95,15 +89,15 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
                     for feature in features:
                         mgr.set_module_option(
                             self.OPTION_FMT.format(feature),
-                            action == Actions.ENABLE.value)
-                        msg += ["Feature '{}': {}".format(
+                            action == Actions.ENABLE)
+                        msg += ["Feature '{.value}': {}".format(
                             feature,
-                            'enabled' if action == Actions.ENABLE.value else
+                            'enabled' if action == Actions.ENABLE else
                             'disabled')]
             else:
-                for feature in features or [f.value for f in Features]:
+                for feature in features or list(Features):
                     enabled = mgr.get_module_option(self.OPTION_FMT.format(feature))
-                    msg += ["Feature '{}': {}".format(
+                    msg += ["Feature '{.value}': {}".format(
                         feature,
                         'enabled' if enabled else 'disabled')]
             return ret, '\n'.join(msg), ''
@@ -120,7 +114,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
     @ttl_cache(ttl=CACHE_TTL, maxsize=CACHE_MAX_SIZE)
     @no_type_check  # https://github.com/python/mypy/issues/7806
     def _is_feature_enabled(self, feature):
-        return self.mgr.get_module_option(self.OPTION_FMT.format(feature.value))
+        return self.mgr.get_module_option(self.OPTION_FMT.format(feature))
 
     @PM.add_hook
     def filter_request_before_handler(self, request):
@@ -132,13 +126,13 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             raise cherrypy.HTTPError(
                 404, "Feature='{}' disabled by option '{}'".format(
                     feature.value,
-                    self.OPTION_FMT.format(feature.value),
+                    self.OPTION_FMT.format(feature),
                 )
             )
 
     @PM.add_hook
     def get_controllers(self):
-        from ..controllers import ApiController, ControllerDoc, EndpointDoc, RESTController
+        from ..controllers import APIDoc, APIRouter, EndpointDoc, RESTController
 
         FEATURES_SCHEMA = {
             "rbd": (bool, ''),
@@ -149,8 +143,8 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "nfs": (bool, '')
         }
 
-        @ApiController('/feature_toggles')
-        @ControllerDoc("Manage Features API", "FeatureTogglesEndpoint")
+        @APIRouter('/feature_toggles')
+        @APIDoc("Manage Features API", "FeatureTogglesEndpoint")
         class FeatureTogglesEndpoint(RESTController):
             @EndpointDoc("Get List Of Features",
                          responses={200: FEATURES_SCHEMA})

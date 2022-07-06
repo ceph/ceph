@@ -23,6 +23,10 @@
 
 class RGWOp_BILog_List : public RGWRESTOp {
   bool sent_header;
+  uint32_t format_ver{0};
+  bool truncated{false};
+  std::optional<rgw::bucket_log_layout_generation> next_log_layout;
+
 public:
   RGWOp_BILog_List() : sent_header(false) {}
   ~RGWOp_BILog_List() override {}
@@ -34,7 +38,7 @@ public:
     return check_caps(s->user->get_caps());
   }
   void send_response() override;
-  virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
+  virtual void send_response(std::list<rgw_bi_log_entry>& entries, std::string& marker);
   virtual void send_response_end();
   void execute(optional_yield y) override;
   const char* name() const override {
@@ -43,10 +47,13 @@ public:
 };
 
 class RGWOp_BILog_Info : public RGWRESTOp {
-  string bucket_ver;
-  string master_ver;
-  string max_marker;
+  std::string bucket_ver;
+  std::string master_ver;
+  std::string max_marker;
   bool syncstopped;
+  uint64_t oldest_gen = 0;
+  uint64_t latest_gen = 0;
+
 public:
   RGWOp_BILog_Info() : bucket_ver(), master_ver(), syncstopped(false) {}
   ~RGWOp_BILog_Info() override {}
@@ -79,8 +86,8 @@ public:
 };
 
 class RGWOp_MDLog_List : public RGWRESTOp {
-  list<cls_log_entry> entries;
-  string last_marker;
+  std::list<cls_log_entry> entries;
+  std::string last_marker;
   bool truncated;
 public:
   RGWOp_MDLog_List() : truncated(false) {}
@@ -178,6 +185,7 @@ public:
   const char* name() const override {
     return "mdlog_notify";
   }
+  RGWOpType get_type() override { return RGW_OP_SYNC_MDLOG_NOTIFY; }
 };
 
 class RGWOp_MDLog_Delete : public RGWRESTOp {
@@ -266,6 +274,23 @@ public:
   const char* name() const override {
     return "datalog_notify";
   }
+  RGWOpType get_type() override { return RGW_OP_SYNC_DATALOG_NOTIFY; }
+};
+
+class RGWOp_DATALog_Notify2 : public RGWRESTOp {
+  rgw_data_notify_entry data_notify;
+public:
+  RGWOp_DATALog_Notify2() {}
+  ~RGWOp_DATALog_Notify2() override {}
+
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("datalog", RGW_CAP_WRITE);
+  }
+  void execute(optional_yield y) override;
+  const char* name() const override {
+    return "datalog_notify2";
+  }
+  RGWOpType get_type() override { return RGW_OP_SYNC_DATALOG_NOTIFY2; }
 };
 
 class RGWOp_DATALog_Delete : public RGWRESTOp {
@@ -301,8 +326,8 @@ public:
   RGWRESTMgr_Log() = default;
   ~RGWRESTMgr_Log() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *store,
-			       struct req_state* const,
+  RGWHandler_REST* get_handler(rgw::sal::Store* store,
+			       req_state* const,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefixs) override {
     return new RGWHandler_Log(auth_registry);

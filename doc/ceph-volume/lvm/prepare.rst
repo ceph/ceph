@@ -253,7 +253,7 @@ work for both bluestore and filestore OSDs::
 
 ``multipath`` support
 ---------------------
-``multipath`` devices are support if ``lvm`` is configured properly.
+``multipath`` devices are supported if ``lvm`` is configured properly.
 
 **Leave it to LVM**
 

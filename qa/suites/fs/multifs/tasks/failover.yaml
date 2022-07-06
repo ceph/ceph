@@ -5,6 +5,8 @@ overrides:
       - \(MDS_INSUFFICIENT_STANDBY\)
       - \(MDS_ALL_DOWN\)
       - \(MDS_UP_LESS_THAN_MAX\)
+      - \(MDS_DAMAGE\)
+      - \(FS_DEGRADED\)
   ceph-fuse:
     disabled: true
 tasks:

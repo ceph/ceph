@@ -8,7 +8,7 @@ from os.path import join as os_path_join
 # CapsHelper is subclassed from CephFSTestCase
 from tasks.cephfs.caps_helper import CapsHelper
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 
 
 log = logging.getLogger(__name__)
@@ -29,8 +29,6 @@ class TestMultiFS(CapsHelper):
         self.run_cluster_cmd(f'auth rm {self.client_name}')
 
         self.fs1 = self.fs
-        # After Octopus is EOL, we can remove this setting:
-        self.fs1.set_allow_multifs()
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
 
         # we'll reassign caps to client.1 so that it can operate with cephfs2
@@ -179,8 +177,7 @@ class TestMDSCaps(TestMultiFS):
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
         keyring_paths = []
         for mount_x in (self.mount_a, self.mount_b):
-            keyring_paths.append(self.create_keyring_file(
-                mount_x.client_remote, keyring))
+            keyring_paths.append(mount_x.client_remote.mktemp(data=keyring))
 
         return keyring_paths
 
@@ -275,8 +272,7 @@ class TestClientsWithoutAuth(TestMultiFS):
     def test_mount_all_caps_absent(self):
         # setup part...
         keyring = self.fs1.authorize(self.client_id, ('/', 'rw'))
-        keyring_path = self.create_keyring_file(self.mount_a.client_remote,
-                                                keyring)
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
 
         # mount the FS for which client has no auth...
         retval = self.mount_a.remount(client_id=self.client_id,
@@ -297,8 +293,7 @@ class TestClientsWithoutAuth(TestMultiFS):
         osdcap = (f'allow rw tag cephfs data={self.fs1.name}, allow rw tag '
                   f'cephfs data={self.fs2.name}')
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
-        keyring_path = self.create_keyring_file(self.mount_a.client_remote,
-                                                keyring)
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
 
         # mount the FS for which client has no auth...
         retval = self.mount_a.remount(client_id=self.client_id,

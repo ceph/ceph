@@ -14,4 +14,13 @@ export class RbdFormModel {
 
   /* Configuration */
   configuration: RbdConfigurationEntry[];
+
+  /* Deletion process */
+  source?: string;
+
+  enable_mirror?: boolean;
+  mirror_mode?: string;
+
+  schedule_interval: string;
+  start_time: string;
 }

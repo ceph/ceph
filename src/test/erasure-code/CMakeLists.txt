@@ -74,7 +74,7 @@ target_link_libraries(unittest_erasure_code_plugin_jerasure
 add_dependencies(unittest_erasure_code_plugin_jerasure
   ec_jerasure)
 
-if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD)
+if(WITH_EC_ISA_PLUGIN)
 
 #unittest_erasure_code_isa
 add_executable(unittest_erasure_code_isa
@@ -105,7 +105,7 @@ target_link_libraries(unittest_erasure_code_plugin_isa
   )
 add_dependencies(unittest_erasure_code_plugin_isa
   ec_isa)
-endif(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD)
+endif(WITH_EC_ISA_PLUGIN)
 
 # unittest_erasure_code_lrc
 add_executable(unittest_erasure_code_lrc
@@ -196,7 +196,7 @@ target_link_libraries(unittest_erasure_code_shec
 add_executable(unittest_erasure_code_shec_all
   TestErasureCodeShec_all.cc
   )
-add_ceph_unittest(unittest_erasure_code_shec_all parallel)
+add_ceph_unittest(unittest_erasure_code_shec_all PARALLEL)
 target_link_libraries(unittest_erasure_code_shec_all
   global
   ${CMAKE_DL_LIBS}

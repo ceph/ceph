@@ -68,8 +68,7 @@ private:
   uint64_t m_current_size = 0;
 
   BitVector<2> m_object_map;
-  BitVector<2> m_prev_object_map;
-  bool m_prev_object_map_valid = false;
+  bool m_object_diff_state_valid = false;
 
   bufferlist m_out_bl;
 

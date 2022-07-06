@@ -26,6 +26,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
+using namespace std;
+
 int Resetter::init(mds_role_t role_, const std::string &type, bool hard)
 {
   role = role_;

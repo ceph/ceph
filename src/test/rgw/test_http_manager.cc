@@ -21,6 +21,8 @@
 #include <thread>
 #include <gtest/gtest.h>
 
+using namespace std;
+
 TEST(HTTPManager, ReadTruncated)
 {
   using tcp = boost::asio::ip::tcp;
@@ -45,6 +47,33 @@ TEST(HTTPManager, ReadTruncated)
 
   RGWHTTPClient client{g_ceph_context, "GET", url};
   EXPECT_EQ(-EAGAIN, RGWHTTP::process(&client, null_yield));
+
+  server.join();
+}
+
+TEST(HTTPManager, Head)
+{
+  using tcp = boost::asio::ip::tcp;
+  tcp::endpoint endpoint(tcp::v4(), 0);
+  boost::asio::io_context ioctx;
+  tcp::acceptor acceptor(ioctx);
+  acceptor.open(endpoint.protocol());
+  acceptor.bind(endpoint);
+  acceptor.listen();
+
+  std::thread server{[&] {
+    tcp::socket socket{ioctx};
+    acceptor.accept(socket);
+    std::string_view response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 1024\r\n"
+        "\r\n";
+    boost::asio::write(socket, boost::asio::buffer(response));
+  }};
+  const auto url = std::string{"http://127.0.0.1:"} + std::to_string(acceptor.local_endpoint().port());
+
+  RGWHTTPClient client{g_ceph_context, "HEAD", url};
+  EXPECT_EQ(0, RGWHTTP::process(&client, null_yield));
 
   server.join();
 }
@@ -76,9 +105,7 @@ TEST(HTTPManager, SignalThread)
 
 int main(int argc, char** argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);

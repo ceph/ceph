@@ -418,7 +418,6 @@ class btree_multiset_container : public btree_container<Tree> {
   using allocator_type = typename Tree::allocator_type;
   using iterator = typename Tree::iterator;
   using const_iterator = typename Tree::const_iterator;
-  using node_type = typename super_type::node_type;
 
   // Inherit constructors.
   using super_type::super_type;
@@ -471,22 +470,6 @@ class btree_multiset_container : public btree_container<Tree> {
   iterator emplace_hint(const_iterator position, Args &&... args) {
     return this->tree_.insert_hint_multi(
         iterator(position), init_type(std::forward<Args>(args)...));
-  }
-  iterator insert(node_type &&node) {
-    if (!node) return this->end();
-    iterator res =
-        this->tree_.insert_multi(params_type::key(node.slot()),
-                                 node.slot());
-    node.destroy();
-    return res;
-  }
-  iterator insert(const_iterator hint, node_type &&node) {
-    if (!node) return this->end();
-    iterator res = this->tree_.insert_hint_multi(
-        iterator(hint),
-        std::move(params_type::element(node.slot())));
-    node.destroy();
-    return res;
   }
 
   // Deletion routines.

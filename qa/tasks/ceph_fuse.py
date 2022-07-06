@@ -5,7 +5,7 @@ Ceph FUSE client task
 import contextlib
 import logging
 
-from teuthology import misc as teuthology
+from teuthology import misc
 from tasks.cephfs.fuse_mount import FuseMount
 
 log = logging.getLogger(__name__)
@@ -72,13 +72,27 @@ def task(ctx, config):
               mount_timeout: 120 # default is 30, give up if /sys/ is not populated
         - interactive:
 
+    Example that creates and mounts a subvol:
+
+        overrides:
+          ceph:
+            subvols:
+              create: 2
+              subvol_options: "--namespace-isolated --size 25000000000"
+          ceph-fuse:
+            client.0:
+              mount_subvol_num: 0
+          kclient:
+            client.1:
+              mount_subvol_num: 1
+
     :param ctx: Context
     :param config: Configuration
     """
     log.info('Running ceph_fuse task...')
 
     if config is None:
-        ids = teuthology.all_roles_of_type(ctx.cluster, 'client')
+        ids = misc.all_roles_of_type(ctx.cluster, 'client')
         client_roles = [f'client.{id_}' for id_ in ids]
         config = dict([r, dict()] for r in client_roles)
     elif isinstance(config, list):
@@ -90,8 +104,8 @@ def task(ctx, config):
         raise ValueError(f"Invalid config object: {config} ({config.__class__})")
     log.info(f"config is {config}")
 
-    clients = list(teuthology.get_clients(ctx=ctx, roles=client_roles))
-    testdir = teuthology.get_testdir(ctx)
+    clients = list(misc.get_clients(ctx=ctx, roles=client_roles))
+    testdir = misc.get_testdir(ctx)
     all_mounts = getattr(ctx, 'mounts', {})
     mounted_by_me = {}
     skipped = {}
@@ -108,12 +122,10 @@ def task(ctx, config):
         if client_config is None:
             client_config = {}
         # top level overrides
-        for k, v in top_overrides.items():
-            if v is not None:
-                client_config[k] = v
+        misc.deep_merge(client_config, top_overrides)
         # mount specific overrides
         client_config_overrides = overrides.get(entity)
-        teuthology.deep_merge(client_config, client_config_overrides)
+        misc.deep_merge(client_config, client_config_overrides)
         log.info(f"{entity} config is {client_config}")
 
         remotes.add(remote)

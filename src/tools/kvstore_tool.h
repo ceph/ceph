@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <iosfwd>
 #include <memory>
-#include <ostream>
 #include <string>
 
 #include "acconfig.h"
@@ -49,7 +49,7 @@ public:
   uint32_t traverse(const std::string& prefix,
                     const bool do_crc,
                     const bool do_value_dump,
-                    ostream *out);
+                    std::ostream *out);
   void list(const std::string& prefix,
 	    const bool do_crc,
 	    const bool do_value_dump);
@@ -77,4 +77,5 @@ public:
   int destructive_repair();
 
   int print_stats() const;
+  int build_size_histogram(const std::string& prefix) const;
 };

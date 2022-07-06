@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import {
   ITreeOptions,
@@ -7,16 +7,20 @@ import {
   TreeNode,
   TREE_ACTIONS
 } from '@circlon/angular-tree-component';
+import { Observable, Subscription } from 'rxjs';
 
-import { HealthService } from '~/app/shared/api/health.service';
+import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { TimerService } from '~/app/shared/services/timer.service';
 
 @Component({
   selector: 'cd-crushmap',
   templateUrl: './crushmap.component.html',
   styleUrls: ['./crushmap.component.scss']
 })
-export class CrushmapComponent implements OnInit {
+export class CrushmapComponent implements OnDestroy, OnInit {
+  private sub = new Subscription();
+
   @ViewChild('tree') tree: TreeComponent;
 
   icons = Icons;
@@ -35,18 +39,26 @@ export class CrushmapComponent implements OnInit {
   metadata: any;
   metadataTitle: string;
   metadataKeyMap: { [key: number]: any } = {};
+  data$: Observable<object>;
 
-  constructor(private healthService: HealthService) {}
+  constructor(private crushRuleService: CrushRuleService, private timerService: TimerService) {}
 
   ngOnInit() {
-    this.healthService.getFullHealth().subscribe((data: any) => {
-      this.loadingIndicator = false;
-      this.nodes = this.abstractTreeData(data);
-    });
+    this.sub = this.timerService
+      .get(() => this.crushRuleService.getInfo(), 5000)
+      .subscribe((data: any) => {
+        this.loadingIndicator = false;
+        this.nodes = this.abstractTreeData(data);
+      });
+  }
+
+  ngOnDestroy() {
+    this.sub.unsubscribe();
   }
 
   private abstractTreeData(data: any): any[] {
-    const nodes = data.osd_map.tree.nodes || [];
+    const nodes = data.nodes || [];
+    const rootNodes = data.roots || [];
     const treeNodeMap: { [key: number]: any } = {};
 
     if (0 === nodes.length) {
@@ -59,7 +71,7 @@ export class CrushmapComponent implements OnInit {
 
     const roots: any[] = [];
     nodes.reverse().forEach((node: any) => {
-      if (node.type === 'root') {
+      if (rootNodes.includes(node.id)) {
         roots.push(node.id);
       }
       treeNodeMap[node.id] = this.generateTreeLeaf(node, treeNodeMap);

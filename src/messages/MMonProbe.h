@@ -23,7 +23,7 @@
 
 class MMonProbe final : public Message {
 public:
-  static constexpr int HEAD_VERSION = 7;
+  static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 5;
 
   enum {
@@ -51,6 +51,7 @@ public:
   int32_t op = 0;
   std::string name;
   std::set<int32_t> quorum;
+  int leader = -1;
   ceph::buffer::list monmap_bl;
   version_t paxos_first_version = 0;
   version_t paxos_last_version = 0;
@@ -79,6 +80,7 @@ public:
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
       out << " quorum " << quorum;
+    out << " leader " << leader;
     if (op == OP_REPLY) {
       out << " paxos("
 	<< " fc " << paxos_first_version
@@ -116,6 +118,7 @@ public:
     encode(paxos_last_version, payload);
     encode(required_features, payload);
     encode(mon_release, payload);
+    encode(leader, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -136,6 +139,11 @@ public:
       decode(mon_release, p);
     else
       mon_release = ceph_release_t::unknown;
+    if (header.version >= 8) {
+      decode(leader, p);
+    } else if (quorum.size()) {
+      leader = *quorum.begin();
+    }
   }
 private:
   template<class T, typename... Args>

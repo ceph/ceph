@@ -280,7 +280,7 @@ XFSTESTS_DIR="/var/lib/xfstests"  # hardcoded into dbench binary
 TEST_DIR="/mnt/test_dir"
 SCRATCH_MNT="/mnt/scratch_mnt"
 MKFS_OPTIONS=""
-EXT_MOUNT_OPTIONS="-o block_validity"
+EXT_MOUNT_OPTIONS="-o block_validity,dioread_nolock"
 
 trap cleanup EXIT ERR HUP INT QUIT
 setup

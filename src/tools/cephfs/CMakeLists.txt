@@ -56,3 +56,8 @@ if(WITH_CEPHFS_SHELL)
     add_tox_test(cephfs-shell)
   endif()
 endif()
+
+option(WITH_CEPHFS_TOP "install cephfs-top utility" ON)
+if(WITH_CEPHFS_TOP)
+  add_subdirectory(top)
+endif()

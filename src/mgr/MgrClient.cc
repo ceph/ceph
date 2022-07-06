@@ -21,6 +21,7 @@
 #include "messages/MMgrMap.h"
 #include "messages/MMgrReport.h"
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrUpdate.h"
 #include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MCommand.h"
@@ -245,6 +246,25 @@ void MgrClient::_send_open()
   }
 }
 
+void MgrClient::_send_update()
+{
+  if (session && session->con) {
+    auto update = make_message<MMgrUpdate>();
+    if (!service_name.empty()) {
+      update->service_name = service_name;
+      update->daemon_name = daemon_name;
+    } else {
+      update->daemon_name = cct->_conf->name.get_id();
+    }
+    if (service_daemon) {
+      update->service_daemon = service_daemon;
+      update->daemon_metadata = daemon_metadata;
+    }
+    update->need_metadata_update = need_metadata_update;
+    session->con->send_message2(update);
+  }
+}
+
 bool MgrClient::handle_mgr_map(ref_t<MMgrMap> m)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
@@ -404,9 +424,7 @@ void MgrClient::_send_report()
 			    &last_config_bl_version);
 
   if (get_perf_report_cb) {
-    MetricPayload payload = get_perf_report_cb();
-    MetricReportMessage message(payload);
-    report->metric_report_message = message;
+    report->metric_report_message = MetricReportMessage(get_perf_report_cb());
   }
 
   session->con->send_message2(report);
@@ -566,6 +584,31 @@ bool MgrClient::handle_command_reply(
 
   command_table.erase(tid);
   return true;
+}
+
+int MgrClient::update_daemon_metadata(
+  const std::string& service,
+  const std::string& name,
+  const std::map<std::string,std::string>& metadata)
+{
+  std::lock_guard l(lock);
+  if (service_daemon) {
+    return -EEXIST;
+  }
+  ldout(cct,1) << service << "." << name << " metadata " << metadata << dendl;
+  service_daemon = true;
+  service_name = service;
+  daemon_name = name;
+  daemon_metadata = metadata;
+  daemon_dirty_status = true;
+
+  if (need_metadata_update == true &&
+      !daemon_metadata.empty()) {
+    _send_update();
+    need_metadata_update = false;
+  }
+
+  return 0;
 }
 
 int MgrClient::service_daemon_register(

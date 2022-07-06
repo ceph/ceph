@@ -25,6 +25,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << " RecoveryQueue::" << __func__ << " "
 
+using namespace std;
+
 class C_MDC_Recover : public MDSIOContextBase {
 public:
   C_MDC_Recover(RecoveryQueue *rq_, CInode *i) :
@@ -188,7 +190,7 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
 
   if (r != 0) {
     dout(0) << "recovery error! " << r << dendl;
-    if (r == -EBLOCKLISTED) {
+    if (r == -CEPHFS_EBLOCKLISTED) {
       mds->respawn();
       return;
     } else {

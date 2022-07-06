@@ -4,7 +4,10 @@ set(cephfs_mirror_internal
   FSMirror.cc
   InstanceWatcher.cc
   MirrorWatcher.cc
+  PeerReplayer.cc
+  ServiceDaemon.cc
   Types.cc
+  Utils.cc
   Watcher.cc
   watcher/RewatchRequest.cc)
 

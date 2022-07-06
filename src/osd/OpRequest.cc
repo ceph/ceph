@@ -74,14 +74,14 @@ void OpRequest::_dump(Formatter *f) const
       f->dump_string("event", i->str);
       f->dump_stream("time") << i->stamp;
 
-      auto i_next = i + 1;
+      double duration = 0;
 
-      if (i_next < events.end()) {
-	f->dump_float("duration", i_next->stamp - i->stamp);
-      } else {
-	f->dump_float("duration", events.rbegin()->stamp - get_initiated());
+      if (i != events.begin()) {
+        auto i_prev = i - 1;
+        duration = i->stamp - i_prev->stamp;
       }
 
+      f->dump_float("duration", duration);
       f->close_section();
     }
     f->close_section();

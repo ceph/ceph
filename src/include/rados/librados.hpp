@@ -104,8 +104,13 @@ inline namespace v14_2_0 {
   };
   CEPH_RADOS_API std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
 
-  class CEPH_RADOS_API NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
+  class CEPH_RADOS_API NObjectIterator {
   public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = ListObject;
+    using difference_type = std::ptrdiff_t;
+    using pointer = ListObject*;
+    using reference = ListObject&;
     static const NObjectIterator __EndObjectIterator;
     NObjectIterator(): impl(NULL) {}
     ~NObjectIterator();
@@ -246,9 +251,11 @@ inline namespace v14_2_0 {
   /**
    * These flags apply to the ObjectOperation as a whole.
    *
-   * BALANCE_READS and LOCALIZE_READS should only be used
-   * when reading from data you're certain won't change,
-   * like a snapshot, or where eventual consistency is ok.
+   * Prior to octopus BALANCE_READS and LOCALIZE_READS should only
+   * be used when reading from data you're certain won't change, like
+   * a snapshot, or where eventual consistency is ok.  Since octopus
+   * (get_min_compatible_osd() >= CEPH_RELEASE_OCTOPUS) both are safe
+   * for general use.
    *
    * ORDER_READS_WRITES will order reads the same way writes are
    * ordered (e.g., waiting for degraded objects).  In particular, it
@@ -549,7 +556,9 @@ inline namespace v14_2_0 {
      * see aio_sparse_read()
      */
     void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
-                    bufferlist *data_bl, int *prval);
+                     bufferlist *data_bl, int *prval,
+                     uint64_t truncate_size = 0,
+                     uint32_t truncate_seq = 0);
 
     /**
      * omap_get_vals: keys and values from the object omap
@@ -1339,6 +1348,7 @@ inline namespace v14_2_0 {
     void unset_osdmap_full_try()
       __attribute__ ((deprecated));
 
+    bool get_pool_full_try();
     void set_pool_full_try();
     void unset_pool_full_try();
 

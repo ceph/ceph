@@ -18,7 +18,8 @@ struct RGWSI_SysObj_Core_GetObjState : public RGWSI_SysObj_Obj_GetObjState {
 
   RGWSI_SysObj_Core_GetObjState() {}
 
-  int get_rados_obj(RGWSI_RADOS *rados_svc,
+  int get_rados_obj(const DoutPrefixProvider *dpp,
+                    RGWSI_RADOS *rados_svc,
                     RGWSI_Zone *zone_svc,
                     const rgw_raw_obj& obj,
                     RGWSI_RADOS::Obj **pobj);
@@ -29,7 +30,7 @@ struct RGWSI_SysObj_Core_PoolListImplInfo : public RGWSI_SysObj_Pool_ListInfo {
   RGWSI_RADOS::Pool::List op;
   RGWAccessListFilterPrefix filter;
 
-  RGWSI_SysObj_Core_PoolListImplInfo(const string& prefix) : op(pool.op()), filter(prefix) {}
+  RGWSI_SysObj_Core_PoolListImplInfo(const std::string& prefix) : op(pool.op()), filter(prefix) {}
 };
 
 struct RGWSysObjState {
@@ -49,7 +50,7 @@ struct RGWSysObjState {
 
   RGWObjVersionTracker objv_tracker;
 
-  map<string, bufferlist> attrset;
+  std::map<std::string, bufferlist> attrset;
   RGWSysObjState() {}
   RGWSysObjState(const RGWSysObjState& rhs) : obj (rhs.obj) {
     has_attrs = rhs.has_attrs;

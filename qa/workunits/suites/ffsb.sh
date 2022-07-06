@@ -4,10 +4,18 @@ set -e
 
 mydir=`dirname $0`
 
-wget http://download.ceph.com/qa/ffsb.tar.bz2
-tar jxvf ffsb.tar.bz2
-cd ffsb-6.0-rc2
-patch -p1 < $mydir/ffsb.patch
+# try it again if the clone is slow and the second time
+trap -- 'retry' EXIT
+retry() {
+    rm -rf ffsb
+    # double the timeout value
+    timeout 3600 git clone git://git.ceph.com/ffsb.git --depth 1
+}
+rm -rf ffsb
+timeout 1800 git clone git://git.ceph.com/ffsb.git --depth 1
+trap - EXIT
+
+cd ffsb
 ./configure
 make
 cd ..
@@ -16,7 +24,7 @@ cd tmp
 
 for f in $mydir/*.ffsb
 do
-    ../ffsb-*/ffsb $f
+    ../ffsb/ffsb $f
 done
 cd ..
 rm -r tmp ffsb*

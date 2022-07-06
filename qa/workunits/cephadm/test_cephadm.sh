@@ -9,10 +9,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 FSID='00000000-0000-0000-0000-0000deadbeef'
 
 # images that are used
-IMAGE_MASTER=${IMAGE_MASTER:-'docker.io/ceph/daemon-base:latest-master-devel'}
-IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'docker.io/ceph/daemon-base:latest-octopus'}
-IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'docker.io/ceph/daemon-base:latest-nautilus'}
-IMAGE_MIMIC=${IMAGE_MIMIC:-'docker.io/ceph/daemon-base:latest-mimic'}
+IMAGE_MAIN=${IMAGE_MAIN:-'quay.ceph.io/ceph-ci/ceph:main'}
+IMAGE_PACIFIC=${IMAGE_PACIFIC:-'quay.ceph.io/ceph-ci/ceph:pacific'}
+#IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'quay.ceph.io/ceph-ci/ceph:octopus'}
+IMAGE_DEFAULT=${IMAGE_MAIN}
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -35,38 +35,8 @@ if ! [ -x "$CEPHADM" ]; then
     exit 1
 fi
 
-# respawn ourselves with a shebang
-if [ -z "$PYTHON_KLUDGE" ]; then
-    # see which pythons we should test with
-    PYTHONS=""
-    which python3 && PYTHONS="$PYTHONS python3"
-    echo "PYTHONS $PYTHONS"
-    if [ -z "$PYTHONS" ]; then
-	echo "No PYTHONS found!"
-	exit 1
-    fi
-
-    TMPBINDIR=$(mktemp -d)
-    trap "rm -rf $TMPBINDIR" EXIT
-    ORIG_CEPHADM="$CEPHADM"
-    CEPHADM="$TMPBINDIR/cephadm"
-    for p in $PYTHONS; do
-	echo "=== re-running with $p ==="
-	ln -s `which $p` $TMPBINDIR/python
-	echo "#!$TMPBINDIR/python" > $CEPHADM
-	cat $ORIG_CEPHADM >> $CEPHADM
-	chmod 700 $CEPHADM
-	$TMPBINDIR/python --version
-	PYTHON_KLUDGE=1 CEPHADM=$CEPHADM $0
-	rm $TMPBINDIR/python
-    done
-    rm -rf $TMPBINDIR
-    echo "PASS with all of: $PYTHONS"
-    exit 0
-fi
-
 # add image to args
-CEPHADM_ARGS="$CEPHADM_ARGS --image $IMAGE_MASTER"
+CEPHADM_ARGS="$CEPHADM_ARGS --image $IMAGE_DEFAULT"
 
 # combine into a single var
 CEPHADM_BIN="$CEPHADM"
@@ -105,6 +75,22 @@ function expect_false()
 {
         set -x
         if eval "$@"; then return 1; else return 0; fi
+}
+
+# expect_return_code $expected_code $command ...
+function expect_return_code()
+{
+  set -x
+  local expected_code="$1"
+  shift
+  local command="$@"
+
+  set +e
+  eval "$command"
+  local return_code="$?"
+  set -e
+
+  if [ ! "$return_code" -eq "$expected_code" ]; then return 1; else return 0; fi
 }
 
 function is_available()
@@ -160,7 +146,7 @@ function nfs_stop()
     # stop the running nfs server
     local units="nfs-server nfs-kernel-server"
     for unit in $units; do
-        if systemctl status $unit; then
+        if systemctl status $unit < /dev/null; then
             $SUDO systemctl stop $unit
         fi
     done
@@ -176,23 +162,23 @@ $SUDO $CEPHADM check-host
 $SUDO $CEPHADM gather-facts
 
 ## version + --image
-$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
-$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
-    | grep 'ceph version 15'
-$SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version
-$SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version \
-    | grep 'ceph version 14'
-$SUDO $CEPHADM_BIN --image $IMAGE_MIMIC version
-$SUDO $CEPHADM_BIN --image $IMAGE_MIMIC version \
-    | grep 'ceph version 13'
-$SUDO $CEPHADM_BIN --image $IMAGE_MASTER version | grep 'ceph version'
+$SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version
+$SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version \
+    | grep 'ceph version 16'
+#$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
+#$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
+#    | grep 'ceph version 15'
+$SUDO $CEPHADM_BIN --image $IMAGE_MAIN version | grep 'ceph version'
 
 # try force docker; this won't work if docker isn't installed
-systemctl status docker && ( $CEPHADM --docker version | grep 'ceph version' )
+systemctl status docker > /dev/null && ( $CEPHADM --docker version | grep 'ceph version' ) || echo "docker not installed"
 
 ## test shell before bootstrap, when crash dir isn't (yet) present on this host
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
 $CEPHADM shell --fsid $FSID -e FOO=BAR -- printenv | grep FOO=BAR
+
+# test stdin
+echo foo | $CEPHADM shell -- cat | grep -q foo
 
 ## bootstrap
 ORIG_CONFIG=`mktemp -p $TMPDIR`
@@ -334,21 +320,21 @@ for id in `seq 0 $((--OSD_TO_CREATE))`; do
 done
 
 # add node-exporter
-${CEPHADM//--image $IMAGE_MASTER/} deploy \
+${CEPHADM//--image $IMAGE_DEFAULT/} deploy \
     --name node-exporter.a --fsid $FSID
 cond="curl 'http://localhost:9100' | grep -q 'Node Exporter'"
 is_available "node-exporter" "$cond" 10
 
 # add prometheus
 cat ${CEPHADM_SAMPLES_DIR}/prometheus.json | \
-        ${CEPHADM//--image $IMAGE_MASTER/} deploy \
+        ${CEPHADM//--image $IMAGE_DEFAULT/} deploy \
 	    --name prometheus.a --fsid $FSID --config-json -
 cond="curl 'localhost:9095/api/v1/query?query=up'"
 is_available "prometheus" "$cond" 10
 
 # add grafana
 cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
-        ${CEPHADM//--image $IMAGE_MASTER/} deploy \
+        ${CEPHADM//--image $IMAGE_DEFAULT/} deploy \
             --name grafana.a --fsid $FSID --config-json -
 cond="curl --insecure 'https://localhost:3000' | grep -q 'grafana'"
 is_available "grafana" "$cond" 50
@@ -376,7 +362,7 @@ $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
 alertmanager_image=$(cat ${CEPHADM_SAMPLES_DIR}/custom_container.json | jq -r '.image')
 tcp_ports=$(cat ${CEPHADM_SAMPLES_DIR}/custom_container.json | jq -r '.ports | map_values(.|tostring) | join(" ")')
 cat ${CEPHADM_SAMPLES_DIR}/custom_container.json | \
-      ${CEPHADM//--image $IMAGE_MASTER/} \
+      ${CEPHADM//--image $IMAGE_DEFAULT/} \
       --image $alertmanager_image \
       deploy \
       --tcp-ports "$tcp_ports" \
@@ -400,6 +386,10 @@ $CEPHADM unit --fsid $FSID --name mon.a -- disable
 expect_false $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
 $CEPHADM unit --fsid $FSID --name mon.a -- enable
 $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
+$CEPHADM unit --fsid $FSID --name mon.a -- status
+$CEPHADM unit --fsid $FSID --name mon.a -- stop
+expect_return_code 3 $CEPHADM unit --fsid $FSID --name mon.a -- status
+$CEPHADM unit --fsid $FSID --name mon.a -- start
 
 ## shell
 $CEPHADM shell --fsid $FSID -- true
@@ -432,8 +422,11 @@ expect_false $CEPHADM rm-daemon --fsid $FSID --name mon.a
 # mgr does not
 $CEPHADM rm-daemon --fsid $FSID --name mgr.x
 
+expect_false $CEPHADM zap-osds --fsid $FSID
+$CEPHADM zap-osds --fsid $FSID --force
+
 ## rm-cluster
-expect_false $CEPHADM rm-cluster --fsid $FSID
-$CEPHADM rm-cluster --fsid $FSID --force
+expect_false $CEPHADM rm-cluster --fsid $FSID --zap-osds
+$CEPHADM rm-cluster --fsid $FSID --force --zap-osds
 
 echo PASS

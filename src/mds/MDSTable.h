@@ -86,6 +86,6 @@ protected:
 
   version_t version = 0, committing_version = 0, committed_version = 0, projected_version = 0;
 
-  map<version_t, MDSContext::vec > waitfor_save;
+  std::map<version_t, MDSContext::vec > waitfor_save;
 };
 #endif

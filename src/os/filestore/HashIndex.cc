@@ -552,15 +552,23 @@ int HashIndex::_created(const vector<string> &path,
     dout(1) << __func__ << " " << path << " has " << info.objs
             << " objects, starting split in pg " << coll() << "." << dendl;
     int r = initiate_split(path, info);
-    if (r < 0)
-      return r;
-    r = complete_split(path, info);
-    dout(1) << __func__ << " " << path << " split completed in pg " << coll() << "."
-            << dendl;
-    return r;
-  } else {
-    return 0;
+    if (r < 0) {
+      derr << __func__ << " error starting split " << path << " in pg "
+           << coll() << ": " << cpp_strerror(r) << dendl;
+      ceph_assert(!cct->_conf->filestore_fail_eio);
+    } else {
+      r = complete_split(path, info);
+      if (r < 0) {
+        derr << __func__ << " error completing split " << path << " in pg "
+             << coll() << ": " << cpp_strerror(r) << dendl;
+        ceph_assert(!cct->_conf->filestore_fail_eio);
+      }
+      dout(1) << __func__ << " " << path << " split completed in pg " << coll()
+              << "." << dendl;
+    }
   }
+
+  return 0;
 }
 
 int HashIndex::_remove(const vector<string> &path,
@@ -578,14 +586,28 @@ int HashIndex::_remove(const vector<string> &path,
   r = set_info(path, info);
   if (r < 0)
     return r;
+
   if (must_merge(info)) {
+    dout(1) << __func__ << " " << path << " has " << info.objs
+            << " objects, starting merge in pg " << coll() << "." << dendl;
     r = initiate_merge(path, info);
-    if (r < 0)
-      return r;
-    return complete_merge(path, info);
-  } else {
-    return 0;
+    if (r < 0) {
+      derr << __func__ << " error starting merge " << path << " in pg "
+           << coll() << ": " << cpp_strerror(r) << dendl;
+      ceph_assert(!cct->_conf->filestore_fail_eio);
+    } else {
+      r = complete_merge(path, info);
+      if (r < 0) {
+        derr << __func__ << " error completing merge " << path << " in pg "
+             << coll() << ": " << cpp_strerror(r) << dendl;
+        ceph_assert(!cct->_conf->filestore_fail_eio);
+      }
+      dout(1) << __func__ << " " << path << " merge completed in pg " << coll()
+              << "." << dendl;
+    }
   }
+
+  return 0;
 }
 
 int HashIndex::_lookup(const ghobject_t &oid,

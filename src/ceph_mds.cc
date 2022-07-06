@@ -54,6 +54,10 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
+using std::cerr;
+using std::cout;
+using std::vector;
+
 static void usage()
 {
   cout << "usage: ceph-mds -i <ID> [flags]\n"
@@ -79,8 +83,7 @@ int main(int argc, const char **argv)
 {
   ceph_pthread_setname(pthread_self(), "ceph-mds");
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);

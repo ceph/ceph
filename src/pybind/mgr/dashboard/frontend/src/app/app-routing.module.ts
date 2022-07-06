@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
 import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
+import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
 import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
@@ -34,6 +35,7 @@ import { ErrorComponent } from './core/error/error.component';
 import { BlankLayoutComponent } from './core/layouts/blank-layout/blank-layout.component';
 import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
+import { ApiDocsComponent } from './core/navigation/api-docs/api-docs.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
@@ -77,6 +79,7 @@ export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
 const routes: Routes = [
   // Dashboard
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+  { path: 'api-docs', component: ApiDocsComponent },
   {
     path: '',
     component: WorkbenchLayoutComponent,
@@ -88,14 +91,27 @@ const routes: Routes = [
 
       // Cluster
       {
+        path: 'expand-cluster',
+        component: CreateClusterComponent,
+        canActivate: [ModuleStatusGuardService],
+        data: {
+          moduleStatusGuardConfig: {
+            uiApiPath: 'orchestrator',
+            redirectTo: 'dashboard',
+            backend: 'cephadm'
+          },
+          breadcrumbs: 'Expand Cluster'
+        }
+      },
+      {
         path: 'hosts',
+        component: HostsComponent,
         data: { breadcrumbs: 'Cluster/Hosts' },
         children: [
-          { path: '', component: HostsComponent },
           {
-            path: URLVerbs.CREATE,
+            path: URLVerbs.ADD,
             component: HostFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
           }
         ]
       },
@@ -106,10 +122,11 @@ const routes: Routes = [
       },
       {
         path: 'services',
-        canActivateChild: [ModuleStatusGuardService],
+        component: ServicesComponent,
+        canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'orchestrator',
+            uiApiPath: 'orchestrator',
             redirectTo: 'error',
             section: 'orch',
             section_info: 'Orchestrator',
@@ -118,11 +135,15 @@ const routes: Routes = [
           breadcrumbs: 'Cluster/Services'
         },
         children: [
-          { path: '', component: ServicesComponent },
           {
             path: URLVerbs.CREATE,
             component: ServiceFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.EDIT}/:type/:name`,
+            component: ServiceFormComponent,
+            outlet: 'modal'
           }
         ]
       },
@@ -132,13 +153,13 @@ const routes: Routes = [
         component: InventoryComponent,
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'orchestrator',
+            uiApiPath: 'orchestrator',
             redirectTo: 'error',
             section: 'orch',
             section_info: 'Orchestrator',
             header: 'Orchestrator is not available'
           },
-          breadcrumbs: 'Cluster/Inventory'
+          breadcrumbs: 'Cluster/Physical Disks'
         }
       },
       {
@@ -264,12 +285,12 @@ const routes: Routes = [
         data: { breadcrumbs: true, text: 'Block', path: null },
         loadChildren: () => import('./ceph/block/block.module').then((m) => m.RoutedBlockModule)
       },
-      // Filesystems
+      // File Systems
       {
         path: 'cephfs',
         component: CephfsListComponent,
         canActivate: [FeatureTogglesGuardService],
-        data: { breadcrumbs: 'Filesystems' }
+        data: { breadcrumbs: 'File Systems' }
       },
       // Object Gateway
       {
@@ -277,7 +298,7 @@ const routes: Routes = [
         canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'rgw',
+            uiApiPath: 'rgw',
             redirectTo: 'error',
             section: 'rgw',
             section_info: 'Object Gateway',
@@ -314,7 +335,7 @@ const routes: Routes = [
         canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'nfs-ganesha',
+            uiApiPath: 'nfs-ganesha',
             redirectTo: 'error',
             section: 'nfs-ganesha',
             section_info: 'NFS GANESHA',
@@ -361,7 +382,8 @@ const routes: Routes = [
   imports: [
     RouterModule.forRoot(routes, {
       useHash: true,
-      preloadingStrategy: PreloadAllModules
+      preloadingStrategy: PreloadAllModules,
+      relativeLinkResolution: 'legacy'
     })
   ],
   exports: [RouterModule],

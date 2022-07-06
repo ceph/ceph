@@ -27,11 +27,12 @@
 
 #define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)
 
-
 class KernelDevice : public BlockDevice {
+protected:
+  std::string path;
+private:
   std::vector<int> fd_directs, fd_buffereds;
   bool enable_wrt = true;
-  std::string path;
   bool aio, dio;
 
   int vdo_fd = -1;      ///< fd for vdo sysfs directory
@@ -78,6 +79,9 @@ class KernelDevice : public BlockDevice {
 
   std::atomic_int injecting_crash;
 
+  virtual int _post_open() { return 0; }  // hook for child implementations
+  virtual void  _pre_close() { }  // hook for child implementations
+
   void _aio_thread();
   void _discard_thread();
   int queue_discard(interval_set<uint64_t> &to_release) override;
@@ -107,6 +111,8 @@ class KernelDevice : public BlockDevice {
 
   void _detect_vdo();
   int choose_fd(bool buffered, int write_hint) const;
+
+  ceph::unique_leakable_ptr<buffer::raw> create_custom_aligned(size_t len, IOContext* ioc) const;
 
 public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);

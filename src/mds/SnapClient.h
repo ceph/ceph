@@ -88,23 +88,23 @@ public:
   snapid_t get_last_created() const { return cached_last_created; }
   snapid_t get_last_destroyed() const { return cached_last_destroyed; }
 
-  void get_snaps(set<snapid_t>& snaps) const;
-  set<snapid_t> filter(const set<snapid_t>& snaps) const;
+  void get_snaps(std::set<snapid_t>& snaps) const;
+  std::set<snapid_t> filter(const std::set<snapid_t>& snaps) const;
   const SnapInfo* get_snap_info(snapid_t snapid) const;
-  void get_snap_infos(map<snapid_t, const SnapInfo*>& infomap, const set<snapid_t>& snaps) const;
+  void get_snap_infos(std::map<snapid_t, const SnapInfo*>& infomap, const std::set<snapid_t>& snaps) const;
 
   int dump_cache(Formatter *f) const;
 
 private:
   version_t cached_version = 0;
   snapid_t cached_last_created = 0, cached_last_destroyed = 0;
-  map<snapid_t, SnapInfo> cached_snaps;
-  map<version_t, SnapInfo> cached_pending_update;
-  map<version_t, pair<snapid_t,snapid_t> > cached_pending_destroy;
+  std::map<snapid_t, SnapInfo> cached_snaps;
+  std::map<version_t, SnapInfo> cached_pending_update;
+  std::map<version_t, std::pair<snapid_t,snapid_t> > cached_pending_destroy;
 
-  set<version_t> committing_tids;
+  std::set<version_t> committing_tids;
 
-  map<version_t, MDSContext::vec > waiting_for_version;
+  std::map<version_t, MDSContext::vec > waiting_for_version;
 
   uint64_t sync_reqid = 0;
   bool synced = false;

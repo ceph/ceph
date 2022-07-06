@@ -224,7 +224,7 @@ in the MDS Map. The balancer pulls the Lua code from RADOS synchronously. We do
 this with a timeout: if the asynchronous read does not come back within half
 the balancing tick interval the operation is cancelled and a Connection Timeout
 error is returned. By default, the balancing tick interval is 10 seconds, so
-Mantle will use a 5 second second timeout. This design allows Mantle to
+Mantle will use a 5 second timeout. This design allows Mantle to
 immediately return an error if anything RADOS-related goes wrong.
 
 We use this implementation because we do not want to do a blocking OSD read

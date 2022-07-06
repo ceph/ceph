@@ -145,7 +145,6 @@ environments and run options::
   $ tox -e py3,lint,check
 
   ## To run it as Jenkins would:  
-  $ ../../../script/run_tox.sh --tox-env py27,py3,lint,check
   $ ../../../script/run_tox.sh --tox-env py3,lint,check
 
 Manager core unit tests

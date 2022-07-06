@@ -13,6 +13,8 @@
 #include "gtest/gtest.h"
 #include <list>
 
+using namespace std;
+
 namespace librbd {
 
 struct MockManagedLockImageCtx : public MockImageCtx {

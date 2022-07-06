@@ -17,32 +17,30 @@
   # buckets
   host host0 {
   \tid -2\t\t# do not change unnecessarily (esc)
-  \t# weight 1.000 (esc)
+  \t# weight 1.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem device1 weight 1.000 (esc)
+  \titem device1 weight 1.00000 (esc)
   }
   host host1 {
   \tid -3\t\t# do not change unnecessarily (esc)
-  \t# weight 0.000 (esc)
+  \t# weight 0.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   }
   cluster cluster0 {
   \tid -1\t\t# do not change unnecessarily (esc)
-  \t# weight 1.000 (esc)
+  \t# weight 1.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem host0 weight 1.000 (esc)
-  \titem host1 weight 0.000 (esc)
+  \titem host0 weight 1.00000 (esc)
+  \titem host1 weight 0.00000 (esc)
   }
   
   # rules
   rule data {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take cluster0 (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
@@ -50,8 +48,6 @@
   rule metadata {
   \tid 1 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take cluster0 (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
@@ -59,8 +55,6 @@
   rule rbd {
   \tid 2 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take cluster0 (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)

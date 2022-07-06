@@ -1,7 +1,9 @@
 
-=============================
-Rook orchestrator integration
-=============================
+.. _mgr-rook:
+
+====
+Rook
+====
 
 Rook (https://rook.io/) is an orchestration tool that can run Ceph inside
 a Kubernetes cluster.

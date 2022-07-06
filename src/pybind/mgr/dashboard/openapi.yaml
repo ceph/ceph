@@ -206,6 +206,8 @@ paths:
                   type: string
                 features:
                   type: string
+                mirror_mode:
+                  type: string
                 name:
                   type: string
                 namespace:
@@ -213,6 +215,9 @@ paths:
                 obj_size:
                   type: integer
                 pool_name:
+                  type: string
+                schedule_interval:
+                  default: ''
                   type: string
                 size:
                   type: integer
@@ -539,9 +544,24 @@ paths:
               properties:
                 configuration:
                   type: string
+                enable_mirror:
+                  type: string
                 features:
                   type: string
+                mirror_mode:
+                  type: string
                 name:
+                  type: string
+                primary:
+                  type: string
+                remove_scheduling:
+                  default: false
+                  type: boolean
+                resync:
+                  default: false
+                  type: boolean
+                schedule_interval:
+                  default: ''
                   type: string
                 size:
                   type: integer
@@ -2038,6 +2058,67 @@ paths:
       - jwt: []
       tags:
       - Cephfs
+  /api/cluster:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get the cluster status
+      tags:
+      - Cluster
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                status:
+                  description: Cluster Status
+                  type: string
+              required:
+              - status
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Update the cluster status
+      tags:
+      - Cluster
   /api/cluster_conf:
     get:
       parameters: []
@@ -2308,7 +2389,7 @@ paths:
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               schema:
                 properties:
                   max_size:
@@ -2444,7 +2525,7 @@ paths:
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               type: object
           description: OK
         '400':
@@ -2460,6 +2541,49 @@ paths:
       - jwt: []
       tags:
       - CrushRule
+  /api/daemon/{daemon_name}:
+    put:
+      parameters:
+      - in: path
+        name: daemon_name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                action:
+                  default: ''
+                  type: string
+                container_image:
+                  type: string
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Daemon
   /api/erasure_code_profile:
     get:
       parameters: []
@@ -2656,6 +2780,168 @@ paths:
       summary: Get List Of Features
       tags:
       - FeatureTogglesEndpoint
+  /api/feedback:
+    get:
+      description: "\n        List all issues details.\n        "
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Report
+    post:
+      description: "\n        Create an issue.\n        :param project: The affected\
+        \ ceph component.\n        :param tracker: The tracker type.\n        :param\
+        \ subject: The title of the issue.\n        :param description: The description\
+        \ of the issue.\n        :param api_key: Ceph tracker api key.\n        "
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                api_key:
+                  type: string
+                description:
+                  type: string
+                project:
+                  type: string
+                subject:
+                  type: string
+                tracker:
+                  type: string
+              required:
+              - project
+              - tracker
+              - subject
+              - description
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Report
+  /api/feedback/api_key:
+    delete:
+      description: "\n        Deletes Ceph tracker API key.\n        "
+      parameters: []
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Report
+    get:
+      description: "\n        Returns Ceph tracker API key.\n        "
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Report
+    post:
+      description: "\n        Sets Ceph tracker API key.\n        :param api_key:\
+        \ The Ceph tracker API key.\n        "
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                api_key:
+                  type: string
+              required:
+              - api_key
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Report
   /api/grafana/dashboards:
     post:
       parameters: []
@@ -3153,10 +3439,16 @@ paths:
         name: sources
         schema:
           type: string
+      - default: false
+        description: Host Facts
+        in: query
+        name: facts
+        schema:
+          type: boolean
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v1.1+json:
               schema:
                 properties:
                   addr:
@@ -3239,7 +3531,19 @@ paths:
           application/json:
             schema:
               properties:
+                addr:
+                  description: Network Address
+                  type: string
                 hostname:
+                  description: Hostname
+                  type: string
+                labels:
+                  description: Host Labels
+                  items:
+                    type: string
+                  type: array
+                status:
+                  description: Host Status
                   type: string
               required:
               - hostname
@@ -3247,12 +3551,12 @@ paths:
       responses:
         '201':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v0.1+json:
               type: object
           description: Resource created.
         '202':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v0.1+json:
               type: object
           description: Operation is still executing. Please check the task queue.
         '400':
@@ -3331,10 +3635,13 @@ paths:
     put:
       description: "\n        Update the specified host.\n        Note, this is only\
         \ supported when Ceph Orchestrator is enabled.\n        :param hostname: The\
-        \ name of the host to be processed.\n        :param labels: List of labels.\n\
-        \        "
+        \ name of the host to be processed.\n        :param update_labels: To update\
+        \ the labels.\n        :param labels: List of labels.\n        :param maintenance:\
+        \ Enter/Exit maintenance mode.\n        :param force: Force enter maintenance\
+        \ mode.\n        :param drain: Drain host\n        "
       parameters:
-      - in: path
+      - description: Hostname
+        in: path
         name: hostname
         required: true
         schema:
@@ -3344,20 +3651,39 @@ paths:
           application/json:
             schema:
               properties:
+                drain:
+                  default: false
+                  description: Drain Host
+                  type: boolean
+                force:
+                  default: false
+                  description: Force Enter Maintenance
+                  type: boolean
                 labels:
-                  type: string
-              required:
-              - labels
+                  description: Host Labels
+                  items:
+                    type: string
+                  type: array
+                maintenance:
+                  default: false
+                  description: Enter/Exit Maintenance
+                  type: boolean
+                update_labels:
+                  default: false
+                  description: Update Labels
+                  type: boolean
               type: object
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
-              type: object
+            application/vnd.ceph.api.v0.1+json:
+              schema:
+                properties: {}
+                type: object
           description: Resource updated.
         '202':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v0.1+json:
               type: object
           description: Operation is still executing. Please check the task queue.
         '400':
@@ -4863,37 +5189,14 @@ paths:
       summary: Get Monitor Details
       tags:
       - Monitor
-  /api/nfs-ganesha/daemon:
+  /api/nfs-ganesha/cluster:
     get:
       parameters: []
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                items:
-                  properties:
-                    cluster_id:
-                      description: Cluster identifier
-                      type: string
-                    cluster_type:
-                      description: Cluster type
-                      type: string
-                    daemon_id:
-                      description: Daemon identifier
-                      type: string
-                    desc:
-                      description: Status description
-                      type: string
-                    status:
-                      description: Status of daemon
-                      type: integer
-                  type: object
-                required:
-                - daemon_id
-                - cluster_id
-                - cluster_type
-                type: array
+            application/vnd.ceph.api.v0.1+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -4906,7 +5209,6 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: List NFS-Ganesha daemons information
       tags:
       - NFS-Ganesha
   /api/nfs-ganesha/export:
@@ -4946,31 +5248,23 @@ paths:
                     cluster_id:
                       description: Cluster identifier
                       type: string
-                    daemons:
-                      description: List of NFS Ganesha daemons identifiers
-                      items:
-                        type: string
-                      type: array
                     export_id:
                       description: Export ID
                       type: integer
                     fsal:
                       description: FSAL configuration
                       properties:
-                        filesystem:
-                          description: CephFS filesystem ID
+                        fs_name:
+                          description: CephFS filesystem name
                           type: string
                         name:
                           description: name of FSAL
-                          type: string
-                        rgw_user_id:
-                          description: RGW user id
                           type: string
                         sec_label_xattr:
                           description: Name of xattr for security label
                           type: string
                         user_id:
-                          description: CephX user id
+                          description: User id
                           type: string
                       required:
                       - name
@@ -4992,9 +5286,6 @@ paths:
                     squash:
                       description: Export squash policy
                       type: string
-                    tag:
-                      description: NFSv3 export tag
-                      type: string
                     transports:
                       description: List of transport types
                       items:
@@ -5005,9 +5296,7 @@ paths:
                 - export_id
                 - path
                 - cluster_id
-                - daemons
                 - pseudo
-                - tag
                 - access_type
                 - squash
                 - security_label
@@ -5065,28 +5354,17 @@ paths:
                 cluster_id:
                   description: Cluster identifier
                   type: string
-                daemons:
-                  description: List of NFS Ganesha daemons identifiers
-                  items:
-                    type: string
-                  type: array
                 fsal:
                   description: FSAL configuration
                   properties:
-                    filesystem:
-                      description: CephFS filesystem ID
+                    fs_name:
+                      description: CephFS filesystem name
                       type: string
                     name:
                       description: name of FSAL
                       type: string
-                    rgw_user_id:
-                      description: RGW user id
-                      type: string
                     sec_label_xattr:
                       description: Name of xattr for security label
-                      type: string
-                    user_id:
-                      description: CephX user id
                       type: string
                   required:
                   - name
@@ -5102,18 +5380,11 @@ paths:
                 pseudo:
                   description: Pseudo FS path
                   type: string
-                reload_daemons:
-                  default: true
-                  description: Trigger reload of NFS-Ganesha daemons configuration
-                  type: boolean
                 security_label:
                   description: Security label
                   type: string
                 squash:
                   description: Export squash policy
-                  type: string
-                tag:
-                  description: NFSv3 export tag
                   type: string
                 transports:
                   description: List of transport types
@@ -5123,9 +5394,7 @@ paths:
               required:
               - path
               - cluster_id
-              - daemons
               - pseudo
-              - tag
               - access_type
               - squash
               - security_label
@@ -5137,7 +5406,7 @@ paths:
       responses:
         '201':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               schema:
                 properties:
                   access_type:
@@ -5167,31 +5436,23 @@ paths:
                   cluster_id:
                     description: Cluster identifier
                     type: string
-                  daemons:
-                    description: List of NFS Ganesha daemons identifiers
-                    items:
-                      type: string
-                    type: array
                   export_id:
                     description: Export ID
                     type: integer
                   fsal:
                     description: FSAL configuration
                     properties:
-                      filesystem:
-                        description: CephFS filesystem ID
+                      fs_name:
+                        description: CephFS filesystem name
                         type: string
                       name:
                         description: name of FSAL
-                        type: string
-                      rgw_user_id:
-                        description: RGW user id
                         type: string
                       sec_label_xattr:
                         description: Name of xattr for security label
                         type: string
                       user_id:
-                        description: CephX user id
+                        description: User id
                         type: string
                     required:
                     - name
@@ -5213,9 +5474,6 @@ paths:
                   squash:
                     description: Export squash policy
                     type: string
-                  tag:
-                    description: NFSv3 export tag
-                    type: string
                   transports:
                     description: List of transport types
                     items:
@@ -5225,9 +5483,7 @@ paths:
                 - export_id
                 - path
                 - cluster_id
-                - daemons
                 - pseudo
-                - tag
                 - access_type
                 - squash
                 - security_label
@@ -5239,7 +5495,7 @@ paths:
           description: Resource created.
         '202':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               type: object
           description: Operation is still executing. Please check the task queue.
         '400':
@@ -5271,21 +5527,15 @@ paths:
         required: true
         schema:
           type: integer
-      - default: true
-        description: Trigger reload of NFS-Ganesha daemons configuration
-        in: query
-        name: reload_daemons
-        schema:
-          type: boolean
       responses:
         '202':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               type: object
           description: Operation is still executing. Please check the task queue.
         '204':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               type: object
           description: Resource deleted.
         '400':
@@ -5315,7 +5565,7 @@ paths:
         name: export_id
         required: true
         schema:
-          type: integer
+          type: string
       responses:
         '200':
           content:
@@ -5349,31 +5599,23 @@ paths:
                   cluster_id:
                     description: Cluster identifier
                     type: string
-                  daemons:
-                    description: List of NFS Ganesha daemons identifiers
-                    items:
-                      type: string
-                    type: array
                   export_id:
                     description: Export ID
                     type: integer
                   fsal:
                     description: FSAL configuration
                     properties:
-                      filesystem:
-                        description: CephFS filesystem ID
+                      fs_name:
+                        description: CephFS filesystem name
                         type: string
                       name:
                         description: name of FSAL
-                        type: string
-                      rgw_user_id:
-                        description: RGW user id
                         type: string
                       sec_label_xattr:
                         description: Name of xattr for security label
                         type: string
                       user_id:
-                        description: CephX user id
+                        description: User id
                         type: string
                     required:
                     - name
@@ -5395,9 +5637,6 @@ paths:
                   squash:
                     description: Export squash policy
                     type: string
-                  tag:
-                    description: NFSv3 export tag
-                    type: string
                   transports:
                     description: List of transport types
                     items:
@@ -5407,9 +5646,7 @@ paths:
                 - export_id
                 - path
                 - cluster_id
-                - daemons
                 - pseudo
-                - tag
                 - access_type
                 - squash
                 - security_label
@@ -5476,28 +5713,17 @@ paths:
                     - squash
                     type: object
                   type: array
-                daemons:
-                  description: List of NFS Ganesha daemons identifiers
-                  items:
-                    type: string
-                  type: array
                 fsal:
                   description: FSAL configuration
                   properties:
-                    filesystem:
-                      description: CephFS filesystem ID
+                    fs_name:
+                      description: CephFS filesystem name
                       type: string
                     name:
                       description: name of FSAL
                       type: string
-                    rgw_user_id:
-                      description: RGW user id
-                      type: string
                     sec_label_xattr:
                       description: Name of xattr for security label
-                      type: string
-                    user_id:
-                      description: CephX user id
                       type: string
                   required:
                   - name
@@ -5513,18 +5739,11 @@ paths:
                 pseudo:
                   description: Pseudo FS path
                   type: string
-                reload_daemons:
-                  default: true
-                  description: Trigger reload of NFS-Ganesha daemons configuration
-                  type: boolean
                 security_label:
                   description: Security label
                   type: string
                 squash:
                   description: Export squash policy
-                  type: string
-                tag:
-                  description: NFSv3 export tag
                   type: string
                 transports:
                   description: List of transport types
@@ -5533,9 +5752,7 @@ paths:
                   type: array
               required:
               - path
-              - daemons
               - pseudo
-              - tag
               - access_type
               - squash
               - security_label
@@ -5547,7 +5764,7 @@ paths:
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               schema:
                 properties:
                   access_type:
@@ -5577,31 +5794,23 @@ paths:
                   cluster_id:
                     description: Cluster identifier
                     type: string
-                  daemons:
-                    description: List of NFS Ganesha daemons identifiers
-                    items:
-                      type: string
-                    type: array
                   export_id:
                     description: Export ID
                     type: integer
                   fsal:
                     description: FSAL configuration
                     properties:
-                      filesystem:
-                        description: CephFS filesystem ID
+                      fs_name:
+                        description: CephFS filesystem name
                         type: string
                       name:
                         description: name of FSAL
-                        type: string
-                      rgw_user_id:
-                        description: RGW user id
                         type: string
                       sec_label_xattr:
                         description: Name of xattr for security label
                         type: string
                       user_id:
-                        description: CephX user id
+                        description: User id
                         type: string
                     required:
                     - name
@@ -5623,9 +5832,6 @@ paths:
                   squash:
                     description: Export squash policy
                     type: string
-                  tag:
-                    description: NFSv3 export tag
-                    type: string
                   transports:
                     description: List of transport types
                     items:
@@ -5635,9 +5841,7 @@ paths:
                 - export_id
                 - path
                 - cluster_id
-                - daemons
                 - pseudo
-                - tag
                 - access_type
                 - squash
                 - security_label
@@ -5649,7 +5853,7 @@ paths:
           description: Resource updated.
         '202':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               type: object
           description: Operation is still executing. Please check the task queue.
         '400':
@@ -5666,74 +5870,6 @@ paths:
       summary: Updates an NFS-Ganesha export
       tags:
       - NFS-Ganesha
-  /api/nfs-ganesha/status:
-    get:
-      parameters: []
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                properties:
-                  available:
-                    description: Is API available?
-                    type: boolean
-                  message:
-                    description: Error message
-                    type: string
-                required:
-                - available
-                - message
-                type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: Status of NFS-Ganesha management feature
-      tags:
-      - NFS-Ganesha
-  /api/orchestrator/status:
-    get:
-      parameters: []
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                properties:
-                  available:
-                    description: Orchestrator status
-                    type: boolean
-                  message:
-                    description: Error message
-                    type: string
-                required:
-                - available
-                - message
-                type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: Display Orchestrator Status
-      tags:
-      - Orchestrator
   /api/osd:
     get:
       parameters: []
@@ -6089,6 +6225,28 @@ paths:
       security:
       - jwt: []
       summary: Check If OSD is Safe to Destroy
+      tags:
+      - OSD
+  /api/osd/settings:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v0.1+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
       tags:
       - OSD
   /api/osd/{svc_id}:
@@ -6898,11 +7056,15 @@ paths:
                     options:
                       description: ''
                       properties:
+                        pg_num_max:
+                          description: ''
+                          type: integer
                         pg_num_min:
                           description: ''
                           type: integer
                       required:
                       - pg_num_min
+                      - pg_num_max
                       type: object
                     pg_autoscale_mode:
                       description: ''
@@ -7066,26 +7228,9 @@ paths:
           application/json:
             schema:
               properties:
-                application_metadata:
-                  type: string
-                configuration:
-                  type: string
-                erasure_code_profile:
-                  type: string
-                flags:
-                  type: string
-                pg_num:
-                  type: integer
                 pool:
+                  default: rbd-mirror
                   type: string
-                pool_type:
-                  type: string
-                rule_name:
-                  type: string
-              required:
-              - pool
-              - pg_num
-              - pool_type
               type: object
       responses:
         '201':
@@ -7404,10 +7549,20 @@ paths:
         name: stats
         schema:
           type: boolean
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: uid
+        schema:
+          type: string
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v1.1+json:
               type: object
           description: OK
         '400':
@@ -7431,6 +7586,8 @@ paths:
             schema:
               properties:
                 bucket:
+                  type: string
+                daemon_name:
                   type: string
                 lock_enabled:
                   default: 'false'
@@ -7488,6 +7645,11 @@ paths:
         name: purge_objects
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -7517,6 +7679,11 @@ paths:
       - in: path
         name: bucket
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
         schema:
           type: string
       responses:
@@ -7551,6 +7718,8 @@ paths:
             schema:
               properties:
                 bucket_id:
+                  type: string
+                daemon_name:
                   type: string
                 lock_mode:
                   type: string
@@ -7615,11 +7784,19 @@ paths:
                     version:
                       description: Ceph Version
                       type: string
+                    zone_name:
+                      description: Zone
+                      type: string
+                    zonegroup_name:
+                      description: Zone Group
+                      type: string
                   type: object
                 required:
                 - id
                 - version
                 - server_hostname
+                - zonegroup_name
+                - zone_name
                 type: array
           description: OK
         '400':
@@ -7671,6 +7848,11 @@ paths:
         name: query
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -7690,43 +7872,14 @@ paths:
       - jwt: []
       tags:
       - RgwSite
-  /api/rgw/status:
-    get:
-      parameters: []
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                properties:
-                  available:
-                    description: Is RGW available?
-                    type: boolean
-                  message:
-                    description: Descriptions
-                    type: string
-                required:
-                - available
-                - message
-                type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: Display RGW Status
-      tags:
-      - Rgw
   /api/rgw/user:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -7764,6 +7917,8 @@ paths:
             schema:
               properties:
                 access_key:
+                  type: string
+                daemon_name:
                   type: string
                 display_name:
                   type: string
@@ -7809,7 +7964,12 @@ paths:
       - RgwUser
   /api/rgw/user/get_emails:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -7835,6 +7995,11 @@ paths:
       - in: path
         name: uid
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
         schema:
           type: string
       responses:
@@ -7868,6 +8033,16 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
+      - default: true
+        in: query
+        name: stats
+        schema:
+          type: boolean
       responses:
         '200':
           content:
@@ -7899,6 +8074,8 @@ paths:
           application/json:
             schema:
               properties:
+                daemon_name:
+                  type: string
                 display_name:
                   type: string
                 email:
@@ -7950,6 +8127,11 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -7986,6 +8168,8 @@ paths:
           application/json:
             schema:
               properties:
+                daemon_name:
+                  type: string
                 perm:
                   type: string
                 type:
@@ -8041,6 +8225,11 @@ paths:
         name: access_key
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -8078,6 +8267,8 @@ paths:
             schema:
               properties:
                 access_key:
+                  type: string
+                daemon_name:
                   type: string
                 generate_key:
                   default: 'true'
@@ -8122,6 +8313,11 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8153,6 +8349,8 @@ paths:
           application/json:
             schema:
               properties:
+                daemon_name:
+                  type: string
                 enabled:
                   type: string
                 max_objects:
@@ -8207,6 +8405,8 @@ paths:
                 access:
                   type: string
                 access_key:
+                  type: string
+                daemon_name:
                   type: string
                 generate_secret:
                   default: 'true'
@@ -8265,6 +8465,11 @@ paths:
       - default: 'true'
         in: query
         name: purge_keys
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
         schema:
           type: string
       responses:
@@ -10190,10 +10395,14 @@ tags:
   name: Auth
 - description: Cephfs Management API
   name: Cephfs
+- description: Get Cluster Details
+  name: Cluster
 - description: Manage Cluster Configurations
   name: ClusterConfiguration
 - description: Crush Rule Management API
   name: CrushRule
+- description: Perform actions on daemons
+  name: Daemon
 - description: Erasure Code Profile Management API
   name: ErasureCodeProfile
 - description: Manage Features API
@@ -10220,12 +10429,10 @@ tags:
   name: MonPerfCounter
 - description: Get Monitor Details
   name: Monitor
-- description: NFS-Ganesha Management API
+- description: NFS-Ganesha Cluster Management API
   name: NFS-Ganesha
 - description: OSD management API
   name: OSD
-- description: Orchestrator Management API
-  name: Orchestrator
 - description: OSD Perf Counters Management API
   name: OsdPerfCounter
 - description: Perf Counters Management API
@@ -10254,8 +10461,8 @@ tags:
   name: RbdSnapshot
 - description: RBD Trash Management API
   name: RbdTrash
-- description: RGW Management API
-  name: Rgw
+- description: Feedback API
+  name: Report
 - description: RGW Bucket Management API
   name: RgwBucket
 - description: RGW Daemon Management API

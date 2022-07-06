@@ -23,6 +23,8 @@
 #include "include/common_fwd.h"
 #include "include/encoding.h"
 #include "common/ceph_time.h"
+#include "common/dout.h"
+#include "rgw/rgw_common.h"
 
 class RGWCoroutine;
 class RGWHTTPManager;
@@ -30,7 +32,7 @@ class RGWHTTPManager;
 namespace rgw {
 
 namespace sal {
-  class RGWRadosStore;
+  class RadosStore;
 }
 
 /// Interface to inform the trim process about which buckets are most active
@@ -69,11 +71,11 @@ void configure_bucket_trim(CephContext *cct, BucketTrimConfig& config);
 /// input: the frequency of entries read from the data changes log, and a global
 /// listing of the bucket.instance metadata. This allows us to trim active
 /// buckets quickly, while also ensuring that all buckets will eventually trim
-class BucketTrimManager : public BucketChangeObserver {
+class BucketTrimManager : public BucketChangeObserver, public DoutPrefixProvider {
   class Impl;
   std::unique_ptr<Impl> impl;
  public:
-  BucketTrimManager(sal::RGWRadosStore *store, const BucketTrimConfig& config);
+  BucketTrimManager(sal::RadosStore *store, const BucketTrimConfig& config);
   ~BucketTrimManager();
 
   int init();
@@ -86,6 +88,10 @@ class BucketTrimManager : public BucketChangeObserver {
 
   /// create a coroutine to trim buckets directly via radosgw-admin
   RGWCoroutine* create_admin_bucket_trim_cr(RGWHTTPManager *http);
+
+  CephContext *get_cct() const override;
+  unsigned get_subsys() const;
+  std::ostream& gen_prefix(std::ostream& out) const;
 };
 
 /// provides persistent storage for the trim manager's current position in the
@@ -110,5 +116,9 @@ struct BucketTrimStatus {
 } // namespace rgw
 
 WRITE_CLASS_ENCODER(rgw::BucketTrimStatus);
+
+int bilog_trim(const DoutPrefixProvider* p, rgw::sal::RadosStore* store,
+	       RGWBucketInfo& bucket_info, uint64_t gen, int shard_id,
+	       std::string_view start_marker, std::string_view end_marker);
 
 #endif // RGW_SYNC_LOG_TRIM_H

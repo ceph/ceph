@@ -52,17 +52,16 @@ describe('InventoryComponent', () => {
   describe('after ngOnInit', () => {
     it('should load devices', () => {
       fixture.detectChanges();
-      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(1, undefined, false);
       component.refresh(); // click refresh button
-      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(2, undefined, true);
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(1, undefined, false);
 
       const newHost = 'host0';
       component.hostname = newHost;
       fixture.detectChanges();
       component.ngOnChanges();
-      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(3, newHost, false);
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(2, newHost, false);
       component.refresh(); // click refresh button
-      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(4, newHost, true);
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(3, newHost, true);
     });
   });
 });

@@ -22,11 +22,13 @@
 #include "rbd_replay/rbd_loc.hpp"
 
 
-using namespace rbd_replay;
-
+namespace rbd_replay {
 std::ostream& operator<<(std::ostream& o, const rbd_loc& name) {
   return o << "('" << name.pool << "', '" << name.image << "', '" << name.snap << "')";
 }
+}
+
+using namespace rbd_replay;
 
 static void add_mapping(ImageNameMap *map, std::string mapping_string) {
   ImageNameMap::Mapping mapping;

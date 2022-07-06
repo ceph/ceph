@@ -39,7 +39,9 @@ public:
   inline operator boost::asio::io_context&() {
     return m_io_context;
   }
-  inline boost::asio::io_context::executor_type get_executor() {
+
+  using executor_type = boost::asio::io_context::executor_type;
+  inline executor_type get_executor() {
     return m_io_context.get_executor();
   }
 

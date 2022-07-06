@@ -9,6 +9,7 @@ from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.exceptions import ConfigError
+from tasks.ceph_manager import get_valgrind_args
 from tasks.util import get_remote_for_role
 from tasks.util.rgw import rgwadmin, wait_for_radosgw
 from tasks.util.rados import (create_ec_pool,
@@ -68,10 +69,7 @@ def start_rgw(ctx, config, clients):
         if endpoint.cert:
             # add the ssl certificate path
             frontends += ' ssl_certificate={}'.format(endpoint.cert.certificate)
-            if ctx.rgw.frontend == 'civetweb':
-                frontends += ' port={}s'.format(endpoint.port)
-            else:
-                frontends += ' ssl_port={}'.format(endpoint.port)
+            frontends += ' ssl_port={}'.format(endpoint.port)
         else:
             frontends += ' port={}'.format(endpoint.port)
 
@@ -112,8 +110,9 @@ def start_rgw(ctx, config, clients):
 
         vault_role = client_config.get('use-vault-role', None)
         barbican_role = client_config.get('use-barbican-role', None)
+        pykmip_role = client_config.get('use-pykmip-role', None)
 
-        token_path = teuthology.get_testdir(ctx) + '/vault-token'
+        token_path = '/etc/ceph/vault-root-token'
         if barbican_role is not None:
             if not hasattr(ctx, 'barbican'):
                 raise ConfigError('rgw must run after the barbican task')
@@ -131,17 +130,57 @@ def start_rgw(ctx, config, clients):
             if not ctx.vault.root_token:
                 raise ConfigError('vault: no "root_token" specified')
             # create token on file
-            ctx.cluster.only(client).run(args=['echo', '-n', ctx.vault.root_token, run.Raw('>'), token_path])
+            ctx.rgw.vault_role = vault_role
+            ctx.cluster.only(client).run(args=['sudo', 'echo', '-n', ctx.vault.root_token, run.Raw('|'), 'sudo', 'tee', token_path])
             log.info("Token file content")
             ctx.cluster.only(client).run(args=['cat', token_path])
             log.info("Restrict access to token file")
-            ctx.cluster.only(client).run(args=['chmod', '600', token_path])
+            ctx.cluster.only(client).run(args=['sudo', 'chmod', '600', token_path])
             ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', token_path])
 
+            vault_addr = "{}:{}".format(*ctx.vault.endpoints[vault_role])
             rgw_cmd.extend([
-                '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
-                '--rgw_crypt_vault_token_file', token_path
+                '--rgw_crypt_vault_addr', vault_addr,
+                '--rgw_crypt_vault_token_file', token_path,
+                '--rgw_crypt_sse_s3_vault_addr', vault_addr,
+                '--rgw_crypt_sse_s3_vault_token_file', token_path,
             ])
+        elif pykmip_role is not None:
+            if not hasattr(ctx, 'pykmip'):
+                raise ConfigError('rgw must run after the pykmip task')
+            ctx.rgw.pykmip_role = pykmip_role
+            rgw_cmd.extend([
+                '--rgw_crypt_kmip_addr', "{}:{}".format(*ctx.pykmip.endpoints[pykmip_role]),
+            ])
+
+            clientcert = ctx.ssl_certificates.get('kmip-client')
+            servercert = ctx.ssl_certificates.get('kmip-server')
+            clientca = ctx.ssl_certificates.get('kmiproot')
+
+            clientkey = clientcert.key
+            clientcert = clientcert.certificate
+            serverkey = servercert.key
+            servercert = servercert.certificate
+            rootkey = clientca.key
+            rootcert = clientca.certificate
+
+            cert_path = '/etc/ceph/'
+            ctx.cluster.only(client).run(args=['sudo', 'cp', clientcert, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', clientkey, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', servercert, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', serverkey, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', rootkey, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', rootcert, cert_path])
+
+            clientcert = cert_path + 'kmip-client.crt'
+            clientkey = cert_path + 'kmip-client.key'
+            servercert = cert_path + 'kmip-server.crt'
+            serverkey = cert_path + 'kmip-server.key'
+            rootkey = cert_path + 'kmiproot.key'
+            rootcert = cert_path + 'kmiproot.crt'
+
+            ctx.cluster.only(client).run(args=['sudo', 'chmod', '600', clientcert, clientkey, servercert, serverkey, rootkey, rootcert])
+            ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', clientcert, clientkey, servercert, serverkey, rootkey, rootcert])
 
         rgw_cmd.extend([
             '--foreground',
@@ -153,11 +192,13 @@ def start_rgw(ctx, config, clients):
             ])
 
         if client_config.get('valgrind'):
-            cmd_prefix = teuthology.get_valgrind_args(
+            cmd_prefix = get_valgrind_args(
                 testdir,
                 client_with_cluster,
                 cmd_prefix,
-                client_config.get('valgrind')
+                client_config.get('valgrind'),
+                # see https://github.com/ceph/teuthology/pull/1600
+                exit_on_first_error=False
                 )
 
         run_cmd = list(cmd_prefix)
@@ -166,6 +207,7 @@ def start_rgw(ctx, config, clients):
         ctx.daemons.add_daemon(
             remote, 'rgw', client_with_id,
             cluster=cluster_name,
+            fsid=ctx.ceph[cluster_name].fsid,
             args=run_cmd,
             logger=log.getChild(client),
             stdin=run.PIPE,
@@ -196,7 +238,7 @@ def start_rgw(ctx, config, clients):
                                                              client=client_with_cluster),
                     ],
                 )
-            ctx.cluster.only(client).run(args=['rm', '-f', token_path])
+            ctx.cluster.only(client).run(args=['sudo', 'rm', '-f', token_path])
 
 def assign_endpoints(ctx, config, default_cert):
     role_endpoints = {}
@@ -270,6 +312,18 @@ def configure_compression(ctx, clients, compression):
                      '--placement-id', 'default-placement',
                      '--compression', compression],
                 check_status=True)
+    yield
+
+@contextlib.contextmanager
+def configure_datacache(ctx, clients, datacache_path):
+    """ create directory for rgw datacache """
+    log.info('Preparing directory for rgw datacache at %s', datacache_path)
+    for client in clients:
+        if(datacache_path != None):
+            ctx.cluster.only(client).run(args=['mkdir', '-p', datacache_path])
+            ctx.cluster.only(client).run(args=['sudo', 'chmod', 'a+rwx', datacache_path])
+        else:
+            log.info('path for datacache was not provided')
     yield
 
 @contextlib.contextmanager
@@ -353,16 +407,19 @@ def task(ctx, config):
     teuthology.deep_merge(config, overrides.get('rgw', {}))
 
     ctx.rgw = argparse.Namespace()
+    ctx.rgw_cloudtier = None
 
     ctx.rgw.ec_data_pool = bool(config.pop('ec-data-pool', False))
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})
     ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
-    ctx.rgw.frontend = config.pop('frontend', 'civetweb')
+    ctx.rgw.frontend = config.pop('frontend', 'beast')
     ctx.rgw.compression_type = config.pop('compression type', None)
     ctx.rgw.storage_classes = config.pop('storage classes', None)
     default_cert = config.pop('ssl certificate', None)
     ctx.rgw.data_pool_pg_size = config.pop('data_pool_pg_size', 64)
     ctx.rgw.index_pool_pg_size = config.pop('index_pool_pg_size', 64)
+    ctx.rgw.datacache = bool(config.pop('datacache', False))
+    ctx.rgw.datacache_path = config.pop('datacache_path', None)
     ctx.rgw.config = config
 
     log.debug("config is {}".format(config))
@@ -377,6 +434,11 @@ def task(ctx, config):
         subtasks.extend([
             lambda: configure_compression(ctx=ctx, clients=clients,
                                           compression=ctx.rgw.compression_type),
+        ])
+    if ctx.rgw.datacache:
+        subtasks.extend([
+            lambda: configure_datacache(ctx=ctx, clients=clients,
+                                        datacache_path=ctx.rgw.datacache_path),
         ])
     if ctx.rgw.storage_classes:
         subtasks.extend([

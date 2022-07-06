@@ -63,7 +63,7 @@ int PyModuleRunner::serve()
                   << "' while running on mgr." << g_conf()->name.get_id()
                   << ": " << exc_msg;
     derr << get_name() << ".serve:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, get_name(), "PyModuleRunner::serve") << dendl;
 
     py_module->fail(exc_msg);
 
@@ -86,7 +86,7 @@ void PyModuleRunner::shutdown()
     Py_DECREF(pValue);
   } else {
     derr << "Failed to invoke shutdown() on " << get_name() << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, get_name(), "PyModuleRunner::shutdown") << dendl;
   }
 
   dead = true;

@@ -29,6 +29,7 @@ namespace deep_copy {
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
+using librbd::util::get_image_ctx;
 
 template <typename I>
 ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
@@ -50,14 +51,17 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
   ceph_assert(!m_snap_map.empty());
 
   m_src_async_op = new io::AsyncOperation();
-  m_src_async_op->start_op(*util::get_image_ctx(m_src_image_ctx));
+  m_src_async_op->start_op(*get_image_ctx(m_src_image_ctx));
 
   m_src_io_ctx.dup(m_src_image_ctx->data_ctx);
   m_dst_io_ctx.dup(m_dst_image_ctx->data_ctx);
 
   m_dst_oid = m_dst_image_ctx->get_object_name(dst_object_number);
 
-  ldout(m_cct, 20) << "dst_oid=" << m_dst_oid << dendl;
+  ldout(m_cct, 20) << "dst_oid=" << m_dst_oid << ", "
+                   << "src_snap_id_start=" << m_src_snap_id_start << ", "
+                   << "dst_snap_id_start=" << m_dst_snap_id_start << ", "
+                   << "snap_map=" << m_snap_map << dendl;
 }
 
 template <typename I>
@@ -73,11 +77,21 @@ void ObjectCopyRequest<I>::send_list_snaps() {
           m_dst_image_ctx->layout.object_size, m_image_extents);
   ldout(m_cct, 20) << "image_extents=" << m_image_extents << dendl;
 
+  auto ctx = create_async_context_callback(
+    *m_src_image_ctx, create_context_callback<
+      ObjectCopyRequest, &ObjectCopyRequest<I>::handle_list_snaps>(this));
+  if ((m_flags & OBJECT_COPY_REQUEST_FLAG_EXISTS_CLEAN) != 0) {
+    // skip listing the snaps if we know the destination exists and is clean,
+    // but we do need to update the object-map
+    ctx->complete(0);
+    return;
+  }
+
   io::SnapIds snap_ids;
   snap_ids.reserve(1 + m_snap_map.size());
   snap_ids.push_back(m_src_snap_id_start);
   for (auto& [src_snap_id, _] : m_snap_map) {
-    if (src_snap_id != snap_ids.front()) {
+    if (m_src_snap_id_start < src_snap_id) {
       snap_ids.push_back(src_snap_id);
     }
   }
@@ -86,11 +100,8 @@ void ObjectCopyRequest<I>::send_list_snaps() {
 
   m_snapshot_delta.clear();
 
-  auto ctx = create_async_context_callback(
-    *m_src_image_ctx, create_context_callback<
-      ObjectCopyRequest, &ObjectCopyRequest<I>::handle_list_snaps>(this));
   auto aio_comp = io::AioCompletion::create_and_start(
-    ctx, util::get_image_ctx(m_src_image_ctx), io::AIO_TYPE_GENERIC);
+    ctx, get_image_ctx(m_src_image_ctx), io::AIO_TYPE_GENERIC);
   auto req = io::ImageDispatchSpec::create_list_snaps(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_NONE, aio_comp,
     io::Extents{m_image_extents}, std::move(snap_ids), list_snaps_flags,
@@ -122,12 +133,6 @@ void ObjectCopyRequest<I>::send_read() {
     // all snapshots have been read
     merge_write_ops();
     compute_zero_ops();
-
-    if (m_snapshot_sparse_bufferlist.empty()) {
-      // nothing to copy
-      finish(-ENOENT);
-      return;
-    }
 
     send_update_object_map();
     return;
@@ -163,7 +168,7 @@ void ObjectCopyRequest<I>::send_read() {
   auto ctx = create_context_callback<
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_read>(this);
   auto aio_comp = io::AioCompletion::create_and_start(
-    ctx, util::get_image_ctx(m_src_image_ctx), io::AIO_TYPE_READ);
+    ctx, get_image_ctx(m_src_image_ctx), io::AIO_TYPE_READ);
 
   auto req = io::ImageDispatchSpec::create_read(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
@@ -274,6 +279,14 @@ void ObjectCopyRequest<I>::handle_update_object_map(int r) {
 
 template <typename I>
 void ObjectCopyRequest<I>::process_copyup() {
+  if (m_snapshot_sparse_bufferlist.empty()) {
+    // no data to copy or truncate/zero. only the copyup state machine cares
+    // about whether the object exists or not, and it always copies from
+    // snap id 0.
+    finish(m_src_snap_id_start > 0 ? 0 : -ENOENT);
+    return;
+  }
+
   ldout(m_cct, 20) << dendl;
 
   // let dispatch layers have a chance to process the data but
@@ -465,7 +478,7 @@ void ObjectCopyRequest<I>::compute_read_ops() {
     io::WriteReadSnapIds write_read_snap_ids{key};
 
     // advance the src write snap id to the first valid snap id
-    if (write_read_snap_ids != io::INITIAL_WRITE_READ_SNAP_IDS) {
+    if (write_read_snap_ids.first > m_src_snap_id_start) {
       // don't attempt to read from snapshots that shouldn't exist in
       // case the OSD fails to give a correct snap list
       auto snap_map_it = m_snap_map.find(write_read_snap_ids.first);
@@ -485,10 +498,10 @@ void ObjectCopyRequest<I>::compute_read_ops() {
       auto state = image_interval.get_val().state;
       switch (state) {
       case io::SPARSE_EXTENT_STATE_DNE:
-        ceph_assert(write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS);
-        if (read_from_parent) {
-          // special-case for DNE object-extents since when flattening we need
-          // to read data from the parent images extents
+        if (write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS &&
+            read_from_parent) {
+          // special-case for DNE initial object-extents since when flattening
+          // we need to read data from the parent images extents
           ldout(m_cct, 20) << "DNE extent: "
                            << image_interval.get_off() << "~"
                            << image_interval.get_len() << dendl;
@@ -619,58 +632,25 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
                       m_src_image_ctx->parent != nullptr);
   m_src_image_ctx->image_lock.unlock_shared();
 
-  // collect all known zeroed extents from the snapshot delta
-  for (auto& [write_read_snap_ids, image_intervals] : m_snapshot_delta) {
-    auto src_snap_seq = write_read_snap_ids.first;
-    for (auto& image_interval : image_intervals) {
-      auto state = image_interval.get_val().state;
-      switch (state) {
-      case io::SPARSE_EXTENT_STATE_ZEROED:
-        if (write_read_snap_ids != io::WriteReadSnapIds{0, 0}) {
-          ldout(m_cct, 20) << "zeroed extent: "
-                           << "src_snap_seq=" << src_snap_seq << " "
-                           << image_interval.get_off() << "~"
-                           << image_interval.get_len() << dendl;
-          m_dst_zero_interval[src_snap_seq].union_insert(
-            image_interval.get_off(), image_interval.get_len());
-        } else if (hide_parent) {
-          auto first_src_snap_id = m_snap_map.begin()->first;
-          ldout(m_cct, 20) << "zeroed (hide parent) extent: "
-                           << "src_snap_seq=" << first_src_snap_id << "  "
-                           << image_interval.get_off() << "~"
-                           << image_interval.get_len() << dendl;
-          m_dst_zero_interval[first_src_snap_id].union_insert(
-            image_interval.get_off(), image_interval.get_len());
-        }
-        break;
-      case io::SPARSE_EXTENT_STATE_DNE:
-      case io::SPARSE_EXTENT_STATE_DATA:
-        break;
-      default:
-        ceph_abort();
-        break;
-      }
+  // ensure we have a zeroed interval for each snapshot
+  for (auto& [src_snap_seq, _] : m_snap_map) {
+    if (m_src_snap_id_start < src_snap_seq) {
+      m_dst_zero_interval[src_snap_seq];
     }
   }
 
+  // exists if copying from an arbitrary snapshot w/o any deltas in the
+  // start snapshot slot (i.e. DNE)
+  bool object_exists = (
+      m_src_snap_id_start > 0 &&
+      m_snapshot_delta.count({m_src_snap_id_start, m_src_snap_id_start}) == 0);
   bool fast_diff = m_dst_image_ctx->test_features(RBD_FEATURE_FAST_DIFF);
   uint64_t prev_end_size = 0;
-
-  // ensure we have a zeroed interval for each snapshot
-  for (auto& [src_snap_seq, _] : m_snap_map) {
-    m_dst_zero_interval[src_snap_seq];
-  }
 
   // compute zero ops from the zeroed intervals
   for (auto &it : m_dst_zero_interval) {
     auto src_snap_seq = it.first;
     auto &zero_interval = it.second;
-
-    // subtract any data intervals from our zero intervals
-    auto& data_interval = m_dst_data_interval[src_snap_seq];
-    interval_set<uint64_t> intersection;
-    intersection.intersection_of(zero_interval, data_interval);
-    zero_interval.subtract(intersection);
 
     auto snap_map_it = m_snap_map.find(src_snap_seq);
     ceph_assert(snap_map_it != m_snap_map.end());
@@ -678,11 +658,12 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
 
     auto dst_may_exist_it = m_dst_object_may_exist.find(dst_snap_seq);
     ceph_assert(dst_may_exist_it != m_dst_object_may_exist.end());
-    if (!dst_may_exist_it->second && prev_end_size > 0) {
+    if (!dst_may_exist_it->second && object_exists) {
       ldout(m_cct, 5) << "object DNE for snap_id: " << dst_snap_seq << dendl;
       m_snapshot_sparse_bufferlist[src_snap_seq].insert(
         0, m_dst_image_ctx->layout.object_size,
         {io::SPARSE_EXTENT_STATE_ZEROED, m_dst_image_ctx->layout.object_size});
+      object_exists = false;
       prev_end_size = 0;
       continue;
     }
@@ -706,21 +687,65 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
         if (overlap == 0) {
           ldout(m_cct, 20) << "no parent overlap" << dendl;
           hide_parent = false;
-        } else if (src_snap_seq == m_dst_zero_interval.begin()->first) {
-          for (auto e : image_extents) {
-            prev_end_size += e.second;
-          }
-          ceph_assert(prev_end_size <= m_dst_image_ctx->layout.object_size);
         }
       }
     }
 
-    uint64_t end_size = prev_end_size;
+    // collect known zeroed extents from the snapshot delta for the current
+    // src snapshot. If this is the first snapshot, we might need to handle
+    // the whiteout case if it overlaps with the parent
+    auto first_src_snap_id = m_snap_map.begin()->first;
+    auto snapshot_delta_it = m_snapshot_delta.lower_bound(
+      {(hide_parent && src_snap_seq == first_src_snap_id ?
+         0 : src_snap_seq), 0});
+    for (; snapshot_delta_it != m_snapshot_delta.end() &&
+           snapshot_delta_it->first.first <= src_snap_seq;
+         ++snapshot_delta_it) {
+      auto& write_read_snap_ids = snapshot_delta_it->first;
+      auto& image_intervals = snapshot_delta_it->second;
+      for (auto& image_interval : image_intervals) {
+        auto state = image_interval.get_val().state;
+        switch (state) {
+        case io::SPARSE_EXTENT_STATE_ZEROED:
+          if (write_read_snap_ids != io::INITIAL_WRITE_READ_SNAP_IDS) {
+            ldout(m_cct, 20) << "zeroed extent: "
+                             << "src_snap_seq=" << src_snap_seq << " "
+                             << image_interval.get_off() << "~"
+                             << image_interval.get_len() << dendl;
+            zero_interval.union_insert(
+              image_interval.get_off(), image_interval.get_len());
+          } else if (hide_parent &&
+                     write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS) {
+            ldout(m_cct, 20) << "zeroed (hide parent) extent: "
+                             << "src_snap_seq=" << src_snap_seq << "  "
+                             << image_interval.get_off() << "~"
+                             << image_interval.get_len() << dendl;
+            zero_interval.union_insert(
+              image_interval.get_off(), image_interval.get_len());
+          }
+          break;
+        case io::SPARSE_EXTENT_STATE_DNE:
+        case io::SPARSE_EXTENT_STATE_DATA:
+          break;
+        default:
+          ceph_abort();
+          break;
+        }
+      }
+    }
+
+    // subtract any data intervals from our zero intervals
+    auto& data_interval = m_dst_data_interval[src_snap_seq];
+    interval_set<uint64_t> intersection;
+    intersection.intersection_of(zero_interval, data_interval);
+    zero_interval.subtract(intersection);
 
     // update end_size if there are writes into higher offsets
+    uint64_t end_size = prev_end_size;
     auto iter = m_snapshot_sparse_bufferlist.find(src_snap_seq);
     if (iter != m_snapshot_sparse_bufferlist.end()) {
       for (auto &sparse_bufferlist : iter->second) {
+        object_exists = true;
         end_size = std::max(
           end_size, sparse_bufferlist.get_off() + sparse_bufferlist.get_len());
       }
@@ -751,6 +776,8 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
               object_extent.offset, length,
               {io::SPARSE_EXTENT_STATE_ZEROED, length});
           }
+
+          object_exists = (object_extent.offset > 0 || hide_parent);
           end_size = std::min(end_size, object_extent.offset);
         } else {
           // zero interval inside the object
@@ -760,19 +787,24 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
           m_snapshot_sparse_bufferlist[src_snap_seq].insert(
             object_extent.offset, object_extent.length,
             {io::SPARSE_EXTENT_STATE_ZEROED, object_extent.length});
+          object_exists = true;
         }
       }
     }
 
-    ldout(m_cct, 20) << "src_snap_seq=" << src_snap_seq << ", "
-                     << "end_size=" << end_size << dendl;
-    if (end_size > 0 || hide_parent) {
-      m_dst_object_state[src_snap_seq] = OBJECT_EXISTS;
-      if (fast_diff && end_size == prev_end_size &&
-          m_snapshot_sparse_bufferlist.count(src_snap_seq) == 0) {
-        m_dst_object_state[src_snap_seq] = OBJECT_EXISTS_CLEAN;
+    uint8_t dst_object_map_state = OBJECT_NONEXISTENT;
+    if (object_exists) {
+      dst_object_map_state = OBJECT_EXISTS;
+      if (fast_diff && m_snapshot_sparse_bufferlist.count(src_snap_seq) == 0) {
+        dst_object_map_state = OBJECT_EXISTS_CLEAN;
       }
+      m_dst_object_state[src_snap_seq] = dst_object_map_state;
     }
+
+    ldout(m_cct, 20) << "dst_snap_seq=" << dst_snap_seq << ", "
+                     << "end_size=" << end_size << ", "
+                     << "dst_object_map_state="
+                     << static_cast<uint32_t>(dst_object_map_state) << dendl;
     prev_end_size = end_size;
   }
 }

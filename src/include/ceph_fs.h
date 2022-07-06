@@ -47,9 +47,15 @@
 #define CEPH_MONC_PROTOCOL   15 /* server/client */
 
 
-#define CEPH_INO_ROOT   1
-#define CEPH_INO_CEPH   2       /* hidden .ceph dir */
-#define CEPH_INO_LOST_AND_FOUND 4	/* reserved ino for use in recovery */
+#define CEPH_INO_ROOT             1
+/*
+ * hidden .ceph dir, which is no longer created but
+ * recognised in existing filesystems so that we
+ * don't try to fragment it.
+ */
+#define CEPH_INO_CEPH             2
+#define CEPH_INO_GLOBAL_SNAPREALM 3
+#define CEPH_INO_LOST_AND_FOUND   4 /* reserved ino for use in recovery */
 
 /* arbitrary limit on max # of monitors (cluster of 3 is typical) */
 #define CEPH_MAX_MON   31
@@ -71,7 +77,7 @@ struct ceph_file_layout {
 
 	/* object -> pg layout */
 	__le32 fl_unused;       /* unused; used to be preferred primary for pg (-1 for none) */
-	__le32 fl_pg_pool;      /* namespace, crush ruleset, rep level */
+	__le32 fl_pg_pool;      /* namespace, crush rule, rep level */
 } __attribute__ ((packed));
 
 #define CEPH_MIN_STRIPE_UNIT 65536
@@ -381,6 +387,7 @@ enum {
 	CEPH_MDS_OP_LOOKUPPARENT = 0x00103,
 	CEPH_MDS_OP_LOOKUPINO  = 0x00104,
 	CEPH_MDS_OP_LOOKUPNAME = 0x00105,
+	CEPH_MDS_OP_GETVXATTR  = 0x00106,
 
 	CEPH_MDS_OP_SETXATTR   = 0x01105,
 	CEPH_MDS_OP_RMXATTR    = 0x01106,
@@ -420,19 +427,22 @@ enum {
 
 extern const char *ceph_mds_op_name(int op);
 
+// setattr mask is an int
 #ifndef CEPH_SETATTR_MODE
-#define CEPH_SETATTR_MODE	(1 << 0)
-#define CEPH_SETATTR_UID	(1 << 1)
-#define CEPH_SETATTR_GID	(1 << 2)
-#define CEPH_SETATTR_MTIME	(1 << 3)
-#define CEPH_SETATTR_ATIME	(1 << 4)
-#define CEPH_SETATTR_SIZE	(1 << 5)
-#define CEPH_SETATTR_CTIME	(1 << 6)
-#define CEPH_SETATTR_MTIME_NOW	(1 << 7)
-#define CEPH_SETATTR_ATIME_NOW	(1 << 8)
-#define CEPH_SETATTR_BTIME	(1 << 9)
+#define CEPH_SETATTR_MODE		(1 << 0)
+#define CEPH_SETATTR_UID		(1 << 1)
+#define CEPH_SETATTR_GID		(1 << 2)
+#define CEPH_SETATTR_MTIME		(1 << 3)
+#define CEPH_SETATTR_ATIME		(1 << 4)
+#define CEPH_SETATTR_SIZE		(1 << 5)
+#define CEPH_SETATTR_CTIME		(1 << 6)
+#define CEPH_SETATTR_MTIME_NOW		(1 << 7)
+#define CEPH_SETATTR_ATIME_NOW		(1 << 8)
+#define CEPH_SETATTR_BTIME		(1 << 9)
+#define CEPH_SETATTR_KILL_SGUID		(1 << 10)
+#define CEPH_SETATTR_FSCRYPT_AUTH	(1 << 11)
+#define CEPH_SETATTR_FSCRYPT_FILE	(1 << 12)
 #endif
-#define CEPH_SETATTR_KILL_SGUID	(1 << 10)
 
 /*
  * open request flags

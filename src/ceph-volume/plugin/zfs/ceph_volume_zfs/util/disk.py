@@ -57,7 +57,7 @@ def get_disk(diskname):
 
     command = ['/sbin/geom', 'disk', 'list', re.sub('/dev/', '', diskname)]
     out, err, rc = process.call(command)
-    geom_block = "" 
+    geom_block = ""
     for line in out:
         line.strip()
         geom_block += ";" + line
@@ -82,7 +82,7 @@ class Disks(object):
         self.disks = {}
         for k in sys_info.devices:
             if path != None:
-                if path in k: 
+                if path in k:
                     self.disks[k] = Disk(k)
             else:
                 self.disks[k] = Disk(k)
@@ -99,7 +99,7 @@ class Disks(object):
         for disk in sorted(self.disks):
             output.append(self.disks[disk].report())
         return ''.join(output)
-        
+
     def json_report(self):
         output = []
         for disk in sorted(self.disks):

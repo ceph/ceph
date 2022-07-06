@@ -81,7 +81,7 @@ public:
   int init();
   void shutdown();
   void respawn();
-  int main(vector<const char *> args);
+  int main(std::vector<const char *> args);
   void tick();
 };
 

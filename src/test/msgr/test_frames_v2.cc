@@ -19,6 +19,7 @@
 #include <string>
 #include <tuple>
 
+#include "msg/async/compression_meta.h"
 #include "auth/Auth.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -26,6 +27,16 @@
 #include "include/Context.h"
 
 #include <gtest/gtest.h>
+
+#define COMP_THRESHOLD 1 << 10
+#define EXPECT_COMPRESSED(is_compressed, val1, val2) \
+  if (is_compressed && val1 > COMP_THRESHOLD) { \
+    EXPECT_GE(val1, val2); \
+  } else { \
+    EXPECT_EQ(val1, val2); \
+  }
+
+using namespace std;
 
 namespace ceph::msgr::v2 {
 
@@ -87,19 +98,25 @@ protected:
 struct mode_t {
   bool is_rev1;
   bool is_secure;
+  bool is_compress;
 };
 
 static std::ostream& operator<<(std::ostream& os, const mode_t& m) {
   os << "msgr2." << (m.is_rev1 ? "1" : "0")
-     << (m.is_secure ? "-secure" : "-crc");
+     << (m.is_secure ? "-secure" : "-crc")
+     << (m.is_compress ? "-compress": "-nocompress");
   return os;
 }
 
 static const mode_t modes[] = {
-  {false, false},
-  {false, true},
-  {true, false},
-  {true, true},
+  {false, false, false},
+  {false, true, false},
+  {true, false, false},
+  {true, true, false},
+  {false, false, true},
+  {false, true, true},
+  {true, false, true},
+  {true, true, true}
 };
 
 struct round_trip_instance_t {
@@ -151,17 +168,18 @@ bool disassemble_frame(FrameAssembler& frame_asm, bufferlist& frame_bl,
   if (epilogue_onwire_len > 0) {
     frame_bl.splice(0, epilogue_onwire_len, &epilogue_bl);
   }
-  frame_asm.disassemble_first_segment(preamble_bl, segment_bls[0]);
-  return frame_asm.disassemble_remaining_segments(segment_bls.data(),
-                                                  epilogue_bl);
+  
+  return frame_asm.disassemble_segments(preamble_bl, segment_bls.data(), epilogue_bl);
 }
 
 class RoundTripTestBase : public ::testing::TestWithParam<
                               std::tuple<round_trip_instance_t, mode_t>> {
 protected:
   RoundTripTestBase()
-      : m_tx_frame_asm(&m_tx_crypto, std::get<1>(GetParam()).is_rev1),
-        m_rx_frame_asm(&m_rx_crypto, std::get<1>(GetParam()).is_rev1),
+      : m_tx_frame_asm(&m_tx_crypto, std::get<1>(GetParam()).is_rev1, true,
+                                                 &m_tx_comp),
+        m_rx_frame_asm(&m_rx_crypto, std::get<1>(GetParam()).is_rev1, true,
+                                                 &m_rx_comp),
         m_header(make_bufferlist(std::get<0>(GetParam()).header_len, 'H')),
         m_front(make_bufferlist(std::get<0>(GetParam()).front_len, 'F')),
         m_middle(make_bufferlist(std::get<0>(GetParam()).middle_len, 'M')),
@@ -181,23 +199,37 @@ protected:
           g_ceph_context, auth_meta, /*new_nonce_format=*/m.is_rev1,
           /*crossed=*/true);
     }
+    
+    if (m.is_compress) {
+      CompConnectionMeta comp_meta;
+      comp_meta.con_mode = Compressor::COMP_FORCE;
+      comp_meta.con_method = Compressor::COMP_ALG_SNAPPY;
+      m_tx_comp = ceph::compression::onwire::rxtx_t::create_handler_pair(
+        g_ceph_context, comp_meta, /*min_compress_size=*/COMP_THRESHOLD
+      );
+      m_rx_comp = ceph::compression::onwire::rxtx_t::create_handler_pair(
+        g_ceph_context, comp_meta, /*min_compress_size=*/COMP_THRESHOLD
+      );
+    }
   }
 
   void check_frame_assembler(const FrameAssembler& frame_asm) {
     const auto& [rti, m] = GetParam();
     const auto& onwire_lens = rti.onwire_lens[m.is_rev1 << 1 | m.is_secure];
-    EXPECT_EQ(rti.header_len + rti.front_len + rti.middle_len + rti.data_len,
+
+    EXPECT_COMPRESSED(m.is_compress, rti.header_len + rti.front_len + rti.middle_len + rti.data_len,
               frame_asm.get_frame_logical_len());
     ASSERT_EQ(rti.num_segments, frame_asm.get_num_segments());
-    EXPECT_EQ(onwire_lens[0], frame_asm.get_preamble_onwire_len());
+    EXPECT_COMPRESSED(m.is_compress, onwire_lens[0], frame_asm.get_preamble_onwire_len());
     for (size_t i = 0; i < rti.num_segments; i++) {
-      EXPECT_EQ(onwire_lens[i + 1], frame_asm.get_segment_onwire_len(i));
+      EXPECT_COMPRESSED(m.is_compress, onwire_lens[i + 1], frame_asm.get_segment_onwire_len(i));
     }
-    EXPECT_EQ(onwire_lens[rti.num_segments + 1],
+    EXPECT_COMPRESSED(m.is_compress, onwire_lens[rti.num_segments + 1],
               frame_asm.get_epilogue_onwire_len());
-    EXPECT_EQ(std::accumulate(std::begin(onwire_lens), std::end(onwire_lens),
-                              uint64_t(0)),
-              frame_asm.get_frame_onwire_len());
+    EXPECT_COMPRESSED(m.is_compress,
+                      std::accumulate(std::begin(onwire_lens), std::end(onwire_lens),
+                                      uint64_t(0)),
+                      frame_asm.get_frame_onwire_len());
   }
 
   void test_round_trip() {
@@ -224,6 +256,8 @@ protected:
 
   ceph::crypto::onwire::rxtx_t m_tx_crypto;
   ceph::crypto::onwire::rxtx_t m_rx_crypto;
+  ceph::compression::onwire::rxtx_t m_tx_comp;
+  ceph::compression::onwire::rxtx_t m_rx_comp;
   FrameAssembler m_tx_frame_asm;
   FrameAssembler m_rx_frame_asm;
 
@@ -437,10 +471,9 @@ INSTANTIATE_TEST_SUITE_P(
 }  // namespace ceph::msgr::v2
 
 int main(int argc, char* argv[]) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char**)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY,
                          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);

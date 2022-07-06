@@ -17,7 +17,7 @@
          i18n>Performance Counters</a>
       <ng-template ngbNavContent>
         <cd-table-performance-counter serviceType="rgw"
-                                      [serviceId]="serviceId">
+                                      [serviceId]="serviceMapId">
         </cd-table-performance-counter>
       </ng-template>
     </li>
@@ -27,6 +27,7 @@
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
         <cd-grafana [grafanaPath]="'rgw-instance-detail?var-rgw_servers=rgw.' + this.serviceId"
+                    [type]="'metrics'"
                     uid="x5ARzZtmk"
                     grafanaStyle="one">
         </cd-grafana>

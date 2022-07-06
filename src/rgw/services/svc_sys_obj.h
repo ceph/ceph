@@ -53,7 +53,7 @@ public:
       ceph::static_ptr<RGWSI_SysObj_Obj_GetObjState, sizeof(RGWSI_SysObj_Core_GetObjState)> state;
       
       RGWObjVersionTracker *objv_tracker{nullptr};
-      map<string, bufferlist> *attrs{nullptr};
+      std::map<std::string, bufferlist> *attrs{nullptr};
       bool raw_attrs{false};
       boost::optional<obj_version> refresh_version{boost::none};
       ceph::real_time *lastmod{nullptr};
@@ -75,7 +75,7 @@ public:
         return *this;
       }
 
-      ROp& set_attrs(map<string, bufferlist> *_attrs) {
+      ROp& set_attrs(std::map<std::string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -97,19 +97,19 @@ public:
 
       ROp(Obj& _source);
 
-      int stat(optional_yield y);
-      int read(int64_t ofs, int64_t end, bufferlist *pbl, optional_yield y);
-      int read(bufferlist *pbl, optional_yield y) {
-        return read(0, -1, pbl, y);
+      int stat(optional_yield y, const DoutPrefixProvider *dpp);
+      int read(const DoutPrefixProvider *dpp, int64_t ofs, int64_t end, bufferlist *pbl, optional_yield y);
+      int read(const DoutPrefixProvider *dpp, bufferlist *pbl, optional_yield y) {
+        return read(dpp, 0, -1, pbl, y);
       }
-      int get_attr(const char *name, bufferlist *dest, optional_yield y);
+      int get_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist *dest, optional_yield y);
     };
 
     struct WOp {
       Obj& source;
 
       RGWObjVersionTracker *objv_tracker{nullptr};
-      map<string, bufferlist> attrs;
+      std::map<std::string, bufferlist> attrs;
       ceph::real_time mtime;
       ceph::real_time *pmtime{nullptr};
       bool exclusive{false};
@@ -119,12 +119,12 @@ public:
         return *this;
       }
 
-      WOp& set_attrs(map<string, bufferlist>& _attrs) {
+      WOp& set_attrs(std::map<std::string, bufferlist>& _attrs) {
         attrs = _attrs;
         return *this;
       }
 
-      WOp& set_attrs(map<string, bufferlist>&& _attrs) {
+      WOp& set_attrs(std::map<std::string, bufferlist>&& _attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -146,12 +146,12 @@ public:
 
       WOp(Obj& _source) : source(_source) {}
 
-      int remove(optional_yield y);
-      int write(bufferlist& bl, optional_yield y);
+      int remove(const DoutPrefixProvider *dpp, optional_yield y);
+      int write(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y);
 
-      int write_data(bufferlist& bl, optional_yield y); /* write data only */
-      int write_attrs(optional_yield y); /* write attrs only */
-      int write_attr(const char *name, bufferlist& bl,
+      int write_data(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y); /* write data only */
+      int write_attrs(const DoutPrefixProvider *dpp, optional_yield y); /* write attrs only */
+      int write_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& bl,
                      optional_yield y); /* write attrs only */
     };
 
@@ -167,13 +167,13 @@ public:
 
       OmapOp(Obj& _source) : source(_source) {}
 
-      int get_all(std::map<string, bufferlist> *m, optional_yield y);
-      int get_vals(const string& marker, uint64_t count,
-                   std::map<string, bufferlist> *m,
+      int get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m, optional_yield y);
+      int get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
+                   std::map<std::string, bufferlist> *m,
                    bool *pmore, optional_yield y);
-      int set(const std::string& key, bufferlist& bl, optional_yield y);
-      int set(const map<std::string, bufferlist>& m, optional_yield y);
-      int del(const std::string& key, optional_yield y);
+      int set(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& bl, optional_yield y);
+      int set(const DoutPrefixProvider *dpp, const std::map<std::string, bufferlist>& m, optional_yield y);
+      int del(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y);
     };
 
     struct WNOp {
@@ -181,7 +181,7 @@ public:
 
       WNOp(Obj& _source) : source(_source) {}
 
-      int notify(bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl,
+      int notify(const DoutPrefixProvider *dpp, bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl,
                  optional_yield y);
     };
     ROp rop() {
@@ -230,17 +230,17 @@ public:
 
       Op(Pool& _source) : source(_source) {}
 
-      int init(const std::string& marker, const std::string& prefix);
-      int get_next(int max, std::vector<string> *oids, bool *is_truncated);
-      int get_marker(string *marker);
+      int init(const DoutPrefixProvider *dpp, const std::string& marker, const std::string& prefix);
+      int get_next(const DoutPrefixProvider *dpp, int max, std::vector<std::string> *oids, bool *is_truncated);
+      int get_marker(std::string *marker);
     };
 
-    int list_prefixed_objs(const std::string& prefix, std::function<void(const string&)> cb);
+    int list_prefixed_objs(const DoutPrefixProvider *dpp, const std::string& prefix, std::function<void(const std::string&)> cb);
 
     template <typename Container>
-    int list_prefixed_objs(const string& prefix,
+    int list_prefixed_objs(const DoutPrefixProvider *dpp, const std::string& prefix,
                            Container *result) {
-      return list_prefixed_objs(prefix, [&](const string& val) {
+      return list_prefixed_objs(dpp, prefix, [&](const std::string& val) {
         result->push_back(val);
       });
     }

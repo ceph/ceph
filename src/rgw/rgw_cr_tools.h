@@ -36,20 +36,18 @@ struct rgw_get_user_info_params {
 using RGWGetUserInfoCR = RGWSimpleAsyncCR<rgw_get_user_info_params, RGWUserInfo>;
 
 struct rgw_get_bucket_info_params {
-  string tenant;
-  string bucket_name;
+  std::string tenant;
+  std::string bucket_name;
 };
 
 struct rgw_get_bucket_info_result {
-  ceph::real_time mtime;
-  RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
 };
 
 using RGWGetBucketInfoCR = RGWSimpleAsyncCR<rgw_get_bucket_info_params, rgw_get_bucket_info_result>;
 
 struct rgw_bucket_create_local_params {
-  shared_ptr<RGWUserInfo> user_info;
+  std::shared_ptr<RGWUserInfo> user_info;
   std::string bucket_name;
   rgw_placement_rule placement_rule;
 };
@@ -60,16 +58,16 @@ struct rgw_object_simple_put_params {
   RGWDataAccess::BucketRef bucket;
   rgw_obj_key key;
   bufferlist data;
-  map<string, bufferlist> attrs;
-  std::optional<string> user_data;
+  std::map<std::string, bufferlist> attrs;
+  std::optional<std::string> user_data;
 };
 
 using RGWObjectSimplePutCR = RGWSimpleWriteOnlyAsyncCR<rgw_object_simple_put_params>;
 
 
 struct rgw_bucket_lifecycle_config_params {
-  RGWBucketInfo bucket_info;
-  map<string, bufferlist> bucket_attrs;
+  rgw::sal::Bucket* bucket;
+  rgw::sal::Attrs bucket_attrs;
   RGWLifecycleConfiguration config;
 };
 

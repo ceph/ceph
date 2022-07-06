@@ -156,7 +156,7 @@ struct CompatSet {
    * -1: This CompatSet is missing at least one feature
    *     described in the other. It may still have more features, though.
    */
-  int compare(const CompatSet& other) {
+  int compare(const CompatSet& other) const {
     if ((other.compat.mask == compat.mask) &&
 	(other.ro_compat.mask == ro_compat.mask) &&
 	(other.incompat.mask == incompat.mask)) return 0;
@@ -172,7 +172,7 @@ struct CompatSet {
   /* Get the features supported by other CompatSet but not this one,
    * as a CompatSet.
    */
-  CompatSet unsupported(CompatSet& other) {
+  CompatSet unsupported(const CompatSet& other) const {
     CompatSet diff;
     uint64_t other_compat =
       ((other.compat.mask ^ compat.mask) & other.compat.mask);
@@ -183,13 +183,13 @@ struct CompatSet {
     for (int id = 1; id < 64; ++id) {
       uint64_t mask = (uint64_t)1 << id;
       if (mask & other_compat) {
-	diff.compat.insert( Feature(id, other.compat.names[id]));
+	diff.compat.insert( Feature(id, other.compat.names.at(id)));
       }
       if (mask & other_ro_compat) {
-	diff.ro_compat.insert(Feature(id, other.ro_compat.names[id]));
+	diff.ro_compat.insert(Feature(id, other.ro_compat.names.at(id)));
       }
       if (mask & other_incompat) {
-	diff.incompat.insert( Feature(id, other.incompat.names[id]));
+	diff.incompat.insert( Feature(id, other.incompat.names.at(id)));
       }
     }
     return diff;
@@ -220,6 +220,14 @@ struct CompatSet {
       }
     }
     return true;
+  }
+
+  std::ostream& printlite(std::ostream& o) const {
+    o << "{c=[" << std::hex << compat.mask << "]";
+    o << ",r=[" << std::hex << ro_compat.mask << "]";
+    o << ",i=[" << std::hex << incompat.mask << "]}";
+    o << std::dec;
+    return o;
   }
 
   void encode(ceph::buffer::list& bl) const {
@@ -257,7 +265,11 @@ struct CompatSet {
 };
 WRITE_CLASS_ENCODER(CompatSet)
 
-using ceph::operator <<;
+inline std::ostream& operator<<(std::ostream& out, const CompatSet::Feature& f)
+{
+  return out << "F(" << f.id << ", \"" << f.name << "\")";
+}
+
 inline std::ostream& operator<<(std::ostream& out, const CompatSet::FeatureSet& fs)
 {
   return out << fs.names;

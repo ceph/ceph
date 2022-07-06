@@ -532,29 +532,6 @@ class btree_multiset
   // Any references, pointers, or iterators are invalidated.
   using Base::emplace_hint;
 
-  // btree_multiset::extract()
-  //
-  // Extracts the indicated element, erasing it in the process, and returns it
-  // as a C++17-compatible node handle. Overloads are listed below.
-  //
-  // node_type extract(const_iterator position):
-  //
-  //   Extracts the element at the indicated position and returns a node handle
-  //   owning that extracted data.
-  //
-  // template <typename K> node_type extract(const K& x):
-  //
-  //   Extracts the element with the key matching the passed key value and
-  //   returns a node handle owning that extracted data. If the `btree_multiset`
-  //   does not contain an element with a matching key, this function returns an
-  //   empty node handle.
-  //
-  // NOTE: In this context, `node_type` refers to the C++17 concept of a
-  // move-only type that owns and provides access to the elements in associative
-  // containers (https://en.cppreference.com/w/cpp/container/node_handle).
-  // It does NOT refer to the data layout of the underlying btree.
-  using Base::extract;
-
   // btree_multiset::merge()
   //
   // Extracts elements from a given `source` btree_multiset into this

@@ -67,16 +67,16 @@ For rpm based instructions execute the following commands:
 #. As ``root``, on all iSCSI gateway nodes, install the
    ``ceph-iscsi`` package:
 
-   ::
+   .. prompt:: bash #
 
-       # yum install ceph-iscsi
+      yum install ceph-iscsi
 
 #. As ``root``, on all iSCSI gateway nodes, install the ``tcmu-runner``
    package:
 
-   ::
+   .. prompt:: bash #
 
-       # yum install tcmu-runner
+      yum install tcmu-runner
 
 **Setup:**
 
@@ -84,9 +84,9 @@ For rpm based instructions execute the following commands:
    like the iSCSI configuration. To check if this pool has been created
    run:
 
-   ::
+   .. prompt:: bash #
 
-       # ceph osd lspools
+      ceph osd lspools
 
    If it does not exist instructions for creating pools can be found on the
    `RADOS pool operations page
@@ -95,13 +95,13 @@ For rpm based instructions execute the following commands:
 #. As ``root``, on a iSCSI gateway node, create a file named
    ``iscsi-gateway.cfg`` in the ``/etc/ceph/`` directory:
 
-   ::
+   .. prompt:: bash #
 
-       # touch /etc/ceph/iscsi-gateway.cfg
+      touch /etc/ceph/iscsi-gateway.cfg
 
    #. Edit the ``iscsi-gateway.cfg`` file and add the following lines:
 
-      ::
+      .. code-block:: ini
 
           [config]
           # Name of the Ceph storage cluster. A suitable Ceph configuration file allowing
@@ -110,7 +110,7 @@ For rpm based instructions execute the following commands:
           cluster_name = ceph
 
           # Place a copy of the ceph cluster's admin keyring in the gateway's /etc/ceph
-          # drectory and reference the filename here
+          # directory and reference the filename here
           gateway_keyring = ceph.client.admin.keyring
 
 
@@ -148,15 +148,15 @@ For rpm based instructions execute the following commands:
 #. As ``root``, on all iSCSI gateway nodes, enable and start the API
    service:
 
-   ::
+   .. prompt:: bash #
 
-       # systemctl daemon-reload
+      systemctl daemon-reload
        
-       # systemctl enable rbd-target-gw
-       # systemctl start rbd-target-gw
+      systemctl enable rbd-target-gw
+      systemctl start rbd-target-gw
 
-       # systemctl enable rbd-target-api
-       # systemctl start rbd-target-api
+      systemctl enable rbd-target-api
+      systemctl start rbd-target-api
 
 
 **Configuring:**
@@ -170,26 +170,26 @@ to create a iSCSI target and export a RBD image as LUN 0.
 #. As ``root``, on a iSCSI gateway node, start the iSCSI gateway
    command-line interface:
 
-   ::
+   .. prompt:: bash #
 
-       # gwcli
+      gwcli
 
 #. Go to iscsi-targets and create a target with the name
    iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw:
 
-   ::
+   .. code-block:: console
 
-       > /> cd /iscsi-target
-       > /iscsi-target>  create iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw
+       > /> cd /iscsi-targets
+       > /iscsi-targets>  create iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw
 
 #. Create the iSCSI gateways. The IPs used below are the ones that will be
    used for iSCSI data like READ and WRITE commands. They can be the
    same IPs used for management operations listed in trusted_ip_list,
    but it is recommended that different IPs are used.
 
-   ::
+   .. code-block:: console
 
-       > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways
+       > /iscsi-targets> cd iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways
        > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21
        > /iscsi-target...-igw/gateways>  create ceph-gw-2 10.172.19.22
 
@@ -197,40 +197,62 @@ to create a iSCSI target and export a RBD image as LUN 0.
    the skipchecks=true argument must be used. This will avoid the Red Hat kernel
    and rpm checks:
 
-   ::
+   .. code-block:: console
 
-       > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways
+       > /iscsi-targets> cd iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways
        > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21 skipchecks=true
        > /iscsi-target...-igw/gateways>  create ceph-gw-2 10.172.19.22 skipchecks=true
 
 #. Add a RBD image with the name disk_1 in the pool rbd:
 
-   ::
+   .. code-block:: console
 
        > /iscsi-target...-igw/gateways> cd /disks
        > /disks> create pool=rbd image=disk_1 size=90G
 
 #. Create a client with the initiator name iqn.1994-05.com.redhat:rh7-client:
 
-   ::
+   .. code-block:: console
 
-       > /disks> cd /iscsi-target/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts
+       > /disks> cd /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts
        > /iscsi-target...eph-igw/hosts>  create iqn.1994-05.com.redhat:rh7-client
 
-#. Set the client's CHAP username to myiscsiusername and password to
-   myiscsipassword:
+#. Set the initiator CHAP username and password which the target would
+   use when authenticating the initiator:
 
-   ::
+   .. code-block:: console
 
-       > /iscsi-target...at:rh7-client>  auth username=myiscsiusername password=myiscsipassword
+       > /iscsi-target...at:rh7-client>  auth username=myusername password=mypassword
 
    .. warning::
       CHAP must always be configured. Without CHAP, the target will
       reject any login requests.
 
+   To use mutual (bidirectional) authentication, also set the target CHAP
+   username and password which the initiator would use when authenticating
+   the target:
+
+   .. code-block:: console
+
+       > /iscsi-target...at:rh7-client>  auth username=myusername password=mypassword mutual_username=mytgtusername mutual_password=mytgtpassword
+
+   .. note::
+      CHAP usernames must be between 8 and 64 characters long.  Valid
+      characters: ``0`` to ``9``, ``a`` to ``z``, ``A`` to ``Z``, ``@``,
+      ``_``, ``-``, ``.``, ``:``.
+
+   .. note::
+      CHAP passwords must be between 12 and 16 characters long.  Valid
+      characters: ``0`` to ``9``, ``a`` to ``z``, ``A`` to ``Z``, ``@``,
+      ``_``, ``-``, ``/``.
+
+   .. note::
+      For mutual CHAP, initiator and target usernames and passwords
+      must not be the same.
+
 #. Add the disk to the client:
 
-   ::
+   .. code-block:: console
 
        > /iscsi-target...at:rh7-client> disk add rbd/disk_1
 

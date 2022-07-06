@@ -22,6 +22,10 @@
 
 using std::deque;
 using std::string;
+using std::unique_ptr;
+using std::cerr;
+using std::cout;
+using std::vector;
 
 static void usage(std::ostream& out)
 {
@@ -177,7 +181,6 @@ static void maybe_override_pid(vector<const char*>& args)
 
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
   deque<std::string> sections;
   bool resolve_search = false;
   std::string action;
@@ -187,7 +190,7 @@ int main(int argc, const char **argv)
   std::map<string,string> filter_key_value;
   std::string dump_format;
 
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto orig_args = args;
   auto cct = [&args] {
@@ -248,7 +251,7 @@ int main(int argc, const char **argv)
 	cerr << "unable to parse option: '" << *i << "'" << std::endl;
 	cerr << "args:";
 	for (auto arg : orig_args) {
-	  cerr << " " << quoted(arg);
+	  cerr << " " << std::quoted(arg);
 	}
 	cerr << std::endl;
 	usage(cerr);

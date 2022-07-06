@@ -99,7 +99,6 @@ enum {
   l_mon_last,
 };
 
-class ConfigKeyService;
 class PaxosService;
 
 class AdminSocketHook;
@@ -217,6 +216,19 @@ public:
 
   std::vector<DaemonHealthMetric> get_health_metrics();
 
+  int quorum_age() const {
+    auto age = std::chrono::duration_cast<std::chrono::seconds>(
+      ceph::mono_clock::now() - quorum_since);
+    return age.count();
+  }
+
+  bool is_mon_down() const {
+    int max = monmap->size();
+    int actual = get_quorum().size();
+    auto now = ceph::real_clock::now();
+    return actual < max && now > monmap->created.to_real_time();
+  }
+
   // -- elector --
 private:
   std::unique_ptr<Paxos> paxos;
@@ -252,27 +264,45 @@ private:
   bool stretch_mode_engaged{false};
   bool degraded_stretch_mode{false};
   bool recovering_stretch_mode{false};
-  string stretch_bucket_divider;
-  map<string, set<string>> dead_mon_buckets; // bucket->mon ranks, locations with no live mons
-  set<string> up_mon_buckets; // locations with a live mon
+  std::string stretch_bucket_divider;
+  std::map<std::string, std::set<std::string>> dead_mon_buckets; // bucket->mon ranks, locations with no live mons
+  std::set<std::string> up_mon_buckets; // locations with a live mon
   void do_stretch_mode_election_work();
 
   bool session_stretch_allowed(MonSession *s, MonOpRequestRef& op);
   void disconnect_disallowed_stretch_sessions();
   void set_elector_disallowed_leaders(bool allow_election);
+
+  std::map<std::string,std::string> crush_loc;
+  bool need_set_crush_loc{false};
 public:
   bool is_stretch_mode() { return stretch_mode_engaged; }
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
   bool is_recovering_stretch_mode() { return recovering_stretch_mode; }
-  void maybe_engage_stretch_mode();
+
+  /**
+   * This set of functions maintains the in-memory stretch state
+   * and sets up transitions of the map states by calling in to
+   * MonmapMonitor and OSDMonitor.
+   *
+   * The [maybe_]go_* functions are called on the leader to
+   * decide if transitions should happen; the trigger_* functions
+   * set up the map transitions; and the set_* functions actually
+   * change the memory state -- but these are only called
+   * via OSDMonitor::update_from_paxos, to guarantee consistent
+   * updates across the entire cluster.
+   */
+  void try_engage_stretch_mode();
   void maybe_go_degraded_stretch_mode();
-  void trigger_degraded_stretch_mode(const set<string>& dead_mons,
-				     const set<int>& dead_buckets);
+  void trigger_degraded_stretch_mode(const std::set<std::string>& dead_mons,
+				     const std::set<int>& dead_buckets);
   void set_degraded_stretch_mode();
   void go_recovery_stretch_mode();
+  void set_recovery_stretch_mode();
   void trigger_healthy_stretch_mode();
   void set_healthy_stretch_mode();
   void enable_stretch_mode();
+  void set_mon_crush_location(const std::string& loc);
 
   
 private:
@@ -678,14 +708,16 @@ public:
     return (class ConfigMonitor*) paxos_service[PAXOS_CONFIG].get();
   }
 
+  class KVMonitor *kvmon() {
+    return (class KVMonitor*) paxos_service[PAXOS_KV].get();
+  }
+
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
   friend class MonmapMonitor;
   friend class LogMonitor;
-  friend class ConfigKeyService;
-
-  std::unique_ptr<ConfigKeyService> config_key_service;
+  friend class KVMonitor;
 
   // -- sessions --
   MonSessionMap session_map;
@@ -764,6 +796,8 @@ public:
     const health_check_map_t& previous,
     MonitorDBStore::TransactionRef t);
 
+  void update_pending_metadata();
+
 protected:
 
   class HealthCheckLogStatus {
@@ -839,7 +873,10 @@ public:
   void waitlist_or_zap_client(MonOpRequestRef op);
 
   void send_mon_message(Message *m, int rank);
-  void notify_new_monmap();
+  /** can_change_external_state if we can do things like
+   *  call elections as a result of the new map.
+   */
+  void notify_new_monmap(bool can_change_external_state=false);
 
 public:
   struct C_Command : public C_MonOp {
@@ -872,7 +909,7 @@ public:
         }
         cmdmap_t cmdmap;
         std::ostringstream ds;
-        string prefix;
+        std::string prefix;
         cmdmap_from_json(m->cmd, &cmdmap, ds);
         cmd_getval(cmdmap, "prefix", prefix);
         if (prefix != "config set" && prefix != "config-key set")
@@ -973,8 +1010,8 @@ private:
   void count_metadata(const std::string& field, ceph::Formatter *f);
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
   // get_all_versions() gathers version information from daemons for health check
-  void get_all_versions(std::map<string, std::list<std::string>> &versions);
-  void get_versions(std::map<string, std::list<std::string>> &versions);
+  void get_all_versions(std::map<std::string, std::list<std::string>> &versions);
+  void get_versions(std::map<std::string, std::list<std::string>> &versions);
 
   // features
   static CompatSet get_initial_supported_features();
@@ -1077,6 +1114,7 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_NAUTILUS CompatSet::Feature(11, "nautilus ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_OCTOPUS CompatSet::Feature(12, "octopus ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_PACIFIC CompatSet::Feature(13, "pacific ondisk layout")
+#define CEPH_MON_FEATURE_INCOMPAT_QUINCY CompatSet::Feature(14, "quincy ondisk layout")
 // make sure you add your feature to Monitor::get_supported_features
 
 

@@ -30,6 +30,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "ceph_test_objectstore_state "
 
+using namespace std;
+
 void TestObjectStoreState::init(int colls, int objs)
 {
   dout(5) << "init " << colls << " colls " << objs << " objs" << dendl;

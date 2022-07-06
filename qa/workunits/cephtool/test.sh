@@ -345,19 +345,25 @@ function test_tiering_1()
   ceph osd tier add slow cache
   ceph osd tier add slow cache2
   expect_false ceph osd tier add slow2 cache
-  # forward and proxy are removed/deprecated
+  # application metadata should propagate to the tiers
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "slow") | .application_metadata["rados"]' | grep '{}'
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "slow2") | .application_metadata["rados"]' | grep '{}'
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "cache") | .application_metadata["rados"]' | grep '{}'
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "cache2") | .application_metadata["rados"]' | grep '{}'
+  # forward is removed/deprecated
   expect_false ceph osd tier cache-mode cache forward
   expect_false ceph osd tier cache-mode cache forward --yes-i-really-mean-it
-  expect_false ceph osd tier cache-mode cache proxy
-  expect_false ceph osd tier cache-mode cache proxy --yes-i-really-mean-it
   # test some state transitions
   ceph osd tier cache-mode cache writeback
   expect_false ceph osd tier cache-mode cache readonly
   expect_false ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
+  ceph osd tier cache-mode cache proxy
   ceph osd tier cache-mode cache readproxy
   ceph osd tier cache-mode cache none
   ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   ceph osd tier cache-mode cache none
+  ceph osd tier cache-mode cache writeback
+  ceph osd tier cache-mode cache proxy
   ceph osd tier cache-mode cache writeback
   expect_false ceph osd tier cache-mode cache none
   expect_false ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
@@ -366,7 +372,7 @@ function test_tiering_1()
   rados -p cache put /etc/passwd /etc/passwd
   flush_pg_stats
   # 1 dirty object in pool 'cache'
-  ceph osd tier cache-mode cache readproxy
+  ceph osd tier cache-mode cache proxy
   expect_false ceph osd tier cache-mode cache none
   expect_false ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   ceph osd tier cache-mode cache writeback
@@ -375,7 +381,7 @@ function test_tiering_1()
   rados -p cache cache-flush-evict-all
   flush_pg_stats
   # no dirty objects in pool 'cache'
-  ceph osd tier cache-mode cache readproxy
+  ceph osd tier cache-mode cache proxy
   ceph osd tier cache-mode cache none
   ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   TRIES=0
@@ -751,6 +757,7 @@ function test_mon_misc()
   ceph log last 100 | grep "$mymsg"
   ceph_watch_wait "$mymsg"
 
+  ceph mgr stat
   ceph mgr dump
   ceph mgr module ls
   ceph mgr module enable restful
@@ -1021,6 +1028,8 @@ function test_mon_mds()
   ceph fs new $FS_NAME fs_metadata mds-ec-pool --force 2>$TMPFILE
   check_response 'erasure-code' $? 22
   ceph fs new $FS_NAME mds-ec-pool fs_data 2>$TMPFILE
+  check_response 'already used by filesystem' $? 22
+  ceph fs new $FS_NAME mds-ec-pool fs_data --force 2>$TMPFILE
   check_response 'erasure-code' $? 22
   ceph fs new $FS_NAME mds-ec-pool mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
@@ -1060,8 +1069,12 @@ function test_mon_mds()
   ceph fs new $FS_NAME fs_metadata mds-tier --force 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
   ceph fs new $FS_NAME mds-tier fs_data 2>$TMPFILE
+  check_response 'already used by filesystem' $? 22
+  ceph fs new $FS_NAME mds-tier fs_data --force 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
   ceph fs new $FS_NAME mds-tier mds-tier 2>$TMPFILE
+  check_response 'already used by filesystem' $? 22
+  ceph fs new $FS_NAME mds-tier mds-tier --force 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
   set -e
 
@@ -1092,6 +1105,8 @@ function test_mon_mds()
   # ...but not as the metadata pool
   set +e
   ceph fs new $FS_NAME mds-ec-pool fs_data 2>$TMPFILE
+  check_response 'already used by filesystem' $? 22
+  ceph fs new $FS_NAME mds-ec-pool fs_data --force 2>$TMPFILE
   check_response 'erasure-code' $? 22
   set -e
 
@@ -1107,7 +1122,7 @@ function test_mon_mds()
 
   # Removing tier should be permitted because the underlying pool is
   # replicated (#11504 case)
-  ceph osd tier cache-mode mds-tier readproxy
+  ceph osd tier cache-mode mds-tier proxy
   ceph osd tier remove-overlay fs_metadata
   ceph osd tier remove fs_metadata mds-tier
   ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
@@ -1151,6 +1166,9 @@ function test_mon_mon()
 {
   # print help message
   ceph --help mon
+  # -h works even when some arguments are passed
+  ceph osd dump -h | grep 'osd dump'
+  ceph osd dump 123 -h | grep 'osd dump'
   # no mon add/remove
   ceph mon dump
   ceph mon getmap -o $TEMP_DIR/monmap.$$
@@ -1417,11 +1435,20 @@ function test_mon_osd()
   ceph osd blocklist ls | grep $bl
   ceph osd blocklist rm $bl
   ceph osd blocklist ls | expect_false grep $bl
-  expect_false "ceph osd blocklist $bl/-1"
-  expect_false "ceph osd blocklist $bl/foo"
+  expect_false "ceph osd blocklist add $bl/-1"
+  expect_false "ceph osd blocklist add $bl/foo"
 
-  # test with wrong address
-  expect_false "ceph osd blocklist 1234.56.78.90/100"
+  # test with invalid address
+  expect_false "ceph osd blocklist add 1234.56.78.90/100"
+
+  # test range blocklisting
+  bl=192.168.0.1:0/24
+  ceph osd blocklist range add $bl
+  ceph osd blocklist ls | grep $bl
+  ceph osd blocklist range rm $bl
+  ceph osd blocklist ls | expect_false grep $bl
+  bad_bl=192.168.0.1/33
+  expect_false ceph osd blocklist range add $bad_bl
 
   # Test `clear`
   ceph osd blocklist add $bl
@@ -1494,12 +1521,10 @@ function test_mon_osd()
 	expect_false ceph osd set $f
 	expect_false ceph osd unset $f
   done
-  ceph osd require-osd-release pacific
+  ceph osd require-osd-release quincy
   # can't lower
+  expect_false ceph osd require-osd-release pacific
   expect_false ceph osd require-osd-release octopus
-  expect_false ceph osd require-osd-release nautilus
-  expect_false ceph osd require-osd-release mimic
-  expect_false ceph osd require-osd-release luminous
   # these are no-ops but should succeed.
 
   ceph osd set noup
@@ -1545,7 +1570,13 @@ function test_mon_osd()
   ceph osd info
   info_json=$(ceph osd info --format=json | jq -cM '.')
   dump_json=$(ceph osd dump --format=json | jq -cM '.osds')
-  [[ "${info_json}" == "${dump_json}" ]]
+  if [[ "${info_json}" != "${dump_json}" ]]; then
+    echo "waiting for OSDs to settle"
+    sleep 10
+    info_json=$(ceph osd info --format=json | jq -cM '.')
+    dump_json=$(ceph osd dump --format=json | jq -cM '.osds')
+    [[ "${info_json}" == "${dump_json}" ]]
+  fi
 
   info_json=$(ceph osd info 0 --format=json | jq -cM '.')
   dump_json=$(ceph osd dump --format=json | \
@@ -2178,13 +2209,14 @@ function test_mon_pg()
 function test_mon_osd_pool_set()
 {
   TEST_POOL_GETSET=pool_getset
-  ceph osd pool create $TEST_POOL_GETSET 1
+  expect_false ceph osd pool create $TEST_POOL_GETSET 1 --target_size_ratio -0.3
+  expect_true ceph osd pool create $TEST_POOL_GETSET 1 --target_size_ratio 1
   ceph osd pool application enable $TEST_POOL_GETSET rados
   ceph osd pool set $TEST_POOL_GETSET pg_autoscale_mode off
   wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
-  for s in pg_num pgp_num size min_size crush_rule; do
+  for s in pg_num pgp_num size min_size crush_rule target_size_ratio; do
     ceph osd pool get $TEST_POOL_GETSET $s
   done
 
@@ -2204,7 +2236,7 @@ function test_mon_osd_pool_set()
   ceph osd pool get pool_erasure erasure_code_profile
   ceph osd pool rm pool_erasure pool_erasure --yes-i-really-really-mean-it
 
-  for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
+  for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub bulk; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
       ceph osd pool get $TEST_POOL_GETSET $flag | grep "$flag: false"
       ceph osd pool set $TEST_POOL_GETSET $flag true
@@ -2256,6 +2288,12 @@ function test_mon_osd_pool_set()
   ceph osd pool get $TEST_POOL_GETSET scrub_priority | grep 'scrub_priority: 5'
   ceph osd pool set $TEST_POOL_GETSET scrub_priority 0
   ceph osd pool get $TEST_POOL_GETSET scrub_priority | expect_false grep '.'
+
+  expect_false ceph osd pool set $TEST_POOL_GETSET target_size_ratio -3
+  expect_false ceph osd pool set $TEST_POOL_GETSET target_size_ratio abc
+  expect_true ceph osd pool set $TEST_POOL_GETSET target_size_ratio 0.1
+  expect_true ceph osd pool set $TEST_POOL_GETSET target_size_ratio 1
+  ceph osd pool get $TEST_POOL_GETSET target_size_ratio | grep 'target_size_ratio: 1'
 
   ceph osd pool set $TEST_POOL_GETSET nopgchange 1
   expect_false ceph osd pool set $TEST_POOL_GETSET pg_num 10
@@ -2455,7 +2493,7 @@ function test_mon_osd_erasure_code()
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f
   expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
-  # make sure ruleset-foo doesn't work anymore
+  # make sure rule-foo doesn't work anymore
   expect_false ceph osd erasure-code-profile set barprofile ruleset-failure-domain=host
   ceph osd erasure-code-profile set barprofile crush-failure-domain=host
   # clean up

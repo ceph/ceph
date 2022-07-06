@@ -24,14 +24,16 @@ def task(ctx, config):
     mds_map = fs.get_mds_map()
     assert(mds_map['max_mds'] == 1)
 
-    json = fs.rank_tell(["scrub", "start", "/", "force", "recursive", "repair"])
+    json = fs.run_scrub(["start", "/", "force", "recursive", "repair"])
     if not json or json['return_code'] == 0:
+        assert(fs.wait_until_scrub_complete(tag=json["scrub_tag"]) == True)
         log.info("scrub / completed")
     else:
         log.info("scrub / failed: {}".format(json))
 
-    json = fs.rank_tell(["scrub", "start", "~mdsdir", "force", "recursive", "repair"])
+    json = fs.run_scrub(["start", "~mdsdir", "force", "recursive", "repair"])
     if not json or json['return_code'] == 0:
+        assert(fs.wait_until_scrub_complete(tag=json["scrub_tag"]) == True)
         log.info("scrub ~mdsdir completed")
     else:
         log.info("scrub / failed: {}".format(json))

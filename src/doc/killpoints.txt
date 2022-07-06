@@ -16,7 +16,7 @@ mds_kill_mdstable_at:
 mds_kill_export_at:
 1: After moving to STATE_EXPORTING
 2: After sending MExportDirDiscover
-3: After receiving MExportDirDiscoverAck and auth_unpin'ing.
+3: After receiving MExportDirDiscoverAck and auth_unpinning.
 4: After sending MExportDirPrep
 5: After receiving MExportDirPrepAck
 6: After sending out MExportDirNotify to all replicas

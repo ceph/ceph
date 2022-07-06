@@ -27,6 +27,8 @@
 
 #define dout_context g_ceph_context
 
+using std::cerr;
+using std::cout;
 using namespace rbd_replay;
 
 namespace {
@@ -99,7 +101,7 @@ void Worker::run() {
     while (!m_pending_ios.empty()) {
       if (!first_time) {
 	dout(THREAD_LEVEL) << "Worker thread trying to stop, still waiting for " << m_pending_ios.size() << " pending IOs to complete:" << dendl;
-	pair<action_id_t, PendingIO::ptr> p;
+	std::pair<action_id_t, PendingIO::ptr> p;
 	BOOST_FOREACH(p, m_pending_ios) {
 	  dout(THREAD_LEVEL) << "> " << p.first << dendl;
 	}
@@ -157,7 +159,7 @@ bool Worker::readonly() const {
   return m_replayer.readonly();
 }
 
-rbd_loc Worker::map_image_name(string image_name, string snap_name) const {
+rbd_loc Worker::map_image_name(std::string image_name, std::string snap_name) const {
   return m_replayer.image_name_map().map(rbd_loc("", image_name, snap_name));
 }
 
@@ -212,7 +214,7 @@ void Replayer::run(const std::string& replay_file) {
 	goto out2;
       }
       m_rbd = new librbd::RBD();
-      map<thread_id_t, Worker*> workers;
+      std::map<thread_id_t, Worker*> workers;
 
       int fd = open(replay_file.c_str(), O_RDONLY|O_BINARY);
       if (fd < 0) {
@@ -264,7 +266,7 @@ void Replayer::run(const std::string& replay_file) {
       }
 
       dout(THREAD_LEVEL) << "Waiting for workers to die" << dendl;
-      pair<thread_id_t, Worker*> w;
+      std::pair<thread_id_t, Worker*> w;
       BOOST_FOREACH(w, workers) {
 	w.second->join();
 	delete w.second;
@@ -298,11 +300,11 @@ void Replayer::erase_image(imagectx_id_t imagectx_id) {
   std::unique_lock lock{m_images_mutex};
   librbd::Image* image = m_images[imagectx_id];
   if (m_dump_perf_counters) {
-    string command = "perf dump";
+    std::string command = "perf dump";
     cmdmap_t cmdmap;
     JSONFormatter jf(true);
     bufferlist out;
-    stringstream ss;
+    std::stringstream ss;
     g_ceph_context->do_command(command, cmdmap, &jf, ss, &out);
     jf.flush(cout);
     cout << std::endl;
@@ -368,11 +370,11 @@ void Replayer::wait_for_actions(const action::Dependencies &deps) {
 void Replayer::clear_images() {
   std::shared_lock lock{m_images_mutex};
   if (m_dump_perf_counters && !m_images.empty()) {
-    string command = "perf dump";
+    std::string command = "perf dump";
     cmdmap_t cmdmap;
     JSONFormatter jf(true);
     bufferlist out;
-    stringstream ss;
+    std::stringstream ss;
     g_ceph_context->do_command(command, cmdmap, &jf, ss, &out);
     jf.flush(cout);
     cout << std::endl;
@@ -397,10 +399,10 @@ void Replayer::set_readonly(bool readonly) {
   m_readonly = readonly;
 }
 
-string Replayer::pool_name() const {
+std::string Replayer::pool_name() const {
   return m_pool_name;
 }
 
-void Replayer::set_pool_name(string pool_name) {
+void Replayer::set_pool_name(std::string pool_name) {
   m_pool_name = pool_name;
 }

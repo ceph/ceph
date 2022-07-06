@@ -10,6 +10,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 class RGW_MB_Handler_Module_OTP : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Zone *zone_svc;
   string prefix;
@@ -60,7 +62,7 @@ void RGWSI_OTP::init(RGWSI_Zone *_zone_svc,
   svc.meta_be = _meta_be_svc;
 }
 
-int RGWSI_OTP::do_start(optional_yield)
+int RGWSI_OTP::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   /* create first backend handler for bucket entrypoints */
 
@@ -88,13 +90,13 @@ int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
                         otp_devices_list_t *devices,
                         real_time *pmtime,
                         RGWObjVersionTracker *objv_tracker,
-                        optional_yield y)
+                        optional_yield y, const DoutPrefixProvider *dpp)
 {
   RGWSI_MBOTP_GetParams params;
   params.pdevices = devices;
   params.pmtime = pmtime;
 
-  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y);
+  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -107,17 +109,20 @@ int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
                         otp_devices_list_t *devices,
                         real_time *pmtime,
                         RGWObjVersionTracker *objv_tracker,
-                        optional_yield y)
+                        optional_yield y,
+                        const DoutPrefixProvider *dpp)
 {
   return read_all(ctx,
                   uid.to_str(),
                   devices,
                   pmtime,
                   objv_tracker,
-                  y);
+                  y,
+                  dpp);
 }
 
-int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
+int RGWSI_OTP::store_all(const DoutPrefixProvider *dpp, 
+                         RGWSI_OTP_BE_Ctx& ctx,
                          const string& key,
                          const otp_devices_list_t& devices,
                          real_time mtime,
@@ -128,7 +133,7 @@ int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
   params.mtime = mtime;
   params.devices = devices;
 
-  int ret = svc.meta_be->put_entry(ctx.get(), key, params, objv_tracker, y);
+  int ret = svc.meta_be->put_entry(dpp, ctx.get(), key, params, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -136,14 +141,15 @@ int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
+int RGWSI_OTP::store_all(const DoutPrefixProvider *dpp, 
+                         RGWSI_OTP_BE_Ctx& ctx,
                          const rgw_user& uid,
                          const otp_devices_list_t& devices,
                          real_time mtime,
                          RGWObjVersionTracker *objv_tracker,
                          optional_yield y)
 {
-  return store_all(ctx,
+  return store_all(dpp, ctx,
                    uid.to_str(),
                    devices,
                    mtime,
@@ -151,14 +157,15 @@ int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
                    y);
 }
 
-int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
+int RGWSI_OTP::remove_all(const DoutPrefixProvider *dpp, 
+                          RGWSI_OTP_BE_Ctx& ctx,
                           const string& key,
                           RGWObjVersionTracker *objv_tracker,
                           optional_yield y)
 {
   RGWSI_MBOTP_RemoveParams params;
 
-  int ret = svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
+  int ret = svc.meta_be->remove_entry(dpp, ctx.get(), key, params, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -166,12 +173,13 @@ int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
+int RGWSI_OTP::remove_all(const DoutPrefixProvider *dpp, 
+                          RGWSI_OTP_BE_Ctx& ctx,
                           const rgw_user& uid,
                           RGWObjVersionTracker *objv_tracker,
                           optional_yield y)
 {
-  return remove_all(ctx,
+  return remove_all(dpp,ctx,
                     uid.to_str(),
                     objv_tracker,
                     y);

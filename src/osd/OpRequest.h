@@ -17,10 +17,7 @@
 #include "osd/osd_op_util.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
-#ifdef HAVE_JAEGER
 #include "common/tracer.h"
-#endif
-
 /**
  * The OpRequest takes in a Message* and takes over a single reference
  * to it, which it puts() when destroyed.
@@ -91,17 +88,8 @@ public:
   epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
-#ifdef HAVE_JAEGER
-  jspan osd_parent_span = nullptr;
-  void set_osd_parent_span(jspan& span) {
-    if(osd_parent_span){
-      jaeger_tracing::finish_span(osd_parent_span);
-    }
-    osd_parent_span = move(span);
-  }
-#else
-  void set_osd_parent_span(...) {}
-#endif
+  jspan osd_parent_span;
+
   template<class T>
   const T* get_req() const { return static_cast<const T*>(request); }
 
@@ -115,6 +103,9 @@ public:
       return entity_name_t();
     }
   }
+  uint8_t state_flag() const {
+    return latest_flag_point;
+  }
 
   std::string_view state_string() const override {
     switch(latest_flag_point) {
@@ -127,6 +118,32 @@ public:
     default: break;
     }
     return "no flag points reached";
+  }
+
+  static std::string get_state_string(uint8_t flag) {
+    std::string flag_point;
+
+    switch(flag) {
+      case flag_queued_for_pg:
+        flag_point = "queued for pg";
+        break;
+      case flag_reached_pg:
+        flag_point = "reached pg";
+        break;
+      case flag_delayed:
+        flag_point = "delayed";
+        break;
+      case flag_started:
+        flag_point = "started";
+        break;
+      case flag_sub_op_sent:
+        flag_point = "waiting for sub ops";
+        break;
+      case flag_commit_sent:
+        flag_point = "commit sent; apply or cleanup";
+        break;
+    }
+    return flag_point;
   }
 
   void mark_queued_for_pg() {

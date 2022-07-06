@@ -28,7 +28,7 @@ sudo $CEPHADM -v add-repo --dev master
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 
-sudo $CEPHADM -v add-repo --release 15.1.1
+sudo $CEPHADM -v add-repo --release 15.2.7
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 

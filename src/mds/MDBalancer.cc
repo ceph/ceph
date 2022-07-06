@@ -29,16 +29,19 @@
 #include "msg/Messenger.h"
 
 #include <fstream>
-#include <iostream>
 #include <vector>
 #include <map>
-using std::map;
-using std::vector;
-using std::chrono::duration_cast;
+
+using namespace std;
 
 #include "common/config.h"
 #include "common/errno.h"
 
+/* Note, by default debug_mds_balancer is 1/5. For debug messages 1<lvl<=5,
+ * should_gather (below) will be true; so, debug_mds will be ignored even if
+ * set to 20/20. For this reason, some messages may not appear in the log.
+ * Increase both debug levels to get expected output!
+ */
 #define dout_context g_ceph_context
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".bal " << __func__ << " "
@@ -241,7 +244,7 @@ void MDBalancer::tick()
   if (mds->get_nodeid() == 0
       && mds->is_active()
       && bal_interval > 0
-      && duration_cast<chrono::seconds>(now - last_heartbeat).count() >= bal_interval
+      && chrono::duration_cast<chrono::seconds>(now - last_heartbeat).count() >= bal_interval
       && (num_bal_times || (bal_max_until >= 0 && mds->get_uptime().count() > bal_max_until))) {
     last_heartbeat = now;
     send_heartbeat();
@@ -301,6 +304,8 @@ mds_load_t MDBalancer::get_load()
   }
 
   uint64_t num_requests = mds->get_num_requests();
+  uint64_t num_traverse = mds->logger->get(l_mds_traverse);
+  uint64_t num_traverse_hit = mds->logger->get(l_mds_traverse_hit);
 
   uint64_t cpu_time = 1;
   {
@@ -332,13 +337,17 @@ mds_load_t MDBalancer::get_load()
 	load.req_rate = (num_requests - last_num_requests) / el;
       if (cpu_time > last_cpu_time)
 	load.cpu_load_avg = (cpu_time - last_cpu_time) / el;
+      if (num_traverse > last_num_traverse && num_traverse_hit > last_num_traverse_hit)
+        load.cache_hit_rate = (double)(num_traverse_hit - last_num_traverse_hit) / (num_traverse - last_num_traverse);
     } else {
       auto p = mds_load.find(mds->get_nodeid());
       if (p != mds_load.end()) {
 	load.req_rate = p->second.req_rate;
 	load.cpu_load_avg = p->second.cpu_load_avg;
+	load.cache_hit_rate = p->second.cache_hit_rate;
       }
-      if (num_requests >= last_num_requests && cpu_time >= last_cpu_time)
+      if (num_requests >= last_num_requests && cpu_time >= last_cpu_time &&
+          num_traverse >= last_num_traverse && num_traverse_hit >= last_num_traverse_hit)
 	update_last = false;
     }
   }
@@ -347,6 +356,8 @@ mds_load_t MDBalancer::get_load()
     last_num_requests = num_requests;
     last_cpu_time = cpu_time;
     last_get_load = now;
+    last_num_traverse = num_traverse;
+    last_num_traverse_hit = num_traverse_hit;
   }
 
   dout(15) << load << dendl;
@@ -369,7 +380,7 @@ int MDBalancer::localize_balancer()
 
   /* we assume that balancer is in the metadata pool */
   object_t oid = object_t(mds->mdsmap->get_balancer());
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
   ceph_tid_t tid = mds->objecter->read(oid, oloc, 0, 0, CEPH_NOSNAP, &lua_src, 0,
                                        new C_SafeCond(lock, cond, &ack, &r));
   dout(15) << "launched non-blocking read tid=" << tid
@@ -384,8 +395,8 @@ int MDBalancer::localize_balancer()
   /* success: store the balancer in memory and set the version. */
   if (!r) {
     if (ret_t == std::cv_status::timeout) {
-      mds->objecter->op_cancel(tid, -ECANCELED);
-      return -ETIMEDOUT;
+      mds->objecter->op_cancel(tid, -CEPHFS_ECANCELED);
+      return -CEPHFS_ETIMEDOUT;
     }
     bal_code.assign(lua_src.to_str());
     bal_version.assign(oid.name);
@@ -875,7 +886,7 @@ int MDBalancer::mantle_prep_rebalance()
 
   /* mantle doesn't know about cluster size, so check target len here */
   if ((int) state.targets.size() != cluster_size)
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   else if (ret)
     return ret;
 
@@ -1184,13 +1195,13 @@ void MDBalancer::find_exports(CDir *dir,
   }
 }
 
-void MDBalancer::hit_inode(CInode *in, int type, int who)
+void MDBalancer::hit_inode(CInode *in, int type)
 {
   // hit inode
   in->pop.get(type).hit();
 
   if (in->get_parent_dn())
-    hit_dir(in->get_parent_dn()->get_dir(), type, who);
+    hit_dir(in->get_parent_dn()->get_dir(), type);
 }
 
 void MDBalancer::maybe_fragment(CDir *dir, bool hot)
@@ -1223,7 +1234,7 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
   }
 }
 
-void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
+void MDBalancer::hit_dir(CDir *dir, int type, double amount)
 {
   if (dir->inode->is_stray())
     return;
@@ -1239,31 +1250,16 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
   maybe_fragment(dir, hot);
 
   // replicate?
-  if (type == META_POP_IRD && who >= 0) {
-    dir->pop_spread.hit(who);
-  }
-
+  const bool readop = (type == META_POP_IRD || type == META_POP_READDIR);
   double rd_adj = 0.0;
-  if (type == META_POP_IRD &&
-      dir->last_popularity_sample < last_sample) {
+  if (readop && dir->last_popularity_sample < last_sample) {
     double dir_pop = dir->pop_auth_subtree.get(type).get();    // hmm??
+    dir_pop += v * 10;
     dir->last_popularity_sample = last_sample;
-    double pop_sp = dir->pop_spread.get();
-    dir_pop += pop_sp * 10;
 
-    //if (dir->ino() == inodeno_t(0x10000000002))
-    if (pop_sp > 0) {
-      dout(20) << type << " pop " << dir_pop << " spread " << pop_sp
-	      << " " << dir->pop_spread.last[0]
-	      << " " << dir->pop_spread.last[1]
-	      << " " << dir->pop_spread.last[2]
-	      << " " << dir->pop_spread.last[3]
-	      << " in " << *dir << dendl;
-    }
-
-    if (dir->is_auth() && !dir->is_ambiguous_auth()) {
-      if (dir->can_rep() &&
-	  dir_pop >= g_conf()->mds_bal_replicate_threshold) {
+    dout(20) << type << " pop " << dir_pop << " spread in " << *dir << dendl;
+    if (dir->is_auth() && !dir->is_ambiguous_auth() && dir->can_rep()) {
+      if (dir_pop >= g_conf()->mds_bal_replicate_threshold) {
 	// replicate
 	double rdp = dir->pop_me.get(META_POP_IRD).get();
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;

@@ -56,6 +56,7 @@ describe('IscsiTargetListComponent', () => {
 
     spyOn(iscsiService, 'status').and.returnValue(of({ available: true }));
     spyOn(iscsiService, 'version').and.returnValue(of({ ceph_iscsi_config_version: 11 }));
+    spyOn(component, 'setTableRefreshTimeout').and.stub();
   });
 
   it('should create', () => {
@@ -83,6 +84,12 @@ describe('IscsiTargetListComponent', () => {
       spyOn(component.table, 'reset');
       summaryService['summaryDataSource'].error(undefined);
       expect(component.table.reset).toHaveBeenCalled();
+    });
+
+    it('should call settings on the getTargets methods', () => {
+      spyOn(iscsiService, 'settings').and.callThrough();
+      component.getTargets();
+      expect(iscsiService.settings).toHaveBeenCalled();
     });
   });
 

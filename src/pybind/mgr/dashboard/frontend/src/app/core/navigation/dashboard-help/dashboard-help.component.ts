@@ -1,7 +1,8 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
+import { FeedbackComponent } from '~/app/ceph/shared/feedback/feedback.component';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { DocService } from '~/app/shared/services/doc.service';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -13,11 +14,10 @@ import { AboutComponent } from '../about/about.component';
   styleUrls: ['./dashboard-help.component.scss']
 })
 export class DashboardHelpComponent implements OnInit {
-  @ViewChild('docsForm', { static: true })
-  docsFormElement: any;
   docsUrl: string;
   modalRef: NgbModalRef;
   icons = Icons;
+  bsModalRef: NgbModalRef;
 
   constructor(private modalService: ModalService, private docService: DocService) {}
 
@@ -31,7 +31,7 @@ export class DashboardHelpComponent implements OnInit {
     this.modalRef = this.modalService.show(AboutComponent, null, { size: 'lg' });
   }
 
-  goToApiDocs() {
-    this.docsFormElement.nativeElement.submit();
+  openFeedbackModal() {
+    this.bsModalRef = this.modalService.show(FeedbackComponent, null, { size: 'lg' });
   }
 }

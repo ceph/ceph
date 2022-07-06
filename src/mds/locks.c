@@ -1,8 +1,5 @@
 #include "include/int_types.h"
 
-#include <string.h>
-#include <fcntl.h>
-
 #include "locks.h"
 
 /* Duplicated from ceph_fs.h, which we cannot include into a C file.  */

@@ -8,26 +8,6 @@
 namespace crimson::os::seastore {
 
 /**
- * root_t
- *
- * Contains information required to find metadata roots.
- * TODO: generalize this to permit more than one lba_manager implementation
- */
-struct __attribute__((aligned(8), packed)) root_t {
-  depth_t lba_depth = 0;
-  depth_t segment_depth = 0;
-  paddr_t lba_root_addr;
-  paddr_t segment_root;
-  laddr_t onode_root = L_ADDR_NULL;
-
-  void adjust_addrs_from_base(paddr_t base) {
-    if (lba_root_addr.is_relative()) {
-      lba_root_addr = base.add_record_relative(lba_root_addr);
-    }
-  }
-};
-
-/**
  * RootBlock
  *
  * Holds the physical addresses of all metadata roots.
@@ -53,7 +33,7 @@ struct __attribute__((aligned(8), packed)) root_t {
  * mutation which changes the journal trim bound.
  */
 struct RootBlock : CachedExtent {
-  constexpr static segment_off_t SIZE = 4<<10;
+  constexpr static seastore_off_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<RootBlock>;
 
   root_t root;
@@ -103,6 +83,7 @@ struct RootBlock : CachedExtent {
   }
 
   root_t &get_root() { return root; }
+
 };
 using RootBlockRef = RootBlock::Ref;
 

@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <string_view>
+#include <string>
+#include <stdexcept>
 
 #include <boost/container/small_vector.hpp>
 

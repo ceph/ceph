@@ -22,6 +22,7 @@
 
 #include "common/config.h"
 #include "common/RefCountedObj.h"
+#include "include/compat.h"
 #include "include/counter.h"
 #include "include/elist.h"
 #include "include/types.h"
@@ -65,9 +66,9 @@ public:
   CInodeCommitOperation(int prio, int64_t po)
     : pool(po), priority(prio) {
   }
-  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f)
-    : pool(po), priority(prio), _layout(l), _features(f) {
-      update_layout = true;
+  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f, std::string_view s)
+    : pool(po), priority(prio), _layout(l), _features(f), _symlink(s) {
+      update_layout_symlink = true;
   }
 
   void update(ObjectOperation &op, inode_backtrace_t &bt);
@@ -76,9 +77,10 @@ public:
 private:
   int64_t pool;     ///< pool id
   int priority;
-  bool update_layout = false;
+  bool update_layout_symlink = false;
   file_layout_t _layout;
   uint64_t _features;
+  std::string_view _symlink;
 };
 
 struct CInodeCommitOperations {
@@ -646,7 +648,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   inodeno_t ino() const { return get_inode()->ino; }
   vinodeno_t vino() const { return vinodeno_t(ino(), last); }
   int d_type() const { return IFTODT(get_inode()->mode); }
-  bool is_root() const { return ino() == MDS_INO_ROOT; }
+  bool is_root() const { return ino() == CEPH_INO_ROOT; }
   bool is_stray() const { return MDS_INO_IS_STRAY(ino()); }
   mds_rank_t get_stray_owner() const {
     return (mds_rank_t)MDS_INO_STRAY_OWNER(ino());

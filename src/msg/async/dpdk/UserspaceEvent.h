@@ -20,12 +20,12 @@
 #include <errno.h>
 #include <string.h>
 
-#include <vector>
 #include <list>
+#include <optional>
+#include <vector>
 
 #include "include/ceph_assert.h"
 #include "include/int_types.h"
-#include "common/Tub.h"
 
 class CephContext;
 
@@ -41,7 +41,7 @@ class UserspaceEventManager {
   CephContext *cct;
   int max_fd = 0;
   uint32_t max_wait_idx = 0;
-  std::vector<Tub<UserspaceFDImpl> > fds;
+  std::vector<std::optional<UserspaceFDImpl> > fds;
   std::vector<int> waiting_fds;
   std::list<uint32_t> unused_fds;
 
@@ -56,7 +56,7 @@ class UserspaceEventManager {
     if ((size_t)fd >= fds.size())
       return -ENOENT;
 
-    Tub<UserspaceFDImpl> &impl = fds[fd];
+    std::optional<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 
@@ -74,7 +74,7 @@ class UserspaceEventManager {
     if ((size_t)fd >= fds.size())
       return -ENOENT;
 
-    Tub<UserspaceFDImpl> &impl = fds[fd];
+    std::optional<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 

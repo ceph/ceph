@@ -26,7 +26,7 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(rgw::sal::RGWRadosStore*& store, std::map<std::string, std::string>& service_map_meta,
+RGWRealmReloader::RGWRealmReloader(rgw::sal::Store*& store, std::map<std::string, std::string>& service_map_meta,
                                    Pauser* frontends)
   : store(store),
     service_map_meta(service_map_meta),
@@ -80,20 +80,21 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
 void RGWRealmReloader::reload()
 {
   CephContext *const cct = store->ctx();
-  ldout(cct, 1) << "Pausing frontends for realm update..." << dendl;
+  const DoutPrefix dp(cct, dout_subsys, "rgw realm reloader: ");
+  ldpp_dout(&dp, 1) << "Pausing frontends for realm update..." << dendl;
 
   frontends->pause();
 
-  ldout(cct, 1) << "Frontends paused" << dendl;
+  ldpp_dout(&dp, 1) << "Frontends paused" << dendl;
 
   // TODO: make RGWRados responsible for rgw_log_usage lifetime
   rgw_log_usage_finalize();
 
   // destroy the existing store
-  RGWStoreManager::close_storage(store);
+  StoreManager::close_storage(store);
   store = nullptr;
 
-  ldout(cct, 1) << "Store closed" << dendl;
+  ldpp_dout(&dp, 1) << "Store closed" << dendl;
   {
     // allow a new notify to reschedule us. it's important that we do this
     // before we start loading the new realm, or we could miss some updates
@@ -101,10 +102,12 @@ void RGWRealmReloader::reload()
     reload_scheduled = nullptr;
   }
 
+
   while (!store) {
     // recreate and initialize a new store
     store =
-      RGWStoreManager::get_storage(cct,
+      StoreManager::get_storage(&dp, cct,
+				   "rados",
 				   cct->_conf->rgw_enable_gc_threads,
 				   cct->_conf->rgw_enable_lc_threads,
 				   cct->_conf->rgw_enable_quota_threads,
@@ -112,9 +115,9 @@ void RGWRealmReloader::reload()
 				   cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
 				   cct->_conf->rgw_cache_enabled);
 
-    ldout(cct, 1) << "Creating new store" << dendl;
+    ldpp_dout(&dp, 1) << "Creating new store" << dendl;
 
-    rgw::sal::RGWRadosStore* store_cleanup = nullptr;
+    rgw::sal::Store* store_cleanup = nullptr;
     {
       std::unique_lock lock{mutex};
 
@@ -123,7 +126,7 @@ void RGWRealmReloader::reload()
       // sleep until we get another notification, and retry until we get
       // a working configuration
       if (store == nullptr) {
-        lderr(cct) << "Failed to reinitialize RGWRados after a realm "
+        ldpp_dout(&dp, -1) << "Failed to reinitialize RGWRados after a realm "
             "configuration update. Waiting for a new update." << dendl;
 
         // sleep until another event is scheduled
@@ -144,28 +147,28 @@ void RGWRealmReloader::reload()
     }
 
     if (store_cleanup) {
-      ldout(cct, 4) << "Got another notification, restarting RGWRados "
+      ldpp_dout(&dp, 4) << "Got another notification, restarting RGWRados "
           "initialization." << dendl;
 
-      RGWStoreManager::close_storage(store_cleanup);
+      StoreManager::close_storage(store_cleanup);
     }
   }
 
-  int r = store->getRados()->register_to_service_map("rgw", service_map_meta);
+  int r = store->register_to_service_map(&dp, "rgw", service_map_meta);
   if (r < 0) {
-    lderr(cct) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
+    ldpp_dout(&dp, -1) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 
     /* ignore error */
   }
 
-  ldout(cct, 1) << "Finishing initialization of new store" << dendl;
+  ldpp_dout(&dp, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
-  ldout(cct, 1) << " - REST subsystem init" << dendl;
-  rgw_rest_init(cct, store->svc()->zone->get_zonegroup());
-  ldout(cct, 1) << " - usage subsystem init" << dendl;
-  rgw_log_usage_init(cct, store->getRados());
+  ldpp_dout(&dp, 1) << " - REST subsystem init" << dendl;
+  rgw_rest_init(cct, store->get_zone()->get_zonegroup());
+  ldpp_dout(&dp, 1) << " - usage subsystem init" << dendl;
+  rgw_log_usage_init(cct, store);
 
-  ldout(cct, 1) << "Resuming frontends with new realm configuration." << dendl;
+  ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;
 
   frontends->resume(store);
 }

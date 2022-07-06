@@ -19,6 +19,8 @@ struct WebTokenClaims {
   std::string user_name;
   //Client Id
   std::string client_id;
+  //azp
+  std::string azp;
 };
 
 }; /* namespace web_idp */

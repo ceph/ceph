@@ -10,7 +10,7 @@ struct rgw_sync_aws_multipart_part_info {
   int part_num{0};
   uint64_t ofs{0};
   uint64_t size{0};
-  string etag;
+  std::string etag;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -34,7 +34,7 @@ WRITE_CLASS_ENCODER(rgw_sync_aws_multipart_part_info)
 
 struct rgw_sync_aws_src_obj_properties {
   ceph::real_time mtime;
-  string etag;
+  std::string etag;
   uint32_t zone_short_id{0};
   uint64_t pg_ver{0};
   uint64_t versioned_epoch{0};
@@ -62,7 +62,7 @@ struct rgw_sync_aws_src_obj_properties {
 WRITE_CLASS_ENCODER(rgw_sync_aws_src_obj_properties)
 
 struct rgw_sync_aws_multipart_upload_info {
-  string upload_id;
+  std::string upload_id;
   uint64_t obj_size;
   rgw_sync_aws_src_obj_properties src_properties;
   uint32_t part_size{0};
@@ -105,7 +105,7 @@ class RGWAWSSyncModule : public RGWSyncModule {
  public:
   RGWAWSSyncModule() {}
   bool supports_data_export() override { return false;}
-  int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
+  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
 #endif /* RGW_SYNC_MODULE_AWS_H */

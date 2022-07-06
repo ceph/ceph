@@ -377,8 +377,10 @@ void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& have, uint32_
 		 << " need " << need << dendl;
 }
 
-bool cephx_decode_ticket(CephContext *cct, KeyStore *keys, uint32_t service_id,
-	      CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info)
+bool cephx_decode_ticket(CephContext *cct, KeyStore *keys,
+			 uint32_t service_id,
+			 const CephXTicketBlob& ticket_blob,
+			 CephXServiceTicketInfo& ticket_info)
 {
   uint64_t secret_id = ticket_blob.secret_id;
   CryptoKey service_secret;

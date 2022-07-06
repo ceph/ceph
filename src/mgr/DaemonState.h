@@ -20,7 +20,6 @@
 #include <set>
 #include <boost/circular_buffer.hpp>
 
-#include "common/RWLock.h"
 #include "include/str_map.h"
 
 #include "msg/msg_types.h"
@@ -163,46 +162,8 @@ class DaemonState
     : perf_counters(types_)
   {
   }
-
-  void set_metadata(const std::map<std::string,std::string>& m) {
-    devices.clear();
-    devices_bypath.clear();
-    metadata = m;
-    auto p = m.find("device_ids");
-    if (p != m.end()) {
-      map<std::string,std::string> devs, paths; // devname -> id or path
-      get_str_map(p->second, &devs, ",; ");
-      auto q = m.find("device_paths");
-      if (q != m.end()) {
-	get_str_map(q->second, &paths, ",; ");
-      }
-      for (auto& i : devs) {
-	if (i.second.size()) {  // skip blank ids
-	  devices[i.second] = i.first;   // id -> devname
-	  auto j = paths.find(i.first);
-	  if (j != paths.end()) {
-	    devices_bypath[i.second] = j->second; // id -> path
-	  }
-	}
-      }
-    }
-    p = m.find("hostname");
-    if (p != m.end()) {
-      hostname = p->second;
-    }
-  }
-
-  const std::map<std::string,std::string>& _get_config_defaults() {
-    if (config_defaults.empty() &&
-	config_defaults_bl.length()) {
-      auto p = config_defaults_bl.cbegin();
-      try {
-	decode(config_defaults, p);
-      } catch (buffer::error& e) {
-      }
-    }
-    return config_defaults;
-  }
+  void set_metadata(const std::map<std::string,std::string>& m);
+  const std::map<std::string,std::string>& _get_config_defaults();
 };
 
 typedef std::shared_ptr<DaemonState> DaemonStatePtr;
@@ -216,17 +177,20 @@ struct DeviceState : public RefCountedObject
   std::set<std::tuple<std::string,std::string,std::string>> attachments;
   std::set<DaemonKey> daemons;
 
-  std::map<string,string> metadata;  ///< persistent metadata
+  std::map<std::string,std::string> metadata;  ///< persistent metadata
 
-  pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
+  std::pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
   utime_t life_expectancy_stamp;          ///< when life expectency was recorded
+  float wear_level = -1;                  ///< SSD wear level (negative if unknown)
 
-  void set_metadata(map<string,string>&& m);
+  void set_metadata(std::map<std::string,std::string>&& m);
 
   void set_life_expectancy(utime_t from, utime_t to, utime_t now);
   void rm_life_expectancy();
 
-  string get_life_expectancy_str(utime_t now) const;
+  void set_wear_level(float wear);
+
+  std::string get_life_expectancy_str(utime_t now) const;
 
   /// true of we can be safely forgotten/removed from memory
   bool empty() const {
@@ -234,7 +198,7 @@ struct DeviceState : public RefCountedObject
   }
 
   void dump(Formatter *f) const;
-  void print(ostream& out) const;
+  void print(std::ostream& out) const;
 
 private:
   FRIEND_MAKE_REF(DeviceState);
@@ -380,7 +344,7 @@ public:
   }
 
   void update_metadata(DaemonStatePtr state,
-		       const map<string,string>& meta) {
+		       const std::map<std::string,std::string>& meta) {
     // remove and re-insert in case the device metadata changed
     std::unique_lock l{lock};
     _rm(state->key);

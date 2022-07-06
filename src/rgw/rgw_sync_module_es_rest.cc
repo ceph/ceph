@@ -12,6 +12,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 struct es_index_obj_response {
   string bucket;
   rgw_obj_key key;
@@ -218,7 +220,7 @@ void RGWMetadataSearchOp::execute(optional_yield y)
 
   bool valid = es_query.compile(&err);
   if (!valid) {
-    ldout(s->cct, 10) << "invalid query, failed generating request json" << dendl;
+    ldpp_dout(this, 10) << "invalid query, failed generating request json" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -245,20 +247,20 @@ void RGWMetadataSearchOp::execute(optional_yield y)
   if (marker > 0) {
     params.push_back(param_pair_t("from", marker_str.c_str()));
   }
-  ldout(s->cct, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
+  ldpp_dout(this, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
   auto& extra_headers = es_module->get_request_headers();
-  op_ret = conn->get_resource(resource, &params, &extra_headers,
+  op_ret = conn->get_resource(s, resource, &params, &extra_headers,
                               out, &in, nullptr, y);
   if (op_ret < 0) {
-    ldout(s->cct, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
     return;
   }
 
-  ldout(s->cct, 20) << "response: " << string(out.c_str(), out.length()) << dendl;
+  ldpp_dout(this, 20) << "response: " << string(out.c_str(), out.length()) << dendl;
 
   JSONParser jparser;
   if (!jparser.parse(out.c_str(), out.length())) {
-    ldout(s->cct, 0) << "ERROR: failed to parse elasticsearch response" << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to parse elasticsearch response" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -266,7 +268,7 @@ void RGWMetadataSearchOp::execute(optional_yield y)
   try {
     decode_json_obj(response, &jparser);
   } catch (const JSONDecoder::err& e) {
-    ldout(s->cct, 0) << "ERROR: failed to decode JSON input: " << e.what() << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to decode JSON input: " << e.what() << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -340,7 +342,7 @@ public:
       string instance = (!e.key.instance.empty() ? e.key.instance : "null");
       s->formatter->dump_string("Instance", instance.c_str());
       s->formatter->dump_int("VersionedEpoch", e.versioned_epoch);
-      dump_time(s, "LastModified", &e.meta.mtime);
+      dump_time(s, "LastModified", e.meta.mtime);
       s->formatter->dump_int("Size", e.meta.size);
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
       s->formatter->dump_string("ContentType", e.meta.content_type.c_str());
@@ -381,7 +383,7 @@ class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
 protected:
   RGWOp *op_get() override {
     if (s->info.args.exists("query")) {
-      return new RGWMetadataSearch_ObjStore_S3(store->getRados()->get_sync_module());
+      return new RGWMetadataSearch_ObjStore_S3(store->get_sync_module());
     }
     if (!s->init_state.url_bucket.empty() &&
         s->info.args.exists("mdsearch")) {
@@ -401,8 +403,8 @@ public:
 };
 
 
-RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::RGWRadosStore *store,
-						     struct req_state* const s,
+RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Store* store,
+						     req_state* const s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
                                                      const std::string& frontend_prefix)
 {
@@ -419,7 +421,7 @@ RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::RGWRadosStore *st
 
   RGWHandler_REST *handler = new RGWHandler_REST_MDSearch_S3(auth_registry);
 
-  ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
+  ldpp_dout(s, 20) << __func__ << " handler=" << typeid(*handler).name()
 		    << dendl;
   return handler;
 }

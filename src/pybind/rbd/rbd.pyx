@@ -29,6 +29,7 @@ try:
 except ImportError:
     from collections import Iterable
 from datetime import datetime
+import errno
 from itertools import chain
 import time
 
@@ -157,6 +158,11 @@ RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR = _RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR
 RBD_SNAP_REMOVE_UNPROTECT = _RBD_SNAP_REMOVE_UNPROTECT
 RBD_SNAP_REMOVE_FLATTEN = _RBD_SNAP_REMOVE_FLATTEN
 RBD_SNAP_REMOVE_FORCE = _RBD_SNAP_REMOVE_FORCE
+
+RBD_ENCRYPTION_FORMAT_LUKS1 = _RBD_ENCRYPTION_FORMAT_LUKS1
+RBD_ENCRYPTION_FORMAT_LUKS2 = _RBD_ENCRYPTION_FORMAT_LUKS2
+RBD_ENCRYPTION_ALGORITHM_AES128 = _RBD_ENCRYPTION_ALGORITHM_AES128
+RBD_ENCRYPTION_ALGORITHM_AES256 = _RBD_ENCRYPTION_ALGORITHM_AES256
 
 RBD_WRITE_ZEROES_FLAG_THICK_PROVISION = _RBD_WRITE_ZEROES_FLAG_THICK_PROVISION
 
@@ -2264,7 +2270,7 @@ cdef class MirrorImageStatusIterator(object):
                         local_status = site_status
                     else:
                         site_status['mirror_uuid'] = mirror_uuid
-                        site_statuses += site_status
+                        site_statuses.append(site_status)
 
                 status = {
                     'name'        : decode_cstr(self.images[i].name),
@@ -2272,6 +2278,8 @@ cdef class MirrorImageStatusIterator(object):
                     'info'        : {
                         'global_id' : decode_cstr(self.images[i].info.global_id),
                         'state'     : self.images[i].info.state,
+                        # primary isn't added here because it is unknown (always
+                        # false, see XXX in Mirror::image_global_status_list())
                         },
                     'remote_statuses': site_statuses,
                     }
@@ -4636,8 +4644,8 @@ written." % (self.name, ret, length))
                 if mirror_uuid == '':
                     local_status = site_status
                 else:
-                    site_statuses['mirror_uuid'] = mirror_uuid
-                    site_statuses += site_status
+                    site_status['mirror_uuid'] = mirror_uuid
+                    site_statuses.append(site_status)
             status = {
                 'name': decode_cstr(c_status.name),
                 'id'  : self.id(),
@@ -5157,6 +5165,73 @@ written." % (self.name, ret, length))
         rbd_snap_mirror_namespace_cleanup(
             &sn, sizeof(rbd_snap_mirror_namespace_t))
         return info
+
+    @requires_not_closed
+    def encryption_format(self, format, passphrase,
+                          cipher_alg=RBD_ENCRYPTION_ALGORITHM_AES256):
+        passphrase = cstr(passphrase, "passphrase")
+        cdef rbd_encryption_format_t _format = format
+        cdef rbd_encryption_luks1_format_options_t _luks1_opts
+        cdef rbd_encryption_luks1_format_options_t _luks2_opts
+        cdef char* _passphrase = passphrase
+
+        if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
+            _luks1_opts.alg = cipher_alg
+            _luks1_opts.passphrase = _passphrase
+            _luks1_opts.passphrase_size = len(passphrase)
+            with nogil:
+                ret = rbd_encryption_format(self.image, _format, &_luks1_opts,
+                                            sizeof(_luks1_opts))
+            if ret != 0:
+                raise make_ex(
+                    ret,
+                    'error formatting image %s with format luks1' % self.name)
+        elif (format == RBD_ENCRYPTION_FORMAT_LUKS2):
+            _luks2_opts.alg = cipher_alg
+            _luks2_opts.passphrase = _passphrase
+            _luks2_opts.passphrase_size = len(passphrase)
+            with nogil:
+                ret = rbd_encryption_format(self.image, _format, &_luks2_opts,
+                                            sizeof(_luks2_opts))
+            if ret != 0:
+                raise make_ex(
+                    ret,
+                    'error formatting image %s with format luks2' % self.name)
+        else:
+            raise make_ex(-errno.ENOTSUP, 'Unsupported encryption format')
+
+    @requires_not_closed
+    def encryption_load(self, format, passphrase):
+        passphrase = cstr(passphrase, "passphrase")
+        cdef rbd_encryption_format_t _format = format
+        cdef rbd_encryption_luks1_format_options_t _luks1_opts
+        cdef rbd_encryption_luks1_format_options_t _luks2_opts
+        cdef char* _passphrase = passphrase
+
+        if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
+            _luks1_opts.passphrase = _passphrase
+            _luks1_opts.passphrase_size = len(passphrase)
+            with nogil:
+                ret = rbd_encryption_load(self.image, _format, &_luks1_opts,
+                                          sizeof(_luks1_opts))
+            if ret != 0:
+                raise make_ex(
+                    ret,
+                    ('error loading encryption on image %s '
+                     'with format luks1') % self.name)
+        elif (format == RBD_ENCRYPTION_FORMAT_LUKS2):
+            _luks2_opts.passphrase = _passphrase
+            _luks2_opts.passphrase_size = len(passphrase)
+            with nogil:
+                ret = rbd_encryption_load(self.image, _format, &_luks2_opts,
+                                          sizeof(_luks2_opts))
+            if ret != 0:
+                raise make_ex(
+                    ret,
+                    ('error loading encryption on image %s '
+                     'with format luks2') % self.name)
+        else:
+            raise make_ex(-errno.ENOTSUP, 'Unsupported encryption format')
 
 
 cdef class ImageIterator(object):

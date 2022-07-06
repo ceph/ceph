@@ -13,13 +13,17 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 
-def wait_for_victim_pg(manager):
+def wait_for_victim_pg(manager, poolid):
     """Return a PG with some data and its acting set"""
     # wait for some PG to have data that we can mess with
     victim = None
     while victim is None:
         stats = manager.get_pg_stats()
         for pg in stats:
+            pgid = str(pg['pgid'])
+            pgpool = int(pgid.split('.')[0])
+            if poolid != pgpool:
+                continue
             size = pg['stat_sum']['num_bytes']
             if size > 0:
                 victim = pg['pgid']
@@ -285,8 +289,7 @@ def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
     pool = 'rbd'
     omap_key = 'key'
     omap_val = 'val'
-    manager.do_rados(mon, ['-p', pool, 'setomapval', obj_name,
-                           omap_key, omap_val])
+    manager.do_rados(['setomapval', obj_name, omap_key, omap_val], pool=pool)
     # Update missing digests, requires "osd deep scrub update digest min age: 0"
     pgnum = get_pgnum(pg)
     manager.do_pg_scrub(pool, pgnum, 'deep-scrub')
@@ -369,19 +372,26 @@ def task(ctx, config):
     manager.flush_pg_stats(range(num_osds))
     manager.wait_for_clean()
 
+    osd_dump = manager.get_osd_dump_json()
+    poolid = -1
+    for p in osd_dump['pools']:
+        if p['pool_name'] == 'rbd':
+            poolid = p['pool']
+            break
+    assert poolid != -1
+
     # write some data
-    p = manager.do_rados(mon, ['-p', 'rbd', 'bench', '--no-cleanup', '1',
-                               'write', '-b', '4096'])
+    p = manager.do_rados(['bench', '--no-cleanup', '1', 'write', '-b', '4096'], pool='rbd')
     log.info('err is %d' % p.exitstatus)
 
     # wait for some PG to have data that we can mess with
-    pg, acting = wait_for_victim_pg(manager)
+    pg, acting = wait_for_victim_pg(manager, poolid)
     osd = acting[0]
 
     osd_remote, obj_path, obj_name = find_victim_object(ctx, pg, osd)
-    manager.do_rados(mon, ['-p', 'rbd', 'setomapval', obj_name, 'key', 'val'])
+    manager.do_rados(['setomapval', obj_name, 'key', 'val'], pool='rbd')
     log.info('err is %d' % p.exitstatus)
-    manager.do_rados(mon, ['-p', 'rbd', 'setomapheader', obj_name, 'hdr'])
+    manager.do_rados(['setomapheader', obj_name, 'hdr'], pool='rbd')
     log.info('err is %d' % p.exitstatus)
 
     # Update missing digests, requires "osd deep scrub update digest min age: 0"

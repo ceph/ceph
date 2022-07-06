@@ -59,6 +59,7 @@ class ShardServices : public md_config_obs_t {
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) final;
+
 public:
   ShardServices(
     OSDMapService &osdmap_service,
@@ -71,7 +72,7 @@ public:
 
   seastar::future<> send_to_osd(
     int peer,
-    MessageRef m,
+    MessageURef m,
     epoch_t from_epoch);
 
   crimson::os::FuturizedStore &get_store() {
@@ -88,7 +89,7 @@ public:
   }
 
   // Op Management
-  OperationRegistry registry;
+  OSDOperationRegistry registry;
   OperationThrottler throttler;
 
   template <typename T, typename... Args>
@@ -97,7 +98,13 @@ public:
       throw crimson::common::system_shutdown_exception();
     }
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
-    return std::make_pair(op, op->start());
+    auto fut = op->start().then([op /* by copy */] {
+      // ensure the op's lifetime is appropriate. It is not enough to
+      // guarantee it's alive at the scheduling stages (i.e. `then()`
+      // calling) but also during the actual execution (i.e. when passed
+      // lambdas are actually run).
+    });
+    return std::make_pair(std::move(op), std::move(fut));
   }
 
   seastar::future<> stop() {
@@ -132,6 +139,13 @@ public:
     return dispatch_context({}, std::move(ctx));
   }
 
+  // -- tids --
+  // for ops i issue
+  unsigned int next_tid{0};
+  ceph_tid_t get_tid() {
+    return (ceph_tid_t)next_tid++;
+  }
+
   // PG Temp State
 private:
   // TODO: hook into map processing and some kind of heartbeat/peering
@@ -140,11 +154,11 @@ private:
     std::vector<int> acting;
     bool forced = false;
   };
-  map<pg_t, pg_temp_t> pg_temp_wanted;
-  map<pg_t, pg_temp_t> pg_temp_pending;
+  std::map<pg_t, pg_temp_t> pg_temp_wanted;
+  std::map<pg_t, pg_temp_t> pg_temp_pending;
   friend std::ostream& operator<<(std::ostream&, const pg_temp_t&);
 public:
-  void queue_want_pg_temp(pg_t pgid, const vector<int>& want,
+  void queue_want_pg_temp(pg_t pgid, const std::vector<int>& want,
 			  bool forced = false);
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
@@ -159,7 +173,7 @@ public:
 
   // PG Created State
 private:
-  set<pg_t> pg_created;
+  std::set<pg_t> pg_created;
 public:
   seastar::future<> send_pg_created(pg_t pgid);
   seastar::future<> send_pg_created();

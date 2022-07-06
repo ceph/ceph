@@ -104,16 +104,20 @@
 #define RADOS_OBJECT_EXTENSION_FORMAT ".%016llx"
 
 /// default object layout
-struct ceph_file_layout default_file_layout = {
-  init_le32(1<<22),	// fl_stripe_unit
-  init_le32(1),		// fl_stripe_count
-  init_le32(1<<22),	// fl_object_size
-  init_le32(0),		// fl_cas_hash
-  init_le32(0),		// fl_object_stripe_unit
-  init_le32(-1),	// fl_unused
-  init_le32(-1),	// fl_pg_pool
+static const struct ceph_file_layout default_file_layout = {
+  ceph_le32(1<<22),	// fl_stripe_unit
+  ceph_le32(1),		// fl_stripe_count
+  ceph_le32(1<<22),	// fl_object_size
+  ceph_le32(0),		// fl_cas_hash
+  ceph_le32(0),		// fl_object_stripe_unit
+  ceph_le32(-1),	// fl_unused
+  ceph_le32(-1),	// fl_pg_pool
 };
 
+using std::map;
+using std::pair;
+using std::string;
+using std::vector;
 using libradosstriper::MultiAioCompletionImplPtr;
 
 namespace {
@@ -417,7 +421,7 @@ struct StatCompletionData : BasicStatCompletionData {
 private:
   FRIEND_MAKE_REF(StatCompletionData);
   /// constructor
-  StatCompletionData<TimeType>(libradosstriper::RadosStriperImpl* striper,
+  StatCompletionData(libradosstriper::RadosStriperImpl* striper,
 		     const std::string& soid,
 		     librados::AioCompletionImpl *userCompletion,
 		     libradosstriper::MultiAioCompletionImpl *multiCompletion,
@@ -658,7 +662,7 @@ static void rados_req_read_complete(rados_completion_t c, void *arg)
     // even exist if we've gone through previous case).
     // This is typical of sparse file and we need to complete with 0s.
     unsigned int lenOfZeros = data->m_expectedBytes-rc;
-    unsigned int existingDataToZero = min(data->m_bl->length()-rc, lenOfZeros);
+    unsigned int existingDataToZero = std::min(data->m_bl->length()-rc, lenOfZeros);
     if (existingDataToZero > 0) {
       data->m_bl->zero(rc, existingDataToZero);
     }
@@ -693,7 +697,7 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
     // nothing to read ! We are done.
     read_len = 0;
   } else {
-    read_len = min(len, (size_t)(size-off));
+    read_len = std::min(len, (size_t)(size-off));
   }
   // get list of extents to be read from
   vector<ObjectExtent> *extents = new vector<ObjectExtent>();

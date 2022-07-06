@@ -48,7 +48,7 @@ class MonConfig : public ::testing::Test
     }
 
     // Helper to test basic operation on a mount
-    void use_mount(struct ceph_mount_info *mnt, string name_prefix) {
+    void use_mount(struct ceph_mount_info *mnt, std::string name_prefix) {
       char name[20];
       snprintf(name, sizeof(name), "%s.%d", name_prefix.c_str(), getpid());
       int fd = ceph_open(mnt, name, O_CREAT|O_RDWR, 0644);

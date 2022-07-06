@@ -78,7 +78,6 @@ int ErasureCode::create_rule(
   if (ruleid < 0)
     return ruleid;
 
-  crush.set_rule_mask_max_size(ruleid, get_chunk_count());
   return ruleid;
 }
 

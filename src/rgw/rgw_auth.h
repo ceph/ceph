@@ -6,6 +6,7 @@
 #define CEPH_RGW_AUTH_H
 
 #include <functional>
+#include <optional>
 #include <ostream>
 #include <type_traits>
 #include <system_error>
@@ -17,6 +18,8 @@
 #define RGW_USER_ANON_ID "anonymous"
 
 class RGWCtl;
+struct rgw_log_entry;
+struct req_state;
 
 namespace rgw {
 namespace auth {
@@ -75,12 +78,15 @@ public:
   virtual uint32_t get_identity_type() const = 0;
 
   /* Name of Account */
-  virtual string get_acct_name() const = 0;
+  virtual std::string get_acct_name() const = 0;
 
   /* Subuser of Account */
-  virtual string get_subuser() const = 0;
+  virtual std::string get_subuser() const = 0;
 
-  virtual string get_role_tenant() const { return ""; }
+  virtual std::string get_role_tenant() const { return ""; }
+
+  /* write any auth-specific fields that are safe to expose in the ops log */
+  virtual void write_ops_log_entry(rgw_log_entry& entry) const {};
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -364,30 +370,75 @@ protected:
 class StrategyRegistry;
 
 class WebIdentityApplier : public IdentityApplier {
+  std::string sub;
+  std::string iss;
+  std::string aud;
+  std::string client_id;
+  std::string user_name;
 protected:
   CephContext* const cct;
-  RGWCtl* const ctl;
-  string role_session;
-  string role_tenant;
-  rgw::web_idp::WebTokenClaims token_claims;
+  rgw::sal::Store* store;
+  std::string role_session;
+  std::string role_tenant;
+  std::unordered_multimap<std::string, std::string> token_claims;
+  boost::optional<std::multimap<std::string,std::string>> role_tags;
+  boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags;
 
-  string get_idp_url() const;
+  std::string get_idp_url() const;
 
   void create_account(const DoutPrefixProvider* dpp,
                       const rgw_user& acct_user,
-                      const string& display_name,
+                      const std::string& display_name,
                       RGWUserInfo& user_info) const;     /* out */
 public:
   WebIdentityApplier( CephContext* const cct,
-                      RGWCtl* const ctl,
-                      const string& role_session,
-                      const string& role_tenant,
-                      const rgw::web_idp::WebTokenClaims& token_claims)
-    : cct(cct),
-      ctl(ctl),
+                      rgw::sal::Store* store,
+                      const std::string& role_session,
+                      const std::string& role_tenant,
+                      const std::unordered_multimap<std::string, std::string>& token_claims,
+                      boost::optional<std::multimap<std::string,std::string>> role_tags,
+                      boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags)
+      : cct(cct),
+      store(store),
       role_session(role_session),
       role_tenant(role_tenant),
-      token_claims(token_claims) {
+      token_claims(token_claims),
+      role_tags(role_tags),
+      principal_tags(principal_tags) {
+      const auto& sub = token_claims.find("sub");
+      if(sub != token_claims.end()) {
+        this->sub = sub->second;
+      }
+
+      const auto& iss = token_claims.find("iss");
+      if(iss != token_claims.end()) {
+        this->iss = iss->second;
+      }
+
+      const auto& aud = token_claims.find("aud");
+      if(aud != token_claims.end()) {
+        this->aud = aud->second;
+      }
+
+      const auto& client_id = token_claims.find("client_id");
+      if(client_id != token_claims.end()) {
+        this->client_id = client_id->second;
+      } else {
+        const auto& azp = token_claims.find("azp");
+        if (azp != token_claims.end()) {
+          this->client_id = azp->second;
+        }
+      }
+
+      const auto& user_name = token_claims.find("username");
+      if(user_name != token_claims.end()) {
+        this->user_name = user_name->second;
+      } else {
+        const auto& given_username = token_claims.find("given_username");
+        if (given_username != token_claims.end()) {
+          this->user_name = given_username->second;
+        }
+      }
   }
 
   void modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const override;
@@ -401,7 +452,7 @@ public:
   }
 
   bool is_owner_of(const rgw_user& uid) const override {
-    if (uid.id == token_claims.sub && uid.tenant == role_tenant && uid.ns == "oidc") {
+    if (uid.id == this->sub && uid.tenant == role_tenant && uid.ns == "oidc") {
       return true;
     }
     return false;
@@ -421,11 +472,11 @@ public:
     return TYPE_WEB;
   }
 
-  string get_acct_name() const override {
-    return token_claims.user_name;
+  std::string get_acct_name() const override {
+    return this->user_name;
   }
 
-  string get_subuser() const override {
+  std::string get_subuser() const override {
     return {};
   }
 
@@ -434,9 +485,11 @@ public:
 
     virtual aplptr_t create_apl_web_identity( CephContext* cct,
                                               const req_state* s,
-                                              const string& role_session,
-                                              const string& role_tenant,
-                                              const rgw::web_idp::WebTokenClaims& token) const = 0;
+                                              const std::string& role_session,
+                                              const std::string& role_tenant,
+                                              const std::unordered_multimap<std::string, std::string>& token,
+                                              boost::optional<std::multimap<std::string, std::string>>,
+                                              boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags) const = 0;
   };
 };
 
@@ -494,6 +547,8 @@ public:
     const uint32_t perm_mask;
     const bool is_admin;
     const uint32_t acct_type;
+    const std::string access_key_id;
+    const std::string subuser;
 
   public:
     enum class acct_privilege_t {
@@ -501,16 +556,23 @@ public:
       IS_PLAIN_ACCT
     };
 
+    static const std::string NO_SUBUSER;
+    static const std::string NO_ACCESS_KEY;
+
     AuthInfo(const rgw_user& acct_user,
              const std::string& acct_name,
              const uint32_t perm_mask,
              const acct_privilege_t level,
+             const std::string access_key_id,
+             const std::string subuser,
              const uint32_t acct_type=TYPE_NONE)
     : acct_user(acct_user),
       acct_name(acct_name),
       perm_mask(perm_mask),
       is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),
-      acct_type(acct_type) {
+      acct_type(acct_type),
+      access_key_id(access_key_id),
+      subuser(subuser) {
     }
   };
 
@@ -521,7 +583,7 @@ protected:
   CephContext* const cct;
 
   /* Read-write is intensional here due to RGWUserInfo creation process. */
-  RGWCtl* const ctl;
+  rgw::sal::Store* store;
 
   /* Supplemental strategy for extracting permissions from ACLs. Its results
    * will be combined (ORed) with a default strategy that is responsible for
@@ -539,13 +601,13 @@ protected:
 
 public:
   RemoteApplier(CephContext* const cct,
-                RGWCtl* const ctl,
+                rgw::sal::Store* store,
                 acl_strategy_t&& extra_acl_strategy,
                 const AuthInfo& info,
 		rgw::auth::ImplicitTenants& implicit_tenant_context,
                 rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit)
     : cct(cct),
-      ctl(ctl),
+      store(store),
       extra_acl_strategy(std::move(extra_acl_strategy)),
       info(info),
       implicit_tenant_context(implicit_tenant_context),
@@ -560,9 +622,10 @@ public:
   uint32_t get_perm_mask() const override { return info.perm_mask; }
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
   uint32_t get_identity_type() const override { return info.acct_type; }
-  string get_acct_name() const override { return info.acct_name; }
-  string get_subuser() const override { return {}; }
+  std::string get_acct_name() const override { return info.acct_name; }
+  std::string get_subuser() const override { return {}; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -588,24 +651,24 @@ protected:
   const RGWUserInfo user_info;
   const std::string subuser;
   uint32_t perm_mask;
+  const std::string access_key_id;
 
   uint32_t get_perm_mask(const std::string& subuser_name,
                          const RGWUserInfo &uinfo) const;
 
 public:
   static const std::string NO_SUBUSER;
+  static const std::string NO_ACCESS_KEY;
 
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
                std::string subuser,
-               const boost::optional<uint32_t>& perm_mask)
+               const std::optional<uint32_t>& perm_mask,
+               const std::string access_key_id)
     : user_info(user_info),
-      subuser(std::move(subuser)) {
-    if (perm_mask) {
-      this->perm_mask = perm_mask.get();
-    } else {
-      this->perm_mask = RGW_PERM_INVALID;
-    }
+      subuser(std::move(subuser)),
+      perm_mask(perm_mask.value_or(RGW_PERM_INVALID)),
+      access_key_id(access_key_id) {
   }
 
 
@@ -623,8 +686,9 @@ public:
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return TYPE_RGW; }
-  string get_acct_name() const override { return {}; }
-  string get_subuser() const override { return subuser; }
+  std::string get_acct_name() const override { return {}; }
+  std::string get_subuser() const override { return subuser; }
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   struct Factory {
     virtual ~Factory() {}
@@ -632,40 +696,38 @@ public:
                                       const req_state* s,
                                       const RGWUserInfo& user_info,
                                       const std::string& subuser,
-                                      const boost::optional<uint32_t>& perm_mask) const = 0;
+                                      const std::optional<uint32_t>& perm_mask,
+                                      const std::string& access_key_id) const = 0;
     };
 };
 
 class RoleApplier : public IdentityApplier {
 public:
   struct Role {
-    string id;
-    string name;
-    string tenant;
-    vector<string> role_policies;
-  } role;
+    std::string id;
+    std::string name;
+    std::string tenant;
+    std::vector<std::string> role_policies;
+  };
+  struct TokenAttrs {
+    rgw_user user_id;
+    std::string token_policy;
+    std::string role_session_name;
+    std::vector<std::string> token_claims;
+    std::string token_issued_at;
+    std::vector<std::pair<std::string, std::string>> principal_tags;
+  };
 protected:
-  const rgw_user user_id;
-  string token_policy;
-  string role_session_name;
-  std::vector<string> token_claims;
-  string token_issued_at;
+  Role role;
+  TokenAttrs token_attrs;
 
 public:
 
   RoleApplier(CephContext* const cct,
                const Role& role,
-               const rgw_user& user_id,
-               const string& token_policy,
-               const string& role_session_name,
-               const std::vector<string>& token_claims,
-               const string& token_issued_at)
+               const TokenAttrs& token_attrs)
     : role(role),
-      user_id(user_id),
-      token_policy(token_policy),
-      role_session_name(role_session_name),
-      token_claims(token_claims),
-      token_issued_at(token_issued_at) {}
+      token_attrs(token_attrs) {}
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
@@ -674,30 +736,26 @@ public:
     return false;
   }
   bool is_owner_of(const rgw_user& uid) const override {
-    return (this->user_id.id == uid.id && this->user_id.tenant == uid.tenant && this->user_id.ns == uid.ns);
+    return (this->token_attrs.user_id.id == uid.id && this->token_attrs.user_id.tenant == uid.tenant && this->token_attrs.user_id.ns == uid.ns);
   }
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
-    return RGW_PERM_NONE;
+    return RGW_PERM_NONE; 
   }
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return TYPE_ROLE; }
-  string get_acct_name() const override { return {}; }
-  string get_subuser() const override { return {}; }
+  std::string get_acct_name() const override { return {}; }
+  std::string get_subuser() const override { return {}; }
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
-  string get_role_tenant() const override { return role.tenant; }
+  std::string get_role_tenant() const override { return role.tenant; }
 
   struct Factory {
     virtual ~Factory() {}
     virtual aplptr_t create_apl_role( CephContext* cct,
                                       const req_state* s,
                                       const rgw::auth::RoleApplier::Role& role,
-                                      const rgw_user& user_id,
-                                      const std::string& token_policy,
-                                      const std::string& role_session,
-                                      const std::vector<string>& token_claims,
-                                      const std::string& token_issued_at) const = 0;
+                                      const rgw::auth::RoleApplier::TokenAttrs& token_attrs) const = 0;
     };
 };
 
@@ -731,6 +789,7 @@ protected:
 
 uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
-  const rgw::auth::Identity::aclspec_t& aclspec);
+  const rgw::auth::Identity::aclspec_t& aclspec,
+  const DoutPrefixProvider *dpp);
 
 #endif /* CEPH_RGW_AUTH_H */

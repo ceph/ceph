@@ -9,6 +9,8 @@
    QEMU <qemu-rbd>
    libvirt <libvirt>
    Kubernetes <rbd-kubernetes>
+   Nomad <rbd-nomad>
    OpenStack <rbd-openstack>
    CloudStack <rbd-cloudstack>
    LIO iSCSI Gateway <iscsi-overview>
+   Windows <rbd-windows>

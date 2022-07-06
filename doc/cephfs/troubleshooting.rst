@@ -124,8 +124,8 @@ slow requests are probably the ``mdsc`` and ``osdc`` files.
 * osdc: Dumps the current ops in-flight to OSDs (ie, file data IO)
 * osdmap: Dumps the current OSDMap epoch, pools, and OSDs
 
-If there are no stuck requests but you have file IO which is not progressing,
-you might have a...
+If the data pool is in a NEARFULL condition, then the kernel cephfs client
+will switch to doing writes synchronously, which is quite slow.
 
 Disconnected+Remounted FS
 =========================

@@ -19,8 +19,7 @@
 
 #include "gtest/gtest.h"
 
-using std::string;
-using std::cout;
+using namespace std;
 
 entity_addr_t addr;
 

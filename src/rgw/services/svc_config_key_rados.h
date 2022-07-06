@@ -31,7 +31,7 @@ class RGWSI_ConfigKey_RADOS : public RGWSI_ConfigKey
   bool maybe_insecure_mon_conn{false};
   std::atomic_flag warned_insecure = ATOMIC_FLAG_INIT;
 
-  int do_start(optional_yield) override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
   void warn_if_insecure();
 
@@ -46,7 +46,9 @@ public:
 
   RGWSI_ConfigKey_RADOS(CephContext *cct) : RGWSI_ConfigKey(cct) {}
 
-  int get(const string& key, bool secure, bufferlist *result) override;
+  virtual ~RGWSI_ConfigKey_RADOS() override;
+
+  int get(const std::string& key, bool secure, bufferlist *result) override;
 };
 
 

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph distributed storage system
@@ -22,6 +22,14 @@
 #include "common/safe_io.h"
 #include "gtest/gtest.h"
 #include "common/fork_function.h"
+
+#ifdef _WIN32
+// Some of the tests expect GNU binaries to be available. We'll just rely on
+// the ones provided by Msys (which also comes with Git for Windows).
+#define SHELL "bash.exe"
+#else
+#define SHELL "/bin/sh"
+#endif
 
 bool read_from_fd(int fd, std::string &out) {
   out.clear();
@@ -53,6 +61,10 @@ TEST(SubProcess, False)
 TEST(SubProcess, NotFound)
 {
   SubProcess p("NOTEXISTENTBINARY", SubProcess::CLOSE, SubProcess::CLOSE, SubProcess::PIPE);
+  #ifdef _WIN32
+  // Windows will error out early.
+  ASSERT_EQ(p.spawn(), -1);
+  #else
   ASSERT_EQ(p.spawn(), 0);
   std::string buf;
   ASSERT_TRUE(read_from_fd(p.get_stderr(), buf));
@@ -60,6 +72,7 @@ TEST(SubProcess, NotFound)
   ASSERT_EQ(p.join(), 1);
   std::cerr << "err: " << p.err() << std::endl;
   ASSERT_FALSE(p.err().c_str()[0] == '\0');
+  #endif
 }
 
 TEST(SubProcess, Echo)
@@ -121,6 +134,7 @@ TEST(SubProcess, Killed)
   ASSERT_FALSE(cat.err().c_str()[0] == '\0');
 }
 
+#ifndef _WIN32
 TEST(SubProcess, CatWithArgs)
 {
   SubProcess cat("cat", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE);
@@ -142,15 +156,16 @@ TEST(SubProcess, CatWithArgs)
   std::cerr << "err: " << cat.err() << std::endl;
   ASSERT_FALSE(cat.err().c_str()[0] == '\0');
 }
+#endif
 
 TEST(SubProcess, Subshell)
 {
-  SubProcess sh("/bin/sh", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE);
+  SubProcess sh(SHELL, SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE);
   sh.add_cmd_args("-c",
       "sleep 0; "
       "cat; "
       "echo 'error from subshell' >&2; "
-      "/bin/sh -c 'exit 13'", NULL);
+      SHELL " -c 'exit 13'", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string msg("hello via subshell");
   int n = write(sh.get_stdin(), msg.c_str(), msg.size());
@@ -210,8 +225,10 @@ TEST(SubProcessTimed, SleepTimedout)
   ASSERT_EQ(sleep.spawn(), 0);
   std::string buf;
   ASSERT_TRUE(read_from_fd(sleep.get_stderr(), buf));
+  #ifndef _WIN32
   std::cerr << "stderr: " << buf;
   ASSERT_FALSE(buf.empty());
+  #endif
   ASSERT_EQ(sleep.join(), 128 + SIGKILL);
   std::cerr << "err: " << sleep.err() << std::endl;
   ASSERT_FALSE(sleep.err().c_str()[0] == '\0');
@@ -219,7 +236,7 @@ TEST(SubProcessTimed, SleepTimedout)
 
 TEST(SubProcessTimed, SubshellNoTimeout)
 {
-  SubProcessTimed sh("/bin/sh", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 0);
+  SubProcessTimed sh(SHELL, SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 0);
   sh.add_cmd_args("-c", "cat >&2", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string msg("the quick brown fox jumps over the lazy dog");
@@ -239,8 +256,8 @@ TEST(SubProcessTimed, SubshellNoTimeout)
 
 TEST(SubProcessTimed, SubshellKilled)
 {
-  SubProcessTimed sh("/bin/sh", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 10);
-  sh.add_cmd_args("-c", "sh -c cat", NULL);
+  SubProcessTimed sh(SHELL, SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 10);
+  sh.add_cmd_args("-c", SHELL "-c cat", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string msg("etaoin shrdlu");
   int n = write(sh.get_stdin(), msg.c_str(), msg.size());
@@ -256,18 +273,21 @@ TEST(SubProcessTimed, SubshellKilled)
 
 TEST(SubProcessTimed, SubshellTimedout)
 {
-  SubProcessTimed sh("/bin/sh", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 1, SIGTERM);
+  SubProcessTimed sh(SHELL, SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 1, SIGTERM);
   sh.add_cmd_args("-c", "sleep 1000& cat; NEVER REACHED", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string buf;
+  #ifndef _WIN32
   ASSERT_TRUE(read_from_fd(sh.get_stderr(), buf));
   std::cerr << "stderr: " << buf;
   ASSERT_FALSE(buf.empty());
+  #endif
   ASSERT_EQ(sh.join(), 128 + SIGTERM);
   std::cerr << "err: " << sh.err() << std::endl;
   ASSERT_FALSE(sh.err().c_str()[0] == '\0');
 }
 
+#ifndef _WIN32
 TEST(fork_function, normal)
 {
   ASSERT_EQ(0, fork_function(10, std::cerr, [&]() { return 0; }));
@@ -291,3 +311,4 @@ TEST(fork_function, timeout)
 	sleep(60);
 	return -111; }));
 }
+#endif

@@ -481,7 +481,7 @@ int SnapshotRemoveRequest<I>::scan_for_parents(
   ceph_assert(ceph_mutex_is_locked(image_ctx.image_lock));
 
   if (pspec.pool_id != -1) {
-    map<uint64_t, SnapInfo>::iterator it;
+    std::map<uint64_t, SnapInfo>::iterator it;
     for (it = image_ctx.snap_info.begin();
          it != image_ctx.snap_info.end(); ++it) {
       // skip our snap id (if checking base image, CEPH_NOSNAP won't match)

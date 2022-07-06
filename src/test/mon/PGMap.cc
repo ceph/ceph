@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -16,6 +16,7 @@
 
 #include "include/stringify.h"
 
+using namespace std;
 
 namespace {
   class CheckTextTable : public TextTable {
@@ -79,8 +80,9 @@ TEST(pgmap, dump_object_stat_sum_0)
   pool.quota_max_bytes = 2000 * 1024 * 1024;
   pool.size = 2;
   pool.type = pg_pool_t::TYPE_REPLICATED;
+  pool.tier_of = 0;
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-			      pool.get_size(), verbose, true, true, &pool);  
+			      pool.get_size(), verbose, true, true, &pool);
   float copies_rate =
     (static_cast<float>(sum.num_object_copies - sum.num_objects_degraded) /
       sum.num_object_copies) * pool.get_size();
@@ -120,8 +122,9 @@ TEST(pgmap, dump_object_stat_sum_1)
   pool.quota_max_bytes = 2000 * 1024 * 1024;
   pool.size = 2;
   pool.type = pg_pool_t::TYPE_REPLICATED;
+  pool.tier_of = 0;
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-			      pool.get_size(), verbose, true, true, &pool);  
+			      pool.get_size(), verbose, true, true, &pool);
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));

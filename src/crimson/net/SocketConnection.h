@@ -44,17 +44,15 @@ class SocketConnection : public Connection {
   bool update_rx_seq(seq_num_t seq);
 
   // messages to be resent after connection gets reset
-  std::deque<MessageRef> out_q;
-  std::deque<MessageRef> pending_q;
+  std::deque<MessageURef> out_q;
   // messages sent, but not yet acked by peer
-  std::deque<MessageRef> sent;
+  std::deque<MessageURef> sent;
 
   seastar::shard_id shard_id() const;
 
  public:
   SocketConnection(SocketMessenger& messenger,
-                   ChainedDispatchers& dispatchers,
-                   bool is_msgr2);
+                   ChainedDispatchers& dispatchers);
   ~SocketConnection() override;
 
   Messenger* get_messenger() const override;
@@ -71,13 +69,13 @@ class SocketConnection : public Connection {
   bool peer_wins() const;
 #endif
 
-  seastar::future<> send(MessageRef msg) override;
+  seastar::future<> send(MessageURef msg) override;
 
   seastar::future<> keepalive() override;
 
   void mark_down() override;
 
-  void print(ostream& out) const override;
+  void print(std::ostream& out) const override;
 
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
@@ -97,6 +95,8 @@ class SocketConnection : public Connection {
   bool is_lossy() const {
     return policy.lossy;
   }
+
+  seastar::socket_address get_local_address() const;
 
   friend class Protocol;
   friend class ProtocolV1;

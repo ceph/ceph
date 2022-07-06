@@ -46,6 +46,8 @@
 
 #include "common/common_init.h"
 
+using namespace std;
+
 int main(int argc, char **argv) {
   map<string,string> defaults = {
     { "admin_socket", get_rand_socket_path() }

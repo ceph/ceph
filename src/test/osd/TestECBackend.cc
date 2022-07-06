@@ -19,6 +19,8 @@
 #include "osd/ECBackend.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 TEST(ECUtil, stripe_info_t)
 {
   const uint64_t swidth = 4096;

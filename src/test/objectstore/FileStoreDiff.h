@@ -29,8 +29,8 @@ class FileStoreDiff {
 
   bool diff_objects(FileStore *a_store, FileStore *b_store, coll_t coll);
   bool diff_objects_stat(struct stat& a, struct stat& b);
-  bool diff_attrs(std::map<std::string,bufferptr>& b,
-      std::map<std::string,bufferptr>& a);
+  bool diff_attrs(std::map<std::string,bufferptr,std::less<>>& b,
+      std::map<std::string,bufferptr,std::less<>>& a);
 
 public:
   FileStoreDiff(FileStore *a, FileStore *b);

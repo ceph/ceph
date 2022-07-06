@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import http.cookies
 import logging
@@ -8,9 +7,9 @@ import sys
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
 from ..services.auth import AuthManager, JwtManager
+from ..services.cluster import ClusterModel
 from ..settings import Settings
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController, \
-    allow_empty_body, set_cookies
+from . import APIDoc, APIRouter, ControllerAuthMixin, EndpointDoc, RESTController, allow_empty_body
 
 # Python 3.8 introduced `samesite` attribute:
 # https://docs.python.org/3/library/http.cookies.html#morsel-objects
@@ -29,12 +28,13 @@ AUTH_CHECK_SCHEMA = {
 }
 
 
-@ApiController('/auth', secure=False)
-@ControllerDoc("Initiate a session with Ceph", "Auth")
-class Auth(RESTController):
+@APIRouter('/auth', secure=False)
+@APIDoc("Initiate a session with Ceph", "Auth")
+class Auth(RESTController, ControllerAuthMixin):
     """
     Provide authenticates and returns JWT token.
     """
+
     def create(self, username, password):
         user_data = AuthManager.authenticate(username, password)
         user_perms, pwd_expiration_date, pwd_update_required = None, None, None
@@ -52,8 +52,11 @@ class Auth(RESTController):
                 mgr.ACCESS_CTRL_DB.reset_attempt(username)
                 mgr.ACCESS_CTRL_DB.save()
                 token = JwtManager.gen_token(username)
-                token = token.decode('utf-8')
-                set_cookies(url_prefix, token)
+
+                # For backward-compatibility: PyJWT versions < 2.0.0 return bytes.
+                token = token.decode('utf-8') if isinstance(token, bytes) else token
+
+                self._set_token_cookie(url_prefix, token)
                 return {
                     'token': token,
                     'username': username,
@@ -86,6 +89,7 @@ class Auth(RESTController):
         logger.debug('Logout successful')
         token = JwtManager.get_token_from_header()
         JwtManager.blocklist_token(token)
+        self._delete_token_cookie(token)
         redirect_url = '#/login'
         if mgr.SSO_DB.protocol == 'saml2':
             redirect_url = 'auth/saml2/slo'
@@ -114,4 +118,5 @@ class Auth(RESTController):
                 }
         return {
             'login_url': self._get_login_url(),
+            'cluster_status': ClusterModel.from_db().dict()['status']
         }

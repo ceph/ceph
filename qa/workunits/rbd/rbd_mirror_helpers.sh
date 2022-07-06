@@ -542,10 +542,15 @@ status()
                     echo "image ${image} journal status"
                     rbd --cluster ${cluster} -p ${image_pool} --namespace "${image_ns}" journal status --image ${image}
                     echo
+                    echo "image ${image} snapshots"
+                    rbd --cluster ${cluster} -p ${image_pool} --namespace "${image_ns}" snap ls --all ${image}
+                    echo
                 done
 
                 echo "${cluster} ${image_pool} ${image_ns} rbd_mirroring omap vals"
                 rados --cluster ${cluster} -p ${image_pool} --namespace "${image_ns}" listomapvals rbd_mirroring
+                echo "${cluster} ${image_pool} ${image_ns} rbd_mirror_leader omap vals"
+                rados --cluster ${cluster} -p ${image_pool} --namespace "${image_ns}" listomapvals rbd_mirror_leader
                 echo
             done
         done
@@ -902,7 +907,9 @@ create_image_and_enable_mirror()
     fi
 
     create_image ${cluster} ${pool} ${image} $@
-    enable_mirror ${cluster} ${pool} ${image} ${mode}
+    if [ "${MIRROR_POOL_MODE}" = "image" ] || [ "$pool" = "${PARENT_POOL}" ]; then
+        enable_mirror ${cluster} ${pool} ${image} ${mode}
+    fi
 }
 
 enable_journaling()
@@ -1091,6 +1098,20 @@ unprotect_snapshot()
     rbd --cluster ${cluster} snap unprotect ${pool}/${image}@${snap}
 }
 
+unprotect_snapshot_retry()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap=$4
+
+    for s in 0 1 2 4 8 16 32; do
+        sleep ${s}
+        unprotect_snapshot ${cluster} ${pool} ${image} ${snap} && return 0
+    done
+    return 1
+}
+
 wait_for_snap_present()
 {
     local cluster=$1
@@ -1170,10 +1191,18 @@ stress_write_image()
     local image=$3
     local duration=$(awk 'BEGIN {srand(); print int(10 * rand()) + 5}')
 
+    set +e
     timeout ${duration}s ceph_test_rbd_mirror_random_write \
         --cluster ${cluster} ${pool} ${image} \
         --debug-rbd=20 --debug-journaler=20 \
-        2> ${TEMPDIR}/rbd-mirror-random-write.log || true
+        2> ${TEMPDIR}/rbd-mirror-random-write.log
+    error_code=$?
+    set -e
+
+    if [ $error_code -eq 124 ]; then
+        return 0
+    fi
+    return 1
 }
 
 show_diff()
@@ -1279,6 +1308,8 @@ enable_mirror()
     local mode=${4:-${MIRROR_IMAGE_MODE}}
 
     rbd --cluster=${cluster} mirror image enable ${pool}/${image} ${mode}
+    # Display image info including the global image id for debugging purpose
+    rbd --cluster=${cluster} info ${pool}/${image}
 }
 
 test_image_present()
@@ -1374,6 +1405,58 @@ get_clone_format()
                if (!parent) exit 1
                print format
              }'
+}
+
+list_omap_keys()
+{
+    local cluster=$1
+    local pool=$2
+    local obj_name=$3
+
+    rados --cluster ${cluster} -p ${pool} listomapkeys ${obj_name}
+}
+
+count_omap_keys_with_filter()
+{
+    local cluster=$1
+    local pool=$2
+    local obj_name=$3
+    local filter=$4
+
+    list_omap_keys ${cluster} ${pool} ${obj_name} | grep -c ${filter}
+}
+
+wait_for_omap_keys()
+{
+    local cluster=$1
+    local pool=$2
+    local obj_name=$3
+    local filter=$4
+
+    for s in 0 1 2 2 4 4 8 8 8 16 16 32; do
+        sleep $s
+
+        set +e
+        test "$(count_omap_keys_with_filter ${cluster} ${pool} ${obj_name} ${filter})" = 0
+        error_code=$?
+        set -e
+
+        if [ $error_code -eq 0 ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+wait_for_image_in_omap()
+{
+    local cluster=$1
+    local pool=$2
+
+    wait_for_omap_keys ${cluster} ${pool} rbd_mirroring status_global
+    wait_for_omap_keys ${cluster} ${pool} rbd_mirroring image_
+    wait_for_omap_keys ${cluster} ${pool} rbd_mirror_leader image_map
 }
 
 #

@@ -25,9 +25,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#ifndef _WIN32
 #include <sys/syscall.h>
-#include <sys/types.h>
 #include <sys/wait.h>
+#endif
+#include <sys/types.h>
 #include <unistd.h>
 #include <atomic>
 #include <limits>
@@ -40,6 +42,8 @@ static pid_t do_gettid(void)
 {
 #if defined(__linux__)
   return static_cast < pid_t >(syscall(SYS_gettid));
+#elif defined(_WIN32)
+  return static_cast < pid_t >(GetCurrentThreadId());
 #else
   return static_cast < pid_t >(pthread_getthreadid_np());
 #endif
@@ -87,6 +91,10 @@ start()
       return ret;
     m_started = true;
   } else {
+    #ifdef _WIN32
+    printf("Using separate processes is not supported on Windows.\n");
+    return -1;
+    #else
     std::string err_msg;
     ret = preforker.prefork(err_msg);
     if (ret < 0)
@@ -99,6 +107,7 @@ start()
     } else {
       m_started = true;
     }
+    #endif
   }
   return 0;
 }
@@ -127,9 +136,13 @@ join()
     }
     return "";
   } else {
+    #ifdef _WIN32
+    return "Using separate processes is not supported on Windows.\n";
+    #else
     std::string err_msg;
     ret = preforker.parent_wait(err_msg);
     return err_msg;
+    #endif
   }
 }
 

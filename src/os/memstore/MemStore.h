@@ -16,13 +16,13 @@
 #ifndef CEPH_MEMSTORE_H
 #define CEPH_MEMSTORE_H
 
+#include <atomic>
 #include <mutex>
 #include <boost/intrusive_ptr.hpp>
 
 #include "include/unordered_map.h"
 #include "common/Finisher.h"
 #include "common/RefCountedObj.h"
-#include "common/RWLock.h"
 #include "os/ObjectStore.h"
 #include "PageSet.h"
 #include "include/ceph_assert.h"
@@ -32,7 +32,7 @@ public:
   struct Object : public RefCountedObject {
     ceph::mutex xattr_mutex{ceph::make_mutex("MemStore::Object::xattr_mutex")};
     ceph::mutex omap_mutex{ceph::make_mutex("MemStore::Object::omap_mutex")};
-    std::map<std::string,ceph::buffer::ptr> xattr;
+    std::map<std::string,ceph::buffer::ptr,std::less<>> xattr;
     ceph::buffer::list omap_header;
     std::map<std::string,ceph::buffer::list> omap;
 
@@ -196,7 +196,7 @@ private:
 
   Finisher finisher;
 
-  uint64_t used_bytes;
+  std::atomic<uint64_t> used_bytes;
 
   void _do_transaction(Transaction& t);
 
@@ -310,7 +310,7 @@ public:
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
 	      ceph::buffer::ptr& value) override;
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
-	       std::map<std::string,ceph::buffer::ptr>& aset) override;
+	       std::map<std::string,ceph::buffer::ptr,std::less<>>& aset) override;
 
   int list_collections(std::vector<coll_t>& ls) override;
 
@@ -363,6 +363,14 @@ public:
     const std::set<std::string> &keys,     ///< [in] Keys to get
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
+#ifdef WITH_SEASTAR
+  int omap_get_values(
+    CollectionHandle &c,         ///< [in] Collection containing oid
+    const ghobject_t &oid,       ///< [in] Object containing omap
+    const std::optional<std::string> &start_after,     ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
+    ) override;
+#endif
 
   using ObjectStore::omap_check_keys;
   /// Filters keys into out which are defined on oid

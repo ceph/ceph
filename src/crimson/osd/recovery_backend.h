@@ -8,6 +8,7 @@
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/futurized_collection.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/shard_services.h"
 
@@ -24,25 +25,16 @@ namespace crimson::osd{
 class PGBackend;
 
 class RecoveryBackend {
-  void handle_backfill_finish(
-    MOSDPGBackfill& m);
-  seastar::future<> handle_backfill_progress(
-    MOSDPGBackfill& m);
-  seastar::future<> handle_backfill_finish_ack(
-    MOSDPGBackfill& m);
-  seastar::future<> handle_backfill(MOSDPGBackfill& m);
-
-  seastar::future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
-
-  seastar::future<> handle_scan_get_digest(
-    MOSDPGScan& m);
-  seastar::future<> handle_scan_digest(
-    MOSDPGScan& m);
-  seastar::future<> handle_scan(
-    MOSDPGScan& m);
-protected:
+public:
   class WaitForObjectRecovery;
 public:
+  template <typename T = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      ::crimson::osd::IOInterruptCondition, T>;
+  using interruptor =
+    ::crimson::interruptible::interruptor<
+      ::crimson::osd::IOInterruptCondition>;
   RecoveryBackend(crimson::osd::PG& pg,
 		  crimson::osd::ShardServices& shard_services,
 		  crimson::os::CollectionRef coll,
@@ -54,13 +46,13 @@ public:
       backend{backend} {}
   virtual ~RecoveryBackend() {}
   WaitForObjectRecovery& add_recovering(const hobject_t& soid) {
-    auto [it, added] = recovering.emplace(soid, WaitForObjectRecovery{});
+    auto [it, added] = recovering.emplace(soid, new WaitForObjectRecovery{});
     assert(added);
-    return it->second;
+    return *(it->second);
   }
   WaitForObjectRecovery& get_recovering(const hobject_t& soid) {
     assert(is_recovering(soid));
-    return recovering.at(soid);
+    return *(recovering.at(soid));
   }
   void remove_recovering(const hobject_t& soid) {
     recovering.erase(soid);
@@ -72,20 +64,20 @@ public:
     return recovering.size();
   }
 
-  virtual seastar::future<> handle_recovery_op(
+  virtual interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m);
 
-  virtual seastar::future<> recover_object(
+  virtual interruptible_future<> recover_object(
     const hobject_t& soid,
     eversion_t need) = 0;
-  virtual seastar::future<> recover_delete(
+  virtual interruptible_future<> recover_delete(
     const hobject_t& soid,
     eversion_t need) = 0;
-  virtual seastar::future<> push_delete(
+  virtual interruptible_future<> push_delete(
     const hobject_t& soid,
     eversion_t need) = 0;
 
-  seastar::future<BackfillInterval> scan_for_backfill(
+  interruptible_future<BackfillInterval> scan_for_backfill(
     const hobject_t& from,
     std::int64_t min,
     std::int64_t max);
@@ -96,7 +88,7 @@ public:
 
   seastar::future<> stop() {
     for (auto& [soid, recovery_waiter] : recovering) {
-      recovery_waiter.stop();
+      recovery_waiter->stop();
     }
     return on_stop();
   }
@@ -127,7 +119,11 @@ protected:
     object_stat_sum_t stat;
   };
 
-  class WaitForObjectRecovery : public crimson::osd::BlockerT<WaitForObjectRecovery> {
+public:
+  class WaitForObjectRecovery :
+    public boost::intrusive_ref_counter<
+      WaitForObjectRecovery, boost::thread_unsafe_counter>,
+    public crimson::BlockerT<WaitForObjectRecovery> {
     seastar::shared_promise<> readable, recovered, pulled;
     std::map<pg_shard_t, seastar::shared_promise<>> pushes;
   public:
@@ -146,10 +142,18 @@ protected:
     seastar::future<> wait_for_recovered() {
       return recovered.get_shared_future();
     }
-    crimson::osd::blocking_future<>
-    wait_for_recovered_blocking() {
-      return make_blocking_future(
-	  recovered.get_shared_future());
+    template <typename T, typename F>
+    auto wait_track_blocking(T &trigger, F &&fut) {
+      WaitForObjectRecoveryRef ref = this;
+      return track_blocking(
+	trigger,
+	std::forward<F>(fut)
+      ).finally([ref] {});
+    }
+    template <typename T>
+    seastar::future<> wait_for_recovered(T &trigger) {
+      WaitForObjectRecoveryRef ref = this;
+      return wait_track_blocking(trigger, recovered.get_shared_future());
     }
     seastar::future<> wait_for_pull() {
       return pulled.get_shared_future();
@@ -185,10 +189,14 @@ protected:
     void dump_detail(Formatter* f) const {
     }
   };
-  std::map<hobject_t, WaitForObjectRecovery> recovering;
+  using RecoveryBlockingEvent =
+    crimson::AggregateBlockingEvent<WaitForObjectRecovery::BlockingEvent>;
+  using WaitForObjectRecoveryRef = boost::intrusive_ptr<WaitForObjectRecovery>;
+protected:
+  std::map<hobject_t, WaitForObjectRecoveryRef> recovering;
   hobject_t get_temp_recovery_object(
     const hobject_t& target,
-    eversion_t version);
+    eversion_t version) const;
 
   boost::container::flat_set<hobject_t> temp_contents;
 
@@ -200,4 +208,20 @@ protected:
   }
   void clean_up(ceph::os::Transaction& t, std::string_view why);
   virtual seastar::future<> on_stop() = 0;
+private:
+  void handle_backfill_finish(
+    MOSDPGBackfill& m);
+  interruptible_future<> handle_backfill_progress(
+    MOSDPGBackfill& m);
+  interruptible_future<> handle_backfill_finish_ack(
+    MOSDPGBackfill& m);
+  interruptible_future<> handle_backfill(MOSDPGBackfill& m);
+
+  interruptible_future<> handle_scan_get_digest(
+    MOSDPGScan& m);
+  interruptible_future<> handle_scan_digest(
+    MOSDPGScan& m);
+  interruptible_future<> handle_scan(
+    MOSDPGScan& m);
+  interruptible_future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
 };

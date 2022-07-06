@@ -7,6 +7,7 @@
 #include <algorithm>
 #include "include/buffer_fwd.h"
 #include "common/Formatter.h"
+#include "common/iso_8601.h"
 #include "common/async/completion.h"
 #include "rgw_common.h"
 #include "rgw_data_sync.h"
@@ -39,14 +40,26 @@ std::string json_format_pubsub_event(const EventType& event) {
   f.flush(ss);
   return ss.str();
 }
+  
+bool get_bool(const RGWHTTPArgs& args, const std::string& name, bool default_value) {
+  bool value;
+  bool exists;
+  if (args.get_bool(name.c_str(), &value, &exists) == -EINVAL) {
+    throw RGWPubSubEndpoint::configuration_error("invalid boolean value for " + name);
+  }
+  if (!exists) {
+    return default_value;
+  }
+  return value;
+}
 
 class RGWPubSubHTTPEndpoint : public RGWPubSubEndpoint {
 private:
   const std::string endpoint;
-  std::string str_ack_level;
   typedef unsigned ack_level_t;
   ack_level_t ack_level; // TODO: not used for now
-  bool verify_ssl;
+  const bool verify_ssl;
+  const bool cloudevents;
   static const ack_level_t ACK_LEVEL_ANY = 0;
   static const ack_level_t ACK_LEVEL_NON_ERROR = 1;
 
@@ -73,7 +86,7 @@ private:
     }
 
     // send message to endpoint
-    int send_request() override {
+    int send_request(const DoutPrefixProvider *dpp) override {
       init_new_io(this);
       const auto rc = sync_env->http_manager->add_request(this);
       if (rc < 0) {
@@ -98,11 +111,11 @@ private:
   };
 
 public:
-  RGWPubSubHTTPEndpoint(const std::string& _endpoint, 
-    const RGWHTTPArgs& args) : endpoint(_endpoint) {
+  RGWPubSubHTTPEndpoint(const std::string& _endpoint, const RGWHTTPArgs& args) : 
+    endpoint(_endpoint), verify_ssl(get_bool(args, "verify-ssl", true)), cloudevents(get_bool(args, "cloudevents", false)) 
+  {
     bool exists;
-
-    str_ack_level = args.get("http-ack-level", &exists);
+    const auto& str_ack_level = args.get("http-ack-level", &exists);
     if (!exists || str_ack_level == "any") {
       // "any" is default
       ack_level = ACK_LEVEL_ANY;
@@ -113,17 +126,6 @@ public:
       if (ack_level < 100 || ack_level >= 600) {
         throw configuration_error("HTTP/S: invalid http-ack-level: " + str_ack_level);
       }
-    }
-
-    auto str_verify_ssl = args.get("verify-ssl", &exists);
-    boost::algorithm::to_lower(str_verify_ssl);
-    // verify server certificate by default
-    if (!exists || str_verify_ssl == "true") {
-      verify_ssl = true;
-    } else if (str_verify_ssl == "false") {
-      verify_ssl = false;
-    } else {
-        throw configuration_error("HTTP/S: verify-ssl must be true/false, not: " + str_verify_ssl);
     }
   }
 
@@ -139,8 +141,20 @@ public:
     bufferlist read_bl;
     RGWPostHTTPData request(cct, "POST", endpoint, &read_bl, verify_ssl);
     const auto post_data = json_format_pubsub_event(event);
+    if (cloudevents) {
+      // following: https://github.com/cloudevents/spec/blob/v1.0.1/http-protocol-binding.md
+      // using "Binary Content Mode"
+      request.append_header("ce-specversion", "1.0");
+      request.append_header("ce-type", "com.amazonaws." + event.eventName);
+      request.append_header("ce-time", to_iso_8601(event.eventTime)); 
+      // default output of iso8601 is also RFC3339 compatible
+      request.append_header("ce-id", event.x_amz_request_id + "." + event.x_amz_id_2);
+      request.append_header("ce-source", event.eventSource + "." + event.awsRegion + "." + event.bucket_name);
+      request.append_header("ce-subject", event.object_key);
+    }
     request.set_post_data(post_data);
     request.set_send_length(post_data.length());
+    request.append_header("Content-Type", "application/json");
     if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
     const auto rc = RGWHTTP::process(&request, y);
     if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
@@ -151,10 +165,8 @@ public:
   std::string to_str() const override {
     std::string str("HTTP/S Endpoint");
     str += "\nURI: " + endpoint;
-    str += "\nAck Level: " + str_ack_level;
     str += (verify_ssl ? "\nverify SSL" : "\ndon't verify SSL");
     return str;
-
   }
 };
 
@@ -172,6 +184,23 @@ private:
   const std::string exchange;
   ack_level_t ack_level;
   amqp::connection_ptr_t conn;
+
+  bool get_verify_ssl(const RGWHTTPArgs& args) {
+    bool exists;
+    auto str_verify_ssl = args.get("verify-ssl", &exists);
+    if (!exists) {
+      // verify server certificate by default
+      return true;
+    }
+    boost::algorithm::to_lower(str_verify_ssl);
+    if (str_verify_ssl == "true") {
+      return true;
+    }
+    if (str_verify_ssl == "false") {
+      return false;
+    }
+    throw configuration_error("'verify-ssl' must be true/false, not: " + str_verify_ssl);
+  }
 
   std::string get_exchange(const RGWHTTPArgs& args) {
     bool exists;
@@ -215,7 +244,7 @@ private:
       topic(_topic), conn(_conn), message(_message) {}
 
     // send message to endpoint, without waiting for reply
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         const auto rc = amqp::publish(conn, topic, message);
         if (rc < 0) {
@@ -245,7 +274,7 @@ private:
       topic(_topic), conn(_conn), message(_message) {}
 
     // send message to endpoint, waiting for reply
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           init_new_io(this);
@@ -297,7 +326,7 @@ public:
         topic(_topic),
         exchange(get_exchange(args)),
         ack_level(get_ack_level(args)),
-        conn(amqp::connect(endpoint, exchange, (ack_level == ack_level_t::Broker))) {
+        conn(amqp::connect(endpoint, exchange, (ack_level == ack_level_t::Broker), get_verify_ssl(args), args.get_optional("ca-location"))) {
     if (!conn) { 
       throw configuration_error("AMQP: failed to create connection to: " + endpoint);
     }
@@ -422,44 +451,10 @@ private:
   kafka::connection_ptr_t conn;
   const ack_level_t ack_level;
 
-  bool get_verify_ssl(const RGWHTTPArgs& args) {
-    bool exists;
-    auto str_verify_ssl = args.get("verify-ssl", &exists);
-    if (!exists) {
-      // verify server certificate by default
-      return true;
-    }
-    boost::algorithm::to_lower(str_verify_ssl);
-    if (str_verify_ssl == "true") {
-      return true;
-    }
-    if (str_verify_ssl == "false") {
-      return false;
-    }
-    throw configuration_error("'verify-ssl' must be true/false, not: " + str_verify_ssl);
-  }
-
-  bool get_use_ssl(const RGWHTTPArgs& args) {
-    bool exists;
-    auto str_use_ssl = args.get("use-ssl", &exists);
-    if (!exists) {
-      // by default ssl not used
-      return false;
-    }
-    boost::algorithm::to_lower(str_use_ssl);
-    if (str_use_ssl == "true") {
-      return true;
-    }
-    if (str_use_ssl == "false") {
-      return false;
-    }
-    throw configuration_error("'use-ssl' must be true/false, not: " + str_use_ssl);
-  }
 
   ack_level_t get_ack_level(const RGWHTTPArgs& args) {
     bool exists;
-    // get ack level
-    const auto str_ack_level = args.get("kafka-ack-level", &exists);
+    const auto& str_ack_level = args.get("kafka-ack-level", &exists);
     if (!exists || str_ack_level == "broker") {
       // "broker" is default
       return ack_level_t::Broker;
@@ -487,7 +482,7 @@ private:
       topic(_topic), conn(_conn), message(_message) {}
 
     // send message to endpoint, without waiting for reply
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         const auto rc = kafka::publish(conn, topic, message);
         if (rc < 0) {
@@ -517,7 +512,7 @@ private:
       topic(_topic), conn(_conn), message(_message) {}
 
     // send message to endpoint, waiting for reply
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           init_new_io(this);
@@ -566,7 +561,7 @@ public:
       CephContext* _cct) : 
         cct(_cct),
         topic(_topic),
-        conn(kafka::connect(_endpoint, get_use_ssl(args), get_verify_ssl(args), args.get_optional("ca-location"))) ,
+        conn(kafka::connect(_endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), args.get_optional("ca-location"))) ,
         ack_level(get_ack_level(args)) {
     if (!conn) { 
       throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
@@ -691,7 +686,7 @@ const std::string& get_schema(const std::string& endpoint) {
   if (schema == "http" || schema == "https") {
     return WEBHOOK_SCHEMA;
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  } else if (schema == "amqp") {
+  } else if (schema == "amqp" || schema == "amqps") {
     return AMQP_SCHEMA;
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
@@ -725,9 +720,6 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
       throw configuration_error("AMQP: unknown version: " + version);
       return nullptr;
     }
-  } else if (schema == "amqps") {
-    throw configuration_error("AMQP: ssl not supported");
-    return nullptr;
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   } else if (schema == KAFKA_SCHEMA) {

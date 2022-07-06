@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_CACHE_RWL_REQUEST_H 
-#define CEPH_LIBRBD_CACHE_RWL_REQUEST_H 
+#ifndef CEPH_LIBRBD_CACHE_PWL_REQUEST_H
+#define CEPH_LIBRBD_CACHE_PWL_REQUEST_H
 
 #include "include/Context.h"
 #include "librbd/cache/pwl/Types.h"
@@ -40,9 +40,6 @@ public:
   ExtentsSummary<io::Extents> image_extents_summary;
   bool detained = false;                /* Detained in blockguard (overlapped with a prior IO) */
   utime_t allocated_time;               /* When allocation began */
-  bool waited_lanes = false;            /* This IO waited for free persist/replicate lanes */
-  bool waited_entries = false;          /* This IO waited for free log entries */
-  bool waited_buffers = false;          /* This IO waited for data buffers (pmemobj_reserve() failed) */
 
   C_BlockIORequest(T &pwl, const utime_t arrived, io::Extents &&extents,
                    bufferlist&& bl, const int fadvise_flags, Context *user_req);
@@ -66,26 +63,16 @@ public:
 
   virtual void dispatch()  = 0;
 
-  virtual void copy_pmem() {};
+  virtual void copy_cache() {};
 
   virtual const char *get_name() const {
     return "C_BlockIORequest";
   }
+
   uint64_t get_image_extents_size() {
     return image_extents.size();
   }
-  void set_io_waited_for_lanes(bool waited) {
-    waited_lanes = waited;
-  }
-  void set_io_waited_for_entries(bool waited) {
-    waited_entries = waited;
-  }
-  void set_io_waited_for_buffers(bool waited) {
-    waited_buffers = waited;
-  }
-  bool has_io_waited_for_buffers() {
-    return waited_buffers;
-  }
+
   std::vector<WriteBufferAllocation>& get_resources_buffers() {
     return m_resources.buffers;
   }
@@ -99,9 +86,9 @@ public:
   }
 
   virtual void setup_buffer_resources(
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
-      uint64_t &number_lanes, uint64_t &number_log_entries,
-      uint64_t &number_unpublished_reserves) {};
+      uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
+      uint64_t *number_lanes, uint64_t *number_log_entries,
+      uint64_t *number_unpublished_reserves) = 0;
 
 protected:
   utime_t m_arrived_time;
@@ -131,11 +118,21 @@ template <typename T>
 class C_WriteRequest : public C_BlockIORequest<T> {
 public:
   using C_BlockIORequest<T>::pwl;
-  unique_ptr<WriteLogOperationSet> op_set = nullptr;
+  bool compare_succeeded = false;
+  uint64_t *mismatch_offset;
+  bufferlist cmp_bl;
+  bufferlist read_bl;
+  bool is_comp_and_write = false;
+  std::unique_ptr<WriteLogOperationSet> op_set = nullptr;
 
   C_WriteRequest(T &pwl, const utime_t arrived, io::Extents &&image_extents,
                  bufferlist&& bl, const int fadvise_flags, ceph::mutex &lock,
                  PerfCounters *perfcounter, Context *user_req);
+
+  C_WriteRequest(T &pwl, const utime_t arrived, io::Extents &&image_extents,
+                 bufferlist&& cmp_bl, bufferlist&& bl, uint64_t *mismatch_offset,
+                 int fadvise_flags, ceph::mutex &lock, PerfCounters *perfcounter,
+                 Context *user_req);
 
   ~C_WriteRequest() override;
 
@@ -145,20 +142,18 @@ public:
   void finish_req(int r) override;
 
   /* Compare and write will override this */
-  virtual void update_req_stats(utime_t &now) {
-    // TODO: Add in later PRs
-  }
+  virtual void update_req_stats(utime_t &now);
+
   bool alloc_resources() override;
 
   void deferred_handler() override { }
 
   void dispatch() override;
 
-  #ifdef WITH_RBD_RWL
-  void copy_pmem() override;
-  #endif
+  void copy_cache() override;
 
-  virtual std::shared_ptr<WriteLogOperation> create_operation(uint64_t offset, uint64_t len);
+  virtual std::shared_ptr<WriteLogOperation> create_operation(uint64_t offset,
+                                                              uint64_t len);
 
   virtual void setup_log_operations(DeferredContexts &on_exit);
 
@@ -173,11 +168,6 @@ public:
 protected:
   using C_BlockIORequest<T>::m_resources;
   PerfCounters *m_perfcounter = nullptr;
-  /* Plain writes will allocate one buffer per request extent */
-  void setup_buffer_resources(
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
-      uint64_t &number_lanes, uint64_t &number_log_entries,
-      uint64_t &number_unpublished_reserves) override;
 
 private:
   bool m_do_early_flush = false;
@@ -220,9 +210,10 @@ public:
   }
 
   void setup_buffer_resources(
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
-      uint64_t &number_lanes, uint64_t &number_log_entries,
-      uint64_t &number_unpublished_reserves) override;
+      uint64_t *bytes_cached, uint64_t *bytes_dirtied,
+      uint64_t *bytes_allocated, uint64_t *number_lanes,
+      uint64_t *number_log_entries,
+      uint64_t *number_unpublished_reserves) override;
 private:
   std::shared_ptr<SyncPointLogOperation> op;
   ceph::mutex &m_lock;
@@ -270,9 +261,9 @@ public:
     return "C_DiscardRequest";
   }
   void setup_buffer_resources(
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
-      uint64_t &number_lanes, uint64_t &number_log_entries,
-      uint64_t &number_unpublished_reserves) override;
+      uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
+      uint64_t *number_lanes, uint64_t *number_log_entries,
+      uint64_t *number_unpublished_reserves) override;
 private:
   uint32_t m_discard_granularity_bytes;
   ceph::mutex &m_lock;
@@ -300,11 +291,6 @@ public:
 
   void update_req_stats(utime_t &now) override;
 
-  void setup_buffer_resources(
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
-      uint64_t &number_lanes, uint64_t &number_log_entries,
-      uint64_t &number_unpublished_reserves) override;
-
   std::shared_ptr<WriteLogOperation> create_operation(uint64_t offset, uint64_t len) override;
 
   const char *get_name() const override {
@@ -316,44 +302,6 @@ public:
                                   const C_WriteSameRequest<U> &req);
 };
 
-/**
- * This is the custodian of the BlockGuard cell for this compare and write. The
- * block guard is acquired before the read begins to guarantee atomicity of this
- * operation.  If this results in a write, the block guard will be released
- * when the write completes to all replicas.
- */
-template <typename T>
-class C_CompAndWriteRequest : public C_WriteRequest<T> {
-public:
-  using C_BlockIORequest<T>::pwl;
-  bool compare_succeeded = false;
-  uint64_t *mismatch_offset;
-  bufferlist cmp_bl;
-  bufferlist read_bl;
-  C_CompAndWriteRequest(T &pwl, const utime_t arrived, io::Extents &&image_extents,
-                        bufferlist&& cmp_bl, bufferlist&& bl, uint64_t *mismatch_offset,
-                        int fadvise_flags, ceph::mutex &lock, PerfCounters *perfcounter,
-                        Context *user_req);
-  ~C_CompAndWriteRequest();
-
-  void finish_req(int r) override;
-
-  void update_req_stats(utime_t &now) override;
-
-  /*
-   * Compare and write doesn't implement alloc_resources(), deferred_handler(),
-   * or dispatch(). We use the implementation in C_WriteRequest(), and only if the
-   * compare phase succeeds and a write is actually performed.
-   */
-
-  const char *get_name() const override {
-    return "C_CompAndWriteRequest";
-  }
-  template <typename U>
-  friend std::ostream &operator<<(std::ostream &os,
-                                  const C_CompAndWriteRequest<U> &req);
-};
-
 struct BlockGuardReqState {
   bool barrier = false; /* This is a barrier request */
   bool current_barrier = false; /* This is the currently active barrier */
@@ -361,10 +309,10 @@ struct BlockGuardReqState {
   bool queued = false; /* Queued for barrier */
   friend std::ostream &operator<<(std::ostream &os,
                                   const BlockGuardReqState &r) {
-    os << "barrier=" << r.barrier << ", "
-       << "current_barrier=" << r.current_barrier << ", "
-       << "detained=" << r.detained << ", "
-       << "queued=" << r.queued;
+    os << "barrier=" << r.barrier
+       << ", current_barrier=" << r.current_barrier
+       << ", detained=" << r.detained
+       << ", queued=" << r.queued;
     return os;
   }
 };
@@ -399,9 +347,9 @@ public:
   }
   friend std::ostream &operator<<(std::ostream &os,
                                   const GuardedRequest &r) {
-    os << "guard_ctx->state=[" << r.guard_ctx->state << "], "
-       << "block_extent.block_start=" << r.block_extent.block_start << ", "
-       << "block_extent.block_start=" << r.block_extent.block_end;
+    os << "guard_ctx->state=[" << r.guard_ctx->state
+       << "], block_extent.block_start=" << r.block_extent.block_start
+       << ", block_extent.block_end=" << r.block_extent.block_end;
     return os;
   }
 };
@@ -410,4 +358,4 @@ public:
 } // namespace cache
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_CACHE_RWL_REQUEST_H
+#endif // CEPH_LIBRBD_CACHE_PWL_REQUEST_H

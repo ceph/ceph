@@ -52,9 +52,9 @@ WRITE_CLASS_ENCODER(link_rollback)
 struct rmdir_rollback {
   metareqid_t reqid;
   dirfrag_t src_dir;
-  string src_dname;
+  std::string src_dname;
   dirfrag_t dest_dir;
-  string dest_dname;
+  std::string dest_dname;
   bufferlist snapbl;
 
   void encode(bufferlist& bl) const;
@@ -70,7 +70,7 @@ struct rename_rollback {
     utime_t dirfrag_old_mtime;
     utime_t dirfrag_old_rctime;
     inodeno_t ino, remote_ino;
-    string dname;
+    std::string dname;
     char remote_d_type;
     utime_t old_ctime;
 
@@ -118,7 +118,7 @@ public:
    */
   EMetaBlob commit;
   bufferlist rollback;
-  string type;
+  std::string type;
   metareqid_t reqid;
   mds_rank_t leader;
   __u8 op;  // prepare, commit, abort
@@ -132,7 +132,7 @@ public:
     leader(leadermds),
     op(o), origop(oo) { }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     if (type.length())
       out << type << " ";
     out << " " << (int)op;

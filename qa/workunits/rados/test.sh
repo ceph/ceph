@@ -29,6 +29,7 @@ for f in \
     api_service api_service_pp \
     api_c_write_operations \
     api_c_read_operations \
+    api_cls_remote_reads \
     list_parallel \
     open_pools_parallel \
     delete_pools_parallel

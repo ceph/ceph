@@ -14,6 +14,8 @@
 
 #include "blk/BlockDevice.h"
 
+using namespace std;
+
 class TempBdev {
 public:
   TempBdev(uint64_t size)
@@ -90,9 +92,7 @@ TEST(KernelDevice, Ticket45337) {
 }
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
+  auto args = argv_to_vec(argc, argv);
   map<string,string> defaults = {
     { "debug_bdev", "1/20" }
   };

@@ -11,5 +11,7 @@
   $ cmp nto.compiled nto.recompiled
 
   $ crushtool -c "$TESTDIR/missing-bucket.crushmap.txt"
+  WARNING: min_size is no longer supported, ignoring
+  WARNING: max_size is no longer supported, ignoring
   in rule 'rule-bad' item 'root-404' not defined
   [1]

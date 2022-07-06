@@ -1,7 +1,3 @@
-# ubuntu for py2 until we move to py3
-os_type: ubuntu
-
-# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
 tasks:
 - install:
 - ceph:
@@ -20,7 +16,7 @@ tasks:
       use-keystone-role: client.0
 - tempest:
     client.0:
-      sha1: d43223773d75d2e82fb33a1281038e611c41d0f3
+      sha1: train-last
       force-branch: master
       use-keystone-role: client.0
       auth:
@@ -48,6 +44,7 @@ tasks:
         - .*test_container_staticweb.StaticWebTest.test_web_listing_css
         - .*test_container_synchronization.*
         - .*test_object_services.PublicObjectTest.test_access_public_container_object_without_using_creds
+        - .*test_object_services.ObjectTest.test_create_object_with_transfer_encoding
 
 overrides:
   ceph:

@@ -1,4 +1,5 @@
-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_bucket_sync.h"
@@ -10,6 +11,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 ostream& operator<<(ostream& os, const rgw_sync_bucket_entity& e) {
   os << "{b=" << rgw_sync_bucket_entities::bucket_key(e.bucket) << ",z=" << e.zone.value_or(rgw_zone_id()) << ",az=" << (int)e.all_zones << "}";
@@ -141,7 +143,8 @@ pair<zb_pipe_map_t::const_iterator, zb_pipe_map_t::const_iterator> rgw_sync_grou
 
 
 template <typename CB>
-void rgw_sync_group_pipe_map::init(CephContext *cct,
+void rgw_sync_group_pipe_map::init(const DoutPrefixProvider *dpp,
+                                   CephContext *cct,
                                    const rgw_zone_id& _zone,
                                    std::optional<rgw_bucket> _bucket,
                                    const rgw_sync_policy_group& group,
@@ -164,7 +167,7 @@ void rgw_sync_group_pipe_map::init(CephContext *cct,
   /* only look at pipes that touch the specific zone and bucket */
   for (auto& pipe : group.pipes) {
     if (pipe.contains_zone_bucket(zone, bucket)) {
-      ldout(cct, 20) << __func__ << "(): pipe_map (zone=" << zone << " bucket=" << bucket_key << "): adding potential pipe: " << pipe << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): pipe_map (zone=" << zone << " bucket=" << bucket_key << "): adding potential pipe: " << pipe << dendl;
       zone_pipes.push_back(pipe);
     }
   }
@@ -348,31 +351,36 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_basic_info_without_tags(const rg
     return false;
   }
 
-  bool conflict = false;
-
   std::optional<rgw_user> _user;
   std::optional<rgw_sync_pipe_acl_translation> _acl_translation;
   std::optional<string> _storage_class;
-  rgw_sync_pipe_params::Mode _mode;
+  rgw_sync_pipe_params::Mode _mode{rgw_sync_pipe_params::Mode::MODE_SYSTEM};
 
-  int i = 0;
+  // make sure all params are the same by saving the first one
+  // encountered and comparing all subsequent to it
+  bool first_iter = true;
   for (auto& iter : iters) {
-    auto& rule_params = iter->second->params;
-    if (++i == 0) {
+    const rgw_sync_pipe_params& rule_params = iter->second->params;
+    if (first_iter) {
       _user = rule_params.user;
       _acl_translation = rule_params.dest.acl_translation;
       _storage_class = rule_params.dest.storage_class;
       _mode = rule_params.mode;
-      continue;
-    }
-
-    conflict = !(_user == rule_params.user &&
-                 _acl_translation == rule_params.dest.acl_translation &&
-                 _storage_class == rule_params.dest.storage_class &&
-                 _mode == rule_params.mode);
-    if (conflict) {
-      *need_more_info = true;
-      return false;
+      first_iter = false;
+    } else {
+      // note: three of these == operators are comparing std::optional
+      // against std::optional; as one would expect they are equal a)
+      // if both do not contain values or b) if both do and those
+      // contained values are the same
+      const bool conflict =
+	!(_user == rule_params.user &&
+	  _acl_translation == rule_params.dest.acl_translation &&
+	  _storage_class == rule_params.dest.storage_class &&
+	  _mode == rule_params.mode);
+      if (conflict) {
+	*need_more_info = true;
+	return false;
+      }
     }
   }
 
@@ -519,7 +527,7 @@ bool RGWBucketSyncFlowManager::allowed_data_flow(const rgw_zone_id& source_zone,
   return found;
 }
 
-void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
+void RGWBucketSyncFlowManager::init(const DoutPrefixProvider *dpp, const rgw_sync_policy_info& sync_policy) {
   std::optional<rgw_sync_data_flow_group> default_flow;
   if (parent) {
     default_flow.emplace();
@@ -530,7 +538,7 @@ void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
     auto& group = item.second;
     auto& flow_group_map = flow_groups[group.id];
 
-    flow_group_map.init(cct, zone_id, bucket, group,
+    flow_group_map.init(dpp, cct, zone_id, bucket, group,
                         (default_flow ? &(*default_flow) : nullptr),
                         &all_zones,
                         [&](const rgw_zone_id& source_zone,
@@ -549,7 +557,8 @@ void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
   }
 }
 
-void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucket,
+void RGWBucketSyncFlowManager::reflect(const DoutPrefixProvider *dpp,
+                                       std::optional<rgw_bucket> effective_bucket,
                                        RGWBucketSyncFlowManager::pipe_set *source_pipes,
                                        RGWBucketSyncFlowManager::pipe_set *dest_pipes,
                                        bool only_enabled) const
@@ -560,7 +569,7 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
     effective_bucket_key = effective_bucket->get_key();
   }
   if (parent) {
-    parent->reflect(effective_bucket, source_pipes, dest_pipes, only_enabled);
+    parent->reflect(dpp, effective_bucket, source_pipes, dest_pipes, only_enabled);
   }
 
   for (auto& item : flow_groups) {
@@ -581,7 +590,7 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
       pipe.source.apply_bucket(effective_bucket);
       pipe.dest.apply_bucket(effective_bucket);
 
-      ldout(cct, 20) << __func__ << "(): flow manager (bucket=" << effective_bucket_key << "): adding source pipe: " << pipe << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): flow manager (bucket=" << effective_bucket_key << "): adding source pipe: " << pipe << dendl;
       source_pipes->insert(pipe);
     }
 
@@ -595,7 +604,7 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
       pipe.source.apply_bucket(effective_bucket);
       pipe.dest.apply_bucket(effective_bucket);
 
-      ldout(cct, 20) << __func__ << "(): flow manager (bucket=" << effective_bucket_key << "): adding dest pipe: " << pipe << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): flow manager (bucket=" << effective_bucket_key << "): adding dest pipe: " << pipe << dendl;
       dest_pipes->insert(pipe);
     }
   }
@@ -734,21 +743,21 @@ RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const rgw_bu
   return new RGWBucketSyncPolicyHandler(this, bucket, sync_policy);
 }
 
-int RGWBucketSyncPolicyHandler::init(optional_yield y)
+int RGWBucketSyncPolicyHandler::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  int r = bucket_sync_svc->get_bucket_sync_hints(bucket.value_or(rgw_bucket()),
+  int r = bucket_sync_svc->get_bucket_sync_hints(dpp, bucket.value_or(rgw_bucket()),
 						 &source_hints,
 						 &target_hints,
 						 y);
   if (r < 0) {
-    ldout(bucket_sync_svc->ctx(), 0) << "ERROR: failed to initialize bucket sync policy handler: get_bucket_sync_hints() on bucket="
+    ldpp_dout(dpp, 0) << "ERROR: failed to initialize bucket sync policy handler: get_bucket_sync_hints() on bucket="
       << bucket << " returned r=" << r << dendl;
     return r;
   }
 
-  flow_mgr->init(sync_policy);
+  flow_mgr->init(dpp, sync_policy);
 
-  reflect(&source_pipes,
+  reflect(dpp, &source_pipes,
           &target_pipes,
           &sources,
           &targets,
@@ -759,7 +768,7 @@ int RGWBucketSyncPolicyHandler::init(optional_yield y)
   return 0;
 }
 
-void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *psource_pipes,
+void RGWBucketSyncPolicyHandler::reflect(const DoutPrefixProvider *dpp, RGWBucketSyncFlowManager::pipe_set *psource_pipes,
                                          RGWBucketSyncFlowManager::pipe_set *ptarget_pipes,
                                          map<rgw_zone_id, RGWBucketSyncFlowManager::pipe_set> *psources,
                                          map<rgw_zone_id, RGWBucketSyncFlowManager::pipe_set> *ptargets,
@@ -774,7 +783,7 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
   std::set<rgw_zone_id> _source_zones;
   std::set<rgw_zone_id> _target_zones;
 
-  flow_mgr->reflect(bucket, &_source_pipes, &_target_pipes, only_enabled);
+  flow_mgr->reflect(dpp, bucket, &_source_pipes, &_target_pipes, only_enabled);
 
   for (auto& entry : _source_pipes.pipe_map) {
     auto& pipe = entry.second;

@@ -33,6 +33,8 @@
 #include "common/Throttle.h"
 #include "common/ceph_argparse.h"
 
+using namespace std;
+
 class ThrottleTest : public ::testing::Test {
 protected:
 

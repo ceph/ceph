@@ -69,6 +69,7 @@ class MGetPoolStatsReply;
 class MStatfsReply;
 class MCommandReply;
 class MWatchNotify;
+struct ObjectOperation;
 template<typename T>
 struct EnumerationContext;
 template<typename t>
@@ -401,22 +402,22 @@ struct ObjectOperation {
     set_handler(CB_ObjectOperation_stat(psize, nullptr, nullptr, pts, prval, nullptr));
     out_rval.back() = prval;
   }
-  void stat(uint64_t *psize, ceph::real_time *pmtime, nullptr_t) {
+  void stat(uint64_t *psize, ceph::real_time *pmtime, std::nullptr_t) {
     add_op(CEPH_OSD_OP_STAT);
     set_handler(CB_ObjectOperation_stat(psize, pmtime, nullptr, nullptr, nullptr,
 					nullptr));
   }
-  void stat(uint64_t *psize, time_t *ptime, nullptr_t) {
+  void stat(uint64_t *psize, time_t *ptime, std::nullptr_t) {
     add_op(CEPH_OSD_OP_STAT);
     set_handler(CB_ObjectOperation_stat(psize, nullptr, ptime, nullptr, nullptr,
 					nullptr));
   }
-  void stat(uint64_t *psize, struct timespec *pts, nullptr_t) {
+  void stat(uint64_t *psize, struct timespec *pts, std::nullptr_t) {
     add_op(CEPH_OSD_OP_STAT);
     set_handler(CB_ObjectOperation_stat(psize, nullptr, nullptr, pts, nullptr,
 					nullptr));
   }
-  void stat(uint64_t *psize, nullptr_t, nullptr_t) {
+  void stat(uint64_t *psize, std::nullptr_t, std::nullptr_t) {
     add_op(CEPH_OSD_OP_STAT);
     set_handler(CB_ObjectOperation_stat(psize, nullptr, nullptr, nullptr,
 					nullptr, nullptr));
@@ -518,9 +519,13 @@ struct ObjectOperation {
     }
   };
   void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t, uint64_t>* m,
-		   ceph::buffer::list* data_bl, int* prval) {
+		   ceph::buffer::list* data_bl, int* prval,
+		   uint64_t truncate_size = 0, uint32_t truncate_seq = 0) {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
+    OSDOp& o = *ops.rbegin();
+    o.op.extent.truncate_size = truncate_size;
+    o.op.extent.truncate_seq = truncate_seq;
     set_handler(CB_ObjectOperation_sparse_read(data_bl, m, prval, nullptr));
     out_rval.back() = prval;
   }
@@ -868,7 +873,7 @@ struct ObjectOperation {
     ceph::buffer::list bl;
     add_xattr(CEPH_OSD_OP_RMXATTR, name, bl);
   }
-  void setxattrs(map<string, ceph::buffer::list>& attrs) {
+  void setxattrs(std::map<std::string, ceph::buffer::list>& attrs) {
     using ceph::encode;
     ceph::buffer::list bl;
     encode(attrs, bl);
@@ -996,7 +1001,7 @@ struct ObjectOperation {
     out_ec.back() = ec;
   }
 
-  void omap_cmp(const std::map<std::string, pair<ceph::buffer::list,int> > &assertions,
+  void omap_cmp(const std::map<std::string, std::pair<ceph::buffer::list,int> > &assertions,
 		int *prval) {
     using ceph::encode;
     OSDOp &op = add_op(CEPH_OSD_OP_OMAP_CMP);
@@ -1012,7 +1017,7 @@ struct ObjectOperation {
   }
 
   void omap_cmp(const boost::container::flat_map<
-		  std::string, pair<ceph::buffer::list, int>>& assertions,
+		std::string, std::pair<ceph::buffer::list, int>>& assertions,
 		boost::system::error_code *ec) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAP_CMP);
     ceph::buffer::list bl;
@@ -1028,7 +1033,7 @@ struct ObjectOperation {
     object_copy_cursor_t *cursor;
     uint64_t *out_size;
     ceph::real_time *out_mtime;
-    std::map<std::string,ceph::buffer::list> *out_attrs;
+    std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs;
     ceph::buffer::list *out_data, *out_omap_header, *out_omap_data;
     std::vector<snapid_t> *out_snaps;
     snapid_t *out_snap_seq;
@@ -1043,7 +1048,7 @@ struct ObjectOperation {
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
 			      ceph::real_time *m,
-			      std::map<std::string,ceph::buffer::list> *a,
+			      std::map<std::string,ceph::buffer::list,std::less<>> *a,
 			      ceph::buffer::list *d, ceph::buffer::list *oh,
 			      ceph::buffer::list *o,
 			      std::vector<snapid_t> *osnaps,
@@ -1122,7 +1127,7 @@ struct ObjectOperation {
 		uint64_t max,
 		uint64_t *out_size,
 		ceph::real_time *out_mtime,
-		std::map<std::string,ceph::buffer::list> *out_attrs,
+		std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs,
 		ceph::buffer::list *out_data,
 		ceph::buffer::list *out_omap_header,
 		ceph::buffer::list *out_omap_data,
@@ -1293,13 +1298,13 @@ struct ObjectOperation {
     out_ec.back() = ec;
   }
 
-  void omap_set(const map<string, ceph::buffer::list> &map) {
+  void omap_set(const std::map<std::string, ceph::buffer::list> &map) {
     ceph::buffer::list bl;
     encode(map, bl);
     add_data(CEPH_OSD_OP_OMAPSETVALS, 0, bl.length(), bl);
   }
 
-  void omap_set(const boost::container::flat_map<string, ceph::buffer::list>& map) {
+  void omap_set(const boost::container::flat_map<std::string, ceph::buffer::list>& map) {
     ceph::buffer::list bl;
     encode(map, bl);
     add_data(CEPH_OSD_OP_OMAPSETVALS, 0, bl.length(), bl);
@@ -1405,7 +1410,7 @@ struct ObjectOperation {
       out_rval.back() = prval;
     }
   }
-  void list_watchers(vector<neorados::ObjWatcher>* out,
+  void list_watchers(std::vector<neorados::ObjWatcher>* out,
 		     boost::system::error_code* ec) {
     add_op(CEPH_OSD_OP_LIST_WATCHERS);
     set_handler(CB_ObjectOperation_decodewatchersneo(out, nullptr, ec));
@@ -1653,7 +1658,6 @@ private:
   std::atomic<int> global_op_flags{0}; // flags which are applied to each IO op
   bool keep_balanced_budget = false;
   bool honor_pool_full = true;
-  bool pool_full_try = false;
 
   // If this is true, accumulate a set of blocklisted entities
   // to be drained by consume_blocklist_events.
@@ -1667,8 +1671,8 @@ private:
     int acting_primary = -1;
 
     pg_mapping_t() {}
-    pg_mapping_t(epoch_t epoch, std::vector<int> up, int up_primary,
-                 std::vector<int> acting, int acting_primary)
+    pg_mapping_t(epoch_t epoch, const std::vector<int>& up, int up_primary,
+                 const std::vector<int>& acting, int acting_primary)
                : epoch(epoch), up(up), up_primary(up_primary),
                  acting(acting), acting_primary(acting_primary) {}
   };
@@ -1678,7 +1682,9 @@ private:
   std::map<int64_t, std::vector<pg_mapping_t>> pg_mappings;
 
   // convenient accessors
-  bool lookup_pg_mapping(const pg_t& pg, pg_mapping_t* pg_mapping) {
+  bool lookup_pg_mapping(const pg_t& pg, epoch_t epoch, std::vector<int> *up,
+                         int *up_primary, std::vector<int> *acting,
+                         int *acting_primary) {
     std::shared_lock l{pg_mapping_lock};
     auto it = pg_mappings.find(pg.pool());
     if (it == pg_mappings.end())
@@ -1686,9 +1692,13 @@ private:
     auto& mapping_array = it->second;
     if (pg.ps() >= mapping_array.size())
       return false;
-    if (mapping_array[pg.ps()].epoch != pg_mapping->epoch) // stale
+    if (mapping_array[pg.ps()].epoch != epoch) // stale
       return false;
-    *pg_mapping = mapping_array[pg.ps()];
+    auto& pg_mapping = mapping_array[pg.ps()];
+    *up = pg_mapping.up;
+    *up_primary = pg_mapping.up_primary;
+    *acting = pg_mapping.acting;
+    *acting_primary = pg_mapping.acting_primary;
     return true;
   }
   void update_pg_mapping(const pg_t& pg, pg_mapping_t&& pg_mapping) {
@@ -1794,7 +1804,7 @@ public:
 
     epoch_t last_force_resend = 0;
 
-    op_target_t(object_t oid, object_locator_t oloc, int flags)
+    op_target_t(const object_t& oid, const object_locator_t& oloc, int flags)
       : flags(flags),
 	base_oid(oid),
 	base_oloc(oloc)
@@ -2165,7 +2175,7 @@ public:
 
   struct StatfsOp {
     ceph_tid_t tid;
-    boost::optional<int64_t> data_pool;
+    std::optional<int64_t> data_pool;
     using OpSig = void(boost::system::error_code,
 		       const struct ceph_statfs);
     using OpComp = ceph::async::Completion<OpSig>;
@@ -2219,7 +2229,7 @@ public:
 
     CommandOp(
       int target_osd,
-      std::vector<string>&& cmd,
+      std::vector<std::string>&& cmd,
       ceph::buffer::list&& inbl,
       decltype(onfinish)&& onfinish)
       : cmd(std::move(cmd)),
@@ -2229,7 +2239,7 @@ public:
 
     CommandOp(
       pg_t pgid,
-      std::vector<string>&& cmd,
+      std::vector<std::string>&& cmd,
       ceph::buffer::list&& inbl,
       decltype(onfinish)&& onfinish)
       : cmd(std::move(cmd)),
@@ -2300,16 +2310,12 @@ public:
       watch_pending_async.push_back(ceph::coarse_mono_clock::now());
     }
     void finished_async() {
-      unique_lock l(watch_lock);
+      std::unique_lock l(watch_lock);
       ceph_assert(!watch_pending_async.empty());
       watch_pending_async.pop_front();
     }
 
-    explicit LingerOp(Objecter *o, uint64_t linger_id)
-      : objecter(o), linger_id(linger_id),
-	watch_lock(ceph::make_shared_mutex(
-		     fmt::format("LingerOp::watch_lock #{}", linger_id))) {}
-
+    LingerOp(Objecter *o, uint64_t linger_id);
     const LingerOp& operator=(const LingerOp& r) = delete;
     LingerOp(const LingerOp& o) = delete;
 
@@ -2465,6 +2471,7 @@ public:
     RECALC_OP_TARGET_POOL_DNE,
     RECALC_OP_TARGET_OSD_DNE,
     RECALC_OP_TARGET_OSD_DOWN,
+    RECALC_OP_TARGET_POOL_EIO,
   };
   bool _osdmap_full_flag() const;
   bool _osdmap_has_pool_full() const;
@@ -2515,9 +2522,11 @@ public:
 
 private:
   void _check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *sl);
+  void _check_op_pool_eio(Op *op, std::unique_lock<std::shared_mutex> *sl);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
   void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
+  void _check_linger_pool_eio(LingerOp *op);
   void _send_linger_map_check(LingerOp *op);
   void _linger_cancel_map_check(LingerOp *op);
   void _check_command_map_dne(CommandOp *op);
@@ -2597,7 +2606,7 @@ private:
 
   template<typename Callback, typename...Args>
   decltype(auto) with_osdmap(Callback&& cb, Args&&... args) {
-    shared_lock l(rwlock);
+    std::shared_lock l(rwlock);
     return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }
 
@@ -2614,9 +2623,6 @@ private:
 
   void set_honor_pool_full() { honor_pool_full = true; }
   void unset_honor_pool_full() { honor_pool_full = false; }
-
-  void set_pool_full_try() { pool_full_try = true; }
-  void unset_pool_full_try() { pool_full_try = false; }
 
   void _scan_requests(
     OSDSession *s,
@@ -2663,7 +2669,7 @@ private:
   template<typename CompletionToken>
   auto wait_for_osd_map(CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, void()> init(token);
-    unique_lock l(rwlock);
+    std::unique_lock l(rwlock);
     if (osdmap->get_epoch()) {
       l.unlock();
       boost::asio::post(std::move(init.completion_handler));
@@ -3787,10 +3793,10 @@ private:
   void _fs_stats_submit(StatfsOp *op);
 public:
   void handle_fs_stats_reply(MStatfsReply *m);
-  void get_fs_stats(boost::optional<int64_t> poolid,
+  void get_fs_stats(std::optional<int64_t> poolid,
 		    decltype(StatfsOp::onfinish)&& onfinish);
   template<typename CompletionToken>
-  auto get_fs_stats(boost::optional<int64_t> poolid,
+  auto get_fs_stats(std::optional<int64_t> poolid,
 		    CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, StatfsOp::OpSig> init(token);
     get_fs_stats(poolid,
@@ -3798,7 +3804,7 @@ public:
 					  std::move(init.completion_handler)));
     return init.result.get();
   }
-  void get_fs_stats(struct ceph_statfs& result, boost::optional<int64_t> poolid,
+  void get_fs_stats(struct ceph_statfs& result, std::optional<int64_t> poolid,
 		    Context *onfinish) {
     get_fs_stats(poolid, OpContextVert(onfinish, result));
   }

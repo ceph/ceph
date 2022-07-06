@@ -30,6 +30,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
+using namespace std;
 
 ostream& CDentry::print_db_line_prefix(ostream& out)
 {
@@ -63,7 +64,10 @@ ostream& operator<<(ostream& out, const CDentry& dn)
     if (dn.is_replicated()) 
       out << dn.get_replicas();
   } else {
-    out << " rep@" << dn.authority();
+    mds_authority_t a = dn.authority();
+    out << " rep@" << a.first;
+    if (a.second != CDIR_AUTH_UNKNOWN)
+      out << "," << a.second;
     out << "." << dn.get_replica_nonce();
   }
 
@@ -107,6 +111,10 @@ ostream& operator<<(ostream& out, const CDentry& dn)
   if (dn.get_num_ref()) {
     out << " |";
     dn.print_pin_set(out);
+  }
+
+  if (dn.get_alternate_name().size()) {
+    out << " altname=" << binstrprint(dn.get_alternate_name(), 16);
   }
 
   out << " " << &dn;
@@ -217,6 +225,22 @@ void CDentry::mark_new()
   state_set(STATE_NEW);
 }
 
+void CDentry::mark_auth()
+{
+  if (!is_auth()) {
+    state_set(STATE_AUTH);
+    dir->adjust_dentry_lru(this);
+  }
+}
+
+void CDentry::clear_auth()
+{
+  if (is_auth()) {
+    state_clear(STATE_AUTH);
+    dir->adjust_dentry_lru(this);
+  }
+}
+
 void CDentry::make_path_string(string& s, bool projected) const
 {
   if (dir) {
@@ -248,6 +272,9 @@ void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 
   if (dnl == &linkage)
     in->add_remote_parent(this);
+
+  // check for reintegration
+  dir->mdcache->eval_remote(this);
 }
 
 void CDentry::unlink_remote(CDentry::linkage_t *dnl)
@@ -311,9 +338,11 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
       linkage.inode = n.inode;
       linkage.inode->add_remote_parent(this);
     }
-  } else if (n.inode) {
-    dir->link_primary_inode(this, n.inode);
-    n.inode->pop_projected_parent();
+  } else {
+    if (n.inode) {
+      dir->link_primary_inode(this, n.inode);
+      n.inode->pop_projected_parent();
+    }
   }
 
   ceph_assert(n.inode == linkage.inode);
@@ -528,6 +557,37 @@ void CDentry::_put()
 	in->mdcache->maybe_eval_stray(in, true);
     }
   }
+}
+
+void CDentry::encode_remote(inodeno_t& ino, unsigned char d_type,
+                            std::string_view alternate_name,
+                            bufferlist &bl)
+{
+  bl.append('l');  // remote link
+
+  // marker, name, ino
+  ENCODE_START(2, 1, bl);
+  encode(ino, bl);
+  encode(d_type, bl);
+  encode(alternate_name, bl);
+  ENCODE_FINISH(bl);
+}
+
+void CDentry::decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            mempool::mds_co::string& alternate_name,
+                            ceph::buffer::list::const_iterator& bl)
+{
+  if (icode == 'l') {
+    DECODE_START(2, bl);
+    decode(ino, bl);
+    decode(d_type, bl);
+    if (struct_v >= 2)
+      decode(alternate_name, bl);
+    DECODE_FINISH(bl);
+  } else if (icode == 'L') {
+    decode(ino, bl);
+    decode(d_type, bl);
+  } else ceph_assert(0);
 }
 
 void CDentry::dump(Formatter *f) const

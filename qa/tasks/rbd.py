@@ -22,6 +22,8 @@ os.environ["RBD_FORCE_ALLOW_V1"] = "1"
 
 log = logging.getLogger(__name__)
 
+ENCRYPTION_PASSPHRASE = "password"
+
 @contextlib.contextmanager
 def create_image(ctx, config):
     """
@@ -36,6 +38,7 @@ def create_image(ctx, config):
                 image_name: testimage
                 image_size: 100
                 image_format: 1
+                encryption_format: luks2
             client.1:
 
     Image size is expressed as a number of megabytes; default value
@@ -53,12 +56,14 @@ def create_image(ctx, config):
         images = [(role, None) for role in config]
 
     testdir = teuthology.get_testdir(ctx)
+    passphrase_file = '{tdir}/passphrase'.format(tdir=testdir)
     for role, properties in images:
         if properties is None:
             properties = {}
         name = properties.get('image_name', default_image_name(role))
         size = properties.get('image_size', 10240)
         fmt = properties.get('image_format', 1)
+        encryption_format = properties.get('encryption_format', 'none')
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Creating image {name} with size {size}'.format(name=name,
                                                                  size=size))
@@ -77,10 +82,36 @@ def create_image(ctx, config):
         if int(fmt) != 1:
             args += ['--image-format', str(fmt)]
         remote.run(args=args)
+
+        if encryption_format != 'none':
+            remote.run(
+                args=[
+                    'echo',
+                    ENCRYPTION_PASSPHRASE,
+                    run.Raw('>'),
+                    passphrase_file
+                    ]
+                )
+            remote.run(
+                args=[
+                    'adjust-ulimits',
+                    'ceph-coverage',
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    'rbd',
+                    'encryption',
+                    'format',
+                    name,
+                    encryption_format,
+                    passphrase_file,
+                    '-p',
+                    'rbd'
+                    ]
+                )
     try:
         yield
     finally:
         log.info('Deleting rbd images...')
+        remote.run(args=['rm', '-f', passphrase_file])
         for role, properties in images:
             if properties is None:
                 properties = {}
@@ -226,25 +257,49 @@ def dev_create(ctx, config):
         - rbd.create_image: [client.0]
         - rbd.modprobe: [client.0]
         - rbd.dev_create:
-            client.0: testimage.client.0
+            client.0:
+                image_name: testimage.client.0
+                encryption_format: luks2
     """
     assert isinstance(config, dict) or isinstance(config, list), \
         "task dev_create only supports a list or dictionary for configuration"
 
     if isinstance(config, dict):
-        role_images = config.items()
+        images = config.items()
     else:
-        role_images = [(role, None) for role in config]
+        images = [(role, None) for role in config]
 
     log.info('Creating rbd block devices...')
 
     testdir = teuthology.get_testdir(ctx)
+    passphrase_file = '{tdir}/passphrase'.format(tdir=testdir)
+    device_path = {}
 
-    for role, image in role_images:
-        if image is None:
-            image = default_image_name(role)
+    for role, properties in images:
+        if properties is None:
+            properties = {}
+        name = properties.get('image_name', default_image_name(role))
+        encryption_format = properties.get('encryption_format', 'none')
         (remote,) = ctx.cluster.only(role).remotes.keys()
 
+        if encryption_format == 'none':
+            device_path[role] = '/dev/rbd/rbd/{image}'.format(image=name)
+            device_specific_args = []
+        else:
+            remote.run(
+                args=[
+                    'echo',
+                    ENCRYPTION_PASSPHRASE,
+                    run.Raw('>'),
+                    passphrase_file
+                    ]
+                )
+            device_specific_args = [
+                '-t', 'nbd', '-o',
+                'encryption-format=%s,encryption-passphrase-file=%s' % (
+                    encryption_format, passphrase_file)]
+
+        map_fp = StringIO()
         remote.run(
             args=[
                 'sudo',
@@ -252,25 +307,36 @@ def dev_create(ctx, config):
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'rbd',
-                '--user', role.rsplit('.')[-1],
+                '--id', role.rsplit('.')[-1],
                 '-p', 'rbd',
                 'map',
-                image,
-                run.Raw('&&'),
-                # wait for the symlink to be created by udev
-                'while', 'test', '!', '-e', '/dev/rbd/rbd/{image}'.format(image=image), run.Raw(';'), 'do',
-                'sleep', '1', run.Raw(';'),
-                'done',
-                ],
+                name] + device_specific_args,
+            stdout=map_fp,
             )
+
+        if encryption_format != 'none':
+            device_path[role] = map_fp.getvalue().rstrip()
+            properties['device_path'] = device_path[role]
+            remote.run(args=['sudo', 'chmod', '666', device_path[role]])
     try:
         yield
     finally:
         log.info('Unmapping rbd devices...')
-        for role, image in role_images:
-            if image is None:
-                image = default_image_name(role)
+        remote.run(args=['rm', '-f', passphrase_file])
+        for role, properties in images:
+            if not device_path.get(role):
+                continue
+
+            if properties is None:
+                properties = {}
+            encryption_format = properties.get('encryption_format', 'none')
             (remote,) = ctx.cluster.only(role).remotes.keys()
+
+            if encryption_format == 'none':
+                device_specific_args = []
+            else:
+                device_specific_args = ['-t', 'nbd']
+
             remote.run(
                 args=[
                     'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
@@ -281,15 +347,8 @@ def dev_create(ctx, config):
                     'rbd',
                     '-p', 'rbd',
                     'unmap',
-                    '/dev/rbd/rbd/{imgname}'.format(imgname=image),
-                    run.Raw('&&'),
-                    # wait for the symlink to be deleted by udev
-                    'while', 'test', '-e', '/dev/rbd/rbd/{image}'.format(image=image),
-                    run.Raw(';'),
-                    'do',
-                    'sleep', '1', run.Raw(';'),
-                    'done',
-                    ],
+                    device_path[role],
+                    ] + device_specific_args,
                 )
 
 
@@ -475,8 +534,7 @@ def xfstests(ctx, config):
                 exclude:
                 - generic/42
                 randomize: true
-                xfstests_branch: master
-                xfstests_url: 'https://raw.github.com/ceph/branch/master/qa'
+                xfstests_url: 'https://raw.github.com/ceph/ceph-ci/wip-55555/qa'
     """
     if config is None:
         config = { 'all': None }
@@ -547,8 +605,8 @@ def xfstests(ctx, config):
         log.info('   scratch ({size} MB): {image}'.format(size=scratch_size,
                                                         image=scratch_image))
         modprobe_config[role] = None
-        image_map_config[role] = test_image
-        scratch_map_config[role] = scratch_image
+        image_map_config[role] = {'image_name': test_image}
+        scratch_map_config[role] = {'image_name': scratch_image}
 
     with contextutil.nested(
         lambda: create_image(ctx=ctx, config=images_config),
@@ -619,7 +677,7 @@ def task(ctx, config):
     with contextutil.nested(
         lambda: create_image(ctx=ctx, config=norm_config),
         lambda: modprobe(ctx=ctx, config=norm_config),
-        lambda: dev_create(ctx=ctx, config=role_images),
+        lambda: dev_create(ctx=ctx, config=norm_config),
         lambda: generic_mkfs(ctx=ctx, config=norm_config,
                 devname_rtn=rbd_devname_rtn),
         lambda: generic_mount(ctx=ctx, config=role_images,

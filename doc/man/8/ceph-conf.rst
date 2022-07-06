@@ -88,8 +88,8 @@ Options
 
    override the ``$pid`` when expanding options. For example, if an option is
    configured like ``/var/log/$name.$pid.log``, the ``$pid`` portion in its
-   value will be substituded using the PID of **ceph-conf** instead of the
-   PID of the process specfied using the ``--name`` option.
+   value will be substituted using the PID of **ceph-conf** instead of the
+   PID of the process specified using the ``--name`` option.
 
 .. option:: -r, --resolve-search
 
@@ -139,7 +139,7 @@ Availability
 ============
 
 **ceph-conf** is part of Ceph, a massively scalable, open-source, distributed storage system.  Please refer
-to the Ceph documentation at http://ceph.com/docs for more
+to the Ceph documentation at https://docs.ceph.com for more
 information.
 
 

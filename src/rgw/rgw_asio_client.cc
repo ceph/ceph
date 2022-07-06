@@ -54,6 +54,8 @@ int ClientIO::init_env(CephContext *cct)
     for (auto src = name.begin(); src != name.end(); ++src, ++dest) {
       if (*src == '-') {
         *dest = '_';
+      } else if (*src == '_') {
+        *dest = '-';
       } else {
         *dest = std::toupper(*src);
       }

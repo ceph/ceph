@@ -44,7 +44,7 @@ inline std::ostream &operator<<(
 }
 
 struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
-  constexpr static segment_off_t SIZE = 4<<10;
+  constexpr static seastore_off_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<TestBlock>;
 
   std::vector<test_block_delta_t> delta = {};
@@ -83,14 +83,14 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 using TestBlockRef = TCachedExtentRef<TestBlock>;
 
 struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
-  constexpr static segment_off_t SIZE = 4<<10;
+  constexpr static seastore_off_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<TestBlockPhysical>;
 
   std::vector<test_block_delta_t> delta = {};
 
   TestBlockPhysical(ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)) {}
-  TestBlockPhysical(const TestBlock &other)
+  TestBlockPhysical(const TestBlockPhysical &other)
     : CachedExtent(other) {}
 
   CachedExtentRef duplicate_for_write() final {
@@ -104,15 +104,16 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
 
   void set_contents(char c, uint16_t offset, uint16_t len) {
     ::memset(get_bptr().c_str() + offset, c, len);
+    delta.push_back({c, offset, len});
   }
 
   void set_contents(char c) {
     set_contents(c, 0, get_length());
   }
 
-  ceph::bufferlist get_delta() final { return ceph::bufferlist(); }
+  ceph::bufferlist get_delta() final;
 
-  void apply_delta_and_adjust_crc(paddr_t, const ceph::bufferlist &bl) final {}
+  void apply_delta_and_adjust_crc(paddr_t, const ceph::bufferlist &bl) final;
 };
 using TestBlockPhysicalRef = TCachedExtentRef<TestBlockPhysical>;
 

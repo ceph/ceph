@@ -12,14 +12,7 @@
  *
  */
 
-#include <boost/type_traits.hpp>
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -42,6 +35,8 @@ namespace fs = std::experimental::filesystem;
 
 // set set_mon_vals()
 #define dout_subsys ceph_subsys_monc
+
+namespace fs = std::filesystem;
 
 using std::cerr;
 using std::cout;
@@ -109,7 +104,7 @@ int ceph_resolve_file_search(const std::string& filename_list,
 
 static int conf_stringify(const Option::value_t& v, string *out)
 {
-  if (boost::get<boost::blank>(&v)) {
+  if (v == Option::value_t{}) {
     return -ENOENT;
   }
   *out = Option::to_str(v);
@@ -185,7 +180,7 @@ md_config_t::md_config_t(ConfigValues& values,
 #define OPTION(name, type) \
     {STRINGIFY(name), &ConfigValues::name},
 #define SAFE_OPTION(name, type) OPTION(name, type)
-#include "common/legacy_config_opts.h"
+#include "options/legacy_config_opts.h"
 #undef OPTION
 #undef SAFE_OPTION
   };
@@ -196,7 +191,7 @@ md_config_t::md_config_t(ConfigValues& values,
   for (const auto &i : schema) {
     const Option &opt = i.second;
     if (opt.type == Option::TYPE_STR) {
-      bool has_daemon_default = !boost::get<boost::blank>(&opt.daemon_value);
+      bool has_daemon_default = (opt.daemon_value != Option::value_t{});
       Option::value_t default_val;
       if (is_daemon && has_daemon_default) {
 	default_val = opt.daemon_value;
@@ -205,7 +200,7 @@ md_config_t::md_config_t(ConfigValues& values,
       }
       // We call pre_validate as a sanity check, but also to get any
       // side effect (value modification) from the validator.
-      std::string *def_str = boost::get<std::string>(&default_val);
+      auto* def_str = std::get_if<std::string>(&default_val);
       std::string val = *def_str;
       std::string err;
       if (opt.pre_validate(&val, &err) != 0) {
@@ -361,7 +356,6 @@ int md_config_t::parse_config_files(ConfigValues& values,
     values.cluster = get_cluster_name(nullptr);
   }
   // open new conf
-  string conffile;
   for (auto& fn : get_conffile_paths(values, conf_files_str, warnings, flags)) {
     bufferlist bl;
     std::string error;
@@ -373,7 +367,7 @@ int md_config_t::parse_config_files(ConfigValues& values,
     int ret = parse_buffer(values, tracker, bl.c_str(), bl.length(), &oss);
     if (ret == 0) {
       parse_error.clear();
-      conffile = fn;
+      conf_path = fn;
       break;
     }
     parse_error = oss.str();
@@ -382,11 +376,11 @@ int md_config_t::parse_config_files(ConfigValues& values,
     }
   }
   // it must have been all ENOENTs, that's the only way we got here
-  if (conffile.empty()) {
+  if (conf_path.empty()) {
     return -ENOENT;
   }
   if (values.cluster.empty()) {
-    values.cluster = get_cluster_name(conffile.c_str());
+    values.cluster = get_cluster_name(conf_path.c_str());
   }
   update_legacy_vals(values);
   return 0;
@@ -1030,6 +1024,16 @@ void md_config_t::get_config_bl(
   }
 }
 
+std::optional<std::string> md_config_t::get_val_default(std::string_view key)
+{
+  std::string val;
+  const Option *opt = find_option(key);
+  if (opt && (conf_stringify(_get_val_default(*opt), &val) == 0)) {
+    return std::make_optional(std::move(val));
+  }
+  return std::nullopt;
+}
+
 int md_config_t::get_val(const ConfigValues& values,
 			 const std::string_view key, char **buf, int len) const
 {
@@ -1059,7 +1063,7 @@ Option::value_t md_config_t::_get_val(
   std::ostream *err) const
 {
   if (key.empty()) {
-    return Option::value_t(boost::blank());
+    return {};
   }
 
   // In key names, leading and trailing whitespace are not significant.
@@ -1068,7 +1072,7 @@ Option::value_t md_config_t::_get_val(
   const Option *o = find_option(k);
   if (!o) {
     // not a valid config option
-    return Option::value_t(boost::blank());
+    return {};
   }
 
   return _get_val(values, *o, stack, err);
@@ -1101,7 +1105,7 @@ Option::value_t md_config_t::_get_val_nometa(const ConfigValues& values,
 
 const Option::value_t& md_config_t::_get_val_default(const Option& o) const
 {
-  bool has_daemon_default = !boost::get<boost::blank>(&o.daemon_value);
+  bool has_daemon_default = (o.daemon_value != Option::value_t{});
   if (is_daemon && has_daemon_default) {
     return o.daemon_value;
   } else {
@@ -1150,7 +1154,7 @@ Option::value_t md_config_t::_expand_meta(
   if (!stack) {
     return in;
   }
-  const std::string *str = boost::get<const std::string>(&in);
+  const auto str = std::get_if<std::string>(&in);
   if (!str) {
     // strings only!
     return in;
@@ -1368,7 +1372,7 @@ int md_config_t::_get_val_from_conf_file(
   std::string &out) const
 {
   for (auto &s : sections) {
-    int ret = cf.read(s.c_str(), std::string{key}, out);
+    int ret = cf.read(s, key, out);
     if (ret == 0) {
       return 0;
     } else if (ret != -ENOENT) {
@@ -1459,7 +1463,7 @@ int md_config_t::_rm_val(ConfigValues& values,
 
 namespace {
 template<typename Size>
-struct get_size_visitor : public boost::static_visitor<Size>
+struct get_size_visitor
 {
   get_size_visitor() {}
 
@@ -1478,35 +1482,34 @@ struct get_size_visitor : public boost::static_visitor<Size>
 /**
  * Handles assigning from a variant-of-types to a variant-of-pointers-to-types
  */
-template<class Config>
-class assign_visitor : public boost::static_visitor<>
+class assign_visitor
 {
-  Config *conf;
+  ConfigValues *conf;
   Option::value_t val;
   public:
 
-  assign_visitor(Config *conf_, Option::value_t val_)
+  assign_visitor(ConfigValues *conf_, Option::value_t val_)
     : conf(conf_), val(val_)
   {}
 
   template <typename T>
-  void operator()(T Config::* ptr) const
+  void operator()(T ConfigValues::* ptr) const
   {
-    T *member = const_cast<T *>(&(conf->*(boost::get<const T Config::*>(ptr))));
+    T *member = const_cast<T *>(&(conf->*(ptr)));
 
-    *member = boost::get<T>(val);
+    *member = std::get<T>(val);
   }
-  void operator()(uint64_t Config::* ptr) const
+  void operator()(uint64_t ConfigValues::* ptr) const
   {
     using T = uint64_t;
-    auto member = const_cast<T*>(&(conf->*(boost::get<const T Config::*>(ptr))));
-    *member = boost::apply_visitor(get_size_visitor<T>{}, val);
+    auto member = const_cast<T*>(&(conf->*(ptr)));
+    *member = std::visit(get_size_visitor<T>{}, val);
   }
-  void operator()(int64_t Config::* ptr) const
+  void operator()(int64_t ConfigValues::* ptr) const
   {
     using T = int64_t;
-    auto member = const_cast<T*>(&(conf->*(boost::get<const T Config::*>(ptr))));
-    *member = boost::apply_visitor(get_size_visitor<T>{}, val);
+    auto member = const_cast<T*>(&(conf->*(ptr)));
+    *member = std::visit(get_size_visitor<T>{}, val);
   }
 };
 } // anonymous namespace
@@ -1526,18 +1529,18 @@ void md_config_t::update_legacy_val(ConfigValues& values,
                                     md_config_t::member_ptr_t member_ptr)
 {
   Option::value_t v = _get_val(values, opt);
-  boost::apply_visitor(assign_visitor(&values, v), member_ptr);
+  std::visit(assign_visitor(&values, v), member_ptr);
 }
 
 static void dump(Formatter *f, int level, Option::value_t in)
 {
-  if (const bool *v = boost::get<const bool>(&in)) {
+  if (const auto v = std::get_if<bool>(&in)) {
     f->dump_bool(ceph_conf_level_name(level), *v);
-  } else if (const int64_t *v = boost::get<const int64_t>(&in)) {
+  } else if (const auto v = std::get_if<int64_t>(&in)) {
     f->dump_int(ceph_conf_level_name(level), *v);
-  } else if (const uint64_t *v = boost::get<const uint64_t>(&in)) {
+  } else if (const auto v = std::get_if<uint64_t>(&in)) {
     f->dump_unsigned(ceph_conf_level_name(level), *v);
-  } else if (const double *v = boost::get<const double>(&in)) {
+  } else if (const auto v = std::get_if<double>(&in)) {
     f->dump_float(ceph_conf_level_name(level), *v);
   } else {
     f->dump_stream(ceph_conf_level_name(level)) << Option::to_str(in);

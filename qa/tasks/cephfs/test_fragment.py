@@ -1,4 +1,4 @@
-
+from io import StringIO
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra import run
@@ -214,18 +214,21 @@ class TestFragmentation(CephFSTestCase):
 
         self.fs.mds_asok(['flush', 'journal'])
 
+        def _check_pq_finished():
+            num_strays = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['num_strays']
+            pq_ops = self.fs.mds_asok(['perf', 'dump', 'purge_queue'])['purge_queue']['pq_executing']
+            return num_strays == 0 and pq_ops == 0
+
         # Wait for all strays to purge
-        self.wait_until_equal(
-            lambda: self.fs.mds_asok(['perf', 'dump', 'mds_cache']
-                                     )['mds_cache']['num_strays'],
-            0,
+        self.wait_until_true(
+            lambda: _check_pq_finished(),
             timeout=1200
         )
         # Check that the metadata pool objects for all the myriad
         # child fragments are gone
-        metadata_objs = self.fs.rados(["ls"])
+        metadata_objs = self.fs.radosmo(["ls"], stdout=StringIO()).strip()
         frag_objs = []
-        for o in metadata_objs:
+        for o in metadata_objs.split("\n"):
             if o.startswith("{0:x}.".format(dir_inode_no)):
                 frag_objs.append(o)
         self.assertListEqual(frag_objs, [])
@@ -297,7 +300,7 @@ class TestFragmentation(CephFSTestCase):
             self.mount_a.run_shell(["ln", "testdir1/{0}".format(i), "testdir2/"])
 
         self.mount_a.umount_wait()
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
         self.mount_a.wait_until_mounted()
 
         # flush journal and restart mds. after restart, testdir2 is not in mds' cache

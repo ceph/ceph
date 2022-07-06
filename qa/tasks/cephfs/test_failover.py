@@ -103,8 +103,6 @@ class TestClusterAffinity(CephFSTestCase):
         """
         That a vanilla standby is preferred over others with mds_join_fs set to another fs.
         """
-        # After Octopus is EOL, we can remove this setting:
-        self.fs.set_allow_multifs()
         fs2 = self.mds_cluster.newfs(name="cephfs2")
         status, target = self._verify_init()
         active = self.fs.get_active_names(status=status)[0]
@@ -129,8 +127,6 @@ class TestClusterAffinity(CephFSTestCase):
         standbys = [info['name'] for info in status.get_standbys()]
         for mds in standbys:
             self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')
-        # After Octopus is EOL, we can remove this setting:
-        self.fs.set_allow_multifs()
         fs2 = self.mds_cluster.newfs(name="cephfs2")
         for mds in standbys:
             self._change_target_state(target, mds, {'join_fscid': fs2.id})
@@ -171,7 +167,7 @@ class TestClusterAffinity(CephFSTestCase):
         self._reach_target(target)
 
 class TestClusterResize(CephFSTestCase):
-    CLIENTS_REQUIRED = 1
+    CLIENTS_REQUIRED = 0
     MDSS_REQUIRED = 3
 
     def test_grow(self):
@@ -211,8 +207,6 @@ class TestClusterResize(CephFSTestCase):
         That marking a FS down does not generate a health warning
         """
 
-        self.mount_a.umount_wait()
-
         self.fs.set_down()
         try:
             self.wait_for_health("", 30)
@@ -228,8 +222,6 @@ class TestClusterResize(CephFSTestCase):
         That marking a FS down twice does not wipe old_max_mds.
         """
 
-        self.mount_a.umount_wait()
-
         self.fs.grow(2)
         self.fs.set_down()
         self.fs.wait_for_daemons()
@@ -242,8 +234,6 @@ class TestClusterResize(CephFSTestCase):
         That setting max_mds undoes down.
         """
 
-        self.mount_a.umount_wait()
-
         self.fs.set_down()
         self.fs.wait_for_daemons()
         self.fs.grow(2)
@@ -253,8 +243,6 @@ class TestClusterResize(CephFSTestCase):
         """
         That down setting toggles and sets max_mds appropriately.
         """
-
-        self.mount_a.umount_wait()
 
         self.fs.set_down()
         self.fs.wait_for_daemons()
@@ -273,26 +261,23 @@ class TestClusterResize(CephFSTestCase):
 
         self.fs.grow(2)
 
+        # Now add a delay which should slow down how quickly rank 1 stops
+        self.config_set('mds', 'ms_inject_delay_max', '5.0')
+        self.config_set('mds', 'ms_inject_delay_probability', '1.0')
         self.fs.set_max_mds(1)
         log.info("status = {0}".format(self.fs.status()))
 
-        self.fs.set_max_mds(3)
         # Don't wait for rank 1 to stop
+        self.fs.set_max_mds(3)
+        log.info("status = {0}".format(self.fs.status()))
 
+        # Now check that the mons didn't try to promote a standby to rank 2
         self.fs.set_max_mds(2)
-        # Prevent another MDS from taking rank 1
-        # XXX This is a little racy because rank 1 may have stopped and a
-        #     standby assigned to rank 1 before joinable=0 is set.
-        self.fs.set_joinable(False) # XXX keep in mind changing max_mds clears this flag
-
+        status = self.fs.status()
         try:
             status = self.fs.wait_for_daemons(timeout=90)
-            raise RuntimeError("should not be able to successfully shrink cluster!")
-        except:
-            # could not shrink to max_mds=2 and reach 2 actives (because joinable=False)
-            status = self.fs.status()
             ranks = set([info['rank'] for info in status.get_ranks(fscid)])
-            self.assertTrue(ranks == set([0]))
+            self.assertEqual(ranks, set([0, 1]))
         finally:
             log.info("status = {0}".format(status))
 
@@ -321,27 +306,20 @@ class TestFailover(CephFSTestCase):
         in thrashing tests.
         """
 
-        # Need all my standbys up as well as the active daemons
-        self.wait_for_daemon_start()
-
         (original_active, ) = self.fs.get_active_names()
         original_standbys = self.mds_cluster.get_standby_daemons()
 
         # Kill the rank 0 daemon's physical process
         self.fs.mds_stop(original_active)
 
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
         # Wait until the monitor promotes his replacement
         def promoted():
-            active = self.fs.get_active_names()
-            return active and active[0] in original_standbys
+            ranks = list(self.fs.get_ranks())
+            return len(ranks) > 0 and ranks[0]['name'] in original_standbys
 
         log.info("Waiting for promotion of one of the original standbys {0}".format(
             original_standbys))
-        self.wait_until_true(
-            promoted,
-            timeout=grace*2)
+        self.wait_until_true(promoted, timeout=self.fs.beacon_timeout)
 
         # Start the original rank 0 daemon up again, see that he becomes a standby
         self.fs.mds_restart(original_active)
@@ -362,8 +340,6 @@ class TestFailover(CephFSTestCase):
         require_active = self.fs.get_config("fuse_require_active_mds", service_type="mon").lower() == "true"
         if not require_active:
             self.skipTest("fuse_require_active_mds is not set")
-
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 
         # Check it's not laggy to begin with
         (original_active, ) = self.fs.get_active_names()
@@ -387,7 +363,7 @@ class TestFailover(CephFSTestCase):
 
             return True
 
-        self.wait_until_true(laggy, grace * 2)
+        self.wait_until_true(laggy, self.fs.beacon_timeout)
         with self.assertRaises(CommandFailedError):
             self.mounts[0].mount_wait()
 
@@ -399,8 +375,6 @@ class TestFailover(CephFSTestCase):
         # Need all my standbys up as well as the active daemons
         self.wait_for_daemon_start()
 
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
         standbys = self.mds_cluster.get_standby_daemons()
         self.assertGreaterEqual(len(standbys), 1)
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)))
@@ -408,8 +382,7 @@ class TestFailover(CephFSTestCase):
         # Kill a standby and check for warning
         victim = standbys.pop()
         self.fs.mds_stop(victim)
-        log.info("waiting for insufficient standby daemon warning")
-        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", grace*2)
+        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", self.fs.beacon_timeout)
 
         # restart the standby, see that he becomes a standby, check health clears
         self.fs.mds_restart(victim)
@@ -423,8 +396,7 @@ class TestFailover(CephFSTestCase):
         standbys = self.mds_cluster.get_standby_daemons()
         self.assertGreaterEqual(len(standbys), 1)
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)+1))
-        log.info("waiting for insufficient standby daemon warning")
-        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", grace*2)
+        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", self.fs.beacon_timeout)
 
         # Set it to 0
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', '0')
@@ -440,7 +412,6 @@ class TestFailover(CephFSTestCase):
 
         self.mount_a.umount_wait()
 
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
         monc_timeout = float(self.fs.get_config("mon_client_ping_timeout", service_type="mds"))
 
         mds_0 = self.fs.get_rank(rank=0, status=status)
@@ -448,7 +419,7 @@ class TestFailover(CephFSTestCase):
         self.fs.rank_signal(signal.SIGSTOP, rank=0, status=status)
         self.wait_until_true(
             lambda: "laggy_since" in self.fs.get_rank(),
-            timeout=grace * 2
+            timeout=self.fs.beacon_timeout
         )
 
         self.fs.rank_fail(rank=1)
@@ -461,7 +432,7 @@ class TestFailover(CephFSTestCase):
         self.fs.rank_signal(signal.SIGCONT, rank=0)
         self.wait_until_true(
             lambda: "laggy_since" not in self.fs.get_rank(rank=0),
-            timeout=grace * 2
+            timeout=self.fs.beacon_timeout
         )
 
         # mds.b will be stuck at 'reconnect' state if snapserver gets confused
@@ -470,7 +441,18 @@ class TestFailover(CephFSTestCase):
         self.assertEqual(mds_0['gid'], self.fs.get_rank(rank=0)['gid'])
         self.fs.rank_freeze(False, rank=0)
 
+    def test_connect_bootstrapping(self):
+        self.config_set("mds", "mds_sleep_rank_change", 10000000.0)
+        self.config_set("mds", "mds_connect_bootstrapping", True)
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+        self.fs.rank_fail(rank=0)
+        # rank 0 will get stuck in up:resolve, see https://tracker.ceph.com/issues/53194
+        self.fs.wait_for_daemons()
+
+
 class TestStandbyReplay(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
     MDSS_REQUIRED = 4
 
     def _confirm_no_replay(self):
@@ -527,6 +509,34 @@ class TestStandbyReplay(CephFSTestCase):
         self.fs.set_allow_standby_replay(True)
         time.sleep(30)
         self._confirm_single_replay()
+
+    def test_standby_replay_damaged(self):
+        """
+        That a standby-replay daemon can cause the rank to go damaged correctly.
+        """
+
+        self._confirm_no_replay()
+        self.config_set("mds", "mds_standby_replay_damaged", True)
+        self.fs.set_allow_standby_replay(True)
+        self.wait_until_true(
+            lambda: len(self.fs.get_damaged()) > 0,
+            timeout=30
+        )
+        status = self.fs.status()
+        self.assertListEqual([], list(self.fs.get_ranks(status=status)))
+        self.assertListEqual([0], self.fs.get_damaged(status=status))
+
+    def test_standby_replay_disable(self):
+        """
+        That turning off allow_standby_replay fails all standby-replay daemons.
+        """
+
+        self._confirm_no_replay()
+        self.fs.set_allow_standby_replay(True)
+        time.sleep(30)
+        self._confirm_single_replay()
+        self.fs.set_allow_standby_replay(False)
+        self._confirm_no_replay()
 
     def test_standby_replay_singleton_fail(self):
         """
@@ -648,14 +658,14 @@ class TestMultiFilesystems(CephFSTestCase):
         fs_a, fs_b = self._setup_two()
 
         # Mount a client on fs_a
-        self.mount_a.mount(cephfs_name=fs_a.name)
+        self.mount_a.mount_wait(cephfs_name=fs_a.name)
         self.mount_a.write_n_mb("pad.bin", 1)
         self.mount_a.write_n_mb("test.bin", 2)
         a_created_ino = self.mount_a.path_to_ino("test.bin")
         self.mount_a.create_files()
 
         # Mount a client on fs_b
-        self.mount_b.mount(cephfs_name=fs_b.name)
+        self.mount_b.mount_wait(cephfs_name=fs_b.name)
         self.mount_b.write_n_mb("test.bin", 1)
         b_created_ino = self.mount_b.path_to_ino("test.bin")
         self.mount_b.create_files()

@@ -264,6 +264,7 @@ public:
   bool get_available() const { return available; }
   const std::string &get_active_name() const { return active_name; }
   const utime_t& get_active_change() const { return active_change; }
+  int get_num_standby() const { return standbys.size(); }
 
   bool all_support_module(const std::string& module) {
     if (!have_module(module)) {

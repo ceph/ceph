@@ -115,10 +115,11 @@ protected:
     ParallelPGMapper *m;
 
     WQ(ParallelPGMapper *m_, ThreadPool *tp)
-      : ThreadPool::WorkQueue<Item>("ParallelPGMapper::WQ",
-				    ceph::timespan::zero(),
-				    ceph::timespan::zero(),
-				    tp),
+      : ThreadPool::WorkQueue<Item>(
+	"ParallelPGMapper::WQ",
+	ceph::make_timespan(m_->cct->_conf->threadpool_default_timeout),
+	ceph::timespan::zero(),
+	tp),
         m(m_) {}
 
     bool _enqueue(Item *i) override {
@@ -246,6 +247,16 @@ private:
 	row[4 + size + i] = up[i];
       }
     }
+
+    uint64_t get_num_acting_pgs() const {
+      uint64_t num_acting_pgs = 0;
+      const size_t row_size = this->row_size();
+      for (size_t ps = 0; ps < pg_num; ++ps) {
+        const int32_t *row = &table[row_size * ps];
+        num_acting_pgs += row[2];
+      }
+      return num_acting_pgs;
+    }
   };
 
   mempool::osdmap_mapping::map<int64_t,PoolMapping> pools;
@@ -286,6 +297,9 @@ private:
       mapping->_finish(*osdmap);
     }
   };
+  friend class OSDMapTest;
+  // for testing only
+  void update(const OSDMap& map);
 
 public:
   void get(pg_t pgid,
@@ -321,12 +335,17 @@ public:
     }
   }
 
-  const mempool::osdmap_mapping::vector<pg_t>& get_osd_acting_pgs(unsigned osd) {
+  const mempool::osdmap_mapping::vector<pg_t>& get_osd_acting_pgs(unsigned osd) { 
     ceph_assert(osd < acting_rmap.size());
     return acting_rmap[osd];
   }
 
-  void update(const OSDMap& map);
+  uint64_t get_num_acting_pgs(int64_t pool) const {
+    auto p = pools.find(pool);
+    ceph_assert(p != pools.end());
+    return p->second.get_num_acting_pgs();
+  }
+
   void update(const OSDMap& map, pg_t pgid);
 
   std::unique_ptr<MappingJob> start_update(

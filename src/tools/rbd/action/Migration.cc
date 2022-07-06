@@ -138,7 +138,8 @@ void get_prepare_arguments(po::options_description *positional,
      "source-spec file (or '-' for stdin)")
     ("source-spec", po::value<std::string>(),
      "source-spec");
-  at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE);
+  at::add_image_or_snap_spec_options(positional, options,
+                                     at::ARGUMENT_MODIFIER_SOURCE);
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
   at::add_create_image_options(options, true);
   at::add_flatten_option(options);
@@ -146,13 +147,18 @@ void get_prepare_arguments(po::options_description *positional,
 
 int execute_prepare(const po::variables_map &vm,
                     const std::vector<std::string> &ceph_global_init_args) {
+  bool import_only = vm["import-only"].as<bool>();
+
   size_t arg_index = 0;
   std::string pool_name;
   std::string namespace_name;
   std::string image_name;
+  std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &namespace_name,
-    &image_name, nullptr, true, utils::SNAPSHOT_PRESENCE_NONE,
+    &image_name, import_only ? &snap_name : nullptr, true,
+    import_only ? utils::SNAPSHOT_PRESENCE_PERMITTED :
+                  utils::SNAPSHOT_PRESENCE_NONE,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
@@ -169,11 +175,10 @@ int execute_prepare(const po::variables_map &vm,
     return r;
   }
 
-  bool import_only = vm["import-only"].as<bool>();
   std::string source_spec;
   if (vm.count("source-spec") && vm.count("source-spec-path")) {
-    std::cerr << "rbd: cannot specify both source-image-spec and "
-              << "source-spec/source-spec-file" << std::endl;
+    std::cerr << "rbd: cannot specify both source-spec and source-spec-path"
+              << std::endl;
     return -EINVAL;
   } else if (vm.count("source-spec-path")) {
     std::string source_spec_path = vm["source-spec-path"].as<std::string>();
@@ -223,12 +228,18 @@ int execute_prepare(const po::variables_map &vm,
   }
 
   if (import_only && source_spec.empty()) {
+    if (snap_name.empty()) {
+      std::cerr << "rbd: snapshot name was not specified" << std::endl;
+      return -EINVAL;
+    }
+
     std::stringstream ss;
     ss << R"({)"
        << R"("type":"native",)"
        << R"("pool_id":)" << io_ctx.get_id() << R"(,)"
        << R"("pool_namespace":")" << io_ctx.get_namespace() << R"(",)"
-       << R"("image_name":")" << image_name << R"(")"
+       << R"("image_name":")" << image_name << R"(",)"
+       << R"("snap_name":")" << snap_name << R"(")"
        << R"(})";
     source_spec = ss.str();
 
@@ -238,9 +249,16 @@ int execute_prepare(const po::variables_map &vm,
     }
     io_ctx = dst_io_ctx;
     image_name = dst_image_name;
+    snap_name = "";
   } else if (!import_only && !source_spec.empty()) {
     std::cerr << "rbd: --import-only must be used in combination with "
               << "source-spec/source-spec-path" << std::endl;
+    return -EINVAL;
+  }
+
+  if (!snap_name.empty()) {
+    std::cerr << "rbd: snapshot name specified for a command that doesn't "
+              << "use it" << std::endl;
     return -EINVAL;
   }
 
@@ -387,6 +405,8 @@ int execute_commit(const po::variables_map &vm,
 
   return 0;
 }
+
+Shell::SwitchArguments switched_arguments({"import-only"});
 
 Shell::Action action_prepare(
   {"migration", "prepare"}, {}, "Prepare image migration.",

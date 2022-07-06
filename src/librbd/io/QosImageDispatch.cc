@@ -6,7 +6,7 @@
 #include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/io/FlushTracker.h"
-#include <map>
+#include <utility>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -36,7 +36,7 @@ uint64_t calculate_tokens(bool read_op, uint64_t extent_length, uint64_t flag) {
   return (((flag & IMAGE_DISPATCH_FLAG_QOS_BPS_MASK) != 0) ? extent_length : 1);
 }
 
-static std::map<uint64_t, std::string> throttle_flags = {
+static const std::pair<uint64_t, const char*> throttle_flags[] = {
   {IMAGE_DISPATCH_FLAG_QOS_IOPS_THROTTLE,       "rbd_qos_iops_throttle"       },
   {IMAGE_DISPATCH_FLAG_QOS_BPS_THROTTLE,        "rbd_qos_bps_throttle"        },
   {IMAGE_DISPATCH_FLAG_QOS_READ_IOPS_THROTTLE,  "rbd_qos_read_iops_throttle"  },
@@ -56,10 +56,10 @@ QosImageDispatch<I>::QosImageDispatch(I* image_ctx)
   SafeTimer *timer;
   ceph::mutex *timer_lock;
   ImageCtx::get_timer_instance(cct, &timer, &timer_lock);
-  for (auto flag : throttle_flags) {
-    m_throttles.push_back(make_pair(
-      flag.first,
-      new TokenBucketThrottle(cct, flag.second, 0, 0, timer, timer_lock)));
+  for (auto [flag, name] : throttle_flags) {
+    m_throttles.emplace_back(
+      flag,
+      new TokenBucketThrottle(cct, name, 0, 0, timer, timer_lock));
   }
 }
 
@@ -68,7 +68,6 @@ QosImageDispatch<I>::~QosImageDispatch() {
   for (auto t : m_throttles) {
     delete t.second;
   }
-  delete m_flush_tracker;
 }
 
 template <typename I>
@@ -114,6 +113,11 @@ void QosImageDispatch<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
 }
 
 template <typename I>
+void QosImageDispatch<I>::apply_qos_exclude_ops(uint64_t exclude_ops) {
+  m_qos_exclude_ops = exclude_ops;
+}
+
+template <typename I>
 bool QosImageDispatch<I>::read(
     AioCompletion* aio_comp, Extents &&image_extents, ReadResult &&read_result,
     IOContext io_context, int op_flags, int read_flags,
@@ -124,6 +128,10 @@ bool QosImageDispatch<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
+
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_READ) {
+    return false;
+  }
 
   if (needs_throttle(true, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {
@@ -143,6 +151,10 @@ bool QosImageDispatch<I>::write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
+
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_WRITE) {
+    return false;
+  }
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {
@@ -164,6 +176,10 @@ bool QosImageDispatch<I>::discard(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_DISCARD) {
+    return false;
+  }
+
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {
     return true;
@@ -182,6 +198,10 @@ bool QosImageDispatch<I>::write_same(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
+
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_WRITE_SAME) {
+    return false;
+  }
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {
@@ -202,6 +222,10 @@ bool QosImageDispatch<I>::compare_and_write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
+
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_COMPARE_AND_WRITE) {
+    return false;
+  }
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {

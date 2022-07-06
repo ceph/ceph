@@ -49,7 +49,7 @@ struct Server {
     {
       std::cout << "server got ping " << *m << std::endl;
       // reply with a pong
-      return c->send(make_message<MPing>()).then([this] {
+      return c->send(crimson::make_message<MPing>()).then([this] {
         ++count;
         on_reply.signal();
         return seastar::now();
@@ -193,6 +193,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
         });
       }).finally([&server] {
         std::cout << "server shutting down" << std::endl;
+        server.msgr->stop();
         return server.msgr->shutdown();
       });
     });
@@ -214,13 +215,14 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
         return seastar::do_until(
           [&disp,count] { return disp.count >= count; },
           [&disp,conn] {
-            return conn->send(make_message<MPing>()).then([&] {
+            return conn->send(crimson::make_message<MPing>()).then([&] {
               return disp.on_reply.wait();
             });
           }
         );
       }).finally([&client] {
         std::cout << "client shutting down" << std::endl;
+        client.msgr->stop();
         return client.msgr->shutdown();
       });
     });
@@ -240,9 +242,7 @@ int main(int argc, char** argv)
     ("nonce", po::value<uint32_t>()->default_value(42),
      "a unique number to identify the pong server")
     ("count", po::value<unsigned>()->default_value(10),
-     "stop after sending/echoing <count> MPing messages")
-    ("v2", po::value<bool>()->default_value(false),
-     "using msgr v2 protocol");
+     "stop after sending/echoing <count> MPing messages");
   po::variables_map vm;
   std::vector<std::string> unrecognized_options;
   try {
@@ -263,11 +263,7 @@ int main(int argc, char** argv)
   }
 
   entity_addr_t addr;
-  if (vm["v2"].as<bool>()) {
-    addr.set_type(entity_addr_t::TYPE_MSGR2);
-  } else {
-    addr.set_type(entity_addr_t::TYPE_LEGACY);
-  }
+  addr.set_type(entity_addr_t::TYPE_MSGR2);
   addr.set_family(AF_INET);
   addr.set_port(vm["port"].as<std::uint16_t>());
   addr.set_nonce(vm["nonce"].as<std::uint32_t>());
@@ -281,7 +277,7 @@ int main(int argc, char** argv)
   seastar::app_template app;
   SeastarContext sc;
   auto job = sc.with_seastar([&] {
-    auto fut = seastar::alien::submit_to(0, [addr, role, count] {
+    auto fut = seastar::alien::submit_to(app.alien(), 0, [addr, role, count] {
       return seastar_echo(addr, role, count);
     });
     fut.wait();

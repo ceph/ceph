@@ -71,16 +71,13 @@ int ErasureCodeLrc::create_rule(const string &name,
 
   int rno = 0;
   for (rno = 0; rno < crush.get_max_rules(); rno++) {
-    if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+    if (!crush.rule_exists(rno))
        break;
   }
 
   int steps = 4 + rule_steps.size();
-  int min_rep = 3;
-  int max_rep = get_chunk_count();
   int ret;
-  ret = crush.add_rule(rno, steps, pg_pool_t::TYPE_ERASURE,
-		       min_rep, max_rep);
+  ret = crush.add_rule(rno, steps, pg_pool_t::TYPE_ERASURE);
   ceph_assert(ret == rno);
   int step = 0;
 
@@ -406,7 +403,9 @@ int ErasureCodeLrc::parse_rule(ErasureCodeProfile &profile,
   err |= to_string("crush-device-class", profile,
 		   &rule_device_class,
 		   "", ss);
-
+  if (err) {
+    return err;
+  }
   if (profile.count("crush-steps") != 0) {
     rule_steps.clear();
     string str = profile.find("crush-steps")->second;

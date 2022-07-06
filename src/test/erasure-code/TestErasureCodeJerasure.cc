@@ -25,6 +25,7 @@
 #include "common/config.h"
 #include "gtest/gtest.h"
 
+using namespace std;
 
 template <typename T>
 class ErasureCodeTest : public ::testing::Test {
@@ -316,18 +317,18 @@ TEST(ErasureCodeTest, create_rule)
     profile["m"] = "2";
     profile["w"] = "8";
     jerasure.init(profile, &cerr);
-    int ruleset = jerasure.create_rule("myrule", *c, &ss);
-    EXPECT_EQ(0, ruleset);
+    int rule = jerasure.create_rule("myrule", *c, &ss);
+    EXPECT_EQ(0, rule);
     EXPECT_EQ(-EEXIST, jerasure.create_rule("myrule", *c, &ss));
     //
-    // the minimum that is expected from the created ruleset is to
+    // the minimum that is expected from the created rule is to
     // successfully map get_chunk_count() devices from the crushmap,
     // at least once.
     //
     vector<__u32> weight(c->get_max_devices(), 0x10000);
     vector<int> out;
     int x = 0;
-    c->do_rule(ruleset, x, out, jerasure.get_chunk_count(), weight, 0);
+    c->do_rule(rule, x, out, jerasure.get_chunk_count(), weight, 0);
     ASSERT_EQ(out.size(), jerasure.get_chunk_count());
     for (unsigned i=0; i<out.size(); ++i)
       ASSERT_NE(CRUSH_ITEM_NONE, out[i]);

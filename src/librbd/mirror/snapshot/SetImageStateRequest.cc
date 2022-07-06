@@ -27,6 +27,45 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void SetImageStateRequest<I>::send() {
+  get_name();
+}
+
+template <typename I>
+void SetImageStateRequest<I>::get_name() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::dir_get_name_start(&op, m_image_ctx->id);
+
+  librados::AioCompletion *comp = create_rados_callback<
+    SetImageStateRequest<I>,
+    &SetImageStateRequest<I>::handle_get_name>(this);
+  m_bl.clear();
+  int r = m_image_ctx->md_ctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void SetImageStateRequest<I>::handle_get_name(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << "r=" << r << dendl;
+
+  if (r == 0) {
+    auto it = m_bl.cbegin();
+    r = cls_client::dir_get_name_finish(&it, &m_image_state.name);
+  }
+
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve image name: " << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
+  }
+
+  ldout(cct, 15) << "name=" << m_image_state.name << dendl;
+
   get_snap_limit();
 }
 
@@ -99,7 +138,6 @@ void SetImageStateRequest<I>::handle_get_metadata(int r) {
   {
     std::shared_lock image_locker{m_image_ctx->image_lock};
 
-    m_image_state.name = m_image_ctx->name;
     m_image_state.features =
       m_image_ctx->features & ~RBD_FEATURES_IMPLICIT_ENABLE;
 

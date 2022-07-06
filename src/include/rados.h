@@ -204,7 +204,8 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_RELEASE_NAUTILUS   14
 #define CEPH_RELEASE_OCTOPUS    15
 #define CEPH_RELEASE_PACIFIC    16
-#define CEPH_RELEASE_MAX        17  /* highest + 1 */
+#define CEPH_RELEASE_QUINCY     17
+#define CEPH_RELEASE_MAX        18  /* highest + 1 */
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -475,6 +476,7 @@ enum {
 	CEPH_OSD_FLAG_FULL_FORCE = 0x1000000,  /* force op despite full flag */
 	CEPH_OSD_FLAG_IGNORE_REDIRECT = 0x2000000,  /* ignore redirection */
 	CEPH_OSD_FLAG_RETURNVEC = 0x4000000, /* allow overall result >= 0, and return >= 0 and buffer for each op in opvec */
+	CEPH_OSD_FLAG_SUPPORTSPOOLEIO = 0x8000000,   /* client understands pool EIO flag */
 };
 
 enum {

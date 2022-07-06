@@ -25,7 +25,7 @@ struct SnapRealmInfo {
     h.seq = seq_;
     h.parent_since = current_parent_since_;
   }
-  
+
   inodeno_t ino() const { return inodeno_t(h.ino); }
   inodeno_t parent() const { return inodeno_t(h.parent); }
   snapid_t seq() const { return snapid_t(h.seq); }
@@ -73,7 +73,5 @@ WRITE_CLASS_ENCODER(SnapContext)
 inline std::ostream& operator<<(std::ostream& out, const SnapContext& snapc) {
   return out << snapc.seq << "=" << snapc.snaps;
 }
-
-//}
 
 #endif

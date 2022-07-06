@@ -8,6 +8,7 @@ import { of } from 'rxjs';
 
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { HealthService } from '~/app/shared/api/health.service';
+import { CssHelper } from '~/app/shared/classes/css-helper';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.service';
@@ -61,7 +62,8 @@ describe('HealthComponent', () => {
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       PgCategoryService,
-      RefreshIntervalService
+      RefreshIntervalService,
+      CssHelper
     ]
   });
 
@@ -218,15 +220,16 @@ describe('HealthComponent', () => {
   });
 
   it('event binding "prepareReadWriteRatio" is called', () => {
-    const prepareReadWriteRatio = spyOn(component, 'prepareReadWriteRatio');
+    const prepareReadWriteRatio = spyOn(component, 'prepareReadWriteRatio').and.callThrough();
 
     const payload = _.cloneDeep(healthPayload);
     payload.client_perf['read_op_per_sec'] = 1;
-    payload.client_perf['write_op_per_sec'] = 1;
+    payload.client_perf['write_op_per_sec'] = 3;
     getHealthSpy.and.returnValue(of(payload));
     fixture.detectChanges();
 
     expect(prepareReadWriteRatio).toHaveBeenCalled();
+    expect(prepareReadWriteRatio.calls.mostRecent().args[0].dataset[0].data).toEqual([25, 75]);
   });
 
   it('event binding "prepareRawUsage" is called', () => {
@@ -337,8 +340,9 @@ describe('HealthComponent', () => {
       expect(component['calcPercentage'](undefined, 1)).toEqual(0);
       expect(component['calcPercentage'](null, 1)).toEqual(0);
       expect(component['calcPercentage'](0, 1)).toEqual(0);
-      expect(component['calcPercentage'](2.346, 10)).toEqual(23);
-      expect(component['calcPercentage'](2.35, 10)).toEqual(24);
+      expect(component['calcPercentage'](1, 100000)).toEqual(0.01);
+      expect(component['calcPercentage'](2.346, 10)).toEqual(23.46);
+      expect(component['calcPercentage'](2.56, 10)).toEqual(25.6);
     });
   });
 });

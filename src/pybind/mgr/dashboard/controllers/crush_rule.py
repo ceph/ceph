@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
@@ -6,8 +7,8 @@ from cherrypy import NotFound
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
-from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, UiApiController
+from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, RESTController, UIRouter
+from ._version import APIVersion
 
 LIST_SCHEMA = {
     "rule_id": (int, 'Rule ID'),
@@ -20,14 +21,16 @@ LIST_SCHEMA = {
 }
 
 
-@ApiController('/crush_rule', Scope.POOL)
-@ControllerDoc("Crush Rule Management API", "CrushRule")
+@APIRouter('/crush_rule', Scope.POOL)
+@APIDoc("Crush Rule Management API", "CrushRule")
 class CrushRule(RESTController):
     @EndpointDoc("List Crush Rule Configuration",
                  responses={200: LIST_SCHEMA})
+    @RESTController.MethodMap(version=APIVersion(2, 0))
     def list(self):
         return mgr.get('osd_map_crush')['rules']
 
+    @RESTController.MethodMap(version=APIVersion(2, 0))
     def get(self, name):
         rules = mgr.get('osd_map_crush')['rules']
         for r in rules:
@@ -48,14 +51,18 @@ class CrushRule(RESTController):
         CephService.send_command('mon', 'osd crush rule rm', name=name)
 
 
-@UiApiController('/crush_rule', Scope.POOL)
-@ControllerDoc("Dashboard UI helper function; not part of the public API", "CrushRuleUi")
+@UIRouter('/crush_rule', Scope.POOL)
+@APIDoc("Dashboard UI helper function; not part of the public API", "CrushRuleUi")
 class CrushRuleUi(CrushRule):
     @Endpoint()
     @ReadPermission
     def info(self):
         '''Used for crush rule creation modal'''
+        osd_map = mgr.get_osdmap()
+        crush = osd_map.get_crush()
+        crush.dump()
         return {
             'names': [r['rule_name'] for r in mgr.get('osd_map_crush')['rules']],
-            'nodes': mgr.get('osd_map_tree')['nodes']
+            'nodes': mgr.get('osd_map_tree')['nodes'],
+            'roots': crush.find_roots()
         }

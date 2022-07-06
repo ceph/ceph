@@ -15,13 +15,13 @@
 #ifndef CEPH_LZ4COMPRESSOR_H
 #define CEPH_LZ4COMPRESSOR_H
 
+#include <optional>
 #include <lz4.h>
 
 #include "compressor/Compressor.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "common/config.h"
-#include "common/Tub.h"
 
 
 class LZ4Compressor : public Compressor {
@@ -35,7 +35,7 @@ class LZ4Compressor : public Compressor {
 #endif
   }
 
-  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> &compressor_message) override {
+  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst, std::optional<int32_t> &compressor_message) override {
     // older versions of liblz4 introduce bit errors when compressing
     // fragmented buffers.  this was fixed in lz4 commit
     // af127334670a5e7b710bbd6adb71aa7c3ef0cd72, which first
@@ -83,7 +83,7 @@ class LZ4Compressor : public Compressor {
     return 0;
   }
 
-  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> compressor_message) override {
+  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst, std::optional<int32_t> compressor_message) override {
 #ifdef HAVE_QATZIP
     if (qat_enabled)
       return qat_accel.decompress(src, dst, compressor_message);
@@ -95,21 +95,20 @@ class LZ4Compressor : public Compressor {
   int decompress(ceph::buffer::list::const_iterator &p,
 		 size_t compressed_len,
 		 ceph::buffer::list &dst,
-		 boost::optional<int32_t> compressor_message) override {
+		 std::optional<int32_t> compressor_message) override {
 #ifdef HAVE_QATZIP
     if (qat_enabled)
       return qat_accel.decompress(p, compressed_len, dst, compressor_message);
 #endif
     using ceph::decode;
     uint32_t count;
-    std::vector<std::pair<uint32_t, uint32_t> > compressed_pairs;
     decode(count, p);
-    compressed_pairs.resize(count);
+    std::vector<std::pair<uint32_t, uint32_t> > compressed_pairs(count);
     uint32_t total_origin = 0;
-    for (unsigned i = 0; i < count; ++i) {
-      decode(compressed_pairs[i].first, p);
-      decode(compressed_pairs[i].second, p);
-      total_origin += compressed_pairs[i].first;
+    for (auto& [dst_size, src_size] : compressed_pairs) {
+      decode(dst_size, p);
+      decode(src_size, p);
+      total_origin += dst_size;
     }
     compressed_len -= (sizeof(uint32_t) + sizeof(uint32_t) * count * 2);
 
@@ -119,11 +118,11 @@ class LZ4Compressor : public Compressor {
 
     ceph::buffer::ptr cur_ptr = p.get_current_ptr();
     ceph::buffer::ptr *ptr = &cur_ptr;
-    Tub<ceph::buffer::ptr> data_holder;
+    std::optional<ceph::buffer::ptr> data_holder;
     if (compressed_len != cur_ptr.length()) {
-      data_holder.construct(compressed_len);
+      data_holder.emplace(compressed_len);
       p.copy_deep(compressed_len, *data_holder);
-      ptr = data_holder.get();
+      ptr = &*data_holder;
     }
 
     char *c_in = ptr->c_str();

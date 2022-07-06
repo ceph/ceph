@@ -2,9 +2,13 @@ Mount CephFS: Prerequisites
 ===========================
 
 You can use CephFS by mounting it to your local filesystem or by using
-`cephfs-shell`_. CephFS can be mounted `using kernel`_ as well as `using
-FUSE`_. Both have their own advantages. Read the following section to
-understand more about both of these ways to mount CephFS.
+`cephfs-shell`_. Mounting CephFS requires superuser privileges to trim
+dentries by issuing a remount of itself. CephFS can be mounted
+`using kernel`_ as well as `using FUSE`_. Both have their own
+advantages. Read the following section to understand more about both of
+these ways to mount CephFS.
+
+For Windows CephFS mounts, please check the `ceph-dokan`_ page.
 
 Which CephFS Client?
 --------------------
@@ -68,3 +72,4 @@ Ceph MON resides.
 .. _cephfs-shell: ../cephfs-shell
 .. _using kernel: ../mount-using-kernel-driver
 .. _using FUSE: ../mount-using-fuse
+.. _ceph-dokan: ../ceph-dokan

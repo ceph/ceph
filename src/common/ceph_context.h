@@ -83,6 +83,9 @@ public:
     // everything crimson is experimental...
     return true;
   }
+  ceph::PluginRegistry* get_plugin_registry() {
+    return _plugin_registry;
+  }
   CryptoRandom* random() const;
   PerfCountersCollectionImpl* get_perfcounters_collection();
   crimson::common::ConfigProxy& _conf;
@@ -92,6 +95,7 @@ public:
 private:
   std::unique_ptr<CryptoRandom> _crypto_random;
   unsigned nref;
+  ceph::PluginRegistry* _plugin_registry;
 };
 }
 #else
@@ -352,9 +356,9 @@ private:
   std::set<std::string> _experimental_features;
 
   ceph::PluginRegistry* _plugin_registry;
-
+#ifdef CEPH_DEBUG_MUTEX
   md_config_obs_t *_lockdep_obs;
-
+#endif
 public:
   TOPNSPC::crush::CrushLocation crush_location;
 private:

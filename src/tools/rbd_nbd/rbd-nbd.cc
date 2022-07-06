@@ -18,6 +18,9 @@
 
 #include "acconfig.h"
 #include "include/int_types.h"
+#include "include/scope_guard.h"
+
+#include <boost/endian/conversion.hpp>
 
 #include <libgen.h>
 #include <stdio.h>
@@ -41,13 +44,7 @@
 #include <libnl3/netlink/genl/ctrl.h>
 #include <libnl3/netlink/genl/mngt.h>
 
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -83,6 +80,12 @@ namespace fs = std::experimental::filesystem;
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-nbd: "
 
+using namespace std;
+namespace fs = std::filesystem;
+
+using boost::endian::big_to_native;
+using boost::endian::native_to_big;
+
 enum Command {
   None,
   Map,
@@ -99,10 +102,12 @@ struct Config {
   int reattach_timeout = 30;
 
   bool exclusive = false;
+  bool notrim = false;
   bool quiesce = false;
   bool readonly = false;
   bool set_max_part = false;
   bool try_netlink = false;
+  bool show_cookie = false;
 
   std::string poolname;
   std::string nsname;
@@ -114,14 +119,18 @@ struct Config {
   std::string format;
   bool pretty_format = false;
 
+  std::optional<librbd::encryption_format_t> encryption_format;
+  std::optional<std::string> encryption_passphrase_file;
+
   Command command = None;
   int pid = 0;
+  std::string cookie;
 
   std::string image_spec() const {
     std::string spec = poolname + "/";
 
     if (!nsname.empty()) {
-      spec += "/" + nsname;
+      spec += nsname + "/";
     }
     spec += imgname;
 
@@ -141,18 +150,24 @@ static void usage()
             << "               unmap <device|image-or-snap-spec>     Unmap nbd device\n"
             << "               [options] list-mapped                 List mapped nbd devices\n"
             << "Map and attach options:\n"
-            << "  --device <device path>   Specify nbd device path (/dev/nbd{num})\n"
-            << "  --exclusive              Forbid writes by other clients\n"
-            << "  --io-timeout <sec>       Set nbd IO timeout\n"
-            << "  --max_part <limit>       Override for module param max_part\n"
-            << "  --nbds_max <limit>       Override for module param nbds_max\n"
-            << "  --quiesce                Use quiesce callbacks\n"
-            << "  --quiesce-hook <path>    Specify quiesce hook path\n"
-            << "                           (default: " << Config().quiesce_hook << ")\n"
-            << "  --read-only              Map read-only\n"
-            << "  --reattach-timeout <sec> Set nbd re-attach timeout\n"
-            << "                           (default: " << Config().reattach_timeout << ")\n"
-            << "  --try-netlink            Use the nbd netlink interface\n"
+            << "  --device <device path>        Specify nbd device path (/dev/nbd{num})\n"
+            << "  --encryption-format           Image encryption format\n"
+            << "                                (possible values: luks1, luks2)\n"
+            << "  --encryption-passphrase-file  Path of file containing passphrase for unlocking image encryption\n"
+            << "  --exclusive                   Forbid writes by other clients\n"
+            << "  --notrim                      Turn off trim/discard\n"
+            << "  --io-timeout <sec>            Set nbd IO timeout\n"
+            << "  --max_part <limit>            Override for module param max_part\n"
+            << "  --nbds_max <limit>            Override for module param nbds_max\n"
+            << "  --quiesce                     Use quiesce callbacks\n"
+            << "  --quiesce-hook <path>         Specify quiesce hook path\n"
+            << "                                (default: " << Config().quiesce_hook << ")\n"
+            << "  --read-only                   Map read-only\n"
+            << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
+            << "                                (default: " << Config().reattach_timeout << ")\n"
+            << "  --try-netlink                 Use the nbd netlink interface\n"
+            << "  --show-cookie                 Show device cookie\n"
+            << "  --cookie                      Specify device cookie\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -170,15 +185,6 @@ static EventSocket terminate_event_sock;
 #define HELP_INFO 1
 #define VERSION_INFO 2
 
-#ifdef CEPH_BIG_ENDIAN
-#define ntohll(a) (a)
-#elif defined(CEPH_LITTLE_ENDIAN)
-#define ntohll(a) swab(a)
-#else
-#error "Could not determine endianess"
-#endif
-#define htonll(a) ntohll(a)
-
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Config *cfg);
 static int netlink_disconnect(int index);
@@ -187,6 +193,8 @@ static int netlink_resize(int nbd_index, uint64_t size);
 static int run_quiesce_hook(const std::string &quiesce_hook,
                             const std::string &devpath,
                             const std::string &command);
+
+static std::string get_cookie(const std::string &devpath);
 
 class NBDServer
 {
@@ -324,16 +332,16 @@ private:
     }
 
     if (ret < 0) {
-      ctx->reply.error = htonl(-ret);
+      ctx->reply.error = native_to_big<uint32_t>(-ret);
     } else if ((ctx->command == NBD_CMD_READ) &&
                 ret < static_cast<int>(ctx->request.len)) {
       int pad_byte_count = static_cast<int> (ctx->request.len) - ret;
       ctx->data.append_zero(pad_byte_count);
       dout(20) << __func__ << ": " << *ctx << ": Pad byte count: "
                << pad_byte_count << dendl;
-      ctx->reply.error = htonl(0);
+      ctx->reply.error = native_to_big<uint32_t>(0);
     } else {
-      ctx->reply.error = htonl(0);
+      ctx->reply.error = native_to_big<uint32_t>(0);
     }
     ctx->server->io_finish(ctx);
 
@@ -387,11 +395,11 @@ private:
 	goto signal;
       }
 
-      ctx->request.from = ntohll(ctx->request.from);
-      ctx->request.type = ntohl(ctx->request.type);
-      ctx->request.len = ntohl(ctx->request.len);
+      ctx->request.from = big_to_native(ctx->request.from);
+      ctx->request.type = big_to_native(ctx->request.type);
+      ctx->request.len = big_to_native(ctx->request.len);
 
-      ctx->reply.magic = htonl(NBD_REPLY_MAGIC);
+      ctx->reply.magic = native_to_big<uint32_t>(NBD_REPLY_MAGIC);
       memcpy(ctx->reply.handle, ctx->request.handle, sizeof(ctx->reply.handle));
 
       ctx->command = ctx->request.type & 0x0000ffff;
@@ -668,7 +676,7 @@ public:
 
 std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
 
-  os << "[" << std::hex << ntohll(*((uint64_t *)ctx.request.handle));
+  os << "[" << std::hex << big_to_native(*((uint64_t *)ctx.request.handle));
 
   switch (ctx.command)
   {
@@ -693,7 +701,7 @@ std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
   }
 
   os << ctx.request.from << "~" << ctx.request.len << " "
-     << std::dec << ntohl(ctx.reply.error) << "]";
+     << std::dec << big_to_native(ctx.reply.error) << "]";
 
   return os;
 }
@@ -795,6 +803,7 @@ public:
         continue;
       }
       ifs >> pid;
+      ifs.close();
 
       // If the rbd-nbd is re-attached the pid may store garbage
       // here. We are sure this is the case when it is negative or
@@ -899,6 +908,7 @@ private:
       c.devpath = cfg->devpath;
     }
 
+    c.cookie = get_cookie(cfg->devpath);
     *cfg = c;
     return 0;
   }
@@ -926,6 +936,20 @@ private:
     return -1;
   }
 };
+
+static std::string get_cookie(const std::string &devpath)
+{
+  std::string cookie;
+  std::ifstream ifs;
+  std::string path = "/sys/block/" + devpath.substr(sizeof("/dev/") - 1) + "/backend";
+
+  ifs.open(path, std::ifstream::in);
+  if (ifs.is_open()) {
+    std::getline(ifs, cookie);
+    ifs.close();
+  }
+  return cookie;
+}
 
 static int load_module(Config *cfg)
 {
@@ -1002,7 +1026,8 @@ static int parse_nbd_index(const std::string& devpath)
   return index;
 }
 
-static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
+static int try_ioctl_setup(Config *cfg, int fd, uint64_t size,
+                           uint64_t blksize, uint64_t flags)
 {
   int index = 0, r;
 
@@ -1065,7 +1090,7 @@ static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
     }
   }
 
-  r = ioctl(nbd, NBD_SET_BLKSIZE, RBD_NBD_BLKSIZE);
+  r = ioctl(nbd, NBD_SET_BLKSIZE, blksize);
   if (r < 0) {
     r = -errno;
     cerr << "rbd-nbd: NBD_SET_BLKSIZE failed" << std::endl;
@@ -1322,6 +1347,8 @@ static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
   NLA_PUT_U64(msg, NBD_ATTR_BLOCK_SIZE_BYTES, RBD_NBD_BLKSIZE);
   NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
   NLA_PUT_U64(msg, NBD_ATTR_DEAD_CONN_TIMEOUT, cfg->reattach_timeout);
+  if (!cfg->cookie.empty())
+    NLA_PUT_STRING(msg, NBD_ATTR_BACKEND_IDENTIFIER, cfg->cookie.c_str());
 
   sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
   if (!sock_attr) {
@@ -1553,6 +1580,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   int read_only = 0;
   unsigned long flags;
   unsigned long size;
+  unsigned long blksize = RBD_NBD_BLKSIZE;
   bool use_netlink;
 
   int fd[2];
@@ -1562,8 +1590,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   Preforker forker;
   NBDServer *server;
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
@@ -1635,11 +1662,65 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
       goto close_fd;
   }
 
+  if (cfg->encryption_format.has_value()) {
+    if (!cfg->encryption_passphrase_file.has_value()) {
+      r = -EINVAL;
+      cerr << "rbd-nbd: missing encryption-passphrase-file" << std::endl;
+      goto close_fd;
+    }
+    std::ifstream file(cfg->encryption_passphrase_file.value().c_str());
+    if (file.fail()) {
+      r = -errno;
+      std::cerr << "rbd-nbd: unable to open passphrase file:"
+                << cpp_strerror(errno) << std::endl;
+      goto close_fd;
+    }
+    std::string passphrase((std::istreambuf_iterator<char>(file)),
+                           (std::istreambuf_iterator<char>()));
+    auto sg = make_scope_guard([&] {
+      ceph_memzero_s(&passphrase[0], passphrase.size(), passphrase.size()); });
+    file.close();
+    if (!passphrase.empty() && passphrase[passphrase.length() - 1] == '\n') {
+      passphrase.erase(passphrase.length() - 1);
+    }
+
+    switch (cfg->encryption_format.value()) {
+      case RBD_ENCRYPTION_FORMAT_LUKS1: {
+        librbd::encryption_luks1_format_options_t opts = {};
+        opts.passphrase = passphrase;
+        r = image.encryption_load(
+                RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts));
+        break;
+      }
+      case RBD_ENCRYPTION_FORMAT_LUKS2: {
+        librbd::encryption_luks2_format_options_t opts = {};
+        opts.passphrase = passphrase;
+        r = image.encryption_load(
+                RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts));
+        blksize = 4096;
+        break;
+      }
+      default:
+        r = -ENOTSUP;
+        cerr << "rbd-nbd: unsupported encryption format" << std::endl;
+        goto close_fd;
+    }
+
+    if (r != 0) {
+      cerr << "rbd-nbd: failed to load encryption: " << cpp_strerror(r)
+           << std::endl;
+      goto close_fd;
+    }
+  }
+
   r = image.stat(info, sizeof(info));
   if (r < 0)
     goto close_fd;
 
-  flags = NBD_FLAG_SEND_FLUSH | NBD_FLAG_SEND_TRIM | NBD_FLAG_HAS_FLAGS;
+  flags = NBD_FLAG_SEND_FLUSH | NBD_FLAG_HAS_FLAGS;
+  if (!cfg->notrim) {
+    flags |= NBD_FLAG_SEND_TRIM;
+  }
   if (!cfg->snapname.empty() || cfg->readonly) {
     flags |= NBD_FLAG_READ_ONLY;
     read_only = 1;
@@ -1662,6 +1743,12 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 
   use_netlink = cfg->try_netlink || reconnect;
   if (use_netlink) {
+    // generate when the cookie is not supplied at CLI
+    if (!reconnect && cfg->cookie.empty()) {
+      uuid_d uuid_gen;
+      uuid_gen.generate_random();
+      cfg->cookie = uuid_gen.to_string();
+    }
     r = try_netlink_setup(cfg, fd[0], size, flags, reconnect);
     if (r < 0) {
       goto free_server;
@@ -1671,7 +1758,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   }
 
   if (!use_netlink) {
-    r = try_ioctl_setup(cfg, fd[0], size, flags);
+    r = try_ioctl_setup(cfg, fd[0], size, blksize, flags);
     if (r < 0)
       goto free_server;
   }
@@ -1704,7 +1791,16 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     if (r < 0)
       goto close_nbd;
 
-    cout << cfg->devpath << std::endl;
+    std::string cookie;
+    if (use_netlink) {
+      cookie = get_cookie(cfg->devpath);
+      ceph_assert(cookie == cfg->cookie || cookie.empty());
+    }
+    if (cfg->show_cookie && !cookie.empty()) {
+      cout << cfg->devpath << " " << cookie << std::endl;
+    } else {
+      cout << cfg->devpath << std::endl;
+    }
 
     run_server(forker, server, use_netlink);
 
@@ -1842,6 +1938,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("cookie", TextTable::LEFT, TextTable::LEFT);
   }
 
   Config cfg;
@@ -1855,6 +1952,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       f->dump_string("image", cfg.imgname);
       f->dump_string("snap", cfg.snapname);
       f->dump_string("device", cfg.devpath);
+      f->dump_string("cookie", cfg.cookie);
       f->close_section();
     } else {
       should_print = true;
@@ -1862,7 +1960,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
         cfg.snapname = "-";
       }
       tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
-          << cfg.snapname << cfg.devpath << TextTable::endrow;
+          << cfg.snapname << cfg.devpath << cfg.cookie << TextTable::endrow;
     }
   }
 
@@ -1925,6 +2023,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
 
   std::vector<const char*>::iterator i;
   std::ostringstream err;
+  std::string arg_value;
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -1979,6 +2078,8 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       }
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
       cfg->exclusive = true;
+    } else if (ceph_argparse_flag(args, i, "--notrim", (char *)NULL)) {
+      cfg->notrim = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->io_timeout, err,
                                      "--timeout", (char *)NULL)) {
       if (!err.str().empty()) {
@@ -1996,6 +2097,25 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
       cfg->try_netlink = true;
+    } else if (ceph_argparse_flag(args, i, "--show-cookie", (char *)NULL)) {
+      cfg->show_cookie = true;
+    } else if (ceph_argparse_witharg(args, i, &cfg->cookie, "--cookie", (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &arg_value,
+                                     "--encryption-format", (char *)NULL)) {
+      if (arg_value == "luks1") {
+        cfg->encryption_format =
+                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS1);
+      } else if (arg_value == "luks2") {
+        cfg->encryption_format =
+                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS2);
+      } else {
+        *err_msg << "rbd-nbd: Invalid encryption format";
+        return -EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &arg_value,
+                                     "--encryption-passphrase-file",
+                                     (char *)NULL)) {
+      cfg->encryption_passphrase_file = std::make_optional(arg_value);
     } else {
       ++i;
     }
@@ -2025,10 +2145,26 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     return -EINVAL;
   }
 
+  std::string cookie;
   switch (cmd) {
     case Attach:
       if (cfg->devpath.empty()) {
         *err_msg << "rbd-nbd: must specify device to attach";
+        return -EINVAL;
+      }
+      // Allowing attach without --cookie option for kernel without
+      // NBD_ATTR_BACKEND_IDENTIFIER support for compatibility
+      cookie = get_cookie(cfg->devpath);
+      if (!cookie.empty()) {
+        if (cfg->cookie.empty()) {
+          *err_msg << "rbd-nbd: must specify cookie to attach";
+          return -EINVAL;
+	} else if (cookie != cfg->cookie) {
+          *err_msg << "rbd-nbd: cookie mismatch";
+          return -EINVAL;
+        }
+      } else if (!cfg->cookie.empty()) {
+        *err_msg << "rbd-nbd: kernel does not have cookie support";
         return -EINVAL;
       }
       [[fallthrough]];
@@ -2075,9 +2211,7 @@ static int rbd_nbd(int argc, const char *argv[])
 {
   int r;
   Config cfg;
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-
+  auto args = argv_to_vec(argc, argv);
   std::ostringstream err_msg;
   r = parse_args(args, &err_msg, &cfg);
   if (r == HELP_INFO) {

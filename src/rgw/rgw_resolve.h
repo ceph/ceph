@@ -16,7 +16,7 @@ class RGWResolver {
 public:
   ~RGWResolver();
   RGWResolver();
-  int resolve_cname(const string& hostname, string& cname, bool *found);
+  int resolve_cname(const std::string& hostname, std::string& cname, bool *found);
 };
 
 

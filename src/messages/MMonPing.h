@@ -96,7 +96,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "mon_ping"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mon_ping(" << get_op_name(op)
 	<< " stamp " << stamp
 	<< ")";

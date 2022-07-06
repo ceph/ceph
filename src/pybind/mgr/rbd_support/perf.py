@@ -7,9 +7,10 @@ import traceback
 
 from datetime import datetime, timedelta
 from threading import Condition, Lock, Thread
+from typing import cast, Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 from .common import (GLOBAL_POOL_KEY, authorize_request, extract_pool_key,
-                     get_rbd_pools)
+                     get_rbd_pools, PoolKeyT)
 
 QUERY_POOL_ID = "pool_id"
 QUERY_POOL_ID_MAP = "pool_id_map"
@@ -38,24 +39,52 @@ STATS_RATE_INTERVAL = timedelta(minutes=1)
 REPORT_MAX_RESULTS = 64
 
 
+# {(pool_id, namespace)...}
+ResolveImageNamesT = Set[Tuple[int, str]]
+
+# (time, [value,...])
+PerfCounterT = Tuple[int, List[int]]
+# current, previous
+RawImageCounterT = Tuple[PerfCounterT, Optional[PerfCounterT]]
+# image_id => perf_counter
+RawImagesCounterT = Dict[str, RawImageCounterT]
+# namespace_counters => raw_images
+RawNamespacesCountersT = Dict[str, RawImagesCounterT]
+# pool_id => namespaces_counters
+RawPoolCountersT = Dict[int, RawNamespacesCountersT]
+
+SumImageCounterT = List[int]
+# image_id => sum_image
+SumImagesCounterT = Dict[str, SumImageCounterT]
+# namespace => sum_images
+SumNamespacesCountersT = Dict[str, SumImagesCounterT]
+# pool_id, sum_namespaces
+SumPoolCountersT = Dict[int, SumNamespacesCountersT]
+
+ExtractDataFuncT = Callable[[int, Optional[RawImageCounterT], SumImageCounterT], float]
+
+
 class PerfHandler:
-    user_queries = {}
-    image_cache = {}
+    user_queries: Dict[PoolKeyT, Dict[str, Any]] = {}
+    image_cache: Dict[str, str] = {}
 
     lock = Lock()
     query_condition = Condition(lock)
     refresh_condition = Condition(lock)
     thread = None
 
-    image_name_cache = {}
+    image_name_cache: Dict[Tuple[int, str], Dict[str, str]] = {}
     image_name_refresh_time = datetime.fromtimestamp(0)
 
     @classmethod
-    def prepare_regex(cls, value):
+    def prepare_regex(cls, value: Any) -> str:
         return '^({})$'.format(value)
 
     @classmethod
-    def prepare_osd_perf_query(cls, pool_id, namespace, counter_type):
+    def prepare_osd_perf_query(cls,
+                               pool_id: Optional[int],
+                               namespace: Optional[str],
+                               counter_type: str) -> Dict[str, Any]:
         pool_id_regex = OSD_PERF_QUERY_REGEX_MATCH_ALL
         namespace_regex = OSD_PERF_QUERY_REGEX_MATCH_ALL
         if pool_id:
@@ -76,23 +105,23 @@ class PerfHandler:
         }
 
     @classmethod
-    def pool_spec_search_keys(cls, pool_key):
+    def pool_spec_search_keys(cls, pool_key: str) -> List[str]:
         return [pool_key[0:len(pool_key) - x]
                 for x in range(0, len(pool_key) + 1)]
 
     @classmethod
-    def submatch_pool_key(cls, pool_key, search_key):
+    def submatch_pool_key(cls, pool_key: PoolKeyT, search_key: str) -> bool:
         return ((pool_key[1] == search_key[1] or not search_key[1])
                 and (pool_key[0] == search_key[0] or not search_key[0]))
 
-    def __init__(self, module):
+    def __init__(self, module: Any) -> None:
         self.module = module
         self.log = module.log
 
         self.thread = Thread(target=self.run)
         self.thread.start()
 
-    def run(self):
+    def run(self) -> None:
         try:
             self.log.info("PerfHandler: starting")
             while True:
@@ -110,12 +139,15 @@ class PerfHandler:
             self.log.fatal("Fatal runtime error: {}\n{}".format(
                 ex, traceback.format_exc()))
 
-    def merge_raw_osd_perf_counters(self, pool_key, query, now_ts,
-                                    resolve_image_names):
+    def merge_raw_osd_perf_counters(self,
+                                    pool_key: PoolKeyT,
+                                    query: Dict[str, Any],
+                                    now_ts: int,
+                                    resolve_image_names: ResolveImageNamesT) -> RawPoolCountersT:
         pool_id_map = query[QUERY_POOL_ID_MAP]
 
         # collect and combine the raw counters from all sort orders
-        raw_pool_counters = query.setdefault(QUERY_RAW_POOL_COUNTERS, {})
+        raw_pool_counters: Dict[int, Dict[str, Dict[str, Any]]] = query.setdefault(QUERY_RAW_POOL_COUNTERS, {})
         for query_id in query[QUERY_IDS]:
             res = self.module.get_osd_perf_counters(query_id)
             for counter in res['counters']:
@@ -141,19 +173,23 @@ class PerfHandler:
                 # if we haven't already processed it for this round
                 raw_namespaces = raw_pool_counters.setdefault(pool_id, {})
                 raw_images = raw_namespaces.setdefault(namespace, {})
-                raw_image = raw_images.setdefault(image_id, [None, None])
-
+                raw_image = raw_images.get(image_id)
                 # save the last two perf counters for each image
-                if raw_image[0] and raw_image[0][0] < now_ts:
-                    raw_image[1] = raw_image[0]
-                    raw_image[0] = None
-                if not raw_image[0]:
-                    raw_image[0] = [now_ts, [int(x[0]) for x in counter['c']]]
+                new_current = (now_ts, [int(x[0]) for x in counter['c']])
+                if raw_image:
+                    old_current, _ = raw_image
+                    if old_current[0] < now_ts:
+                        raw_images[image_id] = (new_current, old_current)
+                else:
+                    raw_images[image_id] = (new_current, None)
 
         self.log.debug("merge_raw_osd_perf_counters: {}".format(raw_pool_counters))
         return raw_pool_counters
 
-    def sum_osd_perf_counters(self, query, raw_pool_counters, now_ts):
+    def sum_osd_perf_counters(self,
+                              query: Dict[str, dict],
+                              raw_pool_counters: RawPoolCountersT,
+                              now_ts: int) -> SumPoolCountersT:
         # update the cumulative counters for each image
         sum_pool_counters = query.setdefault(QUERY_SUM_POOL_COUNTERS, {})
         for pool_id, raw_namespaces in raw_pool_counters.items():
@@ -164,12 +200,13 @@ class PerfHandler:
                     # zero-out non-updated raw counters
                     if not raw_image[0]:
                         continue
-                    elif raw_image[0][0] < now_ts:
-                        raw_image[1] = raw_image[0]
-                        raw_image[0] = [now_ts, [0 for x in raw_image[1][1]]]
+                    old_current, _ = raw_image
+                    if old_current[0] < now_ts:
+                        new_current = (now_ts, [0] * len(old_current[1]))
+                        raw_images[image_id] = (new_current, old_current)
                         continue
 
-                    counters = raw_image[0][1]
+                    counters = old_current[1]
 
                     # copy raw counters if this is a newly discovered image or
                     # increment existing counters
@@ -183,7 +220,7 @@ class PerfHandler:
         self.log.debug("sum_osd_perf_counters: {}".format(sum_pool_counters))
         return sum_pool_counters
 
-    def refresh_image_names(self, resolve_image_names):
+    def refresh_image_names(self, resolve_image_names: ResolveImageNamesT) -> None:
         for pool_id, namespace in resolve_image_names:
             image_key = (pool_id, namespace)
             images = self.image_name_cache.setdefault(image_key, {})
@@ -193,7 +230,7 @@ class PerfHandler:
                     images[image_meta['id']] = image_meta['name']
             self.log.debug("resolve_image_names: {}={}".format(image_key, images))
 
-    def scrub_missing_images(self):
+    def scrub_missing_images(self) -> None:
         for pool_key, query in self.user_queries.items():
             raw_pool_counters = query.get(QUERY_RAW_POOL_COUNTERS, {})
             sum_pool_counters = query.get(QUERY_SUM_POOL_COUNTERS, {})
@@ -213,7 +250,7 @@ class PerfHandler:
                             if image_id in raw_images:
                                 del raw_images[image_id]
 
-    def process_raw_osd_perf_counters(self):
+    def process_raw_osd_perf_counters(self) -> None:
         now = datetime.now()
         now_ts = int(now.strftime("%s"))
 
@@ -223,7 +260,7 @@ class PerfHandler:
             self.log.debug("process_raw_osd_perf_counters: expiring image name cache")
             self.image_name_cache = {}
 
-        resolve_image_names = set()
+        resolve_image_names: Set[Tuple[int, str]] = set()
         for pool_key, query in self.user_queries.items():
             if not query[QUERY_IDS]:
                 continue
@@ -239,14 +276,14 @@ class PerfHandler:
         elif not self.image_name_cache:
             self.scrub_missing_images()
 
-    def resolve_pool_id(self, pool_name):
+    def resolve_pool_id(self, pool_name: str) -> int:
         pool_id = self.module.rados.pool_lookup(pool_name)
         if not pool_id:
             raise rados.ObjectNotFound("Pool '{}' not found".format(pool_name),
                                        errno.ENOENT)
         return pool_id
 
-    def scrub_expired_queries(self):
+    def scrub_expired_queries(self) -> None:
         # perf counters need to be periodically refreshed to continue
         # to be registered
         expire_time = datetime.now() - QUERY_EXPIRE_INTERVAL
@@ -256,7 +293,9 @@ class PerfHandler:
                 self.unregister_osd_perf_queries(pool_key, user_query[QUERY_IDS])
                 del self.user_queries[pool_key]
 
-    def register_osd_perf_queries(self, pool_id, namespace):
+    def register_osd_perf_queries(self,
+                                  pool_id: Optional[int],
+                                  namespace: Optional[str]) -> List[int]:
         query_ids = []
         try:
             for counter in OSD_PERF_QUERY_COUNTERS:
@@ -275,23 +314,24 @@ class PerfHandler:
 
         return query_ids
 
-    def unregister_osd_perf_queries(self, pool_key, query_ids):
+    def unregister_osd_perf_queries(self, pool_key: PoolKeyT, query_ids: List[int]) -> None:
         self.log.info("unregister_osd_perf_queries: pool_key={}, query_ids={}".format(
             pool_key, query_ids))
         for query_id in query_ids:
             self.module.remove_osd_perf_query(query_id)
         query_ids[:] = []
 
-    def register_query(self, pool_key):
+    def register_query(self, pool_key: PoolKeyT) -> Dict[str, Any]:
         if pool_key not in self.user_queries:
+            pool_name, namespace = pool_key
             pool_id = None
-            if pool_key[0]:
-                pool_id = self.resolve_pool_id(pool_key[0])
+            if pool_name:
+                pool_id = self.resolve_pool_id(cast(str, pool_name))
 
             user_query = {
                 QUERY_POOL_ID: pool_id,
-                QUERY_POOL_ID_MAP: {pool_id: pool_key[0]},
-                QUERY_IDS: self.register_osd_perf_queries(pool_id, pool_key[1]),
+                QUERY_POOL_ID_MAP: {pool_id: pool_name},
+                QUERY_IDS: self.register_osd_perf_queries(pool_id, namespace),
                 QUERY_LAST_REQUEST: datetime.now()
             }
 
@@ -319,18 +359,22 @@ class PerfHandler:
 
         return user_query
 
-    def extract_stat(self, index, raw_image, sum_image):
+    def extract_stat(self,
+                     index: int,
+                     raw_image: Optional[RawImageCounterT],
+                     sum_image: Any) -> float:
         # require two raw counters between a fixed time window
         if not raw_image or not raw_image[0] or not raw_image[1]:
             return 0
 
-        current_time = raw_image[0][0]
-        previous_time = raw_image[1][0]
+        current_counter, previous_counter = cast(Tuple[PerfCounterT, PerfCounterT], raw_image)
+        current_time = current_counter[0]
+        previous_time = previous_counter[0]
         if current_time <= previous_time or \
                 current_time - previous_time > STATS_RATE_INTERVAL.total_seconds():
             return 0
 
-        current_value = raw_image[0][1][index]
+        current_value = current_counter[1][index]
         instant_rate = float(current_value) / (current_time - previous_time)
 
         # convert latencies from sum to average per op
@@ -346,15 +390,28 @@ class PerfHandler:
 
         return instant_rate
 
-    def extract_counter(self, index, raw_image, sum_image):
+    def extract_counter(self,
+                        index: int,
+                        raw_image: Optional[RawImageCounterT],
+                        sum_image: List[int]) -> int:
         if sum_image:
             return sum_image[index]
         return 0
 
-    def generate_report(self, query, sort_by, extract_data):
-        pool_id_map = query[QUERY_POOL_ID_MAP]
-        sum_pool_counters = query.setdefault(QUERY_SUM_POOL_COUNTERS, {})
-        raw_pool_counters = query.setdefault(QUERY_RAW_POOL_COUNTERS, {})
+    def generate_report(self,
+                        query: Dict[str, Union[Dict[str, str],
+                                               Dict[int, Dict[str, dict]]]],
+                        sort_by: str,
+                        extract_data: ExtractDataFuncT) -> Tuple[Dict[int, str],
+                                                                 List[Dict[str, List[float]]]]:
+        pool_id_map = cast(Dict[int, str], query[QUERY_POOL_ID_MAP])
+        sum_pool_counters = cast(SumPoolCountersT,
+                                 query.setdefault(QUERY_SUM_POOL_COUNTERS,
+                                                  cast(SumPoolCountersT, {})))
+        # pool_id => {namespace => {image_id => [counter..] }
+        raw_pool_counters = cast(RawPoolCountersT,
+                                 query.setdefault(QUERY_RAW_POOL_COUNTERS,
+                                                  cast(RawPoolCountersT, {})))
 
         sort_by_index = OSD_PERF_QUERY_COUNTERS.index(sort_by)
 
@@ -363,20 +420,20 @@ class PerfHandler:
         for pool_id, sum_namespaces in sum_pool_counters.items():
             if pool_id not in pool_id_map:
                 continue
-            raw_namespaces = raw_pool_counters.get(pool_id, {})
+            raw_namespaces: RawNamespacesCountersT = raw_pool_counters.get(pool_id, {})
             for namespace, sum_images in sum_namespaces.items():
                 raw_images = raw_namespaces.get(namespace, {})
                 for image_id, sum_image in sum_images.items():
-                    raw_image = raw_images.get(image_id, [])
+                    raw_image = raw_images.get(image_id)
 
                     # always sort by recent IO activity
-                    results.append([(pool_id, namespace, image_id),
+                    results.append(((pool_id, namespace, image_id),
                                     self.extract_stat(sort_by_index, raw_image,
-                                                      sum_image)])
+                                                      sum_image)))
         results = sorted(results, key=lambda x: x[1], reverse=True)[:REPORT_MAX_RESULTS]
 
         # build the report in sorted order
-        pool_descriptors = {}
+        pool_descriptors: Dict[str, int] = {}
         counters = []
         for key, _ in results:
             pool_id = key[0]
@@ -389,7 +446,7 @@ class PerfHandler:
 
             raw_namespaces = raw_pool_counters.get(pool_id, {})
             raw_images = raw_namespaces.get(namespace, {})
-            raw_image = raw_images.get(image_id, [])
+            raw_image = raw_images.get(image_id)
 
             sum_namespaces = sum_pool_counters[pool_id]
             sum_images = sum_namespaces[namespace]
@@ -414,14 +471,17 @@ class PerfHandler:
                 in pool_descriptors.items()}, \
             counters
 
-    def get_perf_data(self, report, pool_spec, sort_by, extract_data):
+    def get_perf_data(self,
+                      report: str,
+                      pool_spec: Optional[str],
+                      sort_by: str,
+                      extract_data: ExtractDataFuncT) -> Tuple[int, str, str]:
         self.log.debug("get_perf_{}s: pool_spec={}, sort_by={}".format(
             report, pool_spec, sort_by))
         self.scrub_expired_queries()
 
         pool_key = extract_pool_key(pool_spec)
         authorize_request(self.module, pool_key[0], pool_key[1])
-
         user_query = self.register_query(pool_key)
 
         now = datetime.now()
@@ -437,21 +497,14 @@ class PerfHandler:
 
         return 0, json.dumps(report), ""
 
-    def get_perf_stats(self, pool_spec, sort_by):
+    def get_perf_stats(self,
+                       pool_spec: Optional[str],
+                       sort_by: str) -> Tuple[int, str, str]:
         return self.get_perf_data(
             "stat", pool_spec, sort_by, self.extract_stat)
 
-    def get_perf_counters(self, pool_spec, sort_by):
+    def get_perf_counters(self,
+                          pool_spec: Optional[str],
+                          sort_by: str) -> Tuple[int, str, str]:
         return self.get_perf_data(
             "counter", pool_spec, sort_by, self.extract_counter)
-
-    def handle_command(self, inbuf, prefix, cmd):
-        with self.lock:
-            if prefix == 'image stats':
-                return self.get_perf_stats(cmd.get('pool_spec', None),
-                                           cmd.get('sort_by', OSD_PERF_QUERY_COUNTERS[0]))
-            elif prefix == 'image counters':
-                return self.get_perf_counters(cmd.get('pool_spec', None),
-                                              cmd.get('sort_by', OSD_PERF_QUERY_COUNTERS[0]))
-
-        raise NotImplementedError(cmd['prefix'])

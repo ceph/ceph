@@ -7,4 +7,4 @@
   $ crushtool -i six   --add-item 6 1.0 device6 --loc host host0 --loc cluster cluster0 -o seven > /dev/null
   $ crushtool -i seven --add-item 7 1.0 device7 --loc host host0 --loc cluster cluster0 -o eight > /dev/null
   $ crushtool -d eight -o final
-  $ cmp final "$TESTDIR/tree.template.final"
+  $ diff final "$TESTDIR/tree.template.final"

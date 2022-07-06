@@ -27,6 +27,7 @@
 #include "include/coredumpctl.h"
 #include "../objectstore/store_test_fixture.h"
 
+using namespace std;
 
 struct PGLogTestBase {
   static hobject_t mk_obj(unsigned id) {
@@ -2074,7 +2075,7 @@ TEST_F(PGLogTest, filter_log_1) {
     int num_internal = 10;
 
     // Set up splitting map
-    OSDMap *osdmap = new OSDMap;
+    std::unique_ptr<OSDMap> osdmap(new OSDMap);
     uuid_d test_uuid;
     test_uuid.generate_random();
     osdmap->build_simple_with_pool(g_ceph_context, epoch, test_uuid, max_osd, bits, bits);

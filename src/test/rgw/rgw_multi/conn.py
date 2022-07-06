@@ -1,6 +1,6 @@
 import boto
 import boto.s3.connection
-
+import boto.iam.connection
 
 def get_gateway_connection(gateway, credentials):
     """ connect to the given gateway """
@@ -28,3 +28,14 @@ def get_gateway_secure_connection(gateway, credentials):
             validate_certs=False,
             calling_format = boto.s3.connection.OrdinaryCallingFormat())
     return gateway.secure_connection
+
+def get_gateway_iam_connection(gateway, credentials):
+    """ connect to iam api of the given gateway """
+    if gateway.iam_connection is None:
+        gateway.iam_connection = boto.connect_iam(
+                aws_access_key_id = credentials.access_key,
+                aws_secret_access_key = credentials.secret,
+                host = gateway.host,
+                port = gateway.port,
+                is_secure = False)
+    return gateway.iam_connection

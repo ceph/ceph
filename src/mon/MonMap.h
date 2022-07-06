@@ -162,8 +162,8 @@ class MonMap {
   election_strategy strategy = CLASSIC;
   std::set<std::string> disallowed_leaders; // can't be leader under CONNECTIVITY/DISALLOW
   bool stretch_mode_enabled = false;
-  string tiebreaker_mon;
-  set<string> stretch_marked_down_mons; // can't be leader until fully recovered
+  std::string tiebreaker_mon;
+  std::set<std::string> stretch_marked_down_mons; // can't be leader until fully recovered
 
 public:
   void calc_legacy_ranks();
@@ -529,6 +529,8 @@ protected:
   seastar::future<> build_monmap(const crimson::common::ConfigProxy& conf, bool for_mkfs);
   /// initialize monmap by resolving given service name
   seastar::future<> init_with_dns_srv(bool for_mkfs, const std::string& name);
+  /// initialize monmap with `mon_host` or `mon_host_override`
+  bool maybe_init_with_mon_host(const std::string& mon_host, bool for_mkfs);
 #else
   /// read from encoded monmap file
   int init_with_monmap(const std::string& monmap, std::ostream& errout);

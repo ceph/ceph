@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_CLS_RGW_GC_OPS_H
-#define CEPH_CLS_RGW_GC_OPS_H
+#pragma once
 
 #include "cls/rgw/cls_rgw_types.h"
 
@@ -68,4 +67,3 @@ struct cls_rgw_gc_queue_defer_entry_op {
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_queue_defer_entry_op)
-#endif /* CEPH_CLS_RGW_GC_OPS_H */

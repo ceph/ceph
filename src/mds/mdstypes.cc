@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "mdstypes.h"
+#include "include/cephfs/types.h"
 #include "MDSContext.h"
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
@@ -565,7 +566,7 @@ void session_info_t::encode(bufferlist& bl, uint64_t features) const
   encode(inst, bl, features);
   encode(completed_requests, bl);
   encode(prealloc_inos, bl);   // hacky, see below.
-  encode(used_inos, bl);
+  encode((__u32)0, bl); // used_inos
   encode(completed_flushes, bl);
   encode(auth_name, bl);
   encode(client_metadata, bl);
@@ -587,9 +588,11 @@ void session_info_t::decode(bufferlist::const_iterator& p)
     decode(completed_requests, p);
   }
   decode(prealloc_inos, p);
-  decode(used_inos, p);
-  prealloc_inos.insert(used_inos);
-  used_inos.clear();
+  {
+    interval_set<inodeno_t> used_inos;
+    decode(used_inos, p);
+    prealloc_inos.insert(used_inos);
+  }
   if (struct_v >= 4 && struct_v < 7) {
     decode(client_metadata.kv_map, p);
   }
@@ -620,15 +623,6 @@ void session_info_t::dump(Formatter *f) const
 
   f->open_array_section("prealloc_inos");
   for (const auto& [start, len] : prealloc_inos) {
-    f->open_object_section("ino_range");
-    f->dump_stream("start") << start;
-    f->dump_unsigned("length", len);
-    f->close_section();
-  }
-  f->close_section();
-
-  f->open_array_section("used_inos");
-  for (const auto& [start, len] : used_inos) {
     f->open_object_section("ino_range");
     f->dump_stream("start") << start;
     f->dump_unsigned("length", len);

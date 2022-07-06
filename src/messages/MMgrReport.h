@@ -157,7 +157,12 @@ public:
     encode(config_bl, payload);
     encode(osd_perf_metric_reports, payload);
     encode(task_status, payload);
-    encode(metric_report_message, payload);
+    if (metric_report_message && metric_report_message->should_encode(features)) {
+      encode(metric_report_message, payload);
+    } else {
+      boost::optional<MetricReportMessage> empty;
+      encode(empty, payload);
+    }
   }
 
   std::string_view get_type_name() const override { return "mgrreport"; }
@@ -192,6 +197,8 @@ private:
   using RefCountedObject::get;
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

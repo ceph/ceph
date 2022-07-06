@@ -8,9 +8,13 @@ then deploying the needed services.
 
 .. highlight:: console
 
+
+.. _cephadm-host-requirements:
+
 Requirements
 ============
 
+- Python 3
 - Systemd
 - Podman or Docker for running containers
 - Time synchronization (such as chrony or NTP)
@@ -18,6 +22,13 @@ Requirements
 
 Any modern Linux distribution should be sufficient.  Dependencies
 are installed automatically by the bootstrap process below.
+
+See the section :ref:`Compatibility With Podman
+Versions<cephadm-compatibility-with-podman>` for a table of Ceph versions that
+are compatible with Podman. Not every version of Podman is compatible with
+Ceph.
+
+
 
 .. _get-cephadm:
 
@@ -27,17 +38,26 @@ Install cephadm
 The ``cephadm`` command can 
 
 #. bootstrap a new cluster
-#. launch a containerized shell with a working Ceph CLI, and 
-#. aid in debugging containerized Ceph daemons.
+#. launch a containerized shell with a working Ceph CLI
+#. aid in debugging containerized Ceph daemons
 
-There are a few ways to install cephadm:
+There are two ways to install ``cephadm``:
+
+#. a :ref:`curl-based installation<cephadm_install_curl>` method
+#. :ref:`distribution-specific installation methods<cephadm_install_distros>`
+
+.. _cephadm_install_curl:
+
+curl-based installation
+-----------------------
 
 * Use ``curl`` to fetch the most recent version of the
   standalone script. 
   
   .. prompt:: bash #
+     :substitutions:
 
-   curl --silent --remote-name --location https://github.com/ceph/ceph/raw/octopus/src/cephadm/cephadm
+     curl --silent --remote-name --location https://github.com/ceph/ceph/raw/|stable-release|/src/cephadm/cephadm
 
   Make the ``cephadm`` script executable:
 
@@ -53,13 +73,14 @@ There are a few ways to install cephadm:
 
 * Although the standalone script is sufficient to get a cluster started, it is
   convenient to have the ``cephadm`` command installed on the host.  To install
-  the packages that provide the ``cephadm`` command for the Octopus release,
-  run the following commands:
+  the packages that provide the ``cephadm`` command, run the following
+  commands:
 
   .. prompt:: bash #
+     :substitutions:
 
-    ./cephadm add-repo --release octopus
-    ./cephadm install
+     ./cephadm add-repo --release |stable-release|
+     ./cephadm install
 
   Confirm that ``cephadm`` is now in your PATH by running ``which``:
 
@@ -73,16 +94,38 @@ There are a few ways to install cephadm:
 
     /usr/sbin/cephadm
 
+.. _cephadm_install_distros:
 
-* Some commercial Linux distributions (e.g., RHEL, SLE) may already
-  include up-to-date Ceph packages.  In that case, you can install
-  cephadm directly.  For example:
+distribution-specific installations
+-----------------------------------
+
+.. important:: The methods of installing ``cephadm`` in this section are distinct from the curl-based method above. Use either the curl-based method above or one of the methods in this section, but not both the curl-based method and one of these.
+
+Some Linux distributions  may already include up-to-date Ceph packages.  In
+that case, you can install cephadm directly. For example:
+
+  In Ubuntu:
 
   .. prompt:: bash #
 
-     dnf install -y cephadm   
+     apt install -y cephadm
 
-  or
+  In CentOS Stream:
+
+  .. prompt:: bash #
+     :substitutions:
+
+     dnf search release-ceph
+     dnf install --assumeyes centos-release-ceph-|stable-release|
+     dnf install --assumeyes cephadm
+
+  In Fedora:
+
+  .. prompt:: bash #
+
+     dnf -y install cephadm
+
+  In SUSE:
 
   .. prompt:: bash #
 
@@ -93,18 +136,23 @@ There are a few ways to install cephadm:
 Bootstrap a new cluster
 =======================
 
-You need to know which *IP address* to use for the cluster's first
-monitor daemon.  This is normally just the IP for the first host.  If there
-are multiple networks and interfaces, be sure to choose one that will
-be accessible by any host accessing the Ceph cluster.
+What to know before you bootstrap
+---------------------------------
 
-To bootstrap the cluster, first create an ``/etc/ceph`` directory:
+The first step in creating a new Ceph cluster is running the ``cephadm
+bootstrap`` command on the Ceph cluster's first host. The act of running the
+``cephadm bootstrap`` command on the Ceph cluster's first host creates the Ceph
+cluster's first "monitor daemon", and that monitor daemon needs an IP address.
+You must pass the IP address of the Ceph cluster's first host to the ``ceph
+bootstrap`` command, so you'll need to know the IP address of that host.
 
-.. prompt:: bash # 
+.. note:: If there are multiple networks and interfaces, be sure to choose one
+   that will be accessible by any host accessing the Ceph cluster.
 
-   mkdir -p /etc/ceph
+Running the bootstrap command
+-----------------------------
 
-Then run the ``ceph bootstrap`` command:
+Run the ``ceph bootstrap`` command:
 
 .. prompt:: bash # 
 
@@ -114,46 +162,81 @@ This command will:
 
 * Create a monitor and manager daemon for the new cluster on the local
   host.
-* Generate a new SSH key for the Ceph cluster and adds it to the root
+* Generate a new SSH key for the Ceph cluster and add it to the root
   user's ``/root/.ssh/authorized_keys`` file.
-* Write a minimal configuration file needed to communicate with the
-  new cluster to ``/etc/ceph/ceph.conf``.
+* Write a copy of the public key to ``/etc/ceph/ceph.pub``.
+* Write a minimal configuration file to ``/etc/ceph/ceph.conf``. This
+  file is needed to communicate with the new cluster.
 * Write a copy of the ``client.admin`` administrative (privileged!)
   secret key to ``/etc/ceph/ceph.client.admin.keyring``.
-* Write a copy of the public key to
-  ``/etc/ceph/ceph.pub``.
+* Add the ``_admin`` label to the bootstrap host.  By default, any host
+  with this label will (also) get a copy of ``/etc/ceph/ceph.conf`` and
+  ``/etc/ceph/ceph.client.admin.keyring``.
 
-The default bootstrap behavior will work for the vast majority of
-users.  See below for a few options that may be useful for some users,
-or run ``cephadm bootstrap -h`` to see all available options:
+Further information about cephadm bootstrap 
+-------------------------------------------
 
-* Bootstrap writes the files needed to access the new cluster to ``/etc/ceph``,
-  so that any Ceph packages installed on the host itself (e.g., to access the
-  command line interface) can easily find them.
+The default bootstrap behavior will work for most users. But if you'd like
+immediately to know more about ``cephadm bootstrap``, read the list below.  
+
+Also, you can run ``cephadm bootstrap -h`` to see all of ``cephadm``'s
+available options.
+
+* By default, Ceph daemons send their log output to stdout/stderr, which is picked
+  up by the container runtime (docker or podman) and (on most systems) sent to
+  journald.  If you want Ceph to write traditional log files to ``/var/log/ceph/$fsid``,
+  use the ``--log-to-file`` option during bootstrap.
+
+* Larger Ceph clusters perform better when (external to the Ceph cluster)
+  public network traffic is separated from (internal to the Ceph cluster)
+  cluster traffic. The internal cluster traffic handles replication, recovery,
+  and heartbeats between OSD daemons.  You can define the :ref:`cluster
+  network<cluster-network>` by supplying the ``--cluster-network`` option to the ``bootstrap``
+  subcommand. This parameter must define a subnet in CIDR notation (for example
+  ``10.90.90.0/24`` or ``fe80::/64``).
+
+* ``cephadm bootstrap`` writes to ``/etc/ceph`` the files needed to access
+  the new cluster. This central location makes it possible for Ceph
+  packages installed on the host (e.g., packages that give access to the
+  cephadm command line interface) to find these files.
 
   Daemon containers deployed with cephadm, however, do not need
   ``/etc/ceph`` at all.  Use the ``--output-dir *<directory>*`` option
-  to put them in a different directory (like ``.``), avoiding any
-  potential conflicts with existing Ceph configuration (cephadm or
+  to put them in a different directory (for example, ``.``). This may help
+  avoid conflicts with an existing Ceph configuration (cephadm or
   otherwise) on the same host.
 
 * You can pass any initial Ceph configuration options to the new
   cluster by putting them in a standard ini-style configuration file
-  and using the ``--config *<config-file>*`` option.
+  and using the ``--config *<config-file>*`` option.  For example::
 
-* You can choose the ssh user cephadm will use to connect to hosts by
-  using the ``--ssh-user *<user>*`` option. The ssh key will be added
-  to ``/home/*<user>*/.ssh/authorized_keys``. This user will require
-  passwordless sudo access.
+      $ cat <<EOF > initial-ceph.conf
+      [global]
+      osd crush chooseleaf type = 0
+      EOF
+      $ ./cephadm bootstrap --config initial-ceph.conf ...
+
+* The ``--ssh-user *<user>*`` option makes it possible to choose which ssh
+  user cephadm will use to connect to hosts. The associated ssh key will be
+  added to ``/home/*<user>*/.ssh/authorized_keys``. The user that you 
+  designate with this option must have passwordless sudo access.
 
 * If you are using a container on an authenticated registry that requires
-  login you may add the three arguments ``--registry-url <url of registry>``,
-  ``--registry-username <username of account on registry>``,
-  ``--registry-password <password of account on registry>`` OR
-  ``--registry-json <json file with login info>``. Cephadm will attempt
-  to login to this registry so it may pull your container and then store
-  the login info in its config database so other hosts added to the cluster
-  may also make use of the authenticated registry.
+  login, you may add the argument:
+
+  * ``--registry-json <path to json file>`` 
+
+  example contents of JSON file with login info::
+
+      {"url":"REGISTRY_URL", "username":"REGISTRY_USERNAME", "password":"REGISTRY_PASSWORD"}
+  
+  Cephadm will attempt to log in to this registry so it can pull your container
+  and then store the login info in its config database. Other hosts added to
+  the cluster will then also be able to make use of the authenticated registry.
+
+* See :ref:`cephadm-deployment-scenarios` for additional examples for using ``cephadm bootstrap``.
+
+.. _cephadm-enable-cli:
 
 Enable Ceph CLI
 ===============
@@ -187,9 +270,10 @@ command.  There are several ways to do this:
   CephFS file systems), etc.:
 
   .. prompt:: bash #
+     :substitutions:
 
-    cephadm add-repo --release octopus
-    cephadm install ceph-common
+     cephadm add-repo --release |stable-release|
+     cephadm install ceph-common
 
 Confirm that the ``ceph`` command is accessible with:
 
@@ -205,345 +289,117 @@ its status with:
 
   ceph status
 
+Adding Hosts
+============
 
-Add hosts to the cluster
-========================
+Next, add all hosts to the cluster by following :ref:`cephadm-adding-hosts`.
 
-To add each new host to the cluster, perform two steps:
+By default, a ``ceph.conf`` file and a copy of the ``client.admin`` keyring
+are maintained in ``/etc/ceph`` on all hosts with the ``_admin`` label, which is initially
+applied only to the bootstrap host. We usually recommend that one or more other hosts be
+given the ``_admin`` label so that the Ceph CLI (e.g., via ``cephadm shell``) is easily
+accessible on multiple hosts.  To add the ``_admin`` label to additional host(s),
 
-#. Install the cluster's public SSH key in the new host's root user's ``authorized_keys`` file:
+  .. prompt:: bash #
 
-   .. prompt:: bash #
+    ceph orch host label add *<host>* _admin
 
-    ssh-copy-id -f -i /etc/ceph/ceph.pub root@*<new-host>*
-
-   For example:
-
-   .. prompt:: bash #
-
-      ssh-copy-id -f -i /etc/ceph/ceph.pub root@host2
-      ssh-copy-id -f -i /etc/ceph/ceph.pub root@host3
-
-#. Tell Ceph that the new node is part of the cluster:
-
-   .. prompt:: bash #
-
-     ceph orch host add *newhost*
-
-   For example:
-
-   .. prompt:: bash #
-
-     ceph orch host add host2
-     ceph orch host add host3
-
-
-.. _deploy_additional_monitors:
-
-Deploy additional monitors (optional)
-=====================================
+Adding additional MONs
+======================
 
 A typical Ceph cluster has three or five monitor daemons spread
 across different hosts.  We recommend deploying five
 monitors if there are five or more nodes in your cluster.
 
-.. _CIDR: https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
+Please follow :ref:`deploy_additional_monitors` to deploy additional MONs.
 
-When Ceph knows what IP subnet the monitors should use it can automatically
-deploy and scale monitors as the cluster grows (or contracts).  By default,
-Ceph assumes that other monitors should use the same subnet as the first
-monitor's IP.
+Adding Storage
+==============
 
-If your Ceph monitors (or the entire cluster) live on a single subnet,
-then by default cephadm automatically adds up to 5 monitors as you add new
-hosts to the cluster. No further steps are necessary.
-
-* If there is a specific IP subnet that should be used by monitors, you
-  can configure that in `CIDR`_ format (e.g., ``10.1.2.0/24``) with:
-
-  .. prompt:: bash #
-
-     ceph config set mon public_network *<mon-cidr-network>*
-
-  For example:
-
-  .. prompt:: bash #
-
-     ceph config set mon public_network 10.1.2.0/24
-
-  Cephadm deploys new monitor daemons only on hosts that have IPs
-  configured in the configured subnet.
-
-* If you want to adjust the default of 5 monitors, run this command:
-
-  .. prompt:: bash #
-
-     ceph orch apply mon *<number-of-monitors>*
-
-* To deploy monitors on a specific set of hosts, run this command:
-
-  .. prompt:: bash #
-
-    ceph orch apply mon *<host1,host2,host3,...>*
-
-  Be sure to include the first (bootstrap) host in this list.
-
-* You can control which hosts the monitors run on by making use of
-  host labels.  To set the ``mon`` label to the appropriate
-  hosts, run this command:
-  
-  .. prompt:: bash #
-
-    ceph orch host label add *<hostname>* mon
-
-  To view the current hosts and labels, run this command:
-
-  .. prompt:: bash #
-
-    ceph orch host ls
-
-  For example:
-
-  .. prompt:: bash #
-
-    ceph orch host label add host1 mon
-    ceph orch host label add host2 mon
-    ceph orch host label add host3 mon
-    ceph orch host ls
-
-  .. code-block:: bash
-
-    HOST   ADDR   LABELS  STATUS
-    host1         mon
-    host2         mon
-    host3         mon
-    host4
-    host5
-
-  Tell cephadm to deploy monitors based on the label by running this command:
-
-  .. prompt:: bash #
-
-    ceph orch apply mon label:mon
-
-* You can explicitly specify the IP address or CIDR network for each monitor
-  and control where it is placed.  To disable automated monitor deployment, run
-  this command:
-
-  .. prompt:: bash #
-
-    ceph orch apply mon --unmanaged
-
-  To deploy each additional monitor:
-
-  .. prompt:: bash #
-
-    ceph orch daemon add mon *<host1:ip-or-network1> [<host1:ip-or-network-2>...]*
-
-  For example, to deploy a second monitor on ``newhost1`` using an IP
-  address ``10.1.2.123`` and a third monitor on ``newhost2`` in
-  network ``10.1.2.0/24``, run the following commands:
-
-  .. prompt:: bash #
-
-    ceph orch apply mon --unmanaged
-    ceph orch daemon add mon newhost1:10.1.2.123
-    ceph orch daemon add mon newhost2:10.1.2.0/24
-
-  .. note::
-     The **apply** command can be confusing. For this reason, we recommend using
-     YAML specifications. 
-
-     Each ``ceph orch apply mon`` command supersedes the one before it. 
-     This means that you must use the proper comma-separated list-based 
-     syntax when you want to apply monitors to more than one host. 
-     If you do not use the proper syntax, you will clobber your work 
-     as you go.
-
-     For example:
-
-     .. prompt:: bash #
-        
-          ceph orch apply mon host1
-          ceph orch apply mon host2
-          ceph orch apply mon host3
-
-     This results in only one host having a monitor applied to it: host 3.
-
-     (The first command creates a monitor on host1. Then the second command
-     clobbers the monitor on host1 and creates a monitor on host2. Then the
-     third command clobbers the monitor on host2 and creates a monitor on 
-     host3. In this scenario, at this point, there is a monitor ONLY on
-     host3.)
-
-     To make certain that a monitor is applied to each of these three hosts,
-     run a command like this:
-     
-     .. prompt:: bash #
-       
-       ceph orch apply mon "host1,host2,host3"
-
-     There is another way to apply monitors to multiple hosts: a ``yaml`` file
-     can be used. Instead of using the "ceph orch apply mon" commands, run a
-     command of this form:
-     
-     .. prompt:: bash #
-
-        ceph orch apply -i file.yaml
-
-     Here is a sample **file.yaml** file::
-
-          service_type: mon
-          placement:
-            hosts:
-             - host1
-             - host2
-             - host3
-
-
-Deploy OSDs
-===========
-
-An inventory of storage devices on all cluster hosts can be displayed with:
-
-.. prompt:: bash #
-
-  ceph orch device ls
-
-A storage device is considered *available* if all of the following
-conditions are met:
-
-* The device must have no partitions.
-* The device must not have any LVM state.
-* The device must not be mounted.
-* The device must not contain a file system.
-* The device must not contain a Ceph BlueStore OSD.
-* The device must be larger than 5 GB.
-
-Ceph refuses to provision an OSD on a device that is not available.
-
-There are a few ways to create new OSDs:
-
-* Tell Ceph to consume any available and unused storage device:
+To add storage to the cluster, either tell Ceph to consume any
+available and unused device:
 
   .. prompt:: bash #
 
     ceph orch apply osd --all-available-devices
 
-* Create an OSD from a specific device on a specific host:
-  
+See :ref:`cephadm-deploy-osds` for more detailed instructions.
+
+Enabling OSD memory autotuning
+------------------------------
+
+.. warning:: By default, cephadm enables ``osd_memory_target_autotune`` on bootstrap, with ``mgr/cephadm/autotune_memory_target_ratio`` set to ``.7`` of total host memory.
+
+See :ref:`osd_autotune`.
+
+To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/cephadm.html#scenario-deploy-hyperconverged-ceph>`_
+
+In other cases where the cluster hardware is not exclusively used by Ceph (hyperconverged),
+reduce the memory consumption of Ceph like so:
+
   .. prompt:: bash #
 
-    ceph orch daemon add osd *<host>*:*<device-path>*
+    # hyperconverged only:
+    ceph config set mgr mgr/cephadm/autotune_memory_target_ratio 0.2
 
-  For example:
-  
+Then enable memory autotuning:
+
   .. prompt:: bash #
 
-    ceph orch daemon add osd host1:/dev/sdb
-
-* Use :ref:`drivegroups` to describe device(s) to consume
-  based on their properties, such device type (SSD or HDD), device
-  model names, size, or the hosts on which the devices exist:
-  
-  .. prompt:: bash #
-
-    ceph orch apply osd -i spec.yml
+    ceph config set osd osd_memory_target_autotune true
 
 
-Deploy MDSs
-===========
+Using Ceph
+==========
 
-One or more MDS daemons is required to use the CephFS file system.
-These are created automatically if the newer ``ceph fs volume``
-interface is used to create a new file system.  For more information,
-see :ref:`fs-volumes-and-subvolumes`.
+To use the *Ceph Filesystem*, follow :ref:`orchestrator-cli-cephfs`.
 
-To deploy metadata servers:
+To use the *Ceph Object Gateway*, follow :ref:`cephadm-deploy-rgw`.
 
-.. prompt:: bash #
+To use *NFS*, follow :ref:`deploy-cephadm-nfs-ganesha`
 
-  ceph orch apply mds *<fs-name>* --placement="*<num-daemons>* [*<host1>* ...]"
+To use *iSCSI*, follow :ref:`cephadm-iscsi`
 
-See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
+.. _cephadm-deployment-scenarios:
 
-Deploy RGWs
-===========
+Different deployment scenarios
+==============================
 
-Cephadm deploys radosgw as a collection of daemons that manage a
-particular *realm* and *zone*.  (For more information about realms and
-zones, see :ref:`multisite`.)
+Single host
+-----------
 
-Note that with cephadm, radosgw daemons are configured via the monitor
-configuration database instead of via a `ceph.conf` or the command line.  If
-that configuration isn't already in place (usually in the
-``client.rgw.<realmname>.<zonename>`` section), then the radosgw
-daemons will start up with default settings (e.g., binding to port
-80).
+To configure a Ceph cluster to run on a single host, use the ``--single-host-defaults`` flag when bootstrapping. For use cases of this, see :ref:`one-node-cluster`.
 
-To deploy a set of radosgw daemons for a particular realm and zone, run the
-following command:
+The ``--single-host-defaults`` flag sets the following configuration options::
+
+  global/osd_crush_chooseleaf_type = 0
+  global/osd_pool_default_size = 2
+  mgr/mgr_standby_modules = False
+
+For more information on these options, see :ref:`one-node-cluster` and ``mgr_standby_modules`` in :ref:`mgr-administrator-guide`.
+
+Deployment in an isolated environment
+-------------------------------------
+
+You can install Cephadm in an isolated environment by using a custom container registry. You can either configure Podman or Docker to use an insecure registry, or make the registry secure. Ensure your container image is inside the registry and that you have access to all hosts you wish to add to the cluster.
+
+Run a local container registry:
 
 .. prompt:: bash #
 
-  ceph orch apply rgw *<realm-name>* *<zone-name>* --placement="*<num-daemons>* [*<host1>* ...]"
+   podman run --privileged -d --name registry -p 5000:5000 -v /var/lib/registry:/var/lib/registry --restart=always registry:2
 
-For example, to deploy 2 rgw daemons serving the *myorg* realm and the *us-east-1* zone on *myhost1* and *myhost2*:
+If you are using an insecure registry, configure Podman or Docker with the hostname and port where the registry is running.
 
-.. prompt:: bash #
+.. note:: For every host which accesses the local insecure registry, you will need to repeat this step on the host.
 
-   ceph orch apply rgw myorg us-east-1 --placement="2 myhost1 myhost2"
+Next, push your container image to your local registry.
 
-Cephadm will wait for a healthy cluster and automatically create the supplied realm and zone if they do not exist before deploying the rgw daemon(s)
-
-Alternatively, the realm, zonegroup, and zone can be manually created using ``radosgw-admin`` commands:
+Then run bootstrap using the ``--image`` flag with your container image. For example:
 
 .. prompt:: bash #
 
-  radosgw-admin realm create --rgw-realm=<realm-name> --default
-  
-.. prompt:: bash #
-
-  radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master --default
-
-.. prompt:: bash #
-
-  radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
-
-.. prompt:: bash #
-
-  radosgw-admin period update --rgw-realm=<realm-name> --commit
-
-See :ref:`orchestrator-cli-placement-spec` for details of the placement
-specification.
+   cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
 
 
-.. _deploy-cephadm-nfs-ganesha:
-
-Deploying NFS ganesha
-=====================
-
-Cephadm deploys NFS Ganesha using a pre-defined RADOS *pool*
-and optional *namespace*
-
-To deploy a NFS Ganesha gateway, run the following command:
-
-.. prompt:: bash #
-
-    ceph orch apply nfs *<svc_id>* *<pool>* *<namespace>* --placement="*<num-daemons>* [*<host1>* ...]"
-
-For example, to deploy NFS with a service id of *foo*, that will use the RADOS
-pool *nfs-ganesha* and namespace *nfs-ns*:
-
-.. prompt:: bash #
-
-   ceph orch apply nfs foo nfs-ganesha nfs-ns
-
-.. note::
-   Create the *nfs-ganesha* pool first if it doesn't exist.
-
-See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
-
-Deploying custom containers
-===========================
-It is also possible to choose different containers than the default containers to deploy Ceph. See :ref:`containers` for information about your options in this regard.
+.. _cluster network: ../rados/configuration/network-config-ref#cluster-network

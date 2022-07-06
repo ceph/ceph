@@ -25,6 +25,7 @@ namespace ggate {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+#if defined(__FreeBSD__)
 static int call_ggate_cmd(const po::variables_map &vm,
                           const std::vector<std::string> &args,
                           const std::vector<std::string> &ceph_global_args) {
@@ -65,6 +66,17 @@ int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
     return r;
   }
 
+  if (pool_name.empty()) {
+    // connect to the cluster to get the default pool
+    librados::Rados rados;
+    r = utils::init_rados(&rados);
+    if (r < 0) {
+      return r;
+    }
+
+    utils::normalize_pool_name(&pool_name);
+  }
+
   spec->append(pool_name);
   spec->append("/");
   if (!nspace_name.empty()) {
@@ -92,13 +104,14 @@ int parse_options(const std::vector<std::string> &options,
 
   return 0;
 }
+#endif
 
 int execute_list(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
 #if !defined(__FreeBSD__)
   std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
   return -EOPNOTSUPP;
-#endif
+#else
   std::vector<std::string> args;
 
   args.push_back("list");
@@ -112,6 +125,7 @@ int execute_list(const po::variables_map &vm,
   }
 
   return call_ggate_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
 int execute_map(const po::variables_map &vm,
@@ -119,7 +133,7 @@ int execute_map(const po::variables_map &vm,
 #if !defined(__FreeBSD__)
   std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
   return -EOPNOTSUPP;
-#endif
+#else
   std::vector<std::string> args;
 
   args.push_back("map");
@@ -154,6 +168,7 @@ int execute_map(const po::variables_map &vm,
   }
 
   return call_ggate_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
 int execute_unmap(const po::variables_map &vm,
@@ -161,7 +176,7 @@ int execute_unmap(const po::variables_map &vm,
 #if !defined(__FreeBSD__)
   std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
   return -EOPNOTSUPP;
-#endif
+#else
   std::string device_name = utils::get_positional_argument(vm, 0);
   if (!boost::starts_with(device_name, "/dev/")) {
     device_name.clear();
@@ -194,6 +209,27 @@ int execute_unmap(const po::variables_map &vm,
   }
 
   return call_ggate_cmd(vm, args, ceph_global_init_args);
+#endif
+}
+
+int execute_attach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+#else
+  std::cerr << "rbd: ggate attach command not supported" << std::endl;
+#endif
+  return -EOPNOTSUPP;
+}
+
+int execute_detach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+#else
+  std::cerr << "rbd: ggate detach command not supported" << std::endl;
+#endif
+  return -EOPNOTSUPP;
 }
 
 } // namespace ggate

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <cstdarg>
+#include <boost/container/small_vector.hpp>
 #include "common/ceph_context.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
@@ -26,6 +27,8 @@ using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 using ceph::real_time;
+
+static constexpr int dout_subsys = ceph_subsys_objclass;
 
 
 int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
@@ -614,7 +617,6 @@ uint64_t cls_current_version(cls_method_context_t hctx)
   return ctx->pg->get_last_user_version();
 }
 
-
 int cls_current_subop_num(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
@@ -644,6 +646,18 @@ ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
   return ctx->pg->get_osdmap()->get_require_min_compat_client();
+}
+
+const ConfigProxy& cls_get_config(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->pg->get_cct()->_conf;
+}
+
+const object_info_t& cls_get_object_info(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->obs->oi;
 }
 
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
@@ -682,20 +696,10 @@ int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
-bool cls_has_chunk(cls_method_context_t hctx, string fp_oid)
+int cls_get_manifest_ref_count(cls_method_context_t hctx, string fp_oid)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
-  if (!ctx->obc->obs.oi.has_manifest()) {
-    return false;
-  }
-
-  for (auto &p : ctx->obc->obs.oi.manifest.chunk_map) {
-    if (p.second.oid.oid.name == fp_oid) {
-      return true;
-    }
-  }
-
-  return false;
+  return ctx->pg->get_manifest_ref_count(ctx->obc, fp_oid, ctx->op);
 }
 
 uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
@@ -709,4 +713,70 @@ uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx)
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
 
   return ctx->pg->get_pool().stripe_width;
+}
+
+struct GatherFinisher : public PrimaryLogPG::OpFinisher {
+  std::map<std::string, bufferlist> src_obj_buffs;
+  OSDOp *osd_op;
+  GatherFinisher(OSDOp *osd_op_) : osd_op(osd_op_) {}
+  int execute() override {
+    return 0;
+  }
+};
+
+int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
+		   const char *cls, const char *method, bufferlist& inbl)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
+  int subop_num = (*pctx)->current_osd_subop_num;
+  OSDOp *osd_op = &(*(*pctx)->ops)[subop_num];
+  auto [iter, inserted] = (*pctx)->op_finishers.emplace(std::make_pair(subop_num, std::make_unique<GatherFinisher>(osd_op)));
+  assert(inserted);
+  auto &gather = *static_cast<GatherFinisher*>(iter->second.get());
+  for (const auto &obj : src_objs) {
+    gather.src_obj_buffs[obj] = bufferlist();
+  }
+  return (*pctx)->pg->start_cls_gather(*pctx, &gather.src_obj_buffs, pool, cls, method, inbl);
+}
+
+int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
+{
+  assert(results);
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
+  PrimaryLogPG::OpFinisher* op_finisher = nullptr;
+  int r = 0;
+  {
+    auto op_finisher_it = (*pctx)->op_finishers.find((*pctx)->current_osd_subop_num);
+    if (op_finisher_it != (*pctx)->op_finishers.end()) {
+      op_finisher = op_finisher_it->second.get();
+    }
+  }
+  if (op_finisher == nullptr) {
+    results->clear();
+  } else {
+    GatherFinisher *gf = (GatherFinisher*)op_finisher;
+    *results = std::move(gf->src_obj_buffs);
+    r = gf->osd_op->rval;
+  }
+  return r;
+}
+
+// although at first glance the implementation looks the same as in
+// crimson-osd, it's different b/c of how the dout macro expands.
+int cls_log(int level, const char *format, ...)
+{
+   size_t size = 256;
+   va_list ap;
+   while (1) {
+     boost::container::small_vector<char, 256> buf(size);
+     va_start(ap, format);
+     int n = vsnprintf(buf.data(), size, format, ap);
+     va_end(ap);
+#define MAX_SIZE 8196UL
+     if ((n > -1 && static_cast<size_t>(n) < size) || size > MAX_SIZE) {
+       dout(ceph::dout::need_dynamic(level)) << buf.data() << dendl;
+       return n;
+     }
+     size *= 2;
+   }
 }

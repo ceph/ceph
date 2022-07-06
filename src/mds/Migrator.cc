@@ -66,6 +66,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".mig " << __func__ << " "
 
+using namespace std;
 
 class MigratorContext : public MDSContext {
 protected:
@@ -1407,7 +1408,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   // send.
   it->second.state = EXPORT_PREPPING;
   mds->send_message_mds(prep, it->second.peer);
-  assert (g_conf()->mds_kill_export_at != 4);
+  ceph_assert(g_conf()->mds_kill_export_at != 4);
 
   // make sure any new instantiations of caps are flushed out
   ceph_assert(it->second.warning_ack_waiting.empty());
@@ -1487,7 +1488,7 @@ void Migrator::handle_export_prep_ack(const cref_t<MExportDirPrepAck> &m)
     return;
   }
 
-  assert (g_conf()->mds_kill_export_at != 5);
+  ceph_assert(g_conf()->mds_kill_export_at != 5);
   // send warnings
   set<CDir*> bounds;
   mdcache->get_subtree_bounds(dir, bounds);
@@ -1791,21 +1792,22 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     }
     
     if (dn->get_linkage()->is_remote()) {
-      // remote link
-      exportbl.append("L", 1);  // remote link
-      
       inodeno_t ino = dn->get_linkage()->get_remote_ino();
       unsigned char d_type = dn->get_linkage()->get_remote_d_type();
-      encode(ino, exportbl);
-      encode(d_type, exportbl);
+      auto& alternate_name = dn->alternate_name;
+      // remote link
+      CDentry::encode_remote(ino, d_type, alternate_name, exportbl);
       continue;
     }
 
     // primary link
     // -- inode
-    exportbl.append("I", 1);    // inode dentry
-    
+    exportbl.append("i", 1);    // inode dentry
+
+    ENCODE_START(2, 1, exportbl);
     encode_export_inode(in, exportbl, exported_client_map, exported_client_metadata_map);  // encode, and (update state for) export
+    encode(dn->alternate_name, exportbl);
+    ENCODE_FINISH(exportbl);
 
     // directory?
     auto&& dfs = in->get_dirfrags();
@@ -1911,7 +1913,7 @@ void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
   decode(it->second.peer_imported, bp);
 
   it->second.state = EXPORT_LOGGINGFINISH;
-  assert (g_conf()->mds_kill_export_at != 9);
+  ceph_assert(g_conf()->mds_kill_export_at != 9);
   set<CDir*> bounds;
   mdcache->get_subtree_bounds(dir, bounds);
 
@@ -1938,7 +1940,7 @@ void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
   mds->mdlog->submit_entry(le, new C_MDS_ExportFinishLogged(this, dir));
   mds->mdlog->flush();
-  assert (g_conf()->mds_kill_export_at != 10);
+  ceph_assert(g_conf()->mds_kill_export_at != 10);
 }
 
 void Migrator::export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& bounds)
@@ -1967,7 +1969,7 @@ void Migrator::export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& 
 }
 
 /*
- * this happens if hte dest failes after i send teh export data but before it is acked
+ * this happens if the dest failes after i send the export data but before it is acked
  * that is, we don't know they safely received and logged it, so we reverse our changes
  * and go on.
  */
@@ -2074,7 +2076,7 @@ void Migrator::export_logged_finish(CDir *dir)
 
   // wait for notifyacks
   stat.state = EXPORT_NOTIFYING;
-  assert (g_conf()->mds_kill_export_at != 11);
+  ceph_assert(g_conf()->mds_kill_export_at != 11);
   
   // no notifies to wait for?
   if (stat.notify_ack_waiting.empty()) {
@@ -2155,7 +2157,7 @@ void Migrator::export_finish(CDir *dir)
 {
   dout(3) << *dir << dendl;
 
-  assert (g_conf()->mds_kill_export_at != 12);
+  ceph_assert(g_conf()->mds_kill_export_at != 12);
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
   if (it == export_state.end()) {
     dout(7) << "target must have failed, not sending final commit message.  export succeeded anyway." << dendl;
@@ -2314,7 +2316,7 @@ void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool 
     return;
   }
 
-  assert (g_conf()->mds_kill_import_at != 1);
+  ceph_assert(g_conf()->mds_kill_import_at != 1);
 
   // do we have it?
   CInode *in = mdcache->get_inode(m->get_dirfrag().ino);
@@ -2347,7 +2349,7 @@ void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool 
   // reply
   dout(7) << " sending export_discover_ack on " << *in << dendl;
   mds->send_message_mds(make_message<MExportDirDiscoverAck>(df, m->get_tid()), p_state->peer);
-  assert (g_conf()->mds_kill_import_at != 2);
+  ceph_assert(g_conf()->mds_kill_import_at != 2);
 }
 
 void Migrator::import_reverse_discovering(dirfrag_t df)
@@ -2658,7 +2660,7 @@ public:
 
 void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
 {
-  assert (g_conf()->mds_kill_import_at != 5);
+  ceph_assert(g_conf()->mds_kill_import_at != 5);
   CDir *dir = mdcache->get_dirfrag(m->dirfrag);
   ceph_assert(dir);
 
@@ -2734,7 +2736,7 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
 
   // note state
   it->second.state = IMPORT_LOGGINGSTART;
-  assert (g_conf()->mds_kill_import_at != 6);
+  ceph_assert(g_conf()->mds_kill_import_at != 6);
 
   // log it
   mds->mdlog->submit_entry(le, onlogged);
@@ -2848,7 +2850,7 @@ void Migrator::import_reverse(CDir *dir)
       CDentry *dn = p.second;
 
       // dentry
-      dn->state_clear(CDentry::STATE_AUTH);
+      dn->clear_auth();
       dn->clear_replica_map();
       dn->set_replica_nonce(CDentry::EXPORT_NONCE);
       if (dn->is_dirty()) 
@@ -2857,7 +2859,7 @@ void Migrator::import_reverse(CDir *dir)
       // inode?
       if (dn->get_linkage()->is_primary()) {
 	CInode *in = dn->get_linkage()->get_inode();
-	in->state_clear(CDentry::STATE_AUTH);
+	in->state_clear(CInode::STATE_AUTH);
 	in->clear_replica_map();
 	in->set_replica_nonce(CInode::EXPORT_NONCE);
 	if (in->is_dirty()) 
@@ -2973,7 +2975,7 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
     dout(7) << "no bystanders, finishing reverse now" << dendl;
     import_reverse_unfreeze(dir);
   } else {
-    assert (g_conf()->mds_kill_import_at != 10);
+    ceph_assert(g_conf()->mds_kill_import_at != 10);
   }
 }
 
@@ -3030,7 +3032,7 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
   // note state
   it->second.state = IMPORT_ACKING;
 
-  assert (g_conf()->mds_kill_import_at != 7);
+  ceph_assert(g_conf()->mds_kill_import_at != 7);
 
   // force open client sessions and finish cap import
   mds->server->finish_force_open_sessions(imported_session_map, false);
@@ -3056,7 +3058,7 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
   encode(imported_caps, ack->imported_caps);
 
   mds->send_message_mds(ack, from);
-  assert (g_conf()->mds_kill_import_at != 8);
+  ceph_assert(g_conf()->mds_kill_import_at != 8);
 
   mdcache->show_subtrees();
 }
@@ -3443,23 +3445,36 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       
       // fall thru
     }
-    else if (icode == 'L') {
+    else if (icode == 'L' || icode == 'l') {
       // remote link
       inodeno_t ino;
       unsigned char d_type;
-      decode(ino, blp);
-      decode(d_type, blp);
+      mempool::mds_co::string alternate_name;
+
+      CDentry::decode_remote(icode, ino, d_type, alternate_name, blp);
+
       if (dn->get_linkage()->is_remote()) {
 	ceph_assert(dn->get_linkage()->get_remote_ino() == ino);
+        ceph_assert(dn->get_alternate_name() == alternate_name);
       } else {
 	dir->link_remote_inode(dn, ino, d_type);
+        dn->set_alternate_name(std::move(alternate_name));
       }
     }
-    else if (icode == 'I') {
+    else if (icode == 'I' || icode == 'i') {
       // inode
       ceph_assert(le);
-      decode_import_inode(dn, blp, oldauth, ls,
-			  peer_exports, updated_scatterlocks);
+      if (icode == 'i') {
+        DECODE_START(2, blp);
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+        ceph_assert(!dn->is_projected());
+        decode(dn->alternate_name, blp);
+        DECODE_FINISH(blp);
+      } else {
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+      }
     }
     
     // add dentry to journal entry

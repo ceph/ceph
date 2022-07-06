@@ -299,23 +299,6 @@ The procedure is as follows:
 
 #. Start the monitor(s).
 
-   For Ubuntu, use Upstart::
-
-	sudo start ceph-mon id=node1 [cluster={cluster-name}]
-
-   In this case, to allow the start of the daemon at each reboot you
-   must create two empty files like this::
-
-	sudo touch /var/lib/ceph/mon/{cluster-name}-{hostname}/upstart
-
-   For example::
-
-	sudo touch /var/lib/ceph/mon/ceph-node1/upstart
-
-   For Debian/CentOS/RHEL, use sysvinit::
-
-	sudo /etc/init.d/ceph start mon.node1
-
    For FreeBSD we use the rc.d init scripts (called bsdrc in Ceph)::
 
 	sudo service ceph start start mon.node1
@@ -448,36 +431,6 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 #. After you add an OSD to Ceph, the OSD is in your configuration. However,
    it is not yet running. The OSD is ``down`` and ``in``. You must start
    your new OSD before it can begin receiving data.
-
-   For Ubuntu, use Upstart::
-
-	sudo start ceph-osd id={osd-num} [cluster={cluster-name}]
-
-   For example::
-
-	sudo start ceph-osd id=0
-	sudo start ceph-osd id=1
-
-   For Debian/CentOS/RHEL, use sysvinit::
-
-	sudo /etc/init.d/ceph start osd.{osd-num} [--cluster {cluster-name}]
-
-   For example::
-
-	sudo /etc/init.d/ceph start osd.0
-	sudo /etc/init.d/ceph start osd.1
-
-   In this case, to allow the start of the daemon at each reboot you
-   must create an empty file like this::
-
-	sudo touch /var/lib/ceph/osd/{cluster-name}-{osd-num}/sysvinit
-
-   For example::
-
-	sudo touch /var/lib/ceph/osd/ceph-0/sysvinit
-	sudo touch /var/lib/ceph/osd/ceph-1/sysvinit
-
-   Once you start your OSD, it is ``up`` and ``in``.
 
    For FreeBSD using rc.d init.
 

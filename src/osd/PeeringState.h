@@ -20,6 +20,7 @@
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
 #include "osd_types.h"
+#include "osd_types_fmt.h"
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
 #include "MissingLoc.h"
@@ -57,31 +58,49 @@ struct PGPool {
   }
 };
 
+template <>
+struct fmt::formatter<PGPool> {
+  template <typename ParseContext>
+  constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const PGPool& pool, FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(),
+                          "{}/{}({})",
+                          pool.id,
+                          pool.name,
+                          pool.info);
+  }
+};
+
 struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
-  ceph_release_t require_osd_release;
+#if defined(WITH_SEASTAR)
+  std::map<int, std::vector<MessageURef>> message_map;
+#else
   std::map<int, std::vector<MessageRef>> message_map;
+#endif
 
-  BufferedRecoveryMessages(ceph_release_t r)
-    : require_osd_release(r) {
-  }
-  BufferedRecoveryMessages(ceph_release_t r, PeeringCtx &ctx);
+  BufferedRecoveryMessages() = default;
+  BufferedRecoveryMessages(PeeringCtx &ctx);
 
   void accept_buffered_messages(BufferedRecoveryMessages &m) {
     for (auto &[target, ls] : m.message_map) {
       auto &ovec = message_map[target];
       // put buffered messages in front
       ls.reserve(ls.size() + ovec.size());
-      ls.insert(ls.end(), ovec.begin(), ovec.end());
+      ls.insert(ls.end(), std::make_move_iterator(ovec.begin()), std::make_move_iterator(ovec.end()));
       ovec.clear();
       ovec.swap(ls);
     }
   }
 
-  void send_osd_message(int target, MessageRef m) {
-    message_map[target].push_back(std::move(m));
+  template <class MsgT> // MsgT = MessageRef for ceph-osd and MessageURef for crimson-osd
+  void send_osd_message(int target, MsgT&& m) {
+    message_map[target].emplace_back(std::forward<MsgT>(m));
   }
   void send_notify(int to, const pg_notify_t &n);
   void send_query(int to, spg_t spgid, const pg_query_t &q);
@@ -190,8 +209,7 @@ struct PeeringCtx : BufferedRecoveryMessages {
   ObjectStore::Transaction transaction;
   HBHandle* handle = nullptr;
 
-  PeeringCtx(ceph_release_t r)
-    : BufferedRecoveryMessages(r) {}
+  PeeringCtx() = default;
 
   PeeringCtx(const PeeringCtx &) = delete;
   PeeringCtx &operator=(const PeeringCtx &) = delete;
@@ -226,8 +244,9 @@ struct PeeringCtxWrapper {
 
   PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
 
-  void send_osd_message(int target, MessageRef m) {
-    msgs.send_osd_message(target, std::move(m));
+  template <class MsgT> // MsgT = MessageRef for ceph-osd and MessageURef for crimson-osd
+  void send_osd_message(int target, MsgT&& m) {
+    msgs.send_osd_message(target, std::forward<MsgT>(m));
   }
   void send_notify(int to, const pg_notify_t &n) {
     msgs.send_notify(to, n);
@@ -262,6 +281,13 @@ public:
 
     /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
+
+    /// Notify PG that Primary/Replica status has changed (to update scrub registration)
+    virtual void on_primary_status_change(bool was_primary, bool now_primary) = 0;
+
+    /// Need to reschedule next scrub. Assuming no change in role
+    virtual void reschedule_scrub() = 0;
+
     /// Notify that a scrub has been requested
     virtual void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) = 0;
 
@@ -269,8 +295,13 @@ public:
     virtual uint64_t get_snap_trimq_size() const = 0;
 
     /// Send cluster message to osd
+    #if defined(WITH_SEASTAR)
+    virtual void send_cluster_message(
+      int osd, MessageURef m, epoch_t epoch, bool share_map_update=false) = 0;
+    #else
     virtual void send_cluster_message(
       int osd, MessageRef m, epoch_t epoch, bool share_map_update=false) = 0;
+    #endif
     /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
 
@@ -377,8 +408,8 @@ public:
     /// Notification of removal complete, t must be populated to complete removal
     virtual void on_removal(ObjectStore::Transaction &t) = 0;
     /// Perform incremental removal work
-    virtual ghobject_t do_delete_work(ObjectStore::Transaction &t,
-      ghobject_t _next) = 0;
+    virtual std::pair<ghobject_t, bool> do_delete_work(
+      ObjectStore::Transaction &t, ghobject_t _next) = 0;
 
     // ======================= PG Merge =========================
     virtual void clear_ready_to_merge() = 0;
@@ -1244,7 +1275,6 @@ public:
       boost::statechart::transition<DeleteInterrupted, WaitDeleteReserved>
       > reactions;
     ghobject_t next;
-    ceph::mono_clock::time_point start;
     explicit Deleting(my_context ctx);
     boost::statechart::result react(const DeleteSome &evt);
     void exit();
@@ -1471,7 +1501,7 @@ public:
   uint64_t upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
 
   /// most recently consumed osdmap's require_osd_version
-  ceph_release_t last_require_osd_release = ceph_release_t::unknown;
+  ceph_release_t last_require_osd_release;
 
   std::vector<int> want_acting; ///< non-empty while peering needs a new acting set
 
@@ -1512,7 +1542,7 @@ public:
   }
 
   void update_heartbeat_peers();
-  void query_unfound(Formatter *f, string state);
+  void query_unfound(Formatter *f, std::string state);
   bool proc_replica_info(
     pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
   void remove_down_peer_info(const OSDMapRef &osdmap);
@@ -1572,18 +1602,18 @@ public:
     std::set<pg_shard_t> *acting_backfill,
     std::ostream &ss);
 
-  static std::pair<map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
+  static std::pair<std::map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
   select_replicated_primary(
-    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     uint64_t force_auth_primary_missing_objects,
     const std::vector<int> &up,
     pg_shard_t up_primary,
-    const map<pg_shard_t, pg_info_t> &all_info,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
     const OSDMapRef osdmap,
-    ostream &ss);
+    std::ostream &ss);
 
   static void calc_replicated_acting(
-    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
     eversion_t oldest_auth_log_entry,
     unsigned size,
     const std::vector<int> &acting,
@@ -1598,7 +1628,7 @@ public:
     const PGPool& pool,
     std::ostream &ss);
   static void calc_replicated_acting_stretch(
-    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
     eversion_t oldest_auth_log_entry,
     unsigned size,
     const std::vector<int> &acting,
@@ -1724,7 +1754,6 @@ public:
     const std::vector<int>& newacting, int new_acting_primary,
     const pg_history_t& history,
     const PastIntervals& pi,
-    bool backfill,
     ObjectStore::Transaction &t);
 
   /// Init pg instance from disk state
@@ -1797,6 +1826,9 @@ public:
     std::function<bool(pg_history_t &, pg_stat_t &)> f,
     ObjectStore::Transaction *t = nullptr);
 
+  void update_stats_wo_resched(
+    std::function<void(pg_history_t &, pg_stat_t &)> f);
+
   /**
    * adjust_purged_snaps
    *
@@ -1826,10 +1858,15 @@ public:
    *
    * Returns updated pg_stat_t if stats have changed since
    * pg_stats_publish adding in unstable_stats.
+   *
+   * @param pg_stats_publish the latest pg_stat possessed by caller
+   * @param unstable_stats additional stats which should be included in the
+   *        returned stats
+   * @return the up to date stats if it is different from the specfied
+   *         @c pg_stats_publish
    */
   std::optional<pg_stat_t> prepare_stats_for_publish(
-    bool pg_stats_publish_valid,
-    const pg_stat_t &pg_stats_publish,
+    const std::optional<pg_stat_t> &pg_stats_publish,
     const object_stat_collection_t &unstable_stats);
 
   /**
@@ -2076,6 +2113,7 @@ public:
   void clear_prior_readable_until_ub() {
     prior_readable_until_ub = ceph::signedspan::zero();
     prior_readable_down_osds.clear();
+    info.history.prior_readable_until_ub = ceph::signedspan::zero();
   }
 
   void renew_lease(ceph::signedspan now) {
@@ -2115,7 +2153,7 @@ public:
     return last_rollback_info_trimmed_to_applied;
   }
   /// Returns stable reference to internal pool structure
-  const PGPool &get_pool() const {
+  const PGPool &get_pgpool() const {
     return pool;
   }
   /// Returns reference to current osdmap
@@ -2306,6 +2344,16 @@ public:
     ceph_assert(!is_primary());
     return !pg_log.get_log().has_write_since(
       hoid, get_min_last_complete_ondisk());
+  }
+
+  /**
+   * Returns whether the current acting set is able to go active
+   * and serve writes. It needs to satisfy min_size and any
+   * applicable stretch cluster constraints.
+   */
+  bool acting_set_writeable() {
+    return (actingset.size() >= pool.info.min_size) &&
+      (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
   }
 
   /**

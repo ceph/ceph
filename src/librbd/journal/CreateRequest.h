@@ -9,6 +9,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "common/ceph_mutex.h"
+#include "common/Timer.h"
 #include "librbd/ImageCtx.h"
 #include "journal/Journaler.h"
 #include "librbd/journal/Types.h"
@@ -20,7 +21,6 @@ using journal::Journaler;
 
 class Context;
 class ContextWQ;
-class SafeTimer;
 
 namespace journal {
   class Journaler;

@@ -14,11 +14,6 @@ The standard [AWS CLI](https://docs.aws.amazon.com/cli/latest/) may also be used
 aws --endpoint-url http://localhost:8000 s3api list-objects --bucket=mybucket --allow-unordered
 ```
 
-- Use the following command to set SNS signature to s3v2:
-```
-aws configure set default.sns.signature_version s3
-```
-
 - Topic creation with endpoint:
 ```
 aws --endpoint-url http://localhost:8000 sns create-topic --name=mytopic --attributes='{"push-endpoint": "amqp://localhost:5672", "amqp-exchange": "ex1", "amqp-ack-level": "broker"}'

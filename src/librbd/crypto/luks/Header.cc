@@ -109,13 +109,19 @@ ssize_t Header::read(ceph::bufferlist* bl) {
   if (r < 0) {
     lderr(m_cct) << "error reading header: " << cpp_strerror(r) << dendl;
   }
+
+  ldout(m_cct, 20) << "read size = " << r << dendl;
   return r;
 }
 
-int Header::format(const char* type, const char* alg, size_t key_size,
-                   const char* cipher_mode, uint32_t sector_size,
-                   uint32_t data_alignment, bool insecure_fast_mode) {
+int Header::format(const char* type, const char* alg, const char* key,
+                   size_t key_size, const char* cipher_mode,
+                   uint32_t sector_size, uint32_t data_alignment,
+                   bool insecure_fast_mode) {
   ceph_assert(m_cd != nullptr);
+
+  ldout(m_cct, 20) << "sector size: " << sector_size << ", data alignment: "
+                   << data_alignment << dendl;
 
   // required for passing libcryptsetup device size check
   if (ftruncate(m_fd, 4096) != 0) {
@@ -127,12 +133,7 @@ int Header::format(const char* type, const char* alg, size_t key_size,
   struct crypt_params_luks1 luks1params;
   struct crypt_params_luks2 luks2params;
 
-#ifdef LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT
-  size_t converted_data_alignment = data_alignment / sector_size;
-#else
-  size_t converted_data_alignment = data_alignment / 512;
-#endif
-
+  const size_t converted_data_alignment = data_alignment / 512;
 
   void* params = nullptr;
   if (strcmp(type, CRYPT_LUKS1) == 0) {
@@ -164,7 +165,7 @@ int Header::format(const char* type, const char* alg, size_t key_size,
   }
 
   auto r = crypt_format(
-          m_cd, type, alg, cipher_mode, NULL, NULL, key_size, params);
+          m_cd, type, alg, cipher_mode, NULL, key, key_size, params);
   if (r != 0) {
     lderr(m_cct) << "crypt_format failed: " << cpp_strerror(r) << dendl;
     return r;
@@ -178,7 +179,7 @@ int Header::add_keyslot(const char* passphrase, size_t passphrase_size) {
 
   auto r = crypt_keyslot_add_by_volume_key(
           m_cd, CRYPT_ANY_SLOT, NULL, 0, passphrase, passphrase_size);
-  if (r != 0) {
+  if (r < 0) {
     lderr(m_cct) << "crypt_keyslot_add_by_volume_key failed: "
                  << cpp_strerror(r) << dendl;
     return r;
@@ -187,7 +188,7 @@ int Header::add_keyslot(const char* passphrase, size_t passphrase_size) {
   return 0;
 }
 
-int Header::load() {
+int Header::load(const char* type) {
   ceph_assert(m_cd != nullptr);
 
   // libcryptsetup checks if device size matches the header and keyslots size
@@ -198,11 +199,14 @@ int Header::load() {
     return -errno;
   }
 
-  auto r = crypt_load(m_cd, CRYPT_LUKS, NULL);
+  auto r = crypt_load(m_cd, type, NULL);
   if (r != 0) {
     lderr(m_cct) << "crypt_load failed: " << cpp_strerror(r) << dendl;
     return r;
   }
+
+  ldout(m_cct, 20) << "sector size: " << get_sector_size() << ", data offset: "
+                   << get_data_offset() << dendl;
 
   return 0;
 }
@@ -214,7 +218,7 @@ int Header::read_volume_key(const char* passphrase, size_t passphrase_size,
   auto r = crypt_volume_key_get(
           m_cd, CRYPT_ANY_SLOT, volume_key, volume_key_size, passphrase,
           passphrase_size);
-  if (r != 0) {
+  if (r < 0) {
     lderr(m_cct) << "crypt_volume_key_get failed: " << cpp_strerror(r)
                  << dendl;
     return r;

@@ -15,6 +15,7 @@
 #ifndef CEPH_COMMON_MUTEX_DEBUG_H
 #define CEPH_COMMON_MUTEX_DEBUG_H
 
+#include <atomic>
 #include <system_error>
 #include <thread>
 
@@ -38,7 +39,7 @@ protected:
   bool lockdep;   // track this mutex using lockdep_*
   bool backtrace; // gather backtrace on lock acquisition
 
-  int nlock = 0;
+  std::atomic<int> nlock = 0;
   std::thread::id locked_by = {};
 
   bool _enable_lockdep() const {
@@ -57,10 +58,10 @@ public:
     return (nlock > 0);
   }
   bool is_locked_by_me() const {
-    return nlock > 0 && locked_by == std::this_thread::get_id();
+    return nlock.load(std::memory_order_acquire) > 0 && locked_by == std::this_thread::get_id();
   }
   operator bool() const {
-    return nlock > 0 && locked_by == std::this_thread::get_id();
+    return is_locked_by_me();
   }
 };
 
@@ -152,17 +153,19 @@ public:
     if (!recursive)
       ceph_assert(nlock == 0);
     locked_by = std::this_thread::get_id();
-    nlock++;
+    nlock.fetch_add(1, std::memory_order_release);
   }
 
   void _pre_unlock() {
-    ceph_assert(nlock > 0);
-    --nlock;
+    if (recursive) {
+      ceph_assert(nlock > 0);
+    } else {
+      ceph_assert(nlock == 1);
+    }
     ceph_assert(locked_by == std::this_thread::get_id());
-    if (!recursive)
-      ceph_assert(nlock == 0);
-    if (nlock == 0)
+    if (nlock == 1)
       locked_by = std::thread::id();
+    nlock.fetch_sub(1, std::memory_order_release);
   }
 
   bool try_lock(bool no_lockdep = false) {

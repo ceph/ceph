@@ -152,13 +152,13 @@ namespace rgw {
       return to_base64(std::move(os.str()));
     }
 
-    friend inline ostream& operator<<(ostream& os, const RGWToken& token);
+    friend inline std::ostream& operator<<(std::ostream& os, const RGWToken& token);
 
     virtual ~RGWToken() {};
   };
   WRITE_CLASS_ENCODER(RGWToken)
 
-  inline ostream& operator<<(ostream& os, const RGWToken& token)
+  inline std::ostream& operator<<(std::ostream& os, const RGWToken& token)
   {
     os << "<<RGWToken"
        << " type=" << RGWToken::from_type(token.type)

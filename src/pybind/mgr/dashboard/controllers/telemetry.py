@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController
+from . import APIDoc, APIRouter, EndpointDoc, RESTController
 
 REPORT_SCHEMA = {
     "report": ({
@@ -201,8 +200,8 @@ REPORT_SCHEMA = {
 }
 
 
-@ApiController('/telemetry', Scope.CONFIG_OPT)
-@ControllerDoc("Display Telemetry Report", "Telemetry")
+@APIRouter('/telemetry', Scope.CONFIG_OPT)
+@APIDoc("Display Telemetry Report", "Telemetry")
 class Telemetry(RESTController):
 
     @RESTController.Collection('GET')
@@ -214,7 +213,7 @@ class Telemetry(RESTController):
         :return: Ceph and device report data
         :rtype: dict
         """
-        return mgr.remote('telemetry', 'get_report', 'all')
+        return mgr.remote('telemetry', 'get_report_locked', 'all')
 
     def singleton_set(self, enable=True, license_name=None):
         """
@@ -235,6 +234,6 @@ class Telemetry(RESTController):
                         'Sharing - Version 1.0 (https://cdla.io/sharing-1-0/). To enable, add '
                         '{"license": "sharing-1-0"} to the request payload.'
                 )
-            mgr.remote('telemetry', 'on')
+            mgr.remote('telemetry', 'on', license_name)
         else:
             mgr.remote('telemetry', 'off')

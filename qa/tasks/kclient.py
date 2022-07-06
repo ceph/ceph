@@ -5,7 +5,7 @@ import contextlib
 import logging
 
 from teuthology.misc import deep_merge
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology import misc
 from teuthology.contextutil import MaxWhileTries
 from tasks.cephfs.kernel_mount import KernelMount
@@ -84,9 +84,7 @@ def task(ctx, config):
         if client_config is None:
             client_config = {}
         # top level overrides
-        for k, v in top_overrides.items():
-            if v is not None:
-                client_config[k] = v
+        deep_merge(client_config, top_overrides)
         # mount specific overrides
         client_config_overrides = overrides.get(entity)
         deep_merge(client_config, client_config_overrides)
@@ -102,7 +100,7 @@ def task(ctx, config):
             client_id=id_,
             client_remote=remote,
             brxnet=ctx.teuthology_config.get('brxnet', None),
-            config=client_config,
+            client_config=client_config,
             cephfs_name=cephfs_name)
 
         mounts[id_] = kernel_mount

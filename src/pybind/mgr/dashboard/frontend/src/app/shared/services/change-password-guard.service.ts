@@ -1,5 +1,11 @@
 import { Injectable } from '@angular/core';
-import { CanActivate, CanActivateChild, Router } from '@angular/router';
+import {
+  ActivatedRouteSnapshot,
+  CanActivate,
+  CanActivateChild,
+  Router,
+  RouterStateSnapshot
+} from '@angular/router';
 
 import { AuthStorageService } from './auth-storage.service';
 
@@ -13,7 +19,7 @@ import { AuthStorageService } from './auth-storage.service';
 export class ChangePasswordGuardService implements CanActivate, CanActivateChild {
   constructor(private router: Router, private authStorageService: AuthStorageService) {}
 
-  canActivate() {
+  canActivate(_route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
     // Redirect to '/login-change-password' when the following constraints
     // are fulfilled:
     // - The user must be logged in.
@@ -24,13 +30,13 @@ export class ChangePasswordGuardService implements CanActivate, CanActivateChild
       !this.authStorageService.isSSO() &&
       this.authStorageService.getPwdUpdateRequired()
     ) {
-      this.router.navigate(['/login-change-password']);
+      this.router.navigate(['/login-change-password'], { queryParams: { returnUrl: state.url } });
       return false;
     }
     return true;
   }
 
-  canActivateChild(): boolean {
-    return this.canActivate();
+  canActivateChild(childRoute: ActivatedRouteSnapshot, state: RouterStateSnapshot): boolean {
+    return this.canActivate(childRoute, state);
   }
 }

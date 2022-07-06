@@ -99,11 +99,12 @@ namespace ceph::dout {
 template<typename T>
 struct dynamic_marker_t {
   T value;
-  operator T() const { return value; }
+  // constexpr ctor isn't needed as it's an aggregate type
+  constexpr operator T() const { return value; }
 };
 
 template<typename T>
-dynamic_marker_t<T> need_dynamic(T&& t) {
+constexpr dynamic_marker_t<T> need_dynamic(T&& t) {
   return dynamic_marker_t<T>{ std::forward<T>(t) };
 }
 
@@ -174,6 +175,11 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define lsubdout(cct, sub, v)  dout_impl(cct, ceph_subsys_##sub, v) dout_prefix
 #define ldout(cct, v)  dout_impl(cct, dout_subsys, v) dout_prefix
 #define lderr(cct) dout_impl(cct, ceph_subsys_, -1) dout_prefix
+
+#define ldpp_subdout(dpp, sub, v) 						\
+  if (decltype(auto) pdpp = (dpp); pdpp) /* workaround -Wnonnull-compare for 'this' */ \
+    dout_impl(pdpp->get_cct(), ceph_subsys_##sub, v) \
+      pdpp->gen_prefix(*_dout)
 
 #define ldpp_dout(dpp, v) 						\
   if (decltype(auto) pdpp = (dpp); pdpp) /* workaround -Wnonnull-compare for 'this' */ \

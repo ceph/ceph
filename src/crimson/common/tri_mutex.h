@@ -67,6 +67,7 @@ class tri_mutex : private read_lock,
 {
 public:
   tri_mutex() = default;
+  ~tri_mutex();
 
   read_lock& for_read() {
     return *this;
@@ -83,7 +84,7 @@ public:
   excl_lock_from_write& excl_from_write() {
     return *this;
   }
-  excl_lock_from_write& excl_from_excl() {
+  excl_lock_from_excl& excl_from_excl() {
     return *this;
   }
 

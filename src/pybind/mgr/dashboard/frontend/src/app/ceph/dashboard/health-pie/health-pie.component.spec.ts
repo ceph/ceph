@@ -1,6 +1,7 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { CssHelper } from '~/app/shared/classes/css-helper';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
@@ -14,7 +15,7 @@ describe('HealthPieComponent', () => {
   configureTestBed({
     schemas: [NO_ERRORS_SCHEMA],
     declarations: [HealthPieComponent],
-    providers: [DimlessBinaryPipe, DimlessPipe, FormatterService]
+    providers: [DimlessBinaryPipe, DimlessPipe, FormatterService, CssHelper]
   });
 
   beforeEach(() => {

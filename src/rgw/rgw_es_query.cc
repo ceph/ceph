@@ -15,6 +15,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 bool pop_front(list<string>& l, string *s)
 {
   if (l.empty()) {

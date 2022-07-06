@@ -97,6 +97,21 @@ enum {
     IMAGE_DISPATCH_FLAG_QOS_IOPS_MASK),
 };
 
+enum {
+  RBD_IO_OPERATIONS_DEFAULT             = 0,
+  RBD_IO_OPERATION_READ                 = 1 << 0,
+  RBD_IO_OPERATION_WRITE                = 1 << 1,
+  RBD_IO_OPERATION_DISCARD              = 1 << 2,
+  RBD_IO_OPERATION_WRITE_SAME           = 1 << 3,
+  RBD_IO_OPERATION_COMPARE_AND_WRITE    = 1 << 4,
+  RBD_IO_OPERATIONS_ALL                 = (
+    RBD_IO_OPERATION_READ |
+    RBD_IO_OPERATION_WRITE |
+    RBD_IO_OPERATION_DISCARD |
+    RBD_IO_OPERATION_WRITE_SAME |
+    RBD_IO_OPERATION_COMPARE_AND_WRITE)
+};
+
 enum ImageExtentsMapType {
     IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL,
     IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL,
@@ -148,9 +163,9 @@ std::ostream& operator<<(std::ostream& os, SparseExtentState state);
 
 struct SparseExtent {
   SparseExtentState state;
-  size_t length;
+  uint64_t length;
 
-  SparseExtent(SparseExtentState state, size_t length)
+  SparseExtent(SparseExtentState state, uint64_t length)
     : state(state), length(length) {
   }
 
@@ -199,11 +214,11 @@ typedef std::map<WriteReadSnapIds, SparseExtents> SnapshotDelta;
 struct SparseBufferlistExtent : public SparseExtent {
   ceph::bufferlist bl;
 
-  SparseBufferlistExtent(SparseExtentState state, size_t length)
+  SparseBufferlistExtent(SparseExtentState state, uint64_t length)
     : SparseExtent(state, length) {
     ceph_assert(state != SPARSE_EXTENT_STATE_DATA);
   }
-  SparseBufferlistExtent(SparseExtentState state, size_t length,
+  SparseBufferlistExtent(SparseExtentState state, uint64_t length,
                          ceph::bufferlist&& bl_)
     : SparseExtent(state, length), bl(std::move(bl_)) {
     ceph_assert(state != SPARSE_EXTENT_STATE_DATA || length == bl.length());

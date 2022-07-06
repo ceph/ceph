@@ -21,6 +21,16 @@
 #include "common/Clock.h"
 #include "obj_bencher.h"
 
+using std::ostream;
+using std::cerr;
+using std::cout;
+using std::setfill;
+using std::setprecision;
+using std::setw;
+using std::string;
+using std::unique_lock;
+using std::unique_ptr;
+
 const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
 const std::string BENCH_PREFIX = "benchmark_data";
 const std::string BENCH_OBJ_NAME = BENCH_PREFIX + "_%s_%d_object%d";

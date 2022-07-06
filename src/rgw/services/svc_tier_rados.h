@@ -25,19 +25,26 @@
 extern const std::string MP_META_SUFFIX;
 
 class RGWMPObj {
-  string oid;
-  string prefix;
-  string meta;
-  string upload_id;
+  std::string oid;
+  std::string prefix;
+  std::string meta;
+  std::string upload_id;
 public:
   RGWMPObj() {}
-  RGWMPObj(const string& _oid, const string& _upload_id) {
+  RGWMPObj(const std::string& _oid, const std::string& _upload_id) {
     init(_oid, _upload_id, _upload_id);
   }
-  void init(const string& _oid, const string& _upload_id) {
+  RGWMPObj(const std::string& _oid, std::optional<std::string> _upload_id) {
+    if (_upload_id) {
+      init(_oid, *_upload_id, *_upload_id);
+    } else {
+      from_meta(_oid);
+    }
+  }
+  void init(const std::string& _oid, const std::string& _upload_id) {
     init(_oid, _upload_id, _upload_id);
   }
-  void init(const string& _oid, const string& _upload_id, const string& part_unique_str) {
+  void init(const std::string& _oid, const std::string& _upload_id, const std::string& part_unique_str) {
     if (_oid.empty()) {
       clear();
       return;
@@ -48,27 +55,27 @@ public:
     meta = prefix + upload_id + MP_META_SUFFIX;
     prefix.append(part_unique_str);
   }
-  const string& get_meta() const { return meta; }
-  string get_part(int num) const {
+  const std::string& get_meta() const { return meta; }
+  std::string get_part(int num) const {
     char buf[16];
     snprintf(buf, 16, ".%d", num);
-    string s = prefix;
+    std::string s = prefix;
     s.append(buf);
     return s;
   }
-  string get_part(const string& part) const {
-    string s = prefix;
+  std::string get_part(const std::string& part) const {
+    std::string s = prefix;
     s.append(".");
     s.append(part);
     return s;
   }
-  const string& get_upload_id() const {
+  const std::string& get_upload_id() const {
     return upload_id;
   }
-  const string& get_key() const {
+  const std::string& get_key() const {
     return oid;
   }
-  bool from_meta(const string& meta) {
+  bool from_meta(const std::string& meta) {
     int end_pos = meta.rfind('.'); // search for ".meta"
     if (end_pos < 0)
       return false;
@@ -107,6 +114,8 @@ class MultipartMetaFilter : public RGWAccessListFilter {
 public:
   MultipartMetaFilter() {}
 
+  virtual ~MultipartMetaFilter() override;
+
   /**
    * @param name [in] The object name as it appears in the bucket index.
    * @param key [out] An output parameter that will contain the bucket
@@ -114,7 +123,7 @@ public:
    * @return true if the name provided is in the form of a multipart meta
    *         object, false otherwise
    */
-  bool filter(const string& name, string& key) override;
+  bool filter(const std::string& name, std::string& key) override;
 };
 
 class RGWSI_Tier_RADOS : public RGWServiceInstance
@@ -129,7 +138,7 @@ public:
   }
 
   static inline bool raw_obj_to_obj(const rgw_bucket& bucket, const rgw_raw_obj& raw_obj, rgw_obj *obj) {
-    ssize_t pos = raw_obj.oid.find('_');
+    ssize_t pos = raw_obj.oid.find('_', bucket.marker.length());
     if (pos < 0) {
       return false;
     }

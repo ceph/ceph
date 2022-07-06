@@ -7,33 +7,9 @@ See `Block Device`_ for additional details.
 Generic IO Settings
 ===================
 
-``rbd_compression_hint``
-
-:Description: Hint to send to the OSDs on write operations. If set to 
-              ``compressible`` and the OSD ``bluestore_compression_mode``
-              setting is ``passive``, the OSD will attempt to compress data
-              If set to ``incompressible`` and the OSD compression setting
-              is ``aggressive``, the OSD will not attempt to compress data.
-:Type: Enum
-:Required: No
-:Default: ``none``
-:Values: ``none``, ``compressible``, ``incompressible``
-
-
-``rbd_read_from_replica_policy``
-
-:Description: Policy for determining which OSD will receive read operations.
-              If set to ``default``, each PG's primary OSD will always be used
-              for read operations. If set to ``balance``, read operations will
-              be sent to a randomly selected OSD within the replica set. If set
-              to ``localize``, read operations will be sent to the closest OSD
-              as determined by the CRUSH map. Note: this feature requires the
-              cluster to be configured with a minimum compatible OSD release of
-              Octopus.
-:Type: Enum
-:Required: No
-:Default: ``default``
-:Values: ``default``, ``balance``, ``localize``
+.. confval:: rbd_compression_hint
+.. confval:: rbd_read_from_replica_policy
+.. confval:: rbd_default_order
 
 Cache Settings
 =======================
@@ -82,72 +58,13 @@ Option settings for RBD should be set in the ``[client]``
 section of your configuration file or the central config store. These settings
 include:
 
-``rbd_cache``
-
-:Description: Enable caching for RADOS Block Device (RBD).
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
-``rbd_cache_policy``
-
-:Description: Select the caching policy for librbd.
-:Type: Enum
-:Required: No
-:Default: ``writearound``
-:Values: ``writearound``, ``writeback``, ``writethrough``
-
-
-``rbd_cache_writethrough_until_flush``
-
-:Description: Start out in ``writethrough`` mode, and switch to ``writeback``
-              after the first flush request is received. Enabling is a
-              conservative but safe strategy in case VMs running on RBD volumes
-              are too old to send flushes, like the ``virtio`` driver in Linux
-              kernels older than 2.6.32.
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
-``rbd_cache_size``
-
-:Description: The per-volume RBD client cache size in bytes.
-:Type: 64-bit Integer
-:Required: No
-:Default: ``32 MiB``
-:Policies: write-back and write-through
-
-
-``rbd_cache_max_dirty``
-
-:Description: The ``dirty`` limit in bytes at which the cache triggers write-back.  If ``0``, uses write-through caching.
-:Type: 64-bit Integer
-:Required: No
-:Constraint: Must be less than ``rbd_cache_size``.
-:Default: ``24 MiB``
-:Policies: write-around and write-back
-
-
-``rbd_cache_target_dirty``
-
-:Description: The ``dirty target`` before the cache begins writing data to the data storage. Does not block writes to the cache.
-:Type: 64-bit Integer
-:Required: No
-:Constraint: Must be less than ``rbd_cache_max_dirty``.
-:Default: ``16 MiB``
-:Policies: write-back
-
-
-``rbd_cache_max_dirty_age``
-
-:Description: The number of seconds dirty data is in the cache before writeback starts. 
-:Type: Float
-:Required: No
-:Default: ``1.0``
-:Policies: write-back
-
+.. confval:: rbd_cache
+.. confval:: rbd_cache_policy
+.. confval:: rbd_cache_writethrough_until_flush
+.. confval:: rbd_cache_size
+.. confval:: rbd_cache_max_dirty
+.. confval:: rbd_cache_target_dirty
+.. confval:: rbd_cache_max_dirty_age
 
 .. _Block Device: ../../rbd
 
@@ -161,32 +78,9 @@ but boot loaders may not issue efficient reads. Read-ahead is automatically
 disabled if caching is disabled or if the policy is write-around.
 
 
-``rbd_readahead_trigger_requests``
-
-:Description: Number of sequential read requests necessary to trigger read-ahead.
-:Type: Integer
-:Required: No
-:Default: ``10``
-
-
-``rbd_readahead_max_bytes``
-
-:Description: Maximum size of a read-ahead request.  If zero, read-ahead is disabled.
-:Type: 64-bit Integer
-:Required: No
-:Default: ``512 KiB``
-
-
-``rbd_readahead_disable_after_bytes``
-
-:Description: After this many bytes have been read from an RBD image, read-ahead
-              is disabled for that image until it is closed.  This allows the
-              guest OS to take over read-ahead once it is booted.  If zero,
-              read-ahead stays enabled.
-:Type: 64-bit Integer
-:Required: No
-:Default: ``50 MiB``
-
+.. confval:: rbd_readahead_trigger_requests
+.. confval:: rbd_readahead_max_bytes
+.. confval:: rbd_readahead_disable_after_bytes
 
 Image Features
 ==============
@@ -318,159 +212,54 @@ creating images or the default features can be configured via
 :KRBD support: no
 
 
-QOS Settings
+QoS Settings
 ============
 
-librbd supports limiting per-image IO, controlled by the following
-settings.
+librbd supports limiting per-image IO in several ways. These all apply
+to a given image within a given process - the same image used in
+multiple places, e.g. two separate VMs, would have independent limits.
 
-``rbd_qos_iops_limit``
+* **IOPS:** number of I/Os per second (any type of I/O)
+* **read IOPS:** number of read I/Os per second
+* **write IOPS:** number of write I/Os per second
+* **bps:** bytes per second (any type of I/O)
+* **read bps:** bytes per second read
+* **write bps:** bytes per second written
 
-:Description: The desired limit of IO operations per second.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
+Each of these limits operates independently of each other. They are
+all off by default. Every type of limit throttles I/O using a token
+bucket algorithm, with the ability to configure the limit (average
+speed over time) and potential for a higher rate (a burst) for a short
+period of time (burst_seconds). When any of these limits is reached,
+and there is no burst capacity left, librbd reduces the rate of that
+type of I/O to the limit.
 
+For example, if a read bps limit of 100MB was configured, but writes
+were not limited, writes could proceed as quickly as possible, while
+reads would be throttled to 100MB/s on average. If a read bps burst of
+150MB was set, and read burst seconds was set to five seconds, reads
+could proceed at 150MB/s for up to five seconds before dropping back
+to the 100MB/s limit.
 
-``rbd_qos_bps_limit``
+The following options configure these throttles:
 
-:Description: The desired limit of IO bytes per second.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_read_iops_limit``
-
-:Description: The desired limit of read operations per second.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_write_iops_limit``
-
-:Description: The desired limit of write operations per second.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_read_bps_limit``
-
-:Description: The desired limit of read bytes per second.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_writ_bps_limit``
-
-:Description: The desired limit of write bytes per second.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_iops_burst``
-
-:Description: The desired burst limit of IO operations.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_bps_burst``
-
-:Description: The desired burst limit of IO bytes.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_read_iops_burst``
-
-:Description: The desired burst limit of read operations.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_write_iops_burst``
-
-:Description: The desired burst limit of write operations.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_read_bps_burst``
-
-:Description: The desired burst limit of read bytes per second.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_write_bps_burst``
-
-:Description: The desired burst limit of write bytes per second.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``0``
-
-
-``rbd_qos_iops_burst_seconds``
-
-:Description: The desired burst duration in seconds of IO operations.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``1``
-
-
-``rbd_qos_bps_burst_seconds``
-
-:Description: The desired burst duration in seconds.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``1``
-
-
-``rbd_qos_read_iops_burst_seconds``
-
-:Description: The desired burst duration in seconds of read operations.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``1``
-
-
-``rbd_qos_write_iops_burst_seconds``
-
-:Description: The desired burst duration in seconds of write operations.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``1``
-
-
-``rbd_qos_read_bps_burst_seconds``
-
-:Description: The desired burst duration in seconds of read bytes.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``1``
-
-
-``rbd_qos_write_bps_burst_seconds``
-
-:Description: The desired burst duration in seconds of write bytes.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``1``
-
-
-``rbd_qos_schedule_tick_min``
-
-:Description: The minimum schedule tick (in milliseconds) for QoS.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``50``
+.. confval:: rbd_qos_iops_limit
+.. confval:: rbd_qos_iops_burst
+.. confval:: rbd_qos_iops_burst_seconds
+.. confval:: rbd_qos_read_iops_limit
+.. confval:: rbd_qos_read_iops_burst
+.. confval:: rbd_qos_read_iops_burst_seconds
+.. confval:: rbd_qos_write_iops_limit
+.. confval:: rbd_qos_write_iops_burst
+.. confval:: rbd_qos_write_iops_burst_seconds
+.. confval:: rbd_qos_bps_limit
+.. confval:: rbd_qos_bps_burst
+.. confval:: rbd_qos_bps_burst_seconds
+.. confval:: rbd_qos_read_bps_limit
+.. confval:: rbd_qos_read_bps_burst
+.. confval:: rbd_qos_read_bps_burst_seconds
+.. confval:: rbd_qos_write_bps_limit
+.. confval:: rbd_qos_write_bps_burst
+.. confval:: rbd_qos_write_bps_burst_seconds
+.. confval:: rbd_qos_schedule_tick_min
+.. confval:: rbd_qos_exclude_ops

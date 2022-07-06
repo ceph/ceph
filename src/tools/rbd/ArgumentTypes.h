@@ -87,7 +87,8 @@ static const std::string SKIP_QUIESCE("skip-quiesce");
 static const std::string IGNORE_QUIESCE_ERROR("ignore-quiesce-error");
 
 static const std::set<std::string> SWITCH_ARGUMENTS = {
-  WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERR, SKIP_QUIESCE,
+  WHOLE_OBJECT, IMAGE_SHARED, IMAGE_THICK_PROVISION, IMAGE_FLATTEN,
+  NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERR, SKIP_QUIESCE,
   IGNORE_QUIESCE_ERROR
 };
 
@@ -124,6 +125,8 @@ struct JournalObjectSize {};
 struct ExportFormat {};
 
 struct Secret {};
+
+struct EncryptionAlgorithm {};
 
 void add_export_format_option(boost::program_options::options_description *opt);
 
@@ -216,6 +219,8 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               Format *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               JournalObjectSize *target_type, int);
+void validate(boost::any& v, const std::vector<std::string>& values,
+              EncryptionAlgorithm *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               Secret *target_type, int);
 

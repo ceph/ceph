@@ -168,7 +168,7 @@ public:
 
   void expect_v1_read_header(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               read(mock_image_ctx.header_oid, _, _, _, _));
+                               read(mock_image_ctx.header_oid, _, _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {

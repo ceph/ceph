@@ -32,7 +32,7 @@ class EImportFinish : public LogEvent {
 				     success(s) { }
   EImportFinish() : LogEvent(EVENT_IMPORTFINISH), base(), success(false) { }
   
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "EImportFinish " << base;
     if (success)
       out << " success";

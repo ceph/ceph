@@ -29,7 +29,8 @@ enum class osdc_errc {
   not_supported,
   snapshot_exists,
   snapshot_dne,
-  timed_out
+  timed_out,
+  pool_eio
 };
 
 namespace boost::system {

@@ -26,7 +26,8 @@ public:
   int set(LPCTSTR lpValue, DWORD data);
   int set(LPCTSTR lpValue, std::string data);
 
-  int get(LPCTSTR lpValue, DWORD* value);
+  int get(LPCTSTR lpValue, bool& value);
+  int get(LPCTSTR lpValue, DWORD& value);
   int get(LPCTSTR lpValue, std::string& value);
 
   HKEY hKey = NULL;

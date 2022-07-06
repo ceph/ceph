@@ -13,6 +13,9 @@
 #include <vector>
 
 #include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
+#include <boost/smart_ptr/intrusive_ptr.hpp>
+#include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #undef FMT_HEADER_ONLY
 #define FMT_HEADER_ONLY 1
@@ -20,6 +23,7 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/function2.hpp"
 
 #include "include/rados/librados.hpp"
 
@@ -33,11 +37,10 @@
 #include "cls/log/cls_log_types.h"
 
 #include "rgw_basic_types.h"
+#include "rgw_log_backing.h"
 #include "rgw_sync_policy.h"
 #include "rgw_zone.h"
 #include "rgw_trim_bilog.h"
-
-#include "services/svc_cls.h"
 
 namespace bc = boost::container;
 
@@ -50,23 +53,32 @@ struct rgw_data_change {
   DataLogEntityType entity_type;
   std::string key;
   ceph::real_time timestamp;
+  uint64_t gen = 0;
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    // require decoders to recognize v2 when gen>0
+    const uint8_t compat = (gen == 0) ? 1 : 2;
+    ENCODE_START(2, compat, bl);
     auto t = std::uint8_t(entity_type);
     encode(t, bl);
     encode(key, bl);
     encode(timestamp, bl);
+    encode(gen, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
      std::uint8_t t;
      decode(t, bl);
      entity_type = DataLogEntityType(t);
      decode(key, bl);
      decode(timestamp, bl);
+     if (struct_v < 2) {
+       gen = 0;
+     } else {
+       decode(gen, bl);
+     }
      DECODE_FINISH(bl);
   }
 
@@ -111,72 +123,135 @@ struct RGWDataChangesLogInfo {
 
 struct RGWDataChangesLogMarker {
   int shard = 0;
-  std::optional<std::string> marker;
+  std::string marker;
 
   RGWDataChangesLogMarker() = default;
 };
 
-class RGWDataChangesBE {
-protected:
-  CephContext* const cct;
-private:
-  std::string prefix;
-  static std::string_view get_prefix(CephContext* cct) {
-    std::string_view prefix = cct->_conf->rgw_data_log_obj_prefix;
-    if (prefix.empty()) {
-      prefix = "data_log"sv;
+class RGWDataChangesLog;
+
+struct rgw_data_notify_entry {
+  std::string key;
+  uint64_t gen = 0;
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+
+  rgw_data_notify_entry& operator=(const rgw_data_notify_entry&) = default;
+
+  bool operator <(const rgw_data_notify_entry& d) const {
+    if (key < d.key) {
+      return true;
     }
-    return prefix;
+    if (d.key < key) {
+      return false;
+    }
+    return gen < d.gen;
   }
-public:
-  using entries = std::variant<std::list<cls_log_entry>,
-			       std::vector<ceph::buffer::list>>;
-
-  RGWDataChangesBE(CephContext* const cct)
-    : cct(cct), prefix(get_prefix(cct)) {}
-  virtual ~RGWDataChangesBE() = default;
-
-  static std::string get_oid(CephContext* cct, int i) {
-    return fmt::format("{}.{}", get_prefix(cct), i);
+  friend std::ostream& operator <<(std::ostream& m,
+				   const rgw_data_notify_entry& e) {
+    return m << "[key: " << e.key << ", gen: " << e.gen << "]";
   }
-  std::string get_oid(int i) {
-    return fmt::format("{}.{}", prefix, i);
-  }
-  static int remove(CephContext* cct, librados::Rados* rados,
-		    const rgw_pool& log_pool);
-
-
-  virtual void prepare(ceph::real_time now,
-		       const std::string& key,
-		       ceph::buffer::list&& entry,
-		       entries& out) = 0;
-  virtual int push(int index, entries&& items) = 0;
-  virtual int push(int index, ceph::real_time now,
-		   const std::string& key,
-		   ceph::buffer::list&& bl) = 0;
-  virtual int list(int shard, int max_entries,
-		   std::vector<rgw_data_change_log_entry>& entries,
-		   std::optional<std::string_view> marker,
-		   std::string* out_marker, bool* truncated) = 0;
-  virtual int get_info(int index, RGWDataChangesLogInfo *info) = 0;
-  virtual int trim(int index, std::string_view marker) = 0;
-  virtual int trim(int index, std::string_view marker,
-		   librados::AioCompletion* c) = 0;
-  virtual std::string_view max_marker() const = 0;
 };
 
+class RGWDataChangesBE;
+
+class DataLogBackends final
+  : public logback_generations,
+    private bc::flat_map<uint64_t, boost::intrusive_ptr<RGWDataChangesBE>> {
+  friend class logback_generations;
+  friend class GenTrim;
+
+  std::mutex m;
+  RGWDataChangesLog& datalog;
+
+  DataLogBackends(librados::IoCtx& ioctx,
+		  std::string oid,
+		  fu2::unique_function<std::string(
+		    uint64_t, int) const>&& get_oid,
+		  int shards, RGWDataChangesLog& datalog) noexcept
+    : logback_generations(ioctx, oid, std::move(get_oid),
+			  shards), datalog(datalog) {}
+public:
+
+  boost::intrusive_ptr<RGWDataChangesBE> head() {
+    std::unique_lock l(m);
+    auto i = end();
+    --i;
+    return i->second;
+  }
+  int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
+	   std::vector<rgw_data_change_log_entry>& entries,
+	   std::string_view marker,
+	   std::string* out_marker, bool* truncated);
+  int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker);
+  void trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
+		    librados::AioCompletion* c);
+  void set_zero(RGWDataChangesBE* be) {
+    emplace(0, be);
+  }
+
+  bs::error_code handle_init(entries_t e) noexcept override;
+  bs::error_code handle_new_gens(entries_t e) noexcept override;
+  bs::error_code handle_empty_to(uint64_t new_tail) noexcept override;
+
+  int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
+};
+
+struct BucketGen {
+  rgw_bucket_shard shard;
+  uint64_t gen;
+
+  BucketGen(const rgw_bucket_shard& shard, uint64_t gen)
+    : shard(shard), gen(gen) {}
+
+  BucketGen(rgw_bucket_shard&& shard, uint64_t gen)
+    : shard(std::move(shard)), gen(gen) {}
+
+  BucketGen(const BucketGen&) = default;
+  BucketGen(BucketGen&&) = default;
+  BucketGen& operator =(const BucketGen&) = default;
+  BucketGen& operator =(BucketGen&&) = default;
+
+  ~BucketGen() = default;
+};
+
+inline bool operator ==(const BucketGen& l, const BucketGen& r) {
+  return (l.shard == r.shard) && (l.gen == r.gen);
+}
+
+inline bool operator <(const BucketGen& l, const BucketGen& r) {
+  if (l.shard < r.shard) {
+    return true;
+  } else if (l.shard == r.shard) {
+    return l.gen < r.gen;
+  } else {
+    return false;
+  }
+}
+
 class RGWDataChangesLog {
+  friend DataLogBackends;
   CephContext *cct;
+  librados::IoCtx ioctx;
   rgw::BucketChangeObserver *observer = nullptr;
   const RGWZone* zone;
-  std::unique_ptr<RGWDataChangesBE> be;
+  std::unique_ptr<DataLogBackends> bes;
 
   const int num_shards;
+  std::string get_prefix() {
+    auto prefix = cct->_conf->rgw_data_log_obj_prefix;
+    return prefix.empty() ? prefix : "data_log";
+  }
+  std::string metadata_log_oid() {
+    return get_prefix() + "generations_metadata";
+  }
+  std::string prefix;
 
   ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::lock");
   ceph::shared_mutex modified_lock =
     ceph::make_shared_mutex("RGWDataChangesLog::modified_lock");
-  bc::flat_map<int, bc::flat_set<std::string>> modified_shards;
+  bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>> modified_shards;
 
   std::atomic<bool> down_flag = { false };
 
@@ -191,52 +266,56 @@ class RGWDataChangesLog {
 
   using ChangeStatusPtr = std::shared_ptr<ChangeStatus>;
 
-  lru_map<rgw_bucket_shard, ChangeStatusPtr> changes;
+  lru_map<BucketGen, ChangeStatusPtr> changes;
 
-  bc::flat_set<rgw_bucket_shard> cur_cycle;
+  bc::flat_set<BucketGen> cur_cycle;
 
-  void _get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status);
-  void register_renew(const rgw_bucket_shard& bs);
-  void update_renewed(const rgw_bucket_shard& bs, ceph::real_time expiration);
+  ChangeStatusPtr _get_change(const rgw_bucket_shard& bs, uint64_t gen);
+  void register_renew(const rgw_bucket_shard& bs,
+		      const rgw::bucket_log_layout_generation& gen);
+  void update_renewed(const rgw_bucket_shard& bs,
+		      uint64_t gen,
+		      ceph::real_time expiration);
 
   ceph::mutex renew_lock = ceph::make_mutex("ChangesRenewThread::lock");
   ceph::condition_variable renew_cond;
-  void renew_run();
+  void renew_run() noexcept;
   void renew_stop();
   std::thread renew_thread;
 
-  std::function<bool(const rgw_bucket& bucket, optional_yield y)> bucket_filter;
+  std::function<bool(const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp)> bucket_filter;
   int choose_oid(const rgw_bucket_shard& bs);
   bool going_down() const;
-  bool filter_bucket(const rgw_bucket& bucket, optional_yield y) const;
-  int renew_entries();
+  bool filter_bucket(const DoutPrefixProvider *dpp, const rgw_bucket& bucket, optional_yield y) const;
+  int renew_entries(const DoutPrefixProvider *dpp);
 
 public:
 
   RGWDataChangesLog(CephContext* cct);
   ~RGWDataChangesLog();
 
-  int start(const RGWZone* _zone, const RGWZoneParams& zoneparams,
-	    RGWSI_Cls *cls_svc, librados::Rados* lr);
+  int start(const DoutPrefixProvider *dpp, const RGWZone* _zone, const RGWZoneParams& zoneparams,
+	    librados::Rados* lr);
 
-  int add_entry(const RGWBucketInfo& bucket_info, int shard_id);
+  int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+		const rgw::bucket_log_layout_generation& gen, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
-  int list_entries(int shard, int max_entries,
+  int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
-		   std::optional<std::string_view> marker,
+		   std::string_view marker,
 		   std::string* out_marker, bool* truncated);
-  int trim_entries(int shard_id, std::string_view marker);
-  int trim_entries(int shard_id, std::string_view marker,
+  int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker);
+  int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
 		   librados::AioCompletion* c); // :(
-  int get_info(int shard_id, RGWDataChangesLogInfo *info);
+  int get_info(const DoutPrefixProvider *dpp, int shard_id, RGWDataChangesLogInfo *info);
 
   using LogMarker = RGWDataChangesLogMarker;
 
-  int list_entries(int max_entries,
+  int list_entries(const DoutPrefixProvider *dpp, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   LogMarker& marker, bool* ptruncated);
 
-  void mark_modified(int shard_id, const rgw_bucket_shard& bs);
+  void mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen);
   auto read_clear_modified() {
     std::unique_lock wl{modified_lock};
     decltype(modified_shards) modified;
@@ -253,8 +332,56 @@ public:
     bucket_filter = std::move(f);
   }
   // a marker that compares greater than any other
-  std::string_view max_marker() const;
-  std::string get_oid(int shard_id) const;
+  std::string max_marker() const;
+  std::string get_oid(uint64_t gen_id, int shard_id) const;
+
+
+  int change_format(const DoutPrefixProvider *dpp, log_type type, optional_yield y);
+  int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
 };
+
+class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {
+protected:
+  librados::IoCtx& ioctx;
+  CephContext* const cct;
+  RGWDataChangesLog& datalog;
+
+  std::string get_oid(int shard_id) {
+    return datalog.get_oid(gen_id, shard_id);
+  }
+public:
+  using entries = std::variant<std::list<cls_log_entry>,
+			       std::vector<ceph::buffer::list>>;
+
+  const uint64_t gen_id;
+
+  RGWDataChangesBE(librados::IoCtx& ioctx,
+		   RGWDataChangesLog& datalog,
+		   uint64_t gen_id)
+    : ioctx(ioctx), cct(static_cast<CephContext*>(ioctx.cct())),
+      datalog(datalog), gen_id(gen_id) {}
+  virtual ~RGWDataChangesBE() = default;
+
+  virtual void prepare(ceph::real_time now,
+		       const std::string& key,
+		       ceph::buffer::list&& entry,
+		       entries& out) = 0;
+  virtual int push(const DoutPrefixProvider *dpp, int index, entries&& items) = 0;
+  virtual int push(const DoutPrefixProvider *dpp, int index, ceph::real_time now,
+		   const std::string& key,
+		   ceph::buffer::list&& bl) = 0;
+  virtual int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
+		   std::vector<rgw_data_change_log_entry>& entries,
+		   std::optional<std::string_view> marker,
+		   std::string* out_marker, bool* truncated) = 0;
+  virtual int get_info(const DoutPrefixProvider *dpp, int index, RGWDataChangesLogInfo *info) = 0;
+  virtual int trim(const DoutPrefixProvider *dpp, int index, std::string_view marker) = 0;
+  virtual int trim(const DoutPrefixProvider *dpp, int index, std::string_view marker,
+		   librados::AioCompletion* c) = 0;
+  virtual std::string_view max_marker() const = 0;
+  // 1 on empty, 0 on non-empty, negative on error.
+  virtual int is_empty(const DoutPrefixProvider *dpp) = 0;
+};
+
 
 #endif

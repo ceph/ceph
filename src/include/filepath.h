@@ -37,7 +37,7 @@
 
 
 class filepath {
-  inodeno_t ino;   // base inode.  ino=0 implies pure relative path.
+  inodeno_t ino = 0;   // base inode.  ino=0 implies pure relative path.
   std::string path;     // relative path.
 
   /** bits - path segments
@@ -46,7 +46,7 @@ class filepath {
    * NOTE: this value is LAZILY maintained... i.e. it's a cache
    */
   mutable std::vector<std::string> bits;
-  bool encoded;
+  bool encoded = false;
 
   void rebuild_path() {
     path.clear();
@@ -72,28 +72,26 @@ class filepath {
   }
 
  public:
-  filepath() : ino(0), encoded(false) { }
-  filepath(std::string_view s, inodeno_t i) : ino(i), path(s), encoded(false) { }
-  filepath(const std::string& s, inodeno_t i) : ino(i), path(s), encoded(false) { }
-  filepath(const char* s, inodeno_t i) : ino(i), path(s), encoded(false) { }
+  filepath() = default;
+  filepath(std::string_view p, inodeno_t i) : ino(i), path(p) {}
   filepath(const filepath& o) {
     ino = o.ino;
     path = o.path;
     bits = o.bits;
     encoded = o.encoded;
   }
-  filepath(inodeno_t i) : ino(i), encoded(false) { }
+  filepath(inodeno_t i) : ino(i) {}
+  filepath& operator=(const char* path) {
+    set_path(path);
+    return *this;
+  }
 
   /*
    * if we are fed a relative path as a string, either set ino=0 (strictly
    * relative) or 1 (absolute).  throw out any leading '/'.
    */
-  filepath(std::string_view s) : encoded(false) {
-    set_path(s);
-  }
-  filepath(const char *s) : encoded(false) {
-    set_path(std::string_view(s));
-  }
+  filepath(std::string_view s) { set_path(s); }
+  filepath(const char* s) { set_path(s); }
 
   void set_path(std::string_view s, inodeno_t b) {
     path = s;

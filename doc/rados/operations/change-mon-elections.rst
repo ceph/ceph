@@ -26,7 +26,7 @@ the simplest mode.
 
 The disallow Mode
 =================
-This mode lets you mark monitors as disallowd, in which case they will
+This mode lets you mark monitors as disallowed, in which case they will
 participate in the quorum and serve clients, but cannot be elected leader. You
 may wish to use this if you have some monitors which are known to be far away
 from clients.

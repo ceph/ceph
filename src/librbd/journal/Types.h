@@ -372,12 +372,12 @@ struct UpdateFeaturesEvent : public OpEventBase {
 struct MetadataSetEvent : public OpEventBase {
   static const EventType TYPE = EVENT_TYPE_METADATA_SET;
 
-  string key;
-  string value;
+  std::string key;
+  std::string value;
 
   MetadataSetEvent() {
   }
-  MetadataSetEvent(uint64_t op_tid, const string &_key, const string &_value)
+  MetadataSetEvent(uint64_t op_tid, const std::string &_key, const std::string &_value)
     : OpEventBase(op_tid), key(_key), value(_value) {
   }
 
@@ -389,11 +389,11 @@ struct MetadataSetEvent : public OpEventBase {
 struct MetadataRemoveEvent : public OpEventBase {
   static const EventType TYPE = EVENT_TYPE_METADATA_REMOVE;
 
-  string key;
+  std::string key;
 
   MetadataRemoveEvent() {
   }
-  MetadataRemoveEvent(uint64_t op_tid, const string &_key)
+  MetadataRemoveEvent(uint64_t op_tid, const std::string &_key)
     : OpEventBase(op_tid), key(_key) {
   }
 

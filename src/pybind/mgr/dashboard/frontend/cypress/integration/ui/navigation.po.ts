@@ -20,7 +20,7 @@ export class NavigationPageHelper extends PageHelper {
       menu: 'Cluster',
       submenus: [
         { menu: 'Hosts', component: 'cd-hosts' },
-        { menu: 'Inventory', component: 'cd-error' },
+        { menu: 'Physical Disks', component: 'cd-error' },
         { menu: 'Monitors', component: 'cd-monitor' },
         { menu: 'Services', component: 'cd-error' },
         { menu: 'OSDs', component: 'cd-osd-list' },
@@ -35,27 +35,27 @@ export class NavigationPageHelper extends PageHelper {
     {
       menu: 'Block',
       submenus: [
-        { menu: 'Images', component: 'cd-rbd-list' },
+        { menu: 'Images', component: 'cd-error' },
         { menu: 'Mirroring', component: 'cd-mirroring' },
         { menu: 'iSCSI', component: 'cd-iscsi' }
       ]
     },
-    { menu: 'Filesystem', component: 'cd-cephfs-list' }
+    { menu: 'File Systems', component: 'cd-cephfs-list' }
   ];
 
   getVerticalMenu() {
-    return cy.get('ul.cd-navbar-primary');
+    return cy.get('nav[id=sidebar]');
   }
 
   getMenuToggler() {
-    return cy.get('cd-navigation > div.cd-navbar-top button.btn.btn-link');
+    return cy.get('[aria-label="toggle sidebar visibility"]');
   }
 
   checkNavigations(navs: any) {
-    // The nfs-ganesha and RGW status requests are mocked to ensure that this method runs in time
-    cy.server();
-    cy.route('/api/nfs-ganesha/status', 'fixture:nfs-ganesha-status');
-    cy.route('/api/rgw/status', 'fixture:rgw-status');
+    // The nfs-ganesha, RGW, and block/rbd status requests are mocked to ensure that this method runs in time
+    cy.intercept('/ui-api/nfs-ganesha/status', { fixture: 'nfs-ganesha-status.json' });
+    cy.intercept('/ui-api/rgw/status', { fixture: 'rgw-status.json' });
+    cy.intercept('/ui-api/block/rbd/status', { fixture: 'block-rbd-status.json' });
 
     navs.forEach((nav: any) => {
       cy.contains('.simplebar-content li.nav-item a', nav.menu).click();

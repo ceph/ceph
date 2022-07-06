@@ -5,7 +5,7 @@
 User documentation
 ==================
 
-The documentation on docs.ceph.com is generated from the restructuredText
+The documentation on docs.ceph.com is generated from the reStructuredText
 sources in ``/doc/`` in the Ceph git repository.
 
 Please make sure that your changes are written in a way that is intended
@@ -33,14 +33,16 @@ markup supported by Breathe_.
 .. _Doxygen: http://www.doxygen.nl/
 .. _Breathe: https://github.com/michaeljones/breathe
 
-The general format for function documentation is::
+The general format for function documentation is
+
+.. code-block:: c
 
   /**
    * Short description
    *
    * Detailed description when necessary
    *
-   * preconditons, postconditions, warnings, bugs or other notes
+   * preconditions, postconditions, warnings, bugs or other notes
    *
    * parameter reference
    * return value (if non-void)
@@ -55,7 +57,7 @@ To generate the doxygen documentation in HTML format use:
 
 ::
 
-   # make doxygen
+   # cmake --build . --target doxygen
 
 HTML output will be under: ``build-doc/doxygen/html`` 
 
@@ -126,7 +128,7 @@ Inkscape
 --------
 
 You can use Inkscape to generate scalable vector graphics.
-https://inkscape.org/en/ for restructedText documents.
+https://inkscape.org/en/ for restructuredText documents.
 
 If you generate diagrams with Inkscape, you should
 commit both the Scalable Vector Graphics (SVG) file and export a

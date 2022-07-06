@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "common/ceph_argparse.h"
 #include "common/ceph_time.h"
 #include "messages/MPing.h"
@@ -26,6 +29,7 @@
 
 #include "test_cmds.h"
 
+using namespace std::chrono_literals;
 namespace bpo = boost::program_options;
 using crimson::common::local_conf;
 
@@ -49,8 +53,7 @@ static entity_addr_t get_server_addr() {
 }
 
 static seastar::future<> test_echo(unsigned rounds,
-                                   double keepalive_ratio,
-                                   bool v2)
+                                   double keepalive_ratio)
 {
   struct test_state {
     struct Server final
@@ -64,7 +67,7 @@ static seastar::future<> test_echo(unsigned rounds,
           logger().info("server got {}", *m);
         }
         // reply with a pong
-        std::ignore = c->send(make_message<MPing>());
+        std::ignore = c->send(crimson::make_message<MPing>());
         return {seastar::now()};
       }
 
@@ -202,7 +205,7 @@ static seastar::future<> test_echo(unsigned rounds,
                           seastar::stop_iteration::no);
                       });
                   } else {
-                    return conn->send(make_message<MPing>())
+                    return conn->send(crimson::make_message<MPing>())
                       .then([&count_ping] {
                         count_ping += 1;
                         return seastar::make_ready_future<seastar::stop_iteration>(
@@ -220,8 +223,8 @@ static seastar::future<> test_echo(unsigned rounds,
     };
   };
 
-  logger().info("test_echo(rounds={}, keepalive_ratio={}, v2={}):",
-                rounds, keepalive_ratio, v2);
+  logger().info("test_echo(rounds={}, keepalive_ratio={}):",
+                rounds, keepalive_ratio);
   auto server1 = seastar::make_shared<test_state::Server>();
   auto server2 = seastar::make_shared<test_state::Server>();
   auto client1 = seastar::make_shared<test_state::Client>(rounds, keepalive_ratio);
@@ -229,13 +232,8 @@ static seastar::future<> test_echo(unsigned rounds,
   // start servers and clients
   auto addr1 = get_server_addr();
   auto addr2 = get_server_addr();
-  if (v2) {
-    addr1.set_type(entity_addr_t::TYPE_MSGR2);
-    addr2.set_type(entity_addr_t::TYPE_MSGR2);
-  } else {
-    addr1.set_type(entity_addr_t::TYPE_LEGACY);
-    addr2.set_type(entity_addr_t::TYPE_LEGACY);
-  }
+  addr1.set_type(entity_addr_t::TYPE_MSGR2);
+  addr2.set_type(entity_addr_t::TYPE_MSGR2);
   return seastar::when_all_succeed(
       server1->init(entity_name_t::OSD(0), "server1", 1, addr1),
       server2->init(entity_name_t::OSD(1), "server2", 2, addr2),
@@ -270,7 +268,7 @@ static seastar::future<> test_echo(unsigned rounds,
   });
 }
 
-static seastar::future<> test_concurrent_dispatch(bool v2)
+static seastar::future<> test_concurrent_dispatch()
 {
   struct test_state {
     struct Server final
@@ -340,15 +338,11 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
     };
   };
 
-  logger().info("test_concurrent_dispatch(v2={}):", v2);
+  logger().info("test_concurrent_dispatch():");
   auto server = seastar::make_shared<test_state::Server>();
   auto client = seastar::make_shared<test_state::Client>();
   auto addr = get_server_addr();
-  if (v2) {
-    addr.set_type(entity_addr_t::TYPE_MSGR2);
-  } else {
-    addr.set_type(entity_addr_t::TYPE_LEGACY);
-  }
+  addr.set_type(entity_addr_t::TYPE_MSGR2);
   addr.set_family(AF_INET);
   return seastar::when_all_succeed(
       server->init(entity_name_t::OSD(4), "server3", 5, addr),
@@ -357,8 +351,8 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
     auto conn = client->msgr->connect(server->msgr->get_myaddr(),
                                       entity_name_t::TYPE_OSD);
     // send two messages
-    return conn->send(make_message<MPing>()).then([conn] {
-      return conn->send(make_message<MPing>());
+    return conn->send(crimson::make_message<MPing>()).then([conn] {
+      return conn->send(crimson::make_message<MPing>());
     });
   }).then([server] {
     return server->wait();
@@ -378,7 +372,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
   });
 }
 
-seastar::future<> test_preemptive_shutdown(bool v2) {
+seastar::future<> test_preemptive_shutdown() {
   struct test_state {
     class Server final
       : public crimson::net::Dispatcher {
@@ -387,7 +381,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
 
       std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef c, MessageRef m) override {
-        std::ignore = c->send(make_message<MPing>());
+        std::ignore = c->send(crimson::make_message<MPing>());
         return {seastar::now()};
       }
 
@@ -447,7 +441,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
         (void) seastar::do_until(
           [this] { return stop_send; },
           [conn] {
-            return conn->send(make_message<MPing>()).then([] {
+            return conn->send(crimson::make_message<MPing>()).then([] {
               return seastar::sleep(0ms);
             });
           }
@@ -465,15 +459,11 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
     };
   };
 
-  logger().info("test_preemptive_shutdown(v2={}):", v2);
+  logger().info("test_preemptive_shutdown():");
   auto server = seastar::make_shared<test_state::Server>();
   auto client = seastar::make_shared<test_state::Client>();
   auto addr = get_server_addr();
-  if (v2) {
-    addr.set_type(entity_addr_t::TYPE_MSGR2);
-  } else {
-    addr.set_type(entity_addr_t::TYPE_LEGACY);
-  }
+  addr.set_type(entity_addr_t::TYPE_MSGR2);
   addr.set_family(AF_INET);
   return seastar::when_all_succeed(
     server->init(entity_name_t::OSD(6), "server4", 7, addr),
@@ -955,7 +945,7 @@ class FailoverSuite : public Dispatcher {
     hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                    pgid.pool(), oloc.nspace);
     spg_t spgid(pgid);
-    return tracked_conn->send(make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0));
+    return tracked_conn->send(crimson::make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0));
   }
 
   seastar::future<> flush_pending_send() {
@@ -1248,23 +1238,23 @@ class FailoverTest : public Dispatcher {
  private:
   seastar::future<> prepare_cmd(
       cmd_t cmd,
-      std::function<void(ceph::ref_t<MCommand>)>
-        f_prepare = [] (auto m) { return; }) {
+      std::function<void(MCommand&)>
+        f_prepare = [] (auto& m) { return; }) {
     assert(!recv_cmdreply);
     recv_cmdreply  = seastar::promise<>();
     auto fut = recv_cmdreply->get_future();
-    auto m = make_message<MCommand>();
+    auto m = crimson::make_message<MCommand>();
     m->cmd.emplace_back(1, static_cast<char>(cmd));
-    f_prepare(m);
-    return cmd_conn->send(m).then([fut = std::move(fut)] () mutable {
+    f_prepare(*m);
+    return cmd_conn->send(std::move(m)).then([fut = std::move(fut)] () mutable {
       return std::move(fut);
     });
   }
 
   seastar::future<> start_peer(policy_t peer_policy) {
     return prepare_cmd(cmd_t::suite_start,
-        [peer_policy] (auto m) {
-      m->cmd.emplace_back(1, static_cast<char>(peer_policy));
+        [peer_policy] (auto& m) {
+      m.cmd.emplace_back(1, static_cast<char>(peer_policy));
     });
   }
 
@@ -1276,7 +1266,7 @@ class FailoverTest : public Dispatcher {
     assert(!recv_pong);
     recv_pong = seastar::promise<>();
     auto fut = recv_pong->get_future();
-    return cmd_conn->send(make_message<MPing>()
+    return cmd_conn->send(crimson::make_message<MPing>()
     ).then([fut = std::move(fut)] () mutable {
       return std::move(fut);
     });
@@ -1304,9 +1294,9 @@ class FailoverTest : public Dispatcher {
   seastar::future<> shutdown() {
     logger().info("CmdCli shutdown...");
     assert(!recv_cmdreply);
-    auto m = make_message<MCommand>();
+    auto m = crimson::make_message<MCommand>();
     m->cmd.emplace_back(1, static_cast<char>(cmd_t::shutdown));
-    return cmd_conn->send(m).then([] {
+    return cmd_conn->send(std::move(m)).then([] {
       return seastar::sleep(200ms);
     }).then([this] {
       cmd_msgr->stop();
@@ -1368,8 +1358,8 @@ class FailoverTest : public Dispatcher {
   seastar::future<> peer_connect_me() {
     logger().info("[Test] peer_connect_me({})", test_addr);
     return prepare_cmd(cmd_t::suite_connect_me,
-        [this] (auto m) {
-      m->cmd.emplace_back(fmt::format("{}", test_addr));
+        [this] (auto& m) {
+      m.cmd.emplace_back(fmt::format("{}", test_addr));
     });
   }
 
@@ -1461,7 +1451,7 @@ class FailoverSuitePeer : public Dispatcher {
     hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                    pgid.pool(), oloc.nspace);
     spg_t spgid(pgid);
-    return tracked_conn->send(make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0));
+    return tracked_conn->send(crimson::make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0));
   }
 
   seastar::future<> flush_pending_send() {
@@ -1551,7 +1541,7 @@ class FailoverTestPeer : public Dispatcher {
     ceph_assert(cmd_conn == c);
     switch (m->get_type()) {
      case CEPH_MSG_PING:
-      std::ignore = c->send(make_message<MPing>());
+      std::ignore = c->send(crimson::make_message<MPing>());
       break;
      case MSG_COMMAND: {
       auto m_cmd = boost::static_pointer_cast<MCommand>(m);
@@ -1563,7 +1553,7 @@ class FailoverTestPeer : public Dispatcher {
         std::ignore = cmd_msgr->shutdown();
       } else {
         std::ignore = handle_cmd(cmd, m_cmd).then([c] {
-          return c->send(make_message<MCommandReply>());
+          return c->send(crimson::make_message<MCommandReply>());
         });
       }
       break;
@@ -1582,9 +1572,9 @@ class FailoverTestPeer : public Dispatcher {
  private:
   seastar::future<> notify_recv_op() {
     ceph_assert(cmd_conn);
-    auto m = make_message<MCommand>();
+    auto m = crimson::make_message<MCommand>();
     m->cmd.emplace_back(1, static_cast<char>(cmd_t::suite_recv_op));
-    return cmd_conn->send(m);
+    return cmd_conn->send(std::move(m));
   }
 
   seastar::future<> handle_cmd(cmd_t cmd, MRef<MCommand> m_cmd) {
@@ -3608,17 +3598,11 @@ seastar::future<int> do_test(seastar::app_template& app)
     ceph_assert(v2_testpeer_addr.parse(
         config["v2-testpeer-addr"].as<std::string>().c_str(), nullptr));
     auto v2_testpeer_islocal = config["v2-testpeer-islocal"].as<bool>();
-    return test_echo(rounds, keepalive_ratio, false)
-   .then([rounds, keepalive_ratio] {
-      return test_echo(rounds, keepalive_ratio, true);
+    return test_echo(rounds, keepalive_ratio)
+    .then([] {
+      return test_concurrent_dispatch();
     }).then([] {
-      return test_concurrent_dispatch(false);
-    }).then([] {
-      return test_concurrent_dispatch(true);
-    }).then([] {
-      return test_preemptive_shutdown(false);
-    }).then([] {
-      return test_preemptive_shutdown(true);
+      return test_preemptive_shutdown();
     }).then([v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal] {
       return test_v2_protocol(v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal);
     }).then([] {
@@ -3655,11 +3639,11 @@ int main(int argc, char** argv)
     ("v2-testpeer-islocal", bpo::value<bool>()->default_value(true),
      "create a local crimson testpeer, or connect to a remote testpeer");
   return app.run(argc, argv, [&app] {
-    // This test normally succeeds within 60 seconds, so kill it after 120
+    // This test normally succeeds within 60 seconds, so kill it after 300
     // seconds in case it is blocked forever due to unaddressed bugs.
-    return seastar::with_timeout(seastar::lowres_clock::now() + 120s, do_test(app))
+    return seastar::with_timeout(seastar::lowres_clock::now() + 300s, do_test(app))
       .handle_exception_type([](seastar::timed_out_error&) {
-        logger().error("test_messenger timeout after 120s, abort! "
+        logger().error("test_messenger timeout after 300s, abort! "
                        "Consider to extend the period if the test is still running.");
         // use the retcode of timeout(1)
         return 124;

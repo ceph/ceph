@@ -19,6 +19,14 @@
 #include <sstream>
 #include <cmath>
 
+using std::stringstream;
+using std::cout;
+using std::string;
+using std::pair;
+using std::make_pair;
+using std::map;
+using std::cerr;
+
 KvStoreBench::KvStoreBench()
 : entries(30),
   ops(100),
@@ -55,8 +63,7 @@ KvStoreBench::~KvStoreBench()
 }
 
 int KvStoreBench::setup(int argc, const char** argv) {
-  vector<const char*> args;
-  argv_to_vec(argc,argv,args);
+  auto args = argv_to_vec(argc, argv);
   srand(time(NULL));
 
   stringstream help;

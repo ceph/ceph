@@ -18,6 +18,8 @@
 #include "test/rbd_mirror/mock/MockSafeTimer.h"
 #include <boost/intrusive_ptr.hpp>
 
+using namespace std::chrono_literals;
+
 namespace librbd {
 
 namespace {

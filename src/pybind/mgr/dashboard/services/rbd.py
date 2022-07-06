@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=unused-argument
-from __future__ import absolute_import
+import errno
+import json
+from enum import IntEnum
 
 import cherrypy
 import rbd
 
 from .. import mgr
+from ..exceptions import DashboardException
 from ..tools import ViewCache
 from .ceph_service import CephService
 
@@ -26,6 +29,20 @@ RBD_FEATURES_NAME_MAPPING = {
     rbd.RBD_FEATURE_DATA_POOL: "data-pool",
     rbd.RBD_FEATURE_OPERATIONS: "operations",
 }
+
+
+class MIRROR_IMAGE_MODE(IntEnum):
+    journal = rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL
+    snapshot = rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT
+
+
+def _rbd_support_remote(method_name: str, *args, **kwargs):
+    try:
+        return mgr.remote('rbd_support', method_name, *args, **kwargs)
+    except ImportError as ie:
+        raise DashboardException(f'rbd_support module not found {ie}')
+    except RuntimeError as ie:
+        raise DashboardException(f'rbd_support.{method_name} error: {ie}')
 
 
 def format_bitmask(features):
@@ -84,13 +101,13 @@ def parse_image_spec(image_spec):
 def rbd_call(pool_name, namespace, func, *args, **kwargs):
     with mgr.rados.open_ioctx(pool_name) as ioctx:
         ioctx.set_namespace(namespace if namespace is not None else '')
-        func(ioctx, *args, **kwargs)
+        return func(ioctx, *args, **kwargs)
 
 
 def rbd_image_call(pool_name, namespace, image_name, func, *args, **kwargs):
     def _ioctx_func(ioctx, image_name, func, *args, **kwargs):
         with rbd.Image(ioctx, image_name) as img:
-            func(ioctx, img, *args, **kwargs)
+            return func(ioctx, img, *args, **kwargs)
 
     return rbd_call(pool_name, namespace, _ioctx_func, image_name, func, *args, **kwargs)
 
@@ -245,11 +262,29 @@ class RbdService(object):
         return total_used_size, snap_map
 
     @classmethod
-    def _rbd_image(cls, ioctx, pool_name, namespace, image_name):
+    def _rbd_image(cls, ioctx, pool_name, namespace, image_name):  # pylint: disable=R0912
         with rbd.Image(ioctx, image_name) as img:
-
             stat = img.stat()
+            mirror_mode = img.mirror_image_get_mode()
+            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL:
+                stat['mirror_mode'] = 'journal'
+            elif mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+                stat['mirror_mode'] = 'snapshot'
+                schedule_status = json.loads(_rbd_support_remote(
+                    'mirror_snapshot_schedule_status')[1])
+                for scheduled_image in schedule_status['scheduled_images']:
+                    if scheduled_image['image'] == get_image_spec(pool_name, namespace, image_name):
+                        stat['schedule_info'] = scheduled_image
+            else:
+                stat['mirror_mode'] = 'unknown'
+
             stat['name'] = image_name
+
+            mirror_info = img.mirror_image_get_info()
+            stat['primary'] = None
+            if mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED:
+                stat['primary'] = mirror_info['primary']
+
             if img.old_format():
                 stat['unique_id'] = get_image_spec(pool_name, namespace, stat['block_name_prefix'])
                 stat['id'] = stat['unique_id']
@@ -281,32 +316,39 @@ class RbdService(object):
                 data_pool_name = None
             stat['data_pool'] = data_pool_name
 
-            try:
-                stat['parent'] = img.get_parent_image_spec()
-            except rbd.ImageNotFound:
-                # no parent image
-                stat['parent'] = None
+            stat['parent'] = cls._rbd_image_stat_parent(img)
 
             # snapshots
             stat['snapshots'] = []
             for snap in img.list_snaps():
+                try:
+                    snap['mirror_mode'] = MIRROR_IMAGE_MODE(img.mirror_image_get_mode()).name
+                except ValueError as ex:
+                    raise DashboardException(f'Unknown RBD Mirror mode: {ex}')
+
                 snap['timestamp'] = "{}Z".format(
                     img.get_snap_timestamp(snap['id']).isoformat())
-                snap['is_protected'] = img.is_protected_snap(snap['name'])
+
+                snap['is_protected'] = None
+                if mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+                    snap['is_protected'] = img.is_protected_snap(snap['name'])
                 snap['used_bytes'] = None
                 snap['children'] = []
-                img.set_snap(snap['name'])
-                for child_pool_name, child_image_name in img.list_children():
-                    snap['children'].append({
-                        'pool_name': child_pool_name,
-                        'image_name': child_image_name
-                    })
+
+                if mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+                    img.set_snap(snap['name'])
+                    for child_pool_name, child_image_name in img.list_children():
+                        snap['children'].append({
+                            'pool_name': child_pool_name,
+                            'image_name': child_image_name
+                        })
                 stat['snapshots'].append(snap)
 
             # disk usage
             img_flags = img.flags()
             if 'fast-diff' in stat['features_name'] and \
-                    not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags:
+                    not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags and \
+                    mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
                 snaps = [(s['id'], s['size'], s['name'])
                          for s in stat['snapshots']]
                 snaps.sort(key=lambda s: s[0])
@@ -331,13 +373,39 @@ class RbdService(object):
             return stat
 
     @classmethod
-    def _rbd_image_names(cls, ioctx):
+    def _rbd_image_stat_parent(cls, img):
+        stat_parent = None
+        try:
+            stat_parent = img.get_parent_image_spec()
+        except rbd.ImageNotFound:
+            # no parent image
+            stat_parent = None
+        return stat_parent
+
+    @classmethod
+    def _rbd_image_refs(cls, ioctx):
         rbd_inst = rbd.RBD()
-        return rbd_inst.list(ioctx)
+        return rbd_inst.list2(ioctx)
 
     @classmethod
     def _rbd_image_stat(cls, ioctx, pool_name, namespace, image_name):
         return cls._rbd_image(ioctx, pool_name, namespace, image_name)
+
+    @classmethod
+    def _rbd_image_stat_removing(cls, ioctx, pool_name, namespace, image_id):
+        rbd_inst = rbd.RBD()
+        img = rbd_inst.trash_get(ioctx, image_id)
+        img_spec = get_image_spec(pool_name, namespace, image_id)
+
+        if img['source'] == 'REMOVING':
+            img['unique_id'] = img_spec
+            img['pool_name'] = pool_name
+            img['namespace'] = namespace
+            img['deletion_time'] = "{}Z".format(img['deletion_time'].isoformat())
+            img['deferment_end_time'] = "{}Z".format(img['deferment_end_time'].isoformat())
+            return img
+        raise rbd.ImageNotFound('No image {} in status `REMOVING` found.'.format(img_spec),
+                                errno=errno.ENOENT)
 
     @classmethod
     @ViewCache()
@@ -353,13 +421,19 @@ class RbdService(object):
                 namespaces.append('')
             for current_namespace in namespaces:
                 ioctx.set_namespace(current_namespace)
-                names = cls._rbd_image_names(ioctx)
-                for name in names:
+                image_refs = cls._rbd_image_refs(ioctx)
+                for image_ref in image_refs:
                     try:
-                        stat = cls._rbd_image_stat(ioctx, pool_name, current_namespace, name)
+                        stat = cls._rbd_image_stat(
+                            ioctx, pool_name, current_namespace, image_ref['name'])
                     except rbd.ImageNotFound:
-                        # may have been removed in the meanwhile
-                        continue
+                        # Check if the RBD has been deleted partially. This happens for example if
+                        # the deletion process of the RBD has been started and was interrupted.
+                        try:
+                            stat = cls._rbd_image_stat_removing(
+                                ioctx, pool_name, current_namespace, image_ref['id'])
+                        except rbd.ImageNotFound:
+                            continue
                     result.append(stat)
             return result
 
@@ -387,3 +461,51 @@ class RbdSnapshotService(object):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
         return rbd_image_call(pool_name, namespace, image_name,
                               _remove_snapshot, snapshot_name, unprotect)
+
+
+class RBDSchedulerInterval:
+    def __init__(self, interval: str):
+        self.amount = int(interval[:-1])
+        self.unit = interval[-1]
+        if self.unit not in 'mhd':
+            raise ValueError(f'Invalid interval unit {self.unit}')
+
+    def __str__(self):
+        return f'{self.amount}{self.unit}'
+
+
+class RbdMirroringService:
+
+    @classmethod
+    def enable_image(cls, image_name: str, pool_name: str, namespace: str, mode: MIRROR_IMAGE_MODE):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_enable(mode))
+
+    @classmethod
+    def disable_image(cls, image_name: str, pool_name: str, namespace: str, force: bool = False):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_disable(force))
+
+    @classmethod
+    def promote_image(cls, image_name: str, pool_name: str, namespace: str, force: bool = False):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_promote(force))
+
+    @classmethod
+    def demote_image(cls, image_name: str, pool_name: str, namespace: str):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_demote())
+
+    @classmethod
+    def resync_image(cls, image_name: str, pool_name: str, namespace: str):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_resync())
+
+    @classmethod
+    def snapshot_schedule_add(cls, image_spec: str, interval: str):
+        _rbd_support_remote('mirror_snapshot_schedule_add', image_spec,
+                            str(RBDSchedulerInterval(interval)))
+
+    @classmethod
+    def snapshot_schedule_remove(cls, image_spec: str):
+        _rbd_support_remote('mirror_snapshot_schedule_remove', image_spec)

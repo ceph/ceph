@@ -13,7 +13,7 @@ NVMe Solid State Disks with the upcoming NVMe Zoned Namespaces (ZNS) standard.
 
 This project aims to enable Ceph to work on zoned storage drives and at the same
 time explore research problems related to adopting this new interface.  The
-first target is to enable non-ovewrite workloads (e.g. RGW) on host-managed SMR
+first target is to enable non-overwrite workloads (e.g. RGW) on host-managed SMR
 (HM-SMR) drives and explore cleaning (garbage collection) policies.  HM-SMR
 drives are high capacity hard drives with the ZBC/ZAC interface.  The longer
 term goal is to support ZNS SSDs, as they become available, as well as overwrite

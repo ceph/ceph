@@ -5,8 +5,8 @@
 
 #include <chrono>
 #include <string>
+#include <variant>
 #include <vector>
-#include <boost/variant.hpp>
 #include "include/str_list.h"
 #include "msg/msg_types.h"
 #include "include/uuid.h"
@@ -36,7 +36,7 @@ struct Option {
     case TYPE_ADDR: return "entity_addr_t";
     case TYPE_ADDRVEC: return "entity_addrvec_t";
     case TYPE_UUID: return "uuid_d";
-    case TYPE_SIZE: return "size_t";
+    case TYPE_SIZE: return "uint64_t";
     case TYPE_SECS: return "secs";
     case TYPE_MILLISECS: return "millisecs";
     default: return "unknown";
@@ -127,7 +127,7 @@ struct Option {
   };
 
   struct size_t {
-    std::size_t value;
+    std::uint64_t value;
     operator uint64_t() const {
       return static_cast<uint64_t>(value);
     }
@@ -136,8 +136,8 @@ struct Option {
     }
   };
 
-  using value_t = boost::variant<
-    boost::blank,
+  using value_t = std::variant<
+    std::monostate,
     std::string,
     uint64_t,
     int64_t,
@@ -198,7 +198,7 @@ struct Option {
   Option(std::string const &name, type_t t, level_t l)
     : name(name), type(t), level(l)
   {
-    // While value_t is nullable (via boost::blank), we don't ever
+    // While value_t is nullable (via std::monostate), we don't ever
     // want it set that way in an Option instance: within an instance,
     // the type of ::value should always match the declared type.
     switch (type) {
@@ -271,7 +271,7 @@ struct Option {
     case TYPE_BOOL:
       v = bool(new_value); break;
     case TYPE_SIZE:
-      v = size_t{static_cast<std::size_t>(new_value)}; break;
+      v = size_t{static_cast<std::uint64_t>(new_value)}; break;
     case TYPE_SECS:
       v = std::chrono::seconds{new_value}; break;
     case TYPE_MILLISECS:
@@ -399,5 +399,26 @@ struct Option {
   }
 };
 
-extern const std::vector<Option> ceph_options;
+constexpr unsigned long long operator"" _min (unsigned long long min) {
+  return min * 60;
+}
+constexpr unsigned long long operator"" _hr (unsigned long long hr) {
+  return hr * 60 * 60;
+}
+constexpr unsigned long long operator"" _day (unsigned long long day) {
+  return day * 24 * 60 * 60;
+}
+constexpr unsigned long long operator"" _K (unsigned long long n) {
+  return n << 10;
+}
+constexpr unsigned long long operator"" _M (unsigned long long n) {
+  return n << 20;
+}
+constexpr unsigned long long operator"" _G (unsigned long long n) {
+  return n << 30;
+}
+constexpr unsigned long long operator"" _T (unsigned long long n) {
+  return n << 40;
+}
 
+extern const std::vector<Option> ceph_options;

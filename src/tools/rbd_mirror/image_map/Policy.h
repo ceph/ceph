@@ -8,7 +8,6 @@
 #include <tuple>
 #include <boost/optional.hpp>
 
-#include "common/RWLock.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "tools/rbd_mirror/image_map/StateTransition.h"

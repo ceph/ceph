@@ -41,21 +41,26 @@ class TestSessionMap(CephFSTestCase):
         the conn count goes back to where it started (i.e. we aren't
         leaving connections open)
         """
+        self.config_set('mds', 'ms_async_reap_threshold', '1')
+
         self.mount_a.umount_wait()
         self.mount_b.umount_wait()
 
         status = self.fs.status()
         s = self._get_connection_count(status=status)
         self.fs.rank_tell(["session", "ls"], status=status)
-        e = self._get_connection_count(status=status)
-
-        self.assertEqual(s, e)
+        self.wait_until_true(
+            lambda: self._get_connection_count(status=status) == s,
+            timeout=30
+        )
 
     def test_mount_conn_close(self):
         """
         That when a client unmounts, the thread count on the MDS goes back
         to what it was before the client mounted
         """
+        self.config_set('mds', 'ms_async_reap_threshold', '1')
+
         self.mount_a.umount_wait()
         self.mount_b.umount_wait()
 
@@ -64,9 +69,10 @@ class TestSessionMap(CephFSTestCase):
         self.mount_a.mount_wait()
         self.assertGreater(self._get_connection_count(status=status), s)
         self.mount_a.umount_wait()
-        e = self._get_connection_count(status=status)
-
-        self.assertEqual(s, e)
+        self.wait_until_true(
+            lambda: self._get_connection_count(status=status) == s,
+            timeout=30
+        )
 
     def test_version_splitting(self):
         """
@@ -192,7 +198,8 @@ class TestSessionMap(CephFSTestCase):
         Check that mds evicts blocklisted client
         """
         if not isinstance(self.mount_a, FuseMount):
-            self.skipTest("Requires FUSE client to use is_blocklisted()")
+            self.skipTest("Requires FUSE client to use "
+                          "mds_cluster.is_addr_blocklisted()")
 
         self.fs.set_max_mds(2)
         status = self.fs.wait_for_daemons()
@@ -213,7 +220,8 @@ class TestSessionMap(CephFSTestCase):
         mount_a_client_id = self.mount_a.get_global_id()
         self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id],
                          mds_id=self.fs.get_rank(rank=0, status=status)['name'])
-        self.wait_until_true(lambda: self.mount_a.is_blocklisted(), timeout=30)
+        self.wait_until_true(lambda: self.mds_cluster.is_addr_blocklisted(
+            self.mount_a.get_global_addr()), timeout=30)
 
         # 10 seconds should be enough for evicting client
         time.sleep(10)

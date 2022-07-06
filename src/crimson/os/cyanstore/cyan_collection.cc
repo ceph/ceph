@@ -2,6 +2,8 @@
 
 #include "cyan_object.h"
 
+using std::make_pair;
+
 namespace crimson::os
 {
 

@@ -25,6 +25,7 @@
 #include "common/config_proxy.h"
 #include "gtest/gtest.h"
 
+using namespace std;
 
 TEST(ErasureCodeLrc, parse_rule)
 {

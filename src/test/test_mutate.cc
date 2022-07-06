@@ -40,9 +40,7 @@ static void usage(void)
 
 int main(int argc, const char **argv)
 {
-  int ret = 0;
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -83,6 +81,7 @@ int main(int argc, const char **argv)
      return 1;
   }
 
+  int ret = 0;
   librados::ObjectWriteOperation o;
   IoCtx ioctx;
   if (rados.pool_lookup(pool_name.c_str()) <= 0) {

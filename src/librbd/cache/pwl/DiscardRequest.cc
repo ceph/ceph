@@ -1,19 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <filesystem>
+
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/hostname.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/pwl/DiscardRequest.h"
-
-#if __has_include(<filesystem>)
-#include <filesystem>
-namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 
 #include "librbd/cache/pwl/ImageCacheState.h"
 
@@ -27,6 +21,8 @@ namespace fs = std::experimental::filesystem;
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::pwl:DiscardRequest: " \
                            << this << " " << __func__ << ": "
+
+namespace fs = std::filesystem;
 
 namespace librbd {
 namespace cache {
@@ -72,7 +68,13 @@ void DiscardRequest<I>::delete_image_cache_file() {
   if (m_cache_state->present &&
       !m_cache_state->host.compare(ceph_get_short_hostname()) &&
       fs::exists(m_cache_state->path)) {
-    fs::remove(m_cache_state->path);
+    std::error_code ec;
+    fs::remove(m_cache_state->path, ec);
+    if (ec) {
+      lderr(cct) << "failed to remove persistent cache file: " << ec.message()
+                 << dendl;
+      // not fatal
+    }
   }
 
   remove_image_cache_state();
@@ -111,10 +113,6 @@ void DiscardRequest<I>::remove_feature_bit() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  if (!(m_image_ctx.features &&RBD_FEATURE_DIRTY_CACHE)) {
-    finish();
-    return;
-  }
   uint64_t new_features = m_image_ctx.features & ~RBD_FEATURE_DIRTY_CACHE;
   uint64_t features_mask = RBD_FEATURE_DIRTY_CACHE;
   ldout(cct, 10) << "old_features=" << m_image_ctx.features

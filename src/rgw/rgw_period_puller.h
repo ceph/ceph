@@ -21,7 +21,7 @@ class RGWPeriodPuller : public RGWPeriodHistory::Puller {
  public:
   explicit RGWPeriodPuller(RGWSI_Zone *zone_svc, RGWSI_SysObj *sysobj_svc);
 
-  int pull(const std::string& period_id, RGWPeriod& period, optional_yield y) override;
+  int pull(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period, optional_yield y) override;
 };
 
 #endif // CEPH_RGW_PERIOD_PULLER_H

@@ -31,9 +31,9 @@ struct BlockExtent {
     : block_start(block_start), block_end(block_end) {
   }
 
-  friend ostream& operator<< (ostream& os, const BlockExtent& block_extent) {
-    os << "[block_start = " << block_extent.block_start << ", "
-       << "block_end = " << block_extent.block_end << ")";
+  friend std::ostream& operator<< (std::ostream& os, const BlockExtent& block_extent) {
+    os << "[block_start=" << block_extent.block_start
+       << ", block_end=" << block_extent.block_end << "]";
     return os;
   }
 };
@@ -71,8 +71,9 @@ public:
   int detain(const BlockExtent &block_extent, BlockOperation *block_operation,
              BlockGuardCell **cell) {
     std::lock_guard locker{m_lock};
-    ldout(m_cct, 20) << block_extent << ", "
-                     << "free_slots=" << m_free_detained_block_extents.size()
+    ldout(m_cct, 20) << block_extent
+                     << ", free_slots="
+                     << m_free_detained_block_extents.size()
                      << dendl;
 
     DetainedBlockExtent *detained_block_extent;
@@ -115,8 +116,8 @@ public:
     ceph_assert(cell != nullptr);
     auto &detained_block_extent = reinterpret_cast<DetainedBlockExtent &>(
       *cell);
-    ldout(m_cct, 20) << detained_block_extent.block_extent << ", "
-                     << "pending_ops="
+    ldout(m_cct, 20) << detained_block_extent.block_extent
+                     << ", pending_ops="
                      << detained_block_extent.block_operations.size()
                      << dendl;
 

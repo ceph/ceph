@@ -167,7 +167,7 @@ static void distro_detect(map<string, string> *m, CephContext *cct)
 
 int get_cgroup_memory_limit(uint64_t *limit)
 {
-#ifndef _WIN32
+#if defined(__linux__)
   // /sys/fs/cgroup/memory/memory.limit_in_bytes
 
   // the magic value 9223372036854771712 or 0x7ffffffffffff000

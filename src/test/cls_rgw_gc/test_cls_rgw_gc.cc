@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
@@ -17,6 +17,7 @@
 #include <map>
 #include <set>
 
+using namespace std;
 using namespace librados;
 
 librados::Rados rados;
@@ -206,6 +207,7 @@ TEST(cls_rgw_gc, gc_queue_ops2)
   ASSERT_EQ("chain-1", it.tag);
 }
 
+#if 0 // TODO: fix or remove defer_gc()
 TEST(cls_rgw_gc, gc_queue_ops3)
 {
   //Testing remove queue entries
@@ -358,6 +360,7 @@ TEST(cls_rgw_gc, gc_queue_ops4)
   ASSERT_EQ(0, list_info2.size());
 
 }
+#endif // defer_gc() disabled
 
 TEST(cls_rgw_gc, gc_queue_ops5)
 {

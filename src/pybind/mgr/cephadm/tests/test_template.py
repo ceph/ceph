@@ -2,7 +2,6 @@ import pathlib
 
 import pytest
 
-from cephadm.tests.fixtures import cephadm_module
 from cephadm.template import TemplateMgr, UndefinedError, TemplateNotFoundError
 
 

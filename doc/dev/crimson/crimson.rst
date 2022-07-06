@@ -5,7 +5,7 @@ crimson
 Crimson is the code name of crimson-osd, which is the next generation ceph-osd.
 It targets fast networking devices, fast storage devices by leveraging state of
 the art technologies like DPDK and SPDK, for better performance. And it will
-keep the support of HDDs and low-end SSDs via BlueStore. Crismon will try to
+keep the support of HDDs and low-end SSDs via BlueStore. Crimson will try to
 be backward compatible with classic OSD.
 
 .. highlight:: console
@@ -13,7 +13,7 @@ be backward compatible with classic OSD.
 Building Crimson
 ================
 
-Crismon is not enabled by default. To enable it::
+Crimson is not enabled by default. To enable it::
 
   $ WITH_SEASTAR=true ./install-deps.sh
   $ mkdir build && cd build
@@ -21,13 +21,6 @@ Crismon is not enabled by default. To enable it::
 
 Please note, `ASan`_ is enabled by default if crimson is built from a source
 cloned using git.
-
-Also, Seastar uses its own lockless allocator which does not play well with
-the alien threads. So, to use alienstore / bluestore backend, you might want to
-pass ``-DSeastar_CXX_FLAGS=-DSEASTAR_DEFAULT_ALLOCATOR`` to ``cmake`` when
-configuring this project to use the libc allocator, like::
-
-  $ cmake -DWITH_SEASTAR=ON -DSeastar_CXX_FLAGS=-DSEASTAR_DEFAULT_ALLOCATOR ..
 
 .. _ASan: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
@@ -39,17 +32,35 @@ As you might expect, crimson is not featurewise on par with its predecessor yet.
 object store backend
 --------------------
 
-At the moment ``crimson-osd`` offers two object store backends:
+At the moment, ``crimson-osd`` offers both native and alienized object store
+backends. The native object store backends perform IO using seastar reactor.
+They are:
 
-- CyanStore: CyanStore is modeled after memstore in classic OSD.
-- AlienStore: AlienStore is short for Alienized BlueStore.
+.. describe:: cyanstore
 
-Seastore is still under active development.
+   CyanStore is modeled after memstore in classic OSD.
+
+.. describe:: seastore
+
+   Seastore is still under active development.
+
+While the alienized object store backends are backed by a thread pool, which
+is a proxy of the alien store adaptor running in SeaStar. The proxy issues
+requests to object stores running in alien threads, i.e., worker threads not
+managed by the Seastar framework. They are:
+
+.. describe:: memstore
+
+   The memory backed object store
+
+.. describe:: bluestore
+
+   The object store used by classic OSD by default.
 
 daemonize
 ---------
 
-Unlike ``ceph-osd``, ``crimson-osd`` does daemonize itself even if the
+Unlike ``ceph-osd``, ``crimson-osd`` does not daemonize itself even if the
 ``daemonize`` option is enabled. Because, to read this option, ``crimson-osd``
 needs to ready its config sharded service, but this sharded service lives
 in the seastar reactor. If we fork a child process and exit the parent after
@@ -82,9 +93,9 @@ over ``20`` will be printed using ``logger::trace()``.
 +---------+---------+
 |   0     | warn    |
 +---------+---------+
-| [1, 5)  | info    |
+| [1, 6)  | info    |
 +---------+---------+
-| [5, 20] | debug   |
+| [6, 20] | debug   |
 +---------+---------+
 | >  20   | trace   |
 +---------+---------+
@@ -121,18 +132,21 @@ using ``vstart.sh``,
 
     for more Seastar specific command line options.
 
-``--memstore``
+``--cyanstore``
     use the CyanStore as the object store backend.
 
 ``--bluestore``
-    use the AlienStore as the object store backend. This is the default setting,
-    if not specified otherwise.
+    use the alienized BlueStore as the object store backend. This is the default
+    setting, if not specified otherwise.
+
+``--memstore``
+    use the alienized MemStore as the object store backend.
 
 So, a typical command to start a single-crimson-node cluster is::
 
   $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
-    --without-dashboard --memstore \
-    --crimson --nodaemon --redirect-output \
+    --without-dashboard --cyanstore \
+    --crimson --redirect-output \
     --osd-args "--memory 4G"
 
 Where we assign 4 GiB memory, a single thread running on core-0 to crimson-osd.
@@ -141,10 +155,127 @@ You could stop the vstart cluster using::
 
   $ ../src/stop.sh --crimson
 
+Metrics and Tracing
+===================
 
-CBT Based Testing
+Crimson offers three ways to report the stats and metrics:
+
+pg stats reported to mgr
+------------------------
+
+Crimson collects the per-pg, per-pool, and per-osd stats in a `MPGStats`
+message, and send it over to mgr, so that the mgr modules can query
+them using the `MgrModule.get()` method.
+
+asock command
+-------------
+
+an asock command is offered for dumping the metrics::
+
+  $ ceph tell osd.0 dump_metrics
+  $ ceph tell osd.0 dump_metrics reactor_utilization
+
+Where `reactor_utilization` is an optional string allowing us to filter
+the dumped metrics by prefix.
+
+Prometheus text protocol
+------------------------
+
+the listening port and address can be configured using the command line options of
+`--prometheus_port`
+see `Prometheus`_ for more details.
+
+.. _Prometheus: https://github.com/scylladb/seastar/blob/master/doc/prometheus.md
+
+Profiling Crimson
 =================
 
+fio
+---
+
+``crimson-store-nbd`` exposes configurable ``FuturizedStore`` internals as an
+NBD server for use with fio.
+
+To use fio to test ``crimson-store-nbd``,
+
+#. You will need to install ``libnbd``, and compile fio like
+
+   .. prompt:: bash $
+
+      apt-get install libnbd-dev
+      git clone git://git.kernel.dk/fio.git
+      cd fio
+      ./configure --enable-libnbd
+      make
+
+#. Build ``crimson-store-nbd``
+
+   .. prompt:: bash $
+
+      cd build
+      ninja crimson-store-nbd
+
+#. Run the ``crimson-store-nbd`` server with a block device. Please specify
+   the path to the raw device, like ``/dev/nvme1n1`` in place of the created
+   file for testing with a block device.
+
+   .. prompt:: bash $
+
+      export disk_img=/tmp/disk.img
+      export unix_socket=/tmp/store_nbd_socket.sock
+      rm -f $disk_img $unix_socket
+      truncate -s 512M $disk_img
+      ./bin/crimson-store-nbd \
+        --device-path $disk_img \
+        --smp 1 \
+        --mkfs true \
+        --type transaction_manager \
+        --uds-path ${unix_socket} &
+
+   in which,
+
+   ``--smp``
+     how many CPU cores are used
+
+   ``--mkfs``
+     initialize the device first
+
+   ``--type``
+     which backend to use. If ``transaction_manager`` is specified, SeaStore's
+     ``TransactionManager`` and ``BlockSegmentManager`` are used to emulate a
+     block device. Otherwise, this option is used to choose a backend of
+     ``FuturizedStore``, where the whole "device" is divided into multiple
+     fixed-size objects whose size is specified by ``--object-size``. So, if
+     you are only interested in testing the lower-level implementation of
+     SeaStore like logical address translation layer and garbage collection
+     without the object store semantics, ``transaction_manager`` would be a
+     better choice.
+
+#. Create an fio job file named ``nbd.fio``
+
+   .. code:: ini
+
+      [global]
+      ioengine=nbd
+      uri=nbd+unix:///?socket=${unix_socket}
+      rw=randrw
+      time_based
+      runtime=120
+      group_reporting
+      iodepth=1
+      size=512M
+
+      [job0]
+      offset=0
+
+#. Test the crimson object store using the fio compiled just now
+
+   .. prompt:: bash $
+
+      ./fio nbd.fio
+
+CBT
+---
 We can use `cbt`_ for performing perf tests::
 
   $ git checkout master
@@ -204,7 +335,7 @@ Debugging with GDB
 
 The `tips`_ for debugging Scylla also apply to Crimson.
 
-.. _tips: https://github.com/scylladb/scylla/blob/master/docs/debugging.md#tips-and-tricks
+.. _tips: https://github.com/scylladb/scylla/blob/master/docs/guides/debugging.md#tips-and-tricks
 
 Human-readable backtraces with addr2line
 ----------------------------------------

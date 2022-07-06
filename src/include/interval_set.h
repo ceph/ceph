@@ -430,9 +430,8 @@ class interval_set {
   }
   offset_type range_end() const {
     ceph_assert(!empty());
-    auto p = m.end();
-    p--;
-    return p->first+p->second;
+    auto p = m.rbegin();
+    return p->first + p->second;
   }
 
   // interval start after p (where p not in set)
@@ -520,7 +519,7 @@ class interval_set {
     std::swap(_size, other._size);
   }    
   
-  void erase(iterator &i) {
+  void erase(const iterator &i) {
     _size -= i.get_len();
     m.erase(i._iter);
   }

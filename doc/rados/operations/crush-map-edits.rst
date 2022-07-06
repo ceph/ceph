@@ -395,8 +395,6 @@ A rule takes the following form::
 
 		id [a unique whole numeric ID]
 		type [ replicated | erasure ]
-		min_size <min-size>
-		max_size <max-size>
 		step take <bucket-name> [class <device-class>]
 		step [choose|chooseleaf] [firstn|indep] <N> type <bucket-type>
 		step emit
@@ -423,26 +421,6 @@ A rule takes the following form::
 :Required: Yes
 :Default: ``replicated``
 :Valid Values: Currently only ``replicated`` and ``erasure``
-
-``min_size``
-
-:Description: If a pool makes fewer replicas than this number, CRUSH will
-              **NOT** select this rule.
-
-:Type: Integer
-:Purpose: A component of the rule mask.
-:Required: Yes
-:Default: ``1``
-
-``max_size``
-
-:Description: If a pool makes more replicas than this number, CRUSH will
-              **NOT** select this rule.
-
-:Type: Integer
-:Purpose: A component of the rule mask.
-:Required: Yes
-:Default: 10
 
 
 ``step take <bucket-name> [class <device-class>]``
@@ -552,11 +530,9 @@ There are three types of transformations possible:
 
    For example, imagine you have an existing rule like::
 
-     rule replicated_ruleset {
+     rule replicated_rule {
         id 0
         type replicated
-        min_size 1
-        max_size 10
         step take default
         step chooseleaf firstn 0 type rack
         step emit
@@ -565,11 +541,9 @@ There are three types of transformations possible:
    If you reclassify the root `default` as class `hdd`, the rule will
    become::
 
-     rule replicated_ruleset {
+     rule replicated_rule {
         id 0
         type replicated
-        min_size 1
-        max_size 10
         step take default class hdd
         step chooseleaf firstn 0 type rack
         step emit
@@ -715,4 +689,4 @@ Further, as noted above, be careful running old versions of the
 ``ceph-osd`` daemon after reverting to legacy values as the feature
 bit is not perfectly enforced.
 
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/wp-content/uploads/2016/08/weil-crush-sc06.pdf
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/assets/pdfs/weil-crush-sc06.pdf

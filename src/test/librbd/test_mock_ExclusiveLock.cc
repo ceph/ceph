@@ -265,7 +265,7 @@ public:
                                bool init_shutdown) {
     if (mock_image_ctx.clone_copy_on_read ||
         (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0 ||
-        is_rbd_rwl_enabled(mock_image_ctx.cct)) {
+        is_rbd_pwl_enabled(mock_image_ctx.cct)) {
       expect_set_require_lock(mock_image_dispatch, init_shutdown,
                               io::DIRECTION_BOTH);
     } else {

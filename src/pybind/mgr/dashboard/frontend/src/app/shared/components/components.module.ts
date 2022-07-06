@@ -16,6 +16,7 @@ import { ClickOutsideModule } from 'ng-click-outside';
 import { ChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
+import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { AlertPanelComponent } from './alert-panel/alert-panel.component';
@@ -24,6 +25,7 @@ import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button/copy2clipboard-button.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
+import { CustomLoginBannerComponent } from './custom-login-banner/custom-login-banner.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
 import { DocComponent } from './doc/doc.component';
 import { DownloadButtonComponent } from './download-button/download-button.component';
@@ -44,6 +46,7 @@ import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
+import { WizardComponent } from './wizard/wizard.component';
 
 @NgModule({
   imports: [
@@ -91,7 +94,10 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     DocComponent,
     Copy2ClipboardButtonComponent,
     DownloadButtonComponent,
-    FormButtonPanelComponent
+    FormButtonPanelComponent,
+    MotdComponent,
+    WizardComponent,
+    CustomLoginBannerComponent
   ],
   providers: [],
   exports: [
@@ -117,7 +123,10 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     DocComponent,
     Copy2ClipboardButtonComponent,
     DownloadButtonComponent,
-    FormButtonPanelComponent
+    FormButtonPanelComponent,
+    MotdComponent,
+    WizardComponent,
+    CustomLoginBannerComponent
   ]
 })
 export class ComponentsModule {}

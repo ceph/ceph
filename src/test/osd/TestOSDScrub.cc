@@ -33,7 +33,7 @@ class TestOSDScrub: public OSD {
 
 public:
   TestOSDScrub(CephContext *cct_,
-      ObjectStore *store_,
+      std::unique_ptr<ObjectStore> store_,
       int id,
       Messenger *internal,
       Messenger *external,
@@ -44,18 +44,21 @@ public:
       Messenger *osdc_messenger,
       MonClient *mc, const std::string &dev, const std::string &jdev,
       ceph::async::io_context_pool& ictx) :
-      OSD(cct_, store_, id, internal, external, hb_front_client, hb_back_client, hb_front_server, hb_back_server, osdc_messenger, mc, dev, jdev, ictx)
+      OSD(cct_, std::move(store_), id, internal, external,
+	  hb_front_client, hb_back_client,
+	  hb_front_server, hb_back_server,
+	  osdc_messenger, mc, dev, jdev, ictx)
   {
   }
 
   bool scrub_time_permit(utime_t now) {
-    return OSD::scrub_time_permit(now);
+    return service.get_scrub_services().scrub_time_permit(now);
   }
 };
 
 TEST(TestOSDScrub, scrub_time_permit) {
   ceph::async::io_context_pool icp(1);
-  ObjectStore *store = ObjectStore::create(g_ceph_context,
+  std::unique_ptr<ObjectStore> store = ObjectStore::create(g_ceph_context,
              g_conf()->osd_objectstore,
              g_conf()->osd_data,
              g_conf()->osd_journal);
@@ -68,7 +71,7 @@ TEST(TestOSDScrub, scrub_time_permit) {
   ms->bind(g_conf()->public_addr);
   MonClient mc(g_ceph_context, icp);
   mc.build_initial_monmap();
-  TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store, 0, ms, ms, ms, ms, ms, ms, ms, &mc, "", "", icp);
+  TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, std::move(store), 0, ms, ms, ms, ms, ms, ms, ms, &mc, "", "", icp);
 
   // These are now invalid
   int err = g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "24");

@@ -7,7 +7,6 @@ export class PrometheusAlertLabels {
 
 class Annotations {
   description: string;
-  summary: string;
 }
 
 class CommonAlertmanagerAlert {
@@ -80,6 +79,6 @@ export class PrometheusCustomAlert {
   status: 'resolved' | 'unprocessed' | 'active' | 'suppressed';
   name: string;
   url: string;
-  summary: string;
+  description: string;
   fingerprint?: string | boolean;
 }

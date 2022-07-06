@@ -6,7 +6,6 @@
 
 #include "librbd/AsyncRequest.h"
 #include "include/Context.h"
-#include "common/RWLock.h"
 #include "librbd/Utils.h"
 #include "librbd/Journal.h"
 

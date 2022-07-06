@@ -12,7 +12,7 @@
 #include "include/ceph_assert.h"
 #include "common/ceph_time.h"
 
-#ifndef suseconds_t
+#ifndef HAVE_SUSECONDS_T
 typedef long suseconds_t;
 #endif
 

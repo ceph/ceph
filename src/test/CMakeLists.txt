@@ -1,63 +1,82 @@
 include(AddCephTest)
 
-set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT} 
-    ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES} ${CMAKE_DL_LIBS})
+set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT}
+    ${GSSAPI_LIBRARIES} ${CMAKE_DL_LIBS})
+
+if(WIN32)
+  # Needed by Boost.
+  list(APPEND UNITTEST_LIBS ws2_32)
+endif()
 
 add_library(unit-main OBJECT unit.cc)
 target_include_directories(unit-main PRIVATE
   $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
 
-add_subdirectory(cls_hello)
-add_subdirectory(cls_fifo)
-add_subdirectory(cls_lock)
-add_subdirectory(cls_cas)
-add_subdirectory(cls_log)
-add_subdirectory(cls_numops)
-add_subdirectory(cls_sdk)
-if(WITH_RBD)
-  add_subdirectory(cls_journal)
-  add_subdirectory(cls_rbd)
-endif(WITH_RBD)
-add_subdirectory(cls_refcount)
-add_subdirectory(cls_rgw)
-add_subdirectory(cls_version)
-add_subdirectory(cls_lua)
-add_subdirectory(cls_rgw_gc)
-add_subdirectory(cls_queue)
-add_subdirectory(cls_2pc_queue)
-add_subdirectory(cls_cmpomap)
 add_subdirectory(common)
 add_subdirectory(compressor)
 add_subdirectory(crush)
 add_subdirectory(direct_messenger)
 add_subdirectory(encoding)
-add_subdirectory(erasure-code)
-add_subdirectory(filestore)
-add_subdirectory(fs)
-add_subdirectory(journal)
-add_subdirectory(libcephfs)
 add_subdirectory(librados)
-add_subdirectory(neorados)
 add_subdirectory(librados_test_stub)
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
-if(WITH_RBD)
+if(WITH_RBD AND NOT WIN32)
+  # librbd tests require libcls*, which in turn require libos and libosd, which
+  # haven't been ported to Windows yet.
   add_subdirectory(librbd)
-endif(WITH_RBD)
+endif(WITH_RBD AND NOT WIN32)
 if (WITH_CEPHFS)
   add_subdirectory(mds)
 endif()
-add_subdirectory(mon)
-add_subdirectory(mgr)
-add_subdirectory(msgr)
-add_subdirectory(ObjectMap)
-add_subdirectory(objectstore)
-add_subdirectory(os)
-add_subdirectory(osd)
-add_subdirectory(osdc)
 add_subdirectory(pybind)
-add_subdirectory(immutable_object_cache)
+
+# Not available on Windows for the time being.
+if(NOT WIN32)
+  # libcls_* dependencies cascade to osd, kv and other libs that are not
+  # available on Windows yet.
+  add_subdirectory(cls_hello)
+  add_subdirectory(cls_fifo)
+  add_subdirectory(cls_cas)
+  add_subdirectory(cls_lock)
+  add_subdirectory(cls_log)
+  add_subdirectory(cls_numops)
+  add_subdirectory(cls_sdk)
+  if(WITH_RBD)
+    add_subdirectory(cls_journal)
+    add_subdirectory(cls_rbd)
+  endif(WITH_RBD)
+  add_subdirectory(cls_refcount)
+  add_subdirectory(cls_rgw)
+  add_subdirectory(cls_version)
+  add_subdirectory(cls_lua)
+  add_subdirectory(cls_rgw_gc)
+  add_subdirectory(cls_queue)
+  add_subdirectory(cls_2pc_queue)
+  add_subdirectory(cls_cmpomap)
+  add_subdirectory(journal)
+
+  add_subdirectory(erasure-code)
+  add_subdirectory(filestore)
+  add_subdirectory(fs)
+  add_subdirectory(libcephfs)
+  add_subdirectory(libcephsqlite)
+  add_subdirectory(client)
+  add_subdirectory(mon)
+  if(WITH_MGR)
+    add_subdirectory(mgr)
+  endif()
+  add_subdirectory(msgr)
+  add_subdirectory(neorados)
+  add_subdirectory(objectstore)
+  add_subdirectory(ObjectMap)
+  add_subdirectory(os)
+  add_subdirectory(osd)
+  add_subdirectory(osdc)
+  add_subdirectory(immutable_object_cache)
+endif(NOT WIN32)
+
 if(WITH_RADOSGW)
   set(rgw_libs rgw_a)
   if(WITH_RADOSGW_AMQP_ENDPOINT)
@@ -68,9 +87,9 @@ if(WITH_RADOSGW)
   endif()
   add_subdirectory(rgw)
 endif(WITH_RADOSGW)
-if(WITH_RBD)
-  add_subdirectory(rbd_mirror)
-endif(WITH_RBD)
+if(WITH_RBD AND NOT WIN32)
+add_subdirectory(rbd_mirror)
+endif(WITH_RBD AND NOT WIN32)
 if(WITH_SEASTAR)
   add_subdirectory(crimson)
 endif()
@@ -119,7 +138,10 @@ if(WITH_LIBCEPHFS)
 endif(WITH_LIBCEPHFS)
 
 add_executable(test_build_librados buildtest_skeleton.cc)
-target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os ceph-common cls_lock_client ${BLKID_LIBRARIES})
+target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} ceph-common ${BLKID_LIBRARIES})
+if(NOT WIN32)
+  target_link_libraries(test_build_librados os osdc osd cls_lock_client)
+endif()
 
 # bench_log
 set(bench_log_srcs
@@ -128,20 +150,31 @@ set(bench_log_srcs
 add_executable(ceph_bench_log
   ${bench_log_srcs}
   )
-target_link_libraries(ceph_bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(ceph_bench_log global pthread ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+if(NOT WIN32)
+  target_link_libraries(ceph_bench_log rt)
+endif()
+
+if(WITH_SYSTEMD)
+  add_executable(ceph_bench_journald_logger
+    bench_journald_logger.cc)
+  target_link_libraries(ceph_bench_journald_logger ceph-common)
+endif()
 
 # ceph_test_mutate
 add_executable(ceph_test_mutate
   test_mutate.cc
   )
-target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES} 
+target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
+if(NOT WIN32)
 # test_trans
 add_executable(test_trans
   test_trans.cc
   )
 target_link_libraries(test_trans os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+endif()
 
 ## Benchmarks
 
@@ -169,9 +202,11 @@ if(WITH_KVS)
   install(TARGETS ceph_kvstorebench DESTINATION bin)
 endif(WITH_KVS)
 
-# ceph_objectstore_bench
-add_executable(ceph_objectstore_bench objectstore_bench.cc)
-target_link_libraries(ceph_objectstore_bench os global ${BLKID_LIBRARIES})
+if(NOT WIN32)
+  # ceph_objectstore_bench
+  add_executable(ceph_objectstore_bench objectstore_bench.cc)
+  target_link_libraries(ceph_objectstore_bench os global ${BLKID_LIBRARIES})
+endif()
 
 if(${WITH_RADOSGW})
   # test_cors
@@ -242,9 +277,6 @@ if(${WITH_RADOSGW})
 add_executable(ceph_test_librgw_file
   librgw_file.cc
   )
-if(WITH_RADOSGW_FCGI_FRONTEND)
-target_include_directories(ceph_test_librgw_file SYSTEM PRIVATE ${FCGI_INCLUDE_DIR})
-endif(WITH_RADOSGW_FCGI_FRONTEND)
 target_link_libraries(ceph_test_librgw_file
   rgw
   librados
@@ -252,6 +284,7 @@ target_link_libraries(ceph_test_librgw_file
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
+install(TARGETS ceph_test_librgw_file DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_librgw_file_cd (just the rgw_file create-delete bucket ops)
 add_executable(ceph_test_librgw_file_cd
@@ -264,6 +297,7 @@ target_link_libraries(ceph_test_librgw_file_cd
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
+install(TARGETS ceph_test_librgw_file_cd DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_librgw_file_gp (just the rgw_file get-put bucket ops)
 add_executable(ceph_test_librgw_file_gp
@@ -276,15 +310,13 @@ target_link_libraries(ceph_test_librgw_file_gp
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
+install(TARGETS ceph_test_librgw_file_gp DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_librgw_file_nfsns (nfs namespace tests)
 add_executable(ceph_test_librgw_file_nfsns
   librgw_file_nfsns.cc
   )
 target_include_directories(ceph_test_librgw_file_nfsns SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
-if(WITH_RADOSGW_FCGI_FRONTEND)
-target_include_directories(ceph_test_librgw_file_nfsns SYSTEM PRIVATE ${FCGI_INCLUDE_DIR})
-endif(WITH_RADOSGW_FCGI_FRONTEND)
 target_link_libraries(ceph_test_librgw_file_nfsns
   rgw
   librados
@@ -293,6 +325,7 @@ target_link_libraries(ceph_test_librgw_file_nfsns
   ${EXTRALIBS}
   )
   target_link_libraries(ceph_test_librgw_file_nfsns spawn)
+install(TARGETS ceph_test_librgw_file_nfsns DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_librgw_file_aw (nfs write transaction [atomic write] tests)
 add_executable(ceph_test_librgw_file_aw
@@ -305,6 +338,7 @@ target_link_libraries(ceph_test_librgw_file_aw
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
+install(TARGETS ceph_test_librgw_file_aw DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_librgw_file_marker (READDIR with string and uint64 offsets)
 add_executable(ceph_test_librgw_file_marker
@@ -319,6 +353,7 @@ target_link_libraries(ceph_test_librgw_file_marker
   ${EXTRALIBS}
   )
   target_link_libraries(ceph_test_librgw_file_marker spawn)
+install(TARGETS ceph_test_librgw_file_marker DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_librgw_file_xattr (attribute ops)
 add_executable(ceph_test_librgw_file_xattr
@@ -353,9 +388,11 @@ add_executable(test_rgw_ldap
 target_link_libraries(test_rgw_ldap
   librados
   ceph-common
-  ${OPENLDAP_LIBRARIES}
-  ${UNITTEST_LIBS}
-  )
+  ${UNITTEST_LIBS})
+if(WITH_OPENLDAP)
+  target_link_libraries(test_rgw_ldap
+    OpenLDAP::OpenLDAP)
+endif()
 endif(${WITH_RADOSGW})
 
 # ceph_multi_stress_watch
@@ -364,6 +401,13 @@ add_executable(ceph_multi_stress_watch
   )
 target_link_libraries(ceph_multi_stress_watch librados global radostest-cxx)
 
+install(TARGETS
+  ceph_bench_log
+  ceph_multi_stress_watch
+  ceph_omapbench
+  DESTINATION bin)
+
+if(NOT WIN32)
 #ceph_perf_local
 add_executable(ceph_perf_local
   perf_local.cc
@@ -381,10 +425,7 @@ endif()
 target_link_libraries(ceph_perf_local global ${UNITTEST_LIBS})
 
 install(TARGETS
-  ceph_bench_log
-  ceph_multi_stress_watch
   ceph_objectstore_bench
-  ceph_omapbench
   ceph_perf_local
   DESTINATION bin)
 
@@ -418,6 +459,7 @@ add_executable(ceph_test_snap_mapper
   $<TARGET_OBJECTS:unit-main>
   )
 target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES} ${UNITTEST_LIBS})
+endif(NOT WIN32)
 
 add_executable(ceph_test_stress_watch
   test_stress_watch.cc
@@ -432,6 +474,20 @@ target_link_libraries(ceph_test_stress_watch
   )
 install(TARGETS
   ceph_test_stress_watch
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_c2c
+  test_c2c.cc
+  )
+target_link_libraries(ceph_test_c2c
+  global
+  ceph-common
+  pthread
+  ${EXTRALIBS}
+  ${CMAKE_DL_LIBS}
+  )
+install(TARGETS
+  ceph_test_c2c
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(WITH_FUSE)
@@ -483,25 +539,31 @@ endif()
 
 #following dependencies are run inside make check unit tests
 add_dependencies(tests
-  ceph-mon
   ceph-authtool
-  get_command_descriptions
-  crushtool
   ceph-conf
   rados
-  monmaptool
-  ceph-osd
+  ceph_snappy)
+if(NOT WIN32)
+  # Not currently supported on Windows
+  add_dependencies(tests
+  ceph-mon
+  get_command_descriptions
   ceph-dencoder
+  ceph-dencoder-modules
   ceph-objectstore-tool
   ceph-kvstore-tool
   ceph-monstore-tool
+  ceph-osd
   osdmaptool
   ceph_example
   ceph_snappy
   cls_lock
   ceph_test_objectstore
   ceph_erasure_code_non_regression
-  cython_modules)
+  cython_modules
+  crushtool
+  monmaptool)
+
 if (WITH_CEPHFS)
   add_dependencies(tests ceph-mds)
 endif()
@@ -535,6 +597,9 @@ if(WITH_RBD)
     add_ceph_test(rbd-ggate.sh ${CMAKE_CURRENT_SOURCE_DIR}/rbd-ggate.sh)
   endif(FREEBSD)
 endif(WITH_RBD)
+
+endif(NOT WIN32)
+
 add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 
 # flaky, see https://tracker.ceph.com/issues/44243
@@ -604,12 +669,16 @@ add_executable(unittest_str_list
 add_ceph_unittest(unittest_str_list)
 target_link_libraries(unittest_str_list global)
 
+# This test's usage of templates generates more sections than a PE file can
+# contain.
+if(NOT MINGW)
 # unittest_log
 add_executable(unittest_log
   ${CMAKE_SOURCE_DIR}/src/log/test.cc
   )
 add_ceph_unittest(unittest_log)
 target_link_libraries(unittest_log global)
+endif(NOT MINGW)
 
 # unittest_base64
 add_executable(unittest_base64
@@ -647,6 +716,7 @@ add_executable(unittest_run_cmd
 add_ceph_unittest(unittest_run_cmd)
 target_link_libraries(unittest_run_cmd global)
 
+if(NOT WIN32)
 # signals
 add_executable(unittest_signals
   signals.cc
@@ -654,6 +724,7 @@ add_executable(unittest_signals
   )
 add_ceph_unittest(unittest_signals)
 target_link_libraries(unittest_signals global)
+endif()
 
 # unittest_simple_spin
 add_executable(unittest_simple_spin
@@ -835,6 +906,7 @@ target_link_libraries(unittest_rbd_replay
   librbd
   librados
   global
+  ceph-common
   rbd_replay
   rbd_replay_ios
   ${BLKID_LIBRARIES}
@@ -860,11 +932,13 @@ add_executable(unittest_texttable
 add_ceph_unittest(unittest_texttable)
 target_link_libraries(unittest_texttable ceph-common)
 
+if(NOT WIN32)
 # unittest_on_exit
 add_executable(unittest_on_exit
   on_exit.cc)
 add_ceph_unittest(unittest_on_exit)
 target_link_libraries(unittest_on_exit ceph-common)
+endif()
 
 # unittest_subprocess
 add_executable(unittest_subprocess
@@ -889,4 +963,6 @@ add_ceph_unittest(unittest_any)
 add_executable(unittest_weighted_shuffle test_weighted_shuffle.cc)
 add_ceph_unittest(unittest_weighted_shuffle)
 
+add_executable(unittest_intarith test_intarith.cc)
+add_ceph_unittest(unittest_intarith)
 #make check ends here

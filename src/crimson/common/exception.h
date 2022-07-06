@@ -8,17 +8,21 @@
 #include <seastar/core/future-util.hh>
 
 #include "crimson/common/log.h"
+#include "crimson/common/interruptible_future.h"
 
 namespace crimson::common {
 
-class system_shutdown_exception final : public std::exception{
+class interruption : public std::exception
+{};
+
+class system_shutdown_exception final : public interruption{
 public:
   const char* what() const noexcept final {
     return "system shutting down";
   }
 };
 
-class actingset_changed final : public std::exception {
+class actingset_changed final : public interruption {
 public:
   actingset_changed(bool sp) : still_primary(sp) {}
   const char* what() const noexcept final {

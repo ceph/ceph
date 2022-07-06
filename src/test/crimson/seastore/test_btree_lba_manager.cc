@@ -24,65 +24,122 @@ using namespace crimson::os::seastore;
 using namespace crimson::os::seastore::lba_manager;
 using namespace crimson::os::seastore::lba_manager::btree;
 
-struct btree_lba_manager_test :
-  public seastar_test_suite_t, JournalSegmentProvider {
+struct btree_test_base :
+  public seastar_test_suite_t, SegmentProvider {
+
   segment_manager::EphemeralSegmentManagerRef segment_manager;
-  Journal journal;
-  Cache cache;
-  BtreeLBAManagerRef lba_manager;
+  SegmentManagerGroupRef sms;
+  JournalRef journal;
+  ExtentPlacementManagerRef epm;
+  CacheRef cache;
 
-  const size_t block_size;
+  size_t block_size;
 
-  btree_lba_manager_test()
-    : segment_manager(segment_manager::create_test_ephemeral()),
-      journal(*segment_manager),
-      cache(*segment_manager),
-      lba_manager(new BtreeLBAManager(*segment_manager, cache)),
-      block_size(segment_manager->get_block_size())
-  {
-    journal.set_segment_provider(this);
-  }
+  WritePipeline pipeline;
 
-  segment_id_t next = 0;
-  get_segment_ret get_segment() final {
-    return get_segment_ret(
-      get_segment_ertr::ready_future_marker{},
-      next++);
-  }
+  segment_id_t next;
 
+  std::map<segment_id_t, segment_seq_t> segment_seqs;
+  std::map<segment_id_t, segment_type_t> segment_types;
+
+  mutable segment_info_t tmp_info;
+
+  btree_test_base() = default;
+
+  /*
+   * SegmentProvider interfaces
+   */
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
+
+  const segment_info_t& get_seg_info(segment_id_t id) const final {
+    tmp_info = {};
+    tmp_info.seq = segment_seqs.at(id);
+    tmp_info.type = segment_types.at(id);
+    return tmp_info;
+  }
+
+  segment_id_t allocate_segment(
+    segment_seq_t seq,
+    segment_type_t type,
+    data_category_t,
+    reclaim_gen_t
+  ) final {
+    auto ret = next;
+    next = segment_id_t{
+      segment_manager->get_device_id(),
+      next.device_segment_id() + 1};
+    segment_seqs[ret] = seq;
+    segment_types[ret] = type;
+    return ret;
+  }
+
+  void close_segment(segment_id_t) final {}
+
   void update_journal_tail_committed(journal_seq_t committed) final {}
 
-  auto submit_transaction(TransactionRef t)
-  {
-    auto record = cache.try_construct_record(*t);
-    if (!record) {
-      ceph_assert(0 == "cannot fail");
-    }
+  void update_segment_avail_bytes(segment_type_t, paddr_t) final {}
 
-    return journal.submit_record(std::move(*record)).safe_then(
-      [this, t=std::move(t)](auto p) mutable {
-	auto [addr, seq] = p;
-	cache.complete_commit(*t, addr, seq);
-	lba_manager->complete_transaction(*t);
-      },
-      crimson::ct_error::assert_all{});
+  void update_modify_time(segment_id_t, sea_time_point, std::size_t) final {}
+
+  SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
+
+  journal_seq_t get_dirty_extents_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
   }
 
+  journal_seq_t get_alloc_info_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
+  virtual void complete_commit(Transaction &t) {}
+  seastar::future<> submit_transaction(TransactionRef t)
+  {
+    auto record = cache->prepare_record(*t, this);
+    return journal->submit_record(std::move(record), t->get_handle()).safe_then(
+      [this, t=std::move(t)](auto submit_result) mutable {
+	cache->complete_commit(
+            *t,
+            submit_result.record_block_base,
+            submit_result.write_result.start_seq);
+	complete_commit(*t);
+      }).handle_error(crimson::ct_error::assert_all{});
+  }
+
+  virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;
   seastar::future<> set_up_fut() final {
+    segment_manager = segment_manager::create_test_ephemeral();
     return segment_manager->init(
     ).safe_then([this] {
-      return journal.open_for_write();
-    }).safe_then([this](auto addr) {
+      return segment_manager->mkfs(
+        segment_manager::get_ephemeral_device_config(0, 1));
+    }).safe_then([this] {
+      sms.reset(new SegmentManagerGroup());
+      journal = journal::make_segmented(*this);
+      epm.reset(new ExtentPlacementManager(false));
+      cache.reset(new Cache(*epm));
+
+      block_size = segment_manager->get_block_size();
+      next = segment_id_t{segment_manager->get_device_id(), 0};
+      sms->add_segment_manager(segment_manager.get());
+      epm->add_device(segment_manager.get(), true);
+      journal->set_write_pipeline(&pipeline);
+
+      return journal->open_for_write().discard_result();
+    }).safe_then([this] {
+      return epm->open();
+    }).safe_then([this] {
       return seastar::do_with(
-	make_transaction(),
-	[this](auto &transaction) {
-	  cache.init();
-	  return cache.mkfs(*transaction
-	  ).safe_then([this, &transaction] {
-	    return lba_manager->mkfs(*transaction);
-	  }).safe_then([this, &transaction] {
-	    return submit_transaction(std::move(transaction));
+	cache->create_transaction(
+            Transaction::src_t::MUTATE, "test_set_up_fut", false),
+	[this](auto &ref_t) {
+	  return with_trans_intr(*ref_t, [&](auto &t) {
+	    cache->init();
+	    return cache->mkfs(t
+	    ).si_then([this, &t] {
+	      return test_structure_setup(t);
+	    });
+	  }).safe_then([this, &ref_t] {
+	    return submit_transaction(std::move(ref_t));
 	  });
 	});
     }).handle_error(
@@ -92,17 +149,209 @@ struct btree_lba_manager_test :
     );
   }
 
+  virtual void test_structure_reset() {}
   seastar::future<> tear_down_fut() final {
-    return cache.close(
+    return cache->close(
     ).safe_then([this] {
-      return journal.close();
+      return journal->close();
+    }).safe_then([this] {
+      return epm->close();
+    }).safe_then([this] {
+      test_structure_reset();
+      segment_manager.reset();
+      sms.reset();
+      journal.reset();
+      epm.reset();
+      cache.reset();
     }).handle_error(
       crimson::ct_error::all_same_way([] {
 	ASSERT_FALSE("Unable to close");
       })
     );
   }
+};
 
+struct lba_btree_test : btree_test_base {
+  std::map<laddr_t, lba_map_val_t> check;
+
+  auto get_op_context(Transaction &t) {
+    return op_context_t<laddr_t>{*cache, t};
+  }
+
+  LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
+    return cache->get_root(
+      t
+    ).si_then([this, &t](RootBlockRef croot) {
+      auto mut_croot = cache->duplicate_for_write(
+	t, croot
+      )->cast<RootBlock>();
+      mut_croot->root.lba_root = LBABtree::mkfs(get_op_context(t));
+    });
+  }
+
+  void update_if_dirty(Transaction &t, LBABtree &btree, RootBlockRef croot) {
+    if (btree.is_root_dirty()) {
+      auto mut_croot = cache->duplicate_for_write(
+	t, croot
+      )->cast<RootBlock>();
+      mut_croot->root.lba_root = btree.get_root_undirty();
+    }
+  }
+
+  template <typename F>
+  auto lba_btree_update(F &&f) {
+    auto tref = cache->create_transaction(
+        Transaction::src_t::MUTATE, "test_btree_update", false);
+    auto &t = *tref;
+    with_trans_intr(
+      t,
+      [this, tref=std::move(tref), f=std::forward<F>(f)](auto &t) mutable {
+	return cache->get_root(
+	  t
+	).si_then([this, f=std::move(f), &t](RootBlockRef croot) {
+	  return seastar::do_with(
+	    LBABtree(croot->root.lba_root),
+	    [this, croot, f=std::move(f), &t](auto &btree) mutable {
+	      return std::invoke(
+		std::move(f), btree, t
+	      ).si_then([this, croot, &t, &btree] {
+		update_if_dirty(t, btree, croot);
+		return seastar::now();
+	      });
+	    });
+	}).si_then([this, tref=std::move(tref)]() mutable {
+	  return submit_transaction(std::move(tref));
+	});
+      }).unsafe_get0();
+  }
+
+  template <typename F>
+  auto lba_btree_read(F &&f) {
+    auto t = cache->create_transaction(
+        Transaction::src_t::READ, "test_btree_read", false);
+    return with_trans_intr(
+      *t,
+      [this, f=std::forward<F>(f)](auto &t) mutable {
+	return cache->get_root(
+	  t
+	).si_then([f=std::move(f), &t](RootBlockRef croot) mutable {
+	  return seastar::do_with(
+	    LBABtree(croot->root.lba_root),
+	    [f=std::move(f), &t](auto &btree) mutable {
+	      return std::invoke(
+		std::move(f), btree, t
+	      );
+	    });
+	});
+      }).unsafe_get0();
+  }
+
+  static auto get_map_val(extent_len_t len) {
+    return lba_map_val_t{0, P_ADDR_NULL, len, 0};
+  }
+
+  void insert(laddr_t addr, extent_len_t len) {
+    ceph_assert(check.count(addr) == 0);
+    check.emplace(addr, get_map_val(len));
+    lba_btree_update([=](auto &btree, auto &t) {
+      return btree.insert(
+	get_op_context(t), addr, get_map_val(len)
+      ).si_then([](auto){});
+    });
+  }
+
+  void remove(laddr_t addr) {
+    auto iter = check.find(addr);
+    ceph_assert(iter != check.end());
+    auto len = iter->second.len;
+    check.erase(iter++);
+    lba_btree_update([=](auto &btree, auto &t) {
+      return btree.lower_bound(
+	get_op_context(t), addr
+      ).si_then([this, len, addr, &btree, &t](auto iter) {
+	EXPECT_FALSE(iter.is_end());
+	EXPECT_TRUE(iter.get_key() == addr);
+	EXPECT_TRUE(iter.get_val().len == len);
+	return btree.remove(
+	  get_op_context(t), iter 
+	);
+      });
+    });
+  }
+
+  void check_lower_bound(laddr_t addr) {
+    auto iter = check.lower_bound(addr);
+    auto result = lba_btree_read([=](auto &btree, auto &t) {
+      return btree.lower_bound(
+	get_op_context(t), addr
+      ).si_then([](auto iter)
+		-> std::optional<std::pair<const laddr_t, const lba_map_val_t>> {
+	if (iter.is_end()) {
+	  return std::nullopt;
+	} else {
+	  return std::make_optional(
+	    std::make_pair(iter.get_key(), iter.get_val()));
+	}
+      });
+    });
+    if (iter == check.end()) {
+      EXPECT_FALSE(result);
+    } else {
+      EXPECT_TRUE(result);
+      decltype(result) to_check = *iter;
+      EXPECT_EQ(to_check, *result);
+    }
+  }
+};
+
+TEST_F(lba_btree_test, basic)
+{
+  run_async([this] {
+    constexpr unsigned total = 16<<10;
+    for (unsigned i = 0; i < total; i += 16) {
+      insert(i, 8);
+    }
+
+    for (unsigned i = 0; i < total; i += 16) {
+      check_lower_bound(i);
+      check_lower_bound(i + 4);
+      check_lower_bound(i + 8);
+      check_lower_bound(i + 12);
+    }
+  });
+}
+
+struct btree_lba_manager_test : btree_test_base {
+  BtreeLBAManagerRef lba_manager;
+
+  btree_lba_manager_test() = default;
+
+  void complete_commit(Transaction &t) final {
+    std::vector<CachedExtentRef> lba_to_clear;
+    lba_to_clear.reserve(t.get_retired_set().size());
+    for (auto &e: t.get_retired_set()) {
+      if (e->is_logical() || is_lba_node(e->get_type()))
+	lba_to_clear.push_back(e);
+    }
+    std::vector<CachedExtentRef> lba_to_link;
+    lba_to_link.reserve(t.get_fresh_block_stats().num);
+    t.for_each_fresh_block([&](auto &e) {
+      if (e->is_valid() &&
+	  (is_lba_node(e->get_type()) || e->is_logical()))
+	  lba_to_link.push_back(e);
+    });
+
+    lba_manager->complete_transaction(t, lba_to_clear, lba_to_link);
+  }
+
+  LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
+    lba_manager.reset(new BtreeLBAManager(*cache));
+    return lba_manager->mkfs(t);
+  }
+
+  void test_structure_reset() final {
+    lba_manager.reset();
+  }
 
   struct test_extent_t {
     paddr_t addr;
@@ -116,25 +365,33 @@ struct btree_lba_manager_test :
     test_lba_mapping_t mappings;
   };
 
-  auto create_transaction() {
+  auto create_transaction(bool create_fake_extent=true) {
     auto t = test_transaction_t{
-      make_transaction(),
+      cache->create_transaction(
+          Transaction::src_t::MUTATE, "test_mutate_lba", false),
       test_lba_mappings
     };
-    cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
+    if (create_fake_extent) {
+      cache->alloc_new_extent<TestBlockPhysical>(
+          *t.t,
+          TestBlockPhysical::SIZE,
+          placement_hint_t::HOT,
+          0);
+    };
     return t;
   }
 
   auto create_weak_transaction() {
     auto t = test_transaction_t{
-      make_weak_transaction(),
+      cache->create_transaction(
+          Transaction::src_t::READ, "test_read_weak", true),
       test_lba_mappings
     };
     return t;
   }
 
   void submit_test_transaction(test_transaction_t t) {
-    submit_transaction(std::move(t.t)).get0();
+    submit_transaction(std::move(t.t)).get();
     test_lba_mappings.swap(t.mappings);
   }
 
@@ -153,7 +410,7 @@ struct btree_lba_manager_test :
     );
   }
 
-  segment_off_t next_off = 0;
+  seastore_off_t next_off = 0;
   paddr_t get_paddr() {
     next_off += block_size;
     return make_fake_paddr(next_off);
@@ -164,40 +421,20 @@ struct btree_lba_manager_test :
     laddr_t hint,
     size_t len,
     paddr_t paddr) {
-    auto ret = lba_manager->alloc_extent(*t.t, hint, len, paddr).unsafe_get0();
+    auto ret = with_trans_intr(
+      *t.t,
+      [=](auto &t) {
+	return lba_manager->alloc_extent(t, hint, len, paddr);
+      }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());
-    auto [b, e] = get_overlap(t, ret->get_laddr(), len);
+    auto [b, e] = get_overlap(t, ret->get_key(), len);
     EXPECT_EQ(b, e);
     t.mappings.emplace(
       std::make_pair(
-	ret->get_laddr(),
+	ret->get_key(),
 	test_extent_t{
-	  ret->get_paddr(),
-	  ret->get_length(),
-	  1
-        }
-      ));
-    return ret;
-  }
-
-  auto set_mapping(
-    test_transaction_t &t,
-    laddr_t addr,
-    size_t len,
-    paddr_t paddr) {
-    auto [b, e] = get_overlap(t, addr, len);
-    EXPECT_EQ(b, e);
-
-    auto ret = lba_manager->set_extent(*t.t, addr, len, paddr).unsafe_get0();
-    EXPECT_EQ(addr, ret->get_laddr());
-    EXPECT_EQ(len, ret->get_length());
-    EXPECT_EQ(paddr, ret->get_paddr());
-    t.mappings.emplace(
-      std::make_pair(
-	ret->get_laddr(),
-	test_extent_t{
-	  ret->get_paddr(),
+	  ret->get_val(),
 	  ret->get_length(),
 	  1
         }
@@ -218,9 +455,13 @@ struct btree_lba_manager_test :
     ceph_assert(target->second.refcount > 0);
     target->second.refcount--;
 
-    auto refcnt = lba_manager->decref_extent(
+    auto refcnt = with_trans_intr(
       *t.t,
-      target->first).unsafe_get0().refcount;
+      [=](auto &t) {
+	return lba_manager->decref_extent(
+	  t,
+	  target->first);
+      }).unsafe_get0().refcount;
     EXPECT_EQ(refcnt, target->second.refcount);
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
@@ -238,9 +479,13 @@ struct btree_lba_manager_test :
     test_lba_mapping_t::iterator target) {
     ceph_assert(target->second.refcount > 0);
     target->second.refcount++;
-    auto refcnt = lba_manager->incref_extent(
+    auto refcnt = with_trans_intr(
       *t.t,
-      target->first).unsafe_get0().refcount;
+      [=](auto &t) {
+	return lba_manager->incref_extent(
+	  t,
+	  target->first);
+      }).unsafe_get0().refcount;
     EXPECT_EQ(refcnt, target->second.refcount);
   }
 
@@ -269,25 +514,45 @@ struct btree_lba_manager_test :
 
   void check_mappings(test_transaction_t &t) {
     for (auto &&i: t.mappings) {
-      auto ret_list = lba_manager->get_mapping(
-	*t.t, i.first, i.second.len
-      ).unsafe_get0();
+      auto laddr = i.first;
+      auto len = i.second.len;
+
+      auto ret_list = with_trans_intr(
+	*t.t,
+	[=](auto &t) {
+	  return lba_manager->get_mappings(
+	    t, laddr, len);
+	}).unsafe_get0();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
-      EXPECT_EQ(i.second.addr, ret->get_paddr());
-      EXPECT_EQ(i.first, ret->get_laddr());
-      EXPECT_EQ(i.second.len, ret->get_length());
+      EXPECT_EQ(i.second.addr, ret->get_val());
+      EXPECT_EQ(laddr, ret->get_key());
+      EXPECT_EQ(len, ret->get_length());
+
+      auto ret_pin = with_trans_intr(
+	*t.t,
+	[=](auto &t) {
+	  return lba_manager->get_mapping(
+	    t, laddr);
+	}).unsafe_get0();
+      EXPECT_EQ(i.second.addr, ret_pin->get_val());
+      EXPECT_EQ(laddr, ret_pin->get_key());
+      EXPECT_EQ(len, ret_pin->get_length());
     }
-    lba_manager->scan_mappings(
+    with_trans_intr(
       *t.t,
-      0,
-      L_ADDR_MAX,
-      [iter=t.mappings.begin(), &t](auto l, auto p, auto len) mutable {
-	EXPECT_NE(iter, t.mappings.end());
-	EXPECT_EQ(l, iter->first);
-	EXPECT_EQ(p, iter->second.addr);
-	EXPECT_EQ(len, iter->second.len);
-	++iter;
+      [=, &t](auto &) {
+	return lba_manager->scan_mappings(
+	  *t.t,
+	  0,
+	  L_ADDR_MAX,
+	  [iter=t.mappings.begin(), &t](auto l, auto p, auto len) mutable {
+	    EXPECT_NE(iter, t.mappings.end());
+	    EXPECT_EQ(l, iter->first);
+	    EXPECT_EQ(p, iter->second.addr);
+	    EXPECT_EQ(len, iter->second.len);
+	    ++iter;
+	  });
       }).unsafe_get();
   }
 };
@@ -341,8 +606,8 @@ TEST_F(btree_lba_manager_test, force_split_merge)
 	  check_mappings(t);
 	  check_mappings();
 	}
-	incref_mapping(t, ret->get_laddr());
-	decref_mapping(t, ret->get_laddr());
+	incref_mapping(t, ret->get_key());
+	decref_mapping(t, ret->get_key());
       }
       logger().debug("submitting transaction");
       submit_test_transaction(std::move(t));
@@ -391,7 +656,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
   run_async([this] {
     {
       auto t = create_transaction();
-      for (unsigned i = 0; i < 600; ++i) {
+      for (unsigned i = 0; i < 400; ++i) {
 	alloc_mapping(t, 0, block_size, get_paddr());
       }
       check_mappings(t);
@@ -424,6 +689,43 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
       check_mappings(t);
       submit_test_transaction(std::move(t));
     }
+    check_mappings();
+  });
+}
+
+TEST_F(btree_lba_manager_test, split_merge_multi)
+{
+  run_async([this] {
+    auto iterate = [&](auto f) {
+      for (uint64_t i = 0; i < (1<<10); ++i) {
+	auto t = create_transaction(false);
+	logger().debug("opened transaction");
+	for (unsigned j = 0; j < 5; ++j) {
+	  f(t, (i * 5) + j);
+	}
+	logger().debug("submitting transaction");
+	submit_test_transaction(std::move(t));
+      }
+    };
+    iterate([&](auto &t, auto idx) {
+      alloc_mapping(t, idx * block_size, block_size, get_paddr());
+    });
+    check_mappings();
+    iterate([&](auto &t, auto idx) {
+      if ((idx % 32) > 0) {
+	decref_mapping(t, idx * block_size);
+      }
+    });
+    check_mappings();
+    iterate([&](auto &t, auto idx) {
+      if ((idx % 32) > 0) {
+	alloc_mapping(t, idx * block_size, block_size, get_paddr());
+      }
+    });
+    check_mappings();
+    iterate([&](auto &t, auto idx) {
+      decref_mapping(t, idx * block_size);
+    });
     check_mappings();
   });
 }

@@ -97,6 +97,12 @@ protected:
      * so at most one copy will execute simultaneously for a given thread pool.
      * It can be used for non-thread-safe finalization. */
     virtual void _void_process_finish(void *) = 0;
+    void set_timeout(time_t ti){
+      timeout_interval = ceph::make_timespan(ti);
+    }
+    void set_suicide_timeout(time_t sti){
+      suicide_interval = ceph::make_timespan(sti);
+    }
   };
 
   // track thread pool size changes

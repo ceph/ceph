@@ -185,6 +185,8 @@ Internally, S3 operations are mapped to ACL permissions thus:
 +---------------------------------------+---------------+
 | ``s3:GetReplicationConfiguration``    | ``READ_ACP``  |
 +---------------------------------------+---------------+
+| ``s3:GetBucketEncryption``            | ``READ_ACP``  |
++---------------------------------------+---------------+
 | ``s3:DeleteBucketPolicy``             | ``WRITE_ACP`` |
 +---------------------------------------+---------------+
 | ``s3:DeleteBucketWebsite``            | ``WRITE_ACP`` |
@@ -218,6 +220,8 @@ Internally, S3 operations are mapped to ACL permissions thus:
 | ``s3:PutObjectVersionAcl``            | ``WRITE_ACP`` |
 +---------------------------------------+---------------+
 | ``s3:PutReplicationConfiguration``    | ``WRITE_ACP`` |
++---------------------------------------+---------------+
+| ``s3:PutBucketEncryption``            | ``WRITE_ACP`` |
 +---------------------------------------+---------------+
 
 Some mappings, (e.g. ``s3:CreateBucket`` to ``WRITE``) are not

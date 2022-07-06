@@ -23,6 +23,8 @@
 #include "include/btree_map.h"
 #include "include/mempool.h"
 
+using namespace std;
+
 void check_usage(mempool::pool_index_t ix)
 {
   mempool::pool_t *pool = &mempool::get_pool(ix);
@@ -402,12 +404,39 @@ TEST(mempool, btree_map_test)
   ASSERT_EQ(0, mempool::osd::allocated_bytes());
 }
 
+TEST(mempool, check_shard_select)
+{
+  const size_t samples = mempool::num_shards * 100;
+  std::atomic_int shards[mempool::num_shards] = {0};
+  std::vector<std::thread> workers;
+  for (size_t i = 0; i < samples; i++) {
+    workers.push_back(
+      std::thread([&](){
+          size_t i = mempool::pool_t::pick_a_shard_int();
+          shards[i]++;
+        }));
+  }
+  for (auto& t:workers) {
+    t.join();
+  }
+  workers.clear();
+
+  size_t missed = 0;
+  for (size_t i = 0; i < mempool::num_shards; i++) {
+    if (shards[i] == 0) {
+      missed++;
+    }
+  }
+
+  // If more than half of the shards did not get anything,
+  // the distribution is bad enough to deserve a failure.
+  EXPECT_LT(missed, mempool::num_shards / 2);
+}
 
 
 int main(int argc, char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,

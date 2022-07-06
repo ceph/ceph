@@ -264,8 +264,8 @@ Pool specific commands
 :command:`append` *name* *infile*
   Append object name to the cluster with contents from infile.
 
-:command:`rm` *name*
-  Remove object name.
+:command:`rm` [--force-full] *name* ...
+  Remove object(s) with name(s). With ``--force-full`` will remove when cluster is marked full.
 
 :command:`listwatchers` *name*
   List the watchers of object name.
@@ -395,7 +395,7 @@ Availability
 ============
 
 **rados** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the Ceph documentation at http://ceph.com/docs for more information.
+the Ceph documentation at https://docs.ceph.com for more information.
 
 
 See also

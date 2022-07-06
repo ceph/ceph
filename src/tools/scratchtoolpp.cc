@@ -27,6 +27,8 @@ using namespace librados;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
+using namespace std;
+
 void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
   str[0] = '\0';

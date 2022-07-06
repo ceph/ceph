@@ -10,7 +10,6 @@
 #include "include/rbd/object_map_types.h"
 #include "common/AsyncOpTracker.h"
 #include "common/bit_vector.hpp"
-#include "common/RWLock.h"
 #include "common/RefCountedObj.h"
 #include "librbd/Utils.h"
 #include <boost/optional.hpp>

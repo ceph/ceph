@@ -8,7 +8,7 @@ describe('DurationPipe', () => {
   });
 
   it('transforms seconds into a human readable duration', () => {
-    expect(pipe.transform(0)).toBe('1 second');
+    expect(pipe.transform(0)).toBe('');
     expect(pipe.transform(6)).toBe('6 seconds');
     expect(pipe.transform(60)).toBe('1 minute');
     expect(pipe.transform(600)).toBe('10 minutes');

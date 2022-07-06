@@ -2,10 +2,14 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { HealthService } from '~/app/shared/api/health.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { CssHelper } from '~/app/shared/classes/css-helper';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { OsdSettings } from '~/app/shared/models/osd-settings';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
@@ -15,7 +19,6 @@ import {
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
-import styles from '~/styles.scss';
 
 @Component({
   selector: 'cd-health',
@@ -24,15 +27,20 @@ import styles from '~/styles.scss';
 })
 export class HealthComponent implements OnInit, OnDestroy {
   healthData: any;
+  osdSettings = new OsdSettings();
   interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
   icons = Icons;
+  color: string;
 
   clientStatsConfig = {
     colors: [
       {
-        backgroundColor: [styles.chartHealthColorCyan, styles.chartHealthColorPurple]
+        backgroundColor: [
+          this.cssHelper.propertyValue('chart-color-cyan'),
+          this.cssHelper.propertyValue('chart-color-purple')
+        ]
       }
     ]
   };
@@ -40,7 +48,10 @@ export class HealthComponent implements OnInit, OnDestroy {
   rawCapacityChartConfig = {
     colors: [
       {
-        backgroundColor: [styles.chartHealthColorBlue, styles.chartHealthColorGray]
+        backgroundColor: [
+          this.cssHelper.propertyValue('chart-color-blue'),
+          this.cssHelper.propertyValue('chart-color-gray')
+        ]
       }
     ]
   };
@@ -53,12 +64,14 @@ export class HealthComponent implements OnInit, OnDestroy {
 
   constructor(
     private healthService: HealthService,
+    private osdService: OsdService,
     private authStorageService: AuthStorageService,
     private pgCategoryService: PgCategoryService,
     private featureToggles: FeatureTogglesService,
     private refreshIntervalService: RefreshIntervalService,
     private dimlessBinary: DimlessBinaryPipe,
-    private dimless: DimlessPipe
+    private dimless: DimlessPipe,
+    private cssHelper: CssHelper
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -68,6 +81,13 @@ export class HealthComponent implements OnInit, OnDestroy {
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
     });
+
+    this.osdService
+      .getOsdSettings()
+      .pipe(take(1))
+      .subscribe((data: any) => {
+        this.osdSettings = data;
+      });
   }
 
   ngOnDestroy() {
@@ -92,7 +112,7 @@ export class HealthComponent implements OnInit, OnDestroy {
         this.healthData.client_perf.read_op_per_sec
       )} ${$localize`/s`}`
     );
-    ratioData.push(this.healthData.client_perf.read_op_per_sec);
+    ratioData.push(this.calcPercentage(this.healthData.client_perf.read_op_per_sec, total));
     ratioLabels.push(
       `${$localize`Writes`}: ${this.dimless.transform(
         this.healthData.client_perf.write_op_per_sec
@@ -140,6 +160,17 @@ export class HealthComponent implements OnInit, OnDestroy {
     const percentUsed = this.calcPercentage(
       data.df.stats.total_used_raw_bytes,
       data.df.stats.total_bytes
+    );
+
+    if (percentUsed / 100 >= this.osdSettings.nearfull_ratio) {
+      this.color = 'chart-color-red';
+    } else if (percentUsed / 100 >= this.osdSettings.full_ratio) {
+      this.color = 'chart-color-yellow';
+    } else {
+      this.color = 'chart-color-blue';
+    }
+    this.rawCapacityChartConfig.colors[0].backgroundColor[0] = this.cssHelper.propertyValue(
+      this.color
     );
 
     chart.dataset[0].data = [percentUsed, percentAvailable];
@@ -242,6 +273,6 @@ export class HealthComponent implements OnInit, OnDestroy {
       return 0;
     }
 
-    return Math.round((dividend / divisor) * 100);
+    return Math.ceil((dividend / divisor) * 100 * 100) / 100;
   }
 }

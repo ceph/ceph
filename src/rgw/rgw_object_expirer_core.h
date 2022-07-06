@@ -29,7 +29,6 @@
 #include "include/utime.h"
 #include "include/str_list.h"
 
-#include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 
 class RGWSI_RADOS;
@@ -40,45 +39,43 @@ class cls_timeindex_entry;
 class RGWObjExpStore {
   CephContext *cct;
   RGWSI_RADOS *rados_svc;
-  RGWSI_Zone *zone_svc;
+  rgw::sal::RadosStore* store;
 public:
-  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc) : cct(_cct),
+  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, rgw::sal::RadosStore* _store) : cct(_cct),
                                                                                       rados_svc(_rados_svc),
-                                                                                      zone_svc(_zone_svc) {}
+                                                                                      store(_store) {}
 
-  int objexp_hint_add(const ceph::real_time& delete_at,
-                      const string& tenant_name,
-                      const string& bucket_name,
-                      const string& bucket_id,
+  int objexp_hint_add(const DoutPrefixProvider *dpp, 
+                      const ceph::real_time& delete_at,
+                      const std::string& tenant_name,
+                      const std::string& bucket_name,
+                      const std::string& bucket_id,
                       const rgw_obj_index_key& obj_key);
 
-  int objexp_hint_list(const string& oid,
+  int objexp_hint_list(const DoutPrefixProvider *dpp, 
+                       const std::string& oid,
                        const ceph::real_time& start_time,
                        const ceph::real_time& end_time,
                        const int max_entries,
-                       const string& marker,
-                       list<cls_timeindex_entry>& entries, /* out */
-                       string *out_marker,                 /* out */
+                       const std::string& marker,
+                       std::list<cls_timeindex_entry>& entries, /* out */
+                       std::string *out_marker,                 /* out */
                        bool *truncated);                   /* out */
 
-  int objexp_hint_trim(const string& oid,
+  int objexp_hint_trim(const DoutPrefixProvider *dpp, 
+                       const std::string& oid,
                        const ceph::real_time& start_time,
                        const ceph::real_time& end_time,
-                       const string& from_marker,
-                       const string& to_marker);
+                       const std::string& from_marker,
+                       const std::string& to_marker);
 };
 
 class RGWObjectExpirer {
 protected:
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::Store* store;
   RGWObjExpStore exp_store;
 
-  int init_bucket_info(const std::string& tenant_name,
-                       const std::string& bucket_name,
-                       const std::string& bucket_id,
-                       RGWBucketInfo& bucket_info);
-
-  class OEWorker : public Thread {
+  class OEWorker : public Thread, public DoutPrefixProvider {
     CephContext *cct;
     RGWObjectExpirer *oe;
     ceph::mutex lock = ceph::make_mutex("OEWorker");
@@ -93,46 +90,55 @@ protected:
 
     void *entry() override;
     void stop();
+
+    CephContext *get_cct() const override;
+    unsigned get_subsys() const override;
+    std::ostream& gen_prefix(std::ostream& out) const override;
   };
 
   OEWorker *worker{nullptr};
   std::atomic<bool> down_flag = { false };
 
 public:
-  explicit RGWObjectExpirer(rgw::sal::RGWRadosStore *_store)
+  explicit RGWObjectExpirer(rgw::sal::Store* _store)
     : store(_store),
-      exp_store(_store->getRados()->ctx(), _store->svc()->rados, _store->svc()->zone),
+      exp_store(_store->ctx(), static_cast<rgw::sal::RadosStore*>(store)->svc()->rados, static_cast<rgw::sal::RadosStore*>(store)),
       worker(NULL) {
   }
   ~RGWObjectExpirer() {
     stop_processor();
   }
 
-  int hint_add(const ceph::real_time& delete_at,
-               const string& tenant_name,
-               const string& bucket_name,
-               const string& bucket_id,
+  int hint_add(const DoutPrefixProvider *dpp, 
+               const ceph::real_time& delete_at,
+               const std::string& tenant_name,
+               const std::string& bucket_name,
+               const std::string& bucket_id,
                const rgw_obj_index_key& obj_key) {
-    return exp_store.objexp_hint_add(delete_at, tenant_name, bucket_name,
+    return exp_store.objexp_hint_add(dpp, delete_at, tenant_name, bucket_name,
                                      bucket_id, obj_key);
   }
 
-  int garbage_single_object(objexp_hint_entry& hint);
+  int garbage_single_object(const DoutPrefixProvider *dpp, objexp_hint_entry& hint);
 
-  void garbage_chunk(std::list<cls_timeindex_entry>& entries, /* in  */
+  void garbage_chunk(const DoutPrefixProvider *dpp, 
+                     std::list<cls_timeindex_entry>& entries, /* in  */
                      bool& need_trim);                        /* out */
 
-  void trim_chunk(const std::string& shard,
+  void trim_chunk(const DoutPrefixProvider *dpp, 
+                  const std::string& shard,
                   const utime_t& from,
                   const utime_t& to,
-                  const string& from_marker,
-                  const string& to_marker);
+                  const std::string& from_marker,
+                  const std::string& to_marker);
 
-  bool process_single_shard(const std::string& shard,
+  bool process_single_shard(const DoutPrefixProvider *dpp, 
+                            const std::string& shard,
                             const utime_t& last_run,
                             const utime_t& round_start);
 
-  bool inspect_all_shards(const utime_t& last_run,
+  bool inspect_all_shards(const DoutPrefixProvider *dpp, 
+                          const utime_t& last_run,
                           const utime_t& round_start);
 
   bool going_down();

@@ -14,7 +14,6 @@
 
 #include "SocketConnection.h"
 
-#include "ProtocolV1.h"
 #include "ProtocolV2.h"
 #include "SocketMessenger.h"
 
@@ -22,19 +21,15 @@
 #include "Interceptor.h"
 #endif
 
+using std::ostream;
 using namespace crimson::net;
 using crimson::common::local_conf;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
-                                   ChainedDispatchers& dispatchers,
-                                   bool is_msgr2)
-  : messenger(messenger)
+                                   ChainedDispatchers& dispatchers)
+  : messenger(messenger),
+    protocol(std::make_unique<ProtocolV2>(dispatchers, *this, messenger))
 {
-  if (is_msgr2) {
-    protocol = std::make_unique<ProtocolV2>(dispatchers, *this, messenger);
-  } else {
-    protocol = std::make_unique<ProtocolV1>(dispatchers, *this, messenger);
-  }
 #ifdef UNIT_TESTS_BUILT
   if (messenger.interceptor) {
     interceptor = messenger.interceptor;
@@ -75,7 +70,7 @@ bool SocketConnection::peer_wins() const
   return (messenger.get_myaddr() > peer_addr || policy.server);
 }
 
-seastar::future<> SocketConnection::send(MessageRef msg)
+seastar::future<> SocketConnection::send(MessageURef msg)
 {
   assert(seastar::this_shard_id() == shard_id());
   return protocol->send(std::move(msg));
@@ -134,6 +129,10 @@ SocketConnection::close_clean(bool dispatch_reset)
 
 seastar::shard_id SocketConnection::shard_id() const {
   return messenger.shard_id();
+}
+
+seastar::socket_address SocketConnection::get_local_address() const {
+  return protocol->socket->get_local_address();
 }
 
 void SocketConnection::print(ostream& out) const {

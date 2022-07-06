@@ -25,7 +25,10 @@ function run() {
     export CEPH_MON="127.0.0.1:7114" # git grep '\<7114\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON --osd_max_backfills=1 --debug_reserver=20"
+    CEPH_ARGS+="--mon-host=$CEPH_MON --osd_max_backfills=1 --debug_reserver=20 "
+    # Set osd op queue = wpq for the tests. Recovery priority is not
+    # considered by mclock_scheduler leading to unexpected results.
+    CEPH_ARGS+="--osd-op-queue=wpq "
     export objects=200
     export poolprefix=test
     export FORCE_PRIO="255"    # See OSD_RECOVERY_PRIORITY_FORCED
@@ -425,7 +428,31 @@ function TEST_recovery_pool_priority() {
 
     ceph osd pool set $pool1 size 2
     ceph osd pool set $pool2 size 2
-    sleep 10
+
+    # Wait for both PGs to be in recovering state
+    ceph pg dump pgs
+
+    # Wait for recovery to start
+    set -o pipefail
+    count=0
+    while(true)
+    do
+      if test $(ceph --format json pg dump pgs |
+	      jq '.pg_stats | .[] | .state | contains("recovering")' | grep -c true) == "2"
+      then
+        break
+      fi
+      sleep 2
+      if test "$count" -eq "10"
+      then
+        echo "Recovery never started on both PGs"
+        return 1
+      fi
+      count=$(expr $count + 1)
+    done
+    set +o pipefail
+    ceph pg dump pgs
+
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/dump.${chk_osd1_1}.out
     echo osd.${chk_osd1_1}
     cat $dir/dump.${chk_osd1_1}.out

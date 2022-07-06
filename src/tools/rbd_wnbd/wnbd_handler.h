@@ -65,7 +65,7 @@ class WnbdHandler
 private:
   librbd::Image &image;
   std::string instance_name;
-  uint32_t block_count;
+  uint64_t block_count;
   uint32_t block_size;
   bool readonly;
   bool rbd_cache_enabled;
@@ -76,7 +76,7 @@ private:
 
 public:
   WnbdHandler(librbd::Image& _image, std::string _instance_name,
-              uint32_t _block_count, uint32_t _block_size,
+              uint64_t _block_count, uint32_t _block_size,
               bool _readonly, bool _rbd_cache_enabled,
               uint32_t _io_req_workers,
               uint32_t _io_reply_workers)
@@ -128,8 +128,8 @@ private:
     WnbdRequestType req_type = WnbdReqTypeUnknown;
     uint64_t req_handle = 0;
     uint32_t err_code = 0;
-    uint32_t req_size;
-    uint32_t req_from;
+    size_t req_size;
+    uint64_t req_from;
     bufferlist data;
 
     IOContext()

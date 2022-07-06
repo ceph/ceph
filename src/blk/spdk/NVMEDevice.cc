@@ -47,11 +47,16 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << sn << ") "
 
+using namespace std;
+
 static constexpr uint16_t data_buffer_default_num = 1024;
 
 static constexpr uint32_t data_buffer_size = 8192;
 
 static constexpr uint16_t inline_segment_num = 32;
+
+/* Default to 10 seconds for the keep alive value. This value is arbitrary. */
+static constexpr uint32_t nvme_ctrlr_keep_alive_timeout_in_ms = 10000;
 
 static void io_complete(void *t, const struct spdk_nvme_cpl *completion);
 
@@ -76,6 +81,7 @@ class SharedDriverData {
   spdk_nvme_ns *ns;
   uint32_t block_size = 0;
   uint64_t size = 0;
+  std::thread admin_thread;
 
   public:
   std::vector<NVMEDevice*> registered_devices;
@@ -88,12 +94,30 @@ class SharedDriverData {
         ns(ns_) {
     block_size = spdk_nvme_ns_get_extended_sector_size(ns);
     size = spdk_nvme_ns_get_size(ns);
+    if (trid.trtype == SPDK_NVME_TRANSPORT_PCIE) {
+      return;
+    }
+
+    // For Non-PCIe transport, we need to send keep-alive periodically.
+    admin_thread = std::thread(
+      [this]() {
+	int rc;
+        while (true) {
+	  rc = spdk_nvme_ctrlr_process_admin_completions(ctrlr);
+          ceph_assert(rc >= 0);
+          sleep(1);
+        }
+      }
+    );
   }
 
   bool is_equal(const spdk_nvme_transport_id& trid2) const {
     return spdk_nvme_transport_id_compare(&trid, &trid2) == 0;
   }
   ~SharedDriverData() {
+    if (admin_thread.joinable()) {
+      admin_thread.join();
+    }
   }
 
   void register_device(NVMEDevice *device) {
@@ -126,7 +150,6 @@ class SharedDriverQueueData {
   uint32_t block_size;
   uint32_t max_queue_depth;
   struct spdk_nvme_qpair *qpair;
-  bool reap_io = false;
   int alloc_buf_from_pool(Task *t, bool write);
 
   public:
@@ -145,7 +168,7 @@ class SharedDriverQueueData {
     struct spdk_nvme_io_qpair_opts opts = {};
     spdk_nvme_ctrlr_get_default_io_qpair_opts(ctrlr, &opts, sizeof(opts));
     opts.qprio = SPDK_NVME_QPRIO_URGENT;
-    // usable queue depth should minus 1 to aovid overflow.
+    // usable queue depth should minus 1 to avoid overflow.
     max_queue_depth = opts.io_queue_size - 1;
     qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, &opts, sizeof(opts));
     ceph_assert(qpair != NULL);
@@ -159,16 +182,11 @@ class SharedDriverQueueData {
       }
       data_buf_list.push_front(*reinterpret_cast<data_cache_buf *>(b));
     }
-
-    bdev->queue_number++;
-    if (bdev->queue_number.load() == 1)
-      reap_io = true;
   }
 
   ~SharedDriverQueueData() {
     if (qpair) {
       spdk_nvme_ctrlr_free_io_qpair(qpair);
-      bdev->queue_number--;
     }
 
     data_buf_list.clear_and_dispose(spdk_dma_free);
@@ -186,18 +204,14 @@ struct Task {
   Task *next = nullptr;
   int64_t return_code;
   Task *primary = nullptr;
-  ceph::coarse_real_clock::time_point start;
   IORequest io_request = {};
-  ceph::mutex lock = ceph::make_mutex("Task::lock");
-  ceph::condition_variable cond;
   SharedDriverQueueData *queue = nullptr;
   // reference count by subtasks.
   int ref = 0;
   Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0,
        Task *p = nullptr)
     : device(dev), command(c), offset(off), len(l),
-      return_code(rc), primary(p),
-      start(ceph::coarse_real_clock::now()) {
+      return_code(rc), primary(p) {
         if (primary) {
           primary->ref++;
           return_code = primary->return_code;
@@ -419,8 +433,6 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
     }
   }
 
-  if (reap_io)
-    bdev->reap_ioc();
   dout(20) << __func__ << " end" << dendl;
 }
 
@@ -488,23 +500,31 @@ static NVMEManager manager;
 static bool probe_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid, struct spdk_nvme_ctrlr_opts *opts)
 {
   NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
+  bool do_attach = false;
 
-  if (trid->trtype != SPDK_NVME_TRANSPORT_PCIE) {
-    dout(0) << __func__ << " only probe local nvme device" << dendl;
-    return false;
+  if (trid->trtype == SPDK_NVME_TRANSPORT_PCIE) {
+    do_attach = spdk_nvme_transport_id_compare(&ctx->trid, trid) == 0;
+    if (!do_attach) {
+      dout(0) << __func__ << " device traddr (" << ctx->trid.traddr
+              << ") not match " << trid->traddr << dendl;
+    }
+  } else {
+    // for non-pcie devices, should always match the specified trid
+    assert(!spdk_nvme_transport_id_compare(&ctx->trid, trid));
+    do_attach = true;
   }
 
-  dout(0) << __func__ << " found device at: "
-	  << "trtype=" << spdk_nvme_transport_id_trtype_str(trid->trtype) << ", "
-          << "traddr=" << trid->traddr << dendl;
-  if (spdk_nvme_transport_id_compare(&ctx->trid, trid)) {
-    dout(0) << __func__ << " device traddr (" << ctx->trid.traddr << ") not match " << trid->traddr << dendl;
-    return false;
+  if (do_attach) {
+    dout(0) << __func__ << " found device at: "
+	    << "trtype=" << spdk_nvme_transport_id_trtype_str(trid->trtype) << ", "
+	    << "traddr=" << trid->traddr << dendl;
+
+    opts->io_queue_size = UINT16_MAX;
+    opts->io_queue_requests = UINT16_MAX;
+    opts->keep_alive_timeout_ms = nvme_ctrlr_keep_alive_timeout_in_ms;
   }
 
-  opts->io_queue_size = UINT16_MAX;
-
-  return true;
+  return do_attach;
 }
 
 static void attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
@@ -553,12 +573,6 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
     }
   }
 
-  struct spdk_pci_addr pci_addr;
-  int rc = spdk_pci_addr_parse(&pci_addr, trid.traddr);
-  if (rc < 0) {
-    derr << __func__ << " invalid transport address: " << trid.traddr << dendl;
-    return -ENOENT;
-  }
   auto coremask_arg = g_conf().get_val<std::string>("bluestore_spdk_coremask");
   int m_core_arg = find_first_bitset(coremask_arg);
   // at least one core is needed for using spdk
@@ -573,18 +587,24 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
 
   if (!dpdk_thread.joinable()) {
     dpdk_thread = std::thread(
-      [this, coremask_arg, m_core_arg, mem_size_arg, pci_addr]() {
+      [this, coremask_arg, m_core_arg, mem_size_arg, trid]() {
         struct spdk_env_opts opts;
-        struct spdk_pci_addr addr = pci_addr;
+        struct spdk_pci_addr addr;
         int r;
 
-        spdk_env_opts_init(&opts);
+        bool local_pci_device = false;
+        int rc = spdk_pci_addr_parse(&addr, trid.traddr);
+        if (!rc) {
+          local_pci_device = true;
+          opts.pci_whitelist = &addr;
+          opts.num_pci_addr = 1;
+        }
+
+	spdk_env_opts_init(&opts);
         opts.name = "nvme-device-manager";
         opts.core_mask = coremask_arg.c_str();
         opts.master_core = m_core_arg;
         opts.mem_size = mem_size_arg;
-        opts.pci_whitelist = &addr;
-        opts.num_pci_addr = 1;
         spdk_env_init(&opts);
         spdk_unaffinitize_thread();
 
@@ -593,7 +613,7 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
           if (!probe_queue.empty()) {
             ProbeContext* ctxt = probe_queue.front();
             probe_queue.pop_front();
-            r = spdk_nvme_probe(NULL, ctxt, probe_cb, attach_cb, NULL);
+            r = spdk_nvme_probe(local_pci_device ? NULL : &trid, ctxt, probe_cb, attach_cb, NULL);
             if (r < 0) {
               ceph_assert(!ctxt->driver);
               derr << __func__ << " device probe nvme failed" << dendl;
@@ -724,7 +744,8 @@ int NVMEDevice::open(const string& p)
     return r;
   }
   if (int r = manager.try_get(trid, &driver); r < 0) {
-    derr << __func__ << " failed to get nvme device with transport address " << trid.traddr << dendl;
+    derr << __func__ << " failed to get nvme device with transport address "
+                      << trid.traddr << " type " << trid.trtype << dendl;
     return r;
   }
 

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_BUCKET_H
-#define CEPH_RGW_BUCKET_H
+#pragma once
 
 #include <string>
 #include <memory>
@@ -17,6 +16,7 @@
 #include "rgw_metadata.h"
 
 #include "rgw_string.h"
+#include "rgw_sal.h"
 
 #include "common/Formatter.h"
 #include "common/lru_map.h"
@@ -28,7 +28,7 @@
 #include "services/svc_bucket_sync.h"
 
 // define as static when RGWBucket implementation completes
-extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
+extern void rgw_get_buckets_obj(const rgw_user& user_id, std::string& buckets_obj_id);
 
 class RGWSI_Meta;
 class RGWBucketMetadataHandler;
@@ -37,31 +37,30 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWZone;
 struct RGWZoneParams;
-namespace rgw { namespace sal {
-  class RGWRadosStore;
-  class RGWBucketList;
-} }
 
-extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id);
-extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
+extern void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id);
+extern int rgw_bucket_parse_bucket_key(CephContext *cct, const std::string& key,
                                        rgw_bucket* bucket, int *shard_id);
 
 extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
                                               const std::string& bucket_name);
 
-extern void rgw_parse_url_bucket(const string& bucket,
-                                 const string& auth_tenant,
-                                 string &tenant_name, string &bucket_name);
+extern void rgw_parse_url_bucket(const std::string& bucket,
+                                 const std::string& auth_tenant,
+                                 std::string &tenant_name, std::string &bucket_name);
 
 // this is used as a filter to RGWRados::cls_bucket_list_ordered; it
-// conforms to the type declaration of RGWRados::check_filter_t.
-extern bool rgw_bucket_object_check_filter(const string& oid);
+// conforms to the type RGWBucketListNameFilter
+extern bool rgw_bucket_object_check_filter(const std::string& oid);
 
-extern void init_default_bucket_layout(CephContext *cct, RGWBucketInfo& info, const RGWZone& zone);
+void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
+				const RGWZone& zone,
+				std::optional<uint32_t> shards,
+				std::optional<rgw::BucketIndexType> type);
 
 struct RGWBucketCompleteInfo {
   RGWBucketInfo info;
-  map<string, bufferlist> attrs;
+  std::map<std::string, bufferlist> attrs;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -69,14 +68,14 @@ struct RGWBucketCompleteInfo {
 
 class RGWBucketEntryMetadataObject : public RGWMetadataObject {
   RGWBucketEntryPoint ep;
-  map<string, bufferlist> attrs;
+  std::map<std::string, bufferlist> attrs;
 public:
   RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, const obj_version& v, real_time m) : ep(_ep) {
     objv = v;
     mtime = m;
     set_pattrs (&attrs);
   }
-  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, const obj_version& v, real_time m, std::map<string, bufferlist>&& _attrs) :
+  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, const obj_version& v, real_time m, std::map<std::string, bufferlist>&& _attrs) :
     ep(_ep), attrs(std::move(_attrs)) {
     objv = v;
     mtime = m;
@@ -91,7 +90,7 @@ public:
     return ep;
   }
 
-  map<string, bufferlist>& get_attrs() {
+  std::map<std::string, bufferlist>& get_attrs() {
     return attrs;
   }
 };
@@ -124,8 +123,7 @@ public:
 /**
  * Store a list of the user's buckets, with associated functinos.
  */
-class RGWUserBuckets
-{
+class RGWUserBuckets {
   std::map<std::string, RGWBucketEnt> buckets;
 
 public:
@@ -145,8 +143,8 @@ public:
   /**
    * Check if the user owns a bucket by the given name.
    */
-  bool owns(string& name) {
-    map<string, RGWBucketEnt>::iterator iter;
+  bool owns(std::string& name) {
+    std::map<std::string, RGWBucketEnt>::iterator iter;
     iter = buckets.find(name);
     return (iter != buckets.end());
   }
@@ -161,8 +159,8 @@ public:
   /**
    * Remove a bucket from the user's list by name.
    */
-  void remove(const string& name) {
-    map<string, RGWBucketEnt>::iterator iter;
+  void remove(const std::string& name) {
+    std::map<std::string, RGWBucketEnt>::iterator iter;
     iter = buckets.find(name);
     if (iter != buckets.end()) {
       buckets.erase(iter);
@@ -172,7 +170,7 @@ public:
   /**
    * Get the user's buckets as a map.
    */
-  map<string, RGWBucketEnt>& get_buckets() { return buckets; }
+  std::map<std::string, RGWBucketEnt>& get_buckets() { return buckets; }
 
   /**
    * Cleanup data structure
@@ -219,27 +217,13 @@ public:
   static RGWBucketInstanceMetadataHandlerBase *alloc();
 };
 
-/**
- * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
- * Returns: 0 on success, -ERR# on failure.
- */
-extern int rgw_read_user_buckets(rgw::sal::RGWRadosStore *store,
-                                 const rgw_user& user_id,
-                                 rgw::sal::RGWBucketList& buckets,
-                                 const string& marker,
-                                 const string& end_marker,
-                                 uint64_t max,
-                                 bool need_stats,
-				 optional_yield y);
+extern int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::Bucket* bucket, rgw_obj_key& key);
 
-extern int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
-extern int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
+extern int rgw_object_get_attr(rgw::sal::Store* store, rgw::sal::Object* obj,
+			       const char* attr_name, bufferlist& out_bl,
+			       optional_yield y);
 
-extern int rgw_object_get_attr(rgw::sal::RGWRadosStore* store, const RGWBucketInfo& bucket_info,
-                               const rgw_obj& obj, const char* attr_name,
-                               bufferlist& out_bl, optional_yield y);
-
-extern void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, bool fix, optional_yield y);
+extern void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user, bool fix, optional_yield y, const DoutPrefixProvider *dpp);
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
@@ -258,9 +242,10 @@ struct RGWBucketAdminOpState {
   bool sync_bucket;
   int max_aio = 0;
 
-  rgw_bucket bucket;
+  std::unique_ptr<rgw::sal::Bucket>  bucket;
 
   RGWQuotaInfo quota;
+  RGWRateLimitInfo ratelimit_info;
 
   void set_fetch_stats(bool value) { stat_buckets = value; }
   void set_check_objects(bool value) { check_objects = value; }
@@ -288,6 +273,9 @@ struct RGWBucketAdminOpState {
   void set_quota(RGWQuotaInfo& value) {
     quota = value;
   }
+  void set_bucket_ratelimit(RGWRateLimitInfo& value) {
+    ratelimit_info = value;
+  }
 
 
   void set_sync_bucket(bool value) { sync_bucket = value; }
@@ -298,16 +286,16 @@ struct RGWBucketAdminOpState {
   std::string& get_object_name() { return object_name; }
   std::string& get_tenant() { return uid.tenant; }
 
-  rgw_bucket& get_bucket() { return bucket; }
-  void set_bucket(rgw_bucket& _bucket) {
-    bucket = _bucket; 
+  rgw::sal::Bucket* get_bucket() { return bucket.get(); }
+  void set_bucket(std::unique_ptr<rgw::sal::Bucket> _bucket) {
+    bucket = std::move(_bucket);
     bucket_stored = true;
   }
 
-  void set_bucket_id(const string& bi) {
+  void set_bucket_id(const std::string& bi) {
     bucket_id = bi;
   }
-  const string& get_bucket_id() { return bucket_id; }
+  const std::string& get_bucket_id() { return bucket_id; }
 
   bool will_fetch_stats() { return stat_buckets; }
   bool will_fix_index() { return fix_index; }
@@ -324,108 +312,106 @@ struct RGWBucketAdminOpState {
                             bucket_stored(false), sync_bucket(true)  {}
 };
 
+
 /*
  * A simple wrapper class for administrative bucket operations
  */
-
-class RGWBucket
-{
+class RGWBucket {
   RGWUserBuckets buckets;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::Store* store;
   RGWAccessHandle handle;
 
-  RGWUserInfo user_info;
-  rgw_bucket bucket;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  std::unique_ptr<rgw::sal::User> user;
 
   bool failure;
 
-  RGWBucketInfo bucket_info;
   RGWObjVersionTracker ep_objv; // entrypoint object version
 
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
-  int init(rgw::sal::RGWRadosStore *storage, RGWBucketAdminOpState& op_state, optional_yield y,
-              std::string *err_msg = NULL, map<string, bufferlist> *pattrs = NULL);
+  int init(rgw::sal::Store* storage, RGWBucketAdminOpState& op_state, optional_yield y,
+             const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-              RGWFormatterFlusher& flusher, std::string *err_msg = NULL);
+              RGWFormatterFlusher& flusher,
+              const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
-  int check_object_index(RGWBucketAdminOpState& op_state,
+  int check_object_index(const DoutPrefixProvider *dpp, 
+                         RGWBucketAdminOpState& op_state,
                          RGWFormatterFlusher& flusher,
                          optional_yield y,
                          std::string *err_msg = NULL);
 
-  int check_index(RGWBucketAdminOpState& op_state,
-          map<RGWObjCategory, RGWStorageStats>& existing_stats,
-          map<RGWObjCategory, RGWStorageStats>& calculated_stats,
+  int check_index(const DoutPrefixProvider *dpp,
+          RGWBucketAdminOpState& op_state,
+          std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+          std::map<RGWObjCategory, RGWStorageStats>& calculated_stats,
           std::string *err_msg = NULL);
 
-  int link(RGWBucketAdminOpState& op_state, optional_yield y,
-           map<string, bufferlist>& attrs, std::string *err_msg = NULL);
-  int chown(RGWBucketAdminOpState& op_state, const string& marker,
-            optional_yield y, std::string *err_msg = NULL);
-  int unlink(RGWBucketAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
-  int set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int chown(RGWBucketAdminOpState& op_state, const std::string& marker,
+            optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  int set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
-  int remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
-  int policy_bl_to_stream(bufferlist& bl, ostream& o);
-  int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y);
-  int sync(RGWBucketAdminOpState& op_state, map<string, bufferlist> *attrs, std::string *err_msg = NULL);
+  int remove_object(const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int policy_bl_to_stream(bufferlist& bl, std::ostream& o);
+  int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y, const DoutPrefixProvider *dpp);
+  int sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
   void clear_failure() { failure = false; }
 
-  const RGWBucketInfo& get_bucket_info() const { return bucket_info; }
+  const RGWBucketInfo& get_bucket_info() const { return bucket->get_info(); }
 };
 
-class RGWBucketAdminOp
-{
+class RGWBucketAdminOp {
 public:
-  static int get_policy(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher);
-  static int get_policy(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-                  RGWAccessControlPolicy& policy);
-  static int dump_s3_policy(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-                  ostream& os);
+  static int get_policy(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
+                  RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+  static int get_policy(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
+                  RGWAccessControlPolicy& policy, const DoutPrefixProvider *dpp);
+  static int dump_s3_policy(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
+                  std::ostream& os, const DoutPrefixProvider *dpp);
 
-  static int unlink(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
-  static int link(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
-  static int chown(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, const string& marker, string *err_msg = NULL);
+  static int unlink(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp);
+  static int link(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  static int chown(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const std::string& marker, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
-  static int check_index(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher, optional_yield y);
+  static int check_index(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
+                  RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp);
 
-  static int remove_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true);
-  static int remove_object(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
-  static int info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
-  static int limit_check(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
+  static int remove_bucket(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, optional_yield y,
+			   const DoutPrefixProvider *dpp, bool bypass_gc = false, bool keep_index_consistent = true);
+  static int remove_object(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp);
+  static int info(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp);
+  static int limit_check(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
 			 const std::list<std::string>& user_ids,
 			 RGWFormatterFlusher& flusher, optional_yield y,
+                         const DoutPrefixProvider *dpp,
 			 bool warnings_only = false);
-  static int set_quota(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
+  static int set_quota(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp);
 
-  static int list_stale_instances(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-				  RGWFormatterFlusher& flusher);
+  static int list_stale_instances(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
+				  RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
 
-  static int clear_stale_instances(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-				   RGWFormatterFlusher& flusher);
-  static int fix_lc_shards(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-                           RGWFormatterFlusher& flusher);
-  static int fix_obj_expiry(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-			    RGWFormatterFlusher& flusher, bool dry_run = false);
+  static int clear_stale_instances(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
+				   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+  static int fix_lc_shards(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
+                           RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+  static int fix_obj_expiry(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
+			    RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, bool dry_run = false);
 
-  static int sync_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
+  static int sync_bucket(rgw::sal::Store* store, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 };
 
 struct rgw_ep_info {
   RGWBucketEntryPoint &ep;
-  map<std::string, buffer::list>& attrs;
+  std::map<std::string, buffer::list>& attrs;
   RGWObjVersionTracker ep_objv;
-  rgw_ep_info(RGWBucketEntryPoint &ep, map<string, bufferlist>& attrs)
+  rgw_ep_info(RGWBucketEntryPoint &ep, std::map<std::string, bufferlist>& attrs)
     : ep(ep), attrs(attrs) {}
 };
 
-class RGWBucketCtl
-{
+class RGWBucketCtl {
   CephContext *cct;
 
   struct Svc {
@@ -456,13 +442,14 @@ public:
   void init(RGWUserCtl *user_ctl,
             RGWBucketMetadataHandler *_bm_handler,
             RGWBucketInstanceMetadataHandler *_bmi_handler,
-            RGWDataChangesLog *datalog);
+            RGWDataChangesLog *datalog,
+            const DoutPrefixProvider *dpp);
 
   struct Bucket {
     struct GetParams {
       RGWObjVersionTracker *objv_tracker{nullptr};
       real_time *mtime{nullptr};
-      map<string, bufferlist> *attrs{nullptr};
+      std::map<std::string, bufferlist> *attrs{nullptr};
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
       std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
@@ -479,7 +466,7 @@ public:
         return *this;
       }
 
-      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+      GetParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -504,7 +491,7 @@ public:
       RGWObjVersionTracker *objv_tracker{nullptr};
       ceph::real_time mtime;
       bool exclusive{false};
-      map<string, bufferlist> *attrs{nullptr};
+      std::map<std::string, bufferlist> *attrs{nullptr};
 
       PutParams() {}
 
@@ -523,7 +510,7 @@ public:
         return *this;
       }
 
-      PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+      PutParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -544,7 +531,7 @@ public:
   struct BucketInstance {
     struct GetParams {
       real_time *mtime{nullptr};
-      map<string, bufferlist> *attrs{nullptr};
+      std::map<std::string, bufferlist> *attrs{nullptr};
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
       RGWObjVersionTracker *objv_tracker{nullptr};
@@ -557,7 +544,7 @@ public:
         return *this;
       }
 
-      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+      GetParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -588,7 +575,7 @@ public:
                                                    nullptr: orig_info was not found (new bucket instance */
       ceph::real_time mtime;
       bool exclusive{false};
-      map<string, bufferlist> *attrs{nullptr};
+      std::map<std::string, bufferlist> *attrs{nullptr};
       RGWObjVersionTracker *objv_tracker{nullptr};
 
       PutParams() {}
@@ -608,7 +595,7 @@ public:
         return *this;
       }
 
-      PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+      PutParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -635,27 +622,33 @@ public:
   int read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                   RGWBucketEntryPoint *info,
                                   optional_yield y,
+                                  const DoutPrefixProvider *dpp,
                                   const Bucket::GetParams& params = {});
   int store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                    RGWBucketEntryPoint& info,
                                    optional_yield y,
+                                   const DoutPrefixProvider *dpp,
                                    const Bucket::PutParams& params = {});
   int remove_bucket_entrypoint_info(const rgw_bucket& bucket,
                                     optional_yield y,
+                                    const DoutPrefixProvider *dpp,
                                     const Bucket::RemoveParams& params = {});
 
   /* bucket instance */
   int read_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo *info,
                                   optional_yield y,
+                                  const DoutPrefixProvider *dpp,
                                   const BucketInstance::GetParams& params = {});
   int store_bucket_instance_info(const rgw_bucket& bucket,
                                  RGWBucketInfo& info,
                                  optional_yield y,
+                                 const DoutPrefixProvider *dpp,
                                  const BucketInstance::PutParams& params = {});
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo& info,
                                   optional_yield y,
+                                  const DoutPrefixProvider *dpp,
                                   const BucketInstance::RemoveParams& params = {});
 
   /*
@@ -667,66 +660,75 @@ public:
   int read_bucket_info(const rgw_bucket& bucket,
                        RGWBucketInfo *info,
                        optional_yield y,
+                       const DoutPrefixProvider *dpp,
                        const BucketInstance::GetParams& params = {},
 		       RGWObjVersionTracker *ep_objv_tracker = nullptr);
 
 
   int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
-                                map<string, bufferlist>& attrs,
+                                std::map<std::string, bufferlist>& attrs,
                                 RGWObjVersionTracker *objv_tracker,
-                                optional_yield y);
+                                optional_yield y,
+                                const DoutPrefixProvider *dpp);
 
   /* user/bucket */
   int link_bucket(const rgw_user& user_id,
                   const rgw_bucket& bucket,
                   ceph::real_time creation_time,
 		  optional_yield y,
+                  const DoutPrefixProvider *dpp,
                   bool update_entrypoint = true,
                   rgw_ep_info *pinfo = nullptr);
 
   int unlink_bucket(const rgw_user& user_id,
                     const rgw_bucket& bucket,
 		    optional_yield y,
+                    const DoutPrefixProvider *dpp,
                     bool update_entrypoint = true);
 
-  int chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
+  int chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
             const rgw_user& user_id, const std::string& display_name,
-            const std::string& marker, optional_yield y);
+            const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp);
 
-  int set_acl(ACLOwner& owner, rgw_bucket& bucket,
-              RGWBucketInfo& bucket_info, bufferlist& bl, optional_yield y);
-
-  int read_buckets_stats(map<string, RGWBucketEnt>& m,
-                         optional_yield y);
+  int read_buckets_stats(std::map<std::string, RGWBucketEnt>& m,
+                         optional_yield y,
+                         const DoutPrefixProvider *dpp);
 
   int read_bucket_stats(const rgw_bucket& bucket,
                         RGWBucketEnt *result,
-                        optional_yield y);
+                        optional_yield y,
+                        const DoutPrefixProvider *dpp);
 
   /* quota related */
-  int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info,
+  int sync_user_stats(const DoutPrefixProvider *dpp, 
+                      const rgw_user& user_id, const RGWBucketInfo& bucket_info,
 		      optional_yield y,
-                      RGWBucketEnt* pent = nullptr);
+                      RGWBucketEnt* pent);
 
   /* bucket sync */
   int get_sync_policy_handler(std::optional<rgw_zone_id> zone,
                               std::optional<rgw_bucket> bucket,
 			      RGWBucketSyncPolicyHandlerRef *phandler,
-			      optional_yield y);
+			      optional_yield y,
+                              const DoutPrefixProvider *dpp);
   int bucket_exports_data(const rgw_bucket& bucket,
-                          optional_yield y);
+                          optional_yield y,
+                          const DoutPrefixProvider *dpp);
   int bucket_imports_data(const rgw_bucket& bucket,
-                          optional_yield y);
+                          optional_yield y,
+                          const DoutPrefixProvider *dpp);
 
 private:
   int convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                               const rgw_bucket& bucket,
-                              optional_yield y);
+                              optional_yield y,
+                              const DoutPrefixProvider *dpp);
 
   int do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                     const rgw_bucket& bucket,
                                     RGWBucketInfo& info,
                                     optional_yield y,
+                                    const DoutPrefixProvider *dpp,
                                     const BucketInstance::PutParams& params);
 
   int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
@@ -734,9 +736,10 @@ private:
                                   RGWBucketInfo *orig_info,
                                   bool exclusive, real_time mtime,
                                   obj_version *pep_objv,
-                                  map<string, bufferlist> *pattrs,
+                                  std::map<std::string, bufferlist> *pattrs,
                                   bool create_entry_point,
-				  optional_yield);
+				  optional_yield,
+                                  const DoutPrefixProvider *dpp);
 
   int do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                      const rgw_user& user,
@@ -744,17 +747,17 @@ private:
                      ceph::real_time creation_time,
                      bool update_entrypoint,
                      rgw_ep_info *pinfo,
-		     optional_yield y);
+		     optional_yield y,
+                     const DoutPrefixProvider *dpp);
 
   int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                        const rgw_user& user_id,
                        const rgw_bucket& bucket,
                        bool update_entrypoint,
-		       optional_yield y);
+		       optional_yield y,
+                       const DoutPrefixProvider *dpp);
 
 };
 
-bool rgw_find_bucket_by_id(CephContext *cct, RGWMetadataManager *mgr, const string& marker,
-                           const string& bucket_id, rgw_bucket* bucket_out);
-
-#endif
+bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::Store* store, const std::string& marker,
+                           const std::string& bucket_id, rgw_bucket* bucket_out);

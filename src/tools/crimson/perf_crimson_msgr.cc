@@ -22,6 +22,9 @@
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
 
+using namespace std;
+using namespace std::chrono_literals;
+
 namespace bpo = boost::program_options;
 
 namespace {
@@ -162,7 +165,7 @@ static seastar::future<> run(
         const static hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                                     pgid.pool(), oloc.nspace);
         static spg_t spgid(pgid);
-        auto rep = make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
+        auto rep = crimson::make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
         bufferlist data(msg_data);
         rep->write(0, msg_len, data);
         rep->set_tid(m->get_tid());
@@ -532,7 +535,7 @@ static seastar::future<> run(
           if (client.is_active()) {
             client.do_dispatch_messages(client.active_conn.get());
           }
-        }).then([this, ramptime] {
+        }).then([ramptime] {
           logger().info("[all clients]: ramping up {} seconds...", ramptime);
           return seastar::sleep(std::chrono::seconds(ramptime));
         }).then([this] {
@@ -583,7 +586,7 @@ static seastar::future<> run(
           const static hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                                       pgid.pool(), oloc.nspace);
           static spg_t spgid(pgid);
-          auto m = make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
+          auto m = crimson::make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
           bufferlist data(msg_data);
           m->write(0, msg_len, data);
           // use tid as the identity of each round

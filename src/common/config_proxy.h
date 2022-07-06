@@ -109,7 +109,7 @@ public:
   explicit ConfigProxy(bool is_daemon)
     : config{values, obs_mgr, is_daemon}
   {}
-  explicit ConfigProxy(const ConfigProxy &config_proxy)
+  ConfigProxy(const ConfigProxy &config_proxy)
     : values(config_proxy.get_config_values()),
       config{values, obs_mgr, config_proxy.config.is_daemon}
   {}
@@ -340,6 +340,12 @@ public:
   void get_defaults_bl(ceph::buffer::list *bl) {
     std::lock_guard l{lock};
     config.get_defaults_bl(values, bl);
+  }
+  const std::string& get_conf_path() const {
+    return config.get_conf_path();
+  }
+  std::optional<std::string> get_val_default(std::string_view key) {
+    return config.get_val_default(key);
   }
 };
 

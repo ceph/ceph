@@ -125,11 +125,11 @@ public:
       }
     });
   }
-  int get_val(const std::string &key, std::string *val) const {
+  int get_val(std::string_view key, std::string *val) const {
     return get_config().get_val(*values, key, val);
   }
   template<typename T>
-  const T get_val(const std::string& key) const {
+  const T get_val(std::string_view key) const {
     return get_config().template get_val<T>(*values, key);
   }
 
@@ -179,6 +179,14 @@ public:
     });
   }
 
+  seastar::future<> parse_env() {
+    return do_change([this](ConfigValues& values) {
+      get_config().parse_env(CEPH_ENTITY_TYPE_OSD,
+			     values,
+			     obs_mgr);
+    });
+  }
+
   seastar::future<> parse_config_files(const std::string& conf_files);
 
   using ShardedConfig = seastar::sharded<ConfigProxy>;
@@ -195,6 +203,11 @@ inline ConfigProxy& local_conf() {
 
 inline ConfigProxy::ShardedConfig& sharded_conf() {
   return ConfigProxy::sharded_conf;
+}
+
+template<typename T>
+const T get_conf(const std::string& key) {
+  return local_conf().template get_val<T>(key);
 }
 
 }

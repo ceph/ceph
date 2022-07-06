@@ -7,8 +7,17 @@
 
 bool Connection::is_blackhole() const {
   auto& conf = msgr->cct->_conf;
-  return ((conf->ms_blackhole_mon && peer_type == CEPH_ENTITY_TYPE_MON) ||
-      (conf->ms_blackhole_osd && peer_type == CEPH_ENTITY_TYPE_OSD) ||
-      (conf->ms_blackhole_mds && peer_type == CEPH_ENTITY_TYPE_MDS) ||
-      (conf->ms_blackhole_client && peer_type == CEPH_ENTITY_TYPE_CLIENT));
+
+  switch (peer_type) {
+  case CEPH_ENTITY_TYPE_MON:
+    return conf->ms_blackhole_mon;
+  case CEPH_ENTITY_TYPE_OSD:
+    return conf->ms_blackhole_osd;
+  case CEPH_ENTITY_TYPE_MDS:
+    return conf->ms_blackhole_mds;
+  case CEPH_ENTITY_TYPE_CLIENT:
+    return conf->ms_blackhole_client;
+  default:
+    return false;
+  }
 }

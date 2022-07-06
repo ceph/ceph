@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 
 #pragma once
 
@@ -24,29 +24,32 @@ public:
   class AlienOmapIterator final : public OmapIterator {
   public:
     AlienOmapIterator(ObjectMap::ObjectMapIterator& it,
-	AlienStore* store) : iter(it), store(store) {}
+        AlienStore* store, const CollectionRef& ch)
+      : iter(it), store(store), ch(ch) {}
     seastar::future<> seek_to_first();
     seastar::future<> upper_bound(const std::string& after);
     seastar::future<> lower_bound(const std::string& to);
     bool valid() const;
     seastar::future<> next();
     std::string key();
-    seastar::future<std::string> tail_key();
     ceph::buffer::list value();
     int status() const;
   private:
     ObjectMap::ObjectMapIterator iter;
     AlienStore* store;
+    CollectionRef ch;
   };
-  AlienStore(const std::string& path, const ConfigValues& values);
+  AlienStore(const std::string& type,
+             const std::string& path,
+             const ConfigValues& values);
   ~AlienStore() final;
 
   seastar::future<> start() final;
   seastar::future<> stop() final;
-  seastar::future<> mount() final;
+  mount_ertr::future<> mount() final;
   seastar::future<> umount() final;
 
-  seastar::future<> mkfs(uuid_d new_osd_fsid) final;
+  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
   read_errorator::future<ceph::bufferlist> read(CollectionRef c,
                                    const ghobject_t& oid,
                                    uint64_t offset,
@@ -58,7 +61,7 @@ public:
 						 uint32_t op_flags = 0) final;
 					      
 
-  get_attr_errorator::future<ceph::bufferptr> get_attr(CollectionRef c,
+  get_attr_errorator::future<ceph::bufferlist> get_attr(CollectionRef c,
                                             const ghobject_t& oid,
                                             std::string_view name) const final;
   get_attrs_ertr::future<attrs_t> get_attrs(CollectionRef c,
@@ -89,6 +92,10 @@ public:
   seastar::future<> do_transaction(CollectionRef c,
                                    ceph::os::Transaction&& txn) final;
 
+  // error injection
+  seastar::future<> inject_data_error(const ghobject_t& o) final;
+  seastar::future<> inject_mdata_error(const ghobject_t& o) final;
+
   seastar::future<> write_meta(const std::string& key,
                   const std::string& value) final;
   seastar::future<std::tuple<int, std::string>> read_meta(
@@ -99,10 +106,10 @@ public:
   seastar::future<struct stat> stat(
     CollectionRef,
     const ghobject_t&) final;
-  seastar::future<ceph::bufferlist> omap_get_header(
+  get_attr_errorator::future<ceph::bufferlist> omap_get_header(
     CollectionRef,
     const ghobject_t&) final;
-  seastar::future<std::map<uint64_t, uint64_t>> fiemap(
+  read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef,
     const ghobject_t&,
     uint64_t off,
@@ -112,14 +119,29 @@ public:
     const ghobject_t& oid) final;
 
 private:
-  constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
+  template <class... Args>
+  auto do_with_op_gate(Args&&... args) const {
+    return seastar::with_gate(op_gate,
+      // perfect forwarding in lambda's closure isn't available in C++17
+      // using tuple as workaround; see: https://stackoverflow.com/a/49902823
+      [args = std::make_tuple(std::forward<Args>(args)...)] () mutable {
+      return std::apply([] (auto&&... args) {
+        return seastar::do_with(std::forward<decltype(args)>(args)...);
+      }, std::move(args));
+    });
+  }
+
+  // number of cores that are PREVENTED from being scheduled
+  // to run alien store threads.
+  static constexpr int N_CORES_FOR_SEASTAR = 3;
   mutable std::unique_ptr<crimson::os::ThreadPool> tp;
+  const std::string type;
   const std::string path;
   uint64_t used_bytes = 0;
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
-  seastar::gate transaction_gate;
+  mutable seastar::gate op_gate;
   std::unordered_map<coll_t, CollectionRef> coll_map;
-  seastar::shared_mutex tp_mutex;
+  std::vector<uint64_t> _parse_cpu_cores();
 };
 }

@@ -8,6 +8,7 @@
 #include "librbd/migration/HttpStream.h"
 #include "librbd/migration/S3Stream.h"
 #include "librbd/migration/NativeFormat.h"
+#include "librbd/migration/QCOWFormat.h"
 #include "librbd/migration/RawFormat.h"
 #include "librbd/migration/RawSnapshot.h"
 
@@ -64,6 +65,8 @@ int SourceSpecBuilder<I>::build_format(
   if (type == "native") {
     format->reset(NativeFormat<I>::create(m_image_ctx, source_spec_object,
                                           import_only));
+  } else if (type == "qcow") {
+    format->reset(QCOWFormat<I>::create(m_image_ctx, source_spec_object, this));
   } else if (type == "raw") {
     format->reset(RawFormat<I>::create(m_image_ctx, source_spec_object, this));
   } else {

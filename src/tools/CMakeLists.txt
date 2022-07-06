@@ -17,15 +17,12 @@ endif()
 install(TARGETS rados DESTINATION bin)
 
 if(NOT WIN32)
-set(neorados_srcs
-  neorados.cc)
-add_executable(neorados ${neorados_srcs})
-target_include_directories(neorados PRIVATE
-  $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+  set(neorados_srcs
+      neorados.cc)
+  add_executable(neorados ${neorados_srcs})
+  target_link_libraries(neorados libneorados spawn fmt::fmt ${CMAKE_DL_LIBS})
+  #install(TARGETS neorados DESTINATION bin)
 endif()
-
-target_link_libraries(neorados libneorados spawn ${CMAKE_DL_LIBS})
-#install(TARGETS neorados DESTINATION bin)
 
 if(WITH_TESTS)
 add_executable(ceph_scratchtool scratchtool.c)
@@ -51,6 +48,7 @@ install(TARGETS ceph-osdomap-tool DESTINATION bin)
 
 add_executable(ceph-monstore-tool
   ceph_monstore_tool.cc
+  ../auth/cephx/CephxKeyServer.cc
   ../mgr/mgr_commands.cc)
 target_link_libraries(ceph-monstore-tool os global Boost::program_options)
 install(TARGETS ceph-monstore-tool DESTINATION bin)
@@ -99,8 +97,13 @@ add_executable(osdmaptool ${osdomaptool_srcs})
 target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
 
+install(PROGRAMS crushdiff DESTINATION bin)
+
 set(ceph-diff-sorted_srcs ceph-diff-sorted.cc)
 add_executable(ceph-diff-sorted ${ceph-diff-sorted_srcs})
+set_target_properties(ceph-diff-sorted PROPERTIES
+  SKIP_RPATH TRUE
+  INSTALL_RPATH "")
 install(TARGETS ceph-diff-sorted DESTINATION bin)
 
 if(WITH_TESTS)

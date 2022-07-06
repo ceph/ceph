@@ -52,6 +52,8 @@ def mock_lv_device_generator():
         dev.used_by_ceph = False
         dev.vg_size = [size]
         dev.vg_free = dev.vg_size
+        dev.available_lvm = True
+        dev.is_device = False
         dev.lvs = [lvm.Volume(vg_name=dev.vg_name, lv_name=dev.lv_name, lv_size=size, lv_tags='')]
         return dev
     return mock_lv
@@ -61,6 +63,9 @@ def mock_lv_device_generator():
 def mock_devices_available():
     dev = create_autospec(device.Device)
     dev.path = '/dev/foo'
+    dev.vg_name = 'vg_foo'
+    dev.lv_name = 'lv_foo'
+    dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
     dev.available_lvm = True
     dev.vg_size = [21474836480]
     dev.vg_free = dev.vg_size
@@ -71,6 +76,9 @@ def mock_device_generator():
     def mock_device():
         dev = create_autospec(device.Device)
         dev.path = '/dev/foo'
+        dev.vg_name = 'vg_foo'
+        dev.lv_name = 'lv_foo'
+        dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
         dev.available_lvm = True
         dev.vg_size = [21474836480]
         dev.vg_free = dev.vg_size
@@ -230,12 +238,9 @@ def ceph_parttype(request):
 @pytest.fixture
 def lsblk_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
     monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
-                        lambda path: {'TYPE': 'disk', 'PARTLABEL': ceph_partlabel})
-    # setting blkid here too in order to be able to fall back to PARTTYPE based
-    # membership
-    monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
                         lambda path: {'TYPE': 'disk',
-                                      'PARTLABEL': '',
+                                      'NAME': 'sda',
+                                      'PARTLABEL': ceph_partlabel,
                                       'PARTTYPE': ceph_parttype})
 
 
@@ -256,6 +261,7 @@ def blkid_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
 def device_info_not_ceph_disk_member(monkeypatch, request):
     monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
                         lambda path: {'TYPE': 'disk',
+                                      'NAME': 'sda',
                                       'PARTLABEL': request.param[0]})
     monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
                         lambda path: {'TYPE': 'disk',
@@ -285,7 +291,7 @@ def device_info(monkeypatch, patch_bluestore_label):
         monkeypatch.setattr("ceph_volume.sys_info.devices", {})
         monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
         if not devices:
-            monkeypatch.setattr("ceph_volume.util.device.lvm.get_first_lv", lambda filters: lv)
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_single_lv", lambda filters: lv)
         else:
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_device_lvs",
                                 lambda path: [lv])
@@ -293,3 +299,7 @@ def device_info(monkeypatch, patch_bluestore_label):
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
         monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: udevadm)
     return apply
+
+@pytest.fixture(params=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.999, 1.0])
+def data_allocate_fraction(request):
+    return request.param

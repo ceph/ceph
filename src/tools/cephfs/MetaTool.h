@@ -46,7 +46,7 @@ public:
 private:
   class meta_op {
   public:
-    meta_op(bool debug = false, string out = "", string in = "", bool confirm = false):
+    meta_op(bool debug = false, std::string out = "", std::string in = "", bool confirm = false):
         _debug(debug),
         _out(out),
         _in(in),
@@ -68,8 +68,8 @@ private:
       INO_F
     } ino_type;
 
-    static string op_type_name(op_type& t) {
-      string name;
+    static std::string op_type_name(op_type& t) {
+      std::string name;
       switch (t) {
       case OP_LIST:
         name = "list dir";
@@ -97,8 +97,8 @@ private:
       }
       return name;
     }
-    static string ino_type_name(ino_type& t) {
-      string name;
+    static std::string ino_type_name(ino_type& t) {
+      std::string name;
       switch (t) {
       case INO_DIR:
         name = "dir";
@@ -121,7 +121,7 @@ private:
       void print() {
         std::cout << detail() << std::endl;
       }
-      string detail() {
+      std::string detail() {
         std::stringstream ds;
         ds << " [sub_op]" << op_type_name(sub_op_t) << "|"
            << ino_type_name(sub_ino_t) << "|"
@@ -165,7 +165,7 @@ private:
       
     std::map<inodeno_t, inode_backpointer_t > ancestors;
     std::map<inodeno_t, inode_meta_t* > inodes;
-    std::map<inodeno_t, string > okeys;
+    std::map<inodeno_t, std::string > okeys;
       
     void clear_sops() {
       while(!no_sops())
@@ -189,10 +189,10 @@ private:
       delete sop;
       sub_ops.pop();
     }
-    string outfile() {
+    std::string outfile() {
       return _out;
     }
-    string infile() {
+    std::string infile() {
       return _in;
     }
     bool is_debug() {
@@ -204,8 +204,8 @@ private:
   private:
     stack<sub_op*> sub_ops;
     bool _debug;
-    string _out;
-    string _in;
+    std::string _out;
+    std::string _in;
     bool _confirm;
   };
   MDSRoleSelector role_selector;
@@ -236,12 +236,12 @@ private:
                  meta_op* op = NULL
                  );
 
-  int process(string& mode, string& ino, string out, string in, bool confirm);
-  int show_meta_info(string& ino, string& out);
-  int list_meta_info(string& ino, string& out);
-  int amend_meta_info(string& ino, string& in, bool confirm);
-  int show_fnode(string& ino, string& out);
-  int amend_fnode(string& in, bool confirm);
+  int process(std::string& mode, std::string& ino, std::string out, std::string in, bool confirm);
+  int show_meta_info(std::string& ino, std::string& out);
+  int list_meta_info(std::string& ino, std::string& out);
+  int amend_meta_info(std::string& ino, std::string& in, bool confirm);
+  int show_fnode(std::string& ino, std::string& out);
+  int amend_fnode(std::string& in, bool confirm);
   int op_process(meta_op &op);
   int list_meta(meta_op &op);
   int file_meta(meta_op &op);
@@ -251,21 +251,21 @@ private:
   int amend_fn(meta_op &op);
   public:
   int _file_meta(meta_op &op, librados::IoCtx& io);
-  int _show_meta(inode_meta_t& i, const string& fn);
-  int _amend_meta(string &k, inode_meta_t& i, const string& fn, meta_op& op);
-  int _show_fn(inode_meta_t& i, const string& fn);
-  int _amend_fn(const string& fn, bool confirm);
+  int _show_meta(inode_meta_t& i, const std::string& fn);
+  int _amend_meta(std::string &k, inode_meta_t& i, const std::string& fn, meta_op& op);
+  int _show_fn(inode_meta_t& i, const std::string& fn);
+  int _amend_fn(const std::string& fn, bool confirm);
   void usage();
   MetaTool(bool debug=false):
       _debug(debug) {}
   ~MetaTool() {}
 
-  int main(string& mode,
-           string& rank_str,
-           string& minfo,
-           string&ino,
-           string& out,
-           string& in,
+  int main(std::string& mode,
+           std::string& rank_str,
+           std::string& minfo,
+           std::string&ino,
+           std::string& out,
+           std::string& in,
            bool confirm = false
            );
 };

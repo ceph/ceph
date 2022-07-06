@@ -29,8 +29,8 @@ root default {
 }
 
 # rules
-rule replicated_ruleset {
-    ruleset 0
+rule replicated_rule {
+    id 0
     type replicated
     min_size 1
     max_size 10

@@ -49,6 +49,8 @@ namespace {
   bool verbose {false};
 }
 
+using namespace std;
+
 TEST(TOKEN, INIT) {
   formatter = new JSONFormatter(true /* pretty */);
   ASSERT_NE(formatter, nullptr);
@@ -104,12 +106,10 @@ TEST(TOKEN, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
-  string val;
-  vector<const char*> args;
-
-  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
+  string val;
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_flag(args, arg_iter, "--verbose",
 			      (char*) nullptr)) {

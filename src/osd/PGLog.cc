@@ -938,8 +938,7 @@ void PGLog::_write_log_and_missing(
       if (!missing.is_missing(obj, &item)) {
 	to_remove.insert(key);
       } else {
-	uint64_t features = missing.may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0;
-	encode(make_pair(obj, item), (*km)[key], features);
+	encode(make_pair(obj, item), (*km)[key], CEPH_FEATUREMASK_SERVER_OCTOPUS);
       }
     });
   if (require_rollback) {
@@ -1095,6 +1094,11 @@ namespace {
           return iter->next();
         });
       }).then([this] {
+        if (info.pgid.is_no_shard()) {
+          // replicated pool pg does not persist this key
+          assert(on_disk_rollback_info_trimmed_to == eversion_t());
+          on_disk_rollback_info_trimmed_to = info.last_update;
+        }
         log = PGLog::IndexedLog(
              info.last_update,
              info.log_tail,

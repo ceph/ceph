@@ -26,6 +26,8 @@
 #include "common/config.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 ErasureCodeIsaTableCache tcache;
 
 class IsaErasureCodeTest : public ::testing::Test {
@@ -913,18 +915,18 @@ TEST_F(IsaErasureCodeTest, create_rule)
     profile["m"] = "2";
     profile["w"] = "8";
     isa.init(profile, &cerr);
-    int ruleset = isa.create_rule("myrule", *c, &ss);
-    EXPECT_EQ(0, ruleset);
+    int rule = isa.create_rule("myrule", *c, &ss);
+    EXPECT_EQ(0, rule);
     EXPECT_EQ(-EEXIST, isa.create_rule("myrule", *c, &ss));
     //
-    // the minimum that is expected from the created ruleset is to
+    // the minimum that is expected from the created rule is to
     // successfully map get_chunk_count() devices from the crushmap,
     // at least once.
     //
     vector<__u32> weight(c->get_max_devices(), 0x10000);
     vector<int> out;
     int x = 0;
-    c->do_rule(ruleset, x, out, isa.get_chunk_count(), weight, 0);
+    c->do_rule(rule, x, out, isa.get_chunk_count(), weight, 0);
     ASSERT_EQ(out.size(), isa.get_chunk_count());
     for (unsigned i=0; i<out.size(); ++i)
       ASSERT_NE(CRUSH_ITEM_NONE, out[i]);

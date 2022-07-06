@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -8,9 +8,10 @@
 #include "crimson/os/seastore/transaction_manager.h"
 
 #include "fwd.h"
-#include "super.h"
 #include "node_extent_mutable.h"
 #include "node_types.h"
+#include "stages/node_stage_layout.h"
+#include "super.h"
 
 /**
  * node_extent_manager.h
@@ -24,7 +25,9 @@ using crimson::os::seastore::LogicalCachedExtent;
 class NodeExtent : public LogicalCachedExtent {
  public:
   virtual ~NodeExtent() = default;
-  std::pair<node_type_t, field_type_t> get_types() const;
+  const node_header_t& get_header() const {
+    return *reinterpret_cast<const node_header_t*>(get_read());
+  }
   const char* get_read() const {
     return get_bptr().c_str();
   }
@@ -41,7 +44,11 @@ class NodeExtent : public LogicalCachedExtent {
   NodeExtent(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
 
   NodeExtentMutable do_get_mutable() {
-    return NodeExtentMutable(*this);
+    return NodeExtentMutable(get_bptr().c_str(), get_length());
+  }
+
+  std::ostream& print_detail_l(std::ostream& out) const final {
+    return out << ", fltree_header=" << get_header();
   }
 
   /**
@@ -51,32 +58,44 @@ class NodeExtent : public LogicalCachedExtent {
    * - CacheExtent::get_delta() -> ceph::bufferlist
    * - LogicalCachedExtent::apply_delta(const ceph::bufferlist) -> void
    */
-
- private:
-  friend class NodeExtentMutable;
 };
 
 using crimson::os::seastore::TransactionManager;
 class NodeExtentManager {
+  using base_iertr = TransactionManager::base_iertr;
  public:
   virtual ~NodeExtentManager() = default;
-  using tm_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
+
+  virtual bool is_read_isolated() const = 0;
+
+  using read_iertr = base_iertr::extend<
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
     crimson::ct_error::erange>;
-  template <class ValueT=void>
-  using tm_future = tm_ertr::future<ValueT>;
+  virtual read_iertr::future<NodeExtentRef> read_extent(
+      Transaction&, laddr_t) = 0;
 
-  virtual bool is_read_isolated() const = 0;
-  virtual tm_future<NodeExtentRef> read_extent(
-      Transaction&, laddr_t, extent_len_t) = 0;
-  virtual tm_future<NodeExtentRef> alloc_extent(Transaction&, extent_len_t) = 0;
-  virtual tm_future<Super::URef> get_super(Transaction&, RootNodeTracker&) = 0;
+  using alloc_iertr = base_iertr;
+  virtual alloc_iertr::future<NodeExtentRef> alloc_extent(
+      Transaction&, laddr_t hint, extent_len_t) = 0;
+
+  using retire_iertr = base_iertr::extend<
+    crimson::ct_error::enoent>;
+  virtual retire_iertr::future<> retire_extent(
+      Transaction&, NodeExtentRef) = 0;
+
+  using getsuper_iertr = base_iertr;
+  virtual getsuper_iertr::future<Super::URef> get_super(
+      Transaction&, RootNodeTracker&) = 0;
+
+  virtual std::ostream& print(std::ostream& os) const = 0;
 
   static NodeExtentManagerURef create_dummy(bool is_sync);
   static NodeExtentManagerURef create_seastore(
-      TransactionManager& tm, laddr_t min_laddr = L_ADDR_MIN);
+      TransactionManager &tm, laddr_t min_laddr = L_ADDR_MIN, double p_eagain = 0.0);
 };
+inline std::ostream& operator<<(std::ostream& os, const NodeExtentManager& nm) {
+  return nm.print(os);
+}
 
 }

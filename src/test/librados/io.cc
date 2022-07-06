@@ -27,7 +27,7 @@ TEST_F(LibRadosIo, SimpleWrite) {
 }
 
 TEST_F(LibRadosIo, TooBig) {
-  char buf[1];
+  char buf[1] = { 0 };
   ASSERT_EQ(-E2BIG, rados_write(ioctx, "A", buf, UINT_MAX, 0));
   ASSERT_EQ(-E2BIG, rados_append(ioctx, "A", buf, UINT_MAX));
   ASSERT_EQ(-E2BIG, rados_write_full(ioctx, "A", buf, UINT_MAX));
@@ -112,7 +112,7 @@ TEST_F(LibRadosIo, Checksum) {
 
   uint32_t expected_crc = ceph_crc32c(-1, reinterpret_cast<const uint8_t*>(buf),
                                       sizeof(buf));
-  ceph_le32 init_value = init_le32(-1);
+  ceph_le32 init_value(-1);
   ceph_le32 crc[2];
   ASSERT_EQ(0, rados_checksum(ioctx, "foo", LIBRADOS_CHECKSUM_TYPE_CRC32C,
 			      reinterpret_cast<char*>(&init_value),
@@ -161,6 +161,14 @@ TEST_F(LibRadosIo, AppendRoundTrip) {
   ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
   ASSERT_EQ(0, memcmp(buf3 + sizeof(buf), buf2, sizeof(buf2)));
+}
+
+TEST_F(LibRadosIo, ZeroLenZero) {
+  rados_write_op_t op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_zero(op, 0, 0);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "foo", NULL, 0));
+  rados_release_write_op(op);
 }
 
 TEST_F(LibRadosIo, TruncTest) {

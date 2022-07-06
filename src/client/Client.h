@@ -32,6 +32,7 @@
 #include "include/unordered_set.h"
 #include "include/cephfs/metrics/Types.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/types.h"
 #include "msg/Dispatcher.h"
 #include "msg/MessageRef.h"
 #include "msg/Messenger.h"
@@ -77,6 +78,15 @@ enum {
   l_c_wrlat,
   l_c_read,
   l_c_fsync,
+  l_c_md_avg,
+  l_c_md_sqsum,
+  l_c_md_ops,
+  l_c_rd_avg,
+  l_c_rd_sqsum,
+  l_c_rd_ops,
+  l_c_wr_avg,
+  l_c_wr_sqsum,
+  l_c_wr_ops,
   l_c_last,
 };
 
@@ -107,10 +117,11 @@ class MDSCommandOp : public CommandOp
 
 /* getdir result */
 struct DirEntry {
-  explicit DirEntry(const string &s) : d_name(s), stmask(0) {}
-  DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
+  explicit DirEntry(const std::string &s) : d_name(s), stmask(0) {}
+  DirEntry(const std::string &n, struct stat& s, int stm)
+    : d_name(n), st(s), stmask(stm) {}
 
-  string d_name;
+  std::string d_name;
   struct stat st;
   int stmask;
 };
@@ -136,11 +147,12 @@ struct dir_result_t {
 
   struct dentry {
     int64_t offset;
-    string name;
+    std::string name;
+    std::string alternate_name;
     InodeRef inode;
     explicit dentry(int64_t o) : offset(o) {}
-    dentry(int64_t o, const string& n, const InodeRef& in) :
-      offset(o), name(n), inode(in) {}
+    dentry(int64_t o, std::string n, std::string an, InodeRef in) :
+      offset(o), name(std::move(n)), alternate_name(std::move(an)), inode(std::move(in)) {}
   };
   struct dentry_off_lt {
     bool operator()(const dentry& d, int64_t off) const {
@@ -214,7 +226,7 @@ struct dir_result_t {
 			 //   ((frag value) << 28) | (the nth entry in frag);
 
   unsigned next_offset;  // offset of next chunk (last_name's + 1)
-  string last_name;      // last entry in previous chunk
+  std::string last_name;      // last entry in previous chunk
 
   uint64_t release_count;
   uint64_t ordered_count;
@@ -224,7 +236,7 @@ struct dir_result_t {
 
   frag_t buffer_frag;
 
-  vector<dentry> buffer;
+  std::vector<dentry> buffer;
   struct dirent de;
 };
 
@@ -247,6 +259,11 @@ public:
   using clock = ceph::coarse_mono_clock;
 
   typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct ceph_statx *stx, off_t off, Inode *in);
+
+  struct walk_dentry_result {
+    InodeRef in;
+    std::string alternate_name;
+  };
 
   class CommandHook : public AdminSocketHook {
   public:
@@ -285,6 +302,18 @@ public:
   int mount(const std::string &mount_root, const UserPerm& perms,
 	    bool require_mds=false, const std::string &fs_name="");
   void unmount();
+  bool is_unmounting() const {
+    return mount_state.check_current_state(CLIENT_UNMOUNTING);
+  }
+  bool is_mounted() const {
+    return mount_state.check_current_state(CLIENT_MOUNTED);
+  }
+  bool is_mounting() const {
+    return mount_state.check_current_state(CLIENT_MOUNTING);
+  }
+  bool is_initialized() const {
+    return initialize_state.check_current_state(CLIENT_INITIALIZED);
+  }
   void abort_conn();
 
   void set_uuid(const std::string& uuid);
@@ -313,6 +342,7 @@ public:
 
   // namespace ops
   int opendir(const char *name, dir_result_t **dirpp, const UserPerm& perms);
+  int fdopendir(int dirfd, dir_result_t **dirpp, const UserPerm& perms);
   int closedir(dir_result_t *dirp);
 
   /**
@@ -324,19 +354,19 @@ public:
    * If @a cb returns a negative error code, stop and return that.
    */
   int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
-		   unsigned want=0, unsigned flags=AT_NO_ATTR_SYNC,
+		   unsigned want=0, unsigned flags=AT_STATX_DONT_SYNC,
 		   bool getref=false);
 
   struct dirent * readdir(dir_result_t *d);
   int readdir_r(dir_result_t *dirp, struct dirent *de);
   int readdirplus_r(dir_result_t *dirp, struct dirent *de, struct ceph_statx *stx, unsigned want, unsigned flags, Inode **out);
 
-  int getdir(const char *relpath, list<string>& names,
+  int getdir(const char *relpath, std::list<std::string>& names,
 	     const UserPerm& perms);  // get the whole dir at once.
 
   /**
    * Returns the length of the buffer that got filled in, or -errno.
-   * If it returns -ERANGE you just need to increase the size of the
+   * If it returns -CEPHFS_ERANGE you just need to increase the size of the
    * buffer and try again.
    */
   int _getdents(dir_result_t *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
@@ -351,19 +381,29 @@ public:
   loff_t telldir(dir_result_t *dirp);
   void seekdir(dir_result_t *dirp, loff_t offset);
 
-  int link(const char *existing, const char *newname, const UserPerm& perm);
+  int may_delete(const char *relpath, const UserPerm& perms);
+  int link(const char *existing, const char *newname, const UserPerm& perm, std::string alternate_name="");
   int unlink(const char *path, const UserPerm& perm);
-  int rename(const char *from, const char *to, const UserPerm& perm);
+  int unlinkat(int dirfd, const char *relpath, int flags, const UserPerm& perm);
+  int rename(const char *from, const char *to, const UserPerm& perm, std::string alternate_name="");
 
   // dirs
-  int mkdir(const char *path, mode_t mode, const UserPerm& perm);
+  int mkdir(const char *path, mode_t mode, const UserPerm& perm, std::string alternate_name="");
+  int mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm,
+              std::string alternate_name="");
   int mkdirs(const char *path, mode_t mode, const UserPerm& perms);
   int rmdir(const char *path, const UserPerm& perms);
 
   // symlinks
   int readlink(const char *path, char *buf, loff_t size, const UserPerm& perms);
+  int readlinkat(int dirfd, const char *relpath, char *buf, loff_t size, const UserPerm& perms);
 
-  int symlink(const char *existing, const char *newname, const UserPerm& perms);
+  int symlink(const char *existing, const char *newname, const UserPerm& perms, std::string alternate_name="");
+  int symlinkat(const char *target, int dirfd, const char *relpath, const UserPerm& perms,
+                std::string alternate_name="");
+
+  // path traversal for high-level interface
+  int walk(std::string_view path, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true);
 
   // inode stuff
   unsigned statx_to_mask(unsigned int flags, unsigned int want);
@@ -383,12 +423,15 @@ public:
   int fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& perms);
   int chmod(const char *path, mode_t mode, const UserPerm& perms);
   int fchmod(int fd, mode_t mode, const UserPerm& perms);
+  int chmodat(int dirfd, const char *relpath, mode_t mode, int flags, const UserPerm& perms);
   int lchmod(const char *path, mode_t mode, const UserPerm& perms);
   int chown(const char *path, uid_t new_uid, gid_t new_gid,
 	    const UserPerm& perms);
   int fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms);
   int lchown(const char *path, uid_t new_uid, gid_t new_gid,
 	     const UserPerm& perms);
+  int chownat(int dirfd, const char *relpath, uid_t new_uid, gid_t new_gid,
+              int flags, const UserPerm& perms);
   int utime(const char *path, struct utimbuf *buf, const UserPerm& perms);
   int lutime(const char *path, struct utimbuf *buf, const UserPerm& perms);
   int futime(int fd, struct utimbuf *buf, const UserPerm& perms);
@@ -396,19 +439,36 @@ public:
   int lutimes(const char *relpath, struct timeval times[2], const UserPerm& perms);
   int futimes(int fd, struct timeval times[2], const UserPerm& perms);
   int futimens(int fd, struct timespec times[2], const UserPerm& perms);
+  int utimensat(int dirfd, const char *relpath, struct timespec times[2], int flags,
+                const UserPerm& perms);
   int flock(int fd, int operation, uint64_t owner);
   int truncate(const char *path, loff_t size, const UserPerm& perms);
 
   // file ops
   int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
-  int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0);
+
+  int create_and_open(int dirfd, const char *relpath, int flags, const UserPerm& perms,
+                      mode_t mode, int stripe_unit, int stripe_count, int object_size,
+                      const char *data_pool, std::string alternate_name);
+  int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0, std::string alternate_name="") {
+    return open(path, flags, perms, mode, 0, 0, 0, NULL, alternate_name);
+  }
   int open(const char *path, int flags, const UserPerm& perms,
 	   mode_t mode, int stripe_unit, int stripe_count, int object_size,
-	   const char *data_pool);
+	   const char *data_pool, std::string alternate_name="");
+  int openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
+             mode_t mode, int stripe_unit, int stripe_count,
+             int object_size, const char *data_pool, std::string alternate_name);
+  int openat(int dirfd, const char *path, int flags, const UserPerm& perms, mode_t mode=0,
+             std::string alternate_name="") {
+    return openat(dirfd, path, flags, perms, mode, 0, 0, 0, NULL, alternate_name);
+  }
+
   int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 		  const UserPerm& perms);
   int lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   int lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
+  int _close(int fd);
   int close(int fd);
   loff_t lseek(int fd, loff_t offset, int whence);
   int read(int fd, char *buf, loff_t size, loff_t offset=-1);
@@ -422,6 +482,9 @@ public:
 	    int mask=CEPH_STAT_CAP_INODE_ALL);
   int fstatx(int fd, struct ceph_statx *stx, const UserPerm& perms,
 	     unsigned int want, unsigned int flags);
+  int statxat(int dirfd, const char *relpath,
+              struct ceph_statx *stx, const UserPerm& perms,
+              unsigned int want, unsigned int flags);
   int fallocate(int fd, int mode, loff_t offset, loff_t length);
 
   // full path xattr ops
@@ -458,8 +521,8 @@ public:
   int describe_layout(const char *path, file_layout_t* layout,
 		      const UserPerm& perms);
   int fdescribe_layout(int fd, file_layout_t* layout);
-  int get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address);
-  int get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds);
+  int get_file_stripe_address(int fd, loff_t offset, std::vector<entity_addr_t>& address);
+  int get_file_extent_osds(int fd, loff_t off, loff_t *len, std::vector<int>& osds);
   int get_osd_addr(int osd, entity_addr_t& addr);
 
   // expose mdsmap
@@ -469,15 +532,15 @@ public:
   int get_local_osd();
   int get_pool_replication(int64_t pool);
   int64_t get_pool_id(const char *pool_name);
-  string get_pool_name(int64_t pool);
-  int get_osd_crush_location(int id, vector<pair<string, string> >& path);
+  std::string get_pool_name(int64_t pool);
+  int get_osd_crush_location(int id, std::vector<std::pair<std::string, std::string> >& path);
 
-  int enumerate_layout(int fd, vector<ObjectExtent>& result,
+  int enumerate_layout(int fd, std::vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
 
   int mksnap(const char *path, const char *name, const UserPerm& perm,
              mode_t mode=0, const std::map<std::string, std::string> &metadata={});
-  int rmsnap(const char *path, const char *name, const UserPerm& perm);
+  int rmsnap(const char *path, const char *name, const UserPerm& perm, bool check_perms=false);
 
   // Inode permission checking
   int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
@@ -497,6 +560,7 @@ public:
   int ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		Inode **out, const UserPerm& perms);
   int ll_lookup_inode(struct inodeno_t ino, const UserPerm& perms, Inode **inode);
+  int ll_lookup_vino(vinodeno_t vino, const UserPerm& perms, Inode **inode);
   int ll_lookupx(Inode *parent, const char *name, Inode **out,
 			struct ceph_statx *stx, unsigned want, unsigned flags,
 			const UserPerm& perms);
@@ -598,8 +662,10 @@ public:
   int ll_osdaddr(int osd, uint32_t *addr);
   int ll_osdaddr(int osd, char* buf, size_t size);
 
-  void ll_register_callbacks(struct ceph_client_callback_args *args);
-  int test_dentry_handling(bool can_invalidate);
+  void _ll_register_callbacks(struct ceph_client_callback_args *args);
+  void ll_register_callbacks(struct ceph_client_callback_args *args); // deprecated
+  int ll_register_callbacks2(struct ceph_client_callback_args *args);
+  std::pair<int, bool> test_dentry_handling(bool can_invalidate);
 
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const ConfigProxy& conf,
@@ -657,7 +723,7 @@ public:
   int get_caps_used(Inode *in);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,
-			      vector<snapid_t>& snaps);
+			      std::vector<snapid_t>& snaps);
 
   void handle_quota(const MConstRef<MClientQuota>& m);
   void handle_snap(const MConstRef<MClientSnap>& m);
@@ -683,10 +749,9 @@ public:
   void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
   void finish_cap_snap(Inode *in, CapSnap &capsnap, int used);
-  void _flushed_cap_snap(Inode *in, snapid_t seq);
 
   void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
-  void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
+  void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, std::string& name);
   void _try_to_trim_inode(Inode *in, bool sched_inval);
 
   void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len);
@@ -722,7 +787,7 @@ public:
   void unlock_fh_pos(Fh *f);
 
   // metadata cache
-  void update_dir_dist(Inode *in, DirStat *st);
+  void update_dir_dist(Inode *in, DirStat *st, mds_rank_t from);
 
   void clear_dir_complete_and_ordered(Inode *diri, bool complete);
   void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
@@ -734,7 +799,7 @@ public:
 
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
 			  const UserPerm& request_perms);
-  Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease,
+  Dentry *insert_dentry_inode(Dir *dir, const std::string& dname, LeaseStat *dlease,
 			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);
   void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
@@ -743,6 +808,7 @@ public:
   vinodeno_t map_faked_ino(ino_t ino);
 
   //notify the mds to flush the mdlog
+  void flush_mdlog_sync(Inode *in);
   void flush_mdlog_sync();
   void flush_mdlog(MetaSession *session);
 
@@ -752,6 +818,16 @@ public:
   void renew_and_flush_cap_releases();
   void tick();
   void start_tick_thread();
+
+  void update_read_io_size(size_t size) {
+    total_read_ops++;
+    total_read_size += size;
+  }
+
+  void update_write_io_size(size_t size) {
+    total_write_ops++;
+    total_write_size += size;
+  }
 
   void inc_dentry_nr() {
     ++dentry_nr;
@@ -779,7 +855,35 @@ public:
     return std::make_pair(cap_hits, cap_misses);
   }
 
-  xlist<Inode*> &get_dirty_list() { return dirty_list; }
+  void inc_opened_files() {
+    ++opened_files;
+  }
+  void dec_opened_files() {
+    --opened_files;
+  }
+  std::pair<uint64_t, uint64_t> get_opened_files_rates() {
+    return std::make_pair(opened_files, inode_map.size());
+  }
+
+  void inc_pinned_icaps() {
+    ++pinned_icaps;
+  }
+  void dec_pinned_icaps(uint64_t nr=1) {
+    pinned_icaps -= nr;
+  }
+  std::pair<uint64_t, uint64_t> get_pinned_icaps_rates() {
+    return std::make_pair(pinned_icaps, inode_map.size());
+  }
+
+  void inc_opened_inodes() {
+    ++opened_inodes;
+  }
+  void dec_opened_inodes() {
+    --opened_inodes;
+  }
+  std::pair<uint64_t, uint64_t> get_opened_inodes_rates() {
+    return std::make_pair(opened_inodes, inode_map.size());
+  }
 
   /* timer_lock for 'timer' */
   ceph::mutex timer_lock = ceph::make_mutex("Client::timer_lock");
@@ -794,6 +898,7 @@ public:
   std::unique_ptr<MDSMap> mdsmap;
 
   bool fuse_default_permissions;
+  bool _collect_and_send_global_metrics;
 
 protected:
   /* Flags for check_caps() */
@@ -813,9 +918,9 @@ protected:
   void get_session_metadata(std::map<std::string, std::string> *meta) const;
   bool have_open_session(mds_rank_t mds);
   void got_mds_push(MetaSession *s);
-  MetaSession *_get_mds_session(mds_rank_t mds, Connection *con);  ///< return session for mds *and* con; null otherwise
-  MetaSession *_get_or_open_mds_session(mds_rank_t mds);
-  MetaSession *_open_mds_session(mds_rank_t mds);
+  MetaSessionRef _get_mds_session(mds_rank_t mds, Connection *con);  ///< return session for mds *and* con; null otherwise
+  MetaSessionRef _get_or_open_mds_session(mds_rank_t mds);
+  MetaSessionRef _open_mds_session(mds_rank_t mds);
   void _close_mds_session(MetaSession *s);
   void _closed_mds_session(MetaSession *s, int err=0, bool rejected=false);
   bool _any_stale_sessions() const;
@@ -855,6 +960,11 @@ protected:
   void handle_client_reply(const MConstRef<MClientReply>& reply);
   bool is_dir_operation(MetaRequest *request);
 
+  int path_walk(const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true, int mask=0,
+                InodeRef dirinode=nullptr);
+  int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
+                bool followsym=true, int mask=0, InodeRef dirinode=nullptr);
+
   // fake inode number for 32-bits ino_t
   void _assign_faked_ino(Inode *in);
   void _assign_faked_root(Inode *in);
@@ -892,12 +1002,13 @@ protected:
       return NULL;
     return it->second;
   }
+  int get_fd_inode(int fd, InodeRef *in);
 
   // helpers
   void wake_up_session_caps(MetaSession *s, bool reconnect);
 
-  void wait_on_context_list(list<Context*>& ls);
-  void signal_context_list(list<Context*>& ls);
+  void wait_on_context_list(std::list<Context*>& ls);
+  void signal_context_list(std::list<Context*>& ls);
 
   // -- metadata cache stuff
 
@@ -921,12 +1032,8 @@ protected:
    * leave dn set to default NULL unless you're trying to add
    * a new inode to a pre-created Dentry
    */
-  Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn);
+  Dentry* link(Dir *dir, const std::string& name, Inode *in, Dentry *dn);
   void unlink(Dentry *dn, bool keepdir, bool keepdentry);
-
-  // path traversal for high-level interface
-  int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
-		bool followsym=true, int mask=0);
 
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
@@ -1002,7 +1109,7 @@ protected:
 
   std::map<snapid_t, int> ll_snap_ref;
 
-  Inode*                 root = nullptr;
+  InodeRef               root = nullptr;
   map<Inode*, InodeRef>  root_parents;
   Inode*                 root_ancestor = nullptr;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
@@ -1038,7 +1145,7 @@ protected:
 
   struct mount_state_t : public RWRefState<state_t> {
     public:
-      bool is_valid_state(state_t state) override {
+      bool is_valid_state(state_t state) const override {
         switch (state) {
 	  case Client::CLIENT_MOUNTING:
 	  case Client::CLIENT_MOUNTED:
@@ -1050,7 +1157,7 @@ protected:
         }
       }
 
-      int check_reader_state(state_t require) override {
+      int check_reader_state(state_t require) const override {
         if (require == Client::CLIENT_MOUNTING &&
             (state == Client::CLIENT_MOUNTING || state == Client::CLIENT_MOUNTED))
           return true;
@@ -1059,7 +1166,7 @@ protected:
       }
 
       /* The state migration check */
-      int check_writer_state(state_t require) override {
+      int check_writer_state(state_t require) const override {
         if (require == Client::CLIENT_MOUNTING &&
             state == Client::CLIENT_UNMOUNTED)
           return true;
@@ -1083,7 +1190,7 @@ protected:
 
   struct initialize_state_t : public RWRefState<state_t> {
     public:
-      bool is_valid_state(state_t state) override {
+      bool is_valid_state(state_t state) const override {
         switch (state) {
 	  case Client::CLIENT_NEW:
           case Client::CLIENT_INITIALIZING:
@@ -1094,7 +1201,7 @@ protected:
         }
       }
 
-      int check_reader_state(state_t require) override {
+      int check_reader_state(state_t require) const override {
         if (require == Client::CLIENT_INITIALIZED &&
             state >= Client::CLIENT_INITIALIZED)
           return true;
@@ -1103,7 +1210,7 @@ protected:
       }
 
       /* The state migration check */
-      int check_writer_state(state_t require) override {
+      int check_writer_state(state_t require) const override {
         if (require == Client::CLIENT_INITIALIZING &&
             (state == Client::CLIENT_NEW))
           return true;
@@ -1123,20 +1230,7 @@ protected:
   };
 
   struct mount_state_t mount_state;
-  bool is_unmounting() {
-    return mount_state.check_current_state(CLIENT_UNMOUNTING);
-  }
-  bool is_mounted() {
-    return mount_state.check_current_state(CLIENT_MOUNTED);
-  }
-  bool is_mounting() {
-    return mount_state.check_current_state(CLIENT_MOUNTING);
-  }
-
   struct initialize_state_t initialize_state;
-  bool is_initialized() {
-    return initialize_state.check_current_state(CLIENT_INITIALIZED);
-  }
 
 private:
   struct C_Readahead : public Context {
@@ -1153,11 +1247,13 @@ private:
    * statistics and layout metadata.
    */
   struct VXattr {
-	  const string name;
-	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
-	  bool readonly;
-	  bool (Client::*exists_cb)(Inode *in);
-	  unsigned int flags;
+    const std::string name;
+    size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
+    int (Client::*setxattr_cb)(Inode *in, const void *val, size_t size,
+			       const UserPerm& perms);
+    bool readonly;
+    bool (Client::*exists_cb)(Inode *in);
+    unsigned int flags;
   };
 
   enum {
@@ -1171,6 +1267,7 @@ private:
     MAY_READ = 4,
   };
 
+  std::unique_ptr<CephContext, std::function<void(CephContext*)>> cct_deleter;
 
   /* Flags for VXattr */
   static const unsigned VXATTR_RSTAT = 0x1;
@@ -1181,6 +1278,7 @@ private:
   static const VXattr _common_vxattrs[];
 
 
+  bool is_reserved_vino(vinodeno_t &vino);
 
   void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
 
@@ -1205,7 +1303,7 @@ private:
   int _release_fh(Fh *fh);
   void _put_fh(Fh *fh);
 
-  int _do_remount(bool retry_on_error);
+  std::pair<int, bool> _do_remount(bool retry_on_error);
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
@@ -1214,25 +1312,27 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
+  int _do_lookup(Inode *dir, const std::string& name, int mask, InodeRef *target,
 		 const UserPerm& perms);
 
-  int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
-	      const UserPerm& perm);
+  int _lookup(Inode *dir, const std::string& dname, int mask, InodeRef *target,
+	      const UserPerm& perm, std::string* alternate_name=nullptr);
 
-  int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm,
+  int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm, std::string alternate_name,
 	    InodeRef *inp = 0);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
-  int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm);
+  int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
   int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
-	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={});
+	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={},
+             std::string alternate_name="");
   int _rmdir(Inode *dir, const char *name, const UserPerm& perms);
   int _symlink(Inode *dir, const char *name, const char *target,
-	       const UserPerm& perms, InodeRef *inp = 0);
+	       const UserPerm& perms, std::string alternate_name, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
   int _do_setattr(Inode *in, struct ceph_statx *stx, int mask,
-		  const UserPerm& perms, InodeRef *inp);
+		  const UserPerm& perms, InodeRef *inp,
+		  std::vector<uint8_t>* aux=nullptr);
   void stat_to_statx(struct stat *st, struct ceph_statx *stx);
   int __setattrx(Inode *in, struct ceph_statx *stx, int mask,
 		 const UserPerm& perms, InodeRef *inp = 0);
@@ -1251,6 +1351,8 @@ private:
 		const UserPerm& perms);
   int _getxattr(InodeRef &in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
+  int _getvxattr(Inode *in, const UserPerm& perms, const char *attr_name,
+                 ssize_t size, void *value, mds_rank_t rank);
   int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms);
   int _do_setxattr(Inode *in, const char *name, const void *value, size_t len,
 		   int flags, const UserPerm& perms);
@@ -1258,7 +1360,7 @@ private:
 		int flags, const UserPerm& perms);
   int _setxattr(InodeRef &in, const char *name, const void *value, size_t len,
 		int flags, const UserPerm& perms);
-  int _setxattr_check_data_pool(string& name, string& value, const OSDMap *osdmap);
+  int _setxattr_check_data_pool(std::string& name, std::string& value, const OSDMap *osdmap);
   void _setxattr_maybe_wait_for_osdmap(const char *name, const void *value, size_t len);
   int _removexattr(Inode *in, const char *nm, const UserPerm& perms);
   int _removexattr(InodeRef &in, const char *nm, const UserPerm& perms);
@@ -1267,7 +1369,8 @@ private:
   int _renew_caps(Inode *in);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp,
 	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
-	      const char *data_pool, bool *created, const UserPerm &perms);
+	      const char *data_pool, bool *created, const UserPerm &perms,
+              std::string alternate_name);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
@@ -1275,9 +1378,9 @@ private:
           const struct iovec *iov, int iovcnt);
   int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                  unsigned iovcnt, int64_t offset,
-                                 bool write, bool clamp_to_int,
-                                 std::unique_lock<ceph::mutex> &cl);
-  int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
+                                 bool write, bool clamp_to_int);
+  int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt,
+                      int64_t offset, bool write);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
   int _fsync(Inode *in, bool syncdataonly);
@@ -1288,8 +1391,7 @@ private:
   int _flock(Fh *fh, int cmd, uint64_t owner);
   int _lazyio(Fh *fh, int enable);
 
-  int get_or_create(Inode *dir, const char* name,
-		    Dentry **pdn, bool expect_null=false);
+  Dentry *get_or_create(Inode *dir, const char* name);
 
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
@@ -1305,6 +1407,12 @@ private:
 
   vinodeno_t _get_vino(Inode *in);
 
+  bool _vxattrcb_fscrypt_auth_exists(Inode *in);
+  size_t _vxattrcb_fscrypt_auth(Inode *in, char *val, size_t size);
+  int _vxattrcb_fscrypt_auth_set(Inode *in, const void *val, size_t size, const UserPerm& perms);
+  bool _vxattrcb_fscrypt_file_exists(Inode *in);
+  size_t _vxattrcb_fscrypt_file(Inode *in, char *val, size_t size);
+  int _vxattrcb_fscrypt_file_set(Inode *in, const void *val, size_t size, const UserPerm& perms);
   bool _vxattrcb_quota_exists(Inode *in);
   size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
   size_t _vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size);
@@ -1333,6 +1441,8 @@ private:
   bool _vxattrcb_snap_btime_exists(Inode *in);
   size_t _vxattrcb_snap_btime(Inode *in, char *val, size_t size);
 
+  size_t _vxattrcb_caps(Inode *in, char *val, size_t size);
+
   bool _vxattrcb_mirror_info_exists(Inode *in);
   size_t _vxattrcb_mirror_info(Inode *in, char *val, size_t size);
 
@@ -1359,11 +1469,15 @@ private:
   int _ll_getattr(Inode *in, int caps, const UserPerm& perms);
   int _lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
   int _lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
-  int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
+  int _lookup_vino(vinodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   bool _ll_forget(Inode *in, uint64_t count);
 
   void collect_and_send_metrics();
   void collect_and_send_global_metrics();
+
+  void update_io_stat_metadata(utime_t latency);
+  void update_io_stat_read(utime_t latency);
+  void update_io_stat_write(utime_t latency);
 
   uint32_t deleg_timeout = 0;
 
@@ -1383,7 +1497,7 @@ private:
   Finisher async_ino_releasor;
   Finisher objecter_finisher;
 
-  utime_t last_cap_renew;
+  ceph::coarse_mono_time last_cap_renew;
 
   CommandHook m_command_hook;
 
@@ -1393,7 +1507,7 @@ private:
   epoch_t cap_epoch_barrier = 0;
 
   // mds sessions
-  map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
+  map<mds_rank_t, MetaSessionRef> mds_sessions;  // mds -> push seq
   std::set<mds_rank_t> mds_ranks_closing;  // mds ranks currently tearing down sessions
   std::list<ceph::condition_variable*> waiting_for_mdsmap;
 
@@ -1428,7 +1542,7 @@ private:
   ino_t last_used_faked_ino;
   ino_t last_used_faked_root;
 
-  int local_osd = -ENXIO;
+  int local_osd = -CEPHFS_ENXIO;
   epoch_t local_osd_epoch = 0;
 
   // mds requests
@@ -1439,16 +1553,15 @@ private:
   // cap flushing
   ceph_tid_t last_flush_tid = 1;
 
-  // dirty_list keeps all the dirty inodes before flushing.
-  xlist<Inode*> delayed_list, dirty_list;
+  xlist<Inode*> delayed_list;
   int num_flushing_caps = 0;
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
 
-  utime_t last_auto_reconnect;
-
+  ceph::coarse_mono_time last_auto_reconnect;
+  std::chrono::seconds caps_release_delay, mount_timeout;
   // trace generation
-  ofstream traceout;
+  std::ofstream traceout;
 
   ceph::condition_variable mount_cond, sync_cond;
 
@@ -1471,8 +1584,22 @@ private:
   uint64_t cap_hits = 0;
   uint64_t cap_misses = 0;
 
+  uint64_t opened_files = 0;
+  uint64_t pinned_icaps = 0;
+  uint64_t opened_inodes = 0;
+
+  uint64_t total_read_ops = 0;
+  uint64_t total_read_size = 0;
+
+  uint64_t total_write_ops = 0;
+  uint64_t total_write_size = 0;
+
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
+
+  uint64_t nr_metadata_request = 0;
+  uint64_t nr_read_request = 0;
+  uint64_t nr_write_request = 0;
 };
 
 /**

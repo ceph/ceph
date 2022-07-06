@@ -4,6 +4,7 @@
 #include "os/Transaction.h"
 #include "common/Formatter.h"
 
+using std::less;
 using std::list;
 using std::map;
 using std::ostream;
@@ -554,7 +555,7 @@ void Transaction::generate_test_instances(list<Transaction*>& o)
 
   t = new Transaction;
   t->setattr(c, o1, "key", bl);
-  map<string,bufferptr> m;
+  map<string,bufferptr,less<>> m;
   m["a"] = buffer::copy("this", 4);
   m["b"] = buffer::copy("that", 4);
   t->setattrs(c, o1, m);

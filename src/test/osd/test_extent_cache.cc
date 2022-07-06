@@ -17,6 +17,8 @@
 #include "osd/ExtentCache.h"
 #include <iostream>
 
+using namespace std;
+
 extent_map imap_from_vector(vector<pair<uint64_t, uint64_t> > &&in)
 {
   extent_map out;

@@ -1,3 +1,5 @@
+.. _radosgw api:
+
 ===============
 librgw (Python)
 ===============

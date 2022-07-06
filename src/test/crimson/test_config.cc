@@ -7,6 +7,7 @@
 #include "common/config_obs.h"
 #include "crimson/common/config_proxy.h"
 
+using namespace std::literals;
 using Config = crimson::common::ConfigProxy;
 const std::string test_uint_option = "osd_max_pgls";
 const uint64_t INVALID_VALUE = (uint64_t)(-1);
@@ -47,7 +48,7 @@ seastar::sharded<ConfigObs> sharded_cobs;
 
 static seastar::future<> test_config()
 {
-  return crimson::common::sharded_conf().start(EntityName{}, string_view{"ceph"}).then([] {
+  return crimson::common::sharded_conf().start(EntityName{}, "ceph"sv).then([] {
     std::vector<const char*> args;
     std::string cluster;
     std::string conf_file_list;

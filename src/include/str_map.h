@@ -23,6 +23,25 @@
 #include <string>
 #include <sstream>
 
+template <typename Func>
+void for_each_pair(std::string_view s, const char* delims, Func&& f)
+{
+  auto pos = s.find_first_not_of(delims);
+  while (pos != s.npos) {
+    s.remove_prefix(pos); // trim delims from the front
+    auto end = s.find_first_of(delims);
+    auto kv = s.substr(0, end);
+    if (auto equal = kv.find('='); equal != kv.npos) {
+      f(kv.substr(0, equal), kv.substr(equal + 1));
+    } else {
+      f(kv.substr(0, equal), std::string_view());
+    }
+    pos = s.find_first_not_of(delims, end);
+  }
+}
+
+using str_map_t = std::map<std::string,std::string>;
+
 /**
  * Parse **str** and set **str_map** with the key/value pairs read
  * from it. The format of **str** is either a well formed JSON object
@@ -45,10 +64,10 @@
  * @param [in] fallback_to_plain attempt parsing as plain-text if json fails
  * @return **0** on success or a -EINVAL on error.
  */
-extern int get_json_str_map(
+int get_json_str_map(
     const std::string &str,
     std::ostream &ss,
-    std::map<std::string,std::string> *str_map,
+    str_map_t* str_map,
     bool fallback_to_plain = true);
 
 /**
@@ -89,10 +108,15 @@ extern int get_json_str_map(
  * @param [out] str_map key/value pairs parsed from str
  * @return **0**
  */
-extern int get_str_map(
+int get_str_map(
     const std::string &str,
-    std::map<std::string,std::string> *str_map,
+    str_map_t* str_map,
     const char *delims = CONST_DELIMS);
+
+// an alternate form (as we never fail):
+str_map_t get_str_map(
+    const std::string& str,
+    const char* delim = CONST_DELIMS);
 
 /**
  * Returns the value of **key** in **str_map** if available.
@@ -106,10 +130,10 @@ extern int get_str_map(
  * @param[in] key The key to search for in the map
  * @param[in] def_val The value to return in case **key** is not present
  */
-extern std::string get_str_map_value(
-    const std::map<std::string,std::string> &str_map,
+std::string get_str_map_value(
+    const str_map_t& str_map,
     const std::string &key,
-    const std::string *def_val = NULL);
+    const std::string *def_val = nullptr);
 
 /**
  * Returns the value of **key** in **str_map** if available.
@@ -127,11 +151,10 @@ extern std::string get_str_map_value(
  * @param[in] def_key Key to fallback to if **key** is not present
  *                    in **str_map**
  */
-extern std::string get_str_map_key(
-    const std::map<std::string,std::string> &str_map,
+std::string get_str_map_key(
+    const str_map_t& str_map,
     const std::string &key,
-    const std::string *fallback_key = NULL);
-
+    const std::string *fallback_key = nullptr);
 
 // This function's only purpose is to check whether a given map has only
 // ONE key with an empty value (which would mean that 'get_str_map()' read
@@ -142,7 +165,16 @@ extern std::string get_str_map_key(
 int get_conf_str_map_helper(
     const std::string &str,
     std::ostringstream &oss,
-    std::map<std::string,std::string> *m,
-    const std::string &def_key);
+    str_map_t* str_map,
+    const std::string &default_key);
+
+std::string get_value_via_strmap(
+  const std::string& conf_string,
+  std::string_view default_key);
+
+std::string get_value_via_strmap(
+  const std::string& conf_string,
+  const std::string& key,
+  std::string_view default_key);
 
 #endif

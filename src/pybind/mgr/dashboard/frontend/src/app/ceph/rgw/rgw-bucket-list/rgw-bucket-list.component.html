@@ -27,7 +27,8 @@
                 [used]="row.bucket_size">
   </cd-usage-bar>
 
-  <ng-template #noSizeQuota>No Limit</ng-template>
+  <ng-template #noSizeQuota
+               i18n>No Limit</ng-template>
 </ng-template>
 
 <ng-template #bucketObjectTpl
@@ -38,5 +39,6 @@
                 [isBinary]="false">
   </cd-usage-bar>
 
-  <ng-template #noObjectQuota>No Limit</ng-template>
+  <ng-template #noObjectQuota
+               i18n>No Limit</ng-template>
 </ng-template>

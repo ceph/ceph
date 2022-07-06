@@ -2,28 +2,34 @@
 """
 ceph dashboard mgr plugin (based on CherryPy)
 """
-from __future__ import absolute_import
-
 import collections
 import errno
 import logging
 import os
-import socket
 import ssl
 import sys
 import tempfile
 import threading
 import time
+from typing import TYPE_CHECKING, Optional
 
-from mgr_module import CLIWriteCommand, MgrModule, MgrStandbyModule, Option
-from mgr_util import ServerConfigException, create_self_signed_cert, \
-    get_default_addr, verify_tls_files
+if TYPE_CHECKING:
+    if sys.version_info >= (3, 8):
+        from typing import Literal
+    else:
+        from typing_extensions import Literal
+
+from mgr_module import CLIReadCommand, CLIWriteCommand, HandleCommandResult, \
+    MgrModule, MgrStandbyModule, NotifyType, Option, _get_localized_key
+from mgr_util import ServerConfigException, build_url, \
+    create_self_signed_cert, get_default_addr, verify_tls_files
 
 from . import mgr
-from .controllers import generate_routes, json_error_page
+from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
+from .services.rgw_client import configure_rgw_credentials
 from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
@@ -43,7 +49,7 @@ if cherrypy is not None:
     patch_cherrypy(cherrypy.__version__)
 
 # pylint: disable=wrong-import-position
-from .plugins import PLUGIN_MANAGER, debug, feature_toggles  # noqa # pylint: disable=unused-import
+from .plugins import PLUGIN_MANAGER, debug, feature_toggles, motd  # isort:skip # noqa E501 # pylint: disable=unused-import
 
 PLUGIN_MANAGER.hook.init()
 
@@ -145,7 +151,7 @@ class CherryPyConfig(object):
 
         if use_ssl:
             # SSL initialization
-            cert = self.get_store("crt")  # type: ignore
+            cert = self.get_localized_store("crt")  # type: ignore
             if cert is not None:
                 self.cert_tmp = tempfile.NamedTemporaryFile()
                 self.cert_tmp.write(cert.encode('utf-8'))
@@ -154,7 +160,7 @@ class CherryPyConfig(object):
             else:
                 cert_fname = self.get_localized_module_option('crt_file')  # type: ignore
 
-            pkey = self.get_store("key")  # type: ignore
+            pkey = self.get_localized_store("key")  # type: ignore
             if pkey is not None:
                 self.pkey_tmp = tempfile.NamedTemporaryFile()
                 self.pkey_tmp.write(pkey.encode('utf-8'))
@@ -183,13 +189,14 @@ class CherryPyConfig(object):
         self._url_prefix = prepare_url_prefix(self.get_module_option(  # type: ignore
             'url_prefix', default=''))
 
-        uri = "{0}://{1}:{2}{3}/".format(
-            'https' if use_ssl else 'http',
-            socket.getfqdn(server_addr if server_addr != '::' else ''),
-            server_port,
-            self.url_prefix
+        if server_addr in ['::', '0.0.0.0']:
+            server_addr = self.get_mgr_ip()  # type: ignore
+        base_url = build_url(
+            scheme='https' if use_ssl else 'http',
+            host=server_addr,
+            port=server_port,
         )
-
+        uri = f'{base_url}{self.url_prefix}/'
         return uri
 
     def await_configuration(self):
@@ -211,6 +218,10 @@ class CherryPyConfig(object):
             else:
                 self.log.info("Configured CherryPy, starting engine...")  # type: ignore
                 return uri
+
+
+if TYPE_CHECKING:
+    SslConfigKey = Literal['crt', 'key']
 
 
 class Module(MgrModule, CherryPyConfig):
@@ -250,9 +261,7 @@ class Module(MgrModule, CherryPyConfig):
         Option(name='server_port', type='int', default=8080),
         Option(name='ssl_server_port', type='int', default=8443),
         Option(name='jwt_token_ttl', type='int', default=28800),
-        Option(name='password', type='str', default=''),
         Option(name='url_prefix', type='str', default=''),
-        Option(name='username', type='str', default=''),
         Option(name='key_file', type='str', default=''),
         Option(name='crt_file', type='str', default=''),
         Option(name='ssl', type='bool', default=True),
@@ -264,6 +273,8 @@ class Module(MgrModule, CherryPyConfig):
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:
         MODULE_OPTIONS.extend(options)
+
+    NOTIFY_TYPES = [NotifyType.clog]
 
     __pool_stats = collections.defaultdict(lambda: collections.defaultdict(
         lambda: collections.deque(maxlen=10)))  # type: dict
@@ -294,7 +305,15 @@ class Module(MgrModule, CherryPyConfig):
     @classmethod
     def get_frontend_path(cls):
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        return os.path.join(current_dir, 'frontend/dist')
+        path = os.path.join(current_dir, 'frontend/dist')
+        if os.path.exists(path):
+            return path
+        else:
+            path = os.path.join(current_dir,
+                                '../../../../build',
+                                'src/pybind/mgr/dashboard',
+                                'frontend/dist')
+            return os.path.abspath(path)
 
     def serve(self):
 
@@ -319,7 +338,7 @@ class Module(MgrModule, CherryPyConfig):
         # about to start serving
         self.set_uri(uri)
 
-        mapper, parent_urls = generate_routes(self.url_prefix)
+        mapper, parent_urls = Router.generate_routes(self.url_prefix)
 
         config = {}
         for purl in parent_urls:
@@ -358,29 +377,78 @@ class Module(MgrModule, CherryPyConfig):
         logger.info('Stopping engine...')
         self.shutdown_event.set()
 
-    @CLIWriteCommand("dashboard set-ssl-certificate",
-                     "name=mgr_id,type=CephString,req=false")
-    def set_ssl_certificate(self, mgr_id=None, inbuf=None):
+    def _set_ssl_item(self, item_label: str, item_key: 'SslConfigKey' = 'crt',
+                      mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
         if inbuf is None:
-            return -errno.EINVAL, '',\
-                'Please specify the certificate file with "-i" option'
-        if mgr_id is not None:
-            self.set_store('{}/crt'.format(mgr_id), inbuf)
-        else:
-            self.set_store('crt', inbuf)
-        return 0, 'SSL certificate updated', ''
+            return -errno.EINVAL, '', f'Please specify the {item_label} with "-i" option'
 
-    @CLIWriteCommand("dashboard set-ssl-certificate-key",
-                     "name=mgr_id,type=CephString,req=false")
-    def set_ssl_certificate_key(self, mgr_id=None, inbuf=None):
-        if inbuf is None:
-            return -errno.EINVAL, '',\
-                'Please specify the certificate key file with "-i" option'
         if mgr_id is not None:
-            self.set_store('{}/key'.format(mgr_id), inbuf)
+            self.set_store(_get_localized_key(mgr_id, item_key), inbuf)
         else:
-            self.set_store('key', inbuf)
-        return 0, 'SSL certificate key updated', ''
+            self.set_store(item_key, inbuf)
+        return 0, f'SSL {item_label} updated', ''
+
+    @CLIWriteCommand("dashboard set-ssl-certificate")
+    def set_ssl_certificate(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
+        return self._set_ssl_item('certificate', 'crt', mgr_id, inbuf)
+
+    @CLIWriteCommand("dashboard set-ssl-certificate-key")
+    def set_ssl_certificate_key(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
+        return self._set_ssl_item('certificate key', 'key', mgr_id, inbuf)
+
+    @CLIWriteCommand("dashboard create-self-signed-cert")
+    def set_mgr_created_self_signed_cert(self):
+        cert, pkey = create_self_signed_cert('IT', 'ceph-dashboard')
+        result = HandleCommandResult(*self.set_ssl_certificate(inbuf=cert))
+        if result.retval != 0:
+            return result
+
+        result = HandleCommandResult(*self.set_ssl_certificate_key(inbuf=pkey))
+        if result.retval != 0:
+            return result
+        return 0, 'Self-signed certificate created', ''
+
+    @CLIWriteCommand("dashboard set-rgw-credentials")
+    def set_rgw_credentials(self):
+        try:
+            configure_rgw_credentials()
+        except Exception as error:
+            return -errno.EINVAL, '', str(error)
+
+        return 0, 'RGW credentials configured', ''
+
+    @CLIWriteCommand("dashboard set-login-banner")
+    def set_login_banner(self, inbuf: str):
+        '''
+        Set the custom login banner read from -i <file>
+        '''
+        item_label = 'login banner file'
+        if inbuf is None:
+            return HandleCommandResult(
+                -errno.EINVAL,
+                stderr=f'Please specify the {item_label} with "-i" option'
+            )
+        mgr.set_store('custom_login_banner', inbuf)
+        return HandleCommandResult(stdout=f'{item_label} added')
+
+    @CLIReadCommand("dashboard get-login-banner")
+    def get_login_banner(self):
+        '''
+        Get the custom login banner text
+        '''
+        banner_text = mgr.get_store('custom_login_banner')
+        if banner_text is None:
+            return HandleCommandResult(stdout='No login banner set')
+        else:
+            return HandleCommandResult(stdout=banner_text)
+
+    @CLIWriteCommand("dashboard unset-login-banner")
+    def unset_login_banner(self):
+        '''
+        Unset the custom login banner
+        '''
+        mgr.set_store('custom_login_banner', None)
+        return HandleCommandResult(stdout='Login banner removed')
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
@@ -396,9 +464,6 @@ class Module(MgrModule, CherryPyConfig):
         if cmd['prefix'] == 'dashboard get-jwt-token-ttl':
             ttl = self.get_module_option('jwt_token_ttl', JwtManager.JWT_TOKEN_TTL)
             return 0, str(ttl), ''
-        if cmd['prefix'] == 'dashboard create-self-signed-cert':
-            self.create_self_signed_cert()
-            return 0, 'Self-signed certificate created', ''
         if cmd['prefix'] == 'dashboard grafana dashboards update':
             push_local_dashboards()
             return 0, 'Grafana dashboards updated', ''
@@ -406,13 +471,8 @@ class Module(MgrModule, CherryPyConfig):
         return (-errno.EINVAL, '', 'Command not found \'{0}\''
                 .format(cmd['prefix']))
 
-    def create_self_signed_cert(self):
-        cert, pkey = create_self_signed_cert('IT', 'ceph-dashboard')
-        self.set_store('crt', cert)
-        self.set_store('key', pkey)
-
-    def notify(self, notify_type, notify_id):
-        NotificationQueue.new_notification(notify_type, notify_id)
+    def notify(self, notify_type: NotifyType, notify_id):
+        NotificationQueue.new_notification(str(notify_type), notify_id)
 
     def get_updated_pool_stats(self):
         df = self.get('df')

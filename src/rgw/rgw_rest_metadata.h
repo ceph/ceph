@@ -52,7 +52,7 @@ public:
 
 class RGWOp_Metadata_Put : public RGWRESTOp {
   int get_data(bufferlist& bl);
-  string update_status;
+  std::string update_status;
   obj_version ondisk_version;
 public:
   RGWOp_Metadata_Put() {}
@@ -98,8 +98,8 @@ public:
   RGWRESTMgr_Metadata() = default;
   ~RGWRESTMgr_Metadata() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *store,
-			       struct req_state* const s,
+  RGWHandler_REST* get_handler(rgw::sal::Store* store,
+			       req_state* const s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override {
     return new RGWHandler_Metadata(auth_registry);

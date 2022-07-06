@@ -15,9 +15,12 @@ set(crimson_common_srcs
   common/assert.cc
   common/buffer_io.cc
   common/config_proxy.cc
+  common/fatal_signal.cc
   common/formatter.cc
   common/perf_counters_collection.cc
   common/log.cc
+  common/logclient.cc
+  common/operation.cc
   common/throttle.cc
   common/tri_mutex.cc)
 
@@ -25,6 +28,7 @@ set(crimson_common_srcs
 #  - the logging is sent to Seastar backend
 #  - and the template parameter of lock_policy is SINGLE
 add_library(crimson-common STATIC
+  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket_client.cc
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
   ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
@@ -76,6 +80,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/HTMLFormatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Formatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Graylog.cc
+  ${PROJECT_SOURCE_DIR}/src/common/Journald.cc
   ${PROJECT_SOURCE_DIR}/src/common/ostream_temp.cc
   ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
   ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
@@ -83,6 +88,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
+  ${PROJECT_SOURCE_DIR}/src/compressor/Compressor.cc
   ${PROJECT_SOURCE_DIR}/src/crush/builder.c
   ${PROJECT_SOURCE_DIR}/src/crush/mapper.c
   ${PROJECT_SOURCE_DIR}/src/crush/crush.c
@@ -94,6 +100,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
+  ${PROJECT_SOURCE_DIR}/src/librbd/io/IoOperations.cc
   ${PROJECT_SOURCE_DIR}/src/log/Log.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc
   ${PROJECT_SOURCE_DIR}/src/mds/inode_backtrace.cc
@@ -114,21 +121,22 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
   ${crimson_common_srcs}
-  $<TARGET_OBJECTS:common_mountcephfs_objs>)
+  $<TARGET_OBJECTS:common_mountcephfs_objs>
+  $<TARGET_OBJECTS:common-options-objs>)
 
 target_compile_definitions(crimson-common PRIVATE
-  "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
-  "CEPH_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
-  "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
+  "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
+  "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
+  "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
 set(crimson_common_deps
   Boost::iostreams
   Boost::random
   json_spirit)
 
+set(crimson_common_public_deps crimson::cflags)
 if(WITH_JAEGER)
-  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
-  list(APPEND crimson_common_deps jaeger-base)
+  list(APPEND crimson_common_public_deps jaeger_base)
 endif()
 
 if(NOT WITH_SYSTEM_BOOST)
@@ -137,7 +145,7 @@ endif()
 
 target_link_libraries(crimson-common
   PUBLIC
-    crimson::cflags
+    ${crimson_common_public_deps}
   PRIVATE
     crc32
     ${crimson_common_deps}
@@ -164,6 +172,7 @@ set(crimson_mon_srcs
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
   ${PROJECT_SOURCE_DIR}/src/msg/async/crypto_onwire.cc
+  ${PROJECT_SOURCE_DIR}/src/msg/async/compression_onwire.cc
   ${PROJECT_SOURCE_DIR}/src/msg/async/frames_v2.cc
   net/Errors.cc
   net/Messenger.cc
@@ -171,7 +180,6 @@ set(crimson_net_srcs
   net/SocketMessenger.cc
   net/Socket.cc
   net/Protocol.cc
-  net/ProtocolV1.cc
   net/ProtocolV2.cc
   net/chained_dispatchers.cc)
 add_library(crimson STATIC
@@ -181,6 +189,8 @@ add_library(crimson STATIC
   ${crimson_net_srcs})
 target_compile_options(crimson PUBLIC
   "-ftemplate-backtrace-limit=0")
+set_target_properties(crimson PROPERTIES
+  JOB_POOL_COMPILE heavy_compile_job_pool)
 target_link_libraries(crimson
   PUBLIC
     crimson-common

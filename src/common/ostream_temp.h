@@ -37,3 +37,20 @@ private:
   OstreamTempSink *parent;
   std::stringstream ss;
 };
+
+class LoggerSinkSet : public OstreamTemp::OstreamTempSink {
+public:
+  virtual void info(std::stringstream &s) = 0;
+  virtual void warn(std::stringstream &s) = 0;
+  virtual void error(std::stringstream &s) = 0;
+  virtual void sec(std::stringstream &s) = 0;
+  virtual void debug(std::stringstream &s) = 0;
+  virtual OstreamTemp info() = 0;
+  virtual OstreamTemp warn() = 0;
+  virtual OstreamTemp error() = 0;
+  virtual OstreamTemp sec() = 0;
+  virtual OstreamTemp debug() = 0;
+  virtual void do_log(clog_type prio, std::stringstream& ss) = 0;
+  virtual void do_log(clog_type prio, const std::string& ss) = 0;
+  virtual ~LoggerSinkSet() {};
+};

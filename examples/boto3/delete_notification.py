@@ -26,7 +26,7 @@ client = boto3.client('s3',
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key)
 
-# deleting a specific notification congifuration from a bucket (when NotificationId is provided) or 
+# deleting a specific notification configuration from a bucket (when NotificationId is provided) or 
 # deleting all notification configurations on a bucket (without deleting the bucket itself) are extension to AWS S3 API
 
 if notification_name == "":

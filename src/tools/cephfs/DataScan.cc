@@ -17,8 +17,11 @@
 #include "common/ceph_argparse.h"
 #include <fstream>
 #include "include/util.h"
+#include "include/ceph_fs.h"
 
+#include "mds/CDentry.h"
 #include "mds/CInode.h"
+#include "mds/CDentry.h"
 #include "mds/InoTable.h"
 #include "mds/SnapServer.h"
 #include "cls/cephfs/cls_cephfs_client.h"
@@ -31,6 +34,8 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "datascan." << __func__ << ": "
+
+using namespace std;
 
 void DataScan::usage()
 {
@@ -368,7 +373,7 @@ int MetadataDriver::inject_unlinked_inode(
   // be ignoring dirfrags that exist
   inode_data.damage_flags |= (DAMAGE_STATS | DAMAGE_RSTATS | DAMAGE_FRAGTREE);
 
-  if (inono == MDS_INO_ROOT || MDS_INO_IS_MDSDIR(inono)) {
+  if (inono == CEPH_INO_ROOT || MDS_INO_IS_MDSDIR(inono)) {
     sr_t srnode;
     srnode.seq = 1;
     encode(srnode, inode_data.snap_blob);
@@ -409,7 +414,7 @@ int MetadataDriver::root_exists(inodeno_t ino, bool *result)
 int MetadataDriver::init_roots(int64_t data_pool_id)
 {
   int r = 0;
-  r = inject_unlinked_inode(MDS_INO_ROOT, S_IFDIR|0755, data_pool_id);
+  r = inject_unlinked_inode(CEPH_INO_ROOT, S_IFDIR|0755, data_pool_id);
   if (r != 0) {
     return r;
   }
@@ -429,7 +434,7 @@ int MetadataDriver::init_roots(int64_t data_pool_id)
 int MetadataDriver::check_roots(bool *result)
 {
   int r;
-  r = root_exists(MDS_INO_ROOT, result);
+  r = root_exists(CEPH_INO_ROOT, result);
   if (r != 0) {
     return r;
   }
@@ -676,8 +681,9 @@ int DataScan::scan_inodes()
     AccumulateResult accum_res;
     inode_backtrace_t backtrace;
     file_layout_t loaded_layout = file_layout_t::get_default();
+    std::string symlink;
     r = ClsCephFSClient::fetch_inode_accumulate_result(
-        data_io, oid, &backtrace, &loaded_layout, &accum_res);
+        data_io, oid, &backtrace, &loaded_layout, &symlink, &accum_res);
 
     if (r == -EINVAL) {
       dout(4) << "Accumulated metadata missing from '"
@@ -823,7 +829,7 @@ int DataScan::scan_inodes()
     }
 
     InodeStore dentry;
-    build_file_dentry(obj_name_ino, file_size, file_mtime, guessed_layout, &dentry);
+    build_file_dentry(obj_name_ino, file_size, file_mtime, guessed_layout, &dentry, symlink);
 
     // Inject inode to the metadata pool
     if (have_backtrace) {
@@ -895,8 +901,8 @@ bool DataScan::valid_ino(inodeno_t ino) const
   return (ino >= inodeno_t((1ull << 40)))
     || (MDS_INO_IS_STRAY(ino))
     || (MDS_INO_IS_MDSDIR(ino))
-    || ino == MDS_INO_ROOT
-    || ino == MDS_INO_CEPH;
+    || ino == CEPH_INO_ROOT
+    || ino == CEPH_INO_CEPH;
 }
 
 int DataScan::scan_links()
@@ -989,14 +995,26 @@ int DataScan::scan_links()
 	  }
 	  char dentry_type;
 	  decode(dentry_type, q);
-	  if (dentry_type == 'I') {
+	  mempool::mds_co::string alternate_name;
+	  if (dentry_type == 'I' || dentry_type == 'i') {
 	    InodeStore inode;
-	    inode.decode_bare(q);
+            if (dentry_type == 'i') {
+	      DECODE_START(2, q);
+              if (struct_v >= 2)
+                decode(alternate_name, q);
+	      inode.decode(q);
+	      DECODE_FINISH(q);
+	    } else {
+	      inode.decode_bare(q);
+	    }
+
 	    inodeno_t ino = inode.inode->ino;
 
 	    if (step == SCAN_INOS) {
 	      if (used_inos.contains(ino, 1)) {
-		dup_primaries[ino].size();
+		dup_primaries.emplace(std::piecewise_construct,
+				      std::forward_as_tuple(ino),
+				      std::forward_as_tuple());
 	      } else {
 		used_inos.insert(ino);
 	      }
@@ -1048,11 +1066,10 @@ int DataScan::scan_links()
 	      if (dnfirst == CEPH_NOSNAP)
 		injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
 	    }
-	  } else if (dentry_type == 'L') {
+	  } else if (dentry_type == 'L' || dentry_type == 'l') {
 	    inodeno_t ino;
 	    unsigned char d_type;
-	    decode(ino, q);
-	    decode(d_type, q);
+            CDentry::decode_remote(dentry_type, ino, d_type, alternate_name, q);
 
 	    if (step == SCAN_INOS) {
 	      remote_links[ino]++;
@@ -1472,8 +1489,18 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
     decode(first, q);
     char dentry_type;
     decode(dentry_type, q);
-    if (dentry_type == 'I') {
-      inode->decode_bare(q);
+    if (dentry_type == 'I' || dentry_type == 'i') {
+      if (dentry_type == 'i') {
+        mempool::mds_co::string alternate_name;
+
+        DECODE_START(2, q);
+        if (struct_v >= 2)
+          decode(alternate_name, q);
+        inode->decode(q);
+        DECODE_FINISH(q);
+      } else {
+        inode->decode_bare(q);
+      }
     } else {
       dout(20) << "dentry type '" << dentry_type << "': cannot"
                   "read an inode out of that" << dendl;
@@ -2132,12 +2159,19 @@ int LocalFileDriver::check_roots(bool *result)
 
 void MetadataTool::build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
-    const file_layout_t &layout, InodeStore *out)
+    const file_layout_t &layout, InodeStore *out, std::string symlink)
 {
   ceph_assert(out != NULL);
 
   auto inode = out->get_inode();
-  inode->mode = 0500 | S_IFREG;
+  if(!symlink.empty()) {
+    inode->mode = 0777 | S_IFLNK;
+    out->symlink = symlink;
+  }
+  else {
+    inode->mode = 0500 | S_IFREG;
+  }
+
   inode->size = file_size;
   inode->max_size_ever = file_size;
   inode->mtime.tv.tv_sec = file_mtime;

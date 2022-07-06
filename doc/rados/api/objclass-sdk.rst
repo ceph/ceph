@@ -1,3 +1,5 @@
+.. _`rados-objclass-api-sdk`:
+
 ===========================
 SDK for Ceph Object Classes
 ===========================

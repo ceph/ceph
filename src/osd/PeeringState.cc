@@ -10,13 +10,10 @@
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDScrubReserve.h"
-#include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGLog.h"
-#include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGNotify2.h"
-#include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGQuery2.h"
 #include "messages/MOSDPGLease.h"
 #include "messages/MOSDPGLeaseAck.h"
@@ -31,28 +28,22 @@ using std::map;
 using std::ostream;
 using std::pair;
 using std::set;
+using std::string;
 using std::stringstream;
 using std::vector;
 
 using ceph::Formatter;
 using ceph::make_message;
 
-BufferedRecoveryMessages::BufferedRecoveryMessages(
-  ceph_release_t r,
-  PeeringCtx &ctx)
-  : require_osd_release(r) {
+BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
   // steal messages from ctx
-  message_map.swap(ctx.message_map);
-}
+  : message_map{std::move(ctx.message_map)}
+{}
 
 void BufferedRecoveryMessages::send_notify(int to, const pg_notify_t &n)
 {
-  if (require_osd_release >= ceph_release_t::octopus) {
-    spg_t pgid(n.info.pgid.pgid, n.to);
-    send_osd_message(to, make_message<MOSDPGNotify2>(pgid, n));
-  } else {
-    send_osd_message(to, make_message<MOSDPGNotify>(n.epoch_sent, vector{n}));
-  }
+  spg_t pgid(n.info.pgid.pgid, n.to);
+  send_osd_message(to, TOPNSPC::make_message<MOSDPGNotify2>(pgid, n));
 }
 
 void BufferedRecoveryMessages::send_query(
@@ -60,15 +51,7 @@ void BufferedRecoveryMessages::send_query(
   spg_t to_spgid,
   const pg_query_t &q)
 {
-  if (require_osd_release >= ceph_release_t::octopus) {
-    send_osd_message(to,
-		     make_message<MOSDPGQuery2>(to_spgid, q));
-  } else {
-    auto m = make_message<MOSDPGQuery>(
-      q.epoch_sent,
-      MOSDPGQuery::pg_list_t{{to_spgid, q}});
-    send_osd_message(to, m);
-  }
+  send_osd_message(to, TOPNSPC::make_message<MOSDPGQuery2>(to_spgid, q));
 }
 
 void BufferedRecoveryMessages::send_info(
@@ -80,28 +63,16 @@ void BufferedRecoveryMessages::send_info(
   std::optional<pg_lease_t> lease,
   std::optional<pg_lease_ack_t> lease_ack)
 {
-  if (require_osd_release >= ceph_release_t::octopus) {
-    send_osd_message(
-      to,
-      make_message<MOSDPGInfo2>(
-	to_spgid,
-	info,
-	cur_epoch,
-	min_epoch,
-	lease,
-	lease_ack)
-      );
-  } else {
-    send_osd_message(
-      to,
-      make_message<MOSDPGInfo>(
-        cur_epoch,
-        vector{pg_notify_t{to_spgid.shard,
-			   info.pgid.shard,
-			   min_epoch, cur_epoch,
-			   info, PastIntervals{}}})
-      );
-  }
+  send_osd_message(
+    to,
+    TOPNSPC::make_message<MOSDPGInfo2>(
+      to_spgid,
+      info,
+      cur_epoch,
+      min_epoch,
+      lease,
+      lease_ack)
+  );
 }
 
 void PGPool::update(OSDMapRef map)
@@ -150,6 +121,7 @@ PeeringState::PeeringState(
     pg_whoami(pg_whoami),
     info(spgid),
     pg_log(cct),
+    last_require_osd_release(curmap->require_osd_release),
     missing_loc(spgid, this, dpp, cct),
     machine(this, cct, spgid, dpp, pl, &state_history)
 {
@@ -174,8 +146,7 @@ void PeeringState::begin_block_outgoing() {
   ceph_assert(!messages_pending_flush);
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
-  messages_pending_flush = BufferedRecoveryMessages(
-    orig_ctx->require_osd_release);
+  messages_pending_flush.emplace();
   rctx.emplace(*messages_pending_flush, *orig_ctx);
 }
 
@@ -287,10 +258,10 @@ void PeeringState::purge_strays()
       psdout(10) << "sending PGRemove to osd." << *p << dendl;
       vector<spg_t> to_remove;
       to_remove.push_back(spg_t(info.pgid.pgid, p->shard));
-      auto m = make_message<MOSDPGRemove>(
+      auto m = TOPNSPC::make_message<MOSDPGRemove>(
 	get_osdmap_epoch(),
 	to_remove);
-      pl->send_cluster_message(p->osd, m, get_osdmap_epoch());
+      pl->send_cluster_message(p->osd, std::move(m), get_osdmap_epoch());
     } else {
       psdout(10) << "not sending PGRemove to down osd." << *p << dendl;
     }
@@ -395,11 +366,21 @@ void PeeringState::remove_down_peer_info(const OSDMapRef &osdmap)
       peer_missing.erase(p->first);
       peer_log_requested.erase(p->first);
       peer_missing_requested.erase(p->first);
-      peer_purged.erase(p->first);
       peer_info.erase(p++);
       removed = true;
     } else
       ++p;
+  }
+
+  // Remove any downed osds from peer_purged so we can re-purge if necessary
+  auto it = peer_purged.begin();
+  while (it != peer_purged.end()) {
+    if (!osdmap->is_up(it->osd)) {
+      psdout(10) << " dropping down osd." << *it << " from peer_purged" << dendl;
+      peer_purged.erase(it++);
+    } else {
+      ++it;
+    }
   }
 
   // if we removed anyone, update peers (which include peer_info)
@@ -730,6 +711,8 @@ void PeeringState::start_peering_interval(
     // did primary change?
     if (was_old_primary != is_primary()) {
       state_clear(PG_STATE_CLEAN);
+      // queue/dequeue the scrubber
+      pl->on_primary_status_change(was_old_primary, is_primary());
     }
 
     pl->on_role_change();
@@ -751,6 +734,10 @@ void PeeringState::start_peering_interval(
 		 << ", replicas changed" << dendl;
       }
     }
+  }
+
+  if (is_primary() && was_old_primary) {
+    pl->reschedule_scrub();
   }
 
   if (acting.empty() && !up.empty() && up_primary == pg_whoami) {
@@ -1054,10 +1041,10 @@ unsigned PeeringState::get_backfill_priority()
   if (state & PG_STATE_FORCED_BACKFILL) {
     ret = OSD_BACKFILL_PRIORITY_FORCED;
   } else {
-    if (acting.size() < pool.info.min_size) {
+    if (actingset.size() < pool.info.min_size) {
       base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
       // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = base + (pool.info.min_size - acting.size());
+      ret = base + (pool.info.min_size - actingset.size());
 
     } else if (is_undersized()) {
       // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
@@ -1164,7 +1151,7 @@ void PeeringState::send_lease()
     }
     pl->send_cluster_message(
       peer.osd,
-      make_message<MOSDPGLease>(epoch,
+      TOPNSPC::make_message<MOSDPGLease>(epoch,
 		      spg_t(spgid.pgid, peer.shard),
 		      get_lease()),
       epoch);
@@ -1173,12 +1160,7 @@ void PeeringState::send_lease()
 
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
-  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-    psdout(20) << __func__ << " no-op, upacting_features 0x" << std::hex
-	       << upacting_features << std::dec
-	       << " does not include SERVER_OCTOPUS" << dendl;
-    return;
-  }
+  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   if (!is_nonprimary()) {
     psdout(20) << __func__ << " no-op, !nonprimary" << dendl;
     return;
@@ -1220,9 +1202,7 @@ void PeeringState::proc_lease(const pg_lease_t& l)
 
 void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
 {
-  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-    return;
-  }
+  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   auto now = pl->get_mnow();
   bool was_min = false;
   for (unsigned i = 0; i < acting.size(); ++i) {
@@ -1248,9 +1228,7 @@ void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
 
 void PeeringState::proc_renew_lease()
 {
-  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-    return;
-  }
+  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   renew_lease(pl->get_mnow());
   send_lease();
   schedule_renew_lease();
@@ -1278,9 +1256,7 @@ void PeeringState::recalc_readable_until()
 
 bool PeeringState::check_prior_readable_down_osds(const OSDMapRef& map)
 {
-  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-    return false;
-  }
+  assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   bool changed = false;
   auto p = prior_readable_down_osds.begin();
   while (p != prior_readable_down_osds.end()) {
@@ -1464,7 +1440,7 @@ void PeeringState::reject_reservation()
   pl->unreserve_recovery_space();
   pl->send_cluster_message(
     primary.osd,
-    make_message<MBackfillReserve>(
+    TOPNSPC::make_message<MBackfillReserve>(
       MBackfillReserve::REJECT_TOOFULL,
       spg_t(info.pgid.pgid, primary.shard),
       get_osdmap_epoch()),
@@ -1674,31 +1650,28 @@ PeeringState::select_replicated_primary(
       !primary->second.is_incomplete() &&
       primary->second.last_update >=
         auth_log_shard->second.log_tail) {
-    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
-      auto approx_missing_objects =
-        primary->second.stats.stats.sum.num_objects_missing;
-      auto auth_version = auth_log_shard->second.last_update.version;
-      auto primary_version = primary->second.last_update.version;
-      if (auth_version > primary_version) {
-        approx_missing_objects += auth_version - primary_version;
-      } else {
-        approx_missing_objects += primary_version - auth_version;
-      }
-      if ((uint64_t)approx_missing_objects >
-          force_auth_primary_missing_objects) {
-        primary = auth_log_shard;
-        ss << "up_primary: " << up_primary << ") has approximate "
-           << approx_missing_objects
-           << "(>" << force_auth_primary_missing_objects <<") "
-           << "missing objects, osd." << auth_log_shard_id
-           << " selected as primary instead"
-           << std::endl;
-      } else {
-        ss << "up_primary: " << up_primary << ") selected as primary"
-           << std::endl;
-      }
+    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    auto approx_missing_objects =
+      primary->second.stats.stats.sum.num_objects_missing;
+    auto auth_version = auth_log_shard->second.last_update.version;
+    auto primary_version = primary->second.last_update.version;
+    if (auth_version > primary_version) {
+      approx_missing_objects += auth_version - primary_version;
     } else {
-      ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
+      approx_missing_objects += primary_version - auth_version;
+    }
+    if ((uint64_t)approx_missing_objects >
+        force_auth_primary_missing_objects) {
+      primary = auth_log_shard;
+      ss << "up_primary: " << up_primary << ") has approximate "
+         << approx_missing_objects
+         << "(>" << force_auth_primary_missing_objects <<") "
+         << "missing objects, osd." << auth_log_shard_id
+         << " selected as primary instead"
+         << std::endl;
+    } else {
+      ss << "up_primary: " << up_primary << ") selected as primary"
+         << std::endl;
     }
   } else {
     ceph_assert(!auth_log_shard->second.is_incomplete());
@@ -1881,8 +1854,8 @@ public:
   }
   osd_id_t pop_osd() {
     ceph_assert(!is_empty());
-    auto ret = osds.back();
-    osds.pop_back();
+    auto ret = osds.front();
+    osds.pop_front();
     return ret.second;
   }
 
@@ -1891,7 +1864,7 @@ public:
 
   osd_ord_t get_ord() const {
     return osds.empty() ? std::make_tuple(false, eversion_t())
-      : osds.back().first;
+      : osds.front().first;
   }
 
   bool is_empty() const { return osds.empty(); }
@@ -2002,7 +1975,7 @@ void PeeringState::calc_replicated_acting_stretch(
       osd,
       pool.info.peering_crush_bucket_barrier,
       pool.info.crush_rule);
-    return ancestors[ancestor];
+    return &ancestors[ancestor];
   };
 
   unsigned bucket_max = pool.info.size / pool.info.peering_crush_bucket_target;
@@ -2019,7 +1992,7 @@ void PeeringState::calc_replicated_acting_stretch(
       want->push_back(osd);
       acting_backfill->insert(
 	pg_shard_t(osd, shard_id_t::NO_SHARD));
-      get_ancestor(osd).inc_selected();
+      get_ancestor(osd)->inc_selected();
     }
   };
   add_required(primary->first.osd);
@@ -2038,7 +2011,7 @@ void PeeringState::calc_replicated_acting_stretch(
     }
   }
 
-  if (want->size() >= pool.info.size) {
+  if (want->size() >= pool.info.size) { // non-failed CRUSH mappings are valid
     ss << " up set sufficient" << std::endl;
     return;
   }
@@ -2067,7 +2040,9 @@ void PeeringState::calc_replicated_acting_stretch(
     }
     if (!restrict_to_up_acting) {
       for (auto &[cand, info] : all_info) {
-	if (!used(cand.osd) && usable_info(info)) {
+	if (!used(cand.osd) && usable_info(info) &&
+	    (std::find(acting.begin(), acting.end(), cand.osd)
+	     == acting.end())) {
 	  ss << " other candidate " << cand << " " << info << std::endl;
 	  candidates.push_back(
 	    std::make_pair(get_osd_ord(false, info), cand.osd));
@@ -2078,7 +2053,7 @@ void PeeringState::calc_replicated_acting_stretch(
 
     // We then filter these candidates by ancestor
     std::for_each(candidates.begin(), candidates.end(), [&](auto cand) {
-      get_ancestor(cand.second).add_osd(cand.first, cand.second);
+      get_ancestor(cand.second)->add_osd(cand.first, cand.second);
     });
   }
 
@@ -2107,7 +2082,7 @@ void PeeringState::calc_replicated_acting_stretch(
   if (pool.info.peering_crush_mandatory_member != CRUSH_ITEM_NONE) {
     auto aiter = ancestors.find(pool.info.peering_crush_mandatory_member);
     if (aiter != ancestors.end() &&
-	aiter->second.get_num_selected()) {
+	!aiter->second.get_num_selected()) {
       ss << " adding required ancestor " << aiter->first << std::endl;
       ceph_assert(!aiter->second.is_empty()); // wouldn't exist otherwise
       pop_ancestor(aiter->second);
@@ -2121,7 +2096,13 @@ void PeeringState::calc_replicated_acting_stretch(
     aheap.push_if_nonempty(anc.second);
   });
 
-  /* and pull from this heap until it's empty or we have enough. */
+  /* and pull from this heap until it's empty or we have enough.
+   * "We have enough" is a sufficient check here for
+   * stretch_set_can_peer() because our heap sorting always
+   * pulls from ancestors with the least number of included OSDs,
+   * so if it is possible to satisfy the bucket_count constraints we
+   * will do so.
+   */
   while (!aheap.is_empty() && want->size() < pool.info.size) {
     auto next = aheap.pop();
     pop_ancestor(next.get());
@@ -2153,13 +2134,7 @@ bool PeeringState::recoverable(const vector<int> &want) const
   }
 
   if (num_want_acting < pool.info.min_size) {
-    const bool recovery_ec_pool_below_min_size=
-      HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_OCTOPUS);
-
-    if (pool.info.is_erasure() && !recovery_ec_pool_below_min_size) {
-      psdout(10) << __func__ << " failed, ec recovery below min size not supported by pre-octopus" << dendl;
-      return false;
-    } else if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
+    if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
       psdout(10) << __func__ << " failed, recovery below min size not enabled" << dendl;
       return false;
     }
@@ -2204,21 +2179,15 @@ void PeeringState::choose_async_recovery_ec(
     // past the authoritative last_update the same as those equal to it.
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
-      auto approx_missing_objects =
-        shard_info.stats.stats.sum.num_objects_missing;
-      if (auth_version > candidate_version) {
-        approx_missing_objects += auth_version - candidate_version;
-      }
-      if (static_cast<uint64_t>(approx_missing_objects) >
-         cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.emplace(approx_missing_objects, shard_i);
-      }
-    } else {
-      if (auth_version > candidate_version &&
-          (auth_version - candidate_version) > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.insert(make_pair(auth_version - candidate_version, shard_i));
-      }
+    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
+    if (auth_version > candidate_version) {
+      approx_missing_objects += auth_version - candidate_version;
+    }
+    if (static_cast<uint64_t>(approx_missing_objects) >
+       cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
@@ -2264,28 +2233,17 @@ void PeeringState::choose_async_recovery_replicated(
     // logs plus historical missing objects as the cost of recovery
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
-      auto approx_missing_objects =
-        shard_info.stats.stats.sum.num_objects_missing;
-      if (auth_version > candidate_version) {
-        approx_missing_objects += auth_version - candidate_version;
-      } else {
-        approx_missing_objects += candidate_version - auth_version;
-      }
-      if (static_cast<uint64_t>(approx_missing_objects)  >
-         cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.emplace(approx_missing_objects, shard_i);
-      }
+    assert(HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS));
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
+    if (auth_version > candidate_version) {
+      approx_missing_objects += auth_version - candidate_version;
     } else {
-      size_t approx_entries;
-      if (auth_version > candidate_version) {
-        approx_entries = auth_version - candidate_version;
-      } else {
-        approx_entries = candidate_version - auth_version;
-      }
-      if (approx_entries > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-        candidates_by_cost.insert(make_pair(approx_entries, shard_i));
-      }
+      approx_missing_objects += candidate_version - auth_version;
+    }
+    if (static_cast<uint64_t>(approx_missing_objects)  >
+       cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
@@ -2301,13 +2259,18 @@ void PeeringState::choose_async_recovery_replicated(
     vector<int> candidate_want(*want);
     for (auto it = candidate_want.begin(); it != candidate_want.end(); ++it) {
       if (*it == cur_shard.osd) {
-        candidate_want.erase(it);
-	want->swap(candidate_want);
-	async_recovery->insert(cur_shard);
-        break;
+	candidate_want.erase(it);
+	if (pool.info.stretch_set_can_peer(candidate_want, *osdmap, NULL)) {
+	  // if we're in stretch mode, we can only remove the osd if it doesn't
+	  // break peering limits.
+	  want->swap(candidate_want);
+	  async_recovery->insert(cur_shard);
+	}
+	break;
       }
     }
   }
+
   psdout(20) << __func__ << " result want=" << *want
 	     << " async_recovery=" << *async_recovery << dendl;
 }
@@ -2464,16 +2427,6 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
 	pl->queue_want_pg_temp(want);
     }
     return false;
-  }
-  // make sure we respect the stretch cluster rules -- and
-  // didn't break them with earlier choices!
-  const pg_pool_t& pg_pool = pool.info;
-  if (pg_pool.is_stretch_pool()) {
-    stringstream ss;
-    if (!pg_pool.stretch_set_can_peer(want, *get_osdmap(), &ss)) {
-      psdout(5) << "peering blocked by stretch_can_peer: " << ss.str() << dendl;
-      return false;
-    }
   }
 
   if (request_pg_temp_change_only)
@@ -2685,7 +2638,7 @@ void PeeringState::activate(
 
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size) {
+    if (acting_set_writeable()) {
       ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
@@ -2757,10 +2710,9 @@ void PeeringState::activate(
     purged.intersection_of(to_trim, info.purged_snaps);
     to_trim.subtract(purged);
 
-    if (HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
-      renew_lease(pl->get_mnow());
-      // do not schedule until we are actually activated
-    }
+    assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
+    renew_lease(pl->get_mnow());
+    // do not schedule until we are actually activated
 
     // adjust purged_snaps: PG may have been inactive while snaps were pruned
     // from the removed_snaps_queue in the osdmap.  update local purged_snaps
@@ -2769,6 +2721,11 @@ void PeeringState::activate(
     info.purged_snaps.swap(purged);
 
     // start up replicas
+    if (prior_readable_down_osds.empty()) {
+      dout(10) << __func__ << " no prior_readable_down_osds to wait on, clearing ub"
+	       << dendl;
+      clear_prior_readable_until_ub();
+    }
     info.history.refresh_prior_readable_until_ub(pl->get_mnow(),
 						 prior_readable_until_ub);
 
@@ -2783,11 +2740,18 @@ void PeeringState::activate(
 
       psdout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
+      #if defined(WITH_SEASTAR)
+      MURef<MOSDPGLog> m;
+      #else
       MRef<MOSDPGLog> m;
+      #endif
       ceph_assert(peer_missing.count(peer));
       pg_missing_t& pm = peer_missing[peer];
 
       bool needs_past_intervals = pi.dne();
+
+      // Save num_bytes for backfill reservation request, can't be negative
+      peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
 
       if (pi.last_update == info.last_update) {
         // empty log
@@ -2810,7 +2774,7 @@ void PeeringState::activate(
 	} else {
 	  psdout(10) << "activate peer osd." << peer
 		     << " is up to date, but sending pg_log anyway" << dendl;
-	  m = make_message<MOSDPGLog>(
+	  m = TOPNSPC::make_message<MOSDPGLog>(
 	    i->shard, pg_whoami.shard,
 	    get_osdmap_epoch(), info,
 	    last_peering_reset);
@@ -2839,15 +2803,13 @@ void PeeringState::activate(
 	pi.last_interval_started = info.last_interval_started;
 	pi.history = info.history;
 	pi.hit_set = info.hit_set;
-        // Save num_bytes for reservation request, can't be negative
-        peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
         pi.stats.stats.clear();
         pi.stats.stats.sum.num_bytes = peer_bytes[peer];
 
 	// initialize peer with our purged_snaps.
 	pi.purged_snaps = info.purged_snaps;
 
-	m = make_message<MOSDPGLog>(
+	m = TOPNSPC::make_message<MOSDPGLog>(
 	  i->shard, pg_whoami.shard,
 	  get_osdmap_epoch(), pi,
 	  last_peering_reset /* epoch to create pg at */);
@@ -2862,7 +2824,7 @@ void PeeringState::activate(
       } else {
 	// catch up
 	ceph_assert(pg_log.get_tail() <= pi.last_update);
-	m = make_message<MOSDPGLog>(
+	m = TOPNSPC::make_message<MOSDPGLog>(
 	  i->shard, pg_whoami.shard,
 	  get_osdmap_epoch(), info,
 	  last_peering_reset /* epoch to create pg at */);
@@ -2894,7 +2856,7 @@ void PeeringState::activate(
 	dout(10) << "activate peer osd." << peer << " sending " << m->log
 		 << dendl;
 	m->lease = get_lease();
-	pl->send_cluster_message(peer.osd, m, get_osdmap_epoch());
+	pl->send_cluster_message(peer.osd, std::move(m), get_osdmap_epoch());
       }
 
       // peer now has
@@ -2987,7 +2949,7 @@ void PeeringState::activate(
     state_set(PG_STATE_ACTIVATING);
     pl->on_activate(std::move(to_trim));
   }
-  if (acting.size() >= pool.info.min_size) {
+  if (acting_set_writeable()) {
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
     pg_log.roll_forward(rollbacker.get());
   }
@@ -3009,25 +2971,13 @@ void PeeringState::share_pg_info()
       peer->second.last_interval_started = info.last_interval_started;
       peer->second.history.merge(info.history);
     }
-    MessageRef m;
-    if (last_require_osd_release >= ceph_release_t::octopus) {
-      m = make_message<MOSDPGInfo2>(spg_t{info.pgid.pgid, pg_shard.shard},
+    auto m = TOPNSPC::make_message<MOSDPGInfo2>(spg_t{info.pgid.pgid, pg_shard.shard},
 			  info,
 			  get_osdmap_epoch(),
 			  get_osdmap_epoch(),
 			  std::optional<pg_lease_t>{get_lease()},
 			  std::nullopt);
-    } else {
-      m = make_message<MOSDPGInfo>(get_osdmap_epoch(),
-	      MOSDPGInfo::pg_list_t{
-	        pg_notify_t{pg_shard.shard,
-			    pg_whoami.shard,
-			    get_osdmap_epoch(),
-			    get_osdmap_epoch(),
-			    info,
-			    past_intervals}});
-    }
-    pl->send_cluster_message(pg_shard.osd, m, get_osdmap_epoch());
+    pl->send_cluster_message(pg_shard.osd, std::move(m), get_osdmap_epoch());
   }
 }
 
@@ -3152,7 +3102,7 @@ void PeeringState::fulfill_log(
   ceph_assert(from == primary);
   ceph_assert(query.type != pg_query_t::INFO);
 
-  auto mlog = make_message<MOSDPGLog>(
+  auto mlog = TOPNSPC::make_message<MOSDPGLog>(
     from.shard, pg_whoami.shard,
     get_osdmap_epoch(),
     info, query_epoch);
@@ -3178,7 +3128,7 @@ void PeeringState::fulfill_log(
 
   psdout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
 
-  pl->send_cluster_message(from.osd, mlog, get_osdmap_epoch(), true);
+  pl->send_cluster_message(from.osd, std::move(mlog), get_osdmap_epoch(), true);
 }
 
 void PeeringState::fulfill_query(const MQuery& query, PeeringCtxWrapper &rctx)
@@ -3288,6 +3238,8 @@ void PeeringState::split_into(
   child->info.stats.parent_split_bits = split_bits;
   info.stats.stats_invalid = true;
   child->info.stats.stats_invalid = true;
+  child->info.stats.objects_trimmed = 0;
+  child->info.stats.snaptrim_duration = 0.0;
   child->info.last_epoch_started = info.last_epoch_started;
   child->info.last_interval_started = info.last_interval_started;
 
@@ -3849,11 +3801,12 @@ out:
 }
 
 std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
-  bool pg_stats_publish_valid,
-  const pg_stat_t &pg_stats_publish,
+  const std::optional<pg_stat_t> &pg_stats_publish,
   const object_stat_collection_t &unstable_stats)
 {
   if (info.stats.stats.sum.num_scrub_errors) {
+    psdout(10) << __func__ << " inconsistent due to " <<
+      info.stats.stats.sum.num_scrub_errors << " scrub errors" << dendl;
     state_set(PG_STATE_INCONSISTENT);
   } else {
     state_clear(PG_STATE_INCONSISTENT);
@@ -3864,7 +3817,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   if (info.stats.state != state) {
     info.stats.last_change = now;
     // Optimistic estimation, if we just find out an inactive PG,
-    // assumt it is active till now.
+    // assume it is active till now.
     if (!(state & PG_STATE_ACTIVE) &&
 	(info.stats.state & PG_STATE_ACTIVE))
       info.stats.last_active = now;
@@ -3904,9 +3857,9 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   psdout(20) << __func__ << " reporting purged_snaps "
 	     << pre_publish.purged_snaps << dendl;
 
-  if (pg_stats_publish_valid && pre_publish == pg_stats_publish &&
+  if (pg_stats_publish && pre_publish == *pg_stats_publish &&
       info.stats.last_fresh > cutoff) {
-    psdout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
+    psdout(15) << "publish_stats_to_osd " << pg_stats_publish->reported_epoch
 	       << ": no change since " << info.stats.last_fresh << dendl;
     return std::nullopt;
   } else {
@@ -3928,8 +3881,8 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
       info.stats.last_fullsized = now;
 
-    psdout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
-	       << ":" << pg_stats_publish.reported_seq << dendl;
+    psdout(15) << "publish_stats_to_osd " << pre_publish.reported_epoch
+	       << ":" << pre_publish.reported_seq << dendl;
     return std::make_optional(std::move(pre_publish));
   }
 }
@@ -3940,7 +3893,6 @@ void PeeringState::init(
   const vector<int>& newacting, int new_acting_primary,
   const pg_history_t& history,
   const PastIntervals& pi,
-  bool backfill,
   ObjectStore::Transaction &t)
 {
   psdout(10) << "init role " << role << " up "
@@ -3967,13 +3919,6 @@ void PeeringState::init(
 
   if (!perform_deletes_during_peering()) {
     pg_log.set_missing_may_contain_deletes();
-  }
-
-  if (backfill) {
-    psdout(10) << __func__ << ": Setting backfill" << dendl;
-    info.set_last_backfill(hobject_t());
-    info.last_complete = info.last_update;
-    pg_log.mark_log_for_rewrite();
   }
 
   on_new_interval();
@@ -4038,12 +3983,18 @@ void PeeringState::update_stats(
   if (f(info.history, info.stats)) {
     pl->publish_stats_to_osd();
   }
-  pl->on_info_history_change();
+  pl->reschedule_scrub();
 
   if (t) {
     dirty_info = true;
     write_if_dirty(*t);
   }
+}
+
+void PeeringState::update_stats_wo_resched(
+  std::function<void(pg_history_t &, pg_stat_t &)> f)
+{
+  f(info.history, info.stats);
 }
 
 bool PeeringState::append_log_entries_update_missing(
@@ -4213,6 +4164,8 @@ void PeeringState::append_log(
 
   psdout(10) << __func__ << " approx pg log length =  "
 	     << pg_log.get_log().approx_size() << dendl;
+  psdout(10) << __func__ << " dups pg log length =  "
+	     << pg_log.get_log().dups.size() << dendl;
   psdout(10) << __func__ << " transaction_applied = "
 	     << transaction_applied << dendl;
   if (!transaction_applied || async)
@@ -4399,7 +4352,7 @@ void PeeringState::recovery_committed_to(eversion_t version)
       // we are fully up to date.  tell the primary!
       pl->send_cluster_message(
 	get_primary().osd,
-	make_message<MOSDPGTrim>(
+	TOPNSPC::make_message<MOSDPGTrim>(
 	  get_osdmap_epoch(),
 	  spg_t(info.pgid.pgid, primary.shard),
 	  last_complete_ondisk),
@@ -5042,7 +4995,7 @@ void PeeringState::Backfilling::backfill_release_reservations()
     ceph_assert(*it != ps->pg_whoami);
     pl->send_cluster_message(
       it->osd,
-      make_message<MBackfillReserve>(
+      TOPNSPC::make_message<MBackfillReserve>(
 	MBackfillReserve::RELEASE,
 	spg_t(ps->info.pgid.pgid, it->shard),
 	ps->get_osdmap_epoch()),
@@ -5166,7 +5119,7 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
     ceph_assert(*backfill_osd_it != ps->pg_whoami);
     pl->send_cluster_message(
       backfill_osd_it->osd,
-      make_message<MBackfillReserve>(
+      TOPNSPC::make_message<MBackfillReserve>(
 	MBackfillReserve::REQUEST,
 	spg_t(context< PeeringMachine >().spgid.pgid, backfill_osd_it->shard),
 	ps->get_osdmap_epoch(),
@@ -5206,7 +5159,7 @@ void PeeringState::WaitRemoteBackfillReserved::retry()
     ceph_assert(*it != ps->pg_whoami);
     pl->send_cluster_message(
       it->osd,
-      make_message<MBackfillReserve>(
+      TOPNSPC::make_message<MBackfillReserve>(
 	MBackfillReserve::RELEASE,
 	spg_t(context< PeeringMachine >().spgid.pgid, it->shard),
 	ps->get_osdmap_epoch()),
@@ -5379,7 +5332,7 @@ PeeringState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &evt)
   DECLARE_LOCALS;
   pl->send_cluster_message(
     ps->primary.osd,
-    make_message<MRecoveryReserve>(
+    TOPNSPC::make_message<MRecoveryReserve>(
       MRecoveryReserve::GRANT,
       spg_t(ps->info.pgid.pgid, ps->primary.shard),
       ps->get_osdmap_epoch()),
@@ -5487,7 +5440,7 @@ PeeringState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
 
   pl->send_cluster_message(
       ps->primary.osd,
-      make_message<MBackfillReserve>(
+      TOPNSPC::make_message<MBackfillReserve>(
 	MBackfillReserve::GRANT,
 	spg_t(ps->info.pgid.pgid, ps->primary.shard),
 	ps->get_osdmap_epoch()),
@@ -5544,7 +5497,7 @@ PeeringState::RepRecovering::react(const RemoteRecoveryPreempted &)
   pl->unreserve_recovery_space();
   pl->send_cluster_message(
     ps->primary.osd,
-    make_message<MRecoveryReserve>(
+    TOPNSPC::make_message<MRecoveryReserve>(
       MRecoveryReserve::REVOKE,
       spg_t(ps->info.pgid.pgid, ps->primary.shard),
       ps->get_osdmap_epoch()),
@@ -5561,7 +5514,7 @@ PeeringState::RepRecovering::react(const BackfillTooFull &)
   pl->unreserve_recovery_space();
   pl->send_cluster_message(
     ps->primary.osd,
-    make_message<MBackfillReserve>(
+    TOPNSPC::make_message<MBackfillReserve>(
       MBackfillReserve::REVOKE_TOOFULL,
       spg_t(ps->info.pgid.pgid, ps->primary.shard),
       ps->get_osdmap_epoch()),
@@ -5578,7 +5531,7 @@ PeeringState::RepRecovering::react(const RemoteBackfillPreempted &)
   pl->unreserve_recovery_space();
   pl->send_cluster_message(
     ps->primary.osd,
-    make_message<MBackfillReserve>(
+    TOPNSPC::make_message<MBackfillReserve>(
       MBackfillReserve::REVOKE,
       spg_t(ps->info.pgid.pgid, ps->primary.shard),
       ps->get_osdmap_epoch()),
@@ -5682,7 +5635,7 @@ PeeringState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &ev
     ceph_assert(*remote_recovery_reservation_it != ps->pg_whoami);
     pl->send_cluster_message(
       remote_recovery_reservation_it->osd,
-      make_message<MRecoveryReserve>(
+      TOPNSPC::make_message<MRecoveryReserve>(
 	MRecoveryReserve::REQUEST,
 	spg_t(context< PeeringMachine >().spgid.pgid,
 	      remote_recovery_reservation_it->shard),
@@ -5732,7 +5685,7 @@ void PeeringState::Recovering::release_reservations(bool cancel)
       continue;
     pl->send_cluster_message(
       i->osd,
-      make_message<MRecoveryReserve>(
+      TOPNSPC::make_message<MRecoveryReserve>(
 	MRecoveryReserve::RELEASE,
 	spg_t(ps->info.pgid.pgid, i->shard),
 	ps->get_osdmap_epoch()),
@@ -6253,7 +6206,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
 	pl->set_not_ready_to_merge_source(pgid);
       }
     }
-  } else if (ps->acting.size() < ps->pool.info.min_size) {
+  } else if (!ps->acting_set_writeable()) {
     ps->state_set(PG_STATE_PEERED);
   } else {
     ps->state_set(PG_STATE_ACTIVE);
@@ -6275,6 +6228,8 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   if (ps->pool.info.has_flag(pg_pool_t::FLAG_CREATING)) {
     pl->send_pg_created(pgid);
   }
+
+  psdout(1) << __func__ << " AllReplicasActivated Activating complete" << dendl;
 
   ps->info.history.last_epoch_started = ps->info.last_epoch_started;
   ps->info.history.last_interval_started = ps->info.last_interval_started;
@@ -6324,15 +6279,14 @@ void PeeringState::Active::all_activated_and_committed()
   ceph_assert(!ps->acting_recovery_backfill.empty());
   ceph_assert(ps->blocked_by.empty());
 
-  if (HAVE_FEATURE(ps->upacting_features, SERVER_OCTOPUS)) {
-    // this is overkill when the activation is quick, but when it is slow it
-    // is important, because the lease was renewed by the activate itself but we
-    // don't know how long ago that was, and simply scheduling now may leave
-    // a gap in lease coverage.  keep it simple and aggressively renew.
-    ps->renew_lease(pl->get_mnow());
-    ps->send_lease();
-    ps->schedule_renew_lease();
-  }
+  assert(HAVE_FEATURE(ps->upacting_features, SERVER_OCTOPUS));
+  // this is overkill when the activation is quick, but when it is slow it
+  // is important, because the lease was renewed by the activate itself but we
+  // don't know how long ago that was, and simply scheduling now may leave
+  // a gap in lease coverage.  keep it simple and aggressively renew.
+  ps->renew_lease(pl->get_mnow());
+  ps->send_lease();
+  ps->schedule_renew_lease();
 
   // Degraded?
   ps->update_calc_stats();
@@ -6412,7 +6366,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(
     {}, /* lease */
     ps->get_lease_ack());
 
-  if (ps->acting.size() >= ps->pool.info.min_size) {
+  if (ps->acting_set_writeable()) {
     ps->state_set(PG_STATE_ACTIVE);
   } else {
     ps->state_set(PG_STATE_PEERED);
@@ -6431,7 +6385,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLease& l)
   ps->proc_lease(l.lease);
   pl->send_cluster_message(
     ps->get_primary().osd,
-    make_message<MOSDPGLeaseAck>(epoch,
+    TOPNSPC::make_message<MOSDPGLeaseAck>(epoch,
 		       spg_t(spgid.pgid, ps->get_primary().shard),
 		       ps->get_lease_ack()),
     epoch);
@@ -6649,7 +6603,7 @@ void PeeringState::ToDelete::exit()
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS;
   // note: on a successful removal, this path doesn't execute. see
-  // _delete_some().
+  // do_delete_work().
   pl->get_perf_logger().dec(l_osd_pg_removing);
 
   pl->cancel_local_background_io_reservation();
@@ -6700,8 +6654,6 @@ PeeringState::Deleting::Deleting(my_context ctx)
   : my_base(ctx),
     NamedState(context< PeeringMachine >().state_history, "Started/ToDelete/Deleting")
 {
-  start = ceph::mono_clock::now();
-
   context< PeeringMachine >().log_enter(state_name);
 
   DECLARE_LOCALS;
@@ -6724,9 +6676,11 @@ boost::statechart::result PeeringState::Deleting::react(
   const DeleteSome& evt)
 {
   DECLARE_LOCALS;
-  next = pl->do_delete_work(context<PeeringMachine>().get_cur_transaction(),
+  std::pair<ghobject_t, bool> p;
+  p = pl->do_delete_work(context<PeeringMachine>().get_cur_transaction(),
     next);
-  return discard_event();
+  next = p.first;
+  return p.second ? discard_event() : terminate();
 }
 
 void PeeringState::Deleting::exit()
@@ -6735,9 +6689,6 @@ void PeeringState::Deleting::exit()
   DECLARE_LOCALS;
   ps->deleting = false;
   pl->cancel_local_background_io_reservation();
-  psdout(20) << "Deleting::" << __func__ << this <<" finished in "
-           << ceph::mono_clock::now() - start
-           << dendl;
 }
 
 /*--------GetInfo---------*/
@@ -6757,10 +6708,10 @@ PeeringState::GetInfo::GetInfo(my_context ctx)
 
   prior_set = ps->build_prior();
   ps->prior_readable_down_osds = prior_set.down;
+
   if (ps->prior_readable_down_osds.empty()) {
-    psdout(10) << " no prior_set down osds, clearing prior_readable_until_ub"
+    psdout(10) << " no prior_set down osds, will clear prior_readable_until_ub before activating"
 	       << dendl;
-    ps->clear_prior_readable_until_ub();
   }
 
   ps->reset_min_peer_features();

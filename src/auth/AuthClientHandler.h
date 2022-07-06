@@ -19,7 +19,6 @@
 #include "auth/Auth.h"
 #include "include/common_fwd.h"
 
-struct MAuthReply;
 class RotatingKeyRing;
 
 class AuthClientHandler {
@@ -36,6 +35,8 @@ public:
     : cct(cct_), global_id(0), want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0)
   {}
   virtual ~AuthClientHandler() {}
+
+  virtual AuthClientHandler* clone() const = 0;
 
   void init(const EntityName& n) { name = n; }
   

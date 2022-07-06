@@ -93,6 +93,9 @@ class StandbyPyModule : public PyModuleRunner
   bool get_config(const std::string &key, std::string *value) const;
   bool get_store(const std::string &key, std::string *value) const;
   std::string get_active_uri() const;
+  entity_addrvec_t get_myaddrs() const {
+    return state.get_monc().get_myaddrs();
+  }
 
   int load();
 };

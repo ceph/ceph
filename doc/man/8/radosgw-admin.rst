@@ -365,7 +365,9 @@ which are as follows:
   List all bucket lifecycle progress.
 
 :command:`lc process`
-  Manually process lifecycle.
+  Manually process lifecycle.  If a bucket is specified (e.g., via
+  --bucket_id or via --bucket and optional --tenant), only that bucket
+  is processed.
 
 :command:`metadata get`
   Get metadata info.
@@ -380,25 +382,32 @@ which are as follows:
   List metadata info.
 
 :command:`mdlog list`
-  List metadata log.
+  List metadata log which is needed for multi-site deployments.
 
 :command:`mdlog trim`
-  Trim metadata log.
+  Trim metadata log manually instead of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`mdlog status`
   Read metadata log status.
 
 :command:`bilog list`
-  List bucket index log.
+  List bucket index log which is needed for multi-site deployments.
 
 :command:`bilog trim`
-  Trim bucket index log (use start-marker, end-marker).
+  Trim bucket index log (use start-marker, end-marker) manually instead
+  of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`datalog list`
-  List data log.
+  List data log which is needed for multi-site deployments.
 
 :command:`datalog trim`
-  Trim data log.
+  Trim data log manually instead of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`datalog status`
   Read data log status.
@@ -600,7 +609,7 @@ Options
 
 .. option:: --max-entries=<entries>
 
-	Optional for listing operations to specify the max entires
+	Optional for listing operations to specify the max entries.
 
 .. option:: --purge-data
 
@@ -782,6 +791,10 @@ Options
 	Option for 'user stats' command. When specified, it will update user stats with
 	the current stats reported by user's buckets indexes.
 
+.. option:: --show-config
+
+	Show configuration.
+
 .. option:: --show-log-entries=<flag>
 
 	Enable/disable dump of log entries on log show.
@@ -805,7 +818,7 @@ Options
 
 .. option:: --caps=<caps>
 
-	List of caps (e.g., "usage=read, write; user=read".
+	List of caps (e.g., "usage=read, write; user=read").
 
 .. option:: --compression=<compression-algorithm>
 
@@ -960,7 +973,7 @@ Remove a user::
 
 Rename a user::
 
-        $ radosgw-admin user rename --uid=johny --new-uid=joe
+        $ radosgw-admin user rename --uid=johnny --new-uid=joe
         
 Remove a user and all associated buckets with their contents::
 
@@ -984,11 +997,11 @@ Rename a bucket::
 
 Move a bucket from the old global tenant space to a specified tenant::
 
-        $ radosgw-admin bucket link --bucket=/foo --uid=12345678$12345678'
+        $ radosgw-admin bucket link --bucket=/foo --uid='12345678$12345678'
 
 Link bucket to specified user and change object ACLs::
 
-        $ radosgw-admin bucket chown --bucket=/foo --uid=12345678$12345678'
+        $ radosgw-admin bucket chown --bucket=/foo --uid='12345678$12345678'
 
 Show the logs of a bucket from April 1st, 2012::
 
@@ -1013,7 +1026,7 @@ Availability
 
 :program:`radosgw-admin` is part of Ceph, a massively scalable, open-source,
 distributed storage system.  Please refer to the Ceph documentation at
-http://ceph.com/docs for more information.
+https://docs.ceph.com for more information.
 
 
 See also

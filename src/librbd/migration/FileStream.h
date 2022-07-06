@@ -6,7 +6,8 @@
 
 #include "include/int_types.h"
 #include "librbd/migration/StreamInterface.h"
-#include <boost/asio/io_context_strand.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/posix/basic_stream_descriptor.hpp>
 #include <json_spirit/json_spirit.h>
 #include <memory>
@@ -48,7 +49,7 @@ private:
   std::shared_ptr<AsioEngine> m_asio_engine;
   json_spirit::mObject m_json_object;
 
-  boost::asio::io_context::strand m_strand;
+  boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
 #ifdef BOOST_ASIO_HAS_POSIX_STREAM_DESCRIPTOR
   std::optional<boost::asio::posix::stream_descriptor> m_stream_descriptor;
 

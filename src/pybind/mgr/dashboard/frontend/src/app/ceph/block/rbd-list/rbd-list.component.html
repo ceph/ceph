@@ -24,9 +24,29 @@
   </cd-rbd-details>
 </cd-table>
 
-<ng-template #usageNotAvailableTooltipTpl>
+<ng-template #scheduleStatus>
   <div i18n
        [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled'"></div>
+</ng-template>
+
+<ng-template #provisionedNotAvailableTooltipTpl
+             let-row="row">
+  <span *ngIf="row.disk_usage === null && !row.features_name.includes('fast-diff'); else provisioned"
+        [ngbTooltip]="usageNotAvailableTooltipTpl"
+        placement="top"
+        i18n>N/A</span>
+  <ng-template #provisioned
+               i18n>{{row.disk_usage | dimlessBinary}}</ng-template>
+</ng-template>
+
+<ng-template #totalProvisionedNotAvailableTooltipTpl
+             let-row="row">
+  <span *ngIf="row.total_disk_usage === null && !row.features_name.includes('fast-diff'); else totalProvisioned"
+        [ngbTooltip]="usageNotAvailableTooltipTpl"
+        placement="top"
+        i18n>N/A</span>
+  <ng-template #totalProvisioned
+               i18n>{{row.total_disk_usage | dimlessBinary}}</ng-template>
 </ng-template>
 
 <ng-template #parentTpl
@@ -34,6 +54,25 @@
   <span *ngIf="value">{{ value.pool_name }}<span
           *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}@{{ value.snap_name }}</span>
   <span *ngIf="!value">-</span>
+</ng-template>
+
+<ng-template #mirroringTpl
+             let-value="value"
+             let-row="row">
+  <span *ngIf="value.length === 3; else probb"
+        class="badge badge-info">{{ value[0] }}</span>&nbsp;
+  <span *ngIf="value.length === 3"
+        class="badge badge-info"
+        [ngbTooltip]="'Next scheduled snapshot on' + ' ' + (value[2] | cdDate)">{{ value[1] }}</span>
+  <span *ngIf="row.primary === true"
+        class="badge badge-info"
+        i18n>primary</span>
+  <span *ngIf="row.primary === false"
+        class="badge badge-info"
+        i18n>secondary</span>
+  <ng-template #probb>
+    <span class="badge badge-info">{{ value }}</span>
+  </ng-template>
 </ng-template>
 
 <ng-template #flattenTpl
@@ -61,4 +100,26 @@
       </ul>
     </ng-container>
   </div>
+</ng-template>
+
+<ng-template #removingStatTpl
+             let-column="column"
+             let-value="value"
+             let-row="row">
+
+  <i [ngClass]="[icons.spinner, icons.spin]"
+     *ngIf="row.cdExecuting"></i>
+  <span [ngClass]="column?.customTemplateConfig?.valueClass">
+    {{ value }}
+  </span>
+  <span *ngIf="row.cdExecuting"
+        [ngClass]="column?.customTemplateConfig?.executingClass ?
+        column.customTemplateConfig.executingClass :
+        'text-muted italic'">
+    ({{ row.cdExecuting }})
+  </span>
+  <i *ngIf="row.source && row.source === 'REMOVING'"
+     i18n-title
+     title="RBD in status 'Removing'"
+     class="{{ icons.warning }} warn"></i>
 </ng-template>

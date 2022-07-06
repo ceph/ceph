@@ -12,7 +12,7 @@
 class DefaultRetention
 {
 protected:
-  string mode;
+  std::string mode;
   int days;
   int years;
 
@@ -27,7 +27,7 @@ public:
     return years;
   }
 
-  string get_mode() const {
+  std::string get_mode() const {
     return mode;
   }
 
@@ -65,7 +65,7 @@ public:
     return defaultRetention.get_years();
   }
 
-  string get_mode() const {
+  std::string get_mode() const {
     return defaultRetention.get_mode();
   }
 
@@ -104,7 +104,7 @@ public:
     return rule.get_years();
   }
 
-  string get_mode() const {
+  std::string get_mode() const {
     return rule.get_mode();
   }
 
@@ -148,17 +148,17 @@ WRITE_CLASS_ENCODER(RGWObjectLock)
 class RGWObjectRetention
 {
 protected:
-  string mode;
+  std::string mode;
   ceph::real_time retain_until_date;
 public:
   RGWObjectRetention() {}
-  RGWObjectRetention(string _mode, ceph::real_time _date): mode(_mode), retain_until_date(_date) {}
+  RGWObjectRetention(std::string _mode, ceph::real_time _date): mode(_mode), retain_until_date(_date) {}
 
-  void set_mode(string _mode) {
+  void set_mode(std::string _mode) {
     mode = _mode;
   }
 
-  string get_mode() const {
+  std::string get_mode() const {
     return mode;
   }
 
@@ -192,15 +192,15 @@ WRITE_CLASS_ENCODER(RGWObjectRetention)
 class RGWObjectLegalHold
 {
 protected:
-  string status;
+  std::string status;
 public:
   RGWObjectLegalHold() {}
-  RGWObjectLegalHold(string _status): status(_status) {}
-  void set_status(string _status) {
+  RGWObjectLegalHold(std::string _status): status(_status) {}
+  void set_status(std::string _status) {
     status = _status;
   }
 
-  string get_status() const {
+  std::string get_status() const {
     return status;
   }
 

@@ -134,14 +134,13 @@ def remove_partition(device):
 
     :param device: A ``Device()`` object
     """
-    parent_device = '/dev/%s' % device.disk_api['PKNAME']
     udev_info = udevadm_property(device.abspath)
     partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
     if not partition_number:
         raise RuntimeError('Unable to detect the partition number for device: %s' % device.abspath)
 
     process.run(
-        ['parted', parent_device, '--script', '--', 'rm', partition_number]
+        ['parted', device.parent_device, '--script', '--', 'rm', partition_number]
     )
 
 
@@ -230,6 +229,11 @@ def _udevadm_info(device):
 
 
 def lsblk(device, columns=None, abspath=False):
+    return lsblk_all(device=device,
+                     columns=columns,
+                     abspath=abspath)
+
+def lsblk_all(device='', columns=None, abspath=False):
     """
     Create a dictionary of identifying values for a device using ``lsblk``.
     Each supported column is a key, in its *raw* format (all uppercase
@@ -242,6 +246,7 @@ def lsblk(device, columns=None, abspath=False):
 
          NAME  device name
         KNAME  internal kernel device name
+        PKNAME internal kernel parent device name
       MAJ:MIN  major:minor device number
        FSTYPE  filesystem type
    MOUNTPOINT  where the device is mounted
@@ -285,38 +290,46 @@ def lsblk(device, columns=None, abspath=False):
 
     Normal CLI output, as filtered by the flags in this function will look like ::
 
-        $ lsblk --nodeps -P -o NAME,KNAME,MAJ:MIN,FSTYPE,MOUNTPOINT
+        $ lsblk -P -o NAME,KNAME,PKNAME,MAJ:MIN,FSTYPE,MOUNTPOINT
         NAME="sda1" KNAME="sda1" MAJ:MIN="8:1" FSTYPE="ext4" MOUNTPOINT="/"
 
     :param columns: A list of columns to report as keys in its original form.
     :param abspath: Set the flag for absolute paths on the report
     """
     default_columns = [
-        'NAME', 'KNAME', 'MAJ:MIN', 'FSTYPE', 'MOUNTPOINT', 'LABEL', 'UUID',
-        'RO', 'RM', 'MODEL', 'SIZE', 'STATE', 'OWNER', 'GROUP', 'MODE',
+        'NAME', 'KNAME', 'PKNAME', 'MAJ:MIN', 'FSTYPE', 'MOUNTPOINT', 'LABEL',
+        'UUID', 'RO', 'RM', 'MODEL', 'SIZE', 'STATE', 'OWNER', 'GROUP', 'MODE',
         'ALIGNMENT', 'PHY-SEC', 'LOG-SEC', 'ROTA', 'SCHED', 'TYPE', 'DISC-ALN',
         'DISC-GRAN', 'DISC-MAX', 'DISC-ZERO', 'PKNAME', 'PARTLABEL'
     ]
-    device = device.rstrip('/')
     columns = columns or default_columns
-    # --nodeps -> Avoid adding children/parents to the device, only give information
-    #             on the actual device we are querying for
     # -P       -> Produce pairs of COLUMN="value"
     # -p       -> Return full paths to devices, not just the names, when ``abspath`` is set
     # -o       -> Use the columns specified or default ones provided by this function
-    base_command = ['lsblk', '--nodeps', '-P']
+    base_command = ['lsblk', '-P']
     if abspath:
         base_command.append('-p')
     base_command.append('-o')
     base_command.append(','.join(columns))
-    base_command.append(device)
+
     out, err, rc = process.call(base_command)
 
     if rc != 0:
-        return {}
+        raise RuntimeError(f"Error: {err}")
 
-    return _lsblk_parser(' '.join(out))
+    result = []
 
+    for line in out:
+        result.append(_lsblk_parser(line))
+
+    if not device:
+        return result
+
+    for dev in result:
+        if dev['NAME'] == os.path.basename(device):
+            return dev
+
+    raise RuntimeError(f"{device} not found in lsblk output")
 
 def is_device(dev):
     """
@@ -362,6 +375,13 @@ def is_partition(dev):
     return False
 
 
+def is_ceph_rbd(dev):
+    """
+    Boolean to determine if a given device is a ceph RBD device, like /dev/rbd0
+    """
+    return dev.startswith(('/dev/rbd'))
+
+
 class BaseFloatUnit(float):
     """
     Base class to support float representations of size values. Suffix is
@@ -403,6 +423,8 @@ class FloatKB(BaseFloatUnit):
 class FloatTB(BaseFloatUnit):
     pass
 
+class FloatPB(BaseFloatUnit):
+    pass
 
 class Size(object):
     """
@@ -457,10 +479,10 @@ class Size(object):
     @classmethod
     def parse(cls, size):
         if (len(size) > 2 and
-            size[-2].lower() in ['k', 'm', 'g', 't'] and
+            size[-2].lower() in ['k', 'm', 'g', 't', 'p'] and
             size[-1].lower() == 'b'):
             return cls(**{size[-2:].lower(): float(size[0:-2])})
-        elif size[-1].lower() in ['b', 'k', 'm', 'g', 't']:
+        elif size[-1].lower() in ['b', 'k', 'm', 'g', 't', 'p']:
             return cls(**{size[-1].lower(): float(size[0:-1])})
         else:
             return cls(b=float(size))
@@ -475,6 +497,7 @@ class Size(object):
             [('m', 'mb', 'megabytes'), self._multiplier ** 2],
             [('g', 'gb', 'gigabytes'), self._multiplier ** 3],
             [('t', 'tb', 'terabytes'), self._multiplier ** 4],
+            [('p', 'pb', 'petabytes'), self._multiplier ** 5]
         ]
         # and mappings for units-to-formatters, including bytes and aliases for
         # each
@@ -484,6 +507,7 @@ class Size(object):
             [('mb', 'megabytes'), FloatMB],
             [('gb', 'gigabytes'), FloatGB],
             [('tb', 'terabytes'), FloatTB],
+            [('pb', 'petabytes'), FloatPB],
         ]
         self._formatters = {}
         for key, value in format_aliases:
@@ -517,7 +541,7 @@ class Size(object):
         than 1024. This allows to represent size in the most readable format
         available
         """
-        for unit in ['b', 'kb', 'mb', 'gb', 'tb']:
+        for unit in ['b', 'kb', 'mb', 'gb', 'tb', 'pb']:
             if getattr(self, unit) > 1024:
                 continue
             return getattr(self, unit)
@@ -633,14 +657,15 @@ def human_readable_size(size):
     Take a size in bytes, and transform it into a human readable size with up
     to two decimals of precision.
     """
-    suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
-    suffix_index = 0
-    while size > 1024:
-        suffix_index += 1
-        size = size / 1024.0
+    suffixes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+    for suffix in suffixes:
+        if size >= 1024:
+            size = size / 1024
+        else:
+            break
     return "{size:.2f} {suffix}".format(
         size=size,
-        suffix=suffixes[suffix_index])
+        suffix=suffix)
 
 
 def size_from_human_readable(s):
@@ -652,6 +677,8 @@ def size_from_human_readable(s):
     if s[-1].isdigit():
         return Size(b=float(s))
     n = float(s[:-1])
+    if s[-1].lower() == 'p':
+        return Size(pb=n)
     if s[-1].lower() == 't':
         return Size(tb=n)
     if s[-1].lower() == 'g':
@@ -718,7 +745,7 @@ def is_locked_raw_device(disk_path):
     return 0
 
 
-def get_block_devs_lsblk():
+def get_block_devs_lsblk(device=''):
     '''
     This returns a list of lists with 3 items per inner list.
     KNAME - reflects the kernel device name , for example /dev/sda or /dev/dm-0
@@ -728,14 +755,15 @@ def get_block_devs_lsblk():
 
     '''
     cmd = ['lsblk', '-plno', 'KNAME,NAME,TYPE']
+    if device:
+        cmd.extend(['--nodeps', device])
     stdout, stderr, rc = process.call(cmd)
     # lsblk returns 1 on failure
     if rc == 1:
         raise OSError('lsblk returned failure, stderr: {}'.format(stderr))
     return [re.split(r'\s+', line) for line in stdout]
 
-
-def get_devices(_sys_block_path='/sys/block'):
+def get_devices(_sys_block_path='/sys/block', device=''):
     """
     Captures all available block devices as reported by lsblk.
     Additional interesting metadata like sectors, size, vendor,
@@ -748,7 +776,7 @@ def get_devices(_sys_block_path='/sys/block'):
 
     device_facts = {}
 
-    block_devs = get_block_devs_lsblk()
+    block_devs = get_block_devs_lsblk(device=device)
 
     for block in block_devs:
         devname = os.path.basename(block[0])
@@ -758,9 +786,13 @@ def get_devices(_sys_block_path='/sys/block'):
         sysdir = os.path.join(_sys_block_path, devname)
         metadata = {}
 
+        # If the device is ceph rbd it gets excluded
+        if is_ceph_rbd(diskname):
+            continue
+
         # If the mapper device is a logical volume it gets excluded
         if is_mapper_device(diskname):
-            if lvm.is_lv(diskname):
+            if lvm.get_device_lvs(diskname):
                 continue
 
         # all facts that have no defaults
@@ -802,3 +834,17 @@ def get_devices(_sys_block_path='/sys/block'):
 
         device_facts[diskname] = metadata
     return device_facts
+
+def has_bluestore_label(device_path):
+    isBluestore = False
+    bluestoreDiskSignature = 'bluestore block device' # 22 bytes long
+
+    # throws OSError on failure
+    logger.info("opening device {} to check for BlueStore label".format(device_path))
+    with open(device_path, "rb") as fd:
+        # read first 22 bytes looking for bluestore disk signature
+        signature = fd.read(22)
+        if signature.decode('ascii', 'replace') == bluestoreDiskSignature:
+            isBluestore = True
+
+    return isBluestore

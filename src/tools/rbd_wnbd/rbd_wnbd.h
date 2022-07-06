@@ -23,8 +23,16 @@
 #include "wnbd_handler.h"
 
 #define SERVICE_REG_KEY "SYSTEM\\CurrentControlSet\\Services\\rbd-wnbd"
+#define SERVICE_PIPE_NAME "\\\\.\\pipe\\rbd-wnbd"
+#define SERVICE_PIPE_TIMEOUT_MS 5000
+#define SERVICE_PIPE_BUFFSZ 4096
+
+#define DEFAULT_MAP_TIMEOUT_MS 30000
 
 #define RBD_WNBD_BLKSIZE 512UL
+
+#define DEFAULT_SERVICE_START_TIMEOUT 120
+#define DEFAULT_IMAGE_MAP_TIMEOUT 20
 
 #define HELP_INFO 1
 #define VERSION_INFO 2
@@ -41,7 +49,7 @@ struct Config {
   bool exclusive = false;
   bool readonly = false;
 
-  intptr_t parent_pipe = 0;
+  std::string parent_pipe;
 
   std::string poolname;
   std::string nsname;
@@ -55,6 +63,10 @@ struct Config {
   bool hard_disconnect = false;
   int soft_disconnect_timeout = DEFAULT_SOFT_REMOVE_TIMEOUT;
   bool hard_disconnect_fallback = true;
+
+  int service_start_timeout = DEFAULT_SERVICE_START_TIMEOUT;
+  int image_map_timeout = DEFAULT_IMAGE_MAP_TIMEOUT;
+  bool remap_failure_fatal = false;
 
   // TODO: consider moving those fields to a separate structure. Those
   // provide connection information without actually being configurable.
@@ -71,6 +83,9 @@ struct Config {
   int io_req_workers = DEFAULT_IO_WORKER_COUNT;
   int io_reply_workers = DEFAULT_IO_WORKER_COUNT;
   int service_thread_count = DEFAULT_SERVICE_THREAD_COUNT;
+
+  // register the mapping, recreating it when the Ceph service starts.
+  bool persistent = true;
 };
 
 enum Command {
@@ -83,9 +98,16 @@ enum Command {
   Stats
 };
 
-bool is_process_running(DWORD pid);
+typedef struct {
+  Command command;
+  BYTE arguments[1];
+} ServiceRequest;
 
-void daemonize_complete(HANDLE parent_pipe);
+typedef struct {
+  int status;
+} ServiceReply;
+
+bool is_process_running(DWORD pid);
 void unmap_at_exit();
 
 int disconnect_all_mappings(
@@ -93,7 +115,8 @@ int disconnect_all_mappings(
   bool hard_disconnect,
   int soft_disconnect_timeout,
   int worker_count);
-int restart_registered_mappings(int worker_count);
+int restart_registered_mappings(
+  int worker_count, int total_timeout, int image_map_timeout);
 int map_device_using_suprocess(std::string command_line);
 
 int construct_devpath_if_missing(Config* cfg);

@@ -27,6 +27,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "fuse "
 
+using std::less;
 using std::list;
 using std::map;
 using std::set;
@@ -554,7 +555,7 @@ static int os_readdir(const char *path,
 
   case FN_OBJECT_ATTR:
     {
-      map<string,bufferptr> aset;
+      map<string,bufferptr,less<>> aset;
       fs->store->getattrs(ch, oid, aset);
       unsigned skip = offset;
       for (auto a : aset) {

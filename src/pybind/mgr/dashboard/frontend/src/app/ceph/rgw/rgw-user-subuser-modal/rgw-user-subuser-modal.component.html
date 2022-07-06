@@ -1,5 +1,5 @@
 <cd-modal [modalRef]="bsModalRef">
-  <ng-container i18n="form title|Example: Create Pool@@formTitle"
+  <ng-container i18n="form title"
                 class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
   <ng-container class="modal-content">
     <form #frm="ngForm"
@@ -50,7 +50,7 @@
                  i18n>Permission</label>
           <div class="cd-col-form-input">
             <select id="perm"
-                    class="form-control custom-select"
+                    class="form-control"
                     formControlName="perm">
               <option i18n
                       [ngValue]="null">-- Select a permission --</option>

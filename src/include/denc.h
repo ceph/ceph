@@ -39,6 +39,7 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
+#include "include/compat.h"
 #include "include/intarith.h"
 #include "include/int_types.h"
 #include "include/scope_guard.h"
@@ -609,7 +610,7 @@ template<class It>
 inline std::enable_if_t<is_const_iterator_v<It>>
 denc_lba(uint64_t& v, It& p) {
   uint32_t word = *(ceph_le32*)p.get_pos_add(sizeof(uint32_t));
-  int shift;
+  int shift = 0;
   switch (word & 7) {
   case 0:
   case 2:

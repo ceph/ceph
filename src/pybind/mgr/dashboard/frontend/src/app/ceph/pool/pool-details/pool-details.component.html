@@ -20,6 +20,7 @@
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
         <cd-grafana grafanaPath="ceph-pool-detail?var-pool_name={{selection.pool_name}}"
+                    [type]="'metrics'"
                     uid="-xyV8KCiz"
                     grafanaStyle="three">
         </cd-grafana>

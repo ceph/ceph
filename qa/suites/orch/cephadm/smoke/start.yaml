@@ -1,0 +1,16 @@
+tasks:
+- cephadm:
+    conf:
+      mgr:
+        debug ms: 1
+        debug mgr: 20
+- cephadm.shell:
+    mon.a:
+      - stat -c '%u %g' /var/log/ceph | grep '167 167'
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
+      - ceph orch ls --format yaml
+      - ceph orch ls | grep '^osd '

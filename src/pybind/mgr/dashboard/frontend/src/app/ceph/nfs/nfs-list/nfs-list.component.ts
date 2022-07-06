@@ -119,11 +119,6 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         flexGrow: 2
       },
       {
-        name: $localize`Daemons`,
-        prop: 'daemons',
-        flexGrow: 2
-      },
-      {
         name: $localize`Storage Backend`,
         prop: 'fsal',
         flexGrow: 2,
@@ -136,32 +131,14 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
       }
     ];
 
-    this.nfsService.daemon().subscribe(
-      (daemons: any) => {
-        const clusters = _(daemons)
-          .map((daemon) => daemon.cluster_id)
-          .uniq()
-          .value();
-
-        this.isDefaultCluster = clusters.length === 1 && clusters[0] === '_default_';
-        this.columns[2].isHidden = this.isDefaultCluster;
-        if (this.table) {
-          this.table.updateColumns();
-        }
-
-        this.taskListService.init(
-          () => this.nfsService.list(),
-          (resp) => this.prepareResponse(resp),
-          (exports) => (this.exports = exports),
-          () => this.onFetchError(),
-          this.taskFilter,
-          this.itemFilter,
-          this.builders
-        );
-      },
-      () => {
-        this.onFetchError();
-      }
+    this.taskListService.init(
+      () => this.nfsService.list(),
+      (resp) => this.prepareResponse(resp),
+      (exports) => (this.exports = exports),
+      () => this.onFetchError(),
+      this.taskFilter,
+      this.itemFilter,
+      this.builders
     );
   }
 

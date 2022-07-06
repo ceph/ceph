@@ -2,7 +2,10 @@ import { DatePipe } from '@angular/common';
 import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
 
 import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { LogsService } from '~/app/shared/api/logs.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 
@@ -16,7 +19,10 @@ export class LogsComponent implements OnInit, OnDestroy {
   clog: Array<any>;
   audit_log: Array<any>;
   icons = Icons;
-  logText: string;
+  clogText: string;
+  auditLogText: string;
+  lokiServiceStatus$: Observable<boolean>;
+  promtailServiceStatus$: Observable<boolean>;
 
   interval: number;
   priorities: Array<{ name: string; value: string }> = [
@@ -39,6 +45,7 @@ export class LogsComponent implements OnInit, OnDestroy {
 
   constructor(
     private logsService: LogsService,
+    private cephService: CephServiceService,
     private datePipe: DatePipe,
     private ngZone: NgZone
   ) {}
@@ -46,6 +53,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.getInfo();
     this.ngZone.runOutsideAngular(() => {
+      this.getDaemonDetails();
       this.interval = window.setInterval(() => {
         this.ngZone.run(() => {
           this.getInfo();
@@ -58,17 +66,31 @@ export class LogsComponent implements OnInit, OnDestroy {
     clearInterval(this.interval);
   }
 
+  getDaemonDetails() {
+    this.lokiServiceStatus$ = this.cephService.getDaemons('loki').pipe(
+      map((data: any) => {
+        return data.length > 0 && data[0].status === 1;
+      })
+    );
+    this.promtailServiceStatus$ = this.cephService.getDaemons('promtail').pipe(
+      map((data: any) => {
+        return data.length > 0 && data[0].status === 1;
+      })
+    );
+  }
+
   getInfo() {
     this.logsService.getLogs().subscribe((data: any) => {
       this.contentData = data;
+      this.clogText = this.logToText(this.contentData.clog);
+      this.auditLogText = this.logToText(this.contentData.audit_log);
       this.filterLogs();
     });
   }
 
   abstractFilters(): any {
     const priority = this.priority;
-    const key = this.search.toLowerCase().replace(/,/g, '');
-
+    const key = this.search.toLowerCase();
     let yearMonthDay: string;
     if (this.selectedDate) {
       const m = this.selectedDate.month;
@@ -139,10 +161,10 @@ export class LogsComponent implements OnInit, OnDestroy {
   }
 
   logToText(log: object) {
-    this.logText = '';
+    let logText = '';
     for (const line of Object.keys(log)) {
-      this.logText =
-        this.logText +
+      logText =
+        logText +
         this.datePipe.transform(log[line].stamp, 'medium') +
         '\t' +
         log[line].priority +
@@ -150,5 +172,6 @@ export class LogsComponent implements OnInit, OnDestroy {
         log[line].message +
         '\n';
     }
+    return logText;
   }
 }

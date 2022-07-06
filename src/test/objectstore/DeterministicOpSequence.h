@@ -81,7 +81,7 @@ protected:
       uint64_t len, const bufferlist& data);
   virtual void _do_set_attrs(coll_entry_t *entry,
 			     hobject_t &obj,
-			     const map<string, bufferlist> &attrs);
+			     const std::map<std::string, bufferlist> &attrs);
   virtual void _do_clone(coll_entry_t *entry, hobject_t& orig_obj, hobject_t& new_obj);
   virtual void _do_clone_range(coll_entry_t *entry, hobject_t& orig_obj,
       hobject_t& new_obj, uint64_t srcoff, uint64_t srclen, uint64_t dstoff);

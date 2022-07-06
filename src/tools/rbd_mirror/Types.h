@@ -20,11 +20,16 @@ template <typename> struct MirrorStatusUpdater;
 
 // Performance counters
 enum {
-  l_rbd_mirror_first = 27000,
+  l_rbd_mirror_journal_first = 27000,
   l_rbd_mirror_replay,
   l_rbd_mirror_replay_bytes,
   l_rbd_mirror_replay_latency,
-  l_rbd_mirror_last,
+  l_rbd_mirror_journal_last,
+  l_rbd_mirror_snapshot_first,
+  l_rbd_mirror_snapshot_replay_snapshots,
+  l_rbd_mirror_snapshot_replay_snapshots_time,
+  l_rbd_mirror_snapshot_replay_bytes,
+  l_rbd_mirror_snapshot_last,
 };
 
 typedef std::shared_ptr<librados::Rados> RadosRef;

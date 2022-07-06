@@ -67,8 +67,7 @@ class TestJournalRepair(CephFSTestCase):
         self.mount_a.umount_wait()
 
         # Stop the MDS
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # Now, the journal should contain the operations, but the backing
         # store shouldn't
@@ -88,7 +87,7 @@ class TestJournalRepair(CephFSTestCase):
         # Now check the MDS can read what we wrote: truncate the journal
         # and start the mds.
         self.fs.journal_tool(['journal', 'reset'], 0)
-        self.fs.mds_fail_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         # List files
@@ -160,12 +159,8 @@ class TestJournalRepair(CephFSTestCase):
         # Set max_mds to 2
         self.fs.set_max_mds(2)
         status = self.fs.wait_for_daemons()
-        active_mds_names = self.fs.get_active_names(status=status)
-
-        # Switch off any unneeded MDS daemons
-        for unneeded_mds in set(self.mds_cluster.mds_ids) - set(active_mds_names):
-            self.mds_cluster.mds_stop(unneeded_mds)
-            self.mds_cluster.mds_fail(unneeded_mds)
+        rank0_gid = self.fs.get_rank(rank=0, status=status)['gid']
+        self.fs.set_joinable(False) # no unintended failover
 
         # Create a dir on each rank
         self.mount_a.run_shell_payload("mkdir {alpha,bravo} && touch {alpha,bravo}/file")
@@ -183,11 +178,11 @@ class TestJournalRepair(CephFSTestCase):
 
         # Flush the journals so that we have some backing store data
         # belonging to one MDS, and some to the other MDS.
-        for mds_name in active_mds_names:
-            self.fs.mds_asok(["flush", "journal"], mds_name)
+        self.fs.rank_asok(["flush", "journal"], rank=0)
+        self.fs.rank_asok(["flush", "journal"], rank=1)
 
         # Stop (hard) the second MDS daemon
-        self.fs.mds_stop(active_mds_names[1])
+        self.fs.rank_fail(rank=1)
 
         # Wipe out the tables for MDS rank 1 so that it is broken and can't start
         # (this is the simulated failure that we will demonstrate that the disaster
@@ -218,8 +213,7 @@ class TestJournalRepair(CephFSTestCase):
 
         # See that the second MDS will crash when it starts and tries to
         # acquire rank 1
-        damaged_id = active_mds_names[1]
-        self.fs.mds_restart(damaged_id)
+        self.fs.set_joinable(True)
 
         # The daemon taking the damaged rank should start starting, then
         # restart back into standby after asking the mon to mark the rank
@@ -229,22 +223,10 @@ class TestJournalRepair(CephFSTestCase):
             return 1 in mds_map['damaged']
 
         self.wait_until_true(is_marked_damaged, 60)
-
-        def get_state():
-            info = self.mds_cluster.get_mds_info(damaged_id)
-            return info['state'] if info is not None else None
-
-        self.wait_until_equal(
-                get_state,
-                "up:standby",
-                timeout=60)
-
-        self.fs.mds_stop(damaged_id)
-        self.fs.mds_fail(damaged_id)
+        self.assertEqual(rank0_gid, self.fs.get_rank(rank=0)['gid'])
 
         # Now give up and go through a disaster recovery procedure
-        self.fs.mds_stop(active_mds_names[0])
-        self.fs.mds_fail(active_mds_names[0])
+        self.fs.fail()
         # Invoke recover_dentries quietly, because otherwise log spews millions of lines
         self.fs.journal_tool(["event", "recover_dentries", "summary"], 0, quiet=True)
         self.fs.journal_tool(["event", "recover_dentries", "summary"], 1, quiet=True)
@@ -256,19 +238,15 @@ class TestJournalRepair(CephFSTestCase):
 
         # Bring an MDS back online, mount a client, and see that we can walk the full
         # filesystem tree again
-        self.fs.mds_fail_restart(active_mds_names[0])
-        self.wait_until_equal(lambda: self.fs.get_active_names(), [active_mds_names[0]], 30,
-                              reject_fn=lambda v: len(v) > 1)
+        self.fs.set_joinable(True) # redundant with `fs reset`
+        status = self.fs.wait_for_daemons()
+        self.assertEqual(len(list(self.fs.get_ranks(status=status))), 1)
         self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "-R"], wait=True)
 
     def test_table_tool(self):
-        active_mdss = self.fs.get_active_names()
-        self.assertEqual(len(active_mdss), 1)
-        mds_name = active_mdss[0]
-
         self.mount_a.run_shell(["touch", "foo"])
-        self.fs.mds_asok(["flush", "journal"], mds_name)
+        self.fs.rank_asok(["flush", "journal"])
 
         log.info(self.fs.table_tool(["all", "show", "inode"]))
         log.info(self.fs.table_tool(["all", "show", "snap"]))
@@ -398,8 +376,7 @@ class TestJournalRepair(CephFSTestCase):
         for mount in self.mounts:
             mount.umount_wait()
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # journal tool smoke
         workunit(self.ctx, {
@@ -412,7 +389,7 @@ class TestJournalRepair(CephFSTestCase):
 
 
 
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         self.mount_a.mount_wait()

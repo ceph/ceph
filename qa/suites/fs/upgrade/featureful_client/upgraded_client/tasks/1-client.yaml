@@ -3,7 +3,7 @@ overrides:
   nuke-on-error: false
 tasks:
 - ceph-fuse:
-- print: "**** done nautilus client"
+- print: "**** done octopus client"
 #- workunit:
 #    clients:
 #      all:

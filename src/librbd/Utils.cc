@@ -11,9 +11,11 @@
 #include "include/neorados/RADOS.hpp"
 #include "include/rbd/features.h"
 #include "common/dout.h"
+#include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Features.h"
 
+#include <boost/algorithm/string/predicate.hpp>
 #include <bitset>
 #include <random>
 
@@ -23,6 +25,11 @@
 
 namespace librbd {
 namespace util {
+namespace {
+
+const std::string CONFIG_KEY_URI_PREFIX{"config://"};
+
+} // anonymous namespace
 
 const std::string group_header_name(const std::string &group_id)
 {
@@ -60,7 +67,7 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   std::uniform_int_distribution<uint32_t> distribution{0, 0xFFFFFFFF};
   uint32_t extra = distribution(generator);
 
-  ostringstream bid_ss;
+  std::ostringstream bid_ss;
   bid_ss << std::hex << bid << std::hex << extra;
   std::string id = bid_ss.str();
 
@@ -142,6 +149,9 @@ int create_ioctx(librados::IoCtx& src_io_ctx, const std::string& pool_desc,
 
   dst_io_ctx->set_namespace(
     pool_namespace ? *pool_namespace : src_io_ctx.get_namespace());
+  if (src_io_ctx.get_pool_full_try()) {
+    dst_io_ctx->set_pool_full_try();
+  }
   return 0;
 }
 
@@ -198,6 +208,38 @@ uint64_t reserve_async_request_id() {
   static std::atomic<uint64_t> async_request_seq = 0;
 
   return ++async_request_seq;
+}
+
+bool is_config_key_uri(const std::string& uri) {
+  return boost::starts_with(uri, CONFIG_KEY_URI_PREFIX);
+}
+
+int get_config_key(librados::Rados& rados, const std::string& uri,
+                   std::string* value) {
+  auto cct = reinterpret_cast<CephContext*>(rados.cct());
+
+  if (!is_config_key_uri(uri)) {
+    return -EINVAL;
+  }
+
+  std::string key = uri.substr(CONFIG_KEY_URI_PREFIX.size());
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key get\", "
+      "\"key\": \"" + key + "\""
+    "}";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve MON config key " << key << ": "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  *value = std::string(out_bl.c_str(), out_bl.length());
+  return 0;
 }
 
 } // namespace util

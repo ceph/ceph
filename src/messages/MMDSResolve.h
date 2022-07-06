@@ -32,7 +32,7 @@ public:
     inodeno_t ino;
     std::map<client_t,Capability::Export> cap_exports;
     peer_inode_cap() {}
-    peer_inode_cap(inodeno_t a, map<client_t, Capability::Export> b) : ino(a), cap_exports(b) {}
+    peer_inode_cap(inodeno_t a, std::map<client_t, Capability::Export> b) : ino(a), cap_exports(b) {}
     void encode(ceph::buffer::list &bl) const 
     {
       ENCODE_START(1, 1, bl);
@@ -148,6 +148,8 @@ public:
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 inline std::ostream& operator<<(std::ostream& out, const MMDSResolve::peer_request&) {
