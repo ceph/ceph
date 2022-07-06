@@ -5,10 +5,15 @@
 
 #include <memory>
 
+#include <seastar/core/file.hh>
+#include <seastar/core/future.hh>
+#include <seastar/core/reactor.hh>
+
 #include "include/buffer_fwd.h"
 
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/logging.h"
 
 namespace crimson::os::seastore {
 
@@ -116,6 +121,108 @@ public:
 
   static seastar::future<DeviceRef> make_device(const std::string &device);
 };
+
+namespace device {
+
+using write_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
+using read_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
+
+write_ertr::future<> do_write(
+  device_id_t device_id,
+  seastar::file &device,
+  uint64_t offset,
+  bufferptr &bptr);
+
+write_ertr::future<> do_writev(
+  device_id_t device_id,
+  seastar::file &device,
+  uint64_t offset,
+  bufferlist&& bl,
+  size_t block_size);
+
+read_ertr::future<> do_read(
+  device_id_t device_id,
+  seastar::file &device,
+  uint64_t offset,
+  size_t len,
+  bufferptr &bptr);
+
+using access_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error,
+  crimson::ct_error::permission_denied,
+  crimson::ct_error::enoent>;
+using check_create_device_ertr = access_ertr;
+using check_create_device_ret = check_create_device_ertr::future<>;
+check_create_device_ret check_create_device(
+  const std::string &path,
+  size_t size);
+
+using open_device_ret = access_ertr::future<
+  std::pair<seastar::file, seastar::stat_data>>;
+open_device_ret open_device(const std::string& path);
+
+template <typename T>
+access_ertr::future<> write_superblock(
+    device_id_t device_id,
+    seastar::file &device,
+    T sb)
+{
+  auto &logger = get_logger(ceph_subsys_seastore_device);
+  logger.debug("block_write_superblock: D{} write {}",
+	       device_id_printer_t{device_id}, sb);
+  sb.validate();
+  assert(ceph::encoded_sizeof<T>(sb) <
+	 sb.block_size);
+  return seastar::do_with(
+    bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
+    [=, &device](auto &bp)
+  {
+    bufferlist bl;
+    encode(sb, bl);
+    auto iter = bl.begin();
+    assert(bl.length() < sb.block_size);
+    iter.copy(bl.length(), bp.c_str());
+    return do_write(device_id, device, 0, bp);
+  });
+}
+
+template <typename T>
+access_ertr::future<T> read_superblock(seastar::file &device, seastar::stat_data sd)
+{
+  auto &logger = get_logger(ceph_subsys_seastore_device);
+  logger.debug("reading superblock ...");
+  return seastar::do_with(
+    bufferptr(ceph::buffer::create_page_aligned(sd.block_size)),
+    [=, &device, &logger](auto &bp)
+  {
+    return do_read(
+      DEVICE_ID_NULL, // unknown
+      device,
+      0,
+      bp.length(),
+      bp
+    ).safe_then([=, &bp, &logger] {
+      bufferlist bl;
+      bl.push_back(bp);
+      T ret;
+      auto bliter = bl.cbegin();
+      try {
+        decode(ret, bliter);
+      } catch (...) {
+        logger.error("got decode error!");
+        ceph_assert(0 == "invalid superblock");
+      }
+      assert(ceph::encoded_sizeof<T>(ret) <
+             sd.block_size);
+      return access_ertr::future<T>(
+        access_ertr::ready_future_marker{},
+        ret);
+    });
+  });
+}
+}
 
 }
 

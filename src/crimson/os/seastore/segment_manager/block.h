@@ -16,11 +16,6 @@
 
 namespace crimson::os::seastore::segment_manager::block {
 
-using write_ertr = crimson::errorator<
-  crimson::ct_error::input_output_error>;
-using read_ertr = crimson::errorator<
-  crimson::ct_error::input_output_error>;
-
 /**
  * SegmentStateTracker
  *
@@ -72,12 +67,12 @@ public:
       static_cast<uint8_t>(state);
   }
 
-  write_ertr::future<> write_out(
+  device::write_ertr::future<> write_out(
     device_id_t device_id,
     seastar::file &device,
     uint64_t offset);
 
-  read_ertr::future<> read_in(
+  device::read_ertr::future<> read_in(
     device_id_t device_id,
     seastar::file &device,
     uint64_t offset);
