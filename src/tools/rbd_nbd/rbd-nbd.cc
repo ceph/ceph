@@ -152,7 +152,7 @@ static void usage()
             << "Map and attach options:\n"
             << "  --device <device path>        Specify nbd device path (/dev/nbd{num})\n"
             << "  --encryption-format           Image encryption format\n"
-            << "                                (possible values: luks1, luks2)\n"
+            << "                                (possible values: luks)\n"
             << "  --encryption-passphrase-file  Path of file containing passphrase for unlocking image encryption\n"
             << "  --exclusive                   Forbid writes by other clients\n"
             << "  --notrim                      Turn off trim/discard\n"
@@ -1690,6 +1690,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
         opts.passphrase = passphrase;
         r = image.encryption_load(
                 RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts));
+        blksize = 4096;
         break;
       }
       case RBD_ENCRYPTION_FORMAT_LUKS2: {
@@ -1697,6 +1698,14 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
         opts.passphrase = passphrase;
         r = image.encryption_load(
                 RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts));
+        blksize = 4096;
+        break;
+      }
+      case RBD_ENCRYPTION_FORMAT_LUKS: {
+        librbd::encryption_luks_format_options_t opts = {};
+        opts.passphrase = passphrase;
+        r = image.encryption_load(
+                RBD_ENCRYPTION_FORMAT_LUKS, &opts, sizeof(opts));
         blksize = 4096;
         break;
       }
@@ -2104,10 +2113,17 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                                      "--encryption-format", (char *)NULL)) {
       if (arg_value == "luks1") {
         cfg->encryption_format =
-                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS1);
+                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS);
+        *err_msg << "rbd-nbd: specifying luks1 when loading encryption "
+                    "is deprecated, use luks";
       } else if (arg_value == "luks2") {
         cfg->encryption_format =
-                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS2);
+                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS);
+        *err_msg << "rbd-nbd: specifying luks2 when loading encryption "
+                    "is deprecated, use luks";
+      } else if (arg_value == "luks") {
+        cfg->encryption_format =
+                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS);
       } else {
         *err_msg << "rbd-nbd: Invalid encryption format";
         return -EINVAL;

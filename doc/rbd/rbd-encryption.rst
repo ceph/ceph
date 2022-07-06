@@ -135,7 +135,7 @@ in cases where incoming writes cannot be guaranteed to be sector-aligned.
 
 To mount a LUKS-encrypted image run::
 
-    $ rbd -p {pool-name} device map -t nbd -o encryption-format={luks1|luks2},encryption-passphrase-file={passphrase-file}
+    $ rbd -p {pool-name} device map -t nbd -o encryption-format=luks,encryption-passphrase-file={passphrase-file}
 
 Note that for security reasons, both the encryption format and encryption load
 operations are CPU-intensive, and may take a few seconds to complete. For the

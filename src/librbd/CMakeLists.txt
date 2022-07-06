@@ -212,7 +212,7 @@ endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND librbd_internal_srcs
-          crypto/luks/EncryptionFormat.cc
+          crypto/luks/LUKSEncryptionFormat.cc
           crypto/luks/Header.cc
           crypto/luks/FormatRequest.cc
           crypto/luks/LoadRequest.cc)
