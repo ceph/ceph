@@ -134,7 +134,7 @@ Options
 
 .. option:: redeploy
 
-   Redeploy the ceph daemon on the corresponding host. This will recreate the daemon directory
+   Redeploy the Ceph daemon on the corresponding host. This will recreate the daemon directory
    structure under ``/var/lib/ceph/<fsid>/<daemon-name>`` (if it doesn't exist), refresh its
    configuration files, regenerate its unit-files and restarts the systemd daemon.
 
