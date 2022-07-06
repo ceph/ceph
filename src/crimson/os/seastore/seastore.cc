@@ -400,23 +400,169 @@ seastar::future<store_statfs_t> SeaStore::stat() const
   );
 }
 
+TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
+SeaStore::get_coll_bits(CollectionRef ch, Transaction &t) const
+{
+  return transaction_manager->read_collection_root(t)
+    .si_then([this, ch, &t](auto coll_root) {
+      return collection_manager->list(coll_root, t);
+    }).si_then([ch](auto colls) {
+      auto it = std::find_if(colls.begin(), colls.end(),
+        [ch](const std::pair<coll_t, coll_info_t>& element) {
+          return element.first == ch->get_cid();
+      });
+      if (it != colls.end()) {
+        return TransactionManager::read_extent_iertr::make_ready_future<
+          std::optional<unsigned>>(it->second.split_bits);
+      } else {
+        return TransactionManager::read_extent_iertr::make_ready_future<
+	  std::optional<unsigned>>(std::nullopt);
+      }
+    });
+}
+
+col_obj_ranges_t
+SeaStore::get_objs_range(CollectionRef ch, unsigned bits)
+{
+  col_obj_ranges_t obj_ranges;
+  spg_t pgid;
+  constexpr uint32_t MAX_HASH = std::numeric_limits<uint32_t>::max();
+  const std::string_view MAX_NSPACE = "\xff";
+  if (ch->get_cid().is_pg(&pgid)) {
+    obj_ranges.obj_begin.shard_id = pgid.shard;
+    obj_ranges.temp_begin = obj_ranges.obj_begin;
+
+    obj_ranges.obj_begin.hobj.pool = pgid.pool();
+    obj_ranges.temp_begin.hobj.pool = -2ll - pgid.pool();
+
+    obj_ranges.obj_end = obj_ranges.obj_begin;
+    obj_ranges.temp_end = obj_ranges.temp_begin;
+
+    uint32_t reverse_hash = hobject_t::_reverse_bits(pgid.ps());
+    obj_ranges.obj_begin.hobj.set_bitwise_key_u32(reverse_hash);
+    obj_ranges.temp_begin.hobj.set_bitwise_key_u32(reverse_hash);
+
+    uint64_t end_hash = reverse_hash  + (1ull << (32 - bits));
+    if (end_hash > MAX_HASH) {
+      // make sure end hobj is even greater than the maximum possible hobj
+      obj_ranges.obj_end.hobj.set_bitwise_key_u32(MAX_HASH);
+      obj_ranges.temp_end.hobj.set_bitwise_key_u32(MAX_HASH);
+      obj_ranges.obj_end.hobj.nspace = MAX_NSPACE;
+    } else {
+      obj_ranges.obj_end.hobj.set_bitwise_key_u32(end_hash);
+      obj_ranges.temp_end.hobj.set_bitwise_key_u32(end_hash);
+    }
+  } else {
+    obj_ranges.obj_begin.shard_id = shard_id_t::NO_SHARD;
+    obj_ranges.obj_begin.hobj.pool = -1ull;
+
+    obj_ranges.obj_end = obj_ranges.obj_begin;
+    obj_ranges.obj_begin.hobj.set_bitwise_key_u32(0);
+    obj_ranges.obj_end.hobj.set_bitwise_key_u32(MAX_HASH);
+    obj_ranges.obj_end.hobj.nspace = MAX_NSPACE;
+    // no separate temp section
+    obj_ranges.temp_begin = obj_ranges.obj_end;
+    obj_ranges.temp_end = obj_ranges.obj_end;
+  }
+
+  obj_ranges.obj_begin.generation = 0;
+  obj_ranges.obj_end.generation = 0;
+  obj_ranges.temp_begin.generation = 0;
+  obj_ranges.temp_end.generation = 0;
+  return obj_ranges;
+}
+
+static std::list<std::pair<ghobject_t, ghobject_t>>
+get_ranges(CollectionRef ch,
+           ghobject_t start,
+           ghobject_t end,
+           col_obj_ranges_t obj_ranges)
+{
+  ceph_assert(start <= end);
+  std::list<std::pair<ghobject_t, ghobject_t>> ranges;
+  if (start < obj_ranges.temp_end) {
+    ranges.emplace_back(
+      std::max(obj_ranges.temp_begin, start),
+      std::min(obj_ranges.temp_end, end));
+  }
+  if (end > obj_ranges.obj_begin) {
+    ranges.emplace_back(
+      std::max(obj_ranges.obj_begin, start),
+      std::min(obj_ranges.obj_end, end));
+  }
+  return ranges;
+}
+
 seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>>
 SeaStore::list_objects(CollectionRef ch,
-                        const ghobject_t& start,
-                        const ghobject_t& end,
-                        uint64_t limit) const
+                       const ghobject_t& start,
+                       const ghobject_t& end,
+                       uint64_t limit) const
 {
+  ceph_assert(start <= end);
+  using list_iertr = OnodeManager::list_onodes_iertr;
   using RetType = typename OnodeManager::list_onodes_bare_ret;
   return seastar::do_with(
-      RetType(),
-      [this, start, end, limit] (auto& ret) {
-    return repeat_eagain([this, start, end, limit, &ret] {
+    RetType(),
+    std::move(limit),
+    [this, ch, start, end](auto& ret, auto& limit) {
+    return repeat_eagain([this, ch, start, end, &limit, &ret] {
       return transaction_manager->with_transaction_intr(
         Transaction::src_t::READ,
         "list_objects",
-        [this, start, end, limit](auto &t)
+        [this, ch, start, end, &limit, &ret](auto &t)
       {
-        return onode_manager->list_onodes(t, start, end, limit);
+        return get_coll_bits(
+          ch, t
+	).si_then([this, ch, &t, start, end, &limit, &ret](auto bits) {
+          if (!bits) {
+            return list_iertr::make_ready_future<
+              OnodeManager::list_onodes_bare_ret
+	      >(std::make_tuple(
+		  std::vector<ghobject_t>(),
+		  ghobject_t::get_max()));
+          } else {
+            auto filter = get_objs_range(ch, *bits);
+	    using list_iertr = OnodeManager::list_onodes_iertr;
+	    using repeat_ret = list_iertr::future<seastar::stop_iteration>;
+            return trans_intr::repeat(
+              [this, &t, &ret, &limit,
+	       filter, ranges = get_ranges(ch, start, end, filter)
+	      ]() mutable -> repeat_ret {
+		if (limit == 0 || ranges.empty()) {
+		  return list_iertr::make_ready_future<
+		    seastar::stop_iteration
+		    >(seastar::stop_iteration::yes);
+		}
+		auto ite = ranges.begin();
+		auto pstart = ite->first;
+		auto pend = ite->second;
+		ranges.pop_front();
+		return onode_manager->list_onodes(
+		  t, pstart, pend, limit
+		).si_then([&limit, &ret, pend](auto &&_ret) mutable {
+		  auto &next_objects = std::get<0>(_ret);
+		  auto &ret_objects = std::get<0>(ret);
+		  ret_objects.insert(
+		    ret_objects.end(),
+		    next_objects.begin(),
+		    next_objects.end());
+		  std::get<1>(ret) = std::get<1>(_ret);
+		  assert(limit >= next_objects.size());
+		  limit -= next_objects.size();
+		  assert(limit == 0 ||
+			 std::get<1>(_ret) == pend ||
+			 std::get<1>(_ret) == ghobject_t::get_max());
+		  return list_iertr::make_ready_future<
+		    seastar::stop_iteration
+		    >(seastar::stop_iteration::no);
+		});
+	      }).si_then([&ret] {
+		return list_iertr::make_ready_future<
+		  OnodeManager::list_onodes_bare_ret>(std::move(ret));
+	      });
+          }
+        });
       }).safe_then([&ret](auto&& _ret) {
         ret = std::move(_ret);
       });

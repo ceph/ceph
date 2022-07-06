@@ -41,6 +41,20 @@ public:
   seastar::shared_mutex ordering_lock;
 };
 
+/**
+ * col_obj_ranges_t
+ *
+ * Represents the two ghobject_t ranges spanned by a PG collection.
+ * Temp objects will be within [temp_begin, temp_end) and normal objects
+ * will be in [obj_begin, obj_end).
+ */
+struct col_obj_ranges_t {
+  ghobject_t temp_begin;
+  ghobject_t temp_end;
+  ghobject_t obj_begin;
+  ghobject_t obj_end;
+};
+
 class SeaStore final : public FuturizedStore {
 public:
   class MDStore {
@@ -128,6 +142,9 @@ public:
     CollectionRef c,
     const ghobject_t& oid) final;
 
+  static col_obj_ranges_t
+  get_objs_range(CollectionRef ch, unsigned bits);
+
   seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
     const ghobject_t& start,
@@ -198,6 +215,9 @@ private:
       iter = ext_transaction.begin();
     }
   };
+
+  TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
+  get_coll_bits(CollectionRef ch, Transaction &t) const;
 
   static void on_error(ceph::os::Transaction &t);
 
