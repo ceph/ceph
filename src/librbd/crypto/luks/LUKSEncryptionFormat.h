@@ -17,7 +17,8 @@ namespace crypto {
 namespace luks {
 
 // This class is derived from only for the sake of the 'format' operation.
-// The 'load' operation is handled the same for all three variants.
+// The 'load' and 'flatten' operations are handled the same for all three
+// variants.
 template <typename ImageCtxT>
 class LUKSEncryptionFormat : public crypto::EncryptionFormat<ImageCtxT> {
 
@@ -36,6 +37,7 @@ public:
 
     void format(ImageCtxT* ictx, Context* on_finish) override;
     void load(ImageCtxT* ictx, Context* on_finish) override;
+    void flatten(ImageCtxT* ictx, Context* on_finish) override;
 
     CryptoInterface* get_crypto() override {
       ceph_assert(m_crypto);

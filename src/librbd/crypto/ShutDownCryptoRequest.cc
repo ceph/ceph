@@ -5,7 +5,6 @@
 
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/crypto/CryptoImageDispatch.h"
 #include "librbd/crypto/CryptoObjectDispatch.h"
@@ -25,8 +24,9 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 ShutDownCryptoRequest<I>::ShutDownCryptoRequest(
-        I* image_ctx, Context* on_finish) : m_image_ctx(image_ctx),
-                                            m_on_finish(on_finish) {
+        I* image_ctx, EncryptionFormat* format,
+        Context* on_finish) : m_image_ctx(image_ctx), m_format(format),
+                              m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -97,9 +97,14 @@ void ShutDownCryptoRequest<I>::finish(int r) {
   if (r == 0) {
     {
       std::unique_lock image_locker{m_image_ctx->image_lock};
-      m_image_ctx->encryption_format.reset();
+      if (m_format != nullptr) {
+        *m_format = std::move(m_image_ctx->encryption_format);
+        m_format = nullptr;
+      } else {
+        m_image_ctx->encryption_format.reset();
+      }
     }
-
+    
     if (m_image_ctx->parent != nullptr) {
       // move to shutting down parent crypto
       m_image_ctx = m_image_ctx->parent;

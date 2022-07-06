@@ -4,7 +4,7 @@
 #ifndef CEPH_LIBRBD_CRYPTO_SHUT_DOWN_CRYPTO_REQUEST_H
 #define CEPH_LIBRBD_CRYPTO_SHUT_DOWN_CRYPTO_REQUEST_H
 
-#include "librbd/crypto/CryptoInterface.h"
+#include "librbd/ImageCtx.h"
 
 struct Context;
 
@@ -14,16 +14,20 @@ class ImageCtx;
 
 namespace crypto {
 
-class CryptoInterface;
+template <typename> class EncryptionFormat;
 
 template <typename I>
 class ShutDownCryptoRequest {
 public:
-    static ShutDownCryptoRequest* create(I* image_ctx, Context* on_finish) {
-      return new ShutDownCryptoRequest(image_ctx, on_finish);
+    using EncryptionFormat = decltype(I::encryption_format);
+
+    static ShutDownCryptoRequest* create(
+            I* image_ctx, EncryptionFormat* format, Context* on_finish) {
+      return new ShutDownCryptoRequest(image_ctx, format, on_finish);
     }
 
-    ShutDownCryptoRequest(I* image_ctx, Context* on_finish);
+    ShutDownCryptoRequest(
+            I* image_ctx, EncryptionFormat* format, Context* on_finish);
     void send();
     void shut_down_object_dispatch();
     void handle_shut_down_object_dispatch(int r);
@@ -33,6 +37,7 @@ public:
 
 private:
     I* m_image_ctx;
+    EncryptionFormat* m_format;
     Context* m_on_finish;
 };
 

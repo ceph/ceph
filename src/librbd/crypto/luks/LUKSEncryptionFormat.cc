@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/compat.h"
+#include "librbd/crypto/luks/FlattenRequest.h"
 #include "librbd/crypto/luks/FormatRequest.h"
 #include "librbd/crypto/luks/LoadRequest.h"
 
@@ -47,6 +48,12 @@ template <typename I>
 void LUKSEncryptionFormat<I>::load(I* image_ctx, Context* on_finish) {
   auto req = luks::LoadRequest<I>::create(
           image_ctx, m_passphrase, &m_crypto, on_finish);
+  req->send();
+}
+
+template <typename I>
+void LUKSEncryptionFormat<I>::flatten(I* image_ctx, Context* on_finish) {
+  auto req = luks::FlattenRequest<I>::create(image_ctx, on_finish);
   req->send();
 }
 
