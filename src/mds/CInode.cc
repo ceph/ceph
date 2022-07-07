@@ -5296,11 +5296,17 @@ void CInode::scrub_initialize(ScrubHeaderRef& header)
 
   scrub_info();
   scrub_infop->scrub_in_progress = true;
-  scrub_infop->uninline_in_progress = true;
+  scrub_infop->uninline_in_progress = false;
   scrub_infop->queued_frags.clear();
   scrub_infop->header = header;
   header->inc_num_pending();
   // right now we don't handle remote inodes
+}
+
+void CInode::uninline_initialize()
+{
+  dout(20) << __func__ << " with scrub_version " << get_version() << dendl;
+  scrub_infop->uninline_in_progress = true;
 }
 
 void CInode::scrub_aborted() {
@@ -5313,15 +5319,29 @@ void CInode::scrub_aborted() {
   scrub_maybe_delete_info();
 }
 
+void CInode::common_finished() {
+  if (!scrub_is_in_progress()) {
+    scrub_infop->last_scrub_version = get_version();
+    scrub_infop->last_scrub_stamp = ceph_clock_now();
+    scrub_infop->last_scrub_dirty = true;
+    scrub_infop->header->dec_num_pending();
+  }
+}
+
 void CInode::scrub_finished() {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
 
-  scrub_infop->last_scrub_version = get_version();
-  scrub_infop->last_scrub_stamp = ceph_clock_now();
-  scrub_infop->last_scrub_dirty = true;
   scrub_infop->scrub_in_progress = false;
-  scrub_infop->header->dec_num_pending();
+  common_finished();
+}
+
+void CInode::uninline_finished() {
+  dout(20) << __func__ << dendl;
+  ceph_assert(scrub_is_in_progress());
+
+  scrub_infop->uninline_in_progress = false;
+  common_finished();
 }
 
 int64_t CInode::get_backtrace_pool() const
