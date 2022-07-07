@@ -158,6 +158,9 @@ private:
   friend std::ostream &operator<<(std::ostream &os, const State &state);
 
   friend class C_InodeValidated;
+  friend class C_IO_DataUninlined;
+  friend class C_MDC_DataUninlinedSubmitted;
+  friend class MDCache;
 
   int _enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top);
   /**

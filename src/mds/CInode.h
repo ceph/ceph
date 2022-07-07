@@ -449,6 +449,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * directory's get_projected_version())
    */
   void scrub_initialize(ScrubHeaderRef& header);
+  void uninline_initialize();
   /**
    * Call this once the scrub has been completed, whether it's a full
    * recursive scrub on a directory or simply the data on a file (or
@@ -457,6 +458,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * be complete()ed.
    */
   void scrub_finished();
+  void uninline_finished();
+  void common_finished();
 
   void scrub_aborted();
 
