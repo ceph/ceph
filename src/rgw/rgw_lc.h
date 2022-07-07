@@ -218,12 +218,12 @@ public:
   }
 
   bool empty() const {
-    return !(has_prefix() || has_tags());
+    return !(has_prefix() || has_tags() || has_flags());
   }
 
   // Determine if we need AND tag when creating xml
   bool has_multi_condition() const {
-    if (obj_tags.count() > 1)
+    if (obj_tags.count() + int(has_prefix()) > 1) // Prefix is a member of Filter
       return true;
     return false;
   }
@@ -234,6 +234,14 @@ public:
 
   bool has_tags() const {
     return !obj_tags.empty();
+  }
+
+  bool has_flags() const {
+    return !(flags == uint32_t(LCFlagType::none));
+  }
+
+  bool have_flag(LCFlagType flag) const {
+    return flags & make_flag(flag);
   }
 
   void encode(bufferlist& bl) const {
