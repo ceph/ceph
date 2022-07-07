@@ -991,7 +991,7 @@ class OSDThrasher(Thrasher):
         Pause injection testing. Check for osd being down when finished.
         """
         the_one = random.choice(self.live_osds)
-        self.log("inject_pause on {osd}".format(osd=the_one))
+        self.log("inject_pause on osd.{osd}".format(osd=the_one))
         self.log(
             "Testing {key} pause injection for duration {duration}".format(
                 key=conf_key,
