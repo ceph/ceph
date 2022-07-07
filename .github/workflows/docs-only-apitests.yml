@@ -1,0 +1,15 @@
+# The 'ceph API tests' check is a required check for all Pull Requests.
+# However, we don't need to run the Jenkins job if a PR only changes
+# documentation. This GitHub Action will create a dummy 'ceph API tests'
+# check in lieu of the Jenkins job running and exiting 0 to satisfy the check.
+name: ceph API tests
+on:
+  pull_request:
+    paths-ignore:
+      - '!doc/**'
+      - '!*.rst'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "This is a docs-only PR so we do not need to run ceph API tests." '

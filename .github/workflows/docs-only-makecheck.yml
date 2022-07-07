@@ -1,0 +1,15 @@
+# The 'make check' check is a required check for all Pull Requests.
+# However, we don't need to run the Jenkins job if a PR only changes
+# documentation. This GitHub Action will create a dummy 'make check'
+# check in lieu of the Jenkins job running and exiting 0 to satisfy the check.
+name: make check
+on:
+  pull_request:
+    paths-ignore:
+      - '!doc/**'
+      - '!*.rst'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "This is a docs-only PR so we do not need to run make check." '
