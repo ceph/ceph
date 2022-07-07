@@ -437,30 +437,10 @@ BtreeBackrefManager::get_cached_backrefs_in_range(
   return cache.get_backrefs_in_range(start, end);
 }
 
-Cache::backref_buf_entry_query_set_t
-BtreeBackrefManager::get_cached_backref_removals_in_range(
-  paddr_t start,
-  paddr_t end)
-{
-  return cache.get_del_backrefs_in_range(start, end);
-}
-
-const backref_buf_entry_t::set_t&
-BtreeBackrefManager::get_cached_backref_removals()
-{
-  return cache.get_del_backrefs();
-}
-
-const backref_buf_entry_t::set_t&
+const backref_set_t&
 BtreeBackrefManager::get_cached_backrefs()
 {
   return cache.get_backrefs();
-}
-
-backref_buf_entry_t
-BtreeBackrefManager::get_cached_backref_removal(paddr_t addr)
-{
-  return cache.get_del_backref(addr);
 }
 
 Cache::backref_extent_buf_entry_query_set_t
@@ -501,10 +481,6 @@ BtreeBackrefManager::retrieve_backref_extents(
       extents.emplace_back(std::move(ext));
     });
   });
-}
-
-bool BtreeBackrefManager::backref_should_be_removed(paddr_t paddr) {
-  return cache.backref_should_be_removed(paddr);
 }
 
 } // namespace crimson::os::seastore::backref
