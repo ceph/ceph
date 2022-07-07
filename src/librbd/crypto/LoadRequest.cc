@@ -26,15 +26,25 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 LoadRequest<I>::LoadRequest(
-        I* image_ctx, EncryptionFormat format,
+        I* image_ctx, std::vector<EncryptionFormat>&& formats,
         Context* on_finish) : m_image_ctx(image_ctx),
                               m_on_finish(on_finish),
-                              m_format_idx(0) {
-  m_formats.push_back(std::move(format));
+                              m_format_idx(0),
+                              m_is_current_format_cloned(false),
+                              m_formats(std::move(formats)) {
 }
 
 template <typename I>
 void LoadRequest<I>::send() {
+  if (m_formats.empty()) {
+    lderr(m_image_ctx->cct) << "no encryption formats were specified" << dendl;
+    finish(-EINVAL);
+    return;
+  }
+
+  ldout(m_image_ctx->cct, 20) << "got " << m_formats.size() << " formats"
+                              << dendl;
+
   if (m_image_ctx->encryption_format.get() != nullptr) {
     lderr(m_image_ctx->cct) << "encryption already loaded" << dendl;
     finish(-EEXIST);
@@ -92,8 +102,7 @@ void LoadRequest<I>::load() {
 
 template <typename I>
 void LoadRequest<I>::handle_load(int r) {
-  ldout(m_image_ctx->cct, 20) << "r=" << r << ". image name: "
-                              << m_current_image_ctx->name << dendl;
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(m_image_ctx->cct) << "failed to load encryption. image name: "
@@ -102,17 +111,28 @@ void LoadRequest<I>::handle_load(int r) {
     return;
   }
 
+  m_format_idx++;
   m_current_image_ctx = m_current_image_ctx->parent;
   if (m_current_image_ctx != nullptr) {
     // move on to loading parent
-    m_format_idx++;
     if (m_format_idx >= m_formats.size()) {
       // try to load next ancestor using the same format
+      ldout(m_image_ctx->cct, 20) << "cloning format" << dendl;
+      m_is_current_format_cloned = true;
       m_formats.push_back(m_formats[m_formats.size() - 1]->clone());
     }
 
     load();
   } else {
+    if (m_formats.size() != m_format_idx) {
+      lderr(m_image_ctx->cct) << "got " << m_formats.size()
+                              << " encryption specs to load, "
+                              << "but image has " << m_format_idx - 1
+                              << " ancestors" << dendl;
+      finish(-EINVAL);
+      return;
+    }
+
     invalidate_cache();
   }
 }
