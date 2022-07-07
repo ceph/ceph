@@ -112,19 +112,24 @@ void RGWLifecycleConfiguration_S3::decode_xml(XMLObj *obj)
 
 void LCFilter_S3::dump_xml(Formatter *f) const
 {
-  if (has_prefix()) {
-    encode_xml("Prefix", prefix, f);
-  }
   bool multi = has_multi_condition();
   if (multi) {
     f->open_array_section("And");
+  }
+  if (has_prefix()) {
+    encode_xml("Prefix", prefix, f);
   }
   if (has_tags()) {
     const auto& tagset_s3 = static_cast<const RGWObjTagSet_S3 &>(obj_tags);
     tagset_s3.dump_xml(f);
   }
+  if (has_flags()) {
+    if (have_flag(LCFlagType::ArchiveZone)) {
+      encode_xml("ArchiveZone", "", f);
+    }
+  }
   if (multi) {
-    f->close_section();
+    f->close_section(); // And
   }
 }
 
