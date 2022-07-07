@@ -277,6 +277,8 @@ BuildRequires:	python%{python3_pkgversion}-dateutil
 BuildRequires:	python%{python3_pkgversion}-coverage
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
+BuildRequires:	python%{python3_pkgversion}-asyncssh
+BuildRequires:	python%{python3_pkgversion}-natsort
 %endif
 %if 0%{with zbd}
 BuildRequires:  libzbd-devel
