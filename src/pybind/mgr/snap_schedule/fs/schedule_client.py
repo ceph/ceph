@@ -201,7 +201,7 @@ class SnapSchedClient(CephfsClient):
                     size, _mtime = ioctx.stat(SNAP_DB_OBJECT_NAME)
                     dump = ioctx.read(SNAP_DB_OBJECT_NAME, size).decode('utf-8')
                     db.executescript(dump)
-                    ioctx.remove(SNAP_DB_OBJECT_NAME)
+                    ioctx.remove_object(SNAP_DB_OBJECT_NAME)
                 except rados.ObjectNotFound:
                     log.debug(f'No legacy schedule DB found in {fs}')
             db.executescript(Schedule.CREATE_TABLES)
