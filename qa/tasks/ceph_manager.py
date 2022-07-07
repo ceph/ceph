@@ -1166,6 +1166,7 @@ class OSDThrasher(Thrasher):
         This sequence should cause the revived osd to have to handle
         a map gap since the mons would have trimmed
         """
+        self.log("test_map_discontinuity")
         while len(self.in_osds) < (self.minin + 1):
             self.in_osd()
         self.log("Waiting for recovery")
