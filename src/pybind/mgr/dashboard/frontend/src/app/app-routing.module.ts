@@ -25,6 +25,7 @@ import { ServiceFormComponent } from './ceph/cluster/services/service-form/servi
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
+import { NewDashboardComponent } from './ceph/new-dashboard/dashboard/dashboard.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
@@ -87,6 +88,7 @@ const routes: Routes = [
     canActivateChild: [AuthGuardService, ChangePasswordGuardService],
     children: [
       { path: 'dashboard', component: DashboardComponent },
+      { path: 'dashboard_3', component: NewDashboardComponent },
       { path: 'error', component: ErrorComponent },
 
       // Cluster
