@@ -232,8 +232,11 @@ class CephadmServe:
                     r = self._refresh_host_networks(host)
                     if r:
                         failures.append(r)
-
-                if self.mgr.cache.host_needs_device_refresh(host):
+                if (
+                        (not self.mgr.upgrade.upgrade_state
+                         or self.mgr.upgrade.upgrade_state.paused)
+                        and self.mgr.cache.host_needs_device_refresh(host)
+                ):
                     self.log.debug('refreshing %s devices' % host)
                     r = self._refresh_host_devices(host)
                     if r:
