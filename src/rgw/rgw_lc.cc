@@ -2807,6 +2807,9 @@ void LCFilter::dump(Formatter *f) const
 {
   f->dump_string("prefix", prefix);
   f->dump_object("obj_tags", obj_tags);
+  if (have_flag(LCFlagType::ArchiveZone)) {
+    f->dump_string("archivezone", "");
+  }
 }
 
 void LCExpiration::dump(Formatter *f) const
