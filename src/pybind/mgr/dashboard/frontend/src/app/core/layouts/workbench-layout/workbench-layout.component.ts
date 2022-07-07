@@ -34,6 +34,6 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   }
 
   isDashboardPage() {
-    return this.router.url === '/dashboard';
+    return this.router.url === '/dashboard' || this.router.url === '/dashboard_3';
   }
 }
