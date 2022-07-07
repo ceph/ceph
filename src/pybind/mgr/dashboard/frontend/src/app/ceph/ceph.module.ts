@@ -5,6 +5,7 @@ import { SharedModule } from '../shared/shared.module';
 import { CephfsModule } from './cephfs/cephfs.module';
 import { ClusterModule } from './cluster/cluster.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { NewDashboardModule } from './new-dashboard/dashboard.module';
 import { NfsModule } from './nfs/nfs.module';
 import { PerformanceCounterModule } from './performance-counter/performance-counter.module';
 
@@ -13,6 +14,7 @@ import { PerformanceCounterModule } from './performance-counter/performance-coun
     CommonModule,
     ClusterModule,
     DashboardModule,
+    NewDashboardModule,
     PerformanceCounterModule,
     CephfsModule,
     NfsModule,
