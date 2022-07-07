@@ -345,33 +345,33 @@ void mClockScheduler::set_profile_config()
     static_cast<size_t>(op_scheduler_class::background_best_effort)];
 
   // Set external client params
-  cct->_conf.set_val("osd_mclock_scheduler_client_res",
+  cct->_conf.set_val_default("osd_mclock_scheduler_client_res",
     std::to_string(client.res));
-  cct->_conf.set_val("osd_mclock_scheduler_client_wgt",
+  cct->_conf.set_val_default("osd_mclock_scheduler_client_wgt",
     std::to_string(client.wgt));
-  cct->_conf.set_val("osd_mclock_scheduler_client_lim",
+  cct->_conf.set_val_default("osd_mclock_scheduler_client_lim",
     std::to_string(client.lim));
   dout(10) << __func__ << " client QoS params: " << "["
            << client.res << "," << client.wgt << "," << client.lim
            << "]" << dendl;
 
   // Set background recovery client params
-  cct->_conf.set_val("osd_mclock_scheduler_background_recovery_res",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_recovery_res",
     std::to_string(rec.res));
-  cct->_conf.set_val("osd_mclock_scheduler_background_recovery_wgt",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_recovery_wgt",
     std::to_string(rec.wgt));
-  cct->_conf.set_val("osd_mclock_scheduler_background_recovery_lim",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_recovery_lim",
     std::to_string(rec.lim));
   dout(10) << __func__ << " Recovery QoS params: " << "["
            << rec.res << "," << rec.wgt << "," << rec.lim
            << "]" << dendl;
 
   // Set background best effort client params
-  cct->_conf.set_val("osd_mclock_scheduler_background_best_effort_res",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_best_effort_res",
     std::to_string(best_effort.res));
-  cct->_conf.set_val("osd_mclock_scheduler_background_best_effort_wgt",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_best_effort_wgt",
     std::to_string(best_effort.wgt));
-  cct->_conf.set_val("osd_mclock_scheduler_background_best_effort_lim",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_best_effort_lim",
     std::to_string(best_effort.lim));
   dout(10) << __func__ << " Best effort QoS params: " << "["
     << best_effort.res << "," << best_effort.wgt << "," << best_effort.lim
