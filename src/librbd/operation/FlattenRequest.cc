@@ -5,6 +5,8 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/crypto/CryptoInterface.h"
+#include "librbd/crypto/EncryptionFormat.h"
 #include "librbd/image/DetachChildRequest.h"
 #include "librbd/image/DetachParentRequest.h"
 #include "librbd/Types.h"
@@ -12,6 +14,7 @@
 #include "librbd/io/Utils.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "osdc/Striper.h"
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 
@@ -94,6 +97,15 @@ void FlattenRequest<I>::flatten_objects() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << dendl;
 
+  auto encryption_format = image_ctx.encryption_format.get();
+  uint64_t start_object_no = 0;
+  if (encryption_format != nullptr) {
+    // leave encryption header flattening to format-specific handler
+    start_object_no = Striper::get_num_objects(
+            image_ctx.layout,
+            encryption_format->get_crypto()->get_data_offset());
+  }
+
   assert(ceph_mutex_is_locked(image_ctx.owner_lock));
   auto ctx = create_context_callback<
     FlattenRequest<I>,
@@ -103,7 +115,8 @@ void FlattenRequest<I>::flatten_objects() {
       boost::lambda::_1, &image_ctx, image_ctx.get_data_io_context(),
       boost::lambda::_2));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
-    this, image_ctx, context_factory, ctx, &m_prog_ctx, 0, m_overlap_objects);
+    this, image_ctx, context_factory, ctx, &m_prog_ctx, start_object_no,
+    m_overlap_objects);
   throttle->start_ops(
     image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
 }
@@ -120,6 +133,41 @@ void FlattenRequest<I>::handle_flatten_objects(int r) {
     return;
   } else if (r < 0) {
     lderr(cct) << "flatten encountered an error: " << cpp_strerror(r) << dendl;
+    this->complete(r);
+    return;
+  }
+
+  crypto_flatten();
+}
+
+
+template <typename I>
+void FlattenRequest<I>::crypto_flatten() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+
+  auto encryption_format = image_ctx.encryption_format.get();
+  if (encryption_format == nullptr) {
+    detach_child();
+    return;
+  }
+
+  ldout(cct, 5) << dendl;
+
+  auto ctx = create_context_callback<
+          FlattenRequest<I>,
+          &FlattenRequest<I>::handle_crypto_flatten>(this);
+  encryption_format->flatten(&image_ctx, ctx);
+}
+
+template <typename I>
+void FlattenRequest<I>::handle_crypto_flatten(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "error flattening crypto: " << cpp_strerror(r) << dendl;
     this->complete(r);
     return;
   }
