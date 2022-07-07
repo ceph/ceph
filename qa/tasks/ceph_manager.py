@@ -646,6 +646,7 @@ class OSDThrasher(Thrasher):
                     options['max_change'])
 
     def primary_affinity(self, osd=None):
+        self.log("primary_affinity")
         if osd is None:
             osd = random.choice(self.in_osds)
         if random.random() >= .5:
@@ -672,6 +673,7 @@ class OSDThrasher(Thrasher):
         """
         Install or remove random pg_upmap entries in OSDMap
         """
+        self.log("thrash_pg_upmap")
         from random import shuffle
         out = self.ceph_manager.raw_cluster_cmd('osd', 'dump', '-f', 'json-pretty')
         j = json.loads(out)
@@ -680,12 +682,14 @@ class OSDThrasher(Thrasher):
             if random.random() >= .3:
                 pgs = self.ceph_manager.get_pg_stats()
                 if not pgs:
+                    self.log('No pgs; doing nothing')
                     return
                 pg = random.choice(pgs)
                 pgid = str(pg['pgid'])
                 poolid = int(pgid.split('.')[0])
                 sizes = [x['size'] for x in j['pools'] if x['pool'] == poolid]
                 if len(sizes) == 0:
+                    self.log('No pools; doing nothing')
                     return
                 n = sizes[0]
                 osds = self.in_osds + self.out_osds
@@ -714,6 +718,7 @@ class OSDThrasher(Thrasher):
         """
         Install or remove random pg_upmap_items entries in OSDMap
         """
+        self.log("thrash_pg_upmap_items")
         from random import shuffle
         out = self.ceph_manager.raw_cluster_cmd('osd', 'dump', '-f', 'json-pretty')
         j = json.loads(out)
@@ -722,12 +727,14 @@ class OSDThrasher(Thrasher):
             if random.random() >= .3:
                 pgs = self.ceph_manager.get_pg_stats()
                 if not pgs:
+                    self.log('No pgs; doing nothing')
                     return
                 pg = random.choice(pgs)
                 pgid = str(pg['pgid'])
                 poolid = int(pgid.split('.')[0])
                 sizes = [x['size'] for x in j['pools'] if x['pool'] == poolid]
                 if len(sizes) == 0:
+                    self.log('No pools; doing nothing')
                     return
                 n = sizes[0]
                 osds = self.in_osds + self.out_osds
