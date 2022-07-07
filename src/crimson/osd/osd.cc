@@ -152,7 +152,10 @@ CompatSet get_osd_initial_compat_set()
 }
 }
 
-seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
+seastar::future<> OSD::mkfs(
+  uuid_d osd_uuid,
+  uuid_d cluster_fsid,
+  std::string osdspec_affinity)
 {
   return store.start().then([this, osd_uuid] {
     return store.mkfs(osd_uuid).handle_error(
@@ -184,6 +187,8 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
     return store.write_meta("whoami", std::to_string(whoami));
   }).then([this] {
     return _write_key_meta();
+  }).then([this, osdspec_affinity=std::move(osdspec_affinity)] {
+    return store.write_meta("osdspec_affinity", osdspec_affinity);
   }).then([this] {
     return store.write_meta("ready", "ready");
   }).then([cluster_fsid, this] {
