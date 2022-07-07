@@ -203,15 +203,17 @@ class FSPerfStats(object):
             gid_state = FSPerfStats.get_rank0_mds_gid_state(self.module.get('fs_map'))
             if not gid_state:
                 return
-            rank0_gid, state = gid_state
-            if (rank0_gid and rank0_gid != self.prev_rank0_gid and state == 'up:active'):
-                #the new rank0 MDS is up:active
-                ua_last_updated = time.monotonic()
-                if (self.rqtimer and self.rqtimer.is_alive()):
-                    self.rqtimer.cancel()
-                self.rqtimer = Timer(REREGISTER_TIMER_INTERVAL,
-                                     self.re_register_queries, args=(rank0_gid, ua_last_updated,))
-                self.rqtimer.start()
+            for value in gid_state:
+                rank0_gid, state = value
+                if (rank0_gid and rank0_gid != self.prev_rank0_gid and state == 'up:active'):
+                    #the new rank0 MDS is up:active
+                    ua_last_updated = time.monotonic()
+                    if (self.rqtimer and self.rqtimer.is_alive()):
+                        self.rqtimer.cancel()
+                    self.rqtimer = Timer(REREGISTER_TIMER_INTERVAL,
+                                         self.re_register_queries,
+                                         args=(rank0_gid, ua_last_updated,))
+                    self.rqtimer.start()
 
     def re_register_queries(self, rank0_gid, ua_last_updated):
         #reregister queries if the metrics are the latest. Otherwise reschedule the timer and
@@ -229,12 +231,15 @@ class FSPerfStats(object):
 
     @staticmethod
     def get_rank0_mds_gid_state(fsmap):
+        gid_state = []
         for fs in fsmap['filesystems']:
             mds_map = fs['mdsmap']
             if mds_map is not None:
                 for mds_id, mds_status in mds_map['info'].items():
                     if mds_status['rank'] == 0:
-                        return mds_status['gid'], mds_status['state']
+                        gid_state.append([mds_status['gid'], mds_status['state']])
+        if gid_state:
+            return gid_state
         logger.warn("No rank0 mds in the fsmap")
 
     def update_client_meta(self):
