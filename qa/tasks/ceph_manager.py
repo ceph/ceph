@@ -1208,8 +1208,9 @@ class OSDThrasher(Thrasher):
         mindead = int(self.config.get("min_dead", 0))
 
         self.log('choose_action: min_in %d min_out '
-                 '%d min_live %d min_dead %d' %
-                 (minin, minout, minlive, mindead))
+                 '%d min_live %d min_dead %d '
+                 'chance_down %.2f' %
+                 (minin, minout, minlive, mindead, chance_down))
         actions = []
         if len(self.in_osds) > minin:
             actions.append((self.out_osd, 1.0,))
