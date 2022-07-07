@@ -1043,7 +1043,6 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
   std::vector<OnodeRef> &d_onodes,
   ceph::os::Transaction::iterator &i)
 {
-  LOG_PREFIX(SeaStore::_do_transaction_step);
   auto op = i.decode_op();
 
   using ceph::os::Transaction;
@@ -1088,6 +1087,7 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
     }
   }
   return fut.si_then([&, op, this](auto&& get_onode) -> tm_ret {
+    LOG_PREFIX(SeaStore::_do_transaction_step);
     OnodeRef &o = onodes[op->oid];
     if (!o) {
       assert(get_onode);

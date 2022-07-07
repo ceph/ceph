@@ -87,22 +87,12 @@ public:
   get_cached_backrefs_in_range(
     paddr_t start,
     paddr_t end) = 0;
-
-  virtual Cache::backref_buf_entry_query_set_t
-  get_cached_backref_removals_in_range(
-    paddr_t start,
-    paddr_t end) = 0;
-
-  virtual const backref_buf_entry_t::set_t& get_cached_backref_removals() = 0;
-  virtual const backref_buf_entry_t::set_t& get_cached_backrefs() = 0;
-  virtual backref_buf_entry_t get_cached_backref_removal(paddr_t addr) = 0;
+  virtual const backref_set_t& get_cached_backrefs() = 0;
 
   virtual Cache::backref_extent_buf_entry_query_set_t
   get_cached_backref_extents_in_range(
     paddr_t start,
     paddr_t end) = 0;
-
-  virtual bool backref_should_be_removed(paddr_t paddr) = 0;
 
   using retrieve_backref_extents_iertr = trans_iertr<
     crimson::errorator<

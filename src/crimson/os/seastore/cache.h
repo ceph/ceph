@@ -68,6 +68,7 @@ struct backref_buf_entry_t {
     const backref_buf_entry_t &r) {
     return l.paddr == r.paddr;
   }
+
   using set_hook_t =
     boost::intrusive::set_member_hook<
       boost::intrusive::link_mode<
@@ -84,7 +85,7 @@ struct backref_buf_entry_t {
     backref_buf_entry_t,
     set_hook_t,
     &backref_buf_entry_t::backref_set_hook>;
-  using set_t = boost::intrusive::set<
+  using set_t = boost::intrusive::multiset<
     backref_buf_entry_t,
     backref_set_member_options,
     boost::intrusive::constant_time_size<false>>;
@@ -113,8 +114,12 @@ struct backref_buf_entry_t {
   };
 };
 
+std::ostream &operator<<(std::ostream &out, const backref_buf_entry_t &ent);
+
 using backref_buf_entry_ref =
   std::unique_ptr<backref_buf_entry_t>;
+
+using backref_set_t = backref_buf_entry_t::set_t;
 
 struct backref_buf_t {
   backref_buf_t(std::vector<backref_buf_entry_ref> &&refs) : backrefs(std::move(refs)) {
@@ -555,27 +560,23 @@ private:
   }
 
   backref_cache_ref backref_buffer;
-  // backrefs that needs to be inserted into the backref tree
-  backref_buf_entry_t::set_t backref_inserted_set;
-  backref_buf_entry_t::set_t backref_remove_set; // backrefs needs to be removed
-						 // from the backref tree
+  backref_set_t backref_set; // in cache backrefs indexed by paddr_t
 
   using backref_buf_entry_query_set_t =
-    std::set<
+    std::multiset<
       backref_buf_entry_t,
       backref_buf_entry_t::cmp_t>;
+
   backref_buf_entry_query_set_t get_backrefs_in_range(
     paddr_t start,
     paddr_t end) {
-    auto start_iter = backref_inserted_set.lower_bound(
+    auto start_iter = backref_set.lower_bound(
       start,
       backref_buf_entry_t::cmp_t());
-    auto end_iter = backref_inserted_set.lower_bound(
+    auto end_iter = backref_set.lower_bound(
       end,
       backref_buf_entry_t::cmp_t());
-    std::set<
-      backref_buf_entry_t,
-      backref_buf_entry_t::cmp_t> res;
+    backref_buf_entry_query_set_t res;
     for (auto it = start_iter;
 	 it != end_iter;
 	 it++) {
@@ -584,47 +585,8 @@ private:
     return res;
   }
 
-  backref_buf_entry_query_set_t get_del_backrefs_in_range(
-    paddr_t start,
-    paddr_t end) {
-    LOG_PREFIX(Cache::get_del_backrefs_in_range);
-    SUBDEBUG(seastore_cache, "total {} del_backrefs", backref_remove_set.size());
-    auto start_iter = backref_remove_set.lower_bound(
-      start,
-      backref_buf_entry_t::cmp_t());
-    auto end_iter = backref_remove_set.lower_bound(
-      end,
-      backref_buf_entry_t::cmp_t());
-    std::set<
-      backref_buf_entry_t,
-      backref_buf_entry_t::cmp_t> res;
-    for (auto it = start_iter;
-	 it != end_iter;
-	 it++) {
-      res.emplace(it->paddr, it->laddr, it->len, it->type, it->seq);
-    }
-    SUBDEBUG(seastore_cache, "{} del_backrefs in range", res.size());
-    return res;
-  }
-
-  backref_buf_entry_t get_del_backref(
-    paddr_t addr) {
-    auto it = backref_remove_set.find(addr, backref_buf_entry_t::cmp_t());
-    assert(it != backref_remove_set.end());
-    return *it;
-  }
-
-  bool backref_should_be_removed(paddr_t addr) {
-    return backref_remove_set.find(
-      addr, backref_buf_entry_t::cmp_t()) != backref_remove_set.end();
-  }
-
-  const backref_buf_entry_t::set_t& get_backrefs() {
-    return backref_inserted_set;
-  }
-
-  const backref_buf_entry_t::set_t& get_del_backrefs() {
-    return backref_remove_set;
+  const backref_set_t& get_backrefs() {
+    return backref_set;
   }
 
   backref_cache_ref& get_backref_buffer() {

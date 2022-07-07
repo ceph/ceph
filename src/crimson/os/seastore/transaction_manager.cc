@@ -137,13 +137,10 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    t,
 		    addr,
 		    len);
-		  if (addr.is_real() &&
-		      !backref_manager->backref_should_be_removed(addr)) {
-		    async_cleaner->mark_space_used(
-		      addr,
-		      len ,
-		      /* init_scan = */ true);
-		  }
+		  async_cleaner->mark_space_used(
+		    addr,
+		    len ,
+		    /* init_scan = */ true);
 		  if (is_backref_node(type)) {
 		    ceph_assert(depth);
 		    backref_manager->cache_new_backref_extent(addr, type);
@@ -154,16 +151,24 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    cache->update_tree_extents_num(type, 1);
 		    return seastar::now();
 		  }
-		}).si_then([this] {
+		}).si_then([this, &t] {
 		  LOG_PREFIX(TransactionManager::mount);
 		  auto &backrefs = backref_manager->get_cached_backrefs();
-		  DEBUG("marking {} backrefs used", backrefs.size());
+		  DEBUGT("scan backref cache", t);
 		  for (auto &backref : backrefs) {
-		    async_cleaner->mark_space_used(
-		      backref.paddr,
-		      backref.len,
-		      true);
-		    cache->update_tree_extents_num(backref.type, 1);
+		    if (backref.laddr == L_ADDR_NULL) {
+		      async_cleaner->mark_space_free(
+			backref.paddr,
+			backref.len,
+			true);
+		      cache->update_tree_extents_num(backref.type, -1);
+		    } else {
+		      async_cleaner->mark_space_used(
+			backref.paddr,
+			backref.len,
+			true);
+		      cache->update_tree_extents_num(backref.type, 1);
+		    }
 		  }
 		  return seastar::now();
 		});
@@ -321,7 +326,8 @@ TransactionManager::submit_transaction(
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::submit_transaction_direct(
   Transaction &tref,
-  std::optional<journal_seq_t> seq_to_trim)
+  std::optional<journal_seq_t> seq_to_trim,
+  std::optional<std::pair<paddr_t, paddr_t>> gc_range)
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
   SUBTRACET(seastore_t, "start", tref);
@@ -354,11 +360,26 @@ TransactionManager::submit_transaction_direct(
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
-  }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]() mutable
+  }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim),
+	      gc_range=std::move(gc_range)]() mutable
 	      -> submit_transaction_iertr::future<> {
     if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
       cache->trim_backref_bufs(*seq_to_trim);
     }
+
+#ifndef NDEBUG
+    if (gc_range) {
+      auto backref_set = 
+	backref_manager->get_cached_backrefs_in_range(
+	  gc_range->first, gc_range->second);
+      for (auto &backref : backref_set) {
+	ERRORT("unexpected backref: {}~{}, {}, {}, {}",
+	  tref, backref.paddr, backref.len, backref.laddr,
+	  backref.type, backref.seq);
+	ceph_abort("impossible");
+      }
+    }
+#endif
     auto record = cache->prepare_record(tref, async_cleaner.get());
 
     tref.get_handle().maybe_release_collection_lock();
