@@ -202,6 +202,8 @@ int main(int argc, const char* argv[])
     ("mkfs", "create a [new] data directory")
     ("debug", "enable debug output on all loggers")
     ("trace", "enable trace output on all loggers")
+    ("osdspec-affinity", bpo::value<std::string>()->default_value(std::string{}),
+     "set affinity to an osdspec")
     ("prometheus_port", bpo::value<uint16_t>()->default_value(0),
      "Prometheus port. Set to zero to disable")
     ("prometheus_address", bpo::value<std::string>()->default_value("0.0.0.0"),
@@ -327,7 +329,8 @@ int main(int argc, const char* argv[])
               0,
               &crimson::osd::OSD::mkfs,
               osd_uuid,
-              local_conf().get_val<uuid_d>("fsid")).get();
+              local_conf().get_val<uuid_d>("fsid"),
+              config["osdspec-affinity"].as<std::string>()).get();
           }
           if (config.count("mkkey") || config.count("mkfs")) {
             return EXIT_SUCCESS;
