@@ -44,6 +44,12 @@ void FormatRequest<I>::send() {
   if (m_image_ctx->encryption_format.get() == nullptr) {
     format();
     return;
+  } else if (m_image_ctx->parent != nullptr) {
+    lderr(m_image_ctx->cct) << "cannot format a cloned image "
+                               "while encryption is loaded"
+                            << dendl;
+    finish(-EINVAL);
+    return;
   }
 
   auto ctx = create_context_callback<
@@ -115,7 +121,9 @@ template <typename I>
 void FormatRequest<I>::finish(int r) {
   ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
 
-  if (r == 0) {
+  if (r == 0 && m_image_ctx->parent == nullptr) {
+    // only load on flat images, to avoid a case where encryption
+    // is wrongfully loaded only on the child image
     util::set_crypto(m_image_ctx, std::move(m_format));
   }
   m_on_finish->complete(r);

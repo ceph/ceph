@@ -21,11 +21,13 @@ public:
     using EncryptionFormat = decltype(I::encryption_format);
 
     static LoadRequest* create(
-            I* image_ctx, EncryptionFormat format, Context* on_finish) {
-      return new LoadRequest(image_ctx, std::move(format), on_finish);
+            I* image_ctx, std::vector<EncryptionFormat>&& formats,
+            Context* on_finish) {
+      return new LoadRequest(image_ctx, std::move(formats), on_finish);
     }
 
-    LoadRequest(I* image_ctx, EncryptionFormat format, Context* on_finish);
+    LoadRequest(I* image_ctx, std::vector<EncryptionFormat>&& formats,
+                Context* on_finish);
     void send();
     void flush();
     void handle_flush(int r);
@@ -40,6 +42,7 @@ private:
     Context* m_on_finish;
 
     size_t m_format_idx;
+    bool m_is_current_format_cloned;
     std::vector<EncryptionFormat> m_formats;
     I* m_current_image_ctx;
 };

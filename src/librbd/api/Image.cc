@@ -990,10 +990,12 @@ int Image<I>::encryption_load(I* ictx, encryption_format_t format,
     return r;
   }
 
+  std::vector<std::unique_ptr<crypto::EncryptionFormat<I>>> formats;
+  formats.emplace_back(result_format);
+
   C_SaferCond cond;
   auto req = librbd::crypto::LoadRequest<I>::create(
-          ictx, std::unique_ptr<crypto::EncryptionFormat<I>>(result_format),
-          &cond);
+          ictx, std::move(formats), &cond);
   req->send();
   return cond.wait();
 }
