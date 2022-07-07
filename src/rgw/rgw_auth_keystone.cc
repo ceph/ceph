@@ -133,10 +133,8 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token,
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
     level,
-    rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY,
-    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
-    TYPE_KEYSTONE
-};
+    TYPE_KEYSTONE,
+  };
 }
 
 static inline const std::string
@@ -499,8 +497,7 @@ EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t&) const
 
 EC2Engine::auth_info_t
 EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
-                          const std::vector<std::string>& admin_roles,
-                          const std::string& access_key_id
+                          const std::vector<std::string>& admin_roles
                          ) const noexcept
 {
   using acct_privilege_t = \
@@ -524,9 +521,7 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
     level,
-    access_key_id,
-    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
-    TYPE_KEYSTONE
+    TYPE_KEYSTONE,
   };
 }
 
@@ -594,7 +589,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
                   << " expires: " << t->get_expires() << dendl;
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)));
+                                              get_creds_info(*t, accepted_roles.admin));
     return result_t::grant(std::move(apl), completer_factory(boost::none));
   }
 }

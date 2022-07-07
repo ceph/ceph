@@ -60,12 +60,6 @@ void TempURLApplier::modify_request_state(const DoutPrefixProvider* dpp, req_sta
 
 }
 
-void TempURLApplier::write_ops_log_entry(rgw_log_entry& entry) const
-{
-  LocalApplier::write_ops_log_entry(entry);
-  entry.temp_url = true;
-}
-
 /* TempURL: engine */
 bool TempURLEngine::is_applicable(const req_state* const s) const noexcept
 {
@@ -463,8 +457,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   auto apl = apl_factory->create_apl_local(cct, s, tmp_uinfo,
                                            extract_swift_subuser(swift_user),
-                                           boost::none,
-                                           rgw::auth::LocalApplier::NO_ACCESS_KEY);
+                                           boost::none);
   return result_t::grant(std::move(apl));
 }
 
@@ -618,7 +611,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info,
                                            extract_swift_subuser(swift_user),
-                                           boost::none, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+                                           boost::none);
   return result_t::grant(std::move(apl));
 }
 

@@ -24,11 +24,10 @@ class TempURLApplier : public rgw::auth::LocalApplier {
 public:
   TempURLApplier(CephContext* const cct,
                  const RGWUserInfo& user_info)
-    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none, LocalApplier::NO_ACCESS_KEY) {
+    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none) {
   };
 
   void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override; /* in/out */
-  void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   struct Factory {
     virtual ~Factory() {}
@@ -154,7 +153,7 @@ class SwiftAnonymousApplier : public rgw::auth::LocalApplier {
   public:
     SwiftAnonymousApplier(CephContext* const cct,
                           const RGWUserInfo& user_info)
-      : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none, LocalApplier::NO_ACCESS_KEY) {
+      : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none) {
       };
     bool is_admin_of(const rgw_user& uid) const {return false;}
     bool is_owner_of(const rgw_user& uid) const {return uid.id.compare(RGW_USER_ANON_ID) == 0;}
@@ -226,12 +225,11 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const boost::optional<uint32_t>& perm_mask,
-                            const std::string& access_key_id) const override {
+                            const boost::optional<uint32_t>& perm_mask) const override {
     auto apl = \
       rgw::auth::add_3rdparty(ctl, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, ctl, s,
-          rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask, access_key_id)));
+          rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
