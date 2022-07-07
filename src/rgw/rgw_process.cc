@@ -401,16 +401,18 @@ int process_request(rgw::sal::Store* const store,
   }
 
 done:
-  if (op && s->trace) {
-    s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
-    if (s->user) {
-      s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
-    }
-    if (s->bucket) {
-      s->trace->SetAttribute(tracing::rgw::BUCKET_NAME, s->bucket->get_name());
-    }
-    if (s->object) {
-      s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
+  if (op) {
+    if (s->trace) {
+      s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
+      if (s->user) {
+        s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
+      }
+      if (s->bucket) {
+        s->trace->SetAttribute(tracing::rgw::BUCKET_NAME, s->bucket->get_name());
+      }
+      if (s->object) {
+        s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
+      }
     }
     std::string script;
     auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
