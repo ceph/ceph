@@ -125,12 +125,10 @@ SegmentAllocator::open()
   auto& device_ids = sm_group.get_device_ids();
   ceph_assert(device_ids.size());
   std::ostringstream oss;
-  oss << "D";
   for (auto& device_id : device_ids) {
-    oss << "_" << device_id_printer_t{device_id};
+    oss << device_id_printer_t{device_id} << "_";
   }
-  oss << "_"
-      << fmt::format("{}_G{}", category, gen);
+  oss << fmt::format("{}_G{}", category, gen);
   print_name = oss.str();
 
   INFO("{}", print_name);
