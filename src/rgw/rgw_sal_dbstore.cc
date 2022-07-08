@@ -734,7 +734,9 @@ namespace rgw::sal {
       const DoutPrefixProvider* dpp,
       optional_yield y)
   {
-    return 0;
+    DB::Object op_target(store->getDB(),
+        get_bucket()->get_info(), get_obj());
+    return op_target.transition(dpp, placement_rule, mtime, olh_epoch);
   }
 
   int DBObject::transition_to_cloud(Bucket* bucket,
@@ -1609,7 +1611,9 @@ namespace rgw::sal {
 
   bool DBStore::valid_placement(const rgw_placement_rule& rule)
   {
-    return zone.get_rgw_params().valid_placement(rule);
+    // XXX: Till zonegroup, zone and storage-classes can be configured
+    // for dbstore return true
+    return true; //zone.get_rgw_params().valid_placement(rule);
   }
 
   std::unique_ptr<User> DBStore::get_user(const rgw_user &u)
