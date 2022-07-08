@@ -1110,9 +1110,10 @@ int MotrObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::st
   return 0;
 }
 
-MPSerializer* MotrObject::get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name)
+std::unique_ptr<MPSerializer> MotrObject::get_serializer(const DoutPrefixProvider *dpp,
+                                                         const std::string& lock_name)
 {
-  return new MPMotrSerializer(dpp, store, this, lock_name);
+  return std::make_unique<MPMotrSerializer>(dpp, store, this, lock_name);
 }
 
 int MotrObject::transition(Bucket* bucket,
