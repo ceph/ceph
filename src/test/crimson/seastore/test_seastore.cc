@@ -42,7 +42,7 @@ struct seastore_test_t :
     }).then([this](auto coll_ref) {
       coll = coll_ref;
       CTransaction t;
-      t.create_collection(coll_name, 4);
+      t.create_collection(coll_name, 0);
       return seastore->do_transaction(
 	coll,
 	std::move(t));
@@ -423,8 +423,9 @@ ghobject_t make_oid(int i) {
   auto ret = ghobject_t(
     hobject_t(
       sobject_t(ss.str(), CEPH_NOSNAP)));
-  ret.set_shard(shard_id_t(0));
+  ret.set_shard(shard_id_t(shard_id_t::NO_SHARD));
   ret.hobj.nspace = "asdf";
+  ret.hobj.pool = 0;
   return ret;
 }
 
