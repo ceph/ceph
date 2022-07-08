@@ -1685,9 +1685,8 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 {
   utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
 
-  rgw::sal::LCSerializer* lock = sal_lc->get_serializer(lc_index_lock_name,
-							obj_names[index],
-							cookie);
+  std::unique_ptr<rgw::sal::LCSerializer> lock =
+    sal_lc->get_serializer(lc_index_lock_name, obj_names[index], cookie);
 
   ldpp_dout(this, 5) << "RGWLC::bucket_lc_post(): POST " << entry
 	  << " index: " << index << " worker ix: " << worker->ix
@@ -1731,7 +1730,6 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
     }
 clean:
     lock->unlock();
-    delete lock;
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() unlock "
 			<< obj_names[index] << dendl;
     return 0;
@@ -1880,9 +1878,9 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 	  << dendl;
 
   int ret = 0;
-  std::unique_ptr<rgw::sal::LCSerializer> serializer(
+  std::unique_ptr<rgw::sal::LCSerializer> serializer =
     sal_lc->get_serializer(lc_index_lock_name, obj_names[index],
-			   std::string()));
+			   std::string());
 
   std::unique_ptr<rgw::sal::Lifecycle::LCEntry> entry;
   if (max_lock_secs <= 0) {
@@ -2033,7 +2031,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  << "index: " << index << " worker ix: " << worker->ix
 	  << dendl;
 
-  rgw::sal::LCSerializer* lock =
+  std::unique_ptr<rgw::sal::LCSerializer> lock =
     sal_lc->get_serializer(lc_index_lock_name, lc_shard, std::string());
 
   utime_t lock_for_s(max_lock_secs, 0);
@@ -2054,7 +2052,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
 		       << lc_shard << " after " << shard_lock.get_retries()
 		       << dendl;
-    goto notlocked;
+    return 0;
   }
 
   do {
@@ -2213,7 +2211,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
 			 << lc_shard << " after " << shard_lock.get_retries()
 			 << dendl;
-      goto notlocked;
+      return 0;
     }
 
     if (ret == -ENOENT) {
@@ -2257,13 +2255,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     }
   } while(1 && !once && !going_down());
 
-notlocked:
-  delete lock;
-  return 0;
-
 exit:
   lock->unlock();
-  delete lock;
   return 0;
 }
 
@@ -2395,9 +2388,8 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
   entry->set_status(lc_uninitial);
   int max_lock_secs = cct->_conf->rgw_lc_lock_max_time;
 
-  rgw::sal::LCSerializer* lock = sal_lc->get_serializer(lc_index_lock_name,
-							oid,
-							cookie);
+  std::unique_ptr<rgw::sal::LCSerializer> lock =
+    sal_lc->get_serializer(lc_index_lock_name, oid, cookie);
   utime_t time(max_lock_secs, 0);
 
   int ret;
@@ -2423,7 +2415,6 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
     break;
   } while(true);
   lock->unlock();
-  delete lock;
   return ret;
 }
 
