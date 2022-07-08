@@ -19,6 +19,7 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/pg_map.h"
 #include "crimson/osd/state.h"
 #include "common/AsyncReserver.h"
 
@@ -43,6 +44,8 @@ class PeeringCtx;
 class BufferedRecoveryMessages;
 
 namespace crimson::osd {
+
+class PGShardManager;
 
 /**
  * PerShardState
@@ -237,6 +240,46 @@ class CoreState : public md_config_obs_t, public OSDMapService {
                     epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
+
+  // PGMap state
+  PGMap pg_map;
+
+  seastar::future<Ref<PG>> make_pg(
+    ShardServices &shard_services,
+    cached_map_t create_map,
+    spg_t pgid,
+    bool do_create);
+  seastar::future<Ref<PG>> handle_pg_create_info(
+    PGShardManager &shard_manager,
+    ShardServices &shard_services,
+    std::unique_ptr<PGCreateInfo> info);
+  seastar::future<Ref<PG>> get_or_create_pg(
+    PGShardManager &shard_manager,
+    ShardServices &shard_services,
+    PGMap::PGCreationBlockingEvent::TriggerI&&,
+    spg_t pgid,
+    epoch_t epoch,
+    std::unique_ptr<PGCreateInfo> info);
+  seastar::future<Ref<PG>> wait_for_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
+  Ref<PG> get_pg(spg_t pgid);
+  seastar::future<> load_pgs(ShardServices &shard_services);
+  seastar::future<Ref<PG>> load_pg(
+    ShardServices &shard_services,
+    spg_t pgid);
+  seastar::future<> stop_pgs();
+  std::map<pg_t, pg_stat_t> get_pg_stats() const;
+  seastar::future<> broadcast_map_to_pgs(
+    PGShardManager &shard_manager,
+    ShardServices &shard_services,
+    epoch_t epoch);
+
+  template <typename F>
+  void for_each_pg(F &&f) const {
+    for (auto &pg : pg_map.get_pgs()) {
+      std::invoke(f, pg.first, pg.second);
+    }
+  }
 };
 
 #define FORWARD_CONST(FROM_METHOD, TO_METHOD, TARGET)		\

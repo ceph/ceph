@@ -76,6 +76,28 @@ public:
   FORWARD_TO_CORE(store_maps)
   FORWARD_TO_CORE(get_up_epoch)
   FORWARD_TO_CORE(set_up_epoch)
+
+  FORWARD(pg_created, pg_created, core_state.pg_map)
+  auto load_pgs() {
+    return core_state.load_pgs(shard_services);
+  }
+  FORWARD_TO_CORE(stop_pgs)
+  FORWARD_CONST(get_pg_stats, get_pg_stats, core_state)
+
+  FORWARD_TO_CORE(get_or_create_pg)
+  FORWARD_TO_CORE(wait_for_pg)
+  FORWARD_CONST(for_each_pg, for_each_pg, core_state)
+  auto get_num_pgs() const { return core_state.pg_map.get_pgs().size(); }
+
+  auto broadcast_map_to_pgs(epoch_t epoch) {
+    return core_state.broadcast_map_to_pgs(
+      *this, shard_services, epoch);
+  }
+
+  template <typename F>
+  auto with_pg(spg_t pgid, F &&f) {
+    return std::invoke(std::forward<F>(f), core_state.get_pg(pgid));
+  }
 };
 
 }
