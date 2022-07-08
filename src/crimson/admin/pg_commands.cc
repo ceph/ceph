@@ -56,16 +56,23 @@ public:
       return seastar::make_ready_future<tell_result_t>(tell_result_t{
           -ENOENT, fmt::format("pgid '{}' does not exist", pgid_str)});
     }
-    Ref<PG> pg = osd.get_pg(spg_id);
-    if (!pg) {
-      return seastar::make_ready_future<tell_result_t>(tell_result_t{
-        -ENOENT, fmt::format("i don't have pgid '{}'", spg_id)});
-    }
-    if (!pg->is_primary()) {
-      return seastar::make_ready_future<tell_result_t>(tell_result_t{
-        -EAGAIN, fmt::format("not primary for pgid '{}'", spg_id)});
-    }
-    return this->do_command(pg, cmdmap, format, std::move(input));
+    return osd.get_pg_shard_manager().with_pg(
+      spg_id,
+      [this, spg_id,
+       cmdmap=std::move(cmdmap),
+       format=std::move(format),
+       input=std::move(input)
+      ](auto &&pg) mutable {
+	if (!pg) {
+	  return seastar::make_ready_future<tell_result_t>(tell_result_t{
+	      -ENOENT, fmt::format("i don't have pgid '{}'", spg_id)});
+	}
+	if (!pg->is_primary()) {
+	  return seastar::make_ready_future<tell_result_t>(tell_result_t{
+	      -EAGAIN, fmt::format("not primary for pgid '{}'", spg_id)});
+	}
+	return this->do_command(pg, cmdmap, format, std::move(input));
+      });
   }
 
 private:
