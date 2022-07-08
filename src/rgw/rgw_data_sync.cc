@@ -3761,6 +3761,8 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   rgw_zone_set zones_trace;
 
   RGWSyncTraceNodeRef tn;
+  std::string zone_name;
+
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncCtx *_sc,
                              rgw_bucket_sync_pipe& _sync_pipe,
@@ -3794,6 +3796,13 @@ public:
     
     zones_trace = _zones_trace;
     zones_trace.insert(sync_env->svc->zone->get_zone().id, _sync_pipe.info.dest_bucket.get_key());
+
+    if (sc->env->ostr) {
+      RGWZone* z;
+      if ((z = sc->env->store->svc()->zone->find_zone(sc->source_zone))) {
+	zone_name = z->name;
+      }
+    }
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -3820,9 +3829,23 @@ public:
                      op == CLS_RGW_OP_LINK_OLH) {
             set_status("syncing obj");
             tn->log(5, SSTR("bucket sync: sync obj: " << sc->source_zone << "/" << bs.bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
+	    if (versioned_epoch) {
+	      pretty_print(sc->env, "Syncing object s3://{}/{} version {} in sync from zone {}\n", 
+			   bs.bucket.name, key, *versioned_epoch, zone_name);
+	    } else {
+	      pretty_print(sc->env, "Syncing object s3://{}/{} in sync from zone {}\n",
+			   bs.bucket.name, key, zone_name);
+	    }
             call(data_sync_module->sync_object(dpp, sc, sync_pipe, key, versioned_epoch, &zones_trace));
           } else if (op == CLS_RGW_OP_DEL || op == CLS_RGW_OP_UNLINK_INSTANCE) {
             set_status("removing obj");
+	    if (versioned_epoch) {
+	      pretty_print(sc->env, "Deleting object s3://{}/{} version {} in sync from zone {}\n",
+			   bs.bucket.name, key, *versioned_epoch, zone_name);
+	    } else {
+	      pretty_print(sc->env, "Deleting object s3://{}/{} in sync from zone {}\n",
+			   bs.bucket.name, key, zone_name);
+	    }
             if (op == CLS_RGW_OP_UNLINK_INSTANCE) {
               versioned = true;
             }
@@ -3837,6 +3860,8 @@ public:
           tn->set_resource_name(SSTR(bucket_str_noinstance(bs.bucket) << "/" << key));
         }
         if (retcode == -ERR_PRECONDITION_FAILED) {
+	  pretty_print(sc->env, "Skipping object s3://{}/{} in sync from zone {}\n",
+		       bs.bucket.name, key, zone_name);
           set_status("Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
           tn->log(0, "Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
           retcode = 0;
@@ -5651,13 +5676,16 @@ class SourceCR : public RGWCoroutine {
   uint64_t gen = 0;
   uint64_t num_shards = 0;
   rgw_bucket_sync_status status;
+  std::string zone_name;
 
 public:
 
   SourceCR(RGWDataSyncCtx& sc, const RGWBucketInfo& info,
 	   const rgw_bucket& dest,
-	   const RGWBucketSyncFlowManager::pipe_handler& handler)
-    : RGWCoroutine(sc.cct), sc(sc), info(info), dest(dest), handler(handler) {}
+	   const RGWBucketSyncFlowManager::pipe_handler& handler,
+	   const std::string& zone_name)
+    : RGWCoroutine(sc.cct), sc(sc), info(info), dest(dest), handler(handler),
+      zone_name(zone_name) {}
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
@@ -5676,7 +5704,9 @@ public:
 
       if (status.state == BucketSyncState::Stopped) {
 	// Nothing to do.
-	ldpp_dout(dpp, 0) << "SourceCR: Bucket is in state Stopped, returning."
+	pretty_print(sc.env, "Sync of bucket {} from source zone {} is in state Stopped. "
+		     "Nothing to do.\n", dest.name, zone_name);
+	ldpp_dout(dpp, 5) << "SourceCR: Bucket is in state Stopped, returning."
 			  << dendl;
 	drain_all();
 	return set_cr_done();
@@ -5698,13 +5728,17 @@ public:
 	// though use the current generation so a following
 	// incremental sync can carry on.
 	if (state != BucketSyncState::Incremental) {
-	  ldpp_dout(dpp, 1)  << "SourceCR: Calling GenCR with "
+	  pretty_print(sc.env, "Beginning full sync of bucket {} from source zone {}.\n",
+		       dest.name, zone_name);
+	  ldpp_dout(dpp, 5)  << "SourceCR: Calling GenCR with "
 			     << "gen=" << gen
 			     << ", num_shards=" << 1
 			     << dendl;
 	  yield call(new GenCR(sc, info.bucket, dest, gen, 1, handler));
 	} else {
-	  ldpp_dout(dpp, 1) << "SourceCR: Calling GenCR with "
+	  pretty_print(sc.env, "Beginning incremental sync of bucket {}, generation {} from source zone {}.\n",
+		       dest.name, gen, zone_name);
+	  ldpp_dout(dpp, 5) << "SourceCR: Calling GenCR with "
 			    << "gen=" << gen
 			    << ", num_shards=" << num_shards
 			    << dendl;
@@ -5718,6 +5752,8 @@ public:
 	  drain_all();
 	  return set_cr_error(retcode);
 	}
+
+	pretty_print(sc.env, "Completed.\n");
 
 	yield call(new RGWSimpleRadosReadCR<rgw_bucket_sync_status>(
 		     dpp, sc.env->async_rados, sc.env->svc->sysobj,
@@ -5754,8 +5790,9 @@ int RGWBucketPipeSyncStatusManager::run(const DoutPrefixProvider *dpp)
   list<RGWCoroutinesStack *> stacks;
   for (auto& source : sources) {
     auto stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
-    stack->call(new rgw::bucket_sync_run::SourceCR(source.sc, source.info,
-						   source.dest, source.handler));
+    stack->call(new rgw::bucket_sync_run::SourceCR(
+		  source.sc, source.info, source.dest, source.handler,
+		  source.zone_name));
     stacks.push_back(stack);
   }
   auto ret = cr_mgr.run(dpp, stacks);
