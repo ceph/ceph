@@ -989,7 +989,8 @@ class Object {
     /** Create a randomized instance ID for this object */
     virtual void gen_rand_obj_instance_name() = 0;
     /** Get a multipart serializer for this object */
-    virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) = 0;
+    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+							 const std::string& lock_name) = 0;
     /** Move the data of an object to new placement storage */
     virtual int transition(Bucket* bucket,
 			   const rgw_placement_rule& placement_rule,
@@ -1350,7 +1351,9 @@ public:
   virtual int put_head(const std::string& oid, LCHead& head) = 0;
 
   /** Get a serializer for lifecycle */
-  virtual LCSerializer* get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie) = 0;
+  virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
+						       const std::string& oid,
+						       const std::string& cookie) = 0;
 };
 
 /**
