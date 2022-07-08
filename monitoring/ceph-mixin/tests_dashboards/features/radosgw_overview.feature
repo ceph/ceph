@@ -9,7 +9,7 @@ Scenario: "Test Average GET Latencies"
   When interval is `30s`
   Then Grafana panel `Average GET/PUT Latencies` with legend `GET AVG` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo",instance="127.0.0.1", instance_id="58892247", job="ceph"} | 2.5000000000000004 |
+    | {ceph_daemon="rgw.foo",instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1.5 |
 
 Scenario: "Test Average PUT Latencies"
   Given the following series:
@@ -30,7 +30,7 @@ Scenario: "Test Total Requests/sec by RGW Instance"
   When interval is `30s`
   Then Grafana panel `Total Requests/sec by RGW Instance` with legend `{{rgw_host}}` shows:
     | metrics | values |
-    | {rgw_host="1"} | 1.6666666666666667 |
+    | {rgw_host="1"} | 1.5 |
 
 Scenario: "Test GET Latencies by RGW Instance"
   Given the following series:
@@ -41,7 +41,7 @@ Scenario: "Test GET Latencies by RGW Instance"
   When interval is `30s`
   Then Grafana panel `GET Latencies by RGW Instance` with legend `{{rgw_host}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo"} | 2.5000000000000004 |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo"} | 1.5 |
 
 Scenario: "Test Bandwidth Consumed by Type- GET"
   Given the following series:
@@ -51,7 +51,7 @@ Scenario: "Test Bandwidth Consumed by Type- GET"
   And interval is `30s`
   Then Grafana panel `Bandwidth Consumed by Type` with legend `GETs` shows:
     | metrics | values |
-    | {} | 1.6666666666666667 |
+    | {} | 1.5 |
 
 Scenario: "Test Bandwidth Consumed by Type- PUT"
   Given the following series:
@@ -61,7 +61,7 @@ Scenario: "Test Bandwidth Consumed by Type- PUT"
   And interval is `30s`
   Then Grafana panel `Bandwidth Consumed by Type` with legend `PUTs` shows:
     | metrics | values |
-    | {} | 1 |
+    | {} | 7.5E-01 |
 
 Scenario: "Test Bandwidth by RGW Instance"
   Given the following series:
@@ -73,7 +73,7 @@ Scenario: "Test Bandwidth by RGW Instance"
   And interval is `30s`
   Then Grafana panel `Bandwidth by RGW Instance` with legend `{{rgw_host}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.1", instance_id="92806566", rgw_host="1"} | 2.666666666666667 |
+    | {ceph_daemon="rgw.1", instance_id="92806566", rgw_host="1"} | 2.25 |
 
 Scenario: "Test PUT Latencies by RGW Instance"
   Given the following series:
@@ -90,8 +90,8 @@ Scenario: "Test PUT Latencies by RGW Instance"
 Scenario: "Test Total backend responses by HTTP code"
   Given the following series:
     | metrics | values |
-    | haproxy_backend_http_responses_total{code="200",instance="ingress.rgw.1",proxy="backend"} | 10 100 |
-    | haproxy_backend_http_responses_total{code="404",instance="ingress.rgw.1",proxy="backend"} | 20 200 |
+    | haproxy_backend_http_responses_total{job="haproxy",code="200",instance="ingress.rgw.1",proxy="backend"} | 10 100 |
+    | haproxy_backend_http_responses_total{job="haproxy",code="404",instance="ingress.rgw.1",proxy="backend"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   When variable `code` is `200`
   Then Grafana panel `Total responses by HTTP code` with legend `Backend {{ code }}` shows:
@@ -101,8 +101,8 @@ Scenario: "Test Total backend responses by HTTP code"
 Scenario: "Test Total frontend responses by HTTP code"
   Given the following series:
     | metrics | values |
-    | haproxy_frontend_http_responses_total{code="200",instance="ingress.rgw.1",proxy="frontend"} | 10 100 |
-    | haproxy_frontend_http_responses_total{code="404",instance="ingress.rgw.1",proxy="frontend"} | 20 200 |
+    | haproxy_frontend_http_responses_total{job="haproxy",code="200",instance="ingress.rgw.1",proxy="frontend"} | 10 100 |
+    | haproxy_frontend_http_responses_total{job="haproxy",code="404",instance="ingress.rgw.1",proxy="frontend"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   When variable `code` is `200`
   Then Grafana panel `Total responses by HTTP code` with legend `Frontend {{ code }}` shows:
@@ -112,8 +112,8 @@ Scenario: "Test Total frontend responses by HTTP code"
 Scenario: "Test Total http frontend requests by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_frontend_http_requests_total{proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_frontend_http_requests_total{proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_frontend_http_requests_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_frontend_http_requests_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total requests / responses` with legend `Requests` shows:
     | metrics | values |
@@ -122,8 +122,8 @@ Scenario: "Test Total http frontend requests by instance"
 Scenario: "Test Total backend response errors by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_backend_response_errors_total{proxy="backend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_backend_response_errors_total{proxy="backend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_backend_response_errors_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_backend_response_errors_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total requests / responses` with legend `Response errors` shows:
     | metrics | values |
@@ -132,8 +132,8 @@ Scenario: "Test Total backend response errors by instance"
 Scenario: "Test Total frontend requests errors by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_frontend_request_errors_total{proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_frontend_request_errors_total{proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_frontend_request_errors_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_frontend_request_errors_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total requests / responses` with legend `Requests errors` shows:
     | metrics | values |
@@ -142,8 +142,8 @@ Scenario: "Test Total frontend requests errors by instance"
 Scenario: "Test Total backend redispatch warnings by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_backend_redispatch_warnings_total{proxy="backend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_backend_redispatch_warnings_total{proxy="backend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_backend_redispatch_warnings_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_backend_redispatch_warnings_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total requests / responses` with legend `Backend redispatch` shows:
     | metrics | values |
@@ -152,8 +152,8 @@ Scenario: "Test Total backend redispatch warnings by instance"
 Scenario: "Test Total backend retry warnings by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_backend_retry_warnings_total{proxy="backend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_backend_retry_warnings_total{proxy="backend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_backend_retry_warnings_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_backend_retry_warnings_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total requests / responses` with legend `Backend retry` shows:
     | metrics | values |
@@ -162,8 +162,8 @@ Scenario: "Test Total backend retry warnings by instance"
 Scenario: "Test Total frontend requests denied by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_frontend_requests_denied_total{proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_frontend_requests_denied_total{proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_frontend_requests_denied_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_frontend_requests_denied_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total requests / responses` with legend `Request denied` shows:
     | metrics | values |
@@ -172,8 +172,8 @@ Scenario: "Test Total frontend requests denied by instance"
 Scenario: "Test Total backend current queue by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_backend_current_queue{proxy="backend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_backend_current_queue{proxy="backend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_backend_current_queue{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_backend_current_queue{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total requests / responses` with legend `Backend Queued` shows:
     | metrics | values |
@@ -182,8 +182,8 @@ Scenario: "Test Total backend current queue by instance"
 Scenario: "Test Total frontend connections by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_frontend_connections_total{proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_frontend_connections_total{proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_frontend_connections_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_frontend_connections_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total number of connections` with legend `Front` shows:
     | metrics | values |
@@ -192,8 +192,8 @@ Scenario: "Test Total frontend connections by instance"
 Scenario: "Test Total backend connections attempts by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_backend_connection_attempts_total{proxy="backend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_backend_connection_attempts_total{proxy="backend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_backend_connection_attempts_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_backend_connection_attempts_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total number of connections` with legend `Back` shows:
     | metrics | values |
@@ -202,8 +202,8 @@ Scenario: "Test Total backend connections attempts by instance"
 Scenario: "Test Total backend connections error by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_backend_connection_errors_total{proxy="backend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_backend_connection_errors_total{proxy="backend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_backend_connection_errors_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_backend_connection_errors_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Total number of connections` with legend `Back errors` shows:
     | metrics | values |
@@ -212,8 +212,8 @@ Scenario: "Test Total backend connections error by instance"
 Scenario: "Test Total frontend bytes incoming by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_frontend_bytes_in_total{proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_frontend_bytes_in_total{proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_frontend_bytes_in_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_frontend_bytes_in_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Current total of incoming / outgoing bytes` with legend `IN Front` shows:
     | metrics | values |
@@ -222,8 +222,8 @@ Scenario: "Test Total frontend bytes incoming by instance"
 Scenario: "Test Total frontend bytes outgoing by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_frontend_bytes_out_total{proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_frontend_bytes_out_total{proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_frontend_bytes_out_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_frontend_bytes_out_total{job="haproxy",proxy="frontend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Current total of incoming / outgoing bytes` with legend `OUT Front` shows:
     | metrics | values |
@@ -232,8 +232,8 @@ Scenario: "Test Total frontend bytes outgoing by instance"
 Scenario: "Test Total backend bytes incoming by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_backend_bytes_in_total{proxy="backend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_backend_bytes_in_total{proxy="backend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_backend_bytes_in_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_backend_bytes_in_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Current total of incoming / outgoing bytes` with legend `IN Back` shows:
     | metrics | values |
@@ -242,8 +242,8 @@ Scenario: "Test Total backend bytes incoming by instance"
 Scenario: "Test Total backend bytes outgoing by instance"
   Given the following series:
     | metrics | values |
-    | haproxy_backend_bytes_out_total{proxy="backend",instance="ingress.rgw.1"} | 10 100 |
-    | haproxy_backend_bytes_out_total{proxy="backend",instance="ingress.rgw.1"} | 20 200 |
+    | haproxy_backend_bytes_out_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 10 100 |
+    | haproxy_backend_bytes_out_total{job="haproxy",proxy="backend",instance="ingress.rgw.1"} | 20 200 |
   When variable `ingress_service` is `ingress.rgw.1`
   Then Grafana panel `Current total of incoming / outgoing bytes` with legend `OUT Back` shows:
     | metrics | values |
