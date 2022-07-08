@@ -365,7 +365,7 @@ class TestDevice(object):
         # low-level behavior of has_bluestore_label
         with patch.object(device.Device, "__init__", lambda self, path, with_lsm=False: None):
             disk = device.Device("/dev/sda")
-            disk.abspath = "/dev/sda"
+            disk.path = "/dev/sda"
             with patch('builtins.open', mock_open(read_data=b'bluestore block device\n')):
                 assert disk.has_bluestore_label
             with patch('builtins.open', mock_open(read_data=b'not a bluestore block device\n')):
