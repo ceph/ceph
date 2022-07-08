@@ -1279,6 +1279,11 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct re
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * const s, const uint64_t op)
 {
+  if (rgw::sal::RGWBucket::empty(s->bucket)) {
+    // request is missing a bucket name
+    return false;
+  }
+
   perm_state_from_req_state ps(s);
 
   return verify_bucket_permission(dpp, 
