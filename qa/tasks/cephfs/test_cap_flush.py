@@ -44,7 +44,7 @@ class TestCapFlush(CephFSTestCase):
         self.mount_a.run_python(py_script, sudo=True)
 
         # Modify file mode by different user. ceph-fuse will send a setattr request
-        self.mount_a.run_shell(["chmod", "600", file_path], wait=False, sudo=True)
+        self.mount_a.run_shell(["sudo", "chmod", "600", file_path], wait=False, omit_sudo=False)
 
         time.sleep(10)
 
