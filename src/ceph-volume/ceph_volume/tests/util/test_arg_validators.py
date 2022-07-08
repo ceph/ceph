@@ -88,7 +88,7 @@ class TestValidDevice(object):
         lsblk = {"TYPE": "disk", "NAME": "sda"}
         device_info(lsblk=lsblk)
         result = self.validator('/dev/sda')
-        assert result.abspath == '/dev/sda'
+        assert result.path == '/dev/sda'
 
     @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
     def test_path_is_invalid(self, m_has_bs_label,
