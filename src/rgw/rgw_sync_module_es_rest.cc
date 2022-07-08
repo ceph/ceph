@@ -399,7 +399,7 @@ protected:
   }
 public:
   explicit RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
-  virtual ~RGWHandler_REST_MDSearch_S3() {}
+  ~RGWHandler_REST_MDSearch_S3() {}
 };
 
 

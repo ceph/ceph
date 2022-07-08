@@ -33,7 +33,7 @@ class RadosCompletions : public Completions {
   public:
     std::list<librados::AioCompletion*> handles;
     RadosCompletions() {}
-    ~RadosCompletions() = default;
+    virtual ~RadosCompletions() = default;
     virtual int drain() override;
 };
 
@@ -94,7 +94,7 @@ class RadosZone : public StoreZone {
     RadosZoneGroup group;
   public:
     RadosZone(RadosStore* _store, RadosZoneGroup _zg) : store(_store), group(_zg) {}
-    ~RadosZone() = default;
+    virtual ~RadosZone() = default;
 
     virtual ZoneGroup& get_zonegroup() override;
     virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
@@ -120,7 +120,7 @@ class RadosStore : public StoreStore {
     RadosStore()
       : rados(nullptr) {
       }
-    ~RadosStore() {
+    virtual ~RadosStore() {
       delete rados;
     }
 
@@ -188,7 +188,7 @@ class RadosStore : public StoreStore {
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override;
     virtual const RGWSyncModuleInstanceRef& get_sync_module() { return rados->get_sync_module(); }
     virtual std::string get_host_id() { return rados->host_id; }
-    virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
+    virtual std::unique_ptr<LuaManager> get_lua_manager() override;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					      std::string tenant,
 					      std::string path="",
@@ -722,7 +722,7 @@ class RadosNotification : public StoreNotification {
     RadosNotification(const DoutPrefixProvider* _dpp, RadosStore* _store, Object* _obj, Object* _src_obj, rgw::notify::EventType _type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y) :
       StoreNotification(_obj, _src_obj, _type), store(_store), res(_dpp, _store, _obj, _src_obj, _bucket, _user_id, _user_tenant, _req_id, y) {}
 
-    ~RadosNotification() = default;
+    virtual ~RadosNotification() = default;
 
     rgw::notify::reservation_t& get_reservation(void) {
       return res;
@@ -759,7 +759,7 @@ public:
 				  std::move(_head_obj), olh_epoch, unique_tag,
 				  dpp, y)
   {}
-  ~RadosAtomicWriter() = default;
+  virtual ~RadosAtomicWriter() = default;
 
   // prepare to start processing object data
   virtual int prepare(optional_yield y) override;
@@ -805,7 +805,7 @@ public:
 				  std::move(_head_obj), unique_tag, position,
 				  cur_accounted_size, dpp, y)
   {}
-  ~RadosAppendWriter() = default;
+  virtual ~RadosAppendWriter() = default;
 
   // prepare to start processing object data
   virtual int prepare(optional_yield y) override;
@@ -849,7 +849,7 @@ public:
 				  std::move(_head_obj), upload->get_upload_id(),
 				  part_num, part_num_str, dpp, y)
   {}
-  ~RadosMultipartWriter() = default;
+  virtual ~RadosMultipartWriter() = default;
 
   // prepare to start processing object data
   virtual int prepare(optional_yield y) override;
@@ -868,17 +868,23 @@ public:
                        optional_yield y) override;
 };
 
-class RadosLuaScriptManager : public StoreLuaScriptManager {
+class RadosLuaManager : public StoreLuaManager {
   RadosStore* store;
   rgw_pool pool;
 
 public:
-  RadosLuaScriptManager(RadosStore* _s);
-  virtual ~RadosLuaScriptManager() = default;
+  RadosLuaManager(RadosStore* _s);
+  virtual ~RadosLuaManager() = default;
 
-  virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
-  virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
-  virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+  virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name, bool allow_compilation) override;
+  virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
+  virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
+  virtual int install_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& failed_packages, std::string& output) override;
+#endif
 };
 
 class RadosOIDCProvider : public RGWOIDCProvider {

@@ -602,9 +602,9 @@ namespace rgw::sal {
     return realm->get_id();
   }
 
-  std::unique_ptr<LuaScriptManager> DBStore::get_lua_script_manager()
+  std::unique_ptr<LuaManager> DBStore::get_lua_manager()
   {
-    return std::make_unique<DBLuaScriptManager>(this);
+    return std::make_unique<DBLuaManager>(this);
   }
 
   int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)

@@ -263,7 +263,7 @@ struct list_entry_completion : public lr::ObjectOperationCompletion {
 			std::uint64_t tid)
     : cct(cct), r_out(r_out), entries(entries), more(more),
       full_part(full_part), ptag(ptag), tid(tid) {}
-  virtual ~list_entry_completion() = default;
+  ~list_entry_completion() = default;
   void handle_completion(int r, bufferlist& bl) override {
     if (r >= 0) try {
 	fifo::op::list_part_reply reply;
@@ -354,7 +354,7 @@ struct partinfo_completion : public lr::ObjectOperationCompletion {
 		      std::uint64_t tid) :
     cct(cct), rp(rp), h(h), tid(tid) {
   }
-  virtual ~partinfo_completion() = default;
+  ~partinfo_completion() = default;
   void handle_completion(int r, bufferlist& bl) override {
     if (r >= 0) try {
 	fifo::op::get_part_info_reply reply;

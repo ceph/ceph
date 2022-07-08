@@ -183,7 +183,7 @@ WRITE_CLASS_ENCODER(RGWUserBuckets)
 
 class RGWBucketMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
 public:
-  virtual ~RGWBucketMetadataHandlerBase() {}
+  ~RGWBucketMetadataHandlerBase() {}
   virtual void init(RGWSI_Bucket *bucket_svc,
                     RGWBucketCtl *bucket_ctl) = 0;
 
@@ -191,7 +191,7 @@ public:
 
 class RGWBucketInstanceMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
 public:
-  virtual ~RGWBucketInstanceMetadataHandlerBase() {}
+  ~RGWBucketInstanceMetadataHandlerBase() {}
   virtual void init(RGWSI_Zone *zone_svc,
                     RGWSI_Bucket *bucket_svc,
                     RGWSI_BucketIndex *bi_svc) = 0;

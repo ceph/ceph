@@ -27,8 +27,8 @@
 #include "rgw_zone.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
-#include "rgw_sal_rados.h"
-#include "rgw_rados.h"
+// #include "rgw_sal_rados.h"
+// #include "rgw_rados.h"
 #include "rgw_lc_tier.h"
 #include "rgw_notify.h"
 
@@ -626,7 +626,7 @@ public:
 
 class LCOpFilter {
 public:
-virtual ~LCOpFilter() {}
+  virtual ~LCOpFilter() {}
   virtual bool check(const DoutPrefixProvider *dpp, lc_op_ctx& oc) {
     return false;
   }
@@ -1317,9 +1317,7 @@ public:
       }
 
       /* Allow transition for only RadosStore */
-      rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(oc.store);
-
-      if (!rados) {
+      if (oc.store->get_name() != "rados") {
         ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is not on RadosStore. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
         return -1;
       }
