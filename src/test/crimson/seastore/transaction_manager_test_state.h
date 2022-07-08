@@ -73,8 +73,7 @@ protected:
       auto config =
 	journal::CircularBoundedJournal::mkfs_config_t::get_default();
       rb_device.reset(new nvme_device::TestMemory(config.total_size));
-      rb_device->set_device_id(
-	1 << (std::numeric_limits<device_id_t>::digits - 1));
+      rb_device->set_device_id(make_device_id(1, device_type_t::RANDOM_BLOCK));
     }
     return segment_manager->init(
     ).safe_then([this] {

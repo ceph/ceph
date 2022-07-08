@@ -37,7 +37,7 @@ std::optional<record_t> decode_record(
   decode(r_header, bliter);
   logger().debug(" decode_record mdlength {} records {}",
 		  r_header.mdlength, r_header.records);
-  device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
+  device_id_t d_id = make_device_id(1, device_type_t::RANDOM_BLOCK);
 
   auto del_infos = try_decode_deltas(r_header, bl,
     paddr_t::make_blk_paddr(d_id, 0));
@@ -140,7 +140,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
   {
     device = new nvme_device::TestMemory(CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE);
     cbj.reset(new CircularBoundedJournal(device, std::string()));
-    device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
+    device_id_t d_id = make_device_id(1, device_type_t::RANDOM_BLOCK);
     config.block_size = CBTEST_DEFAULT_BLOCK_SIZE;
     config.total_size = CBTEST_DEFAULT_TEST_SIZE;
     config.device_id = d_id;

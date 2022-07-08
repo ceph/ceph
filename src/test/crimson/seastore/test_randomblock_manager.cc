@@ -55,7 +55,7 @@ struct rbm_test_t :
   seastar::future<> set_up_fut() final {
     device.reset(new nvme_device::TestMemory(DEFAULT_TEST_SIZE));
     rbm_manager.reset(new NVMeManager(device.get(), std::string()));
-    device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
+    device_id_t d_id = make_device_id(1, device_type_t::RANDOM_BLOCK);
     config.start = paddr_t::make_blk_paddr(d_id, 0);
     config.end = paddr_t::make_blk_paddr(d_id, DEFAULT_TEST_SIZE);
     config.block_size = DEFAULT_BLOCK_SIZE;
@@ -291,7 +291,7 @@ TEST_F(rbm_test_t, block_alloc_free_test)
 TEST_F(rbm_test_t, many_block_alloc)
 {
  run_async([this] {
-   device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
+   device_id_t d_id = make_device_id(1, device_type_t::RANDOM_BLOCK);
    config.start = paddr_t::make_blk_paddr(d_id, 0);
    config.end = paddr_t::make_blk_paddr(d_id, (DEFAULT_TEST_SIZE * 1024));
    config.block_size = DEFAULT_BLOCK_SIZE;

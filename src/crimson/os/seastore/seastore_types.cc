@@ -14,6 +14,27 @@ seastar::logger& journal_logger() {
 
 namespace crimson::os::seastore {
 
+device_id_t make_device_id(device_id_t id, device_type_t dtype) {
+  assert(dtype != device_type_t::NONE &&
+         dtype != device_type_t::NUM_TYPES);
+  // clear addr type bits
+  id &= std::numeric_limits<device_id_t>::max() >> DEVICE_ID_TYPE_BITS;
+
+  // set addr type bits
+  switch(dtype) {
+  case device_type_t::HARD_DISK:
+    id |= static_cast<uint8_t>(addr_types_t::HARD_DISK)
+      << (DEVICE_ID_LEN_BITS - DEVICE_ID_TYPE_BITS);
+  case device_type_t::RANDOM_BLOCK:
+    id |= static_cast<uint8_t>(addr_types_t::RANDOM_BLOCK)
+      << (DEVICE_ID_LEN_BITS - DEVICE_ID_TYPE_BITS);
+  default:
+    id |= static_cast<uint8_t>(addr_types_t::SEGMENT)
+      << (DEVICE_ID_LEN_BITS - DEVICE_ID_TYPE_BITS);
+  }
+  return id;
+}
+
 bool is_aligned(uint64_t offset, uint64_t alignment)
 {
   return (offset % alignment) == 0;

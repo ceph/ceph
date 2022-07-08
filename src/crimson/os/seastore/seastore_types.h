@@ -60,7 +60,8 @@ constexpr uint16_t SEGMENT_ID_LEN_BITS = 24;
 // order of device_id_t
 constexpr uint16_t DEVICE_ID_LEN_BITS = 8;
 
-// 1 bit to identify address type
+// 2 bits to identify address type
+constexpr uint16_t DEVICE_ID_TYPE_BITS = 2;
 
 // segment ids without a device id encapsulated
 using device_segment_id_t = uint32_t;
@@ -69,7 +70,7 @@ constexpr device_id_t DEVICE_ID_GLOBAL_MAX =
   std::numeric_limits<device_id_t>::max();
 constexpr device_id_t DEVICE_ID_MAX = // the max value regardless of addrs_type_t prefix
   (DEVICE_ID_GLOBAL_MAX >>
-   (std::numeric_limits<device_id_t>::digits - DEVICE_ID_LEN_BITS + 1));
+   (std::numeric_limits<device_id_t>::digits - DEVICE_ID_LEN_BITS + DEVICE_ID_TYPE_BITS));
 constexpr device_id_t DEVICE_ID_NULL = DEVICE_ID_MAX;
 constexpr device_id_t DEVICE_ID_RECORD_RELATIVE = DEVICE_ID_MAX - 1;
 constexpr device_id_t DEVICE_ID_BLOCK_RELATIVE = DEVICE_ID_MAX - 2;
@@ -101,7 +102,7 @@ private:
     0xFF << (std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_LEN_BITS);
   // default internal segment id
   static constexpr internal_segment_id_t DEFAULT_INTERNAL_SEG_ID =
-    (std::numeric_limits<internal_segment_id_t>::max() >> 1) - 1;
+    (std::numeric_limits<internal_segment_id_t>::max() >> DEVICE_ID_TYPE_BITS) - 1;
 
   internal_segment_id_t segment = DEFAULT_INTERNAL_SEG_ID;
 
@@ -161,7 +162,7 @@ private:
   constexpr static inline internal_segment_id_t make_internal(
     device_segment_id_t id,
     device_id_t sm_id) {
-    return static_cast<internal_segment_id_t>(id) |
+    return static_cast<internal_segment_id_t>(internal_to_segment(id)) |
       (static_cast<internal_segment_id_t>(sm_id) << segment_bits);
   }
 
@@ -448,7 +449,8 @@ constexpr uint16_t DEV_ADDR_LEN_BITS = 64 - DEVICE_ID_LEN_BITS;
 static constexpr uint16_t SEG_OFF_LEN_BITS = 32;
 enum class addr_types_t : uint8_t {
   SEGMENT = 0,
-  RANDOM_BLOCK = 1
+  RANDOM_BLOCK = 1,
+  HARD_DISK = 2
 };
 struct seg_paddr_t;
 struct blk_paddr_t;
@@ -486,14 +488,15 @@ public:
     return paddr_t(device, offset);
   }
 
-  // use 1bit in device_id_t for address type
-  void set_device_id(device_id_t id, addr_types_t type = addr_types_t::SEGMENT) {
+  // use 2 bits in device_id_t for address type
+  void set_device_id(device_id_t id, addr_types_t type) {
     dev_addr &= static_cast<common_addr_t>(
       std::numeric_limits<common_addr_t>::max() >> DEVICE_ID_LEN_BITS);
     dev_addr |= (static_cast<common_addr_t>(id &
-      std::numeric_limits<device_id_t>::max() >> 1) << DEV_ADDR_LEN_BITS);
+      std::numeric_limits<device_id_t>::max() >> DEVICE_ID_TYPE_BITS)
+		 << DEV_ADDR_LEN_BITS);
     dev_addr |= (static_cast<common_addr_t>(type)
-      << (std::numeric_limits<common_addr_t>::digits - 1));
+      << (std::numeric_limits<common_addr_t>::digits - DEVICE_ID_TYPE_BITS));
   }
 
   device_id_t get_device_id() const {
@@ -501,7 +504,8 @@ public:
   }
   addr_types_t get_addr_type() const {
     return (addr_types_t)((dev_addr
-	    >> (std::numeric_limits<common_addr_t>::digits - 1)) & 1);
+	    >> (std::numeric_limits<common_addr_t>::digits - DEVICE_ID_TYPE_BITS)) &
+			  ((1 << DEVICE_ID_TYPE_BITS) - 1));
   }
 
   paddr_t add_offset(int32_t o) const;
@@ -773,12 +777,13 @@ std::ostream& operator<<(std::ostream& out, placement_hint_t h);
 
 enum alignas(4) device_type_t : uint_fast8_t {
   NONE = 0,
-  SEGMENTED, // i.e. Hard_Disk, SATA_SSD, NAND_NVME
+  HARD_DISK,
+  SEGMENTED, // i.e. SATA_SSD, NAND_NVME
   RANDOM_BLOCK, // i.e. RANDOM_BD
   PMEM, // i.e. NVDIMM, PMEM
   NUM_TYPES
 };
-
+device_id_t make_device_id(device_id_t id, device_type_t dtype);
 std::ostream& operator<<(std::ostream& out, device_type_t t);
 
 bool can_delay_allocation(device_type_t type);
@@ -822,7 +827,8 @@ private:
       if (addr.get_addr_type() == addr_types_t::SEGMENT) {
 	auto &seg_addr = addr.as_seg_paddr();
 	return ret_t(seg_addr.get_segment_off(), seg_addr.get_segment_id());
-      } else if (addr.get_addr_type() == addr_types_t::RANDOM_BLOCK) {
+      } else if (addr.get_addr_type() == addr_types_t::RANDOM_BLOCK ||
+		 addr.get_addr_type() == addr_types_t::HARD_DISK) {
 	auto &blk_addr = addr.as_blk_paddr();
 	return ret_t(blk_addr.get_block_off(), MAX_SEG_ID);
       } else {
@@ -1859,12 +1865,14 @@ inline seg_paddr_t& paddr_t::as_seg_paddr() {
 }
 
 inline const blk_paddr_t& paddr_t::as_blk_paddr() const {
-  assert(get_addr_type() == addr_types_t::RANDOM_BLOCK);
+  assert(get_addr_type() == addr_types_t::RANDOM_BLOCK ||
+	 get_addr_type() == addr_types_t::HARD_DISK);
   return *static_cast<const blk_paddr_t*>(this);
 }
 
 inline blk_paddr_t& paddr_t::as_blk_paddr() {
-  assert(get_addr_type() == addr_types_t::RANDOM_BLOCK);
+  assert(get_addr_type() == addr_types_t::RANDOM_BLOCK ||
+	 get_addr_type() == addr_types_t::HARD_DISK);
   return *static_cast<blk_paddr_t*>(this);
 }
 
@@ -1885,6 +1893,7 @@ inline paddr_t paddr_t::operator-(paddr_t rhs) const {
 inline paddr_t paddr_t::add_offset(int32_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_offset(o))
   PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_offset(o))
+  PADDR_OPERATION(addr_types_t::HARD_DISK, blk_paddr_t, add_offset(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
@@ -1892,6 +1901,7 @@ inline paddr_t paddr_t::add_offset(int32_t o) const {
 inline paddr_t paddr_t::add_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_relative(o))
   PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_relative(o))
+  PADDR_OPERATION(addr_types_t::HARD_DISK, blk_paddr_t, add_relative(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
@@ -1899,6 +1909,7 @@ inline paddr_t paddr_t::add_relative(paddr_t o) const {
 inline paddr_t paddr_t::add_block_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_block_relative(o))
   PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_block_relative(o))
+  PADDR_OPERATION(addr_types_t::HARD_DISK, blk_paddr_t, add_block_relative(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
@@ -1906,6 +1917,7 @@ inline paddr_t paddr_t::add_block_relative(paddr_t o) const {
 inline paddr_t paddr_t::add_record_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_record_relative(o))
   PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_record_relative(o))
+  PADDR_OPERATION(addr_types_t::HARD_DISK, blk_paddr_t, add_record_relative(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
@@ -1913,6 +1925,7 @@ inline paddr_t paddr_t::add_record_relative(paddr_t o) const {
 inline paddr_t paddr_t::maybe_relative_to(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, maybe_relative_to(o))
   PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, maybe_relative_to(o))
+  PADDR_OPERATION(addr_types_t::HARD_DISK, blk_paddr_t, maybe_relative_to(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
