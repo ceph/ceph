@@ -139,8 +139,46 @@ using `Internet Relay Chat`_.
 
 .. _`Internet Relay Chat`: http://www.irchelp.org/
 
-See ``https://ceph.com/irc/`` for how to set up your IRC
-client and a list of channels.
+The Ceph community gathers in the #ceph channel of the Open and Free Technology
+Community (OFTC) IRC network.
+
+Created in 1988, Internet Relay Chat (IRC) is a relay-based, real-time chat
+protocol. It is mainly designed for group (many-to-many) communication in
+discussion forums called channels, but also allows one-to-one communication via
+private message. On IRC you can talk to many other members using Ceph, on
+topics ranging from idle chit-chat to support questions. Though a channel might
+have many people in it at any one time, they might not always be at their
+keyboard; so if no-one responds, just wait around and someone will hopefully
+answer soon enough.
+
+Registration
+^^^^^^^^^^^^
+
+If you intend to use the IRC service on a continued basis, you are advised to
+register an account. Registering gives you a unique IRC identity and allows you
+to access channels where unregistered users have been locked out for technical
+reasons.
+
+See ``the official OFTC (Open and Free Technology Community) documentation's
+registration instructions
+<https://www.oftc.net/Services/#register-your-account>`` to learn how to
+register your IRC account.
+
+Channels
+~~~~~~~~
+
+To connect to the OFTC IRC network, download an IRC client and configure it to
+connect to ``irc.oftc.net``. Then join one or more of the channels. Discussions
+inside #ceph are logged and archives are available online.
+
+Here are the real-time discussion channels for the Ceph community:
+
+  -  #ceph
+  -  #ceph-devel
+  -  #cephfs
+  -  #ceph-dashboard
+  -  #ceph-orchestrators
+  -  #sepia
 
 .. _submitting-patches:
 
