@@ -170,13 +170,13 @@ public:
   int fd_on_success;
   Client *client;
 
-  struct fuse_session *se;
+  struct fuse_session *se = nullptr;
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   struct fuse_cmdline_opts opts;
   struct fuse_conn_info_opts *conn_opts;
 #else
-  struct fuse_chan *ch;
-  char *mountpoint;
+  struct fuse_chan *ch = nullptr;
+  char *mountpoint = nullptr;
 #endif
 
   ceph::mutex stag_lock = ceph::make_mutex("fuse_ll.cc stag_lock");
@@ -1370,12 +1370,7 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
 
 CephFuse::Handle::Handle(Client *c, int fd) :
   fd_on_success(fd),
-  client(c),
-  se(NULL),
-#if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
-  ch(NULL),
-  mountpoint(NULL)
-#endif
+  client(c)
 {
   memset(&args, 0, sizeof(args));
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
