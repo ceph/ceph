@@ -32,6 +32,8 @@ def normalize_disks(config):
         image_url = client_config.get('image_url', DEFAULT_IMAGE_URL)
         device_type = client_config.get('type', 'filesystem')
         encryption_format = client_config.get('encryption_format', 'none')
+        parent_encryption_format = client_config.get(
+            'parent_encryption_format', 'none')
 
         disks = client_config.get('disks', DEFAULT_NUM_DISKS)
         if not isinstance(disks, list):
@@ -59,7 +61,10 @@ def normalize_disks(config):
             disk['device_letter'] = chr(ord('a') + i)
 
             if 'encryption_format' not in disk:
-                disk['encryption_format'] = encryption_format
+                if clone:
+                    disk['encryption_format'] = parent_encryption_format
+                else:
+                    disk['encryption_format'] = encryption_format
             assert disk['encryption_format'] in ['none', 'luks1', 'luks2'], 'invalid encryption format'
 
         assert disks, 'at least one rbd device must be used'
@@ -73,6 +78,13 @@ def normalize_disks(config):
                 clone['parent_name'] = clone['image_name']
                 clone['image_name'] += '-clone'
                 del disk['device_letter']
+
+                clone['encryption_format'] = encryption_format
+                assert clone['encryption_format'] in ['none', 'luks1', 'luks2'], 'invalid encryption format'
+
+                clone['parent_encryption_format'] = parent_encryption_format
+                assert clone['parent_encryption_format'] in ['none', 'luks1', 'luks2'], 'invalid encryption format'
+
                 disks.append(clone)
 
 def create_images(ctx, config, managers):
@@ -109,7 +121,8 @@ def create_clones(ctx, config, managers):
             create_config = {
                 client: {
                     'image_name': disk['image_name'],
-                    'parent_name': disk['parent_name']
+                    'parent_name': disk['parent_name'],
+                    'encryption_format': disk['encryption_format'],
                     }
                 }
             managers.append(
@@ -121,7 +134,8 @@ def create_encrypted_devices(ctx, config, managers):
     for client, client_config in config.items():
         disks = client_config['disks']
         for disk in disks:
-            if disk['encryption_format'] == 'none' or \
+            if (disk['encryption_format'] == 'none' and
+                disk.get('parent_encryption_format', 'none') == 'none') or \
                     'device_letter' not in disk:
                 continue
 
@@ -223,7 +237,8 @@ def generate_iso(ctx, config):
                     'device_letter' not in disk or \
                     'image_url' in disk:
                 continue
-            if disk['encryption_format'] == 'none':
+            if disk['encryption_format'] == 'none' and \
+                    disk.get('parent_encryption_format', 'none') == 'none':
                 dev_name = 'vd' + disk['device_letter']
             else:
                 # encrypted disks use if=ide interface, instead of if=virtio
@@ -519,7 +534,8 @@ def run_qemu(ctx, config):
             if 'device_letter' not in disk:
                 continue
 
-            if disk['encryption_format'] == 'none':
+            if disk['encryption_format'] == 'none' and \
+                    disk.get('parent_encryption_format', 'none') == 'none':
                 interface = 'virtio'
                 disk_spec = 'rbd:rbd/{img}:id={id}'.format(
                     img=disk['image_name'],

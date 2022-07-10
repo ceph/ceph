@@ -23,6 +23,7 @@ os.environ["RBD_FORCE_ALLOW_V1"] = "1"
 log = logging.getLogger(__name__)
 
 ENCRYPTION_PASSPHRASE = "password"
+CLONE_ENCRYPTION_PASSPHRASE = "password2"
 
 @contextlib.contextmanager
 def create_image(ctx, config):
@@ -142,6 +143,7 @@ def clone_image(ctx, config):
             client.0:
                 parent_name: testimage
                 image_name: cloneimage
+                encryption_format: luks2
     """
     assert isinstance(config, dict) or isinstance(config, list), \
         "task clone_image only supports a list or dictionary for configuration"
@@ -152,6 +154,7 @@ def clone_image(ctx, config):
         images = [(role, None) for role in config]
 
     testdir = teuthology.get_testdir(ctx)
+    clone_passphrase_file = '{tdir}/clone-passphrase'.format(tdir=testdir)
     for role, properties in images:
         if properties is None:
             properties = {}
@@ -165,9 +168,29 @@ def clone_image(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Clone image {parent} to {child}'.format(parent=parent_name,
                                                           child=name))
-        for cmd in [('snap', 'create', parent_spec),
+
+        commands = [('snap', 'create', parent_spec),
                     ('snap', 'protect', parent_spec),
-                    ('clone', parent_spec, name)]:
+                    ('clone', parent_spec, name)
+                    ]
+
+        encryption_format = properties.get('encryption_format', 'none')
+        if encryption_format != 'none':
+            remote.run(
+                args=[
+                    'echo',
+                    CLONE_ENCRYPTION_PASSPHRASE,
+                    run.Raw('>'),
+                    clone_passphrase_file
+                    ]
+                )
+
+            commands.append(
+                ('encryption', 'format', name, encryption_format,
+                 clone_passphrase_file)
+            )
+
+        for cmd in commands:
             args = [
                     'adjust-ulimits',
                     'ceph-coverage',
@@ -181,6 +204,7 @@ def clone_image(ctx, config):
         yield
     finally:
         log.info('Deleting rbd clones...')
+        remote.run(args=['rm', '-f', clone_passphrase_file])
         for role, properties in images:
             if properties is None:
                 properties = {}
@@ -260,6 +284,7 @@ def dev_create(ctx, config):
             client.0:
                 image_name: testimage.client.0
                 encryption_format: luks2
+                parent_encryption_format: luks1
     """
     assert isinstance(config, dict) or isinstance(config, list), \
         "task dev_create only supports a list or dictionary for configuration"
@@ -273,31 +298,64 @@ def dev_create(ctx, config):
 
     testdir = teuthology.get_testdir(ctx)
     passphrase_file = '{tdir}/passphrase'.format(tdir=testdir)
+    clone_passphrase_file = '{tdir}/clone-passphrase'.format(tdir=testdir)
     device_path = {}
 
     for role, properties in images:
         if properties is None:
             properties = {}
         name = properties.get('image_name', default_image_name(role))
-        encryption_format = properties.get('encryption_format', 'none')
+        parent_encryption_format = properties.get('parent_encryption_format',
+                                                  'none')
+        encryption_format = properties.get('encryption_format',
+                                           parent_encryption_format)
         (remote,) = ctx.cluster.only(role).remotes.keys()
 
-        if encryption_format == 'none':
+        if encryption_format == 'none' and parent_encryption_format == 'none':
             device_path[role] = '/dev/rbd/rbd/{image}'.format(image=name)
             device_specific_args = []
         else:
-            remote.run(
-                args=[
-                    'echo',
-                    ENCRYPTION_PASSPHRASE,
-                    run.Raw('>'),
-                    passphrase_file
-                    ]
-                )
-            device_specific_args = [
-                '-t', 'nbd', '-o',
-                'encryption-format=%s,encryption-passphrase-file=%s' % (
-                    encryption_format, passphrase_file)]
+            device_specific_args = ['-t', 'nbd', '-o']
+
+            is_cloned = properties.get('parent_name') is not None
+            encryption_args = ""
+            if is_cloned and properties.get('encryption_format') != 'none':
+                remote.run(
+                    args=[
+                        'echo',
+                        CLONE_ENCRYPTION_PASSPHRASE,
+                        run.Raw('>'),
+                        clone_passphrase_file
+                        ]
+                    )
+
+                encryption_args = \
+                    'encryption-format=%s,encryption-passphrase-file=%s' % (
+                        encryption_format, clone_passphrase_file)
+
+            if not is_cloned or parent_encryption_format != 'none':
+                remote.run(
+                    args=[
+                        'echo',
+                        ENCRYPTION_PASSPHRASE,
+                        run.Raw('>'),
+                        passphrase_file
+                        ]
+                    )
+
+                if is_cloned and properties.get('encryption_format') != 'none':
+                    encryption_args += ","
+
+                if parent_encryption_format != 'none':
+                    encryption_args += \
+                        'encryption-format=%s,encryption-passphrase-file=%s' % (
+                            parent_encryption_format, passphrase_file)
+                else:
+                    encryption_args += \
+                        'encryption-format=%s,encryption-passphrase-file=%s' % (
+                            encryption_format, passphrase_file)
+
+            device_specific_args.append(encryption_args)
 
         map_fp = StringIO()
         remote.run(
@@ -314,7 +372,7 @@ def dev_create(ctx, config):
             stdout=map_fp,
             )
 
-        if encryption_format != 'none':
+        if encryption_format != 'none' or parent_encryption_format != 'none':
             device_path[role] = map_fp.getvalue().rstrip()
             properties['device_path'] = device_path[role]
             remote.run(args=['sudo', 'chmod', '666', device_path[role]])
@@ -322,7 +380,7 @@ def dev_create(ctx, config):
         yield
     finally:
         log.info('Unmapping rbd devices...')
-        remote.run(args=['rm', '-f', passphrase_file])
+        remote.run(args=['rm', '-f', passphrase_file, clone_passphrase_file])
         for role, properties in images:
             if not device_path.get(role):
                 continue
@@ -330,9 +388,12 @@ def dev_create(ctx, config):
             if properties is None:
                 properties = {}
             encryption_format = properties.get('encryption_format', 'none')
+            parent_encryption_format = properties.get(
+                'parent_encryption_format', 'none')
             (remote,) = ctx.cluster.only(role).remotes.keys()
 
-            if encryption_format == 'none':
+            if encryption_format == 'none' and \
+                    parent_encryption_format == 'none':
                 device_specific_args = []
             else:
                 device_specific_args = ['-t', 'nbd']
