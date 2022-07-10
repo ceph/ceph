@@ -55,7 +55,7 @@ class StoreUser : public User {
     virtual RGWObjVersionTracker& get_version_tracker() override { return objv_tracker; }
     virtual Attrs& get_attrs() override { return attrs; }
     virtual void set_attrs(Attrs& _attrs) override { attrs = _attrs; }
-    virtual bool empty() override { return info.user_id.id.empty(); }
+    virtual bool empty() const override { return info.user_id.id.empty(); }
     virtual RGWUserInfo& get_info() override { return info; }
     virtual void print(std::ostream& out) const override { out << info.user_id; }
 

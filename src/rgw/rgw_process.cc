@@ -404,13 +404,13 @@ done:
   if (op) {
     if (s->trace) {
       s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
-      if (s->user) {
+      if (!rgw::sal::User::empty(s->user)) {
         s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
       }
-      if (s->bucket) {
+      if (!rgw::sal::Bucket::empty(s->bucket)) {
         s->trace->SetAttribute(tracing::rgw::BUCKET_NAME, s->bucket->get_name());
       }
-      if (s->object) {
+      if (!rgw::sal::Object::empty(s->object)) {
         s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
       }
     }
