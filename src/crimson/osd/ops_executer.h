@@ -232,8 +232,13 @@ private:
     return do_const_op(std::forward<Func>(f));
   }
 
+  enum class modified_by {
+    user,
+    sys,
+  };
+
   template <class Func>
-  auto do_write_op(Func&& f, bool um=true);
+  auto do_write_op(Func&& f, modified_by m = modified_by::user);
 
   decltype(auto) dont_do_legacy_op() {
     return crimson::ct_error::operation_not_supported::make();
