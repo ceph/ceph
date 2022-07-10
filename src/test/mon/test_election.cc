@@ -147,7 +147,7 @@ struct Owner : public ElectionOwner, RankProvider {
     logic.start();
   }
   bool ever_participated() const { return ever_joined; }
-  int paxos_size() const { return parent->get_paxos_size(); }
+  unsigned paxos_size() const { return parent->get_paxos_size(); }
   const set<int>& get_disallowed_leaders() const {
     return parent->get_disallowed_leaders();
   }

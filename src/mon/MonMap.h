@@ -107,7 +107,7 @@ class MonMap {
   /* ranks which were removed when this map took effect.
      There should only be one at a time, but leave support
      for arbitrary numbers just to be safe. */
-  std::set<int> removed_ranks;
+  std::set<unsigned> removed_ranks;
 
   /**
    * Persistent Features are all those features that once set on a
