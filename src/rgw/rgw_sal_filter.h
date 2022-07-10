@@ -347,7 +347,7 @@ public:
   }
   virtual Attrs& get_attrs() override { return next->get_attrs(); }
   virtual void set_attrs(Attrs& _attrs) override { next->set_attrs(_attrs); }
-  virtual bool empty() override { return next->empty(); }
+  virtual bool empty() const override { return next->empty(); }
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs&
 				    new_attrs, optional_yield y) override;
