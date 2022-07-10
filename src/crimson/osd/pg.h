@@ -433,7 +433,7 @@ public:
     return OstreamTemp(CLOG_ERROR, nullptr);
   }
 
-  ceph::signedspan get_mnow() final;
+  ceph::signedspan get_mnow() const final;
   HeartbeatStampsRef get_hb_stamps(int peer) final;
   void schedule_renew_lease(epoch_t plr, ceph::timespan delay) final;
 
