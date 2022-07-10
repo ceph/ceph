@@ -451,12 +451,12 @@ auto OpsExecuter::do_const_op(Func&& f) {
 
 // Defined here because there is a circular dependency between OpsExecuter and PG
 template <class Func>
-auto OpsExecuter::do_write_op(Func&& f, bool um) {
+auto OpsExecuter::do_write_op(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   if (!osd_op_params) {
     osd_op_params.emplace();
   }
-  user_modify = um;
+  user_modify = (m == modified_by::user);
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
 }
 OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
@@ -567,7 +567,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_SETALLOCHINT:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.set_allochint(os, osd_op, txn, delta_stats);
-    }, true);
+    });
   case CEPH_OSD_OP_SETXATTR:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.setxattr(os, osd_op, txn, delta_stats);
@@ -655,7 +655,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_WATCH:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return do_op_watch(osd_op, os, txn);
-    }, /* user modify=*/false);
+    }, modified_by::sys);
   case CEPH_OSD_OP_LIST_WATCHERS:
     return do_read_op([this, &osd_op](auto&, const auto& os) {
       return do_op_list_watchers(osd_op, os);
