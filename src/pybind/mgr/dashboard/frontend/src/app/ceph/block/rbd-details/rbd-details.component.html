@@ -149,7 +149,9 @@
       <a ngbNavLink
          i18n>Performance</a>
       <ng-template ngbNavContent>
-        <cd-grafana [grafanaPath]="rbdDashboardUrl"
+        <cd-grafana i18n-title
+                    title="RBD details"
+                    [grafanaPath]="rbdDashboardUrl"
                     [type]="'metrics'"
                     uid="YhCYGcuZz"
                     grafanaStyle="one">
