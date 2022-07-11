@@ -3583,7 +3583,9 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   // and RGWRados::Object::Write::write_meta() in rgw_rados.cc for what and
   // how to set the dir entry. Only set the basic ones for POC, no ACLs and
   // other attrs.
-  obj.get_key().get_index_key(&ent.key);
+  rgw_obj_key key = obj.get_key();
+  ent.key.name = key.name;
+  ent.key.instance = key.instance;
   ent.meta.size = total_data_size;
   ent.meta.accounted_size = total_data_size;
   ent.meta.mtime = real_clock::is_zero(set_mtime)? ceph::real_clock::now() : set_mtime;
@@ -3872,7 +3874,9 @@ int MotrMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
     // size, etag etc.
     bufferlist bl;
     rgw_bucket_dir_entry ent;
-    obj->get_key().get_index_key(&ent.key);
+    rgw_obj_key key = obj->get_key();
+    ent.key.name = key.name;
+    ent.key.instance = key.instance;
     ent.meta.owner = owner.get_id().to_str();
     ent.meta.category = RGWObjCategory::MultiMeta;
     ent.meta.mtime = ceph::real_clock::now();
@@ -4107,23 +4111,6 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
       hash.Update((const unsigned char *)petag, sizeof(petag));
       ldpp_dout(dpp, 20) <<__func__<< ": calc etag " << dendl;
 
-      string oid = mp_obj.get_part(part->num);
-      rgw_obj src_obj;
-      src_obj.init_ns(bucket->get_key(), oid, mp_ns);
-
-#if 0 // does Motr backend need it?
-      /* update manifest for part */
-      if (part->manifest.empty()) {
-        ldpp_dout(dpp, 0) <<__func__<< ": ERROR: empty manifest for object part: obj="
-			 << src_obj << dendl;
-        rc = -ERR_INVALID_PART;
-        return rc;
-      } else {
-        manifest.append(dpp, part->manifest, store->get_zone());
-      }
-      ldpp_dout(dpp, 0) <<__func__<< ": manifest " << dendl;
-#endif
-
       bool part_compressed = (part->cs_info.compression_type != "none");
       if ((handled_parts > 0) &&
           ((part_compressed != compressed) ||
@@ -4154,14 +4141,6 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
         cs_info.orig_size += part->cs_info.orig_size;
         compressed = true;
       }
-
-      // We may not need to do the following as remove_objs are those
-      // don't show when listing a bucket. As we store in-progress uploaded
-      // object's metadata in a separate index, they are not shown when
-      // listing a bucket.
-      rgw_obj_index_key remove_key;
-      src_obj.key.get_index_key(&remove_key);
-      remove_objs.push_back(remove_key);
 
       off += part_size;
       accounted_size += part->accounted_size;
@@ -4215,7 +4194,9 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // Update the dir entry and insert it to the bucket index so
   // the object will be seen when listing the bucket.
   bufferlist update_bl, old_check_bl;
-  target_obj->get_key().get_index_key(&ent.key);  // Change to offical name :)
+  rgw_obj_key key = target_obj->get_key();
+  ent.key.name = key.name;
+  ent.key.instance = key.instance;
   ent.meta.size = off;
   ent.meta.accounted_size = accounted_size;
   ldpp_dout(dpp, 20) <<__func__<< ": obj size=" << ent.meta.size
