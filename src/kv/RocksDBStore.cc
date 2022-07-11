@@ -1747,6 +1747,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
                                                          const string &start,
                                                          const string &end)
 {
+  ldout(db->cct, 10) << __func__ << " enter start=" << start
+		     << " end=" << end << dendl;
   auto p_iter = db->cf_handles.find(prefix);
   if (p_iter == db->cf_handles.end()) {
     uint64_t cnt = db->delete_range_threshold;
@@ -1758,6 +1760,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
       bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
     }
     if (cnt == 0) {
+      ldout(db->cct, 10) << __func__ << " p_iter == end(), resorting to DeleteRange"
+			 << dendl;
       bat.RollbackToSavePoint();
       bat.DeleteRange(db->default_cf,
 		      rocksdb::Slice(combine_strings(prefix, start)),
@@ -1778,6 +1782,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
 	bat.Delete(cf, it->key());
       }
       if (cnt == 0) {
+        ldout(db->cct, 10) << __func__ << " p_iter != end(), resorting to DeleteRange"
+			   << dendl;
 	bat.RollbackToSavePoint();
 	bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
       } else {
@@ -1786,6 +1792,7 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
       delete it;
     }
   }
+  ldout(db->cct, 10) << __func__ << " end" << dendl;
 }
 
 void RocksDBStore::RocksDBTransactionImpl::merge(
