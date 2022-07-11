@@ -307,12 +307,12 @@ The rest (including the actual backporting) will be taken care of by the
 Dependabot
 ----------
 
-Dependabot is a github bot that scans the dependencies in the repositories for
+Dependabot is a GitHub bot that scans the dependencies in the repositories for
 security vulnerabilities (CVEs). If a fix is available for a discovered CVE,
 Dependabot creates a pull request to update the dependency.
 
 Dependabot also indicates the compatibility score of the upgrade. This score is
-based on the number of CI failures that occur in other Github repositories
+based on the number of CI failures that occur in other GitHub repositories
 where the fix was applied. 
 
 With some configuration, Dependabot can perform non-security updates (for
