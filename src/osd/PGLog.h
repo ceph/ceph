@@ -1439,6 +1439,7 @@ public:
     missing.may_include_deletes = false;
     std::list<pg_log_entry_t> entries;
     std::list<pg_log_dup_t> dups;
+    const auto NUM_DUPS_WARN_THRESHOLD = 2*cct->_conf->osd_pg_log_dups_tracked;
     if (p) {
       using ceph::decode;
       for (p->seek_to_first(); p->valid() ; p->next()) {
@@ -1474,6 +1475,14 @@ public:
 	  decode(dup, bp);
 	  if (!dups.empty()) {
 	    ceph_assert(dups.back().version < dup.version);
+	  }
+	  if (dups.size() == NUM_DUPS_WARN_THRESHOLD) {
+	    ldpp_dout(dpp, 0) << "read_log_and_missing WARN num of dups exceeded "
+			      << NUM_DUPS_WARN_THRESHOLD << "."
+			      << " You can be hit by THE DUPS BUG"
+			      << " https://tracker.ceph.com/issues/53729."
+			      << " Consider ceph-objectstore-tool --op trim-pg-log-dups"
+			      << dendl;
 	  }
 	  dups.push_back(dup);
 	} else {
