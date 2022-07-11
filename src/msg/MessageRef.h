@@ -97,7 +97,6 @@ class MMgrConfigure;
 class MMgrDigest;
 class MMgrMap;
 class MMgrOpen;
-class MMgrUpdate;
 class MMgrReport;
 class MMonCommandAck;
 class MMonCommand;

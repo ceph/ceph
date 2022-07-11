@@ -796,8 +796,6 @@ public:
     const health_check_map_t& previous,
     MonitorDBStore::TransactionRef t);
 
-  void update_pending_metadata();
-
 protected:
 
   class HealthCheckLogStatus {
