@@ -643,10 +643,10 @@ public:
      * See TransactionManager::get_extent_if_live and
      * LBAManager::get_physical_extent_if_live.
      */
-    using get_extent_if_live_iertr = extent_mapping_iertr;
-    using get_extent_if_live_ret = get_extent_if_live_iertr::future<
-      CachedExtentRef>;
-    virtual get_extent_if_live_ret get_extent_if_live(
+    using get_extents_if_live_iertr = extent_mapping_iertr;
+    using get_extents_if_live_ret = get_extents_if_live_iertr::future<
+      std::list<CachedExtentRef>>;
+    virtual get_extents_if_live_ret get_extents_if_live(
       Transaction &t,
       extent_types_t type,
       paddr_t addr,

@@ -82,15 +82,20 @@ public:
   };
   get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
     LOG_PREFIX(Transaction::get_extent);
-    if (retired_set.count(addr)) {
-      return get_extent_ret::RETIRED;
-    } else if (auto iter = write_set.find_offset(addr);
+    // it's possible that both write_set and retired_set contain
+    // this addr at the same time when addr is absolute and the
+    // corresponding extent is used to map existing extent on disk.
+    // So search write_set first.
+    if (auto iter = write_set.find_offset(addr);
 	iter != write_set.end()) {
       if (out)
 	*out = CachedExtentRef(&*iter);
       SUBTRACET(seastore_cache, "{} is present in write_set -- {}",
                 *this, addr, *iter);
+      assert((*out)->is_valid());
       return get_extent_ret::PRESENT;
+    } else if (retired_set.count(addr)) {
+      return get_extent_ret::RETIRED;
     } else if (
       auto iter = read_set.find(addr);
       iter != read_set.end()) {
@@ -109,7 +114,12 @@ public:
 
   void add_to_retired_set(CachedExtentRef ref) {
     ceph_assert(!is_weak());
-    if (ref->is_initial_pending()) {
+    if (ref->is_exist_clean() ||
+	ref->is_exist_mutation_pending()) {
+      existing_block_stats.dec(ref);
+      ref->state = CachedExtent::extent_state_t::INVALID;
+      write_set.erase(*ref);
+    } else if (ref->is_initial_pending()) {
       ref->state = CachedExtent::extent_state_t::INVALID;
       write_set.erase(*ref);
     } else if (ref->is_mutation_pending()) {
@@ -137,19 +147,23 @@ public:
   void add_fresh_extent(
     CachedExtentRef ref) {
     ceph_assert(!is_weak());
-    if (ref->get_paddr().is_delayed()) {
+    if (ref->is_exist_clean()) {
+      existing_block_stats.inc(ref);
+      existing_block_list.push_back(ref);
+    } else if (ref->get_paddr().is_delayed()) {
       assert(ref->get_paddr() == make_delayed_temp_paddr(0));
       assert(ref->is_logical());
       ref->set_paddr(make_delayed_temp_paddr(delayed_temp_offset));
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
+      fresh_block_stats.increment(ref->get_length());
     } else {
       assert(ref->get_paddr() == make_record_relative_paddr(0));
       ref->set_paddr(make_record_relative_paddr(offset));
       offset += ref->get_length();
       inline_block_list.push_back(ref);
+      fresh_block_stats.increment(ref->get_length());
     }
-    fresh_block_stats.increment(ref->get_length());
     write_set.insert(*ref);
     if (is_backref_node(ref->get_type()))
       fresh_backref_extents++;
@@ -178,9 +192,15 @@ public:
 
   void add_mutated_extent(CachedExtentRef ref) {
     ceph_assert(!is_weak());
-    assert(read_set.count(ref->prior_instance->get_paddr()));
+    assert(ref->is_exist_mutation_pending() ||
+	   read_set.count(ref->prior_instance->get_paddr()));
     mutated_block_list.push_back(ref);
-    write_set.insert(*ref);
+    if (!ref->is_exist_mutation_pending()) {
+      write_set.insert(*ref);
+    } else {
+      assert(write_set.find_offset(ref->get_paddr()) !=
+	     write_set.end());
+    }
   }
 
   void replace_placeholder(CachedExtent& placeholder, CachedExtent& extent) {
@@ -233,8 +253,29 @@ public:
     return mutated_block_list;
   }
 
+  const auto &get_existing_block_list() {
+    return existing_block_list;
+  }
+
   const auto &get_retired_set() {
     return retired_set;
+  }
+
+  bool is_retired(laddr_t laddr, extent_len_t len, paddr_t paddr) {
+    if (retired_set.empty()) {
+      return false;
+    }
+    auto iter = retired_set.lower_bound(paddr);
+    if (iter == retired_set.end() ||
+	(*iter)->get_paddr() > paddr) {
+      assert(iter != retired_set.begin());
+      --iter;
+    }
+
+    auto lextent = (*iter)->cast<LogicalCachedExtent>();
+    auto ext_laddr = lextent->get_laddr();
+    return ext_laddr <= laddr &&
+      ext_laddr + lextent->get_length() >= laddr + len;
   }
 
   bool should_record_release(paddr_t addr) {
@@ -337,6 +378,8 @@ public:
     ool_block_list.clear();
     retired_set.clear();
     no_release_delta_retired_set.clear();
+    existing_block_list.clear();
+    existing_block_stats = {};
     onode_tree_stats = {};
     omap_tree_stats = {};
     lba_tree_stats = {};
@@ -404,6 +447,31 @@ public:
     return rewrite_version_stats;
   }
 
+  struct existing_block_stats_t {
+    uint64_t valid_num = 0;
+    uint64_t clean_num = 0;
+    uint64_t mutated_num = 0;
+    void inc(const CachedExtentRef &ref) {
+      valid_num++;
+      if (ref->is_exist_clean()) {
+	clean_num++;
+      } else {
+	mutated_num++;
+      }
+    }
+    void dec(const CachedExtentRef &ref) {
+      valid_num--;
+      if (ref->is_exist_clean()) {
+	clean_num--;
+      } else {
+	mutated_num--;
+      }
+    }
+  };
+  existing_block_stats_t& get_existing_block_stats() {
+    return existing_block_stats;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -454,6 +522,10 @@ private:
 
   /// list of mutated blocks, holds refcounts, subset of write_set
   std::list<CachedExtentRef> mutated_block_list;
+
+  /// partial blocks of extents on disk, with data and refcounts
+  std::list<CachedExtentRef> existing_block_list;
+  existing_block_stats_t existing_block_stats;
 
   /**
    * retire_set
