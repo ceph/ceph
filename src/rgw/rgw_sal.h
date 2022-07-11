@@ -280,7 +280,11 @@ class RGWBucket {
       ent.convert(b);
     }
 
-    static bool empty(RGWBucket* b) { return (!b || b->empty()); }
+    /** Check if a Bucket pointer is empty */
+    static bool empty(const RGWBucket* b) { return (!b || b->empty()); }
+    /** Check if a Bucket unique pointer is empty */
+    static bool empty(const std::unique_ptr<RGWBucket>& b) { return (!b || b->empty()); }
+
     virtual std::unique_ptr<RGWBucket> clone() = 0;
 
     /* dang - This is temporary, until the API is completed */
