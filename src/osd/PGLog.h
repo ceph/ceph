@@ -1334,7 +1334,8 @@ public:
     pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid, std::map<eversion_t, hobject_t> &divergent_priors,
-    bool require_rollback);
+    bool require_rollback,
+    const DoutPrefixProvider *dpp = nullptr);
 
   static void write_log_and_missing(
     ObjectStore::Transaction& t,
@@ -1344,7 +1345,8 @@ public:
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
     bool require_rollback,
-    bool *rebuilt_missing_set_with_deletes);
+    bool *rebuilt_missing_set_with_deletes,
+    const DoutPrefixProvider *dpp = nullptr);
 
   static void _write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
@@ -1361,7 +1363,8 @@ public:
     eversion_t dirty_to_dups,
     eversion_t dirty_from_dups,
     eversion_t write_from_dups,
-    std::set<std::string> *log_keys_debug
+    std::set<std::string> *log_keys_debug,
+    const DoutPrefixProvider *dpp = nullptr
     );
 
   static void _write_log_and_missing(
@@ -1382,7 +1385,8 @@ public:
     eversion_t dirty_from_dups,
     eversion_t write_from_dups,
     bool *may_include_deletes_in_missing_dirty,
-    std::set<std::string> *log_keys_debug
+    std::set<std::string> *log_keys_debug,
+    const DoutPrefixProvider *dpp = nullptr
     );
 
   void read_log_and_missing(
