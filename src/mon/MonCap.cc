@@ -213,6 +213,9 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("auth rm"));
     // tell commands (this is a bit of a kludge)
     profile_grants.push_back(MonCapGrant("smart"));
+    // allow the Telemetry module to gather heap and mempool metrics
+    profile_grants.push_back(MonCapGrant("heap"));
+    profile_grants.push_back(MonCapGrant("dump_mempools"));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon" ||
       profile == "mgr") {
