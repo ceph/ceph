@@ -43,7 +43,9 @@
     <a ngbNavLink
        i18n>Overall Performance</a>
     <ng-template ngbNavContent>
-      <cd-grafana [grafanaPath]="'osd-overview?'"
+      <cd-grafana i18n-title
+                  title="OSD list"
+                  [grafanaPath]="'osd-overview?'"
                   [type]="'metrics'"
                   uid="lo02I1Aiz"
                   grafanaStyle="four">

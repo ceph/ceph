@@ -35,6 +35,7 @@ describe('GrafanaComponent', () => {
     component.grafanaPath = 'somePath';
     component.type = 'metrics';
     component.uid = 'foo';
+    component.title = 'panel title';
   });
 
   it('should create', () => {

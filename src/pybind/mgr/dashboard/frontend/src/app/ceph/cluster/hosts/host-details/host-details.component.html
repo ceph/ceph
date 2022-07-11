@@ -34,7 +34,9 @@
       <a ngbNavLink
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
-        <cd-grafana [grafanaPath]="'host-details?var-ceph_hosts=' + selectedHostname"
+        <cd-grafana i18n-title
+                    title="Host details"
+                    [grafanaPath]="'host-details?var-ceph_hosts=' + selectedHostname"
                     [type]="'metrics'"
                     uid="rtOg0AiWz"
                     grafanaStyle="four">
