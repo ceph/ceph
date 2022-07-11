@@ -2,6 +2,7 @@ import os
 import errno
 import logging
 import sys
+import threading
 
 if sys.version_info >= (3, 2):
     import configparser
@@ -13,6 +14,10 @@ import cephfs
 from ...exception import MetadataMgrException
 
 log = logging.getLogger(__name__)
+
+# _lock needs to be shared across all instances of MetadataManager.
+# that is why we have a file level instance
+_lock = threading.Lock()
 
 
 def _conf_reader(fs, fd, offset=0, length=4096):
@@ -75,8 +80,9 @@ class MetadataManager(object):
         fd = None
         try:
             log.debug("opening config {0}".format(self.config_path))
-            fd = self.fs.open(self.config_path, os.O_RDONLY)
-            cfg = ''.join(_conf_reader(self.fs, fd))
+            with _lock:
+                fd = self.fs.open(self.config_path, os.O_RDONLY)
+                cfg = ''.join(_conf_reader(self.fs, fd))
             self.config.read_string(cfg, source=self.config_path)
         except UnicodeDecodeError:
             raise MetadataMgrException(-errno.EINVAL,
@@ -100,10 +106,11 @@ class MetadataManager(object):
 
 
         try:
-            fd = self.fs.open(self.config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, self.mode)
-            with _ConfigWriter(self.fs, fd) as cfg_writer:
-                self.config.write(cfg_writer)
-                cfg_writer.fsync()
+            with _lock:
+                fd = self.fs.open(self.config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, self.mode)
+                with _ConfigWriter(self.fs, fd) as cfg_writer:
+                    self.config.write(cfg_writer)
+                    cfg_writer.fsync()
             log.info("wrote {0} bytes to config {1}".format(cfg_writer.wrote, self.config_path))
         except cephfs.Error as e:
             raise MetadataMgrException(-e.args[0], e.args[1])
