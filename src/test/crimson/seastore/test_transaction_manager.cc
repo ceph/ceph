@@ -463,6 +463,31 @@ struct transaction_manager_test_t :
 
   TestBlockRef try_get_extent(
     test_transaction_t &t,
+    laddr_t addr) {
+    ceph_assert(test_mappings.contains(addr, t.mapping_delta));
+
+    using ertr = with_trans_ertr<TransactionManager::read_extent_iertr>;
+    using ret = ertr::future<TestBlockRef>;
+    auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
+      return tm->read_extent<TestBlock>(trans, addr);
+    }).safe_then([](auto ext) -> ret {
+      return ertr::make_ready_future<TestBlockRef>(ext);
+    }).handle_error(
+      [](const crimson::ct_error::eagain &e) {
+	return seastar::make_ready_future<TestBlockRef>();
+      },
+      crimson::ct_error::assert_all{
+	"get_extent got invalid error"
+      }
+    ).get0();
+    if (ext) {
+      EXPECT_EQ(addr, ext->get_laddr());
+    }
+    return ext;
+  }
+
+  TestBlockRef try_get_extent(
+    test_transaction_t &t,
     laddr_t addr,
     extent_len_t len) {
     ceph_assert(test_mappings.contains(addr, t.mapping_delta));
@@ -726,6 +751,119 @@ struct transaction_manager_test_t :
         writes,
         failures
       );
+    });
+  }
+
+  TestBlockRef map_existing_extent(
+    test_transaction_t &t,
+    laddr_t hint,
+    paddr_t existing_paddr,
+    extent_len_t length) {
+    auto extent = with_trans_intr(*(t.t), [&](auto& trans) {
+      return tm->map_existing_extent<TestBlock>(trans, hint, existing_paddr, length);
+    }).unsafe_get0();
+    EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
+    EXPECT_EQ(length, extent->get_length());
+    test_mappings.alloced(hint, *extent, t.mapping_delta);
+    return extent;
+  }
+
+  void test_map_existing_extent() {
+    run_async([this] {
+      constexpr size_t offset = 16 << 10;
+      constexpr size_t length = 16 << 10;
+      {
+	auto t = create_transaction();
+	auto extent = alloc_extent(t, offset, length);
+	submit_transaction(std::move(t));
+      }
+      {
+	auto t = create_transaction();
+	auto extent = get_extent(t, offset, length);
+	auto base_paddr = extent->get_paddr();
+	dec_ref(t, offset);
+	auto extent1 = map_existing_extent(t, offset, base_paddr, 4 << 10);
+	auto extent2 = map_existing_extent(t, offset + (4 << 10), base_paddr.add_offset(4 << 10), 4 << 10);
+	auto extent3 = map_existing_extent(t, offset + (8 << 10), base_paddr.add_offset(8 << 10), 8 << 10);
+	ASSERT_TRUE(extent1->is_exist_clean());
+	ASSERT_TRUE(extent2->is_exist_clean());
+	ASSERT_TRUE(extent3->is_exist_clean());
+	auto extent4 = mutate_extent(t, extent3);
+	ASSERT_TRUE(extent4->is_exist_mutation_pending());
+	ASSERT_TRUE(extent3.get() == extent4.get());
+	submit_transaction(std::move(t));
+	check();
+      }
+      replay();
+      check();
+    });
+  }
+
+  void test_map_existing_extent_concurrent() {
+    run_async([this] {
+      constexpr unsigned REMAP_NUM = 32;
+      constexpr size_t offset = 0;
+      constexpr size_t length = 256 << 10;
+      {
+	auto t = create_transaction();
+	auto extent = alloc_extent(t, offset, length);
+	ASSERT_EQ(length, extent->get_length());
+	submit_transaction(std::move(t));
+      }
+      int success = 0;
+      int early_exit = 0;
+
+      seastar::parallel_for_each(
+        boost::make_counting_iterator(0u),
+	boost::make_counting_iterator(REMAP_NUM),
+	[&](auto) {
+	  return seastar::async([&] {
+	    uint32_t pieces = std::uniform_int_distribution<>(1, 31)(gen);
+	    std::set<uint32_t> split_points;
+	    for (uint32_t i = 0; i < pieces; i++) {
+	      auto p = std::uniform_int_distribution<>(1, 256)(gen);
+	      split_points.insert((p - p % 4)%length);
+	    }
+
+	    auto t = create_transaction();
+	    auto ext0 = try_get_extent(t, offset);
+	    if (!ext0 || ext0->get_length() != length) {
+	      early_exit++;
+	      return;
+	    }
+	    auto paddr = ext0->get_paddr();
+	    dec_ref(t, offset);
+
+	    auto base = 0;
+	    for (auto off : split_points) {
+	      if (off == 0) {
+		continue;
+	      }
+
+	      auto ext = map_existing_extent(t, base << 10, paddr.add_offset(base << 10), (off - base) << 10);
+	      ASSERT_TRUE(ext->is_exist_clean());
+	      if (get_random_contents() % 2 == 0) {
+		auto ext1 = mutate_extent(t, ext);
+		ASSERT_TRUE(ext1->is_exist_mutation_pending());
+	      }
+	      base = off;
+	    }
+	    auto ext = map_existing_extent(t, base << 10, paddr.add_offset(base << 10), length - (base << 10));
+	    ASSERT_TRUE(ext->is_exist_clean());
+	    if (get_random_contents() % 2 == 0) {
+	      auto ext1 = mutate_extent(t, ext);
+	      ASSERT_TRUE(ext1->is_exist_mutation_pending());
+	    }
+
+	    success += try_submit_transaction(std::move(t));
+	  });
+	}).handle_exception([](std::exception_ptr e) {
+	  logger().info("{}", e);
+	}).get0();
+      ASSERT_TRUE(success == 1);
+      logger().info("test_map_existing_extent_concurrent: early_exit {}", early_exit);
+      replay();
+      check();
     });
   }
 };
@@ -1104,6 +1242,14 @@ TEST_P(tm_single_device_test_t, parallel_extent_read)
   test_parallel_extent_read();
 }
 
+TEST_P(tm_single_device_test_t, test_map_existing_extent)
+{
+  test_map_existing_extent();
+}
+TEST_P(tm_single_device_test_t, test_map_existing_extent_concurrent)
+{
+  test_map_existing_extent_concurrent();
+}
 INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_single_device_test_t,

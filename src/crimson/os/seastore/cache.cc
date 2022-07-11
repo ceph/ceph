@@ -979,6 +979,15 @@ CachedExtentRef Cache::duplicate_for_write(
   if (i->is_pending())
     return i;
 
+  if (i->is_exist_clean()) {
+    i->version++;
+    i->state = CachedExtent::extent_state_t::EXIST_MUTATION_PENDING;
+    i->last_committed_crc = i->get_crc32c();
+    t.add_mutated_extent(i);
+    DEBUGT("duplicate existing extent {}", t, *i);
+    return i;
+  }
+
   auto ret = i->duplicate_for_write();
   ret->prior_instance = i;
   t.add_mutated_extent(ret);
@@ -1035,16 +1044,25 @@ record_t Cache::prepare_record(
       DEBUGT("invalid mutated extent -- {}", t, *i);
       continue;
     }
-    assert(i->prior_instance);
+    assert(i->is_exist_mutation_pending() ||
+	   i->prior_instance);
     get_by_ext(efforts.mutate_by_ext,
                i->get_type()).increment(i->get_length());
 
     auto delta_bl = i->get_delta();
     auto delta_length = delta_bl.length();
-    DEBUGT("mutated extent with {}B delta, commit replace extent ... -- {}, prior={}",
-           t, delta_length, *i, *i->prior_instance);
     i->set_modify_time(commit_time);
-    commit_replace_extent(t, i, i->prior_instance);
+    DEBUGT("mutated extent with {}B delta -- {}",
+	   t, delta_length, *i);
+    if (!i->is_exist_mutation_pending()) {
+      DEBUGT("commit replace extent ... -- {}, prior={}",
+	     t, *i, *i->prior_instance);
+      // extent with EXIST_MUTATION_PENDING doesn't have
+      // prior_instance field so skip these extents.
+      // the existing extents should be added into Cache
+      // during complete_commit to sync with gc transaction.
+      commit_replace_extent(t, i, i->prior_instance);
+    }
 
     i->prepare_write();
     i->set_io_wait();
@@ -1193,6 +1211,16 @@ record_t Cache::prepare_record(
 	i->is_logical()
 	? i->cast<LogicalCachedExtent>()->get_laddr()
 	: i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin,
+	i->get_length(),
+	i->get_type());
+    }
+  }
+
+  for (auto &i: t.existing_block_list) {
+    if (i->is_valid()) {
+      alloc_delta.alloc_blk_ranges.emplace_back(
+        i->get_paddr(),
+	i->cast<LogicalCachedExtent>()->get_laddr(),
 	i->get_length(),
 	i->get_type());
     }
@@ -1401,6 +1429,10 @@ void Cache::complete_commit(
 	  i->get_length());
       }
       if (is_backref_mapped_extent_node(i)) {
+	DEBUGT("backref_list new {} len {}",
+	       t,
+	       i->get_paddr(),
+	       i->get_length());
 	backref_list.emplace_back(
 	  std::make_unique<backref_buf_entry_t>(
 	    i->get_paddr(),
@@ -1426,7 +1458,8 @@ void Cache::complete_commit(
     if (!i->is_valid()) {
       continue;
     }
-    assert(i->prior_instance);
+    assert(i->is_exist_mutation_pending() ||
+	   i->prior_instance);
     i->on_delta_write(final_block_start);
     i->prior_instance = CachedExtentRef();
     i->state = CachedExtent::extent_state_t::DIRTY;
@@ -1445,6 +1478,13 @@ void Cache::complete_commit(
 	i->get_paddr(),
 	i->get_length());
     }
+    for (auto &i: t.existing_block_list) {
+      if (i->is_valid()) {
+	cleaner->mark_space_used(
+	  i->get_paddr(),
+	  i->get_length());
+      }
+    }
   }
 
   for (auto &i: t.mutated_block_list) {
@@ -1459,6 +1499,11 @@ void Cache::complete_commit(
     i->dirty_from_or_retired_at = last_commit;
     if (is_backref_mapped_extent_node(i)
 	  || is_retired_placeholder(i->get_type())) {
+      DEBUGT("backref_list free {} len {} should release {}",
+	     t,
+	     i->get_paddr(),
+	     i->get_length(),
+	     t.should_record_release(i->get_paddr()));
       if (t.should_record_release(i->get_paddr())) {
 	backref_list.emplace_back(
 	  std::make_unique<backref_buf_entry_t>(
@@ -1473,6 +1518,35 @@ void Cache::complete_commit(
     } else {
       ERRORT("{}", t, *i);
       ceph_abort("not possible");
+    }
+  }
+
+  auto existing_stats = t.get_existing_block_stats();
+  DEBUGT("total existing blocks num: {}, exist clean num: {}, "
+	 "exist mutation pending num: {}",
+	 t,
+	 existing_stats.valid_num,
+	 existing_stats.clean_num,
+	 existing_stats.mutated_num);
+  for (auto &i: t.existing_block_list) {
+    if (i->is_valid()) {
+      if (i->is_exist_clean()) {
+	i->state = CachedExtent::extent_state_t::CLEAN;
+      } else {
+	assert(i->state == CachedExtent::extent_state_t::DIRTY);
+      }
+      DEBUGT("backref_list new existing {} len {}",
+	     t,
+	     i->get_paddr(),
+	     i->get_length());
+      backref_list.emplace_back(
+        std::make_unique<backref_buf_entry_t>(
+	  i->get_paddr(),
+	  i->cast<LogicalCachedExtent>()->get_laddr(),
+	  i->get_length(),
+	  i->get_type(),
+	  seq));
+      add_extent(i);
     }
   }
   if (!backref_list.empty())
