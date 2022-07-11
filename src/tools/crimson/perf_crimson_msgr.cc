@@ -18,6 +18,7 @@
 
 #include "crimson/auth/DummyAuth.h"
 #include "crimson/common/log.h"
+#include "crimson/common/config_proxy.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
@@ -653,7 +654,10 @@ static seastar::future<> run(
 
   return seastar::when_all(
       test_state::Server::create(server_conf.core, server_conf.block_size),
-      create_sharded<test_state::Client>(client_conf.jobs, client_conf.block_size, client_conf.depth)
+      create_sharded<test_state::Client>(client_conf.jobs, client_conf.block_size, client_conf.depth),
+      crimson::common::sharded_conf().start(EntityName{}, std::string_view{"ceph"}).then([] {
+        return crimson::common::local_conf().start();
+      })
   ).then([=](auto&& ret) {
     auto fp_server = std::move(std::get<0>(ret).get0());
     auto client = std::move(std::get<1>(ret).get0());
@@ -703,6 +707,8 @@ static seastar::future<> run(
         return server->shutdown().then([cleanup = std::move(fp_server)] {});
       });
     }
+  }).finally([] {
+    return crimson::common::sharded_conf().stop();
   });
 }
 
