@@ -30,6 +30,7 @@
 #include <rte_common.h>
 #include <rte_ethdev.h>
 #include <rte_ether.h>
+#include <rte_flow.h>
 #include <rte_malloc.h>
 #include <rte_version.h>
 
