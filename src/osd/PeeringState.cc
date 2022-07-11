@@ -4379,7 +4379,7 @@ void PeeringState::calc_trim_to()
                  PG_STATE_BACKFILLING |
                  PG_STATE_BACKFILL_WAIT |
                  PG_STATE_BACKFILL_TOOFULL)) {
-    target = pl->get_target_pg_log_entries();
+    target = cct->_conf->osd_max_pg_log_entries;
   }
 
   eversion_t limit = std::min(
@@ -4421,7 +4421,7 @@ void PeeringState::calc_trim_to_aggressive()
 		 PG_STATE_BACKFILLING |
 		 PG_STATE_BACKFILL_WAIT |
 		 PG_STATE_BACKFILL_TOOFULL)) {
-    target = pl->get_target_pg_log_entries();
+    target = cct->_conf->osd_max_pg_log_entries;
   }
   // limit pg log trimming up to the can_rollback_to value
   eversion_t limit = std::min({

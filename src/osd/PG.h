@@ -588,8 +588,6 @@ public:
     });
   }
 
-  unsigned get_target_pg_log_entries() const override;
-
   void clear_publish_stats() override;
   void clear_primary_state() override;
 
