@@ -1387,6 +1387,7 @@ cmake .. \
 %endif
 %if 0%{with seastar}
     -DWITH_SEASTAR:BOOL=ON \
+    -DWITH_JAEGER:BOOL=OFF \
 %endif
     -DWITH_GRAFANA:BOOL=ON
 
