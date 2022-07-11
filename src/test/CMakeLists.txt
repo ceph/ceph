@@ -134,7 +134,7 @@ endif(WITH_RADOSGW)
 if(WITH_LIBCEPHFS)
   # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
   add_executable(test_build_libcephfs buildtest_skeleton.cc)
-  target_link_libraries(test_build_libcephfs cephfs pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+  target_link_libraries(test_build_libcephfs cephfs pthread ceph-common ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(WITH_LIBCEPHFS)
 
 add_executable(test_build_librados buildtest_skeleton.cc)
