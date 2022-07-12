@@ -206,7 +206,8 @@ int RGWSI_BILog_RADOS_InIndex::log_get_max_marker(
 }
 
 int RGWSI_BILog_RADOS_InIndex::log_get_max_marker(
-  const RGWBucketInfo&,
+  const DoutPrefixProvider *dpp,
+  const RGWBucketInfo&, const rgw::bucket_log_layout_generation& log_layout,
   const std::map<int, rgw_bucket_dir_header>& headers,
   const int shard_id,
   std::string *max_marker)
@@ -229,7 +230,7 @@ void RGWSI_BILog_RADOS_FIFO::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
   svc.bi = bi_rados_svc;
 }
 
-int RGWSI_BILog_RADOS_FIFO::log_trim(const RGWBucketInfo& bucket_info,
+int RGWSI_BILog_RADOS_FIFO::log_trim(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
                                      int shard_id,
                                      string& marker)
 {
@@ -242,14 +243,14 @@ int RGWSI_BILog_RADOS_FIFO::log_trim(const RGWBucketInfo& bucket_info,
   }
   ceph_assert(shard_id == 0 || shard_id == -1);
 
-  auto fifo = _open_fifo(bucket_info);
+  auto fifo = _open_fifo(dpp, bucket_info, log_layout);
   if (!fifo) {
     lderr(cct) << __PRETTY_FUNCTION__
                << ": unable to open FIFO: " << ""//get_oid(index)
                << dendl;
     return -EIO;
   }
-  if (int ret = fifo->trim(marker, false, null_yield); ret < 0) {
+  if (int ret = fifo->trim(dpp, marker, false, null_yield); ret < 0) {
     lderr(cct) << __PRETTY_FUNCTION__
                << ": unable to trim FIFO: " << ""//get_oid(index)
                << ": " << cpp_strerror(-ret) << dendl;
@@ -257,7 +258,7 @@ int RGWSI_BILog_RADOS_FIFO::log_trim(const RGWBucketInfo& bucket_info,
   return 0;
 }
 
-int RGWSI_BILog_RADOS_FIFO::log_start(const RGWBucketInfo& bucket_info,
+int RGWSI_BILog_RADOS_FIFO::log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
                                       int shard_id)
 {
   if (shard_id > 0) {
@@ -268,7 +269,7 @@ int RGWSI_BILog_RADOS_FIFO::log_start(const RGWBucketInfo& bucket_info,
   return 0;
 }
 
-int RGWSI_BILog_RADOS_FIFO::log_stop(const RGWBucketInfo& bucket_info,
+int RGWSI_BILog_RADOS_FIFO::log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
                                      int shard_id)
 {
   if (shard_id > 0) {
@@ -280,12 +281,12 @@ int RGWSI_BILog_RADOS_FIFO::log_stop(const RGWBucketInfo& bucket_info,
 }
 
 std::unique_ptr<rgw::cls::fifo::FIFO>
-RGWSI_BILog_RADOS_FIFO::open_fifo(const RGWBucketInfo& bucket_info,
+RGWSI_BILog_RADOS_FIFO::open_fifo(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
                                   RGWSI_BucketIndex_RADOS& bi_rados)
 {
   RGWSI_RADOS::Pool index_pool;
   std::string bucket_oid;
-  if (const int ret = bi_rados.open_bucket_index(bucket_info,
+  if (const int ret = bi_rados.open_bucket_index(dpp, bucket_info,
                                                  &index_pool,
                                                  &bucket_oid);
       ret < 0) {
@@ -294,7 +295,7 @@ RGWSI_BILog_RADOS_FIFO::open_fifo(const RGWBucketInfo& bucket_info,
 
   static constexpr char BILOG_FIFO_SUFFIX[] = ".bilog_fifo";
   std::unique_ptr<rgw::cls::fifo::FIFO> ret_fifo;
-  rgw::cls::fifo::FIFO::create(index_pool.ioctx(),
+  rgw::cls::fifo::FIFO::create(dpp, index_pool.ioctx(),
                                bucket_oid + BILOG_FIFO_SUFFIX,
                                &ret_fifo,
                                null_yield /* FIXME */);
@@ -302,13 +303,13 @@ RGWSI_BILog_RADOS_FIFO::open_fifo(const RGWBucketInfo& bucket_info,
 }
 
 std::unique_ptr<rgw::cls::fifo::FIFO>
-RGWSI_BILog_RADOS_FIFO::_open_fifo(const RGWBucketInfo& bucket_info)
+RGWSI_BILog_RADOS_FIFO::_open_fifo(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout)
 {
   ceph_assert(svc.bi);
-  return open_fifo(bucket_info, *svc.bi);
+  return open_fifo(dpp, bucket_info, log_layout, *svc.bi);
 }
 
-int RGWSI_BILog_RADOS_FIFO::log_list(const RGWBucketInfo& bucket_info,
+int RGWSI_BILog_RADOS_FIFO::log_list(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
                                      int shard_id,
                                      string& _marker /* in/out? */,
                                      const uint32_t max_entries,
@@ -325,7 +326,7 @@ int RGWSI_BILog_RADOS_FIFO::log_list(const RGWBucketInfo& bucket_info,
     ceph_assert(shard_id == 0 || shard_id == -1);
   }
 
-  auto fifo = _open_fifo(bucket_info);
+  auto fifo = _open_fifo(dpp, bucket_info, log_layout);
   if (!fifo) {
     lderr(cct) << __PRETTY_FUNCTION__
                << ": unable to open FIFO: " << ""//get_oid(index)
@@ -340,7 +341,7 @@ int RGWSI_BILog_RADOS_FIFO::log_list(const RGWBucketInfo& bucket_info,
 
   std::vector<rgw::cls::fifo::list_entry> raw_entries;
   bool more = false;
-  auto r = fifo->list(max_entries, marker, &raw_entries, &more,
+  auto r = fifo->list(dpp, max_entries, marker, &raw_entries, &more,
                               null_yield);
   if (r < 0) {
     lderr(cct) << __PRETTY_FUNCTION__
@@ -374,7 +375,8 @@ int RGWSI_BILog_RADOS_FIFO::log_list(const RGWBucketInfo& bucket_info,
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(
-  const RGWBucketInfo& bucket_info,
+  const DoutPrefixProvider *dpp,
+  const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
   const std::map<int, rgw_bucket_dir_header>&,
   const int shard_id,
   std::string* max_marker)
@@ -385,14 +387,14 @@ int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(
   } else {
     ceph_assert(shard_id == 0 || shard_id == -1);
   }
-  auto fifo = _open_fifo(bucket_info);
+  auto fifo = _open_fifo(dpp, bucket_info, log_layout);
   if (!fifo) {
     lderr(cct) << __PRETTY_FUNCTION__
                << ": unable to open FIFO: " << ""//get_oid(index)
                << dendl;
     return -EIO;
   }
-  if (int ret = fifo->read_meta(null_yield); ret < 0) {
+  if (int ret = fifo->read_meta(dpp, null_yield); ret < 0) {
     lderr(cct) << __PRETTY_FUNCTION__
                << ": unable to read_meta() on FIFO: "
                << cpp_strerror(-ret)
@@ -401,7 +403,7 @@ int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(
   }
   const auto head_part_num = fifo->meta().head_part_num;
   rados::cls::fifo::part_header head_part_header;
-  if (int ret = fifo->get_part_info(head_part_num,
+  if (int ret = fifo->get_part_info(dpp, head_part_num,
                                     &head_part_header,
                                     null_yield);
       ret < 0) {
@@ -411,21 +413,22 @@ int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(
                << dendl;
     return ret;
   }
-  *max_marker = rgw::cls::fifo::marker{
+  *max_marker = rgw::cls::fifo::marker(
     head_part_num,
     head_part_header.last_ofs
-  }.to_string();
+      ).to_string();
   return 0;
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(
-  const RGWBucketInfo& bucket_info,
+  const DoutPrefixProvider *dpp,
+  const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
   const std::map<int, rgw_bucket_dir_header>& headers,
   const int shard_id,
   std::map<int, std::string>* max_markers)
 {
   auto& max_marker = (*max_markers)[0];
-  return log_get_max_marker(bucket_info, headers, shard_id, &max_marker);
+  return log_get_max_marker(dpp, bucket_info, log_layout, headers, shard_id, &max_marker);
 }
 
 void RGWSI_BILog_RADOS_BackendDispatcher::init(

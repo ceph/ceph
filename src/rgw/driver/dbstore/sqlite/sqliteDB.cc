@@ -525,7 +525,6 @@ static int list_object(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt
   dent.tag = op.obj.tag;
   dent.flags = op.obj.flags;
   dent.versioned_epoch = op.obj.versioned_epoch;
-  dent.index_ver = op.obj.index_ver;
   dent.exists = true;
   dent.meta.category = op.obj.category;
   dent.meta.size = op.obj.state.size;

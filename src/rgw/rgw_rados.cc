@@ -204,7 +204,7 @@ void RGWObjectCtx::set_prefetch_data(const rgw_obj& obj) {
   objs_state[obj].state.prefetch_data = true;
 }
 
-void RGWObjectCtx::invalidate(const rgw_obj& obj) {
+void RGWObjectCtx::invalidate(const rgw::sal::Object* obj) {
   std::unique_lock wl{lock};
   auto iter = objs_state.find(obj);
   if (iter == objs_state.end()) {
@@ -280,6 +280,7 @@ public:
 /* class RGWRadosThread */
 
 class RGWRados::Bucket::UpdateIndex {
+  const DoutPrefixProvider *dpp;
   RGWRados::Bucket *target;
   string optag;
   rgw_obj obj;
@@ -290,7 +291,7 @@ class RGWRados::Bucket::UpdateIndex {
 
   int init_bs() {
     int r =
-      bs.init(target->get_bucket(), obj, nullptr /* no RGWBucketInfo */);
+      bs.init(target->get_bucket(), obj, nullptr /* no RGWBucketInfo */, dpp);
     if (r < 0) {
       return r;
     }
@@ -302,7 +303,7 @@ class RGWRados::Bucket::UpdateIndex {
     bs_initialized = false;
   }
 
-  int get_bucket_shard(BucketShard **pbs) {
+  int get_bucket_shard(BucketShard **pbs, const DoutPrefixProvider *dpp) {
     if (!bs_initialized) {
       int r = init_bs();
       if (r < 0) {
@@ -313,15 +314,15 @@ class RGWRados::Bucket::UpdateIndex {
     return 0;
   }
 
-  int guard_reshard(BucketShard **pbs, std::function<int(BucketShard *)> call);
+  int guard_reshard(const DoutPrefixProvider *dpp, const rgw_obj& obj_instance, BucketShard **pbs, std::function<int(BucketShard *)> call);
 public:
 
   UpdateIndex(RGWRados::Bucket *_target,
               const rgw_obj& _obj,
               rgw_zone_set *zones_trace = nullptr);
 
-  int prepare(RGWModifyOp, const string *write_tag, optional_yield y);
-  int complete(int64_t poolid, uint64_t epoch, uint64_t size,
+  int prepare(const DoutPrefixProvider *dpp, RGWModifyOp, const string *write_tag, optional_yield y);
+  int complete(const DoutPrefixProvider *dpp, int64_t poolid, uint64_t epoch, uint64_t size,
                uint64_t accounted_size, ceph::real_time& ut,
                const string& etag, const string& content_type,
                const string& storage_class,
@@ -329,11 +330,11 @@ public:
     	   list<rgw_obj_index_key> *remove_objs,
                uint16_t bilog_flags,
                const string *user_data = nullptr, bool appendable = false);
-  int complete_del(int64_t poolid, uint64_t epoch,
+  int complete_del(const DoutPrefixProvider *dpp, int64_t poolid, uint64_t epoch,
                    ceph::real_time& removed_mtime, /* mtime of removed object */
                    list<rgw_obj_index_key> *remove_objs,
                    uint16_t bilog_flags);
-  int cancel();
+  int cancel(const DoutPrefixProvider *dpp, list<cls_rgw_obj_key> *remove_objs);
 
   const string *get_optag() { return &optag; }
 }; // class UpdateIndex
@@ -906,8 +907,6 @@ void RGWIndexCompletionManager::process()
 
     for (auto c : comps) {
       std::unique_ptr<complete_op_data> up{c};
-
-      ldpp_dout(&dpp, 20) << __func__ << "(): handling completion for key=" << c->key << dendl;
 
       RGWRados::BucketShard bs(store);
       RGWBucketInfo bucket_info;
@@ -3314,13 +3313,14 @@ int RGWRados::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t 
 
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   RGWObjState *state;
-  int r = target->get_state(&state, false, y, assume_noent);
+  RGWObjManifest *manifest;
+  int r = target->get_state(dpp, &state, &manifest, false, y, assume_noent);
   if (r < 0) {
     return r;
   }
 
   //tracepoint(rgw_rados, prepare_enter, req_id.c_str());
-  r = index_op.prepare(CLS_RGW_OP_ADD, &state->write_tag, y);
+  r = index_op.prepare(dpp, CLS_RGW_OP_ADD, &state->write_tag, y);
   //tracepoint(rgw_rados, prepare_exit, req_id.c_str());
   if (r < 0) {
     return r;
@@ -3330,7 +3330,7 @@ int RGWRados::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t 
     r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, meta.modify_tail, state, (void *)&index_op, y);
     if (r == -EEXIST) {
       assume_noent = false;
-      r = target->get_state(&state, false, y, assume_noent);
+      r = target->get_state(dpp, &state, &manifest, false, y, assume_noent);
       if (r < 0) {
         return r;
       }
@@ -5290,7 +5290,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    r = index_op.complete_del(poolid, ioctx.get_last_version(), state->mtime,
+    r = index_op.complete_del(dpp, poolid, ioctx.get_last_version(), state->mtime,
                               params.remove_objs, params.bilog_flags);
     
     int ret = target->complete_atomic_modification(dpp);
@@ -7017,10 +7017,11 @@ static uint16_t get_olh_op_bilog_flags()
 }
 
 struct BILogUpdateBatchFIFO {
+  const DoutPrefixProvider *dpp;
   CephContext* cct;
   std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
 
-  BILogUpdateBatchFIFO(CephContext* cct,
+  BILogUpdateBatchFIFO(const DoutPrefixProvider *dpp, CephContext* cct, const rgw::bucket_index_layout_generation& idx_layout,
                        RGWRados& store,
                        const RGWBucketInfo& bucket_info);
 
@@ -7060,7 +7061,7 @@ struct BILogUpdateBatchFIFO {
 
     ceph::bufferlist bl;
     encode(entry, bl);
-    fifo->push(std::move(bl), null_yield /* FIXME */);
+    fifo->push(dpp, std::move(bl), null_yield /* FIXME */);
   }
 
   void add_maybe_flush(const uint64_t olh_epoch,
@@ -7099,7 +7100,7 @@ struct BILogUpdateBatchFIFO {
 
     ceph::bufferlist bl;
     encode(entry, bl);
-    fifo->push(std::move(bl), null_yield /* FIXME */);
+    fifo->push(dpp, std::move(bl), null_yield /* FIXME */);
   }
 
   void add_maybe_flush(RGWModifyOp op,
@@ -7116,13 +7117,14 @@ struct BILogUpdateBatchFIFO {
   }
 };
 
-BILogUpdateBatchFIFO::BILogUpdateBatchFIFO(CephContext* const cct,
+BILogUpdateBatchFIFO::BILogUpdateBatchFIFO(const DoutPrefixProvider *dpp, CephContext* const cct, const rgw::bucket_index_layout_generation& idx_layout,
                                            RGWRados& store,
                                            const RGWBucketInfo& bucket_info)
   : cct(cct)
 {
   ceph_assert(store.svc.bi_rados);
-  fifo = RGWSI_BILog_RADOS_FIFO::open_fifo(bucket_info, *store.svc.bi_rados);
+  auto log = rgw::log_layout_from_index(0, idx_layout);
+  fifo = RGWSI_BILog_RADOS_FIFO::open_fifo(dpp, bucket_info, log, *store.svc.bi_rados);
   if (!fifo) {
     // TODO: "oops" here
   }
@@ -7132,7 +7134,7 @@ static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(CephContext* const cct,
                                                         RGWRados& store,
                                                         const RGWBucketInfo& binfo)
 {
-  return { cct, store, binfo };
+  return { cct, store, binfo } ;
 }
 
 struct BILogNopHandler {
@@ -7205,7 +7207,7 @@ int RGWRados::with_bilog(F&& func,
 
 template <bool DeleteMarkerV, class OpIssuerT>
 int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, OpIssuerT& op_issuer,
-                                    const RGWBucketInfo& bucket_info,
+                                    RGWBucketInfo& bucket_info,
                                     RGWObjState& olh_state,
                                     const rgw_obj& obj_instance,
                                     struct rgw_bucket_dir_entry_meta *meta,
@@ -7255,9 +7257,9 @@ void RGWRados::bucket_index_guard_olh_op(const DoutPrefixProvider *dpp, RGWObjSt
 
 template <class OpIssuerT>
 int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp, OpIssuerT& op_issuer,
-                                           const RGWBucketInfo& bucket_info,
+                                           RGWBucketInfo& bucket_info,
                                            const rgw_obj& obj_instance,
-                                           const string& olh_tag,
+                                           const std::string& olh_tag,
                                            uint64_t olh_epoch,
                                            rgw_zone_set *_zones_trace)
 {
@@ -7486,12 +7488,12 @@ static int decode_olh_info(const DoutPrefixProvider *dpp, CephContext* cct, cons
 }
 
 template <class BILogHandlerT>
-int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
+int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
                             RGWObjState& state,
-                            const RGWBucketInfo& bucket_info,
-                            const rgw_obj& obj,
+                            RGWBucketInfo& bucket_info,
+                            const rgw::sal::Object* obj,
                             bufferlist& olh_tag,
-                            map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
+                            std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
                             BILogHandlerT&& bilog_handler,
                             uint64_t *plast_ver,
                             rgw_zone_set* zones_trace)
@@ -7663,7 +7665,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx
 template <class BILogHandlerT>
 int RGWRados::update_olh(const DoutPrefixProvider *dpp,
                          RGWObjState *state,
-                         const RGWBucketInfo& bucket_info,
+                         RGWBucketInfo& bucket_info,
                          const rgw::sal::Object* obj,
                          BILogHandlerT&& bilog_handler,
                          rgw_zone_set *zones_trace)
@@ -7699,7 +7701,7 @@ static rgw_zone_set get_zones_trace(const RGWZone& zone,
 }
 
 template <bool DeleteMarkerV>
-int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw::sal::Object* target_obj, rgw_bucket_dir_entry_meta *meta,
+int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw::sal::Object* target_obj, rgw_bucket_dir_entry_meta *meta,
                       uint64_t olh_epoch, real_time unmod_since, bool high_precision_time,
                       optional_yield y, rgw_zone_set *_zones_trace, bool log_data_change)
 {
@@ -7798,7 +7800,7 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider *dpp, RGWBucketInfo& 
       int ret, i;
       for (i = 0; i < MAX_ECANCELED_RETRY; i++) {
         if (ret == -ECANCELED) {
-          obj_ctx.invalidate(olh_obj);
+          olh_obj->invalidate();
         }
 
         ret = olh_obj->get_obj_state(dpp, &state, y, false); /* don't follow olh */
@@ -7843,7 +7845,7 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider *dpp, RGWBucketInfo& 
     },
     bucket_info,
     cls_rgw_obj_key {
-      target_obj.key.get_index_key_name(), target_obj.key.instance},
+      target_obj->get_index_key_name(), target_obj->instance},
     std::string{}, //op_tag,
     zones_trace,
     get_olh_op_bilog_flags());
@@ -7956,7 +7958,7 @@ static auto get_bilog_handler(CephContext* const cct,
   return BILogNopHandler{cct};
 }
 
-int RGWRados::follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx, RGWObjState *state, rgw::sal::Object* olh_obj, rgw_obj *target)
+int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx, RGWObjState *state, rgw::sal::Object* olh_obj, rgw_obj *target)
 {
   map<string, bufferlist> pending_entries;
   rgw_filter_attrset(state->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
@@ -7975,7 +7977,7 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& buc
     ldpp_dout(dpp, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj->get_bucket() << dendl;
 
     int ret = with_bilog<void>([&, this] (auto bilog_handler) {
-      return update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, bilog_handler);
+      return update_olh(dpp, state, bucket_info, olh_obj, bilog_handler);
     }, bucket_info);
     if (ret < 0) {
       if (ret == -ECANCELED) {
@@ -8087,7 +8089,8 @@ int RGWRados::get_bucket_stats_and_bilog_meta(
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);
   if (max_marker) {
-    return svc.bilog_rados->log_get_max_marker(bucket_info,
+    auto log = rgw::log_layout_from_index(0, idx_layout);
+    return svc.bilog_rados->log_get_max_marker(dpp, bucket_info, log,
                                                headers,
                                                shard_id,
                                                max_marker);
@@ -8707,7 +8710,7 @@ int RGWRados::cls_obj_complete_op(const RGWBucketInfo& bucket_info,
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx_c(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs <<
-    " obj=" << obj << " tag=" << tag << " op=" << op <<
+    " obj=" << obj << " tag=" << tag <<
     ", remove_objs=" << (remove_objs ? *remove_objs : std::list<rgw_obj_index_key>()) << dendl_bitx;
   ldout_bitx_c(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
 
@@ -8795,6 +8798,7 @@ int RGWRados::cls_obj_complete_cancel(const RGWBucketInfo& bucket_info,
                                       BucketShard& bs,
                                       string& tag,
                                       rgw_obj& obj,
+                                      list<rgw_obj_index_key> *remove_objs,
                                       rgw_zone_set *zones_trace)
 {
   rgw_bucket_dir_entry ent;
@@ -9778,9 +9782,6 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp, librados::IoCtx io
                                                   bucket_info.bucket,
                                                   nullptr));
   }
-  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE | suggest_flag, list_state, suggested_updates);
-  return 0;
-}
 
   ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
     ": encoding update of " << list_state.key << " on suggested_updates" << dendl_bitx;

@@ -603,7 +603,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
         }
         max_aio = concurrent_max;
       }
-      obj_ctx.invalidate(obj->get_obj());
+      obj_ctx.invalidate(*obj);
     } // for all RGW objects in results
   } // while is_truncated
 
@@ -671,7 +671,7 @@ int RadosBucket::read_stats(const DoutPrefixProvider *dpp,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
 			    std::string* max_marker, bool* syncstopped)
 {
-  return store->getRados()->get_bucket_stats(dpp, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats_and_bilog_meta(dpp, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
 int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,

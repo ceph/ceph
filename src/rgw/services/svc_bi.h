@@ -41,7 +41,7 @@ public:
                                const RGWBucketInfo& info,
                                const RGWBucketInfo& orig_info) = 0;
 
-  virtual int get_dir_headers(const RGWBucketInfo& bucket_info,
+  virtual int get_dir_headers(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout,
                               int shard_id,
                               std::map<int, rgw_bucket_dir_header> *headers,
                               optional_yield y) = 0;

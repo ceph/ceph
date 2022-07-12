@@ -1424,7 +1424,7 @@ std::ostream& BucketTrimManager::gen_prefix(std::ostream& out) const
 
 int bilog_trim(const DoutPrefixProvider* p, rgw::sal::RadosStore* store,
 	       RGWBucketInfo& bucket_info, uint64_t gen, int shard_id,
-	       std::string_view start_marker, std::string_view end_marker)
+	       std::string& marker)
 {
   auto& logs = bucket_info.layout.logs;
   auto log = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
@@ -1436,7 +1436,7 @@ int bilog_trim(const DoutPrefixProvider* p, rgw::sal::RadosStore* store,
 
   auto log_layout = *log;
 
-  auto r = store->svc()->bilog_rados->log_trim(p, bucket_info, log_layout, shard_id, start_marker, end_marker);
+  auto r = store->svc()->bilog_rados->log_trim(p, bucket_info, log_layout, shard_id, marker);
   if (r < 0) {
     ldpp_dout(p, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		    << "ERROR: bilog_rados->log_trim returned r=" << r << dendl;

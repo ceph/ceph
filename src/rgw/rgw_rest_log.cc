@@ -532,9 +532,9 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
 
   int shard_id = RGW_NO_SHARD;
   if (!bucket_instance.empty()) {
+    string bn;
     b.name = bn;
     b.bucket_id = bucket_instance;
-    string bn;
     op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
     if (op_ret < 0) {
       ldpp_dout(s, 5) << "ERROR: cannot parse bucket_instance" << dendl;
@@ -571,14 +571,6 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
    *     virtual is_sync_stopped();
    *   };
    */
-  map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->getRados()->get_bucket_stats_and_bilog_meta(bucket_info,
-                                                                shard_id,
-                                                                &bucket_ver,
-                                                                &master_ver,
-                                                                stats,
-                                                                &max_marker,
-                                                                &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(s, 5) << "ERROR: get_bucket_stats_and_bilog_meta returned "
                     << ret << dendl;
@@ -680,9 +672,9 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = bilog_trim(this, static_cast<rgw::sal::RadosStore*>(driver),
-		      bucket->get_info(), gen, shard_id,
-		      start_marker, end_marker);
+  op_ret = bilog_trim(this, static_cast<rgw::sal::RadosStore*>(store),
+                     bucket->get_info(), gen, shard_id,
+                     marker);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "bilog_trim failed with op_ret=" << op_ret << dendl;
   }
