@@ -50,6 +50,7 @@ CoreState::CoreState(
   crimson::os::FuturizedStore &store)
   : whoami(whoami),
     osdmap_service(osdmap_service),
+    osdmap_gate("CoreState::osdmap_gate"),
     cluster_msgr(cluster_msgr),
     public_msgr(public_msgr),
     monc(monc),

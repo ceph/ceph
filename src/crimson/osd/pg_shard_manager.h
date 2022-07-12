@@ -47,6 +47,8 @@ public:
   }
 
   FORWARD_TO_CORE(send_pg_created)
-};
+  FORWARD(got_map, got_map, core_state.osdmap_gate)
+  FORWARD(wait_for_map, wait_for_map, core_state.osdmap_gate)
+}
 
 }
