@@ -20,6 +20,7 @@
 #include "include/utime.h"
 #include "common/Clock.h"
 #include "crimson/common/interruptible_future.h"
+#include "crimson/common/log.h"
 
 namespace ceph {
   class Formatter;
@@ -372,6 +373,7 @@ public:
   }
 
   seastar::future<> stop() {
+    crimson::get_logger(ceph_subsys_osd).info("OperationRegistryI::{}", __func__);
     do_stop();
     shutdown_timer.set_callback([this] {
       if (registries_empty()) {
