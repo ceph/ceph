@@ -53,68 +53,9 @@ int RGWSI_SysObj_Core::get_rados_obj(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
-                                                 const rgw_raw_obj& obj,
-                                                 RGWSysObjState **state,
-                                                 RGWObjVersionTracker *objv_tracker,
-                                                 optional_yield y,
-                                                 const DoutPrefixProvider *dpp)
-{
-  if (obj.empty()) {
-    return -EINVAL;
-  }
-
-  RGWSysObjState *s = rctx->get_state(obj);
-  ldpp_dout(dpp, 20) << "get_system_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
-  *state = s;
-  if (s->has_attrs) {
-    return 0;
-  }
-
-  s->obj = obj;
-
-  int r = raw_stat(dpp, obj, &s->size, &s->mtime, &s->epoch, &s->attrset,
-                   (s->prefetch_data ? &s->data : nullptr), objv_tracker, y);
-  if (r == -ENOENT) {
-    s->exists = false;
-    s->has_attrs = true;
-    s->mtime = real_time();
-    return 0;
-  }
-  if (r < 0)
-    return r;
-
-  s->exists = true;
-  s->has_attrs = true;
-  s->obj_tag = s->attrset[RGW_ATTR_ID_TAG];
-
-  if (s->obj_tag.length()) {
-    ldpp_dout(dpp, 20) << "get_system_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
-  } else {
-    ldpp_dout(dpp, 20) << "get_system_obj_state: s->obj_tag was set empty" << dendl;
-  }
-
-  return 0;
-}
-
-int RGWSI_SysObj_Core::get_system_obj_state(RGWSysObjectCtxBase *rctx,
-                                            const rgw_raw_obj& obj,
-                                            RGWSysObjState **state,
-                                            RGWObjVersionTracker *objv_tracker,
-                                            optional_yield y,
-                                            const DoutPrefixProvider *dpp)
-{
-  int ret;
-
-  do {
-    ret = get_system_obj_state_impl(rctx, obj, state, objv_tracker, y, dpp);
-  } while (ret == -EAGAIN);
-
-  return ret;
-}
-
-int RGWSI_SysObj_Core::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-                                map<string, bufferlist> *attrs, bufferlist *first_chunk,
+int RGWSI_SysObj_Core::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+                                uint64_t *psize, real_time *pmtime,
+                                map<string, bufferlist> *attrs,
                                 RGWObjVersionTracker *objv_tracker,
                                 optional_yield y)
 {
@@ -135,16 +76,8 @@ int RGWSI_SysObj_Core::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj
   if (psize || pmtime) {
     op.stat2(&size, &mtime_ts, nullptr);
   }
-  if (first_chunk) {
-    op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, nullptr);
-  }
   bufferlist outbl;
   r = rados_obj.operate(dpp, &op, &outbl, y);
-
-  if (epoch) {
-    *epoch = rados_obj.get_last_version();
-  }
-
   if (r < 0)
     return r;
 
@@ -167,21 +100,19 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
                             optional_yield y,
                             const DoutPrefixProvider *dpp)
 {
-  RGWSysObjState *astate = nullptr;
+  uint64_t size = 0;
+  ceph::real_time mtime;
+  std::map<std::string, bufferlist> attrset;
 
-  int r = get_system_obj_state(&obj_ctx, obj, &astate, objv_tracker, y, dpp);
+  int r = raw_stat(dpp, obj, &size, &mtime, &attrset, objv_tracker, y);
   if (r < 0)
     return r;
 
-  if (!astate->exists) {
-    return -ENOENT;
-  }
-
   if (attrs) {
     if (raw_attrs) {
-      *attrs = astate->attrset;
+      *attrs = std::move(attrset);
     } else {
-      rgw_filter_attrset(astate->attrset, RGW_ATTR_PREFIX, attrs);
+      rgw_filter_attrset(attrset, RGW_ATTR_PREFIX, attrs);
     }
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       map<string, bufferlist>::iterator iter;
@@ -192,9 +123,9 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
   }
 
   if (obj_size)
-    *obj_size = astate->size;
+    *obj_size = size;
   if (lastmod)
-    *lastmod = astate->mtime;
+    *lastmod = mtime;
 
   return 0;
 }
