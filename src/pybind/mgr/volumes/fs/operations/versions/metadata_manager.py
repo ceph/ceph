@@ -19,6 +19,16 @@ from ...exception import MetadataMgrException
 
 log = logging.getLogger(__name__)
 
+
+def _conf_reader(fs, fd, offset=0, length=4096):
+    while True:
+        buf = fs.read(fd, offset, length)
+        offset += len(buf)
+        if not buf:
+            return
+        yield buf.decode('utf-8')
+
+
 class MetadataManager(object):
     GLOBAL_SECTION = "GLOBAL"
     USER_METADATA_SECTION   = "USER_METADATA"
@@ -31,8 +41,6 @@ class MetadataManager(object):
     CLONE_FAILURE_META_KEY_ERRNO = "errno"
     CLONE_FAILURE_META_KEY_ERROR_MSG = "error_msg"
 
-    MAX_IO_BYTES = 8 * 1024
-
     def __init__(self, fs, config_path, mode):
         self.fs = fs
         self.mode = mode
@@ -44,15 +52,11 @@ class MetadataManager(object):
 
     def refresh(self):
         fd = None
-        conf_data = StringIO()
-        log.debug("opening config {0}".format(self.config_path))
         try:
+            log.debug("opening config {0}".format(self.config_path))
             fd = self.fs.open(self.config_path, os.O_RDONLY)
-            while True:
-                data = self.fs.read(fd, -1, MetadataManager.MAX_IO_BYTES)
-                if not len(data):
-                    break
-                conf_data.write(data.decode('utf-8'))
+            cfg = ''.join(_conf_reader(self.fs, fd))
+            self.config.read_string(cfg, source=self.config_path)
         except UnicodeDecodeError:
             raise MetadataMgrException(-errno.EINVAL,
                     "failed to decode, erroneous metadata config '{0}'".format(self.config_path))
@@ -60,19 +64,12 @@ class MetadataManager(object):
             raise MetadataMgrException(-errno.ENOENT, "metadata config '{0}' not found".format(self.config_path))
         except cephfs.Error as e:
             raise MetadataMgrException(-e.args[0], e.args[1])
-        finally:
-            if fd is not None:
-                self.fs.close(fd)
-
-        conf_data.seek(0)
-        try:
-            if sys.version_info >= (3, 2):
-                self.config.read_file(conf_data)
-            else:
-                self.config.readfp(conf_data)
         except configparser.Error:
             raise MetadataMgrException(-errno.EINVAL, "failed to parse, erroneous metadata config "
                     "'{0}'".format(self.config_path))
+        finally:
+            if fd is not None:
+                self.fs.close(fd)
 
     def flush(self):
         # cull empty sections
