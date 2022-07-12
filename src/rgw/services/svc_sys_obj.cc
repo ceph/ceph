@@ -36,10 +36,8 @@ int RGWSI_SysObj::Obj::ROp::stat(optional_yield y, const DoutPrefixProvider *dpp
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
 
-  return svc->stat(source.get_ctx(), *state, obj,
-		   attrs, raw_attrs,
-                   lastmod, obj_size,
-                   objv_tracker, y, dpp);
+  return svc->stat(*state, obj, attrs, raw_attrs,
+                   lastmod, obj_size, objv_tracker, y, dpp);
 }
 
 int RGWSI_SysObj::Obj::ROp::read(const DoutPrefixProvider *dpp,
@@ -49,7 +47,7 @@ int RGWSI_SysObj::Obj::ROp::read(const DoutPrefixProvider *dpp,
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  return svc->read(dpp, source.get_ctx(), *state,
+  return svc->read(dpp, *state,
                    objv_tracker,
                    obj, bl, ofs, end,
                    attrs,
@@ -73,9 +71,7 @@ int RGWSI_SysObj::Obj::WOp::remove(const DoutPrefixProvider *dpp, optional_yield
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  return svc->remove(dpp, source.get_ctx(),
-                     objv_tracker,
-                     obj, y);
+  return svc->remove(dpp, objv_tracker, obj, y);
 }
 
 int RGWSI_SysObj::Obj::WOp::write(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y)

@@ -85,7 +85,6 @@ void RGWSI_SysObj_Cache::normalize_pool_and_obj(const rgw_pool& src_pool, const 
 
 
 int RGWSI_SysObj_Cache::remove(const DoutPrefixProvider *dpp, 
-                               RGWSysObjectCtxBase& obj_ctx,
                                RGWObjVersionTracker *objv_tracker,
                                const rgw_raw_obj& obj,
                                optional_yield y)
@@ -104,11 +103,10 @@ int RGWSI_SysObj_Cache::remove(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to distribute cache: r=" << r << dendl;
   }
 
-  return RGWSI_SysObj_Core::remove(dpp, obj_ctx, objv_tracker, obj, y);
+  return RGWSI_SysObj_Core::remove(dpp, objv_tracker, obj, y);
 }
 
 int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
-                             RGWSysObjectCtxBase& obj_ctx,
                              RGWSI_SysObj_Obj_GetObjState& read_state,
                              RGWObjVersionTracker *objv_tracker,
                              const rgw_raw_obj& obj,
@@ -122,7 +120,7 @@ int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
   rgw_pool pool;
   string oid;
   if (ofs != 0) {
-    return RGWSI_SysObj_Core::read(dpp, obj_ctx, read_state, objv_tracker,
+    return RGWSI_SysObj_Core::read(dpp, read_state, objv_tracker,
                                    obj, obl, ofs, end, attrs, raw_attrs,
                                    cache_info, refresh_version, y);
   }
@@ -166,7 +164,7 @@ int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
     return -ENOENT;
 
   map<string, bufferlist> unfiltered_attrset;
-  r = RGWSI_SysObj_Core::read(dpp, obj_ctx, read_state, objv_tracker,
+  r = RGWSI_SysObj_Core::read(dpp, read_state, objv_tracker,
                          obj, obl, ofs, end,
 			 (attrs ? &unfiltered_attrset : nullptr),
 			 true, /* cache unfiltered attrs */
