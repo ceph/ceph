@@ -101,7 +101,6 @@ OSD::OSD(int id, uint32_t nonce,
       update_stats();
     }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
-    osdmap_gate("OSD::osdmap_gate"),
     log_client(cluster_msgr.get(), LogClient::NO_FLAGS),
     clog(log_client.create_channel())
 {
@@ -332,8 +331,8 @@ seastar::future<> OSD::start()
     superblock = std::move(sb);
     return get_map(superblock.current_epoch);
   }).then([this](cached_map_t&& map) {
-    osdmap_gate.got_map(map->get_epoch());
     pg_shard_manager.update_map(map);
+    pg_shard_manager.got_map(map->get_epoch());
     osdmap = std::move(map);
     bind_epoch = osdmap->get_epoch();
     return load_pgs();
@@ -1446,7 +1445,7 @@ seastar::future<> OSD::consume_map(epoch_t epoch)
       *this, pg.second, pg.second->get_osdmap_epoch(), epoch,
       PeeringCtx{}, false).second;
   }).then([epoch, this] {
-    osdmap_gate.got_map(epoch);
+    pg_shard_manager.got_map(epoch);
     return seastar::make_ready_future();
   });
 }

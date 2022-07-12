@@ -126,6 +126,7 @@ class CoreState : public md_config_obs_t {
   void update_map(OSDMapService::cached_map_t new_osdmap) {
     osdmap = std::move(new_osdmap);
   }
+  OSD_OSDMapGate osdmap_gate;
 
   crimson::net::Messenger &cluster_msgr;
   crimson::net::Messenger &public_msgr;

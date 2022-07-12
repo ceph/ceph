@@ -215,8 +215,6 @@ private:
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGUpdateLogMissingReply> m);
 public:
-  OSD_OSDMapGate osdmap_gate;
-
   ShardServices &get_shard_services() {
     return pg_shard_manager.get_shard_services();
   }
@@ -273,7 +271,7 @@ public:
 	OSD_OSDMapGate::OSDMapBlocker::BlockingEvent;
       return opref.template with_blocking_event<OSDMapBlockingEvent>(
 	[this, &opref](auto &&trigger) {
-	  return osdmap_gate.wait_for_map(
+	  return pg_shard_manager.wait_for_map(
 	    std::move(trigger),
 	    opref.get_epoch(),
 	    &shard_services
