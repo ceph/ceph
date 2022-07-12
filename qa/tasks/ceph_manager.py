@@ -902,15 +902,15 @@ class OSDThrasher(Thrasher):
         """
         self.log("test_pool_min_size")
         self.all_up()
+        time.sleep(60) # buffer time for recovery to start.
         self.ceph_manager.wait_for_recovery(
             timeout=self.config.get('timeout')
             )
-
         minout = int(self.config.get("min_out", 1))
         minlive = int(self.config.get("min_live", 2))
         mindead = int(self.config.get("min_dead", 1))
         self.log("doing min_size thrashing")
-        self.ceph_manager.wait_for_clean(timeout=60)
+        self.ceph_manager.wait_for_clean(timeout=180)
         assert self.ceph_manager.is_clean(), \
             'not clean before minsize thrashing starts'
         # look up k and m from all the pools on each loop, in case it
@@ -958,7 +958,7 @@ class OSDThrasher(Thrasher):
         # try a few times since there might be a concurrent pool
         # creation or deletion
         with safe_while(
-                sleep=5, tries=5,
+                sleep=20, tries=5,
                 action='check for active or peered') as proceed:
             while proceed():
                 if self.ceph_manager.all_active_or_peered():
@@ -1415,9 +1415,9 @@ class OSDThrasher(Thrasher):
             # self.choose_action()()
             osd_kill_now, osd_kill_later = self.compute_target_osd()
             self.kill_osd(osd_kill_now, mark_out=True)
-            time.sleep(delay)
+            time.sleep(10)
             self.test_pool_min_size(osd_kill_later)
-            time.sleep(delay)
+            time.sleep(10)
         self.all_up()
         if self.random_eio > 0:
             self.ceph_manager.inject_args('osd', self.rerrosd,
