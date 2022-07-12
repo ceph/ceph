@@ -16,6 +16,7 @@ namespace crimson::osd {
 
 void OSDOperationRegistry::do_stop()
 {
+  logger().info("OSDOperationRegistry::{}", __func__);
   // we need to decouple visiting the registry from destructing
   // ops because of the auto-unlink feature of boost::intrusive.
   // the list shouldn't change while iterating due to constrains
