@@ -14,4 +14,10 @@ describe('Login page', () => {
 
     login.doLogout();
   });
+
+  it('should have no accessibility violations', () => {
+    login.navigateTo();
+    cy.injectAxe();
+    cy.checkA11y();
+  });
 });
