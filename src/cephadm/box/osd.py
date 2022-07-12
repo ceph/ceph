@@ -12,6 +12,7 @@ from util import (
     run_cephadm_shell_command,
     run_dc_shell_command,
     run_shell_command,
+    engine
 )
 
 
@@ -112,23 +113,24 @@ def deploy_osds_in_vg(vg: str):
     makes another process to run on the background
     """
     if inside_container():
-        print('xd')
-    else:
-        lvs = json.loads(run_shell_command('sudo lvs --reportformat json'))
+        lvs = json.loads(run_shell_command('lvs --reportformat json'))
         # distribute osds per host
         hosts = get_orch_hosts()
         host_index = 0
-        verbose = '-v' if Config.get('verbose') else ''
         for lv in lvs['report'][0]['lv']:
             if lv['vg_name'] == vg:
                 deployed = False
                 while not deployed:
-                    hostname = hosts[host_index]['hostname']
-                    deployed = run_dc_shell_command(
-                        f'/cephadm/box/box.py -v osd deploy --data /dev/{vg}/{lv["lv_name"]} --hostname {hostname}', 1, 'seed'
+                    deployed = deploy_osd(
+                        f'{vg}/{lv["lv_name"]}', hosts[host_index]['hostname']
                     )
-                    deployed = 'created osd' in deployed.lower() 
                 host_index = (host_index + 1) % len(hosts)
+    else:
+        verbose = '-v' if Config.get('verbose') else ''
+        print('Redirecting deploy osd in vg to inside container')
+        run_dc_shell_command(
+            f'/cephadm/box/box.py {verbose} --engine {engine()} osd deploy --vg {vg}', 1, 'seed'
+        )
 
 
 class Osd(Target):

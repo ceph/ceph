@@ -235,13 +235,13 @@ As kcli has a long startup time, we created an alternative which is faster using
 Podman inside Podman. This approach has its downsides too as we have to
 simulate the creation of osds and addition of devices with loopback devices.
 
-Cephadm's box environment is a command which requires little to setup. The setup
-requires you to get the required podman images for what we call boxes and ceph.
-A box is the first layer of docker containers which can be either a seed or a
-host. A seed is the main box which holds cephadm and where you bootstrap the
-cluster. On the other hand, you have hosts with an ssh server setup so you can
-add those hosts to the cluster. The second layer, managed by cephadm, inside the
-seed box, requires the ceph image.
+Cephadm's box environment is simple to set up. The setup requires you to
+get the required Podman images for Ceph and what we call boxes.
+A box is the first layer of Podman containers which can be either a seed or a
+host. A seed is the main box which holds Cephadm and where you bootstrap the
+cluster. On the other hand, you have hosts with a SSH server setup so you can
+add those hosts to the cluster. The second layer, managed by Cephadm, inside the
+seed box, requires the Ceph image.
 
 .. warning:: This development environment is still experimental and can have unexpected
              behaviour. Please take a look at the road map and the known issues section
@@ -262,7 +262,7 @@ In order to setup Cephadm's box run::
   ./box.py -v cluster setup
 
 .. note:: It is recommended to run box with verbose (-v) as it will show the output of
-					shell commands being run.
+          shell commands being run.
 
 After getting all needed images we can create a simple cluster without OSDs and hosts with::
 
@@ -274,8 +274,8 @@ If you want to deploy the cluster with more OSDs and hosts::
   # explicitly change number of hosts and osds
   sudo box -v cluster start --extended --osds 5 --hosts 5
 
-.. warning:: OSDs are still not supported in the box implementation with podman. It is
-						 work in progress.
+.. warning:: OSDs are still not supported in the box implementation with Podman. It is
+             work in progress.
 
 
 Without the extended option, explicitly adding either more hosts or OSDs won't change the state
@@ -287,7 +287,7 @@ of the cluster.
 .. note::  Each osd will require 5GiB of space.
 
 After bootstraping the cluster you can go inside the seed box in which you'll be
-able to run cephadm commands::
+able to run Cephadm commands::
 
   ./box.py -v cluster sh
   [root@8d52a7860245] cephadm --help
@@ -311,7 +311,7 @@ and you'll see something like::
 To remove the cluster and clean up run::
 
   ./box.py cluster down
- 
+
 If you just want to clean up the last cluster created run::
 
   ./box.py cluster cleanup
@@ -320,11 +320,23 @@ To check all available commands run::
 
   ./box.py --help
 
+If you want to run the box with Docker you can. You'll have to specify which
+engine you want to you like::
+
+  ./box.py -v --engine docker cluster list
+
+With Docker commands like bootstrap and osd creation should be called with sudo
+since it requires privileges to create osds on VGs and LVs::
+
+  sudo ./box.py -v --engine docker cluster start --expanded
+
+.. warning:: Using Docker as the box engine is dangerous as there were some instances
+             where the Xorg session was killed.
 
 Known issues
 ------------
 
-* If you get permission issues with cephadm because it cannot infer the keyring
+* If you get permission issues with Cephadm because it cannot infer the keyring
   and configuration, please run cephadm like this example::
 
     cephadm shell --config /etc/ceph/ceph.conf --keyring /etc/ceph/ceph.kerying
@@ -332,16 +344,16 @@ Known issues
 * Docker containers run with the --privileged flag enabled which has been seen
   to make some computers log out.
 * If SELinux is not disabled you'll probably see unexpected behaviour. For example:
-	if not all permissions of Ceph repo files are set to your user it will probably
-	fail starting with podman-compose.
+  if not all permissions of Ceph repo files are set to your user it will probably
+  fail starting with podman-compose.
 * If running a command it fails to run a podman command because it couldn't find the
-	container, you can debug by running the same podman-compose .. up command displayed
-	with the flag -v.
+  container, you can debug by running the same podman-compose .. up command displayed
+  with the flag -v.
 
 Road map
 ------------
 
-* Create osds with ceph-volume raw.
+* Create osds with ``ceph-volume raw``.
 * Enable ceph-volume to mark loopback devices as a valid block device in
   the inventory.
 * Make the box ready to run dashboard CI tests (including cluster expansion).
