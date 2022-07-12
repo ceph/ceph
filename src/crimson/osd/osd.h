@@ -20,8 +20,7 @@
 #include "crimson/mgr/client.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/osd/osdmap_service.h"
-#include "crimson/osd/state.h"
-#include "crimson/osd/shard_services.h"
+#include "crimson/osd/pg_shard_manager.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/osd_operations/peering_event.h"
@@ -111,7 +110,8 @@ class OSD final : public crimson::net::Dispatcher,
   void handle_authentication(const EntityName& name,
 			     const AuthCapsInfo& caps) final;
 
-  crimson::osd::ShardServices shard_services;
+  crimson::osd::PGShardManager pg_shard_manager;
+  crimson::osd::ShardServices &shard_services;
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
@@ -218,7 +218,7 @@ public:
   OSD_OSDMapGate osdmap_gate;
 
   ShardServices &get_shard_services() {
-    return shard_services;
+    return pg_shard_manager.get_shard_services();
   }
 
   seastar::future<> consume_map(epoch_t epoch);
@@ -252,7 +252,7 @@ public:
 
   template <typename T, typename... Args>
   auto start_pg_operation(Args&&... args) {
-    auto op = shard_services.registry.create_operation<T>(
+    auto op = shard_services.get_registry().create_operation<T>(
       std::forward<Args>(args)...);
     auto &logger = crimson::get_logger(ceph_subsys_osd);
     logger.debug("{}: starting {}", *op, __func__);
