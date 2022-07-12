@@ -3060,6 +3060,11 @@ int BlueFS::_signal_dirty_to_log_D(FileWriter *h)
 {
   ceph_assert(ceph_mutex_is_locked(h->lock));
   std::lock_guard dl(dirty.lock);
+  if (h->file->deleted) {
+    dout(10) << __func__ << "  deleted, no-op" << dendl;
+    return 0;
+  }
+
   h->file->fnode.mtime = ceph_clock_now();
   ceph_assert(h->file->fnode.ino >= 1);
   if (h->file->dirty_seq <= dirty.seq_stable) {
