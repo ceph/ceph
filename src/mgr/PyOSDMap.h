@@ -3,11 +3,9 @@
 
 #pragma once
 
+#include <Python.h>
+
 #include <string>
-
-#include "Python.h"
-
-
 
 extern PyTypeObject BasePyOSDMapType;
 extern PyTypeObject BasePyOSDMapIncrementalType;

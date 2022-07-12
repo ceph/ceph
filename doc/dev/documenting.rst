@@ -5,7 +5,7 @@
 User documentation
 ==================
 
-The documentation on docs.ceph.com is generated from the restructuredText
+The documentation on docs.ceph.com is generated from the reStructuredText
 sources in ``/doc/`` in the Ceph git repository.
 
 Please make sure that your changes are written in a way that is intended
@@ -30,10 +30,12 @@ Code Documentation
 C and C++ can be documented with Doxygen_, using the subset of Doxygen
 markup supported by Breathe_.
 
-.. _Doxygen: http://www.stack.nl/~dimitri/doxygen/
+.. _Doxygen: http://www.doxygen.nl/
 .. _Breathe: https://github.com/michaeljones/breathe
 
-The general format for function documentation is::
+The general format for function documentation is
+
+.. code-block:: c
 
   /**
    * Short description
@@ -51,6 +53,14 @@ functions should be grouped into logical categories. The `librados C
 API`_ provides a complete example. It is pulled into Sphinx by
 `librados.rst`_, which is rendered at :doc:`/rados/api/librados`.
 
+To generate the doxygen documentation in HTML format use:
+
+::
+
+   # cmake --build . --target doxygen
+
+HTML output will be under: ``build-doc/doxygen/html`` 
+
 .. _`librados C API`: https://github.com/ceph/ceph/blob/master/src/include/rados/librados.h
 .. _`librados.rst`: https://github.com/ceph/ceph/raw/master/doc/rados/api/librados.rst
 
@@ -63,7 +73,7 @@ Graphviz
 You can use Graphviz_, as explained in the `Graphviz extension documentation`_.
 
 .. _Graphviz: http://graphviz.org/
-.. _`Graphviz extension documentation`: http://sphinx.pocoo.org/ext/graphviz.html
+.. _`Graphviz extension documentation`: https://www.sphinx-doc.org/en/master/usage/extensions/graphviz.html
 
 .. graphviz::
 
@@ -106,8 +116,8 @@ declarative language for drawing things, and includes:
 - `network diagrams`_: hosts, LANs, IP addresses etc (with `Cisco
   icons`_ if wanted)
 
-.. _Blockdiag: http://blockdiag.com/
-.. _`Cisco icons`: http://pypi.python.org/pypi/blockdiagcontrib-cisco/
+.. _Blockdiag: http://blockdiag.com/en/
+.. _`Cisco icons`: https://pypi.org/project/blockdiagcontrib-cisco/
 .. _`block diagrams`: http://blockdiag.com/en/blockdiag/
 .. _`sequence diagrams`: http://blockdiag.com/en/seqdiag/index.html
 .. _`activity diagrams`: http://blockdiag.com/en/actdiag/index.html
@@ -118,7 +128,7 @@ Inkscape
 --------
 
 You can use Inkscape to generate scalable vector graphics.
-http://inkscape.org for restructedText documents.
+https://inkscape.org/en/ for restructedText documents.
 
 If you generate diagrams with Inkscape, you should
 commit both the Scalable Vector Graphics (SVG) file and export a
@@ -129,4 +139,4 @@ SVG diagrams using Inkscape.
 
 HTML5 will support SVG inline.
 
-.. _Submitting Patches: /SubmittingPatches.rst
+.. _`Submitting Patches`: https://github.com/ceph/ceph/blob/master/SubmittingPatches.rst

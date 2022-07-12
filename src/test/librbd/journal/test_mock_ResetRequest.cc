@@ -5,7 +5,6 @@
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/journal/mock/MockJournaler.h"
-#include "common/Mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/RemoveRequest.h"
@@ -40,7 +39,7 @@ struct CreateRequest<MockTestImageCtx> {
                                uint64_t tag_class, TagData &tag_data,
                                const std::string &client_id,
                                ContextWQ *op_work_queue, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -60,7 +59,7 @@ struct RemoveRequest<MockTestImageCtx> {
   static RemoveRequest* create(IoCtx &ioctx, const std::string &image_id,
                                const std::string &client_id,
                                ContextWQ *op_work_queue, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -155,11 +154,14 @@ TEST_F(TestMockJournalResetRequest, Success) {
   MockCreateRequest mock_create_request;
   expect_create(mock_create_request, 0);
 
+  ContextWQ* context_wq;
+  Journal<>::get_work_queue(ictx->cct, &context_wq);
+
   C_SaferCond ctx;
   auto req = MockResetRequest::create(m_ioctx, "image id",
                                       Journal<>::IMAGE_CLIENT_ID,
                                       Journal<>::LOCAL_MIRROR_UUID,
-                                      ictx->op_work_queue , &ctx);
+                                      context_wq, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -176,11 +178,14 @@ TEST_F(TestMockJournalResetRequest, InitError) {
   expect_init_journaler(mock_journaler, -EINVAL);
   expect_shut_down_journaler(mock_journaler, 0);
 
+  ContextWQ* context_wq;
+  Journal<>::get_work_queue(ictx->cct, &context_wq);
+
   C_SaferCond ctx;
   auto req = MockResetRequest::create(m_ioctx, "image id",
                                       Journal<>::IMAGE_CLIENT_ID,
                                       Journal<>::LOCAL_MIRROR_UUID,
-                                      ictx->op_work_queue , &ctx);
+                                      context_wq, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -198,11 +203,14 @@ TEST_F(TestMockJournalResetRequest, ShutDownError) {
   expect_get_metadata(mock_journaler);
   expect_shut_down_journaler(mock_journaler, -EINVAL);
 
+  ContextWQ* context_wq;
+  Journal<>::get_work_queue(ictx->cct, &context_wq);
+
   C_SaferCond ctx;
   auto req = MockResetRequest::create(m_ioctx, "image id",
                                       Journal<>::IMAGE_CLIENT_ID,
                                       Journal<>::LOCAL_MIRROR_UUID,
-                                      ictx->op_work_queue , &ctx);
+                                      context_wq, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -223,11 +231,14 @@ TEST_F(TestMockJournalResetRequest, RemoveError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, -EINVAL);
 
+  ContextWQ* context_wq;
+  Journal<>::get_work_queue(ictx->cct, &context_wq);
+
   C_SaferCond ctx;
   auto req = MockResetRequest::create(m_ioctx, "image id",
                                       Journal<>::IMAGE_CLIENT_ID,
                                       Journal<>::LOCAL_MIRROR_UUID,
-                                      ictx->op_work_queue , &ctx);
+                                      context_wq, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -251,11 +262,14 @@ TEST_F(TestMockJournalResetRequest, CreateError) {
   MockCreateRequest mock_create_request;
   expect_create(mock_create_request, -EINVAL);
 
+  ContextWQ* context_wq;
+  Journal<>::get_work_queue(ictx->cct, &context_wq);
+
   C_SaferCond ctx;
   auto req = MockResetRequest::create(m_ioctx, "image id",
                                       Journal<>::IMAGE_CLIENT_ID,
                                       Journal<>::LOCAL_MIRROR_UUID,
-                                      ictx->op_work_queue , &ctx);
+                                      context_wq, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }

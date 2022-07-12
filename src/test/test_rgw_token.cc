@@ -20,8 +20,7 @@
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "global/global_init.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "gtest/gtest.h"
 #include "rgw/rgw_token.h"
 #include "rgw/rgw_b64.h"
@@ -49,6 +48,8 @@ namespace {
   Formatter* formatter{nullptr};
   bool verbose {false};
 }
+
+using namespace std;
 
 TEST(TOKEN, INIT) {
   formatter = new JSONFormatter(true /* pretty */);
@@ -105,12 +106,10 @@ TEST(TOKEN, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
-  string val;
-  vector<const char*> args;
-
-  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
+  string val;
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_flag(args, arg_iter, "--verbose",
 			      (char*) nullptr)) {

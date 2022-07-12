@@ -14,7 +14,7 @@ to read something, but it's corrupt so we can't, or we scrubbed a PG but
 the data was inconsistent so we can't recover.
 
 Use WRN for incidents that the cluster can handle, but have some abnormal/negative
-aspect, such as a temporary degredation of service, or an unexpected internal
+aspect, such as a temporary degradation of service, or an unexpected internal
 value.  For example, a metadata error that can be auto-fixed, or a slow operation.
 
 Use INFO for ordinary cluster operations that do not indicate a fault in
@@ -71,7 +71,7 @@ documentation.  Common acronyms are OK -- don't waste screen space
 typing "Rados Object Gateway" instead of RGW.  Do not use internal
 class names like "MDCache" or "Objecter".  It is okay to mention
 internal structures if they are the direct subject of the message,
-for example in a corruption, but use plain english.
+for example in a corruption, but use plain English.
 Example: instead of "Objecter requests" say "OSD client requests"
 Example: it is okay to mention internal structure in the context
 of "Corrupt session table" (but don't say "Corrupt SessionTable")

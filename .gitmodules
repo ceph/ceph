@@ -1,9 +1,6 @@
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
 	url = https://github.com/ceph/ceph-object-corpus.git
-[submodule "src/civetweb"]
-	path = src/civetweb
-	url = https://github.com/ceph/civetweb
 [submodule "src/erasure-code/jerasure/jerasure"]
 	path = src/erasure-code/jerasure/jerasure
 	url = https://github.com/ceph/jerasure.git
@@ -32,17 +29,6 @@
 [submodule "src/isa-l"]
 	path = src/isa-l
 	url = https://github.com/ceph/isa-l
-[submodule "src/lua"]
-	path = src/lua
-	url = https://github.com/ceph/lua.git
-	branch = lua-5.3-ceph
-	ignore = dirty
-[submodule "src/Beast"]
-	path = src/Beast
-	url = https://github.com/ceph/Beast.git
-[submodule "src/dpdk"]
-	path = src/dpdk
-	url = https://github.com/ceph/dpdk
 [submodule "src/zstd"]
 	path = src/zstd
 	url = https://github.com/facebook/zstd
@@ -55,3 +41,34 @@
 [submodule "src/rapidjson"]
 	path = src/rapidjson
 	url = https://github.com/ceph/rapidjson
+[submodule "src/dmclock"]
+	path = src/dmclock
+	url = https://github.com/ceph/dmclock.git
+[submodule "src/seastar"]
+	path = src/seastar
+	url = https://github.com/ceph/seastar.git
+[submodule "src/fmt"]
+	path = src/fmt
+	url = https://github.com/ceph/fmt.git
+[submodule "src/c-ares"]
+	path = src/c-ares
+	url = https://github.com/ceph/c-ares.git
+[submodule "src/spawn"]
+	path = src/spawn
+	url = https://github.com/ceph/spawn.git
+[submodule "src/pybind/mgr/rook/rook-client-python"]
+	path = src/pybind/mgr/rook/rook-client-python
+	url = https://github.com/ceph/rook-client-python.git
+[submodule "s3select"]
+	path = src/s3select
+	url = https://github.com/ceph/s3select.git
+[submodule "src/libkmip"]
+	path = src/libkmip
+	url = https://github.com/ceph/libkmip
+	branch = ceph-master
+[submodule "src/arrow"]
+	path = src/arrow
+	url = https://github.com/apache/arrow.git
+[submodule "src/utf8proc"]
+	path = src/utf8proc
+	url = https://github.com/JuliaStrings/utf8proc

@@ -3,8 +3,10 @@
 
 namespace ceph {
   namespace buffer {
-    class ptr;
-    class list;
+    inline namespace v15_2_0 {
+      class ptr;
+      class list;
+    }
     class hash;
   }
 

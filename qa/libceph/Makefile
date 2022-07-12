@@ -1,4 +1,4 @@
-CFLAGS = -Wall -Wextra -D_GNU_SOURCE -lcephfs -L../../src/.libs
+CFLAGS = -Wall -Wextra -D_GNU_SOURCE -lcephfs -L../../build/lib
 
 TARGETS = trivial_libceph 
 

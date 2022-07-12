@@ -10,12 +10,14 @@
 #include "common/Finisher.h"
 #include "os/filestore/FileJournal.h"
 #include "include/Context.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/safe_io.h"
 #include "os/filestore/JournalingObjectStore.h"
 
+using namespace std;
+
 Finisher *finisher;
-Cond sync_cond;
+ceph::condition_variable sync_cond;
 char path[200];
 uuid_d fsid;
 struct test_info {
@@ -28,37 +30,32 @@ struct test_info {
 };
 
 // ----
-Cond cond;
-Mutex wait_lock("lock");
+ceph::condition_variable cond;
+ceph::mutex wait_lock = ceph::make_mutex("lock");
 bool done;
 
 void wait()
 {
-  wait_lock.Lock();
-  while (!done)
-    cond.Wait(wait_lock);
-  wait_lock.Unlock();
+  std::unique_lock l{wait_lock};
+  cond.wait(l, [] { return done; });
 }
 
 // ----
 class C_Sync {
 public:
-  Cond cond;
-  Mutex lock;
-  bool done;
+  ceph::condition_variable cond;
+  ceph::mutex lock = ceph::make_mutex("C_Sync::lock");
+  bool done = false;
   C_SafeCond *c;
 
-  C_Sync()
-    : lock("C_Sync::lock"), done(false) {
-    c = new C_SafeCond(&lock, &cond, &done);
+  C_Sync() {
+    c = new C_SafeCond(lock, cond, &done);
   }
   ~C_Sync() {
-    lock.Lock();
+    std::unique_lock l{lock};
     //cout << "wait" << std::endl;
-    while (!done)
-      cond.Wait(lock);
+    cond.wait(l, [this] { return done; });
     //cout << "waited" << std::endl;
-    lock.Unlock();
   }
 };
 
@@ -67,17 +64,17 @@ unsigned size_mb = 200;
 const char GTEST_PRFIX[] = "--gtest_";
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   char mb[10];
   sprintf(mb, "%u", size_mb);
-  g_ceph_context->_conf->set_val("osd_journal_size", mb);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_journal_size", mb);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   finisher = new Finisher(g_ceph_context);
   
@@ -113,9 +110,9 @@ int main(int argc, char **argv) {
 }
 
 TEST(TestFileJournal, Create) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -127,9 +124,9 @@ TEST(TestFileJournal, Create) {
 }
 
 TEST(TestFileJournal, WriteSmall) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -144,7 +141,7 @@ TEST(TestFileJournal, WriteSmall) {
     bl.append("small");
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(1, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
 
     fj.close();
@@ -152,9 +149,9 @@ TEST(TestFileJournal, WriteSmall) {
 }
 
 TEST(TestFileJournal, WriteBig) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -173,16 +170,16 @@ TEST(TestFileJournal, WriteBig) {
     vector<ObjectStore::Transaction> tls;
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(1, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
     fj.close();
   }
 }
 
 TEST(TestFileJournal, WriteMany) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -192,7 +189,7 @@ TEST(TestFileJournal, WriteMany) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     vector<ObjectStore::Transaction> tls;
     bufferlist bl;
@@ -213,9 +210,9 @@ TEST(TestFileJournal, WriteMany) {
 }
 
 TEST(TestFileJournal, WriteManyVecs) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -225,7 +222,7 @@ TEST(TestFileJournal, WriteManyVecs) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     bufferlist first;
     first.append("small");
@@ -263,9 +260,9 @@ TEST(TestFileJournal, WriteManyVecs) {
 }
 
 TEST(TestFileJournal, ReplaySmall) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
 
@@ -277,7 +274,7 @@ TEST(TestFileJournal, ReplaySmall) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     bufferlist bl;
     bl.append("small");
@@ -304,14 +301,14 @@ TEST(TestFileJournal, ReplaySmall) {
     uint64_t seq = 0;
     ASSERT_EQ(true, fj.read_entry(inbl, seq));
     ASSERT_EQ(seq, 2ull);
-    inbl.copy(0, inbl.length(), v);
+    inbl.cbegin().copy(inbl.length(), v);
     ASSERT_EQ("small", v);
     inbl.clear();
     v.clear();
 
     ASSERT_EQ(true, fj.read_entry(inbl, seq));
     ASSERT_EQ(seq, 3ull);
-    inbl.copy(0, inbl.length(), v);
+    inbl.cbegin().copy(inbl.length(), v);
     ASSERT_EQ("small", v);
     inbl.clear();
     v.clear();
@@ -324,9 +321,9 @@ TEST(TestFileJournal, ReplaySmall) {
 }
 
 TEST(TestFileJournal, ReplayCorrupt) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
@@ -337,7 +334,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     const char *needle =    "i am a needle";
     const char *newneedle = "in a haystack";
@@ -396,7 +393,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
     uint64_t seq = 0;
     ASSERT_EQ(true, fj.read_entry(inbl, seq));
     ASSERT_EQ(seq, 2ull);
-    inbl.copy(0, inbl.length(), v);
+    inbl.cbegin().copy(inbl.length(), v);
     ASSERT_EQ(needle, v);
     inbl.clear();
     v.clear();
@@ -410,9 +407,9 @@ TEST(TestFileJournal, ReplayCorrupt) {
 }
 
 TEST(TestFileJournal, WriteTrim) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -461,9 +458,9 @@ TEST(TestFileJournal, WriteTrim) {
 }
 
 TEST(TestFileJournal, WriteTrimSmall) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
   vector<ObjectStore::Transaction> tls;
 
   for (unsigned i = 0 ; i < 3; ++i) {
@@ -511,9 +508,9 @@ TEST(TestFileJournal, WriteTrimSmall) {
 }
 
 TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "1");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
@@ -524,7 +521,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     const char *needle =    "i am a needle";
     for (unsigned i = 1; i <= 4; ++i) {
@@ -541,7 +538,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
     bl.append("needle");
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(5, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
 
     fj.close();
@@ -570,9 +567,9 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
 }
 
 TEST(TestFileJournal, ReplayDetectCorruptPayload) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "1");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
@@ -583,7 +580,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     const char *needle =    "i am a needle";
     for (unsigned i = 1; i <= 4; ++i) {
@@ -600,7 +597,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
     bl.append("needle");
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(5, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
 
     fj.close();
@@ -629,9 +626,9 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
 }
 
 TEST(TestFileJournal, ReplayDetectCorruptHeader) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "1");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
@@ -642,7 +639,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     const char *needle =    "i am a needle";
     for (unsigned i = 1; i <= 4; ++i) {
@@ -659,7 +656,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
     bl.append("needle");
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(5, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
 
     fj.close();

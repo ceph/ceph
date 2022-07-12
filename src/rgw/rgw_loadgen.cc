@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <algorithm>
 #include <sstream>
@@ -11,24 +11,28 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void RGWLoadGenRequestEnv::set_date(utime_t& tm)
 {
   date_str = rgw_to_asctime(tm);
 }
 
-int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
+int RGWLoadGenRequestEnv::sign(const DoutPrefixProvider *dpp, RGWAccessKey& access_key)
 {
-  map<string, string> meta_map;
+  meta_map_t meta_map;
   map<string, string> sub_resources;
 
   string canonical_header;
   string digest;
 
-  rgw_create_s3_canonical_header(request_method.c_str(),
+  rgw_create_s3_canonical_header(dpp,
+                                 request_method.c_str(),
                                  nullptr, /* const char *content_md5 */
                                  content_type.c_str(),
                                  date_str.c_str(),
                                  meta_map,
+				                 meta_map_t{},
                                  uri.c_str(),
                                  sub_resources,
                                  canonical_header);
@@ -71,7 +75,7 @@ size_t RGWLoadGenIO::complete_request()
   return 0;
 }
 
-void RGWLoadGenIO::init_env(CephContext *cct)
+int RGWLoadGenIO::init_env(CephContext *cct)
 {
   env.init(cct);
 
@@ -96,6 +100,7 @@ void RGWLoadGenIO::init_env(CephContext *cct)
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", req->port);
   env.set("SERVER_PORT", port_buf);
+  return 0;
 }
 
 size_t RGWLoadGenIO::send_status(const int status,
@@ -109,8 +114,8 @@ size_t RGWLoadGenIO::send_100_continue()
   return 0;
 }
 
-size_t RGWLoadGenIO::send_header(const boost::string_ref& name,
-                                 const boost::string_ref& value)
+size_t RGWLoadGenIO::send_header(const std::string_view& name,
+                                 const std::string_view& value)
 {
   return 0;
 }

@@ -1,5 +1,7 @@
 meta:
-- desc: "4-node cluster"
+- desc: |
+   4-node cluster
+   install and run ceph-ansible on installer.0 stand alone node
 roles:
 - [mon.a, mds.a, osd.0, osd.1, osd.2]
 - [mon.b, mgr.x, osd.3, osd.4, osd.5]

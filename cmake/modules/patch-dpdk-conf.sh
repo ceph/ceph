@@ -15,8 +15,14 @@ conf=$1/.config
 shift
 machine=$1
 shift
+arch=$1
+shift
+numa=$1
+shift
 
 setconf CONFIG_RTE_MACHINE "${machine}"
+setconf CONFIG_RTE_ARCH "${arch}"
+
 # Disable experimental features
 setconf CONFIG_RTE_NEXT_ABI n
 setconf CONFIG_RTE_LIBRTE_MBUF_OFFLOAD n
@@ -38,6 +44,7 @@ setconf CONFIG_RTE_LIBRTE_VHOST_NUMA n
 setconf CONFIG_RTE_LIBRTE_VMXNET3_PMD n
 setconf CONFIG_RTE_LIBRTE_PMD_VHOST n
 setconf CONFIG_RTE_APP_EVENTDEV n
+setconf CONFIG_RTE_MAX_VFIO_GROUPS 64
 
 # no test
 setconf CONFIG_RTE_APP_TEST n
@@ -47,4 +54,4 @@ setconf CONFIG_RTE_TEST_PMD n
 setconf CONFIG_RTE_MBUF_REFCNT_ATOMIC n
 
 # balanced allocation of hugepages
-setconf CONFIG_RTE_EAL_NUMA_AWARE_HUGEPAGES n
+setconf CONFIG_RTE_EAL_NUMA_AWARE_HUGEPAGES "${numa}"

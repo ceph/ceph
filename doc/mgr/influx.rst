@@ -1,11 +1,13 @@
 =============
-Influx Plugin 
+Influx Module 
 =============
 
-The influx plugin continuously collects and sends time series data to an
+.. mgr_module:: influx
+
+The influx module continuously collects and sends time series data to an
 influxdb database.
 
-The influx plugin was introduced in the 13.x *Mimic* release.
+The influx module was introduced in the 13.x *Mimic* release.
 
 --------
 Enabling 
@@ -13,14 +15,14 @@ Enabling
 
 To enable the module, use the following command:
 
-::
+.. prompt:: bash $
 
     ceph mgr module enable influx
 
 If you wish to subsequently disable the module, you can use the equivalent
 *disable* command:
 
-::
+.. prompt:: bash $
 
     ceph mgr module disable influx
 
@@ -34,40 +36,49 @@ credentials.
 
 Set configuration values using the following command:
 
-::
+.. prompt:: bash $
 
-    ceph config-key set mgr/influx/<key> <value>
+    ceph config set mgr mgr/influx/<key> <value>
 
 
-The most important settings are ``hostname``, ``username`` and ``password``.  
+The most important settings are :confval:`mgr/influx/hostname`,
+:confval:`mgr/influx/username` and :confval:`mgr/influx/password`.
 For example, a typical configuration might look like this:
 
-::
+.. prompt:: bash $
 
-    ceph config-key set mgr/influx/hostname influx.mydomain.com
-    ceph config-key set mgr/influx/username admin123
-    ceph config-key set mgr/influx/password p4ssw0rd
+    ceph config set mgr mgr/influx/hostname influx.mydomain.com
+    ceph config set mgr mgr/influx/username admin123
+    ceph config set mgr mgr/influx/password p4ssw0rd
     
-Additional optional configuration settings are:
+Following is the list of all configuration settings:
 
-:interval: Time between reports to InfluxDB.  Default 5 seconds.
-:database: InfluxDB database name.  Default "ceph".  You will need to create this database and grant write privileges to the configured username or the username must have admin privileges to create it.  
-:port: InfluxDB server port.  Default 8086
-    
+.. confval:: hostname
+.. confval:: username
+.. confval:: password
+.. confval:: interval
+.. confval:: database
+.. confval:: port
+.. confval:: ssl
+.. confval:: verify_ssl
+.. confval:: threads
+.. confval:: batch_size
 
 ---------
 Debugging 
 ---------
 
-By default, a few debugging statments as well as error statements have been set to print in the log files. Users can add more if necessary.
+By default, a few debugging statements as well as error statements have been set to print in the log files. Users can add more if necessary.
 To make use of the debugging option in the module:
 
-- Add this to the ceph.conf file.::
+- Add this to the ceph.conf file.
 
-    [mgr]
+  .. code-block:: ini
+
+     [mgr]
         debug_mgr = 20  
 
-- Use this command ``ceph tell mgr.<mymonitor> influx self-test``.
+- Use this command ``ceph influx self-test``.
 - Check the log files. Users may find it easier to filter the log files using *mgr[influx]*.
 
 --------------------
@@ -84,7 +95,7 @@ Pools
 +---------------+-----------------------------------------------------+
 |Counter        | Description                                         |
 +===============+=====================================================+
-|bytes_used     | Bytes used in the pool not including copies         |
+|stored         | Bytes stored in the pool not including copies       |
 +---------------+-----------------------------------------------------+
 |max_avail      | Max available number of bytes in the pool           |
 +---------------+-----------------------------------------------------+
@@ -96,7 +107,7 @@ Pools
 +---------------+-----------------------------------------------------+
 |rd_bytes       | Number of bytes read in the pool                    |
 +---------------+-----------------------------------------------------+
-|raw_bytes_used | Bytes used in pool including copies made            |
+|stored_raw     | Bytes used in pool including copies made            |
 +---------------+-----------------------------------------------------+
 
 ^^^^

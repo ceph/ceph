@@ -7,12 +7,14 @@
 #include "test/rbd_mirror/test_fixture.h"
 #include "test/librados_test_stub/LibradosTestStub.h"
 #include "common/WorkQueue.h"
+#include "librbd/asio/ContextWQ.h"
 #include <boost/shared_ptr.hpp>
 #include <gmock/gmock.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace librados {
 class TestRadosClient;
+class MockTestMemCluster;
 class MockTestMemIoCtxImpl;
 class MockTestMemRadosClient;
 }
@@ -30,7 +32,7 @@ ACTION_P(CompleteContext, r) {
 }
 
 ACTION_P2(CompleteContext, wq, r) {
-  ContextWQ *context_wq = reinterpret_cast<ContextWQ *>(wq);
+  auto context_wq = reinterpret_cast<librbd::asio::ContextWQ *>(wq);
   context_wq->queue(arg0, r);
 }
 
@@ -57,6 +59,8 @@ public:
   void TearDown() override;
 
   void expect_test_features(librbd::MockImageCtx &mock_image_ctx);
+
+  librados::MockTestMemCluster& get_mock_cluster();
 
 private:
   static TestClusterRef s_test_cluster;

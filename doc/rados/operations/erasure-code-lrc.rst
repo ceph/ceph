@@ -4,15 +4,15 @@ Locally repairable erasure code plugin
 
 With the *jerasure* plugin, when an erasure coded object is stored on
 multiple OSDs, recovering from the loss of one OSD requires reading
-from all the others. For instance if *jerasure* is configured with
-*k=8* and *m=4*, losing one OSD requires reading from the eleven
-others to repair.
+from *k* others. For instance if *jerasure* is configured with
+*k=8* and *m=4*, recovering from the loss of one OSD requires reading
+from eight others.
 
-The *lrc* erasure code plugin creates local parity chunks to be able
-to recover using less OSDs. For instance if *lrc* is configured with
+The *lrc* erasure code plugin creates local parity chunks to enable
+recovery using fewer surviving OSDs. For instance if *lrc* is configured with
 *k=8*, *m=4* and *l=4*, it will create an additional parity chunk for
 every four OSDs. When a single OSD is lost, it can be recovered with
-only four OSDs instead of eleven.
+only four OSDs instead of eight.
 
 Erasure code profile examples
 =============================
@@ -28,13 +28,13 @@ observed.::
              plugin=lrc \
              k=4 m=2 l=3 \
              crush-failure-domain=host
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 Reduce recovery bandwidth between racks
 ---------------------------------------
 
-In Firefly the reduced bandwidth will only be observed if the primary
+In Firefly the bandwidth reduction will only be observed if the primary
 OSD is in the same rack as the lost chunk.::
 
         $ ceph osd erasure-code-profile set LRCprofile \
@@ -42,7 +42,7 @@ OSD is in the same rack as the lost chunk.::
              k=4 m=2 l=3 \
              crush-locality=rack \
              crush-failure-domain=host
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 Create an lrc profile
@@ -98,7 +98,7 @@ Where:
 ``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the CRUSH rule. For intance **step take default**.
+              the CRUSH rule. For instance **step take default**.
 
 :Type: String
 :Required: No.
@@ -106,7 +106,7 @@ Where:
 
 ``crush-locality={bucket-type}``
 
-:Description: The type of the crush bucket in which each set of chunks
+:Description: The type of the CRUSH bucket in which each set of chunks
               defined by **l** will be stored. For instance, if it is
               set to **rack**, each group of **l** chunks will be
               placed in a different rack. It is used to create a
@@ -158,8 +158,8 @@ Low level plugin configuration
 ==============================
 
 The sum of **k** and **m** must be a multiple of the **l** parameter.
-The low level configuration parameters do not impose such a
-restriction and it may be more convienient to use it for specific
+The low level configuration parameters however do not enforce this
+restriction and it may be advantageous to use them for specific
 purposes. It is for instance possible to define two groups, one with 4
 chunks and another with 3 chunks. It is also possible to recursively
 define locality sets, for instance datacenters and racks into
@@ -188,7 +188,7 @@ Erasure code profile examples using low level configuration
 Minimal testing
 ---------------
 
-It is strictly equivalent to using the default erasure code profile. The *DD*
+It is strictly equivalent to using a *K=2* *M=1* erasure code profile. The *DD*
 implies *K=2*, the *c* implies *M=1* and the *jerasure* plugin is used
 by default.::
 
@@ -196,7 +196,7 @@ by default.::
              plugin=lrc \
              mapping=DD_ \
              layers='[ [ "DDc", "" ] ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 Reduce recovery bandwidth between hosts
 ---------------------------------------
@@ -214,7 +214,7 @@ the layout of the chunks is different::
                        [ "cDDD____", "" ],
                        [ "____cDDD", "" ],
                      ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 Reduce recovery bandwidth between racks
@@ -235,7 +235,7 @@ OSD is in the same rack as the lost chunk.::
                              [ "choose", "rack", 2 ],
                              [ "chooseleaf", "host", 4 ],
                             ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 Testing with different Erasure Code backends
 --------------------------------------------
@@ -251,7 +251,7 @@ be used in the lrcpool.::
              plugin=lrc \
              mapping=DD_ \
              layers='[ [ "DDc", "plugin=isa technique=cauchy" ] ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 You could also use a different erasure code profile for for each
 layer.::
@@ -264,7 +264,7 @@ layer.::
                        [ "cDDD____", "plugin=isa" ],
                        [ "____cDDD", "plugin=jerasure" ],
                      ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 
@@ -280,7 +280,7 @@ The steps found in the layers description::
    step 3      ____cDDD
 
 are applied in order. For instance, if a 4K object is encoded, it will
-first go thru *step 1* and be divided in four 1K chunks (the four
+first go through *step 1* and be divided in four 1K chunks (the four
 uppercase D). They are stored in the chunks 2, 3, 6 and 7, in
 order. From these, two coding chunks are calculated (the two lowercase
 c). The coding chunks are stored in the chunks 1 and 5, respectively.

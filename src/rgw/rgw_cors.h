@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -40,15 +41,15 @@ protected:
   uint32_t       max_age;
   uint8_t        allowed_methods;
   std::string         id;
-  std::set<string> allowed_hdrs; /* If you change this, you need to discard lowercase_allowed_hdrs */
-  std::set<string> lowercase_allowed_hdrs; /* Not built until needed in RGWCORSRule::is_header_allowed */
-  std::set<string> allowed_origins;
-  std::list<string> exposable_hdrs;
+  std::set<std::string> allowed_hdrs; /* If you change this, you need to discard lowercase_allowed_hdrs */
+  std::set<std::string> lowercase_allowed_hdrs; /* Not built until needed in RGWCORSRule::is_header_allowed */
+  std::set<std::string> allowed_origins;
+  std::list<std::string> exposable_hdrs;
 
 public:
   RGWCORSRule() : max_age(CORS_MAX_AGE_INVALID),allowed_methods(0) {}
-  RGWCORSRule(std::set<string>& o, std::set<string>& h, 
-              std::list<string>& e, uint8_t f, uint32_t a)
+  RGWCORSRule(std::set<std::string>& o, std::set<std::string>& h,
+              std::list<std::string>& e, uint8_t f, uint32_t a)
       :max_age(a),
        allowed_methods(f),
        allowed_hdrs(h),
@@ -62,22 +63,22 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(max_age, bl);
-    ::encode(allowed_methods, bl);
-    ::encode(id, bl);
-    ::encode(allowed_hdrs, bl);
-    ::encode(allowed_origins, bl);
-    ::encode(exposable_hdrs, bl);
+    encode(max_age, bl);
+    encode(allowed_methods, bl);
+    encode(id, bl);
+    encode(allowed_hdrs, bl);
+    encode(allowed_origins, bl);
+    encode(exposable_hdrs, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(max_age, bl);
-    ::decode(allowed_methods, bl);
-    ::decode(id, bl);
-    ::decode(allowed_hdrs, bl);
-    ::decode(allowed_origins, bl);
-    ::decode(exposable_hdrs, bl);
+    decode(max_age, bl);
+    decode(allowed_methods, bl);
+    decode(id, bl);
+    decode(allowed_hdrs, bl);
+    decode(allowed_origins, bl);
+    decode(exposable_hdrs, bl);
     DECODE_FINISH(bl);
   }
   bool has_wildcard_origin();
@@ -100,12 +101,12 @@ class RGWCORSConfiguration
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(rules, bl);
+    encode(rules, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(rules, bl);
+    decode(rules, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -115,7 +116,7 @@ class RGWCORSConfiguration
   bool is_empty() {
     return rules.empty();
   }
-  void get_origins_list(const char *origin, std::list<string>& origins);
+  void get_origins_list(const char *origin, std::list<std::string>& origins);
   RGWCORSRule * host_name_rule(const char *origin);
   void erase_host_name_rule(std::string& origin);
   void dump();
@@ -125,7 +126,7 @@ class RGWCORSConfiguration
 };
 WRITE_CLASS_ENCODER(RGWCORSConfiguration)
 
-static inline int validate_name_string(string& o) {
+static inline int validate_name_string(std::string_view o) {
   if (o.length() == 0)
     return -1;
   if (o.find_first_of("*") != o.find_last_of("*"))

@@ -6,18 +6,24 @@
 #pragma once
 
 #include <functional>
-#include <signal.h>
-#include <sys/wait.h>
-#include <sys/types.h>
+#include <iostream>
 #include <ostream>
+
+#include <signal.h>
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
+#include <sys/types.h>
+
+#include "include/ceph_assert.h"
 #include "common/errno.h"
 
+#ifndef _WIN32
 static void _fork_function_dummy_sighandler(int sig) {}
 
 // Run a function post-fork, with a timeout.  Function can return
 // int8_t only due to unix exit code limitations.  Returns -ETIMEDOUT
 // if timeout is reached.
-
 static inline int fork_function(
   int timeout,
   std::ostream& errstr,
@@ -29,7 +35,7 @@ static inline int fork_function(
     // just wait
     int status;
     while (waitpid(forker_pid, &status, 0) == -1) {
-      assert(errno == EINTR);
+      ceph_assert(errno == EINTR);
     }
     if (WIFSIGNALED(status)) {
       errstr << ": got signal: " << WTERMSIG(status) << "\n";
@@ -158,3 +164,13 @@ static inline int fork_function(
 fail_exit:
   _exit(EXIT_FAILURE);
 }
+#else
+static inline int fork_function(
+  int timeout,
+  std::ostream& errstr,
+  std::function<int8_t(void)> f)
+{
+  errstr << "Forking is not available on Windows.\n";
+  return -1;
+}
+#endif

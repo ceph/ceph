@@ -20,7 +20,9 @@
 #include <string>
 #include <vector>
 
+#ifndef _WIN32
 #include "common/Preforker.h"
+#endif
 
 #define RETURN1_IF_NOT_VAL(expected, expr) \
   do {\
@@ -44,7 +46,7 @@ std::string get_temp_pool_name(const char* prefix);
 class SysTestRunnable
 {
 public:
-  static const int ID_STR_SZ = 128;
+  static const int ID_STR_SZ = 196;
 
   SysTestRunnable(int argc, const char **argv);
   virtual ~SysTestRunnable();
@@ -79,7 +81,9 @@ private:
 
   friend void* systest_runnable_pthread_helper(void *arg);
 
+  #ifndef _WIN32
   Preforker preforker;
+  #endif
   const char **m_argv_orig;
   bool m_started;
   int m_id;

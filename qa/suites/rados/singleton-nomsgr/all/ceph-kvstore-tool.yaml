@@ -7,7 +7,9 @@ roles:
 
 overrides:
   ceph:
-    log-whitelist:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
     - but it is still running
     - overall HEALTH_
     - \(POOL_APP_NOT_ENABLED\)

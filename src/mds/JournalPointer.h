@@ -20,42 +20,27 @@
 #include "mdstypes.h"
 
 class Objecter;
-class Mutex;
 
 // This always lives in the same location for a given MDS
 // instance, it tells the daemon where to look for the journal.
 class JournalPointer {
-  // MDS rank
-  int node_id;
-  // Metadata pool ID
-  int64_t pool_id;
-
-  std::string get_object_id() const;
-
   public:
-  // The currently active journal
-  inodeno_t front;
-  // The backup journal, if any (may be 0)
-  inodeno_t back;
+  JournalPointer(int node_id_, int64_t pool_id_) : node_id(node_id_), pool_id(pool_id_) {}
+  JournalPointer() {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(front, bl);
-    ::encode(back, bl);
+    encode(front, bl);
+    encode(back, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(front, bl);
-    ::decode(back, bl);
+    decode(front, bl);
+    decode(back, bl);
     DECODE_FINISH(bl);
   }
-
-  JournalPointer(int node_id_, int64_t pool_id_) : node_id(node_id_), pool_id(pool_id_),
-    front(0), back(0) {}
-
-  JournalPointer() : node_id(-1), pool_id(-1), front(0), back(0) {}
 
   int load(Objecter *objecter);
   int save(Objecter *objecter) const;
@@ -81,6 +66,19 @@ class JournalPointer {
     ls.back()->front = 0xdeadbeef;
     ls.back()->back = 0xfeedbead;
   }
+
+  // The currently active journal
+  inodeno_t front = 0;
+  // The backup journal, if any (may be 0)
+  inodeno_t back = 0;
+
+  private:
+  // MDS rank
+  int node_id = -1;
+  // Metadata pool ID
+  int64_t pool_id = -1;
+
+  std::string get_object_id() const;
 };
 WRITE_CLASS_ENCODER(JournalPointer)
 

@@ -18,16 +18,16 @@
 
 #include "msg/Message.h"
 
-class MPing : public Message {
- public:
-  MPing() : Message(CEPH_MSG_PING) {}
+class MPing final : public Message {
+public:
+  MPing() : Message{CEPH_MSG_PING} {}
 private:
-  ~MPing() override {}
+  ~MPing() final {}
 
 public:
   void decode_payload() override { }
   void encode_payload(uint64_t features) override { }
-  const char *get_type_name() const override { return "ping"; }
+  std::string_view get_type_name() const override { return "ping"; }
 };
 
 #endif

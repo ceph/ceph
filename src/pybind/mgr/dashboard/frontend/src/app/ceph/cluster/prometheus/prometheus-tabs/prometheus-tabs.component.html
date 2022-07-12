@@ -1,0 +1,18 @@
+<ul ngbNav
+    #nav="ngbNav"
+    [activeId]="router.url"
+    (navChange)="router.navigate([$event.nextId])"
+    class="nav-tabs">
+  <li ngbNavItem="/monitoring/active-alerts">
+    <a ngbNavLink
+       i18n>Active Alerts</a>
+  </li>
+  <li ngbNavItem="/monitoring/alerts">
+    <a ngbNavLink
+       i18n>Alerts</a>
+  </li>
+  <li ngbNavItem="/monitoring/silences">
+    <a ngbNavLink
+       i18n>Silences</a>
+  </li>
+</ul>

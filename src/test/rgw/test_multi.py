@@ -14,11 +14,20 @@ import nose.core
 
 from rgw_multi import multisite
 from rgw_multi.zone_rados import RadosZone as RadosZone
-from rgw_multi.zone_es  import ESZone as ESZone
+from rgw_multi.zone_es import ESZone as ESZone
+from rgw_multi.zone_es import ESZoneConfig as ESZoneConfig
+from rgw_multi.zone_cloud import CloudZone as CloudZone
+from rgw_multi.zone_cloud import CloudZoneConfig as CloudZoneConfig
+from rgw_multi.zone_ps import PSZone as PSZone
+from rgw_multi.zone_ps import PSZoneConfig as PSZoneConfig
+from rgw_multi.zone_az import AZone as AZone
+from rgw_multi.zone_az import AZoneConfig as AZoneConfig
 
 # make tests from rgw_multi.tests available to nose
 from rgw_multi.tests import *
 from rgw_multi.tests_es import *
+from rgw_multi.tests_ps import *
+from rgw_multi.tests_az import *
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
@@ -34,8 +43,8 @@ def bash(cmd, **kwargs):
     check_retcode = kwargs.pop('check_retcode', True)
     kwargs['stdout'] = subprocess.PIPE
     process = subprocess.Popen(cmd, **kwargs)
-    s = process.communicate()[0]
-    log.debug('command returned status=%d stdout=%s', process.returncode, s.decode('utf-8'))
+    s = process.communicate()[0].decode('utf-8')
+    log.debug('command returned status=%d stdout=%s', process.returncode, s)
     if check_retcode:
         assert(process.returncode == 0)
     return (s, process.returncode)
@@ -52,10 +61,10 @@ class Cluster(multisite.Cluster):
         cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', self.cluster_id]
         if args:
             cmd += args
-        cmd += ['--debug-rgw', str(kwargs.pop('debug_rgw', 0))]
-        cmd += ['--debug-ms', str(kwargs.pop('debug_ms', 0))]
+        cmd += ['--debug-rgw=' + str(kwargs.pop('debug_rgw', 0))]
+        cmd += ['--debug-ms=' + str(kwargs.pop('debug_ms', 0))]
         if kwargs.pop('read_only', False):
-            cmd += ['--rgw-cache-enabled', 'false']
+            cmd += ['--rgw-cache-enabled=false']
         return bash(cmd, **kwargs)
 
     def start(self):
@@ -65,6 +74,8 @@ class Cluster(multisite.Cluster):
             env = os.environ.copy()
             env['CEPH_NUM_MDS'] = '0'
             cmd += ['-n']
+            # cmd += ['-o']
+            # cmd += ['rgw_cache_enabled=false']
         bash(cmd, env=env)
         self.needs_reset = False
 
@@ -81,18 +92,23 @@ class Gateway(multisite.Gateway):
     def start(self, args = None):
         """ start the gateway """
         assert(self.cluster)
-        cmd = [mstart_path + 'mrgw.sh', self.cluster.cluster_id, str(self.port)]
+        env = os.environ.copy()
+        # to change frontend, set RGW_FRONTEND env variable
+        # e.g. RGW_FRONTEND=civetweb
+        # to run test under valgrind memcheck, set RGW_VALGRIND to 'yes'
+        # e.g. RGW_VALGRIND=yes
+        cmd = [mstart_path + 'mrgw.sh', self.cluster.cluster_id, str(self.port), str(self.ssl_port)]
         if self.id:
             cmd += ['-i', self.id]
         cmd += ['--debug-rgw=20', '--debug-ms=1']
         if args:
             cmd += args
-        bash(cmd)
+        bash(cmd, env=env)
 
     def stop(self):
         """ stop the gateway """
         assert(self.cluster)
-        cmd = [mstart_path + 'mstop.sh', self.cluster.cluster_id, 'radosgw', self.id]
+        cmd = [mstart_path + 'mstop.sh', self.cluster.cluster_id, 'radosgw', str(self.port)]
         bash(cmd)
 
 def gen_access_key():
@@ -150,12 +166,14 @@ def setup_logging(log_level_console, log_file, log_level_file):
     ch.setFormatter(formatter)
     ch.setLevel(get_log_level(log_level_console))
     log.addHandler(ch)
+    log.setLevel(get_log_level(log_level_console))
 
 def init(parse_args):
     cfg = configparser.RawConfigParser({
                                          'num_zonegroups': 1,
                                          'num_zones': 3,
-                                         'num_es_zones': 0,
+                                         'num_ps_zones': 0,
+                                         'num_az_zones': 0,
                                          'gateways_per_zone': 2,
                                          'no_bootstrap': 'false',
                                          'log_level': 20,
@@ -165,7 +183,7 @@ def init(parse_args):
                                          'checkpoint_retries': 60,
                                          'checkpoint_delay': 5,
                                          'reconfigure_delay': 5,
-                                         'es_endpoint': None,
+                                         'use_ssl': 'false',
                                          })
     try:
         path = os.environ['RGW_MULTI_TEST_CONF']
@@ -186,7 +204,6 @@ def init(parse_args):
     section = 'DEFAULT'
     parser.add_argument('--num-zonegroups', type=int, default=cfg.getint(section, 'num_zonegroups'))
     parser.add_argument('--num-zones', type=int, default=cfg.getint(section, 'num_zones'))
-    parser.add_argument('--num-es-zones', type=int, default=cfg.getint(section, 'num_es_zones'))
     parser.add_argument('--gateways-per-zone', type=int, default=cfg.getint(section, 'gateways_per_zone'))
     parser.add_argument('--no-bootstrap', action='store_true', default=cfg.getboolean(section, 'no_bootstrap'))
     parser.add_argument('--log-level', type=int, default=cfg.getint(section, 'log_level'))
@@ -196,7 +213,25 @@ def init(parse_args):
     parser.add_argument('--checkpoint-retries', type=int, default=cfg.getint(section, 'checkpoint_retries'))
     parser.add_argument('--checkpoint-delay', type=int, default=cfg.getint(section, 'checkpoint_delay'))
     parser.add_argument('--reconfigure-delay', type=int, default=cfg.getint(section, 'reconfigure_delay'))
-    parser.add_argument('--es-endpoint', type=str, default=cfg.get(section, 'es_endpoint'))
+    parser.add_argument('--num-ps-zones', type=int, default=cfg.getint(section, 'num_ps_zones'))
+    parser.add_argument('--use-ssl', type=bool, default=cfg.getboolean(section, 'use_ssl'))
+
+
+    es_cfg = []
+    cloud_cfg = []
+    ps_cfg = []
+    az_cfg = []
+
+    for s in cfg.sections():
+        if s.startswith('elasticsearch'):
+            es_cfg.append(ESZoneConfig(cfg, s))
+        elif s.startswith('cloud'):
+            cloud_cfg.append(CloudZoneConfig(cfg, s))
+        elif s.startswith('pubsub'):
+            ps_cfg.append(PSZoneConfig(cfg, s))
+        elif s.startswith('archive'):
+            az_cfg.append(AZoneConfig(cfg, s))
+
 
     argv = []
 
@@ -205,9 +240,6 @@ def init(parse_args):
 
     args = parser.parse_args(argv)
     bootstrap = not args.no_bootstrap
-
-    # if num_es_zones is defined, need to have es_endpoint defined too
-    assert(args.num_es_zones == 0 or args.es_endpoint)
 
     setup_logging(args.log_level, args.log_file, args.file_log_level)
 
@@ -222,7 +254,7 @@ def init(parse_args):
     admin_user = multisite.User('zone.user')
 
     user_creds = gen_credentials()
-    user = multisite.User('tester')
+    user = multisite.User('tester', tenant=args.tenant)
 
     realm = multisite.Realm('r')
     if bootstrap:
@@ -233,7 +265,35 @@ def init(parse_args):
     period = multisite.Period(realm=realm)
     realm.current_period = period
 
-    num_zones = args.num_zones + args.num_es_zones
+    num_es_zones = len(es_cfg)
+    num_cloud_zones = len(cloud_cfg)
+    num_ps_zones_from_conf = len(ps_cfg)
+    num_az_zones = cfg.getint(section, 'num_az_zones')
+
+    num_ps_zones = args.num_ps_zones if num_ps_zones_from_conf == 0 else num_ps_zones_from_conf 
+
+    num_zones = args.num_zones + num_es_zones + num_cloud_zones + num_ps_zones + num_az_zones
+
+    use_ssl = cfg.getboolean(section, 'use_ssl')
+
+    if use_ssl and bootstrap:
+        cmd = ['openssl', 'req', 
+                '-x509', 
+                '-newkey', 'rsa:4096', 
+                '-sha256', 
+                '-nodes', 
+                '-keyout', 'key.pem', 
+                '-out', 'cert.pem', 
+                '-subj', '/CN=localhost', 
+                '-days', '3650']
+        bash(cmd)
+        # append key to cert
+        fkey = open('./key.pem', 'r')
+        if fkey.mode == 'r':
+            fcert = open('./cert.pem', 'a')
+            fcert.write(fkey.read())
+            fcert.close()
+        fkey.close()
 
     for zg in range(0, args.num_zonegroups):
         zonegroup = multisite.ZoneGroup(zonegroup_name(zg), period)
@@ -271,12 +331,32 @@ def init(parse_args):
                 else:
                     zonegroup.get(cluster)
 
-            es_zone = (z >= args.num_zones)
+            es_zone = (z >= args.num_zones and z < args.num_zones + num_es_zones)
+            cloud_zone = (z >= args.num_zones + num_es_zones and z < args.num_zones + num_es_zones + num_cloud_zones)
+            ps_zone = (z >= args.num_zones + num_es_zones + num_cloud_zones and z < args.num_zones + num_es_zones + num_cloud_zones + num_ps_zones)
+            az_zone = (z >= args.num_zones + num_es_zones + num_cloud_zones + num_ps_zones)
 
             # create the zone in its zonegroup
             zone = multisite.Zone(zone_name(zg, z), zonegroup, cluster)
             if es_zone:
-                zone = ESZone(zone_name(zg, z), args.es_endpoint, zonegroup, cluster)
+                zone_index = z - args.num_zones
+                zone = ESZone(zone_name(zg, z), es_cfg[zone_index].endpoint, zonegroup, cluster)
+            elif cloud_zone:
+                zone_index = z - args.num_zones - num_es_zones
+                ccfg = cloud_cfg[zone_index]
+                zone = CloudZone(zone_name(zg, z), ccfg.endpoint, ccfg.credentials, ccfg.source_bucket,
+                                 ccfg.target_path, zonegroup, cluster)
+            elif ps_zone:
+                zone_index = z - args.num_zones - num_es_zones - num_cloud_zones
+                if num_ps_zones_from_conf == 0:
+                    zone = PSZone(zone_name(zg, z), zonegroup, cluster)
+                else:
+                    pscfg = ps_cfg[zone_index]
+                    zone = PSZone(zone_name(zg, z), zonegroup, cluster,
+                                  full_sync=pscfg.full_sync, retention_days=pscfg.retention_days)
+            elif az_zone:
+                zone_index = z - args.num_zones - num_es_zones - num_cloud_zones - num_ps_zones
+                zone = AZone(zone_name(zg, z), zonegroup, cluster)
             else:
                 zone = RadosZone(zone_name(zg, z), zonegroup, cluster)
 
@@ -304,11 +384,13 @@ def init(parse_args):
             if bootstrap:
                 period.update(zone, commit=True)
 
+            ssl_port_offset = 1000
             # start the gateways
             for g in range(0, args.gateways_per_zone):
                 port = gateway_port(zg, g + z * args.gateways_per_zone)
                 client_id = gateway_name(zg, z, g)
-                gateway = Gateway(client_id, 'localhost', port, cluster, zone)
+                gateway = Gateway(client_id, 'localhost', port, cluster, zone, 
+                        ssl_port = port+ssl_port_offset if use_ssl else 0)
                 if bootstrap:
                     gateway.start()
                 zone.gateways.append(gateway)
@@ -322,14 +404,13 @@ def init(parse_args):
                     # create test user
                     arg = ['--display-name', '"Test User"']
                     arg += user_creds.credential_args()
-                    if args.tenant:
-                        cmd += ['--tenant', args.tenant]
                     user.create(zone, arg)
                 else:
                     # read users and update keys
                     admin_user.info(zone)
                     admin_creds = admin_user.credentials[0]
-                    user.info(zone)
+                    arg = []
+                    user.info(zone, arg)
                     user_creds = user.credentials[0]
 
     if not bootstrap:
@@ -337,7 +418,8 @@ def init(parse_args):
 
     config = Config(checkpoint_retries=args.checkpoint_retries,
                     checkpoint_delay=args.checkpoint_delay,
-                    reconfigure_delay=args.reconfigure_delay)
+                    reconfigure_delay=args.reconfigure_delay,
+                    tenant=args.tenant)
     init_multi(realm, user, config)
 
 def setup_module():
@@ -345,3 +427,4 @@ def setup_module():
 
 if __name__ == "__main__":
     init(True)
+

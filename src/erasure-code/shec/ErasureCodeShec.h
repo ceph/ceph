@@ -24,7 +24,7 @@
 #include "erasure-code/ErasureCode.h"
 #include "ErasureCodeShecTableCache.h"
 
-class ErasureCodeShec : public ErasureCode {
+class ErasureCodeShec : public ceph::ErasureCode {
 
 public:
   enum {
@@ -75,24 +75,24 @@ public:
 			 const std::set<int> &available_chunks,
 			 std::set<int> *minimum);
 
-  int minimum_to_decode_with_cost(const set<int> &want_to_read,
-					  const map<int, int> &available,
-					  set<int> *minimum) override;
+  int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
+				  const std::map<int, int> &available,
+				  std::set<int> *minimum) override;
 
-  int encode(const set<int> &want_to_encode,
-		     const bufferlist &in,
-		     map<int, bufferlist> *encoded) override;
-  int encode_chunks(const set<int> &want_to_encode,
-			    map<int, bufferlist> *encoded) override;
+  int encode(const std::set<int> &want_to_encode,
+		     const ceph::buffer::list &in,
+		     std::map<int, ceph::buffer::list> *encoded) override;
+  int encode_chunks(const std::set<int> &want_to_encode,
+			    std::map<int, ceph::buffer::list> *encoded) override;
 
   int _decode(const std::set<int> &want_to_read,
-	      const std::map<int, bufferlist> &chunks,
-	      std::map<int, bufferlist> *decoded) override;
-  int decode_chunks(const set<int> &want_to_read,
-			    const map<int, bufferlist> &chunks,
-			    map<int, bufferlist> *decoded) override;
+	      const std::map<int, ceph::buffer::list> &chunks,
+	      std::map<int, ceph::buffer::list> *decoded) override;
+  int decode_chunks(const std::set<int> &want_to_read,
+		    const std::map<int, ceph::buffer::list> &chunks,
+		    std::map<int, ceph::buffer::list> *decoded) override;
 
-  int init(ErasureCodeProfile &profile, ostream *ss) override;
+  int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
   virtual void shec_encode(char **data,
 			   char **coding,
 			   int blocksize) = 0;
@@ -109,7 +109,7 @@ public:
   virtual int* shec_reedsolomon_coding_matrix(int is_single);
 
 private:
-  virtual int parse(const ErasureCodeProfile &profile) = 0;
+  virtual int parse(const ceph::ErasureCodeProfile &profile) = 0;
 
   virtual double shec_calc_recovery_efficiency1(int k, int m1, int m2, int c1, int c2);
   virtual int shec_make_decoding_matrix(bool prepare,
@@ -141,7 +141,7 @@ public:
   unsigned get_alignment() const override;
   void prepare() override;
 private:
-  int parse(const ErasureCodeProfile &profile) override;
+  int parse(const ceph::ErasureCodeProfile &profile) override;
 };
 
 #endif

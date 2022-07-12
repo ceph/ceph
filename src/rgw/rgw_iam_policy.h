@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_IAM_POLICY_H
 #define CEPH_RGW_IAM_POLICY_H
@@ -9,13 +9,13 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/optional.hpp>
 #include <boost/thread/shared_mutex.hpp>
-#include <boost/utility/string_ref.hpp>
 #include <boost/variant.hpp>
 
 #include "common/ceph_time.h"
@@ -28,77 +28,145 @@
 #include "rgw_basic_types.h"
 #include "rgw_iam_policy_keywords.h"
 #include "rgw_string.h"
+#include "rgw_arn.h"
 
-class RGWRados;
 namespace rgw {
 namespace auth {
 class Identity;
 }
 }
-struct rgw_obj;
-struct rgw_bucket;
 
 namespace rgw {
 namespace IAM {
-static constexpr std::uint64_t s3None = 0;
-static constexpr std::uint64_t s3GetObject = 1ULL << 0;
-static constexpr std::uint64_t s3GetObjectVersion = 1ULL << 1;
-static constexpr std::uint64_t s3PutObject = 1ULL << 2;
-static constexpr std::uint64_t s3GetObjectAcl = 1ULL << 3;
-static constexpr std::uint64_t s3GetObjectVersionAcl = 1ULL << 4;
-static constexpr std::uint64_t s3PutObjectAcl = 1ULL << 5;
-static constexpr std::uint64_t s3PutObjectVersionAcl = 1ULL << 6;
-static constexpr std::uint64_t s3DeleteObject = 1ULL << 7;
-static constexpr std::uint64_t s3DeleteObjectVersion = 1ULL << 8;
-static constexpr std::uint64_t s3ListMultipartUploadParts = 1ULL << 9;
-static constexpr std::uint64_t s3AbortMultipartUpload = 1ULL << 10;
-static constexpr std::uint64_t s3GetObjectTorrent = 1ULL << 11;
-static constexpr std::uint64_t s3GetObjectVersionTorrent = 1ULL << 12;
-static constexpr std::uint64_t s3RestoreObject = 1ULL << 13;
-static constexpr std::uint64_t s3CreateBucket = 1ULL << 14;
-static constexpr std::uint64_t s3DeleteBucket = 1ULL << 15;
-static constexpr std::uint64_t s3ListBucket = 1ULL << 16;
-static constexpr std::uint64_t s3ListBucketVersions = 1ULL << 17;
-static constexpr std::uint64_t s3ListAllMyBuckets = 1ULL << 18;
-static constexpr std::uint64_t s3ListBucketMultiPartUploads = 1ULL << 19;
-static constexpr std::uint64_t s3GetAccelerateConfiguration = 1ULL << 20;
-static constexpr std::uint64_t s3PutAccelerateConfiguration = 1ULL << 21;
-static constexpr std::uint64_t s3GetBucketAcl = 1ULL << 22;
-static constexpr std::uint64_t s3PutBucketAcl = 1ULL << 23;
-static constexpr std::uint64_t s3GetBucketCORS = 1ULL << 24;
-static constexpr std::uint64_t s3PutBucketCORS = 1ULL << 25;
-static constexpr std::uint64_t s3GetBucketVersioning = 1ULL << 26;
-static constexpr std::uint64_t s3PutBucketVersioning = 1ULL << 27;
-static constexpr std::uint64_t s3GetBucketRequestPayment = 1ULL << 28;
-static constexpr std::uint64_t s3PutBucketRequestPayment = 1ULL << 29;
-static constexpr std::uint64_t s3GetBucketLocation = 1ULL << 30;
-static constexpr std::uint64_t s3GetBucketPolicy = 1ULL << 31;
-static constexpr std::uint64_t s3DeleteBucketPolicy = 1ULL << 32;
-static constexpr std::uint64_t s3PutBucketPolicy = 1ULL << 33;
-static constexpr std::uint64_t s3GetBucketNotification = 1ULL << 34;
-static constexpr std::uint64_t s3PutBucketNotification = 1ULL << 35;
-static constexpr std::uint64_t s3GetBucketLogging = 1ULL << 36;
-static constexpr std::uint64_t s3PutBucketLogging = 1ULL << 37;
-static constexpr std::uint64_t s3GetBucketTagging = 1ULL << 38;
-static constexpr std::uint64_t s3PutBucketTagging = 1ULL << 39;
-static constexpr std::uint64_t s3GetBucketWebsite = 1ULL << 40;
-static constexpr std::uint64_t s3PutBucketWebsite = 1ULL << 41;
-static constexpr std::uint64_t s3DeleteBucketWebsite = 1ULL << 42;
-static constexpr std::uint64_t s3GetLifecycleConfiguration = 1ULL << 43;
-static constexpr std::uint64_t s3PutLifecycleConfiguration = 1ULL << 44;
-static constexpr std::uint64_t s3PutReplicationConfiguration = 1ULL << 45;
-static constexpr std::uint64_t s3GetReplicationConfiguration = 1ULL << 46;
-static constexpr std::uint64_t s3DeleteReplicationConfiguration = 1ULL << 47;
-static constexpr std::uint64_t s3GetObjectTagging = 1ULL << 48;
-static constexpr std::uint64_t s3PutObjectTagging = 1ULL << 49;
-static constexpr std::uint64_t s3DeleteObjectTagging = 1ULL << 50;
-static constexpr std::uint64_t s3GetObjectVersionTagging = 1ULL << 51;
-static constexpr std::uint64_t s3PutObjectVersionTagging = 1ULL << 52;
-static constexpr std::uint64_t s3DeleteObjectVersionTagging = 1ULL << 53;
-static constexpr std::uint64_t s3Count = 54;
-static constexpr std::uint64_t s3All = (1ULL << s3Count) - 1;
+
+static constexpr std::uint64_t s3GetObject = 0;
+static constexpr std::uint64_t s3GetObjectVersion = 1;
+static constexpr std::uint64_t s3PutObject = 2;
+static constexpr std::uint64_t s3GetObjectAcl = 3;
+static constexpr std::uint64_t s3GetObjectVersionAcl = 4;
+static constexpr std::uint64_t s3PutObjectAcl = 5;
+static constexpr std::uint64_t s3PutObjectVersionAcl = 6;
+static constexpr std::uint64_t s3DeleteObject = 7;
+static constexpr std::uint64_t s3DeleteObjectVersion = 8;
+static constexpr std::uint64_t s3ListMultipartUploadParts = 9;
+static constexpr std::uint64_t s3AbortMultipartUpload = 10;
+static constexpr std::uint64_t s3GetObjectTorrent = 11;
+static constexpr std::uint64_t s3GetObjectVersionTorrent = 12;
+static constexpr std::uint64_t s3RestoreObject = 13;
+static constexpr std::uint64_t s3CreateBucket = 14;
+static constexpr std::uint64_t s3DeleteBucket = 15;
+static constexpr std::uint64_t s3ListBucket = 16;
+static constexpr std::uint64_t s3ListBucketVersions = 17;
+static constexpr std::uint64_t s3ListAllMyBuckets = 18;
+static constexpr std::uint64_t s3ListBucketMultipartUploads = 19;
+static constexpr std::uint64_t s3GetAccelerateConfiguration = 20;
+static constexpr std::uint64_t s3PutAccelerateConfiguration = 21;
+static constexpr std::uint64_t s3GetBucketAcl = 22;
+static constexpr std::uint64_t s3PutBucketAcl = 23;
+static constexpr std::uint64_t s3GetBucketCORS = 24;
+static constexpr std::uint64_t s3PutBucketCORS = 25;
+static constexpr std::uint64_t s3GetBucketVersioning = 26;
+static constexpr std::uint64_t s3PutBucketVersioning = 27;
+static constexpr std::uint64_t s3GetBucketRequestPayment = 28;
+static constexpr std::uint64_t s3PutBucketRequestPayment = 29;
+static constexpr std::uint64_t s3GetBucketLocation = 30;
+static constexpr std::uint64_t s3GetBucketPolicy = 31;
+static constexpr std::uint64_t s3DeleteBucketPolicy = 32;
+static constexpr std::uint64_t s3PutBucketPolicy = 33;
+static constexpr std::uint64_t s3GetBucketNotification = 34;
+static constexpr std::uint64_t s3PutBucketNotification = 35;
+static constexpr std::uint64_t s3GetBucketLogging = 36;
+static constexpr std::uint64_t s3PutBucketLogging = 37;
+static constexpr std::uint64_t s3GetBucketTagging = 38;
+static constexpr std::uint64_t s3PutBucketTagging = 39;
+static constexpr std::uint64_t s3GetBucketWebsite = 40;
+static constexpr std::uint64_t s3PutBucketWebsite = 41;
+static constexpr std::uint64_t s3DeleteBucketWebsite = 42;
+static constexpr std::uint64_t s3GetLifecycleConfiguration = 43;
+static constexpr std::uint64_t s3PutLifecycleConfiguration = 44;
+static constexpr std::uint64_t s3PutReplicationConfiguration = 45;
+static constexpr std::uint64_t s3GetReplicationConfiguration = 46;
+static constexpr std::uint64_t s3DeleteReplicationConfiguration = 47;
+static constexpr std::uint64_t s3GetObjectTagging = 48;
+static constexpr std::uint64_t s3PutObjectTagging = 49;
+static constexpr std::uint64_t s3DeleteObjectTagging = 50;
+static constexpr std::uint64_t s3GetObjectVersionTagging = 51;
+static constexpr std::uint64_t s3PutObjectVersionTagging = 52;
+static constexpr std::uint64_t s3DeleteObjectVersionTagging = 53;
+static constexpr std::uint64_t s3PutBucketObjectLockConfiguration = 54;
+static constexpr std::uint64_t s3GetBucketObjectLockConfiguration = 55;
+static constexpr std::uint64_t s3PutObjectRetention = 56;
+static constexpr std::uint64_t s3GetObjectRetention = 57;
+static constexpr std::uint64_t s3PutObjectLegalHold = 58;
+static constexpr std::uint64_t s3GetObjectLegalHold = 59;
+static constexpr std::uint64_t s3BypassGovernanceRetention = 60;
+static constexpr std::uint64_t s3GetBucketPolicyStatus = 61;
+static constexpr std::uint64_t s3PutPublicAccessBlock = 62;
+static constexpr std::uint64_t s3GetPublicAccessBlock = 63;
+static constexpr std::uint64_t s3DeletePublicAccessBlock = 64;
+static constexpr std::uint64_t s3GetBucketPublicAccessBlock = 65;
+static constexpr std::uint64_t s3PutBucketPublicAccessBlock = 66;
+static constexpr std::uint64_t s3DeleteBucketPublicAccessBlock = 67;
+static constexpr std::uint64_t s3GetBucketEncryption = 68;
+static constexpr std::uint64_t s3PutBucketEncryption = 69;
+static constexpr std::uint64_t s3All = 70;
+
+static constexpr std::uint64_t iamPutUserPolicy = s3All + 1;
+static constexpr std::uint64_t iamGetUserPolicy = s3All + 2;
+static constexpr std::uint64_t iamDeleteUserPolicy = s3All + 3;
+static constexpr std::uint64_t iamListUserPolicies = s3All + 4;
+static constexpr std::uint64_t iamCreateRole = s3All + 5;
+static constexpr std::uint64_t iamDeleteRole = s3All + 6;
+static constexpr std::uint64_t iamModifyRole = s3All + 7;
+static constexpr std::uint64_t iamGetRole = s3All + 8;
+static constexpr std::uint64_t iamListRoles = s3All + 9;
+static constexpr std::uint64_t iamPutRolePolicy = s3All + 10;
+static constexpr std::uint64_t iamGetRolePolicy = s3All + 11;
+static constexpr std::uint64_t iamListRolePolicies = s3All + 12;
+static constexpr std::uint64_t iamDeleteRolePolicy = s3All + 13;
+static constexpr std::uint64_t iamCreateOIDCProvider = s3All + 14;
+static constexpr std::uint64_t iamDeleteOIDCProvider = s3All + 15;
+static constexpr std::uint64_t iamGetOIDCProvider = s3All + 16;
+static constexpr std::uint64_t iamListOIDCProviders = s3All + 17;
+static constexpr std::uint64_t iamTagRole = s3All + 18;
+static constexpr std::uint64_t iamListRoleTags = s3All + 19;
+static constexpr std::uint64_t iamUntagRole = s3All + 20;
+static constexpr std::uint64_t iamAll = s3All + 21;
+
+static constexpr std::uint64_t stsAssumeRole = iamAll + 1;
+static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = iamAll + 2;
+static constexpr std::uint64_t stsGetSessionToken = iamAll + 3;
+static constexpr std::uint64_t stsTagSession = iamAll + 4;
+static constexpr std::uint64_t stsAll = iamAll + 5;
+
+static constexpr std::uint64_t s3Count = s3All;
+static constexpr std::uint64_t allCount = stsAll + 1;
+
+using Action_t = std::bitset<allCount>;
+using NotAction_t = Action_t;
+
+template <size_t N>
+constexpr std::bitset<N> make_bitmask(size_t s) {
+  // unfortunately none of the shift/logic operators of std::bitset have a constexpr variation
+  return s < 64 ? std::bitset<N> ((1ULL << s) - 1) :
+    std::bitset<N>((1ULL << 63) - 1) | make_bitmask<N> (s - 63) << 63;
+}
+
+template <size_t N>
+constexpr std::bitset<N> set_cont_bits(size_t start, size_t end)
+{
+  return (make_bitmask<N>(end - start)) << start;
+}
+
+static const Action_t None(0);
+static const Action_t s3AllValue = set_cont_bits<allCount>(0,s3All);
+static const Action_t iamAllValue = set_cont_bits<allCount>(s3All+1,iamAll);
+static const Action_t stsAllValue = set_cont_bits<allCount>(iamAll+1,stsAll);
+static const Action_t allValue = set_cont_bits<allCount>(0,allCount);
 
 namespace {
+// Please update the table in doc/radosgw/s3/authentication.rst if you
+// modify this function.
 inline int op_to_perm(std::uint64_t op) {
   switch (op) {
   case s3GetObject:
@@ -107,9 +175,11 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectVersionTorrent:
   case s3GetObjectTagging:
   case s3GetObjectVersionTagging:
+  case s3GetObjectRetention:
+  case s3GetObjectLegalHold:
   case s3ListAllMyBuckets:
   case s3ListBucket:
-  case s3ListBucketMultiPartUploads:
+  case s3ListBucketMultipartUploads:
   case s3ListBucketVersions:
   case s3ListMultipartUploadParts:
     return RGW_PERM_READ;
@@ -125,15 +195,20 @@ inline int op_to_perm(std::uint64_t op) {
   case s3DeleteObjectTagging:
   case s3DeleteObjectVersionTagging:
   case s3RestoreObject:
+  case s3PutObjectRetention:
+  case s3PutObjectLegalHold:
+  case s3BypassGovernanceRetention:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:
   case s3GetBucketAcl:
   case s3GetBucketCORS:
+  case s3GetBucketEncryption:
   case s3GetBucketLocation:
   case s3GetBucketLogging:
   case s3GetBucketNotification:
   case s3GetBucketPolicy:
+  case s3GetBucketPolicyStatus:
   case s3GetBucketRequestPayment:
   case s3GetBucketTagging:
   case s3GetBucketVersioning:
@@ -142,6 +217,8 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectAcl:
   case s3GetObjectVersionAcl:
   case s3GetReplicationConfiguration:
+  case s3GetBucketObjectLockConfiguration:
+  case s3GetBucketPublicAccessBlock:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -150,6 +227,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutAccelerateConfiguration:
   case s3PutBucketAcl:
   case s3PutBucketCORS:
+  case s3PutBucketEncryption:
   case s3PutBucketLogging:
   case s3PutBucketNotification:
   case s3PutBucketPolicy:
@@ -161,6 +239,8 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutObjectAcl:
   case s3PutObjectVersionAcl:
   case s3PutReplicationConfiguration:
+  case s3PutBucketObjectLockConfiguration:
+  case s3PutBucketPublicAccessBlock:
     return RGW_PERM_WRITE_ACP;
 
   case s3All:
@@ -170,70 +250,13 @@ inline int op_to_perm(std::uint64_t op) {
 }
 }
 
-using Environment = boost::container::flat_map<std::string, std::string>;
-
-enum struct Partition {
-  aws, aws_cn, aws_us_gov, wildcard
-  // If we wanted our own ARNs for principal type unique to us
-  // (maybe to integrate better with Swift) or for anything else we
-  // provide that doesn't map onto S3, we could add an 'rgw'
-  // partition type.
+enum class PolicyPrincipal {
+  Role,
+  Session,
+  Other
 };
 
-enum struct Service {
-  apigateway, appstream, artifact, autoscaling, aws_portal, acm,
-  cloudformation, cloudfront, cloudhsm, cloudsearch, cloudtrail,
-  cloudwatch, events, logs, codebuild, codecommit, codedeploy,
-  codepipeline, cognito_idp, cognito_identity, cognito_sync,
-  config, datapipeline, dms, devicefarm, directconnect,
-  ds, dynamodb, ec2, ecr, ecs, ssm, elasticbeanstalk, elasticfilesystem,
-  elasticloadbalancing, elasticmapreduce, elastictranscoder, elasticache,
-  es, gamelift, glacier, health, iam, importexport, inspector, iot,
-  kms, kinesisanalytics, firehose, kinesis, lambda, lightsail,
-  machinelearning, aws_marketplace, aws_marketplace_management,
-  mobileanalytics, mobilehub, opsworks, opsworks_cm, polly,
-  redshift, rds, route53, route53domains, sts, servicecatalog,
-  ses, sns, sqs, s3, swf, sdb, states, storagegateway, support,
-  trustedadvisor, waf, workmail, workspaces, wildcard
-};
-
-struct ARN {
-  Partition partition;
-  Service service;
-  std::string region;
-  // Once we refit tenant, we should probably use that instead of a
-  // string.
-  std::string account;
-  std::string resource;
-
-  ARN()
-    : partition(Partition::wildcard), service(Service::wildcard) {}
-  ARN(Partition partition, Service service, std::string region,
-      std::string account, std::string resource)
-    : partition(partition), service(service), region(std::move(region)),
-      account(std::move(account)), resource(std::move(resource)) {}
-  ARN(const rgw_obj& o);
-  ARN(const rgw_bucket& b);
-  ARN(const rgw_bucket& b, const std::string& o);
-
-  static boost::optional<ARN> parse(const std::string& s,
-				    bool wildcard = false);
-  std::string to_string() const;
-
-  // `this` is the pattern
-  bool match(const ARN& candidate) const;
-};
-
-inline std::string to_string(const ARN& a) {
-  return a.to_string();
-}
-
-inline std::ostream& operator <<(std::ostream& m, const ARN& a) {
-  return m << to_string(a);
-}
-
-bool operator ==(const ARN& l, const ARN& r);
-bool operator <(const ARN& l, const ARN& r);
+using Environment = std::unordered_multimap<std::string, std::string>;
 
 using Address = std::bitset<128>;
 struct MaskedIP {
@@ -249,8 +272,9 @@ struct MaskedIP {
 std::ostream& operator <<(std::ostream& m, const MaskedIP& ip);
 
 inline bool operator ==(const MaskedIP& l, const MaskedIP& r) {
-  auto shift = std::max((l.v6 ? 128 : 32) - l.prefix,
-			(r.v6 ? 128 : 32) - r.prefix);
+  auto shift = std::max((l.v6 ? 128 : 32) - ((int) l.prefix),
+			(r.v6 ? 128 : 32) - ((int) r.prefix));
+  ceph_assert(shift >= 0);
   return (l.addr >> shift) == (r.addr >> shift);
 }
 
@@ -262,6 +286,7 @@ struct Condition {
   // In future development, use symbol internment.
   std::string key;
   bool ifexists = false;
+  bool isruntime = false; //Is evaluated during run-time
   // Much to my annoyance there is no actual way to do this in a
   // typed way that is compatible with AWS. I know this because I've
   // seen examples where the same value is used as a string in one
@@ -302,7 +327,7 @@ struct Condition {
 				  * 1000000000)));
       }
 
-      return from_iso_8601(boost::string_ref(s), false);
+      return from_iso_8601(std::string_view(s), false);
     } catch (const std::logic_error& e) {
       return boost::none;
     }
@@ -338,7 +363,7 @@ struct Condition {
     ceph::bufferlist bin;
 
     try {
-      base64.decode_base64(bin);
+      bin.decode_base64(base64);
     } catch (const ceph::buffer::malformed_input& e) {
       return boost::none;
     }
@@ -362,13 +387,40 @@ struct Condition {
     }
   };
 
+  struct ci_starts_with {
+    bool operator()(const std::string& s1,
+		    const std::string& s2) const {
+      return boost::istarts_with(s1, s2);
+    }
+  };
+
+  using unordered_multimap_it_pair = std::pair <std::unordered_multimap<std::string,std::string>::const_iterator, std::unordered_multimap<std::string,std::string>::const_iterator>;
+
   template<typename F>
-  static bool orrible(F&& f, const std::string& c,
+  static bool andible(F&& f, const unordered_multimap_it_pair& it,
 		      const std::vector<std::string>& v) {
-    for (const auto& d : v) {
-      if (std::forward<F>(f)(c, d)) {
-	return true;
+    for (auto itr = it.first; itr != it.second; itr++) {
+      bool matched = false;
+      for (const auto& d : v) {
+        if (std::forward<F>(f)(itr->second, d)) {
+	        matched = true;
       }
+     }
+     if (!matched)
+      return false;
+    }
+    return true;
+  }
+
+  template<typename F>
+  static bool orrible(F&& f, const unordered_multimap_it_pair& it,
+		      const std::vector<std::string>& v) {
+    for (auto itr = it.first; itr != it.second; itr++) {
+      for (const auto& d : v) {
+        if (std::forward<F>(f)(itr->second, d)) {
+	        return true;
+      }
+     }
     }
     return false;
   }
@@ -393,6 +445,20 @@ struct Condition {
     }
     return false;
   }
+
+  template <typename F>
+  bool has_key_p(const std::string& _key, F p) const {
+    return p(key, _key);
+  }
+
+  template <typename F>
+  bool has_val_p(const std::string& _val, F p) const {
+    for (auto val : vals) {
+      if (p(val, _val))
+        return true;
+    }
+    return false;
+  }
 };
 
 std::ostream& operator <<(std::ostream& m, const Condition& c);
@@ -407,8 +473,8 @@ struct Statement {
   // deny as defensive programming.
   Effect effect = Effect::Deny;
 
-  std::uint64_t action = 0;
-  std::uint64_t notaction = 0;
+  Action_t action = 0;
+  NotAction_t notaction = 0;
 
   boost::container::flat_set<ARN> resource;
   boost::container::flat_set<ARN> notresource;
@@ -417,15 +483,20 @@ struct Statement {
 
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, const ARN& resource) const;
+	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+
+  Effect eval_principal(const Environment& e,
+		       boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+
+  Effect eval_conditions(const Environment& e) const;
 };
 
-std::ostream& operator <<(ostream& m, const Statement& s);
+std::ostream& operator <<(std::ostream& m, const Statement& s);
 
 struct PolicyParseException : public std::exception {
   rapidjson::ParseResult pr;
 
-  PolicyParseException(rapidjson::ParseResult&& pr)
+  explicit PolicyParseException(rapidjson::ParseResult&& pr)
     : pr(pr) { }
   const char* what() const noexcept override {
     return rapidjson::GetParseError_En(pr.Code());
@@ -444,21 +515,51 @@ struct Policy {
 
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, const ARN& resource) const;
-};
+	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
 
-std::ostream& operator <<(ostream& m, const Policy& p);
-}
-}
+  Effect eval_principal(const Environment& e,
+	      boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
 
-namespace std {
-template<>
-struct hash<::rgw::IAM::Service> {
-  size_t operator()(const ::rgw::IAM::Service& s) const noexcept {
-    // Invoke a default-constructed hash object for int.
-    return hash<int>()(static_cast<int>(s));
+  Effect eval_conditions(const Environment& e) const;
+
+  template <typename F>
+  bool has_conditional(const std::string& conditional, F p) const {
+    for (const auto&s: statements){
+      if (std::any_of(s.conditions.begin(), s.conditions.end(),
+		      [&](const Condition& c) { return c.has_key_p(conditional, p);}))
+	return true;
+    }
+    return false;
+  }
+
+  template <typename F>
+  bool has_conditional_value(const std::string& conditional, F p) const {
+    for (const auto&s: statements){
+      if (std::any_of(s.conditions.begin(), s.conditions.end(),
+		      [&](const Condition& c) { return c.has_val_p(conditional, p);}))
+	    return true;
+    }
+    return false;
+  }
+
+  bool has_conditional(const std::string& c) const {
+    return has_conditional(c, Condition::ci_equal_to());
+  }
+
+  bool has_partial_conditional(const std::string& c) const {
+    return has_conditional(c, Condition::ci_starts_with());
+  }
+
+  // Example: ${s3:ResourceTag}
+  bool has_partial_conditional_value(const std::string& c) const {
+    return has_conditional_value(c, Condition::ci_starts_with());
   }
 };
+
+std::ostream& operator <<(std::ostream& m, const Policy& p);
+bool is_public(const Policy& p);
+
+}
 }
 
 #endif

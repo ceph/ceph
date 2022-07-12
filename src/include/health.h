@@ -15,13 +15,15 @@ enum health_status_t {
   HEALTH_OK = 2,
 };
 
-static inline void encode(health_status_t hs, bufferlist& bl) {
+inline void encode(health_status_t hs, ceph::buffer::list& bl) {
+  using ceph::encode;
   uint8_t v = hs;
-  ::encode(v, bl);
+  encode(v, bl);
 }
-static inline void decode(health_status_t& hs, bufferlist::iterator& p) {
+inline void decode(health_status_t& hs, ceph::buffer::list::const_iterator& p) {
+  using ceph::decode;
   uint8_t v;
-  ::decode(v, p);
+  decode(v, p);
   hs = health_status_t(v);
 }
 template<>
@@ -30,21 +32,21 @@ struct denc_traits<health_status_t> {
   static constexpr bool featured = false;
   static constexpr bool bounded = true;
   static constexpr bool need_contiguous = false;
-  static void bound_encode(const bufferptr& v, size_t& p, uint64_t f=0) {
+  static void bound_encode(const ceph::buffer::ptr& v, size_t& p, uint64_t f=0) {
     p++;
   }
   static void encode(const health_status_t& v,
-		     buffer::list::contiguous_appender& p,
+		     ceph::buffer::list::contiguous_appender& p,
 		     uint64_t f=0) {
     ::denc((uint8_t)v, p);
   }
-  static void decode(health_status_t& v, buffer::ptr::iterator& p,
+  static void decode(health_status_t& v, ceph::buffer::ptr::const_iterator& p,
 		     uint64_t f=0) {
     uint8_t tmp;
     ::denc(tmp, p);
     v = health_status_t(tmp);
   }
-  static void decode(health_status_t& v, buffer::list::iterator& p,
+  static void decode(health_status_t& v, ceph::buffer::list::const_iterator& p,
 		     uint64_t f=0) {
     uint8_t tmp;
     ::denc(tmp, p);
@@ -65,4 +67,17 @@ inline std::ostream& operator<<(std::ostream &oss, const health_status_t status)
       break;
   }
   return oss;
+}
+
+inline const char *short_health_string(const health_status_t status) {
+  switch (status) {
+  case HEALTH_ERR:
+    return "ERR";
+  case HEALTH_WARN:
+    return "WRN";
+  case HEALTH_OK:
+    return "OK";
+  default:
+    return "???";
+  }
 }

@@ -7,29 +7,38 @@
 #include "UserPerm.h"
 #include "mds/flock.h"
 
-class Cond;
 class Inode;
 
 // file handle for any open file state
 
 struct Fh {
   InodeRef  inode;
-  int	    _ref;
-  loff_t    pos;
-  int       mds;        // have to talk to mds we opened with (for now)
+  int       flags;
+  uint64_t  gen;
+  UserPerm  actor_perms; // perms I opened the file with
+
+  // the members above once ininitalized in the constructor
+  // they won't change, and putting them under the client_lock
+  // makes no sense.
+
+  int       _ref = 1;
+  loff_t    pos = 0;
   int       mode;       // the mode i opened the file with
 
-  int flags;
-  bool pos_locked;           // pos is currently in use
-  list<Cond*> pos_waiters;   // waiters for pos
-
-  UserPerm actor_perms; // perms I opened the file with
+  bool pos_locked = false;           // pos is currently in use
+  std::list<ceph::condition_variable*> pos_waiters;   // waiters for pos
 
   Readahead readahead;
 
   // file lock
   std::unique_ptr<ceph_lock_state_t> fcntl_locks;
   std::unique_ptr<ceph_lock_state_t> flock_locks;
+
+  bool has_any_filelocks() {
+    return
+      (fcntl_locks && !fcntl_locks->empty()) ||
+      (flock_locks && !flock_locks->empty());
+  }
 
   // IO error encountered by any writeback on this Inode while
   // this Fh existed (i.e. an fsync on another Fh will still show
@@ -45,7 +54,7 @@ struct Fh {
   }
 
   Fh() = delete;
-  Fh(InodeRef in, int flags, int cmode, const UserPerm &perms);
+  Fh(InodeRef in, int flags, int cmode, uint64_t gen, const UserPerm &perms);
   ~Fh();
 
   void get() { ++_ref; }

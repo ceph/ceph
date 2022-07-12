@@ -14,8 +14,8 @@ First, create an authentication key for your daemon::
 
     ceph auth get-or-create mgr.$name mon 'allow profile mgr' osd 'allow *' mds 'allow *'
 
-Place that key into ``mgr data`` path, which for a cluster "ceph"
-and mgr $name "foo" would be ``/var/lib/ceph/mgr/ceph-foo``.
+Place that key as file named ``keyring`` into ``mgr data`` path, which for a cluster "ceph"
+and mgr $name "foo" would be ``/var/lib/ceph/mgr/ceph-foo`` respective ``/var/lib/ceph/mgr/ceph-foo/keyring``.
 
 Start the ceph-mgr daemon::
 
@@ -47,24 +47,42 @@ active by the monitors, and the others will be standbys.  There is
 no requirement for quorum among the ceph-mgr daemons.
 
 If the active daemon fails to send a beacon to the monitors for
-more than ``mon mgr beacon grace`` (default 30s), then it will be replaced
+more than :confval:`mon_mgr_beacon_grace`, then it will be replaced
 by a standby.
 
-If you want to pre-empt failover, you can explicitly mark a ceph-mgr
+If you want to preempt failover, you can explicitly mark a ceph-mgr
 daemon as failed using ``ceph mgr fail <mgr name>``.
+
+Performance and Scalability
+---------------------------
+
+All the mgr modules share a cache that can be enabled with
+``ceph config set mgr mgr_ttl_cache_expire_seconds <seconds>``, where seconds
+is the time to live of the cached python objects.
+
+It is recommended to enable the cache with a 10 seconds TTL when there are 500+
+osds or 10k+ pgs as internal structures might increase in size, and cause latency
+issues when requesting large structures. As an example, an OSDMap with 1000 osds
+has a aproximate size of 4MiB. With heavy load, on a 3000 osd cluster there has
+been a 1.5x improvement enabling the cache.
+
+Furthermore, you can run ``ceph daemon mgr.${MGRNAME} perf dump`` to retrieve perf
+counters of a mgr module. In ``mgr.cache_hit`` and ``mgr.cache_miss`` you'll find the
+hit/miss ratio of the mgr cache.
 
 Using modules
 -------------
 
 Use the command ``ceph mgr module ls`` to see which modules are
-available, and which are currently enabled.  Enable or disable modules
+available, and which are currently enabled. Use ``ceph mgr module ls --format=json-pretty``
+to view detailed metadata about disabled modules. Enable or disable modules
 using the commands ``ceph mgr module enable <module>`` and
 ``ceph mgr module disable <module>`` respectively.
 
 If a module is *enabled* then the active ceph-mgr daemon will load
 and execute it.  In the case of modules that provide a service,
 such as an HTTP server, the module may publish its address when it
-is loaded.  To see the addresses of such modules, use the command 
+is loaded.  To see the addresses of such modules, use the command
 ``ceph mgr services``.
 
 Some modules may also implement a special standby mode which runs on
@@ -75,9 +93,9 @@ daemon, if the client tries to connect to a standby.
 Consult the documentation pages for individual manager modules for more
 information about what functionality each module provides.
 
-Here is an example of enabling the ``dashboard`` module:
+Here is an example of enabling the :term:`Dashboard` module:
 
-::
+.. code-block:: console
 
 	$ ceph mgr module ls
 	{
@@ -109,51 +127,52 @@ Here is an example of enabling the ``dashboard`` module:
 	}
 
 
+The first time the cluster starts, it uses the :confval:`mgr_initial_modules`
+setting to override which modules to enable.  However, this setting
+is ignored through the rest of the lifetime of the cluster: only
+use it for bootstrapping.  For example, before starting your
+monitor daemons for the first time, you might add a section like
+this to your ``ceph.conf``:
+
+.. code-block:: ini
+
+    [mon]
+        mgr_initial_modules = dashboard balancer
+
+Module Pool
+-----------
+
+The manager creates a pool for use by its module to store state. The name of
+this pool is ``.mgr`` (with the leading ``.`` indicating a reserved pool
+name).
+
+.. note::
+
+   Prior to Quincy, the ``devicehealth`` module created a
+   ``device_health_metrics`` pool to store device SMART statistics. With
+   Quincy, this pool is automatically renamed to be the common manager module
+   pool.
+
+
 Calling module commands
 -----------------------
 
 Where a module implements command line hooks, the commands will
-be accessible as ordinary Ceph commands::
+be accessible as ordinary Ceph commands.  Ceph will automatically incorporate
+module commands into the standard CLI interface and route them appropriately to
+the module.::
 
     ceph <command | help>
-
-If you would like to see the list of commands handled by the
-manager (where normal ``ceph help`` would show all mon and mgr commands),
-you can send a command directly to the manager daemon::
-
-    ceph tell mgr help
-
-Note that it is not necessary to address a particular mgr instance,
-simply ``mgr`` will pick the current active daemon.
 
 Configuration
 -------------
 
-OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
-
-``mgr module path``
-
-:Description: Path to load modules from
-:Type: String
-:Default: ``"<library dir>/mgr"``
-
-``mgr data``
-
-:Description: Path to load daemon data (such as keyring)
-:Type: String
-:Default: ``"/var/lib/ceph/mgr/$cluster-$id"``
-
-``mgr tick period``
-
-:Description: How many seconds between mgr beacons to monitors, and other
-              periodic checks.
-:Type: Integer
-:Default: ``5``
-
-``mon mgr beacon grace``
-
-:Description: How long after last beacon should a mgr be considered failed
-:Type: Integer
-:Default: ``30``
+.. confval:: mgr_module_path
+.. confval:: mgr_initial_modules
+.. confval:: mgr_disabled_modules
+.. confval:: mgr_standby_modules
+.. confval:: mgr_data
+.. confval:: mgr_tick_period
+.. confval:: mon_mgr_beacon_grace
 
 .. _Modifying User Capabilities: ../../rados/operations/user-management/#modify-user-capabilities

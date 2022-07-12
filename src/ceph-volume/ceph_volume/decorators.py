@@ -11,7 +11,7 @@ def needs_root(func):
     """
     @wraps(func)
     def is_root(*a, **kw):
-        if not os.getuid() == 0:
+        if not os.getuid() == 0 and not os.environ.get('CEPH_VOLUME_SKIP_NEEDS_ROOT', False):
             raise exceptions.SuperUserError()
         return func(*a, **kw)
     return is_root
@@ -29,9 +29,9 @@ def catches(catch=None, handler=None, exit=True):
         def bar():
             try:
                 some_call()
-                print "Success!"
+                print("Success!")
             except TypeError, exc:
-                print "Error while handling some call: %s" % exc
+                print("Error while handling some call: %s" % exc)
                 sys.exit(1)
 
     You would need to decorate it like this to have the same effect::
@@ -39,15 +39,15 @@ def catches(catch=None, handler=None, exit=True):
         @catches(TypeError)
         def bar():
             some_call()
-            print "Success!"
+            print("Success!")
 
-    If multiple exceptions need to be catched they need to be provided as a
+    If multiple exceptions need to be caught they need to be provided as a
     tuple::
 
         @catches((TypeError, AttributeError))
         def bar():
             some_call()
-            print "Success!"
+            print("Success!")
     """
     catch = catch or Exception
 

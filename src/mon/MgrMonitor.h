@@ -28,8 +28,11 @@ class MgrMonitor: public PaxosService
   MgrMap pending_map;
   bool ever_had_active_mgr = false;
 
-  std::map<std::string, bufferlist> pending_metadata;
-  std::set<std::string>             pending_metadata_rm;
+  std::map<std::string, ceph::buffer::list> pending_metadata;
+  std::set<std::string> pending_metadata_rm;
+
+  std::map<std::string,Option> mgr_module_options;
+  std::list<std::string> misc_option_strings;
 
   utime_t first_seen_inactive;
 
@@ -57,6 +60,8 @@ class MgrMonitor: public PaxosService
   Context *digest_event = nullptr;
   void cancel_timer();
 
+  std::vector<health_check_map_t> prev_health_checks;
+
   bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
 
   health_status_t should_warn_about_mgr_down();
@@ -66,7 +71,7 @@ class MgrMonitor: public PaxosService
   std::vector<MonCommand> pending_command_descs;
 
 public:
-  MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
+  MgrMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
     : PaxosService(mn, p, service_name)
   {}
   ~MgrMonitor() override {}
@@ -76,13 +81,21 @@ public:
 
   const MgrMap &get_map() const { return map; }
 
+  const std::map<std::string,Option>& get_mgr_module_options() {
+    return mgr_module_options;
+  }
+  const Option *find_module_option(const std::string& name);
+
   bool in_use() const { return map.epoch > 0; }
 
   version_t get_trim_to() const override;
 
+  void prime_mgr_client();
+
   void create_initial() override;
-  void get_store_prefixes(std::set<string>& s) const override;
+  void get_store_prefixes(std::set<std::string>& s) const override;
   void update_from_paxos(bool *need_bootstrap) override;
+  void post_paxos_update() override;
   void create_pending() override;
   void encode_pending(MonitorDBStore::TransactionRef t) override;
 
@@ -106,17 +119,17 @@ public:
 
   void tick() override;
 
-  void print_summary(Formatter *f, std::ostream *ss) const;
+  void print_summary(ceph::Formatter *f, std::ostream *ss) const;
 
   const std::vector<MonCommand> &get_command_descs() const;
 
-  int load_metadata(const string& name, std::map<string, string>& m,
-		    ostream *err);
-  int dump_metadata(const string& name, Formatter *f, ostream *err);
-  void count_metadata(const string& field, Formatter *f);
-  void count_metadata(const string& field, std::map<string,int> *out);
-
-  friend class C_Updated;
+  int load_metadata(const std::string& name, std::map<std::string, std::string>& m,
+		    std::ostream *err) const;
+  int dump_metadata(const std::string& name, ceph::Formatter *f, std::ostream *err);
+  void print_nodes(ceph::Formatter *f) const;
+  void count_metadata(const std::string& field, ceph::Formatter *f);
+  void count_metadata(const std::string& field, std::map<std::string,int> *out);
+  void get_versions(std::map<std::string, std::list<std::string>> &versions);
 
   // When did the mon last call into our tick() method?  Used for detecting
   // when the mon was not updating us for some period (e.g. during slow

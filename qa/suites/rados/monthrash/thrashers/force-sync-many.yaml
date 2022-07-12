@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
       - \(TOO_FEW_PGS\)
@@ -8,5 +8,5 @@ tasks:
 - mon_thrash:
     revive_delay: 90
     thrash_delay: 1
-    thrash_store: true
+    store_thrash: true
     thrash_many: true

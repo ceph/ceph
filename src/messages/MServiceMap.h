@@ -6,29 +6,34 @@
 #include "msg/Message.h"
 #include "mgr/ServiceMap.h"
 
-class MServiceMap : public Message {
+class MServiceMap final : public Message {
 public:
   ServiceMap service_map;
 
-  MServiceMap() : Message(MSG_SERVICE_MAP) { }
+  MServiceMap() : Message{MSG_SERVICE_MAP} { }
   explicit MServiceMap(const ServiceMap& sm)
-    : Message(MSG_SERVICE_MAP),
+    : Message{MSG_SERVICE_MAP},
       service_map(sm) {
   }
 private:
-  ~MServiceMap() override {}
+  ~MServiceMap() final {}
 
 public:
-  const char *get_type_name() const override { return "service_map"; }
-  void print(ostream& out) const override {
+  std::string_view get_type_name() const override { return "service_map"; }
+  void print(std::ostream& out) const override {
     out << "service_map(e" << service_map.epoch << " "
 	<< service_map.services.size() << " svc)";
   }
   void encode_payload(uint64_t features) override {
-    ::encode(service_map, payload, features);
+    using ceph::encode;
+    encode(service_map, payload, features);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(service_map, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(service_map, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };

@@ -27,7 +27,7 @@
 SafeThreadState::SafeThreadState(PyThreadState *ts_)
     : ts(ts_)
 {
-  assert(ts != nullptr);
+  ceph_assert(ts != nullptr);
   thread = pthread_self();
 }
 
@@ -60,7 +60,7 @@ Gil::Gil(SafeThreadState &ts, bool new_thread) : pThreadState(ts)
     PyThreadState_Swap(pNewThreadState);
     dout(20) << "Switched to new thread state " << pNewThreadState << dendl;
   } else {
-    assert(pthread_self() == pThreadState.thread);
+    ceph_assert(pthread_self() == pThreadState.thread);
   }
 }
 
@@ -77,3 +77,38 @@ Gil::~Gil()
   dout(25) << "GIL released for thread state " << pThreadState.ts << dendl;
 }
 
+without_gil_t::without_gil_t()
+{
+  assert(PyGILState_Check());
+  release_gil();
+}
+
+without_gil_t::~without_gil_t()
+{
+  if (save) {
+    acquire_gil();
+  }
+}
+
+void without_gil_t::release_gil()
+{
+  save = PyEval_SaveThread();
+}
+
+void without_gil_t::acquire_gil()
+{
+  assert(save);
+  PyEval_RestoreThread(save);
+  save = nullptr;
+}
+
+with_gil_t::with_gil_t(without_gil_t& allow_threads)
+  : allow_threads{allow_threads}
+{
+  allow_threads.acquire_gil();
+}
+
+with_gil_t::~with_gil_t()
+{
+  allow_threads.release_gil();
+}

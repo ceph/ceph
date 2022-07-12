@@ -17,12 +17,20 @@
 #include "msg/async/net_handler.h"
 #include "RDMAStack.h"
 
+#include "include/compat.h"
+#include "include/sock_compat.h"
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAServerSocketImpl "
 
-RDMAServerSocketImpl::RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a)
-  : cct(cct), net(cct), server_setup_socket(-1), infiniband(i), dispatcher(s), worker(w), sa(a)
+RDMAServerSocketImpl::RDMAServerSocketImpl(
+  CephContext *cct, std::shared_ptr<Infiniband>& ib,
+  std::shared_ptr<RDMADispatcher>& rdma_dispatcher,
+  RDMAWorker *w, entity_addr_t& a, unsigned slot)
+  : ServerSocketImpl(a.get_type(), slot),
+    cct(cct), net(cct), server_setup_socket(-1), ib(ib),
+    dispatcher(rdma_dispatcher), worker(w), sa(a)
 {
 }
 
@@ -46,7 +54,6 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt)
   if (rc < 0) {
     goto err;
   }
-  net.set_close_on_exec(server_setup_socket);
 
   rc = ::bind(server_setup_socket, sa.get_sockaddr(), sa.get_sockaddr_len());
   if (rc < 0) {
@@ -76,15 +83,15 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
 {
   ldout(cct, 15) << __func__ << dendl;
 
-  assert(sock);
+  ceph_assert(sock);
+
   sockaddr_storage ss;
   socklen_t slen = sizeof(ss);
-  int sd = ::accept(server_setup_socket, (sockaddr*)&ss, &slen);
+  int sd = accept_cloexec(server_setup_socket, (sockaddr*)&ss, &slen);
   if (sd < 0) {
     return -errno;
   }
 
-  net.set_close_on_exec(sd);
   int r = net.set_nonblock(sd);
   if (r < 0) {
     ::close(sd);
@@ -97,14 +104,22 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
     return -errno;
   }
 
-  assert(NULL != out); //out should not be NULL in accept connection
+  ceph_assert(NULL != out); //out should not be NULL in accept connection
 
+  out->set_type(addr_type);
   out->set_sockaddr((sockaddr*)&ss);
   net.set_priority(sd, opt.priority, out->get_family());
 
   RDMAConnectedSocketImpl* server;
   //Worker* w = dispatcher->get_stack()->get_worker();
-  server = new RDMAConnectedSocketImpl(cct, infiniband, dispatcher, dynamic_cast<RDMAWorker*>(w));
+  server = new RDMAConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w));
+  if (!server->get_qp()) {
+    lderr(cct) << __func__ << " server->qp is null" << dendl;
+    // cann't use delete server here, destructor will fail.
+    server->cleanup();
+    ::close(sd);
+    return -1;
+  }
   server->set_accept_fd(sd);
   ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
   std::unique_ptr<RDMAConnectedSocketImpl> csi(server);

@@ -5,12 +5,11 @@
  * CRUSH functions for find rules and then mapping an input to an
  * output set.
  *
- * LGPL2
+ * LGPL-2.1 or LGPL-3.0
  */
 
 #include "crush.h"
 
-extern int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size);
 /** @ingroup API
  *
  * Map __x__ to __result_max__ items and store them in the __result__

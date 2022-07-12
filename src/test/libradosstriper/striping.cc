@@ -8,7 +8,6 @@
 #include "include/radosstriper/libradosstriper.h"
 #include "include/radosstriper/libradosstriper.hpp"
 #include "include/ceph_fs.h"
-#include "common/backport_std.h"
 #include "test/librados/test.h"
 #include "test/libradosstriper/TestCase.h"
 
@@ -325,6 +324,6 @@ const TestData simple_stripe_schemes[] = {
   {CEPH_MIN_STRIPE_UNIT, 50,           3*CEPH_MIN_STRIPE_UNIT, 45*CEPH_MIN_STRIPE_UNIT+100}
 };
 
-INSTANTIATE_TEST_CASE_P(SimpleStriping,
+INSTANTIATE_TEST_SUITE_P(SimpleStriping,
                         StriperTestRT,
                         ::testing::ValuesIn(simple_stripe_schemes));

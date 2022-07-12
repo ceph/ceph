@@ -25,7 +25,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 struct MockTrashWatcher {
   static MockTrashWatcher *s_instance;
   static MockTrashWatcher &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -49,7 +49,7 @@ struct TrashWatcher<MockTestImageCtx> {
   }
 
   static TrashWatcher<MockTestImageCtx> &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -81,7 +81,7 @@ namespace mirror {
 template <>
 struct Threads<librbd::MockTestImageCtx> {
   MockSafeTimer *timer;
-  Mutex &timer_lock;
+  ceph::mutex &timer_lock;
 
   MockContextWQ *work_queue;
 
@@ -122,7 +122,8 @@ public:
   typedef librbd::TrashWatcher<librbd::MockTestImageCtx> LibrbdTrashWatcher;
 
   struct MockListener : TrashListener {
-    MOCK_METHOD2(handle_trash_image, void(const std::string&, const utime_t&));
+    MOCK_METHOD2(handle_trash_image, void(const std::string&,
+					  const ceph::real_clock::time_point&));
   };
 
   void expect_work_queue(MockThreads &mock_threads) {
@@ -151,7 +152,7 @@ public:
   }
 
   void expect_create_trash(librados::IoCtx &io_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(io_ctx), create(RBD_TRASH, false))
+    EXPECT_CALL(get_mock_io_ctx(io_ctx), create(RBD_TRASH, false, _))
       .WillOnce(Return(r));
   }
 
@@ -160,16 +161,16 @@ public:
                          std::map<std::string, cls::rbd::TrashImageSpec>&& images,
                          int r) {
     bufferlist bl;
-    ::encode(last_image_id, bl);
-    ::encode(static_cast<size_t>(1024), bl);
+    encode(last_image_id, bl);
+    encode(static_cast<size_t>(1024), bl);
 
     bufferlist out_bl;
-    ::encode(images, out_bl);
+    encode(images, out_bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_TRASH, _, StrEq("rbd"), StrEq("trash_list"),
-                     ContentsEqual(bl), _, _))
-      .WillOnce(DoAll(WithArg<5>(Invoke([this, out_bl](bufferlist *bl) {
+                     ContentsEqual(bl), _, _, _))
+      .WillOnce(DoAll(WithArg<5>(Invoke([out_bl](bufferlist *bl) {
                           *bl = out_bl;
                         })),
                       Return(r)));
@@ -179,8 +180,8 @@ public:
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
       .WillOnce(DoAll(WithArg<1>(Invoke([this](Context *ctx) {
                         auto wrapped_ctx =
-			  new FunctionContext([this, ctx](int r) {
-			      Mutex::Locker timer_locker(m_threads->timer_lock);
+			  new LambdaContext([this, ctx](int r) {
+			      std::lock_guard timer_locker{m_threads->timer_lock};
 			      ctx->complete(r);
 			    });
 			m_threads->work_queue->queue(wrapped_ctx, 0);
@@ -291,6 +292,44 @@ TEST_F(TestMockImageDeleterTrashWatcher, Notify) {
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
 }
 
+TEST_F(TestMockImageDeleterTrashWatcher, CreateBlocklist) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+  expect_create_trash(m_local_io_ctx, -EBLOCKLISTED);
+
+  MockListener mock_listener;
+  MockTrashWatcher mock_trash_watcher(m_local_io_ctx, &mock_threads,
+                                      mock_listener);
+  C_SaferCond ctx;
+  mock_trash_watcher.init(&ctx);
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
+
+  MockLibrbdTrashWatcher mock_librbd_trash_watcher;
+  expect_trash_watcher_unregister(mock_librbd_trash_watcher, 0);
+  ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
+}
+
+TEST_F(TestMockImageDeleterTrashWatcher, CreateDNE) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+  expect_create_trash(m_local_io_ctx, -ENOENT);
+
+  MockListener mock_listener;
+  MockTrashWatcher mock_trash_watcher(m_local_io_ctx, &mock_threads,
+                                      mock_listener);
+  C_SaferCond ctx;
+  mock_trash_watcher.init(&ctx);
+  ASSERT_EQ(-ENOENT, ctx.wait());
+
+  MockLibrbdTrashWatcher mock_librbd_trash_watcher;
+  expect_trash_watcher_unregister(mock_librbd_trash_watcher, 0);
+  ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
+}
+
 TEST_F(TestMockImageDeleterTrashWatcher, CreateError) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
@@ -316,7 +355,7 @@ TEST_F(TestMockImageDeleterTrashWatcher, CreateError) {
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
 }
 
-TEST_F(TestMockImageDeleterTrashWatcher, RegisterWatcherBlacklist) {
+TEST_F(TestMockImageDeleterTrashWatcher, RegisterWatcherBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -325,14 +364,14 @@ TEST_F(TestMockImageDeleterTrashWatcher, RegisterWatcherBlacklist) {
 
   MockLibrbdTrashWatcher mock_librbd_trash_watcher;
   expect_trash_watcher_is_unregistered(mock_librbd_trash_watcher, true);
-  expect_trash_watcher_register(mock_librbd_trash_watcher, -EBLACKLISTED);
+  expect_trash_watcher_register(mock_librbd_trash_watcher, -EBLOCKLISTED);
 
   MockListener mock_listener;
   MockTrashWatcher mock_trash_watcher(m_local_io_ctx, &mock_threads,
                                       mock_listener);
   C_SaferCond ctx;
   mock_trash_watcher.init(&ctx);
-  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
 
   expect_trash_watcher_unregister(mock_librbd_trash_watcher, 0);
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
@@ -366,7 +405,7 @@ TEST_F(TestMockImageDeleterTrashWatcher, RegisterWatcherError) {
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
 }
 
-TEST_F(TestMockImageDeleterTrashWatcher, TrashListBlacklist) {
+TEST_F(TestMockImageDeleterTrashWatcher, TrashListBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -376,14 +415,14 @@ TEST_F(TestMockImageDeleterTrashWatcher, TrashListBlacklist) {
   MockLibrbdTrashWatcher mock_librbd_trash_watcher;
   expect_trash_watcher_is_unregistered(mock_librbd_trash_watcher, true);
   expect_trash_watcher_register(mock_librbd_trash_watcher, 0);
-  expect_trash_list(m_local_io_ctx, "", {}, -EBLACKLISTED);
+  expect_trash_list(m_local_io_ctx, "", {}, -EBLOCKLISTED);
 
   MockListener mock_listener;
   MockTrashWatcher mock_trash_watcher(m_local_io_ctx, &mock_threads,
                                       mock_listener);
   C_SaferCond ctx;
   mock_trash_watcher.init(&ctx);
-  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
 
   expect_trash_watcher_unregister(mock_librbd_trash_watcher, 0);
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
@@ -449,7 +488,7 @@ TEST_F(TestMockImageDeleterTrashWatcher, Rewatch) {
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
 }
 
-TEST_F(TestMockImageDeleterTrashWatcher, RewatchBlacklist) {
+TEST_F(TestMockImageDeleterTrashWatcher, RewatchBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -468,7 +507,7 @@ TEST_F(TestMockImageDeleterTrashWatcher, RewatchBlacklist) {
   mock_trash_watcher.init(&ctx);
   ASSERT_EQ(0, ctx.wait());
 
-  LibrbdTrashWatcher::get_instance().handle_rewatch_complete(-EBLACKLISTED);
+  LibrbdTrashWatcher::get_instance().handle_rewatch_complete(-EBLOCKLISTED);
   m_threads->work_queue->drain();
 
   expect_trash_watcher_unregister(mock_librbd_trash_watcher, 0);

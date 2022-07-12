@@ -68,12 +68,12 @@ Commands
 
 .. option:: count_tests
 
-   Print the number of built-in test instances of the previosly
+   Print the number of built-in test instances of the previously
    selected type that **ceph-dencoder** is able to generate.
 
 .. option:: select_test <n>
 
-   Select the given build-in test instance as a the in-memory instance
+   Select the given built-in test instance as the in-memory instance
    of the type.
 
 .. option:: get_features
@@ -141,7 +141,7 @@ Availability
 ============
 
 **ceph-dencoder** is part of Ceph, a massively scalable, open-source, distributed storage system. Please
-refer to the Ceph documentation at http://ceph.com/docs for more
+refer to the Ceph documentation at https://docs.ceph.com for more
 information.
 
 

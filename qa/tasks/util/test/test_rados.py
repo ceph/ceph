@@ -26,7 +26,7 @@
 #  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #  OTHER DEALINGS IN THE SOFTWARE.
 #
-from .. import rados
+from tasks.util import rados
 
 class TestRados(object):
 

@@ -1,40 +1,54 @@
 #!/usr/bin/env bash
 set -e
 
-if [ ! -e Makefile -o ! -d bin ]; then
+if [ ! -e CMakeCache.txt -o ! -d bin ]; then
     echo 'run this from the build dir'
     exit 1
 fi
 
-TEMP_DIR=${TMPDIR:-/tmp}
-if [ ! -d $TEMP_DIR/ceph-disk-virtualenv -o ! -d $TEMP_DIR/ceph-detect-init-virtualenv ]; then
-    echo '/tmp/*-virtualenv directories not built. Please run "make check" first.'
-    exit 1
-fi
+function get_cmake_variable() {
+    local variable=$1
+    grep "$variable" CMakeCache.txt | cut -d "=" -f 2
+}
+
+function get_python_path() {
+    python_common=$(realpath ../src/python-common)
+    echo $(realpath ../src/pybind):$(pwd)/lib/cython_modules/lib.3:$python_common
+}
 
 if [ `uname` = FreeBSD ]; then
     # otherwise module prettytable will not be found
-    export PYTHONPATH=/usr/local/lib/python2.7/site-packages
+    export PYTHONPATH=$(get_python_path):/usr/local/lib/python3.6/site-packages
     exec_mode=+111
     KERNCORE="kern.corefile"
     COREPATTERN="core.%N.%P"
 else
-    export PYTHONPATH=/usr/lib/python2.7/dist-packages
+    export PYTHONPATH=$(get_python_path)
     exec_mode=/111
     KERNCORE="kernel.core_pattern"
     COREPATTERN="core.%e.%p.%t"
 fi
 
-function finish() {
+function cleanup() {
     if [ -n "$precore" ]; then
-        sudo sysctl -w ${KERNCORE}=${precore}
+        sudo sysctl -w "${KERNCORE}=${precore}"
     fi
+}
+
+function finish() {
+    cleanup
     exit 0
 }
 
 trap finish TERM HUP INT
 
 PATH=$(pwd)/bin:$PATH
+
+# add /sbin and /usr/sbin to PATH to find sysctl in those cases where the
+# user's PATH does not get these directories by default (e.g., tumbleweed)
+PATH=$PATH:/sbin:/usr/sbin
+
+export LD_LIBRARY_PATH="$(pwd)/lib"
 
 # TODO: Use getops
 dryrun=false
@@ -60,26 +74,31 @@ precore="$(sysctl -n $KERNCORE)"
 if [ "$precore" = "$COREPATTERN" ]; then
     precore=""
 else
-    sudo sysctl -w ${KERNCORE}=${COREPATTERN}
+    sudo sysctl -w "${KERNCORE}=${COREPATTERN}"
 fi
+# Clean out any cores in core target directory (currently .)
+if ls $(dirname $(sysctl -n $KERNCORE)) | grep -q '^core\|core$' ; then
+    mkdir found.cores.$$ 2> /dev/null || true
+    for i in $(ls $(dirname $(sysctl -n $KERNCORE)) | grep '^core\|core$'); do
+	mv $i found.cores.$$
+    done
+    echo "Stray cores put in $(pwd)/found.cores.$$"
+fi
+
 ulimit -c unlimited
-for f in $(cd $location ; find . -perm $exec_mode -type f)
+for f in $(cd $location ; find . -mindepth 2 -perm $exec_mode -type f)
 do
     f=$(echo $f | sed 's/\.\///')
-    # This is tested with misc/test-ceph-helpers.sh
-    if [[ "$f" = "ceph-helpers.sh" ]]; then
-        continue
-    fi
     if [[ "$all" = "false" ]]; then
         found=false
         for c in "${!select[@]}"
         do
-            # Get command and any arguments of subset of tests ro tun
+            # Get command and any arguments of subset of tests to run
             allargs="${select[$c]}"
             arg1=$(echo "$allargs" | cut --delimiter " " --field 1)
             # Get user args for this selection for use below
             userargs="$(echo $allargs | cut -s --delimiter " " --field 2-)"
-            if [[ "$arg1" = $(basename $f) ]]; then
+            if [[ "$arg1" = $(basename $f) ]] || [[  "$arg1" = $(dirname $f) ]]; then
                 found=true
                 break
             fi
@@ -105,15 +124,13 @@ do
 	    CEPH_ROOT=.. \
 	    CEPH_LIB=lib \
 	    LOCALRUN=yes \
-	    $cmd ; then
+	    time -f "Elapsed %E (%e seconds)" $cmd ; then
           echo "$f .............. FAILED"
           errors=$(expr $errors + 1)
         fi
     fi
 done
-if [ -n "$precore" ]; then
-    sudo sysctl -w ${KERNCORE}=${precore}
-fi
+cleanup
 
 if [ "$errors" != "0" ]; then
     echo "$errors TESTS FAILED, $count TOTAL TESTS"

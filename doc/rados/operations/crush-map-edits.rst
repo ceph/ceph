@@ -1,14 +1,14 @@
 Manually editing a CRUSH Map
 ============================
 
-.. note:: Manually editing the CRUSH map is considered an advanced
+.. note:: Manually editing the CRUSH map is an advanced
 	  administrator operation.  All CRUSH changes that are
 	  necessary for the overwhelming majority of installations are
 	  possible via the standard ceph CLI and do not require manual
 	  CRUSH map edits.  If you have identified a use case where
-	  manual edits *are* necessary, consider contacting the Ceph
-	  developers so that future versions of Ceph can make this
-	  unnecessary.
+	  manual edits *are* necessary with recent Ceph releases, consider
+	  contacting the Ceph developers so that future versions of Ceph
+	  can obviate your corner case.
 
 To edit an existing CRUSH map:
 
@@ -52,19 +52,37 @@ To decompile a CRUSH map, execute the following::
 
 	crushtool -d {compiled-crushmap-filename} -o {decompiled-crushmap-filename}
 
+.. _compilecrushmap:
+
+Recompile a CRUSH Map
+---------------------
+
+To compile a CRUSH map, execute the following::
+
+	crushtool -c {decompiled-crushmap-filename} -o {compiled-crushmap-filename}
+
+.. _setcrushmap:
+
+Set the CRUSH Map
+-----------------
+
+To set the CRUSH map for your cluster, execute the following::
+
+	ceph osd setcrushmap -i {compiled-crushmap-filename}
+
+Ceph will load (-i) a compiled CRUSH map from the filename you specified.
 
 Sections
 --------
 
 There are six main sections to a CRUSH Map.
 
-#. **tunables:** The preamble at the top of the map described any *tunables*
-   for CRUSH behavior that vary from the historical/legacy CRUSH behavior. These
-   correct for old bugs, optimizations, or other changes in behavior that have
+#. **tunables:** The preamble at the top of the map describes any *tunables*
+   that differ from the historical / legacy CRUSH behavior. These
+   correct for old bugs, optimizations, or other changes that have
    been made over the years to improve CRUSH's behavior.
 
-#. **devices:** Devices are individual ``ceph-osd`` daemons that can
-   store data.
+#. **devices:** Devices are individual OSDs that store data.
 
 #. **types**: Bucket ``types`` define the types of buckets used in
    your CRUSH hierarchy. Buckets consist of a hierarchical aggregation
@@ -73,7 +91,7 @@ There are six main sections to a CRUSH Map.
 
 #. **buckets:** Once you define bucket types, you must define each node
    in the hierarchy, its type, and which devices or other nodes it
-   containes.
+   contains.
 
 #. **rules:** Rules define policy about how data is distributed across
    devices in the hierarchy.
@@ -89,13 +107,15 @@ There are six main sections to a CRUSH Map.
 CRUSH Map Devices
 -----------------
 
-Devices are individual ``ceph-osd`` daemons that can store data.  You
-will normally have one defined here for each OSD daemon in your
-cluster.  Devices are identified by an id (a non-negative integer) and
-a name, normally ``osd.N`` where ``N`` is the device id.
+Devices are individual OSDs that store data.  Usually one is defined here for each
+OSD daemon in your
+cluster.  Devices are identified by an ``id`` (a non-negative integer) and
+a ``name``, normally ``osd.N`` where ``N`` is the device id.
+
+.. _crush-map-device-class:
 
 Devices may also have a *device class* associated with them (e.g.,
-``hdd`` or ``ssd``), allowing them to be conveniently targetted by a
+``hdd`` or ``ssd``), allowing them to be conveniently targeted by a
 crush rule.
 
 ::
@@ -154,8 +174,9 @@ For example::
 	type 6 pod
 	type 7 room
 	type 8 datacenter
-	type 9 region
-	type 10 root
+	type 9 zone
+	type 10 region
+	type 11 root
 
 
 
@@ -223,7 +244,7 @@ result in bringing down numerous hosts/nodes and their OSDs.
 When declaring a bucket instance, you must specify its type, give it a unique
 name (string), assign it a unique ID expressed as a negative integer (optional),
 specify a weight relative to the total capacity/capability of its item(s),
-specify the bucket algorithm (usually ``straw``), and the hash (usually ``0``,
+specify the bucket algorithm (usually ``straw2``), and the hash (usually ``0``,
 reflecting hash algorithm ``rjenkins1``). A bucket may have one or more items.
 The items may consist of node buckets or leaves. Items may have a weight that
 reflects the relative weight of the item.
@@ -233,7 +254,7 @@ You may declare a node bucket with the following syntax::
 	[bucket-type] [bucket-name] {
 		id [a unique negative numeric ID]
 		weight [the relative capacity/capability of the item(s)]
-		alg [the bucket type: uniform | list | tree | straw ]
+		alg [the bucket type: uniform | list | tree | straw | straw2 ]
 		hash [the hash type: 0 by default]
 		item [item-name] weight [weight]
 	}
@@ -243,7 +264,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 	host node1 {
 		id -1
-		alg straw
+		alg straw2
 		hash 0
 		item osd.0 weight 1.00
 		item osd.1 weight 1.00
@@ -251,7 +272,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 	host node2 {
 		id -2
-		alg straw
+		alg straw2
 		hash 0
 		item osd.2 weight 1.00
 		item osd.3 weight 1.00
@@ -259,7 +280,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 	rack rack1 {
 		id -3
-		alg straw
+		alg straw2
 		hash 0
 		item node1 weight 2.00
 		item node2 weight 2.00
@@ -271,14 +292,14 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 .. topic:: Bucket Types
 
-   Ceph supports four bucket types, each representing a tradeoff between
+   Ceph supports five bucket types, each representing a tradeoff between
    performance and reorganization efficiency. If you are unsure of which bucket
-   type to use, we recommend using a ``straw`` bucket.  For a detailed
+   type to use, we recommend using a ``straw2`` bucket.  For a detailed
    discussion of bucket types, refer to
    `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_,
    and more specifically to **Section 3.4**. The bucket types are:
 
-	#. **Uniform**: Uniform buckets aggregate devices with **exactly** the same
+	#. **uniform**: Uniform buckets aggregate devices with **exactly** the same
 	   weight. For example, when firms commission or decommission hardware, they
 	   typically do so with many machines that have exactly the same physical
 	   configuration (e.g., bulk purchases). When storage devices have exactly
@@ -286,7 +307,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   CRUSH to map replicas into uniform buckets in constant time. With
 	   non-uniform weights, you should use another bucket algorithm.
 
-	#. **List**: List buckets aggregate their content as linked lists. Based on
+	#. **list**: List buckets aggregate their content as linked lists. Based on
 	   the :abbr:`RUSH (Replication Under Scalable Hashing)` :sub:`P` algorithm,
 	   a list is a natural and intuitive choice for an **expanding cluster**:
 	   either an object is relocated to the newest device with some appropriate
@@ -296,13 +317,13 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   amount of unnecessary movement, making list buckets most suitable for
 	   circumstances in which they **never (or very rarely) shrink**.
 
-	#. **Tree**: Tree buckets use a binary search tree. They are more efficient
+	#. **tree**: Tree buckets use a binary search tree. They are more efficient
 	   than list buckets when a bucket contains a larger set of items. Based on
 	   the :abbr:`RUSH (Replication Under Scalable Hashing)` :sub:`R` algorithm,
 	   tree buckets reduce the placement time to O(log :sub:`n`), making them
 	   suitable for managing much larger sets of devices or nested buckets.
 
-	#. **Straw**: List and Tree buckets use a divide and conquer strategy
+	#. **straw**: List and Tree buckets use a divide and conquer strategy
 	   in a way that either gives certain items precedence (e.g., those
 	   at the beginning of a list) or obviates the need to consider entire
 	   subtrees of items at all. That improves the performance of the replica
@@ -312,7 +333,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   fairly “compete” against each other for replica placement through a
 	   process analogous to a draw of straws.
 
-        #. **Straw2**: Straw2 buckets improve Straw to correctly avoid any data 
+        #. **straw2**: Straw2 buckets improve Straw to correctly avoid any data
            movement between items when neighbor weights change.
 
            For example the weight of item A including adding it anew or removing
@@ -372,21 +393,17 @@ A rule takes the following form::
 
 	rule <rulename> {
 
-		ruleset <ruleset>
+		id [a unique whole numeric ID]
 		type [ replicated | erasure ]
-		min_size <min-size>
-		max_size <max-size>
 		step take <bucket-name> [class <device-class>]
-		step [choose|chooseleaf] [firstn|indep] <N> <bucket-type>
+		step [choose|chooseleaf] [firstn|indep] <N> type <bucket-type>
 		step emit
 	}
 
 
-``ruleset``
+``id``
 
-:Description: A unique whole number for identifying the rule. The name ``ruleset``
-              is a carry-over from the past, when it was possible to have multiple
-              CRUSH rules per pool.
+:Description: A unique whole number for identifying the rule.
 
 :Purpose: A component of the rule mask.
 :Type: Integer
@@ -405,26 +422,6 @@ A rule takes the following form::
 :Default: ``replicated``
 :Valid Values: Currently only ``replicated`` and ``erasure``
 
-``min_size``
-
-:Description: If a pool makes fewer replicas than this number, CRUSH will
-              **NOT** select this rule.
-
-:Type: Integer
-:Purpose: A component of the rule mask.
-:Required: Yes
-:Default: ``1``
-
-``max_size``
-
-:Description: If a pool makes more replicas than this number, CRUSH will
-              **NOT** select this rule.
-
-:Type: Integer
-:Purpose: A component of the rule mask.
-:Required: Yes
-:Default: 10
-
 
 ``step take <bucket-name> [class <device-class>]``
 
@@ -439,8 +436,9 @@ A rule takes the following form::
 
 ``step choose firstn {num} type {bucket-type}``
 
-:Description: Selects the number of buckets of the given type. The number is
-              usually the number of replicas in the pool (i.e., pool size).
+:Description: Selects the number of buckets of the given type from within the
+	      current bucket. The number is usually the number of replicas in
+	      the pool (i.e., pool size).
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
               - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
@@ -454,8 +452,8 @@ A rule takes the following form::
 ``step chooseleaf firstn {num} type {bucket-type}``
 
 :Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf
-              node from the subtree of each bucket in the set of buckets. The
-              number of buckets in the set is usually the number of replicas in
+              node (that is, an OSD) from the subtree of each bucket in the set of buckets.
+              The number of buckets in the set is usually the number of replicas in
               the pool (i.e., pool size).
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
@@ -465,7 +463,6 @@ A rule takes the following form::
 :Purpose: A component of the rule. Usage removes the need to select a device using two steps.
 :Prerequisite: Follows ``step take`` or ``step choose``.
 :Example: ``step chooseleaf firstn 0 type row``
-
 
 
 ``step emit``
@@ -481,144 +478,180 @@ A rule takes the following form::
 .. important:: A given CRUSH rule may be assigned to multiple pools, but it
    is not possible for a single pool to have multiple CRUSH rules.
 
+``firstn`` versus ``indep``
 
-Placing Different Pools on Different OSDS:
-==========================================
+:Description: Controls the replacement strategy CRUSH uses when items (OSDs)
+	      are marked down in the CRUSH map. If this rule is to be used with
+	      replicated pools it should be ``firstn`` and if it's for
+	      erasure-coded pools it should be ``indep``.
 
-Suppose you want to have most pools default to OSDs backed by large hard drives,
-but have some pools mapped to OSDs backed by fast solid-state drives (SSDs).
-It's possible to have multiple independent CRUSH hierarchies within the same
-CRUSH map. Define two hierarchies with two different root nodes--one for hard
-disks (e.g., "root platter") and one for SSDs (e.g., "root ssd") as shown
-below::
+	      The reason has to do with how they behave when a
+	      previously-selected device fails. Let's say you have a PG stored
+	      on OSDs 1, 2, 3, 4, 5. Then 3 goes down.
+	      
+	      With the "firstn" mode, CRUSH simply adjusts its calculation to
+	      select 1 and 2, then selects 3 but discovers it's down, so it
+	      retries and selects 4 and 5, and then goes on to select a new
+	      OSD 6. So the final CRUSH mapping change is
+	      1, 2, 3, 4, 5 -> 1, 2, 4, 5, 6.
 
-  device 0 osd.0
-  device 1 osd.1
-  device 2 osd.2
-  device 3 osd.3
-  device 4 osd.4
-  device 5 osd.5
-  device 6 osd.6
-  device 7 osd.7
+	      But if you're storing an EC pool, that means you just changed the
+	      data mapped to OSDs 4, 5, and 6! So the "indep" mode attempts to
+	      not do that. You can instead expect it, when it selects the failed
+	      OSD 3, to try again and pick out 6, for a final transformation of:
+	      1, 2, 3, 4, 5 -> 1, 2, 6, 4, 5
+	      
+.. _crush-reclassify:
 
-	host ceph-osd-ssd-server-1 {
-		id -1
-		alg straw
-		hash 0
-		item osd.0 weight 1.00
-		item osd.1 weight 1.00
-	}
+Migrating from a legacy SSD rule to device classes
+--------------------------------------------------
 
-	host ceph-osd-ssd-server-2 {
-		id -2
-		alg straw
-		hash 0
-		item osd.2 weight 1.00
-		item osd.3 weight 1.00
-	}
+It used to be necessary to manually edit your CRUSH map and maintain a
+parallel hierarchy for each specialized device type (e.g., SSD) in order to
+write rules that apply to those devices.  Since the Luminous release,
+the *device class* feature has enabled this transparently.
 
-	host ceph-osd-platter-server-1 {
-		id -3
-		alg straw
-		hash 0
-		item osd.4 weight 1.00
-		item osd.5 weight 1.00
-	}
+However, migrating from an existing, manually customized per-device map to
+the new device class rules in the trivial way will cause all data in the
+system to be reshuffled.
 
-	host ceph-osd-platter-server-2 {
-		id -4
-		alg straw
-		hash 0
-		item osd.6 weight 1.00
-		item osd.7 weight 1.00
-	}
+The ``crushtool`` has a few commands that can transform a legacy rule
+and hierarchy so that you can start using the new class-based rules.
+There are three types of transformations possible:
 
-	root platter {
-		id -5
-		alg straw
-		hash 0
-		item ceph-osd-platter-server-1 weight 2.00
-		item ceph-osd-platter-server-2 weight 2.00
-	}
+#. ``--reclassify-root <root-name> <device-class>``
 
-	root ssd {
-		id -6
-		alg straw
-		hash 0
-		item ceph-osd-ssd-server-1 weight 2.00
-		item ceph-osd-ssd-server-2 weight 2.00
-	}
+   This will take everything in the hierarchy beneath root-name and
+   adjust any rules that reference that root via a ``take
+   <root-name>`` to instead ``take <root-name> class <device-class>``.
+   It renumbers the buckets in such a way that the old IDs are instead
+   used for the specified class's "shadow tree" so that no data
+   movement takes place.
 
-	rule data {
-		ruleset 0
-		type replicated
-		min_size 2
-		max_size 2
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+   For example, imagine you have an existing rule like::
 
-	rule metadata {
-		ruleset 1
-		type replicated
-		min_size 0
-		max_size 10
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+     rule replicated_rule {
+        id 0
+        type replicated
+        step take default
+        step chooseleaf firstn 0 type rack
+        step emit
+     }
 
-	rule rbd {
-		ruleset 2
-		type replicated
-		min_size 0
-		max_size 10
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+   If you reclassify the root `default` as class `hdd`, the rule will
+   become::
 
-	rule platter {
-		ruleset 3
-		type replicated
-		min_size 0
-		max_size 10
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+     rule replicated_rule {
+        id 0
+        type replicated
+        step take default class hdd
+        step chooseleaf firstn 0 type rack
+        step emit
+     }
 
-	rule ssd {
-		ruleset 4
-		type replicated
-		min_size 0
-		max_size 4
-		step take ssd
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+#. ``--set-subtree-class <bucket-name> <device-class>``
 
-	rule ssd-primary {
-		ruleset 5
-		type replicated
-		min_size 5
-		max_size 10
-		step take ssd
-		step chooseleaf firstn 1 type host
-		step emit
-		step take platter
-		step chooseleaf firstn -1 type host
-		step emit
-	}
+   This will mark every device in the subtree rooted at *bucket-name*
+   with the specified device class.
 
-You can then set a pool to use the SSD rule by::
+   This is normally used in conjunction with the ``--reclassify-root``
+   option to ensure that all devices in that root are labeled with the
+   correct class.  In some situations, however, some of those devices
+   (correctly) have a different class and we do not want to relabel
+   them.  In such cases, one can exclude the ``--set-subtree-class``
+   option.  This means that the remapping process will not be perfect,
+   since the previous rule distributed across devices of multiple
+   classes but the adjusted rules will only map to devices of the
+   specified *device-class*, but that often is an accepted level of
+   data movement when the number of outlier devices is small.
 
-  ceph osd pool set <poolname> crush_rule ssd
+#. ``--reclassify-bucket <match-pattern> <device-class> <default-parent>``
 
-Similarly, using the ``ssd-primary`` rule will cause each placement group in the
-pool to be placed with an SSD as the primary and platters as the replicas.
+   This will allow you to merge a parallel type-specific hierarchy with the normal hierarchy.  For example, many users have maps like::
 
+     host node1 {
+        id -2           # do not change unnecessarily
+        # weight 109.152
+        alg straw2
+        hash 0  # rjenkins1
+        item osd.0 weight 9.096
+        item osd.1 weight 9.096
+        item osd.2 weight 9.096
+        item osd.3 weight 9.096
+        item osd.4 weight 9.096
+        item osd.5 weight 9.096
+        ...
+     }
+
+     host node1-ssd {
+        id -10          # do not change unnecessarily
+        # weight 2.000
+        alg straw2
+        hash 0  # rjenkins1
+        item osd.80 weight 2.000
+	...
+     }
+
+     root default {
+        id -1           # do not change unnecessarily
+        alg straw2
+        hash 0  # rjenkins1
+        item node1 weight 110.967
+        ...
+     }
+
+     root ssd {
+        id -18          # do not change unnecessarily
+        # weight 16.000
+        alg straw2
+        hash 0  # rjenkins1
+        item node1-ssd weight 2.000
+	...
+     }
+
+   This function will reclassify each bucket that matches a
+   pattern.  The pattern can look like ``%suffix`` or ``prefix%``.
+   For example, in the above example, we would use the pattern
+   ``%-ssd``.  For each matched bucket, the remaining portion of the
+   name (that matches the ``%`` wildcard) specifies the *base bucket*.
+   All devices in the matched bucket are labeled with the specified
+   device class and then moved to the base bucket.  If the base bucket
+   does not exist (e.g., ``node12-ssd`` exists but ``node12`` does
+   not), then it is created and linked underneath the specified
+   *default parent* bucket.  In each case, we are careful to preserve
+   the old bucket IDs for the new shadow buckets to prevent data
+   movement.  Any rules with ``take`` steps referencing the old
+   buckets are adjusted.
+
+#. ``--reclassify-bucket <bucket-name> <device-class> <base-bucket>``
+
+   The same command can also be used without a wildcard to map a
+   single bucket.  For example, in the previous example, we want the
+   ``ssd`` bucket to be mapped to the ``default`` bucket.
+
+The final command to convert the map comprised of the above fragments would be something like::
+
+  $ ceph osd getcrushmap -o original
+  $ crushtool -i original --reclassify \
+      --set-subtree-class default hdd \
+      --reclassify-root default hdd \
+      --reclassify-bucket %-ssd ssd default \
+      --reclassify-bucket ssd ssd default \
+      -o adjusted
+
+In order to ensure that the conversion is correct, there is a ``--compare`` command that will test a large sample of inputs to the CRUSH map and ensure that the same result comes back out.  These inputs are controlled by the same options that apply to the ``--test`` command.  For the above example,::
+
+  $ crushtool -i original --compare adjusted
+  rule 0 had 0/10240 mismatched mappings (0)
+  rule 1 had 0/10240 mismatched mappings (0)
+  maps appear equivalent
+
+If there were difference, you'd see what ratio of inputs are remapped
+in the parentheses.
+
+If you are satisfied with the adjusted map, you can apply it to the cluster with something like::
+
+  ceph osd setcrushmap -i adjusted
 
 Tuning CRUSH, the hard way
 --------------------------
@@ -656,4 +689,4 @@ Further, as noted above, be careful running old versions of the
 ``ceph-osd`` daemon after reverting to legacy values as the feature
 bit is not perfectly enforced.
 
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/wp-content/uploads/2016/08/weil-crush-sc06.pdf
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/assets/pdfs/weil-crush-sc06.pdf

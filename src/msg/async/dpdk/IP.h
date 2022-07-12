@@ -20,19 +20,6 @@
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  *
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
 #ifndef CEPH_MSG_IP_H_
 #define CEPH_MSG_IP_H_
@@ -73,7 +60,7 @@ struct ipv4_traits {
     ethernet_address e_dst;
     ip_protocol_num proto_num;
   };
-  using packet_provider_type = std::function<Tub<l4packet> ()>;
+  using packet_provider_type = std::function<std::optional<l4packet> ()>;
   static void tcp_pseudo_header_checksum(checksummer& csum, ipv4_address src, ipv4_address dst, uint16_t len) {
     csum.sum_many(src.ip, dst.ip, uint8_t(0), uint8_t(ip_protocol_num::tcp), len);
   }
@@ -131,21 +118,10 @@ class ipv4_tcp final : public ip_protocol {
  public:
   ipv4_tcp(ipv4& inet, EventCenter *c);
   ~ipv4_tcp();
-  virtual void received(Packet p, ipv4_address from, ipv4_address to);
+  virtual void received(Packet p, ipv4_address from, ipv4_address to) override;
   virtual bool forward(forward_hash& out_hash_data, Packet& p, size_t off) override;
   friend class ipv4;
 };
-
-struct icmp_hdr {
-  enum class msg_type : uint8_t {
-    echo_reply = 0,
-    echo_request = 8,
-  };
-  msg_type type;
-  uint8_t code;
-  uint16_t csum;
-  uint32_t rest;
-} __attribute__((packed));
 
 
 class icmp {
@@ -155,7 +131,7 @@ class icmp {
   explicit icmp(CephContext *c, inet_type& inet)
       : cct(c), _inet(inet), _queue_space(c, "DPDK::icmp::_queue_space", 212992) {
     _inet.register_packet_provider([this] {
-      Tub<ipv4_traits::l4packet> l4p;
+      std::optional<ipv4_traits::l4packet> l4p;
       if (!_packetq.empty()) {
         l4p = std::move(_packetq.front());
         _packetq.pop_front();
@@ -180,7 +156,7 @@ class ipv4_icmp final : public ip_protocol {
   icmp _icmp;
  public:
   ipv4_icmp(CephContext *c, ipv4& inet) : cct(c), _inet_l4(inet), _icmp(c, _inet_l4) {}
-  virtual void received(Packet p, ipv4_address from, ipv4_address to) {
+  virtual void received(Packet p, ipv4_address from, ipv4_address to) override {
     _icmp.received(std::move(p), from, to);
   }
   friend class ipv4;
@@ -237,7 +213,7 @@ class ipv4 {
  private:
   interface* _netif;
   std::vector<ipv4_traits::packet_provider_type> _pkt_providers;
-  Tub<uint64_t> frag_timefd;
+  std::optional<uint64_t> frag_timefd;
   EventCallbackRef frag_handler;
   arp _global_arp;
   arp_for<ipv4> _arp;
@@ -275,7 +251,7 @@ class ipv4 {
  private:
   int handle_received_packet(Packet p, ethernet_address from);
   bool forward(forward_hash& out_hash_data, Packet& p, size_t off);
-  Tub<l3_protocol::l3packet> get_packet();
+  std::optional<l3_protocol::l3packet> get_packet();
   bool in_my_netmask(ipv4_address a) const {
     return !((a.ip ^ _host_address.ip) & _netmask.ip);
   }
@@ -286,11 +262,11 @@ class ipv4 {
   }
   void frag_arm(utime_t now) {
     auto tp = now + _frag_timeout;
-    frag_timefd.construct(center->create_time_event(tp.to_nsec() / 1000, frag_handler));
+    frag_timefd = center->create_time_event(tp.to_nsec() / 1000, frag_handler);
   }
   void frag_arm() {
     auto now = ceph_clock_now();
-    frag_timefd.construct(center->create_time_event(now.to_nsec() / 1000, frag_handler));
+    frag_timefd = center->create_time_event(now.to_nsec() / 1000, frag_handler);
   }
 
  public:

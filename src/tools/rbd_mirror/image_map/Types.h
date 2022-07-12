@@ -4,13 +4,18 @@
 #ifndef CEPH_RBD_MIRROR_IMAGE_MAP_TYPES_H
 #define CEPH_RBD_MIRROR_IMAGE_MAP_TYPES_H
 
+#include <iosfwd>
 #include <map>
+#include <set>
 #include <string>
 #include <boost/variant.hpp>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
-#include "tools/rbd_mirror/types.h"
+#include "include/utime.h"
+#include "tools/rbd_mirror/Types.h"
+
+struct Context;
 
 namespace ceph {
 class Formatter;
@@ -20,18 +25,40 @@ namespace rbd {
 namespace mirror {
 namespace image_map {
 
+extern const std::string UNMAPPED_INSTANCE_ID;
+
 struct Listener {
   virtual ~Listener() {
   }
 
   virtual void acquire_image(const std::string &global_image_id,
-                             const std::string &instance_id) = 0;
+                             const std::string &instance_id,
+                             Context* on_finish) = 0;
   virtual void release_image(const std::string &global_image_id,
-                             const std::string &instance_id) = 0;
+                             const std::string &instance_id,
+                             Context* on_finish) = 0;
   virtual void remove_image(const std::string &mirror_uuid,
                             const std::string &global_image_id,
-                            const std::string &instance_id) = 0;
+                            const std::string &instance_id,
+                            Context* on_finish) = 0;
 };
+
+struct LookupInfo {
+  std::string instance_id = UNMAPPED_INSTANCE_ID;
+  utime_t mapped_time;
+};
+
+enum ActionType {
+  ACTION_TYPE_NONE,
+  ACTION_TYPE_MAP_UPDATE,
+  ACTION_TYPE_MAP_REMOVE,
+  ACTION_TYPE_ACQUIRE,
+  ACTION_TYPE_RELEASE
+};
+
+typedef std::vector<std::string> InstanceIds;
+typedef std::set<std::string> GlobalImageIds;
+typedef std::map<std::string, ActionType> ImageActionTypes;
 
 enum PolicyMetaType {
   POLICY_META_TYPE_NONE = 0,
@@ -46,7 +73,7 @@ struct PolicyMetaNone {
   void encode(bufferlist& bl) const {
   }
 
-  void decode(__u8 version, bufferlist::iterator& it) {
+  void decode(__u8 version, bufferlist::const_iterator& it) {
   }
 
   void dump(Formatter *f) const {
@@ -60,10 +87,10 @@ struct PolicyMetaUnknown {
   }
 
   void encode(bufferlist& bl) const {
-    assert(false);
+    ceph_abort();
   }
 
-  void decode(__u8 version, bufferlist::iterator& it) {
+  void decode(__u8 version, bufferlist::const_iterator& it) {
   }
 
   void dump(Formatter *f) const {
@@ -86,16 +113,18 @@ struct PolicyData {
   PolicyMetaType get_policy_meta_type() const;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<PolicyData *> &o);
 };
 
+WRITE_CLASS_ENCODER(PolicyData);
+
+std::ostream &operator<<(std::ostream &os, const ActionType &action_type);
+
 } // namespace image_map
 } // namespace mirror
 } // namespace rbd
-
-WRITE_CLASS_ENCODER(rbd::mirror::image_map::PolicyData);
 
 #endif // CEPH_RBD_MIRROR_IMAGE_MAP_TYPES_H

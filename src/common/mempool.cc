@@ -15,6 +15,9 @@
 #include "include/mempool.h"
 #include "include/demangle.h"
 
+// Thread local variables should save index, not &shard[index],
+// because shard[] is defined in the class
+static thread_local size_t thread_shard_index = mempool::num_shards;
 
 // default to debug_mode off
 bool mempool::debug_mode = false;
@@ -70,7 +73,10 @@ size_t mempool::pool_t::allocated_bytes() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].bytes;
   }
-  assert(result >= 0);
+  if (result < 0) {
+    // we raced with some unbalanced allocations/deallocations
+    result = 0;
+  }
   return (size_t) result;
 }
 
@@ -80,15 +86,18 @@ size_t mempool::pool_t::allocated_items() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].items;
   }
-  assert(result >= 0);
+  if (result < 0) {
+    // we raced with some unbalanced allocations/deallocations
+    result = 0;
+  }
   return (size_t) result;
 }
 
 void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
 {
-  shard_t *shard = pick_a_shard();
-  shard->items += items;
-  shard->bytes += bytes;
+  thread_shard_index = (thread_shard_index == num_shards) ? pick_a_shard_int() : thread_shard_index;
+  shard[thread_shard_index].items += items;
+  shard[thread_shard_index].bytes += bytes;
 }
 
 void mempool::pool_t::get_stats(
@@ -100,7 +109,7 @@ void mempool::pool_t::get_stats(
     total->bytes += shard[i].bytes;
   }
   if (debug_mode) {
-    std::unique_lock<std::mutex> shard_lock(lock);
+    std::lock_guard shard_lock(lock);
     for (auto &p : type_map) {
       std::string n = ceph_demangle(p.second.type_name);
       stats_t &s = (*by_type)[n];

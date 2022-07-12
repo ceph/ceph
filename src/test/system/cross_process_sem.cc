@@ -17,7 +17,11 @@
 #include <errno.h>
 #include <semaphore.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
+
+#include "include/ceph_assert.h"
 
 /* We put our cross-process semaphore into a page of memory mapped with mmap. */
 struct cross_process_sem_data_t
@@ -34,6 +38,7 @@ struct cross_process_sem_data_t
 int CrossProcessSem::
 create(int initial_val, CrossProcessSem** res)
 {
+  #ifndef _WIN32
   struct cross_process_sem_data_t *data = static_cast < cross_process_sem_data_t*> (
     mmap(NULL, sizeof(struct cross_process_sem_data_t),
        PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0));
@@ -42,6 +47,12 @@ create(int initial_val, CrossProcessSem** res)
     return err;
   }
   int ret = sem_init(&data->sem, 1, initial_val);
+  #else
+  // We can't use multiple processes on Windows for the time being.
+  struct cross_process_sem_data_t *data = (cross_process_sem_data_t*)malloc(
+    sizeof(cross_process_sem_data_t));
+  int ret = sem_init(&data->sem, 0, initial_val);
+  #endif /* _WIN32 */
   if (ret) {
     return ret;
   }
@@ -52,7 +63,11 @@ create(int initial_val, CrossProcessSem** res)
 CrossProcessSem::
 ~CrossProcessSem()
 {
+  #ifndef _WIN32
   munmap(m_data, sizeof(struct cross_process_sem_data_t));
+  #else
+  free(m_data);
+  #endif
   m_data = NULL;
 }
 
@@ -66,7 +81,7 @@ wait()
     int err = errno;
     if (err == -EINTR)
       continue;
-    abort();
+    ceph_abort();
   }
 }
 
@@ -75,7 +90,7 @@ post()
 {
   int ret = sem_post(&m_data->sem);
   if (ret == -1) {
-    abort();
+    ceph_abort();
   }
 }
 

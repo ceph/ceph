@@ -1,0 +1,9 @@
+@use './src/styles/vendor/variables' as vv;
+
+.fa {
+  font-size: large;
+
+  &.fa-square-o {
+    color: vv.$gray-400;
+  }
+}

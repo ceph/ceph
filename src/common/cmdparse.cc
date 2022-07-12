@@ -12,17 +12,31 @@
  *
  */
 
-#include "json_spirit/json_spirit.h"
+#include "include/common_fwd.h"
+#include "common/cmdparse.h"
+#include "common/Formatter.h"
 #include "common/debug.h"
+#include "common/strtol.h"
+#include "json_spirit/json_spirit.h"
 
+using std::is_same_v;
+using std::ostringstream;
+using std::string;
+using std::stringstream;
+using std::string_view;
+using std::vector;
+
+using namespace std::literals;
 
 /**
  * Given a cmddesc like "foo baz name=bar,type=CephString",
  * return the prefix "foo baz".
  */
-std::string cmddesc_get_prefix(const std::string &cmddesc)
+namespace TOPNSPC::common {
+std::string cmddesc_get_prefix(const std::string_view &cmddesc)
 {
-  stringstream ss(cmddesc);
+  string tmp(cmddesc); // FIXME: stringstream ctor can't take string_view :(
+  stringstream ss(tmp);
   std::string word;
   std::ostringstream result;
   bool first = true;
@@ -41,6 +55,76 @@ std::string cmddesc_get_prefix(const std::string &cmddesc)
   return result.str();
 }
 
+using arg_desc_t = std::map<std::string_view, std::string_view>;
+
+// Snarf up all the key=val,key=val pairs, put 'em in a dict.
+arg_desc_t cmddesc_get_args(const string_view cmddesc)
+{
+  arg_desc_t arg_desc;
+  for_each_substr(cmddesc, ",", [&](auto kv) {
+      // key=value; key by itself implies value is bool true
+      // name="name" means arg dict will be titled 'name'
+      auto equal = kv.find('=');
+      if (equal == kv.npos) {
+	// it should be the command
+	return;
+      }
+      auto key = kv.substr(0, equal);
+      auto val = kv.substr(equal + 1);
+      arg_desc[key] = val;
+    });
+  return arg_desc;
+}
+
+std::string cmddesc_get_prenautilus_compat(const std::string &cmddesc)
+{
+  std::vector<std::string> out;
+  stringstream ss(cmddesc);
+  std::string word;
+  bool changed = false;
+  while (std::getline(ss, word, ' ')) {
+    // if no , or =, must be a plain word to put out
+    if (word.find_first_of(",=") == string::npos) {
+      out.push_back(word);
+      continue;
+    }
+    auto desckv = cmddesc_get_args(word);
+    auto j = desckv.find("type");
+    if (j != desckv.end() && j->second == "CephBool") {
+      // Instruct legacy clients or mons to send --foo-bar string in place
+      // of a 'true'/'false' value
+      std::ostringstream oss;
+      oss << "--" << desckv["name"];
+      std::string val = oss.str();
+      std::replace(val.begin(), val.end(), '_', '-');
+      desckv["type"] = "CephChoices";
+      desckv["strings"] = val;
+      std::ostringstream fss;
+      for (auto k = desckv.begin(); k != desckv.end(); ++k) {
+	if (k != desckv.begin()) {
+	  fss << ",";
+	}
+	fss << k->first << "=" << k->second;
+      }
+      out.push_back(fss.str());
+      changed = true;
+    } else {
+      out.push_back(word);
+    }
+  }
+  if (!changed) {
+    return cmddesc;
+  }
+  std::string o;
+  for (auto i = out.begin(); i != out.end(); ++i) {
+    if (i != out.begin()) {
+      o += " ";
+    }
+    o += *i;
+  }
+  return o;
+}
+
 /**
  * Read a command description list out of cmd, and dump it to f.
  * A signature description is a set of space-separated words;
@@ -48,7 +132,7 @@ std::string cmddesc_get_prefix(const std::string &cmddesc)
  */
 
 void
-dump_cmd_to_json(Formatter *f, const string& cmd)
+dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
 {
   // put whole command signature in an already-opened container
   // elements are: "name", meaning "the typeless name that means a literal"
@@ -56,40 +140,57 @@ dump_cmd_to_json(Formatter *f, const string& cmd)
 
   stringstream ss(cmd);
   std::string word;
+  bool positional = true;
 
   while (std::getline(ss, word, ' ')) {
+    if (word == "--") {
+      positional = false;
+      continue;
+    }
+
     // if no , or =, must be a plain word to put out
     if (word.find_first_of(",=") == string::npos) {
       f->dump_string("arg", word);
       continue;
     }
-    // Snarf up all the key=val,key=val pairs, put 'em in a dict.
-    // no '=val' implies '=True'.
-    std::stringstream argdesc(word);
-    std::string keyval;
-    std::map<std::string, std::string>desckv;
-    // accumulate descriptor keywords in desckv
 
-    while (std::getline(argdesc, keyval, ',')) {
-      // key=value; key by itself implies value is bool true
-      // name="name" means arg dict will be titled 'name'
-      size_t pos = keyval.find('=');
-      std::string key, val;
-      if (pos != std::string::npos) {
-	key = keyval.substr(0, pos);
-	val = keyval.substr(pos+1);
-      } else {
-        key = keyval;
-        val = true;
-      }
-      desckv.insert(std::pair<std::string, std::string> (key, val));
-    }
+    // accumulate descriptor keywords in desckv
+    auto desckv = cmddesc_get_args(word);
     // name the individual desc object based on the name key
-    f->open_object_section(desckv["name"].c_str());
+    f->open_object_section(desckv["name"]);
+
+    // Compatibility for pre-nautilus clients that don't know about CephBool
+    std::string val;
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      auto i = desckv.find("type");
+      if (i != desckv.end() && i->second == "CephBool") {
+        // Instruct legacy clients to send --foo-bar string in place
+        // of a 'true'/'false' value
+        std::ostringstream oss;
+        oss << "--" << desckv["name"];
+        val = oss.str();
+        std::replace(val.begin(), val.end(), '_', '-');
+
+        desckv["type"] = "CephChoices";
+        desckv["strings"] = val;
+      }
+    }
+
     // dump all the keys including name into the array
-    for (std::map<std::string, std::string>::iterator it = desckv.begin();
-	 it != desckv.end(); ++it) {
-      f->dump_string(it->first.c_str(), it->second);
+    if (!positional) {
+      desckv["positional"] = "false";
+    }
+    for (auto [key, value] : desckv) {
+      if (key == "positional") {
+	if (!HAVE_FEATURE(features, SERVER_QUINCY)) {
+	  continue;
+	}
+	f->dump_bool(key, value == "true" || value == "True");
+      } else if (key == "req" && HAVE_FEATURE(features, SERVER_QUINCY)) {
+	f->dump_bool(key, value == "true" || value == "True");
+      } else {
+	f->dump_string(key, value);
+      }
     }
     f->close_section(); // attribute object for individual desc
   }
@@ -97,43 +198,43 @@ dump_cmd_to_json(Formatter *f, const string& cmd)
 
 void
 dump_cmd_and_help_to_json(Formatter *jf,
+			  uint64_t features,
 			  const string& secname,
 			  const string& cmdsig,
 			  const string& helptext)
 {
-      jf->open_object_section(secname.c_str());
+      jf->open_object_section(secname);
       jf->open_array_section("sig");
-      dump_cmd_to_json(jf, cmdsig);
+      dump_cmd_to_json(jf, features, cmdsig);
       jf->close_section(); // sig array
-      jf->dump_string("help", helptext.c_str());
+      jf->dump_string("help", helptext);
       jf->close_section(); // cmd
 }
 
 void
 dump_cmddesc_to_json(Formatter *jf,
+		     uint64_t features,
 		     const string& secname,
 		     const string& cmdsig,
 		     const string& helptext,
 		     const string& module,
 		     const string& perm,
-		     const string& avail,
 		     uint64_t flags)
 {
-      jf->open_object_section(secname.c_str());
+      jf->open_object_section(secname);
       jf->open_array_section("sig");
-      dump_cmd_to_json(jf, cmdsig);
+      dump_cmd_to_json(jf, features, cmdsig);
       jf->close_section(); // sig array
-      jf->dump_string("help", helptext.c_str());
-      jf->dump_string("module", module.c_str());
-      jf->dump_string("perm", perm.c_str());
-      jf->dump_string("avail", avail.c_str());
+      jf->dump_string("help", helptext);
+      jf->dump_string("module", module);
+      jf->dump_string("perm", perm);
       jf->dump_int("flags", flags);
       jf->close_section(); // cmd
 }
 
 void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
 {
-  assert(f != nullptr);
+  ceph_assert(f != nullptr);
 
   class dump_visitor : public boost::static_visitor<void>
   {
@@ -147,28 +248,28 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
 
     void operator()(const std::string &operand) const
     {
-      f->dump_string(key.c_str(), operand);
+      f->dump_string(key, operand);
     }
 
     void operator()(const bool &operand) const
     {
-      f->dump_bool(key.c_str(), operand);
+      f->dump_bool(key, operand);
     }
 
     void operator()(const int64_t &operand) const
     {
-      f->dump_int(key.c_str(), operand);
+      f->dump_int(key, operand);
     }
 
     void operator()(const double &operand) const
     {
-      f->dump_float(key.c_str(), operand);
+      f->dump_float(key, operand);
     }
 
     void operator()(const std::vector<std::string> &operand) const
     {
-      f->open_array_section(key.c_str());
-      for (const auto i : operand) {
+      f->open_array_section(key);
+      for (const auto& i : operand) {
         f->dump_string("item", i);
       }
       f->close_section();
@@ -176,7 +277,7 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
 
     void operator()(const std::vector<int64_t> &operand) const
     {
-      f->open_array_section(key.c_str());
+      f->open_array_section(key);
       for (const auto i : operand) {
         f->dump_int("item", i);
       }
@@ -185,7 +286,7 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
 
     void operator()(const std::vector<double> &operand) const
     {
-      f->open_array_section(key.c_str());
+      f->open_array_section(key);
       for (const auto i : operand) {
         f->dump_float("item", i);
       }
@@ -209,27 +310,25 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
  * false, ss is valid */
 
 bool
-cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstream &ss)
+cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, std::ostream& ss)
 {
   json_spirit::mValue v;
 
   string fullcmd;
   // First, join all cmd strings
-  for (vector<string>::iterator it = cmd.begin();
-       it != cmd.end(); ++it)
-    fullcmd += *it;
+  for (auto& c : cmd)
+    fullcmd += c;
 
   try {
     if (!json_spirit::read(fullcmd, v))
-      throw runtime_error("unparseable JSON " + fullcmd);
+      throw std::runtime_error("unparseable JSON " + fullcmd);
     if (v.type() != json_spirit::obj_type)
-      throw(runtime_error("not JSON object " + fullcmd));
+      throw std::runtime_error("not JSON object " + fullcmd);
 
     // allocate new mObject (map) to return
     // make sure all contents are simple types (not arrays or objects)
     json_spirit::mObject o = v.get_obj();
-    for (map<string, json_spirit::mValue>::iterator it = o.begin();
-	 it != o.end(); ++it) {
+    for (auto it = o.begin(); it != o.end(); ++it) {
 
       // ok, marshal it into our string->cmd_vartype map, or throw an
       // exception if it's not a simple datatype.  This is kind of
@@ -240,7 +339,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 
       case json_spirit::obj_type:
       default:
-	throw(runtime_error("JSON array/object not allowed " + fullcmd));
+	throw std::runtime_error("JSON array/object not allowed " + fullcmd);
         break;
 
       case json_spirit::array_type:
@@ -257,7 +356,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 	    vector<string> outv;
 	    for (const auto& sv : spvals) {
 	      if (sv.type() != json_spirit::str_type) {
-		throw(runtime_error("Can't handle arrays of multiple types"));
+		throw std::runtime_error("Can't handle arrays of multiple types");
 	      }
 	      outv.push_back(sv.get_str());
 	    }
@@ -266,7 +365,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 	    vector<int64_t> outv;
 	    for (const auto& sv : spvals) {
 	      if (spvals.front().type() != json_spirit::int_type) {
-		throw(runtime_error("Can't handle arrays of multiple types"));
+		throw std::runtime_error("Can't handle arrays of multiple types");
 	      }
 	      outv.push_back(sv.get_int64());
 	    }
@@ -275,14 +374,14 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 	    vector<double> outv;
 	    for (const auto& sv : spvals) {
 	      if (spvals.front().type() != json_spirit::real_type) {
-		throw(runtime_error("Can't handle arrays of multiple types"));
+		throw std::runtime_error("Can't handle arrays of multiple types");
 	      }
 	      outv.push_back(sv.get_real());
 	    }
 	    (*mapp)[it->first] = std::move(outv);
 	  } else {
-	    throw(runtime_error("Can't handle arrays of types other than "
-				"int, string, or double"));
+	    throw std::runtime_error("Can't handle arrays of types other than "
+				     "int, string, or double");
 	  }
 	}
 	break;
@@ -304,7 +403,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
       }
     }
     return true;
-  } catch (runtime_error &e) {
+  } catch (const std::runtime_error &e) {
     ss << e.what();
     return false;
   }
@@ -341,8 +440,9 @@ handle_bad_get(CephContext *cct, const string& k, const char *tname)
   lderr(cct) << errstr.str() << dendl;
 
   ostringstream oss;
-  oss << BackTrace(1);
-  lderr(cct) << oss.rdbuf() << dendl;
+  oss << ClibBackTrace(1);
+  lderr(cct) << oss.str() << dendl;
+
   if (status == 0)
     free((char *)typestr);
 }
@@ -389,4 +489,253 @@ int parse_osd_id(const char *s, std::ostream *pss)
     return -ERANGE;
   }
   return id;
+}
+
+namespace {
+template <typename Func>
+bool find_first_in(std::string_view s, const char *delims, Func&& f)
+{
+  auto pos = s.find_first_not_of(delims);
+  while (pos != s.npos) {
+    s.remove_prefix(pos);
+    auto end = s.find_first_of(delims);
+    if (f(s.substr(0, end))) {
+      return true;
+    }
+    pos = s.find_first_not_of(delims, end);
+  }
+  return false;
+}
+
+template<typename T>
+T str_to_num(const std::string& s)
+{
+  if constexpr (is_same_v<T, int>) {
+    return std::stoi(s);
+  } else if constexpr (is_same_v<T, long>) {
+    return std::stol(s);
+  } else if constexpr (is_same_v<T, long long>) {
+    return std::stoll(s);
+  } else if constexpr (is_same_v<T, double>) {
+    return std::stod(s);
+  }
+}
+
+template<typename T>
+bool arg_in_range(T value, const arg_desc_t& desc, std::ostream& os) {
+  auto range = desc.find("range");
+  if (range == desc.end()) {
+    return true;
+  }
+  auto min_max = get_str_list(string(range->second), "|");
+  auto min = str_to_num<T>(min_max.front());
+  auto max = std::numeric_limits<T>::max();
+  if (min_max.size() > 1) {
+    max = str_to_num<T>(min_max.back());
+  }
+  if (value < min || value > max) {
+    os << "'" << value << "' out of range: " << min_max;
+    return false;
+  }
+  return true;
+}
+
+bool validate_str_arg(std::string_view value,
+		      std::string_view type,
+		      const arg_desc_t& desc,
+		      std::ostream& os)
+{
+  if (type == "CephIPAddr") {
+    entity_addr_t addr;
+    if (addr.parse(value)) {
+      return true;
+    } else {
+      os << "failed to parse addr '" << value << "', should be ip:[port]";
+      return false;
+    }
+  } else if (type == "CephChoices") {
+    auto choices = desc.find("strings");
+    ceph_assert(choices != end(desc));
+    auto strings = choices->second;
+    if (find_first_in(strings, "|", [=](auto choice) {
+	  return (value == choice);
+	})) {
+      return true;
+    } else {
+      os << "'" << value << "' not belong to '" << strings << "'";
+      return false;
+    }
+  } else {
+    // CephString or other types like CephPgid
+    return true;
+  }
+}
+
+bool validate_bool(CephContext *cct,
+		  const cmdmap_t& cmdmap,
+		  const arg_desc_t& desc,
+		  const std::string_view name,
+		  const std::string_view type,
+		  std::ostream& os)
+{
+  bool v;
+  try {
+    if (!cmd_getval(cmdmap, name, v)) {
+      if (auto req = desc.find("req");
+	  req != end(desc) && req->second == "false") {
+	return true;
+      } else {
+	os << "missing required parameter: '" << name << "'";
+	return false;
+      }
+    }
+    return true;
+  } catch (const bad_cmd_get& e) {
+    return false;
+  }
+}
+
+template<bool is_vector,
+	 typename T,
+	 typename Value = std::conditional_t<is_vector,
+					     vector<T>,
+					     T>>
+bool validate_arg(CephContext* cct,
+		  const cmdmap_t& cmdmap,
+		  const arg_desc_t& desc,
+		  const std::string_view name,
+		  const std::string_view type,
+		  std::ostream& os)
+{
+  Value v;
+  try {
+    if (!cmd_getval(cmdmap, name, v)) {
+      if constexpr (is_vector) {
+	  // an empty list is acceptable.
+	  return true;
+	} else {
+	if (auto req = desc.find("req");
+	    req != end(desc) && req->second == "false") {
+	  return true;
+	} else {
+	  os << "missing required parameter: '" << name << "'";
+	  return false;
+	}
+      }
+    }
+  } catch (const bad_cmd_get& e) {
+    return false;
+  }
+  auto validate = [&](const T& value) {
+    if constexpr (is_same_v<std::string, T>) {
+      return validate_str_arg(value, type, desc, os);
+    } else if constexpr (is_same_v<int64_t, T> ||
+			 is_same_v<double, T>) {
+      return arg_in_range(value, desc, os);
+    }
+  };
+  if constexpr(is_vector) {
+    return find_if_not(begin(v), end(v), validate) == end(v);
+  } else {
+    return validate(v);
+  }
+}
+} // anonymous namespace
+
+bool validate_cmd(CephContext* cct,
+		  const std::string& desc,
+		  const cmdmap_t& cmdmap,
+		  std::ostream& os)
+{
+  return !find_first_in(desc, " ", [&](auto desc) {
+    auto arg_desc = cmddesc_get_args(desc);
+    if (arg_desc.empty()) {
+      return false;
+    }
+    ceph_assert(arg_desc.count("name"));
+    ceph_assert(arg_desc.count("type"));
+    auto name = arg_desc["name"];
+    auto type = arg_desc["type"];
+    if (arg_desc.count("n")) {
+      if (type == "CephInt") {
+	return !validate_arg<true, int64_t>(cct, cmdmap, arg_desc,
+					    name, type, os);
+      } else if (type == "CephFloat") {
+	return !validate_arg<true, double>(cct, cmdmap, arg_desc,
+					    name, type, os);
+      } else {
+	return !validate_arg<true, string>(cct, cmdmap, arg_desc,
+					   name, type, os);
+      }
+    } else {
+      if (type == "CephInt") {
+	return !validate_arg<false, int64_t>(cct, cmdmap, arg_desc,
+					    name, type, os);
+      } else if (type == "CephFloat") {
+	return !validate_arg<false, double>(cct, cmdmap, arg_desc,
+					    name, type, os);
+      } else if (type == "CephBool") {
+	return !validate_bool(cct, cmdmap, arg_desc,
+			      name, type, os);
+      } else {
+	return !validate_arg<false, string>(cct, cmdmap, arg_desc,
+					    name, type, os);
+      }
+    }
+  });
+}
+
+bool cmd_getval(const cmdmap_t& cmdmap,
+		std::string_view k, bool& val)
+{
+  /*
+   * Specialized getval for booleans.  CephBool didn't exist before Nautilus,
+   * so earlier clients are sent a CephChoices argdesc instead, and will
+   * send us a "--foo-bar" value string for boolean arguments.
+   */
+  auto found = cmdmap.find(k);
+  if (found == cmdmap.end()) {
+    return false;
+  }
+  try {
+    val = boost::get<bool>(found->second);
+    return true;
+  } catch (boost::bad_get&) {
+    try {
+      std::string expected{"--"};
+      expected += k;
+      std::replace(expected.begin(), expected.end(), '_', '-');
+
+      std::string v_str = boost::get<std::string>(found->second);
+      if (v_str == expected) {
+	val = true;
+	return true;
+      } else {
+	throw bad_cmd_get(k, cmdmap);
+      }
+    } catch (boost::bad_get&) {
+      throw bad_cmd_get(k, cmdmap);
+    }
+  }
+}
+
+bool cmd_getval_compat_cephbool(
+  const cmdmap_t& cmdmap,
+  const std::string& k, bool& val)
+{
+  try {
+    return cmd_getval(cmdmap, k, val);
+  } catch (bad_cmd_get& e) {
+    // try as legacy/compat CephChoices
+    std::string t;
+    if (!cmd_getval(cmdmap, k, t)) {
+      return false;
+    }
+    std::string expected = "--"s + k;
+    std::replace(expected.begin(), expected.end(), '_', '-');
+    val = (t == expected);
+    return true;
+  }
+}
+
 }

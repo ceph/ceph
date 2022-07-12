@@ -16,21 +16,14 @@
 #define CEPH_LOGENTRY_H
 
 #include "include/utime.h"
-#include "msg/msg_types.h" // for entity_inst_t
+#include "msg/msg_types.h"
 #include "common/entity_name.h"
+#include "ostream_temp.h"
+#include "LRUSet.h"
 
 namespace ceph {
   class Formatter;
 }
-
-typedef enum {
-  CLOG_DEBUG = 0,
-  CLOG_INFO = 1,
-  CLOG_SEC = 2,
-  CLOG_WARN = 3,
-  CLOG_ERROR = 4,
-  CLOG_UNKNOWN = -1,
-} clog_type;
 
 static const std::string CLOG_CHANNEL_NONE    = "none";
 static const std::string CLOG_CHANNEL_DEFAULT = "cluster";
@@ -46,11 +39,11 @@ static const std::string CLOG_CONFIG_DEFAULT_KEY = "default";
  */
 int clog_type_to_syslog_level(clog_type t);
 
-clog_type string_to_clog_type(const string& s);
-int string_to_syslog_level(string s);
-int string_to_syslog_facility(string s);
+clog_type string_to_clog_type(const std::string& s);
+int string_to_syslog_level(std::string s);
+int string_to_syslog_facility(std::string s);
 
-string clog_type_to_string(clog_type t);
+std::string clog_type_to_string(clog_type t);
 
 
 struct LogEntryKey {
@@ -58,18 +51,18 @@ private:
   uint64_t _hash = 0;
 
   void _calc_hash() {
-    hash<entity_inst_t> h;
-    _hash = seq + h(who);
+    std::hash<entity_name_t> h;
+    _hash = seq + h(rank);
   }
 
-  entity_inst_t who;
+  entity_name_t rank;
   utime_t stamp;
   uint64_t seq = 0;
 
 public:
   LogEntryKey() {}
-  LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s)
-    : who(w), stamp(t), seq(s) {
+  LogEntryKey(const entity_name_t& w, utime_t t, uint64_t s)
+    : rank(w), stamp(t), seq(s) {
     _calc_hash();
   }
 
@@ -77,77 +70,103 @@ public:
     return _hash;
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<LogEntryKey*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<LogEntryKey*>& o);
 
   friend bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
-    return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
+    return l.rank == r.rank && l.stamp == r.stamp && l.seq == r.seq;
+  }
+
+  void encode(bufferlist& bl) const {
+    using ceph::encode;
+    encode(rank, bl);
+    encode(stamp, bl);
+    encode(seq, bl);
+  }
+  void decode(bufferlist::const_iterator &p) {
+    using ceph::decode;
+    decode(rank, p);
+    decode(stamp, p);
+    decode(seq, p);
   }
 };
-WRITE_CLASS_ENCODER_FEATURES(LogEntryKey)
+WRITE_CLASS_ENCODER(LogEntryKey)
+
 
 namespace std {
-  template<> struct hash<LogEntryKey> {
-    size_t operator()(const LogEntryKey& r) const {
-      return r.get_hash();
-    }
-  };
+template<> struct hash<LogEntryKey> {
+  size_t operator()(const LogEntryKey& r) const {
+    return r.get_hash();
+  }
+};
 } // namespace std
 
 struct LogEntry {
-  entity_inst_t who;
   EntityName name;
+  entity_name_t rank;
+  entity_addrvec_t addrs;
   utime_t stamp;
   uint64_t seq;
   clog_type prio;
-  string msg;
-  string channel;
+  std::string msg;
+  std::string channel;
 
   LogEntry() : seq(0), prio(CLOG_DEBUG) {}
 
-  LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
+  LogEntryKey key() const { return LogEntryKey(rank, stamp, seq); }
 
-  void log_to_syslog(string level, string facility);
+  void log_to_syslog(std::string level, std::string facility) const;
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<LogEntry*>& o);
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<LogEntry*>& o);
   static clog_type str_to_level(std::string const &str);
 };
 WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 
 struct LogSummary {
   version_t version;
-  list<LogEntry> tail;
+
+  // ---- pre-quincy ----
+  // channel -> [(seq#, entry), ...]
+  std::map<std::string,std::list<std::pair<uint64_t,LogEntry>>> tail_by_channel;
+  uint64_t seq = 0;
   ceph::unordered_set<LogEntryKey> keys;
+
+  // ---- quincy+ ----
+  LRUSet<LogEntryKey> recent_keys;
+  std::map<std::string, std::pair<uint64_t,uint64_t>> channel_info; // channel -> [begin, end)
 
   LogSummary() : version(0) {}
 
-  void add(const LogEntry& e) {
-    tail.push_back(e);
-    keys.insert(tail.back().key());
+  void build_ordered_tail_legacy(std::list<LogEntry> *tail) const;
+
+  void add_legacy(const LogEntry& e) {
+    keys.insert(e.key());
+    tail_by_channel[e.channel].push_back(std::make_pair(++seq, e));
   }
   void prune(size_t max) {
-    while (tail.size() > max) {
-      keys.erase(tail.front().key());
-      tail.pop_front();
+    for (auto& i : tail_by_channel) {
+      while (i.second.size() > max) {
+	keys.erase(i.second.front().second.key());
+	i.second.pop_front();
+      }
     }
+    recent_keys.prune(max);
   }
   bool contains(const LogEntryKey& k) const {
-    return keys.count(k);
+    return keys.count(k) || recent_keys.contains(k);
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<LogSummary*>& o);
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<LogSummary*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(LogSummary)
 
-inline ostream& operator<<(ostream& out, const clog_type t)
+inline std::ostream& operator<<(std::ostream& out, const clog_type t)
 {
   switch (t) {
   case CLOG_DEBUG:
@@ -165,10 +184,10 @@ inline ostream& operator<<(ostream& out, const clog_type t)
   }
 }
 
-inline ostream& operator<<(ostream& out, const LogEntry& e)
+inline std::ostream& operator<<(std::ostream& out, const LogEntry& e)
 {
-  return out << e.stamp << " " << e.name << " " << e.who
-	     << " " << e.seq << " : "
+  return out << e.stamp << " " << e.name << " (" << e.rank << ") "
+	     << e.seq << " : "
              << e.channel << " " << e.prio << " " << e.msg;
 }
 

@@ -18,13 +18,11 @@
  *
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cerrno>
 #include <algorithm>
-using namespace std;
-
 #include "common/debug.h"
 #include "ErasureCodeShec.h"
 extern "C" {
@@ -39,6 +37,10 @@ extern int* reed_sol_vandermonde_coding_matrix(int k, int m, int w);
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
+
+using namespace std;
+using namespace ceph;
+
 
 static ostream& _prefix(std::ostream* _dout)
 {
@@ -62,7 +64,7 @@ unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const
   unsigned tail = object_size % alignment;
   unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
 
-  assert(padded_length % k == 0);
+  ceph_assert(padded_length % k == 0);
   return padded_length / k;
 }
 
@@ -177,6 +179,10 @@ int ErasureCodeShec::_decode(const set<int> &want_to_read,
   if (!decoded || !decoded->empty()){
     return -EINVAL;
   }
+  if (!want_to_read.empty() && chunks.empty()) {
+    // i need to get the blocksize from the first element of chunks
+    return -1;
+  }
 
   have.reserve(chunks.size());
   for (map<int, bufferlist>::const_iterator i = chunks.begin();
@@ -198,8 +204,11 @@ int ErasureCodeShec::_decode(const set<int> &want_to_read,
   unsigned blocksize = (*chunks.begin()).second.length();
   for (unsigned int i =  0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
+      bufferlist tmp;
       bufferptr ptr(buffer::create_aligned(blocksize, SIMD_ALIGN));
-      (*decoded)[i].push_front(ptr);
+      tmp.push_back(ptr);
+      tmp.claim_append((*decoded)[i]);
+      (*decoded)[i].swap(tmp);
     } else {
       (*decoded)[i] = chunks.find(i)->second;
       (*decoded)[i].rebuild_aligned(SIMD_ALIGN);
@@ -405,7 +414,7 @@ void ErasureCodeShecReedSolomonVandermonde::prepare()
   dout(10) << " [ technique ] = " <<
     ((technique == MULTIPLE) ? "multiple" : "single") << dendl;
 
-  assert((technique == SINGLE) || (technique == MULTIPLE));
+  ceph_assert((technique == SINGLE) || (technique == MULTIPLE));
 
 }
 
@@ -688,7 +697,7 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
 
 
   if (mindup == k+1) {
-    fprintf(stderr, "shec_make_decoding_matrix(): can't find recover matrix.\n");
+    dout(10) << __func__ << ": can't find recover matrix." << dendl;
     return -1;
   }
 

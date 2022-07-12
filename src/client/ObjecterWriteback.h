@@ -8,7 +8,7 @@
 
 class ObjecterWriteback : public WritebackHandler {
  public:
-  ObjecterWriteback(Objecter *o, Finisher *fin, Mutex *lock)
+  ObjecterWriteback(Objecter *o, Finisher *fin, ceph::mutex *lock)
     : m_objecter(o),
       m_finisher(fin),
       m_lock(lock) { }
@@ -48,15 +48,13 @@ class ObjecterWriteback : public WritebackHandler {
   bool can_scattered_write() override { return true; }
   using WritebackHandler::write;
   ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
-                           vector<pair<uint64_t, bufferlist> >& io_vec,
+                           std::vector<std::pair<uint64_t, bufferlist> >& io_vec,
 			   const SnapContext& snapc, ceph::real_time mtime,
 			   uint64_t trunc_size, __u32 trunc_seq,
 			   Context *oncommit) override {
     ObjectOperation op;
-    for (vector<pair<uint64_t, bufferlist> >::iterator p = io_vec.begin();
-	 p != io_vec.end();
-	 ++p)
-      op.write(p->first, p->second, trunc_size, trunc_seq);
+    for (auto& [offset, bl] : io_vec)
+      op.write(offset, bl, trunc_size, trunc_seq);
 
     return m_objecter->mutate(oid, oloc, op, snapc, mtime, 0,
 			      new C_OnFinisher(new C_Lock(m_lock, oncommit),
@@ -66,7 +64,7 @@ class ObjecterWriteback : public WritebackHandler {
  private:
   Objecter *m_objecter;
   Finisher *m_finisher;
-  Mutex *m_lock;
+  ceph::mutex *m_lock;
 };
 
 #endif

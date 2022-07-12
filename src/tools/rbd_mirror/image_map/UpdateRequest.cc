@@ -68,7 +68,7 @@ void UpdateRequest<I>::update_image_map() {
   librados::AioCompletion *aio_comp = create_rados_callback<
     UpdateRequest, &UpdateRequest::handle_update_image_map>(this);
   int r = m_ioctx.aio_operate(RBD_MIRROR_LEADER, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

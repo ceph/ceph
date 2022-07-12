@@ -12,8 +12,8 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 
+#include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/scope_exit.hpp>
 #include <boost/program_options.hpp>
 
 #include <iostream>
@@ -25,44 +25,20 @@ namespace ggate {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+#if defined(__FreeBSD__)
 static int call_ggate_cmd(const po::variables_map &vm,
-                          const std::vector<const char*> &args)
-{
+                          const std::vector<std::string> &args,
+                          const std::vector<std::string> &ceph_global_args) {
   SubProcess process("rbd-ggate", SubProcess::KEEP, SubProcess::KEEP,
                      SubProcess::KEEP);
 
-  if (vm.count("conf")) {
-    process.add_cmd_arg("--conf");
-    process.add_cmd_arg(vm["conf"].as<std::string>().c_str());
-  }
-  if (vm.count("cluster")) {
-    process.add_cmd_arg("--cluster");
-    process.add_cmd_arg(vm["cluster"].as<std::string>().c_str());
-  }
-  if (vm.count("id")) {
-    process.add_cmd_arg("--id");
-    process.add_cmd_arg(vm["id"].as<std::string>().c_str());
-  }
-  if (vm.count("name")) {
-    process.add_cmd_arg("--name");
-    process.add_cmd_arg(vm["name"].as<std::string>().c_str());
-  }
-  if (vm.count("mon_host")) {
-    process.add_cmd_arg("--mon_host");
-    process.add_cmd_arg(vm["mon_host"].as<std::string>().c_str());
-  }
-  if (vm.count("keyfile")) {
-    process.add_cmd_arg("--keyfile");
-    process.add_cmd_arg(vm["keyfile"].as<std::string>().c_str());
-  }
-  if (vm.count("keyring")) {
-    process.add_cmd_arg("--keyring");
-    process.add_cmd_arg(vm["keyring"].as<std::string>().c_str());
+  for (auto &arg : ceph_global_args) {
+    process.add_cmd_arg(arg.c_str());
   }
 
-  for (std::vector<const char*>::const_iterator p = args.begin();
-       p != args.end(); ++p)
-    process.add_cmd_arg(*p);
+  for (auto &arg : args) {
+    process.add_cmd_arg(arg.c_str());
+  }
 
   if (process.spawn()) {
     std::cerr << "rbd: failed to run rbd-ggate: " << process.err() << std::endl;
@@ -79,18 +55,34 @@ static int call_ggate_cmd(const po::variables_map &vm,
 int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string nspace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
-    utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &nspace_name,
+    &image_name, &snap_name, true,
+    utils::SNAPSHOT_PRESENCE_PERMITTED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
+  if (pool_name.empty()) {
+    // connect to the cluster to get the default pool
+    librados::Rados rados;
+    r = utils::init_rados(&rados);
+    if (r < 0) {
+      return r;
+    }
+
+    utils::normalize_pool_name(&pool_name);
+  }
+
   spec->append(pool_name);
   spec->append("/");
+  if (!nspace_name.empty()) {
+    spec->append(nspace_name);
+    spec->append("/");
+  }
   spec->append(image_name);
   if (!snap_name.empty()) {
     spec->append("@");
@@ -100,42 +92,49 @@ int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
   return 0;
 }
 
-void get_list_arguments(po::options_description *positional,
-                        po::options_description *options) {
-  at::add_format_options(options);
-}
+int parse_options(const std::vector<std::string> &options,
+                  std::vector<std::string> *args) {
+  for (auto &opts : options) {
+    std::vector<std::string> args_;
+    boost::split(args_, opts, boost::is_any_of(","));
+    for (auto &o : args_) {
+      args->push_back("--" + o);
+    }
+  }
 
-int execute_list(const po::variables_map &vm)
-{
-  std::vector<const char*> args;
+  return 0;
+}
+#endif
+
+int execute_list(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+  return -EOPNOTSUPP;
+#else
+  std::vector<std::string> args;
 
   args.push_back("list");
 
   if (vm.count("format")) {
     args.push_back("--format");
-    args.push_back(vm["format"].as<at::Format>().value.c_str());
+    args.push_back(vm["format"].as<at::Format>().value);
   }
   if (vm["pretty-format"].as<bool>()) {
     args.push_back("--pretty-format");
   }
 
-  return call_ggate_cmd(vm, args);
+  return call_ggate_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
-void get_map_arguments(po::options_description *positional,
-                       po::options_description *options)
-{
-  at::add_image_or_snap_spec_options(positional, options,
-                                     at::ARGUMENT_MODIFIER_NONE);
-  options->add_options()
-    ("read-only", po::bool_switch(), "map read-only")
-    ("exclusive", po::bool_switch(), "forbid writes by other clients")
-    ("device", po::value<std::string>(), "specify ggate device");
-}
-
-int execute_map(const po::variables_map &vm)
-{
-  std::vector<const char*> args;
+int execute_map(const po::variables_map &vm,
+                const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+  return -EOPNOTSUPP;
+#else
+  std::vector<std::string> args;
 
   args.push_back("map");
   std::string img;
@@ -143,36 +142,41 @@ int execute_map(const po::variables_map &vm)
   if (r < 0) {
     return r;
   }
-  args.push_back(img.c_str());
+  args.push_back(img);
 
-  if (vm["read-only"].as<bool>())
-    args.push_back("--read-only");
-
-  if (vm["exclusive"].as<bool>())
-    args.push_back("--exclusive");
-
-  if (vm.count("device")) {
-    args.push_back("--device");
-    args.push_back(vm["device"].as<std::string>().c_str());
+  if (vm["quiesce"].as<bool>()) {
+    std::cerr << "rbd: warning: quiesce is not supported" << std::endl;
   }
 
-  return call_ggate_cmd(vm, args);
+  if (vm["read-only"].as<bool>()) {
+    args.push_back("--read-only");
+  }
+
+  if (vm["exclusive"].as<bool>()) {
+    args.push_back("--exclusive");
+  }
+
+  if (vm.count("quiesce-hook")) {
+    std::cerr << "rbd: warning: quiesce-hook is not supported" << std::endl;
+  }
+
+  if (vm.count("options")) {
+    r = parse_options(vm["options"].as<std::vector<std::string>>(), &args);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return call_ggate_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
-void get_unmap_arguments(po::options_description *positional,
-                         po::options_description *options)
-{
-  positional->add_options()
-    ("image-or-snap-or-device-spec",
-     "image, snapshot, or device specification\n"
-     "[<pool-name>/]<image-name>[@<snapshot-name>] or <device-path>");
-  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
-  at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
-  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
-}
-
-int execute_unmap(const po::variables_map &vm)
-{
+int execute_unmap(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+  return -EOPNOTSUPP;
+#else
   std::string device_name = utils::get_positional_argument(vm, 0);
   if (!boost::starts_with(device_name, "/dev/")) {
     device_name.clear();
@@ -192,28 +196,41 @@ int execute_unmap(const po::variables_map &vm)
     return -EINVAL;
   }
 
-  std::vector<const char*> args;
+  std::vector<std::string> args;
 
   args.push_back("unmap");
-  args.push_back(device_name.empty() ? image_name.c_str() :
-                 device_name.c_str());
+  args.push_back(device_name.empty() ? image_name : device_name);
 
-  return call_ggate_cmd(vm, args);
+  if (vm.count("options")) {
+    int r = parse_options(vm["options"].as<std::vector<std::string>>(), &args);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return call_ggate_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
-Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
+int execute_attach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+#else
+  std::cerr << "rbd: ggate attach command not supported" << std::endl;
+#endif
+  return -EOPNOTSUPP;
+}
 
-Shell::Action action_list(
-  {"ggate", "list"}, {"ggate", "ls"}, "List mapped ggate devices.", "",
-  &get_list_arguments, &execute_list);
-
-Shell::Action action_map(
-  {"ggate", "map"}, {}, "Map an image to a ggate device.", "",
-  &get_map_arguments, &execute_map);
-
-Shell::Action action_unmap(
-  {"ggate", "unmap"}, {}, "Unmap a ggate device.", "",
-  &get_unmap_arguments, &execute_unmap);
+int execute_detach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+#else
+  std::cerr << "rbd: ggate detach command not supported" << std::endl;
+#endif
+  return -EOPNOTSUPP;
+}
 
 } // namespace ggate
 } // namespace action

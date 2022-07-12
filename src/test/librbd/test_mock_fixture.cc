@@ -28,7 +28,7 @@ void TestMockFixture::SetUpTestCase() {
 
   // use a mock version of the in-memory cluster
   librados_test_stub::set_cluster(boost::shared_ptr<librados::TestCluster>(
-    new librados::MockTestMemCluster()));
+    new ::testing::NiceMock<librados::MockTestMemCluster>()));
   TestFixture::SetUpTestCase();
 }
 
@@ -45,14 +45,27 @@ void TestMockFixture::TearDown() {
 
   ::testing::Mock::VerifyAndClear(mock_rados_client);
   mock_rados_client->default_to_dispatch();
+  dynamic_cast<librados::MockTestMemCluster*>(
+    librados_test_stub::get_cluster().get())->default_to_dispatch();
 
   TestFixture::TearDown();
 }
 
 void TestMockFixture::expect_unlock_exclusive_lock(librbd::ImageCtx &ictx) {
   EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
-              exec(_, _, StrEq("lock"), StrEq("unlock"), _, _, _))
+              exec(_, _, StrEq("lock"), StrEq("unlock"), _, _, _, _))
                 .WillRepeatedly(DoDefault());
+  if (ictx.test_features(RBD_FEATURE_DIRTY_CACHE)) {
+    EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
+                exec(ictx.header_oid, _, StrEq("rbd"), StrEq("set_features"), _, _, _, _))
+                  .WillOnce(DoDefault());
+    EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
+                exec(ictx.header_oid, _, StrEq("rbd"), StrEq("metadata_set"), _, _, _, _))
+                  .WillOnce(DoDefault());
+    EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
+                exec(ictx.header_oid, _, StrEq("rbd"), StrEq("metadata_remove"), _, _, _, _))
+                  .WillOnce(DoDefault());
+  }
 }
 
 void TestMockFixture::expect_op_work_queue(librbd::MockImageCtx &mock_image_ctx) {

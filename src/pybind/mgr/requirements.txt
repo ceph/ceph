@@ -1,0 +1,3 @@
+-rrequirements-required.txt
+asyncssh==2.9
+kubernetes==11.0.0

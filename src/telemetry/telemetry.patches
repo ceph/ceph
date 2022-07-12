@@ -1,0 +1,820 @@
+From 986a5102efecab4e72d0bcb02e3b813565cf95b4 Mon Sep 17 00:00:00 2001
+From: Dan Mick <dan.mick@redhat.com>
+Date: Mon, 7 Oct 2019 19:02:08 -0700
+Subject: [PATCH 1/8] src/telemetry: gen_crash_reports.py: periodic crash
+ reporting
+
+Signed-off-by: Dan Mick <dan.mick@redhat.com>
+---
+ src/telemetry/gen_crash_report.py | 86 +++++++++++++++++++++++++++++++
+ 1 file changed, 86 insertions(+)
+ create mode 100755 src/telemetry/gen_crash_report.py
+
+diff --git a/src/telemetry/gen_crash_report.py b/src/telemetry/gen_crash_report.py
+new file mode 100755
+index 0000000000..111355857e
+--- /dev/null
++++ b/src/telemetry/gen_crash_report.py
+@@ -0,0 +1,86 @@
++#!/usr/bin/env python3
++# vim: ts=4 sw=4 expandtab:
++from operator import itemgetter
++import os
++import psycopg2
++import sys
++
++HOST = 'localhost'
++DBNAME = 'telemetry'
++USER = 'postgres'
++PASSPATH = os.path.join(os.environ['HOME'], '.pgpass')
++PASSWORD = open(PASSPATH, "r").read().strip().split(':')[-1]
++CRASH_AGE = "2 days"
++
++
++def plural(count, noun, suffix='es'):
++    if count == 1:
++        return noun
++    else:
++        return ''.join((noun, suffix))
++
++
++def main():
++    conn = psycopg2.connect(host=HOST, dbname=DBNAME, user=USER, password=PASSWORD)
++    cur = conn.cursor()
++    sigcur = conn.cursor()
++    crashcur = conn.cursor()
++
++    # fetch all the recent stack sigs by frequency of occurence
++    cur.execute("""
++        select stack_sig, count(stack_sig) from crash
++        where age(timestamp) < interval %s group by stack_sig
++        order by count desc""", (CRASH_AGE,))
++
++    unique_sig_count = cur.statusmessage.split()[1]
++    print('%s unique %s collected in last %s:' %
++          (unique_sig_count, plural(unique_sig_count, 'crash'), CRASH_AGE))
++    print()
++
++    for sig_and_count in cur.fetchall():
++        sig = sig_and_count[0]
++        count = sig_and_count[1]
++
++        # get the first of the N matching stacks
++        sigcur.execute('select stack from crash where stack_sig = %s limit 1', (sig,))
++        stack = sigcur.fetchone()
++        stack = eval(stack[0])
++
++        # for each sig, fetch the crash instances that match it
++        sigcur.execute('select crash_id from crash where age(timestamp) < interval %s and stack_sig = %s', (CRASH_AGE, sig))
++        clid_and_version_count = dict()
++        for crash_id in sigcur.fetchall():
++            # for each crash instance, fetch all clusters that experienced it
++            # accumulate versions and counts
++            crash_id = crash_id[0]
++            crashcur.execute('select cluster_id, version from crash where crash_id = %s', (crash_id,))
++            clids_and_versions = crashcur.fetchall()
++            for clid_and_version in clids_and_versions:
++                if clid_and_version in clid_and_version_count:
++                    clid_and_version_count[clid_and_version] += 1
++                else:
++                    clid_and_version_count[clid_and_version] = 1
++        clusters = set()
++        for clid_and_version in clid_and_version_count.keys():
++            clusters.add(clid_and_version[0])
++        print('Crash signature %s\n%s total %s on %d %s' %
++              (sig, count, plural(count, 'instance', 's'),
++              len(clusters), plural(len(clusters), 'cluster', 's'))
++             )
++        for clid_and_version, count in sorted(
++                clid_and_version_count.items(),
++                key=itemgetter(1),
++                reverse=True,
++            ):
++            print('%d %s, cluster %s, ceph ver %s' %
++                  (count, plural(count, 'instance', 's'),
++                  clid_and_version[0], clid_and_version[1])
++                 )
++        print('stack:\n\t', '\n\t'.join(stack))
++        print()
++
++    conn.close()
++
++
++if __name__ == '__main__':
++    sys.exit(main())
+-- 
+2.17.1
+
+
+From e457a9837a9805774b9ae21a6dcd80c56ccb24d5 Mon Sep 17 00:00:00 2001
+From: Dan Mick <dan.mick@redhat.com>
+Date: Wed, 9 Oct 2019 17:36:20 -0700
+Subject: [PATCH 2/8] src/telemetry: Clean up proc_reports.py, process only new
+ reports
+
+Signed-off-by: Dan Mick <dan.mick@redhat.com>
+---
+ src/telemetry/proc_reports.py | 195 ++++++++++++++++++++++------------
+ 1 file changed, 125 insertions(+), 70 deletions(-)
+
+diff --git a/src/telemetry/proc_reports.py b/src/telemetry/proc_reports.py
+index 98fc9720af..6b2a1493fb 100644
+--- a/src/telemetry/proc_reports.py
++++ b/src/telemetry/proc_reports.py
+@@ -1,95 +1,150 @@
++#!/usr/bin/env python3
++# vim: ts=4 sw=4 expandtab:
++import hashlib
+ import json
+ import psycopg2
++import sys
+ 
+-f = open('/opt/telemetry/pg_pass.txt', 'r')
+-password = f.read().strip()
+-f.close()
+-
+-conn = psycopg2.connect(
+-    host='localhost',
+-    database='telemetry',
+-    user='telemetry',
+-    password=password
+-)
+-rcur = conn.cursor()
+-rcur.execute("SELECT cluster_id, report FROM report")
+-for row in rcur.fetchall():
+-    cluster_id = row[0]
+-    report = json.loads(row[1])
+-    ts = report.get('report_timestamp')
++conn = None
+ 
+-    ccur = conn.cursor()
+ 
+-    # cluster
+-    ccur.execute("SELECT cluster_id,latest_report_stamp FROM cluster WHERE cluster_id=%s", (cluster_id,))
+-    crows = ccur.fetchall()
+-    update = True
+-    if crows:
+-        crow = crows[0]
+-        if str(crow[1]) > ts:
+-            print('cluster %s already has newer report %s' % (cluster_id, crow[1]))
+-            update = False
+-
+-    if update:
+-        print('updating %s' % (cluster_id))
+-        num_pgs = 0
+-        for pool in report.get('pools', []):
+-            num_pgs += pool.get('pg_num', 0)
+-        ccur.execute(
+-            "INSERT INTO cluster (cluster_id, latest_report_stamp, num_mon, num_osd, num_pools, num_pgs, total_bytes, total_used_bytes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (cluster_id) DO UPDATE SET latest_report_stamp=%s, num_mon=%s, num_osd=%s, num_pools=%s, num_pgs=%s, total_bytes=%s, total_used_bytes=%s",
+-            (cluster_id,
+-             ts,
+-             report.get('mon', {}).get('count', 0),
+-             report.get('osd', {}).get('count', 0),
+-             report.get('usage', {}).get('pools', 0),
+-             num_pgs,
+-             report.get('usage', {}).get('total_bytes', 0),
+-             report.get('usage', {}).get('total_used_bytes', 0),
+-             ts,
+-             report.get('mon', {}).get('count', 0),
+-             report.get('osd', {}).get('count', 0),
+-             report.get('usage', {}).get('pools', 0),
+-             num_pgs,
+-             report.get('usage', {}).get('total_bytes', 0),
+-             report.get('usage', {}).get('total_used_bytes', 0)),)
+-
+-        # cluster_version
+-        ccur.execute(
+-            "DELETE FROM cluster_version WHERE cluster_id=%s",
+-            (cluster_id,)
+-        )
+-        for (entity_type, info) in report.get('metadata', {}).items():
+-            for (version, num) in info.get('ceph_version', {}).items():
+-                ccur.execute(
+-                    "INSERT INTO cluster_version (cluster_id, entity_type, version, num_daemons) VALUES (%s, %s, %s, %s)",
+-                    (cluster_id,
+-                     entity_type,
+-                     version,
+-                     num,))
+-
+-    # crash
++def sanitize_backtrace(bt):
++    ret = list()
++    for func_record in bt:
++        # split into two fields on last space, take the first one,
++        # strip off leading ( and trailing )
++        func_plus_offset = func_record.rsplit(' ', 1)[0][1:-1]
++        ret.append(func_plus_offset.split('+')[0])
++
++    return ret
++
++
++def calc_sig(funclist):
++    sig = hashlib.sha256()
++    for func in funclist:
++        sig.update(func.encode())
++    return ''.join('%02x' % c for c in sig.digest())
++
++
++def update_cluster(cluster_id, latest_report_ts, report):
++    cur = conn.cursor()
++    cur.execute("SELECT cluster_id,latest_report_stamp FROM cluster WHERE cluster_id=%s", (cluster_id,))
++    row = cur.fetchone()
++    if row:
++        latest_cluster_report_stamp = row[1]
++
++        if latest_cluster_report_stamp >= latest_report_ts:
++            return False
++
++    num_pgs = 0
++    for pool in report.get('pools', []):
++        num_pgs += pool.get('pg_num', 0)
++    cur.execute(
++        "INSERT INTO cluster (cluster_id, latest_report_stamp, num_mon, num_osd, num_pools, num_pgs, total_bytes, total_used_bytes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (cluster_id) DO UPDATE SET latest_report_stamp=%s, num_mon=%s, num_osd=%s, num_pools=%s, num_pgs=%s, total_bytes=%s, total_used_bytes=%s",
++        (cluster_id,
++         latest_report_ts,
++         report.get('mon', {}).get('count', 0),
++         report.get('osd', {}).get('count', 0),
++         report.get('usage', {}).get('pools', 0),
++         num_pgs,
++         report.get('usage', {}).get('total_bytes', 0),
++         report.get('usage', {}).get('total_used_bytes', 0),
++
++         latest_report_ts,
++         report.get('mon', {}).get('count', 0),
++         report.get('osd', {}).get('count', 0),
++         report.get('usage', {}).get('pools', 0),
++         num_pgs,
++         report.get('usage', {}).get('total_bytes', 0),
++         report.get('usage', {}).get('total_used_bytes', 0)),)
++    return True
++
++
++def update_cluster_version(cluster_id, latest_report_ts, report):
++    cur = conn.cursor()
++    cur.execute(
++        "DELETE FROM cluster_version WHERE cluster_id=%s",
++        (cluster_id,)
++    )
++    for (entity_type, info) in report.get('metadata', {}).items():
++        for (version, num) in info.get('ceph_version', {}).items():
++            cur.execute(
++                "INSERT INTO cluster_version (cluster_id, entity_type, version, num_daemons) VALUES (%s, %s, %s, %s)",
++                (cluster_id,
++                 entity_type,
++                 version,
++                 num,))
++
++
++def update_crash(cluster_id, latest_report_ts, report):
++    cur = conn.cursor()
+     crashes = report.get('crashes', [])
+     if isinstance(crashes, dict):
+         tmp = []
+-        for c in crashes.valeus():
++        for c in crashes.values():
+             tmp.append(c)
+         crashes = tmp
+ 
++    update_count = 0
+     for crash in crashes:
+         crash_id = crash.get('crash_id')
+         if not crash_id:
+             continue
+-        stack = str(crash.get('backtrace'))
+-        ccur.execute(
+-            "INSERT INTO crash (crash_id, cluster_id, raw_report, timestamp, entity_name, version, stack) values (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
++        stack = crash.get('backtrace')
++        funclist = sanitize_backtrace(stack)
++        sig = calc_sig(funclist)
++        cur.execute(
++            "INSERT INTO crash (crash_id, cluster_id, raw_report, timestamp, entity_name, version, stack_sig, stack) values (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+             (crash_id,
+              cluster_id,
+              json.dumps(crash, indent=4),
+              crash.get('timestamp'),
+              crash.get('entity_name'),
+              crash.get('ceph_version'),
+-             stack,
++             sig,
++             str(stack),
+             ))
++        update_count += int(cur.statusmessage.split()[2])
++    return len(crashes), update_count
++
++
++def main():
++    f = open('/opt/telemetry/pg_pass.txt', 'r')
++    password = f.read().strip()
++    f.close()
+ 
++    global conn
++    conn = psycopg2.connect(
++        host='localhost',
++        database='telemetry',
++        user='telemetry',
++        password=password
++    )
++
++    ccur = conn.cursor()
++    rcur = conn.cursor()
++
++    cluster_count = update_count = crash_count = crash_update_count = 0
++    ccur.execute("SELECT DISTINCT cluster_id from report")
++    for cid in ccur.fetchall():
++        cid = cid[0]
++        rcur.execute("SELECT report_stamp, report FROM report WHERE cluster_id=%s ORDER BY report_stamp DESC LIMIT 1", (cid,))
++        latest_report_ts, report = rcur.fetchone()
++        try:
++            report = json.loads(report)
++        except TypeError:
++            print('cluster %s ts %s has malformed report' % (cid, latest_report_ts))
++            continue
++        cluster_count += 1
++        if update_cluster(cid, latest_report_ts, report):
++            update_count += 1
++        update_cluster_version(cid, latest_report_ts, report)
++        visited, updated = update_crash(cid, latest_report_ts, report)
++        crash_count += visited
++        crash_update_count += updated
++    print('updated %d/%d clusters, updated %d/%d crashes' % (update_count, cluster_count, crash_update_count, crash_count))
+     conn.commit()
+ 
++
++if __name__ == '__main__':
++    sys.exit(main())
+-- 
+2.17.1
+
+
+From c8c45b1d64a583fede39ceada8179f4bc862eb88 Mon Sep 17 00:00:00 2001
+From: Dan Mick <dan.mick@redhat.com>
+Date: Thu, 10 Oct 2019 21:22:10 -0700
+Subject: [PATCH 3/8] src/telemetry/proc_reports.py: add assert_msg to
+ stack_sig
+
+Signed-off-by: Dan Mick <dan.mick@redhat.com>
+---
+ src/telemetry/proc_reports.py | 22 ++++++++++++++++++----
+ 1 file changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/src/telemetry/proc_reports.py b/src/telemetry/proc_reports.py
+index 6b2a1493fb..9ccded3677 100644
+--- a/src/telemetry/proc_reports.py
++++ b/src/telemetry/proc_reports.py
+@@ -3,6 +3,7 @@
+ import hashlib
+ import json
+ import psycopg2
++import re
+ import sys
+ 
+ conn = None
+@@ -19,10 +20,23 @@ def sanitize_backtrace(bt):
+     return ret
+ 
+ 
+-def calc_sig(funclist):
++def sanitize_assert_msg(msg):
++
++    # (?s) allows matching newline.  get everything up to "thread" and
++    # then after-and-including the last colon-space.  This skips the
++    # thread id, timestamp, and file:lineno, because file is already in
++    # the beginning, and lineno may vary.
++
++    matchexpr = re.compile(r'(?s)(.*) thread .* time .*(: .*)\n')
++    return ''.join(matchexpr.match(msg).groups())
++
++
++def calc_sig(bt, assert_msg):
+     sig = hashlib.sha256()
+-    for func in funclist:
++    for func in sanitize_backtrace(bt):
+         sig.update(func.encode())
++    if assert_msg:
++        sig.update(sanitize_assert_msg(assert_msg).encode())
+     return ''.join('%02x' % c for c in sig.digest())
+ 
+ 
+@@ -91,8 +105,8 @@ def update_crash(cluster_id, latest_report_ts, report):
+         if not crash_id:
+             continue
+         stack = crash.get('backtrace')
+-        funclist = sanitize_backtrace(stack)
+-        sig = calc_sig(funclist)
++        assert_msg = crash.get('assert_msg')
++        sig = calc_sig(stack, assert_msg)
+         cur.execute(
+             "INSERT INTO crash (crash_id, cluster_id, raw_report, timestamp, entity_name, version, stack_sig, stack) values (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+             (crash_id,
+-- 
+2.17.1
+
+
+From cea3f91a7d2a1b3e20fffc8b356afaa4eb19c2b4 Mon Sep 17 00:00:00 2001
+From: Dan Mick <dan.mick@redhat.com>
+Date: Thu, 10 Oct 2019 21:19:11 -0700
+Subject: [PATCH 4/8] src/telemetry/crashsigs.py: regenerate all crash
+ signatures from reports
+
+Signed-off-by: Dan Mick <dan.mick@redhat.com>
+---
+ src/telemetry/crashsigs.py | 137 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 137 insertions(+)
+ create mode 100755 src/telemetry/crashsigs.py
+
+diff --git a/src/telemetry/crashsigs.py b/src/telemetry/crashsigs.py
+new file mode 100755
+index 0000000000..74f1417c0a
+--- /dev/null
++++ b/src/telemetry/crashsigs.py
+@@ -0,0 +1,137 @@
++#!/usr/bin/env python3
++# vim: ts=4 sw=4 expandtab:
++import argparse
++import hashlib
++import json
++import psycopg2
++import re
++import sys
++
++conn = None
++
++def sanitize_backtrace(bt):
++    ret = list()
++    for func_record in bt:
++        # split into two fields on last space, take the first one,
++        # strip off leading ( and trailing )
++        func_plus_offset = func_record.rsplit(' ', 1)[0][1:-1]
++        ret.append(func_plus_offset.split('+')[0])
++
++    return ret
++
++def sanitize_assert_msg(msg):
++
++    # (?s) allows matching newline.  get everything up to "thread" and
++    # then after-and-including the last colon-space.  This skips the
++    # thread id, timestamp, and file:lineno, because file is already in
++    # the beginning, and lineno may vary.
++
++    matchexpr = re.compile(r'(?s)(.*) thread .* time .*(: .*)\n')
++    return ''.join(matchexpr.match(msg).groups())
++
++
++
++def calc_sig(bt, assert_msg):
++    sig = hashlib.sha256()
++    for func in sanitize_backtrace(bt):
++        sig.update(func.encode())
++    if assert_msg:
++        sig.update(sanitize_assert_msg(assert_msg).encode())
++    return ''.join('%02x' % c for c in sig.digest())
++
++
++def update_crash(cluster_id, report):
++    cur = conn.cursor()
++    crashes = report.get('crashes', [])
++    if isinstance(crashes, dict):
++        tmp = []
++        for c in crashes.values():
++            tmp.append(c)
++        crashes = tmp
++
++    print('Cluster %s has %d crashes' % (cluster_id, len(crashes)))
++    if len(crashes) == 0:
++        return False
++    for crash in crashes:
++        crash_id = crash.get('crash_id')
++        if not crash_id:
++            continue
++        stack = crash.get('backtrace')
++        assert_msg = crash.get('assert_msg')
++        sig = calc_sig(stack, assert_msg)
++        cur.execute(
++            "INSERT INTO crash (crash_id, cluster_id, raw_report, timestamp, entity_name, version, stack_sig, stack) values (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (crash_id) DO UPDATE SET stack_sig=%s",
++            (crash_id,
++             cluster_id,
++             json.dumps(crash, indent=4),
++             crash.get('timestamp'),
++             crash.get('entity_name'),
++             crash.get('ceph_version'),
++             sig,
++             str(stack),
++             sig,
++            ))
++
++
++def parse_args():
++    parser = argparse.ArgumentParser()
++    parser.add_argument("-a", "--all", action='store_true', help="do all crash history (default is just latest report)")
++    parser.add_argument("-c", "--clusters", help="list of cluster IDs to update", nargs='*')
++    return parser.parse_args()
++
++    
++def load_and_call_update(cid, ts, report):
++    try:
++        report = json.loads(report)
++    except TypeError:
++        print('cluster %s ts %s has malformed report' % (cid, ts))
++        return
++    update_crash(cid, report)
++
++
++def main():
++
++    f = open('/opt/telemetry/pg_pass.txt', 'r')
++    password = f.read().strip()
++    f.close()
++
++    global conn
++    conn = psycopg2.connect(
++        host='localhost',
++        database='telemetry',
++        user='telemetry',
++        password=password
++    )
++
++    ccur = conn.cursor()
++    rcur = conn.cursor()
++
++
++    args = parse_args()
++    
++    cluster_count = update_count = 0
++    ccur.execute("SELECT DISTINCT cluster_id from report")
++
++    if args.clusters is None:
++        clusters = ccur.fetchall()
++    else:
++        clusters = args.clusters
++    for cid in clusters:
++        if isinstance(cid, tuple):
++            cid = cid[0]
++        if args.all: 
++            rcur.execute("SELECT report_stamp, report FROM report WHERE cluster_id=%s", (cid,))
++            for ts, report in rcur.fetchall():
++                load_and_call_update(cid, ts, report)
++        else:
++            rcur.execute("SELECT report_stamp, report FROM report WHERE cluster_id=%s ORDER BY report_stamp DESC LIMIT 1", (cid,))
++            ts, report = rcur.fetchone()
++            load_and_call_update(cid, ts, report)
++        cluster_count += 1
++
++    print('Processed %d cluster ids' % cluster_count)
++    conn.commit()
++
++
++if __name__ == '__main__':
++    sys.exit(main())
+-- 
+2.17.1
+
+
+From 6e34381c0723be092c2f717dbc834e66c12bf08f Mon Sep 17 00:00:00 2001
+From: Dan Mick <dan.mick@redhat.com>
+Date: Thu, 10 Oct 2019 21:21:17 -0700
+Subject: [PATCH 5/8] src/telemetry/gen_crash_report.py: add assert_msg if
+ present
+
+Signed-off-by: Dan Mick <dan.mick@redhat.com>
+---
+ src/telemetry/gen_crash_report.py | 23 ++++++++++++++++++++---
+ 1 file changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/src/telemetry/gen_crash_report.py b/src/telemetry/gen_crash_report.py
+index 111355857e..edd1c2909d 100755
+--- a/src/telemetry/gen_crash_report.py
++++ b/src/telemetry/gen_crash_report.py
+@@ -1,8 +1,10 @@
+ #!/usr/bin/env python3
+ # vim: ts=4 sw=4 expandtab:
++import json
+ from operator import itemgetter
+ import os
+ import psycopg2
++import re
+ import sys
+ 
+ HOST = 'localhost'
+@@ -20,6 +22,17 @@ def plural(count, noun, suffix='es'):
+         return ''.join((noun, suffix))
+ 
+ 
++def sanitize_assert_msg(msg):
++
++    # (?s) allows matching newline.  get everything up to "thread" and
++    # then after-and-including the last colon-space.  This skips the
++    # thread id, timestamp, and file:lineno, because file is already in
++    # the beginning, and lineno may vary.
++
++    matchexpr = re.compile(r'(?s)(.*) thread .* time .*(: .*)\n')
++    return ''.join(matchexpr.match(msg).groups())
++
++
+ def main():
+     conn = psycopg2.connect(host=HOST, dbname=DBNAME, user=USER, password=PASSWORD)
+     cur = conn.cursor()
+@@ -42,9 +55,11 @@ def main():
+         count = sig_and_count[1]
+ 
+         # get the first of the N matching stacks
+-        sigcur.execute('select stack from crash where stack_sig = %s limit 1', (sig,))
+-        stack = sigcur.fetchone()
+-        stack = eval(stack[0])
++        sigcur.execute('select stack, raw_report from crash where stack_sig = %s limit 1', (sig,))
++        stack_and_report = sigcur.fetchone()
++        stack = eval(stack_and_report[0])
++        report = json.loads(stack_and_report[1])
++        assert_msg = report.get('assert_msg')
+ 
+         # for each sig, fetch the crash instances that match it
+         sigcur.execute('select crash_id from crash where age(timestamp) < interval %s and stack_sig = %s', (CRASH_AGE, sig))
+@@ -77,6 +92,8 @@ def main():
+                   clid_and_version[0], clid_and_version[1])
+                  )
+         print('stack:\n\t', '\n\t'.join(stack))
++        if assert_msg:
++            print('assert_msg: ', sanitize_assert_msg(assert_msg))
+         print()
+ 
+     conn.close()
+-- 
+2.17.1
+
+
+From 95b9b514c7287adf6be746d3d46cd43842d80d09 Mon Sep 17 00:00:00 2001
+From: Dan Mick <dan.mick@redhat.com>
+Date: Fri, 11 Oct 2019 23:02:54 -0700
+Subject: [PATCH 6/8] src/telemetry: versionbar.py: generate version bargraph
+
+Signed-off-by: Dan Mick <dan.mick@redhat.com>
+---
+ src/telemetry/versionbar.py | 54 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 54 insertions(+)
+ create mode 100644 src/telemetry/versionbar.py
+
+diff --git a/src/telemetry/versionbar.py b/src/telemetry/versionbar.py
+new file mode 100644
+index 0000000000..001376a9e7
+--- /dev/null
++++ b/src/telemetry/versionbar.py
+@@ -0,0 +1,54 @@
++#!/usr/bin/env python3
++# vim: ts=4 sw=4 expandtab:
++import hashlib
++import json
++import matplotlib as mpl
++import matplotlib.pyplot as plt
++import os
++import os.path
++import psycopg2
++import sys
++
++HOST = 'localhost'
++DBNAME = 'telemetry'
++USER = 'postgres'
++PASSPATH = os.path.join(os.environ['HOME'], '.pgpass')
++PASSWORD = open(PASSPATH, "r").read().strip().split(':')[-1]
++
++
++def main():
++    conn = psycopg2.connect(host=HOST, dbname=DBNAME, user=USER, password=PASSWORD)
++
++    cur = conn.cursor()
++    
++    cur.execute('''
++    with cleanver as
++      (select regexp_replace(version, 'ceph version (([0-9.]+|Dev)).*', '\\1')
++       as ver from cluster_version)
++    select ver, count(ver) from cleanver
++    group by ver
++    order by ver
++    ''')
++
++    versions = list()
++    counts = list()
++    for row in cur.fetchall():
++        versions.append(row[0])
++        counts.append(row[1])
++    conn.close()
++    fig, ax = plt.subplots(
++        subplot_kw=dict(xlabel='Ceph version', ylabel='Number of daemons')
++        )
++    ax.bar(
++        range(0, len(versions)),
++        counts,
++        tick_label=versions,
++        )
++    ax.tick_params(axis='x', labelrotation=90)
++    fig.subplots_adjust(bottom=0.2)
++    plt.savefig('versions.png')
++
++
++
++if __name__ == '__main__':
++    sys.exit(main())
+-- 
+2.17.1
+
+
+From 10dfe3e0cb8cbce76cc2fe3d7b7d7d74f16a880b Mon Sep 17 00:00:00 2001
+From: Dan Mick <dan.mick@redhat.com>
+Date: Fri, 11 Oct 2019 23:04:18 -0700
+Subject: [PATCH 7/8] src/telemetry/gen_crash_report.py: sanitize stack for
+ readability
+
+Signed-off-by: Dan Mick <dan.mick@redhat.com>
+---
+ src/telemetry/gen_crash_report.py | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/src/telemetry/gen_crash_report.py b/src/telemetry/gen_crash_report.py
+index edd1c2909d..3b3f6702fc 100755
+--- a/src/telemetry/gen_crash_report.py
++++ b/src/telemetry/gen_crash_report.py
+@@ -22,6 +22,17 @@ def plural(count, noun, suffix='es'):
+         return ''.join((noun, suffix))
+ 
+ 
++def sanitize_backtrace(bt):
++    ret = list()
++    for func_record in bt:
++        # split into two fields on last space, take the first one,
++        # strip off leading ( and trailing )
++        func_plus_offset = func_record.rsplit(' ', 1)[0][1:-1]
++        ret.append(func_plus_offset.split('+')[0])
++
++    return ret
++
++
+ def sanitize_assert_msg(msg):
+ 
+     # (?s) allows matching newline.  get everything up to "thread" and
+@@ -91,7 +102,7 @@ def main():
+                   (count, plural(count, 'instance', 's'),
+                   clid_and_version[0], clid_and_version[1])
+                  )
+-        print('stack:\n\t', '\n\t'.join(stack))
++        print('stack:\n\t', '\n\t'.join(sanitize_backtrace(stack)))
+         if assert_msg:
+             print('assert_msg: ', sanitize_assert_msg(assert_msg))
+         print()
+-- 
+2.17.1
+
+
+From 2f89092d95967e01b4774f0cdf83e9e00457203b Mon Sep 17 00:00:00 2001
+From: Dan Mick <dan.mick@redhat.com>
+Date: Tue, 15 Oct 2019 17:39:44 -0700
+Subject: [PATCH 8/8] src/telemetry/gen_crash_report.py: add stack_sig_notes
+ information
+
+Another table storing notes (currently tracker and PR if any)
+Display before stack trace if present
+
+Signed-off-by: Dan Mick <dan.mick@redhat.com>
+---
+ src/telemetry/gen_crash_report.py | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/src/telemetry/gen_crash_report.py b/src/telemetry/gen_crash_report.py
+index 3b3f6702fc..a200d73e43 100755
+--- a/src/telemetry/gen_crash_report.py
++++ b/src/telemetry/gen_crash_report.py
+@@ -65,6 +65,18 @@ def main():
+         sig = sig_and_count[0]
+         count = sig_and_count[1]
+ 
++        # grab the sig for possible later use
++        sigcur.execute('select stack_sig, tracker_id, note from stack_sig_note where stack_sig = %s', (sig,))
++        row = sigcur.fetchall()
++        try:
++            tracker_id = row[0][1]
++        except IndexError:
++            tracker_id = None
++        try:
++            note = row[0][2]
++        except IndexError:
++            note = None
++
+         # get the first of the N matching stacks
+         sigcur.execute('select stack, raw_report from crash where stack_sig = %s limit 1', (sig,))
+         stack_and_report = sigcur.fetchone()
+@@ -102,9 +114,14 @@ def main():
+                   (count, plural(count, 'instance', 's'),
+                   clid_and_version[0], clid_and_version[1])
+                  )
+-        print('stack:\n\t', '\n\t'.join(sanitize_backtrace(stack)))
+         if assert_msg:
+             print('assert_msg: ', sanitize_assert_msg(assert_msg))
++        if tracker_id:
++            print('tracker_id: ', tracker_id)
++        if note:
++            print('note: ', note)
++        print('stack:\n\t', '\n\t'.join(sanitize_backtrace(stack)))
++
+         print()
+ 
+     conn.close()
+-- 
+2.17.1
+

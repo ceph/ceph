@@ -5,8 +5,7 @@
 #include "ClassHandler.h"
 #include "common/errno.h"
 #include "common/ceph_context.h"
-
-#include <dlfcn.h>
+#include "include/dlfcn_compat.h"
 
 #include <map>
 
@@ -23,20 +22,18 @@
 
 
 #define CLS_PREFIX "libcls_"
-#define CLS_SUFFIX ".so"
+#define CLS_SUFFIX SHARED_LIB_SUFFIX
 
+using std::map;
+using std::set;
+using std::string;
 
-void ClassHandler::add_embedded_class(const string& cname)
-{
-  assert(mutex.is_locked());
-  ClassData *cls = _get_class(cname, false);
-  assert(cls->status == ClassData::CLASS_UNKNOWN);
-  cls->status = ClassData::CLASS_INITIALIZING;
-}
+using ceph::bufferlist;
+
 
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
 {
-  Mutex::Locker lock(mutex);
+  std::lock_guard lock(mutex);
   ClassData *cls = _get_class(cname, true);
   if (!cls)
     return -EPERM;
@@ -129,7 +126,7 @@ ClassHandler::ClassData *ClassHandler::_get_class(const string& cname,
     ldout(cct, 10) << "_get_class adding new class name " << cname << " " << cls << dendl;
     cls->name = cname;
     cls->handler = this;
-    cls->whitelisted = in_class_list(cname, cct->_conf->osd_class_default_list);
+    cls->allowed = in_class_list(cname, cct->_conf->osd_class_default_list);
   }
   return cls;
 }
@@ -211,7 +208,7 @@ int ClassHandler::_load_class(ClassData *cls)
 
 ClassHandler::ClassData *ClassHandler::register_class(const char *cname)
 {
-  assert(mutex.is_locked());
+  ceph_assert(ceph_mutex_is_locked(mutex));
 
   ClassData *cls = _get_class(cname, false);
   ldout(cct, 10) << "register_class " << cname << " status " << cls->status << dendl;
@@ -240,12 +237,8 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
     return NULL;
   }
   ldout(handler->cct, 10) << "register_method " << name << "." << mname << " flags " << flags << " " << (void*)func << dendl;
-  ClassMethod& method = methods_map[mname];
-  method.func = func;
-  method.name = mname;
-  method.flags = flags;
-  method.cls = this;
-  return &method;
+  [[maybe_unused]] auto [method, added] = methods_map.try_emplace(mname, mname, func, flags, this);
+  return &method->second;
 }
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const char *mname,
@@ -254,12 +247,8 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const ch
 {
   /* no need for locking, called under the class_init mutex */
   ldout(handler->cct, 10) << "register_cxx_method " << name << "." << mname << " flags " << flags << " " << (void*)func << dendl;
-  ClassMethod& method = methods_map[mname];
-  method.cxx_func = func;
-  method.name = mname;
-  method.flags = flags;
-  method.cls = this;
-  return &method;
+  [[maybe_unused]] auto [method, added] = methods_map.try_emplace(mname, mname, func, flags, this);
+  return &method->second;
 }
 
 ClassHandler::ClassFilter *ClassHandler::ClassData::register_cxx_filter(
@@ -273,17 +262,19 @@ ClassHandler::ClassFilter *ClassHandler::ClassData::register_cxx_filter(
   return &filter;
 }
 
-ClassHandler::ClassMethod *ClassHandler::ClassData::_get_method(const char *mname)
+ClassHandler::ClassMethod *ClassHandler::ClassData::_get_method(
+    const std::string& mname)
 {
-  map<string, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
-  if (iter == methods_map.end())
-    return NULL;
-  return &(iter->second);
+  if (auto iter = methods_map.find(mname); iter != methods_map.end()) {
+    return &(iter->second);
+  } else {
+    return nullptr;
+  }
 }
 
-int ClassHandler::ClassData::get_method_flags(const char *mname)
+int ClassHandler::ClassData::get_method_flags(const std::string& mname)
 {
-  Mutex::Locker l(handler->mutex);
+  std::lock_guard l(handler->mutex);
   ClassMethod *method = _get_method(mname);
   if (!method)
     return -ENOENT;
@@ -320,21 +311,40 @@ void ClassHandler::ClassFilter::unregister()
 
 int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata)
 {
-  int ret;
-  if (cxx_func) {
-    // C++ call version
-    ret = cxx_func(ctx, &indata, &outdata);
-  } else {
-    // C version
-    char *out = NULL;
-    int olen = 0;
-    ret = func(ctx, indata.c_str(), indata.length(), &out, &olen);
-    if (out) {
-      // assume *out was allocated via cls_alloc (which calls malloc!)
-      buffer::ptr bp = buffer::claim_malloc(olen, out);
-      outdata.push_back(bp);
+  int ret = 0;
+  std::visit([&](auto method) {
+    using method_t = decltype(method);
+    if constexpr (std::is_same_v<method_t, cls_method_cxx_call_t>) {
+      // C++ call version
+      ret = method(ctx, &indata, &outdata);
+    } else if constexpr (std::is_same_v<method_t, cls_method_call_t>) {
+      // C version
+      char *out = nullptr;
+      int olen = 0;
+      ret = method(ctx, indata.c_str(), indata.length(), &out, &olen);
+      if (out) {
+        // assume *out was allocated via cls_alloc (which calls malloc!)
+	ceph::buffer::ptr bp = ceph::buffer::claim_malloc(olen, out);
+        outdata.push_back(bp);
+      }
+    } else {
+      static_assert(std::is_same_v<method_t, void>);
     }
-  }
+  }, func);
   return ret;
 }
 
+ClassHandler& ClassHandler::get_instance()
+{
+#ifdef WITH_SEASTAR
+  // the context is being used solely for:
+  //   1. random number generation (cls_gen_random_bytes)
+  //   2. accessing the configuration
+  //   3. logging
+  static CephContext cct;
+  static ClassHandler single(&cct);
+#else
+  static ClassHandler single(g_ceph_context);
+#endif // WITH_SEASTAR
+  return single;
+}

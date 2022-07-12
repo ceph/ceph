@@ -57,6 +57,34 @@ function get_osds_up() {
     echo $osds
 }
 
+function TEST_reweight_vs_classes() {
+    local dir=$1
+
+    # CrushWrapper::update_item (and ceph osd crush set) must rebuild the shadow
+    # tree too. https://tracker.ceph.com/issues/48065
+
+    run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+
+    ceph osd crush set-device-class ssd osd.0 || return 1
+    ceph osd crush class ls-osd ssd | grep 0 || return 1
+    ceph osd crush set-device-class ssd osd.1 || return 1
+    ceph osd crush class ls-osd ssd | grep 1 || return 1
+
+    ceph osd crush reweight osd.0 1
+
+    h=`hostname -s`
+    ceph osd crush dump | jq ".buckets[] | select(.name==\"$h\") | .items[0].weight" | grep 65536
+    ceph osd crush dump | jq ".buckets[] | select(.name==\"$h~ssd\") | .items[0].weight" | grep 65536
+
+    ceph osd crush set 0 2 host=$h
+
+    ceph osd crush dump | jq ".buckets[] | select(.name==\"$h\") | .items[0].weight" | grep 131072
+    ceph osd crush dump | jq ".buckets[] | select(.name==\"$h~ssd\") | .items[0].weight" | grep 131072
+}
+
 function TEST_classes() {
     local dir=$1
 
@@ -146,6 +174,20 @@ function TEST_mon_classes() {
 
     test "$(get_osds_up rbd SOMETHING)" == "1 2 0" || return 1
     add_something $dir SOMETHING || return 1
+
+    # test create and remove class
+    ceph osd crush class create CLASS || return 1
+    ceph osd crush class create CLASS || return 1 # idempotent
+    ceph osd crush class ls | grep CLASS  || return 1
+    ceph osd crush class rename CLASS TEMP || return 1
+    ceph osd crush class ls | grep TEMP || return 1
+    ceph osd crush class rename TEMP CLASS || return 1
+    ceph osd crush class ls | grep CLASS  || return 1
+    ceph osd erasure-code-profile set myprofile plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd crush-device-class=CLASS || return 1
+    expect_failure $dir EBUSY ceph osd crush class rm CLASS || return 1
+    ceph osd erasure-code-profile rm myprofile || return 1
+    ceph osd crush class rm CLASS || return 1
+    ceph osd crush class rm CLASS || return 1 # test idempotence
 
     # test rm-device-class
     ceph osd crush set-device-class aaa osd.0 || return 1

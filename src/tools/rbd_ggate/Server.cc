@@ -17,7 +17,7 @@ namespace rbd {
 namespace ggate {
 
 Server::Server(Driver *drv, librbd::Image& image)
-  : m_drv(drv), m_image(image), m_lock("rbd::ggate::Server::m_lock"),
+  : m_drv(drv), m_image(image),
     m_reader_thread(this, &Server::reader_entry),
     m_writer_thread(this, &Server::writer_entry) {
 }
@@ -26,15 +26,13 @@ void Server::run() {
   dout(10) << dendl;
 
   int r = start();
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   dout(20) << "entering run loop" << dendl;
 
   {
-    Mutex::Locker locker(m_lock);
-    while (!m_stopping) {
-      m_cond.WaitInterval(m_lock, utime_t(1, 0));
-    }
+    std::unique_lock locker{m_lock};
+    m_cond.wait(locker, [this] { return m_stopping;});
   }
 
   dout(20) << "exiting run loop" << dendl;
@@ -54,8 +52,8 @@ void Server::stop() {
   dout(10) << dendl;
 
   {
-    Mutex::Locker locker(m_lock);
-    assert(m_stopping);
+    std::lock_guard locker{m_lock};
+    ceph_assert(m_stopping);
   }
 
   m_reader_thread.join();
@@ -67,29 +65,26 @@ void Server::stop() {
 void Server::io_start(IOContext *ctx) {
   dout(20) << ctx << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   m_io_pending.push_back(&ctx->item);
 }
 
 void Server::io_finish(IOContext *ctx) {
   dout(20) << ctx << dendl;
 
-  Mutex::Locker locker(m_lock);
-  assert(ctx->item.is_on_list());
+  std::lock_guard locker{m_lock};
+  ceph_assert(ctx->item.is_on_list());
 
   ctx->item.remove_myself();
   m_io_finished.push_back(&ctx->item);
-  m_cond.Signal();
+  m_cond.notify_all();
 }
 
 Server::IOContext *Server::wait_io_finish() {
   dout(20) << dendl;
 
-  Mutex::Locker locker(m_lock);
-
-  while (m_io_finished.empty() && !m_stopping) {
-    m_cond.Wait(m_lock);
-  }
+  std::unique_lock locker{m_lock};
+  m_cond.wait(locker, [this] { return !m_io_finished.empty() || m_stopping;});
 
   if (m_io_finished.empty()) {
     return nullptr;
@@ -104,16 +99,13 @@ Server::IOContext *Server::wait_io_finish() {
 void Server::wait_clean() {
   dout(20) << dendl;
 
-  assert(!m_reader_thread.is_started());
+  ceph_assert(!m_reader_thread.is_started());
 
-  Mutex::Locker locker(m_lock);
-
-  while (!m_io_pending.empty()) {
-    m_cond.Wait(m_lock);
-  }
+  std::unique_lock locker{m_lock};
+  m_cond.wait(locker, [this] { return m_io_pending.empty();});
 
   while (!m_io_finished.empty()) {
-    ceph::unique_ptr<IOContext> free_ctx(m_io_finished.front());
+    std::unique_ptr<IOContext> free_ctx(m_io_finished.front());
     m_io_finished.pop_front();
   }
 }
@@ -158,7 +150,7 @@ void Server::reader_entry() {
   dout(20) << dendl;
 
   while (!m_stopping) {
-    ceph::unique_ptr<IOContext> ctx(new IOContext(this));
+    std::unique_ptr<IOContext> ctx(new IOContext(this));
 
     dout(20) << "waiting for ggate request" << dendl;
 
@@ -167,9 +159,9 @@ void Server::reader_entry() {
       if (r != -ECANCELED) {
         derr << "recv: " << cpp_strerror(r) << dendl;
       }
-      Mutex::Locker locker(m_lock);
+      std::lock_guard locker{m_lock};
       m_stopping = true;
-      m_cond.Signal();
+      m_cond.notify_all();
       return;
     }
 
@@ -200,9 +192,9 @@ void Server::reader_entry() {
       derr << pctx << ": invalid request command: " << pctx->req->get_cmd()
            << dendl;
       c->release();
-      Mutex::Locker locker(m_lock);
+      std::lock_guard locker{m_lock};
       m_stopping = true;
-      m_cond.Signal();
+      m_cond.notify_all();
       return;
     }
   }
@@ -215,7 +207,7 @@ void Server::writer_entry() {
   while (!m_stopping) {
     dout(20) << "waiting for io request" << dendl;
 
-    ceph::unique_ptr<IOContext> ctx(wait_io_finish());
+    std::unique_ptr<IOContext> ctx(wait_io_finish());
     if (!ctx) {
       dout(20) << "no io requests, terminating" << dendl;
       return;
@@ -226,9 +218,9 @@ void Server::writer_entry() {
     int r = m_drv->send(ctx->req);
     if (r < 0) {
       derr << ctx.get() << ": send: " << cpp_strerror(r) << dendl;
-      Mutex::Locker locker(m_lock);
+      std::lock_guard locker{m_lock};
       m_stopping = true;
-      m_cond.Signal();
+      m_cond.notify_all();
       return;
     }
     dout(20) << ctx.get() << " finish" << dendl;

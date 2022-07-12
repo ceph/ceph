@@ -79,6 +79,7 @@ private:
   void acquire_lock();
   void handle_acquire_lock(int r);
 
+  void start_snap_unprotect();
   void snap_unprotect();
   void handle_snap_unprotect(int r);
 
@@ -90,7 +91,7 @@ private:
 
   void finish(int r);
 
-  Context *start_lock_op();
+  Context *start_lock_op(int* r);
 
 };
 

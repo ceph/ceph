@@ -10,6 +10,8 @@
 
 void MetaRequest::dump(Formatter *f) const
 {
+  auto age = std::chrono::duration<double>(ceph_clock_now() - op_stamp);
+
   f->dump_unsigned("tid", tid);
   f->dump_string("op", ceph_mds_op_name(head.op));
   f->dump_stream("path") << path;
@@ -29,6 +31,7 @@ void MetaRequest::dump(Formatter *f) const
   f->dump_stream("hint_ino") << inodeno_t(head.ino);
 
   f->dump_stream("sent_stamp") << sent_stamp;
+  f->dump_float("age", age.count());
   f->dump_int("mds", mds);
   f->dump_int("resend_mds", resend_mds);
   f->dump_int("send_to_auth", send_to_auth);
@@ -56,12 +59,10 @@ MetaRequest::~MetaRequest()
     _dentry->put();
   if (_old_dentry)
     _old_dentry->put();
-  if (reply)
-    reply->put();
 }
 
 void MetaRequest::set_dentry(Dentry *d) {
-  assert(_dentry == NULL);
+  ceph_assert(_dentry == NULL);
   _dentry = d;
   _dentry->get();
 }
@@ -70,7 +71,7 @@ Dentry *MetaRequest::dentry() {
 }
 
 void MetaRequest::set_old_dentry(Dentry *d) {
-  assert(_old_dentry == NULL);
+  ceph_assert(_old_dentry == NULL);
   _old_dentry = d;
   _old_dentry->get();
 }

@@ -13,6 +13,9 @@
 set -e
 
 CACHE=""
+FLAVOR="default"
+SUDO=""
+PRIVILEGED=""
 
 function run {
     printf "%s\n" "$*"
@@ -20,17 +23,29 @@ function run {
 }
 
 function main {
-    eval set -- $(getopt --name "$0" --options 'h' --longoptions 'help,no-cache' -- "$@")
+    eval set -- $(getopt --name "$0" --options 'h' --longoptions 'help,no-cache,flavor:,sudo,privileged' -- "$@")
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
             -h|--help)
-                printf '%s: [--no-cache] <branch> <enviornment>\n' "$0"
+                printf '%s: [--no-cache] <branch>[:sha1] <environment>\n' "$0"
                 exit 0
                 ;;
             --no-cache)
                 CACHE="--no-cache"
                 shift
+                ;;
+            --flavor)
+                FLAVOR=$2
+                shift 2
+                ;;
+            --privileged)
+                PRIVILEGED=--privileged
+                shift 1
+                ;;
+            --sudo)
+                SUDO=sudo
+                shift 1
                 ;;
             --)
                 shift
@@ -40,21 +55,27 @@ function main {
     done
 
     if [ -z "$1" ]; then
-        printf "specify the branch [default \"master\"]: "
+        printf "specify the branch [default \"master:latest\"]: "
         read branch
         if [ -z "$branch" ]; then
-            branch=master
+            branch=master:latest
         fi
     else
         branch="$1"
     fi
-    printf "branch: %s\n" "$branch"
+    if [ "${branch%%:*}" != "${branch}" ]; then
+        sha=${branch##*:}
+    else
+        sha=latest
+    fi
+    branch=${branch%%:*}
+    printf "branch: %s\nsha1: %s\n" "$branch" "$sha"
 
     if [ -z "$2" ]; then
-        printf "specify the build environment [default \"centos:7\"]: "
+        printf "specify the build environment [default \"centos:8\"]: "
         read env
         if [ -z "$env" ]; then
-            env=centos:7
+            env=centos:8
         fi
     else
         env="$2"
@@ -69,45 +90,82 @@ function main {
         user="$(whoami)"
     fi
 
-    image="${user}/ceph-ci:${branch}-${env/:/-}"
+    tag="${user}:ceph-ci-${branch}-${sha}-${env/:/-}"
 
     T=$(mktemp -d)
     pushd "$T"
+    case "$env" in
+        centos:stream)
+            distro="centos/8"
+            ;;
+        *)
+            distro="${env/://}"
+    esac
+    api_url="https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=${FLAVOR}&distros=${distro}/$(arch)&ref=${branch}&sha1=${sha}"
+    repo_url="$(wget -O - "$api_url" | jq -r '.[0].chacra_url')repo"
+    # validate url:
+    wget -O /dev/null "$repo_url"
     if grep ubuntu <<<"$env" > /dev/null 2>&1; then
         # Docker makes it impossible to access anything outside the CWD : /
-        cp -- /ceph/shaman/cephdev.asc .
+        wget -O cephdev.asc 'https://download.ceph.com/keys/autobuild.asc'
         cat > Dockerfile <<EOF
 FROM ${env}
 
 WORKDIR /root
 RUN apt-get update --yes --quiet && \
-    apt-get install --yes --quiet screen wget gdb software-properties-common python-software-properties apt-transport-https
+    apt-get install --yes --quiet screen gdb software-properties-common apt-transport-https curl
 COPY cephdev.asc cephdev.asc
-RUN apt-key add cephdev.asc
-RUN add-apt-repository "\$(wget --quiet -O - https://shaman.ceph.com/api/repos/ceph/${branch}/latest/${env/://}/repo)" && \
+RUN apt-key add cephdev.asc && \
+    curl -L $repo_url | tee /etc/apt/sources.list.d/ceph_dev.list && \
     apt-get update --yes && \
-    apt-get install --yes --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg
+    DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt-get --assume-yes -q --no-install-recommends install -o Dpkg::Options::=--force-confnew --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-common-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg python3-cephfs python3-rados
 EOF
-        time run docker build $CACHE --tag "$image" .
+        time run $SUDO docker build $CACHE --tag "$tag" .
     else # try RHEL flavor
-        time run docker build $CACHE --tag "$image" - <<EOF
+        case "$env" in
+            centos:7)
+                python_bindings="python36-rados python36-cephfs"
+                base_debuginfo=""
+                ceph_debuginfo="ceph-debuginfo"
+                debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
+                ;;
+            centos:8)
+                python_bindings="python3-rados python3-cephfs"
+                base_debuginfo="glibc-debuginfo"
+                ceph_debuginfo="ceph-base-debuginfo"
+                debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
+                ;;
+            centos:stream)
+                python_bindings="python3-rados python3-cephfs"
+                base_debuginfo="glibc-debuginfo"
+                ceph_debuginfo="ceph-base-debuginfo"
+                debuginfo=/etc/yum.repos.d/CentOS-Stream-Debuginfo.repo
+                ;;
+        esac
+        if [ "${FLAVOR}" = "crimson" ]; then
+            ceph_debuginfo+=" ceph-crimson-osd-debuginfo ceph-crimson-osd"
+        fi
+        cat > Dockerfile <<EOF
 FROM ${env}
 
 WORKDIR /root
 RUN yum update -y && \
-    yum install -y screen epel-release wget psmisc ca-certificates gdb
-RUN wget -O /etc/yum.repos.d/ceph-dev.repo https://shaman.ceph.com/api/repos/ceph/${branch}/latest/centos/7/repo && \
+    sed -i 's/enabled=0/enabled=1/' ${debuginfo} && \
+    yum update -y && \
+    yum install -y tmux epel-release wget psmisc ca-certificates gdb
+RUN wget -O /etc/yum.repos.d/ceph-dev.repo $repo_url && \
     yum clean all && \
     yum upgrade -y && \
-    yum install -y ceph ceph-debuginfo ceph-fuse
+    yum install -y ceph ${base_debuginfo} ${ceph_debuginfo} ${python_bindings}
 EOF
+        time run $SUDO docker build $CACHE --tag "$tag" .
     fi
     popd
     rm -rf -- "$T"
 
-    printf "built image %s\n" "$image"
+    printf "built image %s\n" "$tag"
 
-    run docker run -ti -v /ceph:/ceph:ro "$image"
+    run $SUDO docker run $PRIVILEGED -ti -v /ceph:/ceph:ro -v /cephfs:/cephfs:ro -v /teuthology:/teuthology:ro "$tag"
     return 0
 }
 

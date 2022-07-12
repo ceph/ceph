@@ -3,10 +3,10 @@ Special case divergence test with ceph-objectstore-tool export/remove/import
 """
 import logging
 import time
-from cStringIO import StringIO
 
+from teuthology.exceptions import CommandFailedError
 from teuthology import misc as teuthology
-from util.rados import rados
+from tasks.util.rados import rados
 import os
 
 
@@ -64,7 +64,7 @@ def task(ctx, config):
 
     log.info('writing initial objects')
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
     # write 100 objects
     for i in range(100):
         rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
@@ -146,7 +146,7 @@ def task(ctx, config):
 
     # Export a pg
     (exp_remote,) = ctx.\
-        cluster.only('osd.{o}'.format(o=divergent)).remotes.iterkeys()
+        cluster.only('osd.{o}'.format(o=divergent)).remotes.keys()
     FSPATH = manager.get_filepath()
     JPATH = os.path.join(FSPATH, "journal")
     prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
@@ -158,15 +158,17 @@ def task(ctx, config):
     expfile = os.path.join(testdir, "exp.{pid}.out".format(pid=pid))
     cmd = ((prefix + "--op export-remove --pgid 2.0 --file {file}").
            format(id=divergent, file=expfile))
-    proc = exp_remote.run(args=cmd, wait=True,
-                          check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
+    try:
+        exp_remote.sh(cmd, wait=True)
+    except CommandFailedError as e:
+        assert e.exitstatus == 0
 
     cmd = ((prefix + "--op import --file {file}").
            format(id=divergent, file=expfile))
-    proc = exp_remote.run(args=cmd, wait=True,
-                          check_status=False, stdout=StringIO())
-    assert proc.exitstatus == 0
+    try:
+        exp_remote.sh(cmd, wait=True)
+    except CommandFailedError as e:
+        assert e.exitstatus == 0
 
     log.info("reviving divergent %d", divergent)
     manager.revive_osd(divergent)
@@ -183,7 +185,7 @@ def task(ctx, config):
     for i in range(DIVERGENT_WRITE + DIVERGENT_REMOVE):
         exit_status = rados(ctx, mon, ['-p', 'foo', 'get', 'existing_%d' % i,
                                        '/tmp/existing'])
-        assert exit_status is 0
+        assert exit_status == 0
 
     cmd = 'rm {file}'.format(file=expfile)
     exp_remote.run(args=cmd, wait=True)

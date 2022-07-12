@@ -61,7 +61,7 @@ bool SnapshotProtectRequest<I>::should_complete(int r) {
 template <typename I>
 void SnapshotProtectRequest<I>::send_protect_snap() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -76,8 +76,7 @@ void SnapshotProtectRequest<I>::send_protect_snap() {
 template <typename I>
 int SnapshotProtectRequest<I>::verify_and_send_protect_snap() {
   I &image_ctx = this->m_image_ctx;
-  RWLock::RLocker md_locker(image_ctx.md_lock);
-  RWLock::RLocker snap_locker(image_ctx.snap_lock);
+  std::shared_lock image_locker{image_ctx.image_lock};
 
   CephContext *cct = image_ctx.cct;
   if ((image_ctx.features & RBD_FEATURE_LAYERING) == 0) {
@@ -108,7 +107,7 @@ int SnapshotProtectRequest<I>::verify_and_send_protect_snap() {
     this->create_callback_completion();
   r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, rados_completion,
                                      &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
   return 0;
 }

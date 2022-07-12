@@ -31,40 +31,39 @@
   type 6 pod
   type 7 room
   type 8 datacenter
-  type 9 region
-  type 10 root
+  type 9 zone
+  type 10 region
+  type 11 root
   
   # buckets
   host localhost {
   \tid -2\t\t# do not change unnecessarily (esc)
-  \t# weight 3.000 (esc)
+  \t# weight 3.00000 (esc)
   \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem osd.0 weight 1.000 (esc)
-  \titem osd.1 weight 1.000 (esc)
-  \titem osd.2 weight 1.000 (esc)
+  \titem osd.0 weight 1.00000 (esc)
+  \titem osd.1 weight 1.00000 (esc)
+  \titem osd.2 weight 1.00000 (esc)
   }
   rack localrack {
   \tid -3\t\t# do not change unnecessarily (esc)
-  \t# weight 3.000 (esc)
+  \t# weight 3.00000 (esc)
   \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem localhost weight 3.000 (esc)
+  \titem localhost weight 3.00000 (esc)
   }
   root default {
   \tid -1\t\t# do not change unnecessarily (esc)
-  \t# weight 3.000 (esc)
+  \t# weight 3.00000 (esc)
   \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem localrack weight 3.000 (esc)
+  \titem localrack weight 3.00000 (esc)
   }
   
   # rules
   rule replicated_rule {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take default (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
@@ -75,16 +74,17 @@
   osdmaptool: osdmap file 'myosdmap'
   epoch 1
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
-  created \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
-  modified \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
+  created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
+  modified \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   flags 
   crush_version 1
   full_ratio 0
   backfillfull_ratio 0
   nearfull_ratio 0
   min_compat_client jewel
+  stretch_mode_enabled false
   
-  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0 application rbd
+  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 autoscale_mode on last_change 0 flags hashpspool stripe_width 0 application rbd
   
   max_osd 3
   
@@ -93,5 +93,5 @@
   osdmaptool: writing epoch 1 to myosdmap
   $ osdmaptool --print myosdmap | grep 'pool 1'
   osdmaptool: osdmap file 'myosdmap'
-  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0 application rbd
+  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 autoscale_mode on last_change 0 flags hashpspool stripe_width 0 application rbd
   $ rm -f myosdmap

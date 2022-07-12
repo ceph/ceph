@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "CrushCompiler.h"
 
@@ -11,6 +13,14 @@
 #include <string>
 #include "common/errno.h"
 #include <boost/algorithm/string.hpp>
+
+using std::cout;
+using std::istream;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+using std::vector;
 
 // -------------
 
@@ -45,7 +55,7 @@ static void print_bucket_class_ids(ostream& out, int t, CrushWrapper &crush)
     int c = i.first;
     int cid = i.second;
     const char* class_name = crush.get_class_name(c);
-    assert(class_name);
+    ceph_assert(class_name);
     out << "\tid " << cid << " class " << class_name << "\t\t# do not change unnecessarily\n";
   }
 }
@@ -78,7 +88,7 @@ static void print_rule_name(ostream& out, int t, CrushWrapper &crush)
 static void print_fixedpoint(ostream& out, int i)
 {
   char s[20];
-  snprintf(s, sizeof(s), "%.3f", (float)i / (float)0x10000);
+  snprintf(s, sizeof(s), "%.5f", (float)i / (float)0x10000);
   out << s;
 }
 
@@ -161,7 +171,7 @@ int CrushCompiler::decompile_bucket(int cur,
     std::map<int, dcb_state_t>::value_type val(cur, DCB_STATE_IN_PROGRESS);
     std::pair <std::map<int, dcb_state_t>::iterator, bool> rval
       (dcb_states.insert(val));
-    assert(rval.second);
+    ceph_assert(rval.second);
     c = rval.first;
   }
   else if (c->second == DCB_STATE_DONE) {
@@ -250,8 +260,8 @@ int CrushCompiler::decompile_choose_arg(crush_choose_arg *arg,
   int r;
   out << "  {\n";
   out << "    bucket_id " << bucket_id << "\n";
-  if (arg->weight_set_size > 0) {
-    r = decompile_weight_set(arg->weight_set, arg->weight_set_size, out);
+  if (arg->weight_set_positions > 0) {
+    r = decompile_weight_set(arg->weight_set, arg->weight_set_positions, out);
     if (r < 0)
       return r;
   }
@@ -269,7 +279,7 @@ int CrushCompiler::decompile_choose_arg_map(crush_choose_arg_map arg_map,
 {
   for (__u32 i = 0; i < arg_map.size; i++) {
     if ((arg_map.args[i].ids_size == 0) &&
-        (arg_map.args[i].weight_set_size == 0))
+        (arg_map.args[i].weight_set_positions == 0))
       continue;
     int r = decompile_choose_arg(&arg_map.args[i], -1-i, out);
     if (r < 0)
@@ -351,11 +361,8 @@ int CrushCompiler::decompile(ostream &out)
       print_rule_name(out, i, crush);
     out << " {\n";
     out << "\tid " << i << "\n";
-    if (i != crush.get_rule_mask_ruleset(i)) {
-      out << "\t# WARNING: ruleset " << crush.get_rule_mask_ruleset(i) << " != id " << i << "; this will not recompile to the same map\n";
-    }
 
-    switch (crush.get_rule_mask_type(i)) {
+    switch (crush.get_rule_type(i)) {
     case CEPH_PG_TYPE_REPLICATED:
       out << "\ttype replicated\n";
       break;
@@ -363,11 +370,8 @@ int CrushCompiler::decompile(ostream &out)
       out << "\ttype erasure\n";
       break;
     default:
-      out << "\ttype " << crush.get_rule_mask_type(i) << "\n";
+      out << "\ttype " << crush.get_rule_type(i) << "\n";
     }
-
-    out << "\tmin_size " << crush.get_rule_mask_min_size(i) << "\n";
-    out << "\tmax_size " << crush.get_rule_mask_max_size(i) << "\n";
 
     for (int j=0; j<crush.get_rule_len(i); j++) {
       switch (crush.get_rule_op(i, j)) {
@@ -647,7 +651,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 
   // now do the items.
   if (!used_items.empty())
-    size = MAX(size, *used_items.rbegin());
+    size = std::max(size, *used_items.rbegin());
   vector<int> items(size);
   vector<int> weights(size);
 
@@ -741,10 +745,10 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   item_id[name] = id;
   item_weight[id] = bucketweight;
   
-  assert(id != 0);
+  ceph_assert(id != 0);
   int idout;
   int r = crush.add_bucket(id, alg, hash, type, size,
-                           &items[0], &weights[0], &idout);
+                           items.data(), weights.data(), &idout);
   if (r < 0) {
     if (r == -EEXIST)
       err << "Duplicate bucket id " << id << std::endl;
@@ -783,17 +787,29 @@ int CrushCompiler::parse_rule(iter_t const& i)
   else 
     ceph_abort();
 
-  int minsize = int_node(i->children[start+4]);
-  int maxsize = int_node(i->children[start+6]);
-  
-  int steps = i->children.size() - start - 8;
-  //err << "num steps " << steps << std::endl;
+  // ignore min_size+max_size and find first step
+  int step_start = 0;
+  int steps = 0;
+  for (unsigned p = start + 3; p < i->children.size()-1; ++p) {
+    string tag = string_node(i->children[p]);
+    if (tag == "min_size" || tag == "max_size") {
+      std::cerr << "WARNING: " << tag << " is no longer supported, ignoring" << std::endl;
+      ++p;
+      continue;
+    }
+    // has to be a step--grammer doesn't recognized anything else
+    assert(i->children[p].value.id().to_long() == crush_grammar::_step);
+    step_start = p;
+    steps = i->children.size() - p - 1;
+    break;
+  }
+  //err << "num steps " << steps << " start " << step_start << std::endl;
 
   if (crush.rule_exists(ruleno)) {
     err << "rule " << ruleno << " already exists" << std::endl;
     return -1;
   }
-  int r = crush.add_rule(ruleno, steps, type, minsize, maxsize);
+  int r = crush.add_rule(ruleno, steps, type);
   if (r != ruleno) {
     err << "unable to add rule id " << ruleno << " for rule '" << rname
 	<< "'" << std::endl;
@@ -805,7 +821,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
   }
 
   int step = 0;
-  for (iter_t p = i->children.begin() + start + 7; step < steps; p++) {
+  for (iter_t p = i->children.begin() + step_start; step < steps; p++) {
     iter_t s = p->children.begin() + 1;
     int stepid = s->value.id().to_long();
     switch (stepid) {
@@ -925,7 +941,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
       return -1;
     }
   }
-  assert(step == steps);
+  ceph_assert(step == steps);
   return 0;
 }
 
@@ -951,14 +967,14 @@ int CrushCompiler::parse_weight_set_weights(iter_t const& i, int bucket_id, crus
 int CrushCompiler::parse_weight_set(iter_t const& i, int bucket_id, crush_choose_arg *arg)
 {
   // -3 stands for the leading "weight_set" keyword and the enclosing [ ]
-  arg->weight_set_size = i->children.size() - 3;
-  arg->weight_set = (crush_weight_set *)calloc(arg->weight_set_size, sizeof(crush_weight_set));
+  arg->weight_set_positions = i->children.size() - 3;
+  arg->weight_set = (crush_weight_set *)calloc(arg->weight_set_positions, sizeof(crush_weight_set));
   __u32 pos = 0;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     int r = 0;
     switch((int)p->value.id().to_long()) {
     case crush_grammar::_weight_set_weights:
-      if (pos < arg->weight_set_size) {
+      if (pos < arg->weight_set_positions) {
         r = parse_weight_set_weights(p, bucket_id, &arg->weight_set[pos]);
         pos++;
       } else {
@@ -1053,9 +1069,13 @@ void CrushCompiler::find_used_bucket_ids(iter_t const& i)
 {
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     if ((int)p->value.id().to_long() == crush_grammar::_bucket) {
-      iter_t firstline = p->children.begin() + 3;
-      string tag = string_node(firstline->children[0]);
-      if (tag == "id") {
+      for (iter_t firstline = p->children.begin() + 3;
+	   firstline != p->children.end();
+	   ++firstline) {
+	string tag = string_node(firstline->children[0]);
+	if (tag != "id") {
+	  break;
+	}
 	int id = int_node(firstline->children[1]);
 	//err << "saw bucket id " << id << std::endl;
 	id_item[id] = string();
@@ -1244,14 +1264,14 @@ int CrushCompiler::compile(istream& in, const char *infn)
   crush_grammar crushg;
   const char *start = big.c_str();
   //tree_parse_info<const char *> info = ast_parse(start, crushg, space_p);
-  tree_parse_info<> info = ast_parse(start, crushg, space_p);
-  
+  auto info = ast_parse(start, crushg, boost::spirit::space_p);
+
   // parse error?
   if (!info.full) {
     int cpos = info.stop - start;
     //out << "cpos " << cpos << std::endl;
     //out << " linemap " << line_pos << std::endl;
-    assert(!line_pos.empty());
+    ceph_assert(!line_pos.empty());
     map<int,int>::iterator p = line_pos.upper_bound(cpos);
     if (p != line_pos.begin())
       --p;

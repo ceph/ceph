@@ -5,17 +5,14 @@ import pkg_resources
 import sys
 import logging
 
-import ceph_volume
 from ceph_volume.decorators import catches
-from ceph_volume import log, devices, configuration, conf, exceptions, terminal
+from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory, drive_group, activate
 
 
 class Volume(object):
     _help = """
 ceph-volume: Deploy Ceph OSDs using different device technologies like lvm or
 physical disks.
-
-Version: {version}
 
 Log Path: {log_path}
 Ceph Conf: {ceph_path}
@@ -27,7 +24,14 @@ Ceph Conf: {ceph_path}
     """
 
     def __init__(self, argv=None, parse=True):
-        self.mapper = {'lvm': devices.lvm.LVM, 'simple': devices.simple.Simple}
+        self.mapper = {
+            'lvm': devices.lvm.LVM,
+            'simple': devices.simple.Simple,
+            'raw': devices.raw.Raw,
+            'inventory': inventory.Inventory,
+            'activate': activate.Activate,
+            'drive-group': drive_group.Deploy,
+        }
         self.plugin_help = "No plugins found/loaded"
         if argv is None:
             self.argv = sys.argv
@@ -40,7 +44,6 @@ Ceph Conf: {ceph_path}
         warning = 'See "ceph-volume --help" for full list of options.' if warning else ''
         return self._help.format(
             warning=warning,
-            version=ceph_volume.__version__,
             log_path=conf.log_path,
             ceph_path=self.stat_ceph_conf(),
             plugins=self.plugin_help,
@@ -73,11 +76,6 @@ Ceph Conf: {ceph_path}
         if self.plugin_help:
             self.plugin_help = '\nPlugins:\n' + self.plugin_help
 
-    def load_ceph_conf_path(self, cluster_name='ceph'):
-        abspath = '/etc/ceph/%s.conf' % cluster_name
-        conf.path = os.getenv('CEPH_CONF', abspath)
-        conf.cluster = cluster_name
-
     def load_log_path(self):
         conf.log_path = os.getenv('CEPH_VOLUME_LOG_PATH', '/var/log/ceph')
 
@@ -102,7 +100,7 @@ Ceph Conf: {ceph_path}
     def main(self, argv):
         # these need to be available for the help, which gets parsed super
         # early
-        self.load_ceph_conf_path()
+        configuration.load_ceph_conf_path()
         self.load_log_path()
         self.enable_plugins()
         main_args, subcommand_args = self._get_split_args()
@@ -110,7 +108,7 @@ Ceph Conf: {ceph_path}
         # argparse which will end up complaning that there are no args
         if len(argv) <= 1:
             print(self.help(warning=True))
-            return
+            raise SystemExit(0)
         parser = argparse.ArgumentParser(
             prog='ceph-volume',
             formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -124,6 +122,7 @@ Ceph Conf: {ceph_path}
         parser.add_argument(
             '--log-level',
             default='debug',
+            choices=['debug', 'info', 'warning', 'error', 'critical'],
             help='Change the file log level (defaults to debug)',
         )
         parser.add_argument(
@@ -135,19 +134,21 @@ Ceph Conf: {ceph_path}
         conf.log_path = args.log_path
         if os.path.isdir(conf.log_path):
             conf.log_path = os.path.join(args.log_path, 'ceph-volume.log')
-        log.setup()
+        log.setup(log_level=args.log_level)
+        log.setup_console()
         logger = logging.getLogger(__name__)
+        logger.info("Running command: ceph-volume %s %s", " ".join(main_args), " ".join(subcommand_args))
         # set all variables from args and load everything needed according to
         # them
-        self.load_ceph_conf_path(cluster_name=args.cluster)
+        configuration.load_ceph_conf_path(cluster_name=args.cluster)
         try:
             conf.ceph = configuration.load(conf.path)
         except exceptions.ConfigurationError as error:
             # we warn only here, because it is possible that the configuration
             # file is not needed, or that it will be loaded by some other means
             # (like reading from lvm tags)
-            logger.exception('ignoring inability to load ceph.conf')
-            terminal.red(error)
+            logger.warning('ignoring inability to load ceph.conf', exc_info=1)
+            terminal.yellow(error)
         # dispatch to sub-commands
         terminal.dispatch(self.mapper, subcommand_args)
 

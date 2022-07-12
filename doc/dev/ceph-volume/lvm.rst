@@ -23,7 +23,7 @@ looks like::
 
     ceph.<tag name>=<tag value>
 
-All tags are prefixed by the ``ceph`` keyword do claim ownership of that
+All tags are prefixed by the ``ceph`` keyword to claim ownership of that
 namespace and make it easily identifiable. This is how the OSD ID would be used
 in the context of lvm tags::
 
@@ -40,7 +40,7 @@ LVM volume:
 
 ``type``
 --------
-Describes if the device is a an OSD or Journal, with the ability to expand to
+Describes if the device is an OSD or Journal, with the ability to expand to
 other types when supported (for example a lockbox)
 
 Example::
@@ -54,11 +54,20 @@ Example::
 
     ceph.cluster_fsid=7146B649-AE00-4157-9F5D-1DBFF1D52C26
 
+
 ``data_device``
 ---------------
 Example::
 
     ceph.data_device=/dev/ceph/data-0
+
+
+``data_uuid``
+-------------
+Example::
+
+    ceph.data_uuid=B76418EB-0024-401C-8955-AE6919D45CC3
+
 
 ``journal_device``
 ------------------
@@ -66,19 +75,24 @@ Example::
 
     ceph.journal_device=/dev/ceph/journal-0
 
+
+``journal_uuid``
+----------------
+Example::
+
+    ceph.journal_uuid=2070E121-C544-4F40-9571-0B7F35C6CB2B
+
+
 ``encrypted``
 -------------
 Example for enabled encryption with ``luks``::
 
-    ceph.encrypted=luks
+    ceph.encrypted=1
 
-For plain dmcrypt::
-
-    ceph.encrypted=dmcrypt
-
-For disabled encryption::
+When encryption is not supported or simply disabled::
 
     ceph.encrypted=0
+
 
 ``osd_fsid``
 ------------
@@ -86,42 +100,80 @@ Example::
 
     ceph.osd_fsid=88ab9018-f84b-4d62-90b4-ce7c076728ff
 
+
 ``osd_id``
 ----------
 Example::
 
     ceph.osd_id=1
 
-``block``
----------
-Just used on :term:`bluestore` backends.
+
+``block_device``
+----------------
+Just used on :term:`bluestore` backends. Captures the path to the logical
+volume path.
 
 Example::
 
-    ceph.block=/dev/mapper/vg-block-0
+    ceph.block_device=/dev/mapper/vg-block-0
 
-``db``
-------
-Just used on :term:`bluestore` backends.
+
+``block_uuid``
+--------------
+Just used on :term:`bluestore` backends. Captures either the logical volume UUID or
+the partition UUID.
 
 Example::
 
-    ceph.db=/dev/mapper/vg-db-0
+    ceph.block_uuid=E5F041BB-AAD4-48A8-B3BF-31F7AFD7D73E
 
-``wal``
+
+``db_device``
+-------------
+Just used on :term:`bluestore` backends. Captures the path to the logical
+volume path.
+
+Example::
+
+    ceph.db_device=/dev/mapper/vg-db-0
+
+
+``db_uuid``
+-----------
+Just used on :term:`bluestore` backends. Captures either the logical volume UUID or
+the partition UUID.
+
+Example::
+
+    ceph.db_uuid=F9D02CF1-31AB-4910-90A3-6A6302375525
+
+
+``wal_device``
+--------------
+Just used on :term:`bluestore` backends. Captures the path to the logical
+volume path.
+
+Example::
+
+    ceph.wal_device=/dev/mapper/vg-wal-0
+
+
+``wal_uuid``
+------------
+Just used on :term:`bluestore` backends. Captures either the logical volume UUID or
+the partition UUID.
+
+Example::
+
+    ceph.wal_uuid=A58D1C68-0D6E-4CB3-8E99-B261AD47CC39
+
+
+``vdo``
 -------
-Just used on :term:`bluestore` backends.
+A VDO-enabled device is detected when device is getting prepared, and then
+stored for later checks when activating. This affects mount options by
+appending the ``discard`` mount flag, regardless of mount flags being used.
 
-Example::
+Example for an enabled VDO device::
 
-    ceph.wal=/dev/mapper/vg-wal-0
-
-
-``lockbox_device``
-------------------
-Only used when encryption is enabled, to store keys in an unencrypted
-volume.
-
-Example::
-
-    ceph.lockbox_device=/dev/mapper/vg-lockbox-0
+    ceph.vdo=1

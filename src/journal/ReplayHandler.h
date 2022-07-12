@@ -6,14 +6,10 @@
 
 namespace journal {
 
-struct ReplayHandler  {
-  virtual ~ReplayHandler() {}
-
-  virtual void get() = 0;
-  virtual void put() = 0;
-
+struct ReplayHandler {
   virtual void handle_entries_available() = 0;
   virtual void handle_complete(int r) = 0;
+  virtual ~ReplayHandler() {}
 };
 
 } // namespace journal

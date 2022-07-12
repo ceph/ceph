@@ -4,7 +4,7 @@ iSCSI Initiator for Microsoft Windows
 
 **Prerequisite:**
 
--  Microsoft Windows Server 2016
+-  Microsoft Windows Server 2016 or later
 
 **iSCSI Initiator, Discovery and Setup:**
 
@@ -97,5 +97,6 @@ Consider using the following registry settings:
        HKEY_LOCAL_MACHINE\\SYSTEM\CurrentControlSet\Control\Class\{4D36E97B-E325-11CE-BFC1-08002BE10318}\<Instance_Number>\Parameters
 
    ::
+   
        LinkDownTime = 25
        SRBTimeoutDelta = 15

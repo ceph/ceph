@@ -4,7 +4,7 @@
 #
 # Essentially implements:
 #
-# http://docs.ceph.com/docs/master/rbd/rbd-openstack/
+# http://docs.ceph.com/en/latest/rbd/rbd-openstack/
 #
 # The directory named files contains templates for the /etc/glance/glance-api.conf,
 # /etc/cinder/cinder.conf, /etc/nova/nova.conf Openstack files

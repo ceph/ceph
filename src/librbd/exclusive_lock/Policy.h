@@ -7,12 +7,22 @@
 namespace librbd {
 namespace exclusive_lock {
 
+enum OperationRequestType {
+  OPERATION_REQUEST_TYPE_GENERAL           = 0,
+  OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE = 1,
+  OPERATION_REQUEST_TYPE_FORCE_PROMOTION   = 2,
+};
+
 struct Policy {
   virtual ~Policy() {
   }
 
   virtual bool may_auto_request_lock() = 0;
   virtual int lock_requested(bool force) = 0;
+
+  virtual bool accept_blocked_request(OperationRequestType) {
+    return false;
+  }
 };
 
 } // namespace exclusive_lock

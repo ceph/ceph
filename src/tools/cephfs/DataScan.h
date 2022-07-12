@@ -17,6 +17,7 @@
 #include "include/rados/librados.hpp"
 
 class InodeStore;
+class MDSTable;
 
 class RecoveryDriver {
   protected:
@@ -152,7 +153,8 @@ class MetadataTool
   void build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
     const file_layout_t &layout,
-    InodeStore *out);
+    InodeStore *out,
+    std::string symlink);
 
   /**
    * Construct a synthetic InodeStore for a directory
@@ -173,7 +175,7 @@ class MetadataTool
    * Try and read a dentry from a dirfrag
    */
   int read_dentry(inodeno_t parent_ino, frag_t frag,
-                  const std::string &dname, InodeStore *inode);
+		  const std::string &dname, InodeStore *inode, snapid_t *dnfirst=nullptr);
 };
 
 /**
@@ -219,7 +221,7 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
 
     int inject_linkage(
         inodeno_t dir_ino, const std::string &dname,
-        const frag_t fragment, const InodeStore &inode);
+        const frag_t fragment, const InodeStore &inode, snapid_t dnfirst=CEPH_NOSNAP);
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
@@ -232,6 +234,9 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
     int init_roots(int64_t data_pool_id) override;
 
     int check_roots(bool *result) override;
+
+    int load_table(MDSTable *table);
+    int save_table(MDSTable *table);
 };
 
 class DataScan : public MDSUtility, public MetadataTool
@@ -240,11 +245,13 @@ class DataScan : public MDSUtility, public MetadataTool
     RecoveryDriver *driver;
     fs_cluster_id_t fscid;
 
+    std::string metadata_pool_name;
+    std::vector<int64_t> data_pools;
+
     // IoCtx for data pool (where we scrape file backtraces from)
     librados::IoCtx data_io;
     // Remember the data pool ID for use in layouts
     int64_t data_pool_id;
-    string metadata_pool_name;
 
     uint32_t n;
     uint32_t m;
@@ -285,7 +292,7 @@ class DataScan : public MDSUtility, public MetadataTool
     // Overwrite root objects even if they exist
     bool force_init;
     // Only scan inodes without this scrub tag
-    string filter_tag;
+    std::string filter_tag;
 
     /**
      * @param r set to error on valid key with invalid value
@@ -316,12 +323,12 @@ class DataScan : public MDSUtility, public MetadataTool
         std::function<int(std::string, uint64_t, uint64_t)> handler);
 
   public:
-    void usage();
+    static void usage();
     int main(const std::vector<const char *> &args);
 
     DataScan()
       : driver(NULL), fscid(FS_CLUSTER_ID_NONE),
-	data_pool_id(-1), metadata_pool_name(""), n(0), m(1),
+	data_pool_id(-1), n(0), m(1),
         force_pool(false), force_corrupt(false),
         force_init(false)
     {

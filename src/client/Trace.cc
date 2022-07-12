@@ -20,8 +20,6 @@
 #include <iostream>
 #include <map>
 
-#include "common/Mutex.h"
-
 #include "common/config.h"
 
 #include <sys/types.h>

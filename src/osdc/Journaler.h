@@ -65,10 +65,9 @@
 
 #include "common/Timer.h"
 #include "common/Throttle.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 class Context;
-class PerfCounters;
 class Finisher;
 class C_OnFinisher;
 
@@ -136,7 +135,7 @@ public:
     uint64_t expire_pos;
     uint64_t unused_field;
     uint64_t write_pos;
-    string magic;
+    std::string magic;
     file_layout_t layout; //< The mapping from byte stream offsets
 			     //  to RADOS objects
     stream_format_t stream_format; //< The encoding of LogEvents
@@ -149,25 +148,25 @@ public:
 
     void encode(bufferlist &bl) const {
       ENCODE_START(2, 2, bl);
-      ::encode(magic, bl);
-      ::encode(trimmed_pos, bl);
-      ::encode(expire_pos, bl);
-      ::encode(unused_field, bl);
-      ::encode(write_pos, bl);
-      ::encode(layout, bl, 0);  // encode in legacy format
-      ::encode(stream_format, bl);
+      encode(magic, bl);
+      encode(trimmed_pos, bl);
+      encode(expire_pos, bl);
+      encode(unused_field, bl);
+      encode(write_pos, bl);
+      encode(layout, bl, 0);  // encode in legacy format
+      encode(stream_format, bl);
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-      ::decode(magic, bl);
-      ::decode(trimmed_pos, bl);
-      ::decode(expire_pos, bl);
-      ::decode(unused_field, bl);
-      ::decode(write_pos, bl);
-      ::decode(layout, bl);
+      decode(magic, bl);
+      decode(trimmed_pos, bl);
+      decode(expire_pos, bl);
+      decode(unused_field, bl);
+      decode(write_pos, bl);
+      decode(layout, bl);
       if (struct_v > 1) {
-	::decode(stream_format, bl);
+	decode(stream_format, bl);
       } else {
 	stream_format = JOURNAL_FORMAT_LEGACY;
       }
@@ -187,7 +186,7 @@ public:
       f->close_section(); // journal_header
     }
 
-    static void generate_test_instances(list<Header*> &ls)
+    static void generate_test_instances(std::list<Header*> &ls)
     {
       ls.push_back(new Header());
 
@@ -240,7 +239,7 @@ private:
    */
   void _do_delayed_flush()
   {
-    assert(delay_flush_event != NULL);
+    ceph_assert(delay_flush_event != NULL);
     lock_guard l(lock);
     delay_flush_event = NULL;
     _do_flush();
@@ -270,7 +269,7 @@ private:
 
   void _reread_head(Context *onfinish);
   void _set_layout(file_layout_t const *l);
-  list<Context*> waitfor_recover;
+  std::list<Context*> waitfor_recover;
   void _read_head(Context *on_finish, bufferlist *bl);
   void _finish_read_head(int r, bufferlist& bl);
   void _finish_reread_head(int r, bufferlist& bl, Context *finish);
@@ -300,7 +299,7 @@ private:
 		      ///  write_pos>flush_pos, we're buffering writes.
   uint64_t safe_pos; ///< what has been committed safely to disk.
 
-  uint64_t next_safe_pos; /// start postion of the first entry that isn't
+  uint64_t next_safe_pos; /// start position of the first entry that isn't
 			  /// being fully flushed. If we don't flush any
 			  // partial entry, it's equal to flush_pos.
 
@@ -310,8 +309,10 @@ private:
   // protect write_buf from bufferlist _len overflow 
   Throttle write_buf_throttle;
 
-  bool waiting_for_zero;
+  uint64_t waiting_for_zero_pos;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
+  std::list<Context*> waitfor_prezero;
+
   std::map<uint64_t, uint64_t> pending_safe; // flush_pos -> safe_pos
   // when safe through given offset
   std::map<uint64_t, std::list<Context*> > waitfor_safe;
@@ -329,7 +330,7 @@ private:
   // read buffer.  unused_field + read_buf.length() == prefetch_pos.
   bufferlist read_buf;
 
-  map<uint64_t,bufferlist> prefetch_buf;
+  std::map<uint64_t,bufferlist> prefetch_buf;
 
   uint64_t fetch_len;     // how much to read at a time
   uint64_t temp_fetch_len;
@@ -367,7 +368,7 @@ private:
 
   // only init_headers when following or first reading off-disk
   void init_headers(Header& h) {
-    assert(readonly ||
+    ceph_assert(readonly ||
 	   state == STATE_READHEAD ||
 	   state == STATE_REREADHEAD);
     last_written = last_committed = h;
@@ -407,7 +408,7 @@ public:
     prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0),
     safe_pos(0), next_safe_pos(0),
     write_buf_throttle(cct, "write_buf_throttle", UINT_MAX - (UINT_MAX >> 3)),
-    waiting_for_zero(false),
+    waiting_for_zero_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0),
     on_readable(0), on_write_error(NULL), called_write_error(false),
@@ -424,7 +425,7 @@ public:
    */
   void reset() {
     lock_guard l(lock);
-    assert(state == STATE_ACTIVE);
+    ceph_assert(state == STATE_ACTIVE);
 
     readonly = true;
     delay_flush_event = NULL;
@@ -440,11 +441,11 @@ public:
     requested_pos = 0;
     received_pos = 0;
     fetch_len = 0;
-    assert(!on_readable);
+    ceph_assert(!on_readable);
     expire_pos = 0;
     trimming_pos = 0;
     trimmed_pos = 0;
-    waiting_for_zero = false;
+    waiting_for_zero_pos = 0;
   }
 
   // Asynchronous operations
@@ -459,6 +460,7 @@ public:
   void flush(Context *onsafe = 0);
   void wait_for_readable(Context *onfinish);
   bool have_waiter() const;
+  void wait_for_prezero(Context *onfinish);
 
   // Synchronous setters
   // ===================
@@ -472,7 +474,7 @@ public:
   void set_read_pos(uint64_t p) {
     lock_guard l(lock);
     // we can't cope w/ in-progress read right now.
-    assert(requested_pos == received_pos);
+    ceph_assert(requested_pos == received_pos);
     read_pos = requested_pos = received_pos = p;
     read_buf.clear();
   }
@@ -497,7 +499,7 @@ public:
   void trim_tail() {
     lock_guard l(lock);
 
-    assert(!readonly);
+    ceph_assert(!readonly);
     _issue_prezero();
   }
 
@@ -531,6 +533,9 @@ public:
   uint64_t get_read_pos() const { return read_pos; }
   uint64_t get_expire_pos() const { return expire_pos; }
   uint64_t get_trimmed_pos() const { return trimmed_pos; }
+  size_t get_journal_envelope_size() const { 
+    return journal_stream.get_envelope_size(); 
+  }
 };
 WRITE_CLASS_ENCODER(Journaler::Header)
 

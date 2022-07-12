@@ -1,43 +1,42 @@
-add_library(librados_objs OBJECT
+add_library(librados_impl STATIC
   IoCtxImpl.cc
   RadosXattrIter.cc
-  RadosClient.cc)
-add_library(librados_api_obj OBJECT
-  librados.cc)
-if(WITH_LTTNG)
-  add_dependencies(librados_api_obj librados-tp)
-endif()
+  RadosClient.cc
+  librados_util.cc
+  librados_tp.cc)
+
+# C/C++ API
+add_library(librados ${CEPH_SHARED}
+  librados_c.cc
+  librados_cxx.cc
+  $<TARGET_OBJECTS:common_buffer_obj>)
 if(ENABLE_SHARED)
-  add_library(librados ${CEPH_SHARED}
-    $<TARGET_OBJECTS:librados_api_obj>
-    $<TARGET_OBJECTS:librados_objs>
-    $<TARGET_OBJECTS:common_buffer_obj>)
-  target_link_libraries(librados PRIVATE osdc ceph-common cls_lock_client
-    ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
   set_target_properties(librados PROPERTIES
     OUTPUT_NAME rados
     VERSION 2.0.0
     SOVERSION 2
-    CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)
-  if(NOT APPLE)
+  if(HAVE_LINK_EXCLUDE_LIBS AND NOT WIN32)
     set_property(TARGET librados APPEND_STRING PROPERTY
       LINK_FLAGS " -Wl,--exclude-libs,ALL")
   endif()
-else(ENABLE_SHARED)
-  add_library(librados STATIC
-    $<TARGET_OBJECTS:librados_api_obj>
-    $<TARGET_OBJECTS:librados_objs>)
-  target_link_libraries(librados osdc ceph-common cls_lock_client
-    ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
-endif(ENABLE_SHARED)
+  if(HAVE_LINK_VERSION_SCRIPT AND NOT WIN32)
+    set_property(TARGET librados APPEND_STRING PROPERTY
+      LINK_FLAGS " -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/librados.map")
+  endif()
+  if(WITH_STATIC_LIBSTDCXX)
+    set_property(TARGET librados APPEND_STRING PROPERTY
+      LINK_FLAGS " -static-libstdc++ -static-libgcc")
+  endif()
+endif()
+target_link_libraries(librados PRIVATE
+  librados_impl osdc ceph-common cls_lock_client
+  ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS} ${GSSAPI_LIBRARIES})
 install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-if(WITH_EMBEDDED)
-  add_library(cephd_rados STATIC
-    $<TARGET_OBJECTS:librados_api_obj>
-    $<TARGET_OBJECTS:librados_objs>)
-endif()
-if(WITH_LTTNG AND WITH_EVENTTRACE)
-  add_dependencies(librados_api_obj eventtrace_tp)
+if(WITH_LTTNG)
+  add_dependencies(librados_impl librados-tp)
+  if(WITH_EVENTTRACE)
+    add_dependencies(librados_impl eventtrace_tp)
+  endif()
 endif()

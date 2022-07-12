@@ -21,14 +21,14 @@
 class EOpen : public LogEvent {
 public:
   EMetaBlob metablob;
-  vector<inodeno_t> inos;
-  vector<vinodeno_t> snap_inos;
+  std::vector<inodeno_t> inos;
+  std::vector<vinodeno_t> snap_inos;
 
   EOpen() : LogEvent(EVENT_OPEN) { }
   explicit EOpen(MDLog *mdlog) :
     LogEvent(EVENT_OPEN) { }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "EOpen " << metablob << ", " << inos.size() << " open files";
   }
 
@@ -49,9 +49,9 @@ public:
   }
 
   void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator& bl) override;
+  void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(list<EOpen*>& ls);
+  static void generate_test_instances(std::list<EOpen*>& ls);
 
   void update_segment() override;
   void replay(MDSRank *mds) override;

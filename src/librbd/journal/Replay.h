@@ -7,7 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "librbd/io/Types.h"
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
@@ -32,7 +32,7 @@ public:
   Replay(ImageCtxT &image_ctx);
   ~Replay();
 
-  int decode(bufferlist::iterator *it, EventEntry *event_entry);
+  int decode(bufferlist::const_iterator *it, EventEntry *event_entry);
   void process(const EventEntry &event_entry,
                Context *on_ready, Context *on_safe);
 
@@ -119,7 +119,7 @@ private:
 
   ImageCtxT &m_image_ctx;
 
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("Replay<I>::m_lock");
 
   uint64_t m_in_flight_aio_flush = 0;
   uint64_t m_in_flight_aio_modify = 0;
@@ -192,6 +192,8 @@ private:
                                                   std::set<int> &&filters);
   io::AioCompletion *create_aio_flush_completion(Context *on_safe);
   void handle_aio_completion(io::AioCompletion *aio_comp);
+
+  bool clipped_io(uint64_t image_offset, io::AioCompletion *aio_comp);
 
 };
 

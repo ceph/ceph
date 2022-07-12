@@ -1,6 +1,7 @@
 #include "acconfig.h"
 #include "include/int_types.h"
 #include "common/crc32c_aarch64.h"
+#include "arch/arm.h"
 
 #ifndef HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
 /* Request crc extension capabilities from the assembler */
@@ -96,6 +97,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 
 	if (buffer) {
 #ifdef HAVE_ARMV8_CRYPTO
+	        if (ceph_arch_aarch64_pmull) {
 #ifdef HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
 		/* Calculate reflected crc with PMULL Instruction */
 		const poly64_t k1 = 0xe417f38a, k2 = 0x8f158014;
@@ -145,7 +147,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 			"mov    x16,            #0x8014         \n\t"
 			"movk   x16,            #0x8f15, lsl 16 \n\t"
 			"mov    v0.2d[0],       x16             \n\t"
-			:::"x16");
+			:::"x16","v0","v1");
 
 		while ((length -= 1024) >= 0) {
 			PREF1KL2(1024*3);
@@ -176,14 +178,15 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 				"crc32cx        %w[c0],         wzr,    %x[c0]  \n\t"
 				"eor            %w[c],          %w[c],  %w[c0]  \n\t"
 				:[c1]"+r"(crc1), [c0]"+r"(crc0), [c2]"+r"(crc2), [c]"+r"(crc)
-				:[v]"r"(*((const uint64_t *)buffer)));
+				:[v]"r"(*((const uint64_t *)buffer))
+				:"v0","v1","v2","v3");
 			buffer += sizeof(uint64_t);
 		}
 #endif /* HAVE_ARMV8_CRC_CRYPTO_INTRINSICS */
 
 		if(!(length += 1024))
 			return crc;
-
+	        }
 #endif /* HAVE_ARMV8_CRYPTO */
 		while ((length -= sizeof(uint64_t)) >= 0) {
 			CRC32CX(crc, *(uint64_t *)buffer);
@@ -203,6 +206,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 			CRC32CB(crc, *buffer);
 	} else {
 #ifdef HAVE_ARMV8_CRYPTO
+	        if (ceph_arch_aarch64_pmull) {
 #ifdef HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
 		const poly64_t k1 = 0xe417f38a;
 		uint64_t t0;
@@ -226,7 +230,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 		__asm__("mov    x16,            #0xf38a         \n\t"
 			"movk   x16,            #0xe417, lsl 16 \n\t"
 			"mov    v1.2d[0],       x16             \n\t"
-			:::"x16");
+			:::"x16","v1");
 
 		while ((length -= 1024) >= 0) {
 			__asm__("crc32cx %w[c0], %w[c], xzr\n\t"
@@ -244,13 +248,14 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 				"mov            %x[c0],         v3.2d[0]        \n\t"
 				"crc32cx        %w[c],          wzr,    %x[c0]  \n\t"
 				:[c]"=r"(crc)
-				:[c0]"r"(crc0));
+				:[c0]"r"(crc0)
+				:"v1","v3");
 		}
 #endif /* HAVE_ARMV8_CRC_CRYPTO_INTRINSICS */
 
 		if(!(length += 1024))
 			return crc;
-
+	        }
 #endif /* HAVE_ARMV8_CRYPTO */
 		while ((length -= sizeof(uint64_t)) >= 0)
 			CRC32CX(crc, 0);

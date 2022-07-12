@@ -22,27 +22,29 @@ These are exciting times in the Ceph community! Get involved!
 |                      | meetups, the Ceph Developer Summits and more.   |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **IRC**              | As you delve into Ceph, you may have questions  |                                               |
-|                      | or feedback for the Ceph development team. Ceph | - **Domain:** ``irc.oftc.net``                |
-|                      | developers are often available on the ``#ceph`` | - **Channels:** ``#ceph`` and ``#ceph-devel`` |
-|                      | IRC channel particularly during daytime hours   |                                               |
-|                      | in the US Pacific Standard Time zone.           |                                               |
-|                      | While ``#ceph`` is a good starting point for    |                                               |
-|                      | cluster operators and users, there is also      |                                               |
-|                      | ``#ceph-devel`` dedicated for Ceph developers.  |                                               |
+|                      | or feedback for the Ceph development team. Ceph | - **Domain:**                                 |
+|                      | developers are often available on the ``#ceph`` |     ``irc.oftc.net``                          |
+|                      | IRC channel particularly during daytime hours   | - **Channels:**                               |
+|                      | in the US Pacific Standard Time zone.           |     ``#ceph``,                                |
+|                      | While ``#ceph`` is a good starting point for    |     ``#ceph-devel``,                          |
+|                      | cluster operators and users, there is also      |     ``#ceph-dashboard``,                      |
+|                      | ``#ceph-devel``, ``#ceph-dashboard`` and        |     ``#cephfs``                               |
+|                      | ``#cephfs`` dedicated for Ceph developers.      |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **User List**        | Ask and answer user-related questions by        |                                               |
 |                      | subscribing to the email list at                | - `User Subscribe`_                           |
-|                      | ceph-users@ceph.com. You can opt out of         | - `User Unsubscribe`_                         |
-|                      | the email list at any time by unsubscribing.    | - `Gmane for Users`_                          |
-|                      | A simple email is all it takes! If you would    |                                               |
-|                      | like to view the archives, go to Gmane.         |                                               |
+|                      | ceph-users@ceph.io. You can opt out of the email| - `User Unsubscribe`_                         |
+|                      | list at any time by unsubscribing. A simple     | - `User Archives`_                            |
+|                      | email is all it takes!                          |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Devel List**       | Keep in touch with developer activity by        |                                               |
-|                      | subscribing to the email list at                | - `Devel Subscribe`_                          |
-|                      | ceph-devel@vger.kernel.org. You can opt out of  | - `Devel Unsubscribe`_                        |
-|                      | the email list at any time by unsubscribing.    | - `Gmane for Developers`_                     |
-|                      | A simple email is all it takes! If you would    |                                               |
-|                      | like to view the archives, go to Gmane.         |                                               |
+|                      | subscribing to the email list at dev@ceph.io.   | - `Devel Subscribe`_                          |
+|                      | You can opt out of the email list at any time by| - `Devel Unsubscribe`_                        |
+|                      | unsubscribing. A simple email is all it takes!  | - `Devel Archives`_                           |
++----------------------+-------------------------------------------------+-----------------------------------------------+
+| **Kernel Client**    | Linux kernel-related traffic, including kernel  | - `Kernel Client Subscribe`_                  |
+|                      | patches and discussion of implementation details| - `Kernel Client Unsubscribe`_                |
+|                      | for the kernel client code.                     | - `Kernel Client Archives`_                   |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Commit List**      | Subscribe to ceph-commit@ceph.com to get        |                                               |
 |                      | commit notifications via email. You can opt out | - `Commit Subscribe`_                         |
@@ -69,21 +71,26 @@ These are exciting times in the Ceph community! Get involved!
 |                      | at http://github.com. See `Ceph Source Code`_   |                                               |
 |                      | for details on cloning from github.             |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
+| **Ceph Calendar**    | Learn about upcoming Ceph events.               | https://ceph.io/contribute/                   |
++----------------------+-------------------------------------------------+-----------------------------------------------+
 
 
 
-.. _Devel Subscribe: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
-.. _Devel Unsubscribe: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
-.. _User Subscribe: mailto:ceph-users-join@lists.ceph.com
-.. _User Unsubscribe: mailto:ceph-users-leave@lists.ceph.com
+.. _Devel Subscribe: mailto:dev-request@ceph.io?body=subscribe
+.. _Devel Unsubscribe: mailto:dev-request@ceph.io?body=unsubscribe
+.. _Kernel Client Subscribe: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
+.. _Kernel Client Unsubscribe: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
+.. _User Subscribe: mailto:ceph-users-request@ceph.io?body=subscribe
+.. _User Unsubscribe: mailto:ceph-users-request@ceph.io?body=unsubscribe
 .. _Community Subscribe: mailto:ceph-community-join@lists.ceph.com
 .. _Community Unsubscribe: mailto:ceph-community-leave@lists.ceph.com
 .. _Commit Subscribe: mailto:ceph-commit-join@lists.ceph.com
 .. _Commit Unsubscribe: mailto:ceph-commit-leave@lists.ceph.com
 .. _QA Subscribe: mailto:ceph-qa-join@lists.ceph.com
 .. _QA Unsubscribe: mailto:ceph-qa-leave@lists.ceph.com
-.. _Gmane for Developers: http://news.gmane.org/gmane.comp.file-systems.ceph.devel
-.. _Gmane for Users: http://news.gmane.org/gmane.comp.file-systems.ceph.user
+.. _Devel Archives: https://lists.ceph.io/hyperkitty/list/dev@ceph.io/
+.. _User Archives: https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/
+.. _Kernel Client Archives: https://www.spinics.net/lists/ceph-devel/
 .. _Mailing list archives: http://lists.ceph.com/
 .. _Blog: http://ceph.com/community/blog/
 .. _Tracker: http://tracker.ceph.com/

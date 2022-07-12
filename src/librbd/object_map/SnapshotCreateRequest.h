@@ -9,6 +9,7 @@
 #include "librbd/object_map/Request.h"
 
 class Context;
+class RWLock;
 
 namespace librbd {
 
@@ -44,10 +45,12 @@ public:
     STATE_ADD_SNAPSHOT
   };
 
-  SnapshotCreateRequest(ImageCtx &image_ctx, ceph::BitVector<2> *object_map,
-                        uint64_t snap_id, Context *on_finish)
+  SnapshotCreateRequest(ImageCtx &image_ctx, ceph::shared_mutex* object_map_lock,
+                        ceph::BitVector<2> *object_map, uint64_t snap_id,
+                        Context *on_finish)
     : Request(image_ctx, snap_id, on_finish),
-      m_object_map(*object_map), m_ret_val(0) {
+      m_object_map_lock(object_map_lock), m_object_map(*object_map),
+      m_ret_val(0) {
   }
 
   void send() override;
@@ -56,9 +59,10 @@ protected:
   bool should_complete(int r) override;
 
 private:
-  State m_state = STATE_READ_MAP;
+  ceph::shared_mutex* m_object_map_lock;
   ceph::BitVector<2> &m_object_map;
 
+  State m_state = STATE_READ_MAP;
   bufferlist m_read_bl;
   int m_ret_val;
 

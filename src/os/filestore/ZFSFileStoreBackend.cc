@@ -16,7 +16,7 @@
 #include "include/linux_fiemap.h"
 #include "include/color.h"
 #include "include/buffer.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include <iostream>
 #include <fstream>
@@ -150,7 +150,7 @@ static int list_checkpoints_callback(ZFS::Handle *zh, void *data)
   list<string> *ls = static_cast<list<string> *>(data);
   string str = ZFS::get_name(zh);
   size_t pos = str.find('@');
-  assert(pos != string::npos && pos + 1 != str.length());
+  ceph_assert(pos != string::npos && pos + 1 != str.length());
   ls->push_back(str.substr(pos + 1));
   return 0;
 }

@@ -12,9 +12,27 @@ target_link_libraries(ceph_test_rados
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
+  cls_cas_internal
+  cls_cas_client
   )
 install(TARGETS
   ceph_test_rados
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# test_stale_read
+add_executable(ceph_test_osd_stale_read
+  ceph_test_osd_stale_read.cc
+  )
+target_link_libraries(ceph_test_osd_stale_read
+  librados
+  global
+  ${CMAKE_DL_LIBS}
+  ${EXTRALIBS}
+  ${CMAKE_DL_LIBS}
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_osd_stale_read
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # scripts
@@ -48,6 +66,22 @@ add_executable(unittest_osdscrub
   )
 add_ceph_unittest(unittest_osdscrub)
 target_link_libraries(unittest_osdscrub osd os global ${CMAKE_DL_LIBS} mon ${BLKID_LIBRARIES})
+
+# unittest_scrubber_be
+add_executable(unittest_scrubber_be
+  test_scrubber_be.cc
+  scrubber_generators.cc
+  scrubber_test_datasets.cc
+  )
+add_ceph_unittest(unittest_scrubber_be)
+target_link_libraries(unittest_scrubber_be osd os global ${CMAKE_DL_LIBS} mon ${BLKID_LIBRARIES})
+
+# unittest_scrub_sched
+add_executable(unittest_scrub_sched
+  test_scrub_sched.cc
+  )
+add_ceph_unittest(unittest_scrub_sched)
+target_link_libraries(unittest_scrub_sched osd os global ${CMAKE_DL_LIBS} mon ${BLKID_LIBRARIES})
 
 # unittest_pglog
 add_executable(unittest_pglog
@@ -97,20 +131,11 @@ add_executable(unittest_ec_transaction
 add_ceph_unittest(unittest_ec_transaction)
 target_link_libraries(unittest_ec_transaction osd global ${BLKID_LIBRARIES})
 
-# unittest_mclock_op_class_queue
-add_executable(unittest_mclock_op_class_queue
-  TestMClockOpClassQueue.cc
+# unittest_mclock_scheduler
+add_executable(unittest_mclock_scheduler
+  TestMClockScheduler.cc
 )
-add_ceph_unittest(unittest_mclock_op_class_queue)
-target_link_libraries(unittest_mclock_op_class_queue
-  global osd dmclock os
-)
-
-# unittest_mclock_client_queue
-add_executable(unittest_mclock_client_queue
-  TestMClockClientQueue.cc
-)
-add_ceph_unittest(unittest_mclock_client_queue)
-target_link_libraries(unittest_mclock_client_queue
+add_ceph_unittest(unittest_mclock_scheduler)
+target_link_libraries(unittest_mclock_scheduler
   global osd dmclock os
 )

@@ -18,7 +18,7 @@
 #ifndef CEPH_ERASURE_CODE_PLUGIN_H
 #define CEPH_ERASURE_CODE_PLUGIN_H
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "ErasureCodeInterface.h"
 
 extern "C" {
@@ -44,9 +44,9 @@ namespace ceph {
 
   class ErasureCodePluginRegistry {
   public:
-    Mutex lock;
-    bool loading;
-    bool disable_dlclose;
+    ceph::mutex lock = ceph::make_mutex("ErasureCodePluginRegistry::lock");
+    bool loading = false;
+    bool disable_dlclose = false;
     std::map<std::string,ErasureCodePlugin*> plugins;
 
     static ErasureCodePluginRegistry singleton;

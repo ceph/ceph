@@ -17,19 +17,12 @@
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"
 #include "test_rgw_common.h"
-#define GTEST
-#ifdef GTEST
 #include <gtest/gtest.h>
-#else
-#define TEST(x, y) void y()
-#define ASSERT_EQ(v, s) if(v != s)cout << "Error at " << __LINE__ << "(" << #v << "!= " << #s << "\n"; \
-                                else cout << "(" << #v << "==" << #s << ") PASSED\n";
-#define EXPECT_EQ(v, s) ASSERT_EQ(v, s)
-#define ASSERT_TRUE(c) if(c)cout << "Error at " << __LINE__ << "(" << #c << ")" << "\n"; \
-                          else cout << "(" << #c << ") PASSED\n";#define EXPECT_TRUE(c) ASSERT_TRUE(c) 
-#define EXPECT_TRUE(c) ASSERT_TRUE(c) 
-#endif
+
 using namespace std;
+
+auto cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+const DoutPrefix dp(cct, 1, "test rgw manifest: ");
 
 struct OldObjManifestPart {
   old_rgw_obj loc;   /* the object where the data is located */
@@ -40,17 +33,17 @@ struct OldObjManifestPart {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(loc, bl);
-    ::encode(loc_ofs, bl);
-    ::encode(size, bl);
+    encode(loc, bl);
+    encode(loc_ofs, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
-     ::decode(loc, bl);
-     ::decode(loc_ofs, bl);
-     ::decode(size, bl);
+     decode(loc, bl);
+     decode(loc_ofs, bl);
+     decode(size, bl);
      DECODE_FINISH(bl);
   }
 
@@ -87,15 +80,15 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(obj_size, bl);
-    ::encode(objs, bl);
+    encode(obj_size, bl);
+    encode(objs, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(6, 2, 2, bl);
-    ::decode(obj_size, bl);
-    ::decode(objs, bl);
+    decode(obj_size, bl);
+    decode(objs, bl);
     DECODE_FINISH(bl);
   }
 
@@ -128,7 +121,7 @@ void append_stripes(list<rgw_obj> *objs, RGWObjManifest& manifest, uint64_t obj_
 }
 
 static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size, uint64_t stripe_size,
-                    RGWObjManifest *manifest, const string& placement_id, rgw_bucket *bucket, rgw_obj *head, RGWObjManifest::generator *gen,
+                    RGWObjManifest *manifest, const rgw_placement_rule& placement_rule, rgw_bucket *bucket, rgw_obj *head, RGWObjManifest::generator *gen,
                     list<rgw_obj> *test_objs)
 {
   manifest->set_trivial_rule(head_max_size, stripe_size);
@@ -136,7 +129,7 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
   test_rgw_init_bucket(bucket, "buck");
 
   *head = rgw_obj(*bucket, "oid");
-  gen->create_begin(g_ceph_context, manifest, placement_id, *bucket, *head);
+  gen->create_begin(g_ceph_context, manifest, placement_rule, nullptr, *bucket, *head);
 
   append_head(test_objs, *head);
   cout << "test_objs.size()=" << test_objs->size() << std::endl;
@@ -232,18 +225,18 @@ TEST(TestRGWManifest, head_only_obj) {
   list<rgw_obj>::iterator liter;
 
   RGWObjManifest::obj_iterator iter;
-  for (iter = manifest.obj_begin(), liter = objs.begin();
-       iter != manifest.obj_end() && liter != objs.end();
+  for (iter = manifest.obj_begin(&dp), liter = objs.begin();
+       iter != manifest.obj_end(&dp) && liter != objs.end();
        ++iter, ++liter) {
     ASSERT_TRUE(env.get_raw(*liter) == env.get_raw(iter.get_location()));
   }
 
-  ASSERT_TRUE(iter == manifest.obj_end());
+  ASSERT_TRUE(iter == manifest.obj_end(&dp));
   ASSERT_TRUE(liter == objs.end());
 
   rgw_raw_obj raw_head;
 
-  iter = manifest.obj_find(100 * 1024);
+  iter = manifest.obj_find(&dp, 100 * 1024);
   ASSERT_TRUE(env.get_raw(iter.get_location()) == env.get_raw(head));
   ASSERT_EQ((int)iter.get_stripe_size(), obj_size);
 }
@@ -268,8 +261,8 @@ TEST(TestRGWManifest, obj_with_head_and_tail) {
   rgw_obj_select last_obj;
 
   RGWObjManifest::obj_iterator iter;
-  for (iter = manifest.obj_begin(), liter = objs.begin();
-       iter != manifest.obj_end() && liter != objs.end();
+  for (iter = manifest.obj_begin(&dp), liter = objs.begin();
+       iter != manifest.obj_end(&dp) && liter != objs.end();
        ++iter, ++liter) {
     cout << "*liter=" << *liter << " iter.get_location()=" << env.get_raw(iter.get_location()) << std::endl;
     ASSERT_TRUE(env.get_raw(*liter) == env.get_raw(iter.get_location()));
@@ -277,15 +270,15 @@ TEST(TestRGWManifest, obj_with_head_and_tail) {
     last_obj = iter.get_location();
   }
 
-  ASSERT_TRUE(iter == manifest.obj_end());
+  ASSERT_TRUE(iter == manifest.obj_end(&dp));
   ASSERT_TRUE(liter == objs.end());
 
-  iter = manifest.obj_find(100 * 1024);
+  iter = manifest.obj_find(&dp, 100 * 1024);
   ASSERT_TRUE(env.get_raw(iter.get_location()) == env.get_raw(head));
   ASSERT_EQ((int)iter.get_stripe_size(), head_size);
 
   uint64_t ofs = 20 * 1024 * 1024 + head_size;
-  iter = manifest.obj_find(ofs + 100);
+  iter = manifest.obj_find(&dp, ofs + 100);
 
   ASSERT_TRUE(env.get_raw(iter.get_location()) == env.get_raw(last_obj));
   ASSERT_EQ(iter.get_stripe_ofs(), ofs);
@@ -313,7 +306,8 @@ TEST(TestRGWManifest, multipart) {
     rgw_obj head;
     for (ofs = 0; ofs < part_size; ofs += stripe_size) {
       if (ofs == 0) {
-        int r = gen.create_begin(g_ceph_context, &manifest, env.zonegroup.default_placement, bucket, head);
+        rgw_placement_rule rule(env.zonegroup.default_placement.name, RGW_STORAGE_CLASS_STANDARD);
+        int r = gen.create_begin(g_ceph_context, &manifest, rule, nullptr, bucket, head);
         ASSERT_EQ(r, 0);
         continue;
       }
@@ -328,11 +322,11 @@ TEST(TestRGWManifest, multipart) {
   RGWObjManifest m;
 
   for (int i = 0; i < num_parts; i++) {
-    m.append(pm[i], env.zonegroup, env.zone_params);
+    m.append(&dp, pm[i], env.zonegroup, env.zone_params);
   }
   RGWObjManifest::obj_iterator iter;
-  for (iter = m.obj_begin(); iter != m.obj_end(); ++iter) {
-    RGWObjManifest::obj_iterator fiter = m.obj_find(iter.get_ofs());
+  for (iter = m.obj_begin(&dp); iter != m.obj_end(&dp); ++iter) {
+    RGWObjManifest::obj_iterator fiter = m.obj_find(&dp, iter.get_ofs());
     ASSERT_TRUE(env.get_raw(fiter.get_location()) == env.get_raw(iter.get_location()));
   }
 
@@ -357,13 +351,13 @@ TEST(TestRGWManifest, old_obj_manifest) {
 
 
   bufferlist bl;
-  ::encode(old_manifest , bl);
+  encode(old_manifest , bl);
 
   RGWObjManifest manifest;
 
   try {
-    auto iter = bl.begin();
-    ::decode(manifest, iter);
+    auto iter = bl.cbegin();
+    decode(manifest, iter);
   } catch (buffer::error& err) {
     ASSERT_TRUE(false);
   }
@@ -372,8 +366,8 @@ TEST(TestRGWManifest, old_obj_manifest) {
 
   RGWObjManifest::obj_iterator iter;
   auto liter = old_objs.begin();
-  for (iter = manifest.obj_begin();
-       iter != manifest.obj_end() && liter != old_objs.end();
+  for (iter = manifest.obj_begin(&dp);
+       iter != manifest.obj_end(&dp) && liter != old_objs.end();
        ++iter, ++liter) {
     rgw_pool old_pool(liter->bucket.data_pool);
     string old_oid;
@@ -386,17 +380,16 @@ TEST(TestRGWManifest, old_obj_manifest) {
   }
 
   ASSERT_TRUE(liter == old_objs.end());
-  ASSERT_TRUE(iter == manifest.obj_end());
+  ASSERT_TRUE(iter == manifest.obj_end(&dp));
 
 }
 
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto args = argv_to_vec(argc, argv);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

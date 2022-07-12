@@ -4,7 +4,6 @@ import json
 import logging
 from textwrap import dedent
 from ceph_volume import decorators
-from ceph_volume.util import disk
 from ceph_volume.api import lvm as api
 
 logger = logging.getLogger(__name__)
@@ -16,7 +15,7 @@ osd_list_header_template = """\n
 
 osd_device_header_template = """
 
-  [{type: >4}]    {path}
+  {type: <13} {path}
 """
 
 device_metadata_item_template = """
@@ -30,27 +29,48 @@ def readable_tag(tag):
 
 def pretty_report(report):
     output = []
-    for _id, devices in report.items():
+    for osd_id, devices in sorted(report.items()):
         output.append(
-            osd_list_header_template.format(osd_id=" osd.%s " % _id)
+            osd_list_header_template.format(osd_id=" osd.%s " % osd_id)
         )
         for device in devices:
             output.append(
                 osd_device_header_template.format(
-                    type=device['type'],
+                    type='[%s]' % device['type'],
                     path=device['path']
                 )
             )
-            for tag_name, value in device.get('tags', {}).items():
+            for tag_name, value in sorted(device.get('tags', {}).items()):
                 output.append(
                     device_metadata_item_template.format(
                         tag_name=readable_tag(tag_name),
                         value=value
                     )
                 )
+            if not device.get('devices'):
+                continue
+            else:
+                output.append(
+                    device_metadata_item_template.format(
+                        tag_name='devices',
+                        value=','.join(device['devices'])
+                    )
+                )
+
     print(''.join(output))
 
 
+def direct_report():
+    """
+    Other non-cli consumers of listing information will want to consume the
+    report without the need to parse arguments or other flags. This helper
+    bypasses the need to deal with the class interface which is meant for cli
+    handling.
+    """
+    return List([]).full_report()
+
+
+# TODO: Perhaps, get rid of this class and simplify this module further?
 class List(object):
 
     help = 'list logical volumes and devices associated with Ceph'
@@ -60,10 +80,8 @@ class List(object):
 
     @decorators.needs_root
     def list(self, args):
-        # ensure everything is up to date before calling out
-        # to list lv's
-        self.update()
-        report = self.generate(args)
+        report = self.single_report(args.device) if args.device else \
+                 self.full_report()
         if args.format == 'json':
             # If the report is empty, we don't return a non-zero exit status
             # because it is assumed this is going to be consumed by automated
@@ -73,128 +91,84 @@ class List(object):
             print(json.dumps(report, indent=4, sort_keys=True))
         else:
             if not report:
-                raise SystemExit('No valid Ceph devices found')
+                raise SystemExit('No valid Ceph lvm devices found')
             pretty_report(report)
 
-    def update(self):
+    def create_report(self, lvs):
         """
-        Ensure all journal devices are up to date if they aren't a logical
-        volume
+        Create a report for LVM dev(s) passed. Returns '{}' to denote failure.
         """
-        lvs = api.Volumes()
+
+        report = {}
+
         for lv in lvs:
-            try:
-                lv.tags['ceph.osd_id']
-            except KeyError:
-                # only consider ceph-based logical volumes, everything else
-                # will get ignored
+            if not api.is_ceph_device(lv):
                 continue
 
-            for device_type in ['journal', 'block', 'wal', 'db']:
-                device_name = 'ceph.%s_device' % device_type
-                device_uuid = lv.tags.get('ceph.%s_uuid' % device_type)
-                if not device_uuid:
-                    # bluestore will not have a journal, filestore will not have
-                    # a block/wal/db, so we must skip if not present
-                    continue
-                disk_device = disk.get_device_from_partuuid(device_uuid)
-                if disk_device:
-                    if lv.tags[device_name] != disk_device:
-                        # this means that the device has changed, so it must be updated
-                        # on the API to reflect this
-                        lv.set_tags({device_name: disk_device})
+            osd_id = lv.tags['ceph.osd_id']
+            report.setdefault(osd_id, [])
+            lv_report = lv.as_dict()
 
-    def generate(self, args):
-        """
-        Generate reports for an individual device or for all Ceph-related
-        devices, logical or physical, as long as they have been prepared by
-        this tool before and contain enough metadata.
-        """
-        if args.device:
-            return self.single_report(args.device)
-        else:
-            return self.full_report()
+            pvs = api.get_pvs(filters={'lv_uuid': lv.lv_uuid})
+            lv_report['devices'] = [pv.name for pv in pvs] if pvs else []
+            report[osd_id].append(lv_report)
 
-    def single_report(self, device):
-        """
-        Generate a report for a single device. This can be either a logical
-        volume in the form of vg/lv or a device with an absolute path like
-        /dev/sda1
-        """
-        lvs = api.Volumes()
+            phys_devs = self.create_report_non_lv_device(lv)
+            if phys_devs:
+                report[osd_id].append(phys_devs)
+
+        return report
+
+    def create_report_non_lv_device(self, lv):
         report = {}
-        lv = api.get_lv_from_argument(device)
-        if lv:
-            try:
-                _id = lv.tags['ceph.osd_id']
-            except KeyError:
-                logger.warning('device is not part of ceph: %s', device)
-                return report
-
-            report.setdefault(_id, [])
-            report[_id].append(
-                lv.as_dict()
-            )
-
-        else:
-            # this has to be a journal/wal/db device (not a logical volume) so try
-            # to find the PARTUUID that should be stored in the OSD logical
-            # volume
-            for device_type in ['journal', 'block', 'wal', 'db']:
-                device_tag_name = 'ceph.%s_device' % device_type
-                device_tag_uuid = 'ceph.%s_uuid' % device_type
-                associated_lv = lvs.get(lv_tags={device_tag_name: device})
-                if associated_lv:
-                    _id = associated_lv.tags['ceph.osd_id']
-                    uuid = associated_lv.tags[device_tag_uuid]
-
-                    report.setdefault(_id, [])
-                    report[_id].append(
-                        {
-                            'tags': {'PARTUUID': uuid},
-                            'type': device_type,
-                            'path': device,
-                        }
-                    )
+        if lv.tags.get('ceph.type', '') in ['data', 'block']:
+            for dev_type in ['journal', 'wal', 'db']:
+                dev = lv.tags.get('ceph.{}_device'.format(dev_type), '')
+                # counting / in the device name seems brittle but should work,
+                # lvs will have 3
+                if dev and dev.count('/') == 2:
+                    device_uuid = lv.tags.get('ceph.{}_uuid'.format(dev_type))
+                    report = {'tags': {'PARTUUID': device_uuid},
+                              'type': dev_type,
+                              'path': dev}
         return report
 
     def full_report(self):
         """
-        Generate a report for all the logical volumes and associated devices
-        that have been previously prepared by Ceph
+        Create a report of all Ceph LVs. Returns '{}' to denote failure.
         """
-        lvs = api.Volumes()
-        report = {}
-        for lv in lvs:
-            try:
-                _id = lv.tags['ceph.osd_id']
-            except KeyError:
-                # only consider ceph-based logical volumes, everything else
-                # will get ignored
-                continue
+        return self.create_report(api.get_lvs())
 
-            report.setdefault(_id, [])
-            report[_id].append(
-                lv.as_dict()
-            )
+    def single_report(self, arg):
+        """
+        Generate a report for a single device. This can be either a logical
+        volume in the form of vg/lv, a device with an absolute path like
+        /dev/sda1 or /dev/sda, or a list of devices under same OSD ID.
 
-            for device_type in ['journal', 'block', 'wal', 'db']:
-                device_uuid = lv.tags.get('ceph.%s_uuid' % device_type)
-                if not device_uuid:
-                    # bluestore will not have a journal, filestore will not have
-                    # a block/wal/db, so we must skip if not present
-                    continue
-                if not api.get_lv(lv_uuid=device_uuid):
-                    # means we have a regular device, so query blkid
-                    disk_device = disk.get_device_from_partuuid(device_uuid)
-                    if disk_device:
-                        report[_id].append(
-                            {
-                                'tags': {'PARTUUID': device_uuid},
-                                'type': device_type,
-                                'path': disk_device,
-                            }
-                        )
+        Return value '{}' denotes failure.
+        """
+        if isinstance(arg, int) or arg.isdigit():
+            lv = api.get_lvs_from_osd_id(arg)
+        elif arg[0] == '/':
+            lv = api.get_lvs_from_path(arg)
+        else:
+            lv = [api.get_single_lv(filters={'lv_name': arg.split('/')[1]})]
+
+        report = self.create_report(lv)
+
+        if not report:
+            # check if device is a non-lvm journals or wal/db
+            for dev_type in ['journal', 'wal', 'db']:
+                lvs = api.get_lvs(tags={
+                    'ceph.{}_device'.format(dev_type): arg})
+                if lvs:
+                    # just taking the first lv here should work
+                    lv = lvs[0]
+                    phys_dev = self.create_report_non_lv_device(lv)
+                    osd_id = lv.tags.get('ceph.osd_id')
+                    if osd_id:
+                        report[osd_id] = [phys_dev]
+
 
         return report
 
@@ -210,6 +184,10 @@ class List(object):
         Full listing of all system devices associated with a cluster::
 
             ceph-volume lvm list
+
+        List devices under same OSD ID::
+
+            ceph-volume lvm list <OSD-ID>
 
         List a particular device, reporting all metadata about it::
 

@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 #ifndef CEPH_RGW_TORRENT_H
 #define CEPH_RGW_TORRENT_H
 
@@ -8,7 +11,6 @@
 
 #include "common/ceph_time.h"
 
-#include "rgw_rados.h"
 #include "rgw_common.h"
 
 using ceph::crypto::SHA1;
@@ -90,22 +92,22 @@ private:
   {
     int piece_length;    // each piece length
     bufferlist sha1_bl;  // save sha1
-    string name;    // file name
+    std::string name;    // file name
     off_t len;    // file total bytes
   }info;
 
-  string  announce;    // tracker
-  string origin; // origin
+  std::string  announce;    // tracker
+  std::string origin; // origin
   time_t create_date{0};    // time of the file created
-  string comment;  // comment
-  string create_by;    // app name and version
-  string encoding;    // if encode use gbk rather than gtf-8 use this field
+  std::string comment;  // comment
+  std::string create_by;    // app name and version
+  std::string encoding;    // if encode use gbk rather than gtf-8 use this field
   uint64_t sha_len;  // sha1 length
   bool is_torrent;  // flag
   bufferlist bl;  // bufflist ready to send
 
   struct req_state *s{nullptr};
-  RGWRados *store{nullptr};
+  rgw::sal::Store* store{nullptr};
   SHA1 h;
 
   TorrentBencode dencode;
@@ -114,8 +116,8 @@ public:
   ~seed();
 
   int get_params();
-  void init(struct req_state *p_req, RGWRados *p_store);
-  int get_torrent_file(RGWRados::Object::Read &read_op,
+  void init(struct req_state *p_req, rgw::sal::Store* p_store);
+  int get_torrent_file(rgw::sal::Object* object,
                        uint64_t &total_len,
                        ceph::bufferlist &bl_data,
                        rgw_obj &obj);
@@ -124,9 +126,9 @@ public:
   bool get_flag();
 
   void set_create_date(ceph::real_time& value);
-  void set_info_name(const string& value);
+  void set_info_name(const std::string& value);
   void update(bufferlist &bl);
-  int complete();
+  int complete(optional_yield y);
 
 private:
   void do_encode ();
@@ -134,6 +136,6 @@ private:
   void set_exist(bool exist);
   void set_info_pieces(char *buff);
   void sha1(SHA1 *h, bufferlist &bl, off_t bl_len);
-  int save_torrent_file();
+  int save_torrent_file(optional_yield y);
 };
 #endif /* CEPH_RGW_TORRENT_H */

@@ -4,7 +4,7 @@
 """To run this script first install the dependencies
 
 
-  virtualenv v
+  python3 -m venv v
   source v/bin/activate
   pip install githubpy GitPython requests
 
@@ -31,6 +31,7 @@ import os
 import re
 import sys
 import requests
+import time
 
 from git import Repo
 
@@ -41,7 +42,7 @@ reviewed_by_re = re.compile(r"Rev(.*)By", re.IGNORECASE)
 labels = {'bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
           'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
           'tools'}
-merge_re = re.compile("Merge pull request #(\d+).*")
+merge_re = re.compile("Merge (pull request|PR) #(\d+).*")
 # prefixes is the list of commit description prefixes we recognize
 prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
             'common', 'core', 'crush', 'doc', 'fs', 'librados', 'librbd',
@@ -50,6 +51,8 @@ prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 rst_link_re = re.compile(r"([a-zA-Z0-9])_(\W)")
+release_re = re.compile(r"^(nautilus|octopus|pacific|quincy):\s*")
+
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
 
@@ -134,10 +137,14 @@ def _title_message(commit, pr, strict):
         # assume that a single line means the intention is to
         # re-write the PR title
         return (lines[0], None)
+    elif len(lines) < 3 and 'refs/pull' in lines[0]:
+        # assume the intent was rewriting the title and something like
+        # ptl-tool was used to generate the merge message
+        return (lines[1], None)
     message = "    " + "\n    ".join(lines)
     return (title, message)
 
-def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
+def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict, use_tags, include_pr_messages):
 
     issue2prs = {}
     pr2issues = {}
@@ -147,14 +154,29 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
         merge = merge_re.match(commit.summary)
         if not merge:
             continue
-        number = merge.group(1)
+        number = merge.group(2)
         print ("Considering PR#" + number)
         # do not pick up ceph/ceph-qa-suite.git PRs
         if int(number) < 1311:
             print ("Ignoring low-numbered PR, probably picked up from"
                    " ceph/ceph-qa-suite.git")
             continue
-        pr = gh.repos("ceph")("ceph").pulls(number).get()
+
+        attempts = 0
+        retries = 30
+        while attempts < retries:
+            try:
+                pr = gh.repos("ceph")("ceph").pulls(number).get()
+                break
+            except Exception:
+                if attempts < retries:
+                    attempts += 1
+                    sleep_time = 2 * attempts
+                    print(f"Failed to fetch PR {number}, sleeping for {sleep_time} seconds")
+                    time.sleep(sleep_time)
+                else:
+                    print(f"Could not fetch PR {number} in {retries} tries.")
+                    raise
         (title, message) = _title_message(commit, pr, strict)
         issues = []
         if pr['body']:
@@ -184,14 +206,14 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
 
         if strict:
             title_re = (
-                '^(?:hammer|infernalis|jewel|kraken):\s+(' +
+                '^(?:nautilus|octopus|pacific|quincy):\s+(' +
                 '|'.join(prefixes) +
                 ')(:.*)'
             )
             match = re.match(title_re, title)
             if not match:
                 print ("ERROR: https://github.com/ceph/ceph/pull/" +
-                       str(number) + " title " + title.encode("utf-8") +
+                       str(number) + " title " + title +
                        " does not match " + title_re)
             else:
                 title = match.group(1) + match.group(2)
@@ -204,6 +226,8 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
         title = title.replace('*', '\*')
         # and escape the underscores for noting a link
         title = rst_link_re.sub(r'\1\_\2', title)
+        # remove release prefix for backports
+        title = release_re.sub('', title)
         pr2info[number] = (author, title, message)
 
         for issue in set(issues):
@@ -222,11 +246,21 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                        issue + " " + str(prs))
 
     for (pr, (author, title, message)) in sorted(
-        pr2info.items(), key=lambda title: title[1][1]
+        pr2info.items(), key=lambda title: title[1][1].lower()
     ):
         if pr in pr2issues:
             if plaintext:
                 issues = map(lambda issue: '#' + str(issue), pr2issues[pr])
+            elif html:
+                issues = map(lambda issue: (
+                    '<a href="http://tracker.ceph.com/issues/{issue}">issue#{issue}</a>'
+                    ).format(issue=issue), pr2issues[pr]
+                )
+            elif markdown:
+                issues = map(lambda issue: (
+                    '[issue#{issue}](http://tracker.ceph.com/issues/{issue})'
+                    ).format(issue=issue), pr2issues[pr]
+                )
             else:
                 issues = map(lambda issue: (
                     '`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_'
@@ -237,9 +271,29 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
             issues = ''
         if plaintext:
             print ("* {title} ({issues}{author})".format(
-                    title=title.encode("utf-8"),
+                    title=title,
                     issues=issues,
-                    author=author.encode("utf-8")
+                    author=author
+                )
+            )
+        elif html:
+            print (
+                (
+                    "<li><p>{title} ({issues}<a href=\""
+                    "https://github.com/ceph/ceph/pull/{pr}\""
+                    ">pr#{pr}</a>, {author})</p></li>"
+                ).format(
+                    title=title,
+                    issues=issues,
+                    author=author, pr=pr
+                )
+            )
+        elif markdown:
+            markdown_title = title.replace('_', '\_').replace('.', '<span></span>.')
+            print ("- {title} ({issues}[pr#{pr}](https://github.com/ceph/ceph/pull/{pr}), {author})\n".format(
+                    title=markdown_title,
+                    issues=issues,
+                    author=author, pr=pr
                 )
             )
         else:
@@ -249,12 +303,12 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                     "https://github.com/ceph/ceph/pull/{pr}"
                     ">`_, {author})"
                 ).format(
-                    title=title.encode("utf-8"),
+                    title=title,
                     issues=issues,
-                    author=author.encode("utf-8"), pr=pr
+                    author=author, pr=pr
                 )
             )
-        if message:
+        if include_pr_messages and message:
             print (message)
 
 
@@ -279,6 +333,12 @@ if __name__ == "__main__":
     parser.add_argument("--text", "-t",
                         action='store_true', default=None,
                         help="output plain text only, no links")
+    parser.add_argument("--html",
+                        action='store_true', default=None,
+                        help="output html format for (old wordpress) website blog")
+    parser.add_argument("--markdown",
+                        action='store_true', default=None,
+                        help="output markdown format for new ceph.io blog")
     parser.add_argument("--verbose", "-v",
                         action='store_true', default=None,
                         help="verbose")
@@ -294,6 +354,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--use-tags", default=False,
                         help="Use github tags to guess the component")
+    parser.add_argument("--include-pr-messages", default=False, action='store_true',
+                        help="Include full PR message in addition to PR title, if available")
 
     args = parser.parse_args()
     gh = github.GitHub(
@@ -304,7 +366,10 @@ if __name__ == "__main__":
         Repo(args.repo),
         args.rev,
         args.text,
+        args.html,
+        args.markdown,
         args.verbose,
         args.strict,
-        args.use_tags
+        args.use_tags,
+        args.include_pr_messages
     )

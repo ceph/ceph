@@ -8,27 +8,23 @@
 #include "Formatter.h"
 #include "include/stringify.h"
 
+using std::list;
+using std::map;
+using std::make_pair;
+using std::pair;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+
 // ----
 // LogEntryKey
 
-void LogEntryKey::encode(bufferlist& bl, uint64_t features) const
-{
-  ::encode(who, bl, features);
-  ::encode(stamp, bl);
-  ::encode(seq, bl);
-}
-
-void LogEntryKey::decode(bufferlist::iterator& bl)
-{
-  ::decode(who, bl);
-  ::decode(stamp, bl);
-  ::decode(seq, bl);
-  _calc_hash();
-}
-
 void LogEntryKey::dump(Formatter *f) const
 {
-  f->dump_stream("who") << who;
+  f->dump_stream("rank") << rank;
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("seq", seq);
 }
@@ -36,7 +32,7 @@ void LogEntryKey::dump(Formatter *f) const
 void LogEntryKey::generate_test_instances(list<LogEntryKey*>& o)
 {
   o.push_back(new LogEntryKey);
-  o.push_back(new LogEntryKey(entity_inst_t(), utime_t(1,2), 34));
+  o.push_back(new LogEntryKey(entity_name_t::CLIENT(1234), utime_t(1,2), 34));
 }
 
 clog_type LogEntry::str_to_level(std::string const &str)
@@ -191,14 +187,15 @@ string clog_type_to_string(clog_type t)
   }
 }
 
-void LogEntry::log_to_syslog(string level, string facility)
+void LogEntry::log_to_syslog(string level, string facility) const
 {
   int min = string_to_syslog_level(level);
   int l = clog_type_to_syslog_level(prio);
   if (l <= min) {
     int f = string_to_syslog_facility(facility);
-    syslog(l | f, "%s %llu : %s",
-	   stringify(who).c_str(),
+    syslog(l | f, "%s %s %llu : %s",
+	   name.to_cstr(),
+	   stringify(rank).c_str(),
 	   (long long unsigned)seq,
 	   msg.c_str());
   }
@@ -206,46 +203,66 @@ void LogEntry::log_to_syslog(string level, string facility)
 
 void LogEntry::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(4, 2, bl);
+  assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
+  ENCODE_START(5, 5, bl);
   __u16 t = prio;
-  ::encode(who, bl, features);
-  ::encode(stamp, bl);
-  ::encode(seq, bl);
-  ::encode(t, bl);
-  ::encode(msg, bl);
-  ::encode(channel, bl);
-  ::encode(name, bl);
+  encode(name, bl);
+  encode(rank, bl);
+  encode(addrs, bl, features);
+  encode(stamp, bl);
+  encode(seq, bl);
+  encode(t, bl);
+  encode(msg, bl);
+  encode(channel, bl);
   ENCODE_FINISH(bl);
 }
 
-void LogEntry::decode(bufferlist::iterator& bl)
+void LogEntry::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
-  __u16 t;
-  ::decode(who, bl);
-  ::decode(stamp, bl);
-  ::decode(seq, bl);
-  ::decode(t, bl);
-  prio = (clog_type)t;
-  ::decode(msg, bl);
-  if (struct_v >= 3) {
-    ::decode(channel, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+  if (struct_v < 5) {
+    __u16 t;
+    entity_inst_t who;
+    decode(who, bl);
+    rank = who.name;
+    addrs.v.clear();
+    addrs.v.push_back(who.addr);
+    decode(stamp, bl);
+    decode(seq, bl);
+    decode(t, bl);
+    prio = (clog_type)t;
+    decode(msg, bl);
+    if (struct_v >= 3) {
+      decode(channel, bl);
+    } else {
+      // prior to having logging channels we only had a cluster log.
+      // Ensure we keep that appearance when the other party has no
+      // clue of what a 'channel' is.
+      channel = CLOG_CHANNEL_CLUSTER;
+    }
+    if (struct_v >= 4) {
+      decode(name, bl);
+    }
   } else {
-    // prior to having logging channels we only had a cluster log.
-    // Ensure we keep that appearance when the other party has no
-    // clue of what a 'channel' is.
-    channel = CLOG_CHANNEL_CLUSTER;
-  }
-  if (struct_v >= 4) {
-    ::decode(name, bl);
+    __u16 t;
+    decode(name, bl);
+    decode(rank, bl);
+    decode(addrs, bl);
+    decode(stamp, bl);
+    decode(seq, bl);
+    decode(t, bl);
+    prio = (clog_type)t;
+    decode(msg, bl);
+    decode(channel, bl);
   }
   DECODE_FINISH(bl);
 }
 
 void LogEntry::dump(Formatter *f) const
 {
-  f->dump_stream("who") << who;
   f->dump_stream("name") << name;
+  f->dump_stream("rank") << rank;
+  f->dump_object("addrs", addrs);
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("seq", seq);
   f->dump_string("channel", channel);
@@ -261,33 +278,76 @@ void LogEntry::generate_test_instances(list<LogEntry*>& o)
 
 // -----
 
+void LogSummary::build_ordered_tail_legacy(list<LogEntry> *tail) const
+{
+  tail->clear();
+  // channel -> (begin, end)
+  map<string,pair<list<pair<uint64_t,LogEntry>>::const_iterator,
+		  list<pair<uint64_t,LogEntry>>::const_iterator>> pos;
+  for (auto& i : tail_by_channel) {
+    pos.emplace(i.first, make_pair(i.second.begin(), i.second.end()));
+  }
+  while (true) {
+    uint64_t min_seq = 0;
+    list<pair<uint64_t,LogEntry>>::const_iterator *minp = 0;
+    for (auto& i : pos) {
+      if (i.second.first == i.second.second) {
+	continue;
+      }
+      if (min_seq == 0 || i.second.first->first < min_seq) {
+	min_seq = i.second.first->first;
+	minp = &i.second.first;
+      }
+    }
+    if (min_seq == 0) {
+      break; // done
+    }
+    tail->push_back((*minp)->second);
+    ++(*minp);
+  }
+}
+
 void LogSummary::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(2, 2, bl);
-  ::encode(version, bl);
-  ::encode(tail, bl, features);
+  assert(HAVE_FEATURE(features, SERVER_MIMIC));
+  ENCODE_START(4, 3, bl);
+  encode(version, bl);
+  encode(seq, bl);
+  encode(tail_by_channel, bl, features);
+  encode(channel_info, bl);
+  recent_keys.encode(bl);
   ENCODE_FINISH(bl);
 }
 
-void LogSummary::decode(bufferlist::iterator& bl)
+void LogSummary::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(version, bl);
-  ::decode(tail, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+  decode(version, bl);
+  decode(seq, bl);
+  decode(tail_by_channel, bl);
+  if (struct_v >= 4) {
+    decode(channel_info, bl);
+    recent_keys.decode(bl);
+  }
   DECODE_FINISH(bl);
   keys.clear();
-  for (auto& p : tail) {
-    keys.insert(p.key());
+  for (auto& i : tail_by_channel) {
+    for (auto& e : i.second) {
+      keys.insert(e.second.key());
+    }
   }
 }
 
 void LogSummary::dump(Formatter *f) const
 {
   f->dump_unsigned("version", version);
-  f->open_array_section("tail");
-  for (list<LogEntry>::const_iterator p = tail.begin(); p != tail.end(); ++p) {
-    f->open_object_section("entry");
-    p->dump(f);
+  f->open_object_section("tail_by_channel");
+  for (auto& i : tail_by_channel) {
+    f->open_object_section(i.first.c_str());
+    for (auto& j : i.second) {
+      string s = stringify(j.first);
+      f->dump_object(s.c_str(), j.second);
+    }
     f->close_section();
   }
   f->close_section();
@@ -298,4 +358,3 @@ void LogSummary::generate_test_instances(list<LogSummary*>& o)
   o.push_back(new LogSummary);
   // more!
 }
-

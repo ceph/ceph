@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -20,8 +20,8 @@
 
 TEST(inode_t, compare_equal)
 {
-  inode_t foo;
-  inode_t bar;
+  inode_t foo{};
+  inode_t bar{};
   int compare_r;
   bool divergent;
   compare_r = foo.compare(bar, &divergent);
@@ -51,8 +51,8 @@ TEST(inode_t, compare_equal)
 
 TEST(inode_t, compare_aged)
 {
-  inode_t foo;
-  inode_t bar;
+  inode_t foo{};
+  inode_t bar{};
 
   foo.ino = 1234;
   foo.ctime.set_from_double(10.0);
@@ -78,8 +78,8 @@ TEST(inode_t, compare_aged)
 
 TEST(inode_t, compare_divergent)
 {
-  inode_t foo;
-  inode_t bar;
+  inode_t foo{};
+  inode_t bar{};
 
   foo.ino = 1234;
   foo.ctime.set_from_double(10.0);
@@ -111,8 +111,8 @@ TEST(inode_backtrace_t, compare_equal)
   
   foo.ino = 1234;
   foo.pool = 12;
-  foo.old_pools.insert(10);
-  foo.old_pools.insert(5);
+  foo.old_pools.push_back(10);
+  foo.old_pools.push_back(5);
 
   inode_backpointer_t foop;
   foop.dirino = 3;
@@ -147,12 +147,12 @@ TEST(inode_backtrace_t, compare_newer)
 
   foo.ino = 1234;
   foo.pool = 12;
-  foo.old_pools.insert(10);
-  foo.old_pools.insert(5);
+  foo.old_pools.push_back(10);
+  foo.old_pools.push_back(5);
 
   bar.ino = 1234;
   bar.pool = 12;
-  bar.old_pools.insert(10);
+  bar.old_pools.push_back(10);
 
   inode_backpointer_t foop;
   foop.dirino = 3;
@@ -211,12 +211,12 @@ TEST(inode_backtrace_t, compare_divergent)
 
   foo.ino = 1234;
   foo.pool = 12;
-  foo.old_pools.insert(10);
-  foo.old_pools.insert(5);
+  foo.old_pools.push_back(10);
+  foo.old_pools.push_back(5);
 
   bar.ino = 1234;
   bar.pool = 12;
-  bar.old_pools.insert(10);
+  bar.old_pools.push_back(10);
 
   inode_backpointer_t foop;
   foop.dirino = 3;

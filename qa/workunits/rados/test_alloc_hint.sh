@@ -51,6 +51,7 @@ function setup_pgid() {
 }
 
 function expect_alloc_hint_eq() {
+    export CEPH_ARGS="--osd-objectstore=filestore"
     local expected_extsize="$1"
 
     for (( i = 0 ; i < "${NUM_OSDS}" ; i++ )); do
@@ -108,7 +109,7 @@ setup_osd_data
 
 POOL="alloc_hint-rep"
 ceph osd pool create "${POOL}" "${NUM_PG}"
-ceph osd pool set "${POOL}" size "${NUM_OSDS}"
+ceph osd pool set "${POOL}" size "${NUM_OSDS}" --yes-i-really-mean-it
 ceph osd pool application enable "${POOL}" rados
 
 OBJ="foo"

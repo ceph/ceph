@@ -25,6 +25,7 @@
 #include "common/config.h"
 #include "gtest/gtest.h"
 
+using namespace std;
 
 template <typename T>
 class ErasureCodeTest : public ::testing::Test {
@@ -40,7 +41,7 @@ typedef ::testing::Types<
   ErasureCodeJerasureBlaumRoth,
   ErasureCodeJerasureLiber8tion
 > JerasureTypes;
-TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
+TYPED_TEST_SUITE(ErasureCodeTest, JerasureTypes);
 
 TYPED_TEST(ErasureCodeTest, sanity_check_k)
 {
@@ -81,7 +82,7 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     in_ptr.append(payload, strlen(payload));
     bufferlist in;
-    in.push_front(in_ptr);
+    in.push_back(in_ptr);
     int want_to_encode[] = { 0, 1, 2, 3 };
     map<int, bufferlist> encoded;
     EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
@@ -279,7 +280,7 @@ TEST(ErasureCodeTest, encode)
 
 TEST(ErasureCodeTest, create_rule)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c = std::make_unique<CrushWrapper>();
   c->create();
   int root_type = 2;
   c->set_type_name(root_type, "root");
@@ -316,18 +317,18 @@ TEST(ErasureCodeTest, create_rule)
     profile["m"] = "2";
     profile["w"] = "8";
     jerasure.init(profile, &cerr);
-    int ruleset = jerasure.create_rule("myrule", *c, &ss);
-    EXPECT_EQ(0, ruleset);
+    int rule = jerasure.create_rule("myrule", *c, &ss);
+    EXPECT_EQ(0, rule);
     EXPECT_EQ(-EEXIST, jerasure.create_rule("myrule", *c, &ss));
     //
-    // the minimum that is expected from the created ruleset is to
+    // the minimum that is expected from the created rule is to
     // successfully map get_chunk_count() devices from the crushmap,
     // at least once.
     //
     vector<__u32> weight(c->get_max_devices(), 0x10000);
     vector<int> out;
     int x = 0;
-    c->do_rule(ruleset, x, out, jerasure.get_chunk_count(), weight, 0);
+    c->do_rule(rule, x, out, jerasure.get_chunk_count(), weight, 0);
     ASSERT_EQ(out.size(), jerasure.get_chunk_count());
     for (unsigned i=0; i<out.size(); ++i)
       ASSERT_NE(CRUSH_ITEM_NONE, out[i]);

@@ -17,24 +17,25 @@
 
 #include <sys/types.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <limits.h>
-#include <time.h>
 #include <strings.h>
 #if defined(__FreeBSD__)
 #include <sys/disk.h>
 #endif
 #include <sys/file.h>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#include <sys/ioctl.h>
+#endif
 #if defined(__linux__)
 #include <linux/fs.h>
 #endif
-#include <sys/ioctl.h>
 #ifdef HAVE_ERR_H
 #include <err.h>
 #endif
 #include <signal.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -133,7 +134,7 @@ int			logcount = 0;	/* total ops */
 #define OP_SKIPPED	101
 
 #undef PAGE_SIZE
-#define PAGE_SIZE       getpagesize()
+#define PAGE_SIZE       get_page_size()
 #undef PAGE_MASK
 #define PAGE_MASK       (PAGE_SIZE - 1)
 
@@ -147,6 +148,9 @@ char	dirpath[1024];
 off_t		file_size = 0;
 off_t		biggest = 0;
 unsigned long	testcalls = 0;		/* calls to function "test" */
+
+const char* cluster_name = "ceph";      /* --cluster optional */
+const char* client_id = "admin";        /* --id optional */
 
 unsigned long	simulatedopcount = 0;	/* -b flag */
 int	closeprob = 0;			/* -c flag */
@@ -257,6 +261,7 @@ get_random(void)
 	return random_generator();
 }
 
+int get_features(uint64_t* features);
 void replay_imagename(char *buf, size_t len, int clones);
 
 namespace {
@@ -272,11 +277,6 @@ struct ReplayHandler : public journal::ReplayHandler {
                       journal::Journaler *replay_journaler, Context *on_finish)
                 : journaler(journaler), replay_journaler(replay_journaler),
                   on_finish(on_finish) {
-        }
-
-        void get() override {
-        }
-        void put() override {
         }
 
         void handle_entries_available() override {
@@ -326,7 +326,8 @@ int register_journal(rados_ioctx_t ioctx, const char *image_name) {
                 return r;
         }
 
-        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, {});
+        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, {},
+                                     nullptr);
         r = journaler.register_client(bufferlist());
         if (r < 0) {
                 simple_err("failed to register journal client", r);
@@ -345,7 +346,8 @@ int unregister_journal(rados_ioctx_t ioctx, const char *image_name) {
                 return r;
         }
 
-        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, {});
+        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, {},
+                                     nullptr);
         r = journaler.unregister_client();
         if (r < 0) {
                 simple_err("failed to unregister journal client", r);
@@ -361,15 +363,19 @@ int create_replay_image(rados_ioctx_t ioctx, int order,
         librados::IoCtx io_ctx;
         librados::IoCtx::from_rados_ioctx_t(ioctx, io_ctx);
 
-        int r;
+        uint64_t features;
+        int r = get_features(&features);
+        if (r < 0) {
+                return r;
+        }
+
         librbd::RBD rbd;
         if (last_replay_image_name == nullptr) {
-                r = rbd.create2(io_ctx, replay_image_name, 0,
-                                RBD_FEATURES_ALL, &order);
+                r = rbd.create2(io_ctx, replay_image_name, 0, features, &order);
         } else {
                 r = rbd.clone2(io_ctx, last_replay_image_name, "snap",
-                               io_ctx, replay_image_name, RBD_FEATURES_ALL,
-                               &order, stripe_unit, stripe_count);
+                               io_ctx, replay_image_name, features, &order,
+                               stripe_unit, stripe_count);
         }
 
         if (r < 0) {
@@ -397,7 +403,8 @@ int replay_journal(rados_ioctx_t ioctx, const char *image_name,
                 return r;
         }
 
-        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, {});
+        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, {},
+                                     nullptr);
         C_SaferCond init_ctx;
         journaler.init(&init_ctx);
         BOOST_SCOPE_EXIT_ALL( (&journaler) ) {
@@ -410,7 +417,8 @@ int replay_journal(rados_ioctx_t ioctx, const char *image_name,
                 return r;
         }
 
-        journal::Journaler replay_journaler(io_ctx, replay_image_id, "", {});
+        journal::Journaler replay_journaler(io_ctx, replay_image_id, "", {},
+                                            nullptr);
 
         C_SaferCond replay_init_ctx;
         replay_journaler.init(&replay_init_ctx);
@@ -424,7 +432,7 @@ int replay_journal(rados_ioctx_t ioctx, const char *image_name,
                 return r;
         }
 
-        replay_journaler.start_append(0, 0, 0);
+        replay_journaler.start_append(0);
 
         C_SaferCond replay_ctx;
         ReplayHandler replay_handler(&journaler, &replay_journaler,
@@ -535,6 +543,27 @@ struct krbd_ctx *krbd;		/* handle for libkrbd */
 #endif
 bool skip_partial_discard;	/* rbd_skip_partial_discard config value*/
 
+int get_features(uint64_t* features) {
+        char buf[1024];
+        int r = rados_conf_get(cluster, "rbd_default_features", buf,
+                               sizeof(buf));
+        if (r < 0) {
+                simple_err("Could not get rbd_default_features value", r);
+                return r;
+        }
+
+        *features = strtol(buf, NULL, 0);
+
+        if (clone_calls) {
+                *features |= RBD_FEATURE_LAYERING;
+        }
+        if (journal_replay) {
+                *features |= (RBD_FEATURE_EXCLUSIVE_LOCK |
+                              RBD_FEATURE_JOURNALING);
+        }
+        return 0;
+}
+
 /*
  * librbd/krbd rbd_operations handlers.  Given the rest of fsx.c, no
  * attempt to do error handling is made in these handlers.
@@ -546,7 +575,7 @@ __librbd_open(const char *name, struct rbd_ctx *ctx)
 	rbd_image_t image;
 	int ret;
 
-	assert(!ctx->name && !ctx->image &&
+	ceph_assert(!ctx->name && !ctx->image &&
 	       !ctx->krbd_name && ctx->krbd_fd < 0);
 
 	ret = rbd_open(ioctx, name, &image, NULL);
@@ -574,7 +603,7 @@ __librbd_close(struct rbd_ctx *ctx)
 {
 	int ret;
 
-	assert(ctx->name && ctx->image);
+	ceph_assert(ctx->name && ctx->image);
 
 	ret = rbd_close(ctx->image);
 	if (ret < 0) {
@@ -721,16 +750,13 @@ librbd_compare_and_write(struct rbd_ctx *ctx, uint64_t off, size_t len,
 int
 librbd_get_size(struct rbd_ctx *ctx, uint64_t *size)
 {
-	rbd_image_info_t info;
 	int ret;
 
-	ret = rbd_stat(ctx->image, &info, sizeof(info));
+	ret = rbd_get_size(ctx->image, size);
 	if (ret < 0) {
-		prt("rbd_stat failed\n");
+		prt("rbd_get_size failed\n");
 		return ret;
 	}
-
-	*size = info.size;
 
 	return 0;
 }
@@ -768,16 +794,16 @@ __librbd_deep_copy(struct rbd_ctx *ctx, const char *src_snapname,
         };
 	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
                                            features);
-	assert(ret == 0);
+	ceph_assert(ret == 0);
 	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
                                            *order);
-	assert(ret == 0);
+	ceph_assert(ret == 0);
 	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
                                            stripe_unit);
-	assert(ret == 0);
+	ceph_assert(ret == 0);
 	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
                                            stripe_count);
-	assert(ret == 0);
+	ceph_assert(ret == 0);
 
 	ret = rbd_snap_set(ctx->image, src_snapname);
 	if (ret < 0) {
@@ -831,7 +857,7 @@ __librbd_deep_copy(struct rbd_ctx *ctx, const char *src_snapname,
 int
 __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 	       const char *dst_imagename, int *order, int stripe_unit,
-	       int stripe_count, bool krbd)
+	       int stripe_count)
 {
 	int ret;
 
@@ -849,13 +875,12 @@ __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 		return ret;
 	}
 
-	uint64_t features = RBD_FEATURES_ALL;
-	if (krbd) {
-		features &= ~(RBD_FEATURE_OBJECT_MAP     |
-                              RBD_FEATURE_FAST_DIFF      |
-                              RBD_FEATURE_DEEP_FLATTEN   |
-                              RBD_FEATURE_JOURNALING);
-	}
+        uint64_t features;
+        ret = get_features(&features);
+        if (ret < 0) {
+                return ret;
+        }
+
 	if (deep_copy) {
 		ret = __librbd_deep_copy(ctx, src_snapname, dst_imagename, features,
 					 order, stripe_unit, stripe_count);
@@ -884,7 +909,7 @@ librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 	     int stripe_count)
 {
 	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
-			      stripe_unit, stripe_count, false);
+			      stripe_unit, stripe_count);
 }
 
 int
@@ -926,6 +951,7 @@ const struct rbd_operations librbd_operations = {
 int
 krbd_open(const char *name, struct rbd_ctx *ctx)
 {
+	char buf[1024];
 	char *devnode;
 	int fd;
 	int ret;
@@ -934,7 +960,14 @@ krbd_open(const char *name, struct rbd_ctx *ctx)
 	if (ret < 0)
 		return ret;
 
-	ret = krbd_map(krbd, pool, name, "", "", &devnode);
+	ret = rados_conf_get(cluster, "rbd_default_map_options", buf,
+			     sizeof(buf));
+	if (ret < 0) {
+		simple_err("Could not get rbd_default_map_options value", ret);
+		return ret;
+	}
+
+	ret = krbd_map(krbd, pool, "", name, "", buf, &devnode);
 	if (ret < 0) {
 		prt("krbd_map(%s) failed\n", name);
 		return ret;
@@ -958,7 +991,7 @@ krbd_close(struct rbd_ctx *ctx)
 {
 	int ret;
 
-	assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+	ceph_assert(ctx->krbd_name && ctx->krbd_fd >= 0);
 
 	if (close(ctx->krbd_fd) < 0) {
 		ret = -errno;
@@ -1060,7 +1093,7 @@ krbd_discard(struct rbd_ctx *ctx, uint64_t off, uint64_t len)
 	int ret;
 
 	/*
-	 * BLKDISCARD goes straight to disk and doesn't do anything
+	 * BLKZEROOUT goes straight to disk and doesn't do anything
 	 * about dirty buffers.  This means we need to flush so that
 	 *
 	 *   write 0..3M
@@ -1074,19 +1107,22 @@ krbd_discard(struct rbd_ctx *ctx, uint64_t off, uint64_t len)
 	 *
 	 * returns "data 0000 data" rather than "data data data" in
 	 * case 1..2M was cached.
+	 *
+         * Note: These cache coherency issues are supposed to be fixed
+         * in recent kernels.
 	 */
 	ret = __krbd_flush(ctx, true);
 	if (ret < 0)
 		return ret;
 
 	/*
-	 * off and len must be 512-byte aligned, otherwise BLKDISCARD
+	 * off and len must be 512-byte aligned, otherwise BLKZEROOUT
 	 * will fail with -EINVAL.  This means that -K (enable krbd
 	 * mode) requires -h 512 or similar.
 	 */
-	if (ioctl(ctx->krbd_fd, BLKDISCARD, &range) < 0) {
+	if (ioctl(ctx->krbd_fd, BLKZEROOUT, &range) < 0) {
 		ret = -errno;
-		prt("BLKDISCARD(%llu, %llu) failed\n", off, len);
+		prt("BLKZEROOUT(%llu, %llu) failed\n", off, len);
 		return ret;
 	}
 
@@ -1114,7 +1150,7 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
 
-	assert(size % truncbdy == 0);
+	ceph_assert(size % truncbdy == 0);
 
 	/*
 	 * When krbd detects a size change, it calls revalidate_disk(),
@@ -1149,7 +1185,7 @@ krbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 		return ret;
 
 	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
-			      stripe_unit, stripe_count, true);
+			      stripe_unit, stripe_count);
 }
 
 int
@@ -1193,6 +1229,7 @@ nbd_open(const char *name, struct rbd_ctx *ctx)
 	SubProcess process("rbd-nbd", SubProcess::KEEP, SubProcess::PIPE,
 			   SubProcess::KEEP);
 	process.add_cmd_arg("map");
+	process.add_cmd_arg("--io-timeout=600");
 	std::string img;
 	img.append(pool);
 	img.append("/");
@@ -1245,7 +1282,7 @@ nbd_close(struct rbd_ctx *ctx)
 {
 	int r;
 
-	assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+	ceph_assert(ctx->krbd_name && ctx->krbd_fd >= 0);
 
 	if (close(ctx->krbd_fd) < 0) {
 		r = -errno;
@@ -1288,7 +1325,7 @@ nbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 		return ret;
 
 	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
-			      stripe_unit, stripe_count, false);
+			      stripe_unit, stripe_count);
 }
 
 const struct rbd_operations nbd_operations = {
@@ -1381,7 +1418,7 @@ ggate_close(struct rbd_ctx *ctx)
 {
 	int r;
 
-	assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+	ceph_assert(ctx->krbd_name && ctx->krbd_fd >= 0);
 
 	if (close(ctx->krbd_fd) < 0) {
 		r = -errno;
@@ -1513,7 +1550,7 @@ ggate_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
 
-	assert(size % truncbdy == 0);
+	ceph_assert(size % truncbdy == 0);
 
 	ret = __ggate_flush(ctx, false);
 	if (ret < 0) {
@@ -1536,7 +1573,7 @@ ggate_clone(struct rbd_ctx *ctx, const char *src_snapname,
 	}
 
 	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
-			      stripe_unit, stripe_count, false);
+			      stripe_unit, stripe_count);
 }
 
 int
@@ -1573,12 +1610,16 @@ const struct rbd_operations *ops = &librbd_operations;
 static bool rbd_image_has_parent(struct rbd_ctx *ctx)
 {
 	int ret;
+	rbd_linked_image_spec_t parent_image;
+	rbd_snap_spec_t parent_snap;
 
-	ret = rbd_get_parent_info(ctx->image, NULL, 0, NULL, 0, NULL, 0);
-	if (ret < 0 && ret != -ENOENT) {
+	ret = rbd_get_parent(ctx->image, &parent_image, &parent_snap);
+        if (ret < 0 && ret != -ENOENT) {
 		prterrcode("rbd_get_parent_info", ret);
 		exit(1);
 	}
+	rbd_linked_image_spec_cleanup(&parent_image);
+	rbd_snap_spec_cleanup(&parent_snap);
 
 	return !ret;
 }
@@ -1894,8 +1935,11 @@ create_image()
 	int r;
 	int order = 0;
 	char buf[32];
+	char client_name[256];
 
-	r = rados_create(&cluster, NULL);
+	sprintf(client_name, "client.%s", client_id);
+
+	r = rados_create2(&cluster, cluster_name, client_name, 0);
 	if (r < 0) {
 		simple_err("Could not create cluster handle", r);
 		return r;
@@ -1912,7 +1956,7 @@ create_image()
 		goto failed_shutdown;
 	}
 #if defined(WITH_KRBD)
-	r = krbd_create_from_context(rados_cct(cluster), &krbd);
+	r = krbd_create_from_context(rados_cct(cluster), 0, &krbd);
 	if (r < 0) {
 		simple_err("Could not create libkrbd handle", r);
 		goto failed_shutdown;
@@ -1932,14 +1976,12 @@ create_image()
         rados_application_enable(ioctx, "rbd", 1);
 
 	if (clone_calls || journal_replay) {
-                uint64_t features = 0;
-                if (clone_calls) {
-                        features |= RBD_FEATURE_LAYERING;
+                uint64_t features;
+                r = get_features(&features);
+                if (r < 0) {
+                        goto failed_open;
                 }
-                if (journal_replay) {
-                        features |= (RBD_FEATURE_EXCLUSIVE_LOCK |
-                                     RBD_FEATURE_JOURNALING);
-                }
+
 		r = rbd_create2(ioctx, iname, file_size, features, &order);
 	} else {
 		r = rbd_create(ioctx, iname, file_size, &order);
@@ -2392,17 +2434,25 @@ docompareandwrite(unsigned offset, unsigned size)
 
 void clone_filename(char *buf, size_t len, int clones)
 {
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 	snprintf(buf, len, "%s/fsx-%s-parent%d",
 		 dirpath, iname, clones);
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic pop
+#endif
 }
 
 void clone_imagename(char *buf, size_t len, int clones)
 {
-	if (clones > 0)
+	if (clones > 0) {
 		snprintf(buf, len, "%s-clone%d", iname, clones);
-	else
-		strncpy(buf, iname, len);
-        buf[len - 1] = '\0';
+	} else {
+		strncpy(buf, iname, len - 1);
+		buf[len - 1] = '\0';
+	}
 }
 
 void replay_imagename(char *buf, size_t len, int clones)
@@ -2439,7 +2489,7 @@ do_clone()
 	clone_imagename(imagename, sizeof(imagename), num_clones);
 	clone_imagename(lastimagename, sizeof(lastimagename),
 			num_clones - 1);
-	assert(strcmp(lastimagename, ctx.name) == 0);
+	ceph_assert(strcmp(lastimagename, ctx.name) == 0);
 
 	ret = ops->clone(&ctx, "snap", imagename, &order, stripe_unit,
 			 stripe_count);
@@ -2467,7 +2517,7 @@ do_clone()
 				newsize = 0;
 			}
 
-			assert(newsize != (uint64_t)file_size);
+			ceph_assert(newsize != (uint64_t)file_size);
 			prt("truncating image %s from 0x%llx (overlap 0x%llx) to 0x%llx\n",
 			    ctx.name, file_size, overlap, newsize);
 
@@ -3004,23 +3054,38 @@ void remove_image(rados_ioctx_t ioctx, char *imagename, bool remove_snap,
 int
 main(int argc, char **argv)
 {
+	enum {
+		LONG_OPT_CLUSTER = 1000,
+		LONG_OPT_ID = 1001
+	};
+
 	int	i, style, ch, ret;
 	char	*endp;
 	char goodfile[1024];
 	char logfile[1024];
 
+	const char* optstring = "b:c:dfgh:jkl:m:no:p:qr:s:t:w:xyCD:FGHKMLN:OP:RS:UWZ";
+	const struct option longopts[] = {
+		{"cluster", 1, NULL, LONG_OPT_CLUSTER},
+		{"id", 1, NULL, LONG_OPT_ID}};
+
 	goodfile[0] = 0;
 	logfile[0] = 0;
 
-	page_size = getpagesize();
+	page_size = PAGE_SIZE;
 	page_mask = page_size - 1;
 	mmap_mask = page_mask;
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfgh:jkl:m:no:p:qr:s:t:w:xyCD:FGHKMLN:OP:RS:UWZ"))
-	       != EOF)
+	while ((ch = getopt_long(argc, argv, optstring, longopts, NULL)) != EOF) {
 		switch (ch) {
+		case LONG_OPT_CLUSTER:
+			cluster_name = optarg;
+			break;
+		case LONG_OPT_ID:
+			client_id = optarg;
+			break;
 		case 'b':
 			simulatedopcount = getnum(optarg, &endp);
 			if (!quiet)
@@ -3193,7 +3258,7 @@ main(int argc, char **argv)
 		case 'S':
                         seed = getnum(optarg, &endp);
 			if (seed == 0)
-				seed = time(0) % 10000;
+				seed = std::random_device()() % 10000;
 			if (!quiet)
 				fprintf(stdout, "Seed set to %d\n", seed);
 			if (seed < 0)
@@ -3208,12 +3273,15 @@ main(int argc, char **argv)
 				fprintf(stdout, "mapped writes DISABLED\n");
 			break;
 		case 'Z':
+            #ifdef O_DIRECT
 			o_direct = O_DIRECT;
+            #endif
 			break;
 		default:
 			usage();
 			/* NOTREACHED */
 		}
+	}
 	argc -= optind;
 	argv += optind;
 	if (argc != 2)
@@ -3221,6 +3289,7 @@ main(int argc, char **argv)
 	pool = argv[0];
 	iname = argv[1];
 
+    #ifndef _WIN32
 	signal(SIGHUP,	cleanup);
 	signal(SIGINT,	cleanup);
 	signal(SIGPIPE,	cleanup);
@@ -3231,6 +3300,7 @@ main(int argc, char **argv)
 	signal(SIGVTALRM,	cleanup);
 	signal(SIGUSR1,	cleanup);
 	signal(SIGUSR2,	cleanup);
+    #endif
 
 	random_generator.seed(seed);
 

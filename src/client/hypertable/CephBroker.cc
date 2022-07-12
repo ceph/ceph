@@ -117,7 +117,7 @@ void CephBroker::open(ResponseCallbackOpen *cb, const char *fname,
     report_error(cb, -ceph_fd);
     return;
   }
-  HT_INFOF("open (%s) fd=%d ceph_fd=%d", fname, fd, ceph_fd);
+  HT_INFOF("open (%s) fd=%" PRIu32 " ceph_fd=%d", fname, fd, ceph_fd);
 
   {
     struct sockaddr_in addr;
@@ -152,7 +152,7 @@ void CephBroker::create(ResponseCallbackOpen *cb, const char *fname, uint32_t fl
   String directory = abspath.substr(0, abspath.rfind('/'));
   int r;
   HT_INFOF("Calling mkdirs on %s", directory.c_str());
-  if((r=ceph_mkdirs(cmount, directory.c_str(), 0644)) < 0 && r!=-EEXIST) {
+  if((r=ceph_mkdirs(cmount, directory.c_str(), 0644)) < 0 && r!=-CEPHFS_EEXIST) {
     HT_ERRORF("create failed on mkdirs: dname='%s' - %d", directory.c_str(), -r);
     report_error(cb, -r);
     return;
@@ -182,7 +182,7 @@ void CephBroker::create(ResponseCallbackOpen *cb, const char *fname, uint32_t fl
 
 void CephBroker::close(ResponseCallback *cb, uint32_t fd) {
   if (m_verbose) {
-    HT_INFOF("close fd=%d", fd);
+    HT_INFOF("close fd=%" PRIu32, fd);
   }
   OpenFileDataCephPtr fdata;
   m_open_file_map.get(fd, fdata);
@@ -193,35 +193,35 @@ void CephBroker::close(ResponseCallback *cb, uint32_t fd) {
 void CephBroker::read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount) {
   OpenFileDataCephPtr fdata;
   ssize_t nread;
-  uint64_t offset;
+  int64_t offset;
   StaticBuffer buf(new uint8_t [amount], amount);
 
-  HT_DEBUGF("read fd=%d amount = %d", fd, amount);
+  HT_DEBUGF("read fd=%" PRIu32 " amount = %d", fd, amount);
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    sprintf(errbuf, "%" PRIu32, fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
-    HT_ERRORF("bad file handle: %d", fd);
+    HT_ERRORF("bad file handle: %" PRIu32, fd);
     return;
   }
 
   if ((offset = ceph_lseek(cmount, fdata->fd, 0, SEEK_CUR)) < 0) {
-    std::string errs(cpp_strerror((int)-offset));
-    HT_ERRORF("lseek failed: fd=%d ceph_fd=%d offset=0 SEEK_CUR - %s",
+    std::string errs(cpp_strerror(offset));
+    HT_ERRORF("lseek failed: fd=%" PRIu32 " ceph_fd=%d offset=0 SEEK_CUR - %s",
 	      fd, fdata->fd, errs.c_str());
     report_error(cb, offset);
     return;
   }
 
   if ((nread = ceph_read(cmount, fdata->fd, (char *)buf.base, amount, 0)) < 0 ) {
-    HT_ERRORF("read failed: fd=%d ceph_fd=%d amount=%d", fd, fdata->fd, amount);
+    HT_ERRORF("read failed: fd=%" PRIu32 " ceph_fd=%d amount=%d", fd, fdata->fd, amount);
     report_error(cb, -nread);
     return;
   }
 
   buf.size = nread;
-  cb->response(offset, buf);
+  cb->response((uint64_t)offset, buf);
 }
 
 void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
@@ -229,21 +229,21 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
 {
   OpenFileDataCephPtr fdata;
   ssize_t nwritten;
-  uint64_t offset;
+  int64_t offset;
 
   HT_DEBUG_OUT << "append fd="<< fd <<" amount="<< amount <<" data='"
 	       << format_bytes(20, data, amount) <<" sync="<< sync << HT_END;
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    sprintf(errbuf, "%" PRIu32, fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     return;
   }
 
-  if ((offset = (uint64_t)ceph_lseek(cmount, fdata->fd, 0, SEEK_CUR)) < 0) {
-    std::string errs(cpp_strerror((int)-offset));
-    HT_ERRORF("lseek failed: fd=%d ceph_fd=%d offset=0 SEEK_CUR - %s", fd, fdata->fd,
+  if ((offset = ceph_lseek(cmount, fdata->fd, 0, SEEK_CUR)) < 0) {
+    std::string errs(cpp_strerror(offset));
+    HT_ERRORF("lseek failed: fd=%" PRIu32 " ceph_fd=%d offset=0 SEEK_CUR - %s", fd, fdata->fd,
               errs.c_str());
     report_error(cb, offset);
     return;
@@ -251,7 +251,7 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
 
   if ((nwritten = ceph_write(cmount, fdata->fd, (const char *)data, amount, 0)) < 0) {
     std::string errs(cpp_strerror(nwritten));
-    HT_ERRORF("write failed: fd=%d ceph_fd=%d amount=%d - %s",
+    HT_ERRORF("write failed: fd=%" PRIu32 " ceph_fd=%d amount=%d - %s",
 	      fd, fdata->fd, amount, errs.c_str());
     report_error(cb, -nwritten);
     return;
@@ -260,29 +260,29 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
   int r;
   if (sync && ((r = ceph_fsync(cmount, fdata->fd, true)) != 0)) {
     std::string errs(cpp_strerror(errno));
-    HT_ERRORF("flush failed: fd=%d ceph_fd=%d - %s", fd, fdata->fd, errs.c_str());
+    HT_ERRORF("flush failed: fd=%" PRIu32 " ceph_fd=%d - %s", fd, fdata->fd, errs.c_str());
     report_error(cb, r);
     return;
   }
 
-  cb->response(offset, nwritten);
+  cb->response((uint64_t)offset, nwritten);
 }
 
 void CephBroker::seek(ResponseCallback *cb, uint32_t fd, uint64_t offset) {
   OpenFileDataCephPtr fdata;
 
-  HT_DEBUGF("seek fd=%lu offset=%llu", (Lu)fd, (Llu)offset);
+  HT_DEBUGF("seek fd=%" PRIu32 " offset=%llu", fd, (Llu)offset);
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    sprintf(errbuf, "%" PRIu32, fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     return;
   }
   loff_t res = ceph_lseek(cmount, fdata->fd, offset, SEEK_SET);
   if (res < 0) {
     std::string errs(cpp_strerror((int)res));
-    HT_ERRORF("lseek failed: fd=%d ceph_fd=%d offset=%llu - %s",
+    HT_ERRORF("lseek failed: fd=%" PRIu32 " ceph_fd=%d offset=%llu - %s",
 	      fd, fdata->fd, (Llu)offset, errs.c_str());
     report_error(cb, offset);
     return;
@@ -331,19 +331,19 @@ void CephBroker::pread(ResponseCallbackRead *cb, uint32_t fd, uint64_t offset,
   ssize_t nread;
   StaticBuffer buf(new uint8_t [amount], amount);
 
-  HT_DEBUGF("pread fd=%d offset=%llu amount=%d", fd, (Llu)offset, amount);
+  HT_DEBUGF("pread fd=%" PRIu32 " offset=%llu amount=%d", fd, (Llu)offset, amount);
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    sprintf(errbuf, "%" PRIu32, fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     return;
   }
 
   if ((nread = ceph_read(cmount, fdata->fd, (char *)buf.base, amount, offset)) < 0) {
     std::string errs(cpp_strerror(nread));
-    HT_ERRORF("pread failed: fd=%d ceph_fd=%d amount=%d offset=%llu - %s", fd, fdata->fd,
-              amount, (Llu)offset, errs.c_str());
+    HT_ERRORF("pread failed: fd=%" PRIu32 " ceph_fd=%d amount=%d offset=%llu - %s",
+	      fd, fdata->fd, amount, (Llu)offset, errs.c_str());
     report_error(cb, nread);
     return;
   }
@@ -360,7 +360,7 @@ void CephBroker::mkdirs(ResponseCallback *cb, const char *dname) {
 
   make_abs_path(dname, absdir);
   int r;
-  if((r=ceph_mkdirs(cmount, absdir.c_str(), 0644)) < 0 && r!=-EEXIST) {
+  if((r=ceph_mkdirs(cmount, absdir.c_str(), 0644)) < 0 && r!=-CEPHFS_EEXIST) {
     HT_ERRORF("mkdirs failed: dname='%s' - %d", absdir.c_str(), -r);
     report_error(cb, -r);
     return;
@@ -388,7 +388,7 @@ int CephBroker::rmdir_recursive(const char *directory) {
   int r;
   if ((r = ceph_opendir(cmount, directory, &dirp)) < 0)
     return r; //failed to open
-  while ((r = ceph_readdirplus_r(cmount, dirp, &de, &stx, CEPH_STATX_INO, AT_NO_ATTR_SYNC, NULL)) > 0) {
+  while ((r = ceph_readdirplus_r(cmount, dirp, &de, &stx, CEPH_STATX_INO, AT_STATX_DONT_SYNC, NULL)) > 0) {
     String new_dir = de.d_name;
     if(!(new_dir.compare(".")==0 || new_dir.compare("..")==0)) {
       new_dir = directory;
@@ -409,11 +409,11 @@ int CephBroker::rmdir_recursive(const char *directory) {
 void CephBroker::flush(ResponseCallback *cb, uint32_t fd) {
   OpenFileDataCephPtr fdata;
 
-  HT_DEBUGF("flush fd=%d", fd);
+  HT_DEBUGF("flush fd=%" PRIu32, fd);
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    sprintf(errbuf, "%" PRIu32, fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     return;
   }
@@ -421,7 +421,7 @@ void CephBroker::flush(ResponseCallback *cb, uint32_t fd) {
   int r;
   if ((r = ceph_fsync(cmount, fdata->fd, true)) != 0) {
     std::string errs(cpp_strerror(r));
-    HT_ERRORF("flush failed: fd=%d  ceph_fd=%d - %s", fd, fdata->fd, errs.c_str());
+    HT_ERRORF("flush failed: fd=%" PRIu32 " ceph_fd=%d - %s", fd, fdata->fd, errs.c_str());
     report_error(cb, -r);
     return;
   }
@@ -459,7 +459,7 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
   int bufpos;
   while (1) {
     r = ceph_getdnames(cmount, dirp, buf, buflen);
-    if (r==-ERANGE) { //expand the buffer
+    if (r==-CEPHFS_ERANGE) { //expand the buffer
       delete [] buf;
       buflen *= 2;
       buf = new char[buflen];

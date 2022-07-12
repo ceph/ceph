@@ -26,10 +26,10 @@ class EpollDriver : public EventDriver {
   int epfd;
   struct epoll_event *events;
   CephContext *cct;
-  int size;
+  int nevent;
 
  public:
-  explicit EpollDriver(CephContext *c): epfd(-1), events(NULL), cct(c), size(0) {}
+  explicit EpollDriver(CephContext *c): epfd(-1), events(NULL), cct(c), nevent(0) {}
   ~EpollDriver() override {
     if (epfd != -1)
       close(epfd);
@@ -42,7 +42,7 @@ class EpollDriver : public EventDriver {
   int add_event(int fd, int cur_mask, int add_mask) override;
   int del_event(int fd, int cur_mask, int del_mask) override;
   int resize_events(int newsize) override;
-  int event_wait(vector<FiredFileEvent> &fired_events,
+  int event_wait(std::vector<FiredFileEvent> &fired_events,
 		 struct timeval *tp) override;
 };
 

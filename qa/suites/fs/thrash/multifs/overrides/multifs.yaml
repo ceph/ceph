@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    cephfs:
+      fs:
+        - name: a
+        - name: b
+  ceph-fuse:
+    client.0:
+      cephfs_name: a
+    client.1:
+      cephfs_name: b
+  kclient:
+    client.0:
+      cephfs_name: a
+    client.1:
+      cephfs_name: b

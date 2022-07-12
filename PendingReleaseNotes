@@ -1,39 +1,45 @@
-13.0.0
-------
+>=18.0.0
 
-* The RBD C API's rbd_discard method now enforces a maximum length of
-  2GB to match the C++ API's Image::discard method. This restriction
-  prevents overflow of the result code.
-
-* *CephFS*:
-
-  * Several "ceph mds" commands have been obsoleted and replaced
-    by equivalent "ceph fs" commands:
-      - mds dump -> fs dump
-      - mds getmap -> fs dump
-      - mds stop -> mds deactivate
-      - mds set_max_mds -> fs set max_mds
-      - mds set -> fs set
-      - mds cluster_down -> fs set cluster_down true
-      - mds cluster_up -> fs set cluster_down false
-      - mds add_data_pool -> fs add_data_pool
-      - mds remove_data_pool -> fs rm_data_pool
-      - mds rm_data_pool -> fs rm_data_pool
-
-  * New CephFS file system attributes session_timeout and session_autoclose
-    are configurable via `ceph fs set`. The MDS config options
-    mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
-    obsolete.
-
-  * The JSON format of `ceph fs status` and `ceph mds stat` has changed
-    for the "up" and "info" sections of the mds_map.
-
->= 12.2.2
----------
-
-- *CephFS*:
-
-  * The CephFS client now catches failures to clear dentries during startup
-    and refuses to start as consistency and untrimmable cache issues may
-    develop. The new option client_die_on_failed_dentry_invalidate (default:
-    true) may be turned off to allow the client to proceed (dangerous!).
+* RGW's default backend for `rgw_enable_ops_log` changed from RADOS to file.
+  The default value of `rgw_ops_log_rados` is now false, and `rgw_ops_log_file_path`
+  defaults to "/var/log/ceph/ops-log-$cluster-$name.log".
+* The SPDK backend for BlueStore is now able to connect to an NVMeoF target.
+  Please note that this is not an officially supported feature.
+* RGW's pubsub interface now returns boolean fields using bool. Before this change,
+  `/topics/<topic-name>` returns "stored_secret" and "persistent" using a string
+  of "true" or "false" with quotes around them. After this change, these fields
+  are returned without quotes so they can be decoded as boolean values in JSON.
+  The same applies to the `is_truncated` field returned by `/subscriptions/<sub-name>`.
+* RGW's response of `Action=GetTopicAttributes&TopicArn=<topic-arn>` REST API now
+  returns `HasStoredSecret` and `Persistent` as boolean in the JSON string
+  encoded in `Attributes/EndPoint`.
+* All boolean fields previously rendered as string by `rgw-admin` command when
+  the JSON format is used are now rendered as boolean. If your scripts/tools
+  relies on this behavior, please update them accordingly. The impacted field names
+  are:
+  * absolute
+  * add
+  * admin
+  * appendable
+  * bucket_key_enabled
+  * delete_marker
+  * exists
+  * has_bucket_info
+  * high_precision_time
+  * index
+  * is_master
+  * is_prefix
+  * is_truncated
+  * linked
+  * log_meta
+  * log_op
+  * pending_removal
+  * read_only
+  * retain_head_object
+  * rule_exist
+  * start_with_full_sync
+  * sync_from_all
+  * syncstopped
+  * system
+  * truncated
+  * user_stats_sync

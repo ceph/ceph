@@ -26,7 +26,6 @@ function run() {
     export CEPH_MON="127.0.0.1:7126" # git grep '\<7126\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     OLD_ARGS=$CEPH_ARGS
     CEPH_ARGS+="--osd-fast-fail-on-connection-refused=false "
@@ -36,11 +35,7 @@ function run() {
     CEPH_ARGS=$OLD_ARGS"--osd-fast-fail-on-connection-refused=true "
     OLD_ARGS=$CEPH_ARGS
 
-    CEPH_ARGS+="--ms_type=simple"
-    echo "Testing simple msgr..."
-    test_fast_kill $dir || return 1
-
-    CEPH_ARGS=$OLD_ARGS"--ms_type=async"
+    CEPH_ARGS=$OLD_ARGS"--ms_type=async --mon-host=$CEPH_MON"
     echo "Testing async msgr..."
     test_fast_kill $dir || return 1
 
@@ -61,7 +56,7 @@ function test_fast_kill() {
    create_rbd_pool || return 1
 
    # make some objects so osds to ensure connectivity between osds
-   rados -p rbd bench 10 write -b 4096 --max-objects 128 --no-cleanup
+   timeout 20 rados -p rbd bench 10 write -b 4096 --max-objects 128 --no-cleanup || return 1
    sleep 1
 
    killid=0

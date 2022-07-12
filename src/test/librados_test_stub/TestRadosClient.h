@@ -5,6 +5,7 @@
 #define CEPH_TEST_RADOS_CLIENT_H
 
 #include <map>
+#include <memory>
 #include <list>
 #include <string>
 #include <vector>
@@ -15,16 +16,20 @@
 
 #include "include/rados/librados.hpp"
 #include "common/config.h"
+#include "common/config_obs.h"
 #include "include/buffer_fwd.h"
 #include "test/librados_test_stub/TestWatchNotify.h"
 
 class Finisher;
 
+namespace boost { namespace asio { struct io_context; }}
+namespace ceph { namespace async { struct io_context_pool; }}
+
 namespace librados {
 
 class TestIoCtxImpl;
 
-class TestRadosClient {
+class TestRadosClient : public md_config_obs_t {
 public:
 
   static void Deallocate(librados::TestRadosClient* client)
@@ -42,15 +47,17 @@ public:
 
   class Transaction {
   public:
-    Transaction(TestRadosClient *rados_client, const std::string &oid)
-      : rados_client(rados_client), oid(oid) {
-      rados_client->transaction_start(oid);
+    Transaction(TestRadosClient *rados_client, const std::string& nspace,
+                const std::string &oid)
+      : rados_client(rados_client), nspace(nspace), oid(oid) {
+      rados_client->transaction_start(nspace, oid);
     }
     ~Transaction() {
-      rados_client->transaction_finish(oid);
+      rados_client->transaction_finish(nspace, oid);
     }
   private:
     TestRadosClient *rados_client;
+    std::string nspace;
     std::string oid;
   };
 
@@ -63,6 +70,10 @@ public:
 
   virtual uint32_t get_nonce() = 0;
   virtual uint64_t get_instance_id() = 0;
+
+  virtual int get_min_compatible_osd(int8_t* require_osd_release) = 0;
+  virtual int get_min_compatible_client(int8_t* min_compat_client,
+                                        int8_t* require_min_compat_client) = 0;
 
   virtual int connect();
   virtual void shutdown();
@@ -93,9 +104,13 @@ public:
   virtual int aio_watch_flush(AioCompletionImpl *c);
   virtual int watch_flush() = 0;
 
-  virtual bool is_blacklisted() const = 0;
-  virtual int blacklist_add(const std::string& client_address,
+  virtual bool is_blocklisted() const = 0;
+  virtual int blocklist_add(const std::string& client_address,
 			    uint32_t expire_seconds) = 0;
+
+  virtual int wait_for_latest_osd_map() {
+    return 0;
+  }
 
   Finisher *get_aio_finisher() {
     return m_aio_finisher;
@@ -111,13 +126,22 @@ public:
 
   void finish_aio_completion(AioCompletionImpl *c, int r);
 
+  boost::asio::io_context& get_io_context();
+
 protected:
   virtual ~TestRadosClient();
 
-  virtual void transaction_start(const std::string &oid) = 0;
-  virtual void transaction_finish(const std::string &oid) = 0;
+  virtual void transaction_start(const std::string& nspace,
+                                 const std::string &oid) = 0;
+  virtual void transaction_finish(const std::string& nspace,
+                                  const std::string &oid) = 0;
+
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set<std::string> &changed) override;
 
 private:
+  struct IOContextPool;
 
   CephContext *m_cct;
   std::atomic<uint64_t> m_refcount = { 0 };
@@ -130,6 +154,7 @@ private:
   std::vector<Finisher *> m_finishers;
   boost::hash<std::string> m_hash;
 
+  std::unique_ptr<ceph::async::io_context_pool> m_io_context_pool;
 };
 
 } // namespace librados

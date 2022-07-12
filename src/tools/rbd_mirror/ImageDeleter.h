@@ -17,8 +17,9 @@
 
 #include "include/utime.h"
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
-#include "types.h"
+#include "common/ceph_mutex.h"
+#include "common/Timer.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 #include <atomic>
 #include <deque>
@@ -29,15 +30,17 @@
 
 class AdminSocketHook;
 class Context;
-class ContextWQ;
-class SafeTimer;
-namespace librbd { struct ImageCtx; }
+namespace librbd {
+struct ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
 
 template <typename> class ServiceDaemon;
 template <typename> class Threads;
+template <typename> class Throttler;
 
 namespace image_deleter { template <typename> struct TrashWatcher; }
 
@@ -47,8 +50,17 @@ namespace image_deleter { template <typename> struct TrashWatcher; }
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageDeleter {
 public:
+  static ImageDeleter* create(
+      librados::IoCtx& local_io_ctx, Threads<librbd::ImageCtx>* threads,
+      Throttler<librbd::ImageCtx>* image_deletion_throttler,
+      ServiceDaemon<librbd::ImageCtx>* service_daemon) {
+    return new ImageDeleter(local_io_ctx, threads, image_deletion_throttler,
+                            service_daemon);
+  }
+
   ImageDeleter(librados::IoCtx& local_io_ctx,
                Threads<librbd::ImageCtx>* threads,
+               Throttler<librbd::ImageCtx>* image_deletion_throttler,
                ServiceDaemon<librbd::ImageCtx>* service_daemon);
 
   ImageDeleter(const ImageDeleter&) = delete;
@@ -56,12 +68,13 @@ public:
 
   static void trash_move(librados::IoCtx& local_io_ctx,
                          const std::string& global_image_id, bool resync,
-                         ContextWQ* work_queue, Context* on_finish);
+                         librbd::asio::ContextWQ* work_queue,
+                         Context* on_finish);
 
   void init(Context* on_finish);
   void shut_down(Context* on_finish);
 
-  void print_status(Formatter *f, std::stringstream *ss);
+  void print_status(Formatter *f);
 
   // for testing purposes
   void wait_for_deletion(const std::string &image_id,
@@ -75,6 +88,7 @@ public:
   }
 
 private:
+  using clock_t = ceph::real_clock;
   struct TrashListener : public image_deleter::TrashListener {
     ImageDeleter *image_deleter;
 
@@ -82,7 +96,7 @@ private:
     }
 
     void handle_trash_image(const std::string& image_id,
-                            const utime_t& deferment_end_time) override {
+      const ceph::real_clock::time_point& deferment_end_time) override {
       image_deleter->handle_trash_image(image_id, deferment_end_time);
     }
   };
@@ -92,7 +106,7 @@ private:
 
     image_deleter::ErrorResult error_result = {};
     int error_code = 0;
-    utime_t retry_time = {};
+    clock_t::time_point retry_time;
     int retries = 0;
 
     DeleteInfo(const std::string& image_id)
@@ -108,7 +122,7 @@ private:
     return os;
     }
 
-    void print_status(Formatter *f, std::stringstream *ss,
+    void print_status(Formatter *f,
                       bool print_failure_info=false);
   };
   typedef std::shared_ptr<DeleteInfo> DeleteInfoRef;
@@ -117,6 +131,7 @@ private:
 
   librados::IoCtx& m_local_io_ctx;
   Threads<librbd::ImageCtx>* m_threads;
+  Throttler<librbd::ImageCtx>* m_image_deletion_throttler;
   ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
 
   image_deleter::TrashWatcher<ImageCtxT>* m_trash_watcher = nullptr;
@@ -128,7 +143,7 @@ private:
 
   AsyncOpTracker m_async_op_tracker;
 
-  Mutex m_lock;
+  ceph::mutex m_lock;
   DeleteQueue m_delete_queue;
   DeleteQueue m_retry_delete_queue;
   DeleteQueue m_in_flight_delete_queue;
@@ -156,7 +171,7 @@ private:
   void handle_retry_timer();
 
   void handle_trash_image(const std::string& image_id,
-                          const utime_t& deferment_end_time);
+                          const clock_t::time_point& deferment_end_time);
 
   void shut_down_trash_watcher(Context* on_finish);
   void wait_for_ops(Context* on_finish);

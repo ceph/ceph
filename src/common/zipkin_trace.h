@@ -72,18 +72,20 @@ class Trace {
 
 #endif // !WITH_BLKIN
 
-static inline void encode(const blkin_trace_info& b, bufferlist& bl)
+static inline void encode(const blkin_trace_info& b, ceph::buffer::list& bl)
 {
-  ::encode(b.trace_id, bl);
-  ::encode(b.span_id, bl);
-  ::encode(b.parent_span_id, bl);
+  using ceph::encode;
+  encode(b.trace_id, bl);
+  encode(b.span_id, bl);
+  encode(b.parent_span_id, bl);
 }
 
-static inline void decode(blkin_trace_info& b, bufferlist::iterator& p)
+static inline void decode(blkin_trace_info& b, ceph::buffer::list::const_iterator& p)
 {
-  ::decode(b.trace_id, p);
-  ::decode(b.span_id, p);
-  ::decode(b.parent_span_id, p);
+  using ceph::decode;
+  decode(b.trace_id, p);
+  decode(b.span_id, p);
+  decode(b.parent_span_id, p);
 }
 
 

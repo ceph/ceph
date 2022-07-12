@@ -1,4 +1,6 @@
+if(NOT WIN32)
 # get_command_descriptions
+# libmon not currently available on Windows.
 add_executable(get_command_descriptions
   get_command_descriptions.cc
   $<TARGET_OBJECTS:common_texttable_obj>
@@ -6,19 +8,43 @@ add_executable(get_command_descriptions
 target_link_libraries(get_command_descriptions
   mon
   global
-  ${LEVELDB_LIBRARIES}
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   )
+endif(NOT WIN32)
 
-if(HAVE_BLKID)
+# Though FreeBSD has blkdev support, the unittests' mocks only work in Linux
+if(HAVE_BLKID AND LINUX)
   # unittest_blkdev
   add_executable(unittest_blkdev
-    test_blkdev.cc
-    )
+    test_blkdev.cc)
   add_ceph_unittest(unittest_blkdev)
-  target_link_libraries(unittest_blkdev ceph-common ${BLKID_LIBRARIES})
+  target_link_libraries(unittest_blkdev global ${BLKID_LIBRARIES})
+endif()
+
+# unittest_lockdep
+if(WITH_CEPH_DEBUG_MUTEX)
+  add_executable(unittest_lockdep
+    test_lockdep.cc)
+  add_ceph_unittest(unittest_lockdep)
+  target_link_libraries(unittest_lockdep ceph-common)
+endif()
+
+# unittest_counter
+add_executable(unittest_counter
+  test_counter.cc)
+add_ceph_unittest(unittest_counter)
+target_link_libraries(unittest_counter ceph-common)
+
+# FreeBSD only has shims to support NUMA, no functional code.
+if(LINUX)
+# unittest_numa
+add_executable(unittest_numa
+  test_numa.cc
+  )
+add_ceph_unittest(unittest_numa)
+target_link_libraries(unittest_numa ceph-common)
 endif()
 
 # unittest_bloom_filter
@@ -27,6 +53,13 @@ add_executable(unittest_bloom_filter
   )
 add_ceph_unittest(unittest_bloom_filter)
 target_link_libraries(unittest_bloom_filter ceph-common)
+
+# unittest_lruset
+add_executable(unittest_lruset
+  test_lruset.cc
+  )
+add_ceph_unittest(unittest_lruset)
+target_link_libraries(unittest_lruset)
 
 # unittest_histogram
 add_executable(unittest_histogram
@@ -39,14 +72,19 @@ target_link_libraries(unittest_histogram ceph-common)
 add_executable(unittest_prioritized_queue
   test_prioritized_queue.cc
   )
+target_link_libraries(unittest_prioritized_queue ceph-common)
 add_ceph_unittest(unittest_prioritized_queue)
 
+if(NOT WIN32)
 # unittest_mclock_priority_queue
 add_executable(unittest_mclock_priority_queue
   test_mclock_priority_queue.cc
   )
 add_ceph_unittest(unittest_mclock_priority_queue)
-target_link_libraries(unittest_mclock_priority_queue ceph-common dmclock)
+target_link_libraries(unittest_mclock_priority_queue
+  ceph-common
+  dmclock::dmclock)
+endif(NOT WIN32)
 
 # unittest_str_map
 add_executable(unittest_str_map
@@ -54,6 +92,22 @@ add_executable(unittest_str_map
   )
 add_ceph_unittest(unittest_str_map)
 target_link_libraries(unittest_str_map ceph-common)
+
+# unittest_json_formattable
+add_executable(unittest_json_formattable
+  test_json_formattable.cc
+  )
+add_ceph_unittest(unittest_json_formattable ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_json_formattable)
+# add_dependencies(unittest_json_formattable ceph-common)
+target_link_libraries(unittest_json_formattable ceph-common global ${BLKID_LIBRARIES})
+
+# unittest_json_formatter
+add_executable(unittest_json_formatter
+  test_json_formatter.cc
+  )
+add_ceph_unittest(unittest_json_formatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_json_formatter)
+# add_dependencies(unittest_json_formatter ceph-common)
+target_link_libraries(unittest_json_formatter ceph-common global ${BLKID_LIBRARIES})
 
 # unittest_sharedptr_registry
 add_executable(unittest_sharedptr_registry
@@ -92,20 +146,21 @@ add_executable(unittest_util
   ${CMAKE_SOURCE_DIR}/src/common/util.cc
   )
 add_ceph_unittest(unittest_util)
-target_link_libraries(unittest_util global)
+target_link_libraries(unittest_util global StdFilesystem::filesystem)
 
 # unittest_random
 add_executable(unittest_random
   test_random.cc
   )
 add_ceph_unittest(unittest_random)
+target_link_libraries(unittest_random Boost::random)
 
 # unittest_throttle
 add_executable(unittest_throttle
   Throttle.cc
   $<TARGET_OBJECTS:unit-main>
   )
-add_ceph_unittest(unittest_throttle)
+add_ceph_unittest(unittest_throttle PARALLEL)
 target_link_libraries(unittest_throttle global) 
 
 # unittest_lru
@@ -115,12 +170,12 @@ add_executable(unittest_lru
 add_ceph_unittest(unittest_lru)
 target_link_libraries(unittest_lru ceph-common)
 
-# unittest_io_priority
-add_executable(unittest_io_priority
-  test_io_priority.cc
+# unittest_intrusive_lru
+add_executable(unittest_intrusive_lru
+  test_intrusive_lru.cc
   )
-add_ceph_unittest(unittest_io_priority)
-target_link_libraries(unittest_io_priority ceph-common)
+add_ceph_unittest(unittest_intrusive_lru)
+target_link_libraries(unittest_intrusive_lru ceph-common)
 
 # unittest_crc32c
 add_executable(unittest_crc32c
@@ -157,6 +212,13 @@ add_executable(unittest_url_escape
   )
 add_ceph_unittest(unittest_url_escape)
 target_link_libraries(unittest_url_escape ceph-common)
+
+# unittest_pretty_binary
+add_executable(unittest_pretty_binary
+  test_pretty_binary.cc
+  )
+add_ceph_unittest(unittest_pretty_binary)
+target_link_libraries(unittest_pretty_binary ceph-common)
 
 # unittest_readahead
 add_executable(unittest_readahead
@@ -197,27 +259,21 @@ add_executable(unittest_interval_set
   test_interval_set.cc
 )
 add_ceph_unittest(unittest_interval_set)
-target_link_libraries(unittest_interval_set ceph-common)
+target_link_libraries(unittest_interval_set ceph-common GTest::Main)
 
 # unittest_weighted_priority_queue
 add_executable(unittest_weighted_priority_queue
   test_weighted_priority_queue.cc
   )
+target_link_libraries(unittest_weighted_priority_queue ceph-common)
 add_ceph_unittest(unittest_weighted_priority_queue)
 
-# unittest_mutex_debug
-add_executable(unittest_mutex_debug
-  test_mutex_debug.cc
-  )
-add_ceph_unittest(unittest_mutex_debug)
-target_link_libraries(unittest_mutex_debug ceph-common)
-
-# unittest_mutex
-add_executable(unittest_mutex
-  test_mutex.cc
-  )
-add_ceph_unittest(unittest_mutex)
-target_link_libraries(unittest_mutex ceph-common)
+if(WITH_CEPH_DEBUG_MUTEX)
+  add_executable(unittest_mutex_debug
+    test_mutex_debug.cc)
+  add_ceph_unittest(unittest_mutex_debug)
+  target_link_libraries(unittest_mutex_debug ceph-common)
+endif()
 
 # unittest_shunique_lock
 add_executable(unittest_shunique_lock
@@ -225,6 +281,11 @@ add_executable(unittest_shunique_lock
   )
 add_ceph_unittest(unittest_shunique_lock)
 target_link_libraries(unittest_shunique_lock ceph-common)
+
+add_executable(unittest_fair_mutex
+  test_fair_mutex.cc)
+add_ceph_unittest(unittest_fair_mutex)
+target_link_libraries(unittest_fair_mutex ceph-common)
 
 # unittest_perf_histogram
 add_executable(unittest_perf_histogram
@@ -242,34 +303,32 @@ if(WITH_CEPHFS)
   target_link_libraries(unittest_global_doublefree cephfs librados)
 endif(WITH_CEPHFS)
 
+if(NOT WIN32)
 add_executable(unittest_dns_resolve
   dns_resolve.cc
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(unittest_dns_resolve global)
 add_ceph_unittest(unittest_dns_resolve)
+endif()
 
 add_executable(unittest_back_trace
   test_back_trace.cc)
 set_source_files_properties(test_back_trace.cc PROPERTIES
   COMPILE_FLAGS -fno-inline)
-target_link_libraries(unittest_back_trace ceph-common)
 add_ceph_unittest(unittest_back_trace)
+target_link_libraries(unittest_back_trace ceph-common)
 
 add_executable(unittest_hostname
     test_hostname.cc)
-target_link_libraries(unittest_hostname ceph-common)
 add_ceph_unittest(unittest_hostname)
+target_link_libraries(unittest_hostname ceph-common)
 
 add_executable(unittest_iso_8601
     test_iso_8601.cc)
-target_link_libraries(unittest_iso_8601 ceph-common)
 add_ceph_unittest(unittest_iso_8601)
-
-add_executable(unittest_backport_std test_backport_std.cc)
-add_ceph_unittest(unittest_backport_std)
+target_link_libraries(unittest_iso_8601 ceph-common)
 
 add_executable(unittest_convenience test_convenience.cc)
-target_link_libraries(unittest_convenience ceph-common)
 add_ceph_unittest(unittest_convenience)
 
 add_executable(unittest_bounded_key_counter
@@ -278,5 +337,46 @@ add_executable(unittest_bounded_key_counter
 target_link_libraries(unittest_bounded_key_counter global)
 add_ceph_unittest(unittest_bounded_key_counter)
 
+add_executable(unittest_split test_split.cc)
+add_ceph_unittest(unittest_split)
+
 add_executable(unittest_static_ptr test_static_ptr.cc)
 add_ceph_unittest(unittest_static_ptr)
+
+add_executable(unittest_hobject test_hobject.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_hobject global ceph-common)
+add_ceph_unittest(unittest_hobject)
+
+add_executable(unittest_async_completion test_async_completion.cc)
+add_ceph_unittest(unittest_async_completion)
+target_link_libraries(unittest_async_completion ceph-common Boost::system)
+
+add_executable(unittest_async_shared_mutex test_async_shared_mutex.cc)
+add_ceph_unittest(unittest_async_shared_mutex)
+target_link_libraries(unittest_async_shared_mutex ceph-common Boost::system)
+
+add_executable(unittest_cdc test_cdc.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_cdc global ceph-common)
+add_ceph_unittest(unittest_cdc)
+
+add_executable(unittest_ceph_timer test_ceph_timer.cc)
+add_ceph_unittest(unittest_ceph_timer)
+
+add_executable(unittest_option test_option.cc)
+target_link_libraries(unittest_option ceph-common GTest::Main)
+add_ceph_unittest(unittest_option)
+
+add_executable(unittest_blocked_completion test_blocked_completion.cc)
+add_ceph_unittest(unittest_blocked_completion)
+target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
+
+add_executable(unittest_allocate_unique test_allocate_unique.cc)
+add_ceph_unittest(unittest_allocate_unique)
+
+if(WITH_SYSTEMD)
+  add_executable(unittest_journald_logger test_journald_logger.cc)
+  target_link_libraries(unittest_journald_logger ceph-common)
+  add_ceph_unittest(unittest_journald_logger)
+endif()

@@ -1,6 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "common/version.h"
@@ -16,7 +15,6 @@
 
 #include "test/osd/RadosModel.h"
 
-
 using namespace std;
 
 class WeightedTestGenerator : public TestOpGenerator
@@ -30,15 +28,19 @@ public:
 			int max_seconds,
 			bool ec_pool,
 			bool balance_reads,
+			bool localize_reads,
 			bool set_redirect,
-			bool set_chunk) :
+			bool set_chunk,
+			bool enable_dedup) :
     m_nextop(NULL), m_op(0), m_ops(ops), m_seconds(max_seconds),
     m_objects(objects), m_stats(stats),
     m_total_weight(0),
     m_ec_pool(ec_pool),
     m_balance_reads(balance_reads),
+    m_localize_reads(localize_reads),
     m_set_redirect(set_redirect),
-    m_set_chunk(set_chunk)
+    m_set_chunk(set_chunk),
+    m_enable_dedup(enable_dedup)
   {
     m_start = time(0);
     for (map<TestOpType, unsigned int>::const_iterator it = op_weights.begin();
@@ -49,15 +51,11 @@ public:
 							  m_total_weight));
     }
     if (m_set_redirect || m_set_chunk) {
-      m_redirect_objects = objects*2; // for creating objects using copy_from 
-      m_initial_redirected_objects = objects; // for rediect or set-chunk
-      // we need pre-initialization process before run the test
-      // so, m_ops is increased
       if (m_set_redirect) {
-	m_ops = ops+m_redirect_objects+m_initial_redirected_objects;
+	m_ops = ops+m_objects+m_objects;
       } else {
 	/* create 10 chunks per an object*/
-	m_ops = ops+m_redirect_objects+m_initial_redirected_objects+m_objects*10;
+	m_ops = ops+m_objects+m_objects*10;
       }
     }
   }
@@ -67,13 +65,13 @@ public:
     TestOp *retval = NULL;
 
     ++m_op;
-    if (m_op <= m_objects) {
+    if (m_op <= m_objects && !m_set_redirect && !m_set_chunk ) {
       stringstream oid;
       oid << m_op;
-      if (m_op % 2) {
+      /*if (m_op % 2) {
 	// make it a long name
 	oid << " " << string(300, 'o');
-      }
+	}*/
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
       if (m_ec_pool) {
@@ -86,7 +84,7 @@ public:
     }
     
     if (m_set_redirect || m_set_chunk) {
-      if (pre_init_extensible_tier(context, retval)) {
+      if (init_extensible_tier(context, retval)) {
 	return retval;
       }
     } 
@@ -115,52 +113,91 @@ public:
     }
     return retval;
   }
-  
-  bool pre_init_extensible_tier(RadosTestContext &context, TestOp *& op) {
+
+  bool init_extensible_tier(RadosTestContext &context, TestOp *& op) {
     /*
-     * set-redirect or set-chunk test
-     * 0. create default objects
-     * 1. create target objects (using copy from)
-     * 2. set-redirect or set-chunk
+     * set-redirect or set-chunk test (manifest test)
+     * 0. make default objects (using create op)
+     * 1. set-redirect or set-chunk
+     * 2. initialize target objects (using write op)
      * 3. wait for set-* completion
      */
-    int create_objects_end = m_objects + m_redirect_objects;
-    int set_redirect_end = create_objects_end + m_initial_redirected_objects; 
+    int copy_manifest_end = 0;
     if (m_set_chunk) {
-      /* create 10 chunks per an object*/
-      set_redirect_end += set_redirect_end + m_objects * 10;
+      copy_manifest_end = m_objects*2;
+    } else {
+      copy_manifest_end = m_objects*3;
+    }
+    int make_manifest_end = copy_manifest_end;
+    if (m_set_chunk) {
+      /* make 10 chunks per an object*/
+      make_manifest_end = make_manifest_end + m_objects * 10;
+    } else {
+      /* redirect */
+      make_manifest_end = make_manifest_end + m_objects;
     }
 
-    if (m_op <= create_objects_end) {
+    if (m_op <= m_objects) {
       stringstream oid;
-      int _oid = m_op;
-      oid << _oid;
-      if ((_oid) % 2) {
+      oid << m_op;
+      /*if (m_op % 2) {
 	oid << " " << string(300, 'o');
+	}*/
+      cout << m_op << ": write initial oid " << oid.str() << std::endl;
+      context.oid_not_flushing.insert(oid.str());
+      if (m_ec_pool) {
+	op = new WriteOp(m_op, &context, oid.str(), true, true);
+      } else {
+	op = new WriteOp(m_op, &context, oid.str(), false, true);
       }
-      stringstream oid2;
-      int _oid2 = _oid - m_objects;
-      oid2 << _oid2;
-      if ((_oid2) % 2) {
-	oid2 << " " << string(300, 'o');
-      }
-      cout << m_op << ": " << "(create target oid) copy_from oid " << oid.str() 
-	    << " from oid " << oid2.str() << std::endl;
-      op = new CopyFromOp(m_op, &context, oid.str(), oid2.str(), m_stats);
       return true;
-    } else if (m_op <= set_redirect_end) {
-      if (m_set_redirect) {
-	stringstream oid;
-	int _oid = m_op-create_objects_end;
+    } else if (m_op <= copy_manifest_end) {
+	stringstream oid, oid2;
+	//int _oid = m_op-m_objects;
+	int _oid = m_op % m_objects + 1;
 	oid << _oid;
-	if ((_oid) % 2) {
+	/*if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
+	  }*/
+
+        if (context.oid_in_use.count(oid.str())) {
+          /* previous write is not finished */
+          op = NULL;
+          m_op--;
+          cout << m_op << " wait for completion of write op! " << std::endl;
+          return true;
+        }
+
+	int _oid2 = m_op - m_objects + 1;
+	if (_oid2 > copy_manifest_end - m_objects) {
+	  _oid2 -= (copy_manifest_end - m_objects);
 	}
-	stringstream oid2;
-	int _oid2 = _oid + m_objects;
-	oid2 << _oid2;
+	oid2 << _oid2 << " " << context.low_tier_pool_name;
 	if ((_oid2) % 2) {
-	  oid2 << " " << string(300, 'o');
+	  oid2 << " " << string(300, 'm');
+	}
+	cout << m_op << ": " << "copy oid " << oid.str() << " target oid " 
+	      << oid2.str() << std::endl;
+	op = new CopyOp(m_op, &context, oid.str(), oid2.str(), context.low_tier_pool_name);
+	return true;
+    } else if (m_op <= make_manifest_end) {
+      if (m_set_redirect) {
+	stringstream oid, oid2;
+	int _oid = m_op-copy_manifest_end;
+	oid << _oid;
+	/*if ((_oid) % 2) {
+	  oid << " " << string(300, 'o');
+	  }*/
+	oid2 << _oid << " " << context.low_tier_pool_name;
+	if ((_oid) % 2) {
+	  oid2 << " " << string(300, 'm');
+	}
+	if (context.oid_in_use.count(oid.str())) {
+	  /* previous copy is not finished */
+	  op = NULL;
+	  m_op--;
+	  cout << m_op << " retry set_redirect !" << std::endl;
+	  return true;
 	}
 	cout << m_op << ": " << "set_redirect oid " << oid.str() << " target oid " 
 	      << oid2.str() << std::endl;
@@ -170,9 +207,9 @@ public:
 	stringstream oid;
 	int _oid = m_op % m_objects +1;
 	oid << _oid;
-	if ((_oid) % 2) {
+	/*if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
-	}
+	  }*/
 	if (context.oid_in_use.count(oid.str())) {
 	  /* previous set-chunk is not finished */
 	  op = NULL;
@@ -181,65 +218,38 @@ public:
 	  return true;
 	}
 	stringstream oid2;
-	int _oid2 = _oid + m_objects;
-	oid2 << _oid2;
-	if ((_oid2) % 2) {
-	  oid2 << " " << string(300, 'o');
+	oid2 << _oid << " " << context.low_tier_pool_name;
+	if ((_oid) % 2) {
+	  oid2 << " " << string(300, 'm');
 	}
 
-	/* make a chunk like source object (random offset, random length) --> 
-	 * target object (random offset)
-	 */
-	ObjectDesc contents, contents2;
-	context.find_object(oid.str(), &contents);
-	context.find_object(oid2.str(), &contents2);
-	uint32_t max_len = contents.most_recent_gen()->get_length(contents.most_recent());
-	if (max_len > contents2.most_recent_gen()->get_length(contents2.most_recent())) {
-	  max_len = contents2.most_recent_gen()->get_length(contents2.most_recent());
-	}
-	uint32_t rand_offset = rand() % max_len;
-	uint32_t rand_length = rand() % max_len;
-
-	while (rand_offset + rand_length > max_len || rand_length == 0) {
-	  rand_offset = rand() % max_len;
-	  rand_length = rand() % max_len;
-	}
-	uint32_t rand_tgt_offset = rand_offset;
-	cout << m_op << ": " << "set_chunk oid " << oid.str() << " offset: " << rand_offset 
-	     << " length: " << rand_length <<  " target oid " << oid2.str() 
-	     << " tgt_offset: " << rand_tgt_offset << std::endl;
-	op = new SetChunkOp(m_op, &context, oid.str(), rand_offset, rand_length, oid2.str(), 
-			      context.pool_name, rand_tgt_offset, m_stats);
+	cout << m_op << ": " << "set_chunk oid " << oid.str() 
+	     <<  " target oid " << oid2.str()  << std::endl;
+	op = new SetChunkOp(m_op, &context, oid.str(), oid2.str(), m_stats);
 	return true;
+      }
+    } else if (m_op == make_manifest_end + 1) {
+      int set_size = context.oid_not_in_use.size();
+      int set_manifest_size = context.oid_redirect_not_in_use.size();
+      cout << m_op << " oid_not_in_use " << set_size << " oid_redirect_not_in_use " << set_manifest_size <<  std::endl;
+      /* wait for redirect or set_chunk initialization */
+      if (set_size != m_objects || set_manifest_size != 0) {
+	op = NULL;
+	m_op--;
+	cout << m_op << " wait for manifest initialization " << std::endl;
+	return true;
+      }
+      for (int t_op = m_objects+1; t_op <= m_objects*2; t_op++) {
+	stringstream oid;
+	oid << t_op << " " << context.low_tier_pool_name;
+	if (t_op % 2) {
+	  oid << " " << string(300, 'm');
+	}
+	cout << " redirect_not_in_use: " << oid.str() << std::endl;
+	context.oid_redirect_not_in_use.insert(oid.str());
       }
     } 
 
-    if (!context.oid_redirect_not_in_use.size() && m_op > set_redirect_end) {
-      int set_size = context.oid_not_in_use.size();
-      /* wait until redirect or set_chunk completion */
-      if (set_size < m_objects + m_redirect_objects) {
-	op = NULL;
-	m_op--;
-	cout << m_op << " wait completion " << std::endl;
-	return true;
-      }
-      for (int t_op = m_objects+1; t_op <= create_objects_end; t_op++) {
-	stringstream oid;
-	oid << t_op;
-	if (t_op % 2) {
-	  oid << " " << string(300, 'o');
-	}
-	context.oid_not_flushing.erase(oid.str());
-	context.oid_not_in_use.erase(oid.str());
-	context.oid_in_use.erase(oid.str());
-	cout << m_op << ": " << " remove oid " << oid.str() << " from oid_*_use " << std::endl;
-	if (t_op > m_objects + m_initial_redirected_objects) {
-	  context.oid_redirect_not_in_use.insert(oid.str());
-	}
-      }
-      cout << m_op << ": " << " oid_not_in_use: " << context.oid_not_in_use.size()
-	    << " oid_in_use: " << context.oid_in_use.size() << std::endl;
-    }
     return false;
   }
 
@@ -248,12 +258,13 @@ private:
   TestOp *gen_op(RadosTestContext &context, TestOpType type)
   {
     string oid, oid2;
-    assert(context.oid_not_in_use.size());
+    ceph_assert(context.oid_not_in_use.size());
 
     switch (type) {
     case TEST_OP_READ:
       oid = *(rand_choose(context.oid_not_in_use));
-      return new ReadOp(m_op, &context, oid, m_balance_reads, m_stats);
+      return new ReadOp(m_op, &context, oid, m_balance_reads, m_localize_reads,
+			m_stats);
 
     case TEST_OP_WRITE:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -387,6 +398,16 @@ private:
       cout << m_op << ": " << "chunk read oid " << oid << " target oid " << oid2 << std::endl;
       return new ChunkReadOp(m_op, &context, oid, context.pool_name, false, m_stats);
 
+    case TEST_OP_TIER_PROMOTE:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "tier_promote oid " << oid << std::endl;
+      return new TierPromoteOp(m_op, &context, oid, m_stats);
+
+    case TEST_OP_TIER_FLUSH:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "tier_flush oid " << oid << std::endl;
+      return new TierFlushOp(m_op, &context, oid, m_stats);
+
     case TEST_OP_SET_REDIRECT:
       oid = *(rand_choose(context.oid_not_in_use));
       oid2 = *(rand_choose(context.oid_redirect_not_in_use));
@@ -397,6 +418,20 @@ private:
       oid = *(rand_choose(context.oid_not_in_use));
       cout << m_op << ": " << "unset_redirect oid " << oid << std::endl;
       return new UnsetRedirectOp(m_op, &context, oid, m_stats);
+
+    case TEST_OP_SET_CHUNK:
+      {
+	ceph_assert(m_enable_dedup);
+	oid = *(rand_choose(context.oid_not_in_use));
+	cout << m_op << ": " << "set_chunk oid " << oid 
+	     <<  " target oid " << std::endl;
+	return new SetChunkOp(m_op, &context, oid, "", m_stats);
+      }
+
+    case TEST_OP_TIER_EVICT:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "tier_evict oid " << oid << std::endl;
+      return new TierEvictOp(m_op, &context, oid, m_stats);
 
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
@@ -416,10 +451,10 @@ private:
   unsigned int m_total_weight;
   bool m_ec_pool;
   bool m_balance_reads;
+  bool m_localize_reads;
   bool m_set_redirect;
   bool m_set_chunk;
-  int m_redirect_objects{0};
-  int m_initial_redirected_objects{0}; 
+  bool m_enable_dedup;
 };
 
 int main(int argc, char **argv)
@@ -461,17 +496,34 @@ int main(int argc, char **argv)
     { TEST_OP_SET_REDIRECT, "set_redirect", true },
     { TEST_OP_UNSET_REDIRECT, "unset_redirect", true },
     { TEST_OP_CHUNK_READ, "chunk_read", true },
+    { TEST_OP_TIER_PROMOTE, "tier_promote", true },
+    { TEST_OP_TIER_FLUSH, "tier_flush", true },
+    { TEST_OP_SET_CHUNK, "set_chunk", true },
+    { TEST_OP_TIER_EVICT, "tier_evict", true },
     { TEST_OP_READ /* grr */, NULL },
+  };
+
+  struct {
+    const char *name;
+  } chunk_algo_types[] = {
+    { "fastcdc" },
+    { "fixcdc" },
   };
 
   map<TestOpType, unsigned int> op_weights;
   string pool_name = "rbd";
+  string low_tier_pool_name = "";
   bool ec_pool = false;
   bool no_omap = false;
   bool no_sparse = false;
   bool balance_reads = false;
+  bool localize_reads = false;
   bool set_redirect = false;
   bool set_chunk = false;
+  bool enable_dedup = false;
+  string chunk_algo = "";
+  string chunk_size = "";
+
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -494,8 +546,10 @@ int main(int argc, char **argv)
       no_omap = true;
     else if (strcmp(argv[i], "--no-sparse") == 0)
       no_sparse = true;
-    else if (strcmp(argv[i], "--balance_reads") == 0)
+    else if (strcmp(argv[i], "--balance-reads") == 0)
       balance_reads = true;
+    else if (strcmp(argv[i], "--localize-reads") == 0)
+      localize_reads = true;
     else if (strcmp(argv[i], "--pool-snaps") == 0)
       pool_snaps = true;
     else if (strcmp(argv[i], "--write-fadvise-dontneed") == 0)
@@ -546,8 +600,50 @@ int main(int argc, char **argv)
       set_redirect = true;
     } else if (strcmp(argv[i], "--set_chunk") == 0) {
       set_chunk = true;
+    } else if (strcmp(argv[i], "--low_tier_pool") == 0) {
+      /*
+       * disallow redirect or chunk object into the same pool
+       * to prevent the race. see https://github.com/ceph/ceph/pull/20096
+       */
+      low_tier_pool_name = argv[++i];
+    } else if (strcmp(argv[i], "--enable_dedup") == 0) {
+      enable_dedup = true;
+    } else if (strcmp(argv[i], "--dedup_chunk_algo") == 0) {
+      i++;
+      if (i == argc) {
+        cerr << "Missing chunking algorithm after --dedup_chunk_algo" << std::endl;
+        return 1;
+      }
+      int j;
+      for (j = 0; chunk_algo_types[j].name; ++j) {
+	if (strcmp(chunk_algo_types[j].name, argv[i]) == 0) {
+	  break;
+	}
+      }
+      if (!chunk_algo_types[j].name) {
+	cerr << "unknown op " << argv[i] << std::endl;
+	exit(1);
+      }
+      chunk_algo = chunk_algo_types[j].name;
+    } else if (strcmp(argv[i], "--dedup_chunk_size") == 0) {
+      chunk_size = argv[++i];
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
+      exit(1);
+    }
+  }
+
+  if (set_redirect || set_chunk) {
+    if (low_tier_pool_name == "") {
+      cerr << "low_tier_pool is needed" << std::endl;
+      exit(1);
+    }
+  }
+
+  if (enable_dedup) {
+    if (chunk_algo == "" || chunk_size == "") {
+      cerr << "Missing chunking algorithm: " << chunk_algo 
+	   << " or chunking size: " << chunk_size << std::endl;
       exit(1);
     }
   }
@@ -600,13 +696,18 @@ int main(int argc, char **argv)
     no_sparse,
     pool_snaps,
     write_fadvise_dontneed,
+    low_tier_pool_name,
+    enable_dedup,
+    chunk_algo,
+    chunk_size,
     id);
 
   TestOpStat stats;
   WeightedTestGenerator gen = WeightedTestGenerator(
     ops, objects,
     op_weights, &stats, max_seconds,
-    ec_pool, balance_reads, set_redirect, set_chunk);
+    ec_pool, balance_reads, localize_reads,
+    set_redirect, set_chunk, enable_dedup);
   int r = context.init();
   if (r < 0) {
     cerr << "Error initializing rados test context: "
@@ -614,6 +715,12 @@ int main(int argc, char **argv)
     exit(1);
   }
   context.loop(&gen);
+  if (enable_dedup) {
+    if (!context.check_chunks_refcount(context.low_tier_io_ctx, context.io_ctx)) {
+      cerr << " Invalid refcount " << std::endl;
+      exit(1);
+    }
+  }
 
   context.shutdown();
   cerr << context.errors << " errors." << std::endl;

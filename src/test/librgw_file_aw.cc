@@ -26,10 +26,11 @@
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "global/global_init.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 namespace {
   librgw_t rgw = nullptr;
@@ -48,7 +49,7 @@ namespace {
   bool do_verify = false;
   bool do_hexdump = false;
 
-  string bucket_name = "sorry_dave";
+  string bucket_name = "sorrydave";
   string object_name = "jocaml";
 
   struct rgw_file_handle *bucket_fh = nullptr;
@@ -75,7 +76,7 @@ namespace {
     std::vector<ZPage*> pages;
     struct iovec* iovs;
 
-    ZPageSet(int n) {
+    explicit ZPageSet(int n) {
       pages.reserve(n);
       iovs = (struct iovec*) calloc(n, sizeof(struct iovec));
       for (int page_ix = 0; page_ix < n; ++page_ix) {
@@ -199,13 +200,13 @@ TEST(LibRGW, CREATE_BUCKET) {
 
 TEST(LibRGW, LOOKUP_BUCKET) {
   int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		      RGW_LOOKUP_FLAG_NONE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
 TEST(LibRGW, LOOKUP_OBJECT) {
   int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
-		       RGW_LOOKUP_FLAG_CREATE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
   ASSERT_EQ(ret, 0);
 }
 
@@ -334,6 +335,14 @@ TEST(LibRGW, DELETE_OBJECT) {
   }
 }
 
+TEST(LibRGW, DELETE_BUCKET) {
+  if (do_delete) {
+    int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),
+			 RGW_UNLINK_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  }
+}
+
 TEST(LibRGW, CLEANUP) {
   int ret;
   if (object_fh) {
@@ -358,14 +367,10 @@ TEST(LibRGW, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
-  char *v{nullptr};
-  string val;
-  vector<const char*> args;
-
-  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
-  v = getenv("AWS_ACCESS_KEY_ID");
+  char* v = getenv("AWS_ACCESS_KEY_ID");
   if (v) {
     access_key = v;
   }
@@ -374,6 +379,8 @@ int main(int argc, char *argv[])
   if (v) {
     secret_key = v;
   }
+
+  string val;
 
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
@@ -414,7 +421,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  /* dont accidentally run as anonymous */
+  /* don't accidentally run as anonymous */
   if ((access_key == "") ||
       (secret_key == "")) {
     std::cout << argv[0] << " no AWS credentials, exiting" << std::endl;

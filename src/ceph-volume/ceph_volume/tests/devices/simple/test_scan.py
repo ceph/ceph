@@ -3,14 +3,6 @@ import pytest
 from ceph_volume.devices.simple import scan
 
 
-class TestScan(object):
-
-    def test_main_spits_help_with_no_arguments(self, capsys):
-        scan.Scan([]).main()
-        stdout, stderr = capsys.readouterr()
-        assert 'Scan an OSD directory for files' in stdout
-
-
 class TestGetContents(object):
 
     def test_multiple_lines_are_left_as_is(self, tmpfile):
@@ -50,3 +42,27 @@ class TestEtcPath(object):
         scanner._etc_path = path
         with pytest.raises(RuntimeError):
             scanner.etc_path
+
+
+class TestParseKeyring(object):
+
+    def test_newlines_are_removed(self):
+        contents = [
+            '[client.osd-lockbox.8d7a8ab2-5db0-4f83-a785-2809aba403d5]',
+            '\tkey = AQDtoGha/GYJExAA7HNl7Ukhqr7AKlCpLJk6UA==', '']
+        assert '\n' not in scan.parse_keyring('\n'.join(contents))
+
+    def test_key_has_spaces_removed(self):
+        contents = [
+            '[client.osd-lockbox.8d7a8ab2-5db0-4f83-a785-2809aba403d5]',
+            '\tkey = AQDtoGha/GYJExAA7HNl7Ukhqr7AKlCpLJk6UA==', '']
+        result = scan.parse_keyring('\n'.join(contents))
+        assert result.startswith(' ') is False
+        assert result.endswith(' ') is False
+
+    def test_actual_key_is_extracted(self):
+        contents = [
+            '[client.osd-lockbox.8d7a8ab2-5db0-4f83-a785-2809aba403d5]',
+            '\tkey = AQDtoGha/GYJExAA7HNl7Ukhqr7AKlCpLJk6UA==', '']
+        result = scan.parse_keyring('\n'.join(contents))
+        assert result == 'AQDtoGha/GYJExAA7HNl7Ukhqr7AKlCpLJk6UA=='

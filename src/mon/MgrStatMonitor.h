@@ -13,14 +13,16 @@ class MgrStatMonitor : public PaxosService {
   version_t version = 0;
   PGMapDigest digest;
   ServiceMap service_map;
+  std::map<std::string,ProgressEvent> progress_events;
 
   // pending commit
   PGMapDigest pending_digest;
   health_check_map_t pending_health_checks;
-  bufferlist pending_service_map_bl;
+  std::map<std::string,ProgressEvent> pending_progress_events;
+  ceph::buffer::list pending_service_map_bl;
 
 public:
-  MgrStatMonitor(Monitor *mn, Paxos *p, const string& service_name);
+  MgrStatMonitor(Monitor &mn, Paxos &p, const std::string& service_name);
   ~MgrStatMonitor() override;
 
   void init() override {}
@@ -64,6 +66,10 @@ public:
     return service_map;
   }
 
+  const std::map<std::string,ProgressEvent>& get_progress_events() {
+    return progress_events;
+  }
+
   // pg stat access
   const pool_stat_t* get_pool_stat(int64_t poolid) const {
     auto i = digest.pg_pool_sum.find(poolid);
@@ -78,26 +84,24 @@ public:
   }
 
   ceph_statfs get_statfs(OSDMap& osdmap,
-			 boost::optional<int64_t> data_pool) const {
+			 std::optional<int64_t> data_pool) const {
     return digest.get_statfs(osdmap, data_pool);
   }
 
-  void print_summary(Formatter *f, ostream *out) const {
+  void print_summary(ceph::Formatter *f, std::ostream *out) const {
     digest.print_summary(f, out);
   }
-  void dump_info(Formatter *f) const {
+  void dump_info(ceph::Formatter *f) const {
     digest.dump(f);
     f->dump_object("servicemap", get_service_map());
   }
-  void dump_fs_stats(stringstream *ss,
-		     Formatter *f,
-		     bool verbose) const {
-    digest.dump_fs_stats(ss, f, verbose);
+  void dump_cluster_stats(std::stringstream *ss,
+			  ceph::Formatter *f,
+			  bool verbose) const {
+    digest.dump_cluster_stats(ss, f, verbose);
   }
-  void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
+  void dump_pool_stats(const OSDMap& osdm, std::stringstream *ss, ceph::Formatter *f,
 		       bool verbose) const {
     digest.dump_pool_stats_full(osdm, ss, f, verbose);
   }
-
-  friend class C_Updated;
 };

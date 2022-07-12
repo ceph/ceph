@@ -1,7 +1,7 @@
 """
 Run a set of s3 tests on rgw.
 """
-from cStringIO import StringIO
+from io import BytesIO
 from configobj import ConfigObj
 import base64
 import contextlib
@@ -14,7 +14,7 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
-from teuthology.orchestra.connection import split_user
+from teuthology.exceptions import ConfigError
 
 log = logging.getLogger(__name__)
 
@@ -30,35 +30,27 @@ def download(ctx, config):
     assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
-    s3_branches = [ 'giant', 'firefly', 'firefly-original', 'hammer' ]
-    for (client, cconf) in config.items():
-        branch = cconf.get('force-branch', None)
-        if not branch:
-            ceph_branch = ctx.config.get('branch')
-            suite_branch = ctx.config.get('suite_branch', ceph_branch)
-            if suite_branch in s3_branches:
-                branch = cconf.get('branch', suite_branch)
-	    else:
-                branch = cconf.get('branch', 'ceph-' + suite_branch)
-        if not branch:
+    for (client, client_config) in config.items():
+        s3tests_branch = client_config.get('force-branch', None)
+        if not s3tests_branch:
             raise ValueError(
-                "Could not determine what branch to use for s3tests!")
-        else:
-            log.info("Using branch '%s' for s3tests", branch)
-        sha1 = cconf.get('sha1')
-        git_remote = cconf.get('git_remote', None) or teuth_config.ceph_git_base_url
+                "Could not determine what branch to use for s3-tests. Please add 'force-branch: {s3-tests branch name}' to the .yaml config for this s3tests task.")
+
+        log.info("Using branch '%s' for s3tests", s3tests_branch)
+        sha1 = client_config.get('sha1')
+        git_remote = client_config.get('git_remote', teuth_config.ceph_git_base_url)
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
-                '-b', branch,
+                '-b', s3tests_branch,
                 git_remote + 's3-tests.git',
-                '{tdir}/s3-tests'.format(tdir=testdir),
+                '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                 ],
             )
         if sha1 is not None:
             ctx.cluster.only(client).run(
                 args=[
-                    'cd', '{tdir}/s3-tests'.format(tdir=testdir),
+                    'cd', '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                     run.Raw('&&'),
                     'git', 'reset', '--hard', sha1,
                     ],
@@ -73,7 +65,7 @@ def download(ctx, config):
                 args=[
                     'rm',
                     '-rf',
-                    '{tdir}/s3-tests'.format(tdir=testdir),
+                    '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                     ],
                 )
 
@@ -86,8 +78,15 @@ def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
-    s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in xrange(20)))
-    s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
+    s3tests_conf[section].setdefault('access_key',
+        ''.join(random.choice(string.ascii_uppercase) for i in range(20)))
+    s3tests_conf[section].setdefault('secret_key',
+        base64.b64encode(os.urandom(40)).decode())
+    s3tests_conf[section].setdefault('totp_serial',
+        ''.join(random.choice(string.digits) for i in range(10)))
+    s3tests_conf[section].setdefault('totp_seed',
+        base64.b32encode(os.urandom(40)).decode())
+    s3tests_conf[section].setdefault('totp_seconds', '5')
 
 
 @contextlib.contextmanager
@@ -98,37 +97,173 @@ def create_users(ctx, config):
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
-    users = {'s3 main': 'foo', 's3 alt': 'bar', 's3 tenant': 'testx$tenanteduser'}
-    for client in config['clients']:
-        s3tests_conf = config['s3tests_conf'][client]
-        s3tests_conf.setdefault('fixtures', {})
-        s3tests_conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}-')
-        for section, user in users.iteritems():
-            _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
-            log.debug('Creating user {user} on {host}'.format(user=s3tests_conf[section]['user_id'], host=client))
-            cluster_name, daemon_type, client_id = teuthology.split_role(client)
-            client_with_id = daemon_type + '.' + client_id
-            ctx.cluster.only(client).run(
-                args=[
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    '{tdir}/archive/coverage'.format(tdir=testdir),
-                    'radosgw-admin',
-                    '-n', client_with_id,
-                    'user', 'create',
-                    '--uid', s3tests_conf[section]['user_id'],
-                    '--display-name', s3tests_conf[section]['display_name'],
-                    '--access-key', s3tests_conf[section]['access_key'],
-                    '--secret', s3tests_conf[section]['secret_key'],
-                    '--email', s3tests_conf[section]['email'],
-                    '--cluster', cluster_name,
-                ],
-            )
+    
+    if ctx.sts_variable:
+        users = {'s3 main': 'foo', 's3 alt': 'bar', 's3 tenant': 'testx$tenanteduser', 'iam': 'foobar'}
+        for client in config['clients']:
+            s3tests_conf = config['s3tests_conf'][client]
+            s3tests_conf.setdefault('fixtures', {})
+            s3tests_conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}-')
+            for section, user in users.items():
+                _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
+                log.debug('Creating user {user} on {host}'.format(user=s3tests_conf[section]['user_id'], host=client))
+                cluster_name, daemon_type, client_id = teuthology.split_role(client)
+                client_with_id = daemon_type + '.' + client_id
+                if section=='iam':
+                    ctx.cluster.only(client).run(
+                        args=[
+                            'adjust-ulimits',
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'radosgw-admin',
+                            '-n', client_with_id,
+                            'user', 'create',
+                            '--uid', s3tests_conf[section]['user_id'],
+                            '--display-name', s3tests_conf[section]['display_name'],
+                            '--access-key', s3tests_conf[section]['access_key'],
+                            '--secret', s3tests_conf[section]['secret_key'],
+                            '--cluster', cluster_name,
+                        ],
+                    )
+                    ctx.cluster.only(client).run(
+                        args=[
+                            'adjust-ulimits',
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'radosgw-admin',
+                            '-n', client_with_id,
+                            'caps', 'add',
+                            '--uid', s3tests_conf[section]['user_id'],
+                            '--caps', 'user-policy=*',
+                            '--cluster', cluster_name,
+                        ],
+                    )
+                    ctx.cluster.only(client).run(
+                        args=[
+                            'adjust-ulimits',
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'radosgw-admin',
+                            '-n', client_with_id,
+                            'caps', 'add',
+                            '--uid', s3tests_conf[section]['user_id'],
+                            '--caps', 'roles=*',
+                            '--cluster', cluster_name,
+                        ],
+                    )
+                    ctx.cluster.only(client).run(
+                        args=[
+                            'adjust-ulimits',
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'radosgw-admin',
+                            '-n', client_with_id,
+                            'caps', 'add',
+                            '--uid', s3tests_conf[section]['user_id'],
+                            '--caps', 'oidc-provider=*',
+                            '--cluster', cluster_name,
+                        ],
+                    )
+
+                else: 
+                    ctx.cluster.only(client).run(
+                        args=[
+                            'adjust-ulimits',
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'radosgw-admin',
+                            '-n', client_with_id,
+                            'user', 'create',
+                            '--uid', s3tests_conf[section]['user_id'],
+                            '--display-name', s3tests_conf[section]['display_name'],
+                            '--access-key', s3tests_conf[section]['access_key'],
+                            '--secret', s3tests_conf[section]['secret_key'],
+                            '--email', s3tests_conf[section]['email'],
+                            '--caps', 'user-policy=*',
+                            '--cluster', cluster_name,
+                        ],
+                    )
+                    if not ctx.dbstore_variable:
+                        ctx.cluster.only(client).run(
+                            args=[
+                                'adjust-ulimits',
+                                'ceph-coverage',
+                                '{tdir}/archive/coverage'.format(tdir=testdir),
+                                'radosgw-admin',
+                                '-n', client_with_id,
+                                'mfa', 'create',
+                                '--uid', s3tests_conf[section]['user_id'],
+                                '--totp-serial', s3tests_conf[section]['totp_serial'],
+                                '--totp-seed', s3tests_conf[section]['totp_seed'],
+                                '--totp-seconds', s3tests_conf[section]['totp_seconds'],
+                                '--totp-window', '8',
+                                '--totp-seed-type', 'base32',
+                                '--cluster', cluster_name,
+                            ],
+                        )
+
+    else:
+        users = {'s3 main': 'foo', 's3 alt': 'bar', 's3 tenant': 'testx$tenanteduser'}
+        for client in config['clients']:
+            s3tests_conf = config['s3tests_conf'][client]
+            s3tests_conf.setdefault('fixtures', {})
+            s3tests_conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}-')
+            for section, user in users.items():
+                _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
+                log.debug('Creating user {user} on {host}'.format(user=s3tests_conf[section]['user_id'], host=client))
+                cluster_name, daemon_type, client_id = teuthology.split_role(client)
+                client_with_id = daemon_type + '.' + client_id
+                ctx.cluster.only(client).run(
+                        args=[
+                            'adjust-ulimits',
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'radosgw-admin',
+                            '-n', client_with_id,
+                            'user', 'create',
+                            '--uid', s3tests_conf[section]['user_id'],
+                            '--display-name', s3tests_conf[section]['display_name'],
+                            '--access-key', s3tests_conf[section]['access_key'],
+                            '--secret', s3tests_conf[section]['secret_key'],
+                            '--email', s3tests_conf[section]['email'],
+                            '--caps', 'user-policy=*',
+                            '--cluster', cluster_name,
+                        ],
+                    )
+                if not ctx.dbstore_variable:
+                    ctx.cluster.only(client).run(
+                            args=[
+                                'adjust-ulimits',
+                                'ceph-coverage',
+                                '{tdir}/archive/coverage'.format(tdir=testdir),
+                                'radosgw-admin',
+                                '-n', client_with_id,
+                                'mfa', 'create',
+                                '--uid', s3tests_conf[section]['user_id'],
+                                '--totp-serial', s3tests_conf[section]['totp_serial'],
+                                '--totp-seed', s3tests_conf[section]['totp_seed'],
+                                '--totp-seconds', s3tests_conf[section]['totp_seconds'],
+                                '--totp-window', '8',
+                                '--totp-seed-type', 'base32',
+                                '--cluster', cluster_name,
+                            ],
+                        )
+
+    if "TOKEN" in os.environ:
+        s3tests_conf.setdefault('webidentity', {})
+        s3tests_conf['webidentity'].setdefault('token',os.environ['TOKEN'])
+        s3tests_conf['webidentity'].setdefault('aud',os.environ['AUD'])
+        s3tests_conf['webidentity'].setdefault('sub',os.environ['SUB'])
+        s3tests_conf['webidentity'].setdefault('azp',os.environ['AZP'])
+        s3tests_conf['webidentity'].setdefault('user_token',os.environ['USER_TOKEN'])
+        s3tests_conf['webidentity'].setdefault('thumbprint',os.environ['THUMBPRINT'])
+        s3tests_conf['webidentity'].setdefault('KC_REALM',os.environ['KC_REALM'])
+
     try:
         yield
     finally:
         for client in config['clients']:
-            for user in users.itervalues():
+            for user in users.values():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
                 client_with_id = daemon_type + '.' + client_id
@@ -156,65 +291,140 @@ def configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring s3-tests...')
     testdir = teuthology.get_testdir(ctx)
-    for client, properties in config['clients'].iteritems():
+    for client, properties in config['clients'].items():
+        properties = properties or {}
         s3tests_conf = config['s3tests_conf'][client]
-        if properties is not None and 'rgw_server' in properties:
-            host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
-                log.info('roles: ' + str(roles))
-                log.info('target: ' + str(target))
-                if properties['rgw_server'] in roles:
-                    _, host = split_user(target)
-            assert host is not None, "Invalid client specified as the rgw_server"
-            s3tests_conf['DEFAULT']['host'] = host
-        else:
-            s3tests_conf['DEFAULT']['host'] = 'localhost'
+        s3tests_conf['DEFAULT']['calling_format'] = properties.get('calling-format', 'ordinary')
 
-        if properties is not None and 'slow_backend' in properties:
-	    s3tests_conf['fixtures']['slow backend'] = properties['slow_backend']
+        # use rgw_server if given, or default to local client
+        role = properties.get('rgw_server', client)
+
+        endpoint = ctx.rgw.role_endpoints.get(role)
+        assert endpoint, 's3tests: no rgw endpoint for {}'.format(role)
+
+        s3tests_conf['DEFAULT']['host'] = endpoint.dns_name
+
+        website_role = properties.get('rgw_website_server')
+        if website_role:
+            website_endpoint = ctx.rgw.role_endpoints.get(website_role)
+            assert website_endpoint, \
+                    's3tests: no rgw endpoint for rgw_website_server {}'.format(website_role)
+            assert website_endpoint.website_dns_name, \
+                    's3tests: no dns-s3website-name for rgw_website_server {}'.format(website_role)
+            s3tests_conf['DEFAULT']['s3website_domain'] = website_endpoint.website_dns_name
+
+        if hasattr(ctx, 'barbican'):
+            properties = properties['barbican']
+            if properties is not None and 'kms_key' in properties:
+                if not (properties['kms_key'] in ctx.barbican.keys):
+                    raise ConfigError('Key '+properties['kms_key']+' not defined')
+
+                if not (properties['kms_key2'] in ctx.barbican.keys):
+                    raise ConfigError('Key '+properties['kms_key2']+' not defined')
+
+                key = ctx.barbican.keys[properties['kms_key']]
+                s3tests_conf['DEFAULT']['kms_keyid'] = key['id']
+
+                key = ctx.barbican.keys[properties['kms_key2']]
+                s3tests_conf['DEFAULT']['kms_keyid2'] = key['id']
+
+        elif hasattr(ctx, 'vault'):
+            engine_or_flavor = vars(ctx.vault).get('flavor',ctx.vault.engine)
+            keys=[]
+            for name in (x['Path'] for x in vars(ctx.vault).get('keys', {}).get(ctx.rgw.vault_role)):
+                keys.append(name)
+
+            keys.extend(['testkey-1','testkey-2'])
+            if engine_or_flavor == "old":
+                keys=[keys[i] + "/1" for i in range(len(keys))]
+
+            properties = properties.get('vault_%s' % engine_or_flavor, {})
+            s3tests_conf['DEFAULT']['kms_keyid'] = properties.get('key_path', keys[0])
+            s3tests_conf['DEFAULT']['kms_keyid2'] = properties.get('key_path2', keys[1])
+        elif hasattr(ctx.rgw, 'pykmip_role'):
+            keys=[]
+            for name in (x['Name'] for x in ctx.pykmip.keys[ctx.rgw.pykmip_role]):
+                p=name.partition('-')
+                keys.append(p[2] if p[2] else p[0])
+            keys.extend(['testkey-1', 'testkey-2'])
+            s3tests_conf['DEFAULT']['kms_keyid'] = properties.get('kms_key', keys[0])
+            s3tests_conf['DEFAULT']['kms_keyid2'] = properties.get('kms_key2', keys[1])
+        else:
+            # Fallback scenario where it's the local (ceph.conf) kms being tested
+            s3tests_conf['DEFAULT']['kms_keyid'] = 'testkey-1'
+            s3tests_conf['DEFAULT']['kms_keyid2'] = 'testkey-2'
+
+        slow_backend = properties.get('slow_backend')
+        if slow_backend:
+            s3tests_conf['fixtures']['slow backend'] = slow_backend
+
+        storage_classes = properties.get('storage classes')
+        if storage_classes:
+            s3tests_conf['s3 main']['storage_classes'] = storage_classes
+
+        lc_debug_interval = properties.get('lc_debug_interval')
+        if lc_debug_interval:
+            s3tests_conf['s3 main']['lc_debug_interval'] = lc_debug_interval
+
+        if ctx.rgw_cloudtier is not None:
+            log.info(' ctx.rgw_cloudtier config  is %s ...', ctx.rgw_cloudtier.config)
+            client_rgw_config = ctx.rgw_cloudtier.config.get(client)
+            if client_rgw_config:
+                log.info(' ctx.rgw_cloudtier config  is %s ...', client_rgw_config)
+                cloudtier_user = client_rgw_config.get('cloudtier_user')
+                cloud_client = client_rgw_config.get('cloud_client')
+                endpoint = ctx.rgw.role_endpoints.get(cloud_client)
+                s3tests_conf['s3 cloud']['host'] = endpoint.dns_name
+                s3tests_conf['s3 cloud']['port'] = endpoint.port
+                s3tests_conf['s3 cloud']['access_key'] = cloudtier_user.get('cloud_access_key')
+                s3tests_conf['s3 cloud']['secret_key'] = cloudtier_user.get('cloud_secret')
+                s3tests_conf['s3 cloud']['cloud_storage_class'] = client_rgw_config.get('cloud_storage_class')
+                s3tests_conf['s3 cloud']['storage_class'] = client_rgw_config.get('cloud_regular_storage_class')
+                s3tests_conf['s3 cloud']['retain_head_object'] = client_rgw_config.get('cloud_retain_head_object')
+                cloud_target_path = client_rgw_config.get('cloud_target_path')
+                cloud_target_storage_class = client_rgw_config.get('cloud_target_storage_class')
+                if (cloud_target_path != None):
+                    s3tests_conf['s3 cloud']['target_path'] = cloud_target_path
+                if (cloud_target_storage_class != None):
+                    s3tests_conf['s3 cloud']['target_storage_class'] = cloud_target_storage_class
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
                 'cd',
-                '{tdir}/s3-tests'.format(tdir=testdir),
+                '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                 run.Raw('&&'),
                 './bootstrap',
                 ],
             )
-        conf_fp = StringIO()
+        conf_fp = BytesIO()
         s3tests_conf.write(conf_fp)
-        teuthology.write_file(
-            remote=remote,
+        remote.write_file(
             path='{tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             data=conf_fp.getvalue(),
             )
 
     log.info('Configuring boto...')
     boto_src = os.path.join(os.path.dirname(__file__), 'boto.cfg.template')
-    for client, properties in config['clients'].iteritems():
-        with file(boto_src, 'rb') as f:
+    for client, properties in config['clients'].items():
+        with open(boto_src) as f:
             (remote,) = ctx.cluster.only(client).remotes.keys()
             conf = f.read().format(
                 idle_timeout=config.get('idle_timeout', 30)
                 )
-            teuthology.write_file(
-                remote=remote,
-                path='{tdir}/boto.cfg'.format(tdir=testdir),
-                data=conf,
-                )
+            remote.write_file('{tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client), conf)
 
     try:
         yield
 
     finally:
         log.info('Cleaning up boto...')
-        for client, properties in config['clients'].iteritems():
+        for client, properties in config['clients'].items():
             (remote,) = ctx.cluster.only(client).remotes.keys()
             remote.run(
                 args=[
                     'rm',
-                    '{tdir}/boto.cfg'.format(tdir=testdir),
+                    '{tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client),
                     ],
                 )
 
@@ -228,24 +438,41 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    attrs = ["!fails_on_rgw", "!lifecycle"]
-    # beast parser is strict about unreadable headers
-    if ctx.rgw.frontend == 'beast':
-        attrs.append("!fails_strict_rfc2616")
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
+        client_config = client_config or {}
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
-            'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir),
-            '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
+            'BOTO_CONFIG={tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client)
+            ]
+        # the 'requests' library comes with its own ca bundle to verify ssl
+        # certificates - override that to use the system's ca bundle, which
+        # is where the ssl task installed this certificate
+        if remote.os.package_type == 'deb':
+            args += ['REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt']
+        else:
+            args += ['REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt']
+        # civetweb > 1.8 && beast parsers are strict on rfc2616
+        attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616","!test_of_sts","!webidentity_test"]
+        if client_config.get('calling-format') != 'ordinary':
+            attrs += ['!fails_with_subdomain']
+        if not client_config.get('with-sse-s3'):
+            attrs += ['!sse-s3']
+       
+        if 'extra_attrs' in client_config:
+            attrs = client_config.get('extra_attrs') 
+        args += [
+            '{tdir}/s3-tests-{client}/virtualenv/bin/python'.format(tdir=testdir, client=client),
+            '-m', 'nose',
             '-w',
-            '{tdir}/s3-tests'.format(tdir=testdir),
+            '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
             '-v',
             '-a', ','.join(attrs),
             ]
-        if client_config is not None and 'extra_args' in client_config:
-            args.extend(client_config['extra_args'])
+        if 'extra_args' in client_config:
+            args.append(client_config['extra_args'])
 
-        ctx.cluster.only(client).run(
+        remote.run(
             args=args,
             label="s3 tests against rgw"
             )
@@ -270,7 +497,7 @@ def scan_for_leaked_encryption_keys(ctx, config):
 
         log.debug('Scanning radosgw logs for leaked encryption keys...')
         procs = list()
-        for client, client_config in config.iteritems():
+        for client, client_config in config.items():
             if not client_config.get('scan_for_encryption_keys', True):
                 continue
             cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -334,7 +561,29 @@ def task(ctx, config):
               extra_args: ['test_s3:test_object_acl_grand_public_read']
             client.1:
               extra_args: ['--exclude', 'test_100_continue']
+
+    To run any sts-tests don't forget to set a config variable named 'sts_tests' to 'True' as follows::
+
+        tasks:
+        - ceph:
+        - rgw: [client.0]
+        - s3tests:
+            client.0:
+              sts_tests: True
+              rgw_server: client.0
+
+    To run any cloud-transition tests don't forget to set a config variable named 'cloudtier_tests' to 'True' as follows::
+
+        tasks:
+        - ceph:
+        - rgw: [client.0 client.1]
+        - s3tests:
+            client.0:
+              cloudtier_tests: True
+              rgw_server: client.0
+
     """
+    assert hasattr(ctx, 'rgw'), 's3tests must run after the rgw task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
         "task s3tests only supports a list or dictionary for configuration"
@@ -348,7 +597,7 @@ def task(ctx, config):
 
     overrides = ctx.config.get('overrides', {})
     # merge each client section, not the top level.
-    for client in config.iterkeys():
+    for client in config.keys():
         if not config[client]:
             config[client] = {}
         teuthology.deep_merge(config[client], overrides.get('s3tests', {}))
@@ -356,21 +605,113 @@ def task(ctx, config):
     log.debug('s3tests config is %s', config)
 
     s3tests_conf = {}
-    for client in clients:
-        s3tests_conf[client] = ConfigObj(
-            indent_type='',
-            infile={
-                'DEFAULT':
-                    {
-                    'port'      : 7280,
-                    'is_secure' : 'no',
-                    },
-                'fixtures' : {},
-                's3 main'  : {},
-                's3 alt'   : {},
-		's3 tenant': {},
-                }
-            )
+
+    for client, client_config in config.items():
+        if 'sts_tests' in client_config:
+            ctx.sts_variable = True
+        else:
+            ctx.sts_variable = False
+
+        if 'cloudtier_tests' in client_config:
+            ctx.cloudtier_variable = True
+        else:
+            ctx.cloudtier_variable = False
+
+        if 'dbstore_tests' in client_config:
+            ctx.dbstore_variable = True
+        else:
+            ctx.dbstore_variable = False
+
+        #This will be the structure of config file when you want to run webidentity_test (sts-test)
+        if ctx.sts_variable and "TOKEN" in os.environ:
+            for client in clients:
+                endpoint = ctx.rgw.role_endpoints.get(client)
+                assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
+
+                s3tests_conf[client] = ConfigObj(
+                    indent_type='',
+                    infile={
+                        'DEFAULT':
+                            {
+                            'port'      : endpoint.port,
+                            'is_secure' : endpoint.cert is not None,
+                            'api_name'  : 'default',
+                            },
+                        'fixtures'   : {},
+                        's3 main'    : {},
+                        's3 alt'     : {},
+                        's3 tenant'  : {},
+                        'iam'        : {},
+                        'webidentity': {},
+                    }
+                )
+
+        elif ctx.sts_variable:
+            #This will be the structure of config file when you want to run assume_role_test and get_session_token_test (sts-test)
+            for client in clients:
+                endpoint = ctx.rgw.role_endpoints.get(client)
+                assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
+
+                s3tests_conf[client] = ConfigObj(
+                    indent_type='',
+                    infile={
+                        'DEFAULT':
+                            {
+                            'port'      : endpoint.port,
+                            'is_secure' : endpoint.cert is not None,
+                            'api_name'  : 'default',
+                            },
+                        'fixtures'   : {},
+                        's3 main'    : {},
+                        's3 alt'     : {},
+                        's3 tenant'  : {},
+                        'iam'        : {},
+                        }
+                    ) 
+
+        elif ctx.cloudtier_variable:
+            #This will be the structure of config file when you want to run normal s3-tests
+            for client in clients:
+                endpoint = ctx.rgw.role_endpoints.get(client)
+                assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
+
+                s3tests_conf[client] = ConfigObj(
+                    indent_type='',
+                    infile={
+                        'DEFAULT':
+                            {
+                            'port'      : endpoint.port,
+                            'is_secure' : endpoint.cert is not None,
+                            'api_name'  : 'default',
+                            },
+                        'fixtures'   : {},
+                        's3 main'    : {},
+                        's3 alt'     : {},
+                        's3 tenant'  : {},
+                        's3 cloud'   : {},
+                        }
+                    ) 
+        else:
+            #This will be the structure of config file when you want to run normal s3-tests
+            for client in clients:
+                endpoint = ctx.rgw.role_endpoints.get(client)
+                assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
+
+                s3tests_conf[client] = ConfigObj(
+                    indent_type='',
+                    infile={
+                        'DEFAULT':
+                            {
+                            'port'      : endpoint.port,
+                            'is_secure' : endpoint.cert is not None,
+                            'api_name'  : 'default',
+                            },
+                        'fixtures'   : {},
+                        's3 main'    : {},
+                        's3 alt'     : {},
+                        's3 tenant'  : {},
+                        }
+                    )
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),

@@ -15,7 +15,7 @@
  *
  */
 
-#include <errno.h>
+#include <cerrno>
 #include <algorithm>
 
 #include "include/str_map.h"
@@ -28,15 +28,13 @@
 
 #include "ErasureCodeLrc.h"
 
-// re-include our assert to clobber boost's
-#include "include/assert.h"
-
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
 using namespace std;
+using namespace ceph;
 
 static ostream& _prefix(std::ostream* _dout)
 {
@@ -73,25 +71,22 @@ int ErasureCodeLrc::create_rule(const string &name,
 
   int rno = 0;
   for (rno = 0; rno < crush.get_max_rules(); rno++) {
-    if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+    if (!crush.rule_exists(rno))
        break;
   }
 
   int steps = 4 + rule_steps.size();
-  int min_rep = 3;
-  int max_rep = get_chunk_count();
   int ret;
-  ret = crush.add_rule(rno, steps, pg_pool_t::TYPE_ERASURE,
-		       min_rep, max_rep);
-  assert(ret == rno);
+  ret = crush.add_rule(rno, steps, pg_pool_t::TYPE_ERASURE);
+  ceph_assert(ret == rno);
   int step = 0;
 
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_TAKE, root, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   // [ [ "choose", "rack", 2 ],
   //   [ "chooseleaf", "host", 5 ] ]
   for (vector<Step>::const_iterator i = rule_steps.begin();
@@ -105,10 +100,10 @@ int ErasureCodeLrc::create_rule(const string &name,
       return -EINVAL;
     }
     ret = crush.set_rule_step(rno, step++, op, i->n, type);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_EMIT, 0, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   crush.set_rule_name(rno, name);
   return rno;
 }
@@ -142,7 +137,7 @@ int ErasureCodeLrc::layers_description(const ErasureCodeProfile &profile,
   return 0;
 }
 
-int ErasureCodeLrc::layers_parse(string description_string,
+int ErasureCodeLrc::layers_parse(const string &description_string,
 				 json_spirit::mArray description,
 				 ostream *ss)
 {
@@ -251,7 +246,7 @@ int ErasureCodeLrc::layers_init(ostream *ss)
   return 0;
 }
 
-int ErasureCodeLrc::layers_sanity_checks(string description_string,
+int ErasureCodeLrc::layers_sanity_checks(const string &description_string,
 					 ostream *ss) const
 {
   int position = 0;
@@ -324,7 +319,7 @@ int ErasureCodeLrc::parse_kml(ErasureCodeProfile &profile,
     }
   }
 
-  if ((k + m) % l) {
+  if (l == 0 || (k + m) % l) {
     *ss << "k + m must be a multiple of l in "
 	<< profile << std::endl;
     return ERROR_LRC_K_M_MODULO;
@@ -408,7 +403,9 @@ int ErasureCodeLrc::parse_rule(ErasureCodeProfile &profile,
   err |= to_string("crush-device-class", profile,
 		   &rule_device_class,
 		   "", ss);
-
+  if (err) {
+    return err;
+  }
   if (profile.count("crush-steps") != 0) {
     rule_steps.clear();
     string str = profile.find("crush-steps")->second;
@@ -452,7 +449,7 @@ int ErasureCodeLrc::parse_rule(ErasureCodeProfile &profile,
   return 0;
 }
 
-int ErasureCodeLrc::parse_rule_step(string description_string,
+int ErasureCodeLrc::parse_rule_step(const string &description_string,
 				       json_spirit::mArray description,
 				       ostream *ss)
 {
@@ -527,11 +524,7 @@ int ErasureCodeLrc::init(ErasureCodeProfile &profile,
     return ERROR_LRC_MAPPING;
   }
   string mapping = profile.find("mapping")->second;
-  data_chunk_count = 0;
-  for(std::string::iterator it = mapping.begin(); it != mapping.end(); ++it) {
-    if (*it == 'D')
-      data_chunk_count++;
-  }
+  data_chunk_count = count(begin(mapping), end(mapping), 'D');
   chunk_count = mapping.length();
 
   r = layers_sanity_checks(description_string, ss);
@@ -661,8 +654,7 @@ int ErasureCodeLrc::_minimum_to_decode(const set<int> &want_to_read,
 	       j != erasures.end();
 	       ++j) {
 	    erasures_not_recovered.erase(*j);
-	    if (erasures_want.count(*j))
-	      erasures_want.erase(*j);
+	    erasures_want.erase(*j);
 	  }
 	}
       }
@@ -759,16 +751,18 @@ int ErasureCodeLrc::encode_chunks(const set<int> &want_to_encode,
     set<int> layer_want_to_encode;
     map<int, bufferlist> layer_encoded;
     int j = 0;
-    for (vector<int>::const_iterator c = layer.chunks.begin();
-	 c != layer.chunks.end();
-	 ++c) {
-      layer_encoded[j] = (*encoded)[*c];
-      if (want_to_encode.find(*c) != want_to_encode.end())
+    for (const auto& c : layer.chunks) {
+      std::swap(layer_encoded[j], (*encoded)[c]);
+      if (want_to_encode.find(c) != want_to_encode.end())
 	layer_want_to_encode.insert(j);
       j++;
     }
     int err = layer.erasure_code->encode_chunks(layer_want_to_encode,
 						&layer_encoded);
+    j = 0;
+    for (const auto& c : layer.chunks) {
+      std::swap(layer_encoded[j++], (*encoded)[c]);
+    }
     if (err) {
       derr << __func__ << " layer " << layer.chunks_map
 	   << " failed with " << err << " trying to encode "
@@ -843,8 +837,7 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
 	   ++c) {
 	(*decoded)[*c] = layer_decoded[j];
 	++j;
-	if (erasures.count(*c) != 0)
-	  erasures.erase(*c);
+	erasures.erase(*c);
       }
       want_to_read_erasures.clear();
       set_intersection(erasures.begin(), erasures.end(),

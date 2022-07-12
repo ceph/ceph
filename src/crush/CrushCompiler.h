@@ -12,7 +12,7 @@
 
 class CrushCompiler {
   CrushWrapper& crush;
-  ostream& err;
+  std::ostream& err;
   int verbose;
   bool unsafe_tunables;
 
@@ -23,39 +23,39 @@ class CrushCompiler {
   };
 
   int decompile_weight_set_weights(crush_weight_set weight_set,
-				   ostream &out);
+				   std::ostream &out);
   int decompile_weight_set(crush_weight_set *weight_set,
 			   __u32 size,
-			   ostream &out);
+			   std::ostream &out);
   int decompile_choose_arg(crush_choose_arg *arg,
 			   int bucket_id,
-			   ostream &out);
+			   std::ostream &out);
   int decompile_ids(int *ids,
 		    __u32 size,
-		    ostream &out);
+		    std::ostream &out);
   int decompile_choose_arg_map(crush_choose_arg_map arg_map,
-			       ostream &out);
+			       std::ostream &out);
   int decompile_choose_args(const std::pair<const long unsigned int, crush_choose_arg_map> &i,
-			    ostream &out);
-  int decompile_bucket_impl(int i, ostream &out);
+			    std::ostream &out);
+  int decompile_bucket_impl(int i, std::ostream &out);
   int decompile_bucket(int cur,
 		       std::map<int, dcb_state_t>& dcb_states,
-		       ostream &out);
+		       std::ostream &out);
 
   // compile
   typedef char const*         iterator_t;
-  typedef tree_match<iterator_t> parse_tree_match_t;
+  typedef boost::spirit::tree_match<iterator_t> parse_tree_match_t;
   typedef parse_tree_match_t::tree_iterator iter_t;
   typedef parse_tree_match_t::node_t node_t;
 
-  map<string, int> item_id;
-  map<int, string> id_item;
-  map<int, unsigned> item_weight;
-  map<string, int> type_id;
-  map<string, int> rule_id;
-  std::map<int32_t, map<int32_t, int32_t> > class_bucket; // bucket id -> class id -> shadow bucket id
+  std::map<std::string, int> item_id;
+  std::map<int, std::string> id_item;
+  std::map<int, unsigned> item_weight;
+  std::map<std::string, int> type_id;
+  std::map<std::string, int> rule_id;
+  std::map<int32_t, std::map<int32_t, int32_t> > class_bucket; // bucket id -> class id -> shadow bucket id
 
-  string string_node(node_t &node);
+  std::string string_node(node_t &node);
   int int_node(node_t &node); 
   float float_node(node_t &node);
 
@@ -72,11 +72,11 @@ class CrushCompiler {
   void find_used_bucket_ids(iter_t const& i);
   int parse_crush(iter_t const& i);  
   void dump(iter_t const& i, int ind=1);
-  string consolidate_whitespace(string in);
+  std::string consolidate_whitespace(std::string in);
   int adjust_bucket_item_place(iter_t const &i);
 
 public:
-  CrushCompiler(CrushWrapper& c, ostream& eo, int verbosity=0)
+  CrushCompiler(CrushWrapper& c, std::ostream& eo, int verbosity=0)
     : crush(c), err(eo), verbose(verbosity),
       unsafe_tunables(false) {}
   ~CrushCompiler() {}
@@ -85,8 +85,8 @@ public:
     unsafe_tunables = true;
   }
 
-  int decompile(ostream& out);
-  int compile(istream& in, const char *infn=0);
+  int decompile(std::ostream& out);
+  int compile(std::istream& in, const char *infn=0);
 };
 
 #endif

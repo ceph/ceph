@@ -17,15 +17,14 @@
  *
  *     http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf
  *
- * LGPL2
+ * LGPL-2.1 or LGPL-3.0
  */
 
 
 #define CRUSH_MAGIC 0x00010000ul   /* for detecting algorithm revisions */
 
 #define CRUSH_MAX_DEPTH 10  /* max crush hierarchy depth */
-#define CRUSH_MAX_RULESET (1<<8)  /* max crush ruleset number */
-#define CRUSH_MAX_RULES CRUSH_MAX_RULESET  /* should be the same as max rulesets */
+#define CRUSH_MAX_RULES (1<<8)  /* max crush rule id */
 
 #define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
@@ -76,21 +75,12 @@ enum crush_opcodes {
 #define CRUSH_CHOOSE_N            0
 #define CRUSH_CHOOSE_N_MINUS(x)   (-(x))
 
-/*
- * The rule mask is used to describe what the rule is intended for.
- * Given a ruleset and size of output set, we search through the
- * rule list for a matching rule_mask.
- */
-struct crush_rule_mask {
-	__u8 ruleset;
-	__u8 type;
-	__u8 min_size;
-	__u8 max_size;
-};
-
 struct crush_rule {
 	__u32 len;
-	struct crush_rule_mask mask;
+	__u8 __unused_was_rule_mask_ruleset;
+	__u8 type;
+	__u8 deprecated_min_size;
+	__u8 deprecated_max_size;
 	struct crush_rule_step steps[0];
 };
 
@@ -258,7 +248,7 @@ struct crush_weight_set {
  * When crush_do_rule() chooses the Nth item from a straw2 bucket, the
  * replacement weights found at __weight_set[N]__ are used instead of
  * the weights from __item_weights__. If __N__ is greater than
- * __weight_set_size__, the weights found at __weight_set_size-1__ are
+ * __weight_set_positions__, the weights found at __weight_set_positions-1__ are
  * used instead. For instance if __weight_set__ is:
  *
  *    [ [ 0x10000, 0x20000 ],   // position 0
@@ -274,7 +264,7 @@ struct crush_choose_arg {
   __s32 *ids;                           /*!< values to use instead of items */
   __u32 ids_size;                       /*!< size of the __ids__ array */
   struct crush_weight_set *weight_set;  /*!< weight replacements for a given position */
-  __u32 weight_set_size;                /*!< size of the __weight_set__ array */
+  __u32 weight_set_positions;           /*!< size of the __weight_set__ array */
 };
 
 /** @ingroup API
@@ -335,7 +325,7 @@ struct crush_bucket_straw {
  * __h.alg__ == ::CRUSH_BUCKET_STRAW2.
  *
  * The weight of __h.items[i]__ is __item_weights[i]__ for i in
- * [0,__h.size__[.
+ * [0,__h.size__].
  */
 struct crush_bucket_straw2 {
         struct crush_bucket h; /*!< generic bucket information */
@@ -540,7 +530,7 @@ struct crush_work_bucket {
 	__u32 perm_x; /* @x for which *perm is defined */
 	__u32 perm_n; /* num elements of *perm that are permuted/defined */
 	__u32 *perm;  /* Permutation of the bucket's items */
-};
+} __attribute__ ((packed));
 
 struct crush_work {
 	struct crush_work_bucket **work; /* Per-bucket working store */

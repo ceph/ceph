@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librados_test_stub/LibradosTestStub.h"
 #include "include/rbd/librbd.hpp"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
@@ -17,7 +18,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public librbd::MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+  explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
 };
@@ -34,9 +35,9 @@ public:
 
   static SetHeadRequest* create(librbd::MockTestImageCtx *image_ctx,
                                 uint64_t size,
-                                const librbd::ParentSpec &parent_spec,
+                                const cls::rbd::ParentImageSpec &parent_spec,
                                 uint64_t parent_overlap, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -76,21 +77,22 @@ public:
   typedef SnapshotCreateRequest<librbd::MockTestImageCtx> MockSnapshotCreateRequest;
 
   librbd::ImageCtx *m_image_ctx;
-  ThreadPool *m_thread_pool;
-  ContextWQ *m_work_queue;
+
+  std::shared_ptr<librbd::AsioEngine> m_asio_engine;
+  asio::ContextWQ *m_work_queue;
 
   void SetUp() override {
     TestMockFixture::SetUp();
 
     ASSERT_EQ(0, open_image(m_image_name, &m_image_ctx));
 
-    librbd::ImageCtx::get_thread_pool_instance(m_image_ctx->cct, &m_thread_pool,
-                                               &m_work_queue);
+    m_asio_engine = std::make_shared<librbd::AsioEngine>(
+      m_image_ctx->md_ctx);
+    m_work_queue = m_asio_engine->get_work_queue();
   }
 
   void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
-    EXPECT_CALL(mock_exclusive_lock, start_op()).WillOnce(
-      ReturnNew<FunctionContext>([](int) {}));
+    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(Return(new LambdaContext([](int){})));
   }
 
   void expect_test_features(librbd::MockTestImageCtx &mock_image_ctx,
@@ -101,14 +103,17 @@ public:
 
   void expect_set_head(MockSetHeadRequest &mock_set_head_request, int r) {
     EXPECT_CALL(mock_set_head_request, send())
-      .WillOnce(Invoke([this, &mock_set_head_request, r]() {
+      .WillOnce(Invoke([&mock_set_head_request, r]() {
             mock_set_head_request.on_finish->complete(r);
           }));
   }
 
   void expect_snap_create(librbd::MockTestImageCtx &mock_image_ctx,
                           const std::string &snap_name, uint64_t snap_id, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(_, StrEq(snap_name), _, 0, true))
+    uint64_t flags = SNAP_CREATE_FLAG_SKIP_OBJECT_MAP |
+                     SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE;
+    EXPECT_CALL(*mock_image_ctx.operations,
+                execute_snap_create(_, StrEq(snap_name), _, 0, flags, _))
                   .WillOnce(DoAll(InvokeWithoutArgs([&mock_image_ctx, snap_id, snap_name]() {
                                     inject_snap(mock_image_ctx, snap_id, snap_name);
                                   }),
@@ -122,7 +127,8 @@ public:
     std::string oid(librbd::ObjectMap<>::object_map_name(mock_image_ctx.id,
                                                          snap_id));
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(oid, _, StrEq("rbd"), StrEq("object_map_resize"), _, _, _))
+                exec(oid, _, StrEq("rbd"), StrEq("object_map_resize"), _, _, _,
+                     _))
                   .WillOnce(Return(r));
   }
 
@@ -136,7 +142,7 @@ public:
                                             const std::string &snap_name,
 					    const cls::rbd::SnapshotNamespace &snap_namespace,
                                             uint64_t size,
-                                            const librbd::ParentSpec &spec,
+                                            const cls::rbd::ParentImageSpec &spec,
                                             uint64_t parent_overlap,
                                             Context *on_finish) {
     return new MockSnapshotCreateRequest(&mock_local_image_ctx, snap_name, snap_namespace, size,

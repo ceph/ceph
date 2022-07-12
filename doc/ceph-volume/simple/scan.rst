@@ -4,10 +4,12 @@
 ========
 Scanning allows to capture any important details from an already-deployed OSD
 so that ``ceph-volume`` can manage it without the need of any other startup
-workflows or tools (like ``udev`` or ``ceph-disk``).
+workflows or tools (like ``udev`` or ``ceph-disk``). Encryption with LUKS or
+PLAIN formats is fully supported.
 
 The command has the ability to inspect a running OSD, by inspecting the
 directory where the OSD data is stored, or by consuming the data partition.
+The command can also scan all running OSDs if no path or device is provided.
 
 Once scanned, information will (by default) persist the metadata as JSON in
 a file in ``/etc/ceph/osd``. This ``JSON`` file will use the naming convention
@@ -30,6 +32,16 @@ the contents to ``stdout`` (no file will be written)::
 
 .. _ceph-volume-simple-scan-directory:
 
+Running OSDs scan
+-----------------
+Using this command without providing an OSD directory or device will scan the
+directories of any currently running OSDs. If a running OSD was not created
+by ceph-disk it will be ignored and not scanned.
+
+To scan all running ceph-disk OSDs, the command would look like::
+
+    ceph-volume simple scan
+
 Directory scan
 --------------
 The directory scan will capture OSD file contents from interesting files. There
@@ -42,6 +54,12 @@ are a few files that must exist in order to have a successful scan:
 * ``type``
 * ``whoami``
 
+If the OSD is encrypted, it will additionally add the following keys:
+
+* ``encrypted``
+* ``encryption_type``
+* ``lockbox_keyring``
+
 In the case of any other file, as long as it is not a binary or a directory, it
 will also get captured and persisted as part of the JSON object.
 
@@ -53,18 +71,21 @@ would look like::
 
     "whoami": "1",
 
-For files that may have more than one line, the contents are left as-is, for
-example, a ``keyring`` could look like this::
+For files that may have more than one line, the contents are left as-is, except
+for keyrings which are treated specially and parsed to extract the keyring. For
+example, a ``keyring`` that gets read as::
 
-    "keyring": "[osd.1]\n\tkey = AQBBJ/dZp57NIBAAtnuQS9WOS0hnLVe0rZnE6Q==\n",
+    [osd.1]\n\tkey = AQBBJ/dZp57NIBAAtnuQS9WOS0hnLVe0rZnE6Q==\n
+
+Would get stored as::
+
+    "keyring": "AQBBJ/dZp57NIBAAtnuQS9WOS0hnLVe0rZnE6Q==",
+
 
 For a directory like ``/var/lib/ceph/osd/ceph-1``, the command could look
 like::
 
     ceph-volume simple scan /var/lib/ceph/osd/ceph1
-
-
-.. note:: There is no support for encrypted OSDs
 
 
 .. _ceph-volume-simple-scan-device:
@@ -91,9 +112,6 @@ For a device like ``/dev/sda1`` which **must** be a data partition, the command
 could look like::
 
     ceph-volume simple scan /dev/sda1
-
-
-.. note:: There is no support for encrypted OSDs
 
 
 .. _ceph-volume-simple-scan-json:
@@ -147,7 +165,7 @@ This is a sample ``JSON`` metadata, from an OSD that is using ``bluestore``::
             "uuid": "86ebd829-1405-43d3-8fd6-4cbc9b6ecf96"
         },
         "fsid": "86ebd829-1405-43d3-8fd6-4cbc9b6ecf96",
-        "keyring": "[osd.3]\n\tkey = AQBBJ/dZp57NIBAAtnuQS9WOS0hnLVe0rZnE6Q==\n",
+        "keyring": "AQBBJ/dZp57NIBAAtnuQS9WOS0hnLVe0rZnE6Q==",
         "kv_backend": "rocksdb",
         "magic": "ceph osd volume v026",
         "mkfs_done": "yes",

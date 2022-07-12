@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 import requests
 import time
@@ -72,8 +72,9 @@ screenplay = [
     ('get',    '/request?page=0', {}),
     ('delete', '/request', {}),
     ('get',    '/request', {}),
-    ('patch', '/pool/1', {'pg_num': 128}),
-    ('patch', '/pool/1', {'pgp_num': 128}),
+    ('patch',  '/pool/1', {'pg_num': 128}),
+    ('patch',  '/pool/1', {'pgp_num': 128}),
+    ('get',    '/perf?daemon=.*', {}),
 ]
 
 for method, endpoint, args in screenplay:
@@ -84,10 +85,11 @@ for method, endpoint, args in screenplay:
     print("URL = " + url)
     request = getattr(requests, method)(
         url,
-        data=json.dumps(args),
+        data=json.dumps(args) if args else None,
         headers=headers,
         verify=False,
         auth=auth)
+    assert request is not None
     print(request.text)
     if request.status_code != 200 or 'error' in request.json():
         print('ERROR: %s request for URL "%s" failed' % (method, url))

@@ -19,67 +19,70 @@
 #include "msg/Message.h"
 
 
-class MWatchNotify : public Message {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+class MWatchNotify final : public Message {
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 1;
 
  public:
   uint64_t cookie;     ///< client unique id for this watch or notify
   uint64_t ver;        ///< unused
   uint64_t notify_id;  ///< osd unique id for a notify notification
   uint8_t opcode;      ///< CEPH_WATCH_EVENT_*
-  bufferlist bl;       ///< notify payload (osd->client)
+  ceph::buffer::list bl;       ///< notify payload (osd->client)
   errorcode32_t return_code; ///< notify result (osd->client)
   uint64_t notifier_gid; ///< who sent the notify
 
   MWatchNotify()
-    : Message(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
-  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, bufferlist b)
-    : Message(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    : Message{CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION} { }
+  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, ceph::buffer::list b, uint64_t n=0)
+    : Message{CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION},
       cookie(c),
       ver(v),
       notify_id(i),
       opcode(o),
       bl(b),
       return_code(0),
-      notifier_gid(0) { }
+      notifier_gid(n) { }
 private:
-  ~MWatchNotify() override {}
+  ~MWatchNotify() final {}
 
 public:
   void decode_payload() override {
+    using ceph::decode;
     uint8_t msg_ver;
-    bufferlist::iterator p = payload.begin();
-    ::decode(msg_ver, p);
-    ::decode(opcode, p);
-    ::decode(cookie, p);
-    ::decode(ver, p);
-    ::decode(notify_id, p);
+    auto p = payload.cbegin();
+    decode(msg_ver, p);
+    decode(opcode, p);
+    decode(cookie, p);
+    decode(ver, p);
+    decode(notify_id, p);
     if (msg_ver >= 1)
-      ::decode(bl, p);
+      decode(bl, p);
     if (header.version >= 2)
-      ::decode(return_code, p);
+      decode(return_code, p);
     else
       return_code = 0;
     if (header.version >= 3)
-      ::decode(notifier_gid, p);
+      decode(notifier_gid, p);
     else
       notifier_gid = 0;
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     uint8_t msg_ver = 1;
-    ::encode(msg_ver, payload);
-    ::encode(opcode, payload);
-    ::encode(cookie, payload);
-    ::encode(ver, payload);
-    ::encode(notify_id, payload);
-    ::encode(bl, payload);
-    ::encode(return_code, payload);
-    ::encode(notifier_gid, payload);
+    encode(msg_ver, payload);
+    encode(opcode, payload);
+    encode(cookie, payload);
+    encode(ver, payload);
+    encode(notify_id, payload);
+    encode(bl, payload);
+    encode(return_code, payload);
+    encode(notifier_gid, payload);
   }
 
-  const char *get_type_name() const override { return "watch-notify"; }
-  void print(ostream& out) const override {
+  std::string_view get_type_name() const override { return "watch-notify"; }
+  void print(std::ostream& out) const override {
     out << "watch-notify("
 	<< ceph_watch_event_name(opcode) << " (" << (int)opcode << ")"
 	<< " cookie " << cookie
@@ -87,6 +90,9 @@ public:
 	<< " ret " << return_code
 	<< ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -120,11 +120,7 @@ weight).
    you specify only the root bucket, the command will attach the OSD directly
    to the root, but CRUSH rules expect OSDs to be inside of hosts.
 
-   For Argonaut (v 0.48), execute the following::
-
-	ceph osd crush add {id} {name} {weight}  [{bucket-type}={bucket-name} ...]
-
-   For Bobtail (v 0.56) and later releases, execute the following::
+   Execute the following::
 
 	ceph osd crush add {id-or-name} {weight}  [{bucket-type}={bucket-name} ...]
 
@@ -134,44 +130,19 @@ weight).
    `Add/Move an OSD`_ for details.
 
 
-.. topic:: Argonaut (v0.48) Best Practices
-
- To limit impact on user I/O performance, add an OSD to the CRUSH map
- with an initial weight of ``0``. Then, ramp up the CRUSH weight a
- little bit at a time.  For example, to ramp by increments of ``0.2``,
- start with::
-
-      ceph osd crush reweight {osd-id} .2
-
- and allow migration to complete before reweighting to ``0.4``,
- ``0.6``, and so on until the desired CRUSH weight is reached.
-
- To limit the impact of OSD failures, you can set::
-
-      mon osd down out interval = 0
-
- which prevents down OSDs from automatically being marked out, and then
- ramp them down manually with::
-
-      ceph osd reweight {osd-num} .8
-
- Again, wait for the cluster to finish migrating data, and then adjust
- the weight further until you reach a weight of 0.  Note that this
- problem prevents the cluster to automatically re-replicate data after
- a failure, so please ensure that sufficient monitoring is in place for
- an administrator to intervene promptly.
-
- Note that this practice will no longer be necessary in Bobtail and
- subsequent releases.
-
+.. _rados-replacing-an-osd:
 
 Replacing an OSD
 ----------------
 
-When disks fail, or if an admnistrator wants to reprovision OSDs with a new
+When disks fail, or if an administrator wants to reprovision OSDs with a new
 backend, for instance, for switching from FileStore to BlueStore, OSDs need to
 be replaced. Unlike `Removing the OSD`_, replaced OSD's id and CRUSH map entry
 need to be keep intact after the OSD is destroyed for replacement.
+
+#. Make sure it is safe to destroy the OSD::
+
+     while ! ceph osd safe-to-destroy osd.{id} ; do sleep 10 ; done
 
 #. Destroy the OSD first::
 
@@ -184,7 +155,7 @@ need to be keep intact after the OSD is destroyed for replacement.
 
 #. Prepare the disk for replacement by using the previously destroyed OSD id::
 
-     ceph-volume lvm  prepare --osd-id {id} --data /dev/sdX
+     ceph-volume lvm prepare --osd-id {id} --data /dev/sdX
 
 #. And activate the OSD::
 
@@ -193,7 +164,7 @@ need to be keep intact after the OSD is destroyed for replacement.
 Alternatively, instead of preparing and activating, the device can be recreated
 in one call, like::
 
-    ceph-volume lvm create --osd-id {id} --data /dev/sdX
+     ceph-volume lvm create --osd-id {id} --data /dev/sdX
 
 
 Starting the OSD
@@ -203,13 +174,7 @@ After you add an OSD to Ceph, the OSD is in your configuration. However,
 it is not yet running. The OSD is ``down`` and ``in``. You must start
 your new OSD before it can begin receiving data. You may use
 ``service ceph`` from your admin host or start the OSD from its host
-machine.
-
-For Ubuntu Trusty use Upstart. ::
-
-	sudo start ceph-osd id={osd-num}
-
-For all other distros use systemd. ::
+machine::
 
 	sudo systemctl start ceph-osd@{osd-num}
 
@@ -320,7 +285,7 @@ OSD for each drive by repeating this procedure.
 
 #. Let the cluster forget the OSD first. This step removes the OSD from the CRUSH
    map, removes its authentication key. And it is removed from the OSD map as
-   well. Please note the `purge subcommand`_ is introduced in Luminous, for older
+   well. Please note the :ref:`purge subcommand <ceph-admin-osd>` is introduced in Luminous, for older
    versions, please see below ::
 
     ceph osd purge {id} --yes-i-really-mean-it
@@ -368,4 +333,3 @@ you need to perform this step manually:
 
 
 .. _Remove an OSD: ../crush-map#removeosd
-.. _purge subcommand: /man/8/ceph#osd

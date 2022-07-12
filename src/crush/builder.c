@@ -98,17 +98,16 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 	return r;
 }
 
-struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, int maxsize)
+struct crush_rule *crush_make_rule(int len, int type)
 {
 	struct crush_rule *rule;
 	rule = malloc(crush_rule_size(len));
         if (!rule)
                 return NULL;
 	rule->len = len;
-	rule->mask.ruleset = ruleset;
-	rule->mask.type = type;
-	rule->mask.min_size = minsize;
-	rule->mask.max_size = maxsize;
+	rule->type = type;
+	rule->deprecated_min_size = 1;
+	rule->deprecated_max_size = 100;
 	return rule;
 }
 
@@ -209,6 +208,10 @@ crush_make_uniform_bucket(int hash, int type, int size,
 
 	bucket->h.weight = size * item_weight;
 	bucket->item_weight = item_weight;
+
+	if (size == 0) {
+		return bucket;
+	}
 	bucket->h.items = malloc(sizeof(__s32)*size);
 
         if (!bucket->h.items)
@@ -244,6 +247,10 @@ crush_make_list_bucket(int hash, int type, int size,
 	bucket->h.hash = hash;
 	bucket->h.type = type;
 	bucket->h.size = size;
+
+	if (size == 0) {
+		return bucket;
+	}
 
 	bucket->h.items = malloc(sizeof(__s32)*size);
         if (!bucket->h.items)
@@ -339,10 +346,6 @@ crush_make_tree_bucket(int hash, int type, int size,
 	bucket->h.size = size;
 
 	if (size == 0) {
-		bucket->h.items = NULL;
-		bucket->h.weight = 0;
-		bucket->node_weights = NULL;
-		bucket->num_nodes = 0;
 		/* printf("size 0 depth 0 nodes 0\n"); */
 		return bucket;
 	}
@@ -417,7 +420,7 @@ err:
  * next item or set of items.  or why pow() is used the way it is.
  *
  * note that the original version 1 of this function made special
- * accomodation for the case where straw lengths were identical.  this
+ * accommodation for the case where straw lengths were identical.  this
  * is also flawed in a non-obvious way; version 2 drops the special
  * handling and appears to work just as well.
  *
@@ -572,7 +575,6 @@ crush_make_straw_bucket(struct crush_map *map,
         if (!bucket->straws)
                 goto err;
 
-        bucket->h.weight = 0;
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		bucket->h.weight += weights[i];
@@ -611,6 +613,10 @@ crush_make_straw2_bucket(struct crush_map *map,
 	bucket->h.type = type;
 	bucket->h.size = size;
 
+	if (size == 0) {
+		return bucket;
+	}
+
         bucket->h.items = malloc(sizeof(__s32)*size);
         if (!bucket->h.items)
                 goto err;
@@ -618,7 +624,6 @@ crush_make_straw2_bucket(struct crush_map *map,
         if (!bucket->item_weights)
                 goto err;
 
-        bucket->h.weight = 0;
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		bucket->h.weight += weights[i];
@@ -1426,10 +1431,10 @@ struct crush_choose_arg *crush_make_choose_args(struct crush_map *map, int num_p
   struct crush_choose_arg *arg = (struct crush_choose_arg *)space;
   struct crush_weight_set *weight_set = (struct crush_weight_set *)(arg + map->max_buckets);
   __u32 *weights = (__u32 *)(weight_set + bucket_count * num_positions);
-  char *weight_set_ends = (char*)weights;
+  char *weight_set_ends __attribute__((unused)) = (char*)weights;
   __s32 *ids = (__s32 *)(weights + sum_bucket_size * num_positions);
-  char *weights_end = (char *)ids;
-  char *ids_end = (char *)(ids + sum_bucket_size);
+  char *weights_end __attribute__((unused)) = (char *)ids;
+  char *ids_end __attribute__((unused)) = (char *)(ids + sum_bucket_size);
   BUG_ON(space + size != ids_end);
   for (b = 0; b < map->max_buckets; b++) {
     if (map->buckets[b] == 0) {
@@ -1447,7 +1452,7 @@ struct crush_choose_arg *crush_make_choose_args(struct crush_map *map, int num_p
       weights += bucket->h.size;
     }
     arg[b].weight_set = weight_set;
-    arg[b].weight_set_size = num_positions;
+    arg[b].weight_set_positions = num_positions;
     weight_set += position;
 
     memcpy(ids, bucket->h.items, sizeof(__s32) * bucket->h.size);

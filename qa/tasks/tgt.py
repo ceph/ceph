@@ -21,7 +21,7 @@ def start_tgt_remotes(ctx, start_tgtd):
     """
     remotes = ctx.cluster.only(teuthology.is_type('client')).remotes
     tgtd_list = []
-    for rem, roles in remotes.iteritems():
+    for rem, roles in remotes.items():
         for _id in roles:
             if _id in start_tgtd:
                 if not rem in tgtd_list:

@@ -25,8 +25,8 @@
 
 class LRUObject {
 public:
-  LRUObject() : lru(), lru_link(this), lru_pinned(false) { }
-  ~LRUObject();
+  LRUObject() : lru_link(this) {}
+  virtual ~LRUObject();
 
   // pin/unpin item in cache
   void lru_pin();
@@ -35,15 +35,13 @@ public:
 
   friend class LRU;
 private:
-  class LRU *lru;
+  class LRU *lru{};
   xlist<LRUObject *>::item lru_link;
-  bool lru_pinned;
+  bool lru_pinned = false;
 };
 
 class LRU {
 public:
-  LRU() : num_pinned(0), midpoint(0.6) {}
-
   uint64_t lru_get_size() const { return lru_get_top()+lru_get_bot()+lru_get_pintail(); }
   uint64_t lru_get_top() const { return top.size(); }
   uint64_t lru_get_bot() const{ return bottom.size(); }
@@ -62,12 +60,12 @@ public:
     while (!pintail.empty()) {
       lru_remove(pintail.front());
     }
-    assert(num_pinned == 0);
+    ceph_assert(num_pinned == 0);
   }
 
   // insert at top of lru
   void lru_insert_top(LRUObject *o) {
-    assert(!o->lru);
+    ceph_assert(!o->lru);
     o->lru = this;
     top.push_front(&o->lru_link);
     if (o->lru_pinned) num_pinned++;
@@ -76,7 +74,7 @@ public:
 
   // insert at mid point in lru
   void lru_insert_mid(LRUObject *o) {
-    assert(!o->lru);
+    ceph_assert(!o->lru);
     o->lru = this;
     bottom.push_front(&o->lru_link);
     if (o->lru_pinned) num_pinned++;
@@ -85,7 +83,7 @@ public:
 
   // insert at bottom of lru
   void lru_insert_bot(LRUObject *o) {
-    assert(!o->lru);
+    ceph_assert(!o->lru);
     o->lru = this;
     bottom.push_back(&o->lru_link);
     if (o->lru_pinned) num_pinned++;
@@ -96,7 +94,7 @@ public:
   LRUObject *lru_remove(LRUObject *o) {
     if (!o->lru) return o;
     auto list = o->lru_link.get_list();
-    assert(list == &top || list == &bottom || list == &pintail);
+    ceph_assert(list == &top || list == &bottom || list == &pintail);
     o->lru_link.remove_myself();
     if (o->lru_pinned) num_pinned--;
     o->lru = nullptr;
@@ -109,9 +107,9 @@ public:
     if (!o->lru) {
       lru_insert_top(o);
     } else {
-      assert(o->lru == this);
+      ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
-      assert(list == &top || list == &bottom || list == &pintail);
+      ceph_assert(list == &top || list == &bottom || list == &pintail);
       top.push_front(&o->lru_link);
       adjust();
     }
@@ -123,9 +121,9 @@ public:
     if (!o->lru) {
       lru_insert_mid(o);
     } else {
-      assert(o->lru == this);
+      ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
-      assert(list == &top || list == &bottom || list == &pintail);
+      ceph_assert(list == &top || list == &bottom || list == &pintail);
       if (list == &top) return false;
       bottom.push_front(&o->lru_link);
       adjust();
@@ -138,9 +136,9 @@ public:
     if (!o->lru) {
       lru_insert_bot(o);
     } else {
-      assert(o->lru == this);
+      ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
-      assert(list == &top || list == &bottom || list == &pintail);
+      ceph_assert(list == &top || list == &bottom || list == &pintail);
       bottom.push_back(&o->lru_link);
       adjust();
     }
@@ -206,12 +204,12 @@ protected:
     }
   }
 
-  uint64_t num_pinned;
-  double midpoint;
+  uint64_t num_pinned = 0;
+  double midpoint = 0.6;
 
   friend class LRUObject;
 private:
-  typedef xlist<LRUObject *> LRUList;
+  using LRUList = xlist<LRUObject*>;
   LRUList top, bottom, pintail;
 };
 

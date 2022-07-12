@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_POLICY_S3V2_KEYWORDS_H
 #define CEPH_RGW_POLICY_S3V2_KEYWORDS_H
@@ -29,6 +29,9 @@ enum class TokenID {
   // String!
   StringEquals, StringNotEquals, StringEqualsIgnoreCase,
   StringNotEqualsIgnoreCase, StringLike, StringNotLike,
+  ForAllValuesStringEquals, ForAnyValueStringEquals,
+  ForAllValuesStringLike, ForAnyValueStringLike,
+  ForAllValuesStringEqualsIgnoreCase, ForAnyValueStringEqualsIgnoreCase,
 
   // Numeric!
   NumericEquals, NumericNotEquals, NumericLessThan, NumericLessThanEquals,

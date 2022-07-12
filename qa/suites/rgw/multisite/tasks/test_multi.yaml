@@ -1,19 +1,16 @@
-# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
-os_type: centos
-
 tasks:
 - install:
 - ceph: {cluster: c1}
 - ceph: {cluster: c2}
 - rgw:
     c1.client.0:
-      valgrind: [--tool=memcheck]
+      port: 8000
     c1.client.1:
-      valgrind: [--tool=memcheck]
+      port: 8001
     c2.client.0:
-      valgrind: [--tool=memcheck]
+      port: 8000
     c2.client.1:
-      valgrind: [--tool=memcheck]
+      port: 8001
 - rgw-multisite:
 - rgw-multisite-tests:
     config:

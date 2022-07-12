@@ -8,8 +8,8 @@ new developers to get up to speed with the implementation details.
 Introduction
 ------------
 
-Swift offers something called a container, that we use interchangeably with
-the term bucket. One may say that RGW's buckets implement Swift containers.
+Swift offers something called a *container*, which we use interchangeably with
+the term *bucket*, so we say that RGW's buckets implement Swift containers.
 
 This document does not consider how RGW operates on these structures,
 e.g. the use of encode() and decode() methods for serialization and so on.
@@ -42,19 +42,18 @@ Some variables have been used in above commands, they are:
 - bucket: Holds a mapping between bucket name and bucket instance id
 - bucket.instance: Holds bucket instance information[2]
 
-Every metadata entry is kept on a single rados object.
-See below for implementation defails.
+Every metadata entry is kept on a single RADOS object. See below for implementation details.
 
 Note that the metadata is not indexed. When listing a metadata section we do a
-rados pgls operation on the containing pool.
+RADOS ``pgls`` operation on the containing pool.
 
 Bucket Index
 ^^^^^^^^^^^^
 
 It's a different kind of metadata, and kept separately. The bucket index holds
-a key-value map in rados objects. By default it is a single rados object per
-bucket, but it is possible since Hammer to shard that map over multiple rados
-objects. The map itself is kept in omap, associated with each rados object.
+a key-value map in RADOS objects. By default it is a single RADOS object per
+bucket, but it is possible since Hammer to shard that map over multiple RADOS
+objects. The map itself is kept in omap, associated with each RADOS object.
 The key of each omap is the name of the objects, and the value holds some basic
 metadata of that object -- metadata that shows up when listing the bucket.
 Also, each omap holds a header, and we keep some bucket accounting metadata
@@ -67,7 +66,7 @@ objects there is more information that we keep on other keys.
 Data
 ^^^^
 
-Objects data is kept in one or more rados objects for each rgw object.
+Objects data is kept in one or more RADOS objects for each rgw object.
 
 Object Lookup Path
 ------------------
@@ -97,14 +96,14 @@ causes no ambiguity. For the same reason, slashes are permitted in object
 names (keys).
 
 It is also possible to create multiple data pools and make it so that
-different users buckets will be created in different rados pools by default,
+different users\` buckets will be created in different RADOS pools by default,
 thus providing the necessary scaling. The layout and naming of these pools
 is controlled by a 'policy' setting.[3]
 
 An RGW object may consist of several RADOS objects, the first of which
 is the head that contains the metadata, such as manifest, ACLs, content type,
 ETag, and user-defined metadata. The metadata is stored in xattrs.
-The head may also contain up to 512 kilobytes of object data, for efficiency
+The head may also contain up to :confval:`rgw_max_chunk_size` of object data, for efficiency
 and atomicity. The manifest describes how each object is laid out in RADOS
 objects.
 
@@ -118,7 +117,7 @@ These objects are accessed when listing buckets, when updating bucket
 contents, and updating and retrieving bucket statistics (e.g. for quota).
 
 See the user-visible, encoded class 'cls_user_bucket_entry' and its
-nested class 'cls_user_bucket' for the values of these omap entires.
+nested class 'cls_user_bucket' for the values of these omap entries.
 
 These listings are kept consistent with buckets in pool ".rgw".
 
@@ -133,16 +132,17 @@ Footnotes
 to how Extended Attributes associate with a POSIX file. An object's omap
 is not physically located in the object's storage, but its precise
 implementation is invisible and immaterial to RADOS Gateway.
-In Hammer, one LevelDB is used to store omap in each OSD.
+In Hammer, LevelDB is used to store omap data within each OSD; later releases
+default to RocksDB but can be configured to use LevelDB.
 
 [2] Before the Dumpling release, the 'bucket.instance' metadata did not
 exist and the 'bucket' metadata contained its information. It is possible
 to encounter such buckets in old installations.
 
-[3] The pool names have been changed starting with the Infernalis release.
+[3] Pool names changed with the Infernalis release.
 If you are looking at an older setup, some details may be different. In
 particular there was a different pool for each of the namespaces that are
-now being used inside the default.root.meta pool.
+now being used inside the ``default.root.meta`` pool.
 
 Appendix: Compendium
 --------------------
@@ -188,7 +188,7 @@ Known pools:
   namespace: users.keys
     47UA98JSTJZ9YAN3OS3O
 
-    This allows radosgw to look up users by their access keys during authentication.
+    This allows ``radosgw`` to look up users by their access keys during authentication.
 
   namespace: users.swift
     test:tester

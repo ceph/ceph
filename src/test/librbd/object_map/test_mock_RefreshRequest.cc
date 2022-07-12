@@ -29,7 +29,7 @@ class LockRequest<MockObjectMapImageCtx> {
 public:
   static LockRequest *s_instance;
   static LockRequest *create(MockObjectMapImageCtx &image_ctx, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -88,15 +88,16 @@ public:
                               int r) {
     std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id, snap_id));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(oid, _, StrEq("rbd"), StrEq("object_map_load"), _, _, _));
+                               exec(oid, _, StrEq("rbd"),
+                                    StrEq("object_map_load"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
-      assert(object_map);
+      ceph_assert(object_map);
       object_map->set_crc_enabled(false);
 
       bufferlist bl;
-      ::encode(*object_map, bl);
+      encode(*object_map, bl);
 
       std::string str(bl.c_str(), bl.length());
       expect.WillOnce(DoAll(WithArg<5>(CopyInBufferlist(str)), Return(0)));
@@ -110,9 +111,10 @@ public:
   }
 
   void expect_invalidate_request(MockObjectMapImageCtx &mock_image_ctx,
-                                 MockInvalidateRequest &invalidate_request) {
+                                 MockInvalidateRequest &invalidate_request,
+                                 int r) {
     EXPECT_CALL(invalidate_request, send())
-                  .WillOnce(FinishRequest(&invalidate_request, 0,
+                  .WillOnce(FinishRequest(&invalidate_request, r,
                                           &mock_image_ctx));
   }
 
@@ -128,7 +130,8 @@ public:
     std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
                                                  TEST_SNAP_ID));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(oid, _, StrEq("rbd"), StrEq("object_map_resize"), _, _, _));
+                               exec(oid, _, StrEq("rbd"),
+                                    StrEq("object_map_resize"), _, _, _, _));
     expect.WillOnce(Return(r));
   }
 
@@ -155,10 +158,11 @@ TEST_F(TestMockObjectMapRefreshRequest, SuccessHead) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockLockRequest mock_lock_request;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   CEPH_NOSNAP, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, CEPH_NOSNAP, &ctx);
 
   InSequence seq;
   expect_get_image_size(mock_image_ctx, CEPH_NOSNAP,
@@ -185,9 +189,10 @@ TEST_F(TestMockObjectMapRefreshRequest, SuccessSnapshot) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   TEST_SNAP_ID, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
 
   InSequence seq;
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
@@ -213,9 +218,10 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadError) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   TEST_SNAP_ID, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
 
   InSequence seq;
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
@@ -223,12 +229,43 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadError) {
   expect_object_map_load(mock_image_ctx, nullptr, TEST_SNAP_ID, -ENOENT);
 
   MockInvalidateRequest invalidate_request;
-  expect_invalidate_request(mock_image_ctx, invalidate_request);
+  expect_invalidate_request(mock_image_ctx, invalidate_request, 0);
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
                         mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockObjectMapRefreshRequest, LoadInvalidateError) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockObjectMapImageCtx mock_image_ctx(*ictx);
+
+  ceph::BitVector<2> on_disk_object_map;
+  init_object_map(mock_image_ctx, &on_disk_object_map);
+
+  C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
+  ceph::BitVector<2> object_map;
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
+
+  InSequence seq;
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+  expect_object_map_load(mock_image_ctx, nullptr, TEST_SNAP_ID, -ENOENT);
+
+  MockInvalidateRequest invalidate_request;
+  expect_invalidate_request(mock_image_ctx, invalidate_request, -EPERM);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+
+  req->send();
+  ASSERT_EQ(-EPERM, ctx.wait());
 }
 
 TEST_F(TestMockObjectMapRefreshRequest, LoadCorrupt) {
@@ -243,9 +280,10 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadCorrupt) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   TEST_SNAP_ID, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
 
   InSequence seq;
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
@@ -253,7 +291,7 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadCorrupt) {
   expect_object_map_load(mock_image_ctx, nullptr, TEST_SNAP_ID, -EINVAL);
 
   MockInvalidateRequest invalidate_request;
-  expect_invalidate_request(mock_image_ctx, invalidate_request);
+  expect_invalidate_request(mock_image_ctx, invalidate_request, 0);
   expect_truncate_request(mock_image_ctx);
   expect_object_map_resize(mock_image_ctx, on_disk_object_map.size(), 0);
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
@@ -277,9 +315,10 @@ TEST_F(TestMockObjectMapRefreshRequest, TooSmall) {
   ceph::BitVector<2> small_object_map;
 
   C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   TEST_SNAP_ID, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
 
   InSequence seq;
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
@@ -287,13 +326,46 @@ TEST_F(TestMockObjectMapRefreshRequest, TooSmall) {
   expect_object_map_load(mock_image_ctx, &small_object_map, TEST_SNAP_ID, 0);
 
   MockInvalidateRequest invalidate_request;
-  expect_invalidate_request(mock_image_ctx, invalidate_request);
+  expect_invalidate_request(mock_image_ctx, invalidate_request, 0);
   expect_object_map_resize(mock_image_ctx, on_disk_object_map.size(), 0);
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
                         mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockObjectMapRefreshRequest, TooSmallInvalidateError) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockObjectMapImageCtx mock_image_ctx(*ictx);
+
+  ceph::BitVector<2> on_disk_object_map;
+  init_object_map(mock_image_ctx, &on_disk_object_map);
+
+  ceph::BitVector<2> small_object_map;
+
+  C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
+  ceph::BitVector<2> object_map;
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
+
+  InSequence seq;
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+  expect_object_map_load(mock_image_ctx, &small_object_map, TEST_SNAP_ID, 0);
+
+  MockInvalidateRequest invalidate_request;
+  expect_invalidate_request(mock_image_ctx, invalidate_request, -EPERM);
+  expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
+                        mock_image_ctx.image_ctx->size);
+
+  req->send();
+  ASSERT_EQ(-EPERM, ctx.wait());
 }
 
 TEST_F(TestMockObjectMapRefreshRequest, TooLarge) {
@@ -311,9 +383,10 @@ TEST_F(TestMockObjectMapRefreshRequest, TooLarge) {
   large_object_map.resize(on_disk_object_map.size() * 2);
 
   C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   TEST_SNAP_ID, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
 
   InSequence seq;
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
@@ -339,9 +412,10 @@ TEST_F(TestMockObjectMapRefreshRequest, ResizeError) {
   ceph::BitVector<2> small_object_map;
 
   C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   TEST_SNAP_ID, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
 
   InSequence seq;
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
@@ -349,7 +423,7 @@ TEST_F(TestMockObjectMapRefreshRequest, ResizeError) {
   expect_object_map_load(mock_image_ctx, &small_object_map, TEST_SNAP_ID, 0);
 
   MockInvalidateRequest invalidate_request;
-  expect_invalidate_request(mock_image_ctx, invalidate_request);
+  expect_invalidate_request(mock_image_ctx, invalidate_request, 0);
   expect_object_map_resize(mock_image_ctx, on_disk_object_map.size(), -ESTALE);
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
                         mock_image_ctx.image_ctx->size);
@@ -370,16 +444,17 @@ TEST_F(TestMockObjectMapRefreshRequest, LargeImageError) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   TEST_SNAP_ID, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(
+    mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
 
   InSequence seq;
   expect_get_image_size(mock_image_ctx, TEST_SNAP_ID,
                         std::numeric_limits<int64_t>::max());
 
   MockInvalidateRequest invalidate_request;
-  expect_invalidate_request(mock_image_ctx, invalidate_request);
+  expect_invalidate_request(mock_image_ctx, invalidate_request, 0);
 
   req->send();
   ASSERT_EQ(-EFBIG, ctx.wait());

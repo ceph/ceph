@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef RGW_MULTI_DELETE_H_
 #define RGW_MULTI_DELETE_H_
@@ -29,15 +29,15 @@ public:
 
 class RGWMultiDelObject : public XMLObj
 {
-  string key;
-  string version_id;
+  std::string key;
+  std::string version_id;
 public:
   RGWMultiDelObject() {}
   ~RGWMultiDelObject() override {}
   bool xml_end(const char *el) override;
 
-  const string& get_key() { return key; }
-  const string& get_version_id() { return version_id; }
+  const std::string& get_key() { return key; }
+  const std::string& get_version_id() { return version_id; }
 };
 
 class RGWMultiDelKey : public XMLObj

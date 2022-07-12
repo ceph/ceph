@@ -147,9 +147,9 @@ int Driver::send(Request *req) {
 
   if (ggate_drv_req_cmd(req->req) == GGATE_DRV_CMD_READ &&
       ggate_drv_req_error(req->req) == 0) {
-    assert(req->bl.length() == ggate_drv_req_length(req->req));
+    ceph_assert(req->bl.length() == ggate_drv_req_length(req->req));
     // TODO: avoid copying?
-    req->bl.copy(0, ggate_drv_req_length(req->req),
+    req->bl.begin().copy(ggate_drv_req_length(req->req),
                  static_cast<char *>(ggate_drv_req_buf(req->req)));
     dout(20) << "copied resulting " << req->bl.length() << " bytes to "
              << ggate_drv_req_buf(req->req) << dendl;

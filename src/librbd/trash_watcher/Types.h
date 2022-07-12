@@ -36,7 +36,7 @@ struct ImageAddedPayload {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -52,7 +52,7 @@ struct ImageRemovedPayload {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -63,7 +63,7 @@ struct UnknownPayload {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -78,7 +78,7 @@ struct NotifyMessage {
   Payload payload;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<NotifyMessage *> &o);

@@ -20,7 +20,7 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 MirrorStatusWatcher<I>::MirrorStatusWatcher(librados::IoCtx &io_ctx,
-                                            ContextWQ *work_queue)
+                                            librbd::asio::ContextWQ *work_queue)
   : Watcher(io_ctx, work_queue, RBD_MIRRORING) {
 }
 
@@ -32,7 +32,7 @@ template <typename I>
 void MirrorStatusWatcher<I>::init(Context *on_finish) {
   dout(20) << dendl;
 
-  on_finish = new FunctionContext(
+  on_finish = new LambdaContext(
     [this, on_finish] (int r) {
       if (r < 0) {
         derr << "error removing down statuses: " << cpp_strerror(r) << dendl;
@@ -47,7 +47,7 @@ void MirrorStatusWatcher<I>::init(Context *on_finish) {
   librados::AioCompletion *aio_comp = create_rados_callback(on_finish);
 
   int r = m_ioctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

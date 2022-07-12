@@ -1,18 +1,21 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+#include "common/Cond.h"
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "include/stringify.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/Operations.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/api/Io.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>
@@ -57,6 +60,9 @@ std::string TestFixture::get_temp_image_name() {
 
 void TestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
+  m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
+  librados::Rados rados(m_ioctx);
+  rados.conf_set("rbd_persistent_cache_path", ".");
 
   m_image_name = get_temp_image_name();
   m_image_size = 2 << 20;
@@ -69,22 +75,22 @@ void TestFixture::TearDown() {
        iter != m_ictxs.end(); ++iter) {
     (*iter)->state->close();
   }
-
   m_ioctx.close();
 }
 
 int TestFixture::open_image(const std::string &image_name,
 			    librbd::ImageCtx **ictx) {
-  *ictx = new librbd::ImageCtx(image_name.c_str(), "", NULL, m_ioctx, false);
+  *ictx = new librbd::ImageCtx(image_name.c_str(), "", nullptr, m_ioctx, false);
   m_ictxs.insert(*ictx);
 
-  return (*ictx)->state->open(false);
+  return (*ictx)->state->open(0);
 }
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,
                              const std::string &snap_name) {
+  librbd::NoOpProgressContext prog_ctx;
   return ictx.operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-				      snap_name.c_str());
+				      snap_name.c_str(), 0, prog_ctx);
 }
 
 int TestFixture::snap_protect(librbd::ImageCtx &ictx,
@@ -96,6 +102,11 @@ int TestFixture::snap_protect(librbd::ImageCtx &ictx,
 int TestFixture::flatten(librbd::ImageCtx &ictx,
                          librbd::ProgressContext &prog_ctx) {
   return ictx.operations->flatten(prog_ctx);
+}
+
+int TestFixture::resize(librbd::ImageCtx *ictx, uint64_t size){
+  librbd::NoOpProgressContext prog_ctx;
+  return ictx->operations->resize(size, true, prog_ctx);
 }
 
 void TestFixture::close_image(librbd::ImageCtx *ictx) {
@@ -127,12 +138,28 @@ int TestFixture::unlock_image() {
 }
 
 int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
-  int r = ictx.io_work_queue->write(0, 0, {}, 0);
+  int r = librbd::api::Io<>::write(ictx, 0, 0, {}, 0);
   if (r != 0) {
     return r;
   }
 
-  RWLock::RLocker owner_locker(ictx.owner_lock);
-  assert(ictx.exclusive_lock != nullptr);
+  std::shared_lock owner_locker{ictx.owner_lock};
+  ceph_assert(ictx.exclusive_lock != nullptr);
   return ictx.exclusive_lock->is_lock_owner() ? 0 : -EINVAL;
+}
+
+int TestFixture::flush_writeback_cache(librbd::ImageCtx *image_ctx) {
+  if (image_ctx->test_features(RBD_FEATURE_DIRTY_CACHE)) {
+    // cache exists. Close to flush data
+    C_SaferCond ctx;
+    auto aio_comp = librbd::io::AioCompletion::create_and_start(
+      &ctx, image_ctx, librbd::io::AIO_TYPE_FLUSH);
+    auto req = librbd::io::ImageDispatchSpec::create_flush(
+      *image_ctx, librbd::io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
+      librbd::io::FLUSH_SOURCE_INTERNAL, {});
+    req->send();
+    return ctx.wait();
+  } else {
+    return librbd::api::Io<>::flush(*image_ctx);
+  }
 }

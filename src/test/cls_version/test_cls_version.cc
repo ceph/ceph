@@ -1,16 +1,20 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/rados/librados.hpp"
 #include "include/types.h"
+
 #include "cls/version/cls_version_types.h"
 #include "cls/version/cls_version_client.h"
 
 #include "gtest/gtest.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 
 #include <errno.h>
 #include <string>
 #include <vector>
+
+using namespace std;
 
 static librados::ObjectWriteOperation *new_op() {
   return new librados::ObjectWriteOperation();

@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "librbd/managed_lock/Utils.h"
 #include <sstream>
 
@@ -30,7 +30,7 @@ bool decode_lock_cookie(const std::string &tag, uint64_t *handle) {
 }
 
 std::string encode_lock_cookie(uint64_t watch_handle) {
-  assert(watch_handle != 0);
+  ceph_assert(watch_handle != 0);
   std::ostringstream ss;
   ss << WATCHER_LOCK_COOKIE_PREFIX << " " << watch_handle;
   return ss.str();

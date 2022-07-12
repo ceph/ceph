@@ -3,46 +3,52 @@
 
 #include "common/bloom_filter.hpp"
 
-MEMPOOL_DEFINE_FACTORY(unsigned char, byte, bloom_filter);
+#include <numeric>
+#include "include/intarith.h"
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
+
+double bloom_filter::density() const
+{
+  // TODO: use transform_reduce() in GCC-9 and up
+  unsigned set = std::accumulate(
+    bit_table_.begin(),
+    bit_table_.begin() + table_size_,
+    0u, [](unsigned set, cell_type cell) {
+      return set + popcount(cell);
+    });
+  return (double)set / (table_size_ * sizeof(cell_type) * CHAR_BIT);
+}
 
 void bloom_filter::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode((uint64_t)salt_count_, bl);
-  ::encode((uint64_t)insert_count_, bl);
-  ::encode((uint64_t)target_element_count_, bl);
-  ::encode((uint64_t)random_seed_, bl);
-  bufferptr bp((const char*)bit_table_, table_size_);
-  ::encode(bp, bl);
+  encode((uint64_t)salt_count_, bl);
+  encode((uint64_t)insert_count_, bl);
+  encode((uint64_t)target_element_count_, bl);
+  encode((uint64_t)random_seed_, bl);
+  encode(bit_table_, bl);
   ENCODE_FINISH(bl);
 }
 
-void bloom_filter::decode(bufferlist::iterator& p)
+void bloom_filter::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(2, p);
   uint64_t v;
-  ::decode(v, p);
+  decode(v, p);
   salt_count_ = v;
-  ::decode(v, p);
+  decode(v, p);
   insert_count_ = v;
-  ::decode(v, p);
+  decode(v, p);
   target_element_count_ = v;
-  ::decode(v, p);
+  decode(v, p);
   random_seed_ = v;
-  bufferlist t;
-  ::decode(t, p);
-
   salt_.clear();
   generate_unique_salt();
-  table_size_ = t.length();
-  delete[] bit_table_;
-  if (table_size_) {
-    bit_table_ = new cell_type[table_size_];
-    t.copy(0, table_size_, (char *)bit_table_);
-  } else {
-    bit_table_ = NULL;
-  }
-
+  decode(bit_table_, p);
+  table_size_ = bit_table_.size();
   DECODE_FINISH(p);
 }
 
@@ -60,8 +66,9 @@ void bloom_filter::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("bit_table");
-  for (unsigned i = 0; i < table_size_; ++i)
-    f->dump_unsigned("byte", (unsigned)bit_table_[i]);
+  for (auto byte : bit_table_) {
+    f->dump_unsigned("byte", (unsigned)byte);
+  }
   f->close_section();
 }
 
@@ -86,25 +93,25 @@ void compressible_bloom_filter::encode(bufferlist& bl) const
   bloom_filter::encode(bl);
 
   uint32_t s = size_list.size();
-  ::encode(s, bl);
+  encode(s, bl);
   for (std::vector<size_t>::const_iterator p = size_list.begin();
        p != size_list.end(); ++p)
-    ::encode((uint64_t)*p, bl);
+    encode((uint64_t)*p, bl);
 
   ENCODE_FINISH(bl);
 }
 
-void compressible_bloom_filter::decode(bufferlist::iterator& p)
+void compressible_bloom_filter::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(2, p);
   bloom_filter::decode(p);
 
   uint32_t s;
-  ::decode(s, p);
+  decode(s, p);
   size_list.resize(s);
   for (unsigned i = 0; i < s; i++) {
     uint64_t v;
-    ::decode(v, p);
+    decode(v, p);
     size_list[i] = v;
   }
 

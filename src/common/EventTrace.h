@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
 
 #define OID_EVENT_TRACE(oid, event) \
   EventTrace::trace_oid_event(oid, event, "", __FILE__, __func__, __LINE__)
@@ -44,20 +44,20 @@
 
 #endif
 
-#define LOG_LEVEL 1
+#define LOG_LEVEL 30
 
 class EventTrace {
 private:
   CephContext *ctx;
-  string file;
-  string func;
+  std::string file;
+  std::string func;
   int line;
   utime_t last_ts;
 
   static bool tpinit;
 
   static void init_tp(CephContext *_ctx);
-  static void set_message_attrs(const Message *m, string& oid, string& context, bool incl_oid);
+  static void set_message_attrs(const Message *m, std::string& oid, std::string& context, bool incl_oid);
 
 public:
 

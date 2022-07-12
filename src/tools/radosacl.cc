@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 
+using namespace std;
 using namespace librados;
 
 void buf_to_hex(const unsigned char *buf, int len, char *str)
@@ -41,7 +42,7 @@ struct ACLID {
   void encode(bufferlist& bl) const {
     bl.append((const char *)id, ID_SIZE);
   }
-  void decode(bufferlist::iterator& iter) {
+  void decode(bufferlist::const_iterator& iter) {
     iter.copy(ID_SIZE, (char *)id);
   }
 };
@@ -66,10 +67,12 @@ class ObjectACLs {
 public:
 
   void encode(bufferlist& bl) const {
-    ::encode(acls_map, bl);
+    using ceph::encode;
+    encode(acls_map, bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(acls_map, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+    decode(acls_map, bl);
   }
 
   int read_acl(ACLID& id, ACLFlags *flags);
@@ -159,7 +162,7 @@ int main(int argc, const char **argv)
        << " len=" << bl2.length() << std::endl;
   ObjectACLs oa;
   if (r >= 0) {
-    bufferlist::iterator iter = bl2.begin();
+    auto iter = bl2.cbegin();
     oa.decode(iter);
   }
 

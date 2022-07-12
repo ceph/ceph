@@ -1,3 +1,5 @@
+.. _rbd api py:
+
 ================
  Librbd (Python)
 ================
@@ -27,7 +29,7 @@ image::
 To perform I/O on the image, you instantiate an :class:rbd.Image object::
 
     image = rbd.Image(ioctx, 'myimage')
-    data = 'foo' * 200
+    data = b'foo' * 200
     image.write(data, 0)
 
 This writes 'foo' to the first 600 bytes of the image. Note that data
@@ -45,6 +47,7 @@ block::
 
     cluster = rados.Rados(conffile='my_ceph_conf')
     try:
+        cluster.connect()
         ioctx = cluster.open_ioctx('my_pool')
         try:
             rbd_inst = rbd.RBD()
@@ -52,7 +55,7 @@ block::
             rbd_inst.create(ioctx, 'myimage', size)
             image = rbd.Image(ioctx, 'myimage')
             try:
-                data = 'foo' * 200
+                data = b'foo' * 200
                 image.write(data, 0)
             finally:
                 image.close()
@@ -72,7 +75,7 @@ above example becomes::
             size = 4 * 1024**3  # 4 GiB
             rbd_inst.create(ioctx, 'myimage', size)
             with rbd.Image(ioctx, 'myimage') as image:
-                data = 'foo' * 200
+                data = b'foo' * 200
                 image.write(data, 0)
 
 API Reference

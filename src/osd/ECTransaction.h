@@ -26,10 +26,10 @@ namespace ECTransaction {
   struct WritePlan {
     PGTransactionUPtr t;
     bool invalidates_cache = false; // Yes, both are possible
-    map<hobject_t,extent_set> to_read;
-    map<hobject_t,extent_set> will_write; // superset of to_read
+    std::map<hobject_t,extent_set> to_read;
+    std::map<hobject_t,extent_set> will_write; // superset of to_read
 
-    map<hobject_t,ECUtil::HashInfoRef> hash_infos;
+    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
   };
 
   bool requires_overwrite(
@@ -44,7 +44,7 @@ namespace ECTransaction {
     DoutPrefixProvider *dpp) {
     WritePlan plan;
     t->safe_create_traverse(
-      [&](pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
+      [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
 	ECUtil::HashInfoRef hinfo = get_hinfo(i.first);
 	plan.hash_infos[i.first] = hinfo;
 
@@ -89,7 +89,7 @@ namespace ECTransaction {
 	for (auto &&extent: i.second.buffer_updates) {
 	  using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
 	  if (boost::get<BufferUpdate::CloneRange>(&(extent.get_val()))) {
-	    assert(
+	    ceph_assert(
 	      0 ==
 	      "CloneRange is not allowed, do_op should have returned ENOTSUPP");
 	  }
@@ -109,8 +109,8 @@ namespace ECTransaction {
 	  }
 	  if (head_start != head_finish &&
 	      head_start < orig_size) {
-	    assert(head_finish <= orig_size);
-	    assert(head_finish - head_start == sinfo.get_stripe_width());
+	    ceph_assert(head_finish <= orig_size);
+	    ceph_assert(head_finish - head_start == sinfo.get_stripe_width());
 	    ldpp_dout(dpp, 20) << __func__ << ": reading partial head stripe "
 			       << head_start << "~" << sinfo.get_stripe_width()
 			       << dendl;
@@ -127,8 +127,8 @@ namespace ECTransaction {
 	  if (tail_start != tail_finish &&
 	      (head_start == head_finish || tail_start != head_start) &&
 	      tail_start < orig_size) {
-	    assert(tail_finish <= orig_size);
-	    assert(tail_finish - tail_start == sinfo.get_stripe_width());
+	    ceph_assert(tail_finish <= orig_size);
+	    ceph_assert(tail_finish - tail_start == sinfo.get_stripe_width());
 	    ldpp_dout(dpp, 20) << __func__ << ": reading partial tail stripe "
 			       << tail_start << "~" << sinfo.get_stripe_width()
 			       << dendl;
@@ -137,7 +137,7 @@ namespace ECTransaction {
 	  }
 
 	  if (head_start != tail_finish) {
-	    assert(
+	    ceph_assert(
 	      sinfo.logical_offset_is_stripe_aligned(
 		tail_finish - head_start)
 	      );
@@ -146,7 +146,7 @@ namespace ECTransaction {
 	    if (tail_finish > projected_size)
 	      projected_size = tail_finish;
 	  } else {
-	    assert(tail_finish <= projected_size);
+	    ceph_assert(tail_finish <= projected_size);
 	  }
 	}
 
@@ -174,7 +174,7 @@ namespace ECTransaction {
 	 * to_read should have an entry for i.first iff it isn't empty
 	 * and if we are reading from i.first, we can't be renaming or
 	 * cloning it */
-	assert(plan.to_read.count(i.first) == 0 ||
+	ceph_assert(plan.to_read.count(i.first) == 0 ||
 	       (!plan.to_read.at(i.first).empty() &&
 		!i.second.has_source()));
       });
@@ -184,16 +184,17 @@ namespace ECTransaction {
 
   void generate_transactions(
     WritePlan &plan,
-    ErasureCodeInterfaceRef &ecimpl,
+    ceph::ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
     const ECUtil::stripe_info_t &sinfo,
-    const map<hobject_t,extent_map> &partial_extents,
-    vector<pg_log_entry_t> &entries,
-    map<hobject_t,extent_map> *written,
-    map<shard_id_t, ObjectStore::Transaction> *transactions,
-    set<hobject_t> *temp_added,
-    set<hobject_t> *temp_removed,
-    DoutPrefixProvider *dpp);
+    const std::map<hobject_t,extent_map> &partial_extents,
+    std::vector<pg_log_entry_t> &entries,
+    std::map<hobject_t,extent_map> *written,
+    std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+    std::set<hobject_t> *temp_added,
+    std::set<hobject_t> *temp_removed,
+    DoutPrefixProvider *dpp,
+    const ceph_release_t require_osd_release = ceph_release_t::unknown);
 };
 
 #endif

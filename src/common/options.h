@@ -3,25 +3,30 @@
 
 #pragma once
 
+#include <chrono>
 #include <string>
+#include <variant>
 #include <vector>
-#include <boost/variant.hpp>
 #include "include/str_list.h"
 #include "msg/msg_types.h"
 #include "include/uuid.h"
 
 struct Option {
   enum type_t {
-    TYPE_UINT,
-    TYPE_INT,
-    TYPE_STR,
-    TYPE_FLOAT,
-    TYPE_BOOL,
-    TYPE_ADDR,
-    TYPE_UUID,
+    TYPE_UINT = 0,
+    TYPE_INT = 1,
+    TYPE_STR = 2,
+    TYPE_FLOAT = 3,
+    TYPE_BOOL = 4,
+    TYPE_ADDR = 5,
+    TYPE_ADDRVEC = 6,
+    TYPE_UUID = 7,
+    TYPE_SIZE = 8,
+    TYPE_SECS = 9,
+    TYPE_MILLISECS = 10,
   };
 
-  const char *type_to_str(type_t t) const {
+  static const char *type_to_c_type_str(type_t t) {
     switch (t) {
     case TYPE_UINT: return "uint64_t";
     case TYPE_INT: return "int64_t";
@@ -29,9 +34,65 @@ struct Option {
     case TYPE_FLOAT: return "double";
     case TYPE_BOOL: return "bool";
     case TYPE_ADDR: return "entity_addr_t";
+    case TYPE_ADDRVEC: return "entity_addrvec_t";
     case TYPE_UUID: return "uuid_d";
+    case TYPE_SIZE: return "uint64_t";
+    case TYPE_SECS: return "secs";
+    case TYPE_MILLISECS: return "millisecs";
     default: return "unknown";
     }
+  }
+  static const char *type_to_str(type_t t) {
+    switch (t) {
+    case TYPE_UINT: return "uint";
+    case TYPE_INT: return "int";
+    case TYPE_STR: return "str";
+    case TYPE_FLOAT: return "float";
+    case TYPE_BOOL: return "bool";
+    case TYPE_ADDR: return "addr";
+    case TYPE_ADDRVEC: return "addrvec";
+    case TYPE_UUID: return "uuid";
+    case TYPE_SIZE: return "size";
+    case TYPE_SECS: return "secs";
+    case TYPE_MILLISECS: return "millisecs";
+    default: return "unknown";
+    }
+  }
+  static int str_to_type(const std::string& s) {
+    if (s == "uint") {
+      return TYPE_UINT;
+    }
+    if (s == "int") {
+      return TYPE_INT;
+    }
+    if (s == "str") {
+      return TYPE_STR;
+    }
+    if (s == "float") {
+      return TYPE_FLOAT;
+    }
+    if (s == "bool") {
+      return TYPE_BOOL;
+    }
+    if (s == "addr") {
+      return TYPE_ADDR;
+    }
+    if (s == "addrvec") {
+      return TYPE_ADDRVEC;
+    }
+    if (s == "uuid") {
+      return TYPE_UUID;
+    }
+    if (s == "size") {
+      return TYPE_SIZE;
+    }
+    if (s == "secs") {
+      return TYPE_SECS;
+    }
+    if (s == "millisecs") {
+      return TYPE_MILLISECS;
+    }
+    return -1;
   }
 
   /**
@@ -40,28 +101,53 @@ struct Option {
    * Development: not for users.  May be dangerous, may not be documented.
    */
   enum level_t {
-    LEVEL_BASIC,
-    LEVEL_ADVANCED,
-    LEVEL_DEV,
+    LEVEL_BASIC = 0,
+    LEVEL_ADVANCED = 1,
+    LEVEL_DEV = 2,
+    LEVEL_UNKNOWN = 3,
   };
 
-  const char *level_to_str(level_t l) const {
-    switch(l) {
+  static const char *level_to_str(level_t l) {
+    switch (l) {
       case LEVEL_BASIC: return "basic";
       case LEVEL_ADVANCED: return "advanced";
-      case LEVEL_DEV: return "developer";
+      case LEVEL_DEV: return "dev";
       default: return "unknown";
     }
   }
 
-  using value_t = boost::variant<
-    boost::blank,
+  enum flag_t {
+    FLAG_RUNTIME = 0x1,         ///< option can be changed at runtime
+    FLAG_NO_MON_UPDATE = 0x2,   ///< option cannot be changed via mon config
+    FLAG_STARTUP = 0x4,         ///< option can only take effect at startup
+    FLAG_CLUSTER_CREATE = 0x8,  ///< option only has effect at cluster creation
+    FLAG_CREATE = 0x10,         ///< option only has effect at daemon creation
+    FLAG_MGR = 0x20,            ///< option is a mgr module option
+    FLAG_MINIMAL_CONF = 0x40,   ///< option should go in a minimal ceph.conf
+  };
+
+  struct size_t {
+    std::uint64_t value;
+    operator uint64_t() const {
+      return static_cast<uint64_t>(value);
+    }
+    bool operator==(const size_t& rhs) const {
+      return value == rhs.value;
+    }
+  };
+
+  using value_t = std::variant<
+    std::monostate,
     std::string,
     uint64_t,
     int64_t,
     double,
     bool,
     entity_addr_t,
+    entity_addrvec_t,
+    std::chrono::seconds,
+    std::chrono::milliseconds,
+    size_t,
     uuid_d>;
   const std::string name;
   const type_t type;
@@ -70,8 +156,14 @@ struct Option {
   std::string desc;
   std::string long_desc;
 
+  unsigned flags = 0;
+
+  int subsys = -1; // if >= 0, we are a subsys debug level
+
   value_t value;
   value_t daemon_value;
+
+  static std::string to_str(const value_t& v);
 
   // Items like mon, osd, rgw, rbd, ceph-fuse.  This is advisory metadata
   // for presentation layers (like web dashboards, or generated docs), so that
@@ -93,8 +185,6 @@ struct Option {
   value_t min, max;
   std::vector<const char*> enum_allowed;
 
-  bool safe;
-
   /**
    * Return nonzero and set second argument to error string if the
    * value is invalid.
@@ -106,31 +196,40 @@ struct Option {
   validator_fn_t validator;
 
   Option(std::string const &name, type_t t, level_t l)
-    : name(name), type(t), level(l), safe(false)
+    : name(name), type(t), level(l)
   {
-    // While value_t is nullable (via boost::blank), we don't ever
+    // While value_t is nullable (via std::monostate), we don't ever
     // want it set that way in an Option instance: within an instance,
     // the type of ::value should always match the declared type.
-    if (type == TYPE_INT) {
-      value = int64_t(0);
-    } else if (type == TYPE_UINT) {
-      value = uint64_t(0);
-    } else if (type == TYPE_STR) {
-      value = std::string("");
-    } else if (type == TYPE_FLOAT) {
-      value = 0.0;
-    } else if (type == TYPE_BOOL) {
-      value = false;
-    } else if (type == TYPE_ADDR) {
-      value = entity_addr_t();
-    } else if (type == TYPE_UUID) {
-      value = uuid_d();
-    } else {
+    switch (type) {
+    case TYPE_INT:
+      value = int64_t(0); break;
+    case TYPE_UINT:
+      value = uint64_t(0); break;
+    case TYPE_STR:
+      value = std::string(""); break;
+    case TYPE_FLOAT:
+      value = 0.0; break;
+    case TYPE_BOOL:
+      value = false; break;
+    case TYPE_ADDR:
+      value = entity_addr_t(); break;
+    case TYPE_ADDRVEC:
+      value = entity_addrvec_t(); break;
+    case TYPE_UUID:
+      value = uuid_d(); break;
+    case TYPE_SIZE:
+      value = size_t{0}; break;
+    case TYPE_SECS:
+      value = std::chrono::seconds{0}; break;
+    case TYPE_MILLISECS:
+      value = std::chrono::milliseconds{0}; break;
+    default:
       ceph_abort();
     }
   }
 
-  void dump_value(const char *field_name, const value_t &v, Formatter *f) const;
+  void dump_value(const char *field_name, const value_t &v, ceph::Formatter *f) const;
 
   // Validate and potentially modify incoming string value
   int pre_validate(std::string *new_value, std::string *err) const;
@@ -146,12 +245,12 @@ struct Option {
 
   // bool is an integer, but we don't think so. teach it the hard way.
   template<typename T>
-  using is_not_integer = std::enable_if<!std::is_integral<T>::value ||
-					std::is_same<T, bool>::value, int>;
+  using is_not_integer_t =
+      std::enable_if_t<!std::is_integral_v<T> || std::is_same_v<T, bool>, int>;
   template<typename T>
-  using is_integer = std::enable_if<std::is_integral<T>::value &&
-				    !std::is_same<T, bool>::value, int>;
-  template<typename T, typename is_not_integer<T>::type = 0>
+  using is_integer_t =
+      std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, int>;
+  template<typename T, typename = is_not_integer_t<T>>
   Option& set_value(value_t& v, const T& new_value) {
     v = new_value;
     return *this;
@@ -160,23 +259,37 @@ struct Option {
   // For potentially ambiguous types, inspect Option::type and
   // do some casting.  This is necessary to make sure that setting
   // a float option to "0" actually sets the double part of variant.
-  template<typename T, typename is_integer<T>::type = 0>
+  template<typename T, typename = is_integer_t<T>>
   Option& set_value(value_t& v, T new_value) {
-    if (type == TYPE_INT) {
-      v = int64_t(new_value);
-    } else if (type == TYPE_UINT) {
-      v = uint64_t(new_value);
-    } else if (type == TYPE_FLOAT) {
-      v = double(new_value);
-    } else if (type == TYPE_BOOL) {
-      v = bool(new_value);
-    } else {
+    switch (type) {
+    case TYPE_INT:
+      v = int64_t(new_value); break;
+    case TYPE_UINT:
+      v = uint64_t(new_value); break;
+    case TYPE_FLOAT:
+      v = double(new_value); break;
+    case TYPE_BOOL:
+      v = bool(new_value); break;
+    case TYPE_SIZE:
+      v = size_t{static_cast<std::uint64_t>(new_value)}; break;
+    case TYPE_SECS:
+      v = std::chrono::seconds{new_value}; break;
+    case TYPE_MILLISECS:
+      v = std::chrono::milliseconds{new_value}; break;
+    default:
       std::cerr << "Bad type in set_value: " << name << ": "
                 << typeid(T).name() << std::endl;
       ceph_abort();
     }
     return *this;
   }
+
+  /// parse and validate a string input
+  int parse_value(
+    const std::string& raw_val,
+    value_t *out,
+    std::string *error_message,
+    std::string *normalized_value=nullptr) const;
 
   template<typename T>
   Option& set_default(const T& v) {
@@ -233,14 +346,18 @@ struct Option {
     return *this;
   }
 
-  Option& set_enum_allowed(const std::initializer_list<const char*>& allowed)
+  Option& set_enum_allowed(const std::vector<const char*>& allowed)
   {
-    enum_allowed.insert(enum_allowed.end(), allowed);
+    enum_allowed = allowed;
     return *this;
   }
 
-  Option &set_safe() {
-    safe = true;
+  Option &set_flag(flag_t f) {
+    flags |= f;
+    return *this;
+  }
+  Option &set_flags(flag_t f) {
+    flags |= f;
     return *this;
   }
 
@@ -250,19 +367,58 @@ struct Option {
     return *this;
   }
 
-  void dump(Formatter *f) const;
+  Option &set_subsys(int s) {
+    subsys = s;
+    return *this;
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void print(std::ostream *out) const;
+
+  bool has_flag(flag_t f) const {
+    return flags & f;
+  }
 
   /**
    * A crude indicator of whether the value may be
    * modified safely at runtime -- should be replaced
    * with proper locking!
    */
-  bool is_safe() const
+  bool can_update_at_runtime() const
   {
-    return safe || type == TYPE_BOOL || type == TYPE_INT
-                || type == TYPE_UINT || type == TYPE_FLOAT;
+    return
+      (has_flag(FLAG_RUNTIME)
+        || (!has_flag(FLAG_MGR)
+          && (type == TYPE_BOOL || type == TYPE_INT
+            || type == TYPE_UINT || type == TYPE_FLOAT
+            || type == TYPE_SIZE || type == TYPE_SECS
+            || type == TYPE_MILLISECS)))
+      && !has_flag(FLAG_STARTUP)
+      && !has_flag(FLAG_CLUSTER_CREATE)
+      && !has_flag(FLAG_CREATE);
   }
 };
 
-extern const std::vector<Option> ceph_options;
+constexpr unsigned long long operator"" _min (unsigned long long min) {
+  return min * 60;
+}
+constexpr unsigned long long operator"" _hr (unsigned long long hr) {
+  return hr * 60 * 60;
+}
+constexpr unsigned long long operator"" _day (unsigned long long day) {
+  return day * 24 * 60 * 60;
+}
+constexpr unsigned long long operator"" _K (unsigned long long n) {
+  return n << 10;
+}
+constexpr unsigned long long operator"" _M (unsigned long long n) {
+  return n << 20;
+}
+constexpr unsigned long long operator"" _G (unsigned long long n) {
+  return n << 30;
+}
+constexpr unsigned long long operator"" _T (unsigned long long n) {
+  return n << 40;
+}
 
+extern const std::vector<Option> ceph_options;

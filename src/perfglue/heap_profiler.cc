@@ -52,6 +52,16 @@ void ceph_heap_release_free_memory()
   MallocExtension::instance()->ReleaseFreeMemory();
 }
 
+double ceph_heap_get_release_rate()
+{
+  return MallocExtension::instance()->GetMemoryReleaseRate();
+}
+
+void ceph_heap_set_release_rate(double val)
+{
+  MallocExtension::instance()->SetMemoryReleaseRate(val);
+}
+
 bool ceph_heap_get_numeric_property(
   const char *property, size_t *value)
 {
@@ -79,19 +89,28 @@ bool ceph_heap_profiler_running()
 
 static void get_profile_name(char *profile_name, int profile_name_len)
 {
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic push
+  // Don't care, it doesn't matter, and we can't do anything about it.
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
+
   char path[PATH_MAX];
-  snprintf(path, sizeof(path), "%s", g_conf->log_file.c_str());
+  snprintf(path, sizeof(path), "%s", g_conf()->log_file.c_str());
   char *last_slash = rindex(path, '/');
 
   if (last_slash == NULL) {
     snprintf(profile_name, profile_name_len, "./%s.profile",
-	     g_conf->name.to_cstr());
+	     g_conf()->name.to_cstr());
   }
   else {
     last_slash[1] = '\0';
     snprintf(profile_name, profile_name_len, "%s/%s.profile",
-	     path, g_conf->name.to_cstr());
+	     path, g_conf()->name.to_cstr());
   }
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic pop
+#endif
 }
 
 void ceph_heap_profiler_start()
@@ -122,7 +141,7 @@ void ceph_heap_profiler_dump(const char *reason)
 #define HEAP_PROFILER_STATS_SIZE 2048
 
 void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
-                                       ostream& out)
+                                       std::ostream& out)
 {
 #ifdef HAVE_LIBTCMALLOC
   if (cmd.size() == 1 && cmd[0] == "dump") {
@@ -132,24 +151,36 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
     }
     char heap_stats[HEAP_PROFILER_STATS_SIZE];
     ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
-    out << g_conf->name << " dumping heap profile now.\n"
+    out << g_conf()->name << " dumping heap profile now.\n"
 	<< heap_stats;
     ceph_heap_profiler_dump("admin request");
   } else if (cmd.size() == 1 && cmd[0] == "start_profiler") {
     ceph_heap_profiler_start();
-    out << g_conf->name << " started profiler";
+    out << g_conf()->name << " started profiler";
   } else if (cmd.size() == 1 && cmd[0] == "stop_profiler") {
     ceph_heap_profiler_stop();
-    out << g_conf->name << " stopped profiler";
+    out << g_conf()->name << " stopped profiler";
   } else if (cmd.size() == 1 && cmd[0] == "release") {
     ceph_heap_release_free_memory();
-    out << g_conf->name << " releasing free RAM back to system.";
+    out << g_conf()->name << " releasing free RAM back to system.";
+  } else if (cmd.size() == 1 && cmd[0] == "get_release_rate") {
+    out << g_conf()->name << " release rate: " 
+	<< std::setprecision(4) << ceph_heap_get_release_rate() << "\n";
+  } else if (cmd.size() == 2 && cmd[0] == "set_release_rate") {
+    try {
+      double val = std::stod(cmd[1]);
+      ceph_heap_set_release_rate(val);
+      out << g_conf()->name <<  " release rate changed to: " 
+          << std::setprecision(4) << ceph_heap_get_release_rate() << "\n";
+    } catch (...) {
+      out << g_conf()->name <<  " *** need an numerical value. ";
+    }
   } else
 #endif
   if (cmd.size() == 1 && cmd[0] == "stats") {
     char heap_stats[HEAP_PROFILER_STATS_SIZE];
     ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
-    out << g_conf->name << " tcmalloc heap stats:"
+    out << g_conf()->name << " tcmalloc heap stats:"
 	<< heap_stats;
   } else {
     out << "unknown command " << cmd;

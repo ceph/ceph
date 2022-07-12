@@ -8,8 +8,8 @@
 #include "common/debug.h"
 #include "common/Cond.h"
 #include "common/Finisher.h"
-#include "common/Mutex.h"
-#include "include/assert.h"
+#include "common/ceph_mutex.h"
+#include "include/ceph_assert.h"
 #include "common/ceph_time.h"
 
 #include "FakeWriteback.h"
@@ -22,12 +22,12 @@ class C_Delay : public Context {
   CephContext *m_cct;
   Context *m_con;
   ceph::timespan m_delay;
-  Mutex *m_lock;
+  ceph::mutex *m_lock;
   bufferlist *m_bl;
   uint64_t m_off;
 
 public:
-  C_Delay(CephContext *cct, Context *c, Mutex *lock, uint64_t off,
+  C_Delay(CephContext *cct, Context *c, ceph::mutex *lock, uint64_t off,
 	  bufferlist *pbl, uint64_t delay_ns=0)
     : m_cct(cct), m_con(c), m_delay(delay_ns * std::chrono::nanoseconds(1)),
       m_lock(lock), m_bl(pbl), m_off(off) {}
@@ -39,13 +39,12 @@ public:
       m_bl->append(bp);
       ldout(m_cct, 20) << "finished read " << m_off << "~" << r << dendl;
     }
-    m_lock->Lock();
+    std::lock_guard locker{*m_lock};
     m_con->complete(r);
-    m_lock->Unlock();
   }
 };
 
-FakeWriteback::FakeWriteback(CephContext *cct, Mutex *lock, uint64_t delay_ns)
+FakeWriteback::FakeWriteback(CephContext *cct, ceph::mutex *lock, uint64_t delay_ns)
   : m_cct(cct), m_lock(lock), m_delay_ns(delay_ns)
 {
   m_finisher = new Finisher(cct);

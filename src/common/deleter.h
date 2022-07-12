@@ -23,6 +23,9 @@
 #define CEPH_COMMON_DELETER_H
 
 #include <atomic>
+#include <cstdlib>
+#include <new>
+#include <utility>
 
 /// \addtogroup memory-module
 /// @{

@@ -1,45 +1,20 @@
-#!/usr/bin/env bash
+#!/bin/bash -e
 
-#command line => CEPH_BRANCH=<branch>; MACHINE_NAME=<machine_type>; SUITE_NAME=<suite>; ../schedule_subset.sh <day_of_week> $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL
+#command line => CEPH_BRANCH=<branch>; MACHINE_NAME=<machine_type>; SUITE_NAME=<suite>; ../schedule_subset.sh <day_of_week> $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL <$FILTER>
 
-# $1 - part (day of week)
-# $2 - branch name
-# $3 - machine name
-# $4 - suite name
-# $5 - email address
-# $6 - filter out (this arg is to be at the end of the command line for now)
+partitions="$1"
+shift
+branch="$1"
+shift
+machine="$1"
+shift
+suite="$1"
+shift
+email="$1"
+shift
+kernel="$1"
+shift
+# rest of arguments passed directly to teuthology-suite
 
-## example #1 
-## (date +%U) week number
-## % 2 - mod 2 (e.g. 0,1,0,1 ...)
-## * 7 -  multiplied by 7 (e.g. 0,7,0,7...)
-## $1 day of the week (0-6)
-## /14 for 2 weeks
-
-## example #2 
-## (date +%U) week number
-## % 4 - mod 4 (e.g. 0,1,2,3,0,1,2,3 ...)
-## * 7 -  multiplied by 7 (e.g. 0,7,14,21,0,7,14,21...)
-## $1 day of the week (0-6)
-## /28 for 4 weeks
-
-echo "Scheduling " $2 " branch"
-if [ $2 = "master" ] ; then
-        # run master branch with --newest option looking for good sha1 7 builds back with /999 jobs
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/999 --newest 7 -e $5 $6
-elif [ $2 = "hammer" ] ; then
-        # run hammer branch with less jobs
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/56 -e $5 $6
-elif [ $2 = "jewel" ] ; then
-        # run jewel branch with /40 jobs
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/40 -e $5 $6
-elif [ $2 = "kraken" ] ; then
-        # run kraken branch with /999 jobs
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/999 -e $5 $6
-elif [ $2 = "luminous" ] ; then
-        # run luminous branch with /999 jobs
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/999 -e $5 $6
-else
-        # run NON master branches without --newest 
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 -e $5 $6
-fi
+echo "Scheduling $branch branch"
+teuthology-suite -v -c "$branch" -m "$machine" -k "$kernel" -s "$suite" --subset "$((RANDOM % partitions))/$partitions" --newest 100 -e "$email" "$@"

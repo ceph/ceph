@@ -27,6 +27,8 @@
 #include "global/global_init.h"
 #include <gtest/gtest.h>
 
+using namespace std;
+
 class TestWrapLFNIndex : public LFNIndex {
 public:
   TestWrapLFNIndex(CephContext* cct,
@@ -44,6 +46,10 @@ public:
   int _split(
 		     uint32_t match,                           
 		     uint32_t bits,                            
+		     CollectionIndex* dest
+		     ) override { return 0; }
+  int _merge(
+		     uint32_t bits,
 		     CollectionIndex* dest
 		     ) override { return 0; }
 
@@ -282,7 +288,7 @@ TEST_F(TestLFNIndex, remove_object) {
     EXPECT_EQ(0, exists);
     std::string pathname_1("PATH_1/" + mangled_name_1);
     auto retvalue = ::creat(pathname_1.c_str(), 0600);
-    assert(retvalue > 2);
+    ceph_assert(retvalue > 2);
     EXPECT_EQ(0, ::close(retvalue));
     EXPECT_EQ(0, created(hoid, pathname_1.c_str()));
 
@@ -422,7 +428,7 @@ TEST_F(TestLFNIndex, get_mangled_name) {
     mangled_name.clear();
     exists = 666;
     auto retvalue = ::creat(pathname.c_str(), 0600);
-    assert(retvalue > 2);
+    ceph_assert(retvalue > 2);
     EXPECT_EQ(0, ::close(retvalue));
     EXPECT_EQ(0, created(hoid, pathname.c_str()));
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
@@ -466,11 +472,11 @@ int main(int argc, char **argv) {
   if (ret < 0) {
     cerr << "SKIP LFNIndex because unable to test for xattr" << std::endl;
   } else {
-    vector<const char*> args;
-    argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
     auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			   CODE_ENVIRONMENT_UTILITY, 0);
+			   CODE_ENVIRONMENT_UTILITY,
+			   CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
     common_init_finish(g_ceph_context);
 
     ::testing::InitGoogleTest(&argc, argv);

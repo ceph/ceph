@@ -1,3 +1,2 @@
-
-from module import *
-
+# flake8: noqa
+from .module import Module

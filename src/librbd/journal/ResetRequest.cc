@@ -8,7 +8,7 @@
 #include "common/WorkQueue.h"
 #include "journal/Journaler.h"
 #include "journal/Settings.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/CreateRequest.h"
@@ -34,7 +34,7 @@ template<typename I>
 void ResetRequest<I>::init_journaler() {
   ldout(m_cct, 10) << dendl;
 
-  m_journaler = new Journaler(m_io_ctx, m_image_id, m_client_id, {});
+  m_journaler = new Journaler(m_io_ctx, m_image_id, m_client_id, {}, nullptr);
   Context *ctx = create_context_callback<
      ResetRequest<I>, &ResetRequest<I>::handle_init_journaler>(this);
   m_journaler->init(ctx);

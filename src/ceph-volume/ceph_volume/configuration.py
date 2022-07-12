@@ -1,13 +1,19 @@
-try:
-    import configparser
-except ImportError:
-    import ConfigParser as configparser
 import contextlib
 import logging
 import os
 import re
-from ceph_volume import terminal
+from ceph_volume import terminal, conf
 from ceph_volume import exceptions
+from sys import version_info as sys_version_info
+
+if sys_version_info.major >= 3:
+    import configparser
+    conf_parentclass = configparser.ConfigParser
+elif sys_version_info.major < 3:
+    import ConfigParser as configparser
+    conf_parentclass = configparser.SafeConfigParser
+else:
+    raise RuntimeError('Not expecting python version > 3 yet.')
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +37,16 @@ class _TrimIndentFile(object):
         return iter(self.readline, '')
 
 
+def load_ceph_conf_path(cluster_name='ceph'):
+    abspath = '/etc/ceph/%s.conf' % cluster_name
+    conf.path = os.getenv('CEPH_CONF', abspath)
+    conf.cluster = cluster_name
+
+
 def load(abspath=None):
+    if abspath is None:
+        abspath = conf.path
+
     if not os.path.exists(abspath):
         raise exceptions.ConfigurationError(abspath=abspath)
 
@@ -41,7 +56,8 @@ def load(abspath=None):
         ceph_file = open(abspath)
         trimmed_conf = _TrimIndentFile(ceph_file)
         with contextlib.closing(ceph_file):
-            parser.readfp(trimmed_conf)
+            parser.read_conf(trimmed_conf)
+            conf.ceph = parser
             return parser
     except configparser.ParsingError as error:
         logger.exception('Unable to parse INI-style file: %s' % abspath)
@@ -49,9 +65,9 @@ def load(abspath=None):
         raise RuntimeError('Unable to read configuration file: %s' % abspath)
 
 
-class Conf(configparser.SafeConfigParser):
+class Conf(conf_parentclass):
     """
-    Subclasses from SafeConfigParser to give a few helpers for Ceph
+    Subclasses from ConfigParser to give a few helpers for Ceph
     configuration.
     """
 
@@ -64,6 +80,11 @@ class Conf(configparser.SafeConfigParser):
             self.get('global', 'fsid')
         except (configparser.NoSectionError, configparser.NoOptionError):
             raise exceptions.ConfigurationKeyError('global', 'fsid')
+
+    def optionxform(self, s):
+        s = s.replace('_', ' ')
+        s = '_'.join(s.split())
+        return s
 
     def get_safe(self, section, key, default=None):
         """
@@ -200,3 +221,11 @@ class Conf(configparser.SafeConfigParser):
             for name, val in options.items():
                 if isinstance(val, list):
                     options[name] = '\n'.join(val)
+
+    def read_conf(self, conffile):
+        if sys_version_info.major >= 3:
+            self.read_file(conffile)
+        elif sys_version_info.major < 3:
+            self.readfp(conffile)
+        else:
+            raise RuntimeError('Not expecting python version > 3 yet.')

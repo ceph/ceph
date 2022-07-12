@@ -21,6 +21,8 @@
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
 
+#include "include/ceph_assert.h"
+
 namespace bi = boost::intrusive;
 
 template <typename T, typename S>
@@ -67,8 +69,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         K key;		// klass
         ListPairs lp;
         Klass(K& k) :
-          key(k)
-          {}
+          key(k) {
+        }
+        ~Klass() {
+          lp.clear_and_dispose(DelItem<ListPair>());
+        }
       friend bool operator< (const Klass &a, const Klass &b)
         { return a.key < b.key; }
       friend bool operator> (const Klass &a, const Klass &b)
@@ -84,11 +89,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       }
       //Get the cost of the next item to dequeue
       unsigned get_cost() const {
-        assert(!empty());
+        ceph_assert(!empty());
         return lp.begin()->cost;
       }
       T pop() {
-	assert(!lp.empty());
+	ceph_assert(!lp.empty());
 	T ret = std::move(lp.begin()->item);
         lp.erase_and_dispose(lp.begin(), DelItem<ListPair>());
         return ret;
@@ -99,19 +104,16 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       unsigned get_size() const {
 	return lp.size();
       }
-      unsigned filter_class(std::list<T>* out) {
-        unsigned count = 0;
+      void filter_class(std::list<T>* out) {
         for (Lit i = --lp.end();; --i) {
           if (out) {
             out->push_front(std::move(i->item));
           }
           i = lp.erase_and_dispose(i, DelItem<ListPair>());
-          ++count;
           if (i == lp.begin()) {
             break;
           }
         }
-        return count;
       }
     };
     class SubQueue : public bi::set_base_hook<>
@@ -129,8 +131,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	Kit next;
 	SubQueue(unsigned& p) :
 	  key(p),
-	  next(klasses.begin())
-	  {}
+	  next(klasses.begin()) {
+	}
+	~SubQueue() {
+	  klasses.clear_and_dispose(DelItem<Klass>());
+	}
       friend bool operator< (const SubQueue &a, const SubQueue &b)
         { return a.key < b.key; }
       friend bool operator> (const SubQueue &a, const SubQueue &b)
@@ -151,7 +156,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	ret.first->insert(cost, std::move(item), front);
       }
       unsigned get_cost() const {
-        assert(!empty());
+        ceph_assert(!empty());
         return next->get_cost();
       }
       T pop() {
@@ -164,17 +169,23 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         check_end();
 	return ret;
       }
-      unsigned filter_class(K& cl, std::list<T>* out) {
-	unsigned count = 0;
+      void filter_class(K& cl, std::list<T>* out) {
         Kit i = klasses.find(cl, MapKey<Klass, K>());
         if (i != klasses.end()) {
-          count = i->filter_class(out);
+          i->filter_class(out);
 	  Kit tmp = klasses.erase_and_dispose(i, DelItem<Klass>());
 	  if (next == i) {
             next = tmp;
           }
           check_end();
         }
+      }
+      // this is intended for unit tests and should be never used on hot paths
+      unsigned get_size_slow() const {
+	unsigned count = 0;
+	for (const auto& klass : klasses) {
+	  count += klass.get_size();
+	}
 	return count;
       }
       void dump(ceph::Formatter *f) const {
@@ -191,14 +202,15 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       unsigned total_prio;
       unsigned max_cost;
       public:
-	unsigned size;
 	Queue() :
 	  total_prio(0),
-	  max_cost(0),
-	  size(0)
-	  {}
+	  max_cost(0) {
+	}
+	~Queue() {
+	  queues.clear_and_dispose(DelItem<SubQueue>());
+	}
 	bool empty() const {
-	  return !size;
+	  return queues.empty();
 	}
 	void insert(unsigned p, K cl, unsigned cost, T&& item, bool front = false) {
 	  typename SubQueues::insert_commit_data insert_data;
@@ -212,10 +224,8 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  if (cost > max_cost) {
 	    max_cost = cost;
 	  }
-	  ++size;
 	}
 	T pop(bool strict = false) {
-	  --size;
 	  Sit i = --queues.end();
 	  if (strict) {
 	    T ret = i->pop();
@@ -229,7 +239,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	      // Pick a new priority out of the total priority.
 	      unsigned prio = rand() % total_prio + 1;
 	      unsigned tp = total_prio - i->key;
-	      // Find the priority coresponding to the picked number.
+	      // Find the priority corresponding to the picked number.
 	      // Subtract high priorities to low priorities until the picked number
 	      // is more than the total and try to dequeue that priority.
 	      // Reverse the direction from previous implementation because there is a higher
@@ -258,7 +268,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	}
 	void filter_class(K& cl, std::list<T>* out) {
 	  for (Sit i = queues.begin(); i != queues.end();) {
-	    size -= i->filter_class(cl, out);
+	    i->filter_class(cl, out);
 	    if (i->empty()) {
 	      total_prio -= i->key;
 	      i = queues.erase_and_dispose(i, DelItem<SubQueue>());
@@ -266,6 +276,14 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	      ++i;
 	    }
 	  }
+	}
+	// this is intended for unit tests and should be never used on hot paths
+	unsigned get_size_slow() const {
+	  unsigned count = 0;
+	  for (const auto& queue : queues) {
+	    count += queue.get_size_slow();
+	  }
+	  return count;
 	}
 	void dump(ceph::Formatter *f) const {
 	  for (typename SubQueues::const_iterator i = queues.begin();
@@ -289,15 +307,12 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       {
 	std::srand(time(0));
       }
-    unsigned length() const final {
-      return strict.size + normal.size;
-    }
     void remove_by_class(K cl, std::list<T>* removed = 0) final {
       strict.filter_class(cl, removed);
       normal.filter_class(cl, removed);
     }
     bool empty() const final {
-      return !(strict.size + normal.size);
+      return strict.empty() && normal.empty();
     }
     void enqueue_strict(K cl, unsigned p, T&& item) final {
       strict.insert(p, cl, 0, std::move(item));
@@ -312,11 +327,14 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       normal.insert(p, cl, cost, std::move(item), true);
     }
     T dequeue() override {
-      assert(strict.size + normal.size > 0);
+      ceph_assert(!empty());
       if (!strict.empty()) {
 	return strict.pop(true);
       }
       return normal.pop();
+    }
+    unsigned get_size_slow() {
+      return strict.get_size_slow() + normal.get_size_slow();
     }
     void dump(ceph::Formatter *f) const override {
       f->open_array_section("high_queues");
@@ -325,6 +343,10 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       f->open_array_section("queues");
       normal.dump(f);
       f->close_section();
+    }
+
+    void print(std::ostream &ostream) const final {
+      ostream << "WeightedPriorityQueue";
     }
 };
 

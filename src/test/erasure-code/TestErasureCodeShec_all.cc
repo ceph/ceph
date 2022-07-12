@@ -31,6 +31,8 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 struct Param_d {
   char* k;
   char* m;
@@ -260,7 +262,7 @@ TEST_P(ParameterTest, parameter_all)
   delete crush;
 }
 
-INSTANTIATE_TEST_CASE_P(Test, ParameterTest, ::testing::ValuesIn(param));
+INSTANTIATE_TEST_SUITE_P(Test, ParameterTest, ::testing::ValuesIn(param));
 
 int main(int argc, char **argv)
 {
@@ -291,16 +293,12 @@ int main(int argc, char **argv)
     }
   }
 
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **) argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : ".libs");
-  g_conf->set_val_or_die("erasure_code_dir", directory, false);
 
   ::testing::InitGoogleTest(&argc, argv);
 

@@ -36,7 +36,7 @@ struct PayloadBase {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -51,7 +51,7 @@ struct ImagePayloadBase : public PayloadBase {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -91,7 +91,7 @@ struct PeerImageRemovedPayload : public PayloadBase {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -106,7 +106,7 @@ struct SyncPayloadBase : public PayloadBase {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -139,7 +139,7 @@ struct UnknownPayload {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -157,7 +157,7 @@ struct NotifyMessage {
   Payload payload;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<NotifyMessage *> &o);
@@ -181,7 +181,7 @@ struct NotifyAckPayload {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 

@@ -1,0 +1,19 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug client: 20
+    log-ignorelist:
+      - OSD full dropping all updates
+      - OSD near full
+      - pausewr flag
+      - failsafe engaged, dropping updates
+      - failsafe disengaged, no longer dropping
+      - is full \(reached quota
+      - POOL_FULL
+      - POOL_NEARFULL
+      - POOL_BACKFILLFULL
+      - PG_DEGRADED
+      - OSD_OUT_OF_ORDER_FULL
+      - OSD_NEARFULL
+      - OSD_FULL

@@ -20,12 +20,12 @@
 #include <errno.h>
 #include <string.h>
 
-#include <vector>
 #include <list>
+#include <optional>
+#include <vector>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/int_types.h"
-#include "common/Tub.h"
 
 class CephContext;
 
@@ -41,12 +41,12 @@ class UserspaceEventManager {
   CephContext *cct;
   int max_fd = 0;
   uint32_t max_wait_idx = 0;
-  std::vector<Tub<UserspaceFDImpl> > fds;
+  std::vector<std::optional<UserspaceFDImpl> > fds;
   std::vector<int> waiting_fds;
   std::list<uint32_t> unused_fds;
 
  public:
-  UserspaceEventManager(CephContext *c): cct(c) {
+  explicit UserspaceEventManager(CephContext *c): cct(c) {
     waiting_fds.resize(1024);
   }
 
@@ -56,7 +56,7 @@ class UserspaceEventManager {
     if ((size_t)fd >= fds.size())
       return -ENOENT;
 
-    Tub<UserspaceFDImpl> &impl = fds[fd];
+    std::optional<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 
@@ -74,14 +74,14 @@ class UserspaceEventManager {
     if ((size_t)fd >= fds.size())
       return -ENOENT;
 
-    Tub<UserspaceFDImpl> &impl = fds[fd];
+    std::optional<UserspaceFDImpl> &impl = fds[fd];
     if (!impl)
       return -ENOENT;
 
     impl->listening_mask &= (~mask);
     if (!(impl->activating_mask & impl->listening_mask) && impl->waiting_idx) {
       if (waiting_fds[max_wait_idx] == fd) {
-        assert(impl->waiting_idx == max_wait_idx);
+        ceph_assert(impl->waiting_idx == max_wait_idx);
         --max_wait_idx;
       }
       waiting_fds[impl->waiting_idx] = -1;

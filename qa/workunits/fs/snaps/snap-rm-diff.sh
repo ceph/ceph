@@ -1,6 +1,5 @@
 #!/bin/sh -ex
 
-ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
 wget -q http://download.ceph.com/qa/linux-2.6.33.tar.bz2
 mkdir foo
 cp linux* foo

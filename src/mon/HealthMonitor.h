@@ -16,17 +16,17 @@
 
 #include "mon/PaxosService.h"
 
-//forward declaration
-namespace ceph { class Formatter; }
-
 class HealthMonitor : public PaxosService
 {
   version_t version = 0;
-  map<int,health_check_map_t> quorum_checks;  // for each quorum member
+  std::map<int,health_check_map_t> quorum_checks;  // for each quorum member
   health_check_map_t leader_checks;           // leader only
+  std::map<std::string,health_mute_t> mutes;
+
+  std::map<std::string,health_mute_t> pending_mutes;
 
 public:
-  HealthMonitor(Monitor *m, Paxos *p, const string& service_name);
+  HealthMonitor(Monitor &m, Paxos &p, const std::string& service_name);
 
   /**
    * @defgroup HealthMonitor_Inherited_h Inherited abstract methods
@@ -36,11 +36,6 @@ public:
 
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
-
-  bool prepare_health_checks(MonOpRequestRef op);
-
-  bool check_leader_health();
-  bool check_member_health();
 
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
@@ -52,9 +47,29 @@ public:
 
   void tick() override;
 
+  void gather_all_health_checks(health_check_map_t *all);
+  health_status_t get_health_status(
+    bool want_detail,
+    ceph::Formatter *f,
+    std::string *plain,
+    const char *sep1 = " ",
+    const char *sep2 = "; ");
+
   /**
    * @} // HealthMonitor_Inherited_h
    */
+private:
+  bool preprocess_command(MonOpRequestRef op);
+
+  bool prepare_command(MonOpRequestRef op);
+  bool prepare_health_checks(MonOpRequestRef op);
+  void check_for_older_version(health_check_map_t *checks);
+  void check_for_mon_down(health_check_map_t *checks);
+  void check_for_clock_skew(health_check_map_t *checks);
+  void check_if_msgr2_enabled(health_check_map_t *checks);
+  bool check_leader_health();
+  bool check_member_health();
+  bool check_mutes();
 };
 
 #endif // CEPH_HEALTH_MONITOR_H

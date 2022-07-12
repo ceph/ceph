@@ -1,3 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_pg_log_dups_tracked: 10000
+
 tasks:
 - ceph-fuse:
 - workunit:

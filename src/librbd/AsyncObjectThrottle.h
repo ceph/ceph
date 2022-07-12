@@ -58,7 +58,7 @@ public:
   void finish_op(int r) override;
 
 private:
-  Mutex m_lock;
+  ceph::mutex m_lock;
   const AsyncRequest<ImageCtxT> *m_async_request;
   ImageCtxT &m_image_ctx;
   ContextFactory m_context_factory;

@@ -8,7 +8,7 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7227" # git grep '\<7227\>' : there must be only one
+    export CEPH_MON="127.0.0.1:$(get_unused_port)"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -44,7 +44,7 @@ function TEST_safe_to_destroy() {
     flush_pg_stats
     wait_for_clean
 
-    expect_failure $dir 'pgs currently' osd safe-to-destroy 0
+    expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 0
     expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 1
     expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 2
     expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 3
@@ -82,7 +82,7 @@ function TEST_ok_to_stop() {
     ceph osd ok-to-stop 1
     ceph osd ok-to-stop 2
     ceph osd ok-to-stop 3
-    expect_failure $dir degraded ceph osd ok-to-stop 0 1
+    expect_failure $dir bad_become_inactive ceph osd ok-to-stop 0 1
 
     ceph osd pool set foo min_size 1
     sleep 1
@@ -92,8 +92,8 @@ function TEST_ok_to_stop() {
     ceph osd ok-to-stop 1 2
     ceph osd ok-to-stop 2 3
     ceph osd ok-to-stop 3 4
-    expect_failure $dir degraded ceph osd ok-to-stop 0 1 2
-    expect_failure $dir degraded ceph osd ok-to-stop 0 1 2 3
+    expect_failure $dir bad_become_inactive ceph osd ok-to-stop 0 1 2
+    expect_failure $dir bad_become_inactive ceph osd ok-to-stop 0 1 2 3
 }
 
 main safe-to-destroy "$@"

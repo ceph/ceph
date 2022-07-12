@@ -2,25 +2,15 @@
 # Cython
 #
 
-SET(Cython${PYTHON_VERSION}_FOUND FALSE)
 # Try to run Cython, to make sure it works:
 execute_process(
-    COMMAND ${PYTHON${PYTHON_VERSION}_EXECUTABLE} -m cython --version
-    RESULT_VARIABLE CYTHON_RESULT
-    OUTPUT_QUIET
-    ERROR_QUIET
-    )
-if (CYTHON_RESULT EQUAL 0)
-    SET(Cython${PYTHON_VERSION}_FOUND TRUE)
-endif (CYTHON_RESULT EQUAL 0)
-
-
-IF (Cython${PYTHON_VERSION}_FOUND)
-    IF (NOT Cython_FIND_QUIETLY)
-        MESSAGE(STATUS "Found cython${PYTHON_VERSION}")
-    ENDIF (NOT Cython_FIND_QUIETLY)
-ELSE (Cython${PYTHON_VERSION}_FOUND)
-    IF (Cython_FIND_REQUIRED)
-        MESSAGE(FATAL_ERROR "Could not find cython${PYTHON_VERSION}. Please install Cython.")
-    ENDIF (Cython_FIND_REQUIRED)
-ENDIF (Cython${PYTHON_VERSION}_FOUND)
+  COMMAND ${Python3_EXECUTABLE} -m cython --version
+  RESULT_VARIABLE cython_result
+  ERROR_VARIABLE cython_output)
+if(cython_result EQUAL 0)
+  string(REGEX REPLACE "^Cython version ([0-9]+\\.[0-9]+).*" "\\1" CYTHON_VERSION "${cython_output}")
+else()
+  message(SEND_ERROR "Could not find cython${PYTHON_VERSION}: ${cython_output}")
+endif()
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(Cython${PYTHON_VERSION} DEFAULT_MSG CYTHON_VERSION)

@@ -13,7 +13,8 @@ const string dir("rocksdb.test_temp_dir");
 TEST(RocksDBOption, simple) {
   rocksdb::Options options;
   rocksdb::Status status;
-  RocksDBStore *db = new RocksDBStore(g_ceph_context, dir, NULL);
+  map<string,string> kvoptions;
+  RocksDBStore *db = new RocksDBStore(g_ceph_context, dir, kvoptions, NULL);
   string options_string = ""
 			  "write_buffer_size=536870912;"
 			  "create_if_missing=true;"
@@ -25,7 +26,8 @@ TEST(RocksDBOption, simple) {
 			  "max_bytes_for_level_base = 104857600;"
 			  "target_file_size_base = 10485760;"
 			  "num_levels = 3;"
-			  "compression = kNoCompression;";
+			  "compression = kNoCompression;"
+			  "compaction_options_universal = {min_merge_width=4;size_ratio=2;max_size_amplification_percent=500}";
   int r = db->ParseOptionsFromString(options_string, options);
   ASSERT_EQ(0, r);
   ASSERT_EQ(536870912u, options.write_buffer_size);
@@ -38,11 +40,15 @@ TEST(RocksDBOption, simple) {
   ASSERT_EQ(10485760u, options.target_file_size_base);
   ASSERT_EQ(3, options.num_levels);
   ASSERT_EQ(rocksdb::kNoCompression, options.compression);
+  ASSERT_EQ(2, options.compaction_options_universal.size_ratio);
+  ASSERT_EQ(4, options.compaction_options_universal.min_merge_width);
+  ASSERT_EQ(500, options.compaction_options_universal.max_size_amplification_percent);
 }
 TEST(RocksDBOption, interpret) {
   rocksdb::Options options;
   rocksdb::Status status;
-  RocksDBStore *db = new RocksDBStore(g_ceph_context, dir, NULL);
+  map<string,string> kvoptions;
+  RocksDBStore *db = new RocksDBStore(g_ceph_context, dir, kvoptions, NULL);
   string options_string = "compact_on_mount = true; compaction_threads=10;flusher_threads=5;";
   
   int r = db->ParseOptionsFromString(options_string, options);

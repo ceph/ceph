@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        setuser: ceph
+        setgroup: ceph
+        rgw crypt require ssl: false
+        debug rgw: 20
+
+tasks:
+- rgw:
+    client.0:

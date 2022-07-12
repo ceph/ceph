@@ -49,13 +49,14 @@ TEST(SimpleSpin, Test1)
   // Should also work with pass-by-reference:
   // (Note that we don't care about cross-threading here as-such.)
   counter = 0;
-  async(std::launch::async, []() {
+  auto f = async(std::launch::async, []() {
         for(int i = 0; n != i; ++i) {
             spin_lock(lock);
             counter++;
             spin_unlock(lock);
         }
        });
+  f.wait();
   ASSERT_EQ(n, counter);
 }
 
@@ -111,22 +112,24 @@ TEST(SimpleSpin, spinlock_guard)
   const auto n = 2000000U;
 
   ceph::spinlock sl;
- 
+
   counter = 0;
-  async(std::launch::async, [&sl]() {
+  auto f = async(std::launch::async, [&sl]() {
         for(int i = 0; n != i; ++i) {
             std::lock_guard<ceph::spinlock> g(sl);
             counter++;
         }
        });
 
-  async(std::launch::async, [&sl]() {
+  auto g = async(std::launch::async, [&sl]() {
         for(int i = 0; n != i; ++i) {
             std::lock_guard<ceph::spinlock> g(sl);
             counter++;
         }
        });
 
+  f.wait();
+  g.wait();
   ASSERT_EQ(2*n, counter);
 }
 

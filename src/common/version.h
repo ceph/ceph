@@ -18,17 +18,16 @@
 #include <string>
 
 // Return a string describing the Ceph version
-const char *ceph_version_to_str(void);
+const char *ceph_version_to_str();
+
+// Return a string with the Ceph release
+const char *ceph_release_to_str(void);
 
 // Return a string describing the git version
 const char *git_version_to_str(void);
 
 // Return a formatted string describing the ceph and git versions
 std::string const pretty_version_to_str(void);
-
-// Release number (e.g., 12 for luminous); see CEPH_RELEASE_* in include/rados.h
-// and use const char *ceph_release_name(int) to translate to a string.
-unsigned ceph_release(void);
 
 // Release type ("dev", "rc", or "stable")
 const char *ceph_release_type(void);

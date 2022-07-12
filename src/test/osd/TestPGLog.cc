@@ -27,6 +27,7 @@
 #include "include/coredumpctl.h"
 #include "../objectstore/store_test_fixture.h"
 
+using namespace std;
 
 struct PGLogTestBase {
   static hobject_t mk_obj(unsigned id) {
@@ -289,7 +290,7 @@ public:
     bool dirty_info = false;
     bool dirty_big_info = false;
     merge_log(
-      oinfo, olog, pg_shard_t(1, shard_id_t(0)), info,
+      oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
       &h, dirty_info, dirty_big_info);
 
     ASSERT_EQ(info.last_update, oinfo.last_update);
@@ -311,7 +312,7 @@ public:
     proc_replica_log(
       oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)));
 
-    assert(oinfo.last_update >= log.tail);
+    ceph_assert(oinfo.last_update >= log.tail);
 
     if (!tcase.base.empty()) {
       ASSERT_EQ(tcase.base.rbegin()->version, oinfo.last_update);
@@ -890,7 +891,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
@@ -940,7 +941,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
@@ -1045,7 +1046,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
@@ -1154,7 +1155,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     /* When the divergent entry is a DELETE and the authoritative
@@ -1273,7 +1274,7 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     /* When the divergent entry is a DELETE and the authoritative
@@ -1375,7 +1376,7 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, olog, fromosd, info, &h,
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
               dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
@@ -1386,27 +1387,6 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
-  }
-
-  // If our log is empty, the incoming log needs to have not been trimmed.
-  {
-    clear();
-
-    pg_log_t olog;
-    pg_info_t oinfo;
-    pg_shard_t fromosd;
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-    bool dirty_info = false;
-    bool dirty_big_info = false;
-
-    // olog has been trimmed
-    olog.tail = eversion_t(1, 1);
-
-    TestHandler h(remove_snap);
-    PrCtl unset_dumpable;
-    ASSERT_DEATH(merge_log(oinfo, olog, fromosd, info, &h,
-			   dirty_info, dirty_big_info), "");
   }
 
 }
@@ -2225,8 +2205,9 @@ TEST_F(PGLogTest, get_request) {
     eversion_t replay_version;
     version_t user_version;
     int return_code = 0;
+    vector<pg_log_op_return_item_t> op_returns;
     bool got = log.get_request(
-      entry.reqid, &replay_version, &user_version, &return_code);
+      entry.reqid, &replay_version, &user_version, &return_code, &op_returns);
     EXPECT_TRUE(got);
     EXPECT_EQ(entry.return_code, return_code);
     EXPECT_EQ(entry.version, replay_version);
@@ -2292,23 +2273,23 @@ TEST_F(PGLogTest, split_into_preserves_may_include_deletes) {
   clear();
 
   {
-    rebuilt_missing_with_deletes = false;
+    may_include_deletes_in_missing_dirty = false;
     missing.may_include_deletes = true;
-    PGLog child_log(cct, prefix_provider);
+    PGLog child_log(cct);
     pg_t child_pg;
     split_into(child_pg, 6, &child_log);
     ASSERT_TRUE(child_log.get_missing().may_include_deletes);
-    ASSERT_TRUE(child_log.get_rebuilt_missing_with_deletes());
+    ASSERT_TRUE(child_log.get_may_include_deletes_in_missing_dirty());
   }
 
   {
-    rebuilt_missing_with_deletes = false;
+    may_include_deletes_in_missing_dirty = false;
     missing.may_include_deletes = false;
-    PGLog child_log(cct, prefix_provider);
+    PGLog child_log(cct);
     pg_t child_pg;
     split_into(child_pg, 6, &child_log);
     ASSERT_FALSE(child_log.get_missing().may_include_deletes);
-    ASSERT_FALSE(child_log.get_rebuilt_missing_with_deletes());
+    ASSERT_FALSE(child_log.get_may_include_deletes_in_missing_dirty());
   }
 }
 
@@ -2317,22 +2298,22 @@ public:
   PGLogTestRebuildMissing() : PGLogTest(), StoreTestFixture("memstore") {}
   void SetUp() override {
     StoreTestFixture::SetUp();
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     test_coll = coll_t(spg_t(pg_t(1, 1)));
+    ch = store->create_new_collection(test_coll);
     t.create_collection(test_coll, 0);
-    store->apply_transaction(&osr, std::move(t));
+    store->queue_transaction(ch, std::move(t));
     existing_oid = mk_obj(0);
     nonexistent_oid = mk_obj(1);
     ghobject_t existing_ghobj(existing_oid);
     object_info_t existing_info;
     existing_info.version = eversion_t(6, 2);
     bufferlist enc_oi;
-    ::encode(existing_info, enc_oi, 0);
+    encode(existing_info, enc_oi, 0);
     ObjectStore::Transaction t2;
     t2.touch(test_coll, ghobject_t(existing_oid));
     t2.setattr(test_coll, ghobject_t(existing_oid), OI_ATTR, enc_oi);
-    ASSERT_EQ(0u, store->apply_transaction(&osr, std::move(t2)));
+    ASSERT_EQ(0, store->queue_transaction(ch, std::move(t2)));
     info.last_backfill = hobject_t::get_max();
     info.last_complete = eversion_t();
   }
@@ -2348,7 +2329,7 @@ public:
   hobject_t existing_oid, nonexistent_oid;
 
   void run_rebuild_missing_test(const map<hobject_t, pg_missing_item> &expected_missing_items) {
-    rebuild_missing_set_with_deletes(store.get(), test_coll, info);
+    rebuild_missing_set_with_deletes(store.get(), ch, info);
     ASSERT_EQ(expected_missing_items, missing.get_items());
   }
 };
@@ -2400,11 +2381,11 @@ public:
 
   void SetUp() override {
     StoreTestFixture::SetUp();
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     test_coll = coll_t(spg_t(pg_t(1, 1)));
+    auto ch = store->create_new_collection(test_coll);
     t.create_collection(test_coll, 0);
-    store->apply_transaction(&osr, std::move(t));
+    store->queue_transaction(ch, std::move(t));
   }
 
   void TearDown() override {
@@ -2479,7 +2460,6 @@ public:
   }
 
   void test_disk_roundtrip() {
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     hobject_t hoid;
     hoid.pool = 1;
@@ -2490,12 +2470,13 @@ public:
     if (!km.empty()) {
       t.omap_setkeys(test_coll, log_oid, km);
     }
-    ASSERT_EQ(0u, store->apply_transaction(&osr, std::move(t)));
+    auto ch = store->open_collection(test_coll);
+    ASSERT_EQ(0, store->queue_transaction(ch, std::move(t)));
 
     auto orig_dups = log.dups;
     clear();
     ostringstream err;
-    read_log_and_missing(store.get(), test_coll, log_oid,
+    read_log_and_missing(store.get(), ch, log_oid,
 			 pg_info_t(), err, false);
     ASSERT_EQ(orig_dups.size(), log.dups.size());
     ASSERT_EQ(orig_dups, log.dups);
@@ -2569,14 +2550,14 @@ TEST_F(PGLogMergeDupsTest, AmEmptyOverlap) {
   bool changed = merge_log_dups(olog);
 
   EXPECT_TRUE(changed);
-  EXPECT_EQ(3u, log.dups.size());
+  EXPECT_EQ(4u, log.dups.size());
 
-  if (3 == log.dups.size()) {
+  if (4 == log.dups.size()) {
     EXPECT_EQ(10u, log.dups.front().version.epoch);
     EXPECT_EQ(11u, log.dups.front().version.version);
 
-    EXPECT_EQ(11u, log.dups.back().version.epoch);
-    EXPECT_EQ(1u, log.dups.back().version.version);
+    EXPECT_EQ(12u, log.dups.back().version.epoch);
+    EXPECT_EQ(3u, log.dups.back().version.version);
   }
 
   check_order();
@@ -2622,14 +2603,14 @@ TEST_F(PGLogMergeDupsTest, Later) {
   bool changed = merge_log_dups(olog);
 
   EXPECT_TRUE(changed);
-  EXPECT_EQ(6u, log.dups.size());
+  EXPECT_EQ(7u, log.dups.size());
 
-  if (6 == log.dups.size()) {
+  if (7 == log.dups.size()) {
     EXPECT_EQ(10u, log.dups.front().version.epoch);
     EXPECT_EQ(11u, log.dups.front().version.version);
 
-    EXPECT_EQ(15u, log.dups.back().version.epoch);
-    EXPECT_EQ(11u, log.dups.back().version.version);
+    EXPECT_EQ(16u, log.dups.back().version.epoch);
+    EXPECT_EQ(14u, log.dups.back().version.version);
   }
 
   check_order();
@@ -2701,37 +2682,29 @@ struct PGLogTrimTest :
   CephContext *cct = g_ceph_context;
 
   using ::testing::Test::SetUp;
-  void SetUp(unsigned min_entries, unsigned max_entries, unsigned dup_track) {
+  void SetUp(unsigned dup_track) {
     constexpr size_t size = 10;
 
-    char min_entries_s[size];
-    char max_entries_s[size];
     char dup_track_s[size];
 
-    snprintf(min_entries_s, size, "%u", min_entries);
-    snprintf(max_entries_s, size, "%u", max_entries);
     snprintf(dup_track_s, size, "%u", dup_track);
 
-    cct->_conf->set_val_or_die("osd_min_pg_log_entries", min_entries_s);
-    cct->_conf->set_val_or_die("osd_max_pg_log_entries", max_entries_s);
-    cct->_conf->set_val_or_die("osd_pg_log_dups_tracked", dup_track_s);
+    cct->_conf.set_val_or_die("osd_pg_log_dups_tracked", dup_track_s);
   }
 }; // struct PGLogTrimTest
 
 
 TEST_F(PGLogTrimTest, TestMakingCephContext)
 {
-  SetUp(1, 2, 5);
+  SetUp(5);
 
-  EXPECT_EQ(1u, cct->_conf->osd_min_pg_log_entries);
-  EXPECT_EQ(2u, cct->_conf->osd_max_pg_log_entries);
   EXPECT_EQ(5u, cct->_conf->osd_pg_log_dups_tracked);
 }
 
 
 TEST_F(PGLogTrimTest, TestPartialTrim)
 {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
   log.head = mk_evt(24, 0);
   log.skip_can_rollback_to_to_head();
@@ -2744,7 +2717,7 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
   log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 165), mk_evt(26, 160)));
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166)));
 
-  std::set<eversion_t> trimmed;
+  std::set<std::string> trimmed;
   std::set<std::string> trimmed_dups;
   eversion_t write_from_dups = eversion_t::max();
 
@@ -2756,9 +2729,9 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
   EXPECT_EQ(2u, log.dups.size());
   EXPECT_EQ(0u, trimmed_dups.size());
 
-  SetUp(1, 2, 15);
+  SetUp(15);
 
-  std::set<eversion_t> trimmed2;
+  std::set<std::string> trimmed2;
   std::set<std::string> trimmed_dups2;
   eversion_t write_from_dups2 = eversion_t::max();
 
@@ -2767,13 +2740,13 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
   EXPECT_EQ(eversion_t(19, 160), write_from_dups2);
   EXPECT_EQ(2u, log.log.size());
   EXPECT_EQ(1u, trimmed2.size());
-  EXPECT_EQ(2u, log.dups.size());
-  EXPECT_EQ(1u, trimmed_dups2.size());
+  EXPECT_EQ(3u, log.dups.size());
+  EXPECT_EQ(0u, trimmed_dups2.size());
 }
 
 
 TEST_F(PGLogTrimTest, TestTrimNoTrimmed) {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
   log.head = mk_evt(20, 0);
   log.skip_can_rollback_to_to_head();
@@ -2798,7 +2771,7 @@ TEST_F(PGLogTrimTest, TestTrimNoTrimmed) {
 
 TEST_F(PGLogTrimTest, TestTrimNoDups)
 {
-  SetUp(1, 2, 10);
+  SetUp(10);
   PGLog::IndexedLog log;
   log.head = mk_evt(20, 0);
   log.skip_can_rollback_to_to_head();
@@ -2811,7 +2784,7 @@ TEST_F(PGLogTrimTest, TestTrimNoDups)
   log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 165), mk_evt(26, 160)));
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166)));
 
-  std::set<eversion_t> trimmed;
+  std::set<std::string> trimmed;
   std::set<std::string> trimmed_dups;
   eversion_t write_from_dups = eversion_t::max();
 
@@ -2826,7 +2799,7 @@ TEST_F(PGLogTrimTest, TestTrimNoDups)
 
 TEST_F(PGLogTrimTest, TestNoTrim)
 {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
   log.head = mk_evt(24, 0);
   log.skip_can_rollback_to_to_head();
@@ -2839,7 +2812,7 @@ TEST_F(PGLogTrimTest, TestNoTrim)
   log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 165), mk_evt(26, 160)));
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166)));
 
-  std::set<eversion_t> trimmed;
+  std::set<std::string> trimmed;
   std::set<std::string> trimmed_dups;
   eversion_t write_from_dups = eversion_t::max();
 
@@ -2854,8 +2827,9 @@ TEST_F(PGLogTrimTest, TestNoTrim)
 
 TEST_F(PGLogTrimTest, TestTrimAll)
 {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
+  EXPECT_EQ(0u, log.dup_index.size()); // Sanity check
   log.head = mk_evt(24, 0);
   log.skip_can_rollback_to_to_head();
   log.head = mk_evt(9, 0);
@@ -2867,7 +2841,7 @@ TEST_F(PGLogTrimTest, TestTrimAll)
   log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 165), mk_evt(26, 160)));
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166)));
 
-  std::set<eversion_t> trimmed;
+  std::set<std::string> trimmed;
   std::set<std::string> trimmed_dups;
   eversion_t write_from_dups = eversion_t::max();
 
@@ -2878,11 +2852,12 @@ TEST_F(PGLogTrimTest, TestTrimAll)
   EXPECT_EQ(6u, trimmed.size());
   EXPECT_EQ(5u, log.dups.size());
   EXPECT_EQ(0u, trimmed_dups.size());
+  EXPECT_EQ(0u, log.dup_index.size()); // dup_index entry should be trimmed
 }
 
 
 TEST_F(PGLogTrimTest, TestGetRequest) {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
   log.head = mk_evt(20, 0);
   log.skip_can_rollback_to_to_head();
@@ -2914,6 +2889,7 @@ TEST_F(PGLogTrimTest, TestGetRequest) {
   eversion_t version;
   version_t user_version;
   int return_code;
+  vector<pg_log_op_return_item_t> op_returns;
 
   osd_reqid_t log_reqid = osd_reqid_t(client, 8, 5);
   osd_reqid_t dup_reqid = osd_reqid_t(client, 8, 3);
@@ -2921,15 +2897,18 @@ TEST_F(PGLogTrimTest, TestGetRequest) {
 
   bool result;
 
-  result = log.get_request(log_reqid, &version, &user_version, &return_code);
+  result = log.get_request(log_reqid, &version, &user_version, &return_code,
+			   &op_returns);
   EXPECT_EQ(true, result);
   EXPECT_EQ(mk_evt(21, 165), version);
 
-  result = log.get_request(dup_reqid, &version, &user_version, &return_code);
+  result = log.get_request(dup_reqid, &version, &user_version, &return_code,
+			   &op_returns);
   EXPECT_EQ(true, result);
   EXPECT_EQ(mk_evt(15, 155), version);
 
-  result = log.get_request(bad_reqid, &version, &user_version, &return_code);
+  result = log.get_request(bad_reqid, &version, &user_version, &return_code,
+			   &op_returns);
   EXPECT_FALSE(result);
 }
 
@@ -3003,6 +2982,309 @@ TEST(pg_log_dup_t, get_key_name) {
 		 15);
   std::string a_key_name = a.get_key_name();
   EXPECT_EQ("dup_0000001234.00000000000000005678", a_key_name);
+}
+
+
+// This tests trim() to make copies of
+// 2 log entries (107, 106) and 3 additional for a total
+// of 5 dups.  Nothing from the original dups is copied.
+TEST_F(PGLogTrimTest, TestTrimDups) {
+  SetUp(5);
+  PGLog::IndexedLog log;
+  log.head = mk_evt(21, 107);
+  log.skip_can_rollback_to_to_head();
+  log.tail = mk_evt(9, 99);
+  log.head = mk_evt(9, 99);
+
+  entity_name_t client = entity_name_t::CLIENT(777);
+
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(9, 99), mk_evt(8, 98), osd_reqid_t(client, 8, 1))));
+
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(9, 99),
+		     osd_reqid_t(client, 8, 1)));
+  log.add(mk_ple_dt(mk_obj(2), mk_evt(15, 101), mk_evt(10, 100),
+		    osd_reqid_t(client, 8, 2)));
+  log.add(mk_ple_mod_rb(mk_obj(3), mk_evt(15, 102), mk_evt(15, 101),
+			osd_reqid_t(client, 8, 3)));
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(20, 103), mk_evt(15, 102),
+		     osd_reqid_t(client, 8, 4)));
+  log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 104), mk_evt(20, 103),
+		     osd_reqid_t(client, 8, 5)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 105), mk_evt(21, 104),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 106), mk_evt(21, 105),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 107), mk_evt(21, 106),
+		       osd_reqid_t(client, 8, 6)));
+
+  eversion_t write_from_dups = eversion_t::max();
+
+  log.trim(cct, mk_evt(21, 105), nullptr, nullptr, &write_from_dups);
+
+  EXPECT_EQ(eversion_t(20, 103), write_from_dups) << log;
+  EXPECT_EQ(2u, log.log.size()) << log;
+  EXPECT_EQ(4u, log.dups.size()) << log;
+}
+
+// This tests trim() to make copies of
+// 4 log entries (107, 106, 105, 104) and 5 additional for a total
+// of 9 dups.  Only 1 of 2 existing dups are copied.
+TEST_F(PGLogTrimTest, TestTrimDups2) {
+  SetUp(9);
+  PGLog::IndexedLog log;
+  log.head = mk_evt(21, 107);
+  log.skip_can_rollback_to_to_head();
+  log.tail = mk_evt(9, 99);
+  log.head = mk_evt(9, 99);
+
+  entity_name_t client = entity_name_t::CLIENT(777);
+
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(9, 98), mk_evt(8, 97), osd_reqid_t(client, 8, 1))));
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(9, 99), mk_evt(8, 98), osd_reqid_t(client, 8, 1))));
+
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(9, 99),
+		     osd_reqid_t(client, 8, 1)));
+  log.add(mk_ple_dt(mk_obj(2), mk_evt(15, 101), mk_evt(10, 100),
+		    osd_reqid_t(client, 8, 2)));
+  log.add(mk_ple_mod_rb(mk_obj(3), mk_evt(15, 102), mk_evt(15, 101),
+			osd_reqid_t(client, 8, 3)));
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(20, 103), mk_evt(15, 102),
+		     osd_reqid_t(client, 8, 4)));
+  log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 104), mk_evt(20, 103),
+		     osd_reqid_t(client, 8, 5)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 105), mk_evt(21, 104),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 106), mk_evt(21, 105),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 107), mk_evt(21, 106),
+		       osd_reqid_t(client, 8, 6)));
+
+  eversion_t write_from_dups = eversion_t::max();
+
+  log.trim(cct, mk_evt(20, 103), nullptr, nullptr, &write_from_dups);
+
+  EXPECT_EQ(eversion_t(10, 100), write_from_dups) << log;
+  EXPECT_EQ(4u, log.log.size()) << log;
+  EXPECT_EQ(6u, log.dups.size()) << log;
+}
+
+// This tests trim() to make copies of
+// 5 log entries (107, 106, 105, 104, 103) and trim all dups
+TEST_F(PGLogTrimTest, TestTrimAllDups) {
+  SetUp(0);
+  PGLog::IndexedLog log;
+  log.head = mk_evt(21, 107);
+  log.skip_can_rollback_to_to_head();
+  log.tail = mk_evt(9, 99);
+  log.head = mk_evt(9, 99);
+
+  entity_name_t client = entity_name_t::CLIENT(777);
+
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(9, 98), mk_evt(8, 97), osd_reqid_t(client, 8, 1))));
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(9, 99), mk_evt(8, 98), osd_reqid_t(client, 8, 1))));
+
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(9, 99),
+		     osd_reqid_t(client, 8, 1)));
+  log.add(mk_ple_dt(mk_obj(2), mk_evt(15, 101), mk_evt(10, 100),
+		    osd_reqid_t(client, 8, 2)));
+  log.add(mk_ple_mod_rb(mk_obj(3), mk_evt(15, 102), mk_evt(15, 101),
+			osd_reqid_t(client, 8, 3)));
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(20, 103), mk_evt(15, 102),
+		     osd_reqid_t(client, 8, 4)));
+  log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 104), mk_evt(20, 103),
+		     osd_reqid_t(client, 8, 5)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 105), mk_evt(21, 104),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 106), mk_evt(21, 105),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 107), mk_evt(21, 106),
+		       osd_reqid_t(client, 8, 6)));
+
+  eversion_t write_from_dups = eversion_t::max();
+
+  log.trim(cct, mk_evt(20, 102), nullptr, nullptr, &write_from_dups);
+
+  EXPECT_EQ(eversion_t::max(), write_from_dups) << log;
+  EXPECT_EQ(5u, log.log.size()) << log;
+  EXPECT_EQ(0u, log.dups.size()) << log;
+}
+
+// This tests copy_up_to() to make copies of
+// 2 log entries (107, 106) and 3 additional for a total
+// of 5 dups.  Nothing from the original dups is copied.
+TEST_F(PGLogTrimTest, TestCopyUpTo) {
+  SetUp(5);
+  PGLog::IndexedLog log, copy;
+  log.tail = mk_evt(9, 99);
+  log.head = mk_evt(9, 99);
+
+  entity_name_t client = entity_name_t::CLIENT(777);
+
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(9, 99), mk_evt(8, 98), osd_reqid_t(client, 8, 1))));
+
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(9, 99),
+		     osd_reqid_t(client, 8, 1)));
+  log.add(mk_ple_dt(mk_obj(2), mk_evt(15, 101), mk_evt(10, 100),
+		    osd_reqid_t(client, 8, 2)));
+  log.add(mk_ple_mod_rb(mk_obj(3), mk_evt(15, 102), mk_evt(15, 101),
+			osd_reqid_t(client, 8, 3)));
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(20, 103), mk_evt(15, 102),
+		     osd_reqid_t(client, 8, 4)));
+  log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 104), mk_evt(20, 103),
+		     osd_reqid_t(client, 8, 5)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 105), mk_evt(21, 104),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 106), mk_evt(21, 105),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 107), mk_evt(21, 106),
+		       osd_reqid_t(client, 8, 6)));
+
+  copy.copy_up_to(cct, log, 2);
+
+  EXPECT_EQ(2u, copy.log.size()) << copy;
+  EXPECT_EQ(copy.head, mk_evt(21, 107)) << copy;
+  EXPECT_EQ(copy.tail, mk_evt(21, 105)) << copy;
+  // Tracking 5 means 3 additional as dups
+  EXPECT_EQ(3u, copy.dups.size()) << copy;
+}
+
+// This tests copy_up_to() to make copies of
+// 4 log entries (107, 106, 105, 104) and 5 additional for a total
+// of 5 dups.  Only 1 of 2 existing dups are copied.
+TEST_F(PGLogTrimTest, TestCopyUpTo2) {
+  SetUp(9);
+  PGLog::IndexedLog log, copy;
+  log.tail = mk_evt(9, 99);
+  log.head = mk_evt(9, 99);
+
+  entity_name_t client = entity_name_t::CLIENT(777);
+
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(8, 98), mk_evt(8, 97), osd_reqid_t(client, 8, 1))));
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(9, 99), mk_evt(8, 98), osd_reqid_t(client, 8, 1))));
+
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(9, 99),
+		     osd_reqid_t(client, 8, 1)));
+  log.add(mk_ple_dt(mk_obj(2), mk_evt(15, 101), mk_evt(10, 100),
+		    osd_reqid_t(client, 8, 2)));
+  log.add(mk_ple_mod_rb(mk_obj(3), mk_evt(15, 102), mk_evt(15, 101),
+			osd_reqid_t(client, 8, 3)));
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(20, 103), mk_evt(15, 102),
+		     osd_reqid_t(client, 8, 4)));
+  log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 104), mk_evt(20, 103),
+		     osd_reqid_t(client, 8, 5)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 105), mk_evt(21, 104),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 106), mk_evt(21, 105),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 107), mk_evt(21, 106),
+		       osd_reqid_t(client, 8, 6)));
+
+  copy.copy_up_to(cct, log, 4);
+
+  EXPECT_EQ(4u, copy.log.size()) << copy;
+  EXPECT_EQ(copy.head, mk_evt(21, 107)) << copy;
+  EXPECT_EQ(copy.tail, mk_evt(20, 103)) << copy;
+  // Tracking 5 means 3 additional as dups
+  EXPECT_EQ(5u, copy.dups.size()) << copy;
+}
+
+// This tests copy_after() by specifying a version that copies
+// 2 log entries (107, 106) and 3 additional for a total
+// of 5 dups.  Nothing of the original dups is copied.
+TEST_F(PGLogTrimTest, TestCopyAfter) {
+  SetUp(5);
+  PGLog::IndexedLog log, copy;
+  log.tail = mk_evt(9, 99);
+  log.head = mk_evt(9, 99);
+
+  entity_name_t client = entity_name_t::CLIENT(777);
+
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(9, 99), mk_evt(8, 98), osd_reqid_t(client, 8, 1))));
+
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(9, 99),
+		     osd_reqid_t(client, 8, 1)));
+  log.add(mk_ple_dt(mk_obj(2), mk_evt(15, 101), mk_evt(10, 100),
+		    osd_reqid_t(client, 8, 2)));
+  log.add(mk_ple_mod_rb(mk_obj(3), mk_evt(15, 102), mk_evt(15, 101),
+			osd_reqid_t(client, 8, 3)));
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(20, 103), mk_evt(15, 102),
+		     osd_reqid_t(client, 8, 4)));
+  log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 104), mk_evt(20, 103),
+		     osd_reqid_t(client, 8, 5)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 105), mk_evt(21, 104),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 106), mk_evt(21, 105),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 107), mk_evt(21, 106),
+		       osd_reqid_t(client, 8, 6)));
+
+  copy.copy_after(cct, log, mk_evt(21, 105));
+
+  EXPECT_EQ(2u, copy.log.size()) << copy;
+  EXPECT_EQ(copy.head, mk_evt(21, 107)) << copy;
+  EXPECT_EQ(copy.tail, mk_evt(21, 105)) << copy;
+  // Tracking 5 means 3 additional as dups
+  EXPECT_EQ(3u, copy.dups.size()) << copy;
+}
+
+// This copies everything dups and log because of the large max dups
+// and value passed to copy_after().
+TEST_F(PGLogTrimTest, TestCopyAfter2) {
+  SetUp(3000);
+  PGLog::IndexedLog log, copy;
+  log.tail = mk_evt(9, 99);
+  log.head = mk_evt(9, 99);
+
+  entity_name_t client = entity_name_t::CLIENT(777);
+
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(8, 93), mk_evt(8, 92), osd_reqid_t(client, 8, 1))));
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(8, 94), mk_evt(8, 93), osd_reqid_t(client, 8, 1))));
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(8, 95), mk_evt(8, 94), osd_reqid_t(client, 8, 1))));
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(8, 96), mk_evt(8, 95), osd_reqid_t(client, 8, 1))));
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(8, 97), mk_evt(8, 96), osd_reqid_t(client, 8, 1))));
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(8, 98), mk_evt(8, 97), osd_reqid_t(client, 8, 1))));
+  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
+	  mk_evt(9, 99), mk_evt(8, 98), osd_reqid_t(client, 8, 1))));
+
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(9, 99),
+		     osd_reqid_t(client, 8, 1)));
+  log.add(mk_ple_dt(mk_obj(2), mk_evt(15, 101), mk_evt(10, 100),
+		    osd_reqid_t(client, 8, 2)));
+  log.add(mk_ple_mod_rb(mk_obj(3), mk_evt(15, 102), mk_evt(15, 101),
+			osd_reqid_t(client, 8, 3)));
+  log.add(mk_ple_mod(mk_obj(1), mk_evt(20, 103), mk_evt(15, 102),
+		     osd_reqid_t(client, 8, 4)));
+  log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 104), mk_evt(20, 103),
+		     osd_reqid_t(client, 8, 5)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 105), mk_evt(21, 104),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 106), mk_evt(21, 105),
+		       osd_reqid_t(client, 8, 6)));
+  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 107), mk_evt(21, 106),
+		       osd_reqid_t(client, 8, 6)));
+
+  copy.copy_after(cct, log, mk_evt(9, 99));
+
+  EXPECT_EQ(8u, copy.log.size()) << copy;
+  EXPECT_EQ(copy.head, mk_evt(21, 107)) << copy;
+  EXPECT_EQ(copy.tail, mk_evt(9, 99)) << copy;
+  // Tracking 3000 is larger than all entries, so all dups copied
+  EXPECT_EQ(7u, copy.dups.size()) << copy;
 }
 
 // Local Variables:

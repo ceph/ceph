@@ -12,17 +12,21 @@
  *
  */
 
+#include "include/compat.h"
+#include "common/common_init.h"
 #include "common/admin_socket.h"
 #include "common/ceph_argparse.h"
-#include "common/common_init.h"
+#include "common/ceph_context.h"
+#include "common/config.h"
+#include "common/dout.h"
+#include "common/hostname.h"
+#include "common/strtol.h"
 #include "common/valgrind.h"
 #include "common/zipkin_trace.h"
 
 #define dout_subsys ceph_subsys_
 
-#define _STR(x) #x
-#define STRINGIFY(x) _STR(x)
-
+#ifndef WITH_SEASTAR
 CephContext *common_preinit(const CephInitParameters &iparams,
 			    enum code_environment_t code_env, int flags)
 {
@@ -33,7 +37,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   // Create a configuration object
   CephContext *cct = new CephContext(iparams.module_type, code_env, flags);
 
-  md_config_t *conf = cct->_conf;
+  auto& conf = cct->_conf;
   // add config observers here
 
   // Set up our entity name.
@@ -43,52 +47,59 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   // for backward compatibility.  moving forward, we want all keyrings
   // in these locations.  the mon already forces $mon_data/keyring.
   if (conf->name.is_mds()) {
-    conf->set_val("keyring", "$mds_data/keyring", false);
+    conf.set_val_default("keyring", "$mds_data/keyring");
   } else if (conf->name.is_osd()) {
-    conf->set_val("keyring", "$osd_data/keyring", false);
+    conf.set_val_default("keyring", "$osd_data/keyring");
+  }
+
+  if ((flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
+    // make this unique despite multiple instances by the same name.
+    conf.set_val_default("admin_socket",
+			  "$run_dir/$cluster-$name.$pid.$cctid.asok");
   }
 
   if (code_env == CODE_ENVIRONMENT_LIBRARY ||
       code_env == CODE_ENVIRONMENT_UTILITY_NODOUT) {
-    conf->set_val_or_die("log_to_stderr", "false");
-    conf->set_val_or_die("err_to_stderr", "false");
-    conf->set_val_or_die("log_flush_on_exit", "false");
-  }
-  if (code_env != CODE_ENVIRONMENT_DAEMON) {
-    // NOTE: disable ms subsystem gathering in clients by default
-    conf->set_val_or_die("debug_ms", "0/0");
+    conf.set_val_default("log_to_stderr", "false");
+    conf.set_val_default("err_to_stderr", "false");
+    conf.set_val_default("log_flush_on_exit", "false");
   }
 
+  conf.set_val("no_config_file", iparams.no_config_file ? "true" : "false");
+
+  if (conf->host.empty()) {
+    conf.set_val("host", ceph_get_short_hostname());
+  }
   return cct;
 }
+#endif	// #ifndef WITH_SEASTAR
 
-void complain_about_parse_errors(CephContext *cct,
-				 std::deque<std::string> *parse_errors)
+void complain_about_parse_error(CephContext *cct,
+				const std::string& parse_error)
 {
-  if (parse_errors->empty())
+  if (parse_error.empty())
     return;
   lderr(cct) << "Errors while parsing config file!" << dendl;
-  int cur_err = 0;
-  static const int MAX_PARSE_ERRORS = 20;
-  for (std::deque<std::string>::const_iterator p = parse_errors->begin();
-       p != parse_errors->end(); ++p)
-  {
-    lderr(cct) << *p << dendl;
-    if (cur_err == MAX_PARSE_ERRORS) {
-      lderr(cct) << "Suppressed " << (parse_errors->size() - MAX_PARSE_ERRORS)
-	   << " more errors." << dendl;
-      break;
-    }
-    ++cur_err;
-  }
+  lderr(cct) << parse_error << dendl;
 }
+
+#ifndef WITH_SEASTAR
 
 /* Please be sure that this can safely be called multiple times by the
  * same application. */
 void common_init_finish(CephContext *cct)
 {
+  // only do this once per cct
+  if (cct->_finished) {
+    return;
+  }
+  cct->_finished = true;
   cct->init_crypto();
   ZTracer::ztrace_init();
+
+  if (!cct->_log->is_started()) {
+    cct->_log->start();
+  }
 
   int flags = cct->get_init_flags();
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
@@ -99,7 +110,7 @@ void common_init_finish(CephContext *cct)
     cct->get_admin_socket()->chown(cct->get_set_uid(), cct->get_set_gid());
   }
 
-  md_config_t *conf = cct->_conf;
+  const auto& conf = cct->_conf;
 
   if (!conf->admin_socket.empty() && !conf->admin_socket_mode.empty()) {
     int ret = 0;
@@ -118,3 +129,5 @@ void common_init_finish(CephContext *cct)
     }
   }
 }
+
+#endif	// #ifndef WITH_SEASTAR

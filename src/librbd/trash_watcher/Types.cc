@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/Formatter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "librbd/trash_watcher/Types.h"
 #include "librbd/watcher/Utils.h"
@@ -30,13 +30,15 @@ private:
 } // anonymous namespace
 
 void ImageAddedPayload::encode(bufferlist &bl) const {
-  ::encode(image_id, bl);
-  ::encode(trash_image_spec, bl);
+  using ceph::encode;
+  encode(image_id, bl);
+  encode(trash_image_spec, bl);
 }
 
-void ImageAddedPayload::decode(__u8 version, bufferlist::iterator &iter) {
-  ::decode(image_id, iter);
-  ::decode(trash_image_spec, iter);
+void ImageAddedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
+  using ceph::decode;
+  decode(image_id, iter);
+  decode(trash_image_spec, iter);
 }
 
 void ImageAddedPayload::dump(Formatter *f) const {
@@ -47,11 +49,13 @@ void ImageAddedPayload::dump(Formatter *f) const {
 }
 
 void ImageRemovedPayload::encode(bufferlist &bl) const {
-  ::encode(image_id, bl);
+  using ceph::encode;
+  encode(image_id, bl);
 }
 
-void ImageRemovedPayload::decode(__u8 version, bufferlist::iterator &iter) {
-  ::decode(image_id, iter);
+void ImageRemovedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
+  using ceph::decode;
+  decode(image_id, iter);
 }
 
 void ImageRemovedPayload::dump(Formatter *f) const {
@@ -62,7 +66,7 @@ void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
 
-void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void UnknownPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void UnknownPayload::dump(Formatter *f) const {
@@ -74,11 +78,11 @@ void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void NotifyMessage::decode(bufferlist::iterator& iter) {
+void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
 
   uint32_t notify_op;
-  ::decode(notify_op, iter);
+  decode(notify_op, iter);
 
   // select the correct payload variant based upon the encoded op
   switch (notify_op) {

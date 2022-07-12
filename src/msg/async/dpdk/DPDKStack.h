@@ -16,17 +16,16 @@
 #define CEPH_MSG_DPDKSTACK_H
 
 #include <functional>
+#include <optional>
 
 #include "common/ceph_context.h"
-#include "common/Tub.h"
 
 #include "msg/async/Stack.h"
-#include "dpdk_rte.h"
-#include "DPDK.h"
 #include "net.h"
 #include "const.h"
 #include "IP.h"
 #include "Packet.h"
+#include "dpdk_rte.h"
 
 class interface;
 
@@ -38,7 +37,8 @@ template <typename Protocol>
 class DPDKServerSocketImpl : public ServerSocketImpl {
   typename Protocol::listener _listener;
  public:
-  DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt);
+  DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt,
+		       int type, unsigned addr_slot);
   int listen() {
     return _listener.listen();
   }
@@ -55,8 +55,8 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   typename Protocol::connection _conn;
   uint32_t _cur_frag = 0;
   uint32_t _cur_off = 0;
-  Tub<Packet> _buf;
-  Tub<bufferptr> _cache_ptr;
+  std::optional<Packet> _buf;
+  std::optional<bufferptr> _cache_ptr;
 
  public:
   explicit NativeConnectedSocketImpl(typename Protocol::connection conn)
@@ -73,10 +73,10 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     size_t off = 0;
     while (left > 0) {
       if (!_cache_ptr) {
-        _cache_ptr.construct();
+        _cache_ptr.emplace();
         r = zero_copy_read(*_cache_ptr);
         if (r <= 0) {
-          _cache_ptr.destroy();
+          _cache_ptr.reset();
           if (r == -EAGAIN)
             break;
           return r;
@@ -86,7 +86,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
         _cache_ptr->copy_out(0, _cache_ptr->length(), buf+off);
         left -= _cache_ptr->length();
         off += _cache_ptr->length();
-        _cache_ptr.destroy();
+        _cache_ptr.reset();
       } else {
         _cache_ptr->copy_out(0, left, buf+off);
         _cache_ptr->set_offset(_cache_ptr->offset() + left);
@@ -98,7 +98,8 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     return len - left ? len - left : -EAGAIN;
   }
 
-  virtual ssize_t zero_copy_read(bufferptr &data) override {
+private:
+  ssize_t zero_copy_read(bufferptr &data) {
     auto err = _conn.get_errno();
     if (err <= 0)
       return err;
@@ -118,11 +119,11 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     if (++_cur_frag == _buf->nr_frags()) {
       _cur_frag = 0;
       _cur_off = 0;
-      _buf.destroy();
+      _buf.reset();
     } else {
       _cur_off += f.size;
     }
-    assert(data.length());
+    ceph_assert(data.length());
     return data.length();
   }
   virtual ssize_t send(bufferlist &bl, bool more) override {
@@ -136,12 +137,16 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     }
 
     std::vector<fragment> frags;
-    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
-    uint64_t left_pbrs = bl.buffers().size();
+    auto pb = bl.buffers().begin();
     uint64_t len = 0;
     uint64_t seglen = 0;
-    while (len < available && left_pbrs--) {
+    while (len < available && pb != bl.buffers().end()) {
       seglen = pb->length();
+      // Buffer length is zero, no need to send, so skip it
+      if (seglen == 0) {
+        ++pb;
+        continue;
+      }
       if (len + seglen > available) {
         // don't continue if we enough at least 1 fragment since no available
         // space for next ptr.
@@ -167,6 +172,8 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
       return _conn.send(Packet(std::move(frags), make_deleter(std::move(del))));
     }
   }
+
+public:
   virtual void shutdown() override {
     _conn.close_write();
   }
@@ -181,8 +188,9 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
 
 template <typename Protocol>
 DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
-        Protocol& proto, uint16_t port, const SocketOptions &opt)
-        : _listener(proto.listen(port)) {}
+  Protocol& proto, uint16_t port, const SocketOptions &opt,
+  int type, unsigned addr_slot)
+  : ServerSocketImpl(type, addr_slot), _listener(proto.listen(port)) {}
 
 template <typename Protocol>
 int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptions &options, entity_addr_t *out, Worker *w) {
@@ -192,8 +200,10 @@ int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptio
   if (!c)
     return -EAGAIN;
 
-  if (out)
+  if (out) {
     *out = c->remote_addr();
+    out->set_type(addr_type);
+  }
   std::unique_ptr<NativeConnectedSocketImpl<Protocol>> csi(
           new NativeConnectedSocketImpl<Protocol>(std::move(*c)));
   *s = ConnectedSocket(std::move(csi));
@@ -212,13 +222,11 @@ class DPDKWorker : public Worker {
     std::shared_ptr<DPDKDevice> _dev;
     ipv4 _inet;
     Impl(CephContext *cct, unsigned i, EventCenter *c, std::shared_ptr<DPDKDevice> dev);
-    ~Impl() {
-      _dev->unset_local_queue(id);
-    }
+    ~Impl();
   };
   std::unique_ptr<Impl> _impl;
 
-  virtual void initialize();
+  virtual void initialize() override;
   void set_ipv4_packet_filter(ip_packet_filter* filter) {
     _impl->_inet.set_packet_filter(filter);
   }
@@ -226,7 +234,8 @@ class DPDKWorker : public Worker {
 
  public:
   explicit DPDKWorker(CephContext *c, unsigned i): Worker(c, i) {}
-  virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
+  virtual int listen(entity_addr_t &addr, unsigned addr_slot,
+		     const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   void arp_learn(ethernet_address l2, ipv4_address l3) {
     _impl->_inet.learn(l2, l3);
@@ -238,21 +247,25 @@ class DPDKWorker : public Worker {
   friend class DPDKServerSocketImpl<tcp4>;
 };
 
+using namespace dpdk;
 class DPDKStack : public NetworkStack {
-  vector<std::function<void()> > funcs;
- public:
-  explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {
-    funcs.resize(cct->_conf->ms_async_max_op_threads);
-  }
-  virtual bool support_zero_copy_read() const override { return true; }
-  virtual bool support_local_listen_table() const { return true; }
+  std::vector<std::function<void()> > funcs;
 
-  virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
-  virtual void join_worker(unsigned i) override {
-    dpdk::eal::execute_on_master([&]() {
-      rte_eal_wait_lcore(i+1);
-    });
+  virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
+    return new DPDKWorker(c, worker_id);
   }
+  virtual void rename_thread(unsigned id) override {}
+
+ public:
+  explicit DPDKStack(CephContext *cct): NetworkStack(cct), eal(cct) {
+    funcs.reserve(cct->_conf->ms_async_op_threads);
+  }
+  virtual bool support_local_listen_table() const override { return true; }
+
+  virtual void spawn_worker(std::function<void ()> &&func) override;
+  virtual void join_worker(unsigned i) override;
+ private:
+  dpdk::eal eal;
 };
 
 #endif

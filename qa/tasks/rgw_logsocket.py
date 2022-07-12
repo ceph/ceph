@@ -1,11 +1,11 @@
 """
 rgw s3tests logging wrappers
 """
-from cStringIO import StringIO
+from io import BytesIO
 from configobj import ConfigObj
 import contextlib
 import logging
-import s3tests
+from tasks import s3tests
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -47,7 +47,7 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         client_config['extra_args'] = [
             's3tests.functional.test_s3:test_bucket_list_return_data',
         ]
@@ -68,9 +68,9 @@ def run_tests(ctx, config):
 
     s3tests.run_tests(ctx, config)
 
-    netcat_out = StringIO()
+    netcat_out = BytesIO()
 
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         ctx.cluster.only(client).run(
             args = [
                 'netcat',
@@ -112,9 +112,10 @@ def task(ctx, config):
             client.1:
               extra_args: ['--exclude', 'test_100_continue']
     """
+    assert hasattr(ctx, 'rgw'), 'rgw-logsocket must run after the rgw task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
-        "task s3tests only supports a list or dictionary for configuration"
+        "task rgw-logsocket only supports a list or dictionary for configuration"
     all_clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     if config is None:
@@ -125,20 +126,23 @@ def task(ctx, config):
 
     overrides = ctx.config.get('overrides', {})
     # merge each client section, not the top level.
-    for (client, cconf) in config.iteritems():
+    for (client, cconf) in config.items():
         teuthology.deep_merge(cconf, overrides.get('rgw-logsocket', {}))
 
     log.debug('config is %s', config)
 
     s3tests_conf = {}
     for client in clients:
+        endpoint = ctx.rgw.role_endpoints.get(client)
+        assert endpoint, 'rgw-logsocket: no rgw endpoint for {}'.format(client)
+
         s3tests_conf[client] = ConfigObj(
             indent_type='',
             infile={
                 'DEFAULT':
                     {
-                    'port'      : 7280,
-                    'is_secure' : 'no',
+                    'port'      : endpoint.port,
+                    'is_secure' : endpoint.cert is not None,
                     },
                 'fixtures' : {},
                 's3 main'  : {},

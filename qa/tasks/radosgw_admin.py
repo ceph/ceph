@@ -7,33 +7,39 @@ Rgw admin testing against a running instance
 #   grep '^ *# TESTCASE' | sed 's/^ *# TESTCASE //'
 #
 # to run this standalone:
-#	python qa/tasks/radosgw_admin.py [USER] HOSTNAME
+#	python qa/tasks/radosgw_admin.py [--user=uid] --host=host --port=port
 #
 
-import copy
 import json
 import logging
 import time
 import datetime
-import Queue
-import bunch
-
 import sys
 
-from cStringIO import StringIO
+from io import StringIO
+from queue import Queue
 
 import boto.exception
 import boto.s3.connection
 import boto.s3.acl
-from boto.utils import RequestHook
 
 import httplib2
 
-import util.rgw as rgw_utils
+#import pdb
 
-from util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
+import tasks.vstart_runner
+from tasks.rgw import RGWEndpoint
+from tasks.util.rgw import rgwadmin as tasks_util_rgw_rgwadmin
+from tasks.util.rgw import get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
+
+def rgwadmin(*args, **kwargs):
+    ctx = args[0]
+    # Is this a local runner?
+    omit_sudo = hasattr(ctx.rgw, 'omit_sudo') and ctx.rgw.omit_sudo == True
+    omit_tdir = hasattr(ctx.rgw, 'omit_tdir') and ctx.rgw.omit_tdir == True
+    return tasks_util_rgw_rgwadmin(*args, **kwargs, omit_sudo=omit_sudo, omit_tdir=omit_tdir)
 
 def usage_acc_findentry2(entries, user, add=True):
     for e in entries:
@@ -101,7 +107,7 @@ class usage_acc:
     def update(self, c, cat, user, out, b_in, err):
         x = self.c2x(c, cat)
         usage_acc_update2(x, out, b_in, err)
-        if not err and cat == 'create_bucket' and not x.has_key('owner'):
+        if not err and cat == 'create_bucket' and 'owner' not in x:
             x['owner'] = user
     def make_entry(self, cat, bucket, user, out, b_in, err):
         if cat == 'create_bucket' and err:
@@ -119,7 +125,7 @@ class usage_acc:
     def get_usage(self):
         return self.results
     def compare_results(self, results):
-        if not results.has_key('entries') or not results.has_key('summary'):
+        if 'entries' not in results or 'summary' not in results:
             return ['Missing entries or summary']
         r = []
         for e in self.results['entries']:
@@ -135,7 +141,7 @@ class usage_acc:
             for b in e['buckets']:
                 c = b['categories']
                 if b['bucket'] == 'nosuchbucket':
-                    print "got here"
+                    print("got here")
                 try:
                     b2 = self.e2b(e2, b['bucket'], False)
                     if b2 != None:
@@ -167,9 +173,9 @@ class usage_acc:
                 r.append("malformed summary looking for user " + e['user']
 		    + " " + str(ex))
                 break
-            if s2 == None:
-                r.append("missing summary for user " + e['user'] + " " + str(ex))
-                continue
+                if s2 == None:
+                    r.append("missing summary for user " + e['user'] + " " + str(ex))
+                    continue
             try:
                 c2 = s2['categories']
             except Exception as ex:
@@ -190,7 +196,7 @@ class usage_acc:
                 x2 = s2['total']
             except Exception as ex:
                 r.append("malformed summary looking for totals for user "
-		    + e['user'] + " " + str(ex))
+                         + e['user'] + " " + str(ex))
                 break
             usage_acc_validate_fields(r, x, x2, "summary: totals for user" + e['user'])
         return r
@@ -199,32 +205,33 @@ def ignore_this_entry(cat, bucket, user, out, b_in, err):
     pass
 class requestlog_queue():
     def __init__(self, add):
-        self.q = Queue.Queue(1000)
+        self.q = Queue(1000)
         self.adder = add
     def handle_request_data(self, request, response, error=False):
         now = datetime.datetime.now()
-	if error:
-	    pass
-	elif response.status < 200 or response.status >= 400:
-	    error = True
-        self.q.put(bunch.Bunch({'t': now, 'o': request, 'i': response, 'e': error}))
+        if error:
+            pass
+        elif response.status < 200 or response.status >= 400:
+            error = True
+        self.q.put({'t': now, 'o': request, 'i': response, 'e': error})
     def clear(self):
         with self.q.mutex:
             self.q.queue.clear()
     def log_and_clear(self, cat, bucket, user, add_entry = None):
         while not self.q.empty():
             j = self.q.get()
-	    bytes_out = 0
-            if 'Content-Length' in j.o.headers:
-		bytes_out = int(j.o.headers['Content-Length'])
+            bytes_out = 0
+            if 'Content-Length' in j['o'].headers:
+                bytes_out = int(j['o'].headers['Content-Length'])
             bytes_in = 0
-            if 'content-length' in j.i.msg.dict:
-		bytes_in = int(j.i.msg.dict['content-length'])
+            msg = j['i'].msg
+            if 'content-length'in msg:
+                bytes_in = int(msg['content-length'])
             log.info('RL: %s %s %s bytes_out=%d bytes_in=%d failed=%r'
-		% (cat, bucket, user, bytes_out, bytes_in, j.e))
-	    if add_entry == None:
-		add_entry = self.adder
-	    add_entry(cat, bucket, user, bytes_out, bytes_in, j.e)
+                     % (cat, bucket, user, bytes_out, bytes_in, j['e']))
+            if add_entry == None:
+                add_entry = self.adder
+            add_entry(cat, bucket, user, bytes_out, bytes_in, j['e'])
 
 def create_presigned_url(conn, method, bucket_name, key_name, expiration):
     return conn.generate_url(expires_in=expiration,
@@ -236,7 +243,7 @@ def create_presigned_url(conn, method, bucket_name, key_name, expiration):
 
 def send_raw_http_request(conn, method, bucket_name, key_name, follow_redirects = False):
     url = create_presigned_url(conn, method, bucket_name, key_name, 3600)
-    print url
+    print(url)
     h = httplib2.Http()
     h.follow_redirects = follow_redirects
     return h.request(url, method)
@@ -247,7 +254,7 @@ def get_acl(key):
     Helper function to get the xml acl from a key, ensuring that the xml
     version tag is removed from the acl response
     """
-    raw_acl = key.get_xml_acl()
+    raw_acl = key.get_xml_acl().decode()
 
     def remove_version(string):
         return string.split(
@@ -260,6 +267,36 @@ def get_acl(key):
     return remove_version(
         remove_newlines(raw_acl)
     )
+
+def cleanup(ctx, client):
+    # remove objects and buckets
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'list'], check_status=True)
+    try:
+        for bucket in out:
+            (err, out) = rgwadmin(ctx, client, [
+                'bucket', 'rm', '--bucket', bucket, '--purge-objects'],
+                check_status=True)
+    except:
+        pass
+
+    # remove test user(s)
+    users = ['foo', 'fud', 'bar', 'bud']
+    users.reverse()
+    for user in users:
+        try:
+            (err, out) = rgwadmin(ctx, client, [
+                'user', 'rm', '--uid', user],
+                check_status=True)
+        except:
+            pass
+
+    # remove custom placement
+    try:
+        zonecmd = ['zone', 'placement', 'rm', '--rgw-zone', 'default',
+                   '--placement-id', 'new-placement']
+        (err, out) = rgwadmin(ctx, client, zonecmd, check_status=True)
+    except:
+        pass
 
 def task(ctx, config):
     """
@@ -275,25 +312,31 @@ def task(ctx, config):
     clients_from_config = config.keys()
 
     # choose first client as default
-    client = clients_from_config[0]
+    client = next(iter(clients_from_config))
 
     # once the client is chosen, pull the host name and  assigned port out of
     # the role_endpoints that were assigned by the rgw task
-    (remote_host, remote_port) = ctx.rgw.role_endpoints[client]
+    endpoint = ctx.rgw.role_endpoints[client]
+
+    cleanup(ctx, client)
 
     ##
     user1='foo'
     user2='fud'
+    user3='bar'
+    user4='bud'
     subuser1='foo:foo1'
     subuser2='foo:foo2'
     display_name1='Foo'
     display_name2='Fud'
+    display_name3='Bar'
     email='foo@foo.com'
-    email2='bar@bar.com'
     access_key='9te6NH5mcdcq0Tc5i8i1'
     secret_key='Ny4IOauQoL18Gp2zM7lC1vLmoawgqcYP/YGcWfXu'
     access_key2='p5YnriCv1nAtykxBrupQ'
     secret_key2='Q8Tk6Q/27hfbFSYdSkPtUqhqx1GgzvpXa4WARozh'
+    access_key3='NX5QOQKC6BH2IDN8HC7A'
+    secret_key3='LnEsqNNqZIpkzauboDcLXLcYaWwLQ3Kop0zAnKIn'
     swift_secret1='gpS2G9RREMrnbqlp29PP2D36kgPR1tm72n5fPYfL'
     swift_secret2='ri2VJQcKSYATOY6uaDUX7pxgkW+W1YmC6OCxPHwy'
 
@@ -305,23 +348,37 @@ def task(ctx, config):
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         is_secure=False,
-        port=remote_port,
-        host=remote_host,
+        port=endpoint.port,
+        host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
+    connection.auth_region_name='us-east-1'
+
     connection2 = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key2,
         aws_secret_access_key=secret_key2,
         is_secure=False,
-        port=remote_port,
-        host=remote_host,
+        port=endpoint.port,
+        host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
+    connection2.auth_region_name='us-east-1'
+
+    connection3 = boto.s3.connection.S3Connection(
+        aws_access_key_id=access_key3,
+        aws_secret_access_key=secret_key3,
+        is_secure=False,
+        port=endpoint.port,
+        host=endpoint.hostname,
+        calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+        )
+    connection3.auth_region_name='us-east-1'
 
     acc = usage_acc()
     rl = requestlog_queue(acc.generate_make_entry())
     connection.set_request_hook(rl)
     connection2.set_request_hook(rl)
+    connection3.set_request_hook(rl)
 
     # legend (test cases can be easily grep-ed out)
     # TESTCASE 'testname','object','method','operation','assertion'
@@ -539,6 +596,12 @@ def task(ctx, config):
     assert out['usage']['rgw.main']['num_objects'] == 1
     assert out['usage']['rgw.main']['size_kb'] > 0
 
+    #validate we have a positive user stats now
+    (err, out) = rgwadmin(ctx, client,
+                          ['user', 'stats','--uid', user1, '--sync-stats'],
+                          check_status=True)
+    assert out['stats']['size'] > 0
+
     # reclaim it
     key.delete()
     rl.log_and_clear("delete_obj", bucket_name, user1)
@@ -604,6 +667,40 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user2],
         check_status=True)
 
+    #TESTCASE 'bucket link', 'bucket', 'tenanted user', 'succeeds'
+    tenant_name = "testx"
+    # create a tenanted user to link the bucket to
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'create',
+            '--tenant', tenant_name,
+            '--uid', 'tenanteduser',
+            '--display-name', 'tenanted-user',
+            '--access-key', access_key2,
+            '--secret', secret_key2,
+            '--max-buckets', '1',
+            ],
+            check_status=True)
+
+    # link the bucket to a tenanted user
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'link', '--bucket', '/' + bucket_name, '--tenant', tenant_name, '--uid', 'tenanteduser'],
+        check_status=True)
+    
+    # check if the bucket name has tenant/ prefix
+    (err, out) = rgwadmin(ctx, client, ['metadata', 'get', 'bucket:{n}'.format(n= tenant_name + '/' + bucket_name)],
+        check_status=True)
+
+    bucket_data = out['data']
+    assert bucket_data['bucket']['name'] == bucket_name
+    assert bucket_data['bucket']['tenant'] == tenant_name
+
+    # relink the bucket to the first user and delete the tenanted user
+    (err, out) = rgwadmin(ctx, client,
+        ['bucket', 'link', '--bucket', tenant_name + '/' + bucket_name, '--uid', user1],
+        check_status=True)
+
+    (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--tenant', tenant_name, '--uid', 'tenanteduser'],
+        check_status=True)
+
     # TESTCASE 'object-rm', 'object', 'rm', 'remove object', 'succeeds, object is removed'
 
     # upload an object
@@ -613,7 +710,7 @@ def task(ctx, config):
     rl.log_and_clear("put_obj", bucket_name, user1)
 
     # fetch it too (for usage stats presently)
-    s = key.get_contents_as_string()
+    s = key.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name, user1)
     assert s == object_name
     # list bucket too (for usage stats presently)
@@ -648,17 +745,21 @@ def task(ctx, config):
             check_status=True)
         assert len(rgwlog) > 0
 
-        # exempt bucket_name2 from checking as it was only used for multi-region tests
-        assert rgwlog['bucket'].find(bucket_name) == 0 or rgwlog['bucket'].find(bucket_name2) == 0
-        assert rgwlog['bucket'] != bucket_name or rgwlog['bucket_id'] == bucket_id
-        assert rgwlog['bucket_owner'] == user1 or rgwlog['bucket'] == bucket_name + '5' or rgwlog['bucket'] == bucket_name2
-        for entry in rgwlog['log_entries']:
-            log.debug('checking log entry: ', entry)
-            assert entry['bucket'] == rgwlog['bucket']
-            possible_buckets = [bucket_name + '5', bucket_name2]
-            user = entry['user']
-            assert user == user1 or user.endswith('system-user') or \
-                rgwlog['bucket'] in possible_buckets
+        # skip any entry for which there is no bucket name--e.g., list_buckets,
+        # since that is valid but cannot pass the following checks
+        entry_bucket_name = rgwlog['bucket']
+        if entry_bucket_name.strip() != "":
+            # exempt bucket_name2 from checking as it was only used for multi-region tests
+            assert rgwlog['bucket'].find(bucket_name) == 0 or rgwlog['bucket'].find(bucket_name2) == 0
+            assert rgwlog['bucket'] != bucket_name or rgwlog['bucket_id'] == bucket_id
+            assert rgwlog['bucket_owner'] == user1 or rgwlog['bucket'] == bucket_name + '5' or rgwlog['bucket'] == bucket_name2
+            for entry in rgwlog['log_entries']:
+                log.debug('checking log entry: ', entry)
+                assert entry['bucket'] == rgwlog['bucket']
+                possible_buckets = [bucket_name + '5', bucket_name2]
+                user = entry['user']
+                assert user == user1 or user.endswith('system-user') or \
+                    rgwlog['bucket'] in possible_buckets
 
         # TESTCASE 'log-rm','log','rm','delete log objects','succeeds'
         (err, out) = rgwadmin(ctx, client, ['log', 'rm', '--object', obj],
@@ -707,17 +808,19 @@ def task(ctx, config):
     # wait a bit to give the garbage collector time to cycle
     time.sleep(15)
 
-    (err, out) = rgwadmin(ctx, client, ['gc', 'list'])
-
+    (err, out) = rgwadmin(ctx, client, ['gc', 'list', '--include-all'])
     assert len(out) > 0
 
     # TESTCASE 'gc-process', 'gc', 'process', 'manually collect garbage'
     (err, out) = rgwadmin(ctx, client, ['gc', 'process'], check_status=True)
 
     #confirm
-    (err, out) = rgwadmin(ctx, client, ['gc', 'list'])
+    (err, out) = rgwadmin(ctx, client, ['gc', 'list', '--include-all'])
 
-    assert len(out) == 0
+    # don't assume rgw_gc_obj_min_wait has been overridden
+    omit_tdir = hasattr(ctx.rgw, 'omit_tdir') and ctx.rgw.omit_tdir == True
+    if omit_tdir==False:
+        assert len(out) == 0
 
     # TESTCASE 'rm-user-buckets','user','rm','existing user','fails, still has buckets'
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user1])
@@ -749,7 +852,7 @@ def task(ctx, config):
     rl.log_and_clear("put_acls", bucket_name, user1)
 
     (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key],
+        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
         check_status=True, format='xml')
 
     acl = get_acl(key)
@@ -762,7 +865,7 @@ def task(ctx, config):
     rl.log_and_clear("put_acls", bucket_name, user1)
 
     (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key],
+        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
         check_status=True, format='xml')
 
     acl = get_acl(key)
@@ -859,6 +962,90 @@ def task(ctx, config):
         assert entry['category'] == cat
         assert entry['successful_ops'] > 0
 
+    # TESTCASE 'user-rename', 'user', 'rename', 'existing user', 'new user', 'succeeds'
+    # create a new user user3
+    (err, out) = rgwadmin(ctx, client, [
+        'user', 'create',
+        '--uid', user3,
+        '--display-name', display_name3,
+        '--access-key', access_key3,
+        '--secret', secret_key3,
+        '--max-buckets', '4'
+        ],
+        check_status=True)
+
+    # create a bucket
+    bucket = connection3.create_bucket(bucket_name + '6')
+
+    rl.log_and_clear("create_bucket", bucket_name + '6', user3)
+
+    # create object
+    object_name1 = 'thirteen'
+    key1 = boto.s3.key.Key(bucket, object_name1)
+    key1.set_contents_from_string(object_name1)
+    rl.log_and_clear("put_obj", bucket_name + '6', user3)
+
+    # rename user3
+    (err, out) = rgwadmin(ctx, client, ['user', 'rename', '--uid', user3, '--new-uid', user4], check_status=True)
+    assert out['user_id'] == user4
+    assert out['keys'][0]['access_key'] == access_key3
+    assert out['keys'][0]['secret_key'] == secret_key3
+
+    time.sleep(5)
+
+    # get bucket and object to test if user keys are preserved
+    bucket = connection3.get_bucket(bucket_name + '6')
+    s = key1.get_contents_as_string(encoding='ascii')
+    rl.log_and_clear("get_obj", bucket_name + '6', user4)
+    assert s == object_name1
+
+    # TESTCASE 'user-rename', 'user', 'rename', 'existing user', 'another existing user', 'fails'
+    # create a new user user2
+    (err, out) = rgwadmin(ctx, client, [
+        'user', 'create',
+        '--uid', user2,
+        '--display-name', display_name2,
+        '--access-key', access_key2,
+        '--secret', secret_key2,
+        '--max-buckets', '4'
+        ],
+        check_status=True)
+
+    # create a bucket
+    bucket = connection2.create_bucket(bucket_name + '7')
+
+    rl.log_and_clear("create_bucket", bucket_name + '7', user2)
+
+    # create object
+    object_name2 = 'fourteen'
+    key2 = boto.s3.key.Key(bucket, object_name2)
+    key2.set_contents_from_string(object_name2)
+    rl.log_and_clear("put_obj", bucket_name + '7', user2)
+
+    (err, out) = rgwadmin(ctx, client, ['user', 'rename', '--uid', user4, '--new-uid', user2])
+    assert err
+
+    # test if user 2 and user4 can still access their bucket and objects after rename fails
+    bucket = connection3.get_bucket(bucket_name + '6')
+    s = key1.get_contents_as_string(encoding='ascii')
+    rl.log_and_clear("get_obj", bucket_name + '6', user4)
+    assert s == object_name1
+
+    bucket = connection2.get_bucket(bucket_name + '7')
+    s = key2.get_contents_as_string(encoding='ascii')
+    rl.log_and_clear("get_obj", bucket_name + '7', user2)
+    assert s == object_name2
+
+    (err, out) = rgwadmin(ctx, client,
+    ['user', 'rm', '--uid', user4, '--purge-data' ],
+    check_status=True)
+
+    (err, out) = rgwadmin(ctx, client,
+    ['user', 'rm', '--uid', user2, '--purge-data' ],
+    check_status=True)
+
+    time.sleep(5)
+
     # should be all through with connection. (anything using connection
     #  should be BEFORE the usage stuff above.)
     rl.log_and_clear("(before-close)", '-', '-', ignore_this_entry)
@@ -886,8 +1073,6 @@ def task(ctx, config):
     assert err
 
     # TESTCASE 'zone-info', 'zone', 'get', 'get zone info', 'succeeds, has default placement rule'
-    #
-
     (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
     orig_placement_pools = len(out['placement_pools'])
 
@@ -913,44 +1098,49 @@ def task(ctx, config):
     assert len(out['placement_pools']) == orig_placement_pools + 1
 
     zonecmd = ['zone', 'placement', 'rm',
-	'--rgw-zone', 'default',
-	'--placement-id', 'new-placement']
+               '--rgw-zone', 'default',
+               '--placement-id', 'new-placement']
 
     (err, out) = rgwadmin(ctx, client, zonecmd, check_status=True)
 
     # TESTCASE 'zonegroup-info', 'zonegroup', 'get', 'get zonegroup info', 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['zonegroup', 'get'], check_status=True)
 
-import sys
-from tasks.radosgw_admin import task
 from teuthology.config import config
-from teuthology.orchestra import cluster, remote
+from teuthology.orchestra import cluster
+
 import argparse;
 
 def main():
-    if len(sys.argv) == 3:
-	user = sys.argv[1] + "@"
-	host = sys.argv[2]
-    elif len(sys.argv) == 2:
-        user = ""
-	host = sys.argv[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--uid')
+    parser.add_argument('--host', required=True)
+    parser.add_argument('--port', type=int)
+
+    args = parser.parse_args()
+    host = args.host
+    if args.port:
+        port = args.port
     else:
-        sys.stderr.write("usage: radosgw_admin.py [user] host\n")
-	exit(1)
-    client0 = remote.Remote(user + host)
+        port = 80
+
+    client0 = tasks.vstart_runner.LocalRemote()
     ctx = config
     ctx.cluster=cluster.Cluster(remotes=[(client0,
-     [ 'ceph.client.rgw.%s' % (host),  ]),])
-
+        [ 'ceph.client.rgw.%s' % (port),  ]),])
     ctx.rgw = argparse.Namespace()
     endpoints = {}
-    endpoints['ceph.client.rgw.%s' % host] = (host, 80)
+    endpoints['ceph.client.rgw.%s' % port] = RGWEndpoint(
+        hostname=host,
+        port=port)
     ctx.rgw.role_endpoints = endpoints
     ctx.rgw.realm = None
     ctx.rgw.regions = {'region0': { 'api name': 'api1',
-	    'is master': True, 'master zone': 'r0z0',
-	    'zones': ['r0z0', 'r0z1'] }}
-    ctx.rgw.config = {'ceph.client.rgw.%s' % host: {'system user': {'name': '%s-system-user' % host}}}
+        'is master': True, 'master zone': 'r0z0',
+        'zones': ['r0z0', 'r0z1'] }}
+    ctx.rgw.omit_sudo = True
+    ctx.rgw.omit_tdir = True
+    ctx.rgw.config = {'ceph.client.rgw.%s' % port: {'system user': {'name': '%s-system-user' % port}}}
     task(config, None)
     exit()
 

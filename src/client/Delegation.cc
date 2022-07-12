@@ -16,14 +16,11 @@ public:
     Inode *in = deleg->get_fh()->inode.get();
     Client *client = in->client;
 
-    // Called back via Timer, which takes client_lock for us
-    assert(client->client_lock.is_locked_by_me());
-
     lsubdout(client->cct, client, 0) << __func__ <<
 	  ": delegation return timeout for inode 0x" <<
 	  std::hex << in->ino << ". Forcibly unmounting client. "<<
 	  client << std::dec << dendl;
-    client->_unmount();
+    client->_unmount(false);
   }
 };
 
@@ -57,7 +54,7 @@ int ceph_deleg_caps_for_type(unsigned type)
 		break;
 	default:
 		// Should never happen
-		assert(false);
+		ceph_abort();
 	}
 	return caps;
 }
@@ -100,6 +97,7 @@ void Delegation::arm_timeout()
 {
   Client *client = fh->inode.get()->client;
 
+  std::scoped_lock l(client->timer_lock);
   if (timeout_event)
     return;
 
@@ -111,6 +109,7 @@ void Delegation::disarm_timeout()
 {
   Client *client = fh->inode.get()->client;
 
+  std::scoped_lock l(client->timer_lock);
   if (!timeout_event)
     return;
 

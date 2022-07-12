@@ -1,0 +1,15 @@
+<cd-table *ngIf="counters; else warning"
+          [data]="counters"
+          [columns]="columns"
+          columnMode="flex"
+          [autoSave]="false"
+          (fetchData)="getCounters($event)">
+  <ng-template #valueTpl
+               let-row="row">
+    {{ row.value | dimless }} {{ row.unit }}
+  </ng-template>
+</cd-table>
+<ng-template #warning>
+  <cd-alert-panel type="warning"
+                  i18n>Performance counters not available</cd-alert-panel>
+</ng-template>

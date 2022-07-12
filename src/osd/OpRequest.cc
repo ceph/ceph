@@ -10,7 +10,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "osd/osd_types.h"
 
 #ifdef WITH_LTTNG
@@ -23,11 +23,19 @@
 #define tracepoint(...)
 #endif
 
-OpRequest::OpRequest(Message *req, OpTracker *tracker) :
-  TrackedOp(tracker, req->get_recv_stamp()),
-  rmw_flags(0), request(req),
-  hit_flag_points(0), latest_flag_point(0),
-  hitset_inserted(false), qos_resp(dmc::PhaseType::reservation) {
+using std::ostream;
+using std::set;
+using std::string;
+using std::stringstream;
+
+using ceph::Formatter;
+
+OpRequest::OpRequest(Message* req, OpTracker* tracker)
+    : TrackedOp(tracker, req->get_throttle_stamp()),
+      request(req),
+      hit_flag_points(0),
+      latest_flag_point(0),
+      hitset_inserted(false) {
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
     warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;
@@ -39,13 +47,7 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   } else if (req->get_type() == MSG_OSD_REPOPREPLY) {
     reqid = static_cast<MOSDRepOpReply*>(req)->reqid;
   }
-  if (tracker->is_tracking()) {
-    req_src_inst = req->get_source_inst();
-    mark_event("header_read", request->get_recv_stamp());
-    mark_event("throttled", request->get_throttle_stamp());
-    mark_event("all_read", request->get_recv_complete_stamp());
-    mark_event("dispatched", request->get_dispatch_stamp());
-  }
+  req_src_inst = req->get_source_inst();
 }
 
 void OpRequest::_dump(Formatter *f) const
@@ -62,11 +64,25 @@ void OpRequest::_dump(Formatter *f) const
     f->dump_unsigned("tid", m->get_tid());
     f->close_section(); // client_info
   }
+
   {
     f->open_array_section("events");
-    Mutex::Locker l(lock);
-    for (auto& i : events) {
-      f->dump_object("event", i);
+    std::lock_guard l(lock);
+
+    for (auto i = events.begin(); i != events.end(); ++i) {
+      f->open_object_section("event");
+      f->dump_string("event", i->str);
+      f->dump_stream("time") << i->stamp;
+
+      double duration = 0;
+
+      if (i != events.begin()) {
+        auto i_prev = i - 1;
+        duration = i->stamp - i_prev->stamp;
+      }
+
+      f->dump_float("duration", duration);
+      f->close_section();
     }
     f->close_section();
   }
@@ -84,61 +100,21 @@ void OpRequest::_unregistered() {
   request->set_connection(nullptr);
 }
 
-bool OpRequest::check_rmw(int flag) {
-  assert(rmw_flags != 0);
-  return rmw_flags & flag;
-}
-bool OpRequest::may_read() {
-  return need_read_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
-}
-bool OpRequest::may_write() {
-  return need_write_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
-}
-bool OpRequest::may_cache() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
-bool OpRequest::rwordered_forced() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_RWORDERED);
-}
-bool OpRequest::rwordered() {
-  return may_write() || may_cache() || rwordered_forced();
-}
+int OpRequest::maybe_init_op_info(const OSDMap &osdmap) {
+  if (op_info.get_flags())
+    return 0;
 
-bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
-bool OpRequest::need_read_cap() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_READ);
-}
-bool OpRequest::need_write_cap() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
-}
-bool OpRequest::need_promote() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE);
-}
-bool OpRequest::need_skip_handle_cache() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE);
-}
-bool OpRequest::need_skip_promote() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE);
-}
+  auto m = get_req<MOSDOp>();
 
-void OpRequest::set_rmw_flags(int flags) {
 #ifdef WITH_LTTNG
-  int old_rmw_flags = rmw_flags;
+  auto old_rmw_flags = op_info.get_flags();
 #endif
-  rmw_flags |= flags;
+  auto ret = op_info.set_from_op(m, osdmap);
   tracepoint(oprequest, set_rmw_flags, reqid.name._type,
 	     reqid.name._num, reqid.tid, reqid.inc,
-	     flags, old_rmw_flags, rmw_flags);
+	     op_info.get_flags(), old_rmw_flags, op_info.get_flags());
+  return ret;
 }
-
-void OpRequest::set_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_READ); }
-void OpRequest::set_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_WRITE); }
-void OpRequest::set_class_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_READ); }
-void OpRequest::set_class_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_WRITE); }
-void OpRequest::set_pg_op() { set_rmw_flags(CEPH_OSD_RMW_FLAG_PGOP); }
-void OpRequest::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
-void OpRequest::set_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE); }
-void OpRequest::set_skip_handle_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE); }
-void OpRequest::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
-void OpRequest::set_force_rwordered() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED); }
 
 void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
 #ifdef WITH_LTTNG
@@ -148,7 +124,7 @@ void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
   hit_flag_points |= flag;
   latest_flag_point = flag;
   tracepoint(oprequest, mark_flag_point, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
+	     reqid.name._num, reqid.tid, reqid.inc, op_info.get_flags(),
 	     flag, s, old_flags, hit_flag_points);
 }
 
@@ -156,11 +132,11 @@ void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
 #ifdef WITH_LTTNG
   uint8_t old_flags = hit_flag_points;
 #endif
-  mark_event_string(s);
+  mark_event(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
   tracepoint(oprequest, mark_flag_point, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
+	     reqid.name._num, reqid.tid, reqid.inc, op_info.get_flags(),
 	     flag, s.c_str(), old_flags, hit_flag_points);
 }
 
@@ -192,9 +168,3 @@ bool OpRequest::filter_out(const set<string>& filters)
   return false;
 }
 
-ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i)
-{
-  out << "class " << i.name << " rd " << i.read
-    << " wr " << i.write << " wl " << i.whitelisted;
-  return out;
-}

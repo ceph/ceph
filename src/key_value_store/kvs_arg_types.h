@@ -23,36 +23,36 @@ struct assert_size_args {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(bound, bl);
-    ::encode(comparator, bl);
+    encode(bound, bl);
+    encode(comparator, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(bound, p);
-    ::decode(comparator, p);
+    decode(bound, p);
+    decode(comparator, p);
     DECODE_FINISH(p);
   }
 };
 WRITE_CLASS_ENCODER(assert_size_args)
 
 struct idata_from_key_args {
-  string key;
+  std::string key;
   index_data idata;
   index_data next_idata;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(key, bl);
-    ::encode(idata, bl);
-    ::encode(next_idata, bl);
+    encode(key, bl);
+    encode(idata, bl);
+    encode(next_idata, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(key, p);
-    ::decode(idata, p);
-    ::decode(next_idata, p);
+    decode(key, p);
+    decode(idata, p);
+    decode(next_idata, p);
     DECODE_FINISH(p);
   }
 };
@@ -64,55 +64,55 @@ struct idata_from_idata_args {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(idata, bl);
-    ::encode(next_idata, bl);
+    encode(idata, bl);
+    encode(next_idata, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(idata, p);
-    ::decode(next_idata, p);
+    decode(idata, p);
+    decode(next_idata, p);
     DECODE_FINISH(p);
   }
 };
 WRITE_CLASS_ENCODER(idata_from_idata_args)
 
 struct omap_set_args {
-  map<string, bufferlist> omap;
+  std::map<std::string, bufferlist> omap;
   uint64_t bound;
   bool exclusive;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(omap, bl);
-    ::encode(bound, bl);
-    ::encode(exclusive, bl);
+    encode(omap, bl);
+    encode(bound, bl);
+    encode(exclusive, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(omap, p);
-    ::decode(bound, p);
-    ::decode(exclusive, p);
+    decode(omap, p);
+    decode(bound, p);
+    decode(exclusive, p);
     DECODE_FINISH(p);
   }
 };
 WRITE_CLASS_ENCODER(omap_set_args)
 
 struct omap_rm_args {
-  std::set<string> omap;
+  std::set<std::string> omap;
   uint64_t bound;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(omap, bl);
-    ::encode(bound, bl);
+    encode(omap, bl);
+    encode(bound, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(omap, p);
-    ::decode(bound, p);
+    decode(omap, p);
+    decode(bound, p);
     DECODE_FINISH(p);
   }
 };
@@ -125,16 +125,16 @@ struct rebalance_args {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(odata, bl);
-    ::encode(bound, bl);
-    ::encode(comparator, bl);
+    encode(odata, bl);
+    encode(bound, bl);
+    encode(comparator, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(odata,p);
-    ::decode(bound, p);
-    ::decode(comparator, p);
+    decode(odata,p);
+    decode(bound, p);
+    decode(comparator, p);
     DECODE_FINISH(p);
   }
 };

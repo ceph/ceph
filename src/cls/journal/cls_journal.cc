@@ -15,6 +15,12 @@
 CLS_VER(1, 0)
 CLS_NAME(journal)
 
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
 namespace {
 
 static const uint64_t MAX_KEYS_READ = 64;
@@ -55,17 +61,20 @@ int read_key(cls_method_context_t hctx, const string &key, T *t,
              bool ignore_enoent = false) {
   bufferlist bl;
   int r = cls_cxx_map_get_val(hctx, key, &bl);
-  if (r == -ENOENT && ignore_enoent) {
-    return 0;
+  if (r == -ENOENT) {
+    if (ignore_enoent) {
+      r = 0;
+    }
+    return r;
   } else if (r < 0) {
     CLS_ERR("failed to get omap key: %s", key.c_str());
     return r;
   }
 
   try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(*t, iter);
-  } catch (const buffer::error &err) {
+    auto iter = bl.cbegin();
+    decode(*t, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -75,7 +84,7 @@ int read_key(cls_method_context_t hctx, const string &key, T *t,
 template <typename T>
 int write_key(cls_method_context_t hctx, const string &key, const T &t) {
   bufferlist bl;
-  ::encode(t, bl);
+  encode(t, bl);
 
   int r = cls_cxx_map_set_val(hctx, key, &bl);
   if (r < 0) {
@@ -121,10 +130,10 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
       }
 
       cls::journal::Client client;
-      bufferlist::iterator iter = val.second.begin();
+      auto iter = val.second.cbegin();
       try {
-        ::decode(client, iter);
-      } catch (const buffer::error &err) {
+        decode(client, iter);
+      } catch (const ceph::buffer::error &err) {
         CLS_ERR("error decoding registered client: %s",
                 val.first.c_str());
         return -EIO;
@@ -170,10 +179,10 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
 
     for (auto &val : vals) {
       cls::journal::Tag tag;
-      bufferlist::iterator iter = val.second.begin();
+      auto iter = val.second.cbegin();
       try {
-        ::decode(tag, iter);
-      } catch (const buffer::error &err) {
+        decode(tag, iter);
+      } catch (const ceph::buffer::error &err) {
         CLS_ERR("error decoding tag: %s", val.first.c_str());
         return -EIO;
       }
@@ -231,12 +240,12 @@ int get_client_list_range(cls_method_context_t hctx,
   for (std::map<std::string, bufferlist>::iterator it = vals.begin();
        it != vals.end(); ++it) {
     try {
-      bufferlist::iterator iter = it->second.begin();
+      auto iter = it->second.cbegin();
 
       cls::journal::Client client;
-      ::decode(client, iter);
+      decode(client, iter);
       clients->insert(client);
-    } catch (const buffer::error &err) {
+    } catch (const ceph::buffer::error &err) {
       CLS_ERR("could not decode client '%s': %s", it->first.c_str(),
               err.what());
       return -EIO;
@@ -262,11 +271,12 @@ int find_min_commit_position(cls_method_context_t hctx,
     }
 
     start_after = batch.rbegin()->id;
-
     // update the (minimum) commit position from this batch of clients
-    for(std::set<cls::journal::Client>::iterator it = batch.begin();
-        it != batch.end(); ++it) {
-      cls::journal::ObjectSetPosition object_set_position = (*it).commit_position;
+    for (const auto &client : batch) {
+      if (client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+        continue;
+      }
+      const auto &object_set_position = client.commit_position;
       if (object_set_position.object_positions.empty()) {
 	*minset = cls::journal::ObjectSetPosition();
 	break;
@@ -306,11 +316,11 @@ int journal_create(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   uint8_t splay_width;
   int64_t pool_id;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(order, iter);
-    ::decode(splay_width, iter);
-    ::decode(pool_id, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(order, iter);
+    decode(splay_width, iter);
+    decode(pool_id, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -379,7 +389,7 @@ int journal_get_order(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(order, *out);
+  encode(order, *out);
   return 0;
 }
 
@@ -399,7 +409,7 @@ int journal_get_splay_width(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(splay_width, *out);
+  encode(splay_width, *out);
   return 0;
 }
 
@@ -419,7 +429,7 @@ int journal_get_pool_id(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(pool_id, *out);
+  encode(pool_id, *out);
   return 0;
 }
 
@@ -439,7 +449,7 @@ int journal_get_minimum_set(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(minimum_set, *out);
+  encode(minimum_set, *out);
   return 0;
 }
 
@@ -454,9 +464,9 @@ int journal_set_minimum_set(cls_method_context_t hctx, bufferlist *in,
                             bufferlist *out) {
   uint64_t object_set;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(object_set, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(object_set, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -468,7 +478,7 @@ int journal_set_minimum_set(cls_method_context_t hctx, bufferlist *in,
   }
 
   if (current_active_set < object_set) {
-    CLS_ERR("active object set earlier than minimum: %" PRIu64
+    CLS_LOG(10, "active object set earlier than minimum: %" PRIu64
             " < %" PRIu64, current_active_set, object_set);
     return -EINVAL;
   }
@@ -510,7 +520,7 @@ int journal_get_active_set(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(active_set, *out);
+  encode(active_set, *out);
   return 0;
 }
 
@@ -525,9 +535,9 @@ int journal_set_active_set(cls_method_context_t hctx, bufferlist *in,
                            bufferlist *out) {
   uint64_t object_set;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(object_set, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(object_set, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -577,9 +587,9 @@ int journal_get_client(cls_method_context_t hctx, bufferlist *in,
                        bufferlist *out) {
   std::string id;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(id, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -591,7 +601,7 @@ int journal_get_client(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(client, *out);
+  encode(client, *out);
   return 0;
 }
 
@@ -608,10 +618,10 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
   std::string id;
   bufferlist data;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
-    ::decode(data, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(id, iter);
+    decode(data, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -658,10 +668,10 @@ int journal_client_update_data(cls_method_context_t hctx, bufferlist *in,
   std::string id;
   bufferlist data;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
-    ::decode(data, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(id, iter);
+    decode(data, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -695,12 +705,12 @@ int journal_client_update_state(cls_method_context_t hctx, bufferlist *in,
   cls::journal::ClientState state;
   bufferlist data;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
+    auto iter = in->cbegin();
+    decode(id, iter);
     uint8_t state_raw;
-    ::decode(state_raw, iter);
+    decode(state_raw, iter);
     state = static_cast<cls::journal::ClientState>(state_raw);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -731,9 +741,9 @@ int journal_client_unregister(cls_method_context_t hctx, bufferlist *in,
                               bufferlist *out) {
   std::string id;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(id, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -773,10 +783,10 @@ int journal_client_commit(cls_method_context_t hctx, bufferlist *in,
   std::string id;
   cls::journal::ObjectSetPosition commit_position;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
-    ::decode(commit_position, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(id, iter);
+    decode(commit_position, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -824,10 +834,10 @@ int journal_client_list(cls_method_context_t hctx, bufferlist *in,
   std::string start_after;
   uint64_t max_return;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(start_after, iter);
-    ::decode(max_return, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(start_after, iter);
+    decode(max_return, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -837,7 +847,7 @@ int journal_client_list(cls_method_context_t hctx, bufferlist *in,
   if (r < 0)
     return r;
 
-  ::encode(clients, *out);
+  encode(clients, *out);
   return 0;
 }
 
@@ -856,7 +866,7 @@ int journal_get_next_tag_tid(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(tag_tid, *out);
+  encode(tag_tid, *out);
   return 0;
 }
 
@@ -872,9 +882,9 @@ int journal_get_tag(cls_method_context_t hctx, bufferlist *in,
                     bufferlist *out) {
   uint64_t tag_tid;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(tag_tid, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(tag_tid, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -886,7 +896,7 @@ int journal_get_tag(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(tag, *out);
+  encode(tag, *out);
   return 0;
 }
 
@@ -905,11 +915,11 @@ int journal_tag_create(cls_method_context_t hctx, bufferlist *in,
   uint64_t tag_class;
   bufferlist data;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(tag_tid, iter);
-    ::decode(tag_class, iter);
-    ::decode(data, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(tag_tid, iter);
+    decode(tag_class, iter);
+    decode(data, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -999,12 +1009,12 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
   // handle compiler false positive about use-before-init
   tag_class = boost::none;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(start_after_tag_tid, iter);
-    ::decode(max_return, iter);
-    ::decode(client_id, iter);
-    ::decode(tag_class, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(start_after_tag_tid, iter);
+    decode(max_return, iter);
+    decode(client_id, iter);
+    decode(tag_class, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -1042,10 +1052,10 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
 
     for (auto &val : vals) {
       cls::journal::Tag tag;
-      bufferlist::iterator iter = val.second.begin();
+      auto iter = val.second.cbegin();
       try {
-        ::decode(tag, iter);
-      } catch (const buffer::error &err) {
+        decode(tag, iter);
+      } catch (const ceph::buffer::error &err) {
         CLS_ERR("error decoding tag: %s", val.first.c_str());
         return -EIO;
       }
@@ -1082,7 +1092,7 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
     }
   } while (tag_pass != TAG_PASS_DONE);
 
-  ::encode(tags, *out);
+  encode(tags, *out);
   return 0;
 }
 
@@ -1097,9 +1107,9 @@ int journal_object_guard_append(cls_method_context_t hctx, bufferlist *in,
                                 bufferlist *out) {
   uint64_t soft_max_size;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(soft_max_size, iter);
-  } catch (const buffer::error &err) {
+    auto iter = in->cbegin();
+    decode(soft_max_size, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
   }
@@ -1119,6 +1129,80 @@ int journal_object_guard_append(cls_method_context_t hctx, bufferlist *in,
             size, soft_max_size);
     return -EOVERFLOW;
   }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param soft_max_size (uint64_t)
+ * @param data (bufferlist) data to append
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ * @returns -EOVERFLOW if object size is equal or more than soft_max_size
+ */
+int journal_object_append(cls_method_context_t hctx, bufferlist *in,
+                          bufferlist *out) {
+  uint64_t soft_max_size;
+  bufferlist data;
+  try {
+    auto iter = in->cbegin();
+    decode(soft_max_size, iter);
+    decode(data, iter);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("failed to decode input parameters: %s", err.what());
+    return -EINVAL;
+  }
+
+  uint64_t size = 0;
+  int r = cls_cxx_stat(hctx, &size, nullptr);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("append: failed to stat object: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (size >= soft_max_size) {
+    CLS_LOG(5, "journal object full: %" PRIu64 " >= %" PRIu64,
+            size, soft_max_size);
+    return -EOVERFLOW;
+  }
+
+  auto offset = size;
+  r = cls_cxx_write2(hctx, offset, data.length(), &data,
+                     CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  if (r < 0) {
+    CLS_ERR("append: error when writing: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (cls_get_min_compatible_client(hctx) < ceph_release_t::octopus) {
+    return 0;
+  }
+
+  auto min_alloc_size = cls_get_osd_min_alloc_size(hctx);
+  if (min_alloc_size == 0) {
+    min_alloc_size = 8;
+  }
+
+  auto stripe_width = cls_get_pool_stripe_width(hctx);
+  if (stripe_width > 0) {
+    min_alloc_size = round_up_to(min_alloc_size, stripe_width);
+  }
+
+  CLS_LOG(20, "pad to %" PRIu64, min_alloc_size);
+
+  auto end = offset + data.length();
+  auto new_end = round_up_to(end, min_alloc_size);
+  if (new_end == end) {
+    return 0;
+  }
+
+  r = cls_cxx_truncate(hctx, new_end);
+  if (r < 0) {
+    CLS_ERR("append: error when truncating: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
   return 0;
 }
 
@@ -1147,6 +1231,7 @@ CLS_INIT(journal)
   cls_method_handle_t h_journal_tag_create;
   cls_method_handle_t h_journal_tag_list;
   cls_method_handle_t h_journal_object_guard_append;
+  cls_method_handle_t h_journal_object_append;
 
   cls_register("journal", &h_class);
 
@@ -1224,4 +1309,6 @@ CLS_INIT(journal)
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           journal_object_guard_append,
                           &h_journal_object_guard_append);
+  cls_register_cxx_method(h_class, "append", CLS_METHOD_RD | CLS_METHOD_WR,
+                          journal_object_append, &h_journal_object_append);
 }

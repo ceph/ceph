@@ -14,13 +14,19 @@ openstack:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
       - no reply from
       - overall HEALTH_
       - \(MON_DOWN\)
+      - \(MGR_DOWN\)
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
+    conf:
+      mon:
+        debug auth: 30
 - full_sequential:
   - radosbench:
       clients: [client.0]

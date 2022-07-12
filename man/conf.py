@@ -1,7 +1,8 @@
 import os
+import sys
 
 project = u'Ceph'
-copyright = u'2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA'
+copyright = u'2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
 version = 'dev'
 release = 'dev'
 
@@ -16,6 +17,8 @@ def _get_description(fname, base):
             if not line:
                 continue
             if line.startswith(':') and line.endswith(':'):
+                continue
+            if line.startswith('.. '):
                 continue
             one = line
             break
@@ -44,7 +47,11 @@ def _get_manpages():
             if base == 'index':
                 continue
             path = os.path.join(section_dir, filename)
-            description = _get_description(path, base)
+            try:
+                description = _get_description(path, base)
+            except UnicodeDecodeError as e:
+                print(f"unable to decode {path}", file=sys.stderr)
+                raise e
             yield (
                 os.path.join(section, base),
                 base,

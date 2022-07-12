@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms die on skipped message: false
+tasks:
+- ceph:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - direct_io

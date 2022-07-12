@@ -21,7 +21,7 @@ struct MockTestImageCtx : public MockImageCtx {
                                   const std::string &image_id,
                                   const char *snap, librados::IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->construct(image_name, image_id);
     return s_instance;
   }
@@ -62,14 +62,14 @@ struct TestMockTrashMoveRequest : public TestMockFixture {
                         int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(StrEq("rbd_trash"), _, StrEq("rbd"), StrEq("trash_add"),
-                     _, _, _))
+                     _, _, _, _))
       .WillOnce(WithArg<4>(Invoke([=](bufferlist& in_bl) {
                              std::string id;
                              cls::rbd::TrashImageSpec trash_image_spec;
 
-                             bufferlist::iterator bl_it = in_bl.begin();
-                             ::decode(id, bl_it);
-                             ::decode(trash_image_spec, bl_it);
+                             auto bl_it = in_bl.cbegin();
+                             decode(id, bl_it);
+                             decode(trash_image_spec, bl_it);
 
                              EXPECT_EQ(id, image_id);
                              EXPECT_EQ(trash_image_spec.source,
@@ -91,12 +91,12 @@ struct TestMockTrashMoveRequest : public TestMockFixture {
                          const std::string& name, const std::string& id,
                          int r) {
     bufferlist in_bl;
-    ::encode(name, in_bl);
-    ::encode(id, in_bl);
+    encode(name, in_bl);
+    encode(id, in_bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(StrEq("rbd_directory"), _, StrEq("rbd"), StrEq("dir_remove_image"),
-                     ContentsEqual(in_bl), _, _))
+                     ContentsEqual(in_bl), _, _, _))
       .WillOnce(Return(r));
   }
 };

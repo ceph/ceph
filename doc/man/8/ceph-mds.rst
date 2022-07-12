@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **ceph-mds** -i *name* [ --hot-standby [*rank*] ]
+| **ceph-mds** -i <*ID*> [flags]
 
 
 Description
@@ -26,11 +26,6 @@ Once the daemon has started, the monitor cluster will normally assign
 it a logical rank, or put it in a standby pool to take over for
 another daemon that crashes. Some of the specified options can cause
 other behaviors.
-
-If you specify hot-standby, you must either specify the rank on the command
-line, or specify one of the mds_standby_for_[rank|name] parameters in the
-config.  The command line specification overrides the config, and specifying
-the rank overrides specifying the name.
 
 
 Options
@@ -68,15 +63,20 @@ Options
    Connect to specified monitor (instead of looking through
    ``ceph.conf``).
 
-.. option:: --hot-standby <rank>
+.. option:: --id/-i ID
 
-    Start as a hot standby for MDS <rank>.
+   Set ID portion of the MDS name. The ID should not start with a numeric digit.
+
+.. option:: --name/-n TYPE.ID
+
+   Set the MDS name of the format TYPE.ID. The TYPE is obviously 'mds'.
+   The ID should not start with a numeric digit.
 
 Availability
 ============
 
 **ceph-mds** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to the Ceph documentation at
-http://ceph.com/docs for more information.
+https://docs.ceph.com for more information.
 
 
 See also

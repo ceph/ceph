@@ -1,6 +1,9 @@
+.. _cephx_2012_peter:
+
 ============================================================
 A Detailed Description of the Cephx Authentication Protocol
 ============================================================
+
 Peter Reiher
 7/13/12
 
@@ -108,11 +111,10 @@ handler into the right place in the map.  Then we hit specialized code to deal w
 cases.  The case here is when we still need to authenticate to A (the 
 ``if (need & CEPH_ENTITY_TYPE_AUTH)`` branch).
 
-We now create a message of type ``CEPH_AUTH_UNKNOWN``.  We need to authenticate 
-this message with C's secret key, so we fetch that from the local key repository.  (It's 
-called a key server in the code, but it's not really a separate machine or processing entity.
-It's more like the place where locally used keys are kept.)  We create a 
-random challenge, whose purpose is to prevent replays.  We encrypt that challenge.  We already 
+We now create a message of type ``CEPHX_GET_AUTH_SESSION_KEY``.  We need to authenticate
+this message with C's secret key, so we fetch that from the local key repository.  We create
+a random challenge, whose purpose is to prevent replays.  We encrypt that challenge using
+``cephx_calc_client_server_challenge()``.  We already
 have a server challenge (a similar set of random bytes, but created by the server and sent to
 the client) from our pre-cephx stage.  We take both challenges and our secret key and 
 produce a combined encrypted challenge value, which goes into ``req.key``.
@@ -124,14 +126,16 @@ challenges, gets put into the message.  Then we return from this function, and t
 message is sent.
 
 We now switch over to the authenticator side, A.  The server receives the message that was 
-sent, of type ``CEPH_AUTH_UNKNOWN``.  The message gets handled in ``prep_auth()``, 
+sent, of type ``CEPH_GET_AUTH_SESSION_KEY``.  The message gets handled in ``prep_auth()``,
 in ``mon/AuthMonitor.cc``, which calls ``handle_request()`` is ``CephxServiceHandler.cc`` to 
 do most of the work.  This routine, also, handles multiple cases.  
 
 The control flow is determined by the ``request_type`` in the ``cephx_header`` associated 
-with the message.  Our case here is ``CEPH_AUTH_UNKNOWN``.  We need the 
+with the message.  Our case here is ``CEPH_GET_AUTH_SESSION_KEY``.  We need the
 secret key A shares with C, so we call ``get_secret()`` from out local key repository to get 
-it.  We should have set up a server challenge already with this client, so we make sure 
+it. (It's called a ``key_server`` in the code, but it's not really a separate machine or
+processing entity. It's more like the place where locally used keys are kept.)  We should
+have set up a server challenge already with this client, so we make sure
 we really do have one.  (This variable is specific to a ``CephxServiceHandler``, so there 
 is a different one for each such structure we create, presumably one per client A is 
 dealing with.)  If there is no challenge, we'll need to start over, since we need to 
@@ -146,15 +150,17 @@ give it an authentication ticket.
 
 We fetch C's ``eauth`` structure.  This contains an ID, a key, and a set of caps (capabilities).
 
-The client sent us its old ticket in the message, if it had one.  If so, we set a flag,
-``should_enc_ticket``, to true and set the global ID to the global ID in that old ticket.  
-If the attempt to decode its old ticket fails (most probably because it didn't have one),
-``should_enc_ticket`` remains false.  Now we set up the new ticket, filling in timestamps, 
-the name of C, the global ID provided in the method call (unless there was an old ticket), and 
-his ``auid``, obtained from the ``eauth`` structure obtained above.  We need a new session key 
-to help the client communicate securely with us, not using its permanent key.    We set the
-service ID to ``CEPH_ENTITY_TYPE_AUTH``, which will tell the client C what to do with the 
-message we send it.  We build a cephx response header and call 
+The client sent us its old ticket in the message, if it had one.  If
+so, we set a flag, ``should_enc_ticket``, to true and set the global
+ID to the global ID in that old ticket.  If the attempt to decode its
+old ticket fails (most probably because it didn't have one),
+``should_enc_ticket`` remains false.  Now we set up the new ticket,
+filling in timestamps, the name of C, and the global ID provided in the
+method call (unless there was an old ticket).  We need a new session
+key to help the client communicate securely with us, not using its
+permanent key.  We set the service ID to ``CEPH_ENTITY_TYPE_AUTH``,
+which will tell the client C what to do with the message we send it.
+We build a cephx response header and call
 ``cephx_build_service_ticket_reply()``.
 
 ``cephx_build_service_ticket_reply()`` is in ``auth/cephx/CephxProtocol.cc``.  This 

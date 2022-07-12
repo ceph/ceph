@@ -1,0 +1,148 @@
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(bluestore, transaction_state_duration,
+    TP_ARGS(
+        uint32_t, sequencer_id,
+        uint64_t, tid,
+        uint8_t,  state,
+        double, elapsed),
+    TP_FIELDS(
+        ctf_integer(uint32_t, sequencer_id, sequencer_id)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int8_t, state, state)
+        ctf_float(double, elapsed, elapsed)
+    )
+)
+
+TRACEPOINT_EVENT(bluestore, transaction_total_duration,
+    TP_ARGS(
+        uint32_t, sequencer_id,
+        uint64_t, tid,
+        double, elapsed),
+    TP_FIELDS(
+        ctf_integer(uint32_t, sequencer_id, sequencer_id)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_float(double, elapsed, elapsed)
+    )
+)
+
+TRACEPOINT_EVENT(bluestore, transaction_commit_latency,
+    TP_ARGS(
+        uint32_t, sequencer_id,
+        uint64_t, tid,
+        double, elapsed),
+    TP_FIELDS(
+        ctf_integer(uint32_t, sequencer_id, sequencer_id)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_float(double, elapsed, elapsed)
+    )
+)
+
+TRACEPOINT_EVENT(bluestore, transaction_kv_submit_latency,
+    TP_ARGS(
+        uint32_t, sequencer_id,
+        uint64_t, tid,
+	uint8_t, sync,
+        double, elapsed),
+    TP_FIELDS(
+        ctf_integer(uint32_t, sequencer_id, sequencer_id)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int8_t, sync, sync)
+        ctf_float(double, elapsed, elapsed)
+    )
+)
+
+TRACEPOINT_EVENT(bluestore, transaction_kv_sync_latency,
+    TP_ARGS(
+        uint32_t, sequencer_id,
+        uint64_t, tid,
+	uint32_t, kv_batch_size,
+	uint32_t, deferred_done_batch_size,
+	uint32_t, deferred_stable_batch_size,
+        double, elapsed),
+    TP_FIELDS(
+        ctf_integer(uint32_t, sequencer_id, sequencer_id)
+        ctf_integer(uint64_t, tid, tid)
+	ctf_integer(uint32_t, kv_batch_size, kv_batch_size)
+	ctf_integer(uint32_t, deferred_done_batch_size, deferred_done_batch_size)
+	ctf_integer(uint32_t, deferred_stable_batch_size, deferred_stable_batch_size)
+        ctf_float(double, elapsed, elapsed)
+    )
+)
+
+TRACEPOINT_EVENT(bluestore, transaction_initial_state,
+    TP_ARGS(
+        uint32_t, sequencer_id,
+        uint64_t, tid,
+	int64_t, current_kv_throttle_cost,
+	int64_t, current_deferred_throttle_cost,
+	uint64_t, pending_kv_ios,
+	uint64_t, pending_deferred_ios,
+	uint64_t, ios_started_since_last_traced_io,
+	uint64_t, ios_completed_since_last_traced_io,
+	double, throttle_time),
+    TP_FIELDS(
+        ctf_integer(uint32_t, sequencer_id, sequencer_id)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int64_t, current_kv_throttle_cost, current_kv_throttle_cost)
+        ctf_integer(int64_t, current_deferred_throttle_cost, current_deferred_throttle_cost)
+        ctf_integer(uint64_t, pending_kv_ios, pending_kv_ios)
+        ctf_integer(uint64_t, pending_deferred_ios, pending_deferred_ios)
+        ctf_integer(uint64_t, ios_started_since_last_traced_io, ios_started_since_last_traced_io)
+        ctf_integer(uint64_t, ios_completed_since_last_traced_io, ios_completed_since_last_traced_io)
+        ctf_float(double, throttle_time, throttle_time)
+    )
+)
+
+TRACEPOINT_EVENT(bluestore, transaction_initial_state_rocksdb,
+    TP_ARGS(
+        uint32_t, sequencer_id,
+        uint64_t, tid,
+	uint64_t, rocksdb_base_level,
+	uint64_t, rocksdb_estimate_pending_compaction_bytes,
+	uint64_t, rocksdb_cur_size_all_mem_tables,
+        uint64_t, rocksdb_compaction_pending,
+        uint64_t, rocksdb_mem_table_flush_pending,
+        uint64_t, rocksdb_num_running_compactions,
+        uint64_t, rocksdb_num_running_flushes,
+        uint64_t, rocksdb_actual_delayed_write_rate),
+    TP_FIELDS(
+        ctf_integer(uint32_t, sequencer_id, sequencer_id)
+        ctf_integer(uint64_t, tid, tid)
+	ctf_integer(uint64_t, rocksdb_base_level, rocksdb_base_level)
+	ctf_integer(uint64_t, rocksdb_estimate_pending_compaction_bytes, rocksdb_estimate_pending_compaction_bytes)
+	ctf_integer(uint64_t, rocksdb_cur_size_all_mem_tables, rocksdb_cur_size_all_mem_tables)
+        ctf_integer(uint64_t, rocksdb_compaction_pending,rocksdb_compaction_pending)
+        ctf_integer(uint64_t, rocksdb_mem_table_flush_pending, rocksdb_mem_table_flush_pending)
+        ctf_integer(uint64_t, rocksdb_num_running_compactions, rocksdb_num_running_compactions)
+        ctf_integer(uint64_t, rocksdb_num_running_flushes, rocksdb_num_running_flushes)
+        ctf_integer(uint64_t, rocksdb_actual_delayed_write_rate, rocksdb_actual_delayed_write_rate)
+    )
+)
+
+TRACEPOINT_EVENT(bluestore, kv_submit,
+    TP_ARGS(
+        uint32_t, sequencer_id,
+        uint64_t, tid,
+	uint64_t, rocksdb_base_level,
+	uint64_t, rocksdb_estimate_pending_compaction_bytes,
+	uint64_t, rocksdb_cur_size_all_mem_tables,
+        uint64_t, rocksdb_compaction_pending,
+        uint64_t, rocksdb_mem_table_flush_pending,
+        uint64_t, rocksdb_num_running_compactions,
+        uint64_t, rocksdb_num_running_flushes,
+        uint64_t, rocksdb_actual_delayed_write_rate),
+    TP_FIELDS(
+        ctf_integer(uint32_t, sequencer_id, sequencer_id)
+        ctf_integer(uint64_t, tid, tid)
+	ctf_integer(uint64_t, rocksdb_base_level, rocksdb_base_level)
+	ctf_integer(uint64_t, rocksdb_estimate_pending_compaction_bytes, rocksdb_estimate_pending_compaction_bytes)
+	ctf_integer(uint64_t, rocksdb_cur_size_all_mem_tables, rocksdb_cur_size_all_mem_tables)
+        ctf_integer(uint64_t, rocksdb_compaction_pending,rocksdb_compaction_pending)
+        ctf_integer(uint64_t, rocksdb_mem_table_flush_pending, rocksdb_mem_table_flush_pending)
+        ctf_integer(uint64_t, rocksdb_num_running_compactions, rocksdb_num_running_compactions)
+        ctf_integer(uint64_t, rocksdb_num_running_flushes, rocksdb_num_running_flushes)
+        ctf_integer(uint64_t, rocksdb_actual_delayed_write_rate, rocksdb_actual_delayed_write_rate)
+    )
+)
+

@@ -107,7 +107,7 @@ private:
 
   bool m_acquired_lock = false;
   bool m_writes_blocked = false;
-  bool m_snap_lock_acquired = false;
+  bool m_image_lock_acquired = false;
   bool m_requests_blocked = false;
 
   uint64_t m_new_features = 0;
@@ -124,7 +124,7 @@ private:
   void send_block_writes();
   Context *handle_block_writes(int *result);
 
-  void send_acquire_exclusive_lock();
+  Context *send_acquire_exclusive_lock(int *result);
   Context *handle_acquire_exclusive_lock(int *result);
 
   void send_get_mirror_mode();

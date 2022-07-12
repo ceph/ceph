@@ -96,6 +96,8 @@
 #define JAVA_LOCK_NB 4
 #define JAVA_LOCK_UN 8
 
+using namespace std;
+
 /* Map JAVA_O_* open flags to values in libc */
 static inline int fixup_open_flags(jint jflags)
 {
@@ -265,7 +267,7 @@ static void handle_error(JNIEnv *env, int rc)
 /*
  * Cast a jlong to ceph_mount_info. Each JNI function is expected to pass in
  * the class instance variable instance_ptr. Passing a parameter is faster
- * than reaching back into Java via an upcall to retreive this pointer.
+ * than reaching back into Java via an upcall to retrieve this pointer.
  */
 static inline struct ceph_mount_info *get_ceph_mount(jlong j_mntp)
 {
@@ -1321,11 +1323,11 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1stat
 		return -1;
 	}
 
-	ldout(cct, 10) << "jni: lstat: path " << c_path << dendl;
+	ldout(cct, 10) << "jni: stat: path " << c_path << dendl;
 
 	ret = ceph_statx(cmount, c_path, &stx, CEPH_J_CEPHSTAT_MASK, 0);
 
-	ldout(cct, 10) << "jni: lstat exit ret " << ret << dendl;
+	ldout(cct, 10) << "jni: stat exit ret " << ret << dendl;
 
 	env->ReleaseStringUTFChars(j_path, c_path);
 

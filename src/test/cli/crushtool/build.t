@@ -14,14 +14,14 @@
 # display a warning if there is more than one root
 #
   $ crushtool --outfn "$map" --build --num_osds 5 node straw 2 rack straw 1 
-  The crush rulesets will use the root rack0 (re)
+  The crush rules will use the root rack0 (re)
   and ignore the others.
   There are 3 roots, they can be
   grouped into a single root by appending something like:
     root straw 0
   
 #
-# crush rulesets are generated using the OSDMap helpers
+# crush rules are generated using the OSDMap helpers
 #
   $ CEPH_ARGS="--debug-crush 0" crushtool --outfn "$map" --set-straw-calc-version 0 --build --num_osds 1 root straw 0 --set-chooseleaf-stable 0
   $ crushtool -o "$map.txt" -d "$map"
@@ -44,18 +44,16 @@
   # buckets
   root root {
   \tid -1\t\t# do not change unnecessarily (esc)
-  \t# weight 1.000 (esc)
+  \t# weight 1.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem osd.0 weight 1.000 (esc)
+  \titem osd.0 weight 1.00000 (esc)
   }
   
   # rules
   rule replicated_rule {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take root (esc)
   \tstep chooseleaf firstn 0 type root (esc)
   \tstep emit (esc)

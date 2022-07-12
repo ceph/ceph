@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph distributed storage system
@@ -11,7 +11,7 @@
  *  modify it under the terms of the GNU Lesser General Public
  *  License as published by the Free Software Foundation; either
  *  version 2.1 of the License, or (at your option) any later version.
- * 
+ *
  */
 #include <stdlib.h>
 
@@ -19,6 +19,8 @@
 #include "ErasureCodeExample.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
+
+using namespace std;
 
 TEST(ErasureCodeExample, chunk_size)
 {
@@ -180,7 +182,7 @@ TEST(ErasureCodeExample, decode)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
   int want_to_encode[] = { 0, 1, 2 };
   map<int, bufferlist> encoded;
   EXPECT_EQ(0, example.encode(set<int>(want_to_encode, want_to_encode+3),
@@ -203,7 +205,7 @@ TEST(ErasureCodeExample, decode)
 
 TEST(ErasureCodeExample, create_rule)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c = std::make_unique<CrushWrapper>();
   c->create();
   c->set_type_name(2, "root");
   c->set_type_name(1, "host");

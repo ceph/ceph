@@ -1,9 +1,6 @@
 overrides:
   ceph:
     crush_tunables: jewel
-    conf:
-      mon:
-        mon osd initial require min compat client: jewel
 tasks:
 - rados:
     clients: [client.0]

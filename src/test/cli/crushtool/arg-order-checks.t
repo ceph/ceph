@@ -6,43 +6,43 @@
   $ map="$TESTDIR/foo"
   $ crushtool --outfn "$map" --build --set-chooseleaf-vary-r 0 --set-chooseleaf-stable 0 --num_osds 25 node straw 5 rack straw 1 root straw 0 --reweight-item osd.2 99 -o "$map" --tree
   crushtool reweighting item osd.2 to 99
-  ID  CLASS WEIGHT    TYPE NAME          
-  -11       123.00000 root root          
-   -6       103.00000     rack rack0     
-   -1       103.00000         node node0 
-    0         1.00000             osd.0  
-    1         1.00000             osd.1  
-    2        99.00000             osd.2  
-    3         1.00000             osd.3  
-    4         1.00000             osd.4  
-   -7         5.00000     rack rack1     
-   -2         5.00000         node node1 
-    5         1.00000             osd.5  
-    6         1.00000             osd.6  
-    7         1.00000             osd.7  
-    8         1.00000             osd.8  
-    9         1.00000             osd.9  
-   -8         5.00000     rack rack2     
-   -3         5.00000         node node2 
-   10         1.00000             osd.10 
-   11         1.00000             osd.11 
-   12         1.00000             osd.12 
-   13         1.00000             osd.13 
-   14         1.00000             osd.14 
-   -9         5.00000     rack rack3     
-   -4         5.00000         node node3 
-   15         1.00000             osd.15 
-   16         1.00000             osd.16 
-   17         1.00000             osd.17 
-   18         1.00000             osd.18 
-   19         1.00000             osd.19 
-  -10         5.00000     rack rack4     
-   -5         5.00000         node node4 
-   20         1.00000             osd.20 
-   21         1.00000             osd.21 
-   22         1.00000             osd.22 
-   23         1.00000             osd.23 
-   24         1.00000             osd.24 
+  ID   CLASS  WEIGHT     TYPE NAME         
+  -11         123.00000  root root         
+   -6         103.00000      rack rack0    
+   -1         103.00000          node node0
+    0           1.00000              osd.0 
+    1           1.00000              osd.1 
+    2          99.00000              osd.2 
+    3           1.00000              osd.3 
+    4           1.00000              osd.4 
+   -7           5.00000      rack rack1    
+   -2           5.00000          node node1
+    5           1.00000              osd.5 
+    6           1.00000              osd.6 
+    7           1.00000              osd.7 
+    8           1.00000              osd.8 
+    9           1.00000              osd.9 
+   -8           5.00000      rack rack2    
+   -3           5.00000          node node2
+   10           1.00000              osd.10
+   11           1.00000              osd.11
+   12           1.00000              osd.12
+   13           1.00000              osd.13
+   14           1.00000              osd.14
+   -9           5.00000      rack rack3    
+   -4           5.00000          node node3
+   15           1.00000              osd.15
+   16           1.00000              osd.16
+   17           1.00000              osd.17
+   18           1.00000              osd.18
+   19           1.00000              osd.19
+  -10           5.00000      rack rack4    
+   -5           5.00000          node node4
+   20           1.00000              osd.20
+   21           1.00000              osd.21
+   22           1.00000              osd.22
+   23           1.00000              osd.23
+   24           1.00000              osd.24
   $ crushtool -d "$map"
   # begin crush map
   tunable choose_local_tries 0
@@ -88,112 +88,110 @@
   # buckets
   node node0 {
   \tid -1\t\t# do not change unnecessarily (esc)
-  \t# weight 103.000 (esc)
+  \t# weight 103.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem osd.0 weight 1.000 (esc)
-  \titem osd.1 weight 1.000 (esc)
-  \titem osd.2 weight 99.000 (esc)
-  \titem osd.3 weight 1.000 (esc)
-  \titem osd.4 weight 1.000 (esc)
+  \titem osd.0 weight 1.00000 (esc)
+  \titem osd.1 weight 1.00000 (esc)
+  \titem osd.2 weight 99.00000 (esc)
+  \titem osd.3 weight 1.00000 (esc)
+  \titem osd.4 weight 1.00000 (esc)
   }
   node node1 {
   \tid -2\t\t# do not change unnecessarily (esc)
-  \t# weight 5.000 (esc)
+  \t# weight 5.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem osd.5 weight 1.000 (esc)
-  \titem osd.6 weight 1.000 (esc)
-  \titem osd.7 weight 1.000 (esc)
-  \titem osd.8 weight 1.000 (esc)
-  \titem osd.9 weight 1.000 (esc)
+  \titem osd.5 weight 1.00000 (esc)
+  \titem osd.6 weight 1.00000 (esc)
+  \titem osd.7 weight 1.00000 (esc)
+  \titem osd.8 weight 1.00000 (esc)
+  \titem osd.9 weight 1.00000 (esc)
   }
   node node2 {
   \tid -3\t\t# do not change unnecessarily (esc)
-  \t# weight 5.000 (esc)
+  \t# weight 5.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem osd.10 weight 1.000 (esc)
-  \titem osd.11 weight 1.000 (esc)
-  \titem osd.12 weight 1.000 (esc)
-  \titem osd.13 weight 1.000 (esc)
-  \titem osd.14 weight 1.000 (esc)
+  \titem osd.10 weight 1.00000 (esc)
+  \titem osd.11 weight 1.00000 (esc)
+  \titem osd.12 weight 1.00000 (esc)
+  \titem osd.13 weight 1.00000 (esc)
+  \titem osd.14 weight 1.00000 (esc)
   }
   node node3 {
   \tid -4\t\t# do not change unnecessarily (esc)
-  \t# weight 5.000 (esc)
+  \t# weight 5.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem osd.15 weight 1.000 (esc)
-  \titem osd.16 weight 1.000 (esc)
-  \titem osd.17 weight 1.000 (esc)
-  \titem osd.18 weight 1.000 (esc)
-  \titem osd.19 weight 1.000 (esc)
+  \titem osd.15 weight 1.00000 (esc)
+  \titem osd.16 weight 1.00000 (esc)
+  \titem osd.17 weight 1.00000 (esc)
+  \titem osd.18 weight 1.00000 (esc)
+  \titem osd.19 weight 1.00000 (esc)
   }
   node node4 {
   \tid -5\t\t# do not change unnecessarily (esc)
-  \t# weight 5.000 (esc)
+  \t# weight 5.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem osd.20 weight 1.000 (esc)
-  \titem osd.21 weight 1.000 (esc)
-  \titem osd.22 weight 1.000 (esc)
-  \titem osd.23 weight 1.000 (esc)
-  \titem osd.24 weight 1.000 (esc)
+  \titem osd.20 weight 1.00000 (esc)
+  \titem osd.21 weight 1.00000 (esc)
+  \titem osd.22 weight 1.00000 (esc)
+  \titem osd.23 weight 1.00000 (esc)
+  \titem osd.24 weight 1.00000 (esc)
   }
   rack rack0 {
   \tid -6\t\t# do not change unnecessarily (esc)
-  \t# weight 103.000 (esc)
+  \t# weight 103.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem node0 weight 103.000 (esc)
+  \titem node0 weight 103.00000 (esc)
   }
   rack rack1 {
   \tid -7\t\t# do not change unnecessarily (esc)
-  \t# weight 5.000 (esc)
+  \t# weight 5.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem node1 weight 5.000 (esc)
+  \titem node1 weight 5.00000 (esc)
   }
   rack rack2 {
   \tid -8\t\t# do not change unnecessarily (esc)
-  \t# weight 5.000 (esc)
+  \t# weight 5.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem node2 weight 5.000 (esc)
+  \titem node2 weight 5.00000 (esc)
   }
   rack rack3 {
   \tid -9\t\t# do not change unnecessarily (esc)
-  \t# weight 5.000 (esc)
+  \t# weight 5.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem node3 weight 5.000 (esc)
+  \titem node3 weight 5.00000 (esc)
   }
   rack rack4 {
   \tid -10\t\t# do not change unnecessarily (esc)
-  \t# weight 5.000 (esc)
+  \t# weight 5.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem node4 weight 5.000 (esc)
+  \titem node4 weight 5.00000 (esc)
   }
   root root {
   \tid -11\t\t# do not change unnecessarily (esc)
-  \t# weight 123.000 (esc)
+  \t# weight 123.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem rack0 weight 103.000 (esc)
-  \titem rack1 weight 5.000 (esc)
-  \titem rack2 weight 5.000 (esc)
-  \titem rack3 weight 5.000 (esc)
-  \titem rack4 weight 5.000 (esc)
+  \titem rack0 weight 103.00000 (esc)
+  \titem rack1 weight 5.00000 (esc)
+  \titem rack2 weight 5.00000 (esc)
+  \titem rack3 weight 5.00000 (esc)
+  \titem rack4 weight 5.00000 (esc)
   }
   
   # rules
   rule replicated_rule {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take root (esc)
   \tstep chooseleaf firstn 0 type node (esc)
   \tstep emit (esc)
@@ -201,7 +199,7 @@
   
   # end crush map
 # tunables before reweight
-  $ crushtool -i "$map" --set-straw-calc-version 0 --reweight --test --show-utilization --max-x 100 --min-x 1
+  $ crushtool -i "$map" --set-straw-calc-version 0 --reweight --test --show-utilization --max-x 100 --min-x 1 --min-rep 1 --max-rep 10
   rule 0 (replicated_rule), x = 1..100, numrep = 1..10
   rule 0 (replicated_rule) num_rep 1 result size == 1:\t100/100 (esc)
     device 0:\t\t stored : 4\t expected : 4 (esc)
@@ -466,7 +464,7 @@
     device 23:\t\t stored : 13\t expected : 20 (esc)
     device 24:\t\t stored : 18\t expected : 20 (esc)
   crushtool successfully built or modified map.  Use '-o <file>' to write it out.
-  $ crushtool -i "$map" --set-straw-calc-version 1 --reweight --test --show-utilization --max-x 100 --min-x 1
+  $ crushtool -i "$map" --set-straw-calc-version 1 --reweight --test --show-utilization --max-x 100 --min-x 1 --min-rep 1 --max-rep 10
   rule 0 (replicated_rule), x = 1..100, numrep = 1..10
   rule 0 (replicated_rule) num_rep 1 result size == 1:\t100/100 (esc)
     device 1:\t\t stored : 1\t expected : 4 (esc)

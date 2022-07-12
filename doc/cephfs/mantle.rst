@@ -35,7 +35,7 @@ Quickstart with vstart
     Most of the time this guide will work but sometimes all MDSs lock up and you
     cannot actually see them spill. It is much better to run this on a cluster.
 
-As a pre-requistie, we assume you have installed `mdtest
+As a prerequisite, we assume you have installed `mdtest
 <https://sourceforge.net/projects/mdtest/>`_ or pulled the `Docker image
 <https://hub.docker.com/r/michaelsevilla/mdtest/>`_. We use mdtest because we
 need to generate enough load to get over the MIN_OFFLOAD threshold that is
@@ -89,7 +89,7 @@ Mantle with `vstart.sh`
 
 
    Note that if you look at the last MDS (which could be a, b, or c -- it's
-   random), you will see an an attempt to index a nil value. This is because the
+   random), you will see an attempt to index a nil value. This is because the
    last MDS tries to check the load of its neighbor, which does not exist.
 
 5. Run a simple benchmark. In our case, we use the Docker mdtest image to

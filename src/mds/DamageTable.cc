@@ -70,7 +70,7 @@ class DentryDamage : public DamageEntry
   DentryDamage(
       inodeno_t ino_,
       frag_t frag_,
-      std::string dname_,
+      std::string_view dname_,
       snapid_t snap_id_)
     : ino(ino_), frag(frag_), dname(dname_), snap_id(snap_id_)
   {}
@@ -129,7 +129,7 @@ DamageEntry::~DamageEntry()
 
 bool DamageTable::notify_dentry(
     inodeno_t ino, frag_t frag,
-    snapid_t snap_id, const std::string &dname, const std::string &path)
+    snapid_t snap_id, std::string_view dname, std::string_view path)
 {
   if (oversized()) {
     return true;
@@ -160,15 +160,12 @@ bool DamageTable::notify_dentry(
 }
 
 bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag,
-                                 const std::string &path)
+                                 std::string_view path)
 {
   // Special cases: damage to these dirfrags is considered fatal to
   // the MDS rank that owns them.
-  if (
-      (MDS_INO_IS_STRAY(ino) && MDS_INO_STRAY_OWNER(ino) == rank)
-      ||
-      (ino == MDS_INO_ROOT)
-     ) {
+  if ((MDS_INO_IS_STRAY(ino) && MDS_INO_STRAY_OWNER(ino) == rank)
+      || (ino == CEPH_INO_ROOT)) {
     derr << "Damage to fragment " << frag << " of ino " << ino
          << " is fatal because it is a system directory for this rank" << dendl;
     return true;
@@ -189,7 +186,7 @@ bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag,
   return false;
 }
 
-bool DamageTable::notify_remote_damaged(inodeno_t ino, const std::string &path)
+bool DamageTable::notify_remote_damaged(inodeno_t ino, std::string_view path)
 {
   if (oversized()) {
     return true;
@@ -207,12 +204,12 @@ bool DamageTable::notify_remote_damaged(inodeno_t ino, const std::string &path)
 
 bool DamageTable::oversized() const
 {
-  return by_id.size() > (size_t)(g_conf->mds_damage_table_max_entries);
+  return by_id.size() > (size_t)(g_conf()->mds_damage_table_max_entries);
 }
 
 bool DamageTable::is_dentry_damaged(
         const CDir *dir_frag,
-        const std::string &dname,
+        std::string_view dname,
         const snapid_t snap_id) const
 {
   if (dentries.count(
@@ -258,7 +255,7 @@ void DamageTable::erase(damage_entry_id_t damage_id)
   }
 
   DamageEntryRef entry = by_id_entry->second;
-  assert(entry->id == damage_id);  // Sanity
+  ceph_assert(entry->id == damage_id);  // Sanity
 
   const auto type = entry->get_type();
   if (type == DAMAGE_ENTRY_DIRFRAG) {

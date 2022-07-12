@@ -13,74 +13,46 @@
 #
 
 #
-# Return MAX(1, (number of processors / 2)) by default or NPROC
+# To just look at what this script will do, run it like this:
 #
-function get_processors() {
-    if test -n "$NPROC" ; then
-        echo $NPROC
-    else
-        if test $(nproc) -ge 2 ; then
-            expr $(nproc) / 2
-        else
-            echo 1
-        fi
-    fi
+# $ DRY_RUN=echo ./run-make-check.sh
+#
+
+source src/script/run-make.sh
+
+set -e
+
+function in_jenkins() {
+    test -n "$JENKINS_HOME"
 }
 
 function run() {
-    local install_cmd
-    local which_pkg="which"
-    if test -f /etc/redhat-release ; then
-        source /etc/os-release
-        if ! type bc > /dev/null 2>&1 ; then
-            echo "Please install bc and re-run." 
-            exit 1
-        fi
-        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
-            install_cmd="dnf -y install"
-        else
-            install_cmd="yum install -y"
-        fi
-    else
-        which_pkg="debianutils"
-    fi
-
-    type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
-    type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
-
-    if ! type sudo > /dev/null 2>&1 ; then
-        echo "Please install sudo and re-run. This script assumes it is running"
-        echo "as a normal user with the ability to run commands as root via sudo." 
-        exit 1
-    fi
-    if [ -n "$install_cmd" ]; then
-        $DRY_RUN sudo $install_cmd ccache jq $which_pkg
-    else
-        echo "WARNING: Don't know how to install packages" >&2
-    fi
-
-    if test -f ./install-deps.sh ; then
-	$DRY_RUN source ./install-deps.sh || return 1
-    fi
-
-    # Init defaults after deps are installed. get_processors() depends on coreutils nproc.
-    DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
-    BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-    CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-
-    $DRY_RUN ./do_cmake.sh $@ || return 1
-    $DRY_RUN cd build
-    $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
-    # prevent OSD EMFILE death on tests, make sure large than 1024
+    # to prevent OSD EMFILE death on tests, make sure ulimit >= 1024
     $DRY_RUN ulimit -n $(ulimit -Hn)
     if [ $(ulimit -n) -lt 1024 ];then
         echo "***ulimit -n too small, better bigger than 1024 for test***"
         return 1
     fi
- 
-    if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
-        rm -f ${TMPDIR:-/tmp}/ceph-asok.*
-        return 1
+
+    # increase the aio-max-nr, which is by default 65536. we could reach this
+    # limit while running seastar tests and bluestore tests.
+    local m=16
+    if [ $(nproc) -gt $m ]; then
+        m=$(nproc)
+    fi
+    $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr=$((65536 * $(nproc)))
+
+    CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+    if in_jenkins; then
+        if ! ctest $CHECK_MAKEOPTS --no-compress-output --output-on-failure --test-output-size-failed 1024000 -T Test; then
+            # do not return failure, as the jenkins publisher will take care of this
+            rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
+        fi
+    else
+        if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
+            rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
+            return 1
+        fi
     fi
 }
 
@@ -90,21 +62,52 @@ function main() {
         echo "with the ability to run commands as root via sudo."
     fi
     echo -n "Checking hostname sanity... "
-    if hostname --fqdn >/dev/null 2>&1 ; then
+    if $DRY_RUN hostname --fqdn >/dev/null 2>&1 ; then
         echo "OK"
     else
         echo "NOT OK"
         echo "Please fix 'hostname --fqdn', otherwise 'make check' will fail"
         return 1
     fi
-    if run "$@" ; then
-        rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
-        echo "cmake check: successful run on $(git rev-parse HEAD)"
-        return 0
-    else
-        rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
-        return 1
+    # uses run-make.sh to install-deps
+    FOR_MAKE_CHECK=1 prepare
+    local cxx_compiler=g++
+    local c_compiler=gcc
+    for i in $(seq 14 -1 10); do
+        if type -t clang-$i > /dev/null; then
+            cxx_compiler="clang++-$i"
+            c_compiler="clang-$i"
+            break
+        fi
+    done
+    # Init defaults after deps are installed.
+    local cmake_opts
+    cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
+    cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
+    cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
+    cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
+    cmake_opts+=" -DWITH_FIO=ON"
+    cmake_opts+=" -DWITH_CEPHFS_SHELL=ON"
+    cmake_opts+=" -DWITH_GRAFANA=ON"
+    cmake_opts+=" -DWITH_SPDK=ON"
+    cmake_opts+=" -DWITH_RADOSGW_MOTR=ON"
+    if [ $WITH_SEASTAR ]; then
+        cmake_opts+=" -DWITH_SEASTAR=ON"
     fi
+    if [ $WITH_ZBD ]; then
+        cmake_opts+=" -DWITH_ZBD=ON"
+    fi
+    if [ $WITH_RBD_RWL ]; then
+        cmake_opts+=" -DWITH_RBD_RWL=ON"
+    fi
+    cmake_opts+=" -DWITH_RBD_SSD_CACHE=ON"
+    in_jenkins && echo "CI_DEBUG: Our cmake_opts are: $cmake_opts
+                        CI_DEBUG: Running ./configure"
+    configure "$cmake_opts" "$@"
+    in_jenkins && echo "CI_DEBUG: Running 'build tests'"
+    build tests
+    echo "make check: successful build on $(git rev-parse HEAD)"
+    FOR_MAKE_CHECK=1 run
 }
 
 main "$@"

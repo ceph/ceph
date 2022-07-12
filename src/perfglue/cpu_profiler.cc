@@ -20,9 +20,9 @@
 #include "perfglue/cpu_profiler.h"
 
 void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
-				 ostream& out)
+				 std::ostream& out)
 {
-  if (cmd[1] == "status") {
+  if (cmd.size() == 1 && cmd[0] == "status") {
     ProfilerState st;
     ProfilerGetCurrentState(&st);
     out << "cpu_profiler " << (st.enabled ? "enabled":"not enabled")
@@ -30,7 +30,7 @@ void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
 	<< " profile_name " << st.profile_name
 	<< " samples " << st.samples_gathered;
   }
-  else if (cmd[1] == "flush") {
+  else if (cmd.size() == 1 && cmd[0] == "flush") {
     ProfilerFlush();
     out << "cpu_profiler: flushed";
   }

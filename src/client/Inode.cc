@@ -12,9 +12,16 @@
 
 #include "mds/flock.h"
 
+using std::dec;
+using std::list;
+using std::oct;
+using std::ostream;
+using std::string;
+
 Inode::~Inode()
 {
-  cap_item.remove_myself();
+  delay_cap_item.remove_myself();
+  dirty_cap_item.remove_myself(); 
   snaprealm_item.remove_myself();
 
   if (snapdir_parent) {
@@ -25,13 +32,13 @@ Inode::~Inode()
   if (!oset.objects.empty()) {
     lsubdout(client->cct, client, 0) << __func__ << ": leftover objects on inode 0x"
       << std::hex << ino << std::dec << dendl;
-    assert(oset.objects.empty());
+    ceph_assert(oset.objects.empty());
   }
 
   if (!delegations.empty()) {
     lsubdout(client->cct, client, 0) << __func__ << ": leftover delegations on inode 0x"
       << std::hex << ino << std::dec << dendl;
-    assert(delegations.empty());
+    ceph_assert(delegations.empty());
   }
 }
 
@@ -39,19 +46,22 @@ ostream& operator<<(ostream &out, const Inode &in)
 {
   out << in.vino() << "("
       << "faked_ino=" << in.faked_ino
-      << " ref=" << in._ref
+      << " nref=" << in.get_nref()
       << " ll_ref=" << in.ll_ref
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
       << " mode=" << oct << in.mode << dec
       << " size=" << in.size << "/" << in.max_size
+      << " nlink=" << in.nlink
+      << " btime=" << in.btime
       << " mtime=" << in.mtime
+      << " ctime=" << in.ctime
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
     out << "(";
     bool first = true;
     for (const auto &pair : in.caps) {
-      if (first)
+      if (!first)
         out << ',';
       out << pair.first << '=' << ccap_string(pair.second.issued);
       first = false;
@@ -87,13 +97,23 @@ void Inode::make_long_path(filepath& p)
 {
   if (!dentries.empty()) {
     Dentry *dn = get_first_parent();
-    assert(dn->dir && dn->dir->parent_inode);
+    ceph_assert(dn->dir && dn->dir->parent_inode);
     dn->dir->parent_inode->make_long_path(p);
     p.push_dentry(dn->name);
   } else if (snapdir_parent) {
-    snapdir_parent->make_nosnap_relative_path(p);
-    string empty;
-    p.push_dentry(empty);
+    make_nosnap_relative_path(p);
+  } else
+    p = filepath(ino);
+}
+
+void Inode::make_short_path(filepath& p)
+{
+  if (!dentries.empty()) {
+    Dentry *dn = get_first_parent();
+    ceph_assert(dn->dir && dn->dir->parent_inode);
+    p = filepath(dn->name, dn->dir->parent_inode->ino);
+  } else if (snapdir_parent) {
+    make_nosnap_relative_path(p);
   } else
     p = filepath(ino);
 }
@@ -113,7 +133,7 @@ void Inode::make_nosnap_relative_path(filepath& p)
     p.push_dentry(empty);
   } else if (!dentries.empty()) {
     Dentry *dn = get_first_parent();
-    assert(dn->dir && dn->dir->parent_inode);
+    ceph_assert(dn->dir && dn->dir->parent_inode);
     dn->dir->parent_inode->make_nosnap_relative_path(p);
     p.push_dentry(dn->name);
   } else {
@@ -123,6 +143,10 @@ void Inode::make_nosnap_relative_path(filepath& p)
 
 void Inode::get_open_ref(int mode)
 {
+  client->inc_opened_files();
+  if (open_by_mode[mode] == 0) {
+    client->inc_opened_inodes();
+  }
   open_by_mode[mode]++;
   break_deleg(!(mode & CEPH_FILE_MODE_WR));
 }
@@ -130,8 +154,13 @@ void Inode::get_open_ref(int mode)
 bool Inode::put_open_ref(int mode)
 {
   //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
-  if (--open_by_mode[mode] == 0)
+  auto& ref = open_by_mode.at(mode);
+  ceph_assert(ref > 0);
+  client->dec_opened_files();
+  if (--ref == 0) {
+    client->dec_opened_inodes();
     return true;
+  }
   return false;
 }
 
@@ -158,7 +187,7 @@ int Inode::put_cap_ref(int cap)
       int c = 1 << n;
       if (cap_refs[c] <= 0) {
 	lderr(client->cct) << "put_cap_ref " << ccap_string(c) << " went negative on " << *this << dendl;
-	assert(cap_refs[c] > 0);
+	ceph_assert(cap_refs[c] > 0);
       }
       if (--cap_refs[c] == 0)
         last |= c;
@@ -192,13 +221,18 @@ int Inode::caps_issued(int *implemented) const
 {
   int c = snap_caps;
   int i = 0;
-  for (const auto &pair : caps) {
-    const Cap &cap = pair.second;
+  for (const auto &[mds, cap] : caps) {
     if (cap_is_valid(cap)) {
       c |= cap.issued;
       i |= cap.implemented;
     }
   }
+  // exclude caps issued by non-auth MDS, but are been revoking by
+  // the auth MDS. The non-auth MDS should be revoking/exporting
+  // these caps, but the message is delayed.
+  if (auth_cap)
+    c &= ~auth_cap->implemented | auth_cap->issued;
+
   if (implemented)
     *implemented = i;
   return c;
@@ -212,9 +246,28 @@ void Inode::try_touch_cap(mds_rank_t mds)
   }
 }
 
-bool Inode::caps_issued_mask(unsigned mask)
+/**
+ * caps_issued_mask - check whether we have all of the caps in the mask
+ * @mask: mask to check against
+ * @allow_impl: whether the caller can also use caps that are implemented but not issued
+ *
+ * This is the bog standard "check whether we have the required caps" operation.
+ * Typically, we only check against the capset that is currently "issued".
+ * In other words, we ignore caps that have been revoked but not yet released.
+ * Also account capability hit/miss stats.
+ *
+ * Some callers (particularly those doing attribute retrieval) can also make
+ * use of the full set of "implemented" caps to satisfy requests from the
+ * cache.
+ *
+ * Those callers should refrain from taking new references to implemented
+ * caps!
+ */
+bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
 {
   int c = snap_caps;
+  int i = 0;
+
   if ((c & mask) == mask)
     return true;
   // prefer auth cap
@@ -222,6 +275,7 @@ bool Inode::caps_issued_mask(unsigned mask)
       cap_is_valid(*auth_cap) &&
       (auth_cap->issued & mask) == mask) {
     auth_cap->touch();
+    client->cap_hit();
     return true;
   }
   // try any cap
@@ -230,40 +284,45 @@ bool Inode::caps_issued_mask(unsigned mask)
     if (cap_is_valid(cap)) {
       if ((cap.issued & mask) == mask) {
         cap.touch();
+	client->cap_hit();
 	return true;
       }
       c |= cap.issued;
+      i |= cap.implemented;
     }
   }
+
+  if (allow_impl)
+    c |= i;
+
   if ((c & mask) == mask) {
     // bah.. touch them all
     for (auto &pair : caps) {
       pair.second.touch();
     }
+    client->cap_hit();
     return true;
   }
+
+  client->cap_miss();
   return false;
 }
 
 int Inode::caps_used()
 {
   int w = 0;
-  for (map<int,int>::iterator p = cap_refs.begin();
-       p != cap_refs.end();
-       ++p)
-    if (p->second)
-      w |= p->first;
+  for (const auto &[cap, cnt] : cap_refs)
+    if (cnt)
+      w |= cap;
   return w;
 }
 
 int Inode::caps_file_wanted()
 {
   int want = 0;
-  for (map<int,int>::iterator p = open_by_mode.begin();
-       p != open_by_mode.end();
-       ++p)
-    if (p->second)
-      want |= ceph_caps_for_mode(p->first);
+  for (const auto &[mode, cnt] : open_by_mode)
+    if (cnt)
+      want |= ceph_caps_for_mode(mode);
   return want;
 }
 
@@ -324,10 +383,10 @@ Dir *Inode::open_dir()
   if (!dir) {
     dir = new Dir(this);
     lsubdout(client->cct, client, 15) << "open_dir " << dir << " on " << this << dendl;
-    assert(dentries.size() < 2); // dirs can't be hard-linked
+    ceph_assert(dentries.size() < 2); // dirs can't be hard-linked
     if (!dentries.empty())
       get_first_parent()->get();      // pin dentry
-    get();                  // pin inode
+    iget();                  // pin inode
   }
   return dir;
 }
@@ -344,22 +403,6 @@ bool Inode::check_mode(const UserPerm& perms, unsigned want)
 
   return (mode & want) == want;
 }
-
-void Inode::get() {
-  _ref++;
-  lsubdout(client->cct, client, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
-				    << " now " << _ref << dendl;
-}
-
-//private method to put a reference; see Client::put_inode()
-int Inode::_put(int n) {
-  _ref -= n;
-  lsubdout(client->cct, client, 15) << "inode.put on " << this << " " << ino << '.' << snapid
-				    << " now " << _ref << dendl;
-  assert(_ref >= 0);
-  return _ref;
-}
-
 
 void Inode::dump(Formatter *f) const
 {
@@ -408,20 +451,31 @@ void Inode::dump(Formatter *f) const
   f->dump_unsigned("flags", flags);
 
   if (is_dir()) {
-    if (!dir_contacts.empty()) {
-      f->open_object_section("dir_contants");
-      for (set<int>::iterator p = dir_contacts.begin(); p != dir_contacts.end(); ++p)
-	f->dump_int("mds", *p);
-      f->close_section();
-    }
     f->dump_int("dir_hashed", (int)dir_hashed);
     f->dump_int("dir_replicated", (int)dir_replicated);
+    if (dir_replicated) {
+      f->open_array_section("dirfrags");
+      for (const auto &frag : frag_repmap) {
+        f->open_object_section("frags");
+        CachedStackStringStream css;
+        *css << std::hex << frag.first.value() << "/" << std::dec << frag.first.bits();
+        f->dump_string("frag", css->strv());
+
+        f->open_array_section("repmap");
+        for (const auto &mds : frag.second) {
+          f->dump_int("mds", mds);
+        }
+        f->close_section();
+
+        f->close_section();
+      }
+      f->close_section();
+    }
   }
 
   f->open_array_section("caps");
   for (const auto &pair : caps) {
     f->open_object_section("cap");
-    f->dump_int("mds", pair.first);
     if (&pair.second == auth_cap)
       f->dump_int("auth", 1);
     pair.second.dump(f);
@@ -494,12 +548,12 @@ void Inode::dump(Formatter *f) const
   if (requested_max_size != max_size)
     f->dump_unsigned("requested_max_size", requested_max_size);
 
-  f->dump_int("ref", _ref);
+  f->dump_int("nref", get_nref());
   f->dump_int("ll_ref", ll_ref);
 
   if (!dentries.empty()) {
     f->open_array_section("parents");
-    for (const auto &dn : dentries) {
+    for (const auto &&dn : dentries) {
       f->open_object_section("dentry");
       f->dump_stream("dir_ino") << dn->dir->parent_inode->ino;
       f->dump_string("name", dn->name);
@@ -512,7 +566,7 @@ void Inode::dump(Formatter *f) const
 void Cap::dump(Formatter *f) const
 {
   f->dump_int("mds", session->mds_num);
-  f->dump_stream("ino") << inode->ino;
+  f->dump_stream("ino") << inode.ino;
   f->dump_unsigned("cap_id", cap_id);
   f->dump_stream("issued") << ccap_string(issued);
   if (implemented != issued)
@@ -633,13 +687,13 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
    * allow it, with an unusual error to make it clear.
    */
   if (!client->get_deleg_timeout())
-    return -ETIME;
+    return -CEPHFS_ETIME;
 
   // Just say no if we have any recalled delegs still outstanding
   if (has_recalled_deleg()) {
     lsubdout(client->cct, client, 10) << __func__ <<
 	  ": has_recalled_deleg" << dendl;
-    return -EAGAIN;
+    return -CEPHFS_EAGAIN;
   }
 
   // check vs. currently open files on this inode
@@ -648,17 +702,17 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
     if (open_count_for_write()) {
       lsubdout(client->cct, client, 10) << __func__ <<
 	    ": open for write" << dendl;
-      return -EAGAIN;
+      return -CEPHFS_EAGAIN;
     }
     break;
   case CEPH_DELEGATION_WR:
     if (open_count() > 1) {
       lsubdout(client->cct, client, 10) << __func__ << ": open" << dendl;
-      return -EAGAIN;
+      return -CEPHFS_EAGAIN;
     }
     break;
   default:
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   }
 
   /*
@@ -679,7 +733,7 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
   if (!caps_issued_mask(need)) {
     lsubdout(client->cct, client, 10) << __func__ << ": cap mismatch, have="
       << ccap_string(caps_issued()) << " need=" << ccap_string(need) << dendl;
-    return -EAGAIN;
+    return -CEPHFS_EAGAIN;
   }
 
   for (list<Delegation>::iterator d = delegations.begin();
@@ -713,3 +767,47 @@ void Inode::unset_deleg(Fh *fh)
     }
   }
 }
+
+/**
+* mark_caps_dirty - mark some caps dirty
+* @caps: the dirty caps
+*
+* note that if there is no dirty and flushing caps before, we need to pin this inode.
+* it will be unpined by handle_cap_flush_ack when there are no dirty and flushing caps.
+*/
+void Inode::mark_caps_dirty(int caps)
+{
+  /*
+   * If auth_cap is nullptr means the reonnecting is not finished or
+   * already rejected.
+   */
+  if (!auth_cap) {
+    ceph_assert(!dirty_caps);
+
+    lsubdout(client->cct, client, 1) << __func__ << " " << *this << " dirty caps '" << ccap_string(caps)
+	     << "', but no auth cap." << dendl;
+    return;
+  }
+
+  lsubdout(client->cct, client, 10) << __func__ << " " << *this << " " << ccap_string(dirty_caps) << " -> "
+           << ccap_string(dirty_caps | caps) << dendl;
+
+  if (caps && !caps_dirty())
+    iget();
+
+  dirty_caps |= caps;
+  auth_cap->session->get_dirty_list().push_back(&dirty_cap_item);
+  client->cap_delay_requeue(this);
+}
+
+/**
+* mark_caps_clean - only clean the dirty_caps and caller should start flushing the dirty caps.
+*/
+void Inode::mark_caps_clean()
+{
+  lsubdout(client->cct, client, 10) << __func__ << " " << *this << dendl;
+  dirty_caps = 0;
+  dirty_cap_item.remove_myself();
+}
+
+

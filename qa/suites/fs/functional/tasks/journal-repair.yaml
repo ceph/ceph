@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - bad backtrace on directory inode
+      - error reading table object
+      - Metadata damage detected
+      - slow requests are blocked
+      - Behind on trimming
+      - error reading sessionmap
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_journal_repair

@@ -5,17 +5,15 @@
 #define CEPH_LIBRBD_MIRRORING_WATCHER_H
 
 #include "include/int_types.h"
+#include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Watcher.h"
 #include "librbd/mirroring_watcher/Types.h"
 
-namespace librados {
-  class IoCtx;
-}
-
 namespace librbd {
 
+namespace asio { struct ContextWQ; }
 namespace watcher {
 namespace util {
 template <typename> struct HandlePayloadVisitor;
@@ -27,7 +25,7 @@ class MirroringWatcher : public Watcher {
   friend struct watcher::util::HandlePayloadVisitor<MirroringWatcher<ImageCtxT>>;
 
 public:
-  MirroringWatcher(librados::IoCtx &io_ctx, ContextWQ *work_queue);
+  MirroringWatcher(librados::IoCtx &io_ctx, asio::ContextWQ *work_queue);
 
   static int notify_mode_updated(librados::IoCtx &io_ctx,
                                  cls::rbd::MirrorMode mirror_mode);

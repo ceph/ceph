@@ -1,39 +1,40 @@
-from cStringIO import StringIO
 import logging
 import json
-import requests
+import time
 
-from requests.packages.urllib3 import PoolManager
-from requests.packages.urllib3.util import Retry
-from urlparse import urlparse
+from io import StringIO
 
-from teuthology.orchestra.connection import split_user
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
 def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
-             format='json', decode=True, log_level=logging.DEBUG):
+             omit_sudo=False, omit_tdir=False, format='json', decode=True,
+             log_level=logging.DEBUG):
     log.info('rgwadmin: {client} : {cmd}'.format(client=client,cmd=cmd))
     testdir = teuthology.get_testdir(ctx)
     cluster_name, daemon_type, client_id = teuthology.split_role(client)
     client_with_id = daemon_type + '.' + client_id
     pre = [
         'adjust-ulimits',
-        'ceph-coverage'.format(tdir=testdir),
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'radosgw-admin'.format(tdir=testdir),
+        'ceph-coverage']
+    if not omit_tdir:
+        pre.append(
+            '{tdir}/archive/coverage'.format(tdir=testdir))
+    pre.extend([
+        'radosgw-admin',
         '--log-to-stderr',
         '--format', format,
         '-n',  client_with_id,
         '--cluster', cluster_name,
-        ]
+        ])
     pre.extend(cmd)
     log.log(log_level, 'rgwadmin: cmd=%s' % pre)
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(client).remotes.keys()
     proc = remote.run(
         args=pre,
         check_status=check_status,
+        omit_sudo=omit_sudo,
         stdout=StringIO(),
         stderr=StringIO(),
         stdin=stdin,
@@ -70,12 +71,29 @@ def get_user_successful_ops(out, user):
         return 0
     return get_user_summary(out, user)['total']['successful_ops']
 
-def wait_for_radosgw(url):
+def wait_for_radosgw(url, remote):
     """ poll the given url until it starts accepting connections
 
     add_daemon() doesn't wait until radosgw finishes startup, so this is used
     to avoid racing with later tasks that expect radosgw to be up and listening
     """
-    # use a connection pool with retry/backoff to poll until it starts listening
-    http = PoolManager(retries=Retry(connect=8, backoff_factor=1))
-    http.request('GET', url)
+    # TODO: use '--retry-connrefused --retry 8' when teuthology is running on
+    # Centos 8 and other OS's with an updated version of curl
+    curl_cmd = ['curl',
+                url]
+    exit_status = 0
+    num_retries = 8
+    for seconds in range(num_retries):
+        proc = remote.run(
+            args=curl_cmd,
+            check_status=False,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            stdin=StringIO(),
+            )
+        exit_status = proc.exitstatus
+        if exit_status == 0:
+            break
+        time.sleep(2**seconds)
+
+    assert exit_status == 0

@@ -52,15 +52,14 @@ using namespace service_daemon;
 template <typename I>
 ServiceDaemon<I>::ServiceDaemon(CephContext *cct, RadosRef rados,
                                 Threads<I>* threads)
-  : m_cct(cct), m_rados(rados), m_threads(threads),
-    m_lock("rbd::mirror::ServiceDaemon") {
+  : m_cct(cct), m_rados(rados), m_threads(threads) {
   dout(20) << dendl;
 }
 
 template <typename I>
 ServiceDaemon<I>::~ServiceDaemon() {
   dout(20) << dendl;
-  Mutex::Locker timer_locker(m_threads->timer_lock);
+  std::lock_guard timer_locker{m_threads->timer_lock};
   if (m_timer_ctx != nullptr) {
     m_threads->timer->cancel_event(m_timer_ctx);
     update_status();
@@ -93,7 +92,7 @@ void ServiceDaemon<I>::add_pool(int64_t pool_id, const std::string& pool_name) {
   dout(20) << "pool_id=" << pool_id << ", pool_name=" << pool_name << dendl;
 
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     m_pools.insert({pool_id, {pool_name}});
   }
   schedule_update_status();
@@ -103,8 +102,40 @@ template <typename I>
 void ServiceDaemon<I>::remove_pool(int64_t pool_id) {
   dout(20) << "pool_id=" << pool_id << dendl;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     m_pools.erase(pool_id);
+  }
+  schedule_update_status();
+}
+
+template <typename I>
+void ServiceDaemon<I>::add_namespace(int64_t pool_id,
+                                     const std::string& namespace_name) {
+  dout(20) << "pool_id=" << pool_id << ", namespace=" << namespace_name
+           << dendl;
+
+  std::lock_guard locker{m_lock};
+  auto pool_it = m_pools.find(pool_id);
+  if (pool_it == m_pools.end()) {
+    return;
+  }
+  pool_it->second.ns_attributes[namespace_name];
+
+  // don't schedule update status as the namespace attributes are empty yet
+}
+
+template <typename I>
+void ServiceDaemon<I>::remove_namespace(int64_t pool_id,
+                                        const std::string& namespace_name) {
+  dout(20) << "pool_id=" << pool_id << ", namespace=" << namespace_name
+           << dendl;
+  {
+    std::lock_guard locker{m_lock};
+    auto pool_it = m_pools.find(pool_id);
+    if (pool_it == m_pools.end()) {
+      return;
+    }
+    pool_it->second.ns_attributes.erase(namespace_name);
   }
   schedule_update_status();
 }
@@ -120,7 +151,7 @@ uint64_t ServiceDaemon<I>::add_or_update_callout(int64_t pool_id,
            << "text=" << text << dendl;
 
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     auto pool_it = m_pools.find(pool_id);
     if (pool_it == m_pools.end()) {
       return CALLOUT_ID_NONE;
@@ -142,7 +173,7 @@ void ServiceDaemon<I>::remove_callout(int64_t pool_id, uint64_t callout_id) {
            << "callout_id=" << callout_id << dendl;
 
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     auto pool_it = m_pools.find(pool_id);
     if (pool_it == m_pools.end()) {
       return;
@@ -162,12 +193,44 @@ void ServiceDaemon<I>::add_or_update_attribute(int64_t pool_id,
            << "value=" << value << dendl;
 
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     auto pool_it = m_pools.find(pool_id);
     if (pool_it == m_pools.end()) {
       return;
     }
     pool_it->second.attributes[key] = value;
+  }
+
+  schedule_update_status();
+}
+
+template <typename I>
+void ServiceDaemon<I>::add_or_update_namespace_attribute(
+    int64_t pool_id, const std::string& namespace_name, const std::string& key,
+    const AttributeValue& value) {
+  if (namespace_name.empty()) {
+    add_or_update_attribute(pool_id, key, value);
+    return;
+  }
+
+  dout(20) << "pool_id=" << pool_id << ", "
+           << "namespace=" << namespace_name << ", "
+           << "key=" << key << ", "
+           << "value=" << value << dendl;
+
+  {
+    std::lock_guard locker{m_lock};
+    auto pool_it = m_pools.find(pool_id);
+    if (pool_it == m_pools.end()) {
+      return;
+    }
+
+    auto ns_it = pool_it->second.ns_attributes.find(namespace_name);
+    if (ns_it == pool_it->second.ns_attributes.end()) {
+      return;
+    }
+
+    ns_it->second[key] = value;
   }
 
   schedule_update_status();
@@ -180,7 +243,7 @@ void ServiceDaemon<I>::remove_attribute(int64_t pool_id,
            << "key=" << key << dendl;
 
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     auto pool_it = m_pools.find(pool_id);
     if (pool_it == m_pools.end()) {
       return;
@@ -193,12 +256,12 @@ void ServiceDaemon<I>::remove_attribute(int64_t pool_id,
 
 template <typename I>
 void ServiceDaemon<I>::schedule_update_status() {
-  Mutex::Locker timer_locker(m_threads->timer_lock);
+  std::lock_guard timer_locker{m_threads->timer_lock};
   if (m_timer_ctx != nullptr) {
     return;
   }
 
-  m_timer_ctx = new FunctionContext([this](int) {
+  m_timer_ctx = new LambdaContext([this](int) {
       m_timer_ctx = nullptr;
       update_status();
     });
@@ -208,11 +271,11 @@ void ServiceDaemon<I>::schedule_update_status() {
 template <typename I>
 void ServiceDaemon<I>::update_status() {
   dout(20) << dendl;
-  assert(m_threads->timer_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
 
   ceph::JSONFormatter f;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     f.open_object_section("pools");
     for (auto& pool_pair : m_pools) {
       f.open_object_section(stringify(pool_pair.first).c_str());
@@ -229,6 +292,19 @@ void ServiceDaemon<I>::update_status() {
       for (auto& attribute : pool_pair.second.attributes) {
         AttributeDumpVisitor attribute_dump_visitor(&f, attribute.first);
         boost::apply_visitor(attribute_dump_visitor, attribute.second);
+      }
+
+      if (!pool_pair.second.ns_attributes.empty()) {
+        f.open_object_section("namespaces");
+        for (auto& [ns, attributes] : pool_pair.second.ns_attributes) {
+          f.open_object_section(ns.c_str());
+          for (auto& [key, value] : attributes) {
+            AttributeDumpVisitor attribute_dump_visitor(&f, key);
+            boost::apply_visitor(attribute_dump_visitor, value);
+          }
+          f.close_section(); // namespace
+        }
+        f.close_section(); // namespaces
       }
       f.close_section(); // pool
     }

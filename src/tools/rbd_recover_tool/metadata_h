@@ -66,7 +66,7 @@ function get_image_format_by_hobject()
 }
 
 #======================================== image format v1 ========================================  
-# <image_name>.rbd inlude 3 parts:
+# <image_name>.rbd include 3 parts:
 # header + snap_count*snapshot + snap_count*snap_name
 # 
 # struct rbd_obj_header_ondisk {
@@ -80,19 +80,19 @@ function get_image_format_by_hobject()
 # 1		__u8 comp_type;
 # 1		__u8 unused;
 # 	} __attribute__((packed)) options;
-# 8	__le64 image_size;//hexdump -C s=80 n=8
-# 8	__le64 snap_seq;  //hexdump -C s=88 n=8
-# 4	__le32 snap_count;//hexdump -C s=96 n=4
-# 4	__le32 reserved;
-# 8	__le64 snap_names_len;//hexdump -C s=104 n=8
+# 8	ceph_le64 image_size;//hexdump -C s=80 n=8
+# 8	ceph_le64 snap_seq;  //hexdump -C s=88 n=8
+# 4	ceph_le32 snap_count;//hexdump -C s=96 n=4
+# 4	ceph_le32 reserved;
+# 8	ceph_le64 snap_names_len;//hexdump -C s=104 n=8
 # 	struct rbd_obj_snap_ondisk snaps[0];
 # } __attribute__((packed));
 #
 # sizeof(rbd_obj_header_ondisk): 112
 #
 # struct rbd_obj_snap_ondisk {
-# 8	__le64 id;    //hexdump -C s=112+i*16 n=8   , i=[0, snap_count)
-# 8	__le64 image_size;//hexdump -C s=112+i*16+8 n=8, i=[0, snap_count)
+# 8	ceph_le64 id;    //hexdump -C s=112+i*16 n=8   , i=[0, snap_count)
+# 8	ceph_le64 image_size;//hexdump -C s=112+i*16+8 n=8, i=[0, snap_count)
 # } __attribute__((packed));
 # sizeof(rbd_obj_snap_ondisk): 16
 #

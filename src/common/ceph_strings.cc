@@ -1,6 +1,7 @@
 /*
  * Ceph string constants
  */
+#include "ceph_strings.h"
 #include "include/types.h"
 #include "include/ceph_features.h"
 
@@ -14,6 +15,16 @@ const char *ceph_entity_type_name(int type)
 	case CEPH_ENTITY_TYPE_CLIENT: return "client";
 	case CEPH_ENTITY_TYPE_AUTH: return "auth";
 	default: return "unknown";
+	}
+}
+
+const char *ceph_con_mode_name(int con_mode)
+{
+	switch (con_mode) {
+	case CEPH_CON_MODE_UNKNOWN: return "unknown";
+	case CEPH_CON_MODE_CRC: return "crc";
+	case CEPH_CON_MODE_SECURE: return "secure";
+	default: return "???";
 	}
 }
 
@@ -55,6 +66,8 @@ const char *ceph_osd_state_name(int s)
                 return "noin";
         case CEPH_OSD_NOOUT:
                 return "noout";
+        case CEPH_OSD_STOP:
+                return "stop";
 	default:
 		return "???";
 	}
@@ -91,59 +104,17 @@ const char *ceph_release_name(int r)
 		return "mimic";
 	case CEPH_RELEASE_NAUTILUS:
 		return "nautilus";
+	case CEPH_RELEASE_OCTOPUS:
+		return "octopus";
+	case CEPH_RELEASE_PACIFIC:
+		return "pacific";
+	case CEPH_RELEASE_QUINCY:
+		return "quincy";
 	default:
+		if (r < 0)
+			return "unspecified";
 		return "unknown";
 	}
-}
-
-int ceph_release_from_name(const char *s)
-{
-	if (!s) {
-		return -1;
-	}
-	if (strcmp(s, "nautilus") == 0) {
-		return CEPH_RELEASE_NAUTILUS;
-	}
-	if (strcmp(s, "mimic") == 0) {
-		return CEPH_RELEASE_MIMIC;
-	}
-	if (strcmp(s, "luminous") == 0) {
-		return CEPH_RELEASE_LUMINOUS;
-	}
-	if (strcmp(s, "kraken") == 0) {
-		return CEPH_RELEASE_KRAKEN;
-	}
-	if (strcmp(s, "jewel") == 0) {
-		return CEPH_RELEASE_JEWEL;
-	}
-	if (strcmp(s, "infernalis") == 0) {
-		return CEPH_RELEASE_INFERNALIS;
-	}
-	if (strcmp(s, "hammer") == 0) {
-		return CEPH_RELEASE_HAMMER;
-	}
-	if (strcmp(s, "giant") == 0) {
-		return CEPH_RELEASE_GIANT;
-	}
-	if (strcmp(s, "firefly") == 0) {
-		return CEPH_RELEASE_FIREFLY;
-	}
-	if (strcmp(s, "emperor") == 0) {
-		return CEPH_RELEASE_EMPEROR;
-	}
-	if (strcmp(s, "dumpling") == 0) {
-		return CEPH_RELEASE_DUMPLING;
-	}
-	if (strcmp(s, "cuttlefish") == 0) {
-		return CEPH_RELEASE_CUTTLEFISH;
-	}
-	if (strcmp(s, "bobtail") == 0) {
-		return CEPH_RELEASE_BOBTAIL;
-	}
-	if (strcmp(s, "argonaut") == 0) {
-		return CEPH_RELEASE_ARGONAUT;
-	}
-	return -1;
 }
 
 uint64_t ceph_release_features(int r)
@@ -271,6 +242,8 @@ const char *ceph_mds_state_name(int s)
 	case CEPH_MDS_STATE_CLIENTREPLAY: return "up:clientreplay";
 	case CEPH_MDS_STATE_ACTIVE:     return "up:active";
 	case CEPH_MDS_STATE_STOPPING:   return "up:stopping";
+               /* misc */
+	case CEPH_MDS_STATE_NULL:       return "null";
 	}
 	return "???";
 }
@@ -290,6 +263,7 @@ const char *ceph_session_op_name(int op)
 	case CEPH_SESSION_FLUSHMSG_ACK: return "flushmsg_ack";
 	case CEPH_SESSION_FORCE_RO: return "force_ro";
 	case CEPH_SESSION_REJECT: return "reject";
+	case CEPH_SESSION_REQUEST_FLUSH_MDLOG: return "request_flushmdlog";
 	}
 	return "???";
 }
@@ -392,7 +366,7 @@ const char *ceph_pool_op_name(int op)
 	switch (op) {
 	case POOL_OP_CREATE: return "create";
 	case POOL_OP_DELETE: return "delete";
-	case POOL_OP_AUID_CHANGE: return "auid change";
+	case POOL_OP_AUID_CHANGE: return "auid change";  // (obsolete)
 	case POOL_OP_CREATE_SNAP: return "create snap";
 	case POOL_OP_DELETE_SNAP: return "delete snap";
 	case POOL_OP_CREATE_UNMANAGED_SNAP: return "create unmanaged snap";

@@ -17,7 +17,9 @@
 
 #include <atomic>
 #include "common/LogEntry.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
+#include "common/ostream_temp.h"
+#include "common/ref.h"
 #include "include/health.h"
 
 class LogClient;
@@ -37,34 +39,16 @@ namespace logging {
 }
 }
 
-int parse_log_client_options(CephContext *cct,
-			     map<string,string> &log_to_monitors,
-			     map<string,string> &log_to_syslog,
-			     map<string,string> &log_channels,
-			     map<string,string> &log_prios,
-			     map<string,string> &log_to_graylog,
-			     map<string,string> &log_to_graylog_host,
-			     map<string,string> &log_to_graylog_port,
-			     uuid_d &fsid,
-			     string &host);
-
-class LogClientTemp
-{
-public:
-  LogClientTemp(clog_type type_, LogChannel &parent_);
-  LogClientTemp(const LogClientTemp &rhs);
-  ~LogClientTemp();
-
-  template<typename T>
-  std::ostream& operator<<(const T& rhs)
-  {
-    return ss << rhs;
-  }
-
-private:
-  clog_type type;
-  LogChannel &parent;
-  stringstream ss;
+struct clog_targets_conf_t {
+  std::string log_to_monitors;
+  std::string log_to_syslog;
+  std::string log_channels;
+  std::string log_prios;
+  std::string log_to_graylog;
+  std::string log_to_graylog_host;
+  std::string log_to_graylog_port;
+  uuid_d fsid; // only 16B. Simpler as a copy.
+  std::string host;
 };
 
 /** Manage where we output to and at which priority
@@ -76,7 +60,7 @@ private:
  * Past queueing the LogEntry, the LogChannel is done with the whole thing.
  * LogClient will deal with sending and handling of LogEntries.
  */
-class LogChannel
+class LogChannel : public LoggerSinkSet
 {
 public:
 
@@ -86,17 +70,17 @@ public:
              const std::string &facility,
              const std::string &prio);
 
-  LogClientTemp debug() {
-    return LogClientTemp(CLOG_DEBUG, *this);
+  OstreamTemp debug() final {
+    return OstreamTemp(CLOG_DEBUG, this);
   }
-  void debug(std::stringstream &s) {
+  void debug(std::stringstream &s) final {
     do_log(CLOG_DEBUG, s);
   }
   /**
    * Convenience function mapping health status to
    * the appropriate cluster log severity.
    */
-  LogClientTemp health(health_status_t health) {
+  OstreamTemp health(health_status_t health) {
     switch(health) {
       case HEALTH_OK:
         return info();
@@ -109,34 +93,32 @@ public:
         ceph_abort();
     }
   }
-  LogClientTemp info() {
-    return LogClientTemp(CLOG_INFO, *this);
+  OstreamTemp info() final {
+    return OstreamTemp(CLOG_INFO, this);
   }
-  void info(std::stringstream &s) {
+  void info(std::stringstream &s) final {
     do_log(CLOG_INFO, s);
   }
-  LogClientTemp warn() {
-    return LogClientTemp(CLOG_WARN, *this);
+  OstreamTemp warn() final {
+    return OstreamTemp(CLOG_WARN, this);
   }
-  void warn(std::stringstream &s) {
+  void warn(std::stringstream &s) final {
     do_log(CLOG_WARN, s);
   }
-  LogClientTemp error() {
-    return LogClientTemp(CLOG_ERROR, *this);
+  OstreamTemp error() final {
+    return OstreamTemp(CLOG_ERROR, this);
   }
-  void error(std::stringstream &s) {
+  void error(std::stringstream &s) final {
     do_log(CLOG_ERROR, s);
   }
-  LogClientTemp sec() {
-    return LogClientTemp(CLOG_SEC, *this);
+  OstreamTemp sec() final {
+    return OstreamTemp(CLOG_SEC, this);
   }
-  void sec(std::stringstream &s) {
+  void sec(std::stringstream &s) final {
     do_log(CLOG_SEC, s);
   }
 
-  void set_log_to_monitors(bool v) {
-    log_to_monitors = v;
-  }
+  void set_log_to_monitors(bool v);
   void set_log_to_syslog(bool v) {
     log_to_syslog = v;
   }
@@ -169,39 +151,37 @@ public:
     return (graylog != nullptr);
   }
 
-  typedef shared_ptr<LogChannel> Ref;
+  typedef std::shared_ptr<LogChannel> Ref;
 
   /**
-   * update config values from parsed k/v map for each config option
+   * Query the configuration database in conf_cct for configuration
+   * parameters. Pick out the relevant values based on our channel name.
+   * Update the logger configuration based on these values.
    *
-   * Pick out the relevant value based on our channel.
+   * Return a collection of configuration strings.
    */
-  void update_config(map<string,string> &log_to_monitors,
-		     map<string,string> &log_to_syslog,
-		     map<string,string> &log_channels,
-		     map<string,string> &log_prios,
-		     map<string,string> &log_to_graylog,
-		     map<string,string> &log_to_graylog_host,
-		     map<string,string> &log_to_graylog_port,
-		     uuid_d &fsid,
-		     string &host);
+  clog_targets_conf_t parse_client_options(CephContext* conf_cct);
 
-  void do_log(clog_type prio, std::stringstream& ss);
-  void do_log(clog_type prio, const std::string& s);
+  void do_log(clog_type prio, std::stringstream& ss) final;
+  void do_log(clog_type prio, const std::string& s) final;
 
 private:
   CephContext *cct;
   LogClient *parent;
-  Mutex channel_lock;
+  ceph::mutex channel_lock = ceph::make_mutex("LogChannel::channel_lock");
   std::string log_channel;
   std::string log_prio;
   std::string syslog_facility;
   bool log_to_syslog;
   bool log_to_monitors;
-  shared_ptr<ceph::logging::Graylog> graylog;
+  std::shared_ptr<ceph::logging::Graylog> graylog;
 
+  /**
+   * update config values from parsed k/v std::map for each config option
+   */
+  void update_config(const clog_targets_conf_t& conf_strings);
 
-  friend class LogClientTemp;
+  clog_targets_conf_t parse_log_client_options(CephContext* conf_cct);
 };
 
 typedef LogChannel::Ref LogChannelRef;
@@ -215,13 +195,14 @@ public:
   };
 
   LogClient(CephContext *cct, Messenger *m, MonMap *mm,
-	    enum logclient_flag_t flags);
+          logclient_flag_t flags);
+
   virtual ~LogClient() {
     channels.clear();
   }
 
   bool handle_log_ack(MLogAck *m);
-  Message *get_mon_log_message(bool flush);
+  ceph::ref_t<Message> get_mon_log_message(bool flush);
   bool are_pending();
 
   LogChannelRef create_channel() {
@@ -249,19 +230,21 @@ public:
   }
 
   uint64_t get_next_seq();
-  const entity_inst_t& get_myinst();
+  entity_addrvec_t get_myaddrs();
   const EntityName& get_myname();
+  entity_name_t get_myrank();
   version_t queue(LogEntry &entry);
+  void reset();
 
 private:
-  Message *_get_mon_log_message();
+  ceph::ref_t<Message> _get_mon_log_message();
   void _send_to_mon();
 
   CephContext *cct;
   Messenger *messenger;
   MonMap *monmap;
   bool is_mon;
-  Mutex log_lock;
+  ceph::mutex log_lock = ceph::make_mutex("LogClient::log_lock");
   version_t last_log_sent;
   version_t last_log;
   std::deque<LogEntry> log_queue;

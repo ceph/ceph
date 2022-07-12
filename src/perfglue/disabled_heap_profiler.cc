@@ -21,6 +21,10 @@ void ceph_heap_profiler_stats(char *buf, int length) { return; }
 
 void ceph_heap_release_free_memory() { return; }
 
+double ceph_heap_get_release_rate() { return 0; }
+
+void ceph_heap_set_release_rate(double value) { return; }
+
 bool ceph_heap_profiler_running() { return false; }
 
 void ceph_heap_profiler_start() { return; }
@@ -40,4 +44,4 @@ bool ceph_heap_set_numeric_property(const char *property, size_t value)
 }
 
 void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
-                                       ostream& out) { return; }
+                                       std::ostream& out) { return; }

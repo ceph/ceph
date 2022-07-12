@@ -4,7 +4,7 @@
 #ifndef LIBRBD_IO_ASYNC_OPERATION_H
 #define LIBRBD_IO_ASYNC_OPERATION_H
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/xlist.h"
 #include <list>
 
@@ -26,7 +26,7 @@ public:
 
   ~AsyncOperation()
   {
-    assert(!m_xlist_item.is_on_list());
+    ceph_assert(!m_xlist_item.is_on_list());
   }
 
   inline bool started() const {
@@ -36,7 +36,7 @@ public:
   void start_op(ImageCtx &image_ctx);
   void finish_op();
 
-  void add_flush_context(Context *on_finish);
+  void flush(Context *on_finish);
 
 private:
 

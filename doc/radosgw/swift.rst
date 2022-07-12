@@ -1,3 +1,5 @@
+.. _radosgw swift:
+
 ===============================
  Ceph Object Gateway Swift API
 ===============================
@@ -67,7 +69,9 @@ The following table describes the support status for current Swift functional fe
 +---------------------------------+-----------------+----------------------------------------+
 | **Expiring Objects**            | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
-| **Object Versioning**           | Supported       |                                        |
+| **Temporary URLs**              | Partial Support | No support for container-level keys    |
++---------------------------------+-----------------+----------------------------------------+
+| **Object Versioning**           | Partial Support | No support for ``X-History-Location``  |
 +---------------------------------+-----------------+----------------------------------------+
 | **CORS**                        | Not Supported   |                                        |
 +---------------------------------+-----------------+----------------------------------------+

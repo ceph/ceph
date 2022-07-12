@@ -4,7 +4,7 @@
 #ifndef CEPH_LIBRBD_JOURNAL_DEMOTE_REQUEST_H
 #define CEPH_LIBRBD_JOURNAL_DEMOTE_REQUEST_H
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Future.h"
 #include "librbd/journal/Types.h"
@@ -69,7 +69,7 @@ private:
   Journaler *m_journaler = nullptr;
   int m_ret_val = 0;
 
-  Mutex m_lock;
+  ceph::mutex m_lock;
   ImageClientMeta m_client_meta;
   uint64_t m_tag_tid = 0;
   TagData m_tag_data;

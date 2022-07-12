@@ -49,13 +49,12 @@ Interface
 
 Set up an erasure-coded pool::
 
- $ ceph osd pool create ecpool 12 12 erasure
+ $ ceph osd pool create ecpool erasure
 
 Set up an erasure-coded pool and the associated CRUSH rule ``ecrule``::
 
  $ ceph osd crush rule create-erasure ecrule
- $ ceph osd pool create ecpool 12 12 erasure \
-     default ecrule
+ $ ceph osd pool create ecpool erasure default ecrule
 
 Set the CRUSH failure domain to osd (instead of host, which is the default)::
 
@@ -63,23 +62,22 @@ Set the CRUSH failure domain to osd (instead of host, which is the default)::
      crush-failure-domain=osd
  $ ceph osd erasure-code-profile get myprofile
  k=2
- m=1
+ m=2
  plugin=jerasure
  technique=reed_sol_van
  crush-failure-domain=osd
- $ ceph osd pool create ecpool 12 12 erasure myprofile
+ $ ceph osd pool create ecpool erasure myprofile
 
 Control the parameters of the erasure code plugin::
 
  $ ceph osd erasure-code-profile set myprofile \
-     k=3 m=1
+     k=3 m=2
  $ ceph osd erasure-code-profile get myprofile
  k=3
- m=1
+ m=2
  plugin=jerasure
  technique=reed_sol_van
- $ ceph osd pool create ecpool 12 12 erasure \
-     myprofile
+ $ ceph osd pool create ecpool erasure myprofile
 
 Choose an alternate erasure code plugin::
 
@@ -87,7 +85,7 @@ Choose an alternate erasure code plugin::
      plugin=example technique=xor
  $ ceph osd erasure-code-profile get myprofile
  k=2
- m=1
+ m=2
  plugin=example
  technique=xor
  $ ceph osd pool create ecpool 12 12 erasure \
@@ -99,7 +97,7 @@ Display the default erasure code profile::
   default
   $ ceph osd erasure-code-profile get default
   k=2
-  m=1
+  m=2
   plugin=jerasure
   technique=reed_sol_van
 
@@ -130,7 +128,7 @@ Set the rule to ssd (instead of default)::
      crush-root=ssd
  $ ceph osd erasure-code-profile get myprofile
  k=2
- m=1
+ m=2
  plugin=jerasure
  technique=reed_sol_van
  crush-root=ssd

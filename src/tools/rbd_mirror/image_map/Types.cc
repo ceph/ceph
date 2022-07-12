@@ -2,13 +2,16 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Types.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
+#include <iostream>
 
 namespace rbd {
 namespace mirror {
 namespace image_map {
+
+const std::string UNMAPPED_INSTANCE_ID("");
 
 namespace {
 
@@ -28,7 +31,8 @@ public:
 
   template <typename T>
   inline void operator()(const T& t) const {
-    ::encode(static_cast<uint32_t>(T::TYPE), m_bl);
+    using ceph::encode;
+    encode(static_cast<uint32_t>(T::TYPE), m_bl);
     t.encode(m_bl);
   }
 private:
@@ -37,7 +41,7 @@ private:
 
 class DecodeVisitor : public boost::static_visitor<void> {
 public:
-  DecodeVisitor(__u8 version, bufferlist::iterator &iter)
+  DecodeVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {
   }
 
@@ -47,7 +51,7 @@ public:
   }
 private:
   __u8 m_version;
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 class DumpVisitor : public boost::static_visitor<void> {
@@ -78,11 +82,11 @@ void PolicyData::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void PolicyData::decode(bufferlist::iterator& it) {
+void PolicyData::decode(bufferlist::const_iterator& it) {
   DECODE_START(1, it);
 
   uint32_t policy_meta_type;
-  ::decode(policy_meta_type, it);
+  decode(policy_meta_type, it);
 
   switch (policy_meta_type) {
   case POLICY_META_TYPE_NONE:
@@ -103,6 +107,30 @@ void PolicyData::dump(Formatter *f) const {
 
 void PolicyData::generate_test_instances(std::list<PolicyData *> &o) {
   o.push_back(new PolicyData(PolicyMetaNone()));
+}
+
+std::ostream &operator<<(std::ostream &os, const ActionType& action_type) {
+  switch (action_type) {
+  case ACTION_TYPE_NONE:
+    os << "NONE";
+    break;
+  case ACTION_TYPE_MAP_UPDATE:
+    os << "MAP_UPDATE";
+    break;
+  case ACTION_TYPE_MAP_REMOVE:
+    os << "MAP_REMOVE";
+    break;
+  case ACTION_TYPE_ACQUIRE:
+    os << "ACQUIRE";
+    break;
+  case ACTION_TYPE_RELEASE:
+    os << "RELEASE";
+    break;
+  default:
+    os << "UNKNOWN (" << static_cast<uint32_t>(action_type) << ")";
+    break;
+  }
+  return os;
 }
 
 } // namespace image_map

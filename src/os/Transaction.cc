@@ -1,10 +1,58 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
-#include "ObjectStore.h"
+#include "os/Transaction.h"
 #include "common/Formatter.h"
 
-void ObjectStore::Transaction::dump(ceph::Formatter *f)
+using std::less;
+using std::list;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
+void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
+			      bufferlist *out)
+{
+  auto start = p;
+  __u32 n;
+  decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    decode(l, p);
+    p += l;
+    len += 4 + l;
+    decode(l, p);
+    p += l;
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
+
+void decode_str_set_to_bl(bufferlist::const_iterator& p,
+			  bufferlist *out)
+{
+  auto start = p;
+  __u32 n;
+  decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    decode(l, p);
+    p += l;
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
+
+namespace ceph::os {
+
+void Transaction::dump(ceph::Formatter *f)
 {
   f->open_array_section("ops");
   iterator i = begin();
@@ -19,6 +67,16 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_NOP:
       f->dump_string("op_name", "nop");
       break;
+    case Transaction::OP_CREATE:
+      {
+	coll_t cid = i.get_cid(op->cid);
+	ghobject_t oid = i.get_oid(op->oid);
+	f->dump_string("op_name", "create");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("oid") << oid;
+      }
+      break;
+
     case Transaction::OP_TOUCH:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -200,19 +258,20 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 
     case Transaction::OP_COLL_HINT:
       {
+	using ceph::decode;
         coll_t cid = i.get_cid(op->cid);
-        uint32_t type = op->hint_type;
+        uint32_t type = op->hint;
         f->dump_string("op_name", "coll_hint");
         f->dump_stream("collection") << cid;
         f->dump_unsigned("type", type);
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
-          ::decode(pg_num, hiter);
-          ::decode(num_objs, hiter);
+          decode(pg_num, hiter);
+          decode(num_objs, hiter);
           f->dump_unsigned("pg_num", pg_num);
           f->dump_unsigned("expected_num_objects", num_objs);
         }
@@ -337,6 +396,11 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 	f->dump_string("op_name", "omap_rmkeys");
 	f->dump_stream("collection") << cid;
 	f->dump_stream("oid") << oid;
+	f->open_array_section("attrs");
+	for (auto& k : keys) {
+	  f->dump_string("", k.c_str());
+	}
+	f->close_section();
       }
       break;
 
@@ -378,6 +442,18 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 	f->dump_stream("bits") << bits;
 	f->dump_stream("rem") << rem;
 	f->dump_stream("dest") << dest;
+      }
+      break;
+
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        uint32_t bits = op->split_bits;
+        coll_t dest = i.get_cid(op->dest_cid);
+	f->dump_string("op_name", "op_merge_collection");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("dest") << dest;
+	f->dump_stream("bits") << bits;
       }
       break;
 
@@ -428,11 +504,13 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
         ghobject_t oid = i.get_oid(op->oid);
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
+        uint32_t alloc_hint_flags = op->hint;
         f->dump_string("op_name", "op_setallochint");
         f->dump_stream("collection") << cid;
         f->dump_stream("oid") << oid;
         f->dump_stream("expected_object_size") << expected_object_size;
         f->dump_stream("expected_write_size") << expected_write_size;
+        f->dump_string("alloc_hint_flags", ceph_osd_alloc_hint_flag_string(alloc_hint_flags));
       }
       break;
 
@@ -452,7 +530,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transaction*>& o)
+void Transaction::generate_test_instances(list<Transaction*>& o)
 {
   o.push_back(new Transaction);
 
@@ -477,7 +555,7 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
 
   t = new Transaction;
   t->setattr(c, o1, "key", bl);
-  map<string,bufferptr> m;
+  map<string,bufferptr,less<>> m;
   m["a"] = buffer::copy("this", 4);
   m["b"] = buffer::copy("that", 4);
   t->setattrs(c, o1, m);
@@ -494,5 +572,12 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   o.push_back(t);  
 }
 
+ostream& operator<<(ostream& out, const Transaction& tx) {
+
+  return out << "Transaction(" << &tx << ")";
+}
+
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
+
+}

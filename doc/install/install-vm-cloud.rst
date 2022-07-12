@@ -9,7 +9,9 @@ Examples of VMs include: QEMU/KVM, XEN, VMWare, LXC, VirtualBox, etc. Examples
 of Cloud Platforms include OpenStack, CloudStack, OpenNebula, etc.
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                     libvirt                       |
             +------------------------+--------------------------+
                                      |
@@ -19,6 +21,8 @@ of Cloud Platforms include OpenStack, CloudStack, OpenNebula, etc.
             |                       QEMU                        |
             +---------------------------------------------------+
             |                      librbd                       |
+            +---------------------------------------------------+
+            |                     librados                      |
             +------------------------+-+------------------------+
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+

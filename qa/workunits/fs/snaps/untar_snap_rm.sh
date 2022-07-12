@@ -2,8 +2,6 @@
 
 set -e
 
-ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
-
 do_tarball() {
     wget http://download.ceph.com/qa/$1
     tar xvf$2 $1

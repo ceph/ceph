@@ -14,7 +14,7 @@
 #ifndef OMAP_BENCH_HPP_
 #define OMAP_BENCH_HPP_
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "include/rados/librados.hpp"
 #include <string>
@@ -31,7 +31,7 @@ struct o_bench_data {
   int started_ops;
   int completed_ops;
   std::map<int,int> freq_map;
-  pair<int,int> mode;
+  std::pair<int,int> mode;
   o_bench_data()
   : avg_latency(0.0), min_latency(DBL_MAX), max_latency(0.0),
     total_latency(0.0),
@@ -49,7 +49,7 @@ typedef int (OmapBench::*test_t)(omap_generator_t omap_gen);
 
 class Writer{
 protected:
-  string oid;
+  std::string oid;
   utime_t begin_time;
   utime_t end_time;
   std::map<std::string,bufferlist> omap;
@@ -61,7 +61,7 @@ public:
   virtual void start_time();
   virtual void stop_time();
   virtual double get_time();
-  virtual string get_oid();
+  virtual std::string get_oid();
   virtual std::map<std::string,bufferlist> & get_omap();
 };
 
@@ -74,8 +74,7 @@ public:
   AioWriter(OmapBench *omap_bench);
   ~AioWriter() override;
   virtual librados::AioCompletion * get_aioc();
-  virtual void set_aioc(librados::callback_t complete,
-      librados::callback_t safe);
+  virtual void set_aioc(librados::callback_t complete);
 };
 
 class OmapBench{
@@ -87,16 +86,17 @@ protected:
   omap_generator_t omap_generator;
 
   //aio things
-  Cond thread_is_free;
-  Mutex thread_is_free_lock;
-  Mutex  data_lock;
+  ceph::condition_variable thread_is_free;
+  ceph::mutex thread_is_free_lock =
+    ceph::make_mutex("OmapBench::thread_is_free_lock");
+  ceph::mutex data_lock =
+    ceph::make_mutex("OmapBench::data_lock");
   int busythreads_count;
   librados::callback_t comp;
-  librados::callback_t safe;
 
-  string pool_name;
-  string rados_id;
-  string prefix;
+  std::string pool_name;
+  std::string rados_id;
+  std::string prefix;
   int threads;
   int objects;
   int entries_per_omap;
@@ -111,10 +111,8 @@ public:
   OmapBench()
     : test(&OmapBench::test_write_objects_in_parallel),
       omap_generator(generate_uniform_omap),
-      thread_is_free_lock("OmapBench::thread_is_free_lock"),
-      data_lock("OmapBench::data_lock"),
       busythreads_count(0),
-      comp(NULL), safe(aio_is_safe),
+      comp(aio_is_complete),
       pool_name("rbd"),
       rados_id("admin"),
       prefix(rados_id+".obj."),
@@ -128,18 +126,18 @@ public:
 
   /**
    * Callback for when an AioCompletion (called from an AioWriter)
-   * is safe. deletes the AioWriter that called it,
+   * is complete. deletes the AioWriter that called it,
    * Updates data, updates busythreads, and signals thread_is_free.
    *
    * @param c provided by aio_write - not used
    * @param arg the AioWriter that contains this AioCompletion
    */
-  static void aio_is_safe(rados_completion_t c, void *arg);
+  static void aio_is_complete(rados_completion_t c, void *arg);
 
   /**
    * Generates a random string len characters long
    */
-  static string random_string(int len);
+  static std::string random_string(int len);
 
   /*
    * runs the test specified by test using the omap generator specified by

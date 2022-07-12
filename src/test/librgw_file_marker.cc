@@ -24,13 +24,14 @@
 #include "rgw/rgw_lib_frontend.h" // direct requests
 
 #include "gtest/gtest.h"
-#include "common/backport_std.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "global/global_init.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 namespace {
 
@@ -50,7 +51,7 @@ namespace {
 
   uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
 
-  string bucket_name("nfsroot");
+  string bucket_name("dmarker");
 
   class obj_rec
   {
@@ -151,7 +152,7 @@ namespace {
   string marker_dir("nfs_marker");
   struct rgw_file_handle *bucket_fh = nullptr;
   struct rgw_file_handle *marker_fh;
-  static constexpr int marker_nobjs = 2*1024;
+  uint32_t marker_nobjs = 2*1024;
   std::deque<obj_rec> marker_objs;
 
   using dirent_t = std::tuple<std::string, uint64_t>;
@@ -217,7 +218,7 @@ TEST(LibRGW, MARKER1_SETUP_BUCKET) {
   st.st_mode = 755;
 
   (void) rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		    RGW_LOOKUP_FLAG_NONE);
+		    nullptr, 0, RGW_LOOKUP_FLAG_NONE);
   if (! bucket_fh) {
     if (do_create) {
       struct stat st;
@@ -235,7 +236,7 @@ TEST(LibRGW, MARKER1_SETUP_BUCKET) {
   ASSERT_NE(bucket_fh, nullptr);
 
   (void) rgw_lookup(fs, bucket_fh, marker_dir.c_str(), &marker_fh,
-		    RGW_LOOKUP_FLAG_NONE);
+		    nullptr, 0, RGW_LOOKUP_FLAG_NONE);
   if (! marker_fh) {
     if (do_create) {
       ret = rgw_mkdir(fs, bucket_fh, marker_dir.c_str(), &st, create_mask,
@@ -251,16 +252,17 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
 {
   /* "large" directory enumeration test.  this one deals only with
    * file objects */
+
   if (do_create) {
     int ret;
 
-    for (int ix = 0; ix < marker_nobjs; ++ix) {
+    for (uint32_t ix = 0; ix < marker_nobjs; ++ix) {
       std::string object_name("f_");
       object_name += to_string(ix);
       obj_rec obj{object_name, nullptr, marker_fh, nullptr};
       // lookup object--all operations are by handle
       ret = rgw_lookup(fs, marker_fh, obj.name.c_str(), &obj.fh,
-		       RGW_LOOKUP_FLAG_CREATE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
       ASSERT_EQ(ret, 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
       // open object--open transaction
@@ -278,6 +280,11 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
       // commit transaction (write on close)
       ret = rgw_close(fs, obj.fh, 0 /* flags */);
       ASSERT_EQ(ret, 0);
+      if (verbose) {
+	/* XXX std:cout fragged...did it get /0 in the stream
+	 * somewhere? */
+	printf("created: %s:%s\n", bucket_name.c_str(), obj.name.c_str());
+      }
       // save for cleanup
       marker_objs.push_back(obj);
     }
@@ -286,24 +293,18 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
 
 extern "C" {
   static bool r2_cb(const char* name, void *arg, uint64_t offset,
+		    struct stat* st, uint32_t st_mask,
 		    uint32_t flags) {
     dirent_vec& dvec =
       *(static_cast<dirent_vec*>(arg));
-    lsubdout(cct, rgw, 10) << __func__
-			   << " bucket=" << bucket_name
-			   << " dir=" << marker_dir
-			   << " iv count=" << dvec.count
-			   << " called back name=" << name
-			   << " flags=" << flags
-			   << dendl;
 
-  std::cout << __func__
-			   << " bucket=" << bucket_name
-			   << " dir=" << marker_dir
-			   << " iv count=" << dvec.count
-			   << " called back name=" << name
-			   << " flags=" << flags
-			   << std::endl;
+    printf("%s bucket=%s dir=%s iv count=%d called back name=%s flags=%d\n",
+	   __func__,
+	   bucket_name.c_str(),
+	   marker_dir.c_str(),
+	   dvec.count,
+	   name,
+	   flags);
 
     string name_str{name};
     if (! ((name_str == ".") ||
@@ -335,6 +336,7 @@ TEST(LibRGW, MARKER1_READDIR)
       int ret = rgw_readdir(fs, marker_fh, &offset, r2_cb, &dvec, &eof,
 			    RGW_READDIR_FLAG_DOTDOT);
       ASSERT_EQ(ret, 0);
+      ASSERT_GE(dvec.obj_names.size(), 0);
       ASSERT_EQ(offset, get<1>(dvec.obj_names.back())); // cookie check
       ++dvec.count;
     } while(!eof);
@@ -364,8 +366,9 @@ TEST(LibRGW, MARKER2_READDIR)
       int ret = rgw_readdir2(fs, marker_fh,
 			     (marker.length() > 0) ? marker.c_str() : nullptr,
 			     r2_cb, &dvec, &eof,
-			     RGW_READDIR_FLAG_DOTDOT);
+			     RGW_READDIR_FLAG_NONE);
       ASSERT_EQ(ret, 0);
+      ASSERT_GE(dvec.obj_names.size(), 0);
       marker = get<0>(dvec.obj_names.back());
       ++dvec.count;
     } while((!eof) && dvec.count < 4);
@@ -424,14 +427,10 @@ TEST(LibRGW, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
-  char *v{nullptr};
-  string val;
-  vector<const char*> args;
-
-  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
-  v = getenv("AWS_ACCESS_KEY_ID");
+  char* v = getenv("AWS_ACCESS_KEY_ID");
   if (v) {
     access_key = v;
   }
@@ -441,6 +440,7 @@ int main(int argc, char *argv[])
     secret_key = v;
   }
 
+  string val;
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
 			      (char*) nullptr)) {
@@ -460,6 +460,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--gid",
 				     (char*) nullptr)) {
       owner_gid = std::stoi(val);
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--nobjs",
+				     (char*) nullptr)) {
+      marker_nobjs = std::stoi(val);
     } else if (ceph_argparse_flag(args, arg_iter, "--marker1",
 					    (char*) nullptr)) {
       do_marker1 = true;
@@ -477,7 +480,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  /* dont accidentally run as anonymous */
+  /* don't accidentally run as anonymous */
   if ((access_key == "") ||
       (secret_key == "")) {
     std::cout << argv[0] << " no AWS credentials, exiting" << std::endl;

@@ -1,2 +1,2 @@
-from module import *  # NOQA
-
+# flake8: noqa
+from .module import Module, StandbyModule

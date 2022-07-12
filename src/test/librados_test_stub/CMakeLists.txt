@@ -1,5 +1,6 @@
 set(librados_test_stub_srcs
   LibradosTestStub.cc
+  NeoradosTestStub.cc
   TestClassHandler.cc
   TestIoCtxImpl.cc
   TestMemCluster.cc

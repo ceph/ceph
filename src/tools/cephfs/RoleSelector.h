@@ -15,7 +15,8 @@ class MDSRoleSelector
 {
   public:
     const std::vector<mds_role_t> &get_roles() const {return roles;}
-    int parse(const FSMap &fsmap, std::string const &str);
+    int parse(const FSMap &fsmap, std::string const &str,
+            bool allow_unqualified_rank=true);
     MDSRoleSelector()
       : fscid(FS_CLUSTER_ID_NONE)
     {}

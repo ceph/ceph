@@ -23,27 +23,33 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class UpdateRequest : public Request {
 public:
   static UpdateRequest *create(ImageCtx &image_ctx,
+                               ceph::shared_mutex* object_map_lock,
                                ceph::BitVector<2> *object_map,
                                uint64_t snap_id, uint64_t start_object_no,
                                uint64_t end_object_no, uint8_t new_state,
                                const boost::optional<uint8_t> &current_state,
                                const ZTracer::Trace &parent_trace,
-                               Context *on_finish) {
-    return new UpdateRequest(image_ctx, object_map, snap_id, start_object_no,
-                             end_object_no, new_state, current_state,
-                             parent_trace, on_finish);
+                               bool ignore_enoent, Context *on_finish) {
+    return new UpdateRequest(image_ctx, object_map_lock, object_map, snap_id,
+                             start_object_no, end_object_no, new_state,
+                             current_state, parent_trace, ignore_enoent,
+                             on_finish);
   }
 
-  UpdateRequest(ImageCtx &image_ctx, ceph::BitVector<2> *object_map,
-                uint64_t snap_id, uint64_t start_object_no,
-                uint64_t end_object_no, uint8_t new_state,
+  UpdateRequest(ImageCtx &image_ctx, ceph::shared_mutex* object_map_lock,
+                ceph::BitVector<2> *object_map, uint64_t snap_id,
+                uint64_t start_object_no, uint64_t end_object_no,
+                uint8_t new_state,
                 const boost::optional<uint8_t> &current_state,
-      	        const ZTracer::Trace &parent_trace, Context *on_finish)
-    : Request(image_ctx, snap_id, on_finish), m_object_map(*object_map),
+      	        const ZTracer::Trace &parent_trace, bool ignore_enoent,
+                Context *on_finish)
+    : Request(image_ctx, snap_id, on_finish),
+      m_object_map_lock(object_map_lock), m_object_map(*object_map),
       m_start_object_no(start_object_no), m_end_object_no(end_object_no),
       m_update_start_object_no(start_object_no), m_new_state(new_state),
       m_current_state(current_state),
-      m_trace(util::create_trace(image_ctx, "update object map", parent_trace))
+      m_trace(util::create_trace(image_ctx, "update object map", parent_trace)),
+      m_ignore_enoent(ignore_enoent)
   {
     m_trace.event("start");
   }
@@ -72,6 +78,7 @@ private:
    * @endverbatim
    */
 
+  ceph::shared_mutex* m_object_map_lock;
   ceph::BitVector<2> &m_object_map;
   uint64_t m_start_object_no;
   uint64_t m_end_object_no;
@@ -80,6 +87,9 @@ private:
   uint8_t m_new_state;
   boost::optional<uint8_t> m_current_state;
   ZTracer::Trace m_trace;
+  bool m_ignore_enoent;
+
+  int m_ret_val = 0;
 
   void update_object_map();
   void handle_update_object_map(int r);

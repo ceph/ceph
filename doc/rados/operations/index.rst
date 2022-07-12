@@ -1,3 +1,5 @@
+.. _rados-operations:
+
 ====================
  Cluster Operations
 ====================
@@ -37,9 +39,12 @@ CRUSH algorithm.
 	erasure-code
 	cache-tiering
 	placement-groups
+	balancer
 	upmap
 	crush-map
 	crush-map-edits
+	stretch-mode
+	change-mon-elections
 
 
 
@@ -59,6 +64,7 @@ with new hardware.
 
 	add-or-rm-osds
 	add-or-rm-mons
+	devices
 	bluestore-migration
 	Command Reference <control>
 

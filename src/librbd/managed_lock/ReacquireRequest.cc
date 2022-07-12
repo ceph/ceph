@@ -47,14 +47,14 @@ void ReacquireRequest<I>::set_cookie() {
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::set_cookie(&op, RBD_LOCK_NAME,
-                               m_exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
+                               m_exclusive ? ClsLockType::EXCLUSIVE : ClsLockType::SHARED,
                                m_old_cookie, util::get_watcher_lock_tag(),
                                m_new_cookie);
 
   librados::AioCompletion *rados_completion = create_rados_callback<
     ReacquireRequest, &ReacquireRequest::handle_set_cookie>(this);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 

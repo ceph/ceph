@@ -31,7 +31,7 @@ results.
 The workflows are not enforced when they impose an overhead that does
 not make sense. For instance, if the release notes for a point release
 were not written prior to checking all integration tests, they can be
-commited to the stable branch and the result sent for publication
+committed to the stable branch and the result sent for publication
 without going through another run of integration tests.
 
 Release Cycle
@@ -97,9 +97,7 @@ follows:
   assign them a priority
 * The bugs with higher priority are worked on first
 
-Each ``team`` is responsible for a project, managed by leads_.
-
-.. _leads: index#Leads
+Each ``team`` is responsible for a project, managed by :ref:`leads <governance>`.
 
 The ``developer`` assigned to an issue is responsible for it. The
 status of an open issue can be:

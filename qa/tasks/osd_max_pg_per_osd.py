@@ -6,12 +6,12 @@ log = logging.getLogger(__name__)
 
 
 def pg_num_in_all_states(pgs, *states):
-    return sum(1 for state in pgs.itervalues()
+    return sum(1 for state in pgs.values()
                if all(s in state for s in states))
 
 
 def pg_num_in_any_state(pgs, *states):
-    return sum(1 for state in pgs.itervalues()
+    return sum(1 for state in pgs.values()
                if any(s in state for s in states))
 
 
@@ -34,8 +34,9 @@ def test_create_from_mon(ctx, config):
     manager = ctx.managers['ceph']
     log.info('1. creating pool.a')
     pool_a = manager.create_pool_with_unique_name(pg_num)
-    manager.wait_for_clean()
-    assert manager.get_num_active_clean() == pg_num
+    pg_states = manager.wait_till_pg_convergence(300)
+    pg_created = pg_num_in_all_states(pg_states, 'active', 'clean')
+    assert pg_created == pg_num
 
     log.info('2. creating pool.b')
     pool_b = manager.create_pool_with_unique_name(pg_num)
@@ -75,14 +76,14 @@ def test_create_from_peer(ctx, config):
     4. delete a pool, verify pgs go active.
     """
     pg_num = config.get('pg_num', 1)
-    pool_size = config.get('pool_size', 2)
     from_primary = config.get('from_primary', True)
 
     manager = ctx.managers['ceph']
     log.info('1. creating pool.a')
     pool_a = manager.create_pool_with_unique_name(pg_num)
-    manager.wait_for_clean()
-    assert manager.get_num_active_clean() == pg_num
+    pg_states = manager.wait_till_pg_convergence(300)
+    pg_created = pg_num_in_all_states(pg_states, 'active', 'clean')
+    assert pg_created == pg_num
 
     log.info('2. creating pool.b')
     while True:
@@ -119,7 +120,6 @@ def test_create_from_peer(ctx, config):
 def task(ctx, config):
     assert isinstance(config, dict), \
         'osd_max_pg_per_osd task only accepts a dict for config'
-    manager = ctx.managers['ceph']
     if config.get('test_create_from_mon', True):
         test_create_from_mon(ctx, config)
     else:

@@ -30,14 +30,20 @@ protected:
 
   bool should_complete(int r) override;
   int filter_return_code(int r) const override {
-    // never propagate an error back to the caller
-    return 0;
+    if (m_state == STATE_REQUEST) {
+      // never propagate an error back to the caller
+      return 0;
+    }
+    return r;
   }
   virtual void finish_request() {
   }
 
 private:
   /**
+   *              STATE_TIMEOUT --------\
+   *                   ^                |
+   *                   |                v
    * <start> ---> STATE_REQUEST ---> <finish>
    *                   |                ^
    *                   v                |
@@ -45,6 +51,7 @@ private:
    */
   enum State {
     STATE_REQUEST,
+    STATE_TIMEOUT,
     STATE_INVALIDATE
   };
 

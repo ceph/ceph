@@ -1,4 +1,8 @@
+import logging
 import sys
+
+
+terminal_logger = logging.getLogger('terminal')
 
 
 class colorize(str):
@@ -21,10 +25,9 @@ class colorize(str):
     """
 
     def __init__(self, string):
-        self.stdout = sys.__stdout__
         self.appends = ''
         self.prepends = ''
-        self.isatty = self.stdout.isatty()
+        self.isatty = sys.__stderr__.isatty()
 
     def _set_attributes(self):
         """
@@ -79,7 +82,9 @@ yellow_arrow = yellow('--> ')
 class _Write(object):
 
     def __init__(self, _writer=None, prefix='', suffix='', flush=False):
-        self._writer = _writer or sys.stdout
+        # we can't set sys.stderr as the default for _writer. otherwise
+        # pytest's capturing gets confused
+        self._writer = _writer or sys.stderr
         self.suffix = suffix
         self.prefix = prefix
         self.flush = flush
@@ -93,9 +98,17 @@ class _Write(object):
         self.write(string)
 
     def write(self, line):
-        self._writer.write(self.prefix + line + self.suffix)
-        if self.flush:
-            self._writer.flush()
+        entry = self.prefix + line + self.suffix
+
+        try:
+            self._writer.write(entry)
+            if self.flush:
+                self._writer.flush()
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            try:
+                terminal_logger.info(entry.strip('\n'))
+            except (AttributeError, TypeError):
+                terminal_logger.info(entry)
 
 
 def stdout(msg):
@@ -114,12 +127,62 @@ def error(msg):
     return _Write(prefix=red_arrow).raw(msg)
 
 
+def info(msg):
+    return _Write(prefix=blue_arrow).raw(msg)
+
+
+def debug(msg):
+    return _Write(prefix=blue_arrow).raw(msg)
+
+
 def warning(msg):
     return _Write(prefix=yellow_arrow).raw(msg)
 
 
 def success(msg):
     return _Write(prefix=green_arrow).raw(msg)
+
+
+class MultiLogger(object):
+    """
+    Proxy class to be able to report on both logger instances and terminal
+    messages avoiding the issue of having to call them both separately
+
+    Initialize it in the same way a logger object::
+
+        logger = terminal.MultiLogger(__name__)
+    """
+
+    def __init__(self, name):
+        self.logger = logging.getLogger(name)
+
+    def _make_record(self, msg, *args):
+        if len(str(args)):
+            try:
+                return msg % args
+            except TypeError:
+                self.logger.exception('unable to produce log record: %s' % msg)
+        return msg
+
+    def warning(self, msg, *args):
+        record = self._make_record(msg, *args)
+        warning(record)
+        self.logger.warning(record)
+
+    def debug(self, msg, *args):
+        record = self._make_record(msg, *args)
+        debug(record)
+        self.logger.debug(record)
+
+    def info(self, msg, *args):
+        record = self._make_record(msg, *args)
+        info(record)
+        self.logger.info(record)
+
+    def error(self, msg, *args):
+        record = self._make_record(msg, *args)
+        error(record)
+        self.logger.error(record)
 
 
 def dispatch(mapper, argv=None):
@@ -136,7 +199,7 @@ def subhelp(mapper):
     """
     Look at every value of every key in the mapper and will output any
     ``class.help`` possible to return it as a string that will be sent to
-    stdout.
+    stderr.
     """
     help_text_lines = []
     for key, value in mapper.items():

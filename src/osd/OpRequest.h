@@ -13,19 +13,11 @@
 
 #ifndef OPREQUEST_H_
 #define OPREQUEST_H_
-#include <sstream>
-#include <stdint.h>
-#include <vector>
 
-#include <include/utime.h>
-#include "common/Mutex.h"
-#include "include/xlist.h"
-#include "msg/Message.h"
-#include "include/memory.h"
+#include "osd/osd_op_util.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
-#include "common/mClockCommon.h"
-
+#include "common/tracer.h"
 /**
  * The OpRequest takes in a Message* and takes over a single reference
  * to it, which it puts() when destroyed.
@@ -33,51 +25,33 @@
 struct OpRequest : public TrackedOp {
   friend class OpTracker;
 
-  // rmw flags
-  int rmw_flags;
+private:
+  OpInfo op_info;
 
-  bool check_rmw(int flag);
-  bool may_read();
-  bool may_write();
-  bool may_cache();
-  bool rwordered_forced();
-  bool rwordered();
-  bool includes_pg_op();
-  bool need_read_cap();
-  bool need_write_cap();
-  bool need_promote();
-  bool need_skip_handle_cache();
-  bool need_skip_promote();
-  void set_read();
-  void set_write();
-  void set_cache();
-  void set_class_read();
-  void set_class_write();
-  void set_pg_op();
-  void set_promote();
-  void set_skip_handle_cache();
-  void set_skip_promote();
-  void set_force_rwordered();
+public:
+  int maybe_init_op_info(const OSDMap &osdmap);
 
-  struct ClassInfo {
-    ClassInfo(const std::string& name, bool read, bool write,
-        bool whitelisted) :
-      name(name), read(read), write(write), whitelisted(whitelisted)
-    {}
-    const std::string name;
-    const bool read, write, whitelisted;
-  };
+  auto get_flags() const { return op_info.get_flags(); }
+  bool op_info_needs_init() const { return op_info.get_flags() == 0; }
+  bool check_rmw(int flag) const { return op_info.check_rmw(flag); }
+  bool may_read() const { return op_info.may_read(); }
+  bool may_write() const { return op_info.may_write(); }
+  bool may_cache() const { return op_info.may_cache(); }
+  bool rwordered_forced() const { return op_info.rwordered_forced(); }
+  bool rwordered() const { return op_info.rwordered(); }
+  bool includes_pg_op() const { return op_info.includes_pg_op(); }
+  bool need_read_cap() const { return op_info.need_read_cap(); }
+  bool need_write_cap() const { return op_info.need_write_cap(); }
+  bool need_promote() const { return op_info.need_promote(); }
+  bool need_skip_handle_cache() const { return op_info.need_skip_handle_cache(); }
+  bool need_skip_promote() const { return op_info.need_skip_promote(); }
+  bool allows_returnvec() const { return op_info.allows_returnvec(); }
 
-  void add_class(const std::string& name, bool read, bool write,
-      bool whitelisted) {
-    classes_.emplace_back(name, read, write, whitelisted);
+  std::vector<OpInfo::ClassInfo> classes() const {
+    return op_info.get_classes();
   }
 
-  std::vector<ClassInfo> classes() const {
-    return classes_;
-  }
-
-  void _dump(Formatter *f) const override;
+  void _dump(ceph::Formatter *f) const override;
 
   bool has_feature(uint64_t f) const {
     return request->get_connection()->has_feature(f);
@@ -97,14 +71,12 @@ private:
   static const uint8_t flag_sub_op_sent = 1 << 4;
   static const uint8_t flag_commit_sent = 1 << 5;
 
-  std::vector<ClassInfo> classes_;
-
   OpRequest(Message *req, OpTracker *tracker);
 
 protected:
-  void _dump_op_descriptor_unlocked(ostream& stream) const override;
+  void _dump_op_descriptor_unlocked(std::ostream& stream) const override;
   void _unregistered() override;
-  bool filter_out(const set<string>& filters) override;
+  bool filter_out(const std::set<std::string>& filters) override;
 
 public:
   ~OpRequest() override {
@@ -116,7 +88,11 @@ public:
   epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
-  dmc::PhaseType qos_resp;
+  jspan osd_parent_span;
+
+  template<class T>
+  const T* get_req() const { return static_cast<const T*>(request); }
+
   const Message *get_req() const { return request; }
   Message *get_nonconst_req() { return request; }
 
@@ -127,8 +103,11 @@ public:
       return entity_name_t();
     }
   }
+  uint8_t state_flag() const {
+    return latest_flag_point;
+  }
 
-  const char *state_string() const override {
+  std::string_view state_string() const override {
     switch(latest_flag_point) {
     case flag_queued_for_pg: return "queued for pg";
     case flag_reached_pg: return "reached pg";
@@ -141,19 +120,45 @@ public:
     return "no flag points reached";
   }
 
+  static std::string get_state_string(uint8_t flag) {
+    std::string flag_point;
+
+    switch(flag) {
+      case flag_queued_for_pg:
+        flag_point = "queued for pg";
+        break;
+      case flag_reached_pg:
+        flag_point = "reached pg";
+        break;
+      case flag_delayed:
+        flag_point = "delayed";
+        break;
+      case flag_started:
+        flag_point = "started";
+        break;
+      case flag_sub_op_sent:
+        flag_point = "waiting for sub ops";
+        break;
+      case flag_commit_sent:
+        flag_point = "commit sent; apply or cleanup";
+        break;
+    }
+    return flag_point;
+  }
+
   void mark_queued_for_pg() {
     mark_flag_point(flag_queued_for_pg, "queued_for_pg");
   }
   void mark_reached_pg() {
     mark_flag_point(flag_reached_pg, "reached_pg");
   }
-  void mark_delayed(const string& s) {
+  void mark_delayed(const std::string& s) {
     mark_flag_point_string(flag_delayed, s);
   }
   void mark_started() {
     mark_flag_point(flag_started, "started");
   }
-  void mark_sub_op_sent(const string& s) {
+  void mark_sub_op_sent(const std::string& s) {
     mark_flag_point_string(flag_sub_op_sent, s);
   }
   void mark_commit_sent() {
@@ -174,13 +179,10 @@ public:
   typedef boost::intrusive_ptr<OpRequest> Ref;
 
 private:
-  void set_rmw_flags(int flags);
   void mark_flag_point(uint8_t flag, const char *s);
-  void mark_flag_point_string(uint8_t flag, const string& s);
+  void mark_flag_point_string(uint8_t flag, const std::string& s);
 };
 
 typedef OpRequest::Ref OpRequestRef;
-
-ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i);
 
 #endif /* OPREQUEST_H_ */

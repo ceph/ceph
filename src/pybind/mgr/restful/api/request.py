@@ -1,7 +1,7 @@
 from pecan import expose, request, response
 from pecan.rest import RestController
 
-from restful import module
+from restful import context
 from restful.decorators import auth, lock, paginate
 
 
@@ -16,17 +16,12 @@ class RequestId(RestController):
         """
         Show the information for the request id
         """
-        request = filter(
-            lambda x: x.id == self.request_id,
-            module.instance.requests
-        )
-
+        request = [x for x in context.instance.requests
+                   if x.id == self.request_id]
         if len(request) != 1:
             response.status = 500
-            return {'message': 'Unknown request id "%s"' % str(self.request_id)}
-
-        request = request[0]
-        return request
+            return {'message': 'Unknown request id "{}"'.format(self.request_id)}
+        return request[0]
 
 
     @expose(template='json')
@@ -36,9 +31,9 @@ class RequestId(RestController):
         """
         Remove the request id from the database
         """
-        for index in range(len(module.instance.requests)):
-            if module.instance.requests[index].id == self.request_id:
-                return module.instance.requests.pop(index)
+        for index in range(len(context.instance.requests)):
+            if context.instance.requests[index].id == self.request_id:
+                return context.instance.requests.pop(index)
 
         # Failed to find the job to cancel
         response.status = 500
@@ -54,7 +49,7 @@ class Request(RestController):
         """
         List all the available requests
         """
-        return module.instance.requests
+        return context.instance.requests
 
 
     @expose(template='json')
@@ -64,17 +59,15 @@ class Request(RestController):
         """
         Remove all the finished requests
         """
-        num_requests = len(module.instance.requests)
+        num_requests = len(context.instance.requests)
 
-        module.instance.requests = filter(
-            lambda x: not x.is_finished(),
-            module.instance.requests
-        )
-
+        context.instance.requests = [x for x in context.instance.requests
+                                     if not x.is_finished()]
+        remaining = len(context.instance.requests)
         # Return the job statistics
         return {
-            'cleaned': num_requests - len(module.instance.requests),
-            'remaining': len(module.instance.requests),
+            'cleaned': num_requests - remaining,
+            'remaining': remaining,
         }
 
 
@@ -84,7 +77,15 @@ class Request(RestController):
         """
         Pass through method to create any request
         """
-        return module.instance.submit_request([[request.json]], **kwargs)
+        if isinstance(request.json, list):
+            if all(isinstance(element, list) for element in request.json):
+                return context.instance.submit_request(request.json, **kwargs)
+
+            # The request.json has wrong format
+            response.status = 500
+            return {'message': 'The request format should be [[{c1},{c2}]]'}
+
+        return context.instance.submit_request([[request.json]], **kwargs)
 
 
     @expose()

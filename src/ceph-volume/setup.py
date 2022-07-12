@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+import os
 
 
 setup(
@@ -13,11 +14,20 @@ setup(
     keywords='ceph volume disk devices lvm',
     url="https://github.com/ceph/ceph",
     zip_safe = False,
+    install_requires='ceph',
+    dependency_links=[''.join(['file://', os.path.join(os.getcwd(), '../',
+                                                       'python-common#egg=ceph-1.0.0')])],
     tests_require=[
         'pytest >=2.1.3',
         'tox',
+        'ceph',
     ],
-    scripts = ['bin/ceph-volume', 'bin/ceph-volume-systemd'],
+    entry_points = dict(
+        console_scripts = [
+            'ceph-volume = ceph_volume.main:Volume',
+            'ceph-volume-systemd = ceph_volume.systemd:main',
+        ],
+    ),
     classifiers = [
         'Environment :: Console',
         'Intended Audience :: Information Technology',
@@ -29,5 +39,4 @@ setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ]
-
 )

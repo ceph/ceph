@@ -18,15 +18,16 @@
 #include "msg/Message.h"
 #include "common/errno.h"
 
-struct MAuthReply : public Message {
+class MAuthReply final : public Message {
+public:
   __u32 protocol;
   errorcode32_t result;
   uint64_t global_id;      // if zero, meaningless
-  string result_msg;
-  bufferlist result_bl;
+  std::string result_msg;
+  ceph::buffer::list result_bl;
 
   MAuthReply() : Message(CEPH_MSG_AUTH_REPLY), protocol(0), result(0), global_id(0) {}
-  MAuthReply(__u32 p, bufferlist *bl = NULL, int r = 0, uint64_t gid=0, const char *msg = "") :
+  MAuthReply(__u32 p, ceph::buffer::list *bl = NULL, int r = 0, uint64_t gid=0, const char *msg = "") :
     Message(CEPH_MSG_AUTH_REPLY),
     protocol(p), result(r), global_id(gid),
     result_msg(msg) {
@@ -34,11 +35,11 @@ struct MAuthReply : public Message {
       result_bl = *bl;
   }
 private:
-  ~MAuthReply() override {}
+  ~MAuthReply() final {}
 
 public:
-  const char *get_type_name() const override { return "auth_reply"; }
-  void print(ostream& o) const override {
+  std::string_view get_type_name() const override { return "auth_reply"; }
+  void print(std::ostream& o) const override {
     o << "auth_reply(proto " << protocol << " " << result << " " << cpp_strerror(result);
     if (result_msg.length())
       o << ": " << result_msg;
@@ -46,19 +47,21 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(protocol, p);
-    ::decode(result, p);
-    ::decode(global_id, p);
-    ::decode(result_bl, p);
-    ::decode(result_msg, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(protocol, p);
+    decode(result, p);
+    decode(global_id, p);
+    decode(result_bl, p);
+    decode(result_msg, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(protocol, payload);
-    ::encode(result, payload);
-    ::encode(global_id, payload);
-    ::encode(result_bl, payload);
-    ::encode(result_msg, payload);
+    using ceph::encode;
+    encode(protocol, payload);
+    encode(result, payload);
+    encode(global_id, payload);
+    encode(result_bl, payload);
+    encode(result_msg, payload);
   }
 };
 

@@ -15,7 +15,7 @@ void cls_timeindex_add(
   cls_timeindex_add_op call;
   call.entries = entries;
 
-  ::encode(call, in);
+  encode(call, in);
   op.exec("timeindex", "add", in);
 }
 
@@ -27,7 +27,7 @@ void cls_timeindex_add(
   cls_timeindex_add_op call;
   call.entries.push_back(entry);
 
-  ::encode(call, in);
+  encode(call, in);
   op.exec("timeindex", "add", in);
 }
 
@@ -67,7 +67,7 @@ void cls_timeindex_trim(
   call.from_marker = from_marker;
   call.to_marker = to_marker;
 
-  ::encode(call, in);
+  encode(call, in);
 
   op.exec("timeindex", "trim", in);
 }
@@ -113,7 +113,7 @@ void cls_timeindex_list(
   call.marker = in_marker;
   call.max_entries = max_entries;
 
-  ::encode(call, in);
+  encode(call, in);
 
   op.exec("timeindex", "list", in,
           new TimeindexListCtx(&entries, out_marker, truncated));

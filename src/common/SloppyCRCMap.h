@@ -5,7 +5,10 @@
 #define CEPH_COMMON_SLOPPYCRCMAP_H
 
 #include "include/encoding.h"
-#include "common/Formatter.h"
+
+namespace ceph {
+class Formatter;
+}
 
 /**
  * SloppyCRCMap
@@ -30,7 +33,7 @@ public:
     block_size = b;
     //zero_crc = ceph_crc32c(0xffffffff, NULL, block_size);
     if (b) {
-      bufferlist bl;
+      ceph::buffer::list bl;
       bl.append_zero(block_size);
       zero_crc = bl.crc32c(crc_iv);
     } else {
@@ -39,7 +42,7 @@ public:
   }
 
   /// update based on a write
-  void write(uint64_t offset, uint64_t len, const bufferlist& bl,
+  void write(uint64_t offset, uint64_t len, const ceph::buffer::list& bl,
 	     std::ostream *out = NULL);
 
   /// update based on a truncate
@@ -61,11 +64,11 @@ public:
    * @param err option ostream to describe errors in detail
    * @returns error count, 0 for success
    */
-  int read(uint64_t offset, uint64_t len, const bufferlist& bl, std::ostream *err);
+  int read(uint64_t offset, uint64_t len, const ceph::buffer::list& bl, std::ostream *err);
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<SloppyCRCMap*>& ls);
 };
 WRITE_CLASS_ENCODER(SloppyCRCMap)

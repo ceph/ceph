@@ -33,7 +33,7 @@ class TableTool : public MDSUtility
     int apply_role_fn(std::function<int(mds_role_t, Formatter *)> fptr, Formatter *f);
 
   public:
-    void usage();
+    static void usage();
     int main(std::vector<const char*> &argv);
 
 };

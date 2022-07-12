@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "include/rados/librados.hpp"
 
@@ -10,9 +10,9 @@ class TestOp;
 
 class TestOpStat {
 public:
-  mutable Mutex stat_lock;
+  mutable ceph::mutex stat_lock = ceph::make_mutex("TestOpStat lock");
 
-  TestOpStat() : stat_lock("TestOpStat lock") {}
+  TestOpStat() = default;
     
   static uint64_t gettime()
   {
@@ -23,25 +23,25 @@ public:
 
   class TypeStatus {
   public:
-    map<TestOp*,uint64_t> inflight;
-    multiset<uint64_t> latencies;
+    std::map<TestOp*,uint64_t> inflight;
+    std::multiset<uint64_t> latencies;
     void begin(TestOp *in)
     {
-      assert(!inflight.count(in));
+      ceph_assert(!inflight.count(in));
       inflight[in] = gettime();
     }
 
     void end(TestOp *in)
     {
-      assert(inflight.count(in));
+      ceph_assert(inflight.count(in));
       uint64_t curtime = gettime();
       latencies.insert(curtime - inflight[in]);
       inflight.erase(in);
     }
 
-    void export_latencies(map<double,uint64_t> &in) const;
+    void export_latencies(std::map<double,uint64_t> &in) const;
   };
-  map<string,TypeStatus> stats;
+  std::map<std::string,TypeStatus> stats;
 
   void begin(TestOp *in);
   void end(TestOp *in);

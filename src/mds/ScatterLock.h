@@ -18,38 +18,14 @@
 
 #include "SimpleLock.h"
 
+#include "MDSContext.h"
+
 class ScatterLock : public SimpleLock {
-
-  struct more_bits_t {
-    xlist<ScatterLock*>::item item_updated;
-    utime_t update_stamp;
-
-    explicit more_bits_t(ScatterLock *lock) :
-      item_updated(lock)
-    {}
-  };
-
-  mutable std::unique_ptr<more_bits_t> _more;
-
-  more_bits_t *more() {
-    if (!_more)
-      _more.reset(new more_bits_t(this));
-    return _more.get();
-  }
-
-  enum {
-    SCATTER_WANTED   = 1 << 8,
-    UNSCATTER_WANTED = 1 << 9,
-    DIRTY            = 1 << 10,
-    FLUSHING         = 1 << 11,
-    FLUSHED          = 1 << 12,
-  };
-
 public:
   ScatterLock(MDSCacheObject *o, LockType *lt) :
     SimpleLock(o, lt) {}
   ~ScatterLock() override {
-    assert(!_more);
+    ceph_assert(!_more);
   }
 
   bool is_scatterlock() const override {
@@ -77,10 +53,10 @@ public:
       get_state() == LOCK_MIX;
   }
 
-  void set_xlock_snap_sync(MDSInternalContextBase *c)
+  void set_xlock_snap_sync(MDSContext *c)
   {
-    assert(get_type() == CEPH_LOCK_IFILE);
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    ceph_assert(get_type() == CEPH_LOCK_IFILE);
+    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
     state = LOCK_XLOCKSNAP;
     add_waiter(WAIT_STABLE, c);
   }
@@ -148,12 +124,13 @@ public:
       }
     }
   }
+  void clear_flushed() override {
+    state_flags &= ~FLUSHED;
+  }
   void remove_dirty() {
     start_flush();
     finish_flush();
-  }
-  void clear_flushed() override {
-    state_flags &= ~FLUSHED;
+    clear_flushed();
   }
 
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
@@ -165,7 +142,7 @@ public:
       state = LOCK_LOCK;
   }
 
-  void encode_state_for_rejoin(bufferlist& bl, int rep) {
+  void encode_state_for_rejoin(ceph::buffer::list& bl, int rep) {
     __s16 s = get_replica_state();
     if (is_gathering(rep)) {
       // the recovering mds may hold rejoined wrlocks
@@ -184,16 +161,17 @@ public:
     //
     // For example:
     // The recovering mds is auth mds of a dirfrag, this mds is auth mds
-    // of correspinding inode. when 'rm -rf' the direcotry, this mds should
+    // of corresponding inode. when 'rm -rf' the direcotry, this mds should
     // delay the rmdir request until the recovering mds has replayed unlink
     // requests.
     if (s == LOCK_MIX || s == LOCK_MIX_LOCK || s == LOCK_MIX_SYNC)
       mark_need_recover();
 
-    ::encode(s, bl);
+    using ceph::encode;
+    encode(s, bl);
   }
 
-  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
+  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
     SimpleLock::decode_state_rejoin(p, waiters, survivor);
     if (is_flushing()) {
       set_dirty();
@@ -212,7 +190,7 @@ public:
     return SimpleLock::remove_replica(from);
   }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "(";
     _print(out);
     if (is_dirty())
@@ -227,6 +205,29 @@ public:
   }
 
 private:
+  struct more_bits_t {
+    xlist<ScatterLock*>::item item_updated;
+    utime_t update_stamp;
+
+    explicit more_bits_t(ScatterLock *lock) :
+      item_updated(lock)
+    {}
+  };
+
+  more_bits_t *more() {
+    if (!_more)
+      _more.reset(new more_bits_t(this));
+    return _more.get();
+  }
+
+  enum {
+    SCATTER_WANTED   = 1 << 8,
+    UNSCATTER_WANTED = 1 << 9,
+    DIRTY            = 1 << 10,
+    FLUSHING         = 1 << 11,
+    FLUSHED          = 1 << 12,
+  };
+
   void set_flushing() {
     state_flags |= FLUSHING;
   }
@@ -246,6 +247,8 @@ private:
       _more.reset();
     }
   }
+
+  mutable std::unique_ptr<more_bits_t> _more;
 };
 
 #endif

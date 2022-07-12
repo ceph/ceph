@@ -1,7 +1,7 @@
 from pecan import expose
 from pecan.rest import RestController
 
-from restful import module
+from restful import context
 from restful.decorators import auth
 
 
@@ -16,7 +16,7 @@ class ServerFqdn(RestController):
         """
         Show the information for the server fqdn
         """
-        return module.instance.get_server(self.fqdn)
+        return context.instance.get_server(self.fqdn)
 
 
 
@@ -27,7 +27,7 @@ class Server(RestController):
         """
         Show the information for all the servers
         """
-        return module.instance.list_servers()
+        return context.instance.list_servers()
 
 
     @expose()

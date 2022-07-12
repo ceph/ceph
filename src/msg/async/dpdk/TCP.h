@@ -32,14 +32,12 @@
 #include <stdexcept>
 #include <system_error>
 
-#define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
-#include <cryptopp/md5.h>
-
 #include "msg/async/dpdk/EventDPDK.h"
 
 #include "include/utime.h"
 #include "common/Throttle.h"
 #include "common/ceph_time.h"
+#include "common/ceph_crypto.h"
 #include "msg/async/Event.h"
 #include "IPChecksum.h"
 #include "IP.h"
@@ -236,6 +234,7 @@ class tcp {
    public:
     C_handle_delayed_ack(tcb *t): tc(t) { }
     void do_request(uint64_t r) {
+      tc->_delayed_ack_fd.reset();
       tc->_nr_full_seg_received = 0;
       tc->output();
     }
@@ -247,6 +246,7 @@ class tcp {
    public:
     C_handle_retransmit(tcb *t): tc(t) { }
     void do_request(uint64_t r) {
+      tc->retransmit_fd.reset();
       tc->retransmit();
     }
   };
@@ -257,6 +257,7 @@ class tcp {
    public:
     C_handle_persist(tcb *t): tc(t) { }
     void do_request(uint64_t r) {
+      tc->persist_fd.reset();
       tc->persist();
     }
   };
@@ -363,7 +364,7 @@ class tcp {
     int16_t _errno = 1;
     tcp_option _option;
     EventCallbackRef delayed_ack_event;
-    Tub<uint64_t> _delayed_ack_fd;
+    std::optional<uint64_t> _delayed_ack_fd;
     // Retransmission timeout
     std::chrono::microseconds _rto{1000*1000};
     std::chrono::microseconds _persist_time_out{1000*1000};
@@ -373,10 +374,10 @@ class tcp {
     static constexpr std::chrono::microseconds _rto_clk_granularity{1000};
     static constexpr uint16_t _max_nr_retransmit{5};
     EventCallbackRef retransmit_event;
-    Tub<uint64_t> retransmit_fd;
+    std::optional<uint64_t> retransmit_fd;
     EventCallbackRef persist_event;
     EventCallbackRef all_data_ack_event;
-    Tub<uint64_t> persist_fd;
+    std::optional<uint64_t> persist_fd;
     uint16_t _nr_full_seg_received = 0;
     struct isn_secret {
       // 512 bits secretkey for ISN generating
@@ -394,7 +395,7 @@ class tcp {
    public:
     // callback
     void close_final_cleanup();
-    ostream& _prefix(std::ostream *_dout);
+    std::ostream& _prefix(std::ostream *_dout);
 
    public:
     tcb(tcp& t, connid id);
@@ -406,13 +407,13 @@ class tcp {
     bool is_all_data_acked();
     int send(Packet p);
     void connect();
-    Tub<Packet> read();
+    std::optional<Packet> read();
     void close();
     void remove_from_tcbs() {
       auto id = connid{_local_ip, _foreign_ip, _local_port, _foreign_port};
       _tcp._tcbs.erase(id);
     }
-    Tub<typename InetTraits::l4packet> get_packet();
+    std::optional<typename InetTraits::l4packet> get_packet();
     void output() {
       if (!_poll_active) {
         _poll_active = true;
@@ -472,23 +473,23 @@ class tcp {
     void start_retransmit_timer() {
       if (retransmit_fd)
         center->delete_time_event(*retransmit_fd);
-      retransmit_fd.construct(center->create_time_event(_rto.count(), retransmit_event));
+      retransmit_fd.emplace(center->create_time_event(_rto.count(), retransmit_event));
     };
     void stop_retransmit_timer() {
       if (retransmit_fd) {
         center->delete_time_event(*retransmit_fd);
-        retransmit_fd.destroy();
+        retransmit_fd.reset();
       }
     };
     void start_persist_timer() {
       if (persist_fd)
         center->delete_time_event(*persist_fd);
-      persist_fd.construct(center->create_time_event(_persist_time_out.count(), persist_event));
+      persist_fd.emplace(center->create_time_event(_persist_time_out.count(), persist_event));
     };
     void stop_persist_timer() {
       if (persist_fd) {
         center->delete_time_event(*persist_fd);
-        persist_fd.destroy();
+        persist_fd.reset();
       }
     };
     void persist();
@@ -658,7 +659,7 @@ class tcp {
     int send(Packet p) {
       return _tcb->send(std::move(p));
     }
-    Tub<Packet> read() {
+    std::optional<Packet> read() {
       return _tcb->read();
     }
     int16_t get_errno() const {
@@ -684,7 +685,7 @@ class tcp {
     uint16_t _port;
     int _fd = -1;
     int16_t _errno;
-    queue<connection> _q;
+    std::queue<connection> _q;
     size_t _q_max_length;
 
    private:
@@ -710,8 +711,8 @@ class tcp {
       _fd = _tcp.manager.get_eventfd();
       return 0;
     }
-    Tub<connection> accept() {
-      Tub<connection> c;
+    std::optional<connection> accept() {
+      std::optional<connection> c;
       if (!_q.empty()) {
         c = std::move(_q.front());
         _q.pop();
@@ -771,7 +772,7 @@ tcp<InetTraits>::tcp(CephContext *c, inet_type& inet, EventCenter *cen)
       _e(_rd()), _queue_space(cct, "DPDK::tcp::queue_space", 81920) {
   int tcb_polled = 0u;
   _inet.register_packet_provider([this, tcb_polled] () mutable {
-    Tub<typename InetTraits::l4packet> l4p;
+    std::optional<typename InetTraits::l4packet> l4p;
     auto c = _poll_tcbs.size();
     if (!_packetq.empty() && (!(tcb_polled % 128) || c == 0)) {
       l4p = std::move(_packetq.front());
@@ -1065,7 +1066,7 @@ Packet tcp<InetTraits>::tcb::get_transmit_packet() {
   // Max number of TCP payloads we can pass to NIC
   uint32_t len;
   if (_tcp.get_hw_features().tx_tso) {
-    // FIXME: Info tap device the size of the splitted packet
+    // FIXME: Info tap device the size of the split packet
     len = _tcp.get_hw_features().max_packet_len - tcp_hdr_len_min - InetTraits::ip_hdr_len_min;
   } else {
     len = std::min(uint16_t(_tcp.get_hw_features().mtu - tcp_hdr_len_min - InetTraits::ip_hdr_len_min), _snd.mss);
@@ -1219,12 +1220,12 @@ bool tcp<InetTraits>::tcb::is_all_data_acked() {
 }
 
 template <typename InetTraits>
-Tub<Packet> tcp<InetTraits>::tcb::read() {
-  Tub<Packet> p;
+std::optional<Packet> tcp<InetTraits>::tcb::read() {
+  std::optional<Packet> p;
   if (_rcv.data.empty())
     return p;
 
-  p.construct();
+  p.emplace();
   for (auto&& q : _rcv.data) {
     p->append(std::move(q));
   }
@@ -1235,7 +1236,7 @@ Tub<Packet> tcp<InetTraits>::tcb::read() {
 template <typename InetTraits>
 int tcp<InetTraits>::tcb::send(Packet p) {
   // We can not send after the connection is closed
-  assert(!_snd.closed);
+  ceph_assert(!_snd.closed);
 
   if (in_state(CLOSED))
     return -ECONNRESET;
@@ -1281,7 +1282,7 @@ bool tcp<InetTraits>::tcb::should_send_ack(uint16_t seg_len) {
     _nr_full_seg_received = 0;
     if (_delayed_ack_fd) {
       center->delete_time_event(*_delayed_ack_fd);
-      _delayed_ack_fd.destroy();
+      _delayed_ack_fd.reset();
     }
     return true;
   }
@@ -1292,7 +1293,7 @@ bool tcp<InetTraits>::tcb::should_send_ack(uint16_t seg_len) {
       _nr_full_seg_received = 0;
       if (_delayed_ack_fd) {
         center->delete_time_event(*_delayed_ack_fd);
-        _delayed_ack_fd.destroy();
+        _delayed_ack_fd.reset();
       }
       return true;
     }
@@ -1306,7 +1307,7 @@ bool tcp<InetTraits>::tcb::should_send_ack(uint16_t seg_len) {
   // If the timer is not armed, schedule a delayed ACK.
   // The maximum delayed ack timer allowed by RFC1122 is 500ms, most
   // implementations use 200ms.
-  _delayed_ack_fd.construct(center->create_time_event(200*1000, delayed_ack_event));
+  _delayed_ack_fd.emplace(center->create_time_event(200*1000, delayed_ack_event));
   return false;
 }
 
@@ -1314,7 +1315,7 @@ template <typename InetTraits>
 void tcp<InetTraits>::tcb::clear_delayed_ack() {
   if (_delayed_ack_fd) {
     center->delete_time_event(*_delayed_ack_fd);
-    _delayed_ack_fd.destroy();
+    _delayed_ack_fd.reset();
   }
 }
 
@@ -1441,7 +1442,9 @@ tcp_sequence tcp<InetTraits>::tcb::get_isn() {
   hash[1] = _foreign_ip.ip;
   hash[2] = (_local_port << 16) + _foreign_port;
   hash[3] = _isn_secret.key[15];
-  CryptoPP::Weak::MD5::Transform(hash, _isn_secret.key);
+  ceph::crypto::MD5 md5;
+  md5.Update((const unsigned char*)_isn_secret.key, sizeof(_isn_secret.key));
+  md5.Final((unsigned char*)hash);
   auto seq = hash[0];
   auto m = duration_cast<microseconds>(clock_type::now().time_since_epoch());
   seq += m.count() / 4;
@@ -1449,18 +1452,18 @@ tcp_sequence tcp<InetTraits>::tcb::get_isn() {
 }
 
 template <typename InetTraits>
-Tub<typename InetTraits::l4packet> tcp<InetTraits>::tcb::get_packet() {
+std::optional<typename InetTraits::l4packet> tcp<InetTraits>::tcb::get_packet() {
   _poll_active = false;
   if (_packetq.empty()) {
     output_one();
   }
 
-  Tub<typename InetTraits::l4packet> p;
+  std::optional<typename InetTraits::l4packet> p;
   if (in_state(CLOSED)) {
     return p;
   }
 
-  assert(!_packetq.empty());
+  ceph_assert(!_packetq.empty());
 
   p = std::move(_packetq.front());
   _packetq.pop_front();

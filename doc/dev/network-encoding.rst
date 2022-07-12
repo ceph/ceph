@@ -158,7 +158,7 @@ A Blob is simply a list of bytes.
 Blobs are used to encode ``std::string``, ``const char *`` and ``bufferlist``.
 
 .. note::
-	The content of a Blob is arbratrary binary data.
+	The content of a Blob is arbitrary binary data.
 
 Map
 ---

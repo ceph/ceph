@@ -4,7 +4,7 @@
 #ifndef CEPH_LIBRBD_DEEP_COPY_REQUEST_H
 #define CEPH_LIBRBD_DEEP_COPY_REQUEST_H
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "include/int_types.h"
 #include "librbd/ImageCtx.h"
@@ -19,11 +19,13 @@ class Context;
 namespace librbd {
 
 class ImageCtx;
+namespace asio { struct ContextWQ; }
 
 namespace deep_copy {
 
 template <typename> class ImageCopyRequest;
 template <typename> class SnapshotCopyRequest;
+struct Handler;
 
 }
 
@@ -32,23 +34,28 @@ class DeepCopyRequest : public RefCountedObject {
 public:
   static DeepCopyRequest* create(ImageCtxT *src_image_ctx,
                                  ImageCtxT *dst_image_ctx,
-                                 librados::snap_t snap_id_start,
-                                 librados::snap_t snap_id_end,
+                                 librados::snap_t src_snap_id_start,
+                                 librados::snap_t src_snap_id_end,
+                                 librados::snap_t dst_snap_id_start,
+                                 bool flatten,
                                  const deep_copy::ObjectNumber &object_number,
-                                 ContextWQ *work_queue,
+                                 asio::ContextWQ *work_queue,
                                  SnapSeqs *snap_seqs,
-                                 ProgressContext *prog_ctx,
+                                 deep_copy::Handler *handler,
                                  Context *on_finish) {
-    return new DeepCopyRequest(src_image_ctx, dst_image_ctx, snap_id_start,
-                               snap_id_end, object_number, work_queue,
-                               snap_seqs, prog_ctx, on_finish);
+    return new DeepCopyRequest(src_image_ctx, dst_image_ctx, src_snap_id_start,
+                               src_snap_id_end, dst_snap_id_start, flatten,
+                               object_number, work_queue, snap_seqs, handler,
+                               on_finish);
   }
 
   DeepCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
-                  librados::snap_t snap_id_start, librados::snap_t snap_id_end,
-                  const deep_copy::ObjectNumber &object_number,
-                  ContextWQ *work_queue, SnapSeqs *snap_seqs,
-                  ProgressContext *prog_ctx, Context *on_finish);
+                  librados::snap_t src_snap_id_start,
+                  librados::snap_t src_snap_id_end,
+                  librados::snap_t dst_snap_id_start,
+                  bool flatten, const deep_copy::ObjectNumber &object_number,
+                  asio::ContextWQ *work_queue, SnapSeqs *snap_seqs,
+                  deep_copy::Handler *handler, Context *on_finish);
   ~DeepCopyRequest();
 
   void send();
@@ -86,16 +93,18 @@ private:
 
   ImageCtxT *m_src_image_ctx;
   ImageCtxT *m_dst_image_ctx;
-  librados::snap_t m_snap_id_start;
-  librados::snap_t m_snap_id_end;
+  librados::snap_t m_src_snap_id_start;
+  librados::snap_t m_src_snap_id_end;
+  librados::snap_t m_dst_snap_id_start;
+  bool m_flatten;
   deep_copy::ObjectNumber m_object_number;
-  ContextWQ *m_work_queue;
+  asio::ContextWQ *m_work_queue;
   SnapSeqs *m_snap_seqs;
-  ProgressContext *m_prog_ctx;
+  deep_copy::Handler *m_handler;
   Context *m_on_finish;
 
   CephContext *m_cct;
-  Mutex m_lock;
+  ceph::mutex m_lock;
   bool m_canceled = false;
 
   deep_copy::SnapshotCopyRequest<ImageCtxT> *m_snapshot_copy_request = nullptr;

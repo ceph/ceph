@@ -1,7 +1,7 @@
 from pecan import expose, response
 from pecan.rest import RestController
 
-from restful import module
+from restful import context
 from restful.decorators import auth
 
 
@@ -16,15 +16,11 @@ class MonName(RestController):
         """
         Show the information for the monitor name
         """
-        mon = filter(
-            lambda x: x['name'] == self.name,
-            module.instance.get_mons()
-        )
-
+        mon = [x for x in context.instance.get_mons()
+               if x['name'] == self.name]
         if len(mon) != 1:
             response.status = 500
-            return {'message': 'Failed to identify the monitor node "%s"' % self.name}
-
+            return {'message': 'Failed to identify the monitor node "{}"'.format(self.name)}
         return mon[0]
 
 
@@ -36,7 +32,7 @@ class Mon(RestController):
         """
         Show the information for all the monitors
         """
-        return module.instance.get_mons()
+        return context.instance.get_mons()
 
 
     @expose()

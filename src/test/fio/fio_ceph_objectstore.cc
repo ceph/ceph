@@ -11,6 +11,7 @@
 #include <memory>
 #include <system_error>
 #include <vector>
+#include <fstream>
 
 #include "os/ObjectStore.h"
 #include "global/global_init.h"
@@ -18,16 +19,20 @@
 #include "include/intarith.h"
 #include "include/stringify.h"
 #include "include/random.h"
+#include "include/str_list.h"
 #include "common/perf_counters.h"
+#include "common/TracepointProvider.h"
 
 #include <fio.h>
 #include <optgroup.h>
 
-#include "include/assert.h" // fio.h clobbers our assert.h
+#include "include/ceph_assert.h" // fio.h clobbers our assert.h
 #include <algorithm>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
+
+using namespace std;
 
 namespace {
 
@@ -35,7 +40,11 @@ namespace {
 struct Options {
   thread_data* td;
   char* conf;
+  char* perf_output_file;
+  char* throttle_values;
+  char* deferred_throttle_values;
   unsigned long long
+    cycle_throttle_period,
     oi_attr_len_low,
     oi_attr_len_high,
     snapset_attr_len_low,
@@ -46,8 +55,10 @@ struct Options {
     pglog_dup_omap_len_high,
     _fastinfo_omap_len_low,
     _fastinfo_omap_len_high;
-  bool simulate_pglog;
-  bool single_pool_mode;
+  unsigned simulate_pglog;
+  unsigned single_pool_mode;
+  unsigned preallocate_files;
+  unsigned check_files;
 };
 
 template <class Func> // void Func(fio_option&)
@@ -68,6 +79,14 @@ static std::vector<fio_option> ceph_options{
     o.type   = FIO_OPT_STR_STORE;
     o.help   = "Path to a ceph configuration file";
     o.off1   = offsetof(Options, conf);
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "perf_output_file";
+    o.lname  = "perf output target";
+    o.type   = FIO_OPT_STR_STORE;
+    o.help   = "Path to which to write json formatted perf output";
+    o.off1   = offsetof(Options, perf_output_file);
+    o.def    = 0;
   }),
   make_option([] (fio_option& o) {
     o.name   = "oi_attr_len";
@@ -135,6 +154,47 @@ static std::vector<fio_option> ceph_options{
     o.off1   = offsetof(Options, single_pool_mode);
     o.def    = "0";
   }),
+  make_option([] (fio_option& o) {
+    o.name   = "preallocate_files";
+    o.lname  = "preallocate files on init";
+    o.type   = FIO_OPT_BOOL;
+    o.help   = "Enables/disables file preallocation (touch and resize) on init";
+    o.off1   = offsetof(Options, preallocate_files);
+    o.def    = "1";
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "check_files";
+    o.lname  = "ensure files exist and are correct on init";
+    o.type   = FIO_OPT_BOOL;
+    o.help   = "Enables/disables checking of files on init";
+    o.off1   = offsetof(Options, check_files);
+    o.def    = "0";
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "bluestore_throttle";
+    o.lname  = "set bluestore throttle";
+    o.type   = FIO_OPT_STR_STORE;
+    o.help   = "comma delimited list of throttle values",
+    o.off1   = offsetof(Options, throttle_values);
+    o.def    = 0;
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "bluestore_deferred_throttle";
+    o.lname  = "set bluestore deferred throttle";
+    o.type   = FIO_OPT_STR_STORE;
+    o.help   = "comma delimited list of throttle values",
+    o.off1   = offsetof(Options, deferred_throttle_values);
+    o.def    = 0;
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "vary_bluestore_throttle_period";
+    o.lname = "period between different throttle values";
+    o.type   = FIO_OPT_STR_VAL;
+    o.help = "set to non-zero value to periodically cycle through throttle options";
+    o.off1   = offsetof(Options, cycle_throttle_period);
+    o.def    = "0";
+    o.minval = 0;
+  }),
   {} // fio expects a 'null'-terminated list
 };
 
@@ -142,10 +202,10 @@ static std::vector<fio_option> ceph_options{
 struct Collection {
   spg_t pg;
   coll_t cid;
-  ObjectStore::Sequencer sequencer;
+  ObjectStore::CollectionHandle ch;
   // Can't use mutex directly in vectors hence dynamic allocation
 
-  ceph::unique_ptr<std::mutex> lock;
+  std::unique_ptr<std::mutex> lock;
   uint64_t pglog_ver_head = 1;
   uint64_t pglog_ver_tail = 1;
   uint64_t pglog_dup_ver_tail = 1;
@@ -153,58 +213,92 @@ struct Collection {
   // use big pool ids to avoid clashing with existing collections
   static constexpr int64_t MIN_POOL_ID = 0x0000ffffffffffff;
 
-  Collection(const spg_t& pg)
-    : pg(pg), cid(pg), sequencer(stringify(pg)),
+  Collection(const spg_t& pg, ObjectStore::CollectionHandle _ch)
+    : pg(pg), cid(pg), ch(_ch),
         lock(new std::mutex) {
-    sequencer.shard_hint = pg;
   }
 };
-
-int init_collections(std::unique_ptr<ObjectStore>& os,
-		      uint64_t pool,
-		      std::vector<Collection>& collections,
-		      uint64_t count)
-{
-  assert(count > 0);
-  collections.reserve(count);
-
-  const int split_bits = cbits(count - 1);
-
-  ObjectStore::Transaction t;
-  for (uint32_t i = 0; i < count; i++) {
-    auto pg = spg_t{pg_t{i, pool}};
-    collections.emplace_back(pg);
-
-    auto& coll = collections.back();
-    if (!os->collection_exists(coll.cid)) {
-      t.create_collection(coll.cid, split_bits);
-      ghobject_t pgmeta_oid(coll.pg.make_pgmeta_oid());
-      t.touch(coll.cid, pgmeta_oid);
-    }
-  }
-  ObjectStore::Sequencer sequencer("Engine init");
-  int r = os->apply_transaction(&sequencer, std::move(t));
-  if (r)
-    derr << "Engine init failed with " << cpp_strerror(-r) << dendl;
-  return r;
-}
 
 int destroy_collections(
   std::unique_ptr<ObjectStore>& os,
   std::vector<Collection>& collections)
 {
   ObjectStore::Transaction t;
+  bool failed = false;
   // remove our collections
   for (auto& coll : collections) {
     ghobject_t pgmeta_oid(coll.pg.make_pgmeta_oid());
     t.remove(coll.cid, pgmeta_oid);
     t.remove_collection(coll.cid);
+    int r = os->queue_transaction(coll.ch, std::move(t));
+    if (r && !failed) {
+      derr << "Engine cleanup failed with " << cpp_strerror(-r) << dendl;
+      failed = true;
+    }
   }
-  ObjectStore::Sequencer sequencer("Engine cleanup");
-  int r = os->apply_transaction(&sequencer, std::move(t));
-  if (r)
-    derr << "Engine cleanup failed with " << cpp_strerror(-r) << dendl;
-  return r;
+  return 0;
+}
+
+int init_collections(std::unique_ptr<ObjectStore>& os,
+		      uint64_t pool,
+		      std::vector<Collection>& collections,
+		      uint64_t count)
+{
+  ceph_assert(count > 0);
+  collections.reserve(count);
+
+  const int split_bits = cbits(count - 1);
+
+  {
+    // propagate Superblock object to ensure proper functioning of tools that
+    // need it. E.g. ceph-objectstore-tool
+    coll_t cid(coll_t::meta());
+    bool exists = os->collection_exists(cid);
+    if (!exists) {
+      auto ch = os->create_new_collection(cid);
+
+      OSDSuperblock superblock;
+      bufferlist bl;
+      encode(superblock, bl);
+
+      ObjectStore::Transaction t;
+      t.create_collection(cid, split_bits);
+      t.write(cid, OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
+      int r = os->queue_transaction(ch, std::move(t));
+
+      if (r < 0) {
+	derr << "Failure to write OSD superblock: " << cpp_strerror(-r) << dendl;
+	return r;
+      }
+    }
+  }
+
+  for (uint32_t i = 0; i < count; i++) {
+    auto pg = spg_t{pg_t{i, pool}};
+    coll_t cid(pg);
+
+    bool exists = os->collection_exists(cid);
+    auto ch = exists ?
+      os->open_collection(cid) :
+      os->create_new_collection(cid) ;
+
+    collections.emplace_back(pg, ch);
+
+    ObjectStore::Transaction t;
+    auto& coll = collections.back();
+    if (!exists) {
+      t.create_collection(coll.cid, split_bits);
+      ghobject_t pgmeta_oid(coll.pg.make_pgmeta_oid());
+      t.touch(coll.cid, pgmeta_oid);
+      int r = os->queue_transaction(coll.ch, std::move(t));
+      if (r) {
+	derr << "Engine init failed with " << cpp_strerror(-r) << dendl;
+	destroy_collections(os, collections);
+	return r;
+      }
+    }
+  }
+  return 0;
 }
 
 /// global engine state shared between all jobs within the process. this
@@ -220,7 +314,10 @@ struct Engine {
   int ref_count;
   const bool unlink; //< unlink objects on destruction
 
-  Engine(thread_data* td);
+  // file to which to output formatted perf information
+  const std::optional<std::string> perf_output_file;
+
+  explicit Engine(thread_data* td);
   ~Engine();
 
   static Engine* get_instance(thread_data* td) {
@@ -238,18 +335,23 @@ struct Engine {
     --ref_count;
     if (!ref_count) {
       ostringstream ostr;
-      Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+      Formatter* f = Formatter::create(
+	"json-pretty", "json-pretty", "json-pretty");
+      f->open_object_section("perf_output");
       cct->get_perfcounters_collection()->dump_formatted(f, false);
-      ostr << "FIO plugin ";
-      f->flush(ostr);
-      if (g_conf->rocksdb_perf) {
+      if (g_conf()->rocksdb_perf) {
+	f->open_object_section("rocksdb_perf");
         os->get_db_statistics(f);
-        ostr << "FIO get_db_statistics ";
-        f->flush(ostr);
+	f->close_section();
       }
+      mempool::dump(f);
+      {
+	f->open_object_section("db_histogram");
+	os->generate_db_histogram(f);
+	f->close_section();
+      }
+      f->close_section();
       
-      ostr << "Generate db histogram: ";
-      os->generate_db_histogram(f);
       f->flush(ostr);
       delete f;
 
@@ -257,14 +359,33 @@ struct Engine {
 	destroy_collections(os, collections);
       }
       os->umount();
-      dout(0) <<  ostr.str() << dendl;
+      dout(0) << "FIO plugin perf dump:" << dendl;
+      dout(0) << ostr.str() << dendl;
+      if (perf_output_file) {
+	try {
+	  std::ofstream foutput(*perf_output_file);
+	  foutput << ostr.str() << std::endl;
+	} catch (std::exception &e) {
+	  std::cerr << "Unable to write formatted output to "
+		    << *perf_output_file
+		    << ", exception: " << e.what()
+		    << std::endl;
+	}
+      }
     }
   }
 };
 
+TracepointProvider::Traits bluestore_tracepoint_traits("libbluestore_tp.so",
+						       "bluestore_tracing");
+
 Engine::Engine(thread_data* td)
   : ref_count(0),
-    unlink(td->o.unlink)
+    unlink(td->o.unlink),
+    perf_output_file(
+      static_cast<Options*>(td->eo)->perf_output_file ?
+      std::make_optional(static_cast<Options*>(td->eo)->perf_output_file) :
+      std::nullopt)
 {
   // add the ceph command line arguments
   auto o = static_cast<Options*>(td->eo);
@@ -282,24 +403,27 @@ Engine::Engine(thread_data* td)
 
   // claim the g_ceph_context reference and release it on destruction
   cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+		    CODE_ENVIRONMENT_UTILITY,
+		    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
+  TracepointProvider::initialize<bluestore_tracepoint_traits>(g_ceph_context);
+
   // create the ObjectStore
-  os.reset(ObjectStore::create(g_ceph_context,
-                               g_conf->osd_objectstore,
-                               g_conf->osd_data,
-                               g_conf->osd_journal));
+  os = ObjectStore::create(g_ceph_context,
+			   g_conf().get_val<std::string>("osd objectstore"),
+			   g_conf().get_val<std::string>("osd data"),
+			   g_conf().get_val<std::string>("osd journal"));
   if (!os)
-    throw std::runtime_error("bad objectstore type " + g_conf->osd_objectstore);
+    throw std::runtime_error("bad objectstore type " + g_conf()->osd_objectstore);
 
   unsigned num_shards;
-  if(g_conf->osd_op_num_shards)
-    num_shards = g_conf->osd_op_num_shards;
+  if(g_conf()->osd_op_num_shards)
+    num_shards = g_conf()->osd_op_num_shards;
   else if(os->is_rotational())
-    num_shards = g_conf->osd_op_num_shards_hdd;
+    num_shards = g_conf()->osd_op_num_shards_hdd;
   else
-    num_shards = g_conf->osd_op_num_shards_ssd;
+    num_shards = g_conf()->osd_op_num_shards_ssd;
   os->set_cache_shards(num_shards);
 
   //normalize options
@@ -323,7 +447,7 @@ Engine::Engine(thread_data* td)
 
   // create shared collections up to osd_pool_default_pg_num
   if (o->single_pool_mode) {
-    uint64_t count = g_conf->get_val<uint64_t>("osd_pool_default_pg_num");
+    uint64_t count = g_conf().get_val<uint64_t>("osd_pool_default_pg_num");
     if (count > td->o.nr_files)
       count = td->o.nr_files;
     init_collections(os, Collection::MIN_POOL_ID, collections, count);
@@ -332,7 +456,7 @@ Engine::Engine(thread_data* td)
 
 Engine::~Engine()
 {
-  assert(!ref_count);
+  ceph_assert(!ref_count);
 }
 
 struct Object {
@@ -348,6 +472,7 @@ struct Object {
 /// or just a client using its own objects from the shared pool
 struct Job {
   Engine* engine; //< shared ptr to the global Engine
+  const unsigned subjob_number; //< subjob num
   std::vector<Collection> collections; //< job's private collections to spread objects over
   std::vector<Object> objects; //< associate an object with each fio_file
   std::vector<io_u*> events; //< completions for fio_ceph_os_event()
@@ -355,6 +480,26 @@ struct Job {
 
   bufferptr one_for_all_data; //< preallocated buffer long enough
                               //< to use for vairious operations
+  std::mutex throttle_lock;
+  const vector<unsigned> throttle_values;
+  const vector<unsigned> deferred_throttle_values;
+  std::chrono::duration<double> cycle_throttle_period;
+  mono_clock::time_point last = ceph::mono_clock::zero();
+  unsigned index = 0;
+
+  static vector<unsigned> parse_throttle_str(const char *p) {
+    vector<unsigned> ret;
+    if (p == nullptr) {
+      return ret;
+    }
+    ceph::for_each_substr(p, ",\"", [&ret] (auto &&s) mutable {
+      if (s.size() > 0) {
+	ret.push_back(std::stoul(std::string(s)));
+      }
+    });
+    return ret;
+  }
+  void check_throttle();
 
   Job(Engine* engine, const thread_data* td);
   ~Job();
@@ -362,8 +507,15 @@ struct Job {
 
 Job::Job(Engine* engine, const thread_data* td)
   : engine(engine),
+    subjob_number(td->subjob_number),
     events(td->o.iodepth),
-    unlink(td->o.unlink)
+    unlink(td->o.unlink),
+    throttle_values(
+      parse_throttle_str(static_cast<Options*>(td->eo)->throttle_values)),
+    deferred_throttle_values(
+      parse_throttle_str(static_cast<Options*>(td->eo)->deferred_throttle_values)),
+    cycle_throttle_period(
+      static_cast<Options*>(td->eo)->cycle_throttle_period)
 {
   engine->ref();
   auto o = static_cast<Options*>(td->eo);
@@ -377,7 +529,7 @@ Job::Job(Engine* engine, const thread_data* td)
   std::vector<Collection>* colls;
   // create private collections up to osd_pool_default_pg_num
   if (!o->single_pool_mode) {
-    uint64_t count = g_conf->get_val<uint64_t>("osd_pool_default_pg_num");
+    uint64_t count = g_conf().get_val<uint64_t>("osd_pool_default_pg_num");
     if (count > td->o.nr_files)
       count = td->o.nr_files;
     // use the fio thread_number for our unique pool id
@@ -391,6 +543,8 @@ Job::Job(Engine* engine, const thread_data* td)
   ObjectStore::Transaction t;
 
   // create an object for each file in the job
+  objects.reserve(td->o.nr_files);
+  unsigned checked_or_preallocated = 0;
   for (uint32_t i = 0; i < td->o.nr_files; i++) {
     auto f = td->files[i];
     f->real_file_size = file_size;
@@ -400,38 +554,101 @@ Job::Job(Engine* engine, const thread_data* td)
     auto& coll = (*colls)[i % colls->size()];
 
     objects.emplace_back(f->file_name, coll);
-    auto& oid = objects.back().oid;
-
-    t.touch(coll.cid, oid);
-    t.truncate(coll.cid, oid, file_size);
+    if (o->preallocate_files) {
+      auto& oid = objects.back().oid;
+      t.touch(coll.cid, oid);
+      t.truncate(coll.cid, oid, file_size);
+      int r = engine->os->queue_transaction(coll.ch, std::move(t));
+      if (r) {
+        engine->deref();
+        throw std::system_error(r, std::system_category(), "job init");
+      }
+    }
+    if (o->check_files) {
+      auto& oid = objects.back().oid;
+      struct stat st;
+      int r = engine->os->stat(coll.ch, oid, &st);
+      if (r || ((unsigned)st.st_size) != file_size) {
+	derr << "Problem checking " << oid << ", r=" << r
+	     << ", st.st_size=" << st.st_size
+	     << ", file_size=" << file_size
+	     << ", nr_files=" << td->o.nr_files << dendl;
+        engine->deref();
+        throw std::system_error(
+	  r, std::system_category(), "job init -- cannot check file");
+      }
+    }
+    if (o->check_files || o->preallocate_files) {
+      ++checked_or_preallocated;
+    }
   }
-
-  // apply the entire transaction synchronously
-  ObjectStore::Sequencer sequencer("job init");
-  int r = engine->os->apply_transaction(&sequencer, std::move(t));
-  if (r) {
-    engine->deref();
-    throw std::system_error(r, std::system_category(), "job init");
+  if (o->check_files) {
+    derr << "fio_ceph_objectstore checked " << checked_or_preallocated
+	 << " files"<< dendl;
+  }
+  if (o->preallocate_files ){
+    derr << "fio_ceph_objectstore preallocated " << checked_or_preallocated
+	 << " files"<< dendl;
   }
 }
 
 Job::~Job()
 {
   if (unlink) {
-    destroy_collections(engine->os, collections);
     ObjectStore::Transaction t;
+    bool failed = false;
     // remove our objects
     for (auto& obj : objects) {
       t.remove(obj.coll.cid, obj.oid);
+      int r = engine->os->queue_transaction(obj.coll.ch, std::move(t));
+      if (r && !failed) {
+	derr << "job cleanup failed with " << cpp_strerror(-r) << dendl;
+	failed = true;
+      }
     }
-    ObjectStore::Sequencer sequencer("job cleanup");
-    int r = engine->os->apply_transaction(&sequencer, std::move(t));
-    if (r)
-      derr << "job cleanup failed with " << cpp_strerror(-r) << dendl;
+    destroy_collections(engine->os, collections);
   }
   engine->deref();
 }
 
+void Job::check_throttle()
+{
+  if (subjob_number != 0)
+    return;
+
+  std::lock_guard<std::mutex> l(throttle_lock);
+  if (throttle_values.empty() && deferred_throttle_values.empty())
+    return;
+
+  if (ceph::mono_clock::is_zero(last) ||
+      ((cycle_throttle_period != cycle_throttle_period.zero()) &&
+       (ceph::mono_clock::now() - last) > cycle_throttle_period)) {
+    unsigned tvals = throttle_values.size() ? throttle_values.size() : 1;
+    unsigned dtvals = deferred_throttle_values.size() ? deferred_throttle_values.size() : 1;
+    if (!throttle_values.empty()) {
+      std::string val = std::to_string(throttle_values[index % tvals]);
+      std::cerr << "Setting bluestore_throttle_bytes to " << val << std::endl;
+      int r = engine->cct->_conf.set_val(
+	"bluestore_throttle_bytes",
+	val,
+	nullptr);
+      ceph_assert(r == 0);
+    }
+    if (!deferred_throttle_values.empty()) {
+      std::string val = std::to_string(deferred_throttle_values[(index / tvals) % dtvals]);
+      std::cerr << "Setting bluestore_deferred_throttle_bytes to " << val << std::endl;
+      int r = engine->cct->_conf.set_val(
+	"bluestore_throttle_deferred_bytes",
+	val,
+	nullptr);
+      ceph_assert(r == 0);
+    }
+    engine->cct->_conf.apply_changes(nullptr);
+    index++;
+    index %= tvals * dtvals;
+    last = ceph::mono_clock::now();
+  }
+}
 
 int fio_ceph_os_setup(thread_data* td)
 {
@@ -472,8 +689,8 @@ int fio_ceph_os_getevents(thread_data* td, unsigned int min,
 {
   auto job = static_cast<Job*>(td->io_ops_data);
   unsigned int events = 0;
-  io_u* u;
-  unsigned int i;
+  io_u* u = NULL;
+  unsigned int i = 0;
 
   // loop through inflight ios until we find 'min' completions
   do {
@@ -499,14 +716,14 @@ int fio_ceph_os_getevents(thread_data* td, unsigned int min,
 class UnitComplete : public Context {
   io_u* u;
  public:
-  UnitComplete(io_u* u) : u(u) {}
+  explicit UnitComplete(io_u* u) : u(u) {}
   void finish(int r) {
     // mark the pointer to indicate completion for fio_ceph_os_getevents()
     u->engine_data = reinterpret_cast<void*>(1ull);
   }
 };
 
-int fio_ceph_os_queue(thread_data* td, io_u* u)
+enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
 {
   fio_ro_check(td, u);
 
@@ -518,6 +735,8 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
   auto& coll = object.coll;
   auto& os = job->engine->os;
 
+  job->check_throttle();
+
   if (u->ddir == DDIR_WRITE) {
     // provide a hint if we're likely to read this data back
     const int flags = td_rw(td) ? CEPH_OSD_OP_FLAG_FADVISE_WILLNEED : 0;
@@ -526,15 +745,15 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
     bl.push_back(buffer::copy(reinterpret_cast<char*>(u->xfer_buf),
                               u->xfer_buflen ) );
 
-    map<string,bufferptr> attrset;
+    map<string,bufferptr,less<>> attrset;
     map<string, bufferlist> omaps;
-    // enqueue a write transaction on the collection's sequencer
+    // enqueue a write transaction on the collection's handle
     ObjectStore::Transaction t;
     char ver_key[64];
 
     // fill attrs if any
     if (o->oi_attr_len_high) {
-      assert(o->oi_attr_len_high >= o->oi_attr_len_low);
+      ceph_assert(o->oi_attr_len_high >= o->oi_attr_len_low);
       // fill with the garbage as we do not care of the actual content...
       job->one_for_all_data.set_length(
         ceph::util::generate_random_number(
@@ -542,7 +761,7 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
       attrset["_"] = job->one_for_all_data;
     }
     if (o->snapset_attr_len_high) {
-      assert(o->snapset_attr_len_high >= o->snapset_attr_len_low);
+      ceph_assert(o->snapset_attr_len_high >= o->snapset_attr_len_low);
       job->one_for_all_data.set_length(
         ceph::util::generate_random_number
 	  (o->snapset_attr_len_low, o->snapset_attr_len_high));
@@ -550,7 +769,7 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
 
     }
     if (o->_fastinfo_omap_len_high) {
-      assert(o->_fastinfo_omap_len_high >= o->_fastinfo_omap_len_low);
+      ceph_assert(o->_fastinfo_omap_len_high >= o->_fastinfo_omap_len_low);
       // fill with the garbage as we do not care of the actual content...
       job->one_for_all_data.set_length(
 	ceph::util::generate_random_number(
@@ -569,24 +788,24 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
 	if (o->pglog_omap_len_high &&
 	    pglog_ver_cnt >=
 	      coll.pglog_ver_tail +
-	        g_conf->osd_min_pg_log_entries + g_conf->osd_pg_log_trim_min) {
+	        g_conf()->osd_min_pg_log_entries + g_conf()->osd_pg_log_trim_min) {
 	  pglog_trim_tail = coll.pglog_ver_tail;
 	  coll.pglog_ver_tail = pglog_trim_head =
-	    pglog_trim_tail + g_conf->osd_pg_log_trim_min;
+	    pglog_trim_tail + g_conf()->osd_pg_log_trim_min;
 
 	  if (o->pglog_dup_omap_len_high &&
 	      pglog_ver_cnt >=
-		coll.pglog_dup_ver_tail + g_conf->osd_pg_log_dups_tracked +
-		  g_conf->osd_pg_log_trim_min) {
+		coll.pglog_dup_ver_tail + g_conf()->osd_pg_log_dups_tracked +
+		  g_conf()->osd_pg_log_trim_min) {
 	    pglog_dup_trim_tail = coll.pglog_dup_ver_tail;
 	    coll.pglog_dup_ver_tail = pglog_dup_trim_head =
-	      pglog_dup_trim_tail + g_conf->osd_pg_log_trim_min;
+	      pglog_dup_trim_tail + g_conf()->osd_pg_log_trim_min;
 	  }
 	}
       }
 
       if (o->pglog_omap_len_high) {
-	assert(o->pglog_omap_len_high >= o->pglog_omap_len_low);
+	ceph_assert(o->pglog_omap_len_high >= o->pglog_omap_len_low);
 	snprintf(ver_key, sizeof(ver_key),
 	  "0000000011.%020llu", (unsigned long long)pglog_ver_cnt);
 	// fill with the garbage as we do not care of the actual content...
@@ -597,7 +816,7 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
       }
       if (o->pglog_dup_omap_len_high) {
 	//insert dup
-	assert(o->pglog_dup_omap_len_high >= o->pglog_dup_omap_len_low);
+	ceph_assert(o->pglog_dup_omap_len_high >= o->pglog_dup_omap_len_low);
         for( auto i = pglog_trim_tail; i < pglog_trim_head; ++i) {
 	  snprintf(ver_key, sizeof(ver_key),
 	    "dup_0000000011.%020llu", (unsigned long long)i);
@@ -610,7 +829,7 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
       }
     }
 
-    if (attrset.size()) {
+    if (!attrset.empty()) {
       t.setattrs(coll.cid, object.oid, attrset);
     }
     t.write(coll.cid, object.oid, u->offset, u->xfer_buflen, bl, flags);
@@ -636,22 +855,21 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
       ghobject_t pgmeta_oid(coll.pg.make_pgmeta_oid());
       t.omap_setkeys(coll.cid, pgmeta_oid, omaps);
     }
-    os->queue_transaction(&coll.sequencer,
-                          std::move(t),
-                          nullptr,
-                          new UnitComplete(u));
+    t.register_on_commit(new UnitComplete(u));
+    os->queue_transaction(coll.ch,
+                          std::move(t));
     return FIO_Q_QUEUED;
   }
 
   if (u->ddir == DDIR_READ) {
     // ObjectStore reads are synchronous, so make the call and return COMPLETED
     bufferlist bl;
-    int r = os->read(coll.cid, object.oid, u->offset, u->xfer_buflen, bl);
+    int r = os->read(coll.ch, object.oid, u->offset, u->xfer_buflen, bl);
     if (r < 0) {
       u->error = r;
       td_verror(td, u->error, "xfer");
     } else {
-      bl.copy(0, bl.length(), static_cast<char*>(u->xfer_buf));
+      bl.begin().copy(bl.length(), static_cast<char*>(u->xfer_buf));
       u->resid = u->xfer_buflen - r;
     }
     return FIO_Q_COMPLETED;

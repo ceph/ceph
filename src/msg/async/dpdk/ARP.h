@@ -20,19 +20,6 @@
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  *
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
 #ifndef CEPH_MSG_ARP_H_
 #define CEPH_MSG_ARP_H_
@@ -98,7 +85,7 @@ class arp {
   ethernet_address l2self() { return _netif->hw_address(); }
   int process_packet(Packet p, ethernet_address from);
   bool forward(forward_hash& out_hash_data, Packet& p, size_t off);
-  Tub<l3_protocol::l3packet> get_packet();
+  std::optional<l3_protocol::l3packet> get_packet();
   template <class l3_proto>
   friend class arp_for;
 };

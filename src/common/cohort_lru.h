@@ -32,6 +32,7 @@ namespace cohort {
     /* public flag values */
     constexpr uint32_t FLAG_NONE = 0x0000;
     constexpr uint32_t FLAG_INITIAL = 0x0001;
+    constexpr uint32_t FLAG_RECYCLE = 0x0002;
 
     enum class Edge : std::uint8_t
     {
@@ -40,6 +41,8 @@ namespace cohort {
     };
 
     typedef bi::link_mode<bi::safe_link> link_mode;
+
+    class ObjectFactory; // Forward declaration
 
     class Object
     {
@@ -69,7 +72,7 @@ namespace cohort {
 
       uint32_t get_refcnt() const { return lru_refcnt; }
 
-      virtual bool reclaim() = 0;
+      virtual bool reclaim(const ObjectFactory* newobj_fac) = 0;
 
       virtual ~Object() {}
 
@@ -131,38 +134,35 @@ namespace cohort {
 		(!(o->lru_flags & FLAG_EVICTING)));
       }
 
-      Object* evict_block() {
+      Object* evict_block(const ObjectFactory* newobj_fac) {
 	uint32_t lane_ix = next_evict_lane();
 	for (int ix = 0; ix < n_lanes; ++ix,
 	       lane_ix = next_evict_lane()) {
 	  Lane& lane = qlane[lane_ix];
-	  lane.lock.lock();
+	  std::unique_lock lane_lock{lane.lock};
 	  /* if object at LRU has refcnt==1, it may be reclaimable */
 	  Object* o = &(lane.q.back());
 	  if (can_reclaim(o)) {
 	    ++(o->lru_refcnt);
 	    o->lru_flags |= FLAG_EVICTING;
-	    lane.lock.unlock();
-	    if (o->reclaim()) {
-	      lane.lock.lock();
+	    lane_lock.unlock();
+	    if (o->reclaim(newobj_fac)) {
+	      lane_lock.lock();
 	      --(o->lru_refcnt);
 	      /* assertions that o state has not changed across
 	       * relock */
-	      assert(o->lru_refcnt == SENTINEL_REFCNT);
-	      assert(o->lru_flags & FLAG_INLRU);
+	      ceph_assert(o->lru_refcnt == SENTINEL_REFCNT);
+	      ceph_assert(o->lru_flags & FLAG_INLRU);
 	      Object::Queue::iterator it =
 		Object::Queue::s_iterator_to(*o);
 	      lane.q.erase(it);
-	      lane.lock.unlock();
 	      return o;
 	    } else {
-	      // XXX can't make unreachable (means what?)
 	      --(o->lru_refcnt);
 	      o->lru_flags &= ~FLAG_EVICTING;
 	      /* unlock in next block */
 	    }
 	  } /* can_reclaim(o) */
-	  lane.lock.unlock();
 	} /* each lane */
 	return nullptr;
       } /* evict_block */
@@ -172,7 +172,7 @@ namespace cohort {
       LRU(int lanes, uint32_t _hiwat)
 	: n_lanes(lanes), evict_lane(0), lane_hiwat(_hiwat)
 	  {
-	    assert(n_lanes > 0);
+	    ceph_assert(n_lanes > 0);
 	    qlane = new Lane[n_lanes];
 	  }
 
@@ -232,12 +232,14 @@ namespace cohort {
 	  delete tdo;
       } /* unref */
 
-      Object* insert(ObjectFactory* fac, Edge edge, uint32_t flags) {
+      Object* insert(ObjectFactory* fac, Edge edge, uint32_t& flags) {
 	/* use supplied functor to re-use an evicted object, or
 	 * allocate a new one of the descendant type */
-	Object* o = evict_block();
-	if (o)
+	Object* o = evict_block(fac);
+	if (o) {
 	  fac->recycle(o); /* recycle existing object */
+	  flags |= FLAG_RECYCLE;
+	}
 	else
 	  o = fac->alloc(); /* get a new one */
 
@@ -253,7 +255,7 @@ namespace cohort {
 	  lane.q.push_back(*o);
 	  break;
 	default:
-	  abort();
+	  ceph_abort();
 	  break;
 	}
 	if (flags & FLAG_INITIAL)
@@ -333,13 +335,14 @@ namespace cohort {
       }
 
       TreeX(int n_part=1, int csz=127) : n_part(n_part), csz(csz) {
-	assert(n_part > 0);
+	ceph_assert(n_part > 0);
 	part = new Partition[n_part];
 	for (int ix = 0; ix < n_part; ++ix) {
 	  Partition& p = part[ix];
 	  if (csz) {
 	    p.csz = csz;
 	    p.cache = (T**) ::operator new(csz * sizeof(T*));
+	    // FIPS zeroization audit 20191115: this memset is not security related.
 	    memset(p.cache, 0, csz * sizeof(T*));
 	  }
 	  locks.push_back(&p.lock);
@@ -421,7 +424,9 @@ namespace cohort {
 	  lat.lock->unlock();
 	return v;
       } /* find_latch */
-
+      bool is_same_partition(uint64_t lhs, uint64_t rhs) {
+        return ((lhs % n_part) == (rhs % n_part));
+      }
       void insert_latched(T* v, Latch& lat, uint32_t flags) {
 	(void) lat.p->tr.insert_unique_commit(*v, lat.commit_data);
 	if (flags & FLAG_UNLOCK)
@@ -457,7 +462,7 @@ namespace cohort {
       void drain(std::function<void(T*)> uref,
 		 uint32_t flags = FLAG_NONE) {
 	/* clear a table, call supplied function on
-	 * each element found (e.g., retuns sentinel
+	 * each element found (e.g., returns sentinel
 	 * references) */
 	Object::Queue2 drain_q;
 	for (int t_ix = 0; t_ix < n_part; ++t_ix) {

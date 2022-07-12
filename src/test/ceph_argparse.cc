@@ -16,6 +16,9 @@
 
 #include "gtest/gtest.h"
 #include <vector>
+#include "include/stringify.h"
+
+using namespace std;
 
 /* Holds a std::vector with C-strings.
  * Will free() them properly in the destructor.
@@ -384,14 +387,15 @@ TEST(CephArgParse, env_to_vec) {
     clear_g_str_vec();
     env_to_vec(args);
     EXPECT_EQ(3u, args.size());
-    EXPECT_EQ(string("b"), args[1]);
-    EXPECT_EQ(string("c"), args[2]);
+    EXPECT_EQ(string("b"), args[0]);
+    EXPECT_EQ(string("c"), args[1]);
+    EXPECT_EQ(string("a"), args[2]);
     setenv("WHATEVER", "d e", 0);
     clear_g_str_vec();
     env_to_vec(args, "WHATEVER");
     EXPECT_EQ(5u, args.size());
-    EXPECT_EQ(string("d"), args[3]);
-    EXPECT_EQ(string("e"), args[4]);
+    EXPECT_EQ(string("d"), args[0]);
+    EXPECT_EQ(string("e"), args[1]);
   }
   {
     std::vector<const char*> args;
@@ -403,11 +407,11 @@ TEST(CephArgParse, env_to_vec) {
     clear_g_str_vec();
     env_to_vec(args);
     EXPECT_EQ(5u, args.size());
-    EXPECT_EQ(string("a"), args[0]);
-    EXPECT_EQ(string("b"), args[1]);
+    EXPECT_EQ(string("b"), args[0]);
+    EXPECT_EQ(string("a"), args[1]);
     EXPECT_EQ(string("--"), args[2]);
-    EXPECT_EQ(string("c"), args[3]);
-    EXPECT_EQ(string("d"), args[4]);
+    EXPECT_EQ(string("d"), args[3]);
+    EXPECT_EQ(string("c"), args[4]);
   }
   {
     std::vector<const char*> args;
@@ -418,8 +422,8 @@ TEST(CephArgParse, env_to_vec) {
     clear_g_str_vec();
     env_to_vec(args);
     EXPECT_EQ(4u, args.size());
-    EXPECT_EQ(string("a"), args[0]);
-    EXPECT_EQ(string("b"), args[1]);
+    EXPECT_EQ(string("b"), args[0]);
+    EXPECT_EQ(string("a"), args[1]);
     EXPECT_EQ(string("--"), args[2]);
     EXPECT_EQ(string("c"), args[3]);
   }
@@ -434,8 +438,8 @@ TEST(CephArgParse, env_to_vec) {
     EXPECT_EQ(4u, args.size());
     EXPECT_EQ(string("b"), args[0]);
     EXPECT_EQ(string("--"), args[1]);
-    EXPECT_EQ(string("c"), args[2]);
-    EXPECT_EQ(string("d"), args[3]);
+    EXPECT_EQ(string("d"), args[2]);
+    EXPECT_EQ(string("c"), args[3]);
   }
   {
     std::vector<const char*> args;
@@ -445,8 +449,8 @@ TEST(CephArgParse, env_to_vec) {
     clear_g_str_vec();
     env_to_vec(args);
     EXPECT_EQ(4u, args.size());
-    EXPECT_EQ(string("b"), args[0]);
-    EXPECT_EQ(string("c"), args[1]);
+    EXPECT_EQ(string("c"), args[0]);
+    EXPECT_EQ(string("b"), args[1]);
     EXPECT_EQ(string("--"), args[2]);
     EXPECT_EQ(string("d"), args[3]);
   }
@@ -462,8 +466,8 @@ TEST(CephArgParse, env_to_vec) {
     EXPECT_EQ(4u, args.size());
     EXPECT_EQ(string("a"), args[0]);
     EXPECT_EQ(string("--"), args[1]);
-    EXPECT_EQ(string("c"), args[2]);
-    EXPECT_EQ(string("d"), args[3]);
+    EXPECT_EQ(string("d"), args[2]);
+    EXPECT_EQ(string("c"), args[3]);
   }
   {
     std::vector<const char*> args;
@@ -475,12 +479,64 @@ TEST(CephArgParse, env_to_vec) {
     clear_g_str_vec();
     env_to_vec(args);
     EXPECT_EQ(4u, args.size());
-    EXPECT_EQ(string("a"), args[0]);
-    EXPECT_EQ(string("d"), args[1]);
+    EXPECT_EQ(string("d"), args[0]);
+    EXPECT_EQ(string("a"), args[1]);
     EXPECT_EQ(string("--"), args[2]);
     EXPECT_EQ(string("c"), args[3]);
   }
 }
+
+TEST(CephArgParse, parse_ip_port_vec) {
+  struct {
+    const char *from;
+    int type;
+    const char *to;
+  } tests[] = {
+    { "1.2.3.4", entity_addr_t::TYPE_MSGR2,
+      "v2:1.2.3.4:0/0\n" },
+    { "v1:1.2.3.4", entity_addr_t::TYPE_MSGR2,
+      "v1:1.2.3.4:0/0\n" },
+    { "1.2.3.4", entity_addr_t::TYPE_LEGACY,
+      "v1:1.2.3.4:0/0\n" },
+    { "[::],1.2.3.4", entity_addr_t::TYPE_LEGACY,
+      "v1:[::]:0/0\nv1:1.2.3.4:0/0\n" },
+    { "v2:1.2.3.4:111,v1:5.6.7.8:222", entity_addr_t::TYPE_LEGACY,
+      "v2:1.2.3.4:111/0\nv1:5.6.7.8:222/0\n" },
+    { "v2:1.2.3.4:111 v1:5.6.7.8:222", entity_addr_t::TYPE_LEGACY,
+      "v2:1.2.3.4:111/0\nv1:5.6.7.8:222/0\n" },
+    { "[v2:1.2.3.4:111,v1:5.6.7.8:222] [v2:[::]:3300,v1:[::]:6789]",
+      entity_addr_t::TYPE_LEGACY,
+      "[v2:1.2.3.4:111/0,v1:5.6.7.8:222/0]\n[v2:[::]:3300/0,v1:[::]:6789/0]\n" },
+    { "[v2:1.2.3.4:111,v1:5.6.7.8:222],[v2:[::]:3300,v1:[::]:6789]",
+      entity_addr_t::TYPE_LEGACY,
+      "[v2:1.2.3.4:111/0,v1:5.6.7.8:222/0]\n[v2:[::]:3300/0,v1:[::]:6789/0]\n" },
+    { 0, 0, 0 },
+  };
+
+  for (unsigned i = 0; tests[i].from; ++i) {
+    vector<entity_addrvec_t> v;
+    cout << "-- " << tests[i].from << " type " << tests[i].type
+	 << " ->\n" << tests[i].to;
+    ASSERT_TRUE(parse_ip_port_vec(tests[i].from, v, tests[i].type));
+    string actual;
+    for (auto s : v) {
+      actual += stringify(s) + "\n";
+    }
+    ASSERT_EQ(actual, tests[i].to);
+  }
+
+  const char *bad[] = {
+    "1.2.3.4 foo",
+    0
+  };
+  for (unsigned i = 0; bad[i]; ++i) {
+    vector<entity_addrvec_t> v;
+    cout << "bad " << bad[i] << std::endl;
+    ASSERT_FALSE(parse_ip_port_vec(bad[i], v));
+  }
+}
+
+
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_ceph_argparse && ./unittest_ceph_argparse"

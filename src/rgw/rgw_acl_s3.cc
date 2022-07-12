@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string.h>
 
@@ -10,6 +10,7 @@
 
 #include "rgw_acl_s3.h"
 #include "rgw_user.h"
+#include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -17,6 +18,8 @@
 
 #define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
 #define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
+
+using namespace std;
 
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
@@ -290,14 +293,12 @@ static const char *get_acl_header(const RGWEnv *env,
   return env->get(header, NULL);
 }
 
-static int parse_grantee_str(RGWRados *store, string& grantee_str,
+static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Store* store, string& grantee_str,
         const struct s3_acl_header *perm, ACLGrant& grant)
 {
   string id_type, id_val_quoted;
   int rgw_perm = perm->rgw_perm;
   int ret;
-
-  RGWUserInfo info;
 
   ret = parse_key_value(grantee_str, id_type, id_val_quoted);
   if (ret < 0)
@@ -306,18 +307,19 @@ static int parse_grantee_str(RGWRados *store, string& grantee_str,
   string id_val = rgw_trim_quotes(id_val_quoted);
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
-    ret = rgw_get_user_info_by_email(store, id_val, info);
+    std::unique_ptr<rgw::sal::User> user;
+    ret = store->get_user_by_email(dpp, id_val, null_yield, &user);
     if (ret < 0)
       return ret;
 
-    grant.set_canon(info.user_id, info.display_name, rgw_perm);
+    grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
-    rgw_user user(id_val);
-    ret = rgw_get_user_info_by_uid(store, user, info);
+    std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(id_val));
+    ret = user->load_user(dpp, null_yield);
     if (ret < 0)
       return ret;
 
-    grant.set_canon(info.user_id, info.display_name, rgw_perm);
+    grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "uri") == 0) {
     ACLGroupTypeEnum gid = grant.uri_to_group(id_val);
     if (gid == ACL_GROUP_NONE)
@@ -331,8 +333,9 @@ static int parse_grantee_str(RGWRados *store, string& grantee_str,
   return 0;
 }
 
-static int parse_acl_header(RGWRados *store, const RGWEnv *env,
-         const struct s3_acl_header *perm, std::list<ACLGrant>& _grants)
+static int parse_acl_header(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+			    const RGWEnv *env, const struct s3_acl_header *perm,
+			    std::list<ACLGrant>& _grants)
 {
   std::list<string> grantees;
   std::string hacl_str;
@@ -346,7 +349,7 @@ static int parse_acl_header(RGWRados *store, const RGWEnv *env,
 
   for (list<string>::iterator it = grantees.begin(); it != grantees.end(); ++it) {
     ACLGrant grant;
-    int ret = parse_grantee_str(store, *it, perm, grant);
+    int ret = parse_grantee_str(dpp, store, *it, perm, grant);
     if (ret < 0)
       return ret;
 
@@ -451,17 +454,22 @@ static const s3_acl_header acl_header_perms[] = {
   {0, NULL}
 };
 
-int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, const RGWEnv *env, ACLOwner& _owner)
+int RGWAccessControlPolicy_S3::create_from_headers(const DoutPrefixProvider *dpp,
+						   rgw::sal::Store* store,
+						   const RGWEnv *env, ACLOwner& _owner)
 {
   std::list<ACLGrant> grants;
+  int r = 0;
 
   for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
-    if (parse_acl_header(store, env, p, grants) < 0)
-      return false;
+    r = parse_acl_header(dpp, store, env, p, grants);
+    if (r < 0) {
+      return r;
+    }
   }
 
   RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-  int r = _acl.create_from_grants(grants);
+  r = _acl.create_from_grants(grants);
 
   owner = _owner;
 
@@ -471,7 +479,9 @@ int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, const RGWEnv
 /*
   can only be called on object that was parsed
  */
-int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest)
+int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
+				       rgw::sal::Store* store, ACLOwner *owner,
+				       RGWAccessControlPolicy& dest, std::string &err_msg)
 {
   if (!owner)
     return -EINVAL;
@@ -483,17 +493,18 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
       return -EPERM;
   }
 
-  RGWUserInfo owner_info;
-  if (rgw_get_user_info_by_uid(store, owner->get_id(), owner_info) < 0) {
-    ldout(cct, 10) << "owner info does not exist" << dendl;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(owner->get_id());
+  if (user->load_user(dpp, null_yield) < 0) {
+    ldpp_dout(dpp, 10) << "owner info does not exist" << dendl;
+    err_msg = "Invalid id";
     return -EINVAL;
   }
   ACLOwner& dest_owner = dest.get_owner();
   dest_owner.set_id(owner->get_id());
-  dest_owner.set_name(owner_info.display_name);
+  dest_owner.set_name(user->get_display_name());
 
-  ldout(cct, 20) << "owner id=" << owner->get_id() << dendl;
-  ldout(cct, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
+  ldpp_dout(dpp, 20) << "owner id=" << owner->get_id() << dendl;
+  ldpp_dout(dpp, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
 
   RGWAccessControlList& dst_acl = dest.get_acl();
 
@@ -512,37 +523,45 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
         string email;
         rgw_user u;
         if (!src_grant.get_id(u)) {
-          ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: src_grant.get_id() failed" << dendl;
           return -EINVAL;
         }
         email = u.id;
-        ldout(cct, 10) << "grant user email=" << email << dendl;
-        if (rgw_get_user_info_by_email(store, email, grant_user) < 0) {
-          ldout(cct, 10) << "grant user email not found or other error" << dendl;
+        ldpp_dout(dpp, 10) << "grant user email=" << email << dendl;
+	if (store->get_user_by_email(dpp, email, null_yield, &user) < 0) {
+          ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
+          err_msg = "The e-mail address you provided does not match any account on record.";
           return -ERR_UNRESOLVABLE_EMAIL;
         }
+	grant_user = user->get_info();
         uid = grant_user.user_id;
       }
     case ACL_TYPE_CANON_USER:
       {
         if (type.get_type() == ACL_TYPE_CANON_USER) {
           if (!src_grant.get_id(uid)) {
-            ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
+            ldpp_dout(dpp, 0) << "ERROR: src_grant.get_id() failed" << dendl;
+            err_msg = "Invalid id";
             return -EINVAL;
           }
         }
     
-        if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(store, uid, grant_user) < 0) {
-          ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
-          return -EINVAL;
-        } else {
-          ACLPermission& perm = src_grant.get_permission();
-          new_grant.set_canon(uid, grant_user.display_name, perm.get_permissions());
-          grant_ok = true;
-          rgw_user new_id;
-          new_grant.get_id(new_id);
-          ldout(cct, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
+        if (grant_user.user_id.empty()) {
+	  user = store->get_user(uid);
+	  if (user->load_user(dpp, null_yield) < 0) {
+	    ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
+	    err_msg = "Invalid id";
+	    return -EINVAL;
+	  } else {
+	    grant_user = user->get_info();
+	  }
         }
+	ACLPermission& perm = src_grant.get_permission();
+	new_grant.set_canon(uid, grant_user.display_name, perm.get_permissions());
+	grant_ok = true;
+	rgw_user new_id;
+	new_grant.get_id(new_id);
+	ldpp_dout(dpp, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
       }
       break;
     case ACL_TYPE_GROUP:
@@ -551,9 +570,10 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
         if (ACLGrant_S3::group_to_uri(src_grant.get_group(), uri)) {
           new_grant = src_grant;
           grant_ok = true;
-          ldout(cct, 10) << "new grant: " << uri << dendl;
+          ldpp_dout(dpp, 10) << "new grant: " << uri << dendl;
         } else {
-          ldout(cct, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
+          ldpp_dout(dpp, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
+          err_msg = "Invalid group uri";
           return -EINVAL;
         }
       }
@@ -609,5 +629,15 @@ XMLObj *RGWACLXMLParser_S3::alloc_obj(const char *el)
   }
 
   return obj;
+}
+
+ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
+{
+  if (uri.compare(rgw_uri_all_users) == 0)
+    return ACL_GROUP_ALL_USERS;
+  else if (uri.compare(rgw_uri_auth_users) == 0)
+    return ACL_GROUP_AUTHENTICATED_USERS;
+
+  return ACL_GROUP_NONE;
 }
 

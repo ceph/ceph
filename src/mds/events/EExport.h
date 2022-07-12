@@ -28,7 +28,7 @@ public:
   EMetaBlob metablob; // exported dir
 protected:
   dirfrag_t      base;
-  set<dirfrag_t> bounds;
+  std::set<dirfrag_t> bounds;
   mds_rank_t target;
   
 public:
@@ -38,18 +38,18 @@ public:
     LogEvent(EVENT_EXPORT),
     base(dir->dirfrag()), target(t) { }
   
-  set<dirfrag_t> &get_bounds() { return bounds; }
+  std::set<dirfrag_t> &get_bounds() { return bounds; }
   
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "EExport " << base << " to mds." << target << " " << metablob;
   }
 
   EMetaBlob *get_metablob() override { return &metablob; }
 
   void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator &bl) override;
+  void decode(bufferlist::const_iterator &bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(list<EExport*>& ls);
+  static void generate_test_instances(std::list<EExport*>& ls);
   void replay(MDSRank *mds) override;
 
 };

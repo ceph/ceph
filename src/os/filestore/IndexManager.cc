@@ -12,7 +12,6 @@
  *
  */
 
-#include "include/memory.h"
 #include "include/unordered_map.h"
 
 #if defined(__FreeBSD__)
@@ -21,7 +20,6 @@
 
 #include <errno.h>
 
-#include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -33,9 +31,16 @@
 
 #include "chain_xattr.h"
 
+using std::string;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
+
 static int set_version(const char *path, uint32_t version) {
   bufferlist bl;
-  ::encode(version, bl);
+  encode(version, bl);
   return chain_setxattr<true, true>(
     path, "user.cephos.collection_version", bl.c_str(),
     bl.length());
@@ -56,8 +61,8 @@ static int get_version(const char *path, uint32_t *version) {
   bp.set_length(r);
   bufferlist bl;
   bl.push_back(bp);
-  bufferlist::iterator i = bl.begin();
-  ::decode(*version, i);
+  auto i = bl.cbegin();
+  decode(*version, i);
   return 0;
 }
 
@@ -74,7 +79,7 @@ IndexManager::~IndexManager() {
 
 
 int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
   int r = set_version(path, version);
   if (r < 0)
     return r;
@@ -123,7 +128,7 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
 }
 
 bool IndexManager::get_index_optimistic(coll_t c, Index *index) {
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
   ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
   if (it == col_indices.end()) 
     return false;
@@ -134,7 +139,7 @@ bool IndexManager::get_index_optimistic(coll_t c, Index *index) {
 int IndexManager::get_index(coll_t c, const string& baseDir, Index *index) {
   if (get_index_optimistic(c, index))
     return 0;
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
   ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
   if (it == col_indices.end()) {
     char path[PATH_MAX];

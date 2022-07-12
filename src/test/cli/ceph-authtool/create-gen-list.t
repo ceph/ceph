@@ -1,4 +1,4 @@
-  $ ceph-authtool kring --create-keyring
+  $ ceph-authtool kring --create-keyring --mode 0644
   creating kring
 
   $ ceph-authtool kring --list

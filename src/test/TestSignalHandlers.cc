@@ -29,7 +29,8 @@
 #include <string>
 
 #define dout_context g_ceph_context
-using std::string;
+
+using namespace std;
 
 // avoid compiler warning about dereferencing NULL pointer
 static int* get_null()
@@ -47,8 +48,10 @@ static void simple_segv_test()
 
 // Given the name of the function, we can be pretty sure this is intentional.
 
-#pragma clang diagnostic push
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winfinite-recursion"
 
+#pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Winfinite-recursion"
 
 static void infinite_recursion_test_impl()
@@ -56,6 +59,7 @@ static void infinite_recursion_test_impl()
   infinite_recursion_test_impl();
 }
 
+#pragma GCC diagnostic pop
 #pragma clang diagnostic pop
 
 static void infinite_recursion_test()
@@ -66,42 +70,47 @@ static void infinite_recursion_test()
 
 static void usage()
 {
-  cerr << "usage: TestSignalHandlers [test]" << std::endl;
-  cerr << "--simple_segv: run simple_segv test" << std::endl;
-  cerr << "--infinite_recursion: run infinite_recursion test" << std::endl;
-  generic_client_usage(); // Will exit()
+  cout << "usage: TestSignalHandlers [test]" << std::endl;
+  cout << "--simple_segv: run simple_segv test" << std::endl;
+  cout << "--infinite_recursion: run infinite_recursion test" << std::endl;
+  generic_client_usage();
 }
 
 typedef void (*test_fn_t)(void);
 
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  auto args = argv_to_vec(argc, argv);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   test_fn_t fn = NULL;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
     } else if (ceph_argparse_flag(args, i, "--infinite_recursion", (char*)NULL)) {
       fn = infinite_recursion_test;
     } else if (ceph_argparse_flag(args, i, "-s", "--simple_segv", (char*)NULL)) {
       fn = simple_segv_test;
     } else {
-      cerr << "Garbage at end of command line." << std::endl;
-      usage();
+      cerr << "unrecognized argument: " << *i << std::endl;
+      exit(1);
     }
   }
   if (!fn) {
     std::cerr << "Please select a test to run. Type -h for help." << std::endl;
-    usage();
+    exit(1);
   }
   fn();
   return 0;

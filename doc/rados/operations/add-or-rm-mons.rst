@@ -1,3 +1,5 @@
+.. _adding-and-removing-monitors:
+
 ==========================
  Adding/Removing Monitors
 ==========================
@@ -6,35 +8,46 @@ When you have a cluster up and running, you may add or remove monitors
 from the cluster at runtime. To bootstrap a monitor, see `Manual Deployment`_
 or `Monitor Bootstrap`_.
 
+.. _adding-monitors:
+
 Adding Monitors
 ===============
 
-Ceph monitors are light-weight processes that maintain a master copy of the 
-cluster map. You can run a cluster with 1 monitor. We recommend at least 3 
-monitors for a production cluster. Ceph monitors use a variation of the
-`Paxos`_ protocol to establish consensus about maps and other critical
+Ceph monitors are lightweight processes that are the single source of truth
+for the cluster map. You can run a cluster with 1 monitor but we recommend at least 3 
+for a production cluster. Ceph monitors use a variation of the
+`Paxos`_ algorithm to establish consensus about maps and other critical
 information across the cluster. Due to the nature of Paxos, Ceph requires
-a majority of monitors running to establish a quorum (thus establishing
+a majority of monitors to be active to establish a quorum (thus establishing
 consensus).
 
-It is advisable to run an odd-number of monitors but not mandatory. An
-odd-number of monitors has a higher resiliency to failures than an
-even-number of monitors. For instance, on a 2 monitor deployment, no
-failures can be tolerated in order to maintain a quorum; with 3 monitors,
-one failure can be tolerated; in a 4 monitor deployment, one failure can
-be tolerated; with 5 monitors, two failures can be tolerated.  This is
-why an odd-number is advisable. Summarizing, Ceph needs a majority of
-monitors to be running (and able to communicate with each other), but that
+It is advisable to run an odd number of monitors. An
+odd number of monitors is more resilient than an
+even number. For instance, with a two monitor deployment, no
+failures can be tolerated and still maintain a quorum; with three monitors,
+one failure can be tolerated; in a four monitor deployment, one failure can
+be tolerated; with five monitors, two failures can be tolerated.  This avoids
+the dreaded *split brain* phenomenon, and is why an odd number is best.
+In short, Ceph needs a majority of
+monitors to be active (and able to communicate with each other), but that
 majority can be achieved using a single monitor, or 2 out of 2 monitors,
 2 out of 3, 3 out of 4, etc.
 
-For an initial deployment of a multi-node Ceph cluster, it is advisable to
-deploy three monitors, increasing the number two at a time if a valid need
-for more than three exists.
+For small or non-critical deployments of multi-node Ceph clusters, it is
+advisable to deploy three monitors, and to increase the number of monitors
+to five for larger clusters or to survive a double failure.  There is rarely
+justification for seven or more.
 
-Since monitors are light-weight, it is possible to run them on the same 
-host as an OSD; however, we recommend running them on separate hosts,
-because fsync issues with the kernel may impair performance. 
+Since monitors are lightweight, it is possible to run them on the same 
+host as OSDs; however, we recommend running them on separate hosts,
+because `fsync` issues with the kernel may impair performance.
+Dedicated monitor nodes also minimize disruption since monitor and OSD
+daemons are not inactive at the same time when a node crashes or is
+taken down for maintenance.
+
+Dedicated
+monitor nodes also make for cleaner maintenance by avoiding both OSDs and
+a mon going down if a node is rebooted, taken down, or crashes.
 
 .. note:: A *majority* of monitors in your cluster must be able to 
    reach each other in order to establish a quorum.
@@ -102,7 +115,7 @@ on ``mon.a``).
 
 #. Retrieve the monitor map, where ``{tmp}`` is the path to 
    the retrieved monitor map, and ``{map-filename}`` is the name of the file 
-   containing the retrieved monitor monitor map. :: 
+   containing the retrieved monitor map. :: 
 
 	ceph mon getmap -o {tmp}/{map-filename}
 
@@ -115,18 +128,19 @@ on ``mon.a``).
 	
 
 #. Start the new monitor and it will automatically join the cluster.
-   The daemon needs to know which address to bind to, either via
-   ``--public-addr {ip:port}`` or by setting ``mon addr`` in the
-   appropriate section of ``ceph.conf``.  For example::
+   The daemon needs to know which address to bind to, via either the
+   ``--public-addr {ip}`` or ``--public-network {network}`` argument.
+   For example::
 
 	ceph-mon -i {mon-id} --public-addr {ip:port}
 
+.. _removing-monitors:
 
 Removing Monitors
 =================
 
 When you remove monitors from a cluster, consider that Ceph monitors use 
-PAXOS to establish consensus about the master cluster map. You must have 
+Paxos to establish consensus about the master cluster map. You must have 
 a sufficient number of monitors to establish a quorum for consensus about 
 the cluster map.
 
@@ -150,6 +164,7 @@ quorum.
 	
 #. Remove the monitor entry from ``ceph.conf``. 
 
+.. _rados-mon-remove-from-unhealthy: 
 
 Removing Monitors from an Unhealthy Cluster
 -------------------------------------------
@@ -162,7 +177,7 @@ quorum.
 #. Stop all ``ceph-mon`` daemons on all monitor hosts. ::
 
 	ssh {mon-host}
-	service ceph stop mon || stop ceph-mon-all
+	systemctl stop ceph-mon.target
 	# and repeat for all mons
 
 #. Identify a surviving monitor and log in to that host. :: 
@@ -301,7 +316,7 @@ networks  are unable to communicate.  Use the following procedure:
 
 #. Retrieve the monitor map, where ``{tmp}`` is the path to 
    the retrieved monitor map, and ``{filename}`` is the name of the file 
-   containing the retrieved monitor monitor map. :: 
+   containing the retrieved monitor map. :: 
 
 	ceph mon getmap -o {tmp}/{filename}
 

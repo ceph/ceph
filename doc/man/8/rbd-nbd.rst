@@ -9,9 +9,11 @@
 Synopsis
 ========
 
-| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] map *image-spec* | *snap-spec*
-| **rbd-nbd** unmap *nbd device*
+| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--notrim] [--encryption-format *format*] [--encryption-passphrase-file *passphrase-file*] [--io-timeout *seconds*] [--reattach-timeout *seconds*] map *image-spec* | *snap-spec*
+| **rbd-nbd** unmap *nbd device* | *image-spec* | *snap-spec*
 | **rbd-nbd** list-mapped
+| **rbd-nbd** attach --device *nbd device* *image-spec* | *snap-spec*
+| **rbd-nbd** detach *nbd device* | *image-spec* | *snap-spec*
 
 Description
 ===========
@@ -34,16 +36,40 @@ Options
 
 .. option:: --nbds_max *limit*
 
-   Override the parameter of NBD kernel module when modprobe, used to
+   Override the parameter nbds_max of NBD kernel module when modprobe, used to
    limit the count of nbd device.
 
 .. option:: --max_part *limit*
 
-    Override for module param nbds_max.
+    Override for module param max_part.
 
 .. option:: --exclusive
 
    Forbid writes by other clients.
+
+.. option:: --notrim
+
+   Turn off trim/discard.
+
+.. option:: --encryption-format
+
+   Image encryption format.
+   Possible values: *luks1*, *luks2*
+
+.. option:: --encryption-passphrase-file
+
+   Path of file containing a passphrase for unlocking image encryption.
+
+.. option:: --io-timeout *seconds*
+
+   Override device timeout. Linux kernel will default to a 30 second request timeout.
+   Allow the user to optionally specify an alternate timeout.
+
+.. option:: --reattach-timeout *seconds*
+
+   Specify timeout for the kernel to wait for a new rbd-nbd process is
+   attached after the old process is detached. The default is 30
+   second.
 
 Image and snap specs
 ====================
@@ -58,7 +84,7 @@ Availability
 ============
 
 **rbd-nbd** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the Ceph documentation at http://ceph.com/docs for more information.
+the Ceph documentation at https://docs.ceph.com/ for more information.
 
 
 See also

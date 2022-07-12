@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -10,8 +12,12 @@
 #endif
 
 #include "include/ipaddr.h"
+#include "msg/msg_types.h"
+#include "common/pick_address.h"
 
-static void netmask_ipv4(const struct in_addr *addr,
+using std::string;
+
+void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,
 			 struct in_addr *out) {
   uint32_t mask;
@@ -26,40 +32,26 @@ static void netmask_ipv4(const struct in_addr *addr,
   out->s_addr = addr->s_addr & mask;
 }
 
+bool matches_ipv4_in_subnet(const struct ifaddrs& addrs,
+			  const struct sockaddr_in* net,
+			  unsigned int prefix_len)
+{
+  if (addrs.ifa_addr == nullptr)
+    return false;
 
-const struct ifaddrs *find_ipv4_in_subnet(const struct ifaddrs *addrs,
-					   const struct sockaddr_in *net,
-					   unsigned int prefix_len) {
-  struct in_addr want, temp;
-
+  if (addrs.ifa_addr->sa_family != net->sin_family)
+      return false;
+  struct in_addr want;
   netmask_ipv4(&net->sin_addr, prefix_len, &want);
-
-  for (; addrs != NULL; addrs = addrs->ifa_next) {
-
-    if (addrs->ifa_addr == NULL)
-      continue;
-
-    if (strcmp(addrs->ifa_name, "lo") == 0)
-      continue;
-
-    if (addrs->ifa_addr->sa_family != net->sin_family)
-      continue;
-
-    struct in_addr *cur = &((struct sockaddr_in*)addrs->ifa_addr)->sin_addr;
-    netmask_ipv4(cur, prefix_len, &temp);
-
-    if (temp.s_addr == want.s_addr) {
-      return addrs;
-    }
-  }
-
-  return NULL;
+  struct in_addr *cur = &((struct sockaddr_in*)addrs.ifa_addr)->sin_addr;
+  struct in_addr temp;
+  netmask_ipv4(cur, prefix_len, &temp);
+  return temp.s_addr == want.s_addr;
 }
 
-
-static void netmask_ipv6(const struct in6_addr *addr,
-			 unsigned int prefix_len,
-			 struct in6_addr *out) {
+void netmask_ipv6(const struct in6_addr *addr,
+		  unsigned int prefix_len,
+		  struct in6_addr *out) {
   if (prefix_len > 128)
     prefix_len = 128;
 
@@ -70,50 +62,24 @@ static void netmask_ipv6(const struct in6_addr *addr,
     memset(out->s6_addr+prefix_len/8+1, 0, 16-prefix_len/8-1);
 }
 
+bool matches_ipv6_in_subnet(const struct ifaddrs& addrs,
+			    const struct sockaddr_in6* net,
+			    unsigned int prefix_len)
+{
+  if (addrs.ifa_addr == nullptr)
+    return false;
 
-const struct ifaddrs *find_ipv6_in_subnet(const struct ifaddrs *addrs,
-					   const struct sockaddr_in6 *net,
-					   unsigned int prefix_len) {
-  struct in6_addr want, temp;
-
+  if (addrs.ifa_addr->sa_family != net->sin6_family)
+    return false;
+  struct in6_addr want;
   netmask_ipv6(&net->sin6_addr, prefix_len, &want);
-
-  for (; addrs != NULL; addrs = addrs->ifa_next) {
-
-    if (addrs->ifa_addr == NULL)
-      continue;
-
-    if (strcmp(addrs->ifa_name, "lo") == 0)
-      continue;
-
-    if (addrs->ifa_addr->sa_family != net->sin6_family)
-      continue;
-
-    struct in6_addr *cur = &((struct sockaddr_in6*)addrs->ifa_addr)->sin6_addr;
-    netmask_ipv6(cur, prefix_len, &temp);
-
-    if (IN6_ARE_ADDR_EQUAL(&temp, &want))
-      return addrs;
-  }
-
-  return NULL;
+  struct in6_addr temp;
+  struct in6_addr *cur = &((struct sockaddr_in6*)addrs.ifa_addr)->sin6_addr;
+  if (IN6_IS_ADDR_LINKLOCAL(cur))
+    return false;
+  netmask_ipv6(cur, prefix_len, &temp);
+  return IN6_ARE_ADDR_EQUAL(&temp, &want);
 }
-
-
-const struct ifaddrs *find_ip_in_subnet(const struct ifaddrs *addrs,
-					 const struct sockaddr *net,
-					 unsigned int prefix_len) {
-  switch (net->sa_family) {
-    case AF_INET:
-      return find_ipv4_in_subnet(addrs, (struct sockaddr_in*)net, prefix_len);
-
-    case AF_INET6:
-      return find_ipv6_in_subnet(addrs, (struct sockaddr_in6*)net, prefix_len);
-    }
-
-  return NULL;
-}
-
 
 bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int *prefix_len) {
   char *slash = strchr((char*)s, '/');
@@ -160,5 +126,55 @@ bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int
     return true;
   }
 
+  return false;
+}
+
+bool parse_network(const char *s,
+		   entity_addr_t *network,
+		   unsigned int *prefix_len)
+{
+  sockaddr_storage ss;
+  bool ret = parse_network(s, &ss, prefix_len);
+  if (ret) {
+    network->set_type(entity_addr_t::TYPE_LEGACY);
+    network->set_sockaddr((sockaddr *)&ss);
+  }
+  return ret;
+}
+
+bool network_contains(
+  const struct entity_addr_t& network,
+  unsigned int prefix_len,
+  const struct entity_addr_t& addr)
+{
+  if (addr.get_family() != network.get_family()) {
+    return false;
+  }
+  switch (network.get_family()) {
+  case AF_INET:
+    {
+      struct in_addr a, b;
+      netmask_ipv4(
+	&((const sockaddr_in*)network.get_sockaddr())->sin_addr, prefix_len, &a);
+      netmask_ipv4(
+	&((const sockaddr_in*)addr.get_sockaddr())->sin_addr, prefix_len, &b);
+      if (memcmp(&a, &b, sizeof(a)) == 0) {
+	return true;
+      }
+    }
+    break;
+  case AF_INET6:
+    {
+      struct in6_addr a, b;
+      netmask_ipv6(
+	&((const sockaddr_in6*)network.get_sockaddr())->sin6_addr, prefix_len, &a);
+      netmask_ipv6(
+	&((const sockaddr_in6*)addr.get_sockaddr())->sin6_addr, prefix_len, &b);
+      if (memcmp(&a, &b, sizeof(a)) == 0) {
+	return true;
+      }
+    }
+    break;
+  }
   return false;
 }

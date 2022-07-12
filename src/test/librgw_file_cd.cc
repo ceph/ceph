@@ -22,9 +22,10 @@
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "global/global_init.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 namespace {
   librgw_t rgw = nullptr;
@@ -42,7 +43,7 @@ namespace {
   bool do_multi = false;
   int multi_cnt = 10;
 
-  string bucket_name = "sorry_dave";
+  string bucket_name = "sorrydave";
 
   struct {
     int argc;
@@ -137,14 +138,10 @@ TEST(LibRGW, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
-  char *v{nullptr};
-  string val;
-  vector<const char*> args;
-
-  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
-  v = getenv("AWS_ACCESS_KEY_ID");
+  char* v = getenv("AWS_ACCESS_KEY_ID");
   if (v) {
     access_key = v;
   }
@@ -154,6 +151,7 @@ int main(int argc, char *argv[])
     secret_key = v;
   }
 
+  string val;
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
 			      (char*) nullptr)) {
@@ -187,7 +185,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  /* dont accidentally run as anonymous */
+  /* don't accidentally run as anonymous */
   if ((access_key == "") ||
       (secret_key == "")) {
     std::cout << argv[0] << " no AWS credentials, exiting" << std::endl;

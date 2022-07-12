@@ -86,6 +86,25 @@ TEST(util, test_random)
        ASSERT_NE(a, b);
      }
   }
+
+  // Check that the nullary version accepts different numeric types:
+  {
+    long def = ceph::util::generate_random_number();
+    long l = ceph::util::generate_random_number<long>();
+    int64_t i = ceph::util::generate_random_number<int64_t>();
+    double d = ceph::util::generate_random_number<double>();
+
+    swallow_values(def, l, i, d);
+  }
+
+  // (optimistically) Check that the nullary and unary versions never return < 0:
+  {
+    for(long i = 0; 1000000 != i; i++) {
+     ASSERT_LE(0, ceph::util::generate_random_number());
+     ASSERT_LE(0, ceph::util::generate_random_number(1));
+     ASSERT_LE(0, ceph::util::generate_random_number<float>(1.0));
+    }
+  }
  
   {
   auto a = ceph::util::generate_random_number(1, std::numeric_limits<int>::max());
@@ -100,11 +119,16 @@ TEST(util, test_random)
   }
  
   for (auto n = 100000; n; --n) {
-     constexpr int min = 0, max = 6;
-     int a = ceph::util::generate_random_number(min, max);
+     int a = ceph::util::generate_random_number(0, 6);
      ASSERT_GT(a, -1);
      ASSERT_LT(a, 7);
    }
+
+  // Check bounding on zero (checking appropriate value for zero compiles and works):
+  for (auto n = 10; n; --n) {
+    ASSERT_EQ(0, ceph::util::generate_random_number<int>(0, 0));
+    ASSERT_EQ(0, ceph::util::generate_random_number<float>(0.0, 0.0));
+  }
  
   // Multiple types (integral):
   {
@@ -128,10 +152,35 @@ TEST(util, test_random)
     type_check_ok(min, max);
   }
  
-  // min > max should not explode:
+  // When combining types, everything should convert to the largest type:
   {
-    float min = 1.0, max = 0.0;
-    type_check_ok(min, max);
+    // Check with integral types:
+    {
+    int x = 0;
+    long long y = 1;
+
+    auto z = ceph::util::generate_random_number(x, y);
+
+    bool result = std::is_same_v<decltype(z), decltype(y)>;
+
+    ASSERT_TRUE(result);
+    }
+
+    // Check with floating-point types:
+    {
+    float x = 0.0;
+    long double y = 1.0;
+
+    auto z = ceph::util::generate_random_number(x, y);
+
+    bool result = std::is_same_v<decltype(z), decltype(y)>;
+
+    ASSERT_TRUE(result);
+    }
+
+    // It would be nice to have a test to check that mixing integral and floating point
+    // numbers should not compile, however we currently have no good way I know of
+    // to do such negative tests.
   }
 }
 
@@ -145,6 +194,23 @@ TEST(util, test_random_class_interface)
     ceph::util::random_number_generator<int> rng(1234);   // seed
   }
  
+  // Test deduction guides:
+  {
+    { ceph::util::random_number_generator rng(1234); }
+#pragma clang diagnostic push
+    // Turn this warning off, since we're checking that the deduction
+    // guide works. (And we don't know what the seed type will
+    // actually be.)
+#pragma clang diagnostic ignored "-Wliteral-conversion"
+    { ceph::util::random_number_generator rng(1234.1234); }
+#pragma clang diagnostic pop
+
+    {
+    int x = 1234;
+    ceph::util::random_number_generator rng(x);
+    }
+  }
+
   {
     int a = rng_i();
     int b = rng_i();

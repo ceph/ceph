@@ -1,4 +1,4 @@
-
+.. _ceph-manager-daemon:
 
 ===================
 Ceph Manager Daemon
@@ -17,7 +17,7 @@ ensuring it is running.  If there is no mgr daemon running, you will
 see a health warning to that effect, and some of the other information
 in the output of `ceph status` will be missing or stale until a mgr is started.
 
-Use your normal deployment tools, such as ceph-ansible or ceph-deploy, to
+Use your normal deployment tools, such as ceph-ansible or cephadm, to
 set up ceph-mgr daemons on each of your mon nodes.  It is not mandatory
 to place mgr daemons on the same nodes as mons, but it is almost always
 sensible.
@@ -26,11 +26,27 @@ sensible.
     :maxdepth: 1
 
     Installation and Configuration <administrator>
-    Writing plugins <plugins>
-    Dashboard plugin <dashboard>
-    Local pool plugin <localpool>
-    RESTful plugin <restful>
-    Zabbix plugin <zabbix>
-    Prometheus plugin <prometheus>
-    Influx plugin <influx>
-
+    Writing modules <modules>
+    Writing orchestrator plugins <orchestrator_modules>
+    Dashboard module <dashboard>
+    Ceph RESTful API <ceph_api/index>
+    Alerts module <alerts>
+    DiskPrediction module <diskprediction>
+    Local pool module <localpool>
+    RESTful module <restful>
+    Zabbix module <zabbix>
+    Prometheus module <prometheus>
+    Influx module <influx>
+    Hello module <hello>
+    Telegraf module <telegraf>
+    Telemetry module <telemetry>
+    Iostat module <iostat>
+    Crash module <crash>
+    Insights module <insights>
+    Orchestrator module <orchestrator>
+    Rook module <rook>
+    RGW module <rgw>
+    MDS Autoscaler module <mds_autoscaler>
+    NFS module <nfs>
+    Progress Module <progress>
+    CLI API Commands module <cli_api>

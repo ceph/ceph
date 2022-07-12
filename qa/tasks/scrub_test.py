@@ -1,5 +1,4 @@
 """Scrub testing"""
-from cStringIO import StringIO
 
 import contextlib
 import json
@@ -8,19 +7,23 @@ import os
 import time
 import tempfile
 
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
 
-def wait_for_victim_pg(manager):
+def wait_for_victim_pg(manager, poolid):
     """Return a PG with some data and its acting set"""
     # wait for some PG to have data that we can mess with
     victim = None
     while victim is None:
         stats = manager.get_pg_stats()
         for pg in stats:
+            pgid = str(pg['pgid'])
+            pgpool = int(pgid.split('.')[0])
+            if poolid != pgpool:
+                continue
             size = pg['stat_sum']['num_bytes']
             if size > 0:
                 victim = pg['pgid']
@@ -31,7 +34,7 @@ def wait_for_victim_pg(manager):
 
 def find_victim_object(ctx, pg, osd):
     """Return a file to be fuzzed"""
-    (osd_remote,) = ctx.cluster.only('osd.%d' % osd).remotes.iterkeys()
+    (osd_remote,) = ctx.cluster.only('osd.%d' % osd).remotes.keys()
     data_path = os.path.join(
         '/var/lib/ceph/osd',
         'ceph-{id}'.format(id=osd),
@@ -41,12 +44,7 @@ def find_victim_object(ctx, pg, osd):
         )
 
     # fuzz time
-    with contextlib.closing(StringIO()) as ls_fp:
-        osd_remote.run(
-            args=['sudo', 'ls', data_path],
-            stdout=ls_fp,
-        )
-        ls_out = ls_fp.getvalue()
+    ls_out = osd_remote.sh('sudo ls %s' % data_path)
 
     # find an object file we can mess with (and not the pg info object)
     osdfilename = next(line for line in ls_out.split('\n')
@@ -291,8 +289,7 @@ def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
     pool = 'rbd'
     omap_key = 'key'
     omap_val = 'val'
-    manager.do_rados(mon, ['-p', pool, 'setomapval', obj_name,
-                           omap_key, omap_val])
+    manager.do_rados(['setomapval', obj_name, omap_key, omap_val], pool=pool)
     # Update missing digests, requires "osd deep scrub update digest min age: 0"
     pgnum = get_pgnum(pg)
     manager.do_pg_scrub(pool, pgnum, 'deep-scrub')
@@ -306,16 +303,12 @@ def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
             deep_scrub(manager, pg, pool)
             cmd = 'rados list-inconsistent-pg {pool} ' \
                   '--format=json'.format(pool=pool)
-            with contextlib.closing(StringIO()) as out:
-                mon.run(args=cmd.split(), stdout=out)
-                pgs = json.loads(out.getvalue())
+            pgs = json.loads(mon.sh(cmd))
             assert pgs == [pg]
 
             cmd = 'rados list-inconsistent-obj {pg} ' \
                   '--format=json'.format(pg=pg)
-            with contextlib.closing(StringIO()) as out:
-                mon.run(args=cmd.split(), stdout=out)
-                objs = json.loads(out.getvalue())
+            objs = json.loads(mon.sh(cmd))
             assert len(objs['inconsistents']) == 1
 
             checker = InconsistentObjChecker(osd_id, acting, obj_name)
@@ -334,7 +327,7 @@ def task(ctx, config):
     - chef:
     - install:
     - ceph:
-        log-whitelist:
+        log-ignorelist:
         - '!= data_digest'
         - '!= omap_digest'
         - '!= size'
@@ -342,12 +335,13 @@ def task(ctx, config):
         - deep-scrub [0-9]+ errors
         - repair 0 missing, 1 inconsistent objects
         - repair [0-9]+ errors, [0-9]+ fixed
-        - shard [0-9]+ missing
+        - shard [0-9]+ .* : missing
         - deep-scrub 1 missing, 1 inconsistent objects
         - does not match object info size
         - attr name mistmatch
         - deep-scrub 1 missing, 0 inconsistent objects
         - failed to pick suitable auth object
+        - candidate size [0-9]+ info size [0-9]+ mismatch
       conf:
         osd:
           osd deep scrub update digest min age: 0
@@ -358,7 +352,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'scrub_test task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
     log.info('num_osds is %s' % num_osds)
@@ -378,19 +372,26 @@ def task(ctx, config):
     manager.flush_pg_stats(range(num_osds))
     manager.wait_for_clean()
 
+    osd_dump = manager.get_osd_dump_json()
+    poolid = -1
+    for p in osd_dump['pools']:
+        if p['pool_name'] == 'rbd':
+            poolid = p['pool']
+            break
+    assert poolid != -1
+
     # write some data
-    p = manager.do_rados(mon, ['-p', 'rbd', 'bench', '--no-cleanup', '1',
-                               'write', '-b', '4096'])
+    p = manager.do_rados(['bench', '--no-cleanup', '1', 'write', '-b', '4096'], pool='rbd')
     log.info('err is %d' % p.exitstatus)
 
     # wait for some PG to have data that we can mess with
-    pg, acting = wait_for_victim_pg(manager)
+    pg, acting = wait_for_victim_pg(manager, poolid)
     osd = acting[0]
 
     osd_remote, obj_path, obj_name = find_victim_object(ctx, pg, osd)
-    manager.do_rados(mon, ['-p', 'rbd', 'setomapval', obj_name, 'key', 'val'])
+    manager.do_rados(['setomapval', obj_name, 'key', 'val'], pool='rbd')
     log.info('err is %d' % p.exitstatus)
-    manager.do_rados(mon, ['-p', 'rbd', 'setomapheader', obj_name, 'hdr'])
+    manager.do_rados(['setomapheader', obj_name, 'hdr'], pool='rbd')
     log.info('err is %d' % p.exitstatus)
 
     # Update missing digests, requires "osd deep scrub update digest min age: 0"

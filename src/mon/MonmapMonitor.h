@@ -29,14 +29,9 @@
 #include "MonMap.h"
 #include "MonitorDBStore.h"
 
-class MMonGetMap;
-class MMonMap;
-class MMonCommand;
-class MMonJoin;
-
 class MonmapMonitor : public PaxosService {
  public:
-  MonmapMonitor(Monitor *mn, Paxos *p, const string& service_name)
+  MonmapMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
     : PaxosService(mn, p, service_name)
   {
   }
@@ -53,9 +48,10 @@ class MonmapMonitor : public PaxosService {
   void encode_full(MonitorDBStore::TransactionRef t) override { }
 
   void on_active() override;
-  void apply_mon_features(const mon_feature_t& features);
+  void apply_mon_features(const mon_feature_t& features,
+			  ceph_release_t min_mon_release);
 
-  void dump_info(Formatter *f);
+  void dump_info(ceph::Formatter *f);
 
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
@@ -66,7 +62,7 @@ class MonmapMonitor : public PaxosService {
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  int get_monmap(bufferlist &bl);
+  int get_monmap(ceph::buffer::list &bl);
 
   /*
    * Since monitors are pretty
@@ -76,9 +72,39 @@ class MonmapMonitor : public PaxosService {
 
   void check_sub(Subscription *sub);
 
+  void tick() override;
+
 private:
   void check_subs();
-  bufferlist monmap_bl;
+  ceph::buffer::list monmap_bl;
+  /**
+   * Check validity of inputs and monitor state to
+   * engage stretch mode. Designed to be used with
+   * OSDMonitor::try_enable_stretch_mode() where we call both twice,
+   * first with commit=false to validate.
+   * @param ss: a stringstream to write errors into
+   * @param okay: Filled to true if okay, false if validation fails
+   * @param errcode: filled with -errno if there's a problem
+   * @param commit: true if we should commit the change, false if just testing
+   * @param tiebreaker_mon: the name of the monitor to declare tiebreaker
+   * @param dividing_bucket: the bucket type (eg 'dc') that divides the cluster
+   */
+  void try_enable_stretch_mode(std::stringstream& ss, bool *okay,
+			       int *errcode, bool commit,
+			       const std::string& tiebreaker_mon,
+			       const std::string& dividing_bucket);
+
+public:
+  /**
+   * Set us to degraded stretch mode. Put the dead_mons in
+   * the MonMap.
+   */
+  void trigger_degraded_stretch_mode(const std::set<std::string>& dead_mons);
+  /**
+   * Set us to healthy stretch mode: clear out the
+   * down list to allow any non-tiebreaker mon to be the leader again.
+   */
+  void trigger_healthy_stretch_mode();
 };
 
 

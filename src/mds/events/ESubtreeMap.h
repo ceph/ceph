@@ -21,14 +21,14 @@
 class ESubtreeMap : public LogEvent {
 public:
   EMetaBlob metablob;
-  map<dirfrag_t, vector<dirfrag_t> > subtrees;
-  set<dirfrag_t> ambiguous_subtrees;
+  std::map<dirfrag_t, std::vector<dirfrag_t> > subtrees;
+  std::set<dirfrag_t> ambiguous_subtrees;
   uint64_t expire_pos;
   uint64_t event_seq;
 
   ESubtreeMap() : LogEvent(EVENT_SUBTREEMAP), expire_pos(0), event_seq(0) { }
   
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "ESubtreeMap " << subtrees.size() << " subtrees " 
 	<< ", " << ambiguous_subtrees.size() << " ambiguous "
 	<< metablob;
@@ -37,9 +37,9 @@ public:
   EMetaBlob *get_metablob() override { return &metablob; }
 
   void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator& bl) override;
+  void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(list<ESubtreeMap*>& ls);
+  static void generate_test_instances(std::list<ESubtreeMap*>& ls);
 
   void replay(MDSRank *mds) override;
 };

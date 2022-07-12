@@ -30,6 +30,8 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 void* thread1(void* pParam);
 void* thread2(void* pParam);
 void* thread3(void* pParam);
@@ -947,6 +949,7 @@ TEST(ErasureCodeShec, init2_5)
 
   delete shec;
   delete profile;
+  delete profile2;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_8)
@@ -2363,7 +2366,7 @@ TEST(ErasureCodeShec, decode2_4)
 
 TEST(ErasureCodeShec, create_rule_1_2)
 {
-  //create ruleset
+  //create rule
   CrushWrapper *crush = new CrushWrapper;
   crush->create();
   crush->set_type_name(2, "root");
@@ -2421,7 +2424,7 @@ TEST(ErasureCodeShec, create_rule_1_2)
 
 TEST(ErasureCodeShec, create_rule_4)
 {
-  //create ruleset
+  //create rule
   CrushWrapper *crush = new CrushWrapper;
   crush->create();
   crush->set_type_name(2, "root");
@@ -2472,7 +2475,7 @@ TEST(ErasureCodeShec, create_rule_4)
 
 TEST(ErasureCodeShec, create_rule2_1)
 {
-  //create ruleset
+  //create rule
   CrushWrapper *crush = new CrushWrapper;
   crush->create();
   crush->set_type_name(2, "root");
@@ -2531,7 +2534,7 @@ struct CreateRuleset2_3_Param_d {
 
 TEST(ErasureCodeShec, create_rule2_3)
 {
-  //create ruleset
+  //create rule
   CrushWrapper *crush = new CrushWrapper;
   crush->create();
   crush->set_type_name(2, "root");
@@ -2717,7 +2720,7 @@ void* thread3(void* pParam)
 {
   ErasureCodeShec* shec = (ErasureCodeShec*) pParam;
 
-  CrushWrapper *crush = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> crush = std::make_unique<CrushWrapper>();
   crush->create();
   crush->set_type_name(2, "root");
   crush->set_type_name(1, "host");

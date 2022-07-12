@@ -1,3 +1,5 @@
+.. _user-management:
+
 =================
  User Management
 =================
@@ -7,7 +9,8 @@ authorization with the :term:`Ceph Storage Cluster`. Users are either
 individuals or system actors such as applications, which use Ceph clients to
 interact with the Ceph Storage Cluster daemons.
 
-.. ditaa::  +-----+
+.. ditaa::
+            +-----+
             | {o} |
             |     |
             +--+--+       /---------\               /---------\
@@ -42,7 +45,6 @@ For details on configuring the Ceph Storage Cluster to use authentication,
 see `Cephx Config Reference`_. For details on the architecture of Cephx, see
 `Architecture - High Availability Authentication`_.
 
-
 Background
 ==========
 
@@ -52,7 +54,6 @@ Ceph users must have access to pools in order to read and write data.
 Additionally, Ceph users must have execute permissions to use Ceph's
 administrative commands. The following concepts will help you understand Ceph
 user management.
-
 
 User
 ----
@@ -79,11 +80,11 @@ type. So ``client.user1`` can be entered simply as ``user1``. If you specify
 wherever possible.
 
 .. note:: A Ceph Storage Cluster user is not the same as a Ceph Object Storage
-   user or a Ceph Filesystem user. The Ceph Object Gateway uses a Ceph Storage
+   user or a Ceph File System user. The Ceph Object Gateway uses a Ceph Storage
    Cluster user to communicate between the gateway daemon and the storage
    cluster, but the gateway has its own user management functionality for end
-   users. The Ceph Filesystem uses POSIX semantics. The user space associated
-   with the Ceph Filesystem is not the same as a Ceph Storage Cluster user.
+   users. The Ceph File System uses POSIX semantics. The user space associated
+   with the Ceph File System is not the same as a Ceph Storage Cluster user.
 
 
 
@@ -99,20 +100,77 @@ a user.
 
 Capability syntax follows the form::
 
-	{daemon-type} '{capspec}[, {capspec} ...]'
+	{daemon-type} '{cap-spec}[, {cap-spec} ...]'
 
 - **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` access
   settings or ``profile {name}``. For example::
 
-	mon 'allow rwx'
-	mon 'profile osd'
+	mon 'allow {access-spec} [network {network/prefix}]'
+
+	mon 'profile {name}'
+
+  The ``{access-spec}`` syntax is as follows: ::
+
+        * | all | [r][w][x]
+
+  The optional ``{network/prefix}`` is a standard network name and
+  prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
+  the use of this capability is restricted to clients connecting from
+  this network.
 
 - **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``,
   ``class-write`` access settings or ``profile {name}``. Additionally, OSD
   capabilities also allow for pool and namespace settings. ::
 
-	osd 'allow {access} [pool={pool-name} [namespace={namespace-name}]] [tag {application} {key}={value}]'
-	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]]'
+	osd 'allow {access-spec} [{match-spec}] [network {network/prefix}]'
+
+	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]] [network {network/prefix}]'
+
+  The ``{access-spec}`` syntax is either of the following: ::
+
+        * | all | [r][w][x] [class-read] [class-write]
+
+        class {class name} [{method name}]
+
+  The optional ``{match-spec}`` syntax is either of the following: ::
+
+        pool={pool-name} [namespace={namespace-name}] [object_prefix {prefix}]
+
+        [namespace={namespace-name}] tag {application} {key}={value}
+
+  The optional ``{network/prefix}`` is a standard network name and
+  prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
+  the use of this capability is restricted to clients connecting from
+  this network.
+
+- **Manager Caps:** Manager (``ceph-mgr``) capabilities include
+  ``r``, ``w``, ``x`` access settings or ``profile {name}``. For example: ::
+
+	mgr 'allow {access-spec} [network {network/prefix}]'
+
+	mgr 'profile {name} [{key1} {match-type} {value1} ...] [network {network/prefix}]'
+
+  Manager capabilities can also be specified for specific commands,
+  all commands exported by a built-in manager service, or all commands
+  exported by a specific add-on module. For example: ::
+
+        mgr 'allow command "{command-prefix}" [with {key1} {match-type} {value1} ...] [network {network/prefix}]'
+
+        mgr 'allow service {service-name} {access-spec} [network {network/prefix}]'
+
+        mgr 'allow module {module-name} [with {key1} {match-type} {value1} ...] {access-spec} [network {network/prefix}]'
+
+  The ``{access-spec}`` syntax is as follows: ::
+
+        * | all | [r][w][x]
+
+  The ``{service-name}`` is one of the following: ::
+
+        mgr | osd | pg | py
+
+  The ``{match-type}`` is one of the following: ::
+
+        = | prefix | regex
 
 - **Metadata Server Caps:** For administrators, use ``allow *``.  For all
   other users, such as CephFS clients, consult :doc:`/cephfs/client-auth`
@@ -122,7 +180,7 @@ Capability syntax follows the form::
           Ceph Storage Cluster, so it is not represented as a Ceph Storage
           Cluster daemon type.
 
-The following entries describe each capability.
+The following entries describe each access capability.
 
 ``allow``
 
@@ -160,12 +218,13 @@ The following entries describe each capability.
               Subset of ``x``.
 
 
-``*``
+``*``, ``all``
 
 :Description: Gives the user read, write and execute permissions for a
               particular daemon/pool, and the ability to execute
               admin commands.
 
+The following entries describe valid capability profiles:
 
 ``profile osd`` (Monitor only)
 
@@ -183,7 +242,7 @@ The following entries describe each capability.
 ``profile bootstrap-osd`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap an OSD. Conferred on
-              deployment tools such as ``ceph-volume``, ``ceph-deploy``, etc.
+              deployment tools such as ``ceph-volume``, ``cephadm``, etc.
               so that they have permissions to add keys, etc. when
               bootstrapping an OSD.
 
@@ -191,21 +250,76 @@ The following entries describe each capability.
 ``profile bootstrap-mds`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap a metadata server.
-              Conferred on deployment tools such as ``ceph-deploy``, etc.
+              Conferred on deployment tools such as ``cephadm``, etc.
               so they have permissions to add keys, etc. when bootstrapping
               a metadata server.
 
-``profile rbd`` (Monitor and OSD)
+``profile bootstrap-rbd`` (Monitor only)
+
+:Description: Gives a user permissions to bootstrap an RBD user.
+              Conferred on deployment tools such as ``cephadm``, etc.
+              so they have permissions to add keys, etc. when bootstrapping
+              an RBD user.
+
+``profile bootstrap-rbd-mirror`` (Monitor only)
+
+:Description: Gives a user permissions to bootstrap an ``rbd-mirror`` daemon
+              user. Conferred on deployment tools such as ``cephadm``, etc.
+              so they have permissions to add keys, etc. when bootstrapping
+              an ``rbd-mirror`` daemon.
+
+``profile rbd`` (Manager, Monitor, and OSD)
 
 :Description: Gives a user permissions to manipulate RBD images. When used
               as a Monitor cap, it provides the minimal privileges required
-              by an RBD client application. When used as an OSD cap, it
-              provides read-write access to an RBD client application.
+              by an RBD client application; this includes the ability
+	      to blocklist other client users. When used as an OSD cap, it
+              provides read-write access to the specified pool to an
+	      RBD client application. The Manager cap supports optional
+              ``pool`` and ``namespace`` keyword arguments.
 
-``profile rbd-read-only`` (OSD only)
+``profile rbd-mirror`` (Monitor only)
 
-:Description: Gives a user read-only permissions to an RBD image.
+:Description: Gives a user permissions to manipulate RBD images and retrieve
+              RBD mirroring config-key secrets. It provides the minimal
+              privileges required for the ``rbd-mirror`` daemon.
 
+``profile rbd-read-only`` (Manager and OSD)
+
+:Description: Gives a user read-only permissions to RBD images. The Manager
+              cap supports optional ``pool`` and ``namespace`` keyword
+              arguments.
+
+``profile simple-rados-client`` (Monitor only)
+
+:Description: Gives a user read-only permissions for monitor, OSD, and PG data.
+              Intended for use by direct librados client applications.
+
+``profile simple-rados-client-with-blocklist`` (Monitor only)
+
+:Description: Gives a user read-only permissions for monitor, OSD, and PG data.
+              Intended for use by direct librados client applications. Also
+              includes permission to add blocklist entries to build HA
+              applications.
+
+``profile fs-client`` (Monitor only)
+
+:Description: Gives a user read-only permissions for monitor, OSD, PG, and MDS
+              data.  Intended for CephFS clients.
+
+``profile role-definer`` (Monitor and Auth)
+
+:Description: Gives a user **all** permissions for the auth subsystem, read-only
+              access to monitors, and nothing else.  Useful for automation
+              tools.  Do not assign this unless you really, **really** know what
+              you're doing as the security ramifications are substantial and
+              pervasive.
+
+``profile crash`` (Monitor and MGR)
+
+:Description: Gives a user read-only access to monitors, used in conjunction
+              with the manager ``crash`` module to upload daemon crash
+              dumps into monitor storage for later analysis.
 
 Pool
 ----
@@ -253,7 +367,6 @@ capability. Limited globbing of namespaces is supported; if the last character
 of the specified namespace is ``*``, then access is granted to any namespace
 starting with the provided argument.
 
-
 Managing Users
 ==============
 
@@ -264,7 +377,6 @@ Cluster.
 When you create or delete users in the Ceph Storage Cluster, you may need to
 distribute keys to clients so that they can be added to keyrings. See `Keyring
 Management`_ for details.
-
 
 List Users
 ----------
@@ -327,10 +439,7 @@ save the output to a file. Developers may also execute the following::
 
 	ceph auth export {TYPE.ID}
 
-The ``auth export`` command is identical to ``auth get``, but also prints
-out the internal ``auid``, which is not relevant to end users.
-
-
+The ``auth export`` command is identical to ``auth get``.
 
 Add a User
 ----------
@@ -399,14 +508,7 @@ For example::
 	ceph auth caps client.paul mon 'allow rw' osd 'allow rwx pool=liverpool'
 	ceph auth caps client.brian-manager mon 'allow *' osd 'allow *'
 
-To remove a capability, you may reset the capability. If you want the user
-to have no access to a particular daemon that was previously set, specify
-an empty string. For example::
-
-	ceph auth caps client.ringo mon ' ' osd ' '
-
 See `Authorization (Capabilities)`_ for additional details on capabilities.
-
 
 Delete a User
 -------------
@@ -434,7 +536,6 @@ software with a user's key  (e.g., libvirt). ::
 
 	mount -t ceph serverhost:/ mountpoint -o name=client.user,secret=`ceph auth print-key client.user`
 
-
 Import a User(s)
 ----------------
 
@@ -448,10 +549,9 @@ For example::
 	sudo ceph auth import -i /etc/ceph/ceph.keyring
 
 
-.. note:: The ceph storage cluster will add new users, their keys and their
+.. note:: The Ceph storage cluster will add new users, their keys and their
    capabilities and will update existing users, their keys and their
    capabilities.
-
 
 Keyring Management
 ==================
@@ -481,7 +581,6 @@ Cluster.
 The `User Management`_ section details how to list, get, add, modify and delete
 users directly in the Ceph Storage Cluster. However, Ceph also provides the
 ``ceph-authtool`` utility to allow you to manage keyrings from a Ceph client.
-
 
 Create a Keyring
 ----------------
@@ -517,7 +616,6 @@ intend to use the keyring for a particular user or group of users, ensure
 that you execute ``chown`` or ``chmod`` to establish appropriate keyring
 ownership and access.
 
-
 Add a User to a Keyring
 -----------------------
 
@@ -538,7 +636,6 @@ to specify the destination keyring and the source keyring.
 For example::
 
 	sudo ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
-
 
 Create a User
 -------------
@@ -563,7 +660,6 @@ the new user to the Ceph Storage Cluster. ::
 
 	sudo ceph auth add client.ringo -i /etc/ceph/ceph.keyring
 
-
 Modify a User
 -------------
 
@@ -573,7 +669,7 @@ and the user followed by the capabilities. For example::
 	sudo ceph-authtool /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx'
 
 To update the user to the Ceph Storage Cluster, you must update the user
-in the keyring to the user entry in the the Ceph Storage Cluster. ::
+in the keyring to the user entry in the Ceph Storage Cluster. ::
 
 	sudo ceph auth import -i /etc/ceph/ceph.keyring
 
@@ -583,7 +679,6 @@ from a keyring.
 You may also `Modify User Capabilities`_ directly in the cluster, store the
 results to a keyring file; then, import the keyring into your main
 ``ceph.keyring`` file.
-
 
 Command Line Usage
 ==================
@@ -629,7 +724,6 @@ Ceph supports the following usage for user name and secret:
 
 
 .. _pools: ../pools
-
 
 Limitations
 ===========

@@ -15,7 +15,9 @@ roles:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
       - overall HEALTH_
       - \(PG_
       - \(OSD_

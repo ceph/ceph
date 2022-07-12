@@ -16,7 +16,7 @@
 #include "UserspaceEvent.h"
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
@@ -33,9 +33,9 @@ int UserspaceEventManager::get_eventfd()
     fds.resize(fd + 1);
   }
 
-  Tub<UserspaceFDImpl> &impl = fds[fd];
-  assert(!impl);
-  impl.construct();
+  std::optional<UserspaceFDImpl> &impl = fds[fd];
+  ceph_assert(!impl);
+  impl.emplace();
   ldout(cct, 20) << __func__ << " fd=" << fd << dendl;
   return fd;
 }
@@ -46,7 +46,7 @@ int UserspaceEventManager::notify(int fd, int mask)
   if ((size_t)fd >= fds.size())
     return -ENOENT;
 
-  Tub<UserspaceFDImpl> &impl = fds[fd];
+  std::optional<UserspaceFDImpl> &impl = fds[fd];
   if (!impl)
     return -ENOENT;
 
@@ -77,7 +77,7 @@ void UserspaceEventManager::close(int fd)
   if ((size_t)fd >= fds.size())
     return ;
 
-  Tub<UserspaceFDImpl> &impl = fds[fd];
+  std::optional<UserspaceFDImpl> &impl = fds[fd];
   if (!impl)
     return ;
 
@@ -88,12 +88,12 @@ void UserspaceEventManager::close(int fd)
 
   if (impl->activating_mask) {
     if (waiting_fds[max_wait_idx] == fd) {
-      assert(impl->waiting_idx == max_wait_idx);
+      ceph_assert(impl->waiting_idx == max_wait_idx);
       --max_wait_idx;
     }
     waiting_fds[impl->waiting_idx] = -1;
   }
-  impl.destroy();
+  impl.reset();
 }
 
 int UserspaceEventManager::poll(int *events, int *masks, int num_events, struct timeval *tp)
@@ -101,7 +101,7 @@ int UserspaceEventManager::poll(int *events, int *masks, int num_events, struct 
   int fd;
   uint32_t i = 0;
   int count = 0;
-  assert(num_events);
+  ceph_assert(num_events);
   // leave zero slot for waiting_fds
   while (i < max_wait_idx) {
     fd = waiting_fds[++i];
@@ -109,10 +109,10 @@ int UserspaceEventManager::poll(int *events, int *masks, int num_events, struct 
       continue;
 
     events[count] = fd;
-    Tub<UserspaceFDImpl> &impl = fds[fd];
-    assert(impl);
+    std::optional<UserspaceFDImpl> &impl = fds[fd];
+    ceph_assert(impl);
     masks[count] = impl->listening_mask & impl->activating_mask;
-    assert(masks[count]);
+    ceph_assert(masks[count]);
     ldout(cct, 20) << __func__ << " fd=" << fd << " mask=" << masks[count] << dendl;
     impl->activating_mask &= (~masks[count]);
     impl->waiting_idx = 0;

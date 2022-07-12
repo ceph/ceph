@@ -30,6 +30,8 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 void* thread1(void* pParam);
 
 class TestParam {
@@ -94,7 +96,7 @@ void* thread1(void* pParam)
 
   instance.disable_dlclose = true;
   {
-    Mutex::Locker l(instance.lock);
+    std::lock_guard l{instance.lock};
     __erasure_code_init((char*) "shec", (char*) "");
   }
   std::cout << "__erasure_code_init finish " << std::endl;

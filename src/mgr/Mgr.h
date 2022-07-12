@@ -15,20 +15,13 @@
 #define CEPH_MGR_H_
 
 // Python.h comes first because otherwise it clobbers ceph's assert
-#include "Python.h"
-// Python's pyconfig-64.h conflicts with ceph's acconfig.h
-#undef HAVE_SYS_WAIT_H
-#undef HAVE_UNISTD_H
-#undef HAVE_UTIME_H
-#undef _POSIX_C_SOURCE
-#undef _XOPEN_SOURCE
+#include <Python.h>
 
 #include "mds/FSMap.h"
 #include "messages/MFSMap.h"
 #include "msg/Messenger.h"
 #include "auth/Auth.h"
 #include "common/Finisher.h"
-#include "common/Timer.h"
 #include "mon/MgrMap.h"
 
 #include "DaemonServer.h"
@@ -44,21 +37,20 @@ class MServiceMap;
 class Objecter;
 class Client;
 
-class Mgr {
+class Mgr : public AdminSocketHook {
 protected:
   MonClient *monc;
   Objecter  *objecter;
   Client    *client;
   Messenger *client_messenger;
 
-  mutable Mutex lock;
-  SafeTimer timer;
+  mutable ceph::mutex lock = ceph::make_mutex("Mgr::lock");
   Finisher finisher;
 
   // Track receipt of initial data during startup
-  Cond fs_map_cond;
+  ceph::condition_variable fs_map_cond;
   bool digest_received;
-  Cond digest_cond;
+  ceph::condition_variable digest_cond;
 
   PyModuleRegistry *py_module_registry;
   DaemonStateIndex daemon_state;
@@ -69,8 +61,10 @@ protected:
   LogChannelRef clog;
   LogChannelRef audit_clog;
 
-  PyModuleConfig load_config();
+  std::map<std::string, std::string> pre_init_store;
+
   void load_all_metadata();
+  std::map<std::string, std::string> load_store();
   void init();
 
   bool initialized;
@@ -84,25 +78,34 @@ public:
   ~Mgr();
 
   bool is_initialized() const {return initialized;}
-  entity_addr_t get_server_addr() const { return server.get_myaddr(); }
+  entity_addrvec_t get_server_addrs() const {
+    return server.get_myaddrs();
+  }
 
-  void handle_mgr_digest(MMgrDigest* m);
-  void handle_fs_map(MFSMap* m);
+  void handle_mgr_digest(ceph::ref_t<MMgrDigest> m);
+  void handle_fs_map(ceph::ref_t<MFSMap> m);
   void handle_osd_map();
-  void handle_log(MLog *m);
-  void handle_service_map(MServiceMap *m);
+  void handle_log(ceph::ref_t<MLog> m);
+  void handle_service_map(ceph::ref_t<MServiceMap> m);
+  void handle_mon_map();
 
   bool got_mgr_map(const MgrMap& m);
 
-  bool ms_dispatch(Message *m);
-
-  void tick();
+  bool ms_dispatch2(const ceph::ref_t<Message>& m);
 
   void background_init(Context *completion);
   void shutdown();
 
-  std::vector<MonCommand> get_command_set() const;
+  void handle_signal(int signum);
+
   std::map<std::string, std::string> get_services() const;
+
+  int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out) override;
 };
 
 /**
@@ -123,7 +126,10 @@ public:
   std::string outs;
 
   MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
-    : daemon_state(daemon_state_), key(key_) {}
+    : daemon_state(daemon_state_), key(key_)
+  {
+      daemon_state.notify_updating(key);
+  }
 
   void set_default(const std::string &k, const std::string &v)
   {

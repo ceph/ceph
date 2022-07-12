@@ -22,13 +22,16 @@
 #include <vector>
 #include <list>
 #include <mutex>
-#include <atomic>
 #include <typeinfo>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 
-#include <common/Formatter.h>
-#include "include/assert.h"
+#include "common/Formatter.h"
+#include "common/ceph_atomic.h"
+#include "include/ceph_assert.h"
+#include "include/compact_map.h"
+#include "include/compact_set.h"
+#include "include/compat.h"
 
 
 /*
@@ -148,12 +151,20 @@ namespace mempool {
   f(bluestore_alloc)		      \
   f(bluestore_cache_data)	      \
   f(bluestore_cache_onode)	      \
+  f(bluestore_cache_meta)	      \
   f(bluestore_cache_other)	      \
+  f(bluestore_Buffer)		      \
+  f(bluestore_Extent)		      \
+  f(bluestore_Blob)		      \
+  f(bluestore_SharedBlob)	      \
+  f(bluestore_inline_bl)	      \
   f(bluestore_fsck)		      \
   f(bluestore_txc)		      \
-  f(bluestore_writing_deferred)	      \
+  f(bluestore_writing_deferred)      \
   f(bluestore_writing)		      \
   f(bluefs)			      \
+  f(bluefs_file_reader)              \
+  f(bluefs_file_writer)              \
   f(buffer_anon)		      \
   f(buffer_meta)		      \
   f(osd)			      \
@@ -190,11 +201,20 @@ enum {
   num_shards = 1 << num_shard_bits
 };
 
-// align shard to a cacheline
+//
+// Align shard to a cacheline.
+//
+// It would be possible to retrieve the value at runtime (for instance
+// with getconf LEVEL1_DCACHE_LINESIZE or grep -m1 cache_alignment
+// /proc/cpuinfo). It is easier to hard code the largest cache
+// linesize for all known processors (128 bytes). If the actual cache
+// linesize is smaller on a given processor, it will just waste a few
+// bytes.
+//
 struct shard_t {
-  std::atomic<size_t> bytes = {0};
-  std::atomic<size_t> items = {0};
-  char __padding[128 - sizeof(std::atomic<size_t>)*2];
+  ceph::atomic<size_t> bytes = {0};
+  ceph::atomic<size_t> items = {0};
+  char __padding[128 - sizeof(ceph::atomic<size_t>)*2];
 } __attribute__ ((aligned (128)));
 
 static_assert(sizeof(shard_t) == 128, "shard_t should be cacheline-sized");
@@ -220,7 +240,7 @@ const char *get_pool_name(pool_index_t ix);
 struct type_t {
   const char *type_name;
   size_t item_size;
-  std::atomic<ssize_t> items = {0};  // signed
+  ceph::atomic<ssize_t> items = {0};  // signed
 };
 
 struct type_info_hash {
@@ -244,11 +264,16 @@ public:
 
   void adjust_count(ssize_t items, ssize_t bytes);
 
-  shard_t* pick_a_shard() {
+  static size_t pick_a_shard_int() {
     // Dirt cheap, see:
-    //   http://fossies.org/dox/glibc-2.24/pthread__self_8c_source.html
+    //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
     size_t me = (size_t)pthread_self();
-    size_t i = (me >> 3) & ((1 << num_shard_bits) - 1);
+    size_t i = (me >> CEPH_PAGE_SHIFT) & ((1 << num_shard_bits) - 1);
+    return i;
+  }
+
+  shard_t* pick_a_shard() {
+    size_t i = pick_a_shard_int();
     return &shard[i];
   }
 
@@ -359,7 +384,7 @@ public:
     if (type) {
       type->items -= n;
     }
-    ::free(p);
+    aligned_free(p);
   }
 
   void destroy(T* p) {
@@ -398,6 +423,17 @@ public:
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using map = std::map<k, v, cmp,					\
 			 pool_allocator<std::pair<const k,v>>>;		\
+                                                                        \
+    template<typename k,typename v, typename cmp = std::less<k> >       \
+    using compact_map = compact_map<k, v, cmp,                          \
+			 pool_allocator<std::pair<const k,v>>>;         \
+                                                                        \
+    template<typename k,typename v, typename cmp = std::less<k> >       \
+    using compact_multimap = compact_multimap<k, v, cmp,                \
+			 pool_allocator<std::pair<const k,v>>>;         \
+                                                                        \
+    template<typename k, typename cmp = std::less<k> >                  \
+    using compact_set = compact_set<k, cmp, pool_allocator<k>>;         \
                                                                         \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using multimap = std::multimap<k,v,cmp,				\
@@ -501,10 +537,10 @@ bool operator!=(const std::vector<T, mempool::pool_allocator<pool_index, T>>& lh
 #define MEMPOOL_CLASS_HELPERS()						\
   void *operator new(size_t size);					\
   void *operator new[](size_t size) noexcept {				\
-    assert(0 == "no array new");					\
+    ceph_abort_msg("no array new");					\
     return nullptr; }							\
   void  operator delete(void *);					\
-  void  operator delete[](void *) { assert(0 == "no array delete"); }
+  void  operator delete[](void *) { ceph_abort_msg("no array delete"); }
 
 
 // Use this in some particular .cc file to match each class with a

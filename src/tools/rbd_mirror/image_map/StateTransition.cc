@@ -2,80 +2,91 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <ostream>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "StateTransition.h"
 
 namespace rbd {
 namespace mirror {
 namespace image_map {
 
-std::ostream &operator<<(std::ostream &os, const StateTransition::ActionType &action_type) {
-  switch (action_type) {
-  case StateTransition::ACTION_TYPE_ADD:
-    os << "ADD_IMAGE";
-    break;
-  case StateTransition::ACTION_TYPE_REMOVE:
-    os << "REMOVE_IMAGE";
-    break;
-  case StateTransition::ACTION_TYPE_SHUFFLE:
-    os << "SHUFFLE_IMAGE";
-    break;
-  default:
-    os << "UNKNOWN (" << static_cast<uint32_t>(action_type) << ")";
-  }
-
-  return os;
-}
-
-std::ostream &operator<<(std::ostream &os, const StateTransition::State &state) {
+std::ostream &operator<<(std::ostream &os,
+                         const StateTransition::State &state) {
   switch(state) {
-  case StateTransition::STATE_UNASSIGNED:
-    os << "UNASSIGNED";
+  case StateTransition::STATE_INITIALIZING:
+    os << "INITIALIZING";
+    break;
+  case StateTransition::STATE_ASSOCIATING:
+    os << "ASSOCIATING";
     break;
   case StateTransition::STATE_ASSOCIATED:
     os << "ASSOCIATED";
     break;
-  case StateTransition::STATE_DISASSOCIATED:
-    os << "DISASSOCIATED";
+  case StateTransition::STATE_SHUFFLING:
+    os << "SHUFFLING";
     break;
-  case StateTransition::STATE_UPDATE_MAPPING:
-    os << "UPDATE_MAPPING";
+  case StateTransition::STATE_DISSOCIATING:
+    os << "DISSOCIATING";
     break;
-  case StateTransition::STATE_REMOVE_MAPPING:
-    os << "REMOVE_MAPPING";
-    break;
-  case StateTransition::STATE_COMPLETE:
-    os << "COMPLETE";
+  case StateTransition::STATE_UNASSOCIATED:
+    os << "UNASSOCIATED";
     break;
   }
-
   return os;
 }
 
-const StateTransition::TransitionTable StateTransition::transition_table[] = {
-  // action_type         current_state                   Transition
-  // -------------------------------------------------------------------------------
-  ACTION_TYPE_ADD,     STATE_UNASSIGNED,      Transition(STATE_UPDATE_MAPPING, true),
-  ACTION_TYPE_ADD,     STATE_ASSOCIATED,      Transition(STATE_ASSOCIATED,     false),
-  ACTION_TYPE_ADD,     STATE_DISASSOCIATED,   Transition(STATE_UPDATE_MAPPING, true),
-  ACTION_TYPE_ADD,     STATE_UPDATE_MAPPING,  Transition(STATE_ASSOCIATED,     false),
+std::ostream &operator<<(std::ostream &os,
+                         const StateTransition::PolicyAction &policy_action) {
+  switch(policy_action) {
+  case StateTransition::POLICY_ACTION_MAP:
+    os << "MAP";
+    break;
+  case StateTransition::POLICY_ACTION_UNMAP:
+    os << "UNMAP";
+    break;
+  case StateTransition::POLICY_ACTION_REMOVE:
+    os << "REMOVE";
+    break;
+  }
+  return os;
+}
 
-  ACTION_TYPE_REMOVE,  STATE_ASSOCIATED,      Transition(STATE_DISASSOCIATED,  false),
-  ACTION_TYPE_REMOVE,  STATE_DISASSOCIATED,   Transition(STATE_REMOVE_MAPPING, true),
+const StateTransition::TransitionTable StateTransition::s_transition_table {
+  // state             current_action           Transition
+  // ---------------------------------------------------------------------------
+  {{STATE_INITIALIZING, ACTION_TYPE_NONE},       {ACTION_TYPE_ACQUIRE, {}, {},
+                                                  {}}},
+  {{STATE_INITIALIZING, ACTION_TYPE_ACQUIRE},    {ACTION_TYPE_NONE, {}, {},
+                                                  {STATE_ASSOCIATED}}},
 
-  ACTION_TYPE_SHUFFLE, STATE_ASSOCIATED,      Transition(STATE_DISASSOCIATED,  false),
-  ACTION_TYPE_SHUFFLE, STATE_DISASSOCIATED,   Transition(STATE_UPDATE_MAPPING, true),
-  ACTION_TYPE_SHUFFLE, STATE_UPDATE_MAPPING,  Transition(STATE_ASSOCIATED,     false),
+  {{STATE_ASSOCIATING,  ACTION_TYPE_NONE},       {ACTION_TYPE_MAP_UPDATE,
+                                                  {POLICY_ACTION_MAP}, {}, {}}},
+  {{STATE_ASSOCIATING,  ACTION_TYPE_MAP_UPDATE}, {ACTION_TYPE_ACQUIRE, {}, {},
+                                                  {}}},
+  {{STATE_ASSOCIATING,  ACTION_TYPE_ACQUIRE},    {ACTION_TYPE_NONE, {}, {},
+                                                  {STATE_ASSOCIATED}}},
+
+  {{STATE_DISSOCIATING, ACTION_TYPE_NONE},       {ACTION_TYPE_RELEASE, {},
+                                                 {POLICY_ACTION_UNMAP}, {}}},
+  {{STATE_DISSOCIATING, ACTION_TYPE_RELEASE},    {ACTION_TYPE_MAP_REMOVE, {},
+                                                  {POLICY_ACTION_REMOVE}, {}}},
+  {{STATE_DISSOCIATING, ACTION_TYPE_MAP_REMOVE}, {ACTION_TYPE_NONE, {},
+                                                  {}, {STATE_UNASSOCIATED}}},
+
+  {{STATE_SHUFFLING,    ACTION_TYPE_NONE},       {ACTION_TYPE_RELEASE, {},
+                                                  {POLICY_ACTION_UNMAP}, {}}},
+  {{STATE_SHUFFLING,    ACTION_TYPE_RELEASE},    {ACTION_TYPE_MAP_UPDATE,
+                                                  {POLICY_ACTION_MAP}, {}, {}}},
+  {{STATE_SHUFFLING,    ACTION_TYPE_MAP_UPDATE}, {ACTION_TYPE_ACQUIRE, {}, {},
+                                                  {}}},
+  {{STATE_SHUFFLING,    ACTION_TYPE_ACQUIRE},    {ACTION_TYPE_NONE, {}, {},
+                                                  {STATE_ASSOCIATED}}}
 };
 
-const StateTransition::Transition &StateTransition::transit(ActionType action_type, State state) {
-  for (auto const &entry : transition_table) {
-    if (entry.action_type == action_type && entry.current_state == state) {
-      return entry.transition;
-    }
-  }
+void StateTransition::transit(State state, Transition* transition) {
+  auto it = s_transition_table.find({state, transition->action_type});
+  ceph_assert(it != s_transition_table.end());
 
-  assert(false);
+  *transition = it->second;
 }
 
 } // namespace image_map

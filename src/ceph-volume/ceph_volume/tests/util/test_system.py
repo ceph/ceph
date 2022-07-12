@@ -4,7 +4,30 @@ import getpass
 import pytest
 from textwrap import dedent
 from ceph_volume.util import system
+from mock.mock import patch
+from ceph_volume.tests.conftest import Factory
 
+
+@pytest.fixture
+def mock_find_executable_on_host(monkeypatch):
+    """
+    Monkeypatches util.system.find_executable_on_host, so that a caller can add behavior to the response
+    """
+    def apply(stdout=None, stderr=None, returncode=0):
+        stdout_stream = Factory(read=lambda: stdout)
+        stderr_stream = Factory(read=lambda: stderr)
+        return_value = Factory(
+            stdout=stdout_stream,
+            stderr=stderr_stream,
+            wait=lambda: returncode,
+            communicate=lambda x: (stdout, stderr, returncode)
+        )
+
+        monkeypatch.setattr(
+            'ceph_volume.util.system.subprocess.Popen',
+            lambda *a, **kw: return_value)
+
+    return apply
 
 class TestMkdirP(object):
 
@@ -101,6 +124,18 @@ class TestDeviceIsMounted(object):
     def test_is_mounted_at_destination(self, fake_proc):
         assert system.device_is_mounted('/dev/sda1', destination='/far/lib/ceph/osd/ceph-7') is False
 
+    def test_is_realpath_dev_mounted_at_destination(self, fake_proc, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'realpath', lambda x: '/dev/sda1' if 'foo' in x else x)
+        result = system.device_is_mounted('/dev/maper/foo', destination='/far/lib/ceph/osd/ceph-0')
+        assert result is True
+
+    def test_is_realpath_path_mounted_at_destination(self, fake_proc, monkeypatch):
+        monkeypatch.setattr(
+            system.os.path, 'realpath',
+            lambda x: '/far/lib/ceph/osd/ceph-0' if 'symlink' in x else x)
+        result = system.device_is_mounted('/dev/sda1', destination='/symlink/lib/ceph/osd/ceph-0')
+        assert result is True
+
 
 class TestGetMounts(object):
 
@@ -154,3 +189,121 @@ class TestIsBinary(object):
     def test_is_not_binary(self, tmpfile):
         binary_path = tmpfile(contents='asd\n\nlkjh0')
         assert system.is_binary(binary_path) is False
+
+
+class TestGetFileContents(object):
+
+    def test_path_does_not_exist(self, tmpdir):
+        filepath = os.path.join(str(tmpdir), 'doesnotexist')
+        assert system.get_file_contents(filepath, 'default') == 'default'
+
+    def test_path_has_contents(self, tmpfile):
+        interesting_file = tmpfile(contents="1")
+        result = system.get_file_contents(interesting_file)
+        assert result == "1"
+
+    def test_path_has_multiline_contents(self, tmpfile):
+        interesting_file = tmpfile(contents="0\n1")
+        result = system.get_file_contents(interesting_file)
+        assert result == "0\n1"
+
+    def test_exception_returns_default(self, tmpfile):
+        interesting_file = tmpfile(contents="0")
+        # remove read, causes IOError
+        os.chmod(interesting_file, 0o000)
+        result = system.get_file_contents(interesting_file)
+        assert result == ''
+
+
+class TestWhich(object):
+
+    def test_executable_exists_but_is_not_file(self, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: False)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: True)
+        assert system.which('exedir') == 'exedir'
+
+    def test_executable_does_not_exist(self, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: False)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: False)
+        assert system.which('exedir') == 'exedir'
+
+    def test_executable_exists_as_file(self, monkeypatch):
+        monkeypatch.setattr(system.os, 'getenv', lambda x, y: '')
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: x != 'ceph')
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: x != 'ceph')
+        assert system.which('ceph') == '/usr/local/bin/ceph'
+
+    def test_warnings_when_executable_isnt_matched(self, monkeypatch, capsys):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: True)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: False)
+        system.which('exedir')
+        cap = capsys.readouterr()
+        assert 'Executable exedir not in PATH' in cap.err
+
+    def test_run_on_host_found(self, mock_find_executable_on_host):
+        mock_find_executable_on_host(stdout="/sbin/lvs\n", stderr="some stderr message\n")
+        assert system.which('lvs', run_on_host=True) == '/sbin/lvs'
+
+    def test_run_on_host_not_found(self, mock_find_executable_on_host):
+        mock_find_executable_on_host(stdout="", stderr="some stderr message\n")
+        assert system.which('lvs', run_on_host=True) == 'lvs'
+
+@pytest.fixture
+def stub_which(monkeypatch):
+    def apply(value='/bin/restorecon'):
+        monkeypatch.setattr(system, 'which', lambda x: value)
+    return apply
+
+
+# python2 has no FileNotFoundError
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = OSError
+
+
+class TestSetContext(object):
+
+    def setup(self):
+        try:
+            os.environ.pop('CEPH_VOLUME_SKIP_RESTORECON')
+        except KeyError:
+            pass
+
+    @pytest.mark.parametrize('value', ['1', 'True', 'true', 'TRUE', 'yes'])
+    def test_set_context_skips(self, stub_call, fake_run, value):
+        stub_call(('', '', 0))
+        os.environ['CEPH_VOLUME_SKIP_RESTORECON'] = value
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []
+
+    @pytest.mark.parametrize('value', ['0', 'False', 'false', 'FALSE', 'no'])
+    def test_set_context_doesnt_skip_with_env(self, stub_call, stub_which, fake_run, value):
+        stub_call(('', '', 0))
+        stub_which()
+        os.environ['CEPH_VOLUME_SKIP_RESTORECON'] = value
+        system.set_context('/tmp/foo')
+        assert len(fake_run.calls)
+
+    def test_set_context_skips_on_executable(self, stub_call, stub_which, fake_run):
+        stub_call(('', '', 0))
+        stub_which('restorecon')
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []
+
+    def test_set_context_no_skip_on_executable(self, stub_call, stub_which, fake_run):
+        stub_call(('', '', 0))
+        stub_which('/bin/restorecon')
+        system.set_context('/tmp/foo')
+        assert len(fake_run.calls)
+
+    @patch('ceph_volume.process.call')
+    def test_selinuxenabled_doesnt_exist(self, mocked_call, fake_run):
+        mocked_call.side_effect = FileNotFoundError()
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []
+
+    def test_selinuxenabled_is_not_enabled(self, stub_call, fake_run):
+        stub_call(('', '', 1))
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []

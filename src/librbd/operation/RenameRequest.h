@@ -27,6 +27,9 @@ public:
    * <start>
    *    |
    *    v
+   * STATE_READ_DIRECTORY
+   *    |
+   *    v
    * STATE_READ_SOURCE_HEADER
    *    |
    *    v
@@ -45,6 +48,7 @@ public:
    *
    */
   enum State {
+    STATE_READ_DIRECTORY,
     STATE_READ_SOURCE_HEADER,
     STATE_WRITE_DEST_HEADER,
     STATE_UPDATE_DIRECTORY,
@@ -57,6 +61,7 @@ public:
 protected:
   void send_op() override;
   bool should_complete(int r) override;
+  int filter_return_code(int r) const override;
 
   journal::Event create_event(uint64_t op_tid) const override {
     return journal::RenameEvent(op_tid, m_dest_name);
@@ -68,12 +73,12 @@ private:
   std::string m_source_oid;
   std::string m_dest_oid;
 
-  State m_state = STATE_READ_SOURCE_HEADER;
+  State m_state = STATE_READ_DIRECTORY;
 
+  bufferlist m_source_name_bl;
   bufferlist m_header_bl;
 
-  int filter_state_return_code(int r);
-
+  void send_read_directory();
   void send_read_source_header();
   void send_write_destination_header();
   void send_update_directory();

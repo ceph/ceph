@@ -78,6 +78,10 @@ class Cycles {
     uint32_t lo = 0, hi = 0;
     asm volatile("mftbu %0; mftb %1" : "=r" (hi), "=r" (lo));
     return (((uint64_t)hi << 32) | lo);
+#elif defined(__s390__)
+    uint64_t tsc;
+    asm volatile("stck %0" : "=Q" (tsc) : : "cc");
+    return tsc;
 #else
 #warning No high-precision counter available for your OS/arch
     return 0;

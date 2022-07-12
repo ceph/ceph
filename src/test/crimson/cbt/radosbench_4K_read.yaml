@@ -1,0 +1,36 @@
+meta:
+- desc: |
+   Run radosbench benchmark using cbt.
+   4K read workload.
+
+tasks:
+- cbt:
+    benchmarks:
+      radosbench:
+        concurrent_ops: 16
+        concurrent_procs: 2
+        op_size: [4096]
+        pool_profile: 'replicated'
+        read_time: 30
+        read_only: true
+        readmode: 'rand'
+        prefill_time: 3
+        acceptable:
+          bandwidth: '(or (greater) (near 0.05))'
+          iops_avg: '(or (greater) (near 0.05))'
+          iops_stddev: '(or (less) (near 2.00))'
+          latency_avg: '(or (less) (near 0.05))'
+          cpu_cycles_per_op: '(or (less) (near 0.05))'
+    monitoring_profiles:
+      perf:
+        nodes:
+          - osds
+        args: 'stat -p {pid} -o {perf_dir}/perf_stat.{pid}'
+    cluster:
+      osds_per_node: 3
+      iterations: 1
+      pool_profiles:
+        replicated:
+          pg_size: 128
+          pgp_size: 128
+          replication: 'replicated'

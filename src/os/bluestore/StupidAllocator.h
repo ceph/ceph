@@ -11,21 +11,22 @@
 #include "include/interval_set.h"
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
+#include "common/ceph_mutex.h"
 
 class StupidAllocator : public Allocator {
   CephContext* cct;
-  std::mutex lock;
+  ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 
   int64_t num_free;     ///< total bytes in freelist
-  int64_t num_reserved; ///< reserved bytes
 
-  typedef mempool::bluestore_alloc::pool_allocator<
-    pair<const uint64_t,uint64_t>> allocator_t;
-  typedef btree::btree_map<uint64_t,uint64_t,std::less<uint64_t>,allocator_t> interval_set_map_t;
-  typedef interval_set<uint64_t,interval_set_map_t> interval_set_t;
+  template <typename K, typename V> using allocator_t =
+    mempool::bluestore_alloc::pool_allocator<std::pair<const K, V>>;
+  template <typename K, typename V> using btree_map_t =
+    btree::btree_map<K, V, std::less<K>, allocator_t<K, V>>;
+  using interval_set_t = interval_set<uint64_t, btree_map_t>;
   std::vector<interval_set_t> free;  ///< leading-edge copy
 
-  uint64_t last_alloc;
+  uint64_t last_alloc = 0;
 
   unsigned _choose_bin(uint64_t len);
   void _insert_free(uint64_t offset, uint64_t len);
@@ -35,15 +36,19 @@ class StupidAllocator : public Allocator {
     uint64_t alloc_unit);
 
 public:
-  StupidAllocator(CephContext* cct);
+  StupidAllocator(CephContext* cct,
+                  int64_t size,
+                  int64_t block_size,
+		  std::string_view name);
   ~StupidAllocator() override;
-
-  int reserve(uint64_t need) override;
-  void unreserve(uint64_t unused) override;
+  const char* get_type() const override
+  {
+    return "stupid";
+  }
 
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents) override;
+    int64_t hint, PExtentVector *extents) override;
 
   int64_t allocate_int(
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,
@@ -53,8 +58,10 @@ public:
     const interval_set<uint64_t>& release_set) override;
 
   uint64_t get_free() override;
+  double get_fragmentation() override;
 
   void dump() override;
+  void foreach(std::function<void(uint64_t offset, uint64_t length)> notify) override;
 
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;

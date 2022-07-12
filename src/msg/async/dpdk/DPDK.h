@@ -19,44 +19,31 @@
 /*
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
 #ifndef CEPH_DPDK_DEV_H
 #define CEPH_DPDK_DEV_H
 
-#include <memory>
 #include <functional>
+#include <memory>
+#include <optional>
 #include <rte_config.h>
 #include <rte_common.h>
 #include <rte_ethdev.h>
+#include <rte_ether.h>
 #include <rte_malloc.h>
 #include <rte_version.h>
 
 #include "include/page.h"
-#include "common/Tub.h"
 #include "common/perf_counters.h"
+#include "common/admin_socket.h"
 #include "msg/async/Event.h"
 #include "const.h"
 #include "circular_buffer.h"
 #include "ethernet.h"
-#include "memory.h"
 #include "Packet.h"
 #include "stream.h"
 #include "net.h"
 #include "toeplitz.h"
-
 
 struct free_deleter {
   void operator()(void* p) { ::free(p); }
@@ -99,8 +86,13 @@ enum {
 class DPDKDevice;
 class DPDKWorker;
 
+
+#ifndef MARKER
+typedef void    *MARKER[0];   /**< generic marker for a point in a structure */
+#endif
+
 class DPDKQueuePair {
-  using packet_provider_type = std::function<Tub<Packet> ()>;
+  using packet_provider_type = std::function<std::optional<Packet> ()>;
  public:
   void configure_proxies(const std::map<unsigned, float>& cpu_weights);
   // build REdirection TAble for cpu_weights map: target cpu -> weight
@@ -201,8 +193,8 @@ class DPDKQueuePair {
 
       rte_mbuf* m;
 
-      // TODO: assert() in a fast path! Remove me ASAP!
-      assert(frag.size);
+      // TODO: ceph_assert() in a fast path! Remove me ASAP!
+      ceph_assert(frag.size);
 
       // Create a HEAD of mbufs' cluster and set the first bytes into it
       len = do_one_buf(qp, head, base, left_to_set);
@@ -294,7 +286,7 @@ class DPDKQueuePair {
         DPDKQueuePair& qp, rte_mbuf*& m, char* va, size_t buf_len) {
       static constexpr size_t max_frag_len = 15 * 1024; // 15K
 
-      // FIXME: current all tx buf is alloced without rte_malloc
+      // FIXME: current all tx buf is allocated without rte_malloc
       return copy_one_data_buf(qp, m, va, buf_len);
       //
       // Currently we break a buffer on a 15K boundary because 82599
@@ -305,7 +297,7 @@ class DPDKQueuePair {
       if (!pa)
         return copy_one_data_buf(qp, m, va, buf_len);
 
-      assert(buf_len);
+      ceph_assert(buf_len);
       tx_buf* buf = qp.get_tx_buf();
       if (!buf) {
         return 0;
@@ -361,7 +353,7 @@ class DPDKQueuePair {
    public:
     tx_buf(tx_buf_factory& fc) : _fc(fc) {
 
-      _buf_physaddr = _mbuf.buf_physaddr;
+      _buf_physaddr = _mbuf.buf_iova;
       _data_off     = _mbuf.data_off;
     }
 
@@ -374,7 +366,7 @@ class DPDKQueuePair {
 
       // Set the mbuf to point to our data
       _mbuf.buf_addr           = va;
-      _mbuf.buf_physaddr       = pa;
+      _mbuf.buf_iova           = pa;
       _mbuf.data_off           = 0;
       _is_zc                   = true;
     }
@@ -392,14 +384,14 @@ class DPDKQueuePair {
         // to call the "packet"'s destructor and reset the
         // "optional" state to "nonengaged".
         //
-        _p.destroy();
+        _p.reset();
 
       } else if (!_is_zc) {
         return;
       }
 
       // Restore the rte_mbuf fields we trashed in set_zc_info()
-      _mbuf.buf_physaddr = _buf_physaddr;
+      _mbuf.buf_iova     = _buf_physaddr;
       _mbuf.buf_addr     = rte_mbuf_to_baddr(&_mbuf);
       _mbuf.data_off     = _data_off;
 
@@ -424,7 +416,7 @@ class DPDKQueuePair {
    private:
     struct rte_mbuf _mbuf;
     MARKER private_start;
-    Tub<Packet> _p;
+    std::optional<Packet> _p;
     phys_addr_t _buf_physaddr;
     uint16_t _data_off;
     // TRUE if underlying mbuf has been used in the zero-copy flow
@@ -487,6 +479,10 @@ class DPDKQueuePair {
       _ring.push_back(buf);
     }
 
+    unsigned ring_size() const {
+      return _ring.size();
+    }
+
     bool gc() {
       for (int cnt = 0; cnt < gc_count; ++cnt) {
         auto tx_buf_p = get_one_completed();
@@ -544,7 +540,7 @@ class DPDKQueuePair {
   }
 
   void rx_start() {
-    _rx_poller.construct(this);
+    _rx_poller.emplace(this);
   }
 
   uint32_t send(circular_buffer<Packet>& pb) {
@@ -564,8 +560,8 @@ class DPDKQueuePair {
   uint32_t _send(circular_buffer<Packet>& pb, Func &&packet_to_tx_buf_p) {
     if (_tx_burst.size() == 0) {
       for (auto&& p : pb) {
-        // TODO: assert() in a fast path! Remove me ASAP!
-        assert(p.len());
+        // TODO: ceph_assert() in a fast path! Remove me ASAP!
+        ceph_assert(p.len());
 
         tx_buf* buf = packet_to_tx_buf_p(std::move(p));
         if (!buf) {
@@ -626,18 +622,7 @@ class DPDKQueuePair {
     // actual data buffer.
     //
     m->buf_addr      = (char*)data - RTE_PKTMBUF_HEADROOM;
-    m->buf_physaddr  = rte_malloc_virt2iova(data) - RTE_PKTMBUF_HEADROOM;
-    return true;
-  }
-
-  static bool init_noninline_rx_mbuf(rte_mbuf* m, size_t size,
-                                     std::vector<void*> &datas) {
-    if (!refill_rx_mbuf(m, size, datas)) {
-      return false;
-    }
-    // The below fields stay constant during the execution.
-    m->buf_len       = size + RTE_PKTMBUF_HEADROOM;
-    m->data_off      = RTE_PKTMBUF_HEADROOM;
+    m->buf_iova      = rte_mem_virt2iova(data) - RTE_PKTMBUF_HEADROOM;
     return true;
   }
 
@@ -667,7 +652,7 @@ class DPDKQueuePair {
    * @return a "optional" object representing the newly received data if in an
    *         "engaged" state or an error if in a "disengaged" state.
    */
-  Tub<Packet> from_mbuf(rte_mbuf* m);
+  std::optional<Packet> from_mbuf(rte_mbuf* m);
 
   /**
    * Transform an LRO rte_mbuf cluster into the "packet" object.
@@ -676,12 +661,12 @@ class DPDKQueuePair {
    * @return a "optional" object representing the newly received LRO packet if
    *         in an "engaged" state or an error if in a "disengaged" state.
    */
-  Tub<Packet> from_mbuf_lro(rte_mbuf* m);
+  std::optional<Packet> from_mbuf_lro(rte_mbuf* m);
 
  private:
   CephContext *cct;
   std::vector<packet_provider_type> _pkt_providers;
-  Tub<std::array<uint8_t, 128>> _sw_reta;
+  std::optional<std::array<uint8_t, 128>> _sw_reta;
   circular_buffer<Packet> _proxy_packetq;
   stream<Packet> _rx_stream;
   circular_buffer<Packet> _tx_packetq;
@@ -742,7 +727,7 @@ class DPDKQueuePair {
       return qp->poll_rx_once();
     }
   };
-  Tub<DPDKRXPoller> _rx_poller;
+  std::optional<DPDKRXPoller> _rx_poller;
   class DPDKTXGCPoller : public EventCenter::Poller {
     DPDKQueuePair *qp;
 
@@ -773,10 +758,12 @@ class DPDKDevice {
   unsigned _home_cpu;
   bool _use_lro;
   bool _enable_fc;
-  std::vector<uint8_t> _redir_table;
+  std::vector<uint16_t> _redir_table;
   rss_key_type _rss_key;
+  struct rte_flow *_flow = nullptr;
   bool _is_i40e_device = false;
   bool _is_vmxnet3_device = false;
+  std::unique_ptr<AdminSocketHook> dfx_hook;
 
  public:
   rte_eth_dev_info _dev_info = {};
@@ -788,6 +775,8 @@ class DPDKDevice {
    */
   int init_port_fini();
 
+  void nic_stats_dump(Formatter *f);
+  void nic_xstats_dump(Formatter *f);
  private:
   /**
    * Port initialization consists of 3 main stages:
@@ -830,9 +819,9 @@ class DPDKDevice {
     /* now initialise the port we will use */
     int ret = init_port_start();
     if (ret != 0) {
-      rte_exit(EXIT_FAILURE, "Cannot initialise port %u\n", _port_idx);
+      ceph_assert(false && "Cannot initialise port\n");
     }
-    string name(std::string("port") + std::to_string(port_idx));
+    std::string name(std::string("port") + std::to_string(port_idx));
     PerfCountersBuilder plb(cct, name, l_dpdk_dev_first, l_dpdk_dev_last);
 
     plb.add_u64_counter(l_dpdk_dev_rx_mcast, "dpdk_device_receive_multicast_packets", "DPDK received multicast packets");
@@ -848,6 +837,10 @@ class DPDKDevice {
   }
 
   ~DPDKDevice() {
+    cct->get_admin_socket()->unregister_commands(dfx_hook.get());
+    dfx_hook.reset();
+    if (_flow)
+       rte_flow_destroy(_port_idx, _flow, nullptr);
     rte_eth_dev_stop(_port_idx);
   }
 
@@ -858,10 +851,10 @@ class DPDKDevice {
   subscription<Packet> receive(unsigned cpuid, std::function<int (Packet)> next_packet) {
     auto sub = _queues[cpuid]->_rx_stream.listen(std::move(next_packet));
     _queues[cpuid]->rx_start();
-    return std::move(sub);
+    return sub;
   }
   ethernet_address hw_address() {
-    struct ether_addr mac;
+    struct rte_ether_addr mac;
     rte_eth_macaddr_get(_port_idx, &mac);
 
     return mac.addr_bytes;
@@ -871,21 +864,22 @@ class DPDKDevice {
   }
   const rss_key_type& rss_key() const { return _rss_key; }
   uint16_t hw_queues_count() { return _num_queues; }
-  std::unique_ptr<DPDKQueuePair> init_local_queue(CephContext *c, EventCenter *center, string hugepages, uint16_t qid) {
+  std::unique_ptr<DPDKQueuePair> init_local_queue(CephContext *c,
+      EventCenter *center, std::string hugepages, uint16_t qid) {
     std::unique_ptr<DPDKQueuePair> qp;
     qp = std::unique_ptr<DPDKQueuePair>(new DPDKQueuePair(c, center, this, qid));
-    return std::move(qp);
+    return qp;
   }
   unsigned hash2qid(uint32_t hash) {
     // return hash % hw_queues_count();
     return _redir_table[hash & (_redir_table.size() - 1)];
   }
   void set_local_queue(unsigned i, std::unique_ptr<DPDKQueuePair> qp) {
-    assert(!_queues[i]);
+    ceph_assert(!_queues[i]);
     _queues[i] = std::move(qp);
   }
   void unset_local_queue(unsigned i) {
-    assert(_queues[i]);
+    ceph_assert(_queues[i]);
     _queues[i].reset();
   }
   template <typename Func>
@@ -894,7 +888,7 @@ class DPDKDevice {
     if (!qp._sw_reta)
       return src_cpuid;
 
-    assert(!qp._sw_reta);
+    ceph_assert(!qp._sw_reta);
     auto hash = hashfn() >> _rss_table_bits;
     auto& reta = *qp._sw_reta;
     return reta[hash % reta.size()];

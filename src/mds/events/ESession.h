@@ -26,43 +26,40 @@ class ESession : public LogEvent {
   bool open;    // open or close
   version_t cmapv{0};  // client map version
 
-  interval_set<inodeno_t> inos;
+  interval_set<inodeno_t> inos_to_free;
   version_t inotablev{0};
 
+  interval_set<inodeno_t> inos_to_purge;
+  
   // Client metadata stored during open
-  std::map<std::string, std::string> client_metadata;
+  client_metadata_t client_metadata;
 
  public:
   ESession() : LogEvent(EVENT_SESSION), open(false) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
-      const std::map<std::string, std::string> &cm) :
+	   const client_metadata_t& cm) :
     LogEvent(EVENT_SESSION),
-    client_inst(inst),
-    open(o),
-    cmapv(v),
-    inotablev(0),
-    client_metadata(cm) {
-  }
+    client_inst(inst), open(o), cmapv(v), inotablev(0),
+    client_metadata(cm) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
-	   const interval_set<inodeno_t>& i, version_t iv) :
-    LogEvent(EVENT_SESSION),
-    client_inst(inst),
-    open(o),
-    cmapv(v),
-    inos(i), inotablev(iv) { }
+	   const interval_set<inodeno_t>& to_free, version_t iv,
+	   const interval_set<inodeno_t>& to_purge) :
+    LogEvent(EVENT_SESSION), client_inst(inst), open(o), cmapv(v),
+    inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge) {}
 
   void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator& bl) override;
+  void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(list<ESession*>& ls);
+  static void generate_test_instances(std::list<ESession*>& ls);
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     if (open)
       out << "ESession " << client_inst << " open cmapv " << cmapv;
     else
       out << "ESession " << client_inst << " close cmapv " << cmapv;
-    if (inos.size())
-      out << " (" << inos.size() << " inos, v" << inotablev << ")";
+    if (inos_to_free.size() || inos_to_purge.size())
+      out << " (" << inos_to_free.size() << " to free, v" << inotablev
+	  << ", " << inos_to_purge.size() << " to purge)";
   }
   
   void update_segment() override;

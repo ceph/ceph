@@ -26,14 +26,14 @@ public:
   explicit ECommitted(metareqid_t r) :
     LogEvent(EVENT_COMMITTED), reqid(r) { }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "ECommitted " << reqid;
   }
 
   void encode(bufferlist &bl, uint64_t features) const override;
-  void decode(bufferlist::iterator &bl) override;
+  void decode(bufferlist::const_iterator &bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(list<ECommitted*>& ls);
+  static void generate_test_instances(std::list<ECommitted*>& ls);
 
   void update_segment() override {}
   void replay(MDSRank *mds) override;

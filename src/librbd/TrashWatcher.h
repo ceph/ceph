@@ -5,15 +5,15 @@
 #define CEPH_LIBRBD_TRASH_WATCHER_H
 
 #include "include/int_types.h"
+#include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Watcher.h"
 #include "librbd/trash_watcher/Types.h"
 
-namespace librados { class IoCtx; }
-
 namespace librbd {
 
+namespace asio { struct ContextWQ; }
 namespace watcher {
 namespace util {
 template <typename> struct HandlePayloadVisitor;
@@ -24,7 +24,7 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class TrashWatcher : public Watcher {
   friend struct watcher::util::HandlePayloadVisitor<TrashWatcher<ImageCtxT>>;
 public:
-  TrashWatcher(librados::IoCtx &io_ctx, ContextWQ *work_queue);
+  TrashWatcher(librados::IoCtx &io_ctx, asio::ContextWQ *work_queue);
 
   static void notify_image_added(librados::IoCtx &io_ctx,
                                  const std::string& image_id,

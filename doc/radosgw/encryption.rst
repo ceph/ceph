@@ -9,6 +9,13 @@ with 3 options for the management of encryption keys. Server-side encryption
 means that the data is sent over HTTP in its unencrypted form, and the Ceph
 Object Gateway stores that data in the Ceph Storage Cluster in encrypted form.
 
+.. note:: Requests for server-side encryption must be sent over a secure HTTPS
+          connection to avoid sending secrets in plaintext. If a proxy is used
+          for SSL termination, ``rgw trust forwarded https`` must be enabled
+          before forwarded requests will be trusted as secure.
+
+.. note:: Server-side encryption keys must be 256-bit long and base64 encoded.
+
 Customer-Provided Keys
 ======================
 
@@ -18,22 +25,47 @@ keys and remember which key was used to encrypt each object.
 
 This is implemented in S3 according to the `Amazon SSE-C`_ specification.
 
-As all key management is handled by the client, no special configuration is
-needed to support this encryption mode.
+As all key management is handled by the client, no special Ceph configuration
+is needed to support this encryption mode.
 
 Key Management Service
 ======================
 
-This mode allows keys to be stored in a secure key management service and
+In this mode, an administrator stores keys in a secure key management service.
+These keys are then
 retrieved on demand by the Ceph Object Gateway to serve requests to encrypt
 or decrypt data.
 
 This is implemented in S3 according to the `Amazon SSE-KMS`_ specification.
 
-In principle, any key management service could be used here, but currently
-only integration with `Barbican`_ is implemented.
+In principle, any key management service could be used here.  Currently
+integration with `Barbican`_, `Vault`_, and `KMIP`_ are implemented.
 
-See `OpenStack Barbican Integration`_.
+See `OpenStack Barbican Integration`_, `HashiCorp Vault Integration`_,
+and `KMIP Integration`_.
+
+SSE-S3
+======
+
+This makes key management invisible to the user.  They are still stored
+in vault, but they are automatically created and deleted by Ceph. and
+retrieved as required to serve requests to encrypt
+or decrypt data.
+
+This is implemented in S3 according to the `Amazon SSE-S3`_ specification.
+
+In principle, any key management service could be used here.  Currently
+only integration with `Vault`_, is implemented.
+
+See `HashiCorp Vault Integration`_.
+
+Bucket Encryption APIs
+======================
+
+Bucket Encryption APIs to support server-side encryption with Amazon
+S3-managed keys (SSE-S3) or AWS KMS customer master keys (SSE-KMS). 
+
+See `PutBucketEncryption`_, `GetBucketEncryption`_, `DeleteBucketEncryption`_
 
 Automatic Encryption (for testing only)
 =======================================
@@ -52,5 +84,13 @@ The configuration expects a base64-encoded 256 bit key. For example::
 
 .. _Amazon SSE-C: https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html
 .. _Amazon SSE-KMS: http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
+.. _Amazon SSE-S3: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html
 .. _Barbican: https://wiki.openstack.org/wiki/Barbican
+.. _Vault: https://www.vaultproject.io/docs/
+.. _KMIP: http://www.oasis-open.org/committees/kmip/
+.. _PutBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html
+.. _GetBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html
+.. _DeleteBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html
 .. _OpenStack Barbican Integration: ../barbican
+.. _HashiCorp Vault Integration: ../vault
+.. _KMIP Integration: ../kmip

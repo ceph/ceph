@@ -26,6 +26,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 namespace {
   librgw_t rgw = nullptr;
   string uid("testuser");
@@ -72,6 +74,7 @@ TEST(LibRGW, GETATTR_ROOT) {
 
 extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset,
+		    struct stat* st, uint32_t st_mask,
 		    uint32_t flags) {
     // don't need arg--it would point to fids1
     fids1.push_back(fid_type(name, offset, nullptr /* handle */));
@@ -110,7 +113,7 @@ TEST(LibRGW, LOOKUP_BUCKETS) {
     // auto& obj_vector = get<1>(fid_row);
     struct rgw_file_handle *rgw_fh = nullptr;
     ASSERT_EQ(0, rgw_lookup(fs, fs->root_fh, get<0>(fid).c_str(), &rgw_fh,
-			    0 /* flags */));
+			    nullptr /* stat */, 0 /* mask */, 0 /* flags */));
     get<2>(fid) = rgw_fh;
     ASSERT_NE(get<2>(fid), nullptr);
   }
@@ -135,6 +138,7 @@ TEST(LibRGW, GETATTR_BUCKETS) {
 
 extern "C" {
   static bool r2_cb(const char* name, void *arg, uint64_t offset,
+		    struct stat* st, uint32_t st_mask,
 		    uint32_t flags) {
     std::vector<fid_type>& obj_vector = *(static_cast<std::vector<fid_type>*>(arg));
     obj_vector.push_back(fid_type(name, offset, nullptr));
@@ -188,7 +192,7 @@ TEST(LibRGW, GETATTR_OBJECTS) {
 	struct rgw_file_handle *obj_fh = nullptr;
 	std::string object_name = get<0>(obj);
 	ret = rgw_lookup(fs, bucket_fh, get<0>(obj).c_str(), &obj_fh,
-			0 /* flags */);
+			 nullptr /* stat */, 0 /* mask */, 0 /* flags */);
 	ASSERT_EQ(ret, 0);
 	get<2>(obj) = obj_fh; // stash obj_fh for cleanup
 	ASSERT_NE(get<2>(obj), nullptr);
@@ -238,14 +242,10 @@ TEST(LibRGW, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
-  char *v{nullptr};
-  string val;
-  vector<const char*> args;
-
-  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
-  v = getenv("AWS_ACCESS_KEY_ID");
+  char* v = getenv("AWS_ACCESS_KEY_ID");
   if (v) {
     access_key = v;
   }
@@ -255,6 +255,7 @@ int main(int argc, char *argv[])
     secret_key = v;
   }
 
+  string val;
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
 			      (char*) nullptr)) {
@@ -273,7 +274,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  /* dont accidentally run as anonymous */
+  /* don't accidentally run as anonymous */
   if ((access_key == "") ||
       (secret_key == "")) {
     std::cout << argv[0] << " no AWS credentials, exiting" << std::endl;

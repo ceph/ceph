@@ -16,20 +16,23 @@
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
 #include "include/utime.h"
- 
-using namespace librados;
 
 #include "cls/lock/cls_lock_ops.h"
 #include "cls/lock/cls_lock_client.h"
+
+using std::map;
+
+using namespace librados;
+
 
 namespace rados {
   namespace cls {
     namespace lock {
 
       void lock(ObjectWriteOperation *rados_op,
-                const string& name, ClsLockType type,
-                const string& cookie, const string& tag,
-                const string& description,
+                const std::string& name, ClsLockType type,
+                const std::string& cookie, const std::string& tag,
+                const std::string& description,
                 const utime_t& duration, uint8_t flags)
       {
         cls_lock_lock_op op;
@@ -41,15 +44,15 @@ namespace rados {
         op.duration = duration;
         op.flags = flags;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "lock", in);
       }
 
       int lock(IoCtx *ioctx,
-               const string& oid,
-               const string& name, ClsLockType type,
-               const string& cookie, const string& tag,
-               const string& description, const utime_t& duration,
+               const std::string& oid,
+               const std::string& name, ClsLockType type,
+               const std::string& cookie, const std::string& tag,
+               const std::string& description, const utime_t& duration,
 	       uint8_t flags)
       {
         ObjectWriteOperation op;
@@ -58,27 +61,27 @@ namespace rados {
       }
 
       void unlock(ObjectWriteOperation *rados_op,
-                  const string& name, const string& cookie)
+                  const std::string& name, const std::string& cookie)
       {
         cls_lock_unlock_op op;
         op.name = name;
         op.cookie = cookie;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
 
         rados_op->exec("lock", "unlock", in);
       }
 
-      int unlock(IoCtx *ioctx, const string& oid,
-                 const string& name, const string& cookie)
+      int unlock(IoCtx *ioctx, const std::string& oid,
+                 const std::string& name, const std::string& cookie)
       {
         ObjectWriteOperation op;
         unlock(&op, name, cookie);
         return ioctx->operate(oid, &op);
       }
 
-      int aio_unlock(IoCtx *ioctx, const string& oid,
-		     const string& name, const string& cookie,
+      int aio_unlock(IoCtx *ioctx, const std::string& oid,
+		     const std::string& name, const std::string& cookie,
 		     librados::AioCompletion *completion)
       {
         ObjectWriteOperation op;
@@ -87,7 +90,7 @@ namespace rados {
       }
 
       void break_lock(ObjectWriteOperation *rados_op,
-                      const string& name, const string& cookie,
+                      const std::string& name, const std::string& cookie,
                       const entity_name_t& locker)
       {
         cls_lock_break_op op;
@@ -95,12 +98,12 @@ namespace rados {
         op.cookie = cookie;
         op.locker = locker;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "break_lock", in);
       }
 
-      int break_lock(IoCtx *ioctx, const string& oid,
-                     const string& name, const string& cookie,
+      int break_lock(IoCtx *ioctx, const std::string& oid,
+                     const std::string& name, const std::string& cookie,
                      const entity_name_t& locker)
       {
         ObjectWriteOperation op;
@@ -108,7 +111,7 @@ namespace rados {
         return ioctx->operate(oid, &op);
       }
 
-      int list_locks(IoCtx *ioctx, const string& oid, list<string> *locks)
+      int list_locks(IoCtx *ioctx, const std::string& oid, std::list<std::string> *locks)
       {
         bufferlist in, out;
         int r = ioctx->exec(oid, "lock", "list_locks", in, out);
@@ -116,10 +119,10 @@ namespace rados {
           return r;
 
         cls_lock_list_locks_reply ret;
-        bufferlist::iterator iter = out.begin();
+        auto iter = std::cbegin(out);
         try {
-          ::decode(ret, iter);
-        } catch (buffer::error& err) {
+          decode(ret, iter);
+        } catch (ceph::buffer::error& err) {
 	  return -EBADMSG;
         }
 
@@ -129,23 +132,23 @@ namespace rados {
       }
 
       void get_lock_info_start(ObjectReadOperation *rados_op,
-			       const string& name)
+			       const std::string& name)
       {
         bufferlist in;
         cls_lock_get_info_op op;
         op.name = name;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "get_info", in);
       }
 
-      int get_lock_info_finish(bufferlist::iterator *iter,
+      int get_lock_info_finish(bufferlist::const_iterator *iter,
 			       map<locker_id_t, locker_info_t> *lockers,
-			       ClsLockType *type, string *tag)
+			       ClsLockType *type, std::string *tag)
       {
         cls_lock_get_info_reply ret;
         try {
-          ::decode(ret, *iter);
-        } catch (buffer::error& err) {
+          decode(ret, *iter);
+        } catch (ceph::buffer::error& err) {
 	  return -EBADMSG;
         }
 
@@ -164,9 +167,9 @@ namespace rados {
         return 0;
       }
 
-      int get_lock_info(IoCtx *ioctx, const string& oid, const string& name,
+      int get_lock_info(IoCtx *ioctx, const std::string& oid, const std::string& name,
                         map<locker_id_t, locker_info_t> *lockers,
-                        ClsLockType *type, string *tag)
+                        ClsLockType *type, std::string *tag)
       {
         ObjectReadOperation op;
         get_lock_info_start(&op, name);
@@ -174,7 +177,7 @@ namespace rados {
         int r = ioctx->operate(oid, &op, &out);
 	if (r < 0)
 	  return r;
-	bufferlist::iterator it = out.begin();
+	auto it = std::cbegin(out);
 	return get_lock_info_finish(&it, lockers, type, tag);
       }
 
@@ -188,7 +191,7 @@ namespace rados {
         op.cookie = cookie;
         op.tag = tag;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "assert_locked", in);
       }
 
@@ -204,41 +207,58 @@ namespace rados {
         op.tag = tag;
         op.new_cookie = new_cookie;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "set_cookie", in);
-      }
-
-      void Lock::assert_locked_exclusive(ObjectOperation *op)
-      {
-        assert_locked(op, name, LOCK_EXCLUSIVE, cookie, tag);
       }
 
       void Lock::assert_locked_shared(ObjectOperation *op)
       {
-        assert_locked(op, name, LOCK_SHARED, cookie, tag);
+        assert_locked(op, name, ClsLockType::SHARED, cookie, tag);
+      }
+
+      void Lock::assert_locked_exclusive(ObjectOperation *op)
+      {
+        assert_locked(op, name, ClsLockType::EXCLUSIVE, cookie, tag);
+      }
+
+      void Lock::assert_locked_exclusive_ephemeral(ObjectOperation *op)
+      {
+        assert_locked(op, name, ClsLockType::EXCLUSIVE_EPHEMERAL, cookie, tag);
       }
 
       void Lock::lock_shared(ObjectWriteOperation *op)
       {
-        lock(op, name, LOCK_SHARED,
+        lock(op, name, ClsLockType::SHARED,
              cookie, tag, description, duration, flags);
       }
 
-      int Lock::lock_shared(IoCtx *ioctx, const string& oid)
+      int Lock::lock_shared(IoCtx *ioctx, const std::string& oid)
       {
-        return lock(ioctx, oid, name, LOCK_SHARED,
+        return lock(ioctx, oid, name, ClsLockType::SHARED,
                     cookie, tag, description, duration, flags);
       }
 
       void Lock::lock_exclusive(ObjectWriteOperation *op)
       {
-        lock(op, name, LOCK_EXCLUSIVE,
+        lock(op, name, ClsLockType::EXCLUSIVE,
              cookie, tag, description, duration, flags);
       }
 
-      int Lock::lock_exclusive(IoCtx *ioctx, const string& oid)
+      int Lock::lock_exclusive(IoCtx *ioctx, const std::string& oid)
       {
-        return lock(ioctx, oid, name, LOCK_EXCLUSIVE,
+        return lock(ioctx, oid, name, ClsLockType::EXCLUSIVE,
+                    cookie, tag, description, duration, flags);
+      }
+
+      void Lock::lock_exclusive_ephemeral(ObjectWriteOperation *op)
+      {
+        lock(op, name, ClsLockType::EXCLUSIVE_EPHEMERAL,
+             cookie, tag, description, duration, flags);
+      }
+
+      int Lock::lock_exclusive_ephemeral(IoCtx *ioctx, const std::string& oid)
+      {
+        return lock(ioctx, oid, name, ClsLockType::EXCLUSIVE_EPHEMERAL,
                     cookie, tag, description, duration, flags);
       }
 
@@ -247,7 +267,7 @@ namespace rados {
 	rados::cls::lock::unlock(op, name, cookie);
       }
 
-      int Lock::unlock(IoCtx *ioctx, const string& oid)
+      int Lock::unlock(IoCtx *ioctx, const std::string& oid)
       {
         return rados::cls::lock::unlock(ioctx, oid, name, cookie);
       }
@@ -257,11 +277,10 @@ namespace rados {
 	rados::cls::lock::break_lock(op, name, cookie, locker);
       }
 
-      int Lock::break_lock(IoCtx *ioctx, const string& oid, const entity_name_t& locker)
+      int Lock::break_lock(IoCtx *ioctx, const std::string& oid, const entity_name_t& locker)
       {
           return rados::cls::lock::break_lock(ioctx, oid, name, cookie, locker);
       }
     } // namespace lock
   } // namespace cls
 } // namespace rados
-

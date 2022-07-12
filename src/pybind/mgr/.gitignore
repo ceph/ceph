@@ -1,1 +1,17 @@
-.idea
+proxy.conf.json
+
+# tox related
+.coverage*
+htmlcov
+.tox
+coverage.xml
+junit*xml
+.cache
+
+# IDE
+.vscode
+*.egg
+.env
+
+# virtualenv
+venv

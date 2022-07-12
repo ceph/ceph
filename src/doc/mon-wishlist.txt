@@ -8,12 +8,6 @@ Low-hanging fruit
   where possible, get rid of those put().  No one expects helpers to
   put() messages and that may lead to double frees. (issue #9378)
 
-Medium complexity
------------------
-
-* get rid of QuorumServices.  It seemed like a neat idea, but we only have
-  one or two and they just add complexity and noise. (issue #10506)
-
 Time consuming / complex
 ------------------------
 

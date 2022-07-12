@@ -6,15 +6,17 @@
 
 The most frequent Ceph Block Device use case involves providing block device
 images to virtual machines. For example, a user may create  a "golden" image
-with an OS and any relevant software in an ideal configuration. Then, the user
-takes a snapshot of the image. Finally, the user clones the snapshot (usually
+with an OS and any relevant software in an ideal configuration. Then the user
+takes a snapshot of the image. Finally the user clones the snapshot (potentially
 many times). See `Snapshots`_ for details. The ability to make copy-on-write
 clones of a snapshot means that Ceph can provision block device images to
-virtual machines quickly, because the client doesn't have to download an entire
+virtual machines quickly, because the client doesn't have to download the entire
 image each time it spins up a new virtual machine.
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                       QEMU                        |
             +---------------------------------------------------+
             |                      librbd                       |
@@ -25,7 +27,7 @@ image each time it spins up a new virtual machine.
             +------------------------+ +------------------------+
 
 
-Ceph Block Devices can integrate with the QEMU virtual machine. For details on
+Ceph Block Devices attach to QEMU virtual machines. For details on
 QEMU, see  `QEMU Open Source Processor Emulator`_. For QEMU documentation, see
 `QEMU Manual`_. For installation details, see `Installation`_.
 
@@ -36,10 +38,10 @@ QEMU, see  `QEMU Open Source Processor Emulator`_. For QEMU documentation, see
 Usage
 =====
 
-The QEMU command line expects you to specify the pool name and image name. You
-may also specify a snapshot name. 
+The QEMU command line expects you to specify the Ceph pool and image name. You
+may also specify a snapshot. 
 
-QEMU will assume that the Ceph configuration file resides in the default
+QEMU will assume that Ceph configuration resides in the default
 location (e.g., ``/etc/ceph/$cluster.conf``) and that you are executing
 commands as the default ``client.admin`` user unless you expressly specify
 another Ceph configuration file path or another user. When specifying a user,
@@ -114,9 +116,9 @@ Running QEMU with RBD
 
 QEMU can pass a block device from the host on to a guest, but since
 QEMU 0.15, there's no need to map an image as a block device on
-the host. Instead, QEMU can access an image as a virtual block
-device directly via ``librbd``. This performs better because it avoids
-an additional context switch, and can take advantage of `RBD caching`_.
+the host. Instead, QEMU attaches an image as a virtual block
+device directly via ``librbd``. This strategy increases performance
+by avoiding context switches and taking advantage of `RBD caching`_.
 
 You can use ``qemu-img`` to convert existing virtual machine images to Ceph
 block device images. For example, if you have a qcow2 image, you could run::
@@ -141,7 +143,7 @@ configuration (like any Ceph configuration option) as part of the
 .. important:: If you set rbd_cache=true, you must set cache=writeback
    or risk data loss. Without cache=writeback, QEMU will not send
    flush requests to librbd. If QEMU exits uncleanly in this
-   configuration, filesystems on top of rbd can be corrupted.
+   configuration, file systems on top of rbd can be corrupted.
 
 .. _RBD caching: ../rbd-config-ref/#rbd-cache-config-settings
 
@@ -171,7 +173,7 @@ edit`` to include the ``xmlns:qemu`` value. Then, add a ``qemu:commandline``
 block as a child of that domain. The following example shows how to set two
 devices with ``qemu id=`` to different ``discard_granularity`` values.
 
-.. code-block:: guess
+.. code-block:: xml
 
 	<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
 		<qemu:commandline>

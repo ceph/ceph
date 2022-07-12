@@ -1,17 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_CLIENT_IO_H
 #define CEPH_RGW_CLIENT_IO_H
 
 #include <exception>
 #include <string>
+#include <string_view>
 #include <streambuf>
 #include <istream>
 #include <stdlib.h>
 #include <system_error>
-
-#include <boost/utility/string_ref.hpp>
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -28,13 +27,13 @@ using Exception = std::system_error;
  * interacted with. */
 class BasicClient {
 protected:
-  virtual void init_env(CephContext *cct) = 0;
+  virtual int init_env(CephContext *cct) = 0;
 
 public:
   virtual ~BasicClient() = default;
 
   /* Initialize the BasicClient and inject CephContext. */
-  void init(CephContext *cct);
+  int init(CephContext *cct);
 
   /* Return the RGWEnv describing the environment that a given request lives in.
    * The method does not throw exceptions. */
@@ -103,9 +102,9 @@ public:
   /* Generate header. On success returns number of bytes generated for a direct
    * client of RadosGW. On failure throws rgw::io::Exception containing errno.
    *
-   * boost::string_ref is being used because of length it internally carries. */
-  virtual size_t send_header(const boost::string_ref& name,
-                             const boost::string_ref& value) = 0;
+   * std::string_view is being used because of length it internally carries. */
+  virtual size_t send_header(const std::string_view& name,
+                             const std::string_view& value) = 0;
 
   /* Inform a client about a content length. Takes number of bytes as @len.
    * On success returns number of bytes generated for a direct client of RadosGW.
@@ -197,12 +196,12 @@ protected:
     decoratee = &new_dec;
   }
 
-  void init_env(CephContext *cct) override {
+  int init_env(CephContext *cct) override {
     return get_decoratee().init_env(cct);
   }
 
 public:
-  DecoratedRestfulClient(DecorateeT&& decoratee)
+  explicit DecoratedRestfulClient(DecorateeT&& decoratee)
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 
@@ -215,8 +214,8 @@ public:
     return get_decoratee().send_100_continue();
   }
 
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override {
+  size_t send_header(const std::string_view& name,
+                     const std::string_view& value) override {
     return get_decoratee().send_header(name, value);
   }
 
@@ -255,7 +254,7 @@ public:
 } /* rgw::io::DecoratedRestfulClient */;
 
 
-/* Interface that should be provided by a front-end class wanting to to use
+/* Interface that should be provided by a front-end class wanting to use
  * the low-level buffering offered by i.e. StaticOutputBufferer. */
 class BuffererSink {
 public:
@@ -308,7 +307,7 @@ class StaticOutputBufferer : public std::streambuf {
   std::streambuf::char_type buffer[BufferSizeV];
 
 public:
-  StaticOutputBufferer(BuffererSink& sink)
+  explicit StaticOutputBufferer(BuffererSink& sink)
     : sink(sink) {
     constexpr size_t len = sizeof(buffer) - sizeof(std::streambuf::char_type);
     std::streambuf::setp(buffer, buffer + len);
@@ -354,20 +353,20 @@ public:
 /* Type conversions to work around lack of req_state type hierarchy matching
  * (e.g.) REST backends (may be replaced w/dynamic typed req_state). */
 static inline rgw::io::RestfulClient* RESTFUL_IO(struct req_state* s) {
-  assert(dynamic_cast<rgw::io::RestfulClient*>(s->cio) != nullptr);
+  ceph_assert(dynamic_cast<rgw::io::RestfulClient*>(s->cio) != nullptr);
 
   return static_cast<rgw::io::RestfulClient*>(s->cio);
 }
 
 static inline rgw::io::Accounter* ACCOUNTING_IO(struct req_state* s) {
   auto ptr = dynamic_cast<rgw::io::Accounter*>(s->cio);
-  assert(ptr != nullptr);
+  ceph_assert(ptr != nullptr);
 
   return ptr;
 }
 
 static inline RGWRestfulIO* AWS_AUTHv4_IO(const req_state* const s) {
-  assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
+  ceph_assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
 
   return static_cast<RGWRestfulIO*>(s->cio);
 }
@@ -432,7 +431,7 @@ class RGWClientIOStream : private RGWClientIOStreamBuf, public std::istream {
 public:
   explicit RGWClientIOStream(RGWRestfulIO &s)
     : RGWClientIOStreamBuf(s, 1, 2),
-      istream(static_cast<RGWClientIOStreamBuf *>(this)) {
+      std::istream(static_cast<RGWClientIOStreamBuf *>(this)) {
   }
 };
 

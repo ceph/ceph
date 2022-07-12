@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string>
 #include <map>
@@ -7,8 +7,9 @@
 #include "rgw_rados.h"
 #include "rgw_usage.h"
 #include "rgw_formats.h"
+#include "rgw_sal.h"
 
-
+using namespace std;
 
 static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
 {
@@ -20,19 +21,20 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
     const rgw_usage_data& usage = uiter->second;
     formatter->open_object_section("entry");
     formatter->dump_string("category", uiter->first);
-    formatter->dump_int("bytes_sent", usage.bytes_sent);
-    formatter->dump_int("bytes_received", usage.bytes_received);
-    formatter->dump_int("ops", usage.ops);
-    formatter->dump_int("successful_ops", usage.successful_ops);
+    formatter->dump_unsigned("bytes_sent", usage.bytes_sent);
+    formatter->dump_unsigned("bytes_received", usage.bytes_received);
+    formatter->dump_unsigned("ops", usage.ops);
+    formatter->dump_unsigned("successful_ops", usage.successful_ops);
     formatter->close_section(); // entry
   }
   formatter->close_section(); // categories
 }
 
-int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
-		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
-		   map<string, bool> *categories,
-		   RGWFormatterFlusher& flusher)
+int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		  rgw::sal::User* user , rgw::sal::Bucket* bucket,
+		   uint64_t start_epoch, uint64_t end_epoch, bool show_log_entries,
+		   bool show_log_sum,
+		   map<string, bool> *categories, RGWFormatterFlusher& flusher)
 {
   uint32_t max_entries = 1000;
 
@@ -52,9 +54,19 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
   string last_owner;
   bool user_section_open = false;
   map<string, rgw_usage_log_entry> summary_map;
+  int ret;
+
   while (is_truncated) {
-    int ret = store->read_usage(uid, start_epoch, end_epoch, max_entries,
-                                &is_truncated, usage_iter, usage);
+    if (bucket) {
+      ret = bucket->read_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
+			       usage_iter, usage);
+    } else if (user) {
+      ret = user->read_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
+			     usage_iter, usage);
+    } else {
+      ret = store->read_all_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
+				  usage_iter, usage);
+    }
 
     if (ret == -ENOENT) {
       ret = 0;
@@ -120,10 +132,10 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
       rgw_usage_data total_usage;
       entry.sum(total_usage, *categories);
       formatter->open_object_section("total");
-      formatter->dump_int("bytes_sent", total_usage.bytes_sent);
-      formatter->dump_int("bytes_received", total_usage.bytes_received);
-      formatter->dump_int("ops", total_usage.ops);
-      formatter->dump_int("successful_ops", total_usage.successful_ops);
+      encode_json("bytes_sent", total_usage.bytes_sent, formatter);
+      encode_json("bytes_received", total_usage.bytes_received, formatter);
+      encode_json("ops", total_usage.ops, formatter);
+      encode_json("successful_ops", total_usage.successful_ops, formatter);
       formatter->close_section(); // total
 
       formatter->close_section(); // user
@@ -140,8 +152,20 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
   return 0;
 }
 
-int RGWUsage::trim(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
-		   uint64_t end_epoch)
+int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		   rgw::sal::User* user , rgw::sal::Bucket* bucket,
+		   uint64_t start_epoch, uint64_t end_epoch)
 {
-  return store->trim_usage(uid, start_epoch, end_epoch);
+  if (bucket) {
+    return bucket->trim_usage(dpp, start_epoch, end_epoch);
+  } else if (user) {
+    return user->trim_usage(dpp, start_epoch, end_epoch);
+  } else {
+    return store->trim_all_usage(dpp, start_epoch, end_epoch);
+  }
+}
+
+int RGWUsage::clear(const DoutPrefixProvider *dpp, rgw::sal::Store* store)
+{
+  return store->clear_usage(dpp);
 }

@@ -12,6 +12,7 @@
  *
  */
 
+#include <iomanip>
 #include <string>
 
 #include "common/ceph_argparse.h"
@@ -21,50 +22,57 @@
 
 using std::deque;
 using std::string;
+using std::unique_ptr;
+using std::cerr;
+using std::cout;
+using std::vector;
 
-static void usage()
+static void usage(std::ostream& out)
 {
   // TODO: add generic_usage once cerr/derr issues are resolved
-  cerr << "Ceph configuration query tool\n\
-\n\
-USAGE\n\
-ceph-conf <flags> <action>\n\
-\n\
-ACTIONS\n\
-  -L|--list-all-sections          List all sections\n\
-  -l|--list-sections <prefix>     List sections with the given prefix\n\
-  --filter-key <key>              Filter section list to only include sections\n\
-                                  with given key defined.\n\
-  --filter-key-value <key>=<val>  Filter section list to only include sections\n\
-                                  with given key/value pair.\n\
-  --lookup <key>                  Print a configuration setting to stdout.\n\
-                                  Returns 0 (success) if the configuration setting is\n\
-                                  found; 1 otherwise.\n\
-  -r|--resolve-search             search for the first file that exists and\n\
-                                  can be opened in the resulted comma\n\
-                                  delimited search list.\n\
-  -D|--dump-all                   dump all variables.\n\
-\n\
-FLAGS\n\
-  --name name                     Set type.id\n\
-  [-s <section>]                  Add to list of sections to search\n\
-  [--format plain|json|json-pretty]\n\
-                                  dump variables in plain text, json or pretty\n\
-                                  json\n\
-\n\
-If there is no action given, the action will default to --lookup.\n\
-\n\
-EXAMPLES\n\
-$ ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'\n\
-Find out what the value of 'mon addr' is for monitor 0.\n\
-\n\
-$ ceph-conf -l mon\n\
-List sections beginning with 'mon'.\n\
-\n\
-RETURN CODE\n\
-Return code will be 0 on success; error code otherwise.\n\
-";
-  exit(1);
+  out << R"(Ceph configuration query tool
+
+USAGE
+ceph-conf <flags> <action>
+
+ACTIONS
+  -L|--list-all-sections          List all sections
+  -l|--list-sections <prefix>     List sections with the given prefix
+  --filter-key <key>              Filter section list to only include sections
+                                  with given key defined.
+  --filter-key-value <key>=<val>  Filter section list to only include sections
+                                  with given key/value pair.
+  --lookup <key>                  Print a configuration setting to stdout.
+                                  Returns 0 (success) if the configuration setting is
+                                  found; 1 otherwise.
+  -r|--resolve-search             search for the first file that exists and
+                                  can be opened in the resulted comma
+                                  delimited search list.
+  -D|--dump-all                   dump all variables.
+  --show-config-value <key>       Print the corresponding ceph.conf value
+                                  that matches the specified key. Also searches
+                                  global defaults.
+
+FLAGS
+  --name name                     Set type.id
+  [-s <section>]                  Add to list of sections to search
+  [--format plain|json|json-pretty]
+                                  dump variables in plain text, json or pretty
+                                  json
+  [--pid <pid>]                   Override the $pid when expanding options
+
+If there is no action given, the action will default to --lookup.
+
+EXAMPLES
+$ ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'
+Find out what the value of 'mon addr' is for monitor 0.
+
+$ ceph-conf -l mon
+List sections beginning with 'mon'.
+
+RETURN CODE
+Return code will be 0 on success; error code otherwise.
+)";
 }
 
 static int list_sections(const std::string &prefix,
@@ -72,7 +80,7 @@ static int list_sections(const std::string &prefix,
 			 const std::map<string,string>& filter_key_value)
 {
   std::vector <std::string> sections;
-  int ret = g_conf->get_all_sections(sections);
+  int ret = g_conf().get_all_sections(sections);
   if (ret)
     return 2;
   for (std::vector<std::string>::const_iterator p = sections.begin();
@@ -86,7 +94,7 @@ static int list_sections(const std::string &prefix,
     int r = 0;
     for (std::list<string>::const_iterator q = filter_key.begin(); q != filter_key.end(); ++q) {
       string v;
-      r = g_conf->get_val_from_conf_file(sec, q->c_str(), v, false);
+      r = g_conf().get_val_from_conf_file(sec, q->c_str(), v, false);
       if (r < 0)
 	break;
     }
@@ -97,7 +105,7 @@ static int list_sections(const std::string &prefix,
 	 q != filter_key_value.end();
 	 ++q) {
       string v;
-      r = g_conf->get_val_from_conf_file(sec, q->first.c_str(), v, false);
+      r = g_conf().get_val_from_conf_file(sec, q->first.c_str(), v, false);
       if (r < 0 || v != q->second) {
 	r = -1;
 	break;
@@ -114,13 +122,12 @@ static int list_sections(const std::string &prefix,
 static int lookup(const std::deque<std::string> &sections,
 		  const std::string &key, bool resolve_search)
 {
-  std::vector <std::string> my_sections;
-  for (deque<string>::const_iterator s = sections.begin(); s != sections.end(); ++s) {
-    my_sections.push_back(*s);
+  std::vector<std::string> my_sections{sections.begin(), sections.end()};
+  for (auto& section : g_conf().get_my_sections()) {
+    my_sections.push_back(section);
   }
-  g_conf->get_my_sections(my_sections);
   std::string val;
-  int ret = g_conf->get_val_from_conf_file(my_sections, key.c_str(), val, true);
+  int ret = g_conf().get_val_from_conf_file(my_sections, key.c_str(), val, true);
   if (ret == -ENOENT)
     return 1;
   else if (ret == 0) {
@@ -144,26 +151,36 @@ static int lookup(const std::deque<std::string> &sections,
 static int dump_all(const string& format)
 {
   if (format == "" || format == "plain") {
-    g_conf->show_config(std::cout);
+    g_conf().show_config(std::cout);
     return 0;
   } else {
     unique_ptr<Formatter> f(Formatter::create(format));
     if (f) {
       f->open_object_section("ceph-conf");
-      g_conf->show_config(f.get());
+      g_conf().show_config(f.get());
       f->close_section();
       f->flush(std::cout);
       return 0;
     }
     cerr << "format '" << format << "' not recognized." << std::endl;
-    usage();
+    usage(cerr);
     return 1;
+  }
+}
+
+static void maybe_override_pid(vector<const char*>& args)
+{
+  for (auto i = args.begin(); i != args.end(); ++i) {
+    string val;
+    if (ceph_argparse_witharg(args, i, &val, "--pid", (char*)NULL)) {
+      setenv("PID", val.c_str(), 1);
+      break;
+    }
   }
 }
 
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
   deque<std::string> sections;
   bool resolve_search = false;
   std::string action;
@@ -173,20 +190,18 @@ int main(int argc, const char **argv)
   std::map<string,string> filter_key_value;
   std::string dump_format;
 
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-  vector<const char*> orig_args = args;
+  auto args = argv_to_vec(argc, argv);
 
-  global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-		  CINIT_FLAG_NO_DAEMON_ACTIONS);
-  std::unique_ptr<CephContext,
-		  std::function<void(CephContext*)> > cct_deleter{
-      g_ceph_context,
-      [](CephContext *p) {p->put();}
-  };
-
-  g_conf->apply_changes(NULL);
-  g_conf->complain_about_parse_errors(g_ceph_context);
+  auto orig_args = args;
+  auto cct = [&args] {
+    // override the PID before options are expanded
+    maybe_override_pid(args);
+    std::map<std::string,std::string> defaults = {{"log_to_file", "false"}};
+    return global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
+		       CODE_ENVIRONMENT_DAEMON,
+		       CINIT_FLAG_NO_DAEMON_ACTIONS |
+		       CINIT_FLAG_NO_MON_CONFIG);
+  }();
 
   // do not common_init_finish(); do not start threads; do not do any of thing
   // wonky things the daemon whose conf we are examining would do (like initialize
@@ -218,8 +233,8 @@ int main(int argc, const char **argv)
       size_t pos = val.find_first_of('=');
       if (pos == string::npos) {
 	cerr << "expecting argument like 'key=value' for --filter-key-value (not '" << val << "')" << std::endl;
-	usage();
-	exit(1);
+	usage(cerr);
+	return EXIT_FAILURE;
       } 
       string key(val, 0, pos);
       string value(val, pos+1);
@@ -235,20 +250,20 @@ int main(int argc, const char **argv)
       } else {
 	cerr << "unable to parse option: '" << *i << "'" << std::endl;
 	cerr << "args:";
-	for (std::vector<const char *>::iterator ci = orig_args.begin(); ci != orig_args.end(); ++ci) {
-	  cerr << " '" << *ci << "'";
+	for (auto arg : orig_args) {
+	  cerr << " " << std::quoted(arg);
 	}
 	cerr << std::endl;
-	usage();
-	exit(1);
+	usage(cerr);
+	return EXIT_FAILURE;
       }
     }
   }
 
-  g_ceph_context->_log->flush();
+  cct->_log->flush();
   if (action == "help") {
-    usage();
-    exit(0);
+    usage(cout);
+    return EXIT_SUCCESS;
   } else if (action == "list-sections") {
     return list_sections(section_list_prefix, filter_key, filter_key_value);
   } else if (action == "lookup") {
@@ -258,6 +273,6 @@ int main(int argc, const char **argv)
   } else {
     cerr << "You must give an action, such as --lookup or --list-all-sections." << std::endl;
     cerr << "Pass --help for more help." << std::endl;
-    exit(1);
+    return EXIT_FAILURE;
   }
 }

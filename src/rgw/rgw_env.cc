@@ -1,16 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_log.h"
 
 #include <string>
 #include <map>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 void RGWEnv::init(CephContext *cct)
 {

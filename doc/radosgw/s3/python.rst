@@ -33,10 +33,10 @@ This also prints out the bucket name and creation date of each bucket.
 .. code-block:: python
 
 	for bucket in conn.get_all_buckets():
-		print "{name}\t{created}".format(
+		print("{name}\t{created}".format(
 			name = bucket.name,
 			created = bucket.creation_date,
-		)
+		))
 
 The output will look something like this::
 
@@ -65,11 +65,11 @@ modified date.
 .. code-block:: python
 
 	for key in bucket.list():
-		print "{name}\t{size}\t{modified}".format(
+		print("{name}\t{size}\t{modified}".format(
 			name = key.name,
 			size = key.size,
 			modified = key.last_modified,
-			)
+		))
 
 The output will look something like this::
 
@@ -106,6 +106,17 @@ This creates a file ``hello.txt`` with the string ``"Hello World!"``
 
 	key = bucket.new_key('hello.txt')
 	key.set_contents_from_string('Hello World!')
+	
+
+Uploading an Object or a File
+-----------------------------
+
+This creates a file ``logo.png`` with the contents from the file ``"logo.png"``
+
+.. code-block:: python
+
+	key = bucket.new_key('logo.png')
+	key.set_contents_from_filename('logo.png')
 
 
 Change an Object's ACL
@@ -158,14 +169,29 @@ URL will stop working).
 
 	hello_key = bucket.get_key('hello.txt')
 	hello_url = hello_key.generate_url(0, query_auth=False, force_http=True)
-	print hello_url
+	print(hello_url)
 
 	plans_key = bucket.get_key('secret_plans.txt')
 	plans_url = plans_key.generate_url(3600, query_auth=True, force_http=True)
-	print plans_url
+	print(plans_url)
 
 The output of this will look something like::
 
    http://objects.dreamhost.com/my-bucket-name/hello.txt
    http://objects.dreamhost.com/my-bucket-name/secret_plans.txt?Signature=XXXXXXXXXXXXXXXXXXXXXXXXXXX&Expires=1316027075&AWSAccessKeyId=XXXXXXXXXXXXXXXXXXX
 
+Using S3 API Extensions 
+-----------------------
+
+To use the boto3 client to tests the RadosGW extensions to the S3 API, the `extensions file`_ should be placed under: ``~/.aws/models/s3/2006-03-01/`` directory.
+For example, unordered list of objects could be fetched using:
+
+.. code-block:: python
+
+    print(conn.list_objects(Bucket='my-new-bucket', AllowUnordered=True))
+
+
+Without the extensions file, in the above example, boto3 would complain that the ``AllowUnordered`` argument is invalid.
+
+
+.. _extensions file: https://github.com/ceph/ceph/blob/master/examples/boto3/service-2.sdk-extras.json

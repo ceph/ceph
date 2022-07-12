@@ -13,7 +13,7 @@
  */
 
 #include "DirectMessenger.h"
-#include "msg/DispatchStrategy.h"
+#include "DispatchStrategy.h"
 
 
 class DirectConnection : public Connection {
@@ -28,13 +28,15 @@ class DirectConnection : public Connection {
   /// clear this pointer) before dropping its own reference
   std::atomic<Connection*> reply_connection{nullptr};
 
- public:
+ private:
+  FRIEND_MAKE_REF(DirectConnection);
   DirectConnection(CephContext *cct, DirectMessenger *m,
                    DispatchStrategy *dispatchers)
     : Connection(cct, m),
       dispatchers(dispatchers)
   {}
 
+ public:
   /// sets the Connection that will receive replies to outgoing messages
   void set_direct_reply_connection(ConnectionRef conn);
 
@@ -100,8 +102,7 @@ static ConnectionRef create_loopback(DirectMessenger *m,
                                      entity_name_t name,
                                      DispatchStrategy *dispatchers)
 {
-  auto loopback = boost::intrusive_ptr<DirectConnection>(
-      new DirectConnection(m->cct, m, dispatchers));
+  auto loopback = ceph::make_ref<DirectConnection>(m->cct, m, dispatchers);
   // loopback replies go to itself
   loopback->set_direct_reply_connection(loopback);
   loopback->set_peer_type(name.type());
@@ -131,8 +132,7 @@ int DirectMessenger::set_direct_peer(DirectMessenger *peer)
   peer_inst = peer->get_myinst();
 
   // allocate a Connection that dispatches to the peer messenger
-  auto direct_connection = boost::intrusive_ptr<DirectConnection>(
-      new DirectConnection(cct, peer, peer->dispatchers.get()));
+  auto direct_connection = ceph::make_ref<DirectConnection>(cct, peer, peer->dispatchers.get());
 
   direct_connection->set_peer_addr(peer_inst.addr);
   direct_connection->set_peer_type(peer_inst.name.type());
@@ -235,7 +235,7 @@ void DirectMessenger::mark_down(const entity_addr_t& addr)
   ConnectionRef conn;
   if (addr == peer_inst.addr) {
     conn = peer_connection;
-  } else if (addr == get_myaddr()) {
+  } else if (addr == get_myaddr_legacy()) {
     conn = loopback_connection;
   }
   if (conn) {

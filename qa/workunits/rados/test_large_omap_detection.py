@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- mode:python -*-
 # vim: ts=4 sw=4 smarttab expandtab
 #
@@ -33,20 +33,20 @@ def init():
     print("\nCluster ID: " + cluster.get_fsid())
     cluster.create_pool('large-omap-test-pool')
     ioctx = cluster.open_ioctx('large-omap-test-pool')
-    ioctx.write_full('large-omap-test-object1', "Lorem ipsum")
+    ioctx.write_full('large-omap-test-object1', b"Lorem ipsum")
     op = ioctx.create_write_op()
 
     keys = []
     values = []
     for x in range(20001):
         keys.append(str(x))
-        values.append("X")
+        values.append(b"X")
 
     ioctx.set_omap(op, tuple(keys), tuple(values))
     ioctx.operate_write_op(op, 'large-omap-test-object1', 0)
     ioctx.release_write_op(op)
 
-    ioctx.write_full('large-omap-test-object2', "Lorem ipsum dolor")
+    ioctx.write_full('large-omap-test-object2', b"Lorem ipsum dolor")
     op = ioctx.create_write_op()
 
     buffer = ("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
@@ -59,9 +59,9 @@ def init():
 
     keys = []
     values = []
-    for x in xrange(20000):
+    for x in range(20000):
         keys.append(str(x))
-        values.append(buffer)
+        values.append(buffer.encode())
 
     ioctx.set_omap(op, tuple(keys), tuple(values))
     ioctx.operate_write_op(op, 'large-omap-test-object2', 0)
@@ -73,7 +73,11 @@ def get_deep_scrub_timestamp(pgid):
     cmd = ['ceph', 'pg', 'dump', '--format=json-pretty']
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     out = proc.communicate()[0]
-    for stat in json.loads(out)['pg_stats']:
+    try:
+        pgstats = json.loads(out)['pg_map']['pg_stats']
+    except KeyError:
+        pgstats = json.loads(out)['pg_stats']
+    for stat in pgstats:
         if stat['pgid'] == pgid:
             return stat['last_deep_scrub_stamp']
 
@@ -93,8 +97,8 @@ def wait_for_scrub():
     osds.add(json.loads(out)['acting_primary'])
     pgs[json.loads(out)['pgid']] = get_deep_scrub_timestamp(json.loads(out)['pgid'])
 
-    for osd in osds:
-        command = "ceph osd deep-scrub osd." + str(osd)
+    for pg in pgs:
+        command = "ceph pg deep-scrub " + str(pg)
         subprocess.check_call(shlex.split(command))
 
     for pg in pgs:
@@ -111,7 +115,7 @@ def check_health_output():
         RETRIES += 1
         output = subprocess.check_output(["ceph", "health", "detail"])
         for line in output.splitlines():
-            result += int(line.find('2 large omap objects') != -1)
+            result += int(line.find(b'2 large omap objects') != -1)
         time.sleep(10)
 
     if result != 2:

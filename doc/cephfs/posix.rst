@@ -40,6 +40,11 @@ POSIX semantics for various reasons:
   code.  The name of this hidden directory can be changed at mount
   time with ``-o snapdirname=.somethingelse`` (Linux) or the config
   option ``client_snapdir`` (libcephfs, ceph-fuse).
+- CephFS does not currently maintain the ``atime`` field. Most applications
+  do not care, though this impacts some backup and data tiering
+  applications that can move unused data to a secondary storage system.
+  You may be able to workaround this for some use cases, as CephFS does
+  support setting ``atime`` via the ``setattr`` operation.
 
 Perspective
 -----------
@@ -80,3 +85,22 @@ than NFS when it comes to write atomicity.
 In other words, when it comes to POSIX, ::
 
   HDFS < NFS < CephFS < {XFS, ext4}
+
+
+fsync() and error reporting
+---------------------------
+
+POSIX is somewhat vague about the state of an inode after fsync reports
+an error. In general, CephFS uses the standard error-reporting
+mechanisms in the client's kernel, and therefore follows the same
+conventions as other file systems.
+
+In modern Linux kernels (v4.17 or later), writeback errors are reported
+once to every file description that is open at the time of the error. In
+addition, unreported errors that occurred before the file description was
+opened will also be returned on fsync.
+
+See `PostgreSQL's summary of fsync() error reporting across operating systems
+<https://wiki.postgresql.org/wiki/Fsync_Errors>`_ and `Matthew Wilcox's
+presentation on Linux IO error handling
+<https://www.youtube.com/watch?v=74c19hwY2oE>`_ for more information.

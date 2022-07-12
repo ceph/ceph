@@ -39,45 +39,44 @@ public:
    * invalid, the next snapshot / HEAD object mapis flagged as invalid;
    * otherwise, the state machine proceeds to remove the object map.
    */
-  enum State {
-    STATE_LOAD_MAP,
-    STATE_REMOVE_SNAPSHOT,
-    STATE_INVALIDATE_NEXT_MAP,
-    STATE_REMOVE_MAP
-  };
 
-  SnapshotRemoveRequest(ImageCtx &image_ctx, ceph::BitVector<2> *object_map,
-                        uint64_t snap_id, Context *on_finish)
-    : AsyncRequest(image_ctx, on_finish), m_object_map(*object_map),
+  SnapshotRemoveRequest(ImageCtx &image_ctx, ceph::shared_mutex* object_map_lock,
+                        ceph::BitVector<2> *object_map, uint64_t snap_id,
+                        Context *on_finish)
+    : AsyncRequest(image_ctx, on_finish),
+      m_object_map_lock(object_map_lock), m_object_map(*object_map),
       m_snap_id(snap_id), m_next_snap_id(CEPH_NOSNAP) {
   }
 
   void send() override;
 
 protected:
-  bool should_complete(int r) override;
-
-  int filter_return_code(int r) const override {
-    if ((m_state == STATE_LOAD_MAP || m_state == STATE_REMOVE_MAP) &&
-        r == -ENOENT) {
-      return 0;
-    }
-    return r;
+  bool should_complete(int r) override {
+    return true;
   }
 
 private:
-  State m_state = STATE_LOAD_MAP;
+  ceph::shared_mutex* m_object_map_lock;
   ceph::BitVector<2> &m_object_map;
   uint64_t m_snap_id;
   uint64_t m_next_snap_id;
 
+  uint64_t m_flags = 0;
+
   ceph::BitVector<2> m_snap_object_map;
   bufferlist m_out_bl;
 
-  void send_load_map();
-  void send_remove_snapshot();
-  void send_invalidate_next_map();
-  void send_remove_map();
+  void load_map();
+  void handle_load_map(int r);
+
+  void remove_snapshot();
+  void handle_remove_snapshot(int r);
+
+  void invalidate_next_map();
+  void handle_invalidate_next_map(int r);
+
+  void remove_map();
+  void handle_remove_map(int r);
 
   void compute_next_snap_id();
   void update_object_map();

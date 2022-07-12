@@ -1,7 +1,7 @@
 from pecan import expose, request, response
 from pecan.rest import RestController
 
-from restful import common, module
+from restful import common, context
 from restful.decorators import auth
 
 
@@ -16,11 +16,11 @@ class OsdIdCommand(RestController):
         """
         Show implemented commands for the OSD id
         """
-        osd = module.instance.get_osd_by_id(self.osd_id)
+        osd = context.instance.get_osd_by_id(self.osd_id)
 
         if not osd:
             response.status = 500
-            return {'message': 'Failed to identify the OSD id "%d"' % self.osd_id}
+            return {'message': 'Failed to identify the OSD id "{}"'.format(self.osd_id)}
 
         if osd['up']:
             return common.OSD_IMPLEMENTED_COMMANDS
@@ -36,17 +36,17 @@ class OsdIdCommand(RestController):
         """
         command = request.json.get('command', None)
 
-        osd = module.instance.get_osd_by_id(self.osd_id)
+        osd = context.instance.get_osd_by_id(self.osd_id)
 
         if not osd:
             response.status = 500
-            return {'message': 'Failed to identify the OSD id "%d"' % self.osd_id}
+            return {'message': 'Failed to identify the OSD id "{}"'.format(self.osd_id)}
 
         if not osd['up'] or command not in common.OSD_IMPLEMENTED_COMMANDS:
             response.status = 500
-            return {'message': 'Command "%s" not available' % command}
+            return {'message': 'Command "{}" not available'.format(command)}
 
-        return module.instance.submit_request([[{
+        return context.instance.submit_request([[{
             'prefix': 'osd ' + command,
             'who': str(self.osd_id)
         }]], **kwargs)
@@ -65,10 +65,10 @@ class OsdId(RestController):
         """
         Show the information for the OSD id
         """
-        osd = module.instance.get_osds(ids=[str(self.osd_id)])
+        osd = context.instance.get_osds(ids=[str(self.osd_id)])
         if len(osd) != 1:
             response.status = 500
-            return {'message': 'Failed to identify the OSD id "%d"' % self.osd_id}
+            return {'message': 'Failed to identify the OSD id "{}"'.format(self.osd_id)}
 
         return osd[0]
 
@@ -112,7 +112,7 @@ class OsdId(RestController):
                 'weight': args['reweight']
             })
 
-        return module.instance.submit_request([commands], **kwargs)
+        return context.instance.submit_request([commands], **kwargs)
 
 
 
@@ -127,7 +127,7 @@ class Osd(RestController):
         # TODO Filter by ids
         pool_id = kwargs.get('pool', None)
 
-        return module.instance.get_osds(pool_id)
+        return context.instance.get_osds(pool_id)
 
 
     @expose()

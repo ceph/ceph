@@ -33,6 +33,7 @@ Install the iSCSI initiator and multipath tools:
        devices {
                device {
                        vendor                 "LIO-ORG"
+                       product                "TCMU device"
                        hardware_handler       "1 alua"
                        path_grouping_policy   "failover"
                        path_selector          "queue-length 0"
@@ -60,7 +61,7 @@ Install the iSCSI initiator and multipath tools:
 
    ::
 
-       # iscsiadm -m discovery -t -st 192.168.56.101
+       # iscsiadm -m discovery -t st -p 192.168.56.101
        192.168.56.101:3260,1 iqn.2003-01.org.linux-iscsi.rheln1
        192.168.56.102:3260,2 iqn.2003-01.org.linux-iscsi.rheln1
 
@@ -89,3 +90,9 @@ group for each path.
 
 You should now be able to use the RBD image like you would a normal
 multipath’d iSCSI disk.
+
+4. Logout from target:
+
+   ::
+
+      # iscsiadm -m node -T iqn.2003-01.org.linux-iscsi.rheln1 -u

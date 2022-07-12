@@ -1,0 +1,16 @@
+tasks:
+- ceph:
+    fs: xfs
+    conf:
+      mds:
+        debug mds: 20
+        debug ms: 1
+      client:
+        debug client: 20
+        debug ms: 1
+        fuse set user groups: true
+- ceph-fuse:
+- workunit:
+    clients:
+      all:
+        - suites/pjd.sh

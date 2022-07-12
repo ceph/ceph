@@ -35,7 +35,7 @@ function echoerr() {
 function help() {
   >&2 echo "Usage : ceph-lazy [-d | -h] [command] [parameters]
 
-Ceph complex quering tool - Version $VERSION
+Ceph complex querying tool - Version $VERSION
 
 OPTIONS
 ========
@@ -174,13 +174,13 @@ function find_prim_pg_from_osd() {
     exit 1
   fi
 
-  [ $DEBUG -eq 1 ] && echoinfo "Looking for primary PGs beloging to OSD $posd"
+  [ $DEBUG -eq 1 ] && echoinfo "Looking for primary PGs belonging to OSD $posd"
   $CEPH pg dump pgs --format json 2>/dev/null | $JQ --argjson posd $posd '.[] | select(.acting_primary==$posd).pgid'
 }
 
 
 #
-#  Print all pgs (primay & secondary) hosted by an OSD
+#  Print all pgs (primary & secondary) hosted by an OSD
 #
 function find_all_pg_from_osd() {
 

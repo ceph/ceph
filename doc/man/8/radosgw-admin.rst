@@ -35,6 +35,9 @@ which are as follows:
   Display information of a user, and any potentially available
   subusers and keys.
 
+:command:`user rename`
+  Renames a user.
+
 :command:`user rm`
   Remove a user.
 
@@ -75,7 +78,10 @@ which are as follows:
   Remove access key.
 
 :command:`bucket list`
-  List all buckets.
+  List buckets, or, if bucket specified with --bucket=<bucket>,
+  list its objects. If bucket specified adding --allow-unordered
+  removes ordering requirement, possibly generating results more
+  quickly in buckets with large number of objects.
 
 :command:`bucket limit check`
   Show bucket sharding stats.
@@ -85,6 +91,10 @@ which are as follows:
 
 :command:`bucket unlink`
   Unlink bucket from specified user.
+
+:command:`bucket chown`
+  Link bucket to specified user and update object ACLs. 
+  Use --marker to resume if command gets interrupted.
 
 :command:`bucket stats`
   Returns bucket statistics.
@@ -97,6 +107,11 @@ which are as follows:
 
 :command:`bucket rewrite`
   Rewrite all objects in the specified bucket.
+
+:command:`bucket radoslist`
+  List the rados objects that contain the data for all objects is
+  the designated bucket, if --bucket=<bucket> is specified, or
+  otherwise all buckets.
 
 :command:`bucket reshard`
   Reshard a bucket.
@@ -134,8 +149,8 @@ which are as follows:
 :command:`objects expire`
   Run expired objects cleanup.
 
-:command:`period delete`
-  Delete a period.
+:command:`period rm`
+  Remove a period.
 
 :command:`period get`
   Get the period info.
@@ -182,8 +197,8 @@ which are as follows:
 :command:`realm create`
   Create a new realm.
 
-:command:`realm delete`
-  Delete a realm.
+:command:`realm rm`
+  Remove a realm.
 
 :command:`realm get`
   Show the realm info.
@@ -218,8 +233,8 @@ which are as follows:
 :command:`zonegroup default`
   Set the default zone group.
 
-:command:`zonegroup delete`
-  Delete a zone group info.
+:command:`zonegroup rm`
+  Remove a zone group info.
 
 :command:`zonegroup get`
   Show the zone group info.
@@ -257,8 +272,8 @@ which are as follows:
 :command:`zone create`
   Create a new zone.
 
-:command:`zone delete`
-  Delete a zone.
+:command:`zone rm`
+  Remove a zone.
 
 :command:`zone get`
   Show zone cluster params.
@@ -289,6 +304,12 @@ which are as follows:
 
 :command:`data sync run`
   Run data sync for the specified source zone.
+
+:command:`sync error list`
+  list sync error.
+
+:command:`sync error trim`
+  trim sync error.
 
 :command:`zone rename`
   Rename a zone.
@@ -344,7 +365,9 @@ which are as follows:
   List all bucket lifecycle progress.
 
 :command:`lc process`
-  Manually process lifecycle.
+  Manually process lifecycle.  If a bucket is specified (e.g., via
+  --bucket_id or via --bucket and optional --tenant), only that bucket
+  is processed.
 
 :command:`metadata get`
   Get metadata info.
@@ -359,64 +382,53 @@ which are as follows:
   List metadata info.
 
 :command:`mdlog list`
-  List metadata log.
+  List metadata log which is needed for multi-site deployments.
 
 :command:`mdlog trim`
-  Trim metadata log.
+  Trim metadata log manually instead of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`mdlog status`
   Read metadata log status.
 
 :command:`bilog list`
-  List bucket index log.
+  List bucket index log which is needed for multi-site deployments.
 
 :command:`bilog trim`
-  Trim bucket index log (use start-marker, end-marker).
+  Trim bucket index log (use start-marker, end-marker) manually instead
+  of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`datalog list`
-  List data log.
+  List data log which is needed for multi-site deployments.
 
 :command:`datalog trim`
-  Trim data log.
+  Trim data log manually instead of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`datalog status`
   Read data log status.
 
-:command:`opstate list`
-  List stateful operations entries (use client_id, op_id, object).
-
-:command:`opstate set`
-  Set state on an entry (use client_id, op_id, object, state).
-
-:command:`opstate renew`
-  Renew state on an entry (use client_id, op_id, object).
-
-:command:`opstate rm`
-  Remove entry (use client_id, op_id, object).
-
-:command:`replicalog get`
-  Get replica metadata log entry.
-
-:command:`replicalog update`
-  Update replica metadata log entry.
-
-:command:`replicalog delete`
-  Delete replica metadata log entry.
-
 :command:`orphans find`
-  Init and run search for leaked rados objects
+  Init and run search for leaked rados objects.
+  DEPRECATED. See the "rgw-orphan-list" tool.
 
 :command:`orphans finish`
-  Clean up search for leaked rados objects
+  Clean up search for leaked rados objects.
+  DEPRECATED. See the "rgw-orphan-list" tool.
 
 :command:`orphans list-jobs`
   List the current job-ids for the orphans search.
+  DEPRECATED. See the "rgw-orphan-list" tool.
 
 :command:`role create`
   create a new AWS role for use with STS.
 
-:command:`role delete`
-  Delete a role.
+:command:`role rm`
+  Remove a role.
 
 :command:`role get`
   Get a role.
@@ -436,8 +448,8 @@ which are as follows:
 :command:`role-policy get`
   Get the specified inline policy document embedded with the given role.
 
-:command:`role-policy delete`
-  Delete the policy attached to a role
+:command:`role-policy rm`
+  Remove the policy attached to a role
 
 :command:`reshard add`
   Schedule a resharding of a bucket
@@ -453,6 +465,28 @@ which are as follows:
 
 :command:`reshard cancel`
   Cancel resharding a bucket
+
+:command:`topic list`
+  List bucket notifications/pubsub topics                                                   
+
+:command:`topic get`
+  Get a bucket notifications/pubsub topic                                                   
+  
+:command:`topic rm`
+  Remove a bucket notifications/pubsub topic                                                
+
+:command:`subscription get`
+  Get a pubsub subscription definition
+
+:command:`subscription rm`
+  Remove a pubsub subscription
+
+:command:`subscription pull`
+  Show events in a pubsub subscription
+             
+:command:`subscription ack`
+  Ack (remove) an events in a pubsub subscription
+
 
 Options
 =======
@@ -474,6 +508,10 @@ Options
 .. option:: --uid=uid
 
    The radosgw user ID.
+
+.. option:: --new-uid=uid
+
+   ID of the new user. Used with 'user rename' command.
 
 .. option:: --subuser=<name>
 
@@ -521,10 +559,6 @@ Options
 
    The display name of the user.
 
-.. option:: --max-buckets
-
-   Maximum number of buckets for a user.
-
 .. option:: --admin
 
    Set the admin flag on the user.
@@ -533,9 +567,10 @@ Options
 
    Set the system flag on the user.
 
-.. option:: --bucket=bucket
+.. option:: --bucket=[tenant-id/]bucket
 
-   Specify the bucket name.
+   Specify the bucket name.  If tenant-id is not specified, the tenant-id
+   of the user (--uid) is used.
 
 .. option:: --pool=<pool>
 
@@ -562,14 +597,19 @@ Options
 
    Specify the bucket id.
 
+.. option:: --bucket-new-name=[tenant-id/]<bucket>
+
+   Optional for `bucket link`; use to rename a bucket.
+        While tenant-id/ can be specified, this is never
+        necessary for normal operation.
+
 .. option:: --shard-id=<shard-id>
 
-	Optional for mdlog list. Required for ``mdlog trim``,
-	``replica mdlog get/delete``, ``replica datalog get/delete``.
+	Optional for mdlog list, bi list, data sync status. Required for ``mdlog trim``.
 
-.. option:: --auth-uid=auid
+.. option:: --max-entries=<entries>
 
-   The librados auid.
+	Optional for listing operations to specify the max entries.
 
 .. option:: --purge-data
 
@@ -594,6 +634,10 @@ Options
 .. option:: --period=<id>
 
    Period id.
+
+.. option:: --url=<url>
+
+   url for pushing/pulling period or realm.
 
 .. option:: --epoch=<number>
 
@@ -723,6 +767,13 @@ Options
 
    Remove the zones from list of zones to sync from.
 
+.. option:: --bucket-index-max-shards
+
+   Override a zone's or zonegroup's default number of bucket index shards. This
+   option is accepted by the 'zone create', 'zone modify', 'zonegroup add',
+   and 'zonegroup modify' commands, and applies to buckets that are created
+   after the zone/zonegroup changes take effect.
+
 .. option:: --fix
 
 	Besides checking bucket index, will also fix it.
@@ -739,6 +790,10 @@ Options
 
 	Option for 'user stats' command. When specified, it will update user stats with
 	the current stats reported by user's buckets indexes.
+
+.. option:: --show-config
+
+	Show configuration.
 
 .. option:: --show-log-entries=<flag>
 
@@ -757,22 +812,13 @@ Options
 
 	Specify a file to read in when setting data.
 
-.. option:: --state=<state>
-
-	Specify a state for the opstate set command.
-
-.. option:: --replica-log-type <logtypestr>
-
-	Replica log type (metadata, data, bucket), required for replica log
-	operations.
-
 .. option:: --categories=<list>
 
 	Comma separated list of categories, used in usage show.
 
 .. option:: --caps=<caps>
 
-	List of caps (e.g., "usage=read, write; user=read".
+	List of caps (e.g., "usage=read, write; user=read").
 
 .. option:: --compression=<compression-algorithm>
 
@@ -811,6 +857,13 @@ Options
    When specified with bucket deletion and bypass-gc set to true,
    ignores bucket index consistency.
 
+.. option:: --max-concurrent-ios
+
+        Maximum concurrent ios for bucket operations. Affects operations that
+        scan the bucket index, e.g., listing, deletion, and all scan/search
+        operations such as finding orphans or checking the bucket index.
+        Default is 32.
+
 Quota Options
 =============
 
@@ -842,11 +895,6 @@ Orphans Search Options
 .. option:: --job-id
 
         Set the job id (for orphans find)
-
-.. option:: --max-concurrent-ios
-
-        Maximum concurrent ios for orphans find.
-        Default is 32.
 
 
 Orphans list-jobs options
@@ -885,6 +933,22 @@ Role Options
 
    The path prefix for filtering the roles.
 
+
+Bucket Notifications/PubSub Options
+===================================
+.. option:: --topic                   
+
+   The bucket notifications/pubsub topic name.
+
+.. option:: --subscription
+
+   The pubsub subscription name.
+
+.. option:: --event-id
+
+   The event id in a pubsub subscription.
+
+
 Examples
 ========
 
@@ -906,6 +970,10 @@ Generate a new user::
 Remove a user::
 
         $ radosgw-admin user rm --uid=johnny
+
+Rename a user::
+
+        $ radosgw-admin user rename --uid=johnny --new-uid=joe
         
 Remove a user and all associated buckets with their contents::
 
@@ -922,6 +990,18 @@ Link bucket to specified user::
 Unlink bucket from specified user::
 
         $ radosgw-admin bucket unlink --bucket=foo --uid=johnny
+
+Rename a bucket::
+
+        $ radosgw-admin bucket link --bucket=foo --bucket-new-name=bar --uid=johnny
+
+Move a bucket from the old global tenant space to a specified tenant::
+
+        $ radosgw-admin bucket link --bucket=/foo --uid='12345678$12345678'
+
+Link bucket to specified user and change object ACLs::
+
+        $ radosgw-admin bucket chown --bucket=/foo --uid='12345678$12345678'
 
 Show the logs of a bucket from April 1st, 2012::
 
@@ -946,7 +1026,7 @@ Availability
 
 :program:`radosgw-admin` is part of Ceph, a massively scalable, open-source,
 distributed storage system.  Please refer to the Ceph documentation at
-http://ceph.com/docs for more information.
+https://docs.ceph.com for more information.
 
 
 See also

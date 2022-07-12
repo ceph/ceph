@@ -15,6 +15,8 @@
 #ifndef PRIORITY_QUEUE_H
 #define PRIORITY_QUEUE_H
 
+#include "include/ceph_assert.h"
+
 #include "common/Formatter.h"
 #include "common/OpQueue.h"
 
@@ -99,13 +101,13 @@ class PrioritizedQueue : public OpQueue <T, K> {
       size++;
     }
     std::pair<unsigned, T> &front() const {
-      assert(!(q.empty()));
-      assert(cur != q.end());
+      ceph_assert(!(q.empty()));
+      ceph_assert(cur != q.end());
       return cur->second.front();
     }
     T pop_front() {
-      assert(!(q.empty()));
-      assert(cur != q.end());
+      ceph_assert(!(q.empty()));
+      ceph_assert(cur != q.end());
       T ret = std::move(cur->second.front().second);
       cur->second.pop_front();
       if (cur->second.empty()) {
@@ -120,7 +122,7 @@ class PrioritizedQueue : public OpQueue <T, K> {
       return ret;
     }
     unsigned length() const {
-      assert(size >= 0);
+      ceph_assert(size >= 0);
       return (unsigned)size;
     }
     bool empty() const {
@@ -176,10 +178,10 @@ class PrioritizedQueue : public OpQueue <T, K> {
   }
 
   void remove_queue(unsigned priority) {
-    assert(queue.count(priority));
+    ceph_assert(queue.count(priority));
     queue.erase(priority);
     total_priority -= priority;
-    assert(total_priority >= 0);
+    ceph_assert(total_priority >= 0);
   }
 
   void distribute_tokens(unsigned cost) {
@@ -200,18 +202,18 @@ public:
       min_cost(min_c)
   {}
 
-  unsigned length() const final {
+  unsigned length() const {
     unsigned total = 0;
     for (typename SubQueues::const_iterator i = queue.begin();
 	 i != queue.end();
 	 ++i) {
-      assert(i->second.length());
+      ceph_assert(i->second.length());
       total += i->second.length();
     }
     for (typename SubQueues::const_iterator i = high_queue.begin();
 	 i != high_queue.end();
 	 ++i) {
-      assert(i->second.length());
+      ceph_assert(i->second.length());
       total += i->second.length();
     }
     return total;
@@ -267,13 +269,13 @@ public:
   }
 
   bool empty() const final {
-    assert(total_priority >= 0);
-    assert((total_priority == 0) || !(queue.empty()));
+    ceph_assert(total_priority >= 0);
+    ceph_assert((total_priority == 0) || !(queue.empty()));
     return queue.empty() && high_queue.empty();
   }
 
   T dequeue() final {
-    assert(!empty());
+    ceph_assert(!empty());
 
     if (!(high_queue.empty())) {
       T ret = std::move(high_queue.rbegin()->second.front().second);
@@ -290,7 +292,7 @@ public:
     for (typename SubQueues::iterator i = queue.begin();
 	 i != queue.end();
 	 ++i) {
-      assert(!(i->second.empty()));
+      ceph_assert(!(i->second.empty()));
       if (i->second.front().first < i->second.num_tokens()) {
 	unsigned cost = i->second.front().first;
 	i->second.take_tokens(cost);
@@ -340,6 +342,10 @@ public:
       f->close_section();
     }
     f->close_section();
+  }
+
+  void print(std::ostream &ostream) const final {
+    ostream << "PrioritizedQueue";
   }
 };
 
