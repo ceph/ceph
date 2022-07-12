@@ -96,10 +96,12 @@ void DaemonMetricCollector::dump_asok_metrics() {
     }
     std::string perf_dump_response = asok_request(sock_client, "perf dump");
     if (perf_dump_response.size() == 0) {
+      std::cout << "Perf counters dump retrieval for daemon " << daemon_name << " failed." << std::endl;
       continue;
     }
     std::string perf_schema_response = asok_request(sock_client, "perf schema");
     if (perf_schema_response.size() == 0) {
+      std::cout << "Perf counters schema retrieval for daemon " << daemon_name << " failed." << std::endl;
       continue;
     }
     std::string config_show = asok_request(sock_client, "config show");
@@ -137,6 +139,7 @@ void DaemonMetricCollector::dump_asok_metrics() {
       }
     }
   }
+  std::cout << "Perf counters retrieved for " << clients.size() << " daemons." << std::endl;
   // get time spent on this function
   timer.stop();
   std::string scrap_desc("Time spent scraping and transforming perfcounters to metrics");
@@ -303,7 +306,8 @@ void DaemonMetricCollector::update_sockets() {
       std::string daemon_name =
         daemon_socket_name.substr(0, daemon_socket_name.size() - 5);
       if (clients.find(daemon_name) == clients.end() &&
-          !(daemon_name.find("mgr") != std::string::npos)) {
+          !(daemon_name.find("mgr") != std::string::npos) &&
+          !(daemon_name.find("ceph-exporter") != std::string::npos)) {
         AdminSocketClient sock(entry.path().string());
         clients.insert({daemon_name, std::move(sock)});
       }

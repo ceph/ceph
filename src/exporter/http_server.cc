@@ -36,7 +36,7 @@ private:
   tcp::socket socket_;
   beast::flat_buffer buffer_{8192};
   http::request<http::dynamic_body> request_;
-  http::response<http::buffer_body> response_;
+  http::response<http::string_body> response_;
 
   net::steady_timer deadline_{socket_.get_executor(), std::chrono::seconds(60)};
 
@@ -47,7 +47,11 @@ private:
     http::async_read(socket_, buffer_, request_,
                      [self](beast::error_code ec, std::size_t bytes_transferred) {
                        boost::ignore_unused(bytes_transferred);
-                       if (!ec)
+                       if (ec) {
+                         std::cout << "failed to read request: " << ec.message() << std::endl;
+                         return;
+                       }
+                       else
                          self->process_request();
                      });
   }
@@ -79,7 +83,6 @@ private:
 
   // Construct a response message based on the program state.
   void create_response() {
-    std::cout << request_.body() << std::endl;
     if (request_.target() == "/") {
       response_.set(http::field::content_type, "text/html; charset=utf-8");
       std::string body("<html>\n"
@@ -112,6 +115,10 @@ private:
                       [self](beast::error_code ec, std::size_t) {
                         self->socket_.shutdown(tcp::socket::shutdown_send, ec);
                         self->deadline_.cancel();
+                        if (ec) {
+                          std::cout << "failed to write response: " << ec.message() << std::endl;
+                          return;
+                        }
                       });
   }
 
@@ -150,7 +157,6 @@ void http_server_thread_entrypoint() {
     http_server(acceptor, socket);
     std::cout << "Http server running on " << exporter_addr << ":" << port << std::endl;
     ioc.run();
-    return EXIT_SUCCESS;
   } catch (std::exception const &e) {
     std::cerr << "Error: " << e.what() << std::endl;
     exit(EXIT_FAILURE);
