@@ -40,7 +40,6 @@ protected:
                        optional_yield y);
 
   virtual int read(const DoutPrefixProvider *dpp,
-                   RGWSysObjectCtxBase& obj_ctx,
                    RGWSI_SysObj_Obj_GetObjState& read_state,
                    RGWObjVersionTracker *objv_tracker,
                    const rgw_raw_obj& obj,
@@ -52,7 +51,6 @@ protected:
                    optional_yield y);
 
   virtual int remove(const DoutPrefixProvider *dpp, 
-                     RGWSysObjectCtxBase& obj_ctx,
                      RGWObjVersionTracker *objv_tracker,
                      const rgw_raw_obj& obj,
                      optional_yield y);
@@ -127,8 +125,7 @@ protected:
   virtual int pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
                                            std::string *marker);
 
-  int stat(RGWSysObjectCtxBase& obj_ctx,
-           RGWSI_SysObj_Obj_GetObjState& state,
+  int stat(RGWSI_SysObj_Obj_GetObjState& state,
            const rgw_raw_obj& obj,
            std::map<std::string, bufferlist> *attrs,
 	   bool raw_attrs,

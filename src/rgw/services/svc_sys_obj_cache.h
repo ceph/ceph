@@ -44,7 +44,6 @@ protected:
                optional_yield y) override;
 
   int read(const DoutPrefixProvider *dpp,
-           RGWSysObjectCtxBase& obj_ctx,
            RGWSI_SysObj_Obj_GetObjState& read_state,
            RGWObjVersionTracker *objv_tracker,
            const rgw_raw_obj& obj,
@@ -66,7 +65,6 @@ protected:
                 bool exclusive, optional_yield y) override;
 
   int remove(const DoutPrefixProvider *dpp, 
-             RGWSysObjectCtxBase& obj_ctx,
              RGWObjVersionTracker *objv_tracker,
              const rgw_raw_obj& obj,
              optional_yield y) override;

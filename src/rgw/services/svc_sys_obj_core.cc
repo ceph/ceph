@@ -89,8 +89,7 @@ int RGWSI_SysObj_Core::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj
   return 0;
 }
 
-int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
-                            RGWSI_SysObj_Obj_GetObjState& _state,
+int RGWSI_SysObj_Core::stat(RGWSI_SysObj_Obj_GetObjState& _state,
                             const rgw_raw_obj& obj,
                             map<string, bufferlist> *attrs,
 			    bool raw_attrs,
@@ -131,7 +130,6 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
 }
 
 int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
-                            RGWSysObjectCtxBase& obj_ctx,
                             RGWSI_SysObj_Obj_GetObjState& _read_state,
                             RGWObjVersionTracker *objv_tracker,
                             const rgw_raw_obj& obj,
@@ -446,7 +444,6 @@ int RGWSI_SysObj_Core::notify(const DoutPrefixProvider *dpp, const rgw_raw_obj& 
 }
 
 int RGWSI_SysObj_Core::remove(const DoutPrefixProvider *dpp, 
-                              RGWSysObjectCtxBase& obj_ctx,
                               RGWObjVersionTracker *objv_tracker,
                               const rgw_raw_obj& obj,
                               optional_yield y)
