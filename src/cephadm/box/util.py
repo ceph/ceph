@@ -22,6 +22,10 @@ class Config:
         'config': '/etc/ceph/ceph.conf',
         'keyring': '/etc/ceph/ceph.keyring',
         'loop_img': 'loop-images/loop.img',
+        'engine': 'podman',
+        'docker_yaml': 'docker-compose-docker.yml',
+        'docker_v1_yaml': 'docker-compose.cgroup1.yml',
+        'podman_yaml': 'docker-compose-podman.yml',
     }
 
     @staticmethod
@@ -154,7 +158,7 @@ def run_dc_shell_command(
     container_id = get_container_id(f'{box_type}_{index}')
     print(container_id)
     out = run_shell_command(
-        f'podman exec -it {container_id} {command}', expect_error
+        f'{engine()} exec -it {container_id} {command}', expect_error
     )
     return out
 
@@ -162,7 +166,13 @@ def inside_container() -> bool:
     return os.path.exists('/.box_container')
 
 def get_container_id(container_name: str):
-    return run_shell_command("podman ps | \grep " + container_name + " | awk '{ print $1 }'")
+    return run_shell_command(f"{engine()} ps | \grep " + container_name + " | awk '{ print $1 }'")
+
+def engine():
+    return Config.get('engine')
+
+def engine_compose():
+    return f'{engine()}-compose'
 
 @ensure_outside_container
 def get_boxes_container_info(with_seed: bool = False) -> Dict[str, Any]:
@@ -170,7 +180,8 @@ def get_boxes_container_info(with_seed: bool = False) -> Dict[str, Any]:
     IP = 0
     CONTAINER_NAME = 1
     HOSTNAME = 2
-    ips_query = "podman inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} %tab% {{.Name}} %tab% {{.Config.Hostname}}' $(podman ps -aq) | sed 's#%tab%#\t#g' | sed 's#/##g' | sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n"
+    # fstring extrapolation will mistakenly try to extrapolate inspect options
+    ips_query = engine() + " inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} %tab% {{.Name}} %tab% {{.Config.Hostname}}' $("+ engine() + " ps -aq) | sed 's#%tab%#\t#g' | sed 's#/##g' | sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n"
     out = run_shell_command(ips_query)
     # FIXME: if things get more complex a class representing a container info might be useful,
     # for now representing data this way is faster.

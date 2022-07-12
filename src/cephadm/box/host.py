@@ -9,6 +9,7 @@ from util import (
     run_cephadm_shell_command,
     run_dc_shell_command,
     run_shell_command,
+    engine,
 )
 
 
@@ -27,7 +28,7 @@ def _setup_ssh(container_type, container_index):
         print('Redirecting to _setup_ssh to container')
         verbose = '-v' if Config.get('verbose') else ''
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} host setup_ssh {container_type} {container_index}',
+            f'/cephadm/box/box.py {verbose} --engine {engine()} host setup_ssh {container_type} {container_index}',
             container_index,
             container_type,
         )
@@ -47,7 +48,7 @@ def _add_hosts(ips: Union[List[str], str], hostnames: Union[List[str], str]):
         hostnames = ' '.join(hostnames)
         hostnames = f'{hostnames}'
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} host add_hosts seed 1 --ips {ips} --hostnames {hostnames}',
+            f'/cephadm/box/box.py {verbose} --engine {engine()} host add_hosts seed 1 --ips {ips} --hostnames {hostnames}',
             1,
             'seed',
         )
@@ -73,7 +74,7 @@ def _copy_cluster_ssh_key(ips: Union[List[str], str]):
         ips = f'{ips}'
         # assume we only have one seed
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} host copy_cluster_ssh_key seed 1 --ips {ips}',
+            f'/cephadm/box/box.py {verbose} --engine {engine()} host copy_cluster_ssh_key seed 1 --ips {ips}',
             1,
             'seed',
         )

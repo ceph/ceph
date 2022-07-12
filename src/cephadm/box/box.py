@@ -17,6 +17,8 @@ from util import (
     run_shell_command,
     run_shell_commands,
     colored,
+    engine,
+    engine_compose,
     Colors
 )
 
@@ -50,7 +52,7 @@ def image_exists(image_name: str):
     # extract_tag
     assert image_name.find(':')
     image_name, tag = image_name.split(':')
-    images = run_shell_command('podman image ls').split('\n')
+    images = run_shell_command(f'{engine()} image ls').split('\n')
     IMAGE_NAME = 0
     TAG = 1
     for image in images:
@@ -64,21 +66,25 @@ def image_exists(image_name: str):
 
 def get_ceph_image():
     print('Getting ceph image')
-    run_shell_command(f'podman pull {CEPH_IMAGE}')
+    run_shell_command(f'{engine()} pull {CEPH_IMAGE}')
     # update
-    run_shell_command(f'podman build -t {CEPH_IMAGE} docker/ceph')
+    run_shell_command(f'{engine()} build -t {CEPH_IMAGE} docker/ceph')
     if not os.path.exists('docker/ceph/image'):
         os.mkdir('docker/ceph/image')
 
     remove_ceph_image_tar()
 
-    run_shell_command(f'podman save {CEPH_IMAGE} -o {CEPH_IMAGE_TAR}')
+    run_shell_command(f'{engine()} save {CEPH_IMAGE} -o {CEPH_IMAGE_TAR}')
+    run_shell_command(f'chmod 777 {CEPH_IMAGE_TAR}')
     print('Ceph image added')
 
 
 def get_box_image():
     print('Getting box image')
-    run_shell_command('podman build -t cephadm-box -f Dockerfile .')
+    if engine() == 'docker':
+        run_shell_command(f'{engine()} build -t cephadm-box -f DockerfileDocker .')
+    else:
+        run_shell_command(f'{engine()} build -t cephadm-box -f DockerfilePodman .')
     print('Box image added')
 
 def check_dashboard():
@@ -117,7 +123,8 @@ class Cluster(Target):
 
     @ensure_outside_container
     def setup(self):
-        run_shell_command('pip3 install https://github.com/containers/podman-compose/archive/devel.tar.gz')
+        if engine() == 'podman':
+            run_shell_command('pip3 install https://github.com/containers/podman-compose/archive/devel.tar.gz')
 
         check_cgroups()
         check_selinux()
@@ -136,15 +143,16 @@ class Cluster(Target):
         os.symlink('/cephadm/cephadm', cephadm_path)
 
 
-        # restart to ensure docker is using daemon.json
-        # run_shell_command(
-        #     'systemctl restart docker'
-        # )
+        if engine() == 'docker':
+            # restart to ensure docker is using daemon.json
+            run_shell_command(
+                'systemctl restart docker'
+            )
 
         st = os.stat(cephadm_path)
         os.chmod(cephadm_path, st.st_mode | stat.S_IEXEC)
 
-        run_shell_command('podman load < /cephadm/box/docker/ceph/image/quay.ceph.image.tar')
+        run_shell_command(f'{engine()} load < /cephadm/box/docker/ceph/image/quay.ceph.image.tar')
         # cephadm guid error because it sometimes tries to use quay.ceph.io/ceph-ci/ceph:<none>
         # instead of main branch's tag
         run_shell_command('export CEPH_SOURCE_FOLDER=/ceph')
@@ -202,7 +210,6 @@ class Cluster(Target):
 
         run_cephadm_shell_command('ceph -s')
 
-        print(colored('dashboard available at https://localhost:8443', Colors.OKGREEN))
         print('Bootstrap completed!')
 
     @ensure_outside_container
@@ -213,11 +220,14 @@ class Cluster(Target):
         hosts = Config.get('hosts')
 
         # ensure boxes don't exist
-        run_shell_command('podman-compose down')
-        I_am = run_shell_command('whoami')
-        if 'root' in I_am:
-            print(root_error_msg)
-            sys.exit(1)
+        self.down()
+
+        # podman is ran without sudo
+        if engine() == 'podman':
+            I_am = run_shell_command('whoami')
+            if 'root' in I_am:
+                print(root_error_msg)
+                sys.exit(1)
 
         print('Checking docker images')
         if not image_exists(CEPH_IMAGE):
@@ -238,12 +248,13 @@ class Cluster(Target):
 
         print('Starting containers')
 
-        dcflags = '-f docker-compose.yml'
-        if not os.path.exists('/sys/fs/cgroup/cgroup.controllers'):
-            dcflags += ' -f docker-compose.cgroup1.yml'
-        run_shell_command(f'podman-compose --podman-run-args "--group-add keep-groups --network=host --device /dev/fuse -it {loop_device_arg}" up --scale hosts={hosts} -d')
-        ip = run_dc_shell_command('hostname -i', 1, 'seed')
-        assert ip != '127.0.0.1'
+        if engine() == 'docker':
+            dcflags = f'-f {Config.get("docker_yaml")}'
+            if not os.path.exists('/sys/fs/cgroup/cgroup.controllers'):
+                dcflags += f' -f {Config.get("docker_v1_yaml")}'
+            run_shell_command(f'{engine_compose()} {dcflags} up --scale hosts={hosts} -d')
+        else:
+            run_shell_command(f'{engine_compose()} -f {Config.get("podman_yaml")} --podman-run-args "--group-add keep-groups --network=host --device /dev/fuse -it {loop_device_arg}" up --scale hosts={hosts} -d')
 
         run_shell_command('sudo sysctl net.ipv4.conf.all.forwarding=1')
         run_shell_command('sudo iptables -P FORWARD ACCEPT')
@@ -253,7 +264,7 @@ class Cluster(Target):
         sed 's/$OPTIONS/-x/g' /usr/lib/systemd/system/chronyd.service -i
         systemctl daemon-reload
         systemctl start chronyd
-        systemctl status chronyd
+        systemctl status --no-pager chronyd
         """
         for h in range(hosts):
             run_dc_shell_commands(h + 1, 'hosts', chronyd_setup)
@@ -272,7 +283,7 @@ class Cluster(Target):
         )
         skip_dashboard = '--skip-dashboard' if Config.get('skip-dashboard') else ''
         box_bootstrap_command = (
-            f'/cephadm/box/box.py {verbose} cluster bootstrap '
+            f'/cephadm/box/box.py {verbose} --engine {engine()} cluster bootstrap '
             f'--osds {osds} '
             f'--hosts {hosts} '
             f'{skip_deploy} '
@@ -292,17 +303,30 @@ class Cluster(Target):
             host._add_hosts(ips, hostnames)
 
         # TODO: add osds
-        # if expanded and not Config.get('skip-deploy-osds'):
-        #     print('Deploying osds... This could take up to minutes')
-        #     osd.deploy_osds_in_vg('vg1')
-        #     print('Osds deployed')
+        if expanded and not Config.get('skip-deploy-osds'):
+            if engine() == 'podman':
+                print('osd deployment not supported in podman')
+            else:
+                print('Deploying osds... This could take up to minutes')
+                osd.deploy_osds_in_vg('vg1')
+                print('Osds deployed')
+
+        dashboard_ip = 'localhost'
+        info = get_boxes_container_info(with_seed=True)
+        if engine() == 'docker':
+            for i in range(info['size']):
+                if 'seed' in info['container_names'][i]:
+                    dashboard_ip = info["ips"][i]
+        print(colored(f'dashboard available at https://{dashboard_ip}:8443', Colors.OKGREEN))
 
         print('Bootstrap finished successfully')
 
     @ensure_outside_container
     def down(self):
-        run_shell_command('podman-compose down')
-        cleanup_box()
+        if engine() == 'podman':
+            run_shell_command(f'{engine_compose()} -f {Config.get("podman_yaml")} down')
+        else:
+            run_shell_command(f'{engine_compose()} -f {Config.get("docker_yaml")} down')
         print('Successfully killed all boxes')
 
     @ensure_outside_container
@@ -319,7 +343,7 @@ class Cluster(Target):
         # we need verbose to see the prompt after running shell command
         Config.set('verbose', True)
         print('Seed bash')
-        run_shell_command('podman-compose exec seed bash')
+        run_shell_command(f'{engine_compose()} -f {Config.get("docker_yaml")} exec seed bash')
 
 
 targets = {
@@ -333,6 +357,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-v', action='store_true', dest='verbose', help='be more verbose'
+    )
+    parser.add_argument(
+        '--engine', type=str, default='podman',
+        dest='engine', help='choose engine between "docker" and "podman"'
     )
 
     subparsers = parser.add_subparsers()
