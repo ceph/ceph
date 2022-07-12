@@ -3015,13 +3015,28 @@ RadosLuaScriptManager::RadosLuaScriptManager(RadosStore* _s) : store(_s)
 
 int RadosLuaScriptManager::get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  bufferlist bl;
+  RGWDataAccess data_access(store);
+  rgw_obj_key obj_key(key);
+  RGWDataAccess::BucketRef b;
+  RGWDataAccess::ObjectRef o;
 
-  int r = rgw_get_system_obj(obj_ctx, pool, key, bl, nullptr, nullptr, y, dpp);
+  const std::string lua_bucket("lua-script-bucket");
+  const std::string tenant;
+  const std::string bucket_id;
+
+  int r = data_access.get_bucket(dpp, tenant, lua_bucket, bucket_id, &b, y);
   if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to get lua bucket: " << lua_bucket << dendl;
     return r;
   }
+  r = b->get_object(obj_key, &o);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to get lua script: " << key << dendl;
+    return r;
+  }
+  
+  bufferlist bl;
+  // TODO: could not find a way to read the content of the object
 
   auto iter = bl.cbegin();
   try {
