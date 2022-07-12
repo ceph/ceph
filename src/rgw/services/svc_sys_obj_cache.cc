@@ -357,8 +357,9 @@ int RGWSI_SysObj_Cache::write_data(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-int RGWSI_SysObj_Cache::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *pepoch,
-                                 map<string, bufferlist> *attrs, bufferlist *first_chunk,
+int RGWSI_SysObj_Cache::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+                                 uint64_t *psize, real_time *pmtime,
+                                 map<string, bufferlist> *attrs,
                                  RGWObjVersionTracker *objv_tracker,
                                  optional_yield y)
 {
@@ -370,7 +371,6 @@ int RGWSI_SysObj_Cache::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_ob
 
   uint64_t size;
   real_time mtime;
-  uint64_t epoch;
 
   ObjectCacheInfo info;
   uint32_t flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
@@ -383,7 +383,6 @@ int RGWSI_SysObj_Cache::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_ob
 
     size = info.meta.size;
     mtime = info.meta.mtime;
-    epoch = info.epoch;
     if (objv_tracker)
       objv_tracker->read_version = info.version;
     goto done;
@@ -391,8 +390,8 @@ int RGWSI_SysObj_Cache::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_ob
   if (r == -ENODATA) {
     return -ENOENT;
   }
-  r = RGWSI_SysObj_Core::raw_stat(dpp, obj, &size, &mtime, &epoch, &info.xattrs,
-                                  first_chunk, objv_tracker, y);
+  r = RGWSI_SysObj_Core::raw_stat(dpp, obj, &size, &mtime, &info.xattrs,
+                                  objv_tracker, y);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;
@@ -401,7 +400,6 @@ int RGWSI_SysObj_Cache::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_ob
     return r;
   }
   info.status = 0;
-  info.epoch = epoch;
   info.meta.mtime = mtime;
   info.meta.size = size;
   info.flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
@@ -415,8 +413,6 @@ done:
     *psize = size;
   if (pmtime)
     *pmtime = mtime;
-  if (pepoch)
-    *pepoch = epoch;
   if (attrs)
     *attrs = info.xattrs;
   return 0;

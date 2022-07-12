@@ -37,8 +37,9 @@ protected:
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
-  int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-               std::map<std::string, bufferlist> *attrs, bufferlist *first_chunk,
+  int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+               uint64_t *psize, real_time *pmtime,
+               std::map<std::string, bufferlist> *attrs,
                RGWObjVersionTracker *objv_tracker,
                optional_yield y) override;
 
