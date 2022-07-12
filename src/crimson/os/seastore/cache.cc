@@ -91,7 +91,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
               NULL_GENERATION);
     DEBUGT("retire {}~{} as placeholder, add extent -- {}",
            t, addr, length, *ext);
-    add_extent(ext);
+    const auto t_src = t.get_src();
+    add_extent(ext, &t_src);
   }
 
   // add the retired-placeholder to transaction
@@ -685,14 +686,16 @@ void Cache::register_metrics()
   );
 }
 
-void Cache::add_extent(CachedExtentRef ref)
+void Cache::add_extent(
+    CachedExtentRef ref,
+    const Transaction::src_t* p_src=nullptr)
 {
   assert(ref->is_valid());
   extents.insert(*ref);
   if (ref->is_dirty()) {
     add_to_dirty(ref);
   } else {
-    touch_extent(*ref);
+    touch_extent(*ref, p_src);
   }
 }
 
@@ -1422,7 +1425,8 @@ void Cache::complete_commit(
       i->state = CachedExtent::extent_state_t::CLEAN;
       DEBUGT("add extent as fresh, inline={} -- {}",
              t, is_inline, *i);
-      add_extent(i);
+      const auto t_src = t.get_src();
+      add_extent(i, &t_src);
       if (cleaner) {
 	cleaner->mark_space_used(
 	  i->get_paddr(),
@@ -1546,7 +1550,8 @@ void Cache::complete_commit(
 	  i->get_length(),
 	  i->get_type(),
 	  seq));
-      add_extent(i);
+      const auto t_src = t.get_src();
+      add_extent(i, &t_src);
     }
   }
   if (!backref_list.empty())
