@@ -204,7 +204,7 @@ void RGWObjectCtx::set_prefetch_data(const rgw_obj& obj) {
   objs_state[obj].state.prefetch_data = true;
 }
 
-void RGWObjectCtx::invalidate(const rgw_obj& obj) {
+void RGWObjectCtx::invalidate(const rgw::sal::Object* obj) {
   std::unique_lock wl{lock};
   auto iter = objs_state.find(obj);
   if (iter == objs_state.end()) {
@@ -7198,7 +7198,7 @@ int RGWRados::with_bilog(const DoutPrefixProvider *dpp, F&& func,
 
 template <bool DeleteMarkerV, class OpIssuerT>
 int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, OpIssuerT& op_issuer,
-                                    const RGWBucketInfo& bucket_info,
+                                    RGWBucketInfo& bucket_info,
                                     RGWObjState& olh_state,
                                     const rgw_obj& obj_instance,
                                     struct rgw_bucket_dir_entry_meta *meta,
@@ -7248,7 +7248,7 @@ void RGWRados::bucket_index_guard_olh_op(const DoutPrefixProvider *dpp, RGWObjSt
 
 template <class OpIssuerT>
 int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp, OpIssuerT& op_issuer,
-                                           const RGWBucketInfo& bucket_info,
+                                           RGWBucketInfo& bucket_info,
                                            const rgw_obj& obj_instance,
                                            const std::string& olh_tag,
                                            uint64_t olh_epoch,
@@ -7656,7 +7656,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 template <class BILogHandlerT>
 int RGWRados::update_olh(const DoutPrefixProvider *dpp,
                          RGWObjState *state,
-                         const RGWBucketInfo& bucket_info,
+                         RGWBucketInfo& bucket_info,
                          const rgw::sal::Object* obj,
                          BILogHandlerT&& bilog_handler,
                          rgw_zone_set *zones_trace)
@@ -7692,7 +7692,7 @@ static rgw_zone_set get_zones_trace(const RGWZone& zone,
 }
 
 template <bool DeleteMarkerV>
-int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, rgw::sal::Object* target_obj, rgw_bucket_dir_entry_meta *meta,
+int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw::sal::Object* target_obj, rgw_bucket_dir_entry_meta *meta,
                       uint64_t olh_epoch, real_time unmod_since, bool high_precision_time,
                       optional_yield y, rgw_zone_set *_zones_trace, bool log_data_change)
 {
@@ -7949,7 +7949,7 @@ static auto get_bilog_handler(CephContext* const cct,
   return BILogNopHandler{cct};
 }
 
-int RGWRados::follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx, RGWObjState *state, rgw::sal::Object* olh_obj, rgw_obj *target)
+int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx, RGWObjState *state, rgw::sal::Object* olh_obj, rgw_obj *target)
 {
   map<string, bufferlist> pending_entries;
   rgw_filter_attrset(state->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);

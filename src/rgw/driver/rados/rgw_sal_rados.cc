@@ -603,7 +603,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
         }
         max_aio = concurrent_max;
       }
-      obj_ctx.invalidate(obj->get_obj());
+      obj_ctx.invalidate(*obj);
     } // for all RGW objects in results
   } // while is_truncated
 
