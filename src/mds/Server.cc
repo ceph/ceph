@@ -6537,9 +6537,9 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
 
   auto handler = Server::get_xattr_or_default_handler(name);
   const auto& pxattrs = cur->get_projected_xattrs();
+  size_t cur_xattrs_size = 0;
   if (pxattrs) {
     // check xattrs kv pairs size
-    size_t cur_xattrs_size = 0;
     for (const auto& p : *pxattrs) {
       if ((flags & CEPH_XATTR_REPLACE) && name.compare(p.first) == 0) {
 	continue;
@@ -6547,12 +6547,12 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
       cur_xattrs_size += p.first.length() + p.second.length();
     }
 
-    if (((cur_xattrs_size + inc) > mds->mdsmap->get_max_xattr_size())) {
-      dout(10) << "xattr kv pairs size too big. cur_xattrs_size "
-	<< cur_xattrs_size << ", inc " << inc << dendl;
-      respond_to_request(mdr, -CEPHFS_ENOSPC);
-      return;
-    }
+  }
+  if (((cur_xattrs_size + inc) > mds->mdsmap->get_max_xattr_size())) {
+    dout(10) << "xattr kv pairs size too big. cur_xattrs_size "
+	     << cur_xattrs_size << ", inc " << inc << dendl;
+    respond_to_request(mdr, -CEPHFS_ENOSPC);
+    return;
   }
 
   XattrOp xattr_op(CEPH_MDS_OP_SETXATTR, name, req->get_data(), flags);
