@@ -11,7 +11,7 @@
 
 #include "crimson/common/exception.h"
 #include "crimson/osd/pg.h"
-#include "crimson/osd/osd.h"
+#include "crimson/osd/pg_shard_manager.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/osd_operations/compound_peering_request.h"
 
@@ -61,7 +61,7 @@ public:
 };
 
 std::vector<crimson::OperationRef> handle_pg_create(
-  OSD &osd,
+  PGShardManager &pg_shard_manager,
   crimson::net::ConnectionRef conn,
   compound_state_ref state,
   Ref<MOSDPGCreate2> m)
@@ -85,7 +85,7 @@ std::vector<crimson::OperationRef> handle_pg_create(
         pgid, m->epoch,
         pi, history);
     } else {
-      auto op = osd.start_pg_operation<PeeringSubEvent>(
+      auto op = pg_shard_manager.start_pg_operation<PeeringSubEvent>(
 	  state,
 	  conn,
 	  pg_shard_t(),
@@ -106,9 +106,9 @@ std::vector<crimson::OperationRef> handle_pg_create(
 namespace crimson::osd {
 
 CompoundPeeringRequest::CompoundPeeringRequest(
-  OSD &osd,
+  PGShardManager &pg_shard_manager,
   crimson::net::ConnectionRef conn, Ref<Message> m)
-  : osd(osd),
+  : pg_shard_manager(pg_shard_manager),
     conn(conn),
     m(m)
 {}
@@ -132,7 +132,7 @@ seastar::future<> CompoundPeeringRequest::start()
     [&] {
       assert((m->get_type() == MSG_OSD_PG_CREATE2));
       return handle_pg_create(
-        osd,
+	pg_shard_manager,
 	conn,
 	state,
 	boost::static_pointer_cast<MOSDPGCreate2>(m));
@@ -146,7 +146,8 @@ seastar::future<> CompoundPeeringRequest::start()
       return trigger.maybe_record_blocking(state->promise.get_future(), *blocker);
     }).then([this, blocker=std::move(blocker)](auto &&ctx) {
       logger().info("{}: sub events complete", *this);
-      return osd.get_shard_services().dispatch_context_messages(std::move(ctx));
+      return pg_shard_manager.get_shard_services(
+      ).dispatch_context_messages(std::move(ctx));
     }).then([this, ref=std::move(ref)] {
       track_event<CompletionEvent>();
       logger().info("{}: complete", *this);

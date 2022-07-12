@@ -678,7 +678,7 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
       return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
     case MSG_OSD_PG_CREATE2:
       shard_services.start_operation<CompoundPeeringRequest>(
-	*this,
+	pg_shard_manager,
 	conn,
 	m);
       return seastar::now();
@@ -968,7 +968,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
 seastar::future<> OSD::handle_osd_op(crimson::net::ConnectionRef conn,
                                      Ref<MOSDOp> m)
 {
-  (void) start_pg_operation<ClientRequest>(
+  (void) pg_shard_manager.start_pg_operation<ClientRequest>(
     *this,
     conn,
     std::move(m));
@@ -980,7 +980,7 @@ seastar::future<> OSD::handle_update_log_missing(
   Ref<MOSDPGUpdateLogMissing> m)
 {
   m->decode_payload();
-  (void) start_pg_operation<LogMissingRequest>(
+  (void) pg_shard_manager.start_pg_operation<LogMissingRequest>(
     std::move(conn),
     std::move(m));
   return seastar::now();
@@ -991,7 +991,7 @@ seastar::future<> OSD::handle_update_log_missing_reply(
   Ref<MOSDPGUpdateLogMissingReply> m)
 {
   m->decode_payload();
-  (void) start_pg_operation<LogMissingRequestReply>(
+  (void) pg_shard_manager.start_pg_operation<LogMissingRequestReply>(
     std::move(conn),
     std::move(m));
   return seastar::now();
@@ -1027,7 +1027,7 @@ seastar::future<> OSD::handle_rep_op(crimson::net::ConnectionRef conn,
 				     Ref<MOSDRepOp> m)
 {
   m->finish_decode();
-  std::ignore = start_pg_operation<RepRequest>(
+  std::ignore = pg_shard_manager.start_pg_operation<RepRequest>(
     std::move(conn),
     std::move(m));
   return seastar::now();
@@ -1061,7 +1061,7 @@ seastar::future<> OSD::handle_scrub(crimson::net::ConnectionRef conn,
     pg_shard_t from_shard{static_cast<int>(m->get_source().num()),
                           pgid.shard};
     PeeringState::RequestScrub scrub_request{m->deep, m->repair};
-    return start_pg_operation<RemotePeeringEvent>(
+    return pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
       conn,
       from_shard,
       pgid,
@@ -1081,7 +1081,8 @@ seastar::future<> OSD::handle_mark_me_down(crimson::net::ConnectionRef conn,
 seastar::future<> OSD::handle_recovery_subreq(crimson::net::ConnectionRef conn,
 				   Ref<MOSDFastDispatchOp> m)
 {
-  std::ignore = start_pg_operation<RecoverySubRequest>(conn, std::move(m));
+  std::ignore = pg_shard_manager.start_pg_operation<RecoverySubRequest>(
+    conn, std::move(m));
   return seastar::now();
 }
 
@@ -1171,7 +1172,7 @@ seastar::future<> OSD::handle_peering_op(
   const int from = m->get_source().num();
   logger().debug("handle_peering_op on {} from {}", m->get_spg(), from);
   std::unique_ptr<PGPeeringEvent> evt(m->get_event());
-  (void) start_pg_operation<RemotePeeringEvent>(
+  (void) pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
     conn,
     pg_shard_t{from, m->get_spg().shard},
     m->get_spg(),

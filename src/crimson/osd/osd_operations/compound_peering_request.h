@@ -13,7 +13,7 @@
 
 namespace crimson::osd {
 
-class OSD;
+class PGShardManager;
 class PG;
 
 using osd_id_t = int;
@@ -43,13 +43,13 @@ public:
   };
 
 private:
-  OSD &osd;
+  PGShardManager &pg_shard_manager;
   crimson::net::ConnectionRef conn;
   Ref<Message> m;
 
 public:
   CompoundPeeringRequest(
-    OSD &osd, crimson::net::ConnectionRef conn, Ref<Message> m);
+    PGShardManager &pg_shard_manager, crimson::net::ConnectionRef conn, Ref<Message> m);
 
   void print(std::ostream &) const final;
   void dump_detail(Formatter *f) const final;
