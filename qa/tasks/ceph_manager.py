@@ -2679,7 +2679,11 @@ class CephManager:
         True if all pgs are clean
         """
         pgs = self.get_pg_stats()
-        return self._get_num_active_clean(pgs) == len(pgs)
+        if self._get_num_active_clean(pgs) == len(pgs):
+            return True
+        else:
+            self.dump_pgs_not_active_clean()
+            return False
 
     def is_recovered(self):
         """
