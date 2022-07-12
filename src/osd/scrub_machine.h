@@ -306,9 +306,10 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing> {
   explicit WaitDigestUpdate(my_context ctx);
 
   using reactions = mpl::list<sc::custom_reaction<DigestUpdate>,
-			      sc::transition<NextChunk, PendingTimer>,
-			      sc::transition<ScrubFinished, NotActive>>;
+			      sc::custom_reaction<ScrubFinished>,
+			      sc::transition<NextChunk, PendingTimer>>;
   sc::result react(const DigestUpdate&);
+  sc::result react(const ScrubFinished&);
 };
 
 // ----------------------------- the "replica active" states -----------------------
