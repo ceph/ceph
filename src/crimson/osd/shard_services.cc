@@ -27,67 +27,49 @@ using std::vector;
 
 namespace crimson::osd {
 
-ShardServices::ShardServices(
-  OSDMapService &osdmap_service,
-  const int whoami,
-  crimson::net::Messenger &cluster_msgr,
-  crimson::net::Messenger &public_msgr,
-  crimson::mon::Client &monc,
-  crimson::mgr::Client &mgrc,
-  crimson::os::FuturizedStore &store)
-    : osdmap_service(osdmap_service),
-      whoami(whoami),
-      cluster_msgr(cluster_msgr),
-      public_msgr(public_msgr),
-      monc(monc),
-      mgrc(mgrc),
-      store(store),
-      throttler(crimson::common::local_conf()),
-      obc_registry(crimson::common::local_conf()),
-      local_reserver(
-	&cct,
-	&finisher,
-	crimson::common::local_conf()->osd_max_backfills,
-	crimson::common::local_conf()->osd_min_recovery_priority),
-      remote_reserver(
-	&cct,
-	&finisher,
-	crimson::common::local_conf()->osd_max_backfills,
-	crimson::common::local_conf()->osd_min_recovery_priority)
+PerShardState::PerShardState(
+  int whoami)
+  : whoami(whoami),
+    throttler(crimson::common::local_conf()),
+    obc_registry(crimson::common::local_conf())
 {
   perf = build_osd_logger(&cct);
   cct.get_perfcounters_collection()->add(perf);
 
   recoverystate_perf = build_recoverystate_perf(&cct);
   cct.get_perfcounters_collection()->add(recoverystate_perf);
+}
 
+CoreState::CoreState(
+  int whoami,
+  OSDMapService &osdmap_service,
+  crimson::net::Messenger &cluster_msgr,
+  crimson::net::Messenger &public_msgr,
+  crimson::mon::Client &monc,
+  crimson::mgr::Client &mgrc,
+  crimson::os::FuturizedStore &store)
+  : whoami(whoami),
+    osdmap_service(osdmap_service),
+    cluster_msgr(cluster_msgr),
+    public_msgr(public_msgr),
+    monc(monc),
+    mgrc(mgrc),
+    store(store),
+    local_reserver(
+      &cct,
+      &finisher,
+      crimson::common::local_conf()->osd_max_backfills,
+      crimson::common::local_conf()->osd_min_recovery_priority),
+    remote_reserver(
+      &cct,
+      &finisher,
+      crimson::common::local_conf()->osd_max_backfills,
+      crimson::common::local_conf()->osd_min_recovery_priority)
+{
   crimson::common::local_conf().add_observer(this);
 }
 
-const char** ShardServices::get_tracked_conf_keys() const
-{
-  static const char* KEYS[] = {
-    "osd_max_backfills",
-    "osd_min_recovery_priority",
-    nullptr
-  };
-  return KEYS;
-}
-
-void ShardServices::handle_conf_change(const ConfigProxy& conf,
-				       const std::set <std::string> &changed)
-{
-  if (changed.count("osd_max_backfills")) {
-    local_reserver.set_max(conf->osd_max_backfills);
-    remote_reserver.set_max(conf->osd_max_backfills);
-  }
-  if (changed.count("osd_min_recovery_priority")) {
-    local_reserver.set_min_priority(conf->osd_min_recovery_priority);
-    remote_reserver.set_min_priority(conf->osd_min_recovery_priority);
-  }
-}
-
-seastar::future<> ShardServices::send_to_osd(
+seastar::future<> CoreState::send_to_osd(
   int peer, MessageURef m, epoch_t from_epoch)
 {
   if (osdmap->is_down(peer)) {
@@ -104,54 +86,20 @@ seastar::future<> ShardServices::send_to_osd(
   }
 }
 
-seastar::future<> ShardServices::dispatch_context_transaction(
-  crimson::os::CollectionRef col, PeeringCtx &ctx) {
-  if (ctx.transaction.empty()) {
-    logger().debug("ShardServices::dispatch_context_transaction: empty transaction");
+seastar::future<> CoreState::osdmap_subscribe(version_t epoch, bool force_request)
+{
+  logger().info("{}({})", __func__, epoch);
+  if (monc.sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
+      force_request) {
+    return monc.renew_subs();
+  } else {
     return seastar::now();
   }
-
-  logger().debug("ShardServices::dispatch_context_transaction: do_transaction ...");
-  auto ret = store.do_transaction(
-    col,
-    std::move(ctx.transaction));
-  ctx.reset_transaction();
-  return ret;
 }
 
-seastar::future<> ShardServices::dispatch_context_messages(
-  BufferedRecoveryMessages &&ctx)
-{
-  auto ret = seastar::parallel_for_each(std::move(ctx.message_map),
-    [this](auto& osd_messages) {
-      auto& [peer, messages] = osd_messages;
-      logger().debug("dispatch_context_messages sending messages to {}", peer);
-      return seastar::parallel_for_each(
-        std::move(messages), [=, peer=peer](auto& m) {
-        return send_to_osd(peer, std::move(m), osdmap->get_epoch());
-      });
-    });
-  ctx.message_map.clear();
-  return ret;
-}
-
-seastar::future<> ShardServices::dispatch_context(
-  crimson::os::CollectionRef col,
-  PeeringCtx &&ctx)
-{
-  ceph_assert(col || ctx.transaction.empty());
-  return seastar::when_all_succeed(
-    dispatch_context_messages(
-      BufferedRecoveryMessages{ctx}),
-    col ? dispatch_context_transaction(col, ctx) : seastar::now()
-  ).then_unpack([] {
-    return seastar::now();
-  });
-}
-
-void ShardServices::queue_want_pg_temp(pg_t pgid,
-				    const vector<int>& want,
-				    bool forced)
+void CoreState::queue_want_pg_temp(pg_t pgid,
+				       const vector<int>& want,
+				       bool forced)
 {
   auto p = pg_temp_pending.find(pgid);
   if (p == pg_temp_pending.end() ||
@@ -161,13 +109,13 @@ void ShardServices::queue_want_pg_temp(pg_t pgid,
   }
 }
 
-void ShardServices::remove_want_pg_temp(pg_t pgid)
+void CoreState::remove_want_pg_temp(pg_t pgid)
 {
   pg_temp_wanted.erase(pgid);
   pg_temp_pending.erase(pgid);
 }
 
-void ShardServices::requeue_pg_temp()
+void CoreState::requeue_pg_temp()
 {
   unsigned old_wanted = pg_temp_wanted.size();
   unsigned old_pending = pg_temp_pending.size();
@@ -181,18 +129,7 @@ void ShardServices::requeue_pg_temp()
     pg_temp_wanted.size());
 }
 
-std::ostream& operator<<(
-  std::ostream& out,
-  const ShardServices::pg_temp_t& pg_temp)
-{
-  out << pg_temp.acting;
-  if (pg_temp.forced) {
-    out << " (forced)";
-  }
-  return out;
-}
-
-seastar::future<> ShardServices::send_pg_temp()
+seastar::future<> CoreState::send_pg_temp()
 {
   if (pg_temp_wanted.empty())
     return seastar::now();
@@ -218,17 +155,18 @@ seastar::future<> ShardServices::send_pg_temp()
     });
 }
 
-void ShardServices::update_map(cached_map_t new_osdmap)
+std::ostream& operator<<(
+  std::ostream& out,
+  const CoreState::pg_temp_t& pg_temp)
 {
-  osdmap = std::move(new_osdmap);
+  out << pg_temp.acting;
+  if (pg_temp.forced) {
+    out << " (forced)";
+  }
+  return out;
 }
 
-ShardServices::cached_map_t &ShardServices::get_osdmap()
-{
-  return osdmap;
-}
-
-seastar::future<> ShardServices::send_pg_created(pg_t pgid)
+seastar::future<> CoreState::send_pg_created(pg_t pgid)
 {
   logger().debug(__func__);
   auto o = get_osdmap();
@@ -237,7 +175,7 @@ seastar::future<> ShardServices::send_pg_created(pg_t pgid)
   return monc.send_message(crimson::make_message<MOSDPGCreated>(pgid));
 }
 
-seastar::future<> ShardServices::send_pg_created()
+seastar::future<> CoreState::send_pg_created()
 {
   logger().debug(__func__);
   auto o = get_osdmap();
@@ -248,7 +186,7 @@ seastar::future<> ShardServices::send_pg_created()
     });
 }
 
-void ShardServices::prune_pg_created()
+void CoreState::prune_pg_created()
 {
   logger().debug(__func__);
   auto o = get_osdmap();
@@ -265,18 +203,7 @@ void ShardServices::prune_pg_created()
   }
 }
 
-seastar::future<> ShardServices::osdmap_subscribe(version_t epoch, bool force_request)
-{
-  logger().info("{}({})", __func__, epoch);
-  if (monc.sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
-      force_request) {
-    return monc.renew_subs();
-  } else {
-    return seastar::now();
-  }
-}
-
-HeartbeatStampsRef ShardServices::get_hb_stamps(int peer)
+HeartbeatStampsRef CoreState::get_hb_stamps(int peer)
 {
   auto [stamps, added] = heartbeat_stamps.try_emplace(peer);
   if (added) {
@@ -285,7 +212,7 @@ HeartbeatStampsRef ShardServices::get_hb_stamps(int peer)
   return stamps->second;
 }
 
-seastar::future<> ShardServices::send_alive(const epoch_t want)
+seastar::future<> CoreState::send_alive(const epoch_t want)
 {
   logger().info(
     "{} want={} up_thru_wanted={}",
@@ -313,5 +240,74 @@ seastar::future<> ShardServices::send_alive(const epoch_t want)
     return seastar::now();
   }
 }
+
+const char** CoreState::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "osd_max_backfills",
+    "osd_min_recovery_priority",
+    nullptr
+  };
+  return KEYS;
+}
+
+void CoreState::handle_conf_change(const ConfigProxy& conf,
+				   const std::set <std::string> &changed)
+{
+  if (changed.count("osd_max_backfills")) {
+    local_reserver.set_max(conf->osd_max_backfills);
+    remote_reserver.set_max(conf->osd_max_backfills);
+  }
+  if (changed.count("osd_min_recovery_priority")) {
+    local_reserver.set_min_priority(conf->osd_min_recovery_priority);
+    remote_reserver.set_min_priority(conf->osd_min_recovery_priority);
+  }
+}
+
+seastar::future<> ShardServices::dispatch_context_transaction(
+  crimson::os::CollectionRef col, PeeringCtx &ctx) {
+  if (ctx.transaction.empty()) {
+    logger().debug("ShardServices::dispatch_context_transaction: empty transaction");
+    return seastar::now();
+  }
+
+  logger().debug("ShardServices::dispatch_context_transaction: do_transaction ...");
+  auto ret = get_store().do_transaction(
+    col,
+    std::move(ctx.transaction));
+  ctx.reset_transaction();
+  return ret;
+}
+
+seastar::future<> ShardServices::dispatch_context_messages(
+  BufferedRecoveryMessages &&ctx)
+{
+  auto ret = seastar::parallel_for_each(std::move(ctx.message_map),
+    [this](auto& osd_messages) {
+      auto& [peer, messages] = osd_messages;
+      logger().debug("dispatch_context_messages sending messages to {}", peer);
+      return seastar::parallel_for_each(
+        std::move(messages), [=, peer=peer](auto& m) {
+        return send_to_osd(peer, std::move(m), local_state.osdmap->get_epoch());
+      });
+    });
+  ctx.message_map.clear();
+  return ret;
+}
+
+seastar::future<> ShardServices::dispatch_context(
+  crimson::os::CollectionRef col,
+  PeeringCtx &&ctx)
+{
+  ceph_assert(col || ctx.transaction.empty());
+  return seastar::when_all_succeed(
+    dispatch_context_messages(
+      BufferedRecoveryMessages{ctx}),
+    col ? dispatch_context_transaction(col, ctx) : seastar::now()
+  ).then_unpack([] {
+    return seastar::now();
+  });
+}
+
 
 };

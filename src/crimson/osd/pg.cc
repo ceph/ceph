@@ -999,7 +999,7 @@ PG::load_obc_iertr::future<>
 PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
 {
   auto [obc, existed] =
-    shard_services.obc_registry.get_cached_obc(std::move(oid));
+    shard_services.get_cached_obc(std::move(oid));
   return with_head_obc<State>(std::move(obc), existed, std::move(func));
 }
 
@@ -1026,7 +1026,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
       logger().error("with_clone_obc: {} clone not found", coid);
       return load_obc_ertr::make_ready_future<>();
     }
-    auto [clone, existed] = shard_services.obc_registry.get_cached_obc(*coid);
+    auto [clone, existed] = shard_services.get_cached_obc(*coid);
     return clone->template with_lock<State>(
       [coid=*coid, existed=existed,
        head=std::move(head), clone=std::move(clone),

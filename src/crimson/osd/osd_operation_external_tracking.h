@@ -241,8 +241,7 @@ struct HistoricBackend
 
   void handle(ClientRequest::CompletionEvent&, const Operation& op) override {
     if (crimson::common::local_conf()->osd_op_history_size) {
-      const auto& client_op = to_client_request(op);
-      client_op.osd.get_shard_services().registry.put_historic(client_op);
+      to_client_request(op).put_historic();
     }
   }
 };

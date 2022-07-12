@@ -334,4 +334,9 @@ bool ClientRequest::is_misdirected(const PG& pg) const
   return true;
 }
 
+void ClientRequest::put_historic() const
+{
+  osd.get_shard_services().get_registry().put_historic(*this);
+}
+
 }

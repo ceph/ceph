@@ -179,7 +179,7 @@ RecoveryBackend::scan_for_backfill(
       -> interruptible_future<> {
       crimson::osd::ObjectContextRef obc;
       if (pg.is_primary()) {
-        obc = shard_services.obc_registry.maybe_get_cached_obc(object);
+        obc = shard_services.maybe_get_cached_obc(object);
       }
       if (obc) {
         if (obc->obs.exists) {

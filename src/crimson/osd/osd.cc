@@ -90,7 +90,10 @@ OSD::OSD(int id, uint32_t nonce,
     monc{new crimson::mon::Client{*public_msgr, *this}},
     mgrc{new crimson::mgr::Client{*public_msgr, *this}},
     store{store},
-    shard_services{*this, whoami, *cluster_msgr, *public_msgr, *monc, *mgrc, store},
+    pg_shard_manager{
+      static_cast<OSDMapService&>(*this), whoami, *cluster_msgr,
+      *public_msgr, *monc, *mgrc, store},
+    shard_services{pg_shard_manager.get_shard_services()},
     heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
     tick_timer{[this] {
@@ -329,8 +332,8 @@ seastar::future<> OSD::start()
     superblock = std::move(sb);
     return get_map(superblock.current_epoch);
   }).then([this](cached_map_t&& map) {
-    shard_services.update_map(map);
     osdmap_gate.got_map(map->get_epoch());
+    pg_shard_manager.update_map(map);
     osdmap = std::move(map);
     bind_epoch = osdmap->get_epoch();
     return load_pgs();
@@ -554,12 +557,15 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_command(make_asok_hook<pg::QueryCommand>(*this));
     asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this));
     // ops commands
-    asok->register_command(make_asok_hook<DumpInFlightOpsHook>(
-      std::as_const(get_shard_services().registry)));
-    asok->register_command(make_asok_hook<DumpHistoricOpsHook>(
-      std::as_const(get_shard_services().registry)));
-    asok->register_command(make_asok_hook<DumpSlowestHistoricOpsHook>(
-      std::as_const(get_shard_services().registry)));
+    asok->register_command(
+      make_asok_hook<DumpInFlightOpsHook>(
+	std::as_const(get_shard_services().get_registry())));
+    asok->register_command(
+      make_asok_hook<DumpHistoricOpsHook>(
+	std::as_const(get_shard_services().get_registry())));
+    asok->register_command(
+      make_asok_hook<DumpSlowestHistoricOpsHook>(
+	std::as_const(get_shard_services().get_registry())));
   });
 }
 
@@ -578,7 +584,7 @@ seastar::future<> OSD::stop()
     return asok->stop().then([this] {
       return heartbeat->stop();
     }).then([this] {
-      return shard_services.stop();
+      return pg_shard_manager.stop_registries();
     }).then([this] {
       return store.umount();
     }).then([this] {
@@ -1150,7 +1156,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
                               [this](epoch_t cur) {
     return get_map(cur).then([this](cached_map_t&& o) {
       osdmap = std::move(o);
-      shard_services.update_map(osdmap);
+      pg_shard_manager.update_map(osdmap);
       if (up_epoch == 0 &&
           osdmap->is_up(whoami) &&
           osdmap->get_addrs(whoami) == public_msgr->get_myaddrs()) {
