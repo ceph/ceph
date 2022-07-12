@@ -108,6 +108,7 @@ public:
   }
 
   seastar::future<> stop() {
+    crimson::get_logger(ceph_subsys_osd).info("ShardServices::{}", __func__);
     stopping = true;
     return registry.stop();
   }

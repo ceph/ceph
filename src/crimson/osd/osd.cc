@@ -578,6 +578,8 @@ seastar::future<> OSD::stop()
     return asok->stop().then([this] {
       return heartbeat->stop();
     }).then([this] {
+      return shard_services.stop();
+    }).then([this] {
       return store.umount();
     }).then([this] {
       return store.stop();
