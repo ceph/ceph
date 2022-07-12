@@ -8,11 +8,6 @@ if sys.version_info >= (3, 2):
 else:
     import ConfigParser as configparser
 
-try:
-    from StringIO import StringIO
-except ImportError:
-    from io import StringIO
-
 import cephfs
 
 from ...exception import MetadataMgrException
@@ -27,6 +22,32 @@ def _conf_reader(fs, fd, offset=0, length=4096):
         if not buf:
             return
         yield buf.decode('utf-8')
+
+
+class _ConfigWriter:
+    def __init__(self, fs, fd):
+        self._fs = fs
+        self._fd = fd
+        self._wrote = 0
+
+    def write(self, value):
+        buf = value.encode('utf-8')
+        wrote = self._fs.write(self._fd, buf, -1)
+        self._wrote += wrote
+        return wrote
+
+    def fsync(self):
+        self._fs.fsync(self._fd, 0)
+
+    @property
+    def wrote(self):
+        return self._wrote
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self._fs.close(self._fd)
 
 
 class MetadataManager(object):
@@ -77,26 +98,15 @@ class MetadataManager(object):
             if len(self.config.items(section)) == 0:
                 self.config.remove_section(section)
 
-        conf_data = StringIO()
-        self.config.write(conf_data)
-        conf_data.seek(0)
 
-        fd = None
         try:
             fd = self.fs.open(self.config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, self.mode)
-            wrote = 0
-            while True:
-                data = conf_data.read()
-                if not len(data):
-                    break
-                wrote += self.fs.write(fd, data.encode('utf-8'), -1)
-            self.fs.fsync(fd, 0)
-            log.info("wrote {0} bytes to config {1}".format(wrote, self.config_path))
+            with _ConfigWriter(self.fs, fd) as cfg_writer:
+                self.config.write(cfg_writer)
+                cfg_writer.fsync()
+            log.info("wrote {0} bytes to config {1}".format(cfg_writer.wrote, self.config_path))
         except cephfs.Error as e:
             raise MetadataMgrException(-e.args[0], e.args[1])
-        finally:
-            if fd is not None:
-                self.fs.close(fd)
 
     def init(self, version, typ, path, state):
         # you may init just once before refresh (helps to overwrite conf)
