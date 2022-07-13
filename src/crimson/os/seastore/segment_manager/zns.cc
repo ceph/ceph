@@ -12,7 +12,9 @@
 
 SET_SUBSYS(seastore_device);
 
-#define SECT_SHIFT 9
+#define SECT_SHIFT	9
+#define RESERVED_ZONES 	1
+
 namespace crimson::os::seastore::segment_manager::zns {
 
 using open_device_ret = ZNSSegmentManager::access_ertr::future<
@@ -41,48 +43,48 @@ static open_device_ret open_device(
 }
 
 static zns_sm_metadata_t make_metadata(
+  uint64_t size,
   seastore_meta_t meta,
   const seastar::stat_data &data,
-  size_t zone_size,
-  size_t zone_capacity,
+  size_t zone_size_sectors,
+  size_t zone_capacity_sectors,
   size_t num_zones)
 {
   LOG_PREFIX(ZNSSegmentManager::make_metadata);
-  using crimson::common::get_conf;
-  
-  auto config_size = get_conf<Option::size_t>(
-    "seastore_device_size");
-  
-  size_t size = (data.size == 0) ? config_size : data.size;
-  size_t segment_size = zone_size << SECT_SHIFT;
-  size_t zones_per_segment = segment_size / (zone_size << SECT_SHIFT);
-  size_t segments = (num_zones - 1) / zones_per_segment;
-  
+
+  // TODO: support Option::size_t seastore_segment_size
+  // to allow zones_per_segment > 1 with striping.
+  size_t zone_size = zone_size_sectors << SECT_SHIFT;
+  size_t zone_capacity = zone_capacity_sectors << SECT_SHIFT;
+  size_t segment_size = zone_size;
+  size_t zones_per_segment = segment_size / zone_size;
+  size_t segments = (num_zones - RESERVED_ZONES) / zones_per_segment;
+
+  WARN("Ignoring configuration values for device and segment size");
   INFO(
-    "device size {}, block_size {}, allocated_size {}, config_size {},"
+    "device size {}, block_size {}, allocated_size {},"
     " total zones {}, zone_size {}, zone_capacity {},"
     " total segments {}, zones per segment {}, segment size {}",
     size,
     data.block_size,
     data.allocated_size,
-    config_size,
     num_zones,
-    zone_size << SECT_SHIFT,
-    zone_capacity << SECT_SHIFT,
+    zone_size,
+    zone_capacity,
     segments,
     zones_per_segment,
-    (zone_capacity << SECT_SHIFT) * zones_per_segment);
-  
+    zone_capacity * zones_per_segment);
+
   zns_sm_metadata_t ret = zns_sm_metadata_t{
     size,
     segment_size,
-    (zone_capacity << SECT_SHIFT) * zones_per_segment,
+    zone_capacity * zones_per_segment,
     zones_per_segment,
-    zone_capacity << SECT_SHIFT,
+    zone_capacity,
     data.block_size,
     segments,
-    zone_size << SECT_SHIFT,
-    zone_size << SECT_SHIFT,
+    zone_size,
+    zone_size * RESERVED_ZONES,
     meta};
   return ret;
 }
@@ -101,17 +103,35 @@ struct ZoneReport {
   }
 };
 
+static seastar::future<size_t> get_blk_dev_size(
+  seastar::file &device)
+{
+  return seastar::do_with(
+    (uint64_t)0,
+    [&](auto& size_sects) {
+      return device.ioctl(
+        BLKGETSIZE,
+	(void *)&size_sects
+      ).then([&](int ret) {
+        ceph_assert(size_sects);
+        size_t size = size_sects << SECT_SHIFT;
+	return seastar::make_ready_future<size_t>(size);
+      });
+  });
+}
+
+// zone_size should be in 512B sectors
 static seastar::future<> reset_device(
-  seastar::file &device, 
-  uint32_t zone_size, 
+  seastar::file &device,
+  uint32_t zone_size_sects,
   uint32_t nr_zones)
 {
   return seastar::do_with(
     blk_zone_range{},
     ZoneReport(nr_zones),
-    [&, nr_zones] (auto &range, auto &zr){
+    [&, nr_zones](auto &range, auto &zr) {
       range.sector = 0;
-      range.nr_sectors = zone_size * nr_zones;
+      range.nr_sectors = zone_size_sects * nr_zones;
       return device.ioctl(
 	BLKRESETZONE, 
 	&range
@@ -128,7 +148,7 @@ static seastar::future<size_t> get_zone_capacity(
 {
   return seastar::do_with(
     ZoneReport(nr_zones),
-    [&] (auto &zr) {
+    [&](auto &zr) {
         zr.hdr->sector = 0;
         zr.hdr->nr_zones = nr_zones;
 	return device.ioctl(
@@ -304,34 +324,41 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
     zns_sm_metadata_t{},
     size_t(),
     size_t(),
-    [=](auto &device, auto &stat, auto &sb, auto &zone_size, auto &nr_zones){
+    size_t(),
+    [=](auto &device, auto &stat, auto &sb, auto &zone_size_sects, auto &nr_zones, auto &size) {
       return open_device(
-	device_path, 
+	device_path,
 	seastar::open_flags::rw
-      ).safe_then([=, &device, &stat, &sb, &zone_size, &nr_zones](auto p){
+      ).safe_then([=, &device, &stat, &sb, &zone_size_sects, &nr_zones, &size](auto p) {
 	device = p.first;
 	stat = p.second;
 	return device.ioctl(
-	  BLKGETNRZONES, 
+	  BLKGETNRZONES,
 	  (void *)&nr_zones
-	).then([&](int ret){
+	).then([&](int ret) {
 	  if (nr_zones == 0) {
 	    return seastar::make_exception_future<int>(
 	      std::system_error(std::make_error_code(std::errc::io_error)));
 	  }
-	  return device.ioctl(BLKGETZONESZ, (void *)&zone_size);
-	}).then([&] (int ret){
-          ceph_assert(zone_size);
-	  return reset_device(device, zone_size, nr_zones);
-	}).then([&] {
+	  return device.ioctl(BLKGETZONESZ, (void *)&zone_size_sects);
+	}).then([&](int ret) {
+          ceph_assert(zone_size_sects);
+	  return reset_device(device, zone_size_sects, nr_zones);
+        }).then([&] {
+          return get_blk_dev_size(device);
+	}).then([&](auto devsize) {
+          size = devsize;
 	  return get_zone_capacity(device, nr_zones);
-	}).then([&, FNAME, config] (auto zone_capacity){
-          ceph_assert(zone_capacity);
+	}).then([&, FNAME, config](auto zone_capacity_sects) {
+          ceph_assert(zone_capacity_sects);
+          DEBUG("zone_size in sectors {}, zone_capacity in sectors {}",
+                zone_size_sects, zone_capacity_sects);
 	  sb = make_metadata(
-	    config.meta, 
-	    stat, 
-	    zone_size, 
-	    zone_capacity, 
+            size,
+	    config.meta,
+	    stat,
+	    zone_size_sects,
+	    zone_capacity_sects,
 	    nr_zones);
 	  metadata = sb;
 	  stats.metadata_write.increment(
@@ -349,15 +376,16 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
     });
 }
 
+// Return range of sectors to operate on.
 struct blk_zone_range make_range(
-  segment_id_t id, 
-  size_t segment_size, 
-  size_t block_size, 
+  segment_id_t id,
+  size_t segment_size,
   size_t first_segment_offset)
 {
   return blk_zone_range{
-    (id.device_segment_id() * segment_size + first_segment_offset),
-    (segment_size)  
+    (id.device_segment_id() * (segment_size >> SECT_SHIFT)
+                           + (first_segment_offset >> SECT_SHIFT)),
+    (segment_size >> SECT_SHIFT)
   };
 }
 
@@ -389,14 +417,13 @@ ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
   LOG_PREFIX(ZNSSegmentManager::open);
   return seastar::do_with(
     blk_zone_range{},
-    [=] (auto &range){
+    [=](auto &range) {
       range = make_range(
-	id, 
-	metadata.zone_size, 
-	metadata.block_size, 
-	metadata.first_segment_offset);
+	id,
+	metadata.segment_size,
+        metadata.first_segment_offset);
       return blk_open_zone(
-	device, 
+	device,
 	range
       );
     }
@@ -440,14 +467,13 @@ ZNSSegmentManager::release_ertr::future<> ZNSSegmentManager::release(
   LOG_PREFIX(ZNSSegmentManager::release);
   return seastar::do_with(
     blk_zone_range{},
-    [=] (auto &range){
+    [=](auto &range) {
       range = make_range(
-	id, 
-	metadata.zone_size, 
-	metadata.block_size, 
-	metadata.first_segment_offset);
+	id,
+	metadata.segment_size,
+        metadata.first_segment_offset);
       return blk_close_zone(
-	device, 
+	device,
 	range
       );
     }
@@ -470,7 +496,7 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
     return crimson::ct_error::invarg::make();
   }
   
-  if (seg_addr.get_segment_off() + len > metadata.zone_size) {
+  if (seg_addr.get_segment_off() + len > metadata.segment_size) {
     ERROR("invalid offset {}, len {}",
       addr,
       len);
@@ -489,14 +515,13 @@ Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
   LOG_PREFIX(ZNSSegmentManager::close);
   return seastar::do_with(
     blk_zone_range{},
-    [=] (auto &range){
+    [=](auto &range) {
       range = make_range(
-	id, 
-	metadata.zone_size, 
-	metadata.block_size, 
-	metadata.first_segment_offset);
+	id,
+	metadata.segment_size,
+        metadata.first_segment_offset);
       return blk_close_zone(
-	device, 
+	device,
 	range
       );
     }
