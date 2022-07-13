@@ -457,7 +457,7 @@ class MotrZone : public StoreZone {
     virtual const RGWAccessKey& get_system_key() { return zone_params->system_key; }
     virtual const std::string& get_realm_name() { return realm->get_name(); }
     virtual const std::string& get_realm_id() { return realm->get_id(); }
-    virtual const std::string& get_tier_type() { return "fixme"; }
+    virtual const std::string& get_tier_type() { return "rgw"; }
     friend class MotrStore;
 };
 
