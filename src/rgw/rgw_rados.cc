@@ -1738,10 +1738,8 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id, const DoutPr
   rgw_bucket bucket = bucket_info.bucket;
   bucket.update_bucket_id(new_bucket_id);
 
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-
   bucket_info.objv_tracker.clear();
-  int ret = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr, null_yield, dpp);
+  int ret = store->get_bucket_instance_info(bucket, bucket_info, nullptr, nullptr, null_yield, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -2734,13 +2732,11 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
 {
   bucket = _bucket;
 
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-
   RGWBucketInfo bucket_info;
   RGWBucketInfo* bucket_info_p =
     bucket_info_out ? bucket_info_out : &bucket_info;
 
-  int ret = store->get_bucket_instance_info(obj_ctx, bucket, *bucket_info_p, NULL, NULL, null_yield, dpp);
+  int ret = store->get_bucket_instance_info(bucket, *bucket_info_p, NULL, NULL, null_yield, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -4818,12 +4814,11 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner, const DoutPr
   RGWBucketInfo info;
   map<string, bufferlist> attrs;
   int r;
-  auto obj_ctx = svc.sysobj->init_obj_ctx();
 
   if (bucket.bucket_id.empty()) {
     r = get_bucket_info(&svc, bucket.tenant, bucket.name, info, NULL, null_yield, dpp, &attrs);
   } else {
-    r = get_bucket_instance_info(obj_ctx, bucket, info, nullptr, &attrs, null_yield, dpp);
+    r = get_bucket_instance_info(bucket, info, nullptr, &attrs, null_yield, dpp);
   }
   if (r < 0) {
     ldpp_dout(dpp, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
@@ -5374,10 +5369,8 @@ int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime, const 
   std::string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
 
-  auto obj_ctx = svc.sysobj->init_obj_ctx();
-
   RGWBucketInfo bucket_info;
-  int ret = get_bucket_instance_info(obj_ctx, obj.bucket, bucket_info, NULL, NULL, null_yield, dpp);
+  int ret = get_bucket_instance_info(obj.bucket, bucket_info, NULL, NULL, null_yield, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "() get_bucket_instance_info(bucket=" << obj.bucket << ") returned ret=" << ret << dendl;
     return ret;
@@ -7852,8 +7845,7 @@ int RGWRados::get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInf
   return r;
 }
 
-int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx,
-				       const string& meta_key,
+int RGWRados::get_bucket_instance_info(const string& meta_key,
 				       RGWBucketInfo& info,
                                        real_time *pmtime,
 				       map<string, bufferlist> *pattrs,
@@ -7863,21 +7855,19 @@ int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx,
   rgw_bucket bucket;
   rgw_bucket_parse_bucket_key(cct, meta_key, &bucket, nullptr);
 
-  return get_bucket_instance_info(obj_ctx, bucket, info, pmtime, pattrs, y, dpp);
+  return get_bucket_instance_info(bucket, info, pmtime, pattrs, y, dpp);
 }
 
-int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info,
+int RGWRados::get_bucket_instance_info(const rgw_bucket& bucket, RGWBucketInfo& info,
                                        real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y,
                                        const DoutPrefixProvider *dpp)
 {
-  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
   return ctl.bucket->read_bucket_instance_info(bucket, &info,
 					       y,
                                                dpp,
 					       RGWBucketCtl::BucketInstance::GetParams()
 					       .set_mtime(pmtime)
-					       .set_attrs(pattrs)
-                                               .set_bectx_params(bectx_params));
+					       .set_attrs(pattrs));
 }
 
 int RGWRados::get_bucket_info(RGWServices *svc,
@@ -7887,16 +7877,13 @@ int RGWRados::get_bucket_info(RGWServices *svc,
                               optional_yield y,
                               const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs)
 {
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
-  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
   rgw_bucket bucket;
   bucket.tenant = tenant;
   bucket.name = bucket_name;
   return ctl.bucket->read_bucket_info(bucket, &info, y, dpp,
 				      RGWBucketCtl::BucketInstance::GetParams()
 				      .set_mtime(pmtime)
-				      .set_attrs(pattrs)
-                                      .set_bectx_params(bectx_params));
+				      .set_attrs(pattrs));
 }
 
 int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
@@ -7967,8 +7954,6 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
 
 int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m, const DoutPrefixProvider *dpp)
 {
-  auto obj_ctx = svc.sysobj->init_obj_ctx();
-
   map<string, RGWBucketEnt>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     RGWBucketEnt& ent = iter->second;
@@ -7980,7 +7965,7 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m, const DoutPr
     vector<rgw_bucket_dir_header> headers;
 
     RGWBucketInfo bucket_info;
-    int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield, dpp);
+    int ret = get_bucket_instance_info(bucket, bucket_info, NULL, NULL, null_yield, dpp);
     if (ret < 0) {
       return ret;
     }

@@ -320,7 +320,7 @@ private:
 
 class RGWAsyncGetSystemObj : public RGWAsyncRadosRequest {
   const DoutPrefixProvider *dpp;
-  RGWSysObjectCtx obj_ctx;
+  RGWSI_SysObj* svc_sysobj;
   rgw_raw_obj obj;
   const bool want_attrs;
   const bool raw_attrs;

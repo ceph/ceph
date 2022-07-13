@@ -435,11 +435,10 @@ void rgw_pubsub_sub_config::dump(Formatter *f) const
   encode_json("s3_id", s3_id, f);
 }
 
-RGWPubSub::RGWPubSub(rgw::sal::RadosStore* _store, const std::string& _tenant) :
-                            store(_store),
-                            tenant(_tenant),
-                            obj_ctx(store->svc()->sysobj->init_obj_ctx()) {
-    get_meta_obj(&meta_obj);
+RGWPubSub::RGWPubSub(rgw::sal::RadosStore* _store, const std::string& _tenant)
+  : store(_store), tenant(_tenant), svc_sysobj(store->svc()->sysobj)
+{
+  get_meta_obj(&meta_obj);
 }
 
 int RGWPubSub::remove(const DoutPrefixProvider *dpp, 
