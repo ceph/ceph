@@ -239,7 +239,7 @@ class Podman(ContainerEngine):
         return self._version
 
     def get_version(self, ctx: CephadmContext) -> None:
-        out, _, _ = call_throws(ctx, [self.path, 'version', '--format', '{{.Client.Version}}'])
+        out, _, _ = call_throws(ctx, [self.path, 'version', '--format', '{{.Client.Version}}'], verbosity=CallVerbosity.QUIET)
         self._version = _parse_podman_version(out)
 
     def __str__(self) -> str:
@@ -620,14 +620,14 @@ class Monitoring(object):
                 _, err, code = call(ctx, [
                     ctx.container_engine.path, 'exec', container_id, cmd,
                     '--version'
-                ], verbosity=CallVerbosity.DEBUG)
+                ], verbosity=CallVerbosity.QUIET)
                 if code == 0:
                     break
             cmd = 'alertmanager'  # reset cmd for version extraction
         else:
             _, err, code = call(ctx, [
                 ctx.container_engine.path, 'exec', container_id, cmd, '--version'
-            ], verbosity=CallVerbosity.DEBUG)
+            ], verbosity=CallVerbosity.QUIET)
         if code == 0 and \
                 err.startswith('%s, version ' % cmd):
             version = err.split(' ')[2]
@@ -718,7 +718,7 @@ class NFSGanesha(object):
         out, err, code = call(ctx,
                               [ctx.container_engine.path, 'exec', container_id,
                                NFSGanesha.entrypoint, '-v'],
-                              verbosity=CallVerbosity.DEBUG)
+                              verbosity=CallVerbosity.QUIET)
         if code == 0:
             match = re.search(r'NFS-Ganesha Release\s*=\s*[V]*([\d.]+)', out)
             if match:
@@ -850,7 +850,7 @@ class CephIscsi(object):
         out, err, code = call(ctx,
                               [ctx.container_engine.path, 'exec', container_id,
                                '/usr/bin/python3', '-c', "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"],
-                              verbosity=CallVerbosity.DEBUG)
+                              verbosity=CallVerbosity.QUIET)
         if code == 0:
             version = out.strip()
         return version
@@ -1484,20 +1484,21 @@ class FileLock(object):
         try:
             while True:
                 if not self.is_locked:
-                    logger.debug('Acquiring lock %s on %s', lock_id,
-                                 lock_filename)
+                    logger.log(QUIET_LOG_LEVEL, 'Acquiring lock %s on %s', lock_id,
+                               lock_filename)
                     self._acquire()
 
                 if self.is_locked:
-                    logger.debug('Lock %s acquired on %s', lock_id,
-                                 lock_filename)
+                    logger.log(QUIET_LOG_LEVEL, 'Lock %s acquired on %s', lock_id,
+                               lock_filename)
                     break
                 elif timeout >= 0 and time.time() - start_time > timeout:
                     logger.warning('Timeout acquiring lock %s on %s', lock_id,
                                    lock_filename)
                     raise Timeout(self._lock_file)
                 else:
-                    logger.debug(
+                    logger.log(
+                        QUIET_LOG_LEVEL,
                         'Lock %s not acquired on %s, waiting %s seconds ...',
                         lock_id, lock_filename, poll_intervall
                     )
@@ -2469,7 +2470,7 @@ def check_unit(ctx, unit_name):
     installed = False
     try:
         out, err, code = call(ctx, ['systemctl', 'is-enabled', unit_name],
-                              verbosity=CallVerbosity.DEBUG)
+                              verbosity=CallVerbosity.QUIET)
         if code == 0:
             enabled = True
             installed = True
@@ -2483,7 +2484,7 @@ def check_unit(ctx, unit_name):
     state = 'unknown'
     try:
         out, err, code = call(ctx, ['systemctl', 'is-active', unit_name],
-                              verbosity=CallVerbosity.DEBUG)
+                              verbosity=CallVerbosity.QUIET)
         out = out.strip()
         if out in ['active']:
             state = 'running'
@@ -3146,7 +3147,7 @@ def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
                 image=img,
                 entrypoint='stat',
                 args=['-c', '%u %g', fp]
-            ).run()
+            ).run(verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
             uid, gid = out.split(' ')
             return int(uid), int(gid)
         except RuntimeError as e:
@@ -4071,10 +4072,10 @@ class CephContainer:
         ]
         return ret
 
-    def run(self, timeout=DEFAULT_TIMEOUT):
-        # type: (Optional[int]) -> str
+    def run(self, timeout=DEFAULT_TIMEOUT, verbosity=CallVerbosity.VERBOSE_ON_FAILURE):
+        # type: (Optional[int], CallVerbosity) -> str
         out, _, _ = call_throws(self.ctx, self.run_cmd(),
-                                desc=self.entrypoint, timeout=timeout)
+                                desc=self.entrypoint, timeout=timeout, verbosity=verbosity)
         return out
 
 
@@ -4621,7 +4622,7 @@ def _pull_image(ctx, image, insecure=False):
     cmd_str = ' '.join(cmd)
 
     for sleep_secs in [1, 4, 25]:
-        out, err, ret = call(ctx, cmd)
+        out, err, ret = call(ctx, cmd, verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
         if not ret:
             return
 
@@ -5104,7 +5105,8 @@ def wait_for_mon(
         timeout = ctx.timeout if ctx.timeout else 60  # seconds
         out, err, ret = call(ctx, c.run_cmd(),
                              desc=c.entrypoint,
-                             timeout=timeout)
+                             timeout=timeout,
+                             verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
         return ret == 0
 
     is_available(ctx, 'mon', is_mon_available)
@@ -5131,7 +5133,9 @@ def create_mgr(
         # type: () -> bool
         timeout = ctx.timeout if ctx.timeout else 60  # seconds
         try:
-            out = clifunc(['status', '-f', 'json-pretty'], timeout=timeout)
+            out = clifunc(['status', '-f', 'json-pretty'],
+                          timeout=timeout,
+                          verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
             j = json.loads(out)
             return j.get('mgrmap', {}).get('available', False)
         except Exception as e:
@@ -5574,8 +5578,8 @@ def command_bootstrap(ctx):
     tmp_config = write_tmp(config, uid, gid)
 
     # a CLI helper to reduce our typing
-    def cli(cmd, extra_mounts={}, timeout=DEFAULT_TIMEOUT):
-        # type: (List[str], Dict[str, str], Optional[int]) -> str
+    def cli(cmd, extra_mounts={}, timeout=DEFAULT_TIMEOUT, verbosity=CallVerbosity.VERBOSE_ON_FAILURE):
+        # type: (List[str], Dict[str, str], Optional[int], CallVerbosity) -> str
         mounts = {
             log_dir: '/var/log/ceph:z',
             admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
@@ -5590,7 +5594,7 @@ def command_bootstrap(ctx):
             entrypoint='/usr/bin/ceph',
             args=cmd,
             volume_mounts=mounts,
-        ).run(timeout=timeout)
+        ).run(timeout=timeout, verbosity=verbosity)
 
     wait_for_mon(ctx, mon_id, mon_dir, admin_keyring.name, tmp_config.name)
 
@@ -5627,9 +5631,9 @@ def command_bootstrap(ctx):
         # stat' command first, then fall back to 'mgr dump' if
         # necessary
         try:
-            j = json_loads_retry(lambda: cli(['mgr', 'stat']))
+            j = json_loads_retry(lambda: cli(['mgr', 'stat'], verbosity=CallVerbosity.QUIET_UNLESS_ERROR))
         except Exception:
-            j = json_loads_retry(lambda: cli(['mgr', 'dump']))
+            j = json_loads_retry(lambda: cli(['mgr', 'dump'], verbosity=CallVerbosity.QUIET_UNLESS_ERROR))
         epoch = j['epoch']
 
         # wait for mgr to have it
@@ -6121,7 +6125,7 @@ def command_ceph_volume(ctx):
         volume_mounts=mounts,
     )
 
-    out, err, code = call_throws(ctx, c.run_cmd())
+    out, err, code = call_throws(ctx, c.run_cmd(), verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
     if not code:
         print(out)
 
@@ -6186,7 +6190,7 @@ def _list_ipv4_networks(ctx: CephadmContext) -> Dict[str, Dict[str, Set[str]]]:
     execstr: Optional[str] = find_executable('ip')
     if not execstr:
         raise FileNotFoundError("unable to find 'ip' command")
-    out, _, _ = call_throws(ctx, [execstr, 'route', 'ls'])
+    out, _, _ = call_throws(ctx, [execstr, 'route', 'ls'], verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
     return _parse_ipv4_route(out)
 
 
@@ -6214,8 +6218,8 @@ def _list_ipv6_networks(ctx: CephadmContext) -> Dict[str, Dict[str, Set[str]]]:
     execstr: Optional[str] = find_executable('ip')
     if not execstr:
         raise FileNotFoundError("unable to find 'ip' command")
-    routes, _, _ = call_throws(ctx, [execstr, '-6', 'route', 'ls'])
-    ips, _, _ = call_throws(ctx, [execstr, '-6', 'addr', 'ls'])
+    routes, _, _ = call_throws(ctx, [execstr, '-6', 'route', 'ls'], verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+    ips, _, _ = call_throws(ctx, [execstr, '-6', 'addr', 'ls'], verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
     return _parse_ipv6_route(routes, ips)
 
 
@@ -6321,14 +6325,14 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
     out, err, code = call(
         ctx,
         [container_path, 'stats', '--format', '{{.ID}},{{.MemUsage}}', '--no-stream'],
-        verbosity=CallVerbosity.DEBUG
+        verbosity=CallVerbosity.QUIET
     )
     seen_memusage_cid_len, seen_memusage = _parse_mem_usage(code, out)
 
     out, err, code = call(
         ctx,
         [container_path, 'stats', '--format', '{{.ID}},{{.CPUPerc}}', '--no-stream'],
-        verbosity=CallVerbosity.DEBUG
+        verbosity=CallVerbosity.QUIET
     )
     seen_cpuperc_cid_len, seen_cpuperc = _parse_cpu_perc(code, out)
 
@@ -6357,7 +6361,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                             try:
                                 out, err, code = call(ctx,
                                                       ['ceph', '-v'],
-                                                      verbosity=CallVerbosity.DEBUG)
+                                                      verbosity=CallVerbosity.QUIET)
                                 if not code and out.startswith('ceph version '):
                                     host_version = out.split(' ')[2]
                             except Exception:
@@ -6408,7 +6412,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                         container_path, 'image', 'inspect', image_id,
                                         '--format', '{{.RepoDigests}}',
                                     ],
-                                    verbosity=CallVerbosity.DEBUG)
+                                    verbosity=CallVerbosity.QUIET)
                                 if not code:
                                     image_digests = list(set(map(
                                         normalize_image_digest,
@@ -6427,7 +6431,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
                                                            'ceph', '-v'],
-                                                          verbosity=CallVerbosity.DEBUG)
+                                                          verbosity=CallVerbosity.QUIET)
                                     if not code and \
                                        out.startswith('ceph version '):
                                         version = out.split(' ')[2]
@@ -6436,7 +6440,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
                                                            'grafana-server', '-v'],
-                                                          verbosity=CallVerbosity.DEBUG)
+                                                          verbosity=CallVerbosity.QUIET)
                                     if not code and \
                                        out.startswith('Version '):
                                         version = out.split(' ')[1]
@@ -6452,7 +6456,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
                                                            'haproxy', '-v'],
-                                                          verbosity=CallVerbosity.DEBUG)
+                                                          verbosity=CallVerbosity.QUIET)
                                     if not code and \
                                        out.startswith('HA-Proxy version '):
                                         version = out.split(' ')[2]
@@ -6461,7 +6465,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
                                                            'keepalived', '--version'],
-                                                          verbosity=CallVerbosity.DEBUG)
+                                                          verbosity=CallVerbosity.QUIET)
                                     if not code and \
                                        err.startswith('Keepalived '):
                                         version = err.split(' ')[1]
@@ -6571,7 +6575,7 @@ def get_container_stats(ctx: CephadmContext, container_path: str, fsid: str, dae
             '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
             name
         ]
-        out, err, code = call(ctx, cmd, verbosity=CallVerbosity.DEBUG)
+        out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET)
         if not code:
             break
     return out, err, code
@@ -8663,7 +8667,7 @@ class HostFacts():
             security = {}
             try:
                 out, err, code = call(self.ctx, ['sestatus'],
-                                      verbosity=CallVerbosity.DEBUG)
+                                      verbosity=CallVerbosity.QUIET)
                 security['type'] = 'SELinux'
                 status, mode, policy = '', '', ''
                 for line in out.split('\n'):
