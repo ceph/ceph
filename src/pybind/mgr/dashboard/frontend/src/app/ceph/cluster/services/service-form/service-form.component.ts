@@ -30,6 +30,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   readonly RGW_SVC_ID_PATTERN = /^([^.]+)(\.([^.]+)\.([^.]+))?$/;
   readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
   readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
+  readonly INGRESS_SUPPORTED_SERVICE_TYPES = ['rgw', 'nfs'];
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
@@ -343,7 +344,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       this.pools = resp;
     });
     this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
-      this.services = services.filter((service: any) => service.service_type === 'rgw');
+      this.services = services.filter((service: any) =>
+        this.INGRESS_SUPPORTED_SERVICE_TYPES.includes(service.service_type)
+      );
     });
 
     if (this.editing) {
