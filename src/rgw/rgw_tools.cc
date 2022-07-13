@@ -154,55 +154,21 @@ int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
 
 
 int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y,
+                       const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info,
 		       boost::optional<obj_version> refresh_version, bool raw_attrs)
 {
-  bufferlist::iterator iter;
-  int request_len = READ_CHUNK_LEN;
-  rgw_raw_obj obj(pool, key);
-
-  obj_version original_readv;
-  if (objv_tracker && !objv_tracker->read_version.empty()) {
-    original_readv = objv_tracker->read_version;
-  }
-
-  do {
-    auto sysobj = svc_sysobj->get_obj(obj);
-    auto rop = sysobj.rop();
-
-    int ret = rop.set_attrs(pattrs)
-                 .set_last_mod(pmtime)
-                 .set_objv_tracker(objv_tracker)
-                 .set_raw_attrs(raw_attrs)
-                 .stat(y, dpp);
-    if (ret < 0)
-      return ret;
-
-    ret = rop.set_cache_info(cache_info)
-             .set_refresh_version(refresh_version)
-             .read(dpp, &bl, y);
-    if (ret == -ECANCELED) {
-      /* raced, restart */
-      if (!original_readv.empty()) {
-        /* we were asked to read a specific obj_version, failed */
-        return ret;
-      }
-      if (objv_tracker) {
-        objv_tracker->read_version.clear();
-      }
-      continue;
-    }
-    if (ret < 0)
-      return ret;
-
-    if (ret < request_len)
-      break;
-    bl.clear();
-    request_len *= 2;
-  } while (true);
-
-  return 0;
+  const rgw_raw_obj obj(pool, key);
+  auto sysobj = svc_sysobj->get_obj(obj);
+  auto rop = sysobj.rop();
+  return rop.set_attrs(pattrs)
+            .set_last_mod(pmtime)
+            .set_objv_tracker(objv_tracker)
+            .set_raw_attrs(raw_attrs)
+            .set_cache_info(cache_info)
+            .set_refresh_version(refresh_version)
+            .read(dpp, &bl, y);
 }
 
 int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
