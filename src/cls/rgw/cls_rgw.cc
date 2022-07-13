@@ -718,12 +718,14 @@ static int check_index(cls_method_context_t hctx,
         CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode entry, key=%s", kiter->first.c_str());
         return -EIO;
       }
-      rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
-      stats.num_entries++;
-      stats.total_size += entry.meta.accounted_size;
-      stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
-      stats.actual_size += entry.meta.size;
-
+      if (entry.exists) {
+        rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
+        stats.num_entries++;
+        stats.total_size += entry.meta.accounted_size;
+        stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        stats.actual_size += entry.meta.size;
+      }
+      
       start_obj = kiter->first;
     }
   } while (keys.size() == CHECK_CHUNK_SIZE && !done);
