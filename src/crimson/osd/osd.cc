@@ -413,7 +413,7 @@ seastar::future<> OSD::start()
 
 seastar::future<> OSD::start_boot()
 {
-  state.set_preboot();
+  pg_shard_manager.set_preboot();
   return monc->get_version("osdmap").then([this](auto&& ret) {
     auto [newest, oldest] = ret;
     return _preboot(oldest, newest);
@@ -455,7 +455,7 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
 
 seastar::future<> OSD::_send_boot()
 {
-  state.set_booting();
+  pg_shard_manager.set_booting();
 
   entity_addrvec_t public_addrs = public_msgr->get_myaddrs();
   entity_addrvec_t cluster_addrs = cluster_msgr->get_myaddrs();
@@ -575,7 +575,7 @@ seastar::future<> OSD::stop()
   tick_timer.cancel();
   // see also OSD::shutdown()
   return prepare_to_stop().then([this] {
-    state.set_stopping();
+    pg_shard_manager.set_stopping();
     logger().debug("prepared to stop");
     public_msgr->stop();
     cluster_msgr->stop();
@@ -614,7 +614,7 @@ void OSD::dump_status(Formatter* f) const
   f->dump_stream("cluster_fsid") << superblock.cluster_fsid;
   f->dump_stream("osd_fsid") << superblock.osd_fsid;
   f->dump_unsigned("whoami", superblock.whoami);
-  f->dump_string("state", state.to_string());
+  f->dump_string("state", pg_shard_manager.get_osd_state_string());
   f->dump_unsigned("oldest_map", superblock.oldest_map);
   f->dump_unsigned("newest_map", superblock.newest_map);
   f->dump_unsigned("num_pgs", pg_map.get_pgs().size());
@@ -737,7 +737,7 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
 std::optional<seastar::future<>>
 OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
-  if (state.is_stopping()) {
+  if (pg_shard_manager.is_stopping()) {
     return {};
   }
   bool dispatched = true;
@@ -1084,7 +1084,7 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
     logger().warn("fsid mismatched");
     return seastar::now();
   }
-  if (state.is_initializing()) {
+  if (pg_shard_manager.is_initializing()) {
     logger().warn("i am still initializing");
     return seastar::now();
   }
@@ -1169,19 +1169,20 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     if (osdmap->is_up(whoami)) {
       const auto up_from = osdmap->get_up_from(whoami);
       logger().info("osd.{}: map e {} marked me up: up_from {}, bind_epoch {}, state {}",
-                    whoami, osdmap->get_epoch(), up_from, bind_epoch, state);
+                    whoami, osdmap->get_epoch(), up_from, bind_epoch,
+		    pg_shard_manager.get_osd_state_string());
       if (bind_epoch < up_from &&
           osdmap->get_addrs(whoami) == public_msgr->get_myaddrs() &&
-          state.is_booting()) {
+          pg_shard_manager.is_booting()) {
         logger().info("osd.{}: activating...", whoami);
-        state.set_active();
+        pg_shard_manager.set_active();
         beacon_timer.arm_periodic(
           std::chrono::seconds(local_conf()->osd_beacon_report_interval));
         tick_timer.arm_periodic(
           std::chrono::seconds(TICK_INTERVAL));
       }
     } else {
-      if (state.is_prestop()) {
+      if (pg_shard_manager.is_prestop()) {
 	got_stop_ack();
 	return seastar::now();
       }
@@ -1191,7 +1192,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       return consume_map(osdmap->get_epoch());
     });
   }).then([m, this] {
-    if (state.is_active()) {
+    if (pg_shard_manager.is_active()) {
       logger().info("osd.{}: now active", whoami);
       if (!osdmap->exists(whoami) ||
 	  osdmap->is_stop(whoami)) {
@@ -1202,7 +1203,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       } else {
         return seastar::now();
       }
-    } else if (state.is_preboot()) {
+    } else if (pg_shard_manager.is_preboot()) {
       logger().info("osd.{}: now preboot", whoami);
 
       if (m->get_source().is_mon()) {
@@ -1212,7 +1213,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
         return start_boot();
       }
     } else {
-      logger().info("osd.{}: now {}", whoami, state);
+      logger().info("osd.{}: now {}", whoami,
+		    pg_shard_manager.get_osd_state_string());
       // XXX
       return seastar::now();
     }
@@ -1323,7 +1325,7 @@ seastar::future<> OSD::handle_scrub(crimson::net::ConnectionRef conn,
 seastar::future<> OSD::handle_mark_me_down(crimson::net::ConnectionRef conn,
 					   Ref<MOSDMarkMeDown> m)
 {
-  if (state.is_prestop()) {
+  if (pg_shard_manager.is_prestop()) {
     got_stop_ack();
   }
   return seastar::now();
@@ -1380,7 +1382,7 @@ seastar::future<> OSD::shutdown()
 
 seastar::future<> OSD::send_beacon()
 {
-  if (!state.is_active()) {
+  if (!pg_shard_manager.is_active()) {
     return seastar::now();
   }
   // FIXME: min lec should be calculated from pg_stat
@@ -1395,7 +1397,7 @@ seastar::future<> OSD::send_beacon()
 
 void OSD::update_heartbeat_peers()
 {
-  if (!state.is_active()) {
+  if (!pg_shard_manager.is_active()) {
     return;
   }
   for (auto& pg : pg_map.get_pgs()) {
@@ -1484,7 +1486,7 @@ Ref<PG> OSD::get_pg(spg_t pgid)
 seastar::future<> OSD::prepare_to_stop()
 {
   if (osdmap && osdmap->is_up(whoami)) {
-    state.set_prestop();
+    pg_shard_manager.set_prestop();
     const auto timeout =
       std::chrono::duration_cast<std::chrono::milliseconds>(
 	std::chrono::duration<double>(

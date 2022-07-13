@@ -79,8 +79,6 @@ class OSD final : public crimson::net::Dispatcher,
   crimson::os::FuturizedStore& store;
   std::unique_ptr<OSDMeta> meta_coll;
 
-  OSDState state;
-
   /// _first_ epoch we were marked up (after this process started)
   epoch_t boot_epoch = 0;
   /// _most_recent_ epoch we were marked up
@@ -260,7 +258,7 @@ public:
       opref.get_connection_pipeline().await_active
     ).then([this, &opref, &logger] {
       logger.debug("{}: start_pg_operation in await_active stage", opref);
-      return state.when_active();
+      return pg_shard_manager.when_active();
     }).then([&logger, &opref] {
       logger.debug("{}: start_pg_operation active, entering await_map", opref);
       return opref.template enter_stage<>(
