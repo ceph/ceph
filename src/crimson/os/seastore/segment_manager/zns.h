@@ -28,7 +28,8 @@ namespace crimson::os::seastore::segment_manager::zns {
     size_t block_size = 0;
     size_t segments = 0;
     size_t zone_size = 0;
-    uint64_t first_segment_offset = 0;
+    size_t first_segment_offset = 0;
+
     seastore_meta_t meta;
     
     bool major_dev = false;
@@ -166,7 +167,7 @@ namespace crimson::os::seastore::segment_manager::zns {
       auto& seg_addr = addr.as_seg_paddr();
       return (metadata.first_segment_offset +
 	      (seg_addr.get_segment_id().device_segment_id() * 
-	       metadata.zone_size)) + seg_addr.get_segment_off();
+	       metadata.segment_size)) + seg_addr.get_segment_off();
     }
   };
 
