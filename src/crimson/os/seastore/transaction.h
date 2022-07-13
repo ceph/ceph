@@ -261,7 +261,7 @@ public:
     return retired_set;
   }
 
-  bool is_retired(laddr_t laddr, extent_len_t len, paddr_t paddr) {
+  bool is_retired(paddr_t paddr, extent_len_t len) {
     if (retired_set.empty()) {
       return false;
     }
@@ -271,11 +271,10 @@ public:
       assert(iter != retired_set.begin());
       --iter;
     }
-
-    auto lextent = (*iter)->cast<LogicalCachedExtent>();
-    auto ext_laddr = lextent->get_laddr();
-    return ext_laddr <= laddr &&
-      ext_laddr + lextent->get_length() >= laddr + len;
+    auto retired_paddr = (*iter)->get_paddr();
+    auto retired_length = (*iter)->get_length();
+    return retired_paddr <= paddr &&
+      retired_paddr.add_offset(retired_length) >= paddr.add_offset(len);
   }
 
   bool should_record_release(paddr_t addr) {
