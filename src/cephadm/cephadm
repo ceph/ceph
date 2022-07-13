@@ -86,6 +86,7 @@ CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 15
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
+QUIET_LOG_LEVEL = 9  # DEBUG is 10, so using 9 to be lower level than DEBUG
 
 logger: logging.Logger = None  # type: ignore
 
@@ -1575,14 +1576,47 @@ class FileLock(object):
 # Popen wrappers, lifted from ceph-volume
 
 class CallVerbosity(Enum):
+    #####
+    # Format:
+    # Normal Operation: <log-level-when-no-errors>, Errors: <log-level-when-error>
+    #
+    # NOTE: QUIET log level is custom level only used when --verbose is passed
+    #####
+
+    # Normal Operation: None, Errors: None
     SILENT = 0
-    # log stdout/stderr to logger.debug
-    DEBUG = 1
-    # On a non-zero exit status, it will forcefully set
-    # logging ON for the terminal
-    VERBOSE_ON_FAILURE = 2
-    # log at info (instead of debug) level.
-    VERBOSE = 3
+    # Normal Operation: QUIET, Error: QUIET
+    QUIET = 1
+    # Normal Operation: DEBUG, Error: DEBUG
+    DEBUG = 2
+    # Normal Operation: QUIET, Error: INFO
+    QUIET_UNLESS_ERROR = 3
+    # Normal Operation: DEBUG, Error: INFO
+    VERBOSE_ON_FAILURE = 4
+    # Normal Operation: INFO, Error: INFO
+    VERBOSE = 5
+
+    def success_log_level(self) -> int:
+        _verbosity_level_to_log_level = {
+            self.SILENT: 0,
+            self.QUIET: QUIET_LOG_LEVEL,
+            self.DEBUG: logging.DEBUG,
+            self.QUIET_UNLESS_ERROR: QUIET_LOG_LEVEL,
+            self.VERBOSE_ON_FAILURE: logging.DEBUG,
+            self.VERBOSE: logging.INFO
+        }
+        return _verbosity_level_to_log_level[self]  # type: ignore
+
+    def error_log_level(self) -> int:
+        _verbosity_level_to_log_level = {
+            self.SILENT: 0,
+            self.QUIET: QUIET_LOG_LEVEL,
+            self.DEBUG: logging.DEBUG,
+            self.QUIET_UNLESS_ERROR: logging.INFO,
+            self.VERBOSE_ON_FAILURE: logging.INFO,
+            self.VERBOSE: logging.INFO
+        }
+        return _verbosity_level_to_log_level[self]  # type: ignore
 
 
 if sys.version_info < (3, 8):
@@ -1730,10 +1764,6 @@ def call(ctx: CephadmContext,
         async for line in reader:
             message = line.decode('utf-8')
             collected.write(message)
-            if verbosity == CallVerbosity.VERBOSE:
-                logger.info(prefix + message.rstrip())
-            elif verbosity != CallVerbosity.SILENT:
-                logger.debug(prefix + message.rstrip())
         return collected.getvalue()
 
     async def run_with_timeout() -> Tuple[str, str, int]:
@@ -1755,13 +1785,14 @@ def call(ctx: CephadmContext,
             return stdout, stderr, returncode
 
     stdout, stderr, returncode = async_run(run_with_timeout())
-    if returncode != 0 and verbosity == CallVerbosity.VERBOSE_ON_FAILURE:
-        logger.info('Non-zero exit code %d from %s',
-                    returncode, ' '.join(command))
-        for line in stdout.splitlines():
-            logger.info(prefix + 'stdout ' + line)
-        for line in stderr.splitlines():
-            logger.info(prefix + 'stderr ' + line)
+    log_level = verbosity.success_log_level()
+    if returncode != 0:
+        log_level = verbosity.error_log_level()
+        logger.log(log_level, f'Non-zero exit code {returncode} from {" ".join(command)}')
+    for line in stdout.splitlines():
+        logger.log(log_level, prefix + 'stdout ' + line)
+    for line in stderr.splitlines():
+        logger.log(log_level, prefix + 'stderr ' + line)
     return stdout, stderr, returncode
 
 
@@ -9542,6 +9573,7 @@ def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
     """Configure the logging for cephadm as well as updating the system
     to have the expected log dir and logrotate configuration.
     """
+    logging.addLevelName(QUIET_LOG_LEVEL, 'QUIET')
     global logger
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
@@ -9552,6 +9584,7 @@ def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
         dictConfig(logging_config)
 
     logger = logging.getLogger()
+    logger.setLevel(QUIET_LOG_LEVEL)
 
     if not os.path.exists(ctx.logrotate_dir + '/cephadm'):
         with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
@@ -9567,8 +9600,8 @@ def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
 
     if ctx.verbose:
         for handler in logger.handlers:
-            if handler.name == 'console':
-                handler.setLevel(logging.DEBUG)
+            if handler.name in ['console', 'log_file', 'console_stdout']:
+                handler.setLevel(QUIET_LOG_LEVEL)
     logger.debug('%s\ncephadm %s' % ('-' * 80, args))
 
 
