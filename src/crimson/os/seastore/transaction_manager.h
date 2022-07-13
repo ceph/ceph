@@ -386,7 +386,7 @@ public:
     reclaim_gen_t gen = DIRTY_GENERATION) {
     LOG_PREFIX(TransactionManager::map_existing_extent);
     ceph_assert(existing_paddr.is_absolute());
-    assert(t.is_retired(laddr_hint, length, existing_paddr));
+    assert(t.is_retired(existing_paddr, length));
 
     auto bp = ceph::bufferptr(buffer::create_page_aligned(length));
     bp.zero();
