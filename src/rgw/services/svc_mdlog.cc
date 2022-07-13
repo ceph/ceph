@@ -63,18 +63,17 @@ int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
 			      optional_yield y,
                               const DoutPrefixProvider *dpp) const
 {
-  auto obj_ctx = svc.sysobj->init_obj_ctx();
   auto& pool = svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   bufferlist bl;
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, objv_tracker, nullptr, y, dpp);
+  int ret = rgw_get_system_obj(svc.sysobj, pool, oid, bl, objv_tracker, nullptr, y, dpp);
   if (ret < 0) {
     return ret;
   }
   if (bl.length() == 0) {
     /* bad history object, remove it */
     rgw_raw_obj obj(pool, oid);
-    auto sysobj = obj_ctx.get_obj(obj);
+    auto sysobj = svc.sysobj->get_obj(obj);
     ret = sysobj.wop().remove(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
@@ -103,8 +102,7 @@ int RGWSI_MDLog::write_history(const DoutPrefixProvider *dpp,
 
   auto& pool = svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
-  auto obj_ctx = svc.sysobj->init_obj_ctx();
-  return rgw_put_system_obj(dpp, obj_ctx, pool, oid, bl,
+  return rgw_put_system_obj(dpp, svc.sysobj, pool, oid, bl,
                             exclusive, objv_tracker, real_time{}, y);
 }
 

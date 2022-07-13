@@ -58,7 +58,6 @@ struct RGWZoneParams;
 class RGWReshard;
 class RGWReshardWait;
 
-class RGWSysObjectCtx;
 struct get_obj_data;
 
 /* flags for put_obj_meta() */
@@ -1359,8 +1358,8 @@ public:
 
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp);
   /* xxx dang obj_ctx -> svc */
-  int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const std::string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
-  int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
+  int get_bucket_instance_info(const std::string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
+  int get_bucket_instance_info(const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
 
   static void make_bucket_entry_name(const std::string& tenant_name, const std::string& bucket_name, std::string& bucket_entry);
 

@@ -12,19 +12,9 @@
 
 using namespace std;
 
-RGWSysObjectCtx RGWSI_SysObj::init_obj_ctx()
+RGWSI_SysObj::Obj RGWSI_SysObj::get_obj(const rgw_raw_obj& obj)
 {
-  return RGWSysObjectCtx(this);
-}
-
-RGWSI_SysObj::Obj RGWSI_SysObj::get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_obj& obj)
-{
-  return Obj(core_svc, obj_ctx, obj);
-}
-
-void RGWSI_SysObj::Obj::invalidate()
-{
-  ctx.invalidate(obj);
+  return Obj(core_svc, obj);
 }
 
 RGWSI_SysObj::Obj::ROp::ROp(Obj& _source) : source(_source) {

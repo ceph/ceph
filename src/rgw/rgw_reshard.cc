@@ -278,9 +278,8 @@ static int remove_old_reshard_instance(rgw::sal::RadosStore* store,
                                        const DoutPrefixProvider* dpp)
 {
   RGWBucketInfo info;
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  int r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, info,
-                                                      nullptr, nullptr, null_yield, dpp);
+  int r = store->getRados()->get_bucket_instance_info(bucket, info, nullptr,
+                                                      nullptr, null_yield, dpp);
   if (r < 0) {
     return r;
   }
@@ -387,9 +386,8 @@ static int init_target_layout(rgw::sal::RadosStore* store,
 
     if (ret == -ECANCELED) {
       // racing write detected, read the latest bucket info and try again
-      auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
       int ret2 = store->getRados()->get_bucket_instance_info(
-          obj_ctx, bucket_info.bucket, bucket_info,
+          bucket_info.bucket, bucket_info,
           nullptr, &bucket_attrs, null_yield, dpp);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
@@ -461,9 +459,8 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
 
     if (ret == -ECANCELED) {
       // racing write detected, read the latest bucket info and try again
-      auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
       int ret2 = store->getRados()->get_bucket_instance_info(
-          obj_ctx, bucket_info.bucket, bucket_info,
+          bucket_info.bucket, bucket_info,
           nullptr, &bucket_attrs, null_yield, dpp);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
@@ -599,9 +596,8 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     ret = commit_target_layout(store, bucket_info, bucket_attrs, fault, dpp);
     if (ret == -ECANCELED) {
       // racing write detected, read the latest bucket info and try again
-      auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
       int ret2 = store->getRados()->get_bucket_instance_info(
-          obj_ctx, bucket_info.bucket, bucket_info,
+          bucket_info.bucket, bucket_info,
           nullptr, &bucket_attrs, null_yield, dpp);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
