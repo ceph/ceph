@@ -52,7 +52,7 @@
                         i18n>-- No service available --</option>
                 <option *ngIf="services !== null && services.length > 0"
                         [ngValue]="null"
-                        i18n>-- Select an existing RGW service --</option>
+                        i18n>-- Select an existing service --</option>
                 <option *ngFor="let service of services"
                         [value]="service.service_name">{{ service.service_name }}</option>
               </select>
