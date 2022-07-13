@@ -294,12 +294,12 @@ public:
   get_extent_ret<T> get_extent(
     paddr_t offset,                ///< [in] starting addr
     seastore_off_t length,          ///< [in] length
-    const src_ext_t* p_metric_key, ///< [in] cache query metric key
+    const src_ext_t* p_src_ext, ///< [in] cache query metric key
     Func &&extent_init_func,       ///< [in] init func for extent
     OnCache &&on_cache
   ) {
     LOG_PREFIX(Cache::get_extent);
-    auto cached = query_cache(offset, p_metric_key);
+    auto cached = query_cache(offset, p_src_ext);
     if (!cached) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
@@ -310,7 +310,8 @@ public:
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent, add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
-      add_extent(ret);
+      const auto p_src = p_src_ext ? &p_src_ext->first : nullptr;
+      add_extent(ret, p_src);
       on_cache(*ret);
       extent_init_func(*ret);
       return read_extent<T>(
@@ -1293,7 +1294,12 @@ private:
   }
 
   /// Update lru for access to ref
-  void touch_extent(CachedExtent &ext) {
+  void touch_extent(
+      CachedExtent &ext,
+      const Transaction::src_t* p_src=nullptr)
+  {
+    if (p_src && is_cleaner_transaction(*p_src))
+      return;
     if (ext.is_clean() && !ext.is_placeholder()) {
       lru.move_to_top(ext);
     }
@@ -1304,7 +1310,7 @@ private:
     const journal_seq_t &);
 
   /// Add extent to extents handling dirty and refcounting
-  void add_extent(CachedExtentRef ref);
+  void add_extent(CachedExtentRef ref, const Transaction::src_t* t_src);
 
   /// Mark exising extent ref dirty -- mainly for replay
   void mark_dirty(CachedExtentRef ref);
