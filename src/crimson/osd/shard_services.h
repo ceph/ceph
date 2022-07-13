@@ -119,6 +119,7 @@ class CoreState : public md_config_obs_t {
 
   crimson::common::CephContext cct;
 
+  OSDState osd_state;
 
   OSDMapService &osdmap_service;
   OSDMapService::cached_map_t osdmap;
