@@ -63,7 +63,7 @@ DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 DEFAULT_REGISTRY = 'docker.io'   # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
-LATEST_STABLE_RELEASE = 'pacific'
+LATEST_STABLE_RELEASE = 'quincy'
 DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
