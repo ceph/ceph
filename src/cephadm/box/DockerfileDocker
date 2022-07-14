@@ -22,6 +22,7 @@ RUN dnf -y install docker-ce && \
 
 # ssh utilities
 RUN dnf install epel-release -y && dnf makecache && dnf install sshpass -y
+RUN touch /.box_container # empty file to check if inside a container
 
 EXPOSE 8443
 EXPOSE 22
