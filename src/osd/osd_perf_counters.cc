@@ -32,7 +32,7 @@ PerfCounters *build_osd_logger(CephContext *cct) {
 
   osd_plb.add_u64(
     l_osd_op_wip, "op_wip",
-    "Replication operations currently being processed (primary)");
+    "Replication operations currently being processed (primary)", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_u64_counter(
     l_osd_op, "op",
     "Client operations",
@@ -48,13 +48,13 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_time_avg(
     l_osd_op_lat,   "op_latency",
     "Latency of client operations (including queue time)",
-    "l", 9);
+    "l", PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_time_avg(
     l_osd_op_process_lat, "op_process_latency",
-    "Latency of client operations (excluding queue time)");
+    "Latency of client operations (excluding queue time)", NULL, PerfCountersBuilder::PRIO_INTERESTING);
   osd_plb.add_time_avg(
     l_osd_op_prepare_lat, "op_prepare_latency",
-    "Latency of client operations (excluding queue time and wait for finished)");
+    "Latency of client operations (excluding queue time and wait for finished)", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
 
   osd_plb.add_u64_counter(
     l_osd_op_r, "op_r", "Client read operations");
@@ -69,10 +69,10 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     "Histogram of operation latency (including queue time) + data read");
   osd_plb.add_time_avg(
     l_osd_op_r_process_lat, "op_r_process_latency",
-    "Latency of read operation (excluding queue time)");
+    "Latency of read operation (excluding queue time)", NULL, PerfCountersBuilder::PRIO_INTERESTING);
   osd_plb.add_time_avg(
     l_osd_op_r_prepare_lat, "op_r_prepare_latency",
-    "Latency of read operations (excluding queue time and wait for finished)");
+    "Latency of read operations (excluding queue time and wait for finished)", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_u64_counter(
     l_osd_op_w, "op_w", "Client write operations");
   osd_plb.add_u64_counter(
@@ -83,16 +83,16 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter_histogram(
     l_osd_op_w_lat_inb_hist, "op_w_latency_in_bytes_histogram",
     op_hist_x_axis_config, op_hist_y_axis_config,
-    "Histogram of operation latency (including queue time) + data written");
+    "Histogram of operation latency (including queue time) + data written", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_time_avg(
     l_osd_op_w_process_lat, "op_w_process_latency",
     "Latency of write operation (excluding queue time)");
   osd_plb.add_time_avg(
     l_osd_op_w_prepare_lat, "op_w_prepare_latency",
-    "Latency of write operations (excluding queue time and wait for finished)");
+    "Latency of write operations (excluding queue time and wait for finished)", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_u64_counter(
     l_osd_op_rw, "op_rw",
-    "Client read-modify-write operations");
+    "Client read-modify-write operations", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_u64_counter(
     l_osd_op_rw_inb, "op_rw_in_bytes",
     "Client read-modify-write operations write in", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
@@ -101,21 +101,21 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     "Client read-modify-write operations read out ", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   osd_plb.add_time_avg(
     l_osd_op_rw_lat, "op_rw_latency",
-    "Latency of read-modify-write operation (including queue time)");
+    "Latency of read-modify-write operation (including queue time)", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_u64_counter_histogram(
     l_osd_op_rw_lat_inb_hist, "op_rw_latency_in_bytes_histogram",
     op_hist_x_axis_config, op_hist_y_axis_config,
-    "Histogram of rw operation latency (including queue time) + data written");
+    "Histogram of rw operation latency (including queue time) + data written", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_u64_counter_histogram(
     l_osd_op_rw_lat_outb_hist, "op_rw_latency_out_bytes_histogram",
     op_hist_x_axis_config, op_hist_y_axis_config,
-    "Histogram of rw operation latency (including queue time) + data read");
+    "Histogram of rw operation latency (including queue time) + data read", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_time_avg(
     l_osd_op_rw_process_lat, "op_rw_process_latency",
-    "Latency of read-modify-write operation (excluding queue time)");
+    "Latency of read-modify-write operation (excluding queue time)", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
   osd_plb.add_time_avg(
     l_osd_op_rw_prepare_lat, "op_rw_prepare_latency",
-    "Latency of read-modify-write operations (excluding queue time and wait for finished)");
+    "Latency of read-modify-write operations (excluding queue time and wait for finished)", NULL, PerfCountersBuilder::PRIO_UNINTERESTING);
 
   // Now we move on to some more obscure stats, revert to assuming things
   // are low priority unless otherwise specified.
