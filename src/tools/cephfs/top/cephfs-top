@@ -370,7 +370,6 @@ class FSTop(object):
 
     def refresh_client(self, client_id, metrics, counters, client_meta, x_coord_map, y_coord):
         global last_time
-        size = 0
         cur_time = time.time()
         duration = cur_time - last_time
         last_time = cur_time
@@ -399,7 +398,6 @@ class FSTop(object):
                 return
 
         cidx = 0
-        client_id = x_coord_map[FS_TOP_MAIN_WINDOW_COL_CLIENT_ID]
         for item in counters:
             if item in MAIN_WINDOW_TOP_LINE_METRICS_LEGACY:
                 cidx += 1
@@ -452,18 +450,21 @@ class FSTop(object):
                         remaining_hlen = 0
                     else:
                         remaining_hlen -= coord[1]
+                    size = 0
                     if key == "READ_IO_SIZES":
-                        global last_read_size
-                        last_size = last_read_size.get(client_id, 0)
-                        size = m[1] - last_size
-                        last_read_size[client_id] = m[1]
+                        if m[1] > 0:
+                            global last_read_size
+                            last_size = last_read_size.get(client_id, 0)
+                            size = m[1] - last_size
+                            last_read_size[client_id] = m[1]
                     if key == "WRITE_IO_SIZES":
-                        global last_write_size
-                        last_size = last_write_size.get(client_id, 0)
-                        size = m[1] - last_size
-                        last_write_size[client_id] = m[1]
+                        if m[1] > 0:
+                            global last_write_size
+                            last_size = last_write_size.get(client_id, 0)
+                            size = m[1] - last_size
+                            last_write_size[client_id] = m[1]
                     self.mainw.addnstr(y_coord, coord[0],
-                                       f'{calc_speed(size, duration)}',
+                                       f'{calc_speed(abs(size), duration)}',
                                        hlen)
                 else:
                     # display 0th element from metric tuple
