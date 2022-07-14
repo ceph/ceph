@@ -2395,6 +2395,13 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_read_bilog_info_inject_err_probability
+  type: float
+  level: dev
+  default: 0
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_sync_trace_history_size
   type: size
   level: advanced
