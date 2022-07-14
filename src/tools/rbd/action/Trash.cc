@@ -357,7 +357,7 @@ int execute_list(const po::variables_map &vm,
   std::string pool_name;
   std::string namespace_name;
   size_t arg_index = 0;
-  int r = utils::get_pool_and_namespace_names(vm, true, false, &pool_name,
+  int r = utils::get_pool_and_namespace_names(vm, false, &pool_name,
                                               &namespace_name, &arg_index);
   if (r < 0) {
     return r;
@@ -408,7 +408,7 @@ int execute_purge(const po::variables_map &vm,
   std::string pool_name;
   std::string namespace_name;
   size_t arg_index = 0;
-  int r = utils::get_pool_and_namespace_names(vm, true, false, &pool_name,
+  int r = utils::get_pool_and_namespace_names(vm, false, &pool_name,
                                               &namespace_name, &arg_index);
   if (r < 0) {
     return r;
