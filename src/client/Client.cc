@@ -10723,7 +10723,8 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
 int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                        unsigned iovcnt, int64_t offset,
                                        bool write, bool clamp_to_int,
-                                       Context *onfinish, bufferlist *blp)
+                                       Context *onfinish, bufferlist *blp,
+                                       bool do_fsync, bool syncdataonly)
 {
     ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
@@ -10746,7 +10747,7 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     }
 
     if (write) {
-        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt, onfinish);
+        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt, onfinish, do_fsync, syncdataonly);
         ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
@@ -10870,22 +10871,45 @@ void Client::C_Write_Finisher::finish_onuninline(int r)
     delete this;
 }
 
+void Client::C_Write_Finisher::finish_fsync(int r)
+{
+  bool fini;
+
+  fsync_finished = true;
+  fsync_r = r;
+  fini = try_complete();
+
+  if (fini)
+    delete this;
+}
+
 bool Client::C_Write_Finisher::try_complete()
 {
-  if (onuninlinefinished && iofinished) {
+  if (onuninlinefinished && iofinished && !fsync_finished && iofinished_r >= 0) {
+    // Done with I/O AND uninline, but we want to do fsync
+    CWF_fsync_finish *fsync_f = new CWF_fsync_finish(this);
+    C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(clnt, in, syncdataonly, fsync_f);
+
+    // Kick fsync off... and all will magically complete eventually...
+    state->advance();
+  } else {
+    // Now we are REALLY done...
     clnt->put_cap_ref(in, CEPH_CAP_FILE_WR);
 
-    if (onuninlinefinished_r >= 0 || onuninlinefinished_r == -CEPHFS_ECANCELED)
-      onfinish->complete(iofinished_r);
-    else
+    if (fsync_r < 0)
+      onfinish->complete(fsync_r);
+    else if (onuninlinefinished_r < 0 && onuninlinefinished_r != -CEPHFS_ECANCELED)
       onfinish->complete(onuninlinefinished_r);
+    else
+      onfinish->complete(iofinished_r);
     return true;
   }
   return false;
 }
 
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
-	                const struct iovec *iov, int iovcnt, Context *onfinish)
+	                const struct iovec *iov, int iovcnt, Context *onfinish,
+	                bool do_fsync, bool syncdataonly)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
@@ -11030,7 +11054,8 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
                         cct->_conf->client_oc &&
                           (have & (CEPH_CAP_FILE_BUFFER |
                                  CEPH_CAP_FILE_LAZYIO)),
-                        start, f, in, fpos, offset, size));
+                        start, f, in, fpos, offset, size,
+                        do_fsync, syncdataonly));
 
     cwf_iofinish->CWF = cwf.get();
   }
@@ -11136,6 +11161,15 @@ success:
 
   // do not get here if async caller (onfinish != nullptr)
   r = _write_success(f, start, fpos, offset, size, in);
+
+  if (r >= 0 && do_fsync) {
+    int64_t r1;
+    client_lock.unlock();
+    r1 = _fsync(f, false);
+    if (r1 < 0)
+      r = r1;
+    client_lock.lock();
+  }
 
 done:
 
@@ -15275,7 +15309,8 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
 
 int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
                                   int iovcnt, int64_t offset, bool write,
-                                  Context *onfinish, bufferlist *bl)
+                                  Context *onfinish, bufferlist *bl,
+                                  bool do_fsync, bool syncdataonly)
 {
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
     if (!mref_reader.is_state_satisfied())
@@ -15283,7 +15318,7 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
 
     std::scoped_lock cl(client_lock);
     return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
-    				  onfinish, bl);
+    				  onfinish, bl, do_fsync, syncdataonly);
 }
 
 int Client::ll_flush(Fh *fh)
