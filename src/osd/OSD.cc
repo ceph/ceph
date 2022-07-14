@@ -329,7 +329,7 @@ void OSDService::remove_pgid(spg_t pgid, PG *pg)
 void OSDService::dump_live_pgids()
 {
   std::lock_guard l(pgid_lock);
-  derr << "live pgids:" << dendl;
+  derr << __func__ << " live pgids:" << dendl;
   for (map<spg_t, int>::const_iterator i = pgid_tracker.cbegin();
        i != pgid_tracker.cend();
        ++i) {
@@ -2008,7 +2008,7 @@ int OSD::mkfs(CephContext *cct,
 
   ret = store->mkfs();
   if (ret) {
-    derr << "OSD::mkfs: ObjectStore::mkfs failed with error "
+    derr << __func__ << ": ObjectStore::mkfs failed with error "
          << cpp_strerror(ret) << dendl;
     return ret;
   }
@@ -2017,7 +2017,7 @@ int OSD::mkfs(CephContext *cct,
 
   ret = store->mount();
   if (ret) {
-    derr << "OSD::mkfs: couldn't mount ObjectStore: error "
+    derr << __func__ << ": couldn't mount ObjectStore: error "
          << cpp_strerror(ret) << dendl;
     return ret;
   }
@@ -2031,7 +2031,7 @@ int OSD::mkfs(CephContext *cct,
   if (ch) {
     ret = store->read(ch, OSD_SUPERBLOCK_GOBJECT, 0, 0, sbbl);
     if (ret < 0) {
-      derr << "OSD::mkfs: have meta collection but no superblock" << dendl;
+      derr << __func__ << ": have meta collection but no superblock" << dendl;
       return ret;
     }
     /* if we already have superblock, check content of superblock */
@@ -2065,7 +2065,7 @@ int OSD::mkfs(CephContext *cct,
     t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
     ret = store->queue_transaction(ch, std::move(t));
     if (ret) {
-      derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_GOBJECT: "
+      derr << __func__ << ": error while writing OSD_SUPERBLOCK_GOBJECT: "
 	   << "queue_transaction returned " << cpp_strerror(ret) << dendl;
       return ret;
     }
@@ -2074,7 +2074,7 @@ int OSD::mkfs(CephContext *cct,
 
   ret = write_meta(cct, store.get(), sb.cluster_fsid, sb.osd_fsid, whoami, osdspec_affinity);
   if (ret) {
-    derr << "OSD::mkfs: failed to write fsid file: error "
+    derr << __func__ << ": failed to write fsid file: error "
          << cpp_strerror(ret) << dendl;
   }
   return ret;
@@ -2320,7 +2320,7 @@ int OSD::pre_init()
     return 0;
 
   if (store->test_mount_in_use()) {
-    derr << "OSD::pre_init: object store '" << dev_path << "' is "
+    derr << __func__ << ": object store '" << dev_path << "' is "
          << "currently in use. (Is ceph-osd already running?)" << dendl;
     return -EBUSY;
   }
@@ -3486,7 +3486,7 @@ int OSD::init()
   }
 
   // mount.
-  dout(2) << "init " << dev_path
+  dout(2) << __func__ << " " << dev_path
 	  << " (looks like " << (store_is_rotational ? "hdd" : "ssd") << ")"
 	  << dendl;
   dout(2) << "journal " << journal_path << dendl;
@@ -3500,7 +3500,7 @@ int OSD::init()
 
   int r = store->mount();
   if (r < 0) {
-    derr << "OSD:init: unable to mount object store" << dendl;
+    derr << __func__ << ": unable to mount object store" << dendl;
     return r;
   }
   journal_is_rotational = store->is_journal_rotational();
@@ -3523,7 +3523,7 @@ int OSD::init()
   if (getloadavg(loadavgs, 3) == 3) {
     daily_loadavg = loadavgs[2];
   } else {
-    derr << "OSD::init() : couldn't read loadavgs\n" << dendl;
+    derr << __func__ << " : couldn't read loadavgs\n" << dendl;
     daily_loadavg = 1.0;
   }
 
@@ -3555,25 +3555,28 @@ int OSD::init()
   // read superblock
   r = read_superblock();
   if (r < 0) {
-    derr << "OSD::init() : unable to read osd superblock" << dendl;
+    derr << __func__ << " : unable to read osd superblock" << dendl;
     r = -EINVAL;
     goto out;
   }
 
   if (osd_compat.compare(superblock.compat_features) < 0) {
-    derr << "The disk uses features unsupported by the executable." << dendl;
+    derr << __func__ << " The disk uses features unsupported by the executable."
+         << dendl;
     derr << " ondisk features " << superblock.compat_features << dendl;
     derr << " daemon features " << osd_compat << dendl;
 
     if (osd_compat.writeable(superblock.compat_features)) {
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      derr << "it is still writeable, though. Missing features: " << diff << dendl;
+      derr << __func__ << " it is still writeable, though. Missing features: "
+           << diff << dendl;
       r = -EOPNOTSUPP;
       goto out;
     }
     else {
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      derr << "Cannot write to disk! Missing features: " << diff << dendl;
+      derr << __func__ << " Cannot write to disk! Missing features: "
+           << diff << dendl;
       r = -EOPNOTSUPP;
       goto out;
     }
@@ -3581,7 +3584,7 @@ int OSD::init()
 
   assert_warn(whoami == superblock.whoami);
   if (whoami != superblock.whoami) {
-    derr << "OSD::init: superblock says osd"
+    derr << __func__ << ": superblock says osd"
 	 << superblock.whoami << " but I am osd." << whoami << dendl;
     r = -EINVAL;
     goto out;
@@ -3592,7 +3595,7 @@ int OSD::init()
   // load up "current" osdmap
   assert_warn(!get_osdmap());
   if (get_osdmap()) {
-    derr << "OSD::init: unable to read current osdmap" << dendl;
+    derr << __func__ << ": unable to read current osdmap" << dendl;
     r = -EINVAL;
     goto out;
   }
@@ -4442,7 +4445,7 @@ int OSD::shutdown()
   write_superblock(t);
   int r = store->queue_transaction(service.meta_ch, std::move(t));
   if (r) {
-    derr << "OSD::shutdown: error writing superblock: "
+    derr << __func__ << ": error writing superblock: "
 	 << cpp_strerror(r) << dendl;
   }
 
@@ -4946,7 +4949,7 @@ void OSD::load_pgs()
   vector<coll_t> ls;
   int r = store->list_collections(ls);
   if (r < 0) {
-    derr << "failed to list pgs: " << cpp_strerror(-r) << dendl;
+    derr << __func__ << " failed to list pgs: " << cpp_strerror(-r) << dendl;
   }
 
   int num = 0;
@@ -5815,12 +5818,12 @@ void OSD::heartbeat_check()
        ++p) {
 
     if (p->second.first_tx == utime_t()) {
-      dout(25) << "heartbeat_check we haven't sent ping to osd." << p->first
+      dout(25) << __func__ << " we haven't sent ping to osd." << p->first
                << " yet, skipping" << dendl;
       continue;
     }
 
-    dout(25) << "heartbeat_check osd." << p->first
+    dout(25) << __func__ << " osd." << p->first
 	     << " first_tx " << p->second.first_tx
 	     << " last_tx " << p->second.last_tx
 	     << " last_rx_back " << p->second.last_rx_back
@@ -5830,7 +5833,7 @@ void OSD::heartbeat_check()
       utime_t oldest_deadline = p->second.ping_history.begin()->second.first;
       if (p->second.last_rx_back == utime_t() ||
 	  p->second.last_rx_front == utime_t()) {
-        derr << "heartbeat_check: no reply from "
+        derr << __func__ << ": no reply from "
              << p->second.con_front->get_peer_addr().get_sockaddr()
              << " osd." << p->first
              << " ever on either front or back, first ping sent "
@@ -5840,7 +5843,7 @@ void OSD::heartbeat_check()
 	// fail
 	failure_queue[p->first] = p->second.first_tx;
       } else {
-	derr << "heartbeat_check: no reply from "
+	derr << __func__ << ": no reply from "
              << p->second.con_front->get_peer_addr().get_sockaddr()
 	     << " osd." << p->first << " since back " << p->second.last_rx_back
 	     << " front " << p->second.last_rx_front
@@ -7101,7 +7104,7 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSD::ms_dispatch(Message *m)
 {
-  dout(20) << "OSD::ms_dispatch: " << *m << dendl;
+  dout(20) << __func__ << " " << *m << dendl;
   if (m->get_type() == MSG_OSD_MARK_ME_DOWN) {
     service.got_stop_ack();
     m->put();
