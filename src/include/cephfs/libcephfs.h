@@ -127,6 +127,8 @@ struct ceph_ll_io_info {
   int64_t off;
   int64_t result;
   bool write;
+  bool fsync;
+  bool syncdataonly;
 };
 
 /* setattr mask bits (up to an int in size) */

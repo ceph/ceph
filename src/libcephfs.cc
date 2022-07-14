@@ -2042,7 +2042,8 @@ extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmoun
 
   return (cmount->get_client()->ll_preadv_pwritev(
 			io_info->fh, io_info->iov, io_info->iovcnt,
-			io_info->off, io_info->write, onfinish, &onfinish->bl));
+			io_info->off, io_info->write, onfinish, &onfinish->bl,
+			io_info->fsync, io_info->syncdataonly));
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)
