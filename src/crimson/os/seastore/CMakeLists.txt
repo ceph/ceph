@@ -38,6 +38,7 @@ set(crimson_seastore_srcs
   seastore.cc
   random_block_manager/rbm_manager.cc
   random_block_manager/nvmedevice.cc
+  random_block_manager/hdd_device.cc
   journal/segmented_journal.cc
   journal/segment_allocator.cc
   journal.cc
