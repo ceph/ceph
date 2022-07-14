@@ -9168,6 +9168,7 @@ std::vector<Option> get_mds_client_options() {
 
     Option("client_force_lazyio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("client_max_retries_on_remount_failure", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
