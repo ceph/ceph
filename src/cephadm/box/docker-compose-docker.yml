@@ -6,13 +6,7 @@ services:
     environment:
       - CEPH_BRANCH=master
     image: cephadm-box
-    # probably not needed with rootless Docker and cgroups v2
     privileged: true
-    # cap_add:
-    #   - SYS_ADMIN
-    #   - NET_ADMIN
-    #   - SYS_TIME
-    #   - MKNOD
     stop_signal: RTMIN+3
     volumes:
       - ../../../:/ceph
