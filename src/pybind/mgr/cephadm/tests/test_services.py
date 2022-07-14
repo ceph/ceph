@@ -529,8 +529,8 @@ class TestMonitoring:
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
 
         with with_host(cephadm_module, "test"):
-            cephadm_module.set_store("grafana_crt", "c")
-            cephadm_module.set_store("grafana_key", "k")
+            cephadm_module.set_store("test/grafana_crt", "c")
+            cephadm_module.set_store("test/grafana_key", "k")
             with with_service(
                 cephadm_module, MonitoringSpec("prometheus")
             ) as _, with_service(cephadm_module, ServiceSpec("mgr")) as _, with_service(
