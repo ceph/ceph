@@ -301,8 +301,10 @@ BuildRequires:  nlohmann_json-devel
 BuildRequires:  libevent-devel
 %endif
 %if 0%{with system_pmdk}
+BuildRequires:  ndctl-devel >= 63
+BuildRequires:  daxctl-devel >= 63
 BuildRequires:  libpmem-devel
-BuildRequires:  libpmemobj-devel
+BuildRequires:  libpmemobj-devel >= 1.8
 %endif
 %if 0%{with system_arrow}
 BuildRequires:  arrow-devel
