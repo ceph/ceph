@@ -1,5 +1,6 @@
 #include "DaemonMetricCollector.h"
 #include "common/admin_socket_client.h"
+#include "common/debug.h"
 #include "common/hostname.h"
 #include "common/perf_counters.h"
 #include "global/global_init.h"
@@ -17,6 +18,9 @@
 #include <regex>
 #include <string>
 #include <utility>
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_ceph_exporter
 
 using json_object = boost::json::object;
 using json_value = boost::json::value;
@@ -94,17 +98,15 @@ void DaemonMetricCollector::dump_asok_metrics() {
     if (!ok) {
       continue;
     }
-    std::string perf_dump_response = asok_request(sock_client, "perf dump");
+    std::string perf_dump_response = asok_request(sock_client, "perf dump", daemon_name);
     if (perf_dump_response.size() == 0) {
-      std::cout << "Perf counters dump retrieval for daemon " << daemon_name << " failed." << std::endl;
       continue;
     }
-    std::string perf_schema_response = asok_request(sock_client, "perf schema");
+    std::string perf_schema_response = asok_request(sock_client, "perf schema", daemon_name);
     if (perf_schema_response.size() == 0) {
-      std::cout << "Perf counters schema retrieval for daemon " << daemon_name << " failed." << std::endl;
       continue;
     }
-    std::string config_show = asok_request(sock_client, "config show");
+    std::string config_show = asok_request(sock_client, "config show", daemon_name);
     json_object pid_file_json = boost::json::parse(config_show).as_object();
     std::string pid_path =
       boost_string_to_std(pid_file_json["pid_file"].as_string());
@@ -139,7 +141,7 @@ void DaemonMetricCollector::dump_asok_metrics() {
       }
     }
   }
-  std::cout << "Perf counters retrieved for " << clients.size() << " daemons." << std::endl;
+  dout(10) << "Perf counters retrieved for " << clients.size() << " daemons." << dendl;
   // get time spent on this function
   timer.stop();
   std::string scrap_desc("Time spent scraping and transforming perfcounters to metrics");
@@ -224,11 +226,13 @@ void DaemonMetricCollector::get_process_metrics(std::vector<std::pair<std::strin
 }
 
 std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
-                                                std::string command) {
+                                                std::string command, std::string daemon_name) {
   std::string request("{\"prefix\": \"" + command + "\"}");
   std::string response;
   std::string err = asok.do_request(request, &response);
   if (err.length() > 0 || response.substr(0, 5) == "ERROR") {
+    std::cout << command << "command failed for daemon " << daemon_name << std::endl;
+    dout(1) << err << dendl;
     return "";
   }
   return response;
@@ -299,6 +303,11 @@ void DaemonMetricCollector::dump_asok_metric(json_object perf_info,
 void DaemonMetricCollector::update_sockets() {
   std::string sock_dir = g_conf().get_val<std::string>("exporter_sock_dir");
   clients.clear();
+  std::filesystem::path sock_path = sock_dir;
+  if(!std::filesystem::is_directory(sock_path.parent_path())) {
+    dout(1) << "ERROR: No such directory exist" << sock_dir << dendl;
+    return;
+  }
   for (const auto &entry :
          std::filesystem::directory_iterator(sock_dir)) {
     if (entry.path().extension() == ".asok") {
@@ -329,7 +338,7 @@ void OrderedMetricsBuilder::add(std::string value, std::string name,
 
 std::string OrderedMetricsBuilder::dump() {
   for (auto &[name, metric] : metrics) {
-    out += metric.dump() + "\n\n";
+    out += metric.dump() + "\n";
   }
   return out;
 }

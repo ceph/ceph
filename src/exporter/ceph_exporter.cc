@@ -18,8 +18,8 @@ static void usage() {
                "  --sock-dir:     The path to ceph daemons socket files dir\n"
                "  --addrs:        Host ip address where exporter is deployed\n"
                "  --port:         Port to deploy exporter on. Default is 9926\n"
-               "  --prio-limit:   Only perf counters greater than or equal to exporter_prio_limit are fetched\n"
-               "  --stats-period: Time to wait before sending requests again to exporter server (seconds)"
+               "  --prio-limit:   Only perf counters greater than or equal to prio-limit are fetched. Default: 5\n"
+               "  --stats-period: Time to wait before sending requests again to exporter server (seconds). Default: 5s"
             << std::endl;
   generic_server_usage();
 }
