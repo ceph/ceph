@@ -245,6 +245,18 @@ Expected output::
 
 OSDs that are not safe to destroy will be rejected.
 
+.. note::
+    After removing OSDs, if the drives the OSDs were deployed on once again
+    become available, cephadm may automatically try to deploy more OSDs
+    on these drives if they match an existing drivegroup spec. If you deployed
+    the OSDs you are removing with a spec and don't want any new OSDs deployed on
+    the drives after removal, it's best to modify the drivegroup spec before removal.
+    Either set ``unmanaged: true`` to stop it from picking up new drives at all,
+    or modify it in some way that it no longer matches the drives used for the
+    OSDs you wish to remove. Then re-apply the spec. For more info on drivegroup
+    specs see :ref:`drivegroups`. For more info on the declarative nature of
+    cephadm in reference to deploying OSDs, see :ref:`cephadm-osd-declarative`
+
 Monitoring OSD State
 --------------------
 
