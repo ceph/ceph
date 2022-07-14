@@ -580,7 +580,7 @@ int execute_iostat(const po::variables_map &vm,
   std::string pool;
   std::string pool_namespace;
   size_t arg_index = 0;
-  int r = utils::get_pool_and_namespace_names(vm, false, false, &pool,
+  int r = utils::get_pool_and_namespace_names(vm, false, &pool,
                                               &pool_namespace, &arg_index);
   if (r < 0) {
     return r;
@@ -666,7 +666,7 @@ int execute_iotop(const po::variables_map &vm,
   std::string pool;
   std::string pool_namespace;
   size_t arg_index = 0;
-  int r = utils::get_pool_and_namespace_names(vm, false, false, &pool,
+  int r = utils::get_pool_and_namespace_names(vm, false, &pool,
                                               &pool_namespace, &arg_index);
   if (r < 0) {
     return r;
