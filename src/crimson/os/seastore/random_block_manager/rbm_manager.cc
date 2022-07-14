@@ -10,7 +10,7 @@
 #include "nvmedevice.h"
 #include "include/interval_set.h"
 #include "include/intarith.h"
-#include "nvme_manager.h"
+#include "rbm_manager.h"
 
 namespace {
   seastar::logger& logger() {
@@ -20,7 +20,7 @@ namespace {
 
 namespace crimson::os::seastore {
 
-NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap(
+BlockRBMManager::write_ertr::future<> BlockRBMManager::rbm_sync_block_bitmap(
     rbm_bitmap_block_t &block, blk_no_t block_no)
 {
   bufferptr bptr;
@@ -44,7 +44,7 @@ NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap(
 		       bptr);
 }
 
-NVMeManager::mkfs_ertr::future<> NVMeManager::initialize_blk_alloc_area() {
+BlockRBMManager::mkfs_ertr::future<> BlockRBMManager::initialize_blk_alloc_area() {
   auto start = super.start_data_area / super.block_size;
   logger().debug("initialize_alloc_area: start to read at {} ", start);
 
@@ -97,7 +97,7 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::initialize_blk_alloc_area() {
                 mkfs_ertr::pass_further{},
                 crimson::ct_error::assert_all{
                   "Invalid error rbm_sync_block_bitmap to update \
-		  last bitmap block in NVMeManager::initialize_blk_alloc_area"
+		  last bitmap block in BlockRBMManager::initialize_blk_alloc_area"
                 }
               );
       }
@@ -106,20 +106,20 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::initialize_blk_alloc_area() {
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
         "Invalid error rbm_sync_block_bitmap \
-	  in NVMeManager::initialize_blk_alloc_area"
+	  in BlockRBMManager::initialize_blk_alloc_area"
       }
       );
   }).handle_error(
     mkfs_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error rbm_sync_block_bitmap_by_range \
-	in NVMeManager::initialize_blk_alloc_area"
+	in BlockRBMManager::initialize_blk_alloc_area"
     }
     );
 
 }
 
-NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
+BlockRBMManager::mkfs_ertr::future<> BlockRBMManager::mkfs(mkfs_config_t config)
 {
   logger().debug("path {}", path);
   return _open_device(path).safe_then([this, &config]() {
@@ -154,12 +154,12 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
 	}).handle_error(
 	  mkfs_ertr::pass_further{},
 	  crimson::ct_error::assert_all{
-	  "Invalid error write_rbm_header in NVMeManager::mkfs"
+	  "Invalid error write_rbm_header in BlockRBMManager::mkfs"
 	});
       }),
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
-        "Invalid error read_rbm_header in NVMeManager::mkfs"
+        "Invalid error read_rbm_header in BlockRBMManager::mkfs"
       }
     );
   }).safe_then([this]() {
@@ -173,11 +173,11 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
   }).handle_error(
     mkfs_ertr::pass_further{},
     crimson::ct_error::assert_all{
-    "Invalid error open_device in NVMeManager::mkfs"
+    "Invalid error open_device in BlockRBMManager::mkfs"
   });
 }
 
-NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t size)
+BlockRBMManager::find_block_ret BlockRBMManager::find_free_block(Transaction &t, size_t size)
 {
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   return seastar::do_with(uint64_t(0),
@@ -243,14 +243,14 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
 	  }).handle_error(
 	      find_block_ertr::pass_further{},
 	      crimson::ct_error::assert_all{
-		"Invalid error in NVMeManager::find_free_block"
+		"Invalid error in BlockRBMManager::find_free_block"
 	      }
 	    );
     });
 }
 
 /* TODO : block allocator */
-NVMeManager::allocate_ret NVMeManager::alloc_extent(
+BlockRBMManager::allocate_ret BlockRBMManager::alloc_extent(
     Transaction &t, size_t size)
 {
 
@@ -280,12 +280,12 @@ NVMeManager::allocate_ret NVMeManager::alloc_extent(
       ).handle_error(
 	allocate_ertr::pass_further{},
 	crimson::ct_error::assert_all{
-	  "Invalid error find_free_block in NVMeManager::alloc_extent"
+	  "Invalid error find_free_block in BlockRBMManager::alloc_extent"
 	}
 	);
 }
 
-void NVMeManager::add_free_extent(
+void BlockRBMManager::add_free_extent(
     std::vector<alloc_delta_t>& v, rbm_abs_addr from, size_t len)
 {
   ceph_assert(!(len % super.block_size));
@@ -299,7 +299,7 @@ void NVMeManager::add_free_extent(
   v.push_back(alloc_info);
 }
 
-NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap_by_range(
+BlockRBMManager::write_ertr::future<> BlockRBMManager::rbm_sync_block_bitmap_by_range(
     blk_no_t start, blk_no_t end, bitmap_op_types_t op)
 {
   auto addr = super.start_alloc_area +
@@ -391,18 +391,18 @@ NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap_by_range(
 	      }).handle_error(
 		write_ertr::pass_further{},
 		crimson::ct_error::assert_all{
-		  "Invalid error in NVMeManager::rbm_sync_block_bitmap_by_range"
+		  "Invalid error in BlockRBMManager::rbm_sync_block_bitmap_by_range"
 		}
 	      );
 	}).handle_error(
 	  write_ertr::pass_further{},
 	  crimson::ct_error::assert_all{
-	    "Invalid error in NVMeManager::rbm_sync_block_bitmap_by_range"
+	    "Invalid error in BlockRBMManager::rbm_sync_block_bitmap_by_range"
 	  }
 	);
 }
 
-NVMeManager::abort_allocation_ertr::future<> NVMeManager::abort_allocation(
+BlockRBMManager::abort_allocation_ertr::future<> BlockRBMManager::abort_allocation(
     Transaction &t)
 {
   /*
@@ -411,13 +411,13 @@ NVMeManager::abort_allocation_ertr::future<> NVMeManager::abort_allocation(
   return abort_allocation_ertr::now();
 }
 
-NVMeManager::write_ertr::future<> NVMeManager::complete_allocation(
+BlockRBMManager::write_ertr::future<> BlockRBMManager::complete_allocation(
     Transaction &t)
 {
   return write_ertr::now();
 }
 
-NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
+BlockRBMManager::write_ertr::future<> BlockRBMManager::sync_allocation(
     std::vector<alloc_delta_t> &alloc_blocks)
 {
   if (alloc_blocks.empty()) {
@@ -470,7 +470,7 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
   });
 }
 
-NVMeManager::open_ertr::future<> NVMeManager::open(
+BlockRBMManager::open_ertr::future<> BlockRBMManager::open(
     const std::string &path, paddr_t paddr)
 {
   logger().debug("open: path{}", path);
@@ -491,13 +491,13 @@ NVMeManager::open_ertr::future<> NVMeManager::open(
       ).handle_error(
 	open_ertr::pass_further{},
 	crimson::ct_error::assert_all{
-	  "Invalid error read_rbm_header in NVMeManager::open"
+	  "Invalid error read_rbm_header in BlockRBMManager::open"
 	}
       );
     });
 }
 
-NVMeManager::write_ertr::future<> NVMeManager::write(
+BlockRBMManager::write_ertr::future<> BlockRBMManager::write(
   paddr_t paddr,
   bufferptr &bptr)
 {
@@ -512,7 +512,7 @@ NVMeManager::write_ertr::future<> NVMeManager::write(
     bptr);
 }
 
-NVMeManager::read_ertr::future<> NVMeManager::read(
+BlockRBMManager::read_ertr::future<> BlockRBMManager::read(
   paddr_t paddr,
   bufferptr &bptr)
 {
@@ -527,20 +527,20 @@ NVMeManager::read_ertr::future<> NVMeManager::read(
       bptr);
 }
 
-NVMeManager::close_ertr::future<> NVMeManager::close()
+BlockRBMManager::close_ertr::future<> BlockRBMManager::close()
 {
   ceph_assert(device);
   return device->close();
 }
 
-NVMeManager::open_ertr::future<> NVMeManager::_open_device(
+BlockRBMManager::open_ertr::future<> BlockRBMManager::_open_device(
     const std::string path)
 {
   ceph_assert(device);
   return device->open(path, seastar::open_flags::rw);
 }
 
-NVMeManager::write_ertr::future<> NVMeManager::write_rbm_header()
+BlockRBMManager::write_ertr::future<> BlockRBMManager::write_rbm_header()
 {
   bufferlist meta_b_header;
   super.crc = 0;
@@ -565,7 +565,7 @@ NVMeManager::write_ertr::future<> NVMeManager::write_rbm_header()
   return device->write(super.start, bp);
 }
 
-NVMeManager::read_ertr::future<rbm_metadata_header_t> NVMeManager::read_rbm_header(
+BlockRBMManager::read_ertr::future<rbm_metadata_header_t> BlockRBMManager::read_rbm_header(
     rbm_abs_addr addr)
 {
   ceph_assert(device);
@@ -611,12 +611,12 @@ NVMeManager::read_ertr::future<rbm_metadata_header_t> NVMeManager::read_rbm_head
   }).handle_error(
     read_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error in NVMeManager::read_rbm_header"
+      "Invalid error in BlockRBMManager::read_rbm_header"
     }
     );
 }
 
-NVMeManager::check_bitmap_blocks_ertr::future<> NVMeManager::check_bitmap_blocks()
+BlockRBMManager::check_bitmap_blocks_ertr::future<> BlockRBMManager::check_bitmap_blocks()
 {
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   return seastar::do_with(uint64_t(super.start_alloc_area), uint64_t(0), bp,
@@ -648,13 +648,13 @@ NVMeManager::check_bitmap_blocks_ertr::future<> NVMeManager::check_bitmap_blocks
     }).handle_error(
       check_bitmap_blocks_ertr::pass_further{},
       crimson::ct_error::assert_all{
-        "Invalid error in NVMeManager::find_free_block"
+        "Invalid error in BlockRBMManager::find_free_block"
       }
     );
   });
 }
 
-NVMeManager::write_ertr::future<> NVMeManager::write(
+BlockRBMManager::write_ertr::future<> BlockRBMManager::write(
   rbm_abs_addr addr,
   bufferlist &bl)
 {

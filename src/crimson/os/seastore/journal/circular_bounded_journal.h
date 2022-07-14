@@ -17,6 +17,7 @@
 #include "crimson/os/seastore/journal.h"
 #include "include/uuid.h"
 #include "crimson/os/seastore/random_block_manager.h"
+#include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "crimson/os/seastore/random_block_manager/nvmedevice.h"
 #include <list>
 
@@ -25,7 +26,7 @@ namespace crimson::os::seastore::journal {
 
 constexpr rbm_abs_addr CBJOURNAL_START_ADDRESS = 0;
 constexpr uint64_t CBJOURNAL_MAGIC = 0xCCCC;
-using NVMeBlockDevice = nvme_device::NVMeBlockDevice;
+using RBMDevice = rbm_device::RBMDevice;
 
 /**
  * CircularBoundedJournal
@@ -66,7 +67,7 @@ public:
     device_id_t device_id = 0;
     seastore_meta_t meta;
     static mkfs_config_t get_default() {
-      device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
+      device_id_t d_id = make_device_id(1, device_type_t::RANDOM_BLOCK);
       return mkfs_config_t {
 	"",
 	DEFAULT_BLOCK_SIZE,
@@ -77,7 +78,7 @@ public:
     }
   };
 
-  CircularBoundedJournal(NVMeBlockDevice* device, const std::string &path);
+  CircularBoundedJournal(RBMDevice* device, const std::string &path);
   ~CircularBoundedJournal() {}
 
   open_for_write_ret open_for_write() final;
@@ -274,12 +275,12 @@ public:
   rbm_abs_addr get_journal_end() const {
     return get_start_addr() + header.size + get_block_size(); // journal size + header length
   }
-  void add_device(NVMeBlockDevice* dev) {
+  void add_device(RBMDevice* dev) {
     device = dev;
   }
 private:
   cbj_header_t header;
-  NVMeBlockDevice* device;
+  RBMDevice* device;
   std::string path;
   WritePipeline *write_pipeline = nullptr;
   /**

@@ -15,8 +15,9 @@
 #include "crimson/osd/exceptions.h"
 
 #include "crimson/os/seastore/transaction.h"
-#include "nvmedevice.h"
 #include "crimson/os/seastore/random_block_manager.h"
+#include "crimson/os/seastore/random_block_manager/rbm_device.h"
+#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
 
 #include "crimson/common/layout.h"
 #include "include/buffer.h"
@@ -26,8 +27,8 @@ namespace crimson::os::seastore {
 
 constexpr uint32_t RBM_SUPERBLOCK_SIZE = 4096;
 
-using NVMeBlockDevice = nvme_device::NVMeBlockDevice;
-using NVMeBlockDeviceRef = std::unique_ptr<NVMeBlockDevice>;
+using RBMDevice = rbm_device::RBMDevice;
+using RBMDeviceRef = std::unique_ptr<RBMDevice>;
 
 enum {
   // TODO: This allows the device to manage crc on a block by itself
@@ -173,7 +174,7 @@ WRITE_CLASS_DENC_BOUNDED(
 
 namespace crimson::os::seastore {
 
-class NVMeManager final : public RandomBlockManager {
+class BlockRBMManager final : public RandomBlockManager {
 public:
   /*
    * Ondisk layout
@@ -294,7 +295,7 @@ public:
    * on a device, so start and end location of the device are needed to
    * support such case.
    */
-  NVMeManager(NVMeBlockDevice * device, std::string path)
+  BlockRBMManager(RBMDevice * device, std::string path)
     : device(device), path(path) {}
 
   /*
@@ -370,10 +371,10 @@ private:
    */
   rbm_metadata_header_t super;
   //FreelistManager free_manager; // TODO: block management
-  NVMeBlockDevice * device;
+  RBMDevice * device;
   std::string path;
   int stream_id; // for multi-stream
 };
-using NVMeManagerRef = std::unique_ptr<NVMeManager>;
+using BlockRBMManagerRef = std::unique_ptr<BlockRBMManager>;
 
 }

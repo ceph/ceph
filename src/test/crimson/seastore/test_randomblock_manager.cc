@@ -6,7 +6,7 @@
 #include <random>
 
 #include "crimson/common/log.h"
-#include "crimson/os/seastore/random_block_manager/nvme_manager.h"
+#include "crimson/os/seastore/random_block_manager/rbm_manager.h"
 #include "crimson/os/seastore/random_block_manager/nvmedevice.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
@@ -25,8 +25,8 @@ constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 
 struct rbm_test_t :
   public seastar_test_suite_t, TMTestState {
-  std::unique_ptr<NVMeManager> rbm_manager;
-  std::unique_ptr<nvme_device::NVMeBlockDevice> device;
+  std::unique_ptr<BlockRBMManager> rbm_manager;
+  std::unique_ptr<rbm_device::RBMDevice> device;
 
   struct rbm_transaction {
     void add_rbm_allocated_blocks(alloc_delta_t &d) {
@@ -54,7 +54,7 @@ struct rbm_test_t :
 
   seastar::future<> set_up_fut() final {
     device.reset(new nvme_device::TestMemory(DEFAULT_TEST_SIZE));
-    rbm_manager.reset(new NVMeManager(device.get(), std::string()));
+    rbm_manager.reset(new BlockRBMManager(device.get(), std::string()));
     device_id_t d_id = make_device_id(1, device_type_t::RANDOM_BLOCK);
     config.start = paddr_t::make_blk_paddr(d_id, 0);
     config.end = paddr_t::make_blk_paddr(d_id, DEFAULT_TEST_SIZE);

@@ -126,7 +126,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
   Cache cache;
   std::vector<entry_validator_t> entries;
   std::unique_ptr<CircularBoundedJournal> cbj;
-  nvme_device::NVMeBlockDevice *device;
+  rbm_device::RBMDevice *device;
 
   std::default_random_engine generator;
   uint64_t block_size;
