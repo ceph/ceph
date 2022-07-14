@@ -136,8 +136,7 @@ ssh_exec wnbd-client.exe -v
 CEPH_REPO_FILE="/etc/apt/sources.list.d/ceph.list"
 PROJECT=$(cat $CEPH_REPO_FILE | cut -d ' ' -f3 | tr '\/', ' ' | awk '{print $4}')
 BRANCH=$(cat $CEPH_REPO_FILE | cut -d ' ' -f3 | tr '\/', ' ' | awk '{print $5}')
-SHA1=$(cat $CEPH_REPO_FILE | cut -d ' ' -f3 | tr '\/', ' ' | awk '{print $6}')
-retrycmd_if_failure 10 0 10m ./get-chacra-bin.py --project $PROJECT --branchname $BRANCH --sha1 $SHA1 --filename ceph.zip
+retrycmd_if_failure 10 0 10m ./get-chacra-bin.py --project $PROJECT --branchname $BRANCH --sha1 latest --filename ceph.zip
 
 # Install Ceph on Windows
 SSH_TIMEOUT=5m scp_upload ./ceph.zip /ceph.zip
