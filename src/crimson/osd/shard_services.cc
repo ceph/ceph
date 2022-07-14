@@ -92,7 +92,8 @@ seastar::future<> CoreState::send_to_osd(
   }
 }
 
-seastar::future<> CoreState::osdmap_subscribe(version_t epoch, bool force_request)
+seastar::future<> CoreState::osdmap_subscribe(
+  version_t epoch, bool force_request)
 {
   logger().info("{}({})", __func__, epoch);
   if (monc.sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
@@ -103,9 +104,10 @@ seastar::future<> CoreState::osdmap_subscribe(version_t epoch, bool force_reques
   }
 }
 
-void CoreState::queue_want_pg_temp(pg_t pgid,
-				       const vector<int>& want,
-				       bool forced)
+void CoreState::queue_want_pg_temp(
+  pg_t pgid,
+  const vector<int>& want,
+  bool forced)
 {
   auto p = pg_temp_pending.find(pgid);
   if (p == pg_temp_pending.end() ||
@@ -257,8 +259,9 @@ const char** CoreState::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void CoreState::handle_conf_change(const ConfigProxy& conf,
-				   const std::set <std::string> &changed)
+void CoreState::handle_conf_change(
+  const ConfigProxy& conf,
+  const std::set <std::string> &changed)
 {
   if (changed.count("osd_max_backfills")) {
     local_reserver.set_max(conf->osd_max_backfills);
@@ -288,14 +291,16 @@ seastar::future<CoreState::cached_map_t> CoreState::get_map(epoch_t e)
   }
 }
 
-void CoreState::store_map_bl(ceph::os::Transaction& t,
-                       epoch_t e, bufferlist&& bl)
+void CoreState::store_map_bl(
+  ceph::os::Transaction& t,
+  epoch_t e, bufferlist&& bl)
 {
   meta_coll->store_map(t, e, bl);
   map_bl_cache.insert(e, std::move(bl));
 }
 
-seastar::future<bufferlist> CoreState::load_map_bl(epoch_t e)
+seastar::future<bufferlist> CoreState::load_map_bl(
+  epoch_t e)
 {
   if (std::optional<bufferlist> found = map_bl_cache.find(e); found) {
     return seastar::make_ready_future<bufferlist>(*found);
@@ -339,34 +344,35 @@ seastar::future<std::unique_ptr<OSDMap>> CoreState::load_map(epoch_t e)
 seastar::future<> CoreState::store_maps(ceph::os::Transaction& t,
                                   epoch_t start, Ref<MOSDMap> m)
 {
-  return seastar::do_for_each(boost::make_counting_iterator(start),
-                              boost::make_counting_iterator(m->get_last() + 1),
-                              [&t, m, this](epoch_t e) {
-    if (auto p = m->maps.find(e); p != m->maps.end()) {
-      auto o = std::make_unique<OSDMap>();
-      o->decode(p->second);
-      logger().info("store_maps osdmap.{}", e);
-      store_map_bl(t, e, std::move(std::move(p->second)));
-      osdmaps.insert(e, std::move(o));
-      return seastar::now();
-    } else if (auto p = m->incremental_maps.find(e);
-               p != m->incremental_maps.end()) {
-      return load_map(e - 1).then([e, bl=p->second, &t, this](auto o) {
-        OSDMap::Incremental inc;
-        auto i = bl.cbegin();
-        inc.decode(i);
-        o->apply_incremental(inc);
-        bufferlist fbl;
-        o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
-        store_map_bl(t, e, std::move(fbl));
-        osdmaps.insert(e, std::move(o));
-        return seastar::now();
-      });
-    } else {
-      logger().error("MOSDMap lied about what maps it had?");
-      return seastar::now();
-    }
-  });
+  return seastar::do_for_each(
+    boost::make_counting_iterator(start),
+    boost::make_counting_iterator(m->get_last() + 1),
+    [&t, m, this](epoch_t e) {
+      if (auto p = m->maps.find(e); p != m->maps.end()) {
+	auto o = std::make_unique<OSDMap>();
+	o->decode(p->second);
+	logger().info("store_maps osdmap.{}", e);
+	store_map_bl(t, e, std::move(std::move(p->second)));
+	osdmaps.insert(e, std::move(o));
+	return seastar::now();
+      } else if (auto p = m->incremental_maps.find(e);
+		 p != m->incremental_maps.end()) {
+	return load_map(e - 1).then([e, bl=p->second, &t, this](auto o) {
+	  OSDMap::Incremental inc;
+	  auto i = bl.cbegin();
+	  inc.decode(i);
+	  o->apply_incremental(inc);
+	  bufferlist fbl;
+	  o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
+	  store_map_bl(t, e, std::move(fbl));
+	  osdmaps.insert(e, std::move(o));
+	  return seastar::now();
+	});
+      } else {
+	logger().error("MOSDMap lied about what maps it had?");
+	return seastar::now();
+      }
+    });
 }
 
 seastar::future<Ref<PG>> CoreState::make_pg(
@@ -429,11 +435,11 @@ seastar::future<Ref<PG>> CoreState::handle_pg_create_info(
   std::unique_ptr<PGCreateInfo> info) {
   return seastar::do_with(
     std::move(info),
-    [this, &shard_manager, &shard_services](auto &info) -> seastar::future<Ref<PG>> {
+    [this, &shard_manager, &shard_services](auto &info)
+    -> seastar::future<Ref<PG>> {
       return get_map(info->epoch).then(
-	[&info, &shard_services, this](
-	  OSDMapService::cached_map_t startmap) ->
-	seastar::future<std::tuple<Ref<PG>, OSDMapService::cached_map_t>> {
+	[&info, &shard_services, this](OSDMapService::cached_map_t startmap)
+	-> seastar::future<std::tuple<Ref<PG>, OSDMapService::cached_map_t>> {
 	  const spg_t &pgid = info->pgid;
 	  if (info->by_mon) {
 	    int64_t pool_id = pgid.pgid.pool();
@@ -467,8 +473,8 @@ seastar::future<Ref<PG>> CoreState::handle_pg_create_info(
 		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
 		>(std::make_tuple(std::move(pg), std::move(startmap)));
 	    });
-	}).then([this, &shard_manager, &shard_services, &info](auto&& ret) ->
-		seastar::future<Ref<PG>> {
+	}).then([this, &shard_manager, &shard_services, &info](auto&& ret)
+		->seastar::future<Ref<PG>> {
 	  auto [pg, startmap] = std::move(ret);
 	  if (!pg)
 	    return seastar::make_ready_future<Ref<PG>>(Ref<PG>());
