@@ -622,5 +622,6 @@ TEST(TestRGWLua, OpsLog)
 	std::this_thread::sleep_for(std::chrono::seconds(5));
 	unix_socket_thread.detach(); // read is stuck there, so we cannot join
   EXPECT_TRUE(unix_socket_client_ended_ok);
+
 }
 
