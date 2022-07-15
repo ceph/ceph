@@ -6766,6 +6766,23 @@ void RGWDeleteMultiObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
+  int num_err = 0;
+  int num_ok = 0;
+  for (auto iter = ops_log_entries.begin();
+       iter != ops_log_entries.end();
+       ++iter) {
+    if (iter->error) {
+      num_err++;
+    } else {
+      num_ok++;
+    }
+  }
+  entry.delete_multi_obj_meta.num_err = num_err;
+  entry.delete_multi_obj_meta.num_ok = num_ok;
+  entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
+}
+
 void RGWDeleteMultiObj::execute(optional_yield y)
 {
   RGWMultiDelDelete *multi_delete;
