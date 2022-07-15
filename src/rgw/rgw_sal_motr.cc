@@ -1140,6 +1140,7 @@ int MotrBucket::check_quota(const DoutPrefixProvider *dpp,
   int rc = quota_handler->check_quota(dpp, info.owner, info.bucket,
                                       user_quota, bucket_quota,
                                       check_size_only ? 0 : 1, obj_size, y);
+  RGWQuotaHandler::free_handler(quota_handler);
   return rc;
 }
 
