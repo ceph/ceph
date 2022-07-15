@@ -453,6 +453,14 @@ options:
   services:
   - mds_client
   with_legacy: true
+- name: client_max_retries_on_remount_failure
+  type: uint
+  level: advanced
+  desc: number of consecutive failed remount attempts for invalidating kernel dcache
+    after which client would abort.
+  default: 5
+  services:
+  - mds_client
 - name: client_die_on_failed_remount
   type: bool
   level: dev
