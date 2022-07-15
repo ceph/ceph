@@ -3008,7 +3008,7 @@ const std::string& RadosZone::get_realm_id()
   return store->svc()->zone->get_realm().get_id();
 }
 
-const std::string& RadosZone::get_tier_type()
+const std::string_view RadosZone::get_tier_type()
 {
   return store->svc()->zone->get_zone().tier_type;
 }
