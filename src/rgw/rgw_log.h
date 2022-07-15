@@ -11,6 +11,8 @@
 #include <fstream>
 #include "rgw_sal_fwd.h"
 
+class RGWOp;
+
 struct rgw_log_entry {
 
   using headers_map = boost::container::flat_map<std::string, std::string>;
@@ -217,8 +219,8 @@ public:
 
 class RGWREST;
 
-int rgw_log_op(RGWREST* const rest, req_state* s,
-	       const std::string& op_name, OpsLogSink* olog);
+int rgw_log_op(RGWREST* const rest, struct req_state* s,
+	             const RGWOp* op, OpsLogSink* olog);
 void rgw_log_usage_init(CephContext* cct, rgw::sal::Store* store);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry,
