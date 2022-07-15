@@ -666,7 +666,8 @@ public:
       submit_transaction_direct_iertr::future<>;
     virtual submit_transaction_direct_ret submit_transaction_direct(
       Transaction &t,
-      std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
+      std::optional<journal_seq_t> seq_to_trim = std::nullopt,
+      std::optional<std::pair<paddr_t, paddr_t>> gc_range = std::nullopt) = 0;
   };
 
 private:
@@ -835,7 +836,8 @@ public:
 
   void mark_space_free(
     paddr_t addr,
-    extent_len_t len);
+    extent_len_t len,
+    bool init_scan = false);
 
   SpaceTrackerIRef get_empty_space_tracker() const {
     return space_tracker->make_empty();
@@ -1110,7 +1112,7 @@ private:
 
   using retrieve_live_extents_iertr = work_iertr;
   using retrieve_live_extents_ret =
-    retrieve_live_extents_iertr::future<journal_seq_t>;
+    retrieve_live_extents_iertr::future<>;
   retrieve_live_extents_ret _retrieve_live_extents(
     Transaction &t,
     std::set<
