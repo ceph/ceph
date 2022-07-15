@@ -1307,3 +1307,15 @@ int FilterLuaScriptManager::del(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 } } // namespace rgw::sal
+
+extern "C" {
+
+rgw::sal::Store* newBaseFilter(rgw::sal::Store* next)
+{
+  rgw::sal::FilterStore* store = new rgw::sal::FilterStore(next);
+
+  return store;
+}
+
+}
+
