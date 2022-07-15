@@ -44,6 +44,7 @@
 #include "rgw_putobj.h"
 #include "rgw_sal.h"
 #include "rgw_compression_types.h"
+#include "rgw_log.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
@@ -2029,6 +2030,7 @@ public:
 
 class RGWDeleteMultiObj : public RGWOp {
 protected:
+  std::vector<delete_multi_obj_entry> ops_log_entries;
   bufferlist data;
   rgw::sal::Bucket* bucket;
   bool quiet;
@@ -2058,6 +2060,8 @@ public:
   const char* name() const override { return "multi_object_delete"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_MULTI_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
 };
 
 class RGWInfo: public RGWOp {

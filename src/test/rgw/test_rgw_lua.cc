@@ -358,7 +358,7 @@ TEST(TestRGWLua, WriteBucket)
   DEFINE_REQ_STATE;
   s.init_state.url_bucket = "myname";
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
   ASSERT_EQ(s.init_state.url_bucket, "othername");
 }
@@ -376,7 +376,7 @@ TEST(TestRGWLua, WriteBucketFail)
   b.name = "myname";
   s.bucket.reset(new sal::RadosBucket(nullptr, b));
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_NE(rc, 0);
 }
 
@@ -551,7 +551,7 @@ TEST(TestRGWLua, User)
   u.id = "myid";
   s.user.reset(new sal::RadosUser(nullptr, u));
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -778,7 +778,7 @@ TEST(TestRGWLuaBackground, RequestScript)
 
   // to make sure test is consistent we have to puase the background
   lua_background.pause();
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "hello"), "from request");
   // now we resume and let the background set the value
@@ -927,7 +927,7 @@ TEST(TestRGWLuaBackground, TableValues)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
   EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
@@ -948,7 +948,7 @@ TEST(TestRGWLuaBackground, TablePersist)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
   EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
@@ -958,7 +958,7 @@ TEST(TestRGWLuaBackground, TablePersist)
     RGW["key4"] = RGW["key2"]
   )";
   
-  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
   EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
@@ -987,7 +987,7 @@ TEST(TestRGWLuaBackground, TableValuesFromRequest)
   s.err.ret = -99;
   s.err.message = "hi";
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<long long int>(lua_background, "key1"), -99);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key2"), "hi");
@@ -1014,7 +1014,7 @@ TEST(TestRGWLuaBackground, TableInvalidValue)
   s.tagset.add_tag("key1", "val1");
   s.tagset.add_tag("key2", "val2");
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_NE(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "val1");
   EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
@@ -1038,7 +1038,7 @@ TEST(TestRGWLuaBackground, TableErase)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
   EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
@@ -1053,7 +1053,7 @@ TEST(TestRGWLuaBackground, TableErase)
     RGW["size"] = #RGW
   )";
   
-  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "");
   EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
@@ -1080,7 +1080,7 @@ TEST(TestRGWLuaBackground, TableIterate)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
   EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
@@ -1106,7 +1106,7 @@ TEST(TestRGWLuaBackground, TableIncrement)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -1129,7 +1129,7 @@ TEST(TestRGWLuaBackground, TableIncrementBy)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -1150,7 +1150,7 @@ TEST(TestRGWLuaBackground, TableDecrement)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -1173,7 +1173,7 @@ TEST(TestRGWLuaBackground, TableDecrementBy)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -1191,7 +1191,7 @@ TEST(TestRGWLuaBackground, TableIncrementValueError)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_NE(rc, 0);
   
   request_script = R"(
@@ -1200,7 +1200,7 @@ TEST(TestRGWLuaBackground, TableIncrementValueError)
     RGW.increment("key1")
   )";
 
-  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_NE(rc, 0);
   
   request_script = R"(
@@ -1209,7 +1209,7 @@ TEST(TestRGWLuaBackground, TableIncrementValueError)
     RGW.increment("key1", "kaboom")
   )";
 
-  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_NE(rc, 0);
 }
 
@@ -1227,7 +1227,7 @@ TEST(TestRGWLuaBackground, TableIncrementError)
   DEFINE_REQ_STATE;
   s.lua_background = &lua_background;
 
-  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_NE(rc, 0);
   
   request_script = R"(
@@ -1235,7 +1235,7 @@ TEST(TestRGWLuaBackground, TableIncrementError)
     RGW.increment = 11
   )";
 
-  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script);
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_NE(rc, 0);
 }
 
@@ -1249,7 +1249,7 @@ TEST(TestRGWLua, TracingSetAttribute)
 
   DEFINE_REQ_STATE;
   INIT_TRACE;
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -1261,7 +1261,7 @@ TEST(TestRGWLua, TracingSetBadAttribute)
 
   DEFINE_REQ_STATE;
   INIT_TRACE;
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   #ifdef HAVE_JAEGER
    ASSERT_NE(rc, 0);
   #else
@@ -1283,7 +1283,7 @@ TEST(TestRGWLua, TracingAddEvent)
 
   DEFINE_REQ_STATE;
   INIT_TRACE;
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
