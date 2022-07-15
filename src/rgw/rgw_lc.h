@@ -223,7 +223,7 @@ public:
 
   // Determine if we need AND tag when creating xml
   bool has_multi_condition() const {
-    if (obj_tags.count() + int(has_prefix()) > 1) // Prefix is a member of Filter
+    if (obj_tags.count() + int(has_prefix()) + int(has_flags()) > 1) // Prefix is a member of Filter
       return true;
     return false;
   }
