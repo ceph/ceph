@@ -103,6 +103,16 @@ target_link_libraries(
   crimson-seastore
   aio)
 
+add_executable(unittest-seastore-hdd-device
+  test_hdd_device.cc)
+add_ceph_test(unittest-seastore-hdd-device
+  unittest-seastore-nvmedevice --memory 256M --smp 1)
+target_link_libraries(
+  unittest-seastore-hdd-device
+  crimson::gtest
+  crimson-seastore
+  aio)
+
 add_executable(unittest-seastore-cbjournal
   test_cbjournal.cc)
 add_ceph_test(unittest-seastore-cbjournal
