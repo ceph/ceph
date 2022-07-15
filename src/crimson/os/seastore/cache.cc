@@ -28,6 +28,15 @@ SET_SUBSYS(seastore_cache);
 
 namespace crimson::os::seastore {
 
+std::ostream &operator<<(std::ostream &out, const backref_buf_entry_t &ent) {
+  return out << "backref_buf_entry_t{"
+	     << ent.paddr << "~" << ent.len << ", "
+	     << "laddr: " << ent.laddr << ", "
+	     << "type: " << ent.type << ", "
+	     << "seq: " << ent.seq << ", "
+	     << "}";
+}
+
 Cache::Cache(
   ExtentPlacementManager &epm)
   : epm(epm),
@@ -1351,39 +1360,9 @@ void Cache::backref_batch_update(
   if (!backref_buffer) {
     backref_buffer = std::make_unique<backref_cache_t>();
   }
-  // backref_buf_entry_t::laddr == L_ADDR_NULL means erase
+
   for (auto &ent : list) {
-    if (ent->laddr == L_ADDR_NULL) {
-      auto insert_set_iter = backref_inserted_set.find(
-	ent->paddr, backref_buf_entry_t::cmp_t());
-      if (insert_set_iter == backref_inserted_set.end()) {
-	// backref to be removed isn't in the backref buffer,
-	// it must be in the backref tree.
-	auto [it, insert] = backref_remove_set.insert(*ent);
-	boost::ignore_unused(insert);
-#ifndef NDEBUG
-	if (!insert) {
-	  ERROR("backref_remove_set already contains {}", ent->paddr);
-	}
-#endif
-	assert(insert);
-      } else {
-	// the backref insertion hasn't been applied to the
-	// backref tree
-	auto seq = insert_set_iter->seq;
-	auto it = backref_buffer->backrefs_by_seq.find(seq);
-	ceph_assert(it != backref_buffer->backrefs_by_seq.end());
-	auto &backref_buf = it->second;
-	assert(insert_set_iter->backref_buf_hook.is_linked());
-	backref_buf.br_list.erase(
-	  backref_buf_entry_t::list_t::s_iterator_to(*insert_set_iter));
-	backref_inserted_set.erase(insert_set_iter);
-      }
-    } else {
-      auto [it, insert] = backref_inserted_set.insert(*ent);
-      boost::ignore_unused(insert);
-      assert(insert);
-    }
+    backref_set.insert(*ent);
   }
 
   auto iter = backref_buffer->backrefs_by_seq.find(seq);
