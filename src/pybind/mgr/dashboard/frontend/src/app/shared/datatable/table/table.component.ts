@@ -101,6 +101,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // Page size to show. Set to 0 to show unlimited number of rows.
   @Input()
   limit? = 10;
+  @Input()
+  maxLimit? = 9999;
   // Has the row details?
   @Input()
   hasDetails = false;
@@ -630,7 +632,13 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   setLimit(e: any) {
     const value = Number(e.target.value);
     if (value > 0) {
-      this.userConfig.limit = value;
+      if (this.maxLimit && value > this.maxLimit) {
+        this.userConfig.limit = this.maxLimit;
+        // change input field to maxLimit
+        e.srcElement.value = this.maxLimit;
+      } else {
+        this.userConfig.limit = value;
+      }
     }
     if (this.serverSide) {
       this.reloadData();
