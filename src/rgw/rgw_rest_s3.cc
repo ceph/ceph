@@ -3935,11 +3935,11 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
       s->formatter->open_object_section("Deleted");
       s->formatter->dump_string("Key", key.name);
       if (!key.instance.empty()) {
-	s->formatter->dump_string("VersionId", key.instance);
+          s->formatter->dump_string("VersionId", key.instance);
       }
       if (delete_marker) {
-	s->formatter->dump_bool("DeleteMarker", true);
-	s->formatter->dump_string("DeleteMarkerVersionId", marker_version_id);
+          s->formatter->dump_bool("DeleteMarker", true);
+          s->formatter->dump_string("DeleteMarkerVersionId", marker_version_id);
       }
       s->formatter->close_section();
     } else if (ret < 0) {
