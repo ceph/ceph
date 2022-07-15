@@ -3692,7 +3692,6 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp, std::string
 {
   int rc;
   int max_parts = 1000;
-  int total_parts_fetched = 0;
   uint64_t total_size = 0, total_size_rounded = 0;
   int marker = 0;
   bool truncated = false;
@@ -3709,7 +3708,6 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp, std::string
       return rc;
 
     std::map<uint32_t, std::unique_ptr<MultipartPart>>& parts = this->get_parts();
-    total_parts_fetched += parts.size();
     for (auto part_iter = parts.begin(); part_iter != parts.end(); ++part_iter) {
 
       MultipartPart *mpart = part_iter->second.get();
@@ -3755,10 +3753,10 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp, std::string
     *size_rounded = total_size_rounded;
 
   if (get_upload_id().length()) {
-    // Subtract size & count of all the parts if multipart is not completed.
+    // Subtract size & object count if multipart is not completed.
     rc = update_bucket_stats(dpp, store,
                              bucket->get_acl_owner().get_id().to_str(), tenant_bkt_name,
-                             total_size, total_size_rounded, total_parts_fetched, false);
+                             total_size, total_size_rounded, 1, false);
     if (rc != 0) {
       ldpp_dout(dpp, 20) <<__func__<< ": Failed stats substraction for the "
         << "bucket/obj=" << tenant_bkt_name << "/" << mp_obj.get_key()
@@ -3926,10 +3924,20 @@ int MotrMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   rc = store->create_motr_idx_by_name(obj_part_iname);
   if (rc == -EEXIST)
     rc = 0;
-  if (rc < 0)
+  if (rc < 0) {
     // TODO: clean the bucket index entry
     ldpp_dout(dpp, 0) << "Failed to create object multipart index  " << obj_part_iname << dendl;
+    return rc;
+  }
 
+  // Add one to the object_count of the current bucket stats
+  // Size will be added when parts are uploaded
+  rc = update_bucket_stats(dpp, store, owner.get_id().to_str(), tenant_bkt_name, 0, 0, 1, true);
+  if (rc != 0) {
+    ldpp_dout(dpp, 20) <<__func__<< ": Failed to update object count for the "
+      << "bucket/obj=" << tenant_bkt_name << "/" << mp_obj.get_key()
+      << ", rc=" << rc << dendl;
+  }
   return rc;
 }
 
@@ -4248,20 +4256,6 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   }
   store->get_obj_meta_cache()->put(dpp, tobj_key, update_bl);
 
-  // Increment size & count for new multipart obj in bucket stats entry.
-  std::string bkt_owner = target_obj->get_bucket()->get_acl_owner().get_id().to_str();
-  rc = update_bucket_stats(dpp, store, bkt_owner, tenant_bkt_name,
-                           0, 0, total_parts - 1, false);
-  if (rc != 0) {
-    ldpp_dout(dpp, 20) <<__func__<< ": Failed stats update for the "
-      << "bucket/obj=" << tenant_bkt_name << "/" << target_obj->get_key().to_str()
-      << ", rc=" << rc << dendl;
-    return rc;
-  }
-  ldpp_dout(dpp, 70) <<__func__<< ": Updated stats successfully for the "
-      << "bucket/obj=" << tenant_bkt_name << "/" << target_obj->get_key().to_str()
-      << ", rc=" << rc << dendl;
-
   ldpp_dout(dpp, 20) <<__func__<< ": remove from bucket multipart index " << dendl;
   return store->do_idx_op_by_name(bucket_multipart_iname,
                                   M0_IC_DEL, meta_obj->get_key().to_str(), bl);
@@ -4408,7 +4402,6 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
   info.accounted_size = accounted_size;
   info.modified = real_clock::now();
   uint64_t old_part_size = 0, old_part_size_rounded = 0;
-  bool old_part_exist = false;
 
   bool compressed;
   int rc = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);
@@ -4458,7 +4451,6 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
     ldpp_dout(dpp, 20) <<__func__<< ": Old part with oid [" << oid_str << "] exists" << dendl;
     old_part_size = old_part_info.accounted_size;
     old_part_size_rounded = old_part_info.size_rounded;
-    old_part_exist = true;
     // Delete old object
     rc = old_mobj->delete_mobj(dpp);
     if (rc == 0) {
@@ -4474,13 +4466,13 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
     ldpp_dout(dpp, 0) <<__func__<< ": failed to add part obj in part index, rc=" << rc << dendl;
     return rc == -ENOENT ? -ERR_NO_SUCH_UPLOAD : rc;
   }
-
-   rc = update_bucket_stats(dpp, store,
+   
+  // update size without changing the object count
+  rc = update_bucket_stats(dpp, store,
                            head_obj->get_bucket()->get_acl_owner().get_id().to_str(),
                            tenant_bkt_name,
                            actual_part_size - old_part_size,
-                           size_rounded - old_part_size_rounded,
-                           1 - old_part_exist);
+                           size_rounded - old_part_size_rounded, 0, true);
   if (rc != 0) {
     ldpp_dout(dpp, 20) <<__func__<< ": Failed stats update for the "
       << "obj/part=" << head_obj->get_key().to_str() << "/" << part_num
