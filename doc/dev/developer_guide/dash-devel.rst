@@ -685,7 +685,7 @@ applitools eyes test runner, where you can see all your screenshots. And if ther
 Writing More Visual Regression Tests
 ....................................
 
-Please refer to `Applitools's official cypress sdk documentation <https://github.com/applitools/eyes.sdk.javascript1/tree/master/packages/eyes-cypress>`_ to write more tests.
+Please refer to `Applitools's official cypress sdk documentation <https://www.npmjs.com/package/@applitools/eyes-cypress#usage>`_ to write more tests.
 
 Visual Regression Tests In Jenkins
 ..................................
