@@ -4,6 +4,6 @@ tasks:
       image_name: testimage
       image_size: 10240
       image_format: 2
-- persistent_write_log_cache_thrash:
+- rbd_pwl_cache_recovery:
     client.0:
       image_name: testimage
