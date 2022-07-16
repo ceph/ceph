@@ -1,5 +1,5 @@
 """
-persistent write log cache thrash task
+persistent write log cache recovery task
 """
 import contextlib
 import logging
@@ -81,10 +81,10 @@ def thrashes_rbd_bench_on_persistent_cache(ctx, config):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    This is task for testing persistent write log cache thrash.
+    This is task for testing persistent write log cache recovery.
     """
     assert isinstance(config, dict), \
-            "task persistent_write_log_cache_thrash only supports a dictionary for configuration"
+            "task rbd_pwl_cache_recovery only supports a dictionary for configuration"
 
     managers = []
     config = teuthology.replace_all_with_clients(ctx.cluster, config)
