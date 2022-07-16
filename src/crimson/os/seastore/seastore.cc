@@ -503,7 +503,7 @@ SeaStore::list_objects(CollectionRef ch,
   using list_iertr = OnodeManager::list_onodes_iertr;
   using RetType = typename OnodeManager::list_onodes_bare_ret;
   return seastar::do_with(
-    RetType(),
+    RetType(std::vector<ghobject_t>(), start),
     std::move(limit),
     [this, ch, start, end](auto& ret, auto& limit) {
     return repeat_eagain([this, ch, start, end, &limit, &ret] {

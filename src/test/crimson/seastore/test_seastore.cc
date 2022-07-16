@@ -25,6 +25,33 @@ namespace {
   }
 }
 
+ghobject_t make_oid(int i) {
+  stringstream ss;
+  ss << "object_" << i;
+  auto ret = ghobject_t(
+    hobject_t(
+      sobject_t(ss.str(), CEPH_NOSNAP)));
+  ret.set_shard(shard_id_t(shard_id_t::NO_SHARD));
+  ret.hobj.nspace = "asdf";
+  ret.hobj.pool = 0;
+  uint32_t reverse_hash = hobject_t::_reverse_bits(0);
+  ret.hobj.set_bitwise_key_u32(reverse_hash + i * 100);
+  return ret;
+}
+
+ghobject_t make_temp_oid(int i) {
+  stringstream ss;
+  ss << "temp_object_" << i;
+  auto ret = ghobject_t(
+    hobject_t(
+      sobject_t(ss.str(), CEPH_NOSNAP)));
+  ret.set_shard(shard_id_t(shard_id_t::NO_SHARD));
+  ret.hobj.nspace = "hjkl";
+  ret.hobj.pool = -2ll;
+  uint32_t reverse_hash = hobject_t::_reverse_bits(0);
+  ret.hobj.set_bitwise_key_u32(reverse_hash + i * 100);
+  return ret;
+}
 
 struct seastore_test_t :
   public seastar_test_suite_t,
@@ -415,19 +442,138 @@ struct seastore_test_t :
     EXPECT_EQ(std::get<1>(ret), ghobject_t::get_max());
     EXPECT_EQ(std::get<0>(ret), oids);
   }
-};
 
-ghobject_t make_oid(int i) {
-  stringstream ss;
-  ss << "object_" << i;
-  auto ret = ghobject_t(
-    hobject_t(
-      sobject_t(ss.str(), CEPH_NOSNAP)));
-  ret.set_shard(shard_id_t(shard_id_t::NO_SHARD));
-  ret.hobj.nspace = "asdf";
-  ret.hobj.pool = 0;
-  return ret;
-}
+  // create temp objects
+  struct bound_t {
+    enum class type_t {
+      MIN,
+      MAX,
+      TEMP,
+      TEMP_END,
+      NORMAL_BEGIN,
+      NORMAL,
+    } type = type_t::MIN;
+    unsigned index = 0;
+
+    static bound_t get_temp(unsigned index) {
+      return bound_t{type_t::TEMP, index};
+    }
+    static bound_t get_normal(unsigned index) {
+      return bound_t{type_t::NORMAL, index};
+    }
+    static bound_t get_min() { return bound_t{type_t::MIN}; }
+    static bound_t get_max() { return bound_t{type_t::MAX}; }
+    static bound_t get_temp_end() { return bound_t{type_t::TEMP_END}; }
+    static bound_t get_normal_begin() {
+      return bound_t{type_t::NORMAL_BEGIN};
+    }
+
+    ghobject_t get_oid(SeaStore &seastore, CollectionRef &coll) const {
+      switch (type) {
+      case type_t::MIN:
+	return ghobject_t();
+      case type_t::MAX:
+	return ghobject_t::get_max();
+      case type_t::TEMP:
+	return make_temp_oid(index);
+      case type_t::TEMP_END:
+	return seastore.get_objs_range(coll, 0).temp_end;
+      case type_t::NORMAL_BEGIN:
+	return seastore.get_objs_range(coll, 0).obj_begin;
+      case type_t::NORMAL:
+	return make_oid(index);
+      default:
+	assert(0 == "impossible");
+	return ghobject_t();
+      }
+    }
+  };
+  struct list_test_case_t {
+    bound_t left;
+    bound_t right;
+    unsigned limit;
+  };
+  // list_test_cases_t :: [<limit, left_bound, right_bound>]
+  using list_test_cases_t = std::list<std::tuple<unsigned, bound_t, bound_t>>;
+
+  void test_list(
+    unsigned temp_to_create,   /// create temp 0..temp_to_create-1
+    unsigned normal_to_create, /// create normal 0..normal_to_create-1
+    list_test_cases_t cases              /// cases to test
+  ) {
+    std::vector<ghobject_t> objs;
+
+    // setup
+    auto create = [this, &objs](ghobject_t hoid) {
+      objs.emplace_back(std::move(hoid));
+      auto &obj = get_object(objs.back());
+      obj.touch(*seastore);
+      obj.check_size(*seastore);
+    };
+    for (unsigned i = 0; i < temp_to_create; ++i) {
+      create(make_temp_oid(i));
+    }
+    for (unsigned i = 0; i < normal_to_create; ++i) {
+      create(make_oid(i));
+    }
+
+    // list and validate each case
+    for (auto [limit, in_left_bound, in_right_bound] : cases) {
+      auto left_bound = in_left_bound.get_oid(*seastore, coll);
+      auto right_bound = in_right_bound.get_oid(*seastore, coll);
+
+      // get results from seastore
+      auto [listed, next] = seastore->list_objects(
+	coll, left_bound, right_bound, limit).get0();
+
+      // compute correct answer
+      auto correct_begin = std::find_if(
+	objs.begin(), objs.end(),
+	[&left_bound](const auto &in) {
+	  return in >= left_bound;
+	});
+      unsigned count = 0;
+      auto correct_end = correct_begin;
+      for (; count < limit &&
+	     correct_end != objs.end() &&
+	     *correct_end < right_bound;
+	   ++correct_end, ++count);
+
+      // validate return -- [correct_begin, correct_end) should match listed
+      decltype(objs) correct_listed(correct_begin, correct_end);
+      EXPECT_EQ(listed, correct_listed);
+
+      if (count < limit) {
+	if (correct_end == objs.end()) {
+	  // if listed extends to end of range, next should be >= right_bound
+	  EXPECT_GE(next, right_bound);
+	} else {
+	  // next <= *correct_end since *correct_end is the next object to list
+	  EXPECT_LE(next, *correct_end);
+	  // next > *(correct_end - 1) since we already listed it
+	  EXPECT_GT(next, *(correct_end - 1));
+	}
+      } else {
+	// we listed exactly limit objects
+	EXPECT_EQ(limit, listed.size());
+
+	EXPECT_GE(next, left_bound);
+	if (limit == 0) {
+	  if (correct_end != objs.end()) {
+	    // next <= *correct_end since *correct_end is the next object to list
+	    EXPECT_LE(next, *correct_end);
+	  }
+	} else {
+	  // next > *(correct_end - 1) since we already listed it
+	  EXPECT_GT(next, *(correct_end - 1));
+	}
+      }
+    }
+
+    // teardown
+    for (auto &&hoid : objs) { get_object(hoid).remove(*seastore); }
+  }
+};
 
 template <typename T, typename V>
 auto contains(const T &t, const V &v) {
@@ -492,6 +638,78 @@ TEST_F(seastore_test_t, touch_stat_list_remove)
     remove_object(test_obj);
     validate_objects();
   });
+}
+
+using bound_t = seastore_test_t::bound_t;
+constexpr unsigned MAX_LIMIT = std::numeric_limits<unsigned>::max();
+static const seastore_test_t::list_test_cases_t temp_list_cases{
+  // list all temp, maybe overlap to normal on right
+  {MAX_LIMIT, bound_t::get_min()     , bound_t::get_max()     },
+  {        5, bound_t::get_min()     , bound_t::get_temp_end()},
+  {        6, bound_t::get_min()     , bound_t::get_temp_end()},
+  {        6, bound_t::get_min()     , bound_t::get_max()     },
+
+  // list temp starting at min up to but not past boundary
+  {        3, bound_t::get_min()     , bound_t::get_temp(3)   },
+  {        3, bound_t::get_min()     , bound_t::get_temp(4)   },
+  {        3, bound_t::get_min()     , bound_t::get_temp(2)   },
+
+  // list temp starting > min up to or past boundary
+  {        3, bound_t::get_temp(2)   , bound_t::get_temp_end()},
+  {        3, bound_t::get_temp(2)   , bound_t::get_max()     },
+  {        3, bound_t::get_temp(3)   , bound_t::get_max()     },
+  {        3, bound_t::get_temp(1)   , bound_t::get_max()     },
+
+  // 0 limit
+  {        0, bound_t::get_min()     , bound_t::get_max()     },
+  {        0, bound_t::get_temp(1)   , bound_t::get_max()     },
+  {        0, bound_t::get_temp_end(), bound_t::get_max()     },
+};
+
+TEST_F(seastore_test_t, list_objects_temp_only)
+{
+  run_async([this] { test_list(5, 0, temp_list_cases); });
+}
+
+TEST_F(seastore_test_t, list_objects_temp_overlap)
+{
+  run_async([this] { test_list(5, 5, temp_list_cases); });
+}
+
+static const seastore_test_t::list_test_cases_t normal_list_cases{
+  // list all normal, maybe overlap to temp on left
+  {MAX_LIMIT, bound_t::get_min()         , bound_t::get_max()    },
+  {        5, bound_t::get_normal_begin(), bound_t::get_max()    },
+  {        6, bound_t::get_normal_begin(), bound_t::get_max()    },
+  {        6, bound_t::get_temp(4)       , bound_t::get_max()    },
+
+  // list normal starting <= normal_begin < end
+  {        3, bound_t::get_normal_begin(), bound_t::get_normal(3)},
+  {        3, bound_t::get_normal_begin(), bound_t::get_normal(4)},
+  {        3, bound_t::get_normal_begin(), bound_t::get_normal(2)},
+  {        3, bound_t::get_temp(5)       , bound_t::get_normal(2)},
+  {        3, bound_t::get_temp(4)       , bound_t::get_normal(2)},
+
+  // list normal starting > min up to end
+  {        3, bound_t::get_normal(2)     , bound_t::get_max()    },
+  {        3, bound_t::get_normal(2)     , bound_t::get_max()    },
+  {        3, bound_t::get_normal(3)     , bound_t::get_max()    },
+  {        3, bound_t::get_normal(1)     , bound_t::get_max()    },
+
+  // 0 limit
+  {        0, bound_t::get_min()         , bound_t::get_max()    },
+  {        0, bound_t::get_normal(1)     , bound_t::get_max()    },
+  {        0, bound_t::get_normal_begin(), bound_t::get_max()    },
+};
+
+TEST_F(seastore_test_t, list_objects_normal_only)
+{
+  run_async([this] { test_list(5, 0, normal_list_cases); });
+}
+
+TEST_F(seastore_test_t, list_objects_normal_overlap)
+{
+  run_async([this] { test_list(5, 5, normal_list_cases); });
 }
 
 bufferlist make_bufferlist(size_t len) {
