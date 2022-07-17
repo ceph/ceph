@@ -476,7 +476,7 @@ TEST(ClsLock, TestExclusiveEphemeralBasic) {
   string lock_name2 = "mylock2";
 
   Lock l1(lock_name1);
-  l1.set_duration(utime_t(5, 0));
+  l1.set_duration(utime_t(300, 0));
 
   uint64_t size;
   time_t mod_time;
@@ -491,8 +491,7 @@ TEST(ClsLock, TestExclusiveEphemeralBasic) {
   // ***********************************************
 
   Lock l2(lock_name2);
-  utime_t lock_duration2(5, 0);
-  l2.set_duration(utime_t(5, 0));
+  l2.set_duration(utime_t(300, 0));
 
   ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid2));
   ASSERT_EQ(0, ioctx.stat(oid2, &size, &mod_time));
