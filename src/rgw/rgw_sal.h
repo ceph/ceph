@@ -745,9 +745,9 @@ class Bucket {
     virtual bool versioning_enabled() = 0;
 
     /** Check if a Bucket pointer is empty */
-    static bool empty(Bucket* b) { return (!b || b->empty()); }
+    static bool empty(const Bucket* b) { return (!b || b->empty()); }
     /** Check if a Bucket unique pointer is empty */
-    static bool empty(std::unique_ptr<Bucket> b) { return (!b || b->empty()); }
+    static bool empty(const std::unique_ptr<Bucket>& b) { return (!b || b->empty()); }
     /** Clone a copy of this bucket.  Used when modification is necessary of the copy */
     virtual std::unique_ptr<Bucket> clone() = 0;
 
