@@ -519,6 +519,7 @@ class CephadmServe:
                                             len(self.mgr.apply_spec_fails),
                                             warnings)
         self.mgr.update_watched_hosts()
+        self.mgr.tuned_profile_utils._write_all_tuned_profiles()
         return r
 
     def _apply_service_config(self, spec: ServiceSpec) -> None:

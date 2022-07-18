@@ -25,7 +25,8 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     ServiceSpec, PlacementSpec, \
-    HostPlacementSpec, IngressSpec
+    HostPlacementSpec, IngressSpec, \
+    TunedProfileSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -57,13 +58,14 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
 from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCollectorService, JaegerQueryService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
-    ClientKeyringStore, ClientKeyringSpec
+    ClientKeyringStore, ClientKeyringSpec, TunedProfileStore
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
     cephadmNoImage, CEPH_UPGRADE_ORDER
 from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
+from .tuned_profiles import TunedProfileUtils
 
 try:
     import asyncssh
@@ -533,6 +535,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.keys = ClientKeyringStore(self)
         self.keys.load()
+
+        self.tuned_profiles = TunedProfileStore(self)
+        self.tuned_profiles.load()
+
+        self.tuned_profile_utils = TunedProfileUtils(self)
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
@@ -2477,6 +2484,46 @@ Then run the following:
             self._trigger_preview_refresh(specs=[cast(DriveGroupSpec, spec)])
 
         return self._apply_service_spec(cast(ServiceSpec, spec))
+
+    @handle_orch_error
+    def apply_tuned_profiles(self, specs: List[TunedProfileSpec]) -> str:
+        outs = []
+        for spec in specs:
+            self.tuned_profiles.add_profile(spec)
+            outs.append(f'Saved tuned profile {spec.profile_name}')
+        self._kick_serve_loop()
+        return '\n'.join(outs)
+
+    @handle_orch_error
+    def rm_tuned_profile(self, profile_name: str) -> str:
+        if profile_name not in self.tuned_profiles:
+            raise OrchestratorError(
+                f'Tuned profile {profile_name} does not exist. Nothing to remove.')
+        self.tuned_profiles.rm_profile(profile_name)
+        self._kick_serve_loop()
+        return f'Removed tuned profile {profile_name}'
+
+    @handle_orch_error
+    def tuned_profile_ls(self) -> List[TunedProfileSpec]:
+        return self.tuned_profiles.list_profiles()
+
+    @handle_orch_error
+    def tuned_profile_add_setting(self, profile_name: str, setting: str, value: str) -> str:
+        if profile_name not in self.tuned_profiles:
+            raise OrchestratorError(
+                f'Tuned profile {profile_name} does not exist. Cannot add setting.')
+        self.tuned_profiles.add_setting(profile_name, setting, value)
+        self._kick_serve_loop()
+        return f'Added setting {setting} with value {value} to tuned profile {profile_name}'
+
+    @handle_orch_error
+    def tuned_profile_rm_setting(self, profile_name: str, setting: str) -> str:
+        if profile_name not in self.tuned_profiles:
+            raise OrchestratorError(
+                f'Tuned profile {profile_name} does not exist. Cannot remove setting.')
+        self.tuned_profiles.rm_setting(profile_name, setting)
+        self._kick_serve_loop()
+        return f'Removed setting {setting} from tuned profile {profile_name}'
 
     def set_health_warning(self, name: str, summary: str, count: int, detail: List[str]) -> None:
         self.health_checks[name] = {
