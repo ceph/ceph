@@ -134,6 +134,7 @@ EOF
                 base_debuginfo="glibc-debuginfo"
                 ceph_debuginfo="ceph-base-debuginfo"
                 debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
+                base_url="s|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g"
                 ;;
             centos:stream)
                 python_bindings="python3-rados python3-cephfs"
@@ -149,7 +150,8 @@ EOF
 FROM ${env}
 
 WORKDIR /root
-RUN yum update -y && \
+RUN sed -i '${base_url}' /etc/yum.repos.d/CentOS-* && \
+    yum update -y && \
     sed -i 's/enabled=0/enabled=1/' ${debuginfo} && \
     yum update -y && \
     yum install -y tmux epel-release wget psmisc ca-certificates gdb
