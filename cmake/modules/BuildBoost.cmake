@@ -11,6 +11,9 @@
 #  Boost_USE_MULTITHREADED : boolean (default: OFF)
 #  BOOST_J: integer (defanult 1)
 
+# CMAKE_CURRENT_FUNCTION_LIST_DIR is introduced by cmake 3.17, but ubuntu comes with 3.16
+set(_build_boost_list_dir "${CMAKE_CURRENT_LIST_DIR}")
+
 function(check_boost_version source_dir expected_version)
   set(version_hpp "${source_dir}/boost/version.hpp")
   if(NOT EXISTS ${version_hpp})
@@ -167,10 +170,12 @@ function(do_build_boost version)
       URL_HASH SHA256=${boost_sha256}
       DOWNLOAD_NO_PROGRESS 1)
   endif()
+  find_program(PATCH_EXECUTABLE patch)
   # build all components in a single shot
   include(ExternalProject)
   ExternalProject_Add(Boost
     ${source_dir}
+    PATCH_COMMAND ${PATCH_EXECUTABLE} -p3 -i ${_build_boost_list_dir}/boost-python-use-public-api-for-filename.patch
     CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${configure_command}
     BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
     BUILD_IN_SOURCE 1
