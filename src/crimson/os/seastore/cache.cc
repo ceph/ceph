@@ -96,7 +96,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
       RetiredExtentPlaceholder>(length);
     ext->init(CachedExtent::extent_state_t::CLEAN,
               addr,
-              placement_hint_t::NUM_HINTS,
+              PLACEMENT_HINT_NULL,
               NULL_GENERATION);
     DEBUGT("retire {}~{} as placeholder, add extent -- {}",
            t, addr, length, *ext);
