@@ -8213,6 +8213,66 @@ TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, ReproBug56488Test) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t alloc_size = 65536;
+  size_t write_size = 4096;
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(1 << 30).c_str());
+
+  g_conf().apply_changes(nullptr);
+  StartDeferred(alloc_size);
+
+  int r;
+  coll_t cid;
+  const PerfCounters* logger = store->get_perf_counters();
+
+  ObjectStore::CollectionHandle ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+    {
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+
+    auto issued_dw = logger->get(l_bluestore_write_deferred);
+    auto issued_dw_bytes = logger->get(l_bluestore_write_deferred_bytes);
+    {
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append(std::string(write_size, 'x'));
+      t.write(cid, hoid, 0, bl.length(), bl,
+	      CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    ASSERT_EQ(logger->get(l_bluestore_write_deferred), issued_dw + 1);
+    ASSERT_EQ(logger->get(l_bluestore_write_deferred_bytes),
+      issued_dw_bytes + write_size);
+  }
+  {
+    ObjectStore::Transaction t;
+    ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 #endif //#if defined(WITH_BLUESTORE)
 
 TEST_P(StoreTest, KVDBHistogramTest) {
