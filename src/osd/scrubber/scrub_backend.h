@@ -120,11 +120,6 @@ struct SnapMapperAccessor {
   virtual ~SnapMapperAccessor() = default;
 };
 
-/*
-return tl::unexpected(info->last_error);
-
-*/
-
 enum class snap_mapper_op_t {
   add,
   update,
@@ -551,6 +546,13 @@ class ScrubBackend {
     const hobject_t& hoid,
     const SnapSet& snapset,
     SnapMapperAccessor& snaps_getter);
+
+  /**
+   * check a set of snap-ids agains the existing snaps. Returns
+   * the first "should not exist" snap-id, or none if all are fine.
+   */
+  std::optional<snapid_t> check_for_rmed_snaps(
+    const std::set<snapid_t>& snaps);
 
   // accessing the PG backend for this translation service
   uint64_t logical_to_ondisk_size(uint64_t logical_size) const;

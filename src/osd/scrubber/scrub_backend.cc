@@ -1523,9 +1523,9 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
     if (!expected) {
       // If we couldn't read the head's snapset, just ignore clones
       if (head && !snapset) {
-        clog.error() << m_mode_desc << " " << m_pg_id << " TTTTT:" << m_pg_id
-                      << " " << soid
-                      << " : clone ignored due to missing snapset";
+	clog.error() << m_mode_desc << " " << m_pg_id
+		     << " " << soid
+		     << " : clone ignored due to missing snapset";
       } else {
         clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
                       << " : is an unexpected clone";
@@ -1766,14 +1766,19 @@ std::vector<snap_mapper_fix_t> ScrubBackend::scan_snaps(
       // parse the SnapSet
       bufferlist bl;
       if (o.attrs.find(SS_ATTR) == o.attrs.end()) {
-        continue;
+	// no snaps for this head
+	continue;
       }
       bl.push_back(o.attrs[SS_ATTR]);
       auto p = bl.cbegin();
       try {
-        decode(snapset, p);
+	decode(snapset, p);
       } catch (...) {
-        continue;
+	dout(20) << fmt::format("{}: failed to decode the snapset ({})",
+				__func__,
+				hoid)
+		 << dendl;
+	continue;
       }
       head = hoid.get_head();
       continue;
@@ -1782,11 +1787,12 @@ std::vector<snap_mapper_fix_t> ScrubBackend::scan_snaps(
     /// \todo document why guaranteed to have initialized 'head' at this point
 
     if (hoid.snap < CEPH_MAXSNAP) {
-
       if (hoid.get_head() != head) {
-        derr << __func__ << " no head for " << hoid << " (have " << head << ")"
-             << dendl;
-        continue;
+        auto errmsg =
+          fmt::format("{}: no head for {} (have {})", __func__, hoid, head);
+        derr << errmsg << dendl;
+        dout(1) << errmsg << dendl;
+	continue;
       }
 
       auto maybe_fix_order = scan_object_snaps(hoid, snapset, snaps_getter);
@@ -1800,36 +1806,103 @@ std::vector<snap_mapper_fix_t> ScrubBackend::scan_snaps(
   return out_orders;
 }
 
+std::optional<snapid_t> ScrubBackend::check_for_rmed_snaps(
+  const std::set<snapid_t>& snaps)
+{
+  auto offending_snap =
+    std::find_if(begin(snaps), end(snaps), [&](const snapid_t& snap) {
+      return m_pool.info.is_removed_snap(snap);
+    });
+
+  if (offending_snap == end(snaps)) {
+    return std::nullopt;
+  }
+  return *offending_snap;
+}
+
 std::optional<snap_mapper_fix_t> ScrubBackend::scan_object_snaps(
   const hobject_t& hoid,
   const SnapSet& snapset,
   SnapMapperAccessor& snaps_getter)
 {
   // check and if necessary fix snap_mapper
+  dout(15) << fmt::format("{}: obj:{} snapset:{}", __func__, hoid, snapset)
+	   << dendl;
 
   auto p = snapset.clone_snaps.find(hoid.snap);
   if (p == snapset.clone_snaps.end()) {
-    derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset
-         << dendl;
+    auto errmsg =
+      fmt::format("{}: no clone_snaps for {} in {}", __func__, hoid, snapset);
+    derr << errmsg << dendl;
+    dout(1) << errmsg << dendl;
     return std::nullopt;
   }
   set<snapid_t> obj_snaps{p->second.begin(), p->second.end()};
 
-  set<snapid_t> cur_snaps;
-  int r = snaps_getter.get_snaps(hoid, &cur_snaps);
-  if (r != 0 && r != -ENOENT) {
-    derr << __func__ << ": get_snaps returned " << cpp_strerror(r) << dendl;
+  // make sure no removed snap is mentioned in the object's snapset
+  if (auto rmed_snap = check_for_rmed_snaps(obj_snaps); rmed_snap) {
+    auto errmsg =
+      fmt::format("{}: removed snap {} is mentioned in {}'s snap-set",
+		  __func__,
+		  *rmed_snap,
+		  hoid);
+    derr << errmsg << dendl;
+    dout(1) << errmsg << dendl;
+  }
+
+  // check/fix snapset. Should match what we have in the object.
+  auto cur_snaps = snaps_getter.get_snaps(hoid);
+
+  // three possible outcomes:
+  // 1) cur_snaps == obj_snaps: nothing to do
+  // 2) snapmapper's idea of the object's snaps does not match the object's
+  // 3) no mapping found for the object's snaps
+
+  if (!cur_snaps && cur_snaps.error() != -ENOENT) {
+    derr << __func__ << ": get_snaps returned "
+	 << cpp_strerror(cur_snaps.error()) << dendl;
     ceph_abort();
   }
-  if (r == -ENOENT || cur_snaps != obj_snaps) {
 
-    // add this object to the list of snapsets that needs fixing. Note
-    // that we also collect the existing (bogus) list, for logging purposes
-    snap_mapper_op_t fixing_op =
-      (r == -ENOENT ? snap_mapper_op_t::add : snap_mapper_op_t::update);
-    return snap_mapper_fix_t{fixing_op, hoid, obj_snaps, cur_snaps};
+  if (!cur_snaps) {
+    dout(10) << __func__ << " no snaps for " << hoid << ". Adding." << dendl;
+    return snap_mapper_fix_t{snap_mapper_op_t::add, hoid, obj_snaps, {}};
   }
-  return std::nullopt;
+
+  // make sure no removed snap is mentioned in the object's snapset
+  if (cur_snaps) {
+    if (auto rmed_snap = check_for_rmed_snaps(*cur_snaps); rmed_snap) {
+      auto errmsg =
+	fmt::format("{}: removed snap {} for {} appears in the SnapMapper",
+		    __func__,
+		    *rmed_snap,
+		    hoid);
+      derr << errmsg << dendl;
+      dout(1) << errmsg << dendl;
+    }
+  }
+
+  if (*cur_snaps == obj_snaps) {
+    dout(20) << fmt::format("{}: {}: snapset match SnapMapper's ({})",
+			    __func__,
+			    hoid,
+			    obj_snaps)
+	     << dendl;
+    return std::nullopt;
+  }
+
+  // add this object to the list of snapsets that needs fixing. Note
+  // that we also collect the existing (bogus) list, for logging purposes
+  dout(20) << fmt::format("{}: obj {}: was: {} updating to: {}",
+			  __func__,
+			  hoid,
+			  *cur_snaps,
+			  obj_snaps)
+	   << dendl;
+  return snap_mapper_fix_t{snap_mapper_op_t::update,
+			   hoid,
+			   obj_snaps,
+			   *cur_snaps};
 }
 
 /*

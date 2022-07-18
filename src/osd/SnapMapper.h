@@ -15,7 +15,6 @@
 #ifndef SNAPMAPPER_H
 #define SNAPMAPPER_H
 
-#include <cstring>
 #include <set>
 #include <string>
 #include <utility>
