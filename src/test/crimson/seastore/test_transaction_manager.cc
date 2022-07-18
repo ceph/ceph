@@ -521,6 +521,7 @@ struct transaction_manager_test_t :
   TestBlockRef mutate_extent(
     test_transaction_t &t,
     TestBlockRef ref) {
+    ceph_assert(!t.t->is_conflicted());
     ceph_assert(test_mappings.contains(ref->get_laddr(), t.mapping_delta));
     ceph_assert(
       test_mappings.get(ref->get_laddr(), t.mapping_delta).desc.len ==
@@ -555,17 +556,38 @@ struct transaction_manager_test_t :
     EXPECT_EQ(refcnt, check_refcnt);
   }
 
-  void dec_ref(test_transaction_t &t, laddr_t offset) {
+  bool try_dec_ref(test_transaction_t &t, laddr_t offset) {
     ceph_assert(test_mappings.contains(offset, t.mapping_delta));
     ceph_assert(test_mappings.get(offset, t.mapping_delta).refcount > 0);
 
-    auto refcnt = with_trans_intr(*(t.t), [&](auto& trans) {
+    using ertr = with_trans_ertr<TransactionManager::ref_iertr>;
+    using ret_t = std::optional<unsigned>;
+    auto maybe_refcnt = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->dec_ref(trans, offset);
-    }).unsafe_get0();
-    auto check_refcnt = test_mappings.dec_ref(offset, t.mapping_delta);
-    EXPECT_EQ(refcnt, check_refcnt);
-    if (refcnt == 0)
-      logger().debug("dec_ref: {} at refcount 0", offset);
+    }).safe_then([](auto cnt) -> ertr::future<ret_t> {
+      return ertr::make_ready_future<ret_t>(cnt);
+    }).handle_error(
+      [](const crimson::ct_error::eagain &e) {
+        return seastar::make_ready_future<ret_t>();
+      },
+      crimson::ct_error::assert_all{
+        "dec_ref got invalid error"
+      }
+    ).get0();
+    if (maybe_refcnt.has_value()) {
+      auto refcnt = *maybe_refcnt;
+      auto check_refcnt = test_mappings.dec_ref(offset, t.mapping_delta);
+      EXPECT_EQ(refcnt, check_refcnt);
+      if (refcnt == 0) {
+        logger().debug("dec_ref: {} at refcount 0", offset);
+      }
+    }
+    return maybe_refcnt.has_value();
+  }
+
+  void dec_ref(test_transaction_t &t, laddr_t offset) {
+    bool success = try_dec_ref(t, offset);
+    EXPECT_TRUE(success);
   }
 
   void check_mappings(test_transaction_t &t) {
@@ -594,6 +616,7 @@ struct transaction_manager_test_t :
   }
 
   bool try_submit_transaction(test_transaction_t t) {
+    ceph_assert(!t.t->is_conflicted());
     using ertr = with_trans_ertr<TransactionManager::submit_transaction_iertr>;
     using ret = ertr::future<bool>;
     bool success = submit_transaction_fut(*t.t
@@ -827,7 +850,6 @@ struct transaction_manager_test_t :
 	submit_transaction(std::move(t));
       }
       int success = 0;
-      int early_exit = 0;
       int conflicted = 0;
 
       seastar::parallel_for_each(
@@ -845,11 +867,14 @@ struct transaction_manager_test_t :
 	    auto t = create_transaction();
 	    auto ext0 = try_get_extent(t, offset);
 	    if (!ext0 || ext0->get_length() != length) {
-	      early_exit++;
+	      conflicted++;
 	      return;
 	    }
 	    auto paddr = ext0->get_paddr();
-	    dec_ref(t, offset);
+            if (!try_dec_ref(t, offset)) {
+              conflicted++;
+              return;
+            }
 
 	    auto base = 0;
 	    ASSERT_TRUE(!split_points.empty());
@@ -896,9 +921,9 @@ struct transaction_manager_test_t :
 	}).handle_exception([](std::exception_ptr e) {
 	  logger().info("{}", e);
 	}).get0();
-      logger().info("test_map_existing_extent_concurrent: early_exit {} conflicted {} success {}", early_exit, conflicted, success);
+      logger().info("test_map_existing_extent_concurrent: conflicted {} success {}", conflicted, success);
       ASSERT_TRUE(success == 1);
-      ASSERT_EQ(success + conflicted + early_exit, REMAP_NUM);
+      ASSERT_EQ(success + conflicted, REMAP_NUM);
       replay();
       check();
     });
