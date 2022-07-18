@@ -366,11 +366,12 @@ ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
 bluestore_blob_use_tracker_t::bluestore_blob_use_tracker_t(
   const bluestore_blob_use_tracker_t& tracker)
  : au_size{tracker.au_size},
-   num_au{tracker.num_au},
+   num_au(0),
+   alloc_au(0),
    bytes_per_au{nullptr}
 {
-  if (num_au > 0) {
-    allocate();
+  if (tracker.num_au > 0) {
+    allocate(tracker.num_au);
     std::copy(tracker.bytes_per_au, tracker.bytes_per_au + num_au, bytes_per_au);
   } else {
     total_bytes = tracker.total_bytes;
@@ -385,9 +386,8 @@ bluestore_blob_use_tracker_t::operator=(const bluestore_blob_use_tracker_t& rhs)
   }
   clear();
   au_size = rhs.au_size;
-  num_au = rhs.num_au;
   if (rhs.num_au > 0) {
-    allocate();
+    allocate( rhs.num_au);
     std::copy(rhs.bytes_per_au, rhs.bytes_per_au + num_au, bytes_per_au);
   } else {
     total_bytes = rhs.total_bytes;
@@ -395,16 +395,28 @@ bluestore_blob_use_tracker_t::operator=(const bluestore_blob_use_tracker_t& rhs)
   return *this;
 }
 
-void bluestore_blob_use_tracker_t::allocate()
+void bluestore_blob_use_tracker_t::allocate(uint32_t au_count)
 {
-  ceph_assert(num_au != 0);
-  bytes_per_au = new uint32_t[num_au];
+  ceph_assert(au_count != 0);
+  ceph_assert(num_au == 0);
+  ceph_assert(alloc_au == 0);
+  num_au = alloc_au = au_count;
+  bytes_per_au = new uint32_t[alloc_au];
   mempool::get_pool(
     mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
-      adjust_count(1, sizeof(uint32_t) * num_au);
+      adjust_count(alloc_au, sizeof(uint32_t) * alloc_au);
 
   for (uint32_t i = 0; i < num_au; ++i) {
     bytes_per_au[i] = 0;
+  }
+}
+
+void bluestore_blob_use_tracker_t::release(uint32_t au_count, uint32_t* ptr) {
+  if (au_count) {
+    delete[] ptr;
+    mempool::get_pool(
+      mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
+        adjust_count(-(int32_t)au_count, -(int32_t)(sizeof(uint32_t) * au_count));
   }
 }
 
@@ -417,8 +429,7 @@ void bluestore_blob_use_tracker_t::init(
   uint32_t _num_au = round_up_to(full_length, _au_size) / _au_size;
   au_size = _au_size;
   if ( _num_au > 1 ) {
-    num_au = _num_au;
-    allocate();
+    allocate(_num_au);
   }
 }
 

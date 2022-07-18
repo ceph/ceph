@@ -247,10 +247,11 @@ struct bluestore_blob_use_tracker_t {
   //   1) Struct isn't packed hence it's padded. And even if it's packed see 2)
   //   2) Mem manager has its own granularity, most probably >= 8 bytes
   //
-  uint32_t au_size; // Allocation (=tracking) unit size,
-                    // == 0 if uninitialized
-  uint32_t num_au;  // Amount of allocation units tracked
-                    // == 0 if single unit or the whole blob is tracked
+  uint32_t au_size;  // Allocation (=tracking) unit size,
+                     // == 0 if uninitialized
+  uint32_t num_au;   // Amount of allocation units tracked
+                     // == 0 if single unit or the whole blob is tracked
+  uint32_t alloc_au; // Amount of allocation units allocated
                        
   union {
     uint32_t* bytes_per_au;
@@ -258,7 +259,7 @@ struct bluestore_blob_use_tracker_t {
   };
   
   bluestore_blob_use_tracker_t()
-    : au_size(0), num_au(0), bytes_per_au(nullptr) {
+    : au_size(0), num_au(0), alloc_au(0), bytes_per_au(nullptr) {
   }
   bluestore_blob_use_tracker_t(const bluestore_blob_use_tracker_t& tracker);
   bluestore_blob_use_tracker_t& operator=(const bluestore_blob_use_tracker_t& rhs);
@@ -267,15 +268,11 @@ struct bluestore_blob_use_tracker_t {
   }
 
   void clear() {
-    if (num_au != 0) {
-      delete[] bytes_per_au;
-      mempool::get_pool(
-        mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
-          adjust_count(-1, -sizeof(uint32_t) * num_au);
-    }
+    release(alloc_au, bytes_per_au);
+    num_au = 0;
+    alloc_au = 0;
     bytes_per_au = 0;
     au_size = 0;
-    num_au = 0;
   }
 
   uint32_t get_referenced_bytes() const {
@@ -311,7 +308,6 @@ struct bluestore_blob_use_tracker_t {
       ceph_assert(_num_au <= num_au);
       if (_num_au) {
         num_au = _num_au; // bytes_per_au array is left unmodified
-
       } else {
         clear();
       }
@@ -337,15 +333,17 @@ struct bluestore_blob_use_tracker_t {
       if (_num_au > num_au) {
 	auto old_bytes = bytes_per_au;
 	auto old_num_au = num_au;
-	num_au = _num_au;
-	allocate();
+	auto old_alloc_au = alloc_au;
+	alloc_au = num_au = 0; // to bypass an assertion in allocate()
+	bytes_per_au = nullptr;
+	allocate(_num_au);
 	for (size_t i = 0; i < old_num_au; i++) {
 	  bytes_per_au[i] = old_bytes[i];
 	}
 	for (size_t i = old_num_au; i < num_au; i++) {
 	  bytes_per_au[i] = 0;
 	}
-	delete[] old_bytes;
+	release(old_alloc_au, old_bytes);
       }
     }
   }
@@ -410,12 +408,14 @@ struct bluestore_blob_use_tracker_t {
     clear();
     denc_varint(au_size, p);
     if (au_size) {
-      denc_varint(num_au, p);
-      if (!num_au) {
+      uint32_t _num_au;
+      denc_varint(_num_au, p);
+      if (!_num_au) {
+        num_au = 0;
         denc_varint(total_bytes, p);
       } else {
-        allocate();
-        for (size_t i = 0; i < num_au; ++i) {
+        allocate(_num_au);
+        for (size_t i = 0; i < _num_au; ++i) {
 	  denc_varint(bytes_per_au[i], p);
         }
       }
@@ -425,7 +425,8 @@ struct bluestore_blob_use_tracker_t {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bluestore_blob_use_tracker_t*>& o);
 private:
-  void allocate();
+  void allocate(uint32_t _num_au);
+  void release(uint32_t _num_au, uint32_t* ptr);
 };
 WRITE_CLASS_DENC(bluestore_blob_use_tracker_t)
 std::ostream& operator<<(std::ostream& out, const bluestore_blob_use_tracker_t& rm);
