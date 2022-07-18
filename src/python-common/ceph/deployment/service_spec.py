@@ -1422,3 +1422,55 @@ class TracingSpec(ServiceSpec):
 
 
 yaml.add_representer(TracingSpec, ServiceSpec.yaml_representer)
+
+
+class TunedProfileSpec():
+    def __init__(self,
+                 profile_name: str,
+                 placement: Optional[PlacementSpec] = None,
+                 settings: Optional[Dict[str, str]] = None,
+                 ):
+        self.profile_name = profile_name
+        self.placement = placement or PlacementSpec(host_pattern='*')
+        self.settings = settings or {}
+        self._last_updated: str = ''
+
+    @classmethod
+    def from_json(cls, spec: Dict[str, Any]) -> 'TunedProfileSpec':
+        data = {}
+        if 'profile_name' not in spec:
+            raise SpecValidationError('Tuned profile spec must include "profile_name" field')
+        data['profile_name'] = spec['profile_name']
+        if not isinstance(data['profile_name'], str):
+            raise SpecValidationError('"profile_name" field must be a string')
+        if 'placement' in spec:
+            data['placement'] = PlacementSpec.from_json(spec['placement'])
+        if 'settings' in spec:
+            data['settings'] = spec['settings']
+        return cls(**data)
+
+    def to_json(self) -> Dict[str, Any]:
+        res: Dict[str, Any] = {}
+        res['profile_name'] = self.profile_name
+        res['placement'] = self.placement.to_json()
+        res['settings'] = self.settings
+        return res
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, TunedProfileSpec):
+            if (
+                self.placement == other.placement
+                and self.profile_name == other.profile_name
+                and self.settings == other.settings
+            ):
+                return True
+            return False
+        return NotImplemented
+
+    def __repr__(self) -> str:
+        return f'TunedProfile({self.profile_name})'
+
+    def copy(self) -> 'TunedProfileSpec':
+        # for making deep copies so you can edit the settings in one without affecting the other
+        # mostly for testing purposes
+        return TunedProfileSpec(self.profile_name, self.placement, self.settings.copy())
