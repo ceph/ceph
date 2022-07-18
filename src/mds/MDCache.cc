@@ -13130,12 +13130,16 @@ class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
 
   void finish(int r) {
     auto mds = get_mds(); // to keep dout happy
+    auto in = static_cast<CInode*>(mdr->internal_op_private);
+
+    ceph_assert(in != nullptr);
 
     if (r) {
       dout(20) << "(uninline_data) log submission failed; r=" << r
-	       << " (" << cpp_strerror(r) << ")" << dendl;
+	       << " (" << cpp_strerror(r) << ") for " << *in << dendl;
     } else {
-      dout(20) << "(uninline_data) log submission succeeded" << dendl;
+      dout(20) << "(uninline_data) log submission succeeded for " << *in << dendl;
+      in->mdcache->logger->inc(l_mdc_uninline_succeeded);
     }
 
     mdr->apply();
@@ -13160,7 +13164,8 @@ struct C_IO_DataUninlined : public MDSIOContext {
     // return faster if operation has failed (non-zero) status
     if (r) {
       derr << "(uninline_data) mutation failed: r=" << r
-	   << "(" << cpp_strerror(r) << ")" << dendl;
+	   << " (" << cpp_strerror(r) << ") for " << *in << dendl;
+      in->mdcache->logger->inc(l_mdc_uninline_write_failed);
       mds->server->respond_to_request(mdr, r);
       return;
     }
@@ -13225,6 +13230,8 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
     mds->server->respond_to_request(mdr, 0);
     return;
   }
+
+  logger->inc(l_mdc_uninline_started);
 
   auto ino = [&]() { return in->ino(); };
   auto pi = in->get_projected_inode();
@@ -13652,6 +13659,14 @@ void MDCache::register_perfcounters()
                         "Internal Request type frag stats");
     pcb.add_u64_counter(l_mdss_ireq_inodestats, "ireq_inodestats",
                         "Internal Request type inode stats");
+
+    // uninline op stats
+    pcb.add_u64_counter(l_mdc_uninline_started, "uninline_started",
+                        "Internal Counter type uninline started");
+    pcb.add_u64_counter(l_mdc_uninline_succeeded, "uninline_succeeded",
+                        "Internal Counter type uninline succeeded");
+    pcb.add_u64_counter(l_mdc_uninline_write_failed, "uninline_write_failed",
+                        "Internal Counter type uninline write failed");
 
     logger.reset(pcb.create_perf_counters());
     g_ceph_context->get_perfcounters_collection()->add(logger.get());
