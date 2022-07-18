@@ -388,6 +388,8 @@ public:
     ceph_assert(existing_paddr.is_absolute());
     assert(t.is_retired(existing_paddr, length));
 
+    SUBDEBUGT(seastore_tm, " laddr_hint: {} existing_paddr: {} length: {}",
+	      t, laddr_hint, existing_paddr, length);
     auto bp = ceph::bufferptr(buffer::create_page_aligned(length));
     bp.zero();
 
@@ -407,9 +409,7 @@ public:
       laddr_hint,
       length,
       existing_paddr
-    ).si_then([ext=std::move(ext), laddr_hint, &t, this, FNAME](auto &&ref) {
-      SUBDEBUGT(seastore_tm, "map existing extent: {}, laddr_hint: {} pin: {}",
-		t, *ext, laddr_hint, *ref);
+    ).si_then([ext=std::move(ext), laddr_hint, this](auto &&ref) {
       ceph_assert(laddr_hint == ref->get_key());
       ext->set_pin(std::move(ref));
       return epm->read(

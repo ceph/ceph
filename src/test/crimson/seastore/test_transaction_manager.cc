@@ -758,18 +758,27 @@ struct transaction_manager_test_t :
     });
   }
 
-  TestBlockRef map_existing_extent(
+  std::optional<TestBlockRef> map_existing_extent(
     test_transaction_t &t,
     laddr_t hint,
     paddr_t existing_paddr,
     extent_len_t length) {
+    if (t.t->is_conflicted()) {
+      return std::nullopt;
+    }
     auto extent = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->map_existing_extent<TestBlock>(trans, hint, existing_paddr, length);
-    }).unsafe_get0();
+    }).handle_error(crimson::ct_error::eagain::handle([] {
+      return TCachedExtentRef<TestBlock>(new TestBlock(0));
+    }), crimson::ct_error::pass_further_all{}).unsafe_get0();
+    if (t.t->is_conflicted()) {
+      return std::nullopt;
+    }
+    EXPECT_TRUE(extent->get_length() != 0);
     EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
     EXPECT_EQ(length, extent->get_length());
     test_mappings.alloced(hint, *extent, t.mapping_delta);
-    return extent;
+    return std::make_optional(std::move(extent));
   }
 
   void test_map_existing_extent() {
@@ -787,14 +796,17 @@ struct transaction_manager_test_t :
 	auto base_paddr = extent->get_paddr();
 	dec_ref(t, offset);
 	auto extent1 = map_existing_extent(t, offset, base_paddr, 4 << 10);
+	ASSERT_TRUE(extent1.has_value());
 	auto extent2 = map_existing_extent(t, offset + (4 << 10), base_paddr.add_offset(4 << 10), 4 << 10);
+	ASSERT_TRUE(extent2.has_value());
 	auto extent3 = map_existing_extent(t, offset + (8 << 10), base_paddr.add_offset(8 << 10), 8 << 10);
-	ASSERT_TRUE(extent1->is_exist_clean());
-	ASSERT_TRUE(extent2->is_exist_clean());
-	ASSERT_TRUE(extent3->is_exist_clean());
-	auto extent4 = mutate_extent(t, extent3);
+	ASSERT_TRUE(extent3.has_value());
+	ASSERT_TRUE((*extent1)->is_exist_clean());
+	ASSERT_TRUE((*extent2)->is_exist_clean());
+	ASSERT_TRUE((*extent3)->is_exist_clean());
+	auto extent4 = mutate_extent(t, (*extent3));
 	ASSERT_TRUE(extent4->is_exist_mutation_pending());
-	ASSERT_TRUE(extent3.get() == extent4.get());
+	ASSERT_TRUE((*extent3).get() == extent4.get());
 	submit_transaction(std::move(t));
 	check();
       }
@@ -816,6 +828,7 @@ struct transaction_manager_test_t :
       }
       int success = 0;
       int early_exit = 0;
+      int conflicted = 0;
 
       seastar::parallel_for_each(
         boost::make_counting_iterator(0u),
@@ -826,7 +839,7 @@ struct transaction_manager_test_t :
 	    std::set<uint32_t> split_points;
 	    for (uint32_t i = 0; i < pieces; i++) {
 	      auto p = std::uniform_int_distribution<>(1, 256)(gen);
-	      split_points.insert((p - p % 4)%length);
+	      split_points.insert(p - p % 4);
 	    }
 
 	    auto t = create_transaction();
@@ -839,12 +852,18 @@ struct transaction_manager_test_t :
 	    dec_ref(t, offset);
 
 	    auto base = 0;
+	    ASSERT_TRUE(!split_points.empty());
 	    for (auto off : split_points) {
 	      if (off == 0) {
 		continue;
 	      }
 
-	      auto ext = map_existing_extent(t, base << 10, paddr.add_offset(base << 10), (off - base) << 10);
+	      auto ext_ = map_existing_extent(t, base << 10, paddr.add_offset(base << 10), (off - base) << 10);
+	      if (!ext_) {
+		conflicted++;
+		return;
+	      }
+	      auto ext = *ext_;
 	      ASSERT_TRUE(ext->is_exist_clean());
 	      if (get_random_contents() % 2 == 0) {
 		auto ext1 = mutate_extent(t, ext);
@@ -852,20 +871,34 @@ struct transaction_manager_test_t :
 	      }
 	      base = off;
 	    }
-	    auto ext = map_existing_extent(t, base << 10, paddr.add_offset(base << 10), length - (base << 10));
-	    ASSERT_TRUE(ext->is_exist_clean());
-	    if (get_random_contents() % 2 == 0) {
-	      auto ext1 = mutate_extent(t, ext);
-	      ASSERT_TRUE(ext1->is_exist_mutation_pending());
-	    }
 
-	    success += try_submit_transaction(std::move(t));
+	    base <<= 10;
+	    if (base != length) {
+	      auto ext_ = map_existing_extent(t, base, paddr.add_offset(base), length - base);
+	      if (!ext_) {
+		conflicted++;
+		return;
+	      }
+	      auto ext = *ext_;
+	      ASSERT_TRUE(ext->is_exist_clean());
+	      if (get_random_contents() % 2 == 0) {
+		auto ext1 = mutate_extent(t, ext);
+		ASSERT_TRUE(ext1->is_exist_mutation_pending());
+	      }
+	    }
+	    if (try_submit_transaction(std::move(t))) {
+	      success++;
+	      logger().info("transaction {} submit the transction", static_cast<void*>(t.t.get()));
+	    } else {
+	      conflicted++;
+	    }
 	  });
 	}).handle_exception([](std::exception_ptr e) {
 	  logger().info("{}", e);
 	}).get0();
+      logger().info("test_map_existing_extent_concurrent: early_exit {} conflicted {} success {}", early_exit, conflicted, success);
       ASSERT_TRUE(success == 1);
-      logger().info("test_map_existing_extent_concurrent: early_exit {}", early_exit);
+      ASSERT_EQ(success + conflicted + early_exit, REMAP_NUM);
       replay();
       check();
     });
