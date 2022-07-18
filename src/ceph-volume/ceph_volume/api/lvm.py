@@ -785,6 +785,17 @@ def get_device_vgs(device, name_prefix=''):
     return [VolumeGroup(**vg) for vg in vgs if vg['vg_name'] and vg['vg_name'].startswith(name_prefix)]
 
 
+def get_all_devices_vgs(name_prefix=''):
+    vg_fields = f'pv_name,{VG_FIELDS}'
+    cmd = ['pvs'] + VG_CMD_OPTIONS + ['-o', vg_fields]
+    stdout, stderr, returncode = process.call(
+        cmd,
+        run_on_host=True,
+        verbose_on_failure=False
+    )
+    vgs = _output_parser(stdout, vg_fields)
+    return [VolumeGroup(**vg) for vg in vgs]
+
 #################################
 #
 # Code for LVM Logical Volumes
