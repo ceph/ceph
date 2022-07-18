@@ -499,14 +499,12 @@ class TestMonitoring:
                   filename: /tmp/positions.yaml
 
                 clients:
-                  - url: http://1::4:3100/loki/api/v1/push
+                  - url: http://:3100/loki/api/v1/push
 
                 scrape_configs:
                 - job_name: system
                   static_configs:
-                  - targets:
-                    - 1::4
-                    labels:
+                  - labels:
                       job: Cluster Logs
                       __path__: /var/log/ceph/**/*.log""").lstrip()
 
@@ -584,7 +582,7 @@ class TestMonitoring:
                             type: 'loki'
                             access: 'proxy'
                             orgId: 2
-                            url: 'http://[1::4]:3100'
+                            url: ''
                             basicAuth: false
                             isDefault: true
                             editable: false""").lstrip(),
@@ -652,7 +650,7 @@ class TestMonitoring:
                                     "    type: 'loki'\n"
                                     "    access: 'proxy'\n"
                                     '    orgId: 2\n'
-                                    "    url: 'http://[1::4]:3100'\n"
+                                    "    url: ''\n"
                                     '    basicAuth: false\n'
                                     '    isDefault: true\n'
                                     '    editable: false',
