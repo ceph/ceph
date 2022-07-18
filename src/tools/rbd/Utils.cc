@@ -197,8 +197,7 @@ std::string get_default_pool_name() {
 }
 
 int get_pool_and_namespace_names(
-    const boost::program_options::variables_map &vm,
-    bool default_empty_pool_name, bool validate_pool_name,
+    const boost::program_options::variables_map &vm, bool validate_pool_name,
     std::string* pool_name, std::string* namespace_name, size_t *arg_index) {
   if (namespace_name != nullptr && vm.count(at::NAMESPACE_NAME)) {
     *namespace_name = vm[at::NAMESPACE_NAME].as<std::string>();
