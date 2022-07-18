@@ -1823,7 +1823,11 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
       && pgb.superblock.cluster_fsid != sb.cluster_fsid) {
     cerr << "Export came from different cluster with fsid "
          << pgb.superblock.cluster_fsid << std::endl;
-    return -EINVAL;
+    if (force) {
+      cerr << "Ignoring this problem due to --force" << std::endl;
+    } else {
+      return -EINVAL;
+    }
   }
 
   if (debug) {
