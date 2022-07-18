@@ -7,12 +7,9 @@
 #include "common/ceph_json.h"
 #include "common/RefCountedObj.h"
 #include "include/common_fwd.h"
+#include "rgw_sal_fwd.h"
 
 #include <atomic>
-
-namespace rgw { namespace sal {
-  class Store;
-} }
 
 class RGWSI_Zone;
 

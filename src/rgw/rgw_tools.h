@@ -12,6 +12,7 @@
 #include "common/ceph_time.h"
 
 #include "rgw_common.h"
+#include "rgw_sal_fwd.h"
 
 class RGWSI_SysObj;
 
@@ -19,9 +20,6 @@ class RGWRados;
 class RGWSysObjectCtx;
 struct RGWObjVersionTracker;
 class optional_yield;
-namespace rgw { namespace sal {
-  class Store;
-} }
 
 struct obj_version;
 

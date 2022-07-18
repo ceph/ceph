@@ -38,13 +38,17 @@ auto read_pin(
  * extent_to_write_t
  *
  * Encapsulates extents to be written out using do_insertions.
- * Indicates a zero extent or a data extent based on whether
+ * Indicates a zero/existing extent or a data extent based on whether
  * to_write is populate.
+ * The meaning of existing_paddr is that the new extent to be
+ * written is the part of exising extent on the disk. existing_paddr
+ * must be absolute.
  */
 struct extent_to_write_t {
   laddr_t addr = L_ADDR_NULL;
   extent_len_t len;
   std::optional<bufferlist> to_write;
+  std::optional<paddr_t> existing_paddr = std::nullopt;
 
   extent_to_write_t() = default;
   extent_to_write_t(const extent_to_write_t &) = default;
@@ -55,6 +59,9 @@ struct extent_to_write_t {
 
   extent_to_write_t(laddr_t addr, extent_len_t len)
     : addr(addr), len(len) {}
+
+  extent_to_write_t(laddr_t addr, paddr_t existing_paddr, extent_len_t len)
+    : addr(addr), len(len), to_write(std::nullopt), existing_paddr(existing_paddr) {}
 };
 using extent_to_write_list_t = std::list<extent_to_write_t>;
 
@@ -155,7 +162,7 @@ ObjectDataHandler::write_ret do_insertions(
 	  iter.copy(region.len, extent->get_bptr().c_str());
 	  return ObjectDataHandler::write_iertr::now();
 	});
-      } else {
+      } else if (!region.existing_paddr){
 	DEBUGT("reserving: {}~{}",
 	       ctx.t,
 	       region.addr,
@@ -176,8 +183,192 @@ ObjectDataHandler::write_ret do_insertions(
 	  ceph_assert(pin->get_key() == region.addr);
 	  return ObjectDataHandler::write_iertr::now();
 	});
+      } else {
+	DEBUGT("map existing extent: laddr {} len {} {}",
+	       ctx.t, region.addr, region.len, *region.existing_paddr);
+	return ctx.tm.map_existing_extent<ObjectDataBlock>(
+	  ctx.t, region.addr, *region.existing_paddr, region.len
+	).handle_error_interruptible(
+	  TransactionManager::alloc_extent_iertr::pass_further{},
+	  Device::read_ertr::assert_all{"ignore read error"}
+	).si_then([FNAME, ctx, &region](auto extent) {
+	  if (extent->get_laddr() != region.addr) {
+	    ERRORT(
+	      "inconsistent laddr: extent: {} region {}",
+	      ctx.t,
+	      extent->get_laddr(),
+	      region.addr);
+	  }
+	  ceph_assert(extent->get_laddr() == region.addr);
+	  return ObjectDataHandler::write_iertr::now();
+	});
       }
     });
+}
+
+struct overwrite_plan_t {
+  extent_len_t block_size;
+  laddr_t pin_begin;
+  laddr_t pin_end;
+  paddr_t left_paddr;
+  paddr_t right_paddr;
+  laddr_t data_begin;
+  laddr_t data_end;
+  laddr_t aligned_begin;
+  laddr_t aligned_end;
+  extent_len_t data_size;
+  extent_len_t write_size;
+  bool split_left;
+  bool split_right;
+  friend std::ostream& operator<<(
+    std::ostream& out,
+    const overwrite_plan_t& overwrite_plan) {
+    return out << "overwrite_plan_t(pin_begin=" << overwrite_plan.pin_begin
+	       << ", pin_end=" << overwrite_plan.pin_end
+	       << ", left_paddr=" << overwrite_plan.left_paddr
+	       << ", right_paddr=" << overwrite_plan.right_paddr
+	       << ", data_begin=" << overwrite_plan.data_begin
+	       << ", data_end=" << overwrite_plan.data_end
+	       << ", aligned_begin=" << overwrite_plan.aligned_begin
+	       << ", aligned_end=" << overwrite_plan.aligned_end
+	       << ", block_size=" << overwrite_plan.block_size
+	       << ", data_size=" << overwrite_plan.data_size
+	       << ", write_size=" << overwrite_plan.write_size << std::boolalpha
+	       << ", split_left=" << overwrite_plan.split_left
+	       << ", split_right=" << overwrite_plan.split_right << ")"
+	       << std::noboolalpha;
+  }
+  overwrite_plan_t(laddr_t offset,
+		   extent_len_t len,
+		   const lba_pin_list_t& pins,
+		   extent_len_t block_size) :
+    block_size(block_size),
+    pin_begin(pins.front()->get_key()),
+    pin_end(pins.back()->get_key() + pins.back()->get_length()),
+    left_paddr(pins.front()->get_val()),
+    right_paddr(pins.back()->get_val()),
+    data_begin(offset),
+    data_end(offset + len),
+    aligned_begin(p2align((uint64_t)data_begin, (uint64_t)block_size)),
+    aligned_end(p2roundup((uint64_t)data_end, (uint64_t)block_size)),
+    data_size(aligned_end - aligned_begin),
+    write_size(pin_end - pin_begin),
+    split_left(false),
+    split_right(false) {}
+
+  void validate() const {
+    ceph_assert(pin_begin <= data_begin);
+    ceph_assert(pin_end >= data_end);
+    ceph_assert(aligned_begin % block_size == 0);
+    ceph_assert(aligned_begin <= data_begin);
+    ceph_assert(pin_begin <= aligned_begin);
+    ceph_assert(aligned_end % block_size == 0);
+    ceph_assert(aligned_end >= data_end);
+    ceph_assert(pin_end >= aligned_end);
+  }
+  /*
+   * When trying to modify a portion of an object data block, follow
+   * the read-full-extent-then-merge-new-data strategy, if the write
+   * amplification caused by it is not greater than
+   * seastore_obj_data_write_amplification; otherwise, split the
+   * original extent into at most three parts: origin-left, part-to-be-modified
+   * and origin-right.
+   *
+   * all used variable are described as follows:
+   * |<--------------------------------------write_size--------------------------------------->|
+   *                 |<----------------------data_size----------------------->|
+   *                                data_begin         data_end
+   *                                ---------------------------(incoming data)
+   *                 aligned_begin                                  aligned_end
+   *                 ----------------------------------------------------------(incoming data's block-size-aligned range)
+   * |<--left_size-->|                                                        |<--right_size-->|
+   * pin_begin                                                                           pin_end
+   * -------------------------------------(existing extent)   ----------------------------------(existing extent)
+   * left_paddr                                               right_paddr
+   *
+   * pseudocode of splitting:
+   *
+   * if left_paddr/right_paddr is zero:
+   *   prepend/append hole if data_offset/data_end is not aligned,
+   *   reverse zero extent if necessary.
+   *
+   * if left_paddr/right_paddr is relative:
+   *   merge pin_begin/pin_end to incoming data
+   *
+   * if left_paddr/right_paddr is absolute, split extent:
+   *   while either left or right is not processed:
+   *     if write/data_size > seastore_obj_data_write_amplification
+   *       select a larger end according to left_size and right_size,
+   *       split selected end.
+   *       write_size -= left_size or right_size
+   *     else
+   *       merge the end that has not been processed
+   */
+  void split() {
+    auto left_size = aligned_begin - pin_begin;
+    auto right_size = pin_end - aligned_end;
+    bool left_set = false;
+    bool right_set = false;
+    if (left_paddr.is_zero()) {
+      write_size -= left_size;
+      left_size = 0;
+      left_set = true;
+    } else if (left_paddr.is_relative() ||
+	       left_paddr.is_delayed()) {
+      data_size += left_size;
+      left_size = 0;
+      left_set = true;
+    }
+    if (right_paddr.is_zero()) {
+      write_size -= right_size;
+      right_size = 0;
+      right_set = true;
+    } else if (right_paddr.is_relative() ||
+	       right_paddr.is_delayed()) {
+      data_size += right_size;
+      right_size = 0;
+      right_set = true;
+    }
+
+    while (!(left_set && right_set)) {
+      if (((double)write_size / (double)data_size) >
+	  crimson::common::get_conf<double>("seastore_obj_data_write_amplification")) {
+	if (left_size >= right_size && !left_set && left_size != 0) {
+	  write_size -= left_size;
+	  left_size = 0;
+	  left_set = true;
+	  split_left = true;
+	} else if (!right_set && right_size != 0) {
+	  write_size -= right_size;
+	  right_size = 0;
+	  right_set = true;
+	  split_right = true;
+	} else {
+	  ceph_assert(0 == "impossible case");
+	}
+      } else {
+	break;
+      }
+    }
+    // fallback case, merge default
+    if (!left_set) {
+      split_left = false;
+    }
+    if (!right_set) {
+      split_right = false;
+    }
+  }
+};
+
+overwrite_plan_t generate_overwrite_plan(
+  laddr_t offset,
+  extent_len_t len,
+  const lba_pin_list_t& pins,
+  extent_len_t block_size) {
+  overwrite_plan_t plan(offset, len, pins, block_size);
+  plan.validate();
+  plan.split();
+  return plan;
 }
 
 /**
@@ -191,12 +382,9 @@ using split_ret_bare = std::pair<
   std::optional<extent_to_write_t>,
   std::optional<bufferptr>>;
 using split_ret = get_iertr::future<split_ret_bare>;
-split_ret split_pin_left(context_t ctx, LBAPinRef &pin, laddr_t offset)
+split_ret split_pin_left(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &overwrite_plan)
 {
-  const auto pin_offset = pin->get_key();
-  assert_aligned(pin_offset);
-  ceph_assert(offset >= pin_offset);
-  if (offset == pin_offset) {
+  if (overwrite_plan.data_begin == overwrite_plan.pin_begin) {
     // Aligned, no tail and no extra extent
     return get_iertr::make_ready_future<split_ret_bare>(
       std::nullopt,
@@ -204,70 +392,128 @@ split_ret split_pin_left(context_t ctx, LBAPinRef &pin, laddr_t offset)
   } else if (pin->get_val().is_zero()) {
     /* Zero extent unaligned, return largest aligned zero extent to
      * the left and the gap between aligned_offset and offset to prepend. */
-    auto aligned_offset = p2align(offset, (uint64_t)ctx.tm.get_block_size());
-    assert_aligned(aligned_offset);
-    ceph_assert(aligned_offset <= offset);
-    auto zero_extent_len = aligned_offset - pin_offset;
+    auto zero_extent_len = overwrite_plan.aligned_begin - overwrite_plan.pin_begin;
     assert_aligned(zero_extent_len);
-    auto zero_prepend_len = offset - aligned_offset;
+    auto zero_prepend_len = overwrite_plan.data_begin - overwrite_plan.aligned_begin;
     return get_iertr::make_ready_future<split_ret_bare>(
       (zero_extent_len == 0
        ? std::nullopt
-       : std::make_optional(extent_to_write_t(pin_offset, zero_extent_len))),
+       : std::make_optional(extent_to_write_t(overwrite_plan.pin_begin, zero_extent_len))),
       (zero_prepend_len == 0
        ? std::nullopt
        : std::make_optional(
 	 bufferptr(ceph::buffer::create(zero_prepend_len, 0))))
     );
   } else {
-    // Data, return up to offset to prepend
-    auto to_prepend = offset - pin->get_key();
-    return read_pin(ctx, pin->duplicate()
-    ).si_then([to_prepend](auto extent) {
-      return get_iertr::make_ready_future<split_ret_bare>(
-	std::nullopt,
-	bufferptr(extent->get_bptr(), 0, to_prepend));
-    });
+    if (!overwrite_plan.split_left) {
+      // Data, return up to offset to prepend
+      auto to_prepend = overwrite_plan.data_begin - overwrite_plan.pin_begin;
+      return read_pin(ctx, pin->duplicate()
+      ).si_then([to_prepend](auto extent) {
+	return get_iertr::make_ready_future<split_ret_bare>(
+	  std::nullopt,
+	  (to_prepend == 0
+	   ? std::nullopt
+	   : std::make_optional(bufferptr(extent->get_bptr(), 0, to_prepend))));
+      });
+    } else {
+      auto extent_len = overwrite_plan.aligned_begin - overwrite_plan.pin_begin;
+      auto prepend_len = overwrite_plan.data_begin - overwrite_plan.aligned_begin;
+      if (prepend_len == 0) {
+	// block_size aligned, split
+	return get_iertr::make_ready_future<split_ret_bare>(
+	  (extent_len == 0
+	   ? std::nullopt
+	   : std::make_optional(extent_to_write_t(
+	       overwrite_plan.pin_begin,
+	       overwrite_plan.left_paddr,
+	       extent_len))),
+	  std::nullopt);
+      } else {
+	// not block_size aligned, split
+	return read_pin(ctx, pin->duplicate()
+	).si_then([prepend_len, extent_len, &overwrite_plan](auto extent) {
+	  return get_iertr::make_ready_future<split_ret_bare>(
+	    (extent_len == 0
+	     ? std::nullopt
+	     : std::make_optional(extent_to_write_t(
+	         overwrite_plan.pin_begin,
+		 overwrite_plan.left_paddr,
+		 extent_len))),
+	    std::make_optional(bufferptr(
+	      extent->get_bptr(),
+	      overwrite_plan.aligned_begin - overwrite_plan.pin_begin,
+	      prepend_len)));
+	});
+      }
+    }
   }
 };
 
 /// Reverse of split_pin_left
-split_ret split_pin_right(context_t ctx, LBAPinRef &pin, laddr_t end)
+split_ret split_pin_right(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &overwrite_plan)
 {
-  const auto pin_begin = pin->get_key();
-  const auto pin_end = pin->get_key() + pin->get_length();
-  assert_aligned(pin_end);
-  ceph_assert(pin_end >= end);
-  if (end == pin_end) {
+  if (overwrite_plan.data_end == overwrite_plan.pin_end) {
     return get_iertr::make_ready_future<split_ret_bare>(
       std::nullopt,
       std::nullopt);
   } else if (pin->get_val().is_zero()) {
-    auto aligned_end = p2roundup(end, (uint64_t)ctx.tm.get_block_size());
-    assert_aligned(aligned_end);
-    ceph_assert(aligned_end >= end);
-    auto zero_suffix_len = aligned_end - end;
-    auto zero_extent_len = pin_end - aligned_end;
+    auto zero_suffix_len = overwrite_plan.aligned_end - overwrite_plan.data_end;
+    auto zero_extent_len = overwrite_plan.pin_end - overwrite_plan.aligned_end;
     assert_aligned(zero_extent_len);
     return get_iertr::make_ready_future<split_ret_bare>(
       (zero_extent_len == 0
        ? std::nullopt
-       : std::make_optional(extent_to_write_t(aligned_end, zero_extent_len))),
+       : std::make_optional(extent_to_write_t(overwrite_plan.aligned_end, zero_extent_len))),
       (zero_suffix_len == 0
        ? std::nullopt
        : std::make_optional(
-	 bufferptr(ceph::buffer::create(zero_suffix_len, 0))))
+         bufferptr(ceph::buffer::create(zero_suffix_len, 0))))
     );
   } else {
-    return read_pin(ctx, pin->duplicate()
-    ).si_then([end, pin_begin, pin_end](auto extent) {
-      return get_iertr::make_ready_future<split_ret_bare>(
-	std::nullopt,
-	bufferptr(
-	  extent->get_bptr(),
-	  end - pin_begin,
-	  pin_end - end));
-    });
+    auto last_pin_begin = pin->get_key();
+    if (!overwrite_plan.split_right) {
+      return read_pin(ctx, pin->duplicate()
+      ).si_then([last_pin_begin, &overwrite_plan](auto extent) {
+	auto to_append = overwrite_plan.pin_end - overwrite_plan.data_end;
+        return get_iertr::make_ready_future<split_ret_bare>(
+          std::nullopt,
+	  (to_append == 0
+	   ? std::nullopt
+	   : std::make_optional(bufferptr(
+	       extent->get_bptr(),
+	       overwrite_plan.data_end - last_pin_begin,
+	       to_append))));
+      });
+    } else {
+      auto extent_len = overwrite_plan.pin_end - overwrite_plan.aligned_end;
+      auto append_len = overwrite_plan.aligned_end - overwrite_plan.data_end;
+      if (append_len == 0) {
+        return get_iertr::make_ready_future<split_ret_bare>(
+	  (extent_len == 0
+	   ? std::nullopt
+	   : std::make_optional(extent_to_write_t(
+	       overwrite_plan.aligned_end,
+	       overwrite_plan.right_paddr.add_offset(overwrite_plan.aligned_end - last_pin_begin),
+	       extent_len))),
+          std::nullopt);
+      } else {
+	return read_pin(ctx, pin->duplicate()
+	).si_then([last_pin_begin, append_len, extent_len, &overwrite_plan](auto extent) {
+	  return get_iertr::make_ready_future<split_ret_bare>(
+	  (extent_len == 0
+	   ? std::nullopt
+	   : std::make_optional(extent_to_write_t(
+	       overwrite_plan.aligned_end,
+	       overwrite_plan.right_paddr.add_offset(overwrite_plan.aligned_end - last_pin_begin),
+	       extent_len))),
+	  std::make_optional(bufferptr(
+	    extent->get_bptr(),
+	    overwrite_plan.data_end - last_pin_begin,
+	    append_len)));
+	});
+      }
+    }
   }
 };
 
@@ -496,34 +742,34 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
   if (bl) {
     assert(bl->length() == len);
   }
+  auto overwrite_plan =
+    generate_overwrite_plan(_offset, len, _pins, ctx.tm.get_block_size());
   return seastar::do_with(
     _offset,
     std::move(bl),
     std::optional<bufferptr>(),
     std::move(_pins),
     extent_to_write_list_t(),
+    overwrite_plan,
     [ctx, len](laddr_t &offset, auto &bl, auto &headptr,
-	       auto &pins, auto &to_write) {
+	       auto &pins, auto &to_write, auto &overwrite_plan) {
       LOG_PREFIX(ObjectDataHandler::overwrite);
       DEBUGT("overwrite: {}~{}",
 	     ctx.t,
 	     offset,
 	     len);
       ceph_assert(pins.size() >= 1);
-      auto pin_begin = pins.front()->get_key();
-      ceph_assert(pin_begin <= offset);
-      auto pin_end = pins.back()->get_key() + pins.back()->get_length();
-      ceph_assert(pin_end >= (offset + len));
+      DEBUGT("overwrite: split overwrite_plan {}", ctx.t, overwrite_plan);
 
       return split_pin_left(
 	ctx,
 	pins.front(),
-	offset
-      ).si_then([ctx, len, pin_begin, &offset, &headptr, &pins, &to_write](
+	overwrite_plan
+      ).si_then([ctx, &headptr, &pins, &to_write, &overwrite_plan](
 		 auto p) {
 	auto &[left_extent, _headptr] = p;
 	if (left_extent) {
-	  ceph_assert(left_extent->addr == pin_begin);
+	  ceph_assert(left_extent->addr == overwrite_plan.pin_begin);
 	  append_extent_to_write(to_write, std::move(*left_extent));
 	}
 	if (_headptr) {
@@ -533,9 +779,9 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
 	return split_pin_right(
 	  ctx,
 	  pins.back(),
-	  offset + len);
-      }).si_then([ctx, len, pin_begin, pin_end,
-		  &offset, &bl, &headptr, &to_write](auto p) {
+	  overwrite_plan);
+      }).si_then([ctx, len, &offset, &bl, &headptr, &to_write,
+		  &overwrite_plan](auto p) {
 	auto &[right_extent, tailptr] = p;
 	if (bl) {
 	  bufferlist write_bl;
@@ -561,12 +807,14 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
 	      std::move(tailptr)));
 	}
 	if (right_extent) {
-	  ceph_assert((right_extent->addr  + right_extent->len) == pin_end);
+	  ceph_assert((right_extent->addr  + right_extent->len) ==
+		      overwrite_plan.pin_end);
 	  append_extent_to_write(to_write, std::move(*right_extent));
 	}
 	assert(to_write.size());
-	assert(pin_begin == to_write.front().addr);
-	assert(pin_end == (to_write.back().addr + to_write.back().len));
+	assert(overwrite_plan.pin_begin == to_write.front().addr);
+	assert(overwrite_plan.pin_end ==
+	       (to_write.back().addr + to_write.back().len));
 	return write_iertr::now();
       }).si_then([ctx, &pins] {
 	return do_removals(ctx, pins);

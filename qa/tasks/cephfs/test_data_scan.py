@@ -92,7 +92,7 @@ class SimpleWorkload(Workload):
         self._initial_state = self._mount.stat("subdir/sixmegs")
 
     def validate(self):
-        self._mount.run_shell(["ls", "subdir"], sudo=True)
+        self._mount.run_shell(["sudo", "ls", "subdir"], omit_sudo=False)
         st = self._mount.stat("subdir/sixmegs", sudo=True)
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
         return self._errors
@@ -109,7 +109,7 @@ class SymlinkWorkload(Workload):
         self._mount.run_shell(["ln", "-s", "symdir/onemegs", "symlink1_onemegs"])
 
     def validate(self):
-        self._mount.run_shell(["ls", "symdir"], sudo=True)
+        self._mount.run_shell(["sudo", "ls", "symdir"], omit_sudo=False)
         st = self._mount.lstat("symdir/symlink_onemegs")
         self.assert_true(stat.S_ISLNK(st['st_mode']))
         target = self._mount.readlink("symdir/symlink_onemegs")
@@ -529,7 +529,7 @@ class TestDataScan(CephFSTestCase):
         self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "-l", "subdir/"]) # debugging
         # Use sudo because cephfs-data-scan will reinsert the dentry with root ownership, it can't know the real owner.
-        out = self.mount_a.run_shell_payload(f"cat subdir/{victim_dentry}", sudo=True).stdout.getvalue().strip()
+        out = self.mount_a.run_shell_payload(f"sudo cat subdir/{victim_dentry}", omit_sudo=False).stdout.getvalue().strip()
         self.assertEqual(out, victim_dentry)
 
         # Finally, close the loop by checking our injected dentry survives a merge

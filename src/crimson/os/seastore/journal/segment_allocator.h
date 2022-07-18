@@ -30,13 +30,18 @@ class SegmentAllocator {
       crimson::ct_error::input_output_error>;
 
  public:
-  SegmentAllocator(std::string name,
-                   segment_type_t type,
+  SegmentAllocator(segment_type_t type,
+                   data_category_t category,
+                   reclaim_gen_t gen,
                    SegmentProvider &sp,
                    SegmentSeqAllocator &ssa);
 
   const std::string& get_name() const {
     return print_name;
+  }
+
+  SegmentProvider &get_provider() {
+    return segment_provider;
   }
 
   seastore_off_t get_block_size() const {
@@ -111,11 +116,12 @@ class SegmentAllocator {
   using close_segment_ertr = base_ertr;
   close_segment_ertr::future<> close_segment();
 
-  const std::string name;
   // device id is not available during construction,
   // so generate the print_name later.
   std::string print_name;
   const segment_type_t type; // JOURNAL or OOL
+  const data_category_t category;
+  const reclaim_gen_t gen;
   SegmentProvider &segment_provider;
   SegmentManagerGroup &sm_group;
   SegmentRef current_segment;

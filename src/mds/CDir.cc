@@ -208,7 +208,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdc, bool auth) :
   pop_nested(mdc->decayrate),
   pop_auth_subtree(mdc->decayrate),
   pop_auth_subtree_nested(mdc->decayrate),
-  pop_spread(mdc->decayrate),
   pop_lru_subdirs(member_offset(CInode, item_pop_lru)),
   dir_auth(CDIR_AUTH_DEFAULT)
 {

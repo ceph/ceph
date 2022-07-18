@@ -380,7 +380,7 @@ void PG::log_state_exit(
     events);
 }
 
-ceph::signedspan PG::get_mnow()
+ceph::signedspan PG::get_mnow() const
 {
   return shard_services.get_mnow();
 }

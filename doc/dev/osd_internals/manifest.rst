@@ -229,7 +229,7 @@ refcounts on backing objects (or risk a reference to a dead object)
 Thus, we introduce a simple convention: consecutive clones which
 share a reference at the same offset share the same refcount.  This
 means that a write that invokes ``make_writeable`` may decrease refcounts,
-but not increase them.  This has some conquences for removing clones.
+but not increase them.  This has some consequences for removing clones.
 Consider the following sequence ::
 
   write foo [0, 1024)

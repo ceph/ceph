@@ -662,7 +662,7 @@ public:
 
   void send_pg_created(pg_t pgid) override;
 
-  ceph::signedspan get_mnow() override;
+  ceph::signedspan get_mnow() const override;
   HeartbeatStampsRef get_hb_stamps(int peer) override;
   void schedule_renew_lease(epoch_t lpr, ceph::timespan delay) override;
   void queue_check_readable(epoch_t lpr, ceph::timespan delay) override;

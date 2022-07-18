@@ -1,0 +1,7 @@
+tasks:
+- s3tests:
+    client.0:
+      iam_tests: True
+      extra_attrs: ["test_of_iam","!fails_on_rgw"]
+      force-branch: ceph-master
+      rgw_server: client.0

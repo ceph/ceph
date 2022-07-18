@@ -67,7 +67,7 @@ public:
   }
 };
 
-class TestUser : public sal::User {
+class TestUser : public sal::StoreUser {
 public:
   virtual std::unique_ptr<User> clone() override {
     return std::unique_ptr<User>(new TestUser(*this));
@@ -341,6 +341,39 @@ TEST(TestRGWLua, Bucket)
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
   ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, WriteBucket)
+{
+  const std::string script = R"(
+    assert(Request.Bucket)
+    assert(Request.Bucket.Name == "myname")
+    Request.Bucket.Name = "othername"
+  )";
+
+  DEFINE_REQ_STATE;
+  s.init_state.url_bucket = "myname";
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  ASSERT_EQ(rc, 0);
+  ASSERT_EQ(s.init_state.url_bucket, "othername");
+}
+
+TEST(TestRGWLua, WriteBucketFail)
+{
+  const std::string script = R"(
+    assert(Request.Bucket)
+    assert(Request.Bucket.Name == "myname")
+    Request.Bucket.Name = "othername"
+  )";
+
+  DEFINE_REQ_STATE;
+  rgw_bucket b;
+  b.name = "myname";
+  s.bucket.reset(new sal::RadosBucket(nullptr, b));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  ASSERT_NE(rc, 0);
 }
 
 TEST(TestRGWLua, GenericAttributes)

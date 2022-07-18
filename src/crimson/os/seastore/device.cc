@@ -12,7 +12,7 @@ std::ostream& operator<<(std::ostream& out, const device_spec_t& ds)
   return out << "device_spec("
              << "magic=" << ds.magic
              << ", dtype=" << ds.dtype
-             << ", id=" << device_id_printer_t{ds.id}
+             << ", " << device_id_printer_t{ds.id}
              << ")";
 }
 

@@ -130,7 +130,7 @@ public:
     }
   }
 
-  ceph::signedspan get_mnow();
+  ceph::signedspan get_mnow() const;
 
 private:
   // -- superblock --
@@ -1130,7 +1130,6 @@ protected:
   void tick();
   void tick_without_osd_lock();
   void _dispatch(Message *m);
-  void dispatch_op(OpRequestRef op);
 
   void check_osdmap_features();
 
@@ -1545,15 +1544,6 @@ public:
   } heartbeat_dispatcher;
 
 private:
-  // -- waiters --
-  std::list<OpRequestRef> finished;
-
-  void take_waiters(std::list<OpRequestRef>& ls) {
-    ceph_assert(ceph_mutex_is_locked(osd_lock));
-    finished.splice(finished.end(), ls);
-  }
-  void do_waiters();
-
   // -- op tracking --
   OpTracker op_tracker;
   void test_ops(std::string command, std::string args, std::ostream& ss);
@@ -1720,12 +1710,10 @@ protected:
   pool_pg_num_history_t pg_num_history;
 
   ceph::shared_mutex map_lock = ceph::make_shared_mutex("OSD::map_lock");
-  std::list<OpRequestRef>  waiting_for_osdmap;
   std::deque<utime_t> osd_markdown_log;
 
   friend struct send_map_on_destruct;
 
-  void wait_for_new_map(OpRequestRef op);
   void handle_osd_map(class MOSDMap *m);
   void _committed_osd_maps(epoch_t first, epoch_t last, class MOSDMap *m);
   void trim_maps(epoch_t oldest, int nreceived, bool skip_maps);
@@ -1807,17 +1795,7 @@ protected:
 
   void load_pgs();
 
-  /// build initial pg history and intervals on create
-  void build_initial_pg_history(
-    spg_t pgid,
-    epoch_t created,
-    utime_t created_stamp,
-    pg_history_t *h,
-    PastIntervals *pi);
-
   epoch_t last_pg_create_epoch;
-
-  void handle_pg_create(OpRequestRef op);
 
   void split_pgs(
     PG *parent,
@@ -1894,21 +1872,6 @@ protected:
   bool require_mon_peer(const Message *m);
   bool require_mon_or_mgr_peer(const Message *m);
   bool require_osd_peer(const Message *m);
-  /***
-   * Verifies that we were alive in the given epoch, and that
-   * still are.
-   */
-  bool require_self_aliveness(const Message *m, epoch_t alive_since);
-  /**
-   * Verifies that the OSD who sent the given op has the same
-   * address as in the given std::map.
-   * @pre op was sent by an OSD using the cluster messenger
-   */
-  bool require_same_peer_instance(const Message *m, const OSDMapRef& map,
-				  bool is_fast_dispatch);
-
-  bool require_same_or_newer_map(OpRequestRef& op, epoch_t e,
-				 bool is_fast_dispatch);
 
   void handle_fast_pg_create(MOSDPGCreate2 *m);
   void handle_pg_query_nopg(const MQuery& q);
@@ -2045,7 +2008,6 @@ private:
 			ObjectStore *store,
 			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami, std::string& osdspec_affinity);
 
-  void handle_scrub(class MOSDScrub *m);
   void handle_fast_scrub(class MOSDScrub2 *m);
   void handle_osd_ping(class MOSDPing *m);
 

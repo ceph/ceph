@@ -54,6 +54,10 @@ std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
     return out << "CLEAN";
   case CachedExtent::extent_state_t::DIRTY:
     return out << "DIRTY";
+  case CachedExtent::extent_state_t::EXIST_CLEAN:
+    return out << "EXIST_CLEAN";
+  case CachedExtent::extent_state_t::EXIST_MUTATION_PENDING:
+    return out << "EXIST_MUTATION_PENDING";
   case CachedExtent::extent_state_t::INVALID:
     return out << "INVALID";
   default:

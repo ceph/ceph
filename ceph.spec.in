@@ -146,10 +146,13 @@
 %endif
 
 %if 0%{with seastar}
-# disable -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1, as gcc-toolset-{9,10}-annobin
+# disable -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1, as gcc-toolset-{10,11}-annobin
 # do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
 # redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
 %undefine _annotated_build
+%if 0%{?enable_devtoolset11:1}
+%enable_devtoolset11
+%endif
 %endif
 
 #################################################################################
@@ -198,7 +201,8 @@ BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
 %if 0%{with seastar} && 0%{?rhel}
-BuildRequires:	gcc-toolset-10-gcc-c++ >= 10.3.1-1.2
+BuildRequires:	gcc-toolset-11-gcc-c++
+BuildRequires:	gcc-toolset-11-build
 %else
 %if 0%{?suse_version}
 BuildRequires:	gcc11-c++
@@ -273,6 +277,8 @@ BuildRequires:	python%{python3_pkgversion}-dateutil
 BuildRequires:	python%{python3_pkgversion}-coverage
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
+BuildRequires:	python%{python3_pkgversion}-asyncssh
+BuildRequires:	python%{python3_pkgversion}-natsort
 %endif
 %if 0%{with zbd}
 BuildRequires:  libzbd-devel
@@ -295,8 +301,10 @@ BuildRequires:  nlohmann_json-devel
 BuildRequires:  libevent-devel
 %endif
 %if 0%{with system_pmdk}
+BuildRequires:  ndctl-devel >= 63
+BuildRequires:  daxctl-devel >= 63
 BuildRequires:  libpmem-devel
-BuildRequires:  libpmemobj-devel
+BuildRequires:  libpmemobj-devel >= 1.8
 %endif
 %if 0%{with system_arrow}
 BuildRequires:  arrow-devel
@@ -319,10 +327,10 @@ BuildRequires:  libasan
 BuildRequires:  libatomic
 %endif
 %if 0%{?rhel}
-BuildRequires:  gcc-toolset-10-annobin
-BuildRequires:  gcc-toolset-10-libubsan-devel
-BuildRequires:  gcc-toolset-10-libasan-devel
-BuildRequires:  gcc-toolset-10-libatomic-devel
+BuildRequires:  gcc-toolset-11-annobin-plugin-gcc
+BuildRequires:  gcc-toolset-11-libubsan-devel
+BuildRequires:  gcc-toolset-11-libasan-devel
+BuildRequires:  gcc-toolset-11-libatomic-devel
 %endif
 %endif
 #################################################################################
@@ -1240,6 +1248,15 @@ Group:          System/Monitoring
 %description prometheus-alerts
 This package provides Ceph default alerts for Prometheus.
 
+%package mib
+Summary:        MIB for SNMP alerts
+BuildArch:      noarch
+%if 0%{?suse_version}
+Group:          System/Monitoring
+%endif
+%description mib
+This package provides a Ceph MIB for SNMP traps.
+
 #################################################################################
 # common
 #################################################################################
@@ -1251,10 +1268,6 @@ This package provides Ceph default alerts for Prometheus.
 # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
 %if ( 0%{?rhel} && 0%{?rhel} < 9 ) || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
 %define _lto_cflags %{nil}
-%endif
-
-%if 0%{with seastar} && 0%{?rhel}
-. /opt/rh/gcc-toolset-10/enable
 %endif
 
 %if 0%{with cephfs_java}
@@ -1383,6 +1396,10 @@ cmake .. \
 %if 0%{with system_utf8proc}
     -DWITH_SYSTEM_UTF8PROC:BOOL=ON \
 %endif
+%if 0%{with seastar}
+    -DWITH_SEASTAR:BOOL=ON \
+    -DWITH_JAEGER:BOOL=OFF \
+%endif
     -DWITH_GRAFANA:BOOL=ON
 
 %if %{with cmake_verbose_logging}
@@ -1408,6 +1425,7 @@ popd
 
 
 %install
+
 pushd %{_vpath_builddir}
 %make_install
 # we have dropped sysvinit bits
@@ -1481,6 +1499,9 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 
 # prometheus alerts
 install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yml %{buildroot}/etc/prometheus/ceph/ceph_default_alerts.yml
+
+# SNMP MIB
+install -m 644 -D -p monitoring/snmp/CEPH-MIB.txt %{buildroot}%{_datadir}/snmp/mibs
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -2560,5 +2581,9 @@ exit 0
 %endif
 %attr(0755,root,root) %dir %{_sysconfdir}/prometheus/ceph
 %config %{_sysconfdir}/prometheus/ceph/ceph_default_alerts.yml
+
+%files mib
+%attr(0755,root,root) %dir %{_datadir}/snmp
+%config %{_datadir}/snmp/mibs
 
 %changelog

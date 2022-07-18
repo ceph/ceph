@@ -7,7 +7,6 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
-import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -29,18 +28,12 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
   permission: Permission;
   selection = new CdTableSelection();
   icons = Icons;
-  customCss = {
-    'badge badge-danger': 'active',
-    'badge badge-warning': 'unprocessed',
-    'badge badge-info': 'suppressed'
-  };
 
   constructor(
     // NotificationsComponent will refresh all alerts every 5s (No need to do it here as well)
     private authStorageService: AuthStorageService,
     public prometheusAlertService: PrometheusAlertService,
     private urlBuilder: URLBuilderService,
-    private cdDatePipe: CdDatePipe,
     @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
     super(prometheusService);
@@ -65,30 +58,49 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
       {
         name: $localize`Name`,
         prop: 'labels.alertname',
+        cellClass: 'font-weight-bold',
         flexGrow: 2
       },
       {
-        name: $localize`Job`,
-        prop: 'labels.job',
-        flexGrow: 2
+        name: $localize`Summary`,
+        prop: 'annotations.summary',
+        flexGrow: 3
       },
       {
         name: $localize`Severity`,
-        prop: 'labels.severity'
+        prop: 'labels.severity',
+        flexGrow: 1,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            critical: { class: 'badge-danger' },
+            warning: { class: 'badge-warning' }
+          }
+        }
       },
       {
         name: $localize`State`,
         prop: 'status.state',
-        cellTransformation: CellTemplate.classAdding
+        flexGrow: 1,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            active: { class: 'badge-info' },
+            unprocessed: { class: 'badge-warning' },
+            suppressed: { class: 'badge-dark' }
+          }
+        }
       },
       {
         name: $localize`Started`,
         prop: 'startsAt',
-        pipe: this.cdDatePipe
+        cellTransformation: CellTemplate.timeAgo,
+        flexGrow: 1
       },
       {
         name: $localize`URL`,
         prop: 'generatorURL',
+        flexGrow: 1,
         sortable: false,
         cellTemplate: this.externalLinkTpl
       }

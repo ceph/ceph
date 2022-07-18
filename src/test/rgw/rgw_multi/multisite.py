@@ -169,6 +169,9 @@ class Zone(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemO
     def has_buckets(self):
         return True
 
+    def has_roles(self):
+        return True
+
     def get_conn(self, credentials):
         return ZoneConn(self, credentials) # not implemented, but can be used
 

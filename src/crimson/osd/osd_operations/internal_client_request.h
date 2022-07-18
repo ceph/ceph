@@ -45,8 +45,11 @@ private:
 
   Ref<PG> pg;
   OpInfo op_info;
+  PipelineHandle handle;
 
 public:
+  PipelineHandle& get_handle() { return handle; }
+
   std::tuple<
     StartEvent,
     CommonPGPipeline::WaitForActive::BlockingEvent,

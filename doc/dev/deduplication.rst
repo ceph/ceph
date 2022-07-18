@@ -94,8 +94,8 @@ Regarding how to use, please see ``osd_internals/manifest.rst``
 Usage Patterns
 ==============
 
-The different Ceph interface layers present potentially different oportunities
-and costs for deduplication and tiering in general.
+Each Ceph interface layer presents unique opportunities and costs for
+deduplication and tiering in general.
 
 RadosGW
 -------

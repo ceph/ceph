@@ -136,13 +136,31 @@ Note that the MDS adds a bunch of other locks for this inode, but for now let's 
 
 The state transition entries are of type `sm_state_t` from `src/mds/locks.h` source. TODO: Describe these in detail.
 
-We reach a point where the MDS fills in `LockOpVec` and invokes `Locker::acquire_locks()`, which according to the lock type and the mode (`rdlock`, etc..) tries to acquire that particular lock. Starting state for the lock is `LOCK_SYNC` (this may not always be the case, but consider this for simplicity). To acquire `xlock` for `iauth`, the MDS refers to the state transition table. If the current state allows the lock to be acquired, the MDS grabs the lock (which is just incrementing a counter). The current state (`LOCK_SYNC`) does not allow `xlock` to be acquired (column `x` in `LOCK_SYNC` state), thereby requiring a lock state switch. At this point, the MDS switches to an intermediate state `LOCK_SYNC_LOCK` - signifying transitioning from `LOCK_SYNC` to `LOCK_LOCK` state. The intermediate state has a couple of purposes - a. The intermediate state defines what caps are allowed to be held by cilents thereby revoking caps that are not allowed be held in this state, and b. preventing new locks to be acquired. At this point the MDS sends cap revoke messages to clients::
+We reach a point where the MDS fills in `LockOpVec` and invokes
+`Locker::acquire_locks()`, which according to the lock type and the mode
+(`rdlock`, etc..) tries to acquire that particular lock. Starting state for
+the lock is `LOCK_SYNC` (this may not always be the case, but consider this
+for simplicity). To acquire `xlock` for `iauth`, the MDS refers to the state
+transition table. If the current state allows the lock to be acquired, the MDS
+grabs the lock (which is just incrementing a counter). The current state
+(`LOCK_SYNC`) does not allow `xlock` to be acquired (column `x` in `LOCK_SYNC`
+state), thereby requiring a lock state switch. At this point, the MDS switches
+to an intermediate state `LOCK_SYNC_LOCK` - signifying transitioning from
+`LOCK_SYNC` to `LOCK_LOCK` state. The intermediate state has a couple of
+purposes - a. The intermediate state defines what caps are allowed to be held
+by clients thereby revoking caps that are not allowed be held in this state,
+and b. preventing new locks to be acquired. At this point the MDS sends cap
+revoke messages to clients::
 
   2021-11-22T07:18:20.040-0500 7fa66a3bd700  7 mds.0.locker: issue_caps allowed=pLsXsFscrl, xlocker allowed=pLsXsFscrl on [inode 0x10000000003 [2,head] /testfile auth v142 ap=1 DIRTYPARENT s=0 n(v0 rc2021-11-22T06:21:45.015746-0500 1=1+0) (iauth sync->lock) (iversion lock) caps={94134=pAsLsXsFscr/-@1,94138=pLsXsFscr/-@1} | request=1 lock=1 caps=1 dirtyparent=1 dirty=1 authpin=1 0x5633ffdac000]
   2021-11-22T07:18:20.040-0500 7fa66a3bd700 20 mds.0.locker: client.94134 pending pAsLsXsFscr allowed pLsXsFscrl wanted -
   2021-11-22T07:18:20.040-0500 7fa66a3bd700  7 mds.0.locker: sending MClientCaps to client.94134 seq 2 new pending pLsXsFscr was pAsLsXsFscr
 
-As seen above, `client.94134` has `As` caps, which is getting revoked by the MDS. After the caps have been revoked, the MDS can continue to transition to further states: `LOCK_SYNC_LOCK` to `LOCK_LOCK`. Since the goal is to acquire `xlock`, the state transition conitnues (as per the lock transition state machine)::
+As seen above, `client.94134` has `As` caps, which are getting revoked by the
+MDS. After the caps have been revoked, the MDS can continue to transition to
+further states: `LOCK_SYNC_LOCK` to `LOCK_LOCK`. Since the goal is to acquire
+`xlock`, the state transition continues (as per the lock transition state
+machine)::
 
   LOCK_LOCK -> LOCK_LOCK_XLOCK
   LOCK_LOCK_XLOCK -> LOCK_PREXLOCK

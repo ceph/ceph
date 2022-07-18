@@ -12,9 +12,9 @@
 #include "include/str_list.h"
 #include "rgw_xml.h"
 #include "rgw_acl.h"
+#include "rgw_sal_fwd.h"
 
 class RGWUserCtl;
-namespace rgw { namespace sal { class Store; } }
 
 class ACLPermission_S3 : public ACLPermission, public XMLObj
 {

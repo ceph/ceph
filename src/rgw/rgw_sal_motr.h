@@ -26,7 +26,7 @@ extern "C" {
 #pragma clang diagnostic pop
 }
 
-#include "rgw_sal.h"
+#include "rgw_sal_store.h"
 #include "rgw_rados.h"
 #include "rgw_notify.h"
 #include "rgw_oidc_provider.h"
@@ -189,10 +189,10 @@ struct MotrAccessKey {
 };
 WRITE_CLASS_ENCODER(MotrAccessKey);
 
-class MotrNotification : public Notification {
+class MotrNotification : public StoreNotification {
   public:
     MotrNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type) :
-        Notification(_obj, _src_obj, _type) {}
+        StoreNotification(_obj, _src_obj, _type) {}
     ~MotrNotification() = default;
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0;}
@@ -200,7 +200,7 @@ class MotrNotification : public Notification {
 			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) override { return 0; }
 };
 
-class MotrUser : public User {
+class MotrUser : public StoreUser {
   private:
     MotrStore         *store;
     struct m0_uint128  idxID = {0xe5ecb53640d4ecce, 0x6a156cd5a74aa3b8}; // MD5 of “motr.rgw.users“
@@ -208,8 +208,8 @@ class MotrUser : public User {
 
   public:
     std::set<std::string> access_key_tracker;
-    MotrUser(MotrStore *_st, const rgw_user& _u) : User(_u), store(_st) { }
-    MotrUser(MotrStore *_st, const RGWUserInfo& _i) : User(_i), store(_st) { }
+    MotrUser(MotrStore *_st, const rgw_user& _u) : StoreUser(_u), store(_st) { }
+    MotrUser(MotrStore *_st, const RGWUserInfo& _i) : StoreUser(_i), store(_st) { }
     MotrUser(MotrStore *_st) : store(_st) { }
     MotrUser(MotrUser& _o) = default;
     MotrUser() {}
@@ -259,7 +259,7 @@ class MotrUser : public User {
     friend class MotrBucket;
 };
 
-class MotrBucket : public Bucket {
+class MotrBucket : public StoreBucket {
   private:
     MotrStore *store;
     RGWAccessControlPolicy acls;
@@ -306,43 +306,43 @@ class MotrBucket : public Bucket {
       }
 
     MotrBucket(MotrStore *_st, User* _u)
-      : Bucket(_u),
+      : StoreBucket(_u),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const rgw_bucket& _b)
-      : Bucket(_b),
+      : StoreBucket(_b),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const RGWBucketEnt& _e)
-      : Bucket(_e),
+      : StoreBucket(_e),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const RGWBucketInfo& _i)
-      : Bucket(_i),
+      : StoreBucket(_i),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const rgw_bucket& _b, User* _u)
-      : Bucket(_b, _u),
+      : StoreBucket(_b, _u),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const RGWBucketEnt& _e, User* _u)
-      : Bucket(_e, _u),
+      : StoreBucket(_e, _u),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const RGWBucketInfo& _i, User* _u)
-      : Bucket(_i, _u),
+      : StoreBucket(_i, _u),
       store(_st),
       acls() {
       }
@@ -410,7 +410,7 @@ class MotrBucket : public Bucket {
     friend class MotrStore;
 };
 
-class MotrPlacementTier: public PlacementTier {
+class MotrPlacementTier: public StorePlacementTier {
   MotrStore* store;
   RGWZoneGroupPlacementTier tier;
 public:
@@ -423,7 +423,7 @@ public:
   RGWZoneGroupPlacementTier& get_rt() { return tier; }
 };
 
-class MotrZoneGroup : public ZoneGroup {
+class MotrZoneGroup : public StoreZoneGroup {
   MotrStore* store;
   const RGWZoneGroup group;
   std::string empty;
@@ -462,7 +462,7 @@ public:
   const RGWZoneGroup& get_group() { return group; }
 };
 
-class MotrZone : public Zone {
+class MotrZone : public StoreZone {
   protected:
     MotrStore* store;
     RGWRealm *realm{nullptr};
@@ -521,7 +521,7 @@ class MotrZone : public Zone {
     friend class MotrStore;
 };
 
-class MotrLuaScriptManager : public LuaScriptManager {
+class MotrLuaScriptManager : public StoreLuaScriptManager {
   MotrStore* store;
 
   public:
@@ -553,7 +553,7 @@ class MotrOIDCProvider : public RGWOIDCProvider {
   }
 };
 
-class MotrObject : public Object {
+class MotrObject : public StoreObject {
   private:
     MotrStore *store;
     RGWAccessControlPolicy acls;
@@ -629,9 +629,9 @@ class MotrObject : public Object {
     MotrObject() = default;
 
     MotrObject(MotrStore *_st, const rgw_obj_key& _k)
-      : Object(_k), store(_st), acls() {}
+      : StoreObject(_k), store(_st), acls() {}
     MotrObject(MotrStore *_st, const rgw_obj_key& _k, Bucket* _b)
-      : Object(_k, _b), store(_st), acls() {}
+      : StoreObject(_k, _b), store(_st), acls() {}
 
     MotrObject(MotrObject& _o) = default;
 
@@ -736,7 +736,7 @@ class MotrObject : public Object {
 
 // A placeholder locking class for multipart upload.
 // TODO: implement it using Motr object locks.
-class MPMotrSerializer : public MPSerializer {
+class MPMotrSerializer : public StoreMPSerializer {
 
   public:
     MPMotrSerializer(const DoutPrefixProvider *dpp, MotrStore* store, MotrObject* obj, const std::string& lock_name) {}
@@ -745,7 +745,7 @@ class MPMotrSerializer : public MPSerializer {
     virtual int unlock() override { return 0;}
 };
 
-class MotrAtomicWriter : public Writer {
+class MotrAtomicWriter : public StoreWriter {
   protected:
   rgw::sal::MotrStore* store;
   const rgw_user& owner;
@@ -795,7 +795,7 @@ class MotrAtomicWriter : public Writer {
   void cleanup();
 };
 
-class MotrMultipartWriter : public Writer {
+class MotrMultipartWriter : public StoreWriter {
 protected:
   rgw::sal::MotrStore* store;
 
@@ -816,7 +816,7 @@ public:
 		       const rgw_user& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t _part_num, const std::string& part_num_str) :
-				  Writer(dpp, y), store(_store), head_obj(std::move(_head_obj)),
+				  StoreWriter(dpp, y), store(_store), head_obj(std::move(_head_obj)),
 				  part_num(_part_num), part_num_str(part_num_str)
   {
   }
@@ -865,7 +865,7 @@ public:
 //
 //
 
-class MotrMultipartPart : public MultipartPart {
+class MotrMultipartPart : public StoreMultipartPart {
 protected:
   RGWUploadPartInfo info;
 
@@ -886,7 +886,7 @@ public:
   friend class MotrMultipartUpload;
 };
 
-class MotrMultipartUpload : public MultipartUpload {
+class MotrMultipartUpload : public StoreMultipartUpload {
   MotrStore* store;
   RGWMPObj mp_obj;
   ACLOwner owner;
@@ -897,7 +897,7 @@ class MotrMultipartUpload : public MultipartUpload {
 public:
   MotrMultipartUpload(MotrStore* _store, Bucket* _bucket, const std::string& oid,
                       std::optional<std::string> upload_id, ACLOwner _owner, ceph::real_time _mtime) :
-       MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {}
+       StoreMultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {}
   virtual ~MotrMultipartUpload() = default;
 
   virtual const std::string& get_meta() const { return mp_obj.get_meta(); }
@@ -932,7 +932,7 @@ public:
   int delete_parts(const DoutPrefixProvider *dpp);
 };
 
-class MotrStore : public Store {
+class MotrStore : public StoreStore {
   private:
     std::string luarocks_path;
     MotrZone zone;

@@ -1,15 +1,6 @@
 api-change:
   - src/pybind/mgr/dashboard/openapi.yaml
 
-backport quincy:
-  - doc/releases/**
-
-backport pacific:
-  - doc/releases/**
-
-backport octopus:
-  - doc/releases/**
-
 build/ops:
   - "**/CMakeLists.txt"
   - admin/**
@@ -146,6 +137,14 @@ core:
   - src/msg/**
   - src/os/**
   - src/osd/**
+  - src/tools/ceph_dedup_tool.cc
+  - src/tools/ceph_kvstore_tool.cc
+  - src/tools/ceph_monstore_tool.cc
+  - src/tools/ceph_objectstore_tool.*
+  - src/tools/crushtool.cc
+  - src/tools/kvstore_tool.*
+  - src/tools/monmaptool.cc
+  - src/tools/osdmaptool.cc
   - src/tools/rados/**
   - src/test/osd/**
 

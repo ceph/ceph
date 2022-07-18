@@ -9,11 +9,7 @@
 #include "crimson/os/seastore/omap_manager/btree/btree_omap_manager.h"
 #include "crimson/os/seastore/omap_manager/btree/omap_btree_node_impl.h"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore_omap);
-  }
-}
+SET_SUBSYS(seastore_omap);
 
 namespace crimson::os::seastore::omap_manager {
 
@@ -24,8 +20,8 @@ BtreeOMapManager::BtreeOMapManager(
 BtreeOMapManager::initialize_omap_ret
 BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint)
 {
-
-  logger().debug("{}", __func__);
+  LOG_PREFIX(BtreeOMapManager::initialize_omap);
+  DEBUGT("hint: {}", t, hint);
   return tm.alloc_extent<OMapLeafNode>(t, hint, OMAP_LEAF_BLOCK_SIZE)
     .si_then([hint, &t](auto&& root_extent) {
       root_extent->set_size(0);
@@ -53,6 +49,8 @@ BtreeOMapManager::handle_root_split(
   omap_root_t &omap_root,
   const OMapNode::mutation_result_t& mresult)
 {
+  LOG_PREFIX(BtreeOMapManager::handle_root_split);
+  DEBUGT("{}", oc.t, omap_root);
   return oc.tm.alloc_extent<OMapInnerNode>(oc.t, omap_root.hint,
                                            OMAP_INNER_BLOCK_SIZE)
     .si_then([&omap_root, mresult, oc](auto&& nroot) -> handle_root_split_ret {
@@ -76,6 +74,8 @@ BtreeOMapManager::handle_root_merge(
   omap_root_t &omap_root, 
   OMapNode::mutation_result_t mresult)
 {
+  LOG_PREFIX(BtreeOMapManager::handle_root_merge);
+  DEBUGT("{}", oc.t, omap_root);
   auto root = *(mresult.need_merge);
   auto iter = root->cast<OMapInnerNode>()->iter_begin();
   omap_root.update(
@@ -101,7 +101,8 @@ BtreeOMapManager::omap_get_value(
   Transaction &t,
   const std::string &key)
 {
-  logger().debug("{}: {}", __func__, key);
+  LOG_PREFIX(BtreeOMapManager::omap_get_value);
+  DEBUGT("key={}", t, key);
   return get_omap_root(
     get_omap_context(t, omap_root.hint),
     omap_root
@@ -137,7 +138,8 @@ BtreeOMapManager::omap_set_key(
   const std::string &key,
   const ceph::bufferlist &value)
 {
-  logger().debug("{}: {} -> {}", __func__, key, value);
+  LOG_PREFIX(BtreeOMapManager::omap_set_key);
+  DEBUGT("{} -> {}", t, key, value);
   return get_omap_root(
     get_omap_context(t, omap_root.hint),
     omap_root
@@ -159,7 +161,8 @@ BtreeOMapManager::omap_rm_key(
   Transaction &t,
   const std::string &key)
 {
-  logger().debug("{}: {}", __func__, key);
+  LOG_PREFIX(BtreeOMapManager::omap_rm_key);
+  DEBUGT("{}", t, key);
   return get_omap_root(
     get_omap_context(t, omap_root.hint),
     omap_root
@@ -191,7 +194,12 @@ BtreeOMapManager::omap_list(
   const std::optional<std::string> &start,
   omap_list_config_t config)
 {
-  logger().debug("{}", __func__);
+  LOG_PREFIX(BtreeOMapManager::omap_list);
+  if (start) {
+    DEBUGT("{}, start: {}", t, omap_root, *start);
+  } else {
+    DEBUGT("{}", t, omap_root);
+  }
   return get_omap_root(
     get_omap_context(t, omap_root.hint),
     omap_root
@@ -208,7 +216,8 @@ BtreeOMapManager::omap_clear(
   omap_root_t &omap_root,
   Transaction &t)
 {
-  logger().debug("{}", __func__);
+  LOG_PREFIX(BtreeOMapManager::omap_clear);
+  DEBUGT("{}", t, omap_root);
   return get_omap_root(
     get_omap_context(t, omap_root.hint),
     omap_root

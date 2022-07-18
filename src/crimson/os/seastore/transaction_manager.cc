@@ -23,23 +23,21 @@ SET_SUBSYS(seastore_tm);
 namespace crimson::os::seastore {
 
 TransactionManager::TransactionManager(
-  SegmentCleanerRef _segment_cleaner,
+  AsyncCleanerRef _async_cleaner,
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef &&epm,
-  BackrefManagerRef&& backref_manager,
-  tm_make_config_t config)
-  : segment_cleaner(std::move(_segment_cleaner)),
+  BackrefManagerRef&& backref_manager)
+  : async_cleaner(std::move(_async_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
     backref_manager(std::move(backref_manager)),
-    sm_group(*segment_cleaner->get_segment_manager_group()),
-    config(config)
+    sm_group(*async_cleaner->get_segment_manager_group())
 {
-  segment_cleaner->set_extent_callback(this);
+  async_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
 }
 
@@ -47,11 +45,11 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
-  return segment_cleaner->mount(
+  return async_cleaner->mount(
   ).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this](auto) {
-    segment_cleaner->init_mkfs();
+    async_cleaner->init_mkfs();
     return epm->open();
   }).safe_then([this, FNAME]() {
     return with_transaction_intr(
@@ -88,17 +86,17 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   LOG_PREFIX(TransactionManager::mount);
   INFO("enter");
   cache->init();
-  return segment_cleaner->mount(
+  return async_cleaner->mount(
   ).safe_then([this] {
     return journal->replay(
       [this](
 	const auto &offsets,
 	const auto &e,
 	const journal_seq_t alloc_replay_from,
-	auto last_modified)
+	auto modify_time)
       {
 	auto start_seq = offsets.write_result.start_seq;
-	segment_cleaner->update_journal_tail_target(
+	async_cleaner->update_journal_tail_target(
 	  cache->get_oldest_dirty_from().value_or(start_seq),
 	  cache->get_oldest_backref_dirty_from().value_or(start_seq));
 	return cache->replay_delta(
@@ -106,7 +104,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  offsets.record_block_base,
 	  e,
 	  alloc_replay_from,
-	  last_modified);
+	  modify_time);
       });
   }).safe_then([this] {
     return journal->open_for_write();
@@ -124,8 +122,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	      else
 		return lba_manager->init_cached_extent(t, e);
 	    }).si_then([this, FNAME, &t] {
-	      assert(segment_cleaner->debug_check_space(
-		       *segment_cleaner->get_empty_space_tracker()));
+	      assert(async_cleaner->debug_check_space(
+		       *async_cleaner->get_empty_space_tracker()));
 	      return backref_manager->scan_mapped_space(
 		t,
 		[this, FNAME, &t](
@@ -139,15 +137,10 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    t,
 		    addr,
 		    len);
-		  if (addr.is_real() &&
-		      !backref_manager->backref_should_be_removed(addr)) {
-		    segment_cleaner->mark_space_used(
-		      addr,
-		      len ,
-		      seastar::lowres_system_clock::time_point(),
-		      seastar::lowres_system_clock::time_point(),
-		      /* init_scan = */ true);
-		  }
+		  async_cleaner->mark_space_used(
+		    addr,
+		    len ,
+		    /* init_scan = */ true);
 		  if (is_backref_node(type)) {
 		    ceph_assert(depth);
 		    backref_manager->cache_new_backref_extent(addr, type);
@@ -158,18 +151,24 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    cache->update_tree_extents_num(type, 1);
 		    return seastar::now();
 		  }
-		}).si_then([this] {
+		}).si_then([this, &t] {
 		  LOG_PREFIX(TransactionManager::mount);
 		  auto &backrefs = backref_manager->get_cached_backrefs();
-		  DEBUG("marking {} backrefs used", backrefs.size());
+		  DEBUGT("scan backref cache", t);
 		  for (auto &backref : backrefs) {
-		    segment_cleaner->mark_space_used(
-		      backref.paddr,
-		      backref.len,
-		      seastar::lowres_system_clock::time_point(),
-		      seastar::lowres_system_clock::time_point(),
-		      true);
-		    cache->update_tree_extents_num(backref.type, 1);
+		    if (backref.laddr == L_ADDR_NULL) {
+		      async_cleaner->mark_space_free(
+			backref.paddr,
+			backref.len,
+			true);
+		      cache->update_tree_extents_num(backref.type, -1);
+		    } else {
+		      async_cleaner->mark_space_used(
+			backref.paddr,
+			backref.len,
+			true);
+		      cache->update_tree_extents_num(backref.type, 1);
+		    }
 		  }
 		  return seastar::now();
 		});
@@ -179,7 +178,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this] {
     return epm->open();
   }).safe_then([FNAME, this] {
-    segment_cleaner->complete_init();
+    async_cleaner->complete_init();
     INFO("completed");
   }).handle_error(
     mount_ertr::pass_further{},
@@ -192,7 +191,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 TransactionManager::close_ertr::future<> TransactionManager::close() {
   LOG_PREFIX(TransactionManager::close);
   INFO("enter");
-  return segment_cleaner->stop(
+  return async_cleaner->stop(
   ).then([this] {
     return cache->close();
   }).safe_then([this] {
@@ -314,12 +313,12 @@ TransactionManager::submit_transaction(
     size_t projected_usage = t.get_allocation_size();
     SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
     return trans_intr::make_interruptible(
-      segment_cleaner->reserve_projected_usage(projected_usage)
+      async_cleaner->reserve_projected_usage(projected_usage)
     ).then_interruptible([this, &t] {
       return submit_transaction_direct(t);
     }).finally([this, FNAME, projected_usage, &t] {
       SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
-      segment_cleaner->release_projected_usage(projected_usage);
+      async_cleaner->release_projected_usage(projected_usage);
     });
   });
 }
@@ -327,7 +326,8 @@ TransactionManager::submit_transaction(
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::submit_transaction_direct(
   Transaction &tref,
-  std::optional<journal_seq_t> seq_to_trim)
+  std::optional<journal_seq_t> seq_to_trim,
+  std::optional<std::pair<paddr_t, paddr_t>> gc_range)
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
   SUBTRACET(seastore_t, "start", tref);
@@ -360,12 +360,27 @@ TransactionManager::submit_transaction_direct(
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
-  }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]() mutable
+  }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim),
+	      gc_range=std::move(gc_range)]() mutable
 	      -> submit_transaction_iertr::future<> {
     if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
       cache->trim_backref_bufs(*seq_to_trim);
     }
-    auto record = cache->prepare_record(tref, segment_cleaner.get());
+
+#ifndef NDEBUG
+    if (gc_range) {
+      auto backref_set = 
+	backref_manager->get_cached_backrefs_in_range(
+	  gc_range->first, gc_range->second);
+      for (auto &backref : backref_set) {
+	ERRORT("unexpected backref: {}~{}, {}, {}, {}",
+	  tref, backref.paddr, backref.len, backref.laddr,
+	  backref.type, backref.seq);
+	ceph_abort("impossible");
+      }
+    }
+#endif
+    auto record = cache->prepare_record(tref, async_cleaner.get());
 
     tref.get_handle().maybe_release_collection_lock();
 
@@ -379,7 +394,7 @@ TransactionManager::submit_transaction_direct(
           tref,
           submit_result.record_block_base,
           start_seq,
-          segment_cleaner.get());
+          async_cleaner.get());
 
       std::vector<CachedExtentRef> lba_to_clear;
       std::vector<CachedExtentRef> backref_to_clear;
@@ -395,7 +410,8 @@ TransactionManager::submit_transaction_direct(
       // ...but add_pin from parent->leaf
       std::vector<CachedExtentRef> lba_to_link;
       std::vector<CachedExtentRef> backref_to_link;
-      lba_to_link.reserve(tref.get_fresh_block_stats().num);
+      lba_to_link.reserve(tref.get_fresh_block_stats().num +
+			  tref.get_existing_block_stats().valid_num);
       backref_to_link.reserve(tref.get_fresh_block_stats().num);
       tref.for_each_fresh_block([&](auto &e) {
 	if (e->is_valid()) {
@@ -406,13 +422,19 @@ TransactionManager::submit_transaction_direct(
 	}
       });
 
+      for (auto &e: tref.get_existing_block_list()) {
+	if (e->is_valid()) {
+	  lba_to_link.push_back(e);
+	}
+      }
+
       lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
       backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
 
-      segment_cleaner->update_journal_tail_target(
+      async_cleaner->update_journal_tail_target(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
-      return segment_cleaner->maybe_release_segment(tref);
+      return async_cleaner->maybe_release_segment(tref);
     }).safe_then([FNAME, &tref] {
       SUBTRACET(seastore_t, "completed", tref);
       return tref.get_handle().complete();
@@ -473,20 +495,21 @@ TransactionManager::rewrite_logical_extent(
     t,
     lextent->get_type(),
     lextent->get_length(),
-    placement_hint_t::REWRITE)->cast<LogicalCachedExtent>();
+    lextent->get_user_hint(),
+    lextent->get_reclaim_generation())->cast<LogicalCachedExtent>();
   lextent->get_bptr().copy_out(
     0,
     lextent->get_length(),
     nlextent->get_bptr().c_str());
   nlextent->set_laddr(lextent->get_laddr());
   nlextent->set_pin(lextent->get_pin().duplicate());
-  nlextent->last_modified = lextent->last_modified;
+  nlextent->set_modify_time(lextent->get_modify_time());
 
   DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
   /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
    * extents since we're going to do it again once we either do the ool write
-   * or allocate a relative inline addr.  TODO: refactor SegmentCleaner to
+   * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
    * avoid this complication. */
   return lba_manager->update_mapping(
     t,
@@ -497,7 +520,9 @@ TransactionManager::rewrite_logical_extent(
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   Transaction &t,
-  CachedExtentRef extent)
+  CachedExtentRef extent,
+  reclaim_gen_t target_generation,
+  sea_time_point modify_time)
 {
   LOG_PREFIX(TransactionManager::rewrite_extent);
 
@@ -509,6 +534,15 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     }
     extent = updated;
     ceph_assert(!extent->is_pending_io());
+  }
+
+  assert(extent->is_valid() && !extent->is_initial_pending());
+  if (extent->is_dirty()) {
+    extent->set_reclaim_generation(DIRTY_GENERATION);
+  } else {
+    extent->set_reclaim_generation(target_generation);
+    ceph_assert(modify_time != NULL_TIME);
+    extent->set_modify_time(modify_time);
   }
 
   t.get_rewrite_version_stats().increment(extent->get_version());
@@ -544,7 +578,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   });
 }
 
-TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_live(
+TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_live(
   Transaction &t,
   extent_types_t type,
   paddr_t addr,
@@ -556,64 +590,67 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 
   return cache->get_extent_if_cached(t, addr, type
   ).si_then([this, FNAME, &t, type, addr, laddr, len](auto extent)
-	    -> get_extent_if_live_ret {
-    if (extent) {
+	    -> get_extents_if_live_ret {
+    if (extent && extent->get_length() == (extent_len_t)len) {
       DEBUGT("{} {}~{} {} is live in cache -- {}",
              t, type, laddr, len, addr, *extent);
-      return get_extent_if_live_ret (
+      std::list<CachedExtentRef> res;
+      res.emplace_back(std::move(extent));
+      return get_extents_if_live_ret(
 	interruptible::ready_future_marker{},
-	extent);
+	res);
     }
 
     if (is_logical_type(type)) {
       using inner_ret = LBAManager::get_mapping_iertr::future<CachedExtentRef>;
-      return lba_manager->get_mapping(
+      return lba_manager->get_mappings(
 	t,
-	laddr).si_then([=, &t] (LBAPinRef pin) -> inner_ret {
-	  ceph_assert(pin->get_key() == laddr);
-	  if (pin->get_val() == addr) {
-	    if (pin->get_length() != (extent_len_t)len) {
-	      ERRORT(
-		"Invalid pin {}~{} {} found for "
-		"extent {} {}~{} {}",
-		t,
-		pin->get_key(),
-		pin->get_length(),
-		pin->get_val(),
-		type,
-		laddr,
-		len,
-		addr);
-	      ceph_abort();
-	    }
-	    return cache->get_extent_by_type(
-	      t,
-	      type,
-	      addr,
-	      laddr,
-	      len,
-	      [this, pin=std::move(pin)](CachedExtent &extent) mutable {
-		auto lref = extent.cast<LogicalCachedExtent>();
-		assert(!lref->has_pin());
-		assert(!lref->has_been_invalidated());
-		assert(!pin->has_been_invalidated());
-		lref->set_pin(std::move(pin));
-		lba_manager->add_pin(lref->get_pin());
-	      }).si_then([=, &t](auto ret) {;
-		DEBUGT("{} {}~{} {} is live as logical extent -- {}",
-		       t, type, laddr, len, addr, extent);
-		return ret;
+	laddr,
+	len
+      ).si_then([=, &t](lba_pin_list_t pin_list) {
+	return seastar::do_with(
+	  std::list<CachedExtentRef>(),
+	  std::move(pin_list),
+	  [=, &t](std::list<CachedExtentRef> &list, lba_pin_list_t &pin_list) {
+	    auto &seg_addr = addr.as_seg_paddr();
+	    auto seg_addr_id = seg_addr.get_segment_id();
+	    return trans_intr::parallel_for_each(pin_list, [=, &seg_addr, &list, &t](LBAPinRef &pin) ->
+						 Cache::get_extent_iertr::future<> {
+	      auto pin_laddr = pin->get_key();
+	      auto pin_paddr = pin->get_val();
+	      auto pin_len = pin->get_length();
+
+	      auto &pin_seg_addr = pin_paddr.as_seg_paddr();
+	      auto pin_seg_addr_id = pin_seg_addr.get_segment_id();
+
+	      if (pin_seg_addr_id != seg_addr_id ||
+		  pin_paddr < seg_addr ||
+		  pin_paddr.add_offset(pin_len) > seg_addr.add_offset(len)) {
+		return seastar::now();
+	      }
+	      return cache->get_extent_by_type(
+	        t, type, pin_paddr, pin_laddr, pin_len,
+		[this, pin=std::move(pin)](CachedExtent &extent) mutable {
+		  auto lref = extent.cast<LogicalCachedExtent>();
+		  assert(!lref->has_pin());
+		  assert(!lref->has_been_invalidated());
+		  assert(!pin->has_been_invalidated());
+		  lref->set_pin(std::move(pin));
+		  lba_manager->add_pin(lref->get_pin());
+		}
+	      ).si_then([=, &list](auto ret) {
+		list.emplace_back(std::move(ret));
+		return seastar::now();
 	      });
-	  } else {
-	    DEBUGT("{} {}~{} {} is not live as logical extent",
-	           t, type, laddr, len, addr);
-	    return inner_ret(
-	      interruptible::ready_future_marker{},
-	      CachedExtentRef());
-	  }
-	}).handle_error_interruptible(crimson::ct_error::enoent::handle([] {
-	  return CachedExtentRef();
-	}), crimson::ct_error::pass_further_all{});
+	    }).si_then([&list] {
+	      return get_extents_if_live_ret(
+	        interruptible::ready_future_marker{},
+		std::move(list));
+	    });
+	  });
+      }).handle_error_interruptible(crimson::ct_error::enoent::handle([] {
+	return std::list<CachedExtentRef>();
+      }), crimson::ct_error::pass_further_all{});
     } else {
       return lba_manager->get_physical_extent_if_live(
 	t,
@@ -629,7 +666,11 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
           DEBUGT("{} {}~{} {} is not live as physical extent",
                  t, type, laddr, len, addr);
         }
-        return ret;
+	std::list<CachedExtentRef> res;
+	res.emplace_back(std::move(ret));
+        return get_extents_if_live_ret(
+	  interruptible::ready_future_marker{},
+	  std::move(res));
       });
     }
   });
@@ -640,22 +681,22 @@ TransactionManager::~TransactionManager() {}
 TransactionManagerRef make_transaction_manager(tm_make_config_t config)
 {
   LOG_PREFIX(make_transaction_manager);
-  auto epm = std::make_unique<ExtentPlacementManager>();
+  auto epm = std::make_unique<ExtentPlacementManager>(config.epm_prefer_ool);
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto backref_manager = create_backref_manager(*sms, *cache);
 
   bool cleaner_is_detailed;
-  SegmentCleaner::config_t cleaner_config;
+  AsyncCleaner::config_t cleaner_config;
   if (config.is_test) {
     cleaner_is_detailed = true;
-    cleaner_config = SegmentCleaner::config_t::get_test();
+    cleaner_config = AsyncCleaner::config_t::get_test();
   } else {
     cleaner_is_detailed = false;
-    cleaner_config = SegmentCleaner::config_t::get_default();
+    cleaner_config = AsyncCleaner::config_t::get_default();
   }
-  auto segment_cleaner = std::make_unique<SegmentCleaner>(
+  auto async_cleaner = std::make_unique<AsyncCleaner>(
     cleaner_config,
     std::move(sms),
     *backref_manager,
@@ -663,26 +704,25 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
 
   JournalRef journal;
   if (config.j_type == journal_type_t::SEGMENT_JOURNAL) {
-    journal = journal::make_segmented(*segment_cleaner);
+    journal = journal::make_segmented(*async_cleaner);
   } else {
     journal = journal::make_circularbounded(
       nullptr, "");
-    segment_cleaner->set_disable_trim(true);
+    async_cleaner->set_disable_trim(true);
     ERROR("disabling journal trimming since support for CircularBoundedJournal\
 	  hasn't been added yet");
   }
   epm->init_ool_writers(
-      *segment_cleaner,
-      segment_cleaner->get_ool_segment_seq_allocator());
+      *async_cleaner,
+      async_cleaner->get_ool_segment_seq_allocator());
 
   return std::make_unique<TransactionManager>(
-    std::move(segment_cleaner),
+    std::move(async_cleaner),
     std::move(journal),
     std::move(cache),
     std::move(lba_manager),
     std::move(epm),
-    std::move(backref_manager),
-    config);
+    std::move(backref_manager));
 }
 
 }

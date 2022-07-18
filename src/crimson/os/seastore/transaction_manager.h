@@ -21,7 +21,7 @@
 #include "crimson/osd/exceptions.h"
 
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/lba_manager.h"
@@ -35,15 +35,16 @@ namespace crimson::os::seastore {
 class Journal;
 
 struct tm_make_config_t {
-  bool is_test = true;
-  journal_type_t j_type = journal_type_t::SEGMENT_JOURNAL;
-  placement_hint_t default_placement_hint = placement_hint_t::HOT;
+  bool is_test;
+  journal_type_t j_type;
+  bool epm_prefer_ool;
+  reclaim_gen_t default_generation;
 
   static tm_make_config_t get_default() {
     return tm_make_config_t {
       false,
       journal_type_t::SEGMENT_JOURNAL,
-      placement_hint_t::HOT
+      false
     };
   }
   static tm_make_config_t get_test_segmented_journal() {
@@ -52,7 +53,7 @@ struct tm_make_config_t {
     return tm_make_config_t {
       true,
       journal_type_t::SEGMENT_JOURNAL,
-      placement_hint_t::HOT
+      false
     };
   }
   static tm_make_config_t get_test_cb_journal() {
@@ -61,7 +62,7 @@ struct tm_make_config_t {
     return tm_make_config_t {
       true,
       journal_type_t::CIRCULARBOUNDED_JOURNAL,
-      placement_hint_t::REWRITE
+      true
     };
   }
 
@@ -71,9 +72,9 @@ private:
   tm_make_config_t(
     bool is_test,
     journal_type_t j_type,
-    placement_hint_t default_placement_hint)
+    bool epm_prefer_ool)
     : is_test(is_test), j_type(j_type),
-      default_placement_hint(default_placement_hint)
+      epm_prefer_ool(epm_prefer_ool)
   {}
 };
 
@@ -103,19 +104,18 @@ auto repeat_eagain(F &&f) {
  * Abstraction hiding reading and writing to persistence.
  * Exposes transaction based interface with read isolation.
  */
-class TransactionManager : public SegmentCleaner::ExtentCallbackInterface {
+class TransactionManager : public AsyncCleaner::ExtentCallbackInterface {
 public:
   using base_ertr = Cache::base_ertr;
   using base_iertr = Cache::base_iertr;
 
   TransactionManager(
-    SegmentCleanerRef segment_cleaner,
+    AsyncCleanerRef async_cleaner,
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
     ExtentPlacementManagerRef &&epm,
-    BackrefManagerRef&& backref_manager,
-    tm_make_config_t config = tm_make_config_t::get_default());
+    BackrefManagerRef&& backref_manager);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -338,14 +338,8 @@ public:
   alloc_extent_ret<T> alloc_extent(
     Transaction &t,
     laddr_t laddr_hint,
-    extent_len_t len) {
-    placement_hint_t placement_hint;
-    if constexpr (T::TYPE == extent_types_t::OBJECT_DATA_BLOCK ||
-                  T::TYPE == extent_types_t::COLL_BLOCK) {
-      placement_hint = placement_hint_t::COLD;
-    } else {
-      placement_hint = config.default_placement_hint;
-    }
+    extent_len_t len,
+    placement_hint_t placement_hint = placement_hint_t::HOT) {
     LOG_PREFIX(TransactionManager::alloc_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
@@ -353,7 +347,8 @@ public:
     auto ext = cache->alloc_new_extent<T>(
       t,
       len,
-      placement_hint);
+      placement_hint,
+      0);
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -366,6 +361,68 @@ public:
 	std::move(ext));
     });
   }
+
+  /**
+   * map_existing_extent
+   *
+   * Allocates a new extent at given existing_paddr that must be absolute and
+   * reads disk to fill the extent.
+   * The common usage is that remove the LogicalCachedExtent (laddr~length at paddr)
+   * and map extent to multiple new extents.
+   * placement_hint and generation should follow the original extent.
+   */
+  using map_existing_extent_iertr =
+    alloc_extent_iertr::extend_ertr<Device::read_ertr>;
+  template <typename T>
+  using map_existing_extent_ret =
+    map_existing_extent_iertr::future<TCachedExtentRef<T>>;
+  template <typename T>
+  map_existing_extent_ret<T> map_existing_extent(
+    Transaction &t,
+    laddr_t laddr_hint,
+    paddr_t existing_paddr,
+    extent_len_t length,
+    placement_hint_t placement_hint = placement_hint_t::HOT,
+    reclaim_gen_t gen = DIRTY_GENERATION) {
+    LOG_PREFIX(TransactionManager::map_existing_extent);
+    ceph_assert(existing_paddr.is_absolute());
+    assert(t.is_retired(existing_paddr, length));
+
+    SUBDEBUGT(seastore_tm, " laddr_hint: {} existing_paddr: {} length: {}",
+	      t, laddr_hint, existing_paddr, length);
+    auto bp = ceph::bufferptr(buffer::create_page_aligned(length));
+    bp.zero();
+
+    // ExtentPlacementManager::alloc_new_extent will make a new
+    // (relative/temp) paddr, so make extent directly
+    auto ext = CachedExtent::make_cached_extent_ref<T>(std::move(bp));
+
+    ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
+	      existing_paddr,
+	      placement_hint,
+	      gen);
+
+    t.add_fresh_extent(ext);
+
+    return lba_manager->alloc_extent(
+      t,
+      laddr_hint,
+      length,
+      existing_paddr
+    ).si_then([ext=std::move(ext), laddr_hint, this](auto &&ref) {
+      ceph_assert(laddr_hint == ref->get_key());
+      ext->set_pin(std::move(ref));
+      return epm->read(
+        ext->get_paddr(),
+	ext->get_length(),
+	ext->get_bptr()
+      ).safe_then([ext=std::move(ext)] {
+	return map_existing_extent_iertr::make_ready_future<TCachedExtentRef<T>>
+	  (std::move(ext));
+      });
+    });
+  }
+
 
   using reserve_extent_iertr = alloc_extent_iertr;
   using reserve_extent_ret = reserve_extent_iertr::future<LBAPinRef>;
@@ -423,11 +480,12 @@ public:
   using submit_transaction_iertr = base_iertr;
   submit_transaction_iertr::future<> submit_transaction(Transaction &);
 
-  /// SegmentCleaner::ExtentCallbackInterface
-  using SegmentCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
+  /// AsyncCleaner::ExtentCallbackInterface
+  using AsyncCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
   submit_transaction_direct_ret submit_transaction_direct(
     Transaction &t,
-    std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt,
+    std::optional<std::pair<paddr_t, paddr_t>> gc_range = std::nullopt) final;
 
   /**
    * flush
@@ -438,19 +496,21 @@ public:
    */
   seastar::future<> flush(OrderingHandle &handle);
 
-  using SegmentCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
+  using AsyncCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes) final;
 
-  using SegmentCleaner::ExtentCallbackInterface::rewrite_extent_ret;
+  using AsyncCleaner::ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
-    CachedExtentRef extent) final;
+    CachedExtentRef extent,
+    reclaim_gen_t target_generation,
+    sea_time_point modify_time) final;
 
-  using SegmentCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
-  get_extent_if_live_ret get_extent_if_live(
+  using AsyncCleaner::ExtentCallbackInterface::get_extents_if_live_ret;
+  get_extents_if_live_ret get_extents_if_live(
     Transaction &t,
     extent_types_t type,
     paddr_t addr,
@@ -577,7 +637,7 @@ public:
   }
 
   store_statfs_t store_stat() const {
-    return segment_cleaner->stat();
+    return async_cleaner->stat();
   }
 
   void add_device(Device* dev, bool is_primary) {
@@ -598,7 +658,7 @@ public:
 private:
   friend class Transaction;
 
-  SegmentCleanerRef segment_cleaner;
+  AsyncCleanerRef async_cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
@@ -608,14 +668,14 @@ private:
 
   WritePipeline write_pipeline;
 
-  tm_make_config_t config;
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
     LogicalCachedExtentRef extent);
+
 public:
   // Testing interfaces
-  auto get_segment_cleaner() {
-    return segment_cleaner.get();
+  auto get_async_cleaner() {
+    return async_cleaner.get();
   }
 
   auto get_lba_manager() {

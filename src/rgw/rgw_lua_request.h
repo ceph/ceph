@@ -2,13 +2,11 @@
 
 #include <string>
 #include "include/common_fwd.h"
+#include "rgw_sal_fwd.h"
 
 struct req_state;
 class RGWREST;
 class OpsLogSink;
-namespace rgw::sal {
-  class Store;
-}
 namespace rgw::lua {
   class Background;
 }

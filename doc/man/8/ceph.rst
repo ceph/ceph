@@ -232,7 +232,7 @@ Usage::
     ceph config rm <who> <option>
 
 Subcommand ``log`` to show recent history of config changes. If `count` option
-is omitted it defeaults to 10.
+is omitted it defaults to 10.
 
 Usage::
 
