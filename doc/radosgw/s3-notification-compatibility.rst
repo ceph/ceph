@@ -135,7 +135,7 @@ Event Types
    
 .. note::
 
-   The ``s3:ObjectSynced:Create`` event is sent when an object successfully syncs to a zone. It must be explicitely set for each zone. 
+   The ``s3:ObjectSynced:Create`` event is sent when an object successfully syncs to a zone. It must be explicitly set for each zone. 
 
 Topic Configuration
 -------------------

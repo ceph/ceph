@@ -24,6 +24,7 @@
 
 #include "rgw/rgw_basic_types.h"
 #include "common/async/yield_context.h"
+#include "rgw_sal_fwd.h"
 
 static inline int64_t rgw_rounded_kb(int64_t bytes)
 {
@@ -31,10 +32,6 @@ static inline int64_t rgw_rounded_kb(int64_t bytes)
 }
 
 class JSONObj;
-namespace rgw { namespace sal {
-  class Store;
-} }
-
 
 struct RGWQuotaInfo {
   template<class T> friend class RGWQuotaCache;

@@ -17,7 +17,7 @@
 #define FMT_HEADER_ONLY 1
 #include "fmt/format.h"
 #include <map>
-#include "rgw/rgw_sal.h"
+#include "rgw/rgw_sal_store.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_bucket.h"
 #include "global/global_context.h"
@@ -104,15 +104,15 @@ struct DBOpObjectDataInfo {
 
 struct DBOpLCHeadInfo {
   std::string index;
-  rgw::sal::Lifecycle::LCHead head;
+  rgw::sal::StoreLifecycle::StoreLCHead head;
 };
 
 struct DBOpLCEntryInfo {
   std::string index;
-  rgw::sal::Lifecycle::LCEntry entry;
+  rgw::sal::StoreLifecycle::StoreLCEntry entry;
   // used for list query
   std::string min_marker;
-  std::list<rgw::sal::Lifecycle::LCEntry> list_entries;
+  std::list<rgw::sal::StoreLifecycle::StoreLCEntry> list_entries;
 };
 
 struct DBOpInfo {
@@ -341,21 +341,21 @@ struct DBOpPrepareParams {
 };
 
 struct DBOps {
-  class InsertUserOp *InsertUser;
-  class RemoveUserOp *RemoveUser;
-  class GetUserOp *GetUser;
-  class InsertBucketOp *InsertBucket;
-  class UpdateBucketOp *UpdateBucket;
-  class RemoveBucketOp *RemoveBucket;
-  class GetBucketOp *GetBucket;
-  class ListUserBucketsOp *ListUserBuckets;
-  class InsertLCEntryOp *InsertLCEntry;
-  class RemoveLCEntryOp *RemoveLCEntry;
-  class GetLCEntryOp *GetLCEntry;
-  class ListLCEntriesOp *ListLCEntries;
-  class InsertLCHeadOp *InsertLCHead;
-  class RemoveLCHeadOp *RemoveLCHead;
-  class GetLCHeadOp *GetLCHead;
+  std::shared_ptr<class InsertUserOp> InsertUser;
+  std::shared_ptr<class RemoveUserOp> RemoveUser;
+  std::shared_ptr<class GetUserOp> GetUser;
+  std::shared_ptr<class InsertBucketOp> InsertBucket;
+  std::shared_ptr<class UpdateBucketOp> UpdateBucket;
+  std::shared_ptr<class RemoveBucketOp> RemoveBucket;
+  std::shared_ptr<class GetBucketOp> GetBucket;
+  std::shared_ptr<class ListUserBucketsOp> ListUserBuckets;
+  std::shared_ptr<class InsertLCEntryOp> InsertLCEntry;
+  std::shared_ptr<class RemoveLCEntryOp> RemoveLCEntry;
+  std::shared_ptr<class GetLCEntryOp> GetLCEntry;
+  std::shared_ptr<class ListLCEntriesOp> ListLCEntries;
+  std::shared_ptr<class  InsertLCHeadOp> InsertLCHead;
+  std::shared_ptr<class RemoveLCHeadOp> RemoveLCHead;
+  std::shared_ptr<class GetLCHeadOp> GetLCHead;
 };
 
 class ObjectOp {
@@ -364,19 +364,18 @@ class ObjectOp {
 
     virtual ~ObjectOp() {}
 
-    class PutObjectOp *PutObject;
-    class DeleteObjectOp *DeleteObject;
-    class GetObjectOp *GetObject;
-    class UpdateObjectOp *UpdateObject;
-    class ListBucketObjectsOp *ListBucketObjects;
-    class PutObjectDataOp *PutObjectData;
-    class UpdateObjectDataOp *UpdateObjectData;
-    class GetObjectDataOp *GetObjectData;
-    class DeleteObjectDataOp *DeleteObjectData;
-    class DeleteStaleObjectDataOp *DeleteStaleObjectData;
+    std::shared_ptr<class PutObjectOp> PutObject;
+    std::shared_ptr<class DeleteObjectOp> DeleteObject;
+    std::shared_ptr<class GetObjectOp> GetObject;
+    std::shared_ptr<class UpdateObjectOp> UpdateObject;
+    std::shared_ptr<class ListBucketObjectsOp> ListBucketObjects;
+    std::shared_ptr<class PutObjectDataOp> PutObjectData;
+    std::shared_ptr<class UpdateObjectDataOp> UpdateObjectData;
+    std::shared_ptr<class GetObjectDataOp> GetObjectData;
+    std::shared_ptr<class DeleteObjectDataOp> DeleteObjectData;
+    std::shared_ptr<class DeleteStaleObjectDataOp> DeleteStaleObjectData;
 
     virtual int InitializeObjectOps(std::string db_name, const DoutPrefixProvider *dpp) { return 0; }
-    virtual int FreeObjectOps(const DoutPrefixProvider *dpp) { return 0; }
 };
 
 class DBOp {
@@ -626,9 +625,7 @@ class DBOp {
       BucketName TEXT NOT NULL , \
       StartTime  INTEGER , \
       Status     INTEGER , \
-      PRIMARY KEY (LCIndex, BucketName), \
-      FOREIGN KEY (BucketName) \
-      REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
+      PRIMARY KEY (LCIndex, BucketName) \n);";
 
     static constexpr std::string_view CreateLCHeadTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
@@ -1512,7 +1509,7 @@ class DB {
 
     int InitializeParams(const DoutPrefixProvider *dpp, DBOpParams *params);
     int ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params);
-    DBOp* getDBOp(const DoutPrefixProvider *dpp, std::string_view Op, const DBOpParams *params);
+    std::shared_ptr<class DBOp> getDBOp(const DoutPrefixProvider *dpp, std::string_view Op, const DBOpParams *params);
     int objectmapInsert(const DoutPrefixProvider *dpp, std::string bucket, class ObjectOp* ptr);
     int objectmapDelete(const DoutPrefixProvider *dpp, std::string bucket);
 
@@ -1521,7 +1518,6 @@ class DB {
     virtual int closeDB(const DoutPrefixProvider *dpp) { return 0; }
     virtual int createTables(const DoutPrefixProvider *dpp) { return 0; }
     virtual int InitializeDBOps(const DoutPrefixProvider *dpp) { return 0; }
-    virtual int FreeDBOps(const DoutPrefixProvider *dpp) { return 0; }
     virtual int InitPrepareParams(const DoutPrefixProvider *dpp,
                                   DBOpPrepareParams &p_params,
                                   DBOpParams* params) = 0;
@@ -1912,6 +1908,9 @@ class DB {
       int InitializeParamsfromObject(const DoutPrefixProvider *dpp, DBOpParams* params);
       int set_attrs(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& setattrs,
           std::map<std::string, bufferlist>* rmattrs);
+      int transition(const DoutPrefixProvider *dpp,
+                     const rgw_placement_rule& rule, const real_time& mtime,
+                     uint64_t olh_epoch);
       int obj_omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val, bool must_exist);
       int obj_omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
           const std::set<std::string>& keys,
@@ -1935,15 +1934,15 @@ class DB {
         RGWObjState *astate, void *arg);
 
     int get_entry(const std::string& oid, const std::string& marker,
-                  rgw::sal::Lifecycle::LCEntry& entry);
-    int get_next_entry(const std::string& oid, std::string& marker,
-                  rgw::sal::Lifecycle::LCEntry& entry);
-    int set_entry(const std::string& oid, const rgw::sal::Lifecycle::LCEntry& entry);
+		  std::unique_ptr<rgw::sal::Lifecycle::LCEntry>* entry);
+    int get_next_entry(const std::string& oid, const std::string& marker,
+		  std::unique_ptr<rgw::sal::Lifecycle::LCEntry>* entry);
+    int set_entry(const std::string& oid, rgw::sal::Lifecycle::LCEntry& entry);
     int list_entries(const std::string& oid, const std::string& marker,
-			   uint32_t max_entries, std::vector<rgw::sal::Lifecycle::LCEntry>& entries);
-    int rm_entry(const std::string& oid, const rgw::sal::Lifecycle::LCEntry& entry);
-    int get_head(const std::string& oid, rgw::sal::Lifecycle::LCHead& head);
-    int put_head(const std::string& oid, const rgw::sal::Lifecycle::LCHead& head);
+			   uint32_t max_entries, std::vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>& entries);
+    int rm_entry(const std::string& oid, rgw::sal::Lifecycle::LCEntry& entry);
+    int get_head(const std::string& oid, std::unique_ptr<rgw::sal::Lifecycle::LCHead>* head);
+    int put_head(const std::string& oid, rgw::sal::Lifecycle::LCHead& head);
     int delete_stale_objs(const DoutPrefixProvider *dpp, const std::string& bucket,
                           uint32_t min_wait);
     int createGC(const DoutPrefixProvider *_dpp);

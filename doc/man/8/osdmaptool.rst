@@ -236,7 +236,7 @@ In which,
     * the weight of this OSD.
  #. Looking at the number of placement groups held by 3 OSDs. We have
 
-    * avarge, stddev, stddev/average, expected stddev, expected stddev / average
+    * average, stddev, stddev/average, expected stddev, expected stddev / average
     * min and max
  #. The number of placement groups mapping to n OSDs. In this case, all 8 placement
     groups are mapping to 3 different OSDs.

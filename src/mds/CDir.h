@@ -738,8 +738,6 @@ protected:
 
   ceph::coarse_mono_time last_popularity_sample = ceph::coarse_mono_clock::zero();
 
-  load_spread_t pop_spread;
-
   elist<CInode*> pop_lru_subdirs;
 
   std::unique_ptr<bloom_filter> bloom; // XXX not part of mempool::mds_co

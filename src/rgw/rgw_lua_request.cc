@@ -324,6 +324,21 @@ struct BucketMetaTable : public EmptyMetaTable {
     }
     return ONE_RETURNVAL;
   }
+  
+  static int NewIndexClosure(lua_State* L) {
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto bucket = s->bucket.get();
+
+    const char* index = luaL_checkstring(L, 2);
+
+    if (rgw::sal::Bucket::empty(bucket)) {
+      if (strcasecmp(index, "Name") == 0) {
+        s->init_state.url_bucket = luaL_checkstring(L, 3);
+        return NO_RETURNVAL;
+      }
+    }
+    return error_unknown_field(L, index, TableName());
+  }
 };
 
 struct ObjectMetaTable : public EmptyMetaTable {

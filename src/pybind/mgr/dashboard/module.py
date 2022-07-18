@@ -517,6 +517,13 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
             def default(self, *args, **kwargs):
                 if module.get_module_option('standby_behaviour', 'redirect') == 'redirect':
                     active_uri = module.get_active_uri()
+
+                    if cherrypy.request.path_info.startswith('/api/prometheus_receiver'):
+                        module.log.debug("Suppressed redirecting alert to active '%s'",
+                                         active_uri)
+                        cherrypy.response.status = 204
+                        return None
+
                     if active_uri:
                         module.log.info("Redirecting to active '%s'", active_uri)
                         raise cherrypy.HTTPRedirect(active_uri)

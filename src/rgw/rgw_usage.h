@@ -11,8 +11,7 @@
 #include "common/dout.h"
 #include "rgw_formats.h"
 #include "rgw_user.h"
-
-namespace rgw { namespace sal { class Store; } }
+#include "rgw_sal_fwd.h"
 
 
 class RGWUsage

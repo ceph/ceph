@@ -24,7 +24,7 @@ Attaching gdb to the process::
 
 .. note::
     It is recommended to compile without any optimizations (``-O0`` gcc flag)
-    in order to avoid elimintaion of intermediate values.
+    in order to avoid elimination of intermediate values.
 
 Stopping for breakpoints while debugging may cause timeouts, so the following
 configuration options are suggested::

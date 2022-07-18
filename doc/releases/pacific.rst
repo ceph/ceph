@@ -1547,7 +1547,7 @@ Post-upgrade
    the `crush-compat` :ref:`balancer <balancer>` mode added back in Luminous.
 
 #. If you did not already do so when upgrading from Mimic, we
-   recommened you enable the new :ref:`v2 network protocol <msgr2>`,
+   recommended you enable the new :ref:`v2 network protocol <msgr2>`,
    issue the following command::
 
      ceph mon enable-msgr2

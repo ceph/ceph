@@ -9,10 +9,9 @@
 #include "common/OutputDataSocket.h"
 #include <vector>
 #include <fstream>
+#include "rgw_sal_fwd.h"
 
-namespace rgw { namespace sal {
-  class Store;
-} }
+#define dout_subsys ceph_subsys_rgw
 
 struct rgw_log_entry {
 

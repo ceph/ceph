@@ -47,7 +47,7 @@ do not require incrementing compat_version.
 The ``DECODE_START`` macro takes an argument specifying the most recent
 message version that the code can handle.  This is compared with the
 compat_version encoded in the message, and if the message is too new then
-an exception will be thrown.  Because changes to compat_verison are rare,
+an exception will be thrown.  Because changes to compat_version are rare,
 this isn't usually something to worry about when adding fields.
 
 In practice, changes to encoding usually involve simply adding the desired fields

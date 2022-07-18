@@ -61,6 +61,7 @@ private:
   PGPipeline &pp(PG &pg);
 
   crimson::net::ConnectionRef conn;
+  PipelineHandle handle;
   Ref<MOSDRepOp> req;
 };
 

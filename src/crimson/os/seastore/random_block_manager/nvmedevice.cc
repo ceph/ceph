@@ -164,13 +164,13 @@ write_ertr::future<> PosixNVMeDevice::writev(
       ).handle_exception(
         [this, off, len](auto e) -> write_ertr::future<size_t>
       {
-        logger().error("D{} poffset={}~{} dma_write got error -- {}",
-              get_device_id(), off, len, e);
+        logger().error("{} poffset={}~{} dma_write got error -- {}",
+                       device_id_printer_t{get_device_id()}, off, len, e);
         return crimson::ct_error::input_output_error::make();
       }).then([this, off, len](size_t written) -> write_ertr::future<> {
         if (written != len) {
-          logger().error("D{} poffset={}~{} dma_write len={} inconsistent",
-                get_device_id(), off, len, written);
+          logger().error("{} poffset={}~{} dma_write len={} inconsistent",
+                         device_id_printer_t{get_device_id()}, off, len, written);
           return crimson::ct_error::input_output_error::make();
         }
         return write_ertr::now();

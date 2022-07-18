@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "rgw_sal.h"
+#include "rgw_sal_store.h"
 #include "rgw_rados.h"
 #include "rgw_notify.h"
 #include "rgw_oidc_provider.h"
@@ -37,7 +37,7 @@ class RadosCompletions : public Completions {
     virtual int drain() override;
 };
 
-class RadosPlacementTier: public PlacementTier {
+class RadosPlacementTier: public StorePlacementTier {
   RadosStore* store;
   RGWZoneGroupPlacementTier tier;
 public:
@@ -50,7 +50,7 @@ public:
   RGWZoneGroupPlacementTier& get_rt() { return tier; }
 };
 
-class RadosZoneGroup : public ZoneGroup {
+class RadosZoneGroup : public StoreZoneGroup {
   RadosStore* store;
   const RGWZoneGroup group;
   std::string empty;
@@ -88,7 +88,7 @@ public:
   const RGWZoneGroup& get_group() const { return group; }
 };
 
-class RadosZone : public Zone {
+class RadosZone : public StoreZone {
   protected:
     RadosStore* store;
     RadosZoneGroup group;
@@ -109,7 +109,7 @@ class RadosZone : public Zone {
     virtual const std::string& get_realm_id() override;
 };
 
-class RadosStore : public Store {
+class RadosStore : public StoreStore {
   private:
     RGWRados* rados;
     RGWUserCtl* user_ctl;
@@ -255,13 +255,13 @@ class RadosStore : public Store {
     void setUserCtl(RGWUserCtl *_ctl) { user_ctl = _ctl; }
 };
 
-class RadosUser : public User {
+class RadosUser : public StoreUser {
   private:
     RadosStore* store;
 
   public:
-    RadosUser(RadosStore *_st, const rgw_user& _u) : User(_u), store(_st) { }
-    RadosUser(RadosStore *_st, const RGWUserInfo& _i) : User(_i), store(_st) { }
+    RadosUser(RadosStore *_st, const rgw_user& _u) : StoreUser(_u), store(_st) { }
+    RadosUser(RadosStore *_st, const RGWUserInfo& _i) : StoreUser(_i), store(_st) { }
     RadosUser(RadosStore *_st) : store(_st) { }
     RadosUser(RadosUser& _o) = default;
     RadosUser() {}
@@ -308,7 +308,7 @@ class RadosUser : public User {
     friend class RadosBucket;
 };
 
-class RadosObject : public Object {
+class RadosObject : public StoreObject {
   private:
     RadosStore* store;
     RGWAccessControlPolicy acls;
@@ -349,20 +349,20 @@ class RadosObject : public Object {
     RadosObject() = default;
 
     RadosObject(RadosStore *_st, const rgw_obj_key& _k)
-      : Object(_k),
+      : StoreObject(_k),
 	store(_st),
         acls(),
 	rados_ctx(new RGWObjectCtx(dynamic_cast<Store*>(store))),
 	rados_ctx_owned(true) {
     }
     RadosObject(RadosStore *_st, const rgw_obj_key& _k, Bucket* _b)
-      : Object(_k, _b),
+      : StoreObject(_k, _b),
 	store(_st),
         acls(),
 	rados_ctx(new RGWObjectCtx(dynamic_cast<Store*>(store))) ,
 	rados_ctx_owned(true) {
     }
-    RadosObject(RadosObject& _o) : Object(_o) {
+    RadosObject(RadosObject& _o) : StoreObject(_o) {
       store = _o.store;
       acls = _o.acls;
       manifest = _o.manifest;
@@ -395,15 +395,15 @@ class RadosObject : public Object {
     virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
     virtual void set_atomic() override {
       rados_ctx->set_atomic(state.obj);
-      Object::set_atomic();
+      StoreObject::set_atomic();
     }
     virtual void set_prefetch_data() override {
       rados_ctx->set_prefetch_data(state.obj);
-      Object::set_prefetch_data();
+      StoreObject::set_prefetch_data();
     }
     virtual void set_compressed() override {
       rados_ctx->set_compressed(state.obj);
-      Object::set_compressed();
+      StoreObject::set_compressed();
     }
 
     virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state, optional_yield y, bool follow_olh = true) override;
@@ -478,7 +478,7 @@ class RadosObject : public Object {
     int read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
 };
 
-class RadosBucket : public Bucket {
+class RadosBucket : public StoreBucket {
   private:
     RadosStore* store;
     RGWAccessControlPolicy acls;
@@ -490,43 +490,43 @@ class RadosBucket : public Bucket {
     }
 
     RadosBucket(RadosStore *_st, User* _u)
-      : Bucket(_u),
+      : StoreBucket(_u),
 	store(_st),
         acls() {
     }
 
     RadosBucket(RadosStore *_st, const rgw_bucket& _b)
-      : Bucket(_b),
+      : StoreBucket(_b),
 	store(_st),
         acls() {
     }
 
     RadosBucket(RadosStore *_st, const RGWBucketEnt& _e)
-      : Bucket(_e),
+      : StoreBucket(_e),
 	store(_st),
         acls() {
     }
 
     RadosBucket(RadosStore *_st, const RGWBucketInfo& _i)
-      : Bucket(_i),
+      : StoreBucket(_i),
 	store(_st),
         acls() {
     }
 
     RadosBucket(RadosStore *_st, const rgw_bucket& _b, User* _u)
-      : Bucket(_b, _u),
+      : StoreBucket(_b, _u),
 	store(_st),
         acls() {
     }
 
     RadosBucket(RadosStore *_st, const RGWBucketEnt& _e, User* _u)
-      : Bucket(_e, _u),
+      : StoreBucket(_e, _u),
 	store(_st),
         acls() {
     }
 
     RadosBucket(RadosStore *_st, const RGWBucketInfo& _i, User* _u)
-      : Bucket(_i, _u),
+      : StoreBucket(_i, _u),
 	store(_st),
         acls() {
     }
@@ -594,7 +594,7 @@ class RadosBucket : public Bucket {
     friend class RadosUser;
 };
 
-class RadosMultipartPart : public MultipartPart {
+class RadosMultipartPart : public StoreMultipartPart {
 protected:
   RGWUploadPartInfo info;
 
@@ -613,7 +613,7 @@ public:
   friend class RadosMultipartUpload;
 };
 
-class RadosMultipartUpload : public MultipartUpload {
+class RadosMultipartUpload : public StoreMultipartUpload {
   RadosStore* store;
   RGWMPObj mp_obj;
   ACLOwner owner;
@@ -625,7 +625,7 @@ public:
   RadosMultipartUpload(RadosStore* _store, Bucket* _bucket, const std::string& oid,
                        std::optional<std::string> upload_id, ACLOwner owner,
                        ceph::real_time _mtime)
-      : MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id),
+      : StoreMultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id),
         owner(owner), mtime(_mtime) {}
   virtual ~RadosMultipartUpload() = default;
 
@@ -660,7 +660,7 @@ public:
 			  const std::string& part_num_str) override;
 };
 
-class MPRadosSerializer : public MPSerializer {
+class MPRadosSerializer : public StoreMPSerializer {
   librados::IoCtx ioctx;
   rados::cls::lock::Lock lock;
   librados::ObjectWriteOperation op;
@@ -674,10 +674,9 @@ public:
   }
 };
 
-class LCRadosSerializer : public LCSerializer {
+class LCRadosSerializer : public StoreLCSerializer {
   librados::IoCtx* ioctx;
   rados::cls::lock::Lock lock;
-  const std::string oid;
 
 public:
   LCRadosSerializer(RadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
@@ -688,24 +687,26 @@ public:
   }
 };
 
-class RadosLifecycle : public Lifecycle {
+class RadosLifecycle : public StoreLifecycle {
   RadosStore* store;
 
 public:
   RadosLifecycle(RadosStore* _st) : store(_st) {}
 
-  virtual int get_entry(const std::string& oid, const std::string& marker, LCEntry& entry) override;
-  virtual int get_next_entry(const std::string& oid, std::string& marker, LCEntry& entry) override;
-  virtual int set_entry(const std::string& oid, const LCEntry& entry) override;
+  using StoreLifecycle::get_entry;
+  virtual int get_entry(const std::string& oid, const std::string& marker, std::unique_ptr<LCEntry>* entry) override;
+  virtual int get_next_entry(const std::string& oid, const std::string& marker, std::unique_ptr<LCEntry>* entry) override;
+  virtual int set_entry(const std::string& oid, LCEntry& entry) override;
   virtual int list_entries(const std::string& oid, const std::string& marker,
-			   uint32_t max_entries, std::vector<LCEntry>& entries) override;
-  virtual int rm_entry(const std::string& oid, const LCEntry& entry) override;
-  virtual int get_head(const std::string& oid, LCHead& head) override;
-  virtual int put_head(const std::string& oid, const LCHead& head) override;
+			   uint32_t max_entries,
+			   std::vector<std::unique_ptr<LCEntry>>& entries) override;
+  virtual int rm_entry(const std::string& oid, LCEntry& entry) override;
+  virtual int get_head(const std::string& oid, std::unique_ptr<LCHead>* head) override;
+  virtual int put_head(const std::string& oid, LCHead& head) override;
   virtual LCSerializer* get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie) override;
 };
 
-class RadosNotification : public Notification {
+class RadosNotification : public StoreNotification {
   RadosStore* store;
   /* XXX it feels incorrect to me that rgw::notify::reservation_t is
    * currently RADOS-specific; instead, I think notification types such as
@@ -716,10 +717,10 @@ class RadosNotification : public Notification {
 
   public:
     RadosNotification(const DoutPrefixProvider* _dpp, RadosStore* _store, Object* _obj, Object* _src_obj, req_state* _s, rgw::notify::EventType _type, const std::string* object_name=nullptr) :
-      Notification(_obj, _src_obj, _type), store(_store), res(_dpp, _store, _s, _obj, _src_obj, object_name) { }
+      StoreNotification(_obj, _src_obj, _type), store(_store), res(_dpp, _store, _s, _obj, _src_obj, object_name) { }
 
     RadosNotification(const DoutPrefixProvider* _dpp, RadosStore* _store, Object* _obj, Object* _src_obj, rgw::notify::EventType _type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y) :
-      Notification(_obj, _src_obj, _type), store(_store), res(_dpp, _store, _obj, _src_obj, _bucket, _user_id, _user_tenant, _req_id, y) {}
+      StoreNotification(_obj, _src_obj, _type), store(_store), res(_dpp, _store, _obj, _src_obj, _bucket, _user_id, _user_tenant, _req_id, y) {}
 
     ~RadosNotification() = default;
 
@@ -732,7 +733,7 @@ class RadosNotification : public Notification {
 			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
 };
 
-class RadosAtomicWriter : public Writer {
+class RadosAtomicWriter : public StoreWriter {
 protected:
   rgw::sal::RadosStore* store;
   std::unique_ptr<Aio> aio;
@@ -748,7 +749,7 @@ public:
 		    const rgw_placement_rule *ptail_placement_rule,
 		    uint64_t olh_epoch,
 		    const std::string& unique_tag) :
-			Writer(dpp, y),
+			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
 			obj_ctx(&dynamic_cast<RadosObject*>(_head_obj.get())->get_ctx()),
@@ -777,7 +778,7 @@ public:
                        optional_yield y) override;
 };
 
-class RadosAppendWriter : public Writer {
+class RadosAppendWriter : public StoreWriter {
 protected:
   rgw::sal::RadosStore* store;
   std::unique_ptr<Aio> aio;
@@ -794,7 +795,7 @@ public:
 		    const std::string& unique_tag,
 		    uint64_t position,
 		    uint64_t *cur_accounted_size) :
-			Writer(dpp, y),
+			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
 			obj_ctx(&dynamic_cast<RadosObject*>(_head_obj.get())->get_ctx()),
@@ -823,7 +824,7 @@ public:
                        optional_yield y) override;
 };
 
-class RadosMultipartWriter : public Writer {
+class RadosMultipartWriter : public StoreWriter {
 protected:
   rgw::sal::RadosStore* store;
   std::unique_ptr<Aio> aio;
@@ -838,7 +839,7 @@ public:
 		       const rgw_user& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t part_num, const std::string& part_num_str) :
-			Writer(dpp, y),
+			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
 			obj_ctx(&dynamic_cast<RadosObject*>(_head_obj.get())->get_ctx()),
@@ -867,7 +868,7 @@ public:
                        optional_yield y) override;
 };
 
-class RadosLuaScriptManager : public LuaScriptManager {
+class RadosLuaScriptManager : public StoreLuaScriptManager {
   RadosStore* store;
   rgw_pool pool;
 

@@ -64,7 +64,7 @@ Associate
 * `grnet <https://grnet.gr/>`_
 * `Monash University <http://www.monash.edu/>`_
 * `NRF SARAO <http://www.ska.ac.za/about/sarao/>`_
-* `Science & Technology Facilities Councel (STFC) <https://stfc.ukri.org/>`_
+* `Science & Technology Facilities Council (STFC) <https://stfc.ukri.org/>`_
 * `University of Michigan <http://www.osris.org/>`_
 * `SWITCH <https://switch.ch/>`_
 
@@ -108,7 +108,6 @@ Members
 * Pawel Sadowski (OVH)
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
-* Sage Weil (Red Hat) - Ceph project leader
 * Xie Xingguo (ZTE)
 * Zhang Shaowen (China Mobile)
 

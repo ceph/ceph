@@ -151,7 +151,7 @@ And removed using:
    # radosgw-admin subscription rm --subscription={topic-name} [--tenant={tenant}]
 
 
-To fetch all of the events stored in a subcription, use:
+To fetch all of the events stored in a subscription, use:
 
 ::
    

@@ -3,7 +3,7 @@
 name: 'Close stale issues and PRs'
 on:
   schedule:
-    - cron: '30 1 * * *'
+    - cron: '0 * * * *'
 
 jobs:
   stale:
@@ -52,3 +52,7 @@ jobs:
           
           # Max number of operations per run
           operations-per-run: 30
+
+          # Change the order used to fetch the issues and pull requests from GitHub
+          # So we now start with the oldest PRs and work our way backwards
+          ascending: true

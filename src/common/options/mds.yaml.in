@@ -633,7 +633,7 @@ options:
   type: float
   level: advanced
   desc: hot popularity threshold to replicate a subtree
-  fmt_desc: The maximum temperature before Ceph attempts to replicate
+  fmt_desc: The minimum temperature before Ceph attempts to replicate
     metadata to other nodes.
   default: 8000
   services:

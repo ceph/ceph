@@ -9,10 +9,7 @@
 #include "rgw_obj_manifest.h"
 #include "rgw_compression_types.h"
 #include "common/dout.h"
-
-namespace rgw { namespace sal {
-  class Store;
-} }
+#include "rgw_sal_fwd.h"
 
 #define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
 #define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()

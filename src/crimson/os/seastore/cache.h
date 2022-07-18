@@ -26,7 +26,7 @@ class BtreeBackrefManager;
 namespace crimson::os::seastore {
 
 class BackrefManager;
-class SegmentCleaner;
+class AsyncCleaner;
 
 struct backref_buf_entry_t {
   backref_buf_entry_t(
@@ -68,6 +68,7 @@ struct backref_buf_entry_t {
     const backref_buf_entry_t &r) {
     return l.paddr == r.paddr;
   }
+
   using set_hook_t =
     boost::intrusive::set_member_hook<
       boost::intrusive::link_mode<
@@ -84,7 +85,7 @@ struct backref_buf_entry_t {
     backref_buf_entry_t,
     set_hook_t,
     &backref_buf_entry_t::backref_set_hook>;
-  using set_t = boost::intrusive::set<
+  using set_t = boost::intrusive::multiset<
     backref_buf_entry_t,
     backref_set_member_options,
     boost::intrusive::constant_time_size<false>>;
@@ -113,8 +114,12 @@ struct backref_buf_entry_t {
   };
 };
 
+std::ostream &operator<<(std::ostream &out, const backref_buf_entry_t &ent);
+
 using backref_buf_entry_ref =
   std::unique_ptr<backref_buf_entry_t>;
+
+using backref_set_t = backref_buf_entry_t::set_t;
 
 struct backref_buf_t {
   backref_buf_t(std::vector<backref_buf_entry_ref> &&refs) : backrefs(std::move(refs)) {
@@ -294,21 +299,24 @@ public:
   get_extent_ret<T> get_extent(
     paddr_t offset,                ///< [in] starting addr
     seastore_off_t length,          ///< [in] length
-    const src_ext_t* p_metric_key, ///< [in] cache query metric key
+    const src_ext_t* p_src_ext, ///< [in] cache query metric key
     Func &&extent_init_func,       ///< [in] init func for extent
     OnCache &&on_cache
   ) {
     LOG_PREFIX(Cache::get_extent);
-    auto cached = query_cache(offset, p_metric_key);
+    auto cached = query_cache(offset, p_src_ext);
     if (!cached) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
-      ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
+      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+                offset,
+                placement_hint_t::NUM_HINTS,
+                NULL_GENERATION);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent, add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
-      add_extent(ret);
+      const auto p_src = p_src_ext ? &p_src_ext->first : nullptr;
+      add_extent(ret, p_src);
       on_cache(*ret);
       extent_init_func(*ret);
       return read_extent<T>(
@@ -319,8 +327,10 @@ public:
     if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
-      ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
+      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+                offset,
+                placement_hint_t::NUM_HINTS,
+                NULL_GENERATION);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent(placeholder), reading ... -- {}",
           T::TYPE, offset, length, *ret);
@@ -550,27 +560,23 @@ private:
   }
 
   backref_cache_ref backref_buffer;
-  // backrefs that needs to be inserted into the backref tree
-  backref_buf_entry_t::set_t backref_inserted_set;
-  backref_buf_entry_t::set_t backref_remove_set; // backrefs needs to be removed
-						 // from the backref tree
+  backref_set_t backref_set; // in cache backrefs indexed by paddr_t
 
   using backref_buf_entry_query_set_t =
-    std::set<
+    std::multiset<
       backref_buf_entry_t,
       backref_buf_entry_t::cmp_t>;
+
   backref_buf_entry_query_set_t get_backrefs_in_range(
     paddr_t start,
     paddr_t end) {
-    auto start_iter = backref_inserted_set.lower_bound(
+    auto start_iter = backref_set.lower_bound(
       start,
       backref_buf_entry_t::cmp_t());
-    auto end_iter = backref_inserted_set.lower_bound(
+    auto end_iter = backref_set.lower_bound(
       end,
       backref_buf_entry_t::cmp_t());
-    std::set<
-      backref_buf_entry_t,
-      backref_buf_entry_t::cmp_t> res;
+    backref_buf_entry_query_set_t res;
     for (auto it = start_iter;
 	 it != end_iter;
 	 it++) {
@@ -579,47 +585,8 @@ private:
     return res;
   }
 
-  backref_buf_entry_query_set_t get_del_backrefs_in_range(
-    paddr_t start,
-    paddr_t end) {
-    LOG_PREFIX(Cache::get_del_backrefs_in_range);
-    SUBDEBUG(seastore_cache, "total {} del_backrefs", backref_remove_set.size());
-    auto start_iter = backref_remove_set.lower_bound(
-      start,
-      backref_buf_entry_t::cmp_t());
-    auto end_iter = backref_remove_set.lower_bound(
-      end,
-      backref_buf_entry_t::cmp_t());
-    std::set<
-      backref_buf_entry_t,
-      backref_buf_entry_t::cmp_t> res;
-    for (auto it = start_iter;
-	 it != end_iter;
-	 it++) {
-      res.emplace(it->paddr, it->laddr, it->len, it->type, it->seq);
-    }
-    SUBDEBUG(seastore_cache, "{} del_backrefs in range", res.size());
-    return res;
-  }
-
-  backref_buf_entry_t get_del_backref(
-    paddr_t addr) {
-    auto it = backref_remove_set.find(addr, backref_buf_entry_t::cmp_t());
-    assert(it != backref_remove_set.end());
-    return *it;
-  }
-
-  bool backref_should_be_removed(paddr_t addr) {
-    return backref_remove_set.find(
-      addr, backref_buf_entry_t::cmp_t()) != backref_remove_set.end();
-  }
-
-  const backref_buf_entry_t::set_t& get_backrefs() {
-    return backref_inserted_set;
-  }
-
-  const backref_buf_entry_t::set_t& get_del_backrefs() {
-    return backref_remove_set;
+  const backref_set_t& get_backrefs() {
+    return backref_set;
   }
 
   backref_cache_ref& get_backref_buffer() {
@@ -681,19 +648,23 @@ public:
   TCachedExtentRef<T> alloc_new_extent(
     Transaction &t,         ///< [in, out] current transaction
     seastore_off_t length,  ///< [in] length
-    placement_hint_t hint = placement_hint_t::HOT
+    placement_hint_t hint,  ///< [in] user hint
+    reclaim_gen_t gen       ///< [in] reclaim generation
   ) {
     LOG_PREFIX(Cache::alloc_new_extent);
-    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}",
-              t, T::TYPE, length, hint);
-    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint);
+    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
+              t, T::TYPE, length, hint, reclaim_gen_printer_t{gen});
+    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen);
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
-    ret->set_paddr(result.paddr);
-    ret->hint = hint;
-    ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
+    ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
+              result.paddr,
+              hint,
+              result.gen);
     t.add_fresh_extent(ret);
-    SUBDEBUGT(seastore_cache, "allocated {} {}B extent at {}, hint={} -- {}",
-              t, T::TYPE, length, result.paddr, hint, *ret);
+    SUBDEBUGT(seastore_cache,
+              "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
+              t, T::TYPE, length, result.paddr,
+              hint, reclaim_gen_printer_t{result.gen}, *ret);
     return ret;
   }
 
@@ -703,10 +674,11 @@ public:
    * Allocates a fresh extent.  addr will be relative until commit.
    */
   CachedExtentRef alloc_new_extent_by_type(
-    Transaction &t,       ///< [in, out] current transaction
-    extent_types_t type,  ///< [in] type tag
+    Transaction &t,        ///< [in, out] current transaction
+    extent_types_t type,   ///< [in] type tag
     seastore_off_t length, ///< [in] length
-    placement_hint_t hint = placement_hint_t::HOT
+    placement_hint_t hint, ///< [in] user hint
+    reclaim_gen_t gen      ///< [in] reclaim generation
     );
 
   /**
@@ -747,7 +719,7 @@ public:
     Transaction &t,            ///< [in, out] current transaction
     paddr_t final_block_start, ///< [in] offset of initial block
     journal_seq_t seq,         ///< [in] journal commit seq
-    SegmentCleaner *cleaner=nullptr ///< [out] optional segment stat listener
+    AsyncCleaner *cleaner=nullptr ///< [out] optional segment stat listener
   );
 
   /**
@@ -789,7 +761,7 @@ public:
     const delta_info_t &delta,
     const journal_seq_t &, // journal seq from which alloc
 			   // delta should be replayed
-    seastar::lowres_system_clock::time_point& last_modified);
+    sea_time_point &modify_time);
 
   /**
    * init_cached_extents
@@ -1002,6 +974,10 @@ public:
     default:
       return;
     }
+  }
+
+  uint64_t get_omap_tree_depth() {
+    return stats.omap_tree_depth;
   }
 private:
   ExtentPlacementManager& epm;
@@ -1280,7 +1256,12 @@ private:
   }
 
   /// Update lru for access to ref
-  void touch_extent(CachedExtent &ext) {
+  void touch_extent(
+      CachedExtent &ext,
+      const Transaction::src_t* p_src=nullptr)
+  {
+    if (p_src && is_cleaner_transaction(*p_src))
+      return;
     if (ext.is_clean() && !ext.is_placeholder()) {
       lru.move_to_top(ext);
     }
@@ -1291,7 +1272,7 @@ private:
     const journal_seq_t &);
 
   /// Add extent to extents handling dirty and refcounting
-  void add_extent(CachedExtentRef ref);
+  void add_extent(CachedExtentRef ref, const Transaction::src_t* t_src);
 
   /// Mark exising extent ref dirty -- mainly for replay
   void mark_dirty(CachedExtentRef ref);

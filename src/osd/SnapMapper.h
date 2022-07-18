@@ -100,6 +100,7 @@ public:
  * particular snap will group under up to 8 prefixes.
  */
 class SnapMapper {
+  friend class MapperVerifier;
 public:
   CephContext* cct;
   struct object_snaps {
@@ -173,6 +174,10 @@ public:
 
     void run();
   };
+
+  static std::string convert_legacy_key(
+    const std::string& old_key,
+    const bufferlist& value);
 
   static int convert_legacy(
     CephContext *cct,

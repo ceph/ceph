@@ -151,6 +151,15 @@ class MetadataManager(object):
                 metadata_dict[option] = self.config.get(section,option)
         return metadata_dict
 
+    def list_all_keys_with_specified_values_from_section(self, section, value):
+        keys = []
+        if self.config.has_section(section):
+            options = self.config.options(section)
+            for option in options:
+                if (value == self.config.get(section, option)) :
+                    keys.append(option)
+        return keys
+
     def section_has_item(self, section, item):
         if not self.config.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))

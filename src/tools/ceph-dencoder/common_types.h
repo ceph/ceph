@@ -366,9 +366,6 @@ MESSAGE(MOSDOpReply)
 #include "messages/MOSDPGBackfill.h"
 MESSAGE(MOSDPGBackfill)
 
-#include "messages/MOSDPGCreate.h"
-MESSAGE(MOSDPGCreate)
-
 #include "messages/MOSDPGCreate2.h"
 MESSAGE(MOSDPGCreate2)
 
@@ -407,9 +404,6 @@ MESSAGE(MOSDPing)
 
 #include "messages/MOSDRepScrub.h"
 MESSAGE(MOSDRepScrub)
-
-#include "messages/MOSDScrub.h"
-MESSAGE(MOSDScrub)
 
 #include "messages/MOSDScrub2.h"
 MESSAGE(MOSDScrub2)

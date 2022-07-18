@@ -16,7 +16,7 @@ except ImportError:
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json, TracingSpec
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
 
@@ -62,6 +62,10 @@ class ServiceType(enum.Enum):
     nfs = 'nfs'
     iscsi = 'iscsi'
     snmp_gateway = 'snmp-gateway'
+    elasticsearch = 'elasticsearch'
+    jaeger_agent = 'jaeger-agent'
+    jaeger_collector = 'jaeger-collector'
+    jaeger_query = 'jaeger-query'
 
 
 class ServiceAction(enum.Enum):
@@ -1065,6 +1069,10 @@ Usage:
 
                 if dry_run and not isinstance(spec, HostSpec):
                     spec.preview_only = dry_run
+
+                if isinstance(spec, TracingSpec) and spec.service_type == 'jaeger-tracing':
+                    specs.extend(spec.get_tracing_specs())
+                    continue
                 specs.append(spec)
         else:
             placementspec = PlacementSpec.from_string(placement)
@@ -1251,6 +1259,28 @@ Usage:
         spec.validate()  # force any validation exceptions to be caught correctly
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch apply jaeger')
+    def _apply_jaeger(self,
+                      es_nodes: Optional[str] = None,
+                      without_query: bool = False,
+                      placement: Optional[str] = None,
+                      unmanaged: bool = False,
+                      dry_run: bool = False,
+                      format: Format = Format.plain,
+                      no_overwrite: bool = False,
+                      inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Apply jaeger tracing services"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        spec = TracingSpec(service_type='jaeger-tracing',
+                           es_nodes=es_nodes,
+                           without_query=without_query,
+                           placement=PlacementSpec.from_string(placement),
+                           unmanaged=unmanaged)
+        specs: List[ServiceSpec] = spec.get_tracing_specs()
+        return self._apply_misc(specs, dry_run, format, no_overwrite)
 
     @_cli_write_command('orch set backend')
     def _set_backend(self, module_name: Optional[str] = None) -> HandleCommandResult:

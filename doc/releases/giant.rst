@@ -848,7 +848,7 @@ v0.85
 
 This is the second-to-last development release before Giant that
 contains new functionality.  The big items to land during this cycle
-are the messenger refactoring from Matt Benjmain that lays some
+are the messenger refactoring from Matt Benjamin that lays some
 groundwork for RDMA support, a performance improvement series from
 SanDisk that improves performance on SSDs, lots of improvements to our
 new standalone civetweb-based RGW frontend, and a new 'osd blocked-by'

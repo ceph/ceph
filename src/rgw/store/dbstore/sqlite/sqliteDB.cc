@@ -567,9 +567,9 @@ static int list_lc_entry(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_st
     return -1;
 
   op.lc_entry.index = (const char*)sqlite3_column_text(stmt, LCEntryIndex);
-  op.lc_entry.entry.bucket = (const char*)sqlite3_column_text(stmt, LCEntryBucketName);
-  op.lc_entry.entry.start_time = sqlite3_column_int(stmt, LCEntryStartTime);
-  op.lc_entry.entry.status = sqlite3_column_int(stmt, LCEntryStatus);
+  op.lc_entry.entry.set_bucket((const char*)sqlite3_column_text(stmt, LCEntryBucketName));
+  op.lc_entry.entry.set_start_time(sqlite3_column_int(stmt, LCEntryStartTime));
+  op.lc_entry.entry.set_status(sqlite3_column_int(stmt, LCEntryStatus));
  
   op.lc_entry.list_entries.push_back(op.lc_entry.entry);
 
@@ -581,9 +581,9 @@ static int list_lc_head(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stm
     return -1;
 
   op.lc_head.index = (const char*)sqlite3_column_text(stmt, LCHeadIndex);
-  op.lc_head.head.marker = (const char*)sqlite3_column_text(stmt, LCHeadMarker);
+  op.lc_head.head.set_marker((const char*)sqlite3_column_text(stmt, LCHeadMarker));
  
-  SQL_DECODE_BLOB_PARAM(dpp, stmt, LCHeadStartDate, op.lc_head.head.start_date, sdb);
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, LCHeadStartDate, op.lc_head.head.get_start_date(), sdb);
 
   return 0;
 }
@@ -591,42 +591,21 @@ static int list_lc_head(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stm
 int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
 {
   (void)createTables(dpp);
-  dbops.InsertUser = new SQLInsertUser(&this->db, this->getDBname(), cct);
-  dbops.RemoveUser = new SQLRemoveUser(&this->db, this->getDBname(), cct);
-  dbops.GetUser = new SQLGetUser(&this->db, this->getDBname(), cct);
-  dbops.InsertBucket = new SQLInsertBucket(&this->db, this->getDBname(), cct);
-  dbops.UpdateBucket = new SQLUpdateBucket(&this->db, this->getDBname(), cct);
-  dbops.RemoveBucket = new SQLRemoveBucket(&this->db, this->getDBname(), cct);
-  dbops.GetBucket = new SQLGetBucket(&this->db, this->getDBname(), cct);
-  dbops.ListUserBuckets = new SQLListUserBuckets(&this->db, this->getDBname(), cct);
-  dbops.InsertLCEntry = new SQLInsertLCEntry(&this->db, this->getDBname(), cct);
-  dbops.RemoveLCEntry = new SQLRemoveLCEntry(&this->db, this->getDBname(), cct);
-  dbops.GetLCEntry = new SQLGetLCEntry(&this->db, this->getDBname(), cct);
-  dbops.ListLCEntries = new SQLListLCEntries(&this->db, this->getDBname(), cct);
-  dbops.InsertLCHead = new SQLInsertLCHead(&this->db, this->getDBname(), cct);
-  dbops.RemoveLCHead = new SQLRemoveLCHead(&this->db, this->getDBname(), cct);
-  dbops.GetLCHead = new SQLGetLCHead(&this->db, this->getDBname(), cct);
-
-  return 0;
-}
-
-int SQLiteDB::FreeDBOps(const DoutPrefixProvider *dpp)
-{
-  delete dbops.InsertUser;
-  delete dbops.RemoveUser;
-  delete dbops.GetUser;
-  delete dbops.InsertBucket;
-  delete dbops.UpdateBucket;
-  delete dbops.RemoveBucket;
-  delete dbops.GetBucket;
-  delete dbops.ListUserBuckets;
-  delete dbops.InsertLCEntry;
-  delete dbops.RemoveLCEntry;
-  delete dbops.GetLCEntry;
-  delete dbops.ListLCEntries;
-  delete dbops.InsertLCHead;
-  delete dbops.RemoveLCHead;
-  delete dbops.GetLCHead;
+  dbops.InsertUser = make_shared<SQLInsertUser>(&this->db, this->getDBname(), cct);
+  dbops.RemoveUser = make_shared<SQLRemoveUser>(&this->db, this->getDBname(), cct);
+  dbops.GetUser = make_shared<SQLGetUser>(&this->db, this->getDBname(), cct);
+  dbops.InsertBucket = make_shared<SQLInsertBucket>(&this->db, this->getDBname(), cct);
+  dbops.UpdateBucket = make_shared<SQLUpdateBucket>(&this->db, this->getDBname(), cct);
+  dbops.RemoveBucket = make_shared<SQLRemoveBucket>(&this->db, this->getDBname(), cct);
+  dbops.GetBucket = make_shared<SQLGetBucket>(&this->db, this->getDBname(), cct);
+  dbops.ListUserBuckets = make_shared<SQLListUserBuckets>(&this->db, this->getDBname(), cct);
+  dbops.InsertLCEntry = make_shared<SQLInsertLCEntry>(&this->db, this->getDBname(), cct);
+  dbops.RemoveLCEntry = make_shared<SQLRemoveLCEntry>(&this->db, this->getDBname(), cct);
+  dbops.GetLCEntry = make_shared<SQLGetLCEntry>(&this->db, this->getDBname(), cct);
+  dbops.ListLCEntries = make_shared<SQLListLCEntries>(&this->db, this->getDBname(), cct);
+  dbops.InsertLCHead = make_shared<SQLInsertLCHead>(&this->db, this->getDBname(), cct);
+  dbops.RemoveLCHead = make_shared<SQLRemoveLCHead>(&this->db, this->getDBname(), cct);
+  dbops.GetLCHead = make_shared<SQLGetLCHead>(&this->db, this->getDBname(), cct);
 
   return 0;
 }
@@ -1062,31 +1041,16 @@ int SQLiteDB::ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params)
 
 int SQLObjectOp::InitializeObjectOps(string db_name, const DoutPrefixProvider *dpp)
 {
-  PutObject = new SQLPutObject(sdb, db_name, cct);
-  DeleteObject = new SQLDeleteObject(sdb, db_name, cct);
-  GetObject = new SQLGetObject(sdb, db_name, cct);
-  UpdateObject = new SQLUpdateObject(sdb, db_name, cct);
-  ListBucketObjects = new SQLListBucketObjects(sdb, db_name, cct);
-  PutObjectData = new SQLPutObjectData(sdb, db_name, cct);
-  UpdateObjectData = new SQLUpdateObjectData(sdb, db_name, cct);
-  GetObjectData = new SQLGetObjectData(sdb, db_name, cct);
-  DeleteObjectData = new SQLDeleteObjectData(sdb, db_name, cct);
-  DeleteStaleObjectData = new SQLDeleteStaleObjectData(sdb, db_name, cct);
-
-  return 0;
-}
-
-int SQLObjectOp::FreeObjectOps(const DoutPrefixProvider *dpp)
-{
-  delete PutObject;
-  delete DeleteObject;
-  delete GetObject;
-  delete UpdateObject;
-  delete PutObjectData;
-  delete UpdateObjectData;
-  delete GetObjectData;
-  delete DeleteObjectData;
-  delete DeleteStaleObjectData;
+  PutObject = make_shared<SQLPutObject>(sdb, db_name, cct);
+  DeleteObject = make_shared<SQLDeleteObject>(sdb, db_name, cct);
+  GetObject = make_shared<SQLGetObject>(sdb, db_name, cct);
+  UpdateObject = make_shared<SQLUpdateObject>(sdb, db_name, cct);
+  ListBucketObjects = make_shared<SQLListBucketObjects>(sdb, db_name, cct);
+  PutObjectData = make_shared<SQLPutObjectData>(sdb, db_name, cct);
+  UpdateObjectData = make_shared<SQLUpdateObjectData>(sdb, db_name, cct);
+  GetObjectData = make_shared<SQLGetObjectData>(sdb, db_name, cct);
+  DeleteObjectData = make_shared<SQLDeleteObjectData>(sdb, db_name, cct);
+  DeleteStaleObjectData = make_shared<SQLDeleteStaleObjectData>(sdb, db_name, cct);
 
   return 0;
 }
@@ -2636,13 +2600,13 @@ int SQLInsertLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.get_bucket().c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.status, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.status, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.get_status(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.start_time, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.start_time, sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.get_start_time(), sdb);
 
 out:
   return rc;
@@ -2685,7 +2649,7 @@ int SQLRemoveLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.get_bucket().c_str(), sdb);
 
 out:
   return rc;
@@ -2740,7 +2704,7 @@ int SQLGetLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.index.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.bucket_name, sdb);
-  SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.entry.get_bucket().c_str(), sdb);
 
 out:
   return rc;
@@ -2836,10 +2800,10 @@ int SQLInsertLCHead::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.index.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.marker, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.head.marker.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.head.get_marker().c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.start_date, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.lc_head.head.start_date, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.lc_head.head.get_start_date(), sdb);
 
 out:
   return rc;

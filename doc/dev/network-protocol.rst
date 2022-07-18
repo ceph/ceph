@@ -141,7 +141,7 @@ CEPH_MSGR_TAG_MSG (0x07)
 		u32le front_crc;  // Checksums of the various sections.
 		u32le middle_crc; //
 		u32le data_crc;   //
-		u64le sig; // Crypographic signature.
+		u64le sig; // Cryptographic signature.
 		u8    flags;
 	}
 

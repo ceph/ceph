@@ -1,9 +1,0 @@
-overrides:
-  ceph:
-    cephfs:
-      max_mds: 5
-  check-counter:
-    counters:
-      mds:
-        - mds.exported
-        - mds.imported

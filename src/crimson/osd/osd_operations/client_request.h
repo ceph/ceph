@@ -28,7 +28,9 @@ class ShardServices;
 class ClientRequest final : public PhasedOperationT<ClientRequest>,
                             private CommonClientRequest {
   OSD &osd;
-  crimson::net::ConnectionRef conn;
+  const crimson::net::ConnectionRef conn;
+  // must be after conn due to ConnectionPipeline's life-time
+  PipelineHandle handle;
   Ref<MOSDOp> m;
   OpInfo op_info;
   seastar::promise<> on_complete;

@@ -82,8 +82,6 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
   closeDB(dpp);
 
 
-  FreeDBOps(dpp);
-
   ldpp_dout(dpp, 20)<<"DB successfully destroyed - name:" \
     <<db_name << dendl;
 
@@ -91,7 +89,7 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
 }
 
 
-DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
+std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
                   const DBOpParams *params)
 {
   if (!Op.compare("InsertUser"))
@@ -138,7 +136,7 @@ DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
     ldpp_dout(dpp, 30)<<"No objectmap found for bucket: " \
       <<params->op.bucket.info.bucket.name << dendl;
     /* not found */
-    return NULL;
+    return nullptr;
   }
 
   Ob = iter->second;
@@ -164,7 +162,7 @@ DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
   if (!Op.compare("DeleteStaleObjectData"))
     return Ob->DeleteStaleObjectData;
 
-  return NULL;
+  return nullptr;
 }
 
 int DB::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, class ObjectOp* ptr)
@@ -198,7 +196,6 @@ int DB::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, class Obje
 int DB::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
 {
   map<string, class ObjectOp*>::iterator iter;
-  class ObjectOp *Ob;
 
   const std::lock_guard<std::mutex> lk(mtx);
   iter = DB::objectmap.find(bucket);
@@ -211,9 +208,6 @@ int DB::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
       <<"doesnt exist to delete " << dendl;
     return 0;
   }
-
-  Ob = (class ObjectOp*) (iter->second);
-  Ob->FreeObjectOps(dpp);
 
   DB::objectmap.erase(iter);
 
@@ -243,7 +237,7 @@ out:
 
 int DB::ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params) {
   int ret = -1;
-  class DBOp *db_op;
+  shared_ptr<class DBOp> db_op;
 
   db_op = getDBOp(dpp, Op, params);
 
@@ -1139,6 +1133,60 @@ out:
   return ret;
 }
 
+int DB::Object::transition(const DoutPrefixProvider *dpp,
+                           const rgw_placement_rule& rule,
+                           const real_time& mtime,
+                           uint64_t olh_epoch)
+{
+  int ret = 0;
+
+  DBOpParams params = {};
+  map<string, bufferlist> *attrset;
+
+  store->InitializeParams(dpp, &params);
+  InitializeParamsfromObject(dpp, &params);
+
+  ret = store->ProcessOp(dpp, "GetObject", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0) <<"In GetObject failed err:(" <<ret<<")" << dendl;
+    goto out;
+  }
+
+  /* pick one field check if object exists */
+  if (!params.op.obj.state.exists) {
+    ldpp_dout(dpp, 0)<<"Object(bucket:" << bucket_info.bucket.name << ", Object:"<< obj.key.name << ") doesn't exist" << dendl;
+    return -1;
+  }
+
+  params.op.query_str = "meta";
+  params.op.obj.state.mtime = real_clock::now();
+  params.op.obj.storage_class = rule.storage_class;
+  attrset = &params.op.obj.state.attrset;
+  if (!rule.storage_class.empty()) {
+    bufferlist bl;
+    bl.append(rule.storage_class);
+    (*attrset)[RGW_ATTR_STORAGE_CLASS] = bl;
+  }
+  params.op.obj.versioned_epoch = olh_epoch; // XXX: not sure if needed
+
+  /* Unlike Rados, in dbstore for now, both head and tail objects
+   * refer to same storage class
+   */
+  params.op.obj.head_placement_rule = rule;
+  params.op.obj.tail_placement.placement_rule = rule;
+
+  ret = store->ProcessOp(dpp, "UpdateObject", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In UpdateObject failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+out:
+  return ret;
+}
+
 int DB::raw_obj::read(const DoutPrefixProvider *dpp, int64_t ofs,
                       uint64_t len, bufferlist& bl)
 {
@@ -1841,7 +1889,7 @@ int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {
 }
 
 int DB::get_entry(const std::string& oid, const std::string& marker,
-			      rgw::sal::Lifecycle::LCEntry& entry)
+			      std::unique_ptr<rgw::sal::Lifecycle::LCEntry>* entry)
 {
   int ret = 0;
   const DoutPrefixProvider *dpp = get_def_dpp();
@@ -1850,7 +1898,7 @@ int DB::get_entry(const std::string& oid, const std::string& marker,
   InitializeParams(dpp, &params);
 
   params.op.lc_entry.index = oid;
-  params.op.lc_entry.entry.bucket = marker;
+  params.op.lc_entry.entry.set_bucket(marker);
 
   params.op.query_str = "get_entry";
   ret = ProcessOp(dpp, "GetLCEntry", &params);
@@ -1860,16 +1908,22 @@ int DB::get_entry(const std::string& oid, const std::string& marker,
     goto out;
   }
 
-  if (!params.op.lc_entry.entry.start_time == 0) { //ensure entry found
-    entry = params.op.lc_entry.entry;
+  if (!params.op.lc_entry.entry.get_start_time() == 0) { //ensure entry found
+    rgw::sal::Lifecycle::LCEntry* e;
+    e = new rgw::sal::StoreLifecycle::StoreLCEntry(params.op.lc_entry.entry);
+    if (!e) {
+      ret = -ENOMEM;
+      goto out;
+    }
+    entry->reset(e);
   }
 
 out:
   return ret;
 }
 
-int DB::get_next_entry(const std::string& oid, std::string& marker,
-				   rgw::sal::Lifecycle::LCEntry& entry)
+int DB::get_next_entry(const std::string& oid, const std::string& marker,
+			      std::unique_ptr<rgw::sal::Lifecycle::LCEntry>* entry)
 {
   int ret = 0;
   const DoutPrefixProvider *dpp = get_def_dpp();
@@ -1878,7 +1932,7 @@ int DB::get_next_entry(const std::string& oid, std::string& marker,
   InitializeParams(dpp, &params);
 
   params.op.lc_entry.index = oid;
-  params.op.lc_entry.entry.bucket = marker;
+  params.op.lc_entry.entry.set_bucket(marker);
 
   params.op.query_str = "get_next_entry";
   ret = ProcessOp(dpp, "GetLCEntry", &params);
@@ -1888,15 +1942,21 @@ int DB::get_next_entry(const std::string& oid, std::string& marker,
     goto out;
   }
 
-  if (!params.op.lc_entry.entry.start_time == 0) { //ensure entry found
-    entry = params.op.lc_entry.entry;
+  if (!params.op.lc_entry.entry.get_start_time() == 0) { //ensure entry found
+    rgw::sal::Lifecycle::LCEntry* e;
+    e = new rgw::sal::StoreLifecycle::StoreLCEntry(params.op.lc_entry.entry);
+    if (!e) {
+      ret = -ENOMEM;
+      goto out;
+    }
+    entry->reset(e);
   }
 
 out:
   return ret;
 }
 
-int DB::set_entry(const std::string& oid, const rgw::sal::Lifecycle::LCEntry& entry)
+int DB::set_entry(const std::string& oid, rgw::sal::Lifecycle::LCEntry& entry)
 {
   int ret = 0;
   const DoutPrefixProvider *dpp = get_def_dpp();
@@ -1919,7 +1979,7 @@ out:
 }
 
 int DB::list_entries(const std::string& oid, const std::string& marker,
-  				 uint32_t max_entries, vector<rgw::sal::Lifecycle::LCEntry>& entries)
+  				 uint32_t max_entries, std::vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>& entries)
 {
   int ret = 0;
   const DoutPrefixProvider *dpp = get_def_dpp();
@@ -1941,14 +2001,14 @@ int DB::list_entries(const std::string& oid, const std::string& marker,
   }
 
   for (auto& entry : params.op.lc_entry.list_entries) {
-    entries.push_back(std::move(entry));
+    entries.push_back(std::make_unique<rgw::sal::StoreLifecycle::StoreLCEntry>(std::move(entry)));
   }
 
 out:
   return ret;
 }
 
-int DB::rm_entry(const std::string& oid, const rgw::sal::Lifecycle::LCEntry& entry)
+int DB::rm_entry(const std::string& oid, rgw::sal::Lifecycle::LCEntry& entry)
 {
   int ret = 0;
   const DoutPrefixProvider *dpp = get_def_dpp();
@@ -1970,7 +2030,7 @@ out:
   return ret;
 }
 
-int DB::get_head(const std::string& oid, rgw::sal::Lifecycle::LCHead& head)
+int DB::get_head(const std::string& oid, std::unique_ptr<rgw::sal::Lifecycle::LCHead>* head)
 {
   int ret = 0;
   const DoutPrefixProvider *dpp = get_def_dpp();
@@ -1987,13 +2047,13 @@ int DB::get_head(const std::string& oid, rgw::sal::Lifecycle::LCHead& head)
     goto out;
   }
 
-  head = params.op.lc_head.head;
+  *head = std::make_unique<rgw::sal::StoreLifecycle::StoreLCHead>(params.op.lc_head.head);
 
 out:
   return ret;
 }
 
-int DB::put_head(const std::string& oid, const rgw::sal::Lifecycle::LCHead& head)
+int DB::put_head(const std::string& oid, rgw::sal::Lifecycle::LCHead& head)
 {
   int ret = 0;
   const DoutPrefixProvider *dpp = get_def_dpp();

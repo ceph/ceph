@@ -143,7 +143,7 @@ signature::
         std::cout << "oops, the optimistic path generates a new error!";
         return crimson::ct_error::input_output_error::make();
       },
-      // we have a special handler to delegate the handling up. For conveience,
+      // we have a special handler to delegate the handling up. For convenience,
       // the same behaviour is available as single argument-taking variant of
       // `safe_then()`.
       ertr::pass_further{});

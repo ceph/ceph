@@ -667,7 +667,7 @@ improves the readability of the document in a command line interface.
 
 
 .. _Python Sphinx: http://sphinx-doc.org
-.. _resturcturedText: http://docutils.sourceforge.net/rst.html
+.. _restructuredText: http://docutils.sourceforge.net/rst.html
 .. _Fork and Pull: https://help.github.com/articles/using-pull-requests
 .. _github: http://github.com
 .. _ditaa: http://ditaa.sourceforge.net/

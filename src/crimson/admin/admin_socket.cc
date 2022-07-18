@@ -88,6 +88,10 @@ auto AdminSocket::parse_cmd(const std::vector<std::string>& cmd)
   try {
     cmd_getval(cmdmap, "format", format);
     cmd_getval(cmdmap, "prefix", prefix);
+    // tolerate old-style pg <pgid> command <args> style formatting
+    if (prefix == "pg") {
+      cmd_getval(cmdmap, "cmd", prefix);
+    }
   } catch (const bad_cmd_get& e) {
     logger().error("{}: invalid syntax: {}", __func__, cmd);
     out.append(string{e.what()});

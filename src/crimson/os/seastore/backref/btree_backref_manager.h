@@ -104,15 +104,7 @@ public:
   get_cached_backrefs_in_range(
     paddr_t start,
     paddr_t end) final;
-
-  Cache::backref_buf_entry_query_set_t
-  get_cached_backref_removals_in_range(
-    paddr_t start,
-    paddr_t end) final;
-
-  const backref_buf_entry_t::set_t& get_cached_backref_removals() final;
-  const backref_buf_entry_t::set_t& get_cached_backrefs() final;
-  backref_buf_entry_t get_cached_backref_removal(paddr_t addr) final;
+  const backref_set_t& get_cached_backrefs() final;
 
   Cache::backref_extent_buf_entry_query_set_t
   get_cached_backref_extents_in_range(
@@ -125,8 +117,6 @@ public:
     std::vector<CachedExtentRef> &extents) final;
 
   void cache_new_backref_extent(paddr_t paddr, extent_types_t type) final;
-
-  bool backref_should_be_removed(paddr_t paddr) final;
 
 private:
   SegmentManagerGroup &sm_group;
