@@ -376,6 +376,7 @@ Requires:	systemd
 BuildRequires:  boost-random
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
+BuildRequires:  libatomic
 BuildRequires:	libibverbs-devel
 BuildRequires:  librdmacm-devel
 BuildRequires:  ninja-build
