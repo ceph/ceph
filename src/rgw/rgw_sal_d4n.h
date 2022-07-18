@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "rgw_sal_filter.h"
 #include "rgw_sal.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_role.h"
@@ -23,20 +24,22 @@
 
 namespace rgw { namespace sal {
 
-class D4NFilterCompletions : public Completions {
+class D4NFilterCompletions : public FilterCompletions {
   std::unique_ptr<Completions> next;
 
   public:
-  D4NFilterCompletions(std::unique_ptr<Completions> _next) : next(std::move(_next)) {}
+  D4NFilterCompletions(std::unique_ptr<Completions> _next) : FilterCompletions(std::move(_next)),
+							     next(std::move(_next)) {}
   virtual ~D4NFilterCompletions() = default;
   virtual int drain() override { return next->drain(); }
 };
 
-class D4NFilterPlacementTier : public PlacementTier {
+class D4NFilterPlacementTier : public FilterPlacementTier {
   std::unique_ptr<PlacementTier> next;
 
 public:
-  D4NFilterPlacementTier(std::unique_ptr<PlacementTier> _next) : next(std::move(_next)) {}
+  D4NFilterPlacementTier(std::unique_ptr<PlacementTier> _next) : FilterPlacementTier(std::move(_next)),
+								 next(std::move(_next)) {}
   virtual ~D4NFilterPlacementTier() = default;
 
   virtual const std::string& get_tier_type() override { return next->get_tier_type(); }
@@ -44,11 +47,12 @@ public:
   virtual bool retain_head_object() override { return next->retain_head_object(); }
 };
 
-class D4NFilterZoneGroup : public ZoneGroup {
+class D4NFilterZoneGroup : public FilterZoneGroup {
   std::unique_ptr<ZoneGroup> next;
 
 public:
-  D4NFilterZoneGroup(std::unique_ptr<ZoneGroup> _next) : next(std::move(_next)) {}
+  D4NFilterZoneGroup(std::unique_ptr<ZoneGroup> _next) : FilterZoneGroup(std::move(_next)),
+							 next(std::move(_next)) {}
   virtual ~D4NFilterZoneGroup() = default;
   virtual const std::string& get_id() const override
     { return next->get_id(); }
@@ -81,12 +85,13 @@ public:
   }
 };
 
-class D4NFilterZone : public Zone {
+class D4NFilterZone : public FilterZone {
   std::unique_ptr<Zone> next;
   std::unique_ptr<ZoneGroup> group;
 
   public:
-  D4NFilterZone(std::unique_ptr<Zone> _next) : next(std::move(_next))
+  D4NFilterZone(std::unique_ptr<Zone> _next) : FilterZone(std::move(_next)),
+					       next(std::move(_next))
   {
     group = std::make_unique<D4NFilterZoneGroup>(next->get_zonegroup().clone());
   }
@@ -129,7 +134,7 @@ class D4NFilterZone : public Zone {
   }
 };
 
-class D4NFilterStore : public Store {
+class D4NFilterStore : public FilterStore {
   Store* next;
   std::unique_ptr<D4NFilterZone> zone;
 
@@ -137,7 +142,8 @@ class D4NFilterStore : public Store {
     RGWBlockDirectory* blk_dir; // Change to private later -Sam
     cache_block* c_blk;
 
-    D4NFilterStore(Store* _next) : next(_next) {}
+    D4NFilterStore(Store* _next) : FilterStore(_next),
+				   next(_next) {}
     // virtual ~D4NFilterStore() = default; // Should this be removed? -Sam
     ~D4NFilterStore() {
       delete next;
@@ -266,12 +272,14 @@ class D4NFilterStore : public Store {
     virtual void set_luarocks_path(const std::string& path) override;
 };
 
-class D4NFilterUser : public User {
+class D4NFilterUser : public FilterUser {
   std::unique_ptr<User> next;
 
   public:
-    D4NFilterUser(std::unique_ptr<User> _next) : next(std::move(_next)) {}
-    D4NFilterUser(D4NFilterUser& u) : next(u.next->clone()) {};
+    D4NFilterUser(std::unique_ptr<User> _next) : FilterUser(std::move(_next)),
+					         next(std::move(_next)) {}
+    D4NFilterUser(D4NFilterUser& u) : FilterUser(u.next->clone()),
+				      next(u.next->clone()) {};
     virtual ~D4NFilterUser() = default;
 
     virtual std::unique_ptr<User> clone() override {
@@ -339,14 +347,14 @@ class D4NFilterUser : public User {
     User* get_next() { return next.get(); }
 };
 
-class D4NFilterBucket : public Bucket {
+class D4NFilterBucket : public FilterBucket {
   std::unique_ptr<Bucket> next;
   User* user;
 
   public:
 
-    D4NFilterBucket(std::unique_ptr<Bucket> _next, User* _user) :
-      next(std::move(_next)), user(_user) {}
+    D4NFilterBucket(std::unique_ptr<Bucket> _next, User* _user) : FilterBucket(std::move(_next), _user),
+								  next(std::move(_next)), user(_user) {}
     virtual ~D4NFilterBucket() = default;
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
@@ -458,7 +466,7 @@ class D4NFilterBucket : public Bucket {
     Bucket* get_next() { return next.get(); }
 };
 
-class D4NFilterObject : public Object {
+class D4NFilterObject : public FilterObject {
   std::unique_ptr<Object> next;
   Bucket* bucket{nullptr};
   D4NFilterStore* trace;
@@ -469,6 +477,7 @@ class D4NFilterObject : public Object {
       std::unique_ptr<ReadOp> next;
       D4NFilterObject* source;
 
+      D4NFilterReadOp(std::unique_ptr<ReadOp> _next) : next(std::move(_next)) {}
       D4NFilterReadOp(std::unique_ptr<ReadOp> _next, D4NFilterObject* _source) : next(std::move(_next)),
 										 source(_source) {}
       virtual ~D4NFilterReadOp() = default;
@@ -493,10 +502,11 @@ class D4NFilterObject : public Object {
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
     };
 
-    D4NFilterObject(std::unique_ptr<Object> _next) : next(std::move(_next)) {}
-    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket) :
-			next(std::move(_next)), bucket(_bucket) {}
-    D4NFilterObject(D4NFilterObject& _o) {
+    D4NFilterObject(std::unique_ptr<Object> _next) : FilterObject(std::move(_next)), 
+						     next(std::move(_next)) {}
+    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket) : FilterObject(std::move(_next)),
+								      next(std::move(_next)), bucket(_bucket) {}
+    D4NFilterObject(D4NFilterObject& _o) : FilterObject(_o.next->clone()) { // Double check -Sam
       next = _o.next->clone();
       bucket = _o.bucket;
     }
@@ -616,11 +626,12 @@ class D4NFilterObject : public Object {
     Object* get_next() { return next.get(); }
 };
 
-class D4NFilterMultipartPart : public MultipartPart {
+class D4NFilterMultipartPart : public FilterMultipartPart {
   std::unique_ptr<MultipartPart> next;
 
 public:
-  D4NFilterMultipartPart(std::unique_ptr<MultipartPart> _next) : next(std::move(_next)) {}
+  D4NFilterMultipartPart(std::unique_ptr<MultipartPart> _next) : FilterMultipartPart(std::move(_next)), 
+								 next(std::move(_next)) {}
   virtual ~D4NFilterMultipartPart() = default;
 
   virtual uint32_t get_num() override { return next->get_num(); }
@@ -629,14 +640,14 @@ public:
   virtual ceph::real_time& get_mtime() override { return next->get_mtime(); }
 };
 
-class D4NFilterMultipartUpload : public MultipartUpload {
+class D4NFilterMultipartUpload : public FilterMultipartUpload {
   std::unique_ptr<MultipartUpload> next;
   Bucket* bucket;
   std::map<uint32_t, std::unique_ptr<MultipartPart>> parts;
 
 public:
-  D4NFilterMultipartUpload(std::unique_ptr<MultipartUpload> _next, Bucket* _b) :
-    next(std::move(_next)), bucket(_b) {}
+  D4NFilterMultipartUpload(std::unique_ptr<MultipartUpload> _next, Bucket* _b) : FilterMultipartUpload(std::move(_next), _b),
+										 next(std::move(_next)), bucket(_b) {}
   virtual ~D4NFilterMultipartUpload() = default;
 
   virtual const std::string& get_meta() const override { return next->get_meta(); }
@@ -681,11 +692,12 @@ public:
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
 
-class D4NFilterMPSerializer : public MPSerializer {
+class D4NFilterMPSerializer : public FilterMPSerializer {
   std::unique_ptr<MPSerializer> next;
 
 public:
-  D4NFilterMPSerializer(std::unique_ptr<MPSerializer> _next) : next(std::move(_next)) {}
+  D4NFilterMPSerializer(std::unique_ptr<MPSerializer> _next) : FilterMPSerializer(std::move(_next)), 
+							       next(std::move(_next)) {}
   virtual ~D4NFilterMPSerializer() = default;
 
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
@@ -695,11 +707,12 @@ public:
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
 
-class D4NFilterLCSerializer : public LCSerializer {
+class D4NFilterLCSerializer : public FilterLCSerializer {
   std::unique_ptr<LCSerializer> next;
 
 public:
-  D4NFilterLCSerializer(std::unique_ptr<LCSerializer> _next) : next(std::move(_next)) {}
+  D4NFilterLCSerializer(std::unique_ptr<LCSerializer> _next) : FilterLCSerializer(std::move(_next)),
+							       next(std::move(_next)) {}
   virtual ~D4NFilterLCSerializer() = default;
 
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
@@ -707,7 +720,7 @@ public:
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
 
-class D4NFilterLifecycle : public Lifecycle {
+class D4NFilterLifecycle : public FilterLifecycle {
   std::unique_ptr<Lifecycle> next;
 
 public:
@@ -742,7 +755,8 @@ public:
     virtual void print(std::ostream& out) const override { return next->print(out); }
   };
 
-  D4NFilterLifecycle(std::unique_ptr<Lifecycle> _next) : next(std::move(_next)) {}
+  D4NFilterLifecycle(std::unique_ptr<Lifecycle> _next) : FilterLifecycle(std::move(_next)), 
+							 next(std::move(_next)) {}
   virtual ~D4NFilterLifecycle() = default;
 
   virtual std::unique_ptr<LCEntry> get_entry() override;
@@ -762,11 +776,12 @@ public:
 						       const std::string& cookie) override;
 };
 
-class D4NFilterNotification : public Notification {
+class D4NFilterNotification : public FilterNotification {
   std::unique_ptr<Notification> next;
 
   public:
-    D4NFilterNotification(std::unique_ptr<Notification> _next) : next(std::move(_next)) {}
+    D4NFilterNotification(std::unique_ptr<Notification> _next) : FilterNotification(std::move(_next)), 
+								 next(std::move(_next)) {}
 
     virtual ~D4NFilterNotification() = default;
 
@@ -775,14 +790,16 @@ class D4NFilterNotification : public Notification {
 			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
 };
 
-class D4NFilterWriter : public Writer {
+class D4NFilterWriter : public FilterWriter {
   std::unique_ptr<Writer> next;
   D4NFilterStore* trace; // Change name to something different? -Sam
   rgw::sal::Object* head_obj;
 public:
-  D4NFilterWriter(std::unique_ptr<Writer> _next) : next(std::move(_next)) {} 
+  D4NFilterWriter(std::unique_ptr<Writer> _next) : FilterWriter(std::move(_next)), 
+						   next(std::move(_next)) {} 
   D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _trace, std::unique_ptr<rgw::sal::Object> _head_obj) 
-  : next(std::move(_next)), 
+  : FilterWriter(std::move(_next)),
+  next(std::move(_next)), 
   trace(_trace),
   head_obj(_head_obj.get()) {}
   virtual ~D4NFilterWriter() = default;
@@ -799,11 +816,12 @@ public:
                        optional_yield y) override;
 };
 
-class D4NFilterLuaScriptManager : public LuaScriptManager {
+class D4NFilterLuaScriptManager : public FilterLuaScriptManager {
   std::unique_ptr<LuaScriptManager> next;
 
 public:
-  D4NFilterLuaScriptManager(std::unique_ptr<LuaScriptManager> _next) : next(std::move(_next)) {}
+  D4NFilterLuaScriptManager(std::unique_ptr<LuaScriptManager> _next) : FilterLuaScriptManager(std::move(_next)), 
+								       next(std::move(_next)) {}
   virtual ~D4NFilterLuaScriptManager() = default;
 
   virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
