@@ -27,6 +27,7 @@ struct tagged_ptr {
   std::size_t tag;
 };
 
+void atomic16(std::atomic<tagged_ptr> *ptr) __attribute__ ((used));
 void atomic16(std::atomic<tagged_ptr> *ptr)
 {
   tagged_ptr p{nullptr, 1};

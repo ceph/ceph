@@ -324,7 +324,6 @@ BuildRequires:  systemtap-sdt-devel
 %if 0%{?fedora}
 BuildRequires:  libubsan
 BuildRequires:  libasan
-BuildRequires:  libatomic
 %endif
 %if 0%{?rhel}
 BuildRequires:  gcc-toolset-11-annobin-plugin-gcc
@@ -366,6 +365,7 @@ Requires:	systemd
 BuildRequires:  boost-random
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
+BuildRequires:  libatomic
 BuildRequires:	libibverbs-devel
 BuildRequires:  librdmacm-devel
 BuildRequires:  ninja-build
