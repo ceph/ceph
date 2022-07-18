@@ -3,7 +3,7 @@
 import logging
 import os
 from functools import total_ordering
-from ceph_volume import sys_info, process
+from ceph_volume import sys_info
 from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
@@ -219,11 +219,7 @@ class Device(object):
                 valid_types.append('loop')
             if device_type in valid_types:
                 self._set_lvm_membership()
-            out, err, rc = process.call([
-                'ceph-bluestore-tool', 'show-label',
-                '--dev', self.path], verbose_on_failure=False)
-            if rc:
-                self.ceph_device = True
+            self.ceph_device = disk.has_bluestore_label(self.path)
 
         self.ceph_disk = CephDiskDevice(self)
 
