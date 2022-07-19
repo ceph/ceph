@@ -21,6 +21,7 @@
 #include "rgw_role.h"
 #include "rgw_directory.h"
 #include "common/dout.h" 
+#include "rgw_sal_d4n.h"
 
 namespace rgw { namespace sal {
 
@@ -143,7 +144,11 @@ class D4NFilterStore : public FilterStore {
     cache_block* c_blk;
 
     D4NFilterStore(Store* _next) : FilterStore(_next),
-				   next(_next) {}
+				   next(_next) 
+    {
+      blk_dir = new RGWBlockDirectory("127.0.0.1", 6379); // Change so it's not hardcoded -Sam
+      c_blk = new cache_block();
+    }
     // virtual ~D4NFilterStore() = default; // Should this be removed? -Sam
     ~D4NFilterStore() {
       delete next;
@@ -152,13 +157,6 @@ class D4NFilterStore : public FilterStore {
     }
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
-    void initialize(Store* inputStore)
-    {
-        blk_dir = new RGWBlockDirectory("127.0.0.1", 6379); // Change so it's not hardcoded -Sam
-        c_blk = new cache_block();
-
-        this->next = inputStore;
-    }
     virtual const std::string get_name() const override;
     virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) override;
     virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
