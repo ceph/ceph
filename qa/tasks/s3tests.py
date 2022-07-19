@@ -119,6 +119,8 @@ def create_users(ctx, config):
                     'user', 'create',
                     '--uid', s3tests_conf[section]['user_id'],
                     '--display-name', s3tests_conf[section]['display_name'],
+                    '--email', s3tests_conf[section]['email'],
+                    '--caps', 'user-policy=*',
                     '--access-key', s3tests_conf[section]['access_key'],
                     '--secret', s3tests_conf[section]['secret_key'],
                     '--cluster', cluster_name,
@@ -146,19 +148,6 @@ def create_users(ctx, config):
 
             # add/configure caps for iam user
             if section=='iam':
-                ctx.cluster.only(client).run(
-                    args=[
-                        'adjust-ulimits',
-                        'ceph-coverage',
-                        '{tdir}/archive/coverage'.format(tdir=testdir),
-                        'radosgw-admin',
-                        '-n', client_with_id,
-                        'caps', 'add',
-                        '--uid', s3tests_conf[section]['user_id'],
-                        '--caps', 'user-policy=*',
-                        '--cluster', cluster_name,
-                    ],
-                )
                 ctx.cluster.only(client).run(
                     args=[
                         'adjust-ulimits',
@@ -626,6 +615,7 @@ def task(ctx, config):
                         's3 alt'     : {},
                         's3 tenant'  : {},
                         's3 cloud'   : {},
+                        'iam'        : {},
                         }
                     ) 
         else:
