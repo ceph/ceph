@@ -58,9 +58,7 @@ def mock_lv_device_generator():
         return dev
     return mock_lv
 
-
-@pytest.fixture
-def mock_devices_available():
+def mock_device():
     dev = create_autospec(device.Device)
     dev.path = '/dev/foo'
     dev.vg_name = 'vg_foo'
@@ -69,21 +67,18 @@ def mock_devices_available():
     dev.available_lvm = True
     dev.vg_size = [21474836480]
     dev.vg_free = dev.vg_size
-    return [dev]
+    dev.lvs = []
+    return dev
+
+@pytest.fixture(params=range(1,3))
+def mock_devices_available(request):
+    ret = []
+    for _ in range(request.param):
+        ret.append(mock_device())
+    return ret
 
 @pytest.fixture
 def mock_device_generator():
-    def mock_device():
-        dev = create_autospec(device.Device)
-        dev.path = '/dev/foo'
-        dev.vg_name = 'vg_foo'
-        dev.lv_name = 'lv_foo'
-        dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
-        dev.available_lvm = True
-        dev.vg_size = [21474836480]
-        dev.vg_free = dev.vg_size
-        dev.lvs = []
-        return dev
     return mock_device
 
 

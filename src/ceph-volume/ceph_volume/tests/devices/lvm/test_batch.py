@@ -225,6 +225,16 @@ class TestBatch(object):
                                               'block_db', 2, 2, args)
         assert len(fast) == 2
 
+    def test_get_physical_fast_allocs_abs_size(self, factory,
+                                               conf_ceph_stub,
+                                               mock_devices_available):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        args = factory(block_db_slots=None, get_block_db_size=None)
+        fasts = batch.get_physical_fast_allocs(mock_devices_available,
+                                              'block_db', 2, 2, args)
+        for fast, dev in zip(fasts, mock_devices_available):
+            assert fast[2] == int(dev.vg_size[0] / 2)
+
     def test_batch_fast_allocations_one_block_db_length(self, factory, conf_ceph_stub,
                                                   mock_lv_device_generator):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
