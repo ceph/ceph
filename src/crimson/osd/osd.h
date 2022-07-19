@@ -16,12 +16,10 @@
 #include "crimson/common/gated.h"
 #include "crimson/admin/admin_socket.h"
 #include "crimson/common/simple_lru.h"
-#include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/osd/osdmap_service.h"
-#include "crimson/osd/state.h"
-#include "crimson/osd/shard_services.h"
+#include "crimson/osd/pg_shard_manager.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/osd_operations/peering_event.h"
@@ -60,7 +58,6 @@ namespace crimson::osd {
 class PG;
 
 class OSD final : public crimson::net::Dispatcher,
-		  private OSDMapService,
 		  private crimson::common::AuthHandler,
 		  private crimson::mgr::WithStats {
   const int whoami;
@@ -73,19 +70,12 @@ class OSD final : public crimson::net::Dispatcher,
   std::unique_ptr<crimson::mon::Client> monc;
   std::unique_ptr<crimson::mgr::Client> mgrc;
 
-  SharedLRU<epoch_t, OSDMap> osdmaps;
-  SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
-  cached_map_t osdmap;
   // TODO: use a wrapper for ObjectStore
+  OSDMapService::cached_map_t osdmap;
   crimson::os::FuturizedStore& store;
-  std::unique_ptr<OSDMeta> meta_coll;
-
-  OSDState state;
 
   /// _first_ epoch we were marked up (after this process started)
   epoch_t boot_epoch = 0;
-  /// _most_recent_ epoch we were marked up
-  epoch_t up_epoch = 0;
   //< epoch we last did a bind to new ip:ports
   epoch_t bind_epoch = 0;
   //< since when there is no more pending pg creates from mon
@@ -111,7 +101,8 @@ class OSD final : public crimson::net::Dispatcher,
   void handle_authentication(const EntityName& name,
 			     const AuthCapsInfo& caps) final;
 
-  crimson::osd::ShardServices shard_services;
+  crimson::osd::PGShardManager pg_shard_manager;
+  crimson::osd::ShardServices &shard_services;
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
@@ -128,6 +119,8 @@ public:
       crimson::net::MessengerRef hb_back_msgr);
   ~OSD() final;
 
+  seastar::future<> open_meta_coll();
+  seastar::future<> open_or_create_meta_coll();
   seastar::future<> mkfs(uuid_d osd_uuid,
                          uuid_d cluster_fsid,
                          std::string osdspec_affinity);
@@ -153,35 +146,12 @@ private:
   seastar::future<> _send_boot();
   seastar::future<> _add_me_to_crush();
 
-  seastar::future<Ref<PG>> make_pg(cached_map_t create_map,
-				   spg_t pgid,
-				   bool do_create);
-  seastar::future<Ref<PG>> load_pg(spg_t pgid);
-  seastar::future<> load_pgs();
-
-  // OSDMapService methods
-  epoch_t get_up_epoch() const final {
-    return up_epoch;
-  }
-  seastar::future<cached_map_t> get_map(epoch_t e) final;
-  cached_map_t get_map() const final;
-  seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
-  seastar::future<bufferlist> load_map_bl(epoch_t e);
-  seastar::future<std::map<epoch_t, bufferlist>>
-  load_map_bls(epoch_t first, epoch_t last);
-  void store_map_bl(ceph::os::Transaction& t,
-                    epoch_t e, bufferlist&& bl);
-  seastar::future<> store_maps(ceph::os::Transaction& t,
-                               epoch_t start, Ref<MOSDMap> m);
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
   void write_superblock(ceph::os::Transaction& t);
   seastar::future<> read_superblock();
 
   bool require_mon_peer(crimson::net::Connection *conn, Ref<Message> m);
-
-  seastar::future<Ref<PG>> handle_pg_create_info(
-    std::unique_ptr<PGCreateInfo> info);
 
   seastar::future<> handle_osd_map(crimson::net::ConnectionRef conn,
                                    Ref<MOSDMap> m);
@@ -215,16 +185,14 @@ private:
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGUpdateLogMissingReply> m);
 public:
-  OSD_OSDMapGate osdmap_gate;
-
+  auto &get_pg_shard_manager() {
+    return pg_shard_manager;
+  }
   ShardServices &get_shard_services() {
-    return shard_services;
+    return pg_shard_manager.get_shard_services();
   }
 
-  seastar::future<> consume_map(epoch_t epoch);
-
 private:
-  PGMap pg_map;
   crimson::common::Gated gate;
 
   seastar::promise<> stop_acked;
@@ -238,81 +206,8 @@ private:
   void update_heartbeat_peers();
   friend class PGAdvanceMap;
 
-  RemotePeeringEvent::OSDPipeline peering_request_osd_pipeline;
-  friend class RemotePeeringEvent;
-
-  seastar::future<Ref<PG>> get_or_create_pg(
-    PGMap::PGCreationBlockingEvent::TriggerI&&,
-    spg_t pgid,
-    epoch_t epoch,
-    std::unique_ptr<PGCreateInfo> info);
-  seastar::future<Ref<PG>> wait_for_pg(
-    PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
-
 public:
-  Ref<PG> get_pg(spg_t pgid);
   seastar::future<> send_beacon();
-
-  template <typename T, typename... Args>
-  auto start_pg_operation(Args&&... args) {
-    auto op = shard_services.registry.create_operation<T>(
-      std::forward<Args>(args)...);
-    auto &logger = crimson::get_logger(ceph_subsys_osd);
-    logger.debug("{}: starting {}", *op, __func__);
-    auto &opref = *op;
-
-    auto fut = opref.template enter_stage<>(
-      opref.get_connection_pipeline().await_active
-    ).then([this, &opref, &logger] {
-      logger.debug("{}: start_pg_operation in await_active stage", opref);
-      return state.when_active();
-    }).then([&logger, &opref] {
-      logger.debug("{}: start_pg_operation active, entering await_map", opref);
-      return opref.template enter_stage<>(
-	opref.get_connection_pipeline().await_map);
-    }).then([this, &logger, &opref] {
-      logger.debug("{}: start_pg_operation await_map stage", opref);
-      using OSDMapBlockingEvent =
-	OSD_OSDMapGate::OSDMapBlocker::BlockingEvent;
-      return opref.template with_blocking_event<OSDMapBlockingEvent>(
-	[this, &opref](auto &&trigger) {
-	  return osdmap_gate.wait_for_map(std::move(trigger),
-					  opref.get_epoch());
-	});
-    }).then([&logger, &opref](auto epoch) {
-      logger.debug("{}: got map {}, entering get_pg", opref, epoch);
-      return opref.template enter_stage<>(
-	opref.get_connection_pipeline().get_pg);
-    }).then([this, &logger, &opref] {
-      logger.debug("{}: in get_pg", opref);
-      if constexpr (T::can_create()) {
-	logger.debug("{}: can_create", opref);
-	return opref.template with_blocking_event<
-	  PGMap::PGCreationBlockingEvent
-	  >([this, &opref](auto &&trigger) {
-	    std::ignore = this; // avoid clang warning
-	    return get_or_create_pg(
-	      std::move(trigger),
-	      opref.get_pgid(), opref.get_epoch(),
-	      std::move(opref.get_create_info()));
-	  });
-      } else {
-	logger.debug("{}: !can_create", opref);
-	return opref.template with_blocking_event<
-	  PGMap::PGCreationBlockingEvent
-	  >([this, &opref](auto &&trigger) {
-	    std::ignore = this; // avoid clang warning
-	    return wait_for_pg(std::move(trigger), opref.get_pgid());
-	  });
-      }
-    }).then([this, &logger, &opref](Ref<PG> pgref) {
-      logger.debug("{}: have_pg", opref);
-      return opref.with_pg(shard_services, pgref);
-    }).then([op] { /* Retain refcount on op until completion */ });
-
-    return std::make_pair(std::move(op), std::move(fut));
-  }
-
 
 private:
   LogClient log_client;

@@ -25,7 +25,8 @@ void OSDMapGate<OSDMapGateTypeV>::OSDMapBlocker::dump_detail(Formatter *f) const
 template <OSDMapGateType OSDMapGateTypeV>
 seastar::future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map(
   typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
-  epoch_t epoch)
+  epoch_t epoch,
+  ShardServices *shard_services)
 {
   if (__builtin_expect(stopping, false)) {
     return seastar::make_exception_future<epoch_t>(
@@ -40,7 +41,7 @@ seastar::future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map(
     auto fut = blocker.promise.get_shared_future();
     if (shard_services) {
       return trigger.maybe_record_blocking(
-	(*shard_services).get().osdmap_subscribe(current, true).then(
+	shard_services->osdmap_subscribe(current, true).then(
 	  [fut=std::move(fut)]() mutable {
 	    return std::move(fut);
 	  }),

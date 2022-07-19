@@ -133,8 +133,9 @@ seastar::future<> ClientRequest::with_pg_int(
 	return with_blocking_event<
 	  PG_OSDMapGate::OSDMapBlocker::BlockingEvent
 	  >([this, &pg] (auto&& trigger) {
-	    return pg.osdmap_gate.wait_for_map(std::move(trigger),
-					       m->get_min_epoch());
+	    return pg.osdmap_gate.wait_for_map(
+	      std::move(trigger),
+	      m->get_min_epoch());
 	  });
       }).then_interruptible([this, this_instance_id, &pg](auto map) {
 	logger().debug("{}.{}: after wait_for_map", *this, this_instance_id);
@@ -331,6 +332,11 @@ bool ClientRequest::is_misdirected(const PG& pg) const
   }
   // neither balanced nor localize reads
   return true;
+}
+
+void ClientRequest::put_historic() const
+{
+  osd.get_shard_services().get_registry().put_historic(*this);
 }
 
 }
