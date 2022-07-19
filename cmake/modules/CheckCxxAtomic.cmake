@@ -6,7 +6,10 @@ include(CMakePushCheckState)
 
 
 function(check_cxx_atomics var)
-  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++11")
+  set(CMAKE_REQUIRED_FLAGS "-std=c++11")
+  unset(CMAKE_CXX_FLAGS)
+  unset(CMAKE_REQUIRED_DEFINITIONS)
+  unset(CMAKE_REQUIRED_LINK_OPTIONS)
     check_cxx_source_compiles("
 #include <atomic>
 #include <cstdint>
@@ -52,6 +55,7 @@ int main() {
 endfunction(check_cxx_atomics)
 
 cmake_push_check_state()
+unset(CMAKE_REQUIRED_LIBRARIES)
 check_cxx_atomics(HAVE_CXX11_ATOMIC)
 cmake_pop_check_state()
 
