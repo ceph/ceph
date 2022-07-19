@@ -2139,7 +2139,10 @@ public:
     RGWSI_BucketIndex *bi{nullptr};
   } svc;
 
-  RGWBucketInstanceMetadataHandler() {}
+  rgw::sal::Store* store;
+
+  RGWBucketInstanceMetadataHandler(rgw::sal::Store* store)
+    : store(store) {}
 
   void init(RGWSI_Zone *zone_svc,
 	    RGWSI_Bucket *bucket_svc,
@@ -2371,12 +2374,51 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
     return ret;
   }
 
+  /* update lifecyle policy */
+  {
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    ret = bihandler->store->get_bucket(nullptr, bci.info, &bucket);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ << " failed to get_bucket(...) for "
+			<< bci.info.bucket.name
+			<< dendl;
+      return ret;
+    }
+
+    auto lc = bihandler->store->get_rgwlc();
+
+    auto lc_it = bci.attrs.find(RGW_ATTR_LC);
+    if (lc_it != bci.attrs.end()) {
+      ldpp_dout(dpp, 20) << "set lc config for " << bci.info.bucket.name << dendl;
+      ret = lc->set_bucket_config(bucket.get(), bci.attrs, nullptr);
+      if (ret < 0) {
+	      ldpp_dout(dpp, 0) << __func__ << " failed to set lc config for "
+			<< bci.info.bucket.name
+			<< dendl;
+	      return ret;
+      }
+
+    } else {
+      ldpp_dout(dpp, 20) << "remove lc config for " << bci.info.bucket.name << dendl;
+      ret = lc->remove_bucket_config(bucket.get(), bci.attrs);
+      if (ret < 0) {
+	      ldpp_dout(dpp, 0) << __func__ << " failed to remove lc config for "
+			<< bci.info.bucket.name
+			<< dendl;
+	      return ret;
+      }
+    }
+  } /* update lc */
+
   return STATUS_APPLIED;
 }
 
 class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
 public:
-  RGWArchiveBucketInstanceMetadataHandler() {}
+  RGWArchiveBucketInstanceMetadataHandler(rgw::sal::Store* store)
+    : RGWBucketInstanceMetadataHandler(store) {}
+
+  // N.B. replication of lifecycle policy relies on logic in RGWBucketInstanceMetadataHandler::do_put(...), override with caution
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) override {
     ldpp_dout(dpp, 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
@@ -3027,24 +3069,24 @@ int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,
   return handler->bucket_imports_data();
 }
 
-RGWBucketMetadataHandlerBase *RGWBucketMetaHandlerAllocator::alloc()
+RGWBucketMetadataHandlerBase* RGWBucketMetaHandlerAllocator::alloc()
 {
   return new RGWBucketMetadataHandler();
 }
 
-RGWBucketInstanceMetadataHandlerBase *RGWBucketInstanceMetaHandlerAllocator::alloc()
+RGWBucketInstanceMetadataHandlerBase* RGWBucketInstanceMetaHandlerAllocator::alloc(rgw::sal::Store* store)
 {
-  return new RGWBucketInstanceMetadataHandler();
+  return new RGWBucketInstanceMetadataHandler(store);
 }
 
-RGWBucketMetadataHandlerBase *RGWArchiveBucketMetaHandlerAllocator::alloc()
+RGWBucketMetadataHandlerBase* RGWArchiveBucketMetaHandlerAllocator::alloc()
 {
   return new RGWArchiveBucketMetadataHandler();
 }
 
-RGWBucketInstanceMetadataHandlerBase *RGWArchiveBucketInstanceMetaHandlerAllocator::alloc()
+RGWBucketInstanceMetadataHandlerBase* RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(rgw::sal::Store* store)
 {
-  return new RGWArchiveBucketInstanceMetadataHandler();
+  return new RGWArchiveBucketInstanceMetadataHandler(store);
 }
 
 

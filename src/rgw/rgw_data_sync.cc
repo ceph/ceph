@@ -520,7 +520,7 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   static constexpr uint32_t lock_duration = 30;
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
-  rgw::sal::RadosStore* store;
+  rgw::sal::RadosStore* store; // RGWDataSyncEnv also has a pointer to store
   const rgw_pool& pool;
   const uint32_t num_shards;
 
@@ -2500,8 +2500,8 @@ public:
   RGWMetadataHandler *alloc_bucket_meta_handler() override {
     return RGWArchiveBucketMetaHandlerAllocator::alloc();
   }
-  RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler() override {
-    return RGWArchiveBucketInstanceMetaHandlerAllocator::alloc();
+  RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler(rgw::sal::Store* store) override {
+    return RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(store);
   }
 };
 
