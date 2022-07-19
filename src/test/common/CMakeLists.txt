@@ -177,6 +177,13 @@ add_executable(unittest_intrusive_lru
 add_ceph_unittest(unittest_intrusive_lru)
 target_link_libraries(unittest_intrusive_lru ceph-common)
 
+# unittest_perf_counters_cache
+add_executable(unittest_perf_counters_cache 
+  test_perf_counters_cache.cc
+  )
+add_ceph_unittest(unittest_perf_counters_cache)
+target_link_libraries(unittest_perf_counters_cache ceph-common)
+
 # unittest_crc32c
 add_executable(unittest_crc32c
   test_crc32c.cc
