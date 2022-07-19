@@ -338,7 +338,7 @@ struct Engine {
       Formatter* f = Formatter::create(
 	"json-pretty", "json-pretty", "json-pretty");
       f->open_object_section("perf_output");
-      cct->get_perfcounters_collection()->dump_formatted(f, false);
+      cct->get_perfcounters_collection()->dump_formatted(f, false, false);
       if (g_conf()->rocksdb_perf) {
 	f->open_object_section("rocksdb_perf");
         os->get_db_statistics(f);

@@ -63,6 +63,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/mempool.cc
   ${PROJECT_SOURCE_DIR}/src/common/options.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
+  ${PROJECT_SOURCE_DIR}/src/common/perf_counters_key.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/page.cc
   ${PROJECT_SOURCE_DIR}/src/common/pick_address.cc
