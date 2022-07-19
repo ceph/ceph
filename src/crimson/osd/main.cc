@@ -224,7 +224,6 @@ int main(int argc, const char* argv[])
                                               CEPH_ENTITY_TYPE_OSD,
                                               &cluster_name,
                                               &conf_file_list);
-  seastar::sharded<crimson::osd::OSD> osd;
   using crimson::common::sharded_conf;
   using crimson::common::sharded_perf_coll;
   try {
@@ -306,11 +305,10 @@ int main(int argc, const char* argv[])
             local_conf().get_val<std::string>("osd_data"),
             local_conf().get_config_values()).get();
 
-          osd.start_single(whoami, nonce,
-                           std::ref(*store),
-                           cluster_msgr, client_msgr,
-                           hb_front_msgr, hb_back_msgr).get();
-          auto stop_osd = seastar::deferred_stop(osd);
+          crimson::osd::OSD osd(
+	    whoami, nonce, std::ref(*store), cluster_msgr, client_msgr,
+	    hb_front_msgr, hb_back_msgr);
+
           if (config.count("mkkey")) {
             make_keyring().get();
           }
@@ -325,9 +323,7 @@ int main(int argc, const char* argv[])
               // use a random osd uuid if not specified
               osd_uuid.generate_random();
             }
-            osd.invoke_on(
-              0,
-              &crimson::osd::OSD::mkfs,
+            osd.mkfs(
               osd_uuid,
               local_conf().get_val<uuid_d>("fsid"),
               config["osdspec-affinity"].as<std::string>()).get();
@@ -335,7 +331,7 @@ int main(int argc, const char* argv[])
           if (config.count("mkkey") || config.count("mkfs")) {
             return EXIT_SUCCESS;
           } else {
-            osd.invoke_on(0, &crimson::osd::OSD::start).get();
+            osd.start().get();
           }
           logger().info("crimson startup completed");
           should_stop.wait().get();
