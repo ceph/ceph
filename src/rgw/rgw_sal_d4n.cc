@@ -28,7 +28,6 @@ static inline Object* nextObject(Object* t)
   return dynamic_cast<D4NFilterObject*>(t)->get_next();
 }  
 
-std::unique_ptr<Object> D4NFilterStore::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
   return std::make_unique<D4NFilterObject>(std::move(o));
