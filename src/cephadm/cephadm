@@ -9248,6 +9248,7 @@ def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
     compress
     missingok
     notifempty
+    su root root
 }
 """)
 
