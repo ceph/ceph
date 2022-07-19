@@ -10718,7 +10718,9 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   // we don't allow any more if we are already at or beyond the limit
   if (diri->snaprealm &&
       diri->snaprealm->get_snaps().size() >= max_snaps_per_dir) {
-    respond_to_request(mdr, -CEPHFS_EMLINK);
+    dout(1) << __func__ << ": snapshot limit reached; mds_max_snaps_per_dir="
+            << max_snaps_per_dir << dendl;
+    respond_to_request(mdr, -CEPHFS_EDQUOT);
     return;
   }
 
