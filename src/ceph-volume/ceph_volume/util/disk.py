@@ -866,6 +866,12 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         for key, file_ in facts:
             metadata[key] = get_file_contents(os.path.join(sysdir, file_))
 
+        device_slaves = os.listdir(os.path.join(sysdir, 'slaves'))
+        if device_slaves:
+            metadata['device_nodes'] = ','.join(device_slaves)
+        else:
+            metadata['device_nodes'] = devname
+
         metadata['scheduler_mode'] = ""
         scheduler = get_file_contents(sysdir + "/queue/scheduler")
         if scheduler is not None:
