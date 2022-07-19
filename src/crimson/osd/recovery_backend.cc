@@ -81,7 +81,6 @@ void RecoveryBackend::handle_backfill_finish(
   std::ignore = m.get_connection()->send(std::move(reply));
   shard_services.start_operation<crimson::osd::LocalPeeringEvent>(
     static_cast<crimson::osd::PG*>(&pg),
-    shard_services,
     pg.get_pg_whoami(),
     pg.get_pgid(),
     pg.get_osdmap_epoch(),
@@ -180,7 +179,7 @@ RecoveryBackend::scan_for_backfill(
       -> interruptible_future<> {
       crimson::osd::ObjectContextRef obc;
       if (pg.is_primary()) {
-        obc = shard_services.obc_registry.maybe_get_cached_obc(object);
+        obc = shard_services.maybe_get_cached_obc(object);
       }
       if (obc) {
         if (obc->obs.exists) {
@@ -226,7 +225,6 @@ RecoveryBackend::handle_scan_get_digest(
     std::ignore = shard_services.start_operation<crimson::osd::LocalPeeringEvent>(
       // TODO: abstract start_background_recovery
       static_cast<crimson::osd::PG*>(&pg),
-      shard_services,
       pg.get_pg_whoami(),
       pg.get_pgid(),
       pg.get_osdmap_epoch(),

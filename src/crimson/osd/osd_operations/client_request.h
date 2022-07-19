@@ -165,6 +165,8 @@ public:
   auto get_completed() const {
     return get_event<CompletionEvent>().get_timestamp();
   };
+
+  void put_historic() const;
 };
 
 }

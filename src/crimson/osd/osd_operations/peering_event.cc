@@ -58,9 +58,9 @@ seastar::future<> PeeringEvent<T>::with_pg(
 {
   if (!pg) {
     logger().warn("{}: pg absent, did not create", *this);
-    on_pg_absent();
+    on_pg_absent(shard_services);
     that()->get_handle().exit();
-    return complete_rctx_no_pg();
+    return complete_rctx_no_pg(shard_services);
   }
 
   using interruptor = typename T::interruptor;
@@ -81,10 +81,10 @@ seastar::future<> PeeringEvent<T>::with_pg(
       // recovery.
       return this->template enter_stage<interruptor>(
 	BackfillRecovery::bp(*pg).process);
-    }).then_interruptible([this, pg] {
+    }).then_interruptible([this, pg, &shard_services] {
       pg->do_peering_event(evt, ctx);
       that()->get_handle().exit();
-      return complete_rctx(pg);
+      return complete_rctx(shard_services, pg);
     }).then_interruptible([pg, &shard_services]()
 			  -> typename T::template interruptible_future<> {
         if (!pg->get_need_up_thru()) {
@@ -100,14 +100,14 @@ seastar::future<> PeeringEvent<T>::with_pg(
 }
 
 template <class T>
-void PeeringEvent<T>::on_pg_absent()
+void PeeringEvent<T>::on_pg_absent(ShardServices &)
 {
   logger().debug("{}: pg absent, dropping", *this);
 }
 
 template <class T>
 typename PeeringEvent<T>::template interruptible_future<>
-PeeringEvent<T>::complete_rctx(Ref<PG> pg)
+PeeringEvent<T>::complete_rctx(ShardServices &shard_services, Ref<PG> pg)
 {
   logger().debug("{}: submitting ctx", *this);
   return shard_services.dispatch_context(
@@ -120,7 +120,7 @@ ConnectionPipeline &RemotePeeringEvent::get_connection_pipeline()
   return get_osd_priv(conn.get()).peering_request_conn_pipeline;
 }
 
-void RemotePeeringEvent::on_pg_absent()
+void RemotePeeringEvent::on_pg_absent(ShardServices &shard_services)
 {
   if (auto& e = get_event().get_event();
       e.dynamic_type() == MQuery::static_type()) {
@@ -143,16 +143,19 @@ void RemotePeeringEvent::on_pg_absent()
   }
 }
 
-RemotePeeringEvent::interruptible_future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
+RemotePeeringEvent::interruptible_future<> RemotePeeringEvent::complete_rctx(
+  ShardServices &shard_services,
+  Ref<PG> pg)
 {
   if (pg) {
-    return PeeringEvent::complete_rctx(pg);
+    return PeeringEvent::complete_rctx(shard_services, pg);
   } else {
     return shard_services.dispatch_context_messages(std::move(ctx));
   }
 }
 
-seastar::future<> RemotePeeringEvent::complete_rctx_no_pg()
+seastar::future<> RemotePeeringEvent::complete_rctx_no_pg(
+  ShardServices &shard_services)
 {
   return shard_services.dispatch_context_messages(std::move(ctx));
 }
@@ -168,7 +171,7 @@ seastar::future<> LocalPeeringEvent::start()
       std::chrono::milliseconds(std::lround(delay * 1000)));
   }
   return maybe_delay.then([this] {
-    return with_pg(shard_services, pg);
+    return with_pg(pg->get_shard_services(), pg);
   }).finally([ref=std::move(ref)] {
     logger().debug("{}: complete", *ref);
   });

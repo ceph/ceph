@@ -203,7 +203,6 @@ public:
   void start_peering_event_operation(T &&evt, float delay = 0) {
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
-      shard_services,
       pg_whoami,
       pgid,
       delay,
@@ -222,7 +221,7 @@ public:
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
-    shard_services.local_reserver.request_reservation(
+    shard_services.local_request_reservation(
       pgid,
       on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
 	start_peering_event_operation(std::move(*on_grant));
@@ -236,13 +235,13 @@ public:
 
   void update_local_background_io_priority(
     unsigned priority) final {
-    shard_services.local_reserver.update_priority(
+    shard_services.local_update_priority(
       pgid,
       priority);
   }
 
   void cancel_local_background_io_reservation() final {
-    shard_services.local_reserver.cancel_reservation(
+    shard_services.local_cancel_reservation(
       pgid);
   }
 
@@ -250,7 +249,7 @@ public:
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
-    shard_services.remote_reserver.request_reservation(
+    shard_services.remote_request_reservation(
       pgid,
       on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
 	start_peering_event_operation(std::move(*on_grant));
@@ -263,7 +262,7 @@ public:
   }
 
   void cancel_remote_recovery_reservation() final {
-    shard_services.remote_reserver.cancel_reservation(
+    shard_services.remote_cancel_reservation(
       pgid);
   }
 
