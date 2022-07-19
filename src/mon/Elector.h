@@ -240,7 +240,7 @@ class Elector : public ElectionOwner, RankProvider {
   /* Retrieve the Monitor::has_ever_joined member */
   bool ever_participated() const;
   /* Retrieve monmap->size() */
-  int paxos_size() const;
+  unsigned paxos_size() const;
   /* Right now we don't disallow anybody */
   std::set<int> disallowed_leaders;
   const std::set<int>& get_disallowed_leaders() const { return disallowed_leaders; }
@@ -371,7 +371,7 @@ class Elector : public ElectionOwner, RankProvider {
    * This is safe to call even if we haven't joined or are currently
    * in a quorum.
    */
-  void notify_rank_removed(int rank_removed);
+  void notify_rank_removed(unsigned rank_removed);
   void notify_strategy_maybe_changed(int strategy);
   /**
    * Set the disallowed leaders.
