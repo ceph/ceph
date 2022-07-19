@@ -21,6 +21,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
+#include "common/perf_counters_cache_key.h"
 #include "rgw_tracer.h"
 
 #include "rgw_rados.h"
@@ -2152,6 +2153,8 @@ void RGWGetObj::execute(optional_yield y)
   std::unique_ptr<RGWGetObj_Filter> decrypt;
   std::unique_ptr<RGWGetObj_Filter> run_lua;
   map<string, bufferlist>::iterator attr_iter;
+  std::string labels;
+  bool rgw_perf_counters_cache;
 
   perfcounter->inc(l_rgw_get);
 
@@ -2320,6 +2323,15 @@ void RGWGetObj::execute(optional_yield y)
     return;
   }
 
+  rgw_perf_counters_cache = s->cct->_conf.get_val<bool>("rgw_perf_counters_cache");
+  if(rgw_perf_counters_cache) {
+    labels = ceph::perf_counters::cache_key("z_rgw", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
+    // TODO delete logging
+    ldpp_dout(this, 20) << "labels for perf counters cache for l_rgw_metrics_get_b: " << labels << dendl;
+    perf_counters_cache->add(labels);
+    perf_counters_cache->inc(labels, l_rgw_get_b, s->obj_size);
+  }
+
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
   op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
@@ -2328,6 +2340,11 @@ void RGWGetObj::execute(optional_yield y)
     op_ret = filter->flush();
 
   perfcounter->tinc(l_rgw_get_lat, s->time_elapsed());
+
+  if(rgw_perf_counters_cache) {
+    perf_counters_cache->tinc(labels, l_rgw_get_lat, s->time_elapsed());
+  }
+
   if (op_ret < 0) {
     goto done_err;
   }
@@ -3899,11 +3916,26 @@ void RGWPutObj::execute(optional_yield y)
   off_t fst;
   off_t lst;
 
+  bool rgw_perf_counters_cache = s->cct->_conf.get_val<bool>("rgw_perf_counters_cache");
+  std::string labels = ceph::perf_counters::cache_key("z_rgw", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
+  if(rgw_perf_counters_cache) {
+    // TODO delete below logging
+    ldpp_dout(this, 20) << "labels for perf counters cache for l_rgw_metrics_put_b: " << labels << dendl;
+    uint64_t target_size = s->cct->_conf.get_val<uint64_t>("labeled_perfcounters_cache_size");
+    bool eviction = s->cct->_conf.get_val<bool>("labeled_perfcounters_cache_eviction");
+    ldpp_dout(this, 20) << "target size for perf counters cache is: " << target_size << " eviction is: " << eviction << dendl;
+
+    perf_counters_cache->add(labels);
+  }
+
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
   perfcounter->inc(l_rgw_put);
   // report latency on return
   auto put_lat = make_scope_guard([&] {
       perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
+      perf_counters_cache->tinc(labels, l_rgw_put_lat, s->time_elapsed());
+      //if(rgw_perf_counters_cache) {
+      //}
     });
 
   op_ret = -EINVAL;
@@ -4164,6 +4196,11 @@ void RGWPutObj::execute(optional_yield y)
   }
   s->obj_size = ofs;
   s->object->set_obj_size(ofs);
+
+  rgw_perf_counters_cache = s->cct->_conf.get_val<bool>("rgw_perf_counters_cache");
+  if(rgw_perf_counters_cache) {
+    perf_counters_cache->inc(labels, l_rgw_put_b, s->obj_size);
+  }
 
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 

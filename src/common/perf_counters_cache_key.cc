@@ -7,7 +7,7 @@
 namespace ceph::perf_counters::detail {
 
 // use a null character to delimit strings
-constexpr char delimiter = '\0';
+constexpr char delimiter = ':';
 
 
 // write a delimited string to the output
@@ -76,7 +76,7 @@ class label_iterator {
   label_iterator() = default;
   label_iterator(base_iterator begin, base_iterator end)
       : state(make_state(begin, end)) {
-    static_assert(std::forward_iterator<label_iterator>);
+    //static_assert(std::forward_iterator<label_iterator>);
   }
 
   label_iterator& operator++() {
@@ -118,7 +118,7 @@ class label_insert_iterator {
 
   label_insert_iterator() = default;
   label_insert_iterator(base_iterator begin) : label{begin} {
-    static_assert(std::output_iterator<label_insert_iterator, label_pair>);
+    //static_assert(std::output_iterator<label_insert_iterator, label_pair>);
   }
 
   // increments are noops

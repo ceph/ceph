@@ -64,7 +64,7 @@ class PerfCountersBuilder
 {
 public:
   PerfCountersBuilder(CephContext *cct, const std::string &name,
-		    int first, int last);
+		    int first, int last, bool is_labeled = false);
   ~PerfCountersBuilder();
 
   // prio values: higher is better, and higher values get included in
@@ -189,6 +189,7 @@ public:
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
     std::unique_ptr<PerfHistogram<>> histogram;
+    bool accessed = false;
 
     void reset()
     {
@@ -200,6 +201,7 @@ public:
       if (histogram) {
         histogram->reset();
       }
+      accessed = false;
     }
 
     // read <sum, count> safely by making sure the post- and pre-count
@@ -247,12 +249,13 @@ public:
 
   void reset();
   void dump_formatted(ceph::Formatter *f, bool schema,
+                      bool dump_labeled = false,
                       const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, false, counter);
+    dump_formatted_generic(f, schema, false, dump_labeled, counter);
   }
   void dump_formatted_histograms(ceph::Formatter *f, bool schema,
                                  const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, true, counter);
+    dump_formatted_generic(f, schema, true, false, counter);
   }
   std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
@@ -272,13 +275,17 @@ public:
                     0);
   }
 
+  bool is_instance_labeled() {
+    return m_is_labeled;
+  }
+
 private:
   PerfCounters(CephContext *cct, const std::string &name,
-	     int lower_bound, int upper_bound);
+	     int lower_bound, int upper_bound, bool is_labeled = false);
   PerfCounters(const PerfCounters &rhs);
   PerfCounters& operator=(const PerfCounters &rhs);
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
-                              const std::string &counter = "") const;
+                              bool dump_labeled = false, const std::string &counter = "") const;
 
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
@@ -286,6 +293,7 @@ private:
   int m_lower_bound;
   int m_upper_bound;
   std::string m_name;
+  bool m_is_labeled;
 
   int prio_adjust = 0;
 
@@ -324,15 +332,16 @@ public:
   bool reset(const std::string &name);
 
   void dump_formatted(ceph::Formatter *f, bool schema,
+                      bool dump_labeled = false,
                       const std::string &logger = "",
                       const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, false, logger, counter);
+    dump_formatted_generic(f, schema, false, dump_labeled, logger, counter);
   }
 
   void dump_formatted_histograms(ceph::Formatter *f, bool schema,
                                  const std::string &logger = "",
                                  const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, true, logger, counter);
+    dump_formatted_generic(f, schema, true, false, logger, counter);
   }
 
   // A reference to a perf_counter_data_any_d, with an accompanying
@@ -351,6 +360,7 @@ public:
 
 private:
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
+                              bool dump_labeled = false,
                               const std::string &logger = "",
                               const std::string &counter = "") const;
 
