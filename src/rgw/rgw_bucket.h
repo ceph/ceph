@@ -204,7 +204,7 @@ public:
 
 class RGWBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWBucketInstanceMetadataHandlerBase *alloc();
+  static RGWBucketInstanceMetadataHandlerBase *alloc(rgw::sal::Store* store);
 };
 
 class RGWArchiveBucketMetaHandlerAllocator {
@@ -214,7 +214,7 @@ public:
 
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWBucketInstanceMetadataHandlerBase *alloc();
+  static RGWBucketInstanceMetadataHandlerBase *alloc(rgw::sal::Store* store);
 };
 
 extern int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::Bucket* bucket, rgw_obj_key& key);
