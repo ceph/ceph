@@ -1346,7 +1346,7 @@ int D4NFilterLuaScriptManager::del(const DoutPrefixProvider* dpp, optional_yield
 
 extern "C" {
 
-rgw::sal::Store* newBaseD4NFilter(rgw::sal::Store* next)
+rgw::sal::Store* newD4NFilter(rgw::sal::Store* next)
 {
   rgw::sal::D4NFilterStore* store = new rgw::sal::D4NFilterStore(next);
 
