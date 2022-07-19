@@ -752,7 +752,6 @@ def get_block_devs_lsblk(device=''):
     NAME - the device name, for example /dev/sda or
            /dev/mapper/<vg_name>-<lv_name>
     TYPE - the block device type: disk, partition, lvm and such
-
     '''
     cmd = ['lsblk', '-plno', 'KNAME,NAME,TYPE']
     if device:
