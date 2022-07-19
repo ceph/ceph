@@ -1144,9 +1144,8 @@ record_t Cache::prepare_record(
     retire_stat.increment(i->get_length());
     DEBUGT("retired and remove extent -- {}", t, *i);
     commit_retire_extent(t, i);
-    if ((is_backref_mapped_extent_node(i)
-	  || is_retired_placeholder(i->get_type()))
-	&& t.should_record_release(i->get_paddr())) {
+    if (is_backref_mapped_extent_node(i)
+	  || is_retired_placeholder(i->get_type())) {
       rel_delta.alloc_blk_ranges.emplace_back(
 	i->get_paddr(),
 	L_ADDR_NULL,
@@ -1482,20 +1481,17 @@ void Cache::complete_commit(
     i->dirty_from_or_retired_at = last_commit;
     if (is_backref_mapped_extent_node(i)
 	  || is_retired_placeholder(i->get_type())) {
-      DEBUGT("backref_list free {} len {} should release {}",
+      DEBUGT("backref_list free {} len {}",
 	     t,
 	     i->get_paddr(),
-	     i->get_length(),
-	     t.should_record_release(i->get_paddr()));
-      if (t.should_record_release(i->get_paddr())) {
-	backref_list.emplace_back(
-	  std::make_unique<backref_buf_entry_t>(
-	    i->get_paddr(),
-	    L_ADDR_NULL,
-	    i->get_length(),
-	    i->get_type(),
-	    seq));
-      }
+	     i->get_length());
+      backref_list.emplace_back(
+	std::make_unique<backref_buf_entry_t>(
+	  i->get_paddr(),
+	  L_ADDR_NULL,
+	  i->get_length(),
+	  i->get_type(),
+	  seq));
     } else if (is_backref_node(i->get_type())) {
       remove_backref_extent(i->get_paddr());
     } else {
