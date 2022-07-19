@@ -324,13 +324,12 @@ class Device(object):
             # can each host a PV and VG. I think the vg_name property is
             # actually unused (not 100% sure) and can simply be removed
             vgs = None
+            if not self.all_devices_vgs:
+                self.all_devices_vgs = lvm.get_all_devices_vgs()
             for path in device_to_check:
-                if self.all_devices_vgs:
-                    for dev_vg in self.all_devices_vgs:
-                        if dev_vg.pv_name == path:
-                            vgs = [dev_vg]
-                else:
-                    vgs = lvm.get_device_vgs(path)
+                for dev_vg in self.all_devices_vgs:
+                    if dev_vg.pv_name == path:
+                        vgs = [dev_vg]
                 if vgs:
                     self.vgs.extend(vgs)
                     self.vg_name = vgs[0]
