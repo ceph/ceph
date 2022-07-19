@@ -1171,8 +1171,44 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
           "HTTP header x-amz-server-side-encryption : aws:kms or AES256";
         return -EINVAL;
       }
-    } else {
-  /*no encryption*/
+    } else if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
+      /* check if there is a test key */
+      std::string master_encryption_key;
+      try {
+        master_encryption_key = from_base64(s->cct->_conf->rgw_crypt_default_encryption_key);
+      } catch (...) {
+        ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_encrypt invalid default encryption key "
+                         << "which contains character that is not base64 encoded."
+                         << dendl;
+        s->err.message = "Requests specifying Server Side Encryption with Customer "
+                         "provided keys must provide an appropriate secret key.";
+        return -EINVAL;
+      }
+
+      if (master_encryption_key.size() != 256 / 8) {
+        ldpp_dout(s, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
+        /* not an error to return; missing encryption does not inhibit processing */
+        return 0;
+      }
+
+      set_attr(attrs, RGW_ATTR_CRYPT_MODE, "RGW-AUTO");
+      std::string key_selector = create_random_key_selector(s->cct);
+      set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
+
+      uint8_t actual_key[AES_256_KEYSIZE];
+      if (AES_256_ECB_encrypt(s, s->cct,
+                              reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()), AES_256_KEYSIZE,
+                              reinterpret_cast<const uint8_t*>(key_selector.c_str()),
+                              actual_key, AES_256_KEYSIZE) != true) {
+        ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
+        return -EIO;
+      }
+      if (block_crypt) {
+        auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
+        aes->set_key(reinterpret_cast<const uint8_t*>(actual_key), AES_256_KEYSIZE);
+        *block_crypt = std::move(aes);
+      }
+      ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       return 0;
     }
 
@@ -1223,46 +1259,6 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       return 0;
     }
 
-    /* SSE-S3 and no backend, check if there is a test key */
-    if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
-      std::string master_encryption_key;
-      try {
-        master_encryption_key = from_base64(s->cct->_conf->rgw_crypt_default_encryption_key);
-      } catch (...) {
-        ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_encrypt invalid default encryption key "
-                         << "which contains character that is not base64 encoded."
-                         << dendl;
-        s->err.message = "Requests specifying Server Side Encryption with Customer "
-                         "provided keys must provide an appropriate secret key.";
-        return -EINVAL;
-      }
-
-      if (master_encryption_key.size() != 256 / 8) {
-        ldpp_dout(s, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
-        /* not an error to return; missing encryption does not inhibit processing */
-        return 0;
-      }
-
-      set_attr(attrs, RGW_ATTR_CRYPT_MODE, "RGW-AUTO");
-      std::string key_selector = create_random_key_selector(s->cct);
-      set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
-
-      uint8_t actual_key[AES_256_KEYSIZE];
-      if (AES_256_ECB_encrypt(s, s->cct,
-                              reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()), AES_256_KEYSIZE,
-                              reinterpret_cast<const uint8_t*>(key_selector.c_str()),
-                              actual_key, AES_256_KEYSIZE) != true) {
-        ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
-        return -EIO;
-      }
-      if (block_crypt) {
-        auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
-        aes->set_key(reinterpret_cast<const uint8_t*>(actual_key), AES_256_KEYSIZE);
-        *block_crypt = std::move(aes);
-      }
-      ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
-      return 0;
-    }
     s->err.message = "Request specifies Server Side Encryption "
                      "but server configuration does not support this.";
     return -EINVAL;
