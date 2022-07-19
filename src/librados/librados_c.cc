@@ -1174,7 +1174,9 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_ioctx_destroy)(rados_ioctx_t io)
 {
   tracepoint(librados, rados_ioctx_destroy_enter, io);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  ctx->put();
+  if (ctx) {
+    ctx->put();
+  }
   tracepoint(librados, rados_ioctx_destroy_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_destroy);
