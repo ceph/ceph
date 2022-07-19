@@ -429,15 +429,14 @@ class TestMDSMetrics(CephFSTestCase):
         client_b_name = f'client.{self.mount_b.get_global_id()}'
 
         global_metrics = metrics['global_metrics']
-        client_a_metrics = global_metrics[client_a_name]
-        client_b_metrics = global_metrics[client_b_name]
+        client_a_metrics = global_metrics[self.fs.name][client_a_name]
+        client_b_metrics = global_metrics[self.fs.name][client_b_name]
 
         #fail rank0 mds
         self.fs.rank_fail(rank=0)
 
-        # Wait for 10 seconds for the failover to complete and
-        # the mgr to get initial metrics from the new rank0 mds.
-        time.sleep(10)
+        # Wait for rank0 up:active state
+        self.fs.wait_for_state('up:active', rank=0, timeout=30)
 
         fscid = self.fs.id
 
@@ -457,15 +456,22 @@ class TestMDSMetrics(CephFSTestCase):
             log.debug(f'metrics={metrics_new}')
             self.assertTrue(valid)
 
+            client_metadata = metrics_new['client_metadata']
+            client_a_metadata = client_metadata.get(self.fs.name, {}).get(client_a_name, {})
+            client_b_metadata = client_metadata.get(self.fs.name, {}).get(client_b_name, {})
+
             global_metrics = metrics_new['global_metrics']
-            client_a_metrics_new = global_metrics[client_a_name]
-            client_b_metrics_new = global_metrics[client_b_name]
+            client_a_metrics_new = global_metrics.get(self.fs.name, {}).get(client_a_name, {})
+            client_b_metrics_new = global_metrics.get(self.fs.name, {}).get(client_b_name, {})
 
             #the metrics should be different for the test to succeed.
-            self.assertNotEqual(client_a_metrics, client_a_metrics_new)
-            self.assertNotEqual(client_b_metrics, client_b_metrics_new)
+            self.assertTrue(client_a_metadata and client_b_metadata and
+                            client_a_metrics_new and client_b_metrics_new and
+                            (client_a_metrics_new != client_a_metrics) and
+                            (client_b_metrics_new != client_b_metrics),
+                            "Invalid 'ceph fs perf stats' metrics after rank0 mds failover")
         except MaxWhileTries:
-            raise RuntimeError("Failed to fetch `ceph fs perf stats` metrics")
+            raise RuntimeError("Failed to fetch 'ceph fs perf stats' metrics")
         finally:
             # cleanup test directories
             self._cleanup_test_dirs()
