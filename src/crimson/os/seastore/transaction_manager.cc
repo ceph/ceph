@@ -326,8 +326,7 @@ TransactionManager::submit_transaction(
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::submit_transaction_direct(
   Transaction &tref,
-  std::optional<journal_seq_t> seq_to_trim,
-  std::optional<std::pair<paddr_t, paddr_t>> gc_range)
+  std::optional<journal_seq_t> seq_to_trim)
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
   SUBTRACET(seastore_t, "start", tref);
@@ -360,26 +359,12 @@ TransactionManager::submit_transaction_direct(
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
-  }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim),
-	      gc_range=std::move(gc_range)]() mutable
+  }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]() mutable
 	      -> submit_transaction_iertr::future<> {
     if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
       cache->trim_backref_bufs(*seq_to_trim);
     }
 
-#ifndef NDEBUG
-    if (gc_range) {
-      auto backref_set = 
-	backref_manager->get_cached_backrefs_in_range(
-	  gc_range->first, gc_range->second);
-      for (auto &backref : backref_set) {
-	ERRORT("unexpected backref: {}~{}, {}, {}, {}",
-	  tref, backref.paddr, backref.len, backref.laddr,
-	  backref.type, backref.seq);
-	ceph_abort("impossible");
-      }
-    }
-#endif
     auto record = cache->prepare_record(tref, async_cleaner.get());
 
     tref.get_handle().maybe_release_collection_lock();
@@ -558,24 +543,12 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     return rewrite_extent_iertr::now();
   }
 
-  auto fut = rewrite_extent_iertr::now();
   if (extent->is_logical()) {
-    fut = rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
+    return rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
   } else {
     DEBUGT("rewriting physical extent -- {}", t, *extent);
-    fut = lba_manager->rewrite_extent(t, extent);
+    return lba_manager->rewrite_extent(t, extent);
   }
-
-  return fut.si_then([this, extent, &t] {
-    t.dont_record_release(extent);
-    return backref_manager->remove_mapping(
-      t, extent->get_paddr()).si_then([](auto) {
-      return seastar::now();
-    }).handle_error_interruptible(
-      crimson::ct_error::input_output_error::pass_further(),
-      crimson::ct_error::assert_all()
-    );
-  });
 }
 
 TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_live(
