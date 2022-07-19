@@ -1307,22 +1307,23 @@ int MotrBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max,
         rgw_bucket_dir_entry ent;
         auto iter = vals[i].cbegin();
         ent.decode(iter);
+        rgw_obj_key key(ent.key);
         if (params.list_versions || ent.is_visible()) {
-          if (ent.key.name == params.marker.name &&
+          if (key.name == params.marker.name &&
               // filter out versions which go before marker.instance
               ((!null_ent.key.empty() && params.marker.instance == "null" &&
                  null_ent.meta.mtime < ent.meta.mtime) ||
-               (ent.key.instance != "" &&
-                ent.key.instance < params.marker.instance)))
+               (key.instance != "" &&
+                key.instance < params.marker.instance)))
             continue;
 check_keycount:
           if (keycount >= max) {
             if (!null_ent.key.empty() &&
                 (null_ent.key.name != ent.key.name ||
                  null_ent.meta.mtime > ent.meta.mtime))
-              results.next_marker = rgw_obj_key(ent.key.name, "null");
+              results.next_marker = rgw_obj_key(key.name, "null");
             else
-              results.next_marker = rgw_obj_key(ent.key.name, ent.key.instance);
+              results.next_marker = rgw_obj_key(key.name, key.instance);
             results.is_truncated = true;
             break;
           }
@@ -1333,7 +1334,7 @@ check_keycount:
               (null_ent.key.name != ent.key.name ||
                null_ent.meta.mtime > ent.meta.mtime)) {
             if (params.marker.instance != "" &&
-                ent.key.instance == params.marker.instance)
+                key.instance == params.marker.instance)
               null_ent.key = {}; // filtered out by the marker
             else {
               results.objs.emplace_back(std::move(null_ent));
@@ -1341,7 +1342,7 @@ check_keycount:
               goto check_keycount;
             }
           }
-          if (ent.key.instance == "")
+          if (key.instance == "")
             null_ent = std::move(ent);
           else {
             results.objs.emplace_back(std::move(ent));
@@ -1427,7 +1428,7 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
     if (prefix.size() &&
         (0 != key.name.compare(0, prefix.size(), prefix))) {
       ldpp_dout(dpp, 20) <<__func__<<
-        ": skippping \"" << ent.key <<
+        ": skippping \"" << key <<
         "\" because doesn't match prefix" << dendl;
       continue;
     }
@@ -1592,7 +1593,8 @@ int MotrObject::fetch_obj_entry_and_key(const DoutPrefixProvider* dpp, rgw_bucke
   else
     bname = get_bucket_name(this->get_bucket()->get_tenant(), this->get_bucket()->get_name());
 
-  key = ent.key.name + '\a' + ent.key.instance;
+  rgw_obj_key objkey(ent.key);
+  key = objkey.name + '\a' + objkey.instance;
 
   ldpp_dout(dpp, 20) <<__func__<< ": bucket=" << bname << " key=" << key << dendl;
 
@@ -1968,7 +1970,8 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
   // we should consider adding object entry to GC before deleting the metadata.
   // Delete from the cache first.
   source->store->get_obj_meta_cache()->remove(dpp, delete_key);
-
+  ldpp_dout(dpp, 20) << __func__ << ": Deleting key " << delete_key << " from "
+                            << tenant_bkt_name << dendl;
   // Remove the motr object.
   // versioning enabled and suspended case.
   if (info.versioned()) {
@@ -1977,20 +1980,18 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
       result.version_id = ent.key.instance;
       if (ent.is_delete_marker())
         result.delete_marker = true;
-      ldpp_dout(dpp, 20) << "delete " << delete_key << " from "
-                            << tenant_bkt_name << dendl;
 
       rc = source->remove_mobj_and_index_entry(
           dpp, ent, delete_key, bucket_index_iname, tenant_bkt_name);
       if (rc < 0) {
-        ldpp_dout(dpp, 0) << "Failed to delete the object from Motr."
-	                          <<" key=" << delete_key << dendl;
+        ldpp_dout(dpp, 0) << __func__ << ": Failed to delete the object from Motr."
+                          <<" key=" << delete_key << dendl;
         return rc;
       }
       // if deleted object version is the latest version,
       // then update is-latest flag to true for previous version.
       if (ent.is_current()) {
-        ldpp_dout(dpp, 20) << "Updating previous version entries " << dendl;
+        ldpp_dout(dpp, 20) << __func__ << ": Updating previous version entries " << dendl;
         bool set_is_latest=true;
         rc = source->update_version_entries(dpp, set_is_latest);
         if (rc < 0)
@@ -2006,7 +2007,7 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
       if (!info.versioning_enabled()) {
         result.version_id = "";
         if (ent.is_delete_marker() && ent.key.instance == "") {
-          ldpp_dout(dpp, 0) << "null-delete-marker is already present." << dendl;
+          ldpp_dout(dpp, 0) << __func__ << ": null-delete-marker is already present." << dendl;
           return 0;
         }
         // if latest version is null version, then delete the null version-object and
@@ -2017,7 +2018,7 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
           rc = source->remove_mobj_and_index_entry(
             dpp, ent, delete_key, bucket_index_iname, tenant_bkt_name);
           if (rc < 0) {
-            ldpp_dout(dpp, 0) << "Failed to delete the object from Motr, key="<< delete_key << dendl;
+            ldpp_dout(dpp, 0) <<  __func__ << ": Failed to delete the object from Motr, key="<< delete_key << dendl;
             return rc;
           }
         }
@@ -2025,7 +2026,7 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
 
       source->set_instance(result.version_id);
       // update is-latest=false for current version entry.
-      ldpp_dout(dpp, 20) << "Updating previous version entries " << dendl;
+      ldpp_dout(dpp, 20) << __func__ << ": Updating previous version entries " << dendl;
       rc = source->update_version_entries(dpp);
       if (rc < 0)
         return rc;
@@ -2037,8 +2038,6 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
       result.version_id = "null"; // show it as "null" in the reply
   } else {
     // Unversioned flow
-    // handling empty size object case
-    ldpp_dout(dpp, 20) << "delete " << delete_key << " from " << tenant_bkt_name << dendl;
     rc = source->remove_mobj_and_index_entry(
         dpp, ent, delete_key, bucket_index_iname, tenant_bkt_name);
     if (rc < 0) {
@@ -3040,10 +3039,10 @@ int MotrObject::fetch_latest_obj(const DoutPrefixProvider *dpp, bufferlist& bl_o
 
     auto iter = bl.cbegin();
     ent.decode(iter);
-
-    ldpp_dout(dpp, 20) <<__func__<< ": ent.key=" << ent.key.to_string()
+    rgw_obj_key key(ent.key);
+    ldpp_dout(dpp, 20) <<__func__<< ": key=" << key.to_str()
                        << " is_current=" << ent.is_current() << dendl;
-    if (ent.key.name != this->get_name())
+    if (key.name != this->get_name())
       break;
 
     if (null_ent.key.empty())
@@ -3065,6 +3064,7 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
   string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
   bufferlist bl;
   bufferlist::const_iterator iter;
+  rgw_obj_key key;
   std::string obj_key = this->get_key_str();
 
   if (this->have_instance()) {
@@ -3092,8 +3092,8 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
 
   iter = bl.cbegin();
   ent.decode(iter);
-
-  obj_key = ent.key.name + '\a' + ent.key.instance;
+  key.set(ent.key);
+  obj_key = key.name + '\a' + key.instance;
 
   // Put into the cache
   this->store->get_obj_meta_cache()->put(dpp, obj_key, bl);
@@ -3164,8 +3164,8 @@ int MotrObject::update_version_entries(const DoutPrefixProvider *dpp, bool set_i
     else
       ent.flags = rgw_bucket_dir_entry::FLAG_VER;
   }
-
-  string key = ent.key.name + '\a' + ent.key.instance;
+  rgw_obj_key objkey(ent.key);
+  string key = objkey.name + '\a' + objkey.instance;
 
   // Remove from the cache.
   store->get_obj_meta_cache()->remove(dpp, key);
@@ -3584,9 +3584,7 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   // and RGWRados::Object::Write::write_meta() in rgw_rados.cc for what and
   // how to set the dir entry. Only set the basic ones for POC, no ACLs and
   // other attrs.
-  rgw_obj_key key = obj.get_key();
-  ent.key.name = key.name;
-  ent.key.instance = key.instance;
+  obj.get_key().get_index_key(&ent.key);
   ent.meta.size = total_data_size;
   ent.meta.accounted_size = total_data_size;
   ent.meta.mtime = real_clock::is_zero(set_mtime)? ceph::real_clock::now() : set_mtime;
@@ -3873,9 +3871,7 @@ int MotrMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
     // size, etag etc.
     bufferlist bl;
     rgw_bucket_dir_entry ent;
-    rgw_obj_key key = obj->get_key();
-    ent.key.name = key.name;
-    ent.key.instance = key.instance;
+    obj->get_key().get_index_key(&ent.key);
     ent.meta.owner = owner.get_id().to_str();
     ent.meta.category = RGWObjCategory::MultiMeta;
     ent.meta.mtime = ceph::real_clock::now();
@@ -3970,7 +3966,8 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
       return ret_rc;
 
     if (!ent.is_delete_marker()) {
-      key_name = ent.key.name + '\a' + ent.key.instance;
+      rgw_obj_key key(ent.key);
+      key_name = key.name + '\a' + key.instance;
       rc = store->get_upload_id(tenant_bkt_name, key_name, upload_id);
       if (rc < 0) {
         ldpp_dout(dpp, 0) <<__func__<< ": ERROR: get_upload_id failed. rc=" << rc << dendl;
@@ -4203,9 +4200,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // Update the dir entry and insert it to the bucket index so
   // the object will be seen when listing the bucket.
   bufferlist update_bl, old_check_bl;
-  rgw_obj_key key = target_obj->get_key();
-  ent.key.name = key.name;
-  ent.key.instance = key.instance;
+  target_obj->get_key().get_index_key(&ent.key);  // Change to offical name :)
   ent.meta.size = off;
   ent.meta.accounted_size = accounted_size;
   ldpp_dout(dpp, 20) <<__func__<< ": obj size=" << ent.meta.size
