@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 report_template = """
-{dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model}"""
+{dev:<25} {size:<12} {device_nodes:<15} {rot!s:<7} {available!s:<9} {model}"""
 
 
 def encryption_status(abspath):
@@ -55,6 +55,8 @@ class Devices(object):
                 rot='rotates',
                 model='Model name',
                 available='available',
+                device_nodes='Device nodes',
+
             )]
         for device in sorted(self.devices):
             output.append(device.report())
@@ -102,7 +104,9 @@ class Device(object):
         self.abspath = path
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
-        self.sys_api = sys_info.devices.get(self.abspath, {})
+        if sys_info.devices.get(self.path, {}):
+            self.device_nodes = sys_info.devices[self.path]['device_nodes']
+        self.sys_api = sys_info.devices.get(self.path, {})
         self.partitions = self._get_partitions()
         self.lv_api = None
         self.lvs = [] if not lvs else lvs
@@ -268,6 +272,7 @@ class Device(object):
             rot=self.rotational,
             available=self.available,
             model=self.model,
+            device_nodes=self.device_nodes
         )
 
     def json_report(self):

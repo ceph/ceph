@@ -28,7 +28,8 @@ def device_report_keys(device_info):
                      'size': 1999844147200.0,
                      'support_discard': '',
                      'vendor': 'DELL',
-                     'device_id': 'Vendor-Model-Serial'}
+                     'device_id': 'Vendor-Model-Serial',
+                     'device_nodes': 'sdb'}
     }
  )
     report = Devices().json_report()[0]
@@ -55,7 +56,8 @@ def device_sys_api_keys(device_info):
                      'sectorsize': '512',
                      'size': 1999844147200.0,
                      'support_discard': '',
-                     'vendor': 'DELL'}
+                     'vendor': 'DELL',
+                     'device_nodes': 'sdb'}
     }
  )
     report = Devices().json_report()[0]
@@ -85,6 +87,7 @@ def device_data(device_info):
                 'size': 1999844147200.0,
                 'support_discard': '',
                 'vendor': 'DELL',
+                'device_nodes': 'sdb'
             }
         }
     )
@@ -140,6 +143,7 @@ class TestInventory(object):
         'size',
         'support_discard',
         'vendor',
+        'device_nodes'
     ]
 
     expected_lsm_keys = [
