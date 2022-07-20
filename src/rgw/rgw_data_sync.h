@@ -4,9 +4,15 @@
 #ifndef CEPH_RGW_DATA_SYNC_H
 #define CEPH_RGW_DATA_SYNC_H
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
 #include "include/encoding.h"
 
 #include "common/ceph_json.h"
+#include "common/likely.h"
 
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
@@ -328,7 +334,18 @@ struct RGWDataSyncEnv {
 
   std::string shard_obj_name(int shard_id);
   std::string status_oid();
+
+  std::ostream* ostr{nullptr}; // For pretty printing progress
 };
+
+// pretty ostream output for `radosgw-admin bucket sync run`
+template<typename ...T>
+void pretty_print(const RGWDataSyncEnv* env, T&& ...t) {
+  if (unlikely(!!env->ostr)) {
+    fmt::print(*env->ostr, std::forward<T>(t)...);
+    env->ostr->flush();
+  }
+}
 
 struct RGWDataSyncCtx {
   RGWDataSyncEnv *env{nullptr};
@@ -703,15 +720,18 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
     RGWBucketInfo info;
     rgw_bucket dest;
     RGWBucketSyncFlowManager::pipe_handler handler;
+    std::string zone_name;
 
     source(RGWDataSyncEnv* env, const rgw_zone_id& zone, RGWRESTConn* conn,
 	   const RGWBucketInfo& info, const rgw_bucket& dest,
-	   const RGWBucketSyncFlowManager::pipe_handler& handler)
-      : sc(env, conn, zone), info(info), dest(dest), handler(handler) {}
+	   const RGWBucketSyncFlowManager::pipe_handler& handler,
+	   const std::string& zone_name)
+      : sc(env, conn, zone), info(info), dest(dest), handler(handler),
+	zone_name(zone_name) {}
   };
   std::vector<source> sources;
 
-  int do_init(const DoutPrefixProvider *dpp);
+  int do_init(const DoutPrefixProvider *dpp, std::ostream* ostr);
   RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* store,
 				 std::optional<rgw_zone_id> source_zone,
 				 std::optional<rgw_bucket> source_bucket,
@@ -727,7 +747,7 @@ public:
   construct(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* store,
 	    std::optional<rgw_zone_id> source_zone,
 	    std::optional<rgw_bucket> source_bucket,
-	    const rgw_bucket& dest_bucket);
+	    const rgw_bucket& dest_bucket, std::ostream *ostream);
   ~RGWBucketPipeSyncStatusManager() = default;
 
 
