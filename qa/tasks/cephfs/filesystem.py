@@ -1585,6 +1585,12 @@ class Filesystem(MDSCluster):
         caps: tuple containing the path and permission (can be r or rw)
               respectively.
         """
+        if isinstance(caps[0], (tuple, list)):
+            x = []
+            for c in caps:
+                x.extend(c)
+            caps = tuple(x)
+
         client_name = 'client.' + client_id
         return self.mon_manager.raw_cluster_cmd('fs', 'authorize', self.name,
                                                 client_name, *caps)
