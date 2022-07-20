@@ -191,6 +191,7 @@ List all collections with::
   crash_base            REPORTING                                            Information about daemon crashes (daemon type and version, backtrace, etc.)
   device_base           REPORTING                                            Information about device health metrics
   ident_base            NOT REPORTING: CHANNEL ident IS OFF                  User-provided identifying information about the cluster
+  perf_memory_metrics   NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     Heap stats and mempools for mon and mds
   perf_perf             NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     Information about performance counters of the cluster
 
 
