@@ -83,7 +83,7 @@ def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
     daemon = RgwDaemon()
-    daemon.host = _parse_addr(daemon_info['addr'])
+    daemon.host = daemon_info['metadata']['hostname']
     daemon.port, daemon.ssl = _parse_frontend_config(daemon_info['metadata']['frontend_config#0'])
 
     return daemon
