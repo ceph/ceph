@@ -101,7 +101,7 @@ public:
   }
 
   Cache::backref_buf_entry_query_set_t
-  get_cached_backrefs_in_range(
+  get_cached_backref_entries_in_range(
     paddr_t start,
     paddr_t end) final;
   const backref_set_t& get_cached_backrefs() final;

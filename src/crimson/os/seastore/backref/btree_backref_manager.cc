@@ -430,11 +430,11 @@ void BtreeBackrefManager::complete_transaction(
 }
 
 Cache::backref_buf_entry_query_set_t
-BtreeBackrefManager::get_cached_backrefs_in_range(
+BtreeBackrefManager::get_cached_backref_entries_in_range(
   paddr_t start,
   paddr_t end)
 {
-  return cache.get_backrefs_in_range(start, end);
+  return cache.get_backref_entries_in_range(start, end);
 }
 
 const backref_set_t&

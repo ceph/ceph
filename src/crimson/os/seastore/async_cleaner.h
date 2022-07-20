@@ -666,8 +666,7 @@ public:
       submit_transaction_direct_iertr::future<>;
     virtual submit_transaction_direct_ret submit_transaction_direct(
       Transaction &t,
-      std::optional<journal_seq_t> seq_to_trim = std::nullopt,
-      std::optional<std::pair<paddr_t, paddr_t>> gc_range = std::nullopt) = 0;
+      std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
   };
 
 private:
