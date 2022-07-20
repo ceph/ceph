@@ -32,6 +32,13 @@
   in certain recovery scenarios, e.g., monitor database lost and rebuilt, and
   the restored file system is expected to have the same ID as before.
 
+>=16.2.11
+--------
+
+* Cephfs: The 'AT_NO_ATTR_SYNC' macro is deprecated, please use the standard
+  'AT_STATX_DONT_SYNC' macro. The 'AT_NO_ATTR_SYNC' macro will be removed in
+  the future.
+
 >=16.2.8
 --------
 
