@@ -1,3 +1,10 @@
+>=17.2.4
+--------
+
+* Cephfs: The 'AT_NO_ATTR_SYNC' macro is deprecated, please use the standard
+  'AT_STATX_DONT_SYNC' macro. The 'AT_NO_ATTR_SYNC' macro will be removed in
+  the future.
+
 >=17.2.1
 
 * The "BlueStore zero block detection" feature (first introduced to Quincy in
