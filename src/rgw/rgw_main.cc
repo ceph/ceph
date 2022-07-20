@@ -403,14 +403,10 @@ int radosgw_Main(int argc, const char **argv)
   const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
   if (config_store == "base") {
     rgw_filter = "base";
-  }
-
+  } 
 #ifdef WITH_RADOSGW_TRACER
-  // Get the d4n directory
-  std::string rgw_d4n = "none";
-  const auto& config_d4n = g_conf().get_val<std::string>("d4n");
-  if (config_d4n == "d4n") {
-    rgw_d4n = "d4n";
+  else if (config_filter == "d4n") {
+    rgw_filter = "d4n";
   }
 #endif
 
