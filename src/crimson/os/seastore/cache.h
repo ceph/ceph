@@ -567,7 +567,7 @@ private:
       backref_buf_entry_t,
       backref_buf_entry_t::cmp_t>;
 
-  backref_buf_entry_query_set_t get_backrefs_in_range(
+  backref_buf_entry_query_set_t get_backref_entries_in_range(
     paddr_t start,
     paddr_t end) {
     auto start_iter = backref_set.lower_bound(
