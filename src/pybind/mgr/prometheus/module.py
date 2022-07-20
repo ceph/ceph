@@ -794,6 +794,13 @@ class Module(MgrModule):
                 path,
                 'DF {}'.format(state),
             )
+            path = 'cluster_by_class_{}'.format(state)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'DF {}'.format(state),
+                ('device_class',)
+            )
         for state in DF_POOL:
             path = 'pool_{}'.format(state)
             metrics[path] = Metric(
@@ -921,6 +928,8 @@ class Module(MgrModule):
         df = self.get('df')
         for stat in DF_CLUSTER:
             self.metrics['cluster_{}'.format(stat)].set(df['stats'][stat])
+            for device_class in df['stats_by_class']:
+                self.metrics['cluster_by_class_{}'.format(stat)].set(df['stats_by_class'][device_class][stat], (device_class,))
 
         for pool in df['pools']:
             for stat in DF_POOL:
