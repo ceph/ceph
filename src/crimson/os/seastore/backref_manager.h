@@ -164,7 +164,6 @@ using BackrefManagerRef =
   std::unique_ptr<BackrefManager>;
 
 BackrefManagerRef create_backref_manager(
-  SegmentManagerGroup &sm_group,
   Cache &cache);
 
 } // namespace crimson::os::seastore::backref
