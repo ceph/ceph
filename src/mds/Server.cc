@@ -362,8 +362,8 @@ void Server::dispatch(const cref_t<Message> &m)
     handle_peer_request(ref_cast<MMDSPeerRequest>(m));
     return;
   default:
-    derr << "server unknown message " << m->get_type() << dendl;
-    ceph_abort_msg("server unknown message");  
+    derr << "Server unknown message " << m->get_type() << " from peer type " << m->get_connection()->get_peer_type() << dendl;
+    ceph_abort_msg("server unknown message  " + to_string(m->get_type()) + " from peer type " + to_string(m->get_connection()->get_peer_type()));  
   }
 }
 
