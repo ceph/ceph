@@ -9,6 +9,7 @@ from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressS
 from object_format import ErrorResponse
 
 import orchestrator
+from orchestrator.module import IngressType
 
 from .exception import NFSInvalidOperation, ClusterNotFound
 from .utils import (
@@ -60,8 +61,9 @@ class NFSCluster:
     def _call_orch_apply_nfs(
             self,
             cluster_id: str,
-            placement: Optional[str],
+            placement: Optional[str] = None,
             virtual_ip: Optional[str] = None,
+            ingress_mode: Optional[IngressType] = None,
             port: Optional[int] = None,
     ) -> None:
         if not port:
@@ -69,18 +71,27 @@ class NFSCluster:
         if virtual_ip:
             # nfs + ingress
             # run NFS on non-standard port
+            if not ingress_mode:
+                ingress_mode = IngressType.default
+            pspec = PlacementSpec.from_string(placement)
+            if ingress_mode == IngressType.keepalive_only:
+                # enforce count=1 for nfs over keepalive only
+                pspec.count = 1
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
-                                  placement=PlacementSpec.from_string(placement),
+                                  placement=pspec,
                                   # use non-default port so we don't conflict with ingress
-                                  port=10000 + port)   # semi-arbitrary, fix me someday
+                                  port=10000 + port if ingress_mode != IngressType.keepalive_only else port,  # semi-arbitrary, fix me someday
+                                  virtual_ip=virtual_ip.split('/')[0] if ingress_mode == IngressType.keepalive_only else None)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
                                 service_id='nfs.' + cluster_id,
                                 backend_service='nfs.' + cluster_id,
-                                frontend_port=port,
+                                placement=pspec,
+                                frontend_port=port if ingress_mode != IngressType.keepalive_only else None,
                                 monitor_port=7000 + port,   # semi-arbitrary, fix me someday
-                                virtual_ip=virtual_ip)
+                                virtual_ip=virtual_ip,
+                                keepalive_only=(ingress_mode == IngressType.keepalive_only))
             completion = self.mgr.apply_ingress(ispec)
             orchestrator.raise_if_exception(completion)
         else:
@@ -109,6 +120,7 @@ class NFSCluster:
             placement: Optional[str],
             virtual_ip: Optional[str],
             ingress: Optional[bool] = None,
+            ingress_mode: Optional[IngressType] = None,
             port: Optional[int] = None,
     ) -> None:
         try:
@@ -121,6 +133,8 @@ class NFSCluster:
                 raise NFSInvalidOperation('virtual_ip can only be provided with ingress enabled')
             if not virtual_ip and ingress:
                 raise NFSInvalidOperation('ingress currently requires a virtual_ip')
+            if ingress_mode and not ingress:
+                raise NFSInvalidOperation('--ingress-mode must be passed along with --ingress')
             invalid_str = re.search('[^A-Za-z0-9-_.]', cluster_id)
             if invalid_str:
                 raise NFSInvalidOperation(f"cluster id {cluster_id} is invalid. "
@@ -131,7 +145,7 @@ class NFSCluster:
             self.create_empty_rados_obj(cluster_id)
 
             if cluster_id not in available_clusters(self.mgr):
-                self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, port)
+                self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, ingress_mode, port)
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
         except Exception as e:
