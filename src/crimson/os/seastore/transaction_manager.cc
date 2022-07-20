@@ -684,7 +684,7 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
-  auto backref_manager = create_backref_manager(*sms, *cache);
+  auto backref_manager = create_backref_manager(*cache);
 
   bool cleaner_is_detailed;
   AsyncCleaner::config_t cleaner_config;
