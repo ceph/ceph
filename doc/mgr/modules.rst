@@ -108,9 +108,13 @@ following commands::
 Exposing commands
 -----------------
 
-There are two approaches for exposing a command. The first one is to
-use the ``@CLICommand`` decorator to decorate the method which handles
-the command. like this
+There are two approaches for exposing a command. The first method involves using
+the ``@CLICommand`` decorator to decorate the methods needed to handle a command.
+The second method uses a ``COMMANDS`` attribute defined for the module class.
+
+
+The CLICommand approach
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: python
 
@@ -164,7 +168,11 @@ In addition to ``@CLICommand``, you could also use ``@CLIReadCommand`` or
 ``@CLIWriteCommand`` if your command only requires read permissions or
 write permissions respectively.
 
-The second one is to set the ``COMMANDS`` class attribute of your module to
+
+The COMMANDS Approach
+~~~~~~~~~~~~~~~~~~~~~
+
+This method uses the ``COMMANDS`` class attribute of your module to define
 a list of dicts like this::
 
     COMMANDS = [
