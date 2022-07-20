@@ -1016,7 +1016,7 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
 	      ).si_then([this, &extents, &t, &pin_list] {
 		// calculate live extents
 		auto cached_backrefs = 
-		  backref_manager.get_cached_backrefs_in_range(
+		  backref_manager.get_cached_backref_entries_in_range(
 		    reclaim_state->start_pos, reclaim_state->end_pos);
 		std::set<
 		  backref_buf_entry_t,
