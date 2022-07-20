@@ -41,7 +41,7 @@
                        [id]="'label_' + optionName"
                        [for]="optionName"
                        i18n>{{ deploymentOptions?.options[optionName].title }}
-                       {{ deploymentOptions.recommended_option === optionName ? "(Recommended)" : "" }}
+                       {{ deploymentOptions?.recommended_option === optionName ? "(Recommended)" : "" }}
                   <cd-helper>
                     <span>{{ deploymentOptions?.options[optionName].desc }}</span>
                   </cd-helper>

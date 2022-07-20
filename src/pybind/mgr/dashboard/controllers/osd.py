@@ -371,7 +371,7 @@ class Osd(RESTController):
                     option]['encrypted'] = data[0]['encrypted']
                 orch.osds.create([DriveGroupSpec.from_json(
                     predefined_drive_groups[option])])
-            except (ValueError, TypeError, DriveGroupValidationError) as e:
+            except (ValueError, TypeError, KeyError, DriveGroupValidationError) as e:
                 raise DashboardException(e, component='osd')
 
     def _create_bare(self, data):

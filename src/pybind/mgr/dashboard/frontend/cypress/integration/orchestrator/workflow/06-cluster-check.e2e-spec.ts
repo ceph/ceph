@@ -32,7 +32,36 @@ describe('when cluster creation is completed', () => {
       hosts.navigateTo();
     });
 
-    it('should check if monitoring stacks are running on the root host', () => {
+    // grafana ip address is set to the fqdn by default.
+    // kcli is not working with that, so setting the IP manually.
+    it('should change ip address of grafana, prometheus and alertmanager', () => {
+      const dashboardArr: Input[] = [
+        {
+          id: 'GRAFANA_API_URL',
+          newValue: 'https://192.168.100.100:3000',
+          oldValue: ''
+        },
+        {
+          id: 'PROMETHEUS_API_HOST',
+          newValue: 'http://192.168.100.100:9095',
+          oldValue: ''
+        },
+        {
+          id: 'ALERTMANAGER_API_HOST',
+          newValue: 'http://192.168.100.100:9093',
+          oldValue: ''
+        }
+      ];
+      mgrmodules.editMgrModule('dashboard', dashboardArr);
+    });
+
+    // avoid creating node-exporter on the newly added host
+    // to favour the host draining process
+    it('should reduce the count for node-exporter', { retries: 2 }, () => {
+      services.editService('node-exporter', '3');
+    });
+
+    it('should check if monitoring stacks are running on the root host', { retries: 2 }, () => {
       const monitoringStack = ['alertmanager', 'grafana', 'node-exporter', 'prometheus'];
       hosts.clickTab('cd-host-details', 'ceph-node-00', 'Daemons');
       for (const daemon of monitoringStack) {
@@ -40,25 +69,6 @@ describe('when cluster creation is completed', () => {
           services.checkServiceStatus(daemon);
         });
       }
-    });
-
-    // avoid creating node-exporter on the newly added host
-    // to favour the host draining process
-    it('should reduce the count for node-exporter', () => {
-      services.editService('node-exporter', '3');
-    });
-
-    // grafana ip address is set to the fqdn by default.
-    // kcli is not working with that, so setting the IP manually.
-    it('should change ip address of grafana', { retries: 2 }, () => {
-      const dashboardArr: Input[] = [
-        {
-          id: 'GRAFANA_API_URL',
-          newValue: 'https://192.168.100.100:3000',
-          oldValue: ''
-        }
-      ];
-      mgrmodules.editMgrModule('dashboard', dashboardArr);
     });
 
     it('should add one more host', () => {
