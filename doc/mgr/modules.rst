@@ -135,7 +135,7 @@ The CLICommand approach
        else:
            location = blackhole
        self.send_object_to(obj, location)
-       return HandleCommandResult(stdout=f'the black hole swallowed '{oid}'")
+       return HandleCommandResult(stdout=f"the black hole swallowed '{oid}'")
 
 The first parameter passed to ``CLICommand`` is the "name" of the command.
 Since there are lots of commands in Ceph, we tend to group related commands
