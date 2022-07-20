@@ -707,8 +707,8 @@ class CephadmServe:
                 else None
             ),
             allow_colo=svc.allow_colo(),
-            primary_daemon_type=svc.primary_daemon_type(),
-            per_host_daemon_type=svc.per_host_daemon_type(),
+            primary_daemon_type=svc.primary_daemon_type(spec),
+            per_host_daemon_type=svc.per_host_daemon_type(spec),
             rank_map=rank_map,
         )
 

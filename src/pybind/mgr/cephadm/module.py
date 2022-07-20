@@ -1989,7 +1989,9 @@ Then run the following:
             )
             if spec.service_type == 'ingress':
                 # ingress has 2 daemons running per host
-                sm[nm].size *= 2
+                # but only if it's the full ingress service, not for keepalive-only
+                if not cast(IngressSpec, spec).keepalive_only:
+                    sm[nm].size *= 2
 
         # factor daemons into status
         for h, dm in self.cache.get_daemons_with_volatile_status():

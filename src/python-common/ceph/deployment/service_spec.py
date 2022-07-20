@@ -809,6 +809,7 @@ class NFSServiceSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
+                 virtual_ip: Optional[str] = None,
                  extra_container_args: Optional[List[str]] = None,
                  extra_entrypoint_args: Optional[List[str]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -821,6 +822,7 @@ class NFSServiceSpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args, custom_configs=custom_configs)
 
         self.port = port
+        self.virtual_ip = virtual_ip
 
     def get_port_start(self) -> List[int]:
         if self.port:
@@ -1050,6 +1052,7 @@ class IngressSpec(ServiceSpec):
                  virtual_interface_networks: Optional[List[str]] = [],
                  unmanaged: bool = False,
                  ssl: bool = False,
+                 keepalive_only: bool = False,
                  extra_container_args: Optional[List[str]] = None,
                  extra_entrypoint_args: Optional[List[str]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1080,10 +1083,15 @@ class IngressSpec(ServiceSpec):
         self.virtual_interface_networks = virtual_interface_networks or []
         self.unmanaged = unmanaged
         self.ssl = ssl
+        self.keepalive_only = keepalive_only
 
     def get_port_start(self) -> List[int]:
-        return [cast(int, self.frontend_port),
-                cast(int, self.monitor_port)]
+        ports = []
+        if self.frontend_port is not None:
+            ports.append(cast(int, self.frontend_port))
+        if self.monitor_port is not None:
+            ports.append(cast(int, self.monitor_port))
+        return ports
 
     def get_virtual_ip(self) -> Optional[str]:
         return self.virtual_ip
@@ -1094,7 +1102,7 @@ class IngressSpec(ServiceSpec):
         if not self.backend_service:
             raise SpecValidationError(
                 'Cannot add ingress: No backend_service specified')
-        if not self.frontend_port:
+        if not self.keepalive_only and not self.frontend_port:
             raise SpecValidationError(
                 'Cannot add ingress: No frontend_port specified')
         if not self.monitor_port:
