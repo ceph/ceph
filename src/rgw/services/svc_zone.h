@@ -129,7 +129,7 @@ public:
     return zone_data_notify_to_map;
   }
 
-  bool find_zone(const rgw_zone_id& id, RGWZone **zone);
+  RGWZone* find_zone(const rgw_zone_id& id);
 
   RGWRESTConn *get_zone_conn(const rgw_zone_id& zone_id);
   RGWRESTConn *get_zone_conn_by_name(const std::string& name);

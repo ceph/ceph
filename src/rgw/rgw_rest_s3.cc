@@ -1077,7 +1077,7 @@ struct ReplicationConfiguration {
 
       for (auto& id : zone_ids) {
 	RGWZone *zone;
-	if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(id, &zone)) {
+	if ((zone = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(id))) {
 	  names.emplace_back(zone->name);
 	}
       }
