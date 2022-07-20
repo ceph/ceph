@@ -519,7 +519,7 @@ class Module(MgrModule):
         r, outb, outs = self.tell_command(daemon_type, str(daemon_id), cmd_dict)
 
         if r != 0:
-            self.log.debug("Invalid command dictionary.")
+            self.log.error("Invalid command dictionary: {}".format(cmd_dict))
         else:
             if 'tcmalloc heap stats' in outs:
                 values = [int(i) for i in outs.split() if i.isdigit()]
@@ -537,14 +537,14 @@ class Module(MgrModule):
                               'thread_heaps_in_use',
                               'tcmalloc_page_size']
                 if len(values) != len(categories):
-                    self.log.debug('Received unexpected output from {}.{}; ' \
+                    self.log.error('Received unexpected output from {}.{}; ' \
                                    'number of values should match the number' \
                                    'of expected categories:\n values: len={} {} '\
                                    '~ categories: len={} {} ~ outs: {}'.format(daemon_type, daemon_id, len(values), values, len(categories), categories, outs))
                 else:
                     parsed_output = dict(zip(categories, values))
             else:
-                self.log.debug('No heap stats available on {}.{}: {}'.format(daemon_type, daemon_id, outs))
+                self.log.error('No heap stats available on {}.{}: {}'.format(daemon_type, daemon_id, outs))
         
         return parsed_output
 
@@ -575,7 +575,7 @@ class Module(MgrModule):
             }
             r, outb, outs = self.tell_command(daemon_type, daemon_id, cmd_dict)
             if r != 0:
-                self.log.debug("Invalid command dictionary.")
+                self.log.error("Invalid command dictionary: {}".format(cmd_dict))
                 continue
             else:
                 try:
@@ -592,9 +592,9 @@ class Module(MgrModule):
                             result[daemon_type][mem_type]['bytes'] += dump['mempool']['by_pool'][mem_type]['bytes']
                             result[daemon_type][mem_type]['items'] += dump['mempool']['by_pool'][mem_type]['items']
                     else:
-                        self.log.debug("Incorrect mode specified in get_mempool")
+                        self.log.error("Incorrect mode specified in get_mempool: {}".format(mode))
                 except (json.decoder.JSONDecodeError, KeyError) as e:
-                    self.log.debug("Error caught on {}.{}: {}".format(daemon_type, daemon_id, e))
+                    self.log.error("Error caught on {}.{}: {}".format(daemon_type, daemon_id, e))
                     continue
 
         if anonymized_daemons:
@@ -624,7 +624,7 @@ class Module(MgrModule):
             r, outb, outs = self.osd_command(cmd_dict)
             # Check for invalid calls
             if r != 0:
-                self.log.debug("Invalid command dictionary.")
+                self.log.error("Invalid command dictionary: {}".format(cmd_dict))
                 continue
             else:
                 try:
@@ -711,7 +711,7 @@ class Module(MgrModule):
                 # schema when it doesn't. In either case, we'll handle that
                 # by continuing and collecting what we can from other osds.
                 except (json.decoder.JSONDecodeError, KeyError) as e:
-                    self.log.debug("Error caught on osd.{}: {}".format(osd_id, e))
+                    self.log.error("Error caught on osd.{}: {}".format(osd_id, e))
                     continue
 
         return list(result.values())
@@ -919,14 +919,14 @@ class Module(MgrModule):
                 m = self.remote('devicehealth', 'get_recent_device_metrics',
                                 devid, min_sample)
             except Exception as e:
-                self.log.debug('Unable to get recent metrics from device with id "{}": {}'.format(devid, e))
+                self.log.error('Unable to get recent metrics from device with id "{}": {}'.format(devid, e))
                 continue
 
             # anonymize host id
             try:
                 host = d['location'][0]['host']
             except (KeyError, IndexError) as e:
-                self.log.debug('Unable to get host from device with id "{}": {}'.format(devid, e))
+                self.log.error('Unable to get host from device with id "{}": {}'.format(devid, e))
                 continue
             anon_host = self.get_store('host-id/%s' % host)
             if not anon_host:
