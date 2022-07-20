@@ -62,6 +62,13 @@ class KernelMount(CephFSMount):
                 self.enable_dynamic_debug()
             self.ctx[f'kmount_count.{self.client_remote.hostname}'] = kmount_count + 1
 
+        self.gather_mount_info()
+
+    def gather_mount_info(self):
+        self.id = self._get_global_id()
+        self.get_global_inst()
+        self.get_global_addr()
+
     def _run_mount_cmd(self, mntopts, check_status):
         mount_cmd = self._get_mount_cmd(mntopts)
         mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
@@ -133,6 +140,11 @@ class KernelMount(CephFSMount):
             self.cleanup()
             return
 
+        if self.is_blocked():
+            self._run_umount_lf()
+            self.cleanup()
+            return
+
         log.debug('Unmounting client client.{id}...'.format(id=self.client_id))
 
         try:
@@ -173,11 +185,7 @@ class KernelMount(CephFSMount):
                 raise
 
             # force delete the netns and umount
-            log.debug('Force/lazy unmounting on client.{id}...'.format(id=self.client_id))
-            self.client_remote.run(args=['sudo', 'umount', '-f', '-l',
-                                         self.mountpoint], timeout=timeout,
-                                   omit_sudo=False)
-
+            self._run_umount_lf()
             self.cleanup()
 
     def wait_until_mounted(self):
