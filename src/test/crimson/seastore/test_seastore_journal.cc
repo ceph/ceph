@@ -90,6 +90,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   /*
    * SegmentProvider interfaces
    */
+  void set_journal_head(journal_seq_t) final {}
+
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
 
   const segment_info_t& get_seg_info(segment_id_t id) const final {

@@ -603,6 +603,11 @@ segment_id_t AsyncCleaner::allocate_segment(
     if (segment_info.is_empty()) {
       auto old_usage = calc_utilization(seg_id);
       segments.mark_open(seg_id, seq, type, category, generation);
+      if (type == segment_type_t::JOURNAL) {
+        set_journal_head(segments.get_journal_head());
+      } else {
+        gc_process.maybe_wake_on_space_used();
+      }
       auto new_usage = calc_utilization(seg_id);
       adjust_segment_util(old_usage, new_usage);
       INFO("opened, should_block_on_trim {}, should_block_on_reclaim {}, "
@@ -639,7 +644,6 @@ void AsyncCleaner::update_journal_tail_target(
 
   journal_seq_t target = std::min(dirty_replay_from, alloc_replay_from);
   ceph_assert(target != JOURNAL_SEQ_NULL);
-  auto journal_head = segments.get_journal_head();
   ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
               journal_head >= target);
   if (journal_tail_target == JOURNAL_SEQ_NULL ||
@@ -675,7 +679,6 @@ void AsyncCleaner::update_journal_tail_committed(journal_seq_t committed)
   if (committed == JOURNAL_SEQ_NULL) {
     return;
   }
-  auto journal_head = segments.get_journal_head();
   ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
               journal_head >= committed);
 
@@ -1296,7 +1299,7 @@ void AsyncCleaner::complete_init()
   }
   INFO("done, start GC, time_bound={}",
        sea_time_point_printer_t{segments.get_time_bound()});
-  ceph_assert(segments.get_journal_head() != JOURNAL_SEQ_NULL);
+  ceph_assert(journal_head != JOURNAL_SEQ_NULL);
   init_complete = true;
   gc_process.start();
 }
@@ -1453,7 +1456,7 @@ void AsyncCleaner::log_gc_state(const char *caller) const
       should_block_on_trim(),
       should_block_on_reclaim(),
       gc_should_reclaim_space(),
-      segments.get_journal_head(),
+      journal_head,
       journal_tail_target,
       journal_tail_committed,
       get_dirty_tail(),
