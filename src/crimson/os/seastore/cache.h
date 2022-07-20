@@ -310,7 +310,7 @@ public:
         alloc_cache_buf(length));
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
-                placement_hint_t::NUM_HINTS,
+                PLACEMENT_HINT_NULL,
                 NULL_GENERATION);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent, add extent and reading ... -- {}",
@@ -329,7 +329,7 @@ public:
         alloc_cache_buf(length));
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
-                placement_hint_t::NUM_HINTS,
+                PLACEMENT_HINT_NULL,
                 NULL_GENERATION);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent(placeholder), reading ... -- {}",
