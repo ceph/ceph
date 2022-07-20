@@ -168,6 +168,12 @@ class CephFSMount(object):
                      get_file(self.client_remote, self.client_keyring_path,
                               sudo=True).decode())
 
+    def is_blocked(self):
+        self.fs = Filesystem(self.ctx, name=self.cephfs_name)
+
+        output = self.fs.mon_manager.raw_cluster_cmd(args='osd blocklist ls')
+        return self.addr in output
+
     def is_stuck(self):
         """
         Check if mount is stuck/in a hanged state.
@@ -472,6 +478,19 @@ class CephFSMount(object):
         """
         self.mount(**kwargs)
         self.wait_until_mounted()
+
+    def _run_umount_lf(self):
+        log.debug(f'Force/lazy unmounting on client.{self.client_id}')
+
+        try:
+            proc = self.client_remote.run(
+                args=f'sudo umount --lazy --force {self.hostfs_mntpt}',
+                timeout=UMOUNT_TIMEOUT, omit_sudo=False)
+        except CommandFailedError:
+            if self.is_mounted():
+                raise
+
+        return proc
 
     def umount(self):
         raise NotImplementedError()
