@@ -575,7 +575,6 @@ TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_l
     }
 
     if (is_logical_type(type)) {
-      using inner_ret = LBAManager::get_mapping_iertr::future<CachedExtentRef>;
       return lba_manager->get_mappings(
 	t,
 	laddr,
@@ -658,7 +657,7 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
-  auto backref_manager = create_backref_manager(*sms, *cache);
+  auto backref_manager = create_backref_manager(*cache);
 
   bool cleaner_is_detailed;
   AsyncCleaner::config_t cleaner_config;

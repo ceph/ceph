@@ -482,6 +482,10 @@ public:
     return get_extent<T>(t, offset, length, [](T &){});
   }
 
+  seastore_off_t get_block_size() const {
+    return epm.get_block_size();
+  }
+
 private:
   // This is a workaround std::move_only_function not being available,
   // not really worth generalizing at this time.

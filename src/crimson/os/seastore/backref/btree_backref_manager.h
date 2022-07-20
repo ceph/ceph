@@ -38,11 +38,8 @@ using BackrefBtree = FixedKVBtree<
 class BtreeBackrefManager : public BackrefManager {
 public:
 
-  BtreeBackrefManager(
-    SegmentManagerGroup &sm_group,
-    Cache &cache)
-    : sm_group(sm_group),
-      cache(cache)
+  BtreeBackrefManager(Cache &cache)
+    : cache(cache)
   {}
 
   mkfs_ret mkfs(
@@ -119,7 +116,6 @@ public:
   void cache_new_backref_extent(paddr_t paddr, extent_types_t type) final;
 
 private:
-  SegmentManagerGroup &sm_group;
   Cache &cache;
 
   btree_pin_set_t<paddr_t> pin_set;
