@@ -48,6 +48,11 @@
   CephFS does not support disk space reservation. The only flags supported are
   `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
 
+* RADOS: Upgrading a cluster configured with a stretch crush rule and a multi-take
+  rule can lead to data shuffling, as the new crush changes may necessitate data
+  redistribution. In contrast, a stretch rule with a single-take configuration
+  will not cause any data movement during the upgrade process.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
