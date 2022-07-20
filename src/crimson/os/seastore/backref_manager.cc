@@ -8,12 +8,10 @@
 namespace crimson::os::seastore {
 
 BackrefManagerRef create_backref_manager(
-  SegmentManagerGroup &sm_group,
   Cache &cache)
 {
   return BackrefManagerRef(
-    new backref::BtreeBackrefManager(
-      sm_group, cache));
+    new backref::BtreeBackrefManager(cache));
 }
 
 } // namespace crimson::os::seastore::backref
