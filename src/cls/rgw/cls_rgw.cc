@@ -1161,7 +1161,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
                __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
-  const auto [ decode_ret, op ] = decode_complete_op(in);
+  auto [ decode_ret, op ] = decode_complete_op(in);
   if (decode_ret < 0) {
     return decode_ret;
   }
@@ -1206,12 +1206,12 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     if (pinter == entry.pending_map.end()) {
       CLS_LOG_BITX(bitx_inst, 1,
 		   "ERROR: %s: couldn't find op_tag for pending operation with tag %s",
-		   __func__, op.tag.c_str());
+		   __func__, op.op_tag.c_str());
       return -EINVAL;
     }
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: removing tag %s from pending map",
-		   __func__, op.tag.c_str());
+		   __func__, op.op_tag.c_str());
     entry.pending_map.erase(pinter);
   }
 
@@ -1232,7 +1232,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   entry.ver = op.ver;
   if (op.op == CLS_RGW_OP_CANCEL) {
     log_op = false; // don't log cancelation
-    if (op.tag.size()) {
+    if (op.op_tag.size()) {
       // we removed this tag from pending_map so need to write the changes
       CLS_LOG_BITX(bitx_inst, 20,
 		   "INFO: %s: setting map entry at key=%s",
@@ -1834,7 +1834,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   BIOLHEntry olh(hctx, op.key);
   bool olh_read_attempt = false;
   bool olh_found = false;
-  if (!existed && op.delete_marker) {
+  if (!existed && op.has_delete_marker()) {
     /* read olh */
     ret = olh.init(&olh_found);
     if (ret < 0) {
@@ -2490,17 +2490,9 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: op=%c cur_disk.pending_map.empty()=%d cur_disk.exists=%d "
-		 "cur_disk.index_ver=%d cur_change.exists=%d cur_change.index_ver=%d",
+		 "cur_change.exists=%d ",
 		 __func__, op, cur_disk.pending_map.empty(), cur_disk.exists,
-		 (int)cur_disk.index_ver, cur_change.exists,
-		 (int)cur_change.index_ver);
-
-    if (cur_change.index_ver < cur_disk.index_ver) {
-      // a pending on-disk entry was completed since this suggestion was made,
-      // don't apply it yet. if the index really is inconsistent, the next
-      // listing will get the latest version and resend the suggestion
-      continue;
-    }
+		 cur_change.exists);
 
     if (cur_disk.pending_map.empty()) {
       CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: cur_disk.pending_map is empty", __func__);

@@ -204,7 +204,7 @@ void RGWObjectCtx::set_prefetch_data(const rgw_obj& obj) {
   objs_state[obj].state.prefetch_data = true;
 }
 
-void RGWObjectCtx::invalidate(const rgw::sal::Object* obj) {
+void RGWObjectCtx::invalidate(const rgw_obj& obj) {
   std::unique_lock wl{lock};
   auto iter = objs_state.find(obj);
   if (iter == objs_state.end()) {
@@ -923,16 +923,12 @@ void RGWIndexCompletionManager::process()
 			       const bool bitx = ctx()->_conf->rgw_bucket_index_transaction_instrumentation;
 			       ldout_bitx(bitx, &dpp, 10) <<
 				 "ENTERING " << __func__ << ": bucket-shard=" << bs <<
-				 " obj=" << c->obj << " tag=" << c->tag <<
-				 " op=" << c->op << ", remove_objs=" << c->remove_objs << dendl_bitx;
+				 " obj=" << c->obj << dendl_bitx;
 			       ldout_bitx(bitx, &dpp, 25) <<
 				 "BACKTRACE: " << __func__ << ": " << ClibBackTrace(1) << dendl_bitx;
 
 			       librados::ObjectWriteOperation o;
-			       o.assert_exists();
-			       cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-			       cls_rgw_bucket_complete_op(o, c->op, c->tag, c->ver, c->key, c->dir_meta, &c->remove_objs,
-							  c->log_op, c->bilog_op, &c->zones_trace);
+                               c->bi_update(o);
 			       int ret = bs->bucket_obj.operate(&dpp, &o, null_yield);
 			       ldout_bitx(bitx, &dpp, 10) <<
 				 "EXITING " << __func__ << ": ret=" << dendl_bitx;
@@ -990,7 +986,6 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
     auto iter = comps.find(arg);
     if (iter == comps.end()) {
-      ldout(arg->manager->ctx(), 0) << __func__ << "(): cannot find completion for obj=" << arg->key << dendl;
       return true;
     }
 
@@ -999,13 +994,9 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
   int r = rados_aio_get_return_value(cb);
   if (r != -ERR_BUSY_RESHARDING) {
-    ldout(arg->manager->ctx(), 20) << __func__ << "(): completion " << 
-      (r == 0 ? "ok" : "failed with " + to_string(r)) << 
-      " for obj=" << arg->key << dendl;
     return true;
   }
   add_completion(arg);
-  ldout(arg->manager->ctx(), 20) << __func__ << "(): async completion added for obj=" << arg->key << dendl;
   return false;
 }
 
@@ -7134,7 +7125,7 @@ static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(CephContext* const cct,
                                                         RGWRados& store,
                                                         const RGWBucketInfo& binfo)
 {
-  return { cct, store, binfo } ;
+  return { cct, store, binfo };
 }
 
 struct BILogNopHandler {
@@ -7721,7 +7712,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWB
       int ret, i;
       for (i = 0; i < MAX_ECANCELED_RETRY; i++) {
         if (ret == -ECANCELED) {
-          obj_ctx.invalidate(olh_obj);
+          olh_obj->invalidate();
         }
 
         ret = get_obj_state(dpp, &obj_ctx, bucket_info, olh_obj.get(), &state, &manifest, false, y); /* don't follow olh */
@@ -7778,7 +7769,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWB
     },
     bucket_info,
     cls_rgw_obj_key {
-      target_obj.key.get_index_key_name(), target_obj.key.instance},
+      target_obj->get_name(), target_obj->get_instance()},
     std::string{}, //op_tag,
     zones_trace,
     get_olh_op_bilog_flags());
@@ -7845,7 +7836,7 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider *dpp, RGWBucketInfo& 
     },
     bucket_info,
     cls_rgw_obj_key {
-      target_obj->get_index_key_name(), target_obj->instance},
+      target_obj->get_name(), target_obj->get_instance()},
     std::string{}, //op_tag,
     zones_trace,
     get_olh_op_bilog_flags());
