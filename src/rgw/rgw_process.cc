@@ -180,6 +180,10 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
    * if you are using the REST endpoint either (ergo, no authenticated access)
    */
   if (! skip_retarget) {
+    if (!s->bucket_exists) {
+      dout(0) << "ERROR: No such bucket or bucket is null" << dendl;
+      return -ERR_NO_SUCH_BUCKET;
+    }
     ldpp_dout(op, 2) << "recalculating target" << dendl;
     ret = handler->retarget(op, &op, y);
     if (ret < 0) {
