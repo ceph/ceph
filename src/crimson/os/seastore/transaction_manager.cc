@@ -602,7 +602,6 @@ TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_l
     }
 
     if (is_logical_type(type)) {
-      using inner_ret = LBAManager::get_mapping_iertr::future<CachedExtentRef>;
       return lba_manager->get_mappings(
 	t,
 	laddr,
