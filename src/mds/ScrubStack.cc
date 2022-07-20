@@ -771,6 +771,7 @@ void ScrubStack::scrub_status(Formatter *f) {
       uint64_t started = 0;
       uint64_t passed = 0;
       uint64_t failed = 0;
+      uint64_t skipped = 0;
       for (auto& stats : mds_scrub_stats) {
 	if (auto it = stats.counters.find(tag); it != stats.counters.end()) {
 	  auto& [t, c] = *it;
