@@ -269,6 +269,8 @@ private:
  */
 class SegmentProvider {
 public:
+  virtual void set_journal_head(journal_seq_t) = 0;
+
   virtual journal_seq_t get_journal_tail_target() const = 0;
 
   virtual const segment_info_t& get_seg_info(segment_id_t id) const = 0;
@@ -731,6 +733,9 @@ private:
   /// most recently committed journal_tail
   journal_seq_t journal_tail_committed;
 
+  /// head of journal
+  journal_seq_t journal_head;
+
   ExtentCallbackInterface *ecb = nullptr;
 
   /// populated if there is an IO blocked on hard limits
@@ -773,6 +778,14 @@ public:
     return segments[id];
   }
 
+  void set_journal_head(journal_seq_t head) final {
+    ceph_assert(head != JOURNAL_SEQ_NULL);
+    ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
+                head >= journal_head);
+    journal_head = head;
+    gc_process.maybe_wake_on_space_used();
+  }
+
   segment_id_t allocate_segment(
       segment_seq_t, segment_type_t, data_category_t, reclaim_gen_t) final;
 
@@ -782,7 +795,11 @@ public:
 
   void update_segment_avail_bytes(segment_type_t type, paddr_t offset) final {
     segments.update_written_to(type, offset);
-    gc_process.maybe_wake_on_space_used();
+    if (type == segment_type_t::JOURNAL) {
+      set_journal_head(segments.get_journal_head());
+    } else {
+      gc_process.maybe_wake_on_space_used();
+    }
   }
 
   void update_modify_time(
@@ -811,7 +828,6 @@ public:
     journal_seq_t alloc_replay_from);
 
   void init_mkfs() {
-    auto journal_head = segments.get_journal_head();
     ceph_assert(disable_trim || journal_head != JOURNAL_SEQ_NULL);
     journal_tail_target = journal_head;
     journal_tail_committed = journal_head;
@@ -932,7 +948,7 @@ private:
     journal_seq_t limit);
 
   journal_seq_t get_dirty_tail() const {
-    auto ret = segments.get_journal_head();
+    auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.target_journal_segments) {
       ret.segment_seq -= config.target_journal_segments;
@@ -944,7 +960,7 @@ private:
   }
 
   journal_seq_t get_dirty_tail_limit() const {
-    auto ret = segments.get_journal_head();
+    auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.max_journal_segments) {
       ret.segment_seq -= config.max_journal_segments;
@@ -956,7 +972,7 @@ private:
   }
 
   journal_seq_t get_backref_tail() const {
-    auto ret = segments.get_journal_head();
+    auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.target_backref_inflight_segments) {
       ret.segment_seq -= config.target_backref_inflight_segments;
@@ -1136,7 +1152,6 @@ private:
     if (journal_tail_committed == JOURNAL_SEQ_NULL) {
       return segments.get_num_type_journal();
     }
-    auto journal_head = segments.get_journal_head();
     assert(journal_head != JOURNAL_SEQ_NULL);
     assert(journal_head.segment_seq >= journal_tail_committed.segment_seq);
     return journal_head.segment_seq + 1 - journal_tail_committed.segment_seq;
@@ -1201,7 +1216,6 @@ private:
    * Journal sizes
    */
   std::size_t get_dirty_journal_size() const {
-    auto journal_head = segments.get_journal_head();
     if (journal_head == JOURNAL_SEQ_NULL ||
         dirty_extents_replay_from == JOURNAL_SEQ_NULL) {
       return 0;
@@ -1214,7 +1228,6 @@ private:
   }
 
   std::size_t get_alloc_journal_size() const {
-    auto journal_head = segments.get_journal_head();
     if (journal_head == JOURNAL_SEQ_NULL ||
         alloc_info_replay_from == JOURNAL_SEQ_NULL) {
       return 0;
