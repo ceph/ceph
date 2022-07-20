@@ -646,11 +646,13 @@ std::ostream& operator<<(std::ostream& out, placement_hint_t h)
 {
   switch (h) {
   case placement_hint_t::HOT:
-    return out << "HOT";
+    return out << "Hint(HOT)";
   case placement_hint_t::COLD:
-    return out << "COLD";
+    return out << "Hint(COLD)";
   case placement_hint_t::REWRITE:
-    return out << "REWRITE";
+    return out << "Hint(REWRITE)";
+  case PLACEMENT_HINT_NULL:
+    return out << "Hint(NULL)";
   default:
     return out << "INVALID_PLACEMENT_HINT_TYPE!";
   }

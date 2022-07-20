@@ -399,7 +399,7 @@ public:
   }
 
   void invalidate_hints() {
-    user_hint = placement_hint_t::NUM_HINTS;
+    user_hint = PLACEMENT_HINT_NULL;
     reclaim_generation = NULL_GENERATION;
   }
 

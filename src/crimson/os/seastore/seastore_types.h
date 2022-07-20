@@ -764,8 +764,10 @@ enum class placement_hint_t {
   HOT = 0,   // The default user hint that expects mutations or retirement
   COLD,      // Expect no mutations and no retirement in the near future
   REWRITE,   // Hint for the internal rewrites
-  NUM_HINTS  // Constant for number of hints
+  NUM_HINTS  // Constant for number of hints or as NULL
 };
+
+constexpr auto PLACEMENT_HINT_NULL = placement_hint_t::NUM_HINTS;
 
 std::ostream& operator<<(std::ostream& out, placement_hint_t h);
 

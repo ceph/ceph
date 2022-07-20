@@ -381,9 +381,7 @@ public:
     Transaction &t,
     laddr_t laddr_hint,
     paddr_t existing_paddr,
-    extent_len_t length,
-    placement_hint_t placement_hint = placement_hint_t::HOT,
-    reclaim_gen_t gen = DIRTY_GENERATION) {
+    extent_len_t length) {
     LOG_PREFIX(TransactionManager::map_existing_extent);
     ceph_assert(existing_paddr.is_absolute());
     assert(t.is_retired(existing_paddr, length));
@@ -399,8 +397,8 @@ public:
 
     ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
 	      existing_paddr,
-	      placement_hint,
-	      gen);
+	      PLACEMENT_HINT_NULL,
+	      NULL_GENERATION);
 
     t.add_fresh_extent(ext);
 
