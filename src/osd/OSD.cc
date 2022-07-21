@@ -10538,7 +10538,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       if (is_smallest_thread_index) {
         sdata->shard_lock.unlock();
         handle_oncommits(oncommits);
-        return;
+        sdata->shard_lock.lock();
       }
       std::unique_lock wait_lock{sdata->sdata_wait_lock};
       auto future_time = ceph::real_clock::from_double(*when_ready);
@@ -10554,6 +10554,11 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       // Reapply default wq timeouts
       osd->cct->get_heartbeat_map()->reset_timeout(hb,
         timeout_interval, suicide_interval);
+      // Populate the oncommits list if there were any additions
+      // to the context_queue while we were waiting
+      if (is_smallest_thread_index) {
+        sdata->context_queue.move_to(oncommits);
+      }
     }
   } // while
 
