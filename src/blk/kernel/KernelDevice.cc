@@ -1065,11 +1065,6 @@ struct ExplicitHugePagePool {
       // don't delete nor unmmap; recycle the region instead
       region_q.push(data);
     }
-    raw* clone_empty() override {
-      // the entire cloning facility is used solely by the dev-only MemDB.
-      // see: https://github.com/ceph/ceph/pull/36282
-      ceph_abort_msg("this should be never called on this path!");
-    }
   };
 
   ExplicitHugePagePool(const size_t buffer_size, size_t buffers_in_pool)

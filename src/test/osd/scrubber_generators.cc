@@ -83,8 +83,9 @@ ScrubGenerator::SmapEntry ScrubGenerator::make_smobject(
     ret.smobj.attrs[at_k] = ceph::buffer::copy(at_v.c_str(), at_v.size());
     {
       // verifying (to be removed after dev phase)
-      auto bk = ret.smobj.attrs[at_k].clone();
-      std::string bkstr{bk.get()->get_data(), bk.get()->get_len()};
+      auto bk = ret.smobj.attrs[at_k].begin_deep().get_ptr(
+	ret.smobj.attrs[at_k].length());
+      std::string bkstr{bk.raw_c_str(), bk.raw_length()};
       std::cout << fmt::format("{}: verification: {}", __func__, bkstr)
 		<< std::endl;
     }

@@ -27,9 +27,6 @@ class raw_seastar_foreign_ptr : public raw {
  public:
   raw_seastar_foreign_ptr(temporary_buffer&& buf)
     : raw(buf.get_write(), buf.size()), ptr(std::move(buf)) {}
-  raw* clone_empty() override {
-    return create(len).release();
-  }
 };
 
 class raw_seastar_local_ptr : public raw {
@@ -37,9 +34,6 @@ class raw_seastar_local_ptr : public raw {
  public:
   raw_seastar_local_ptr(temporary_buffer&& buf)
     : raw(buf.get_write(), buf.size()), buf(std::move(buf)) {}
-  raw* clone_empty() override {
-    return create(len).release();
-  }
 };
 
 inline namespace v15_2_0 {
@@ -93,9 +87,6 @@ class raw_seastar_local_shared_ptr : public raw {
 public:
   raw_seastar_local_shared_ptr(temporary_buffer& buf)
     : raw(buf.get_write(), buf.size()), buf(buf.share()) {}
-  raw* clone_empty() override {
-    return ceph::buffer::create(len).release();
-  }
 };
 }
 
