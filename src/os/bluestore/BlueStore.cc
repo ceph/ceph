@@ -15472,7 +15472,7 @@ int BlueStore::_do_alloc_write(
   );
 
   // compress (as needed) and calc needed space
-  uint64_t need = 0;
+  int64_t need = 0;
   auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   for (auto& wi : wctx->writes) {
     if (c && wi.blob_length > min_alloc_size) {
@@ -15556,8 +15556,7 @@ int BlueStore::_do_alloc_write(
   }
   PExtentVector prealloc;
   prealloc.reserve(2 * wctx->writes.size());;
-  int64_t prealloc_left = 0;
-  prealloc_left = alloc->allocate(
+  int64_t prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
     0, &prealloc);
   if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
@@ -15576,19 +15575,20 @@ int BlueStore::_do_alloc_write(
   dout(20) << __func__ << " prealloc " << prealloc << dendl;
   auto prealloc_pos = prealloc.begin();
   ceph_assert(prealloc_pos != prealloc.end());
-  uint64_t prealloc_pos_length = prealloc_pos->length;
+  int64_t prefer_deferred_size_snapshot = prefer_deferred_size.load();
+  uint64_t prealloc_pos_length0 = prealloc_pos->length;
 
   for (auto& wi : wctx->writes) {
     bluestore_blob_t& dblob = wi.b->dirty_blob();
     uint64_t b_off = wi.b_off;
-    bufferlist *l = &wi.bl;
-    uint64_t final_length = wi.blob_length;
+    bufferlist *bl = &wi.bl;
+    uint64_t blob_allocated_len = wi.blob_length;
     uint64_t csum_length = wi.blob_length;
     if (wi.compressed) {
-      final_length = wi.compressed_bl.length();
-      csum_length = final_length;
+      blob_allocated_len = wi.compressed_bl.length();
+      csum_length = blob_allocated_len;
       unsigned csum_order = std::countr_zero(csum_length);
-      l = &wi.compressed_bl;
+      bl = &wi.compressed_bl;
       dblob.set_compressed(wi.blob_length, wi.compressed_len);
       if (csum != Checksummer::CSUM_NONE) {
         dout(20) << __func__
@@ -15605,20 +15605,20 @@ int BlueStore::_do_alloc_write(
       unsigned csum_order;
       // initialize newly created blob only
       ceph_assert(dblob.is_mutable());
-      if (l->length() != wi.blob_length) {
+      if (bl->length() != wi.blob_length) {
         // hrm, maybe we could do better here, but let's not bother.
         dout(20) << __func__ << " forcing csum_order to block_size_order "
                 << block_size_order << dendl;
 	csum_order = block_size_order;
       } else {
-        csum_order = std::min<unsigned>(wctx->csum_order, std::countr_zero(l->length()));
+        csum_order = std::min<unsigned>(wctx->csum_order, std::countr_zero(bl->length()));
       }
       // try to align blob with max_blob_size to improve
       // its reuse ratio, e.g. in case of reverse write
       uint32_t suggested_boff =
        (wi.logical_offset - (wi.b_off0 - wi.b_off)) % max_bsize;
       if ((suggested_boff % (1 << csum_order)) == 0 &&
-           suggested_boff + final_length <= max_bsize &&
+           suggested_boff + blob_allocated_len <= max_bsize &&
            suggested_boff > b_off) {
         dout(20) << __func__ << " forcing blob_offset to 0x"
                  << std::hex << suggested_boff << std::dec << dendl;
@@ -15638,15 +15638,47 @@ int BlueStore::_do_alloc_write(
     }
 
     PExtentVector extents;
-    int64_t left = final_length;
-    int64_t prefer_deferred_size_snapshot = prefer_deferred_size.load();
-    bool has_chunk2defer = false;
+    std::vector<bool> deferred_extents_bitmap;
+    int64_t left = blob_allocated_len;
+
+    // The following flag equal to true generally means device block size
+    // is shorter than min_alloc_size and writing block is unaligned
+    // with the latter. As a result a bunch of such writes when merged
+    // tend to have gaps in resulting physical extent mapping.
+    // So we can analyse these writes separately.
+    bool small_unaligned_write = bl->length() < blob_allocated_len;
     while (left > 0) {
       ceph_assert(prealloc_left > 0);
       ceph_assert(prealloc_pos != prealloc.end());
-      has_chunk2defer |= (prealloc_pos_length < prefer_deferred_size_snapshot);
       auto l = std::min(int64_t(prealloc_pos->length), left);
       extents.emplace_back(prealloc_pos->offset, l);
+
+      bool deferred;
+      if (prealloc_pos_length0 < prefer_deferred_size) {
+        // go deferred for the current writing block
+        // if allocated chunk is that short.
+        deferred = true;
+      } else if (small_unaligned_write) {
+        // go deferred if writing block fits the allocated chunk
+        //(and allocation unit within it) just partially
+        // and block's length is short enough.
+        // This isn't 100% correct detection since it bypasses a potential
+        // case when adjacent write blocks might still generate a continuous
+        // chunk long enough for direct writing.
+        // But sticking with  simple implementation for now given that this code
+        // branch handles legacy deployments only - fresh ones have got device block
+        // size equal to min alloc size by default.
+        // Smarter implementation will need to inspect preceding/following
+        // writes to make proper decision.
+        deferred = bl->length() < prefer_deferred_size_snapshot;
+      } else {
+        // go deferred if we are to write less than prefer_deferred_size into
+        // an allocated chunk - which might happen for the last one only.
+        // The preceeding chunks are filled entirely and respective writes are
+        // deferred or not depending exclusively on their sizes.
+        deferred = need < prefer_deferred_size_snapshot;
+      }
+      deferred_extents_bitmap.emplace_back(deferred);
       txc->allocated.insert(prealloc_pos->offset, l);
       txc->statfs_delta.allocated() += l;
       prealloc_left -= l;
@@ -15656,16 +15688,16 @@ int BlueStore::_do_alloc_write(
       if (prealloc_pos->length == 0) {
 	++prealloc_pos;
         if (prealloc_pos != prealloc.end()) {
-          prealloc_pos_length = prealloc_pos->length;
-          has_chunk2defer |= (prealloc_pos->length < prefer_deferred_size_snapshot);
+          need -= prealloc_pos_length0;
+          prealloc_pos_length0 = prealloc_pos->length;
         }
       }
     }
-    dblob.allocated(p2align(b_off, min_alloc_size), final_length, extents);
+    dblob.allocated(p2align(b_off, min_alloc_size), blob_allocated_len, extents);
 
     dout(20) << __func__ << " blob " << *wi.b << dendl;
     if (dblob.has_csum()) {
-      dblob.calc_csum(b_off, *l);
+      dblob.calc_csum(b_off, *bl);
     }
 
     if (wi.mark_unused) {
@@ -15693,27 +15725,28 @@ int BlueStore::_do_alloc_write(
 
     // queue io
     if (!g_conf()->bluestore_debug_omit_block_device_write) {
-      if (has_chunk2defer && l->length() < prefer_deferred_size_snapshot) {
-	dout(20) << __func__ << " deferring 0x" << std::hex
-		 << l->length() << std::dec << " write via deferred" << dendl;
-	bluestore_deferred_op_t *op = _get_deferred_op(txc, l->length());
-	op->op = bluestore_deferred_op_t::OP_WRITE;
-	int r = wi.b->get_blob().map(
-	  b_off, l->length(),
-	  [&](uint64_t offset, uint64_t length) {
-	    op->extents.emplace_back(bluestore_pextent_t(offset, length));
-	    return 0;
-	  });
-        ceph_assert(r == 0);
-	op->data = *l;
-      } else {
-	wi.b->get_blob().map_bl(
-	  b_off, *l,
-	  [&](uint64_t offset, bufferlist& t) {
+      auto deferred = deferred_extents_bitmap.begin();
+      wi.b->get_blob().map_bl(
+        b_off, *bl,
+	[&](uint64_t offset, bufferlist& t) {
+	  ceph_assert(deferred != deferred_extents_bitmap.end());
+	  if (*deferred) {
+	    dout(20) << __func__ << " deferred write 0x" << std::hex
+		     << offset << "~" << t.length()
+		     << std::dec << dendl;
+	    bluestore_deferred_op_t *op = _get_deferred_op(txc, t.length());
+	    op->op = bluestore_deferred_op_t::OP_WRITE;
+	    op->extents.emplace_back(bluestore_pextent_t(offset, t.length()));
+	    op->data = t;
+	  } else {
+	    dout(20) << __func__ << " direct write 0x" << std::hex
+		     << offset << "~" << t.length()
+		     << std::dec << dendl;
 	    bdev->aio_write(offset, t, &txc->ioc, false);
-	  });
-	logger->inc(l_bluestore_write_new);
-      }
+	    logger->inc(l_bluestore_write_new);
+	  }
+	  ++deferred;
+	});
     }
   } // for (auto& wi : wctx->writes)
   ceph_assert(prealloc_left == 0);
