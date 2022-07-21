@@ -1168,7 +1168,7 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
 }
 
 AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
-  const segment_header_t& header,
+  const segment_header_t &segment_header,
   segment_id_t segment_id)
 {
   return seastar::do_with(
@@ -1177,9 +1177,9 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
       paddr_t::make_seg_paddr(segment_id, 0)
     }),
     SegmentManagerGroup::found_record_handler_t(
-      [this, segment_id, segment_header=header](
+      [this, segment_id, segment_header](
         record_locator_t locator,
-        const record_group_header_t& header,
+        const record_group_header_t &record_group_header,
         const bufferlist& mdbuf
       ) mutable -> SegmentManagerGroup::scan_valid_records_ertr::future<>
     {
@@ -1187,16 +1187,16 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
       if (segment_header.get_type() == segment_type_t::OOL) {
         DEBUG("out-of-line segment {}, decodeing {} records",
           segment_id,
-          header.records);
+          record_group_header.records);
       } else {
         DEBUG("inline segment {}, decodeing {} records",
           segment_id,
-          header.records);
+          record_group_header.records);
         auto maybe_record_deltas_list = try_decode_deltas(
-          header, mdbuf, locator.record_block_base);
+          record_group_header, mdbuf, locator.record_block_base);
         if (!maybe_record_deltas_list) {
           ERROR("unable to decode deltas for record {} at {}",
-                header, locator);
+                record_group_header, locator);
           return crimson::ct_error::input_output_error::make();
         }
         for (auto &record_deltas : *maybe_record_deltas_list) {
@@ -1210,7 +1210,8 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
         }
       }
 
-      auto maybe_headers = try_decode_record_headers(header, mdbuf);
+      auto maybe_headers = try_decode_record_headers(
+          record_group_header, mdbuf);
       if (!maybe_headers) {
         // This should be impossible, we did check the crc on the mdbuf
         ERROR("unable to decode record headers for record group {}",
@@ -1218,32 +1219,32 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
         return crimson::ct_error::input_output_error::make();
       }
 
-      for (auto& header : *maybe_headers) {
-        auto modify_time = mod_to_timepoint(header.modify_time);
-        if (header.extents == 0 || modify_time != NULL_TIME) {
+      for (auto &record_header : *maybe_headers) {
+        auto modify_time = mod_to_timepoint(record_header.modify_time);
+        if (record_header.extents == 0 || modify_time != NULL_TIME) {
           segments.update_modify_time(
-              segment_id, modify_time, header.extents);
+              segment_id, modify_time, record_header.extents);
         } else {
-          ERROR("illegal modify time {}", header);
+          ERROR("illegal modify time {}", record_header);
           return crimson::ct_error::input_output_error::make();
         }
       }
       return seastar::now();
     }),
-    [this, header](auto &cursor, auto &handler)
+    [this, segment_header](auto &cursor, auto &handler)
   {
     return sm_group->scan_valid_records(
       cursor,
-      header.segment_nonce,
+      segment_header.segment_nonce,
       segments.get_segment_size(),
       handler).discard_result();
-  }).safe_then([this, segment_id, header] {
+  }).safe_then([this, segment_id, segment_header] {
     init_mark_segment_closed(
       segment_id,
-      header.segment_seq,
-      header.type,
-      header.category,
-      header.generation);
+      segment_header.segment_seq,
+      segment_header.type,
+      segment_header.category,
+      segment_header.generation);
   });
 }
 
