@@ -14,6 +14,7 @@
 
 
 #include "common/dout.h"
+#include "common/likely.h"
 #include "common/HeartbeatMap.h"
 
 #include "include/stringify.h"
@@ -297,6 +298,11 @@ void Beacon::notify_health(MDSRank const *mds)
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
   health.metrics.clear();
+
+  if (unlikely(g_conf().get_val<bool>("mds_inject_health_dummy"))) {
+    MDSHealthMetric m(MDS_HEALTH_DUMMY, HEALTH_ERR, std::string("dummy"));
+    health.metrics.push_back(m);
+  }
 
   // Detect presence of entries in DamageTable
   if (!mds->damage_table.empty()) {
