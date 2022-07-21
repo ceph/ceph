@@ -14,7 +14,18 @@ all users update to this release.
 Notable Changes
 ---------------
 
-Notable Changes
+* Octopus modified the SnapMapper key format from
+  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
+  to
+  <MAPPING_PREFIX><pool>_<snapid>_<shardid>_<hobject_t::to_str()>
+  When this change was introduced, 94ebe0e also introduced a conversion
+  with a crucial bug which essentially destroyed legacy keys by mapping them
+  to
+  <MAPPING_PREFIX><poolid>_<snapid>_
+  without the object-unique suffix. The conversion is fixed in this release.
+  Relevant tracker: https://tracker.ceph.com/issues/5614
+
+Changelog
 ---------------
 
 * admin/doc-requirements: bump sphinx to 4.4.0 (`pr#45972 <https://github.com/ceph/ceph/pull/45972>`_, Kefu Chai)
