@@ -1574,7 +1574,8 @@ def restart(ctx, config):
     with suppress_mon_health_to_clog(ctx, config):
         for role in daemons:
             cluster, type_, id_ = teuthology.split_role(role)
-            ctx.daemons.get_daemon(type_, id_, cluster).stop()
+            if config.get('stop_daemons', True):
+                ctx.daemons.get_daemon(type_, id_, cluster).stop()
             if type_ == 'osd':
                 ctx.managers[cluster].mark_down_osd(id_)
             ctx.daemons.get_daemon(type_, id_, cluster).restart()
