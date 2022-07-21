@@ -269,7 +269,8 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
   return out << "segment_header_t("
 	     << "segment_seq=" << segment_seq_printer_t{header.segment_seq}
 	     << ", segment_id=" << header.physical_segment_id
-	     << ", journal_tail=" << header.journal_tail
+	     << ", dirty_tail=" << header.dirty_tail
+	     << ", alloc_tail=" << header.alloc_tail
 	     << ", segment_nonce=" << header.segment_nonce
 	     << ", type=" << header.type
 	     << ", category=" << header.category
@@ -341,7 +342,8 @@ std::ostream &operator<<(std::ostream& out, const record_size_t& rsize)
 std::ostream &operator<<(std::ostream& out, const record_t& r)
 {
   return out << "record_t("
-             << "num_extents=" << r.extents.size()
+             << "type=" << r.type
+             << ", num_extents=" << r.extents.size()
              << ", num_deltas=" << r.deltas.size()
              << ", modify_time=" << sea_time_point_printer_t{r.modify_time}
              << ")";
@@ -350,7 +352,8 @@ std::ostream &operator<<(std::ostream& out, const record_t& r)
 std::ostream &operator<<(std::ostream& out, const record_header_t& r)
 {
   return out << "record_header_t("
-             << "num_extents=" << r.extents
+             << "type=" << r.type
+             << ", num_extents=" << r.extents
              << ", num_deltas=" << r.deltas
              << ", modify_time=" << mod_time_point_printer_t{r.modify_time}
              << ")";
@@ -450,6 +453,7 @@ ceph::bufferlist encode_records(
 
   for (auto& r: record_group.records) {
     record_header_t rheader{
+      r.type,
       (extent_len_t)r.deltas.size(),
       (extent_len_t)r.extents.size(),
       timepoint_to_mod(r.modify_time)

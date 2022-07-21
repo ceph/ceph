@@ -625,75 +625,42 @@ segment_id_t AsyncCleaner::allocate_segment(
   return NULL_SEG_ID;
 }
 
-void AsyncCleaner::update_journal_tail_target(
-  journal_seq_t dirty_replay_from,
-  journal_seq_t alloc_replay_from)
+void AsyncCleaner::update_journal_tails(
+  journal_seq_t dirty_tail,
+  journal_seq_t alloc_tail)
 {
-  LOG_PREFIX(AsyncCleaner::update_journal_tail_target);
+  LOG_PREFIX(AsyncCleaner::update_journal_tails);
   if (disable_trim) return;
-  assert(dirty_replay_from.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
-  assert(alloc_replay_from.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
-  if (dirty_extents_replay_from == JOURNAL_SEQ_NULL
-      || dirty_replay_from > dirty_extents_replay_from) {
-    DEBUG("dirty_extents_replay_from={} => {}",
-          dirty_extents_replay_from, dirty_replay_from);
-    dirty_extents_replay_from = dirty_replay_from;
-  }
+  assert(dirty_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
+  assert(alloc_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
 
-  update_alloc_info_replay_from(alloc_replay_from);
-
-  journal_seq_t target = std::min(dirty_replay_from, alloc_replay_from);
-  ceph_assert(target != JOURNAL_SEQ_NULL);
+  ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
+  ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
   ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
-              journal_head >= target);
-  if (journal_tail_target == JOURNAL_SEQ_NULL ||
-      target > journal_tail_target) {
-    if (!init_complete ||
-        journal_tail_target.segment_seq == target.segment_seq) {
-      DEBUG("journal_tail_target={} => {}", journal_tail_target, target);
+              (journal_head >= dirty_tail && journal_head >= alloc_tail));
+
+  if (journal_dirty_tail == JOURNAL_SEQ_NULL ||
+      dirty_tail > journal_dirty_tail) {
+    if (journal_dirty_tail.segment_seq == dirty_tail.segment_seq) {
+      DEBUG("journal_dirty_tail {} => {}", journal_dirty_tail, dirty_tail);
     } else {
-      INFO("journal_tail_target={} => {}", journal_tail_target, target);
+      INFO("journal_dirty_tail {} => {}", journal_dirty_tail, dirty_tail);
     }
-    journal_tail_target = target;
+    journal_dirty_tail = dirty_tail;
   }
+
+  if (journal_alloc_tail == JOURNAL_SEQ_NULL ||
+      alloc_tail > journal_alloc_tail) {
+    if (journal_alloc_tail.segment_seq == alloc_tail.segment_seq) {
+      DEBUG("journal_alloc_tail {} => {}", journal_alloc_tail, alloc_tail);
+    } else {
+      INFO("journal_alloc_tail {} => {}", journal_alloc_tail, alloc_tail);
+    }
+    journal_alloc_tail = alloc_tail;
+  }
+
   gc_process.maybe_wake_on_space_used();
   maybe_wake_gc_blocked_io();
-}
-
-void AsyncCleaner::update_alloc_info_replay_from(
-  journal_seq_t alloc_replay_from)
-{
-  LOG_PREFIX(AsyncCleaner::update_alloc_info_replay_from);
-  if (alloc_info_replay_from == JOURNAL_SEQ_NULL
-      || alloc_replay_from > alloc_info_replay_from) {
-    DEBUG("alloc_info_replay_from={} => {}",
-          alloc_info_replay_from, alloc_replay_from);
-    alloc_info_replay_from = alloc_replay_from;
-  }
-}
-
-void AsyncCleaner::update_journal_tail_committed(journal_seq_t committed)
-{
-  LOG_PREFIX(AsyncCleaner::update_journal_tail_committed);
-  assert(committed.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
-  if (committed == JOURNAL_SEQ_NULL) {
-    return;
-  }
-  ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
-              journal_head >= committed);
-
-  if (journal_tail_committed == JOURNAL_SEQ_NULL ||
-      committed > journal_tail_committed) {
-    DEBUG("update journal_tail_committed={} => {}",
-          journal_tail_committed, committed);
-    journal_tail_committed = committed;
-  }
-  if (journal_tail_target == JOURNAL_SEQ_NULL ||
-      committed > journal_tail_target) {
-    DEBUG("update journal_tail_target={} => {}",
-          journal_tail_target, committed);
-    journal_tail_target = committed;
-  }
 }
 
 void AsyncCleaner::close_segment(segment_id_t segment)
@@ -819,7 +786,7 @@ AsyncCleaner::gc_cycle_ret AsyncCleaner::GCProcess::run()
 AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
 {
   if (gc_should_trim_backref()) {
-    return gc_trim_backref(get_backref_tail()
+    return gc_trim_backref(get_alloc_tail_target()
     ).safe_then([](auto) {
       return seastar::now();
     }).handle_error(
@@ -884,7 +851,7 @@ AsyncCleaner::gc_trim_backref(journal_seq_t limit) {
 
 AsyncCleaner::gc_trim_journal_ret AsyncCleaner::gc_trim_journal()
 {
-  return gc_trim_backref(get_dirty_tail()
+  return gc_trim_backref(get_dirty_tail_target()
   ).safe_then([this](auto seq) {
     return repeat_eagain([this, seq=std::move(seq)]() mutable {
       return ecb->with_transaction_intr(
@@ -1086,10 +1053,8 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   INFO("{} segment managers", sms.size());
   init_complete = false;
   stats = {};
-  journal_tail_target = JOURNAL_SEQ_NULL;
-  journal_tail_committed = JOURNAL_SEQ_NULL;
-  dirty_extents_replay_from = JOURNAL_SEQ_NULL;
-  alloc_info_replay_from = JOURNAL_SEQ_NULL;
+  journal_alloc_tail = JOURNAL_SEQ_NULL;
+  journal_dirty_tail = JOURNAL_SEQ_NULL;
   
   space_tracker.reset(
     detailed ?
@@ -1184,31 +1149,8 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
       ) mutable -> SegmentManagerGroup::scan_valid_records_ertr::future<>
     {
       LOG_PREFIX(AsyncCleaner::scan_no_tail_segment);
-      if (segment_header.get_type() == segment_type_t::OOL) {
-        DEBUG("out-of-line segment {}, decodeing {} records",
-          segment_id,
-          record_group_header.records);
-      } else {
-        DEBUG("inline segment {}, decodeing {} records",
-          segment_id,
-          record_group_header.records);
-        auto maybe_record_deltas_list = try_decode_deltas(
-          record_group_header, mdbuf, locator.record_block_base);
-        if (!maybe_record_deltas_list) {
-          ERROR("unable to decode deltas for record {} at {}",
-                record_group_header, locator);
-          return crimson::ct_error::input_output_error::make();
-        }
-        for (auto &record_deltas : *maybe_record_deltas_list) {
-          for (auto &[ctime, delta] : record_deltas.deltas) {
-            if (delta.type == extent_types_t::ALLOC_TAIL) {
-              journal_seq_t seq;
-              decode(seq, delta.bl);
-              update_alloc_info_replay_from(seq);
-            }
-          }
-        }
-      }
+      DEBUG("{} {}, decoding {} records",
+            segment_id, segment_header.get_type(), record_group_header.records);
 
       auto maybe_headers = try_decode_record_headers(
           record_group_header, mdbuf);
@@ -1389,7 +1331,7 @@ segment_id_t AsyncCleaner::get_next_reclaim_segment() const
   }
   for (auto& [_id, segment_info] : segments) {
     if (segment_info.is_closed() &&
-        !segment_info.is_in_journal(journal_tail_committed)) {
+        !segment_info.is_in_journal(get_journal_tail())) {
       double benefit_cost = calc_gc_benefit_cost(_id, now_time, bound_time);
       if (benefit_cost > max_benefit_cost) {
         id = _id;
@@ -1431,10 +1373,11 @@ void AsyncCleaner::log_gc_state(const char *caller) const
       "should_block_on_reclaim {}, "
       "gc_should_reclaim_space {}, "
       "journal_head {}, "
-      "journal_tail_target {}, "
-      "journal_tail_commit {}, "
-      "dirty_tail {}, "
-      "dirty_tail_limit {}, "
+      "journal_alloc_tail {}, "
+      "journal_dirty_tail {}, "
+      "alloc_tail_target {}, "
+      "dirty_tail_target {}, "
+      "tail_limit {}, "
       "gc_should_trim_journal {}, ",
       caller,
       segments.get_num_empty(),
@@ -1452,10 +1395,11 @@ void AsyncCleaner::log_gc_state(const char *caller) const
       should_block_on_reclaim(),
       gc_should_reclaim_space(),
       journal_head,
-      journal_tail_target,
-      journal_tail_committed,
-      get_dirty_tail(),
-      get_dirty_tail_limit(),
+      journal_alloc_tail,
+      journal_dirty_tail,
+      get_alloc_tail_target(),
+      get_dirty_tail_target(),
+      get_tail_limit(),
       gc_should_trim_journal()
     );
   }

@@ -54,34 +54,34 @@ SegmentAllocator::do_open(bool is_mkfs)
   ).safe_then([this, is_mkfs, FNAME, new_segment_seq](auto sref) {
     // initialize new segment
     segment_id_t segment_id = sref->get_segment_id();
-    journal_seq_t new_journal_tail;
-    journal_seq_t new_alloc_replay_from;
+    journal_seq_t dirty_tail;
+    journal_seq_t alloc_tail;
     if (type == segment_type_t::JOURNAL) {
-      new_journal_tail = segment_provider.get_journal_tail_target();
-      new_alloc_replay_from = segment_provider.get_alloc_info_replay_from();
+      dirty_tail = segment_provider.get_dirty_tail();
+      alloc_tail = segment_provider.get_alloc_tail();
       if (is_mkfs) {
-        ceph_assert(new_journal_tail == JOURNAL_SEQ_NULL);
-        ceph_assert(new_alloc_replay_from == JOURNAL_SEQ_NULL);
+        ceph_assert(dirty_tail == JOURNAL_SEQ_NULL);
+        ceph_assert(alloc_tail == JOURNAL_SEQ_NULL);
         auto mkfs_seq = journal_seq_t{
           new_segment_seq,
           paddr_t::make_seg_paddr(segment_id, 0)
         };
-        new_journal_tail = mkfs_seq;
-        new_alloc_replay_from = mkfs_seq;
+        dirty_tail = mkfs_seq;
+        alloc_tail = mkfs_seq;
       } else {
-        ceph_assert(new_journal_tail != JOURNAL_SEQ_NULL);
-        ceph_assert(new_alloc_replay_from != JOURNAL_SEQ_NULL);
+        ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
+        ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
       }
     } else { // OOL
       ceph_assert(!is_mkfs);
-      new_journal_tail = NO_DELTAS;
-      new_alloc_replay_from = NO_DELTAS;
+      dirty_tail = NO_DELTAS;
+      alloc_tail = NO_DELTAS;
     }
     auto header = segment_header_t{
       new_segment_seq,
       segment_id,
-      new_journal_tail,
-      new_alloc_replay_from,
+      dirty_tail,
+      alloc_tail,
       current_segment_nonce,
       type,
       category,
@@ -116,13 +116,9 @@ SegmentAllocator::do_open(bool is_mkfs)
     ).safe_then([this,
                  FNAME,
                  new_journal_seq,
-                 new_journal_tail,
                  sref=std::move(sref)]() mutable {
       ceph_assert(!current_segment);
       current_segment = std::move(sref);
-      if (type == segment_type_t::JOURNAL) {
-        segment_provider.update_journal_tail_committed(new_journal_tail);
-      }
       DEBUG("{} rolled new segment id={}",
             print_name, current_segment->get_segment_id());
       ceph_assert(new_journal_seq.segment_seq ==

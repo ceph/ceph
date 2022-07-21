@@ -931,7 +931,7 @@ enum class extent_types_t : uint8_t {
   // the following two types are not extent types,
   // they are just used to indicates paddr allocation deltas
   ALLOC_INFO = 9,
-  ALLOC_TAIL = 10,
+  JOURNAL_TAIL = 10,
   // Test Block Types
   TEST_BLOCK = 11,
   TEST_BLOCK_PHYSICAL = 12,
@@ -1106,6 +1106,19 @@ struct delta_info_t {
 };
 
 std::ostream &operator<<(std::ostream &out, const delta_info_t &delta);
+
+/* contains the latest journal tail information */
+struct journal_tail_delta_t {
+  journal_seq_t alloc_tail;
+  journal_seq_t dirty_tail;
+
+  DENC(journal_tail_delta_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.alloc_tail, p);
+    denc(v.dirty_tail, p);
+    DENC_FINISH(p);
+  }
+};
 
 class object_data_t {
   laddr_t reserved_data_base = L_ADDR_NULL;
@@ -1475,14 +1488,16 @@ using segment_nonce_t = uint32_t;
  * Every segment contains and encode segment_header_t in the first block.
  * Our strategy for finding the journal replay point is:
  * 1) Find the segment with the highest journal_segment_seq
- * 2) Replay starting at record located at that segment's journal_tail
+ * 2) Get dirty_tail and alloc_tail from the segment header
+ * 3) Scan forward to update tails from journal_tail_delta_t
+ * 4) Replay from the latest tails
  */
 struct segment_header_t {
   segment_seq_t segment_seq;
   segment_id_t physical_segment_id; // debugging
 
-  journal_seq_t journal_tail;
-  journal_seq_t alloc_replay_from;
+  journal_seq_t dirty_tail;
+  journal_seq_t alloc_tail;
   segment_nonce_t segment_nonce;
 
   segment_type_t type;
@@ -1498,8 +1513,8 @@ struct segment_header_t {
     DENC_START(1, 1, p);
     denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
-    denc(v.journal_tail, p);
-    denc(v.alloc_replay_from, p);
+    denc(v.dirty_tail, p);
+    denc(v.alloc_tail, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
     denc(v.category, p);
@@ -1585,12 +1600,18 @@ WRITE_EQ_OPERATORS_2(record_size_t, plain_mdlength, dlength);
 std::ostream &operator<<(std::ostream&, const record_size_t&);
 
 struct record_t {
+  transaction_type_t type = TRANSACTION_TYPE_NULL;
   std::vector<extent_t> extents;
   std::vector<delta_info_t> deltas;
   record_size_t size;
   sea_time_point modify_time = NULL_TIME;
 
-  record_t() = default;
+  record_t(transaction_type_t type) : type{type} { }
+
+  // unit test only
+  record_t() {
+    type = transaction_type_t::MUTATE;
+  }
 
   // unit test only
   record_t(std::vector<extent_t>&& _extents,
@@ -1602,6 +1623,7 @@ struct record_t {
     for (auto& d: _deltas) {
       push_back(std::move(d));
     }
+    type = transaction_type_t::MUTATE;
   }
 
   bool is_empty() const {
@@ -1639,12 +1661,14 @@ struct record_t {
 std::ostream &operator<<(std::ostream&, const record_t&);
 
 struct record_header_t {
+  transaction_type_t type;
   uint32_t deltas;              // number of deltas
   uint32_t extents;             // number of extents
   mod_time_point_t modify_time;
 
   DENC(record_header_t, v, p) {
     DENC_START(1, 1, p);
+    denc(v.type, p);
     denc(v.deltas, p);
     denc(v.extents, p);
     denc(v.modify_time, p);
@@ -1945,6 +1969,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_id_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_tail_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_group_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)

@@ -100,43 +100,126 @@ SegmentedJournal::prep_replay_segments(
     }
   });
 
-  auto journal_tail = segments.rbegin()->second.journal_tail;
-  segment_provider.update_journal_tail_committed(journal_tail);
-  auto journal_tail_paddr = journal_tail.offset;
-  ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
-  ceph_assert(journal_tail_paddr != P_ADDR_NULL);
-  auto from = std::find_if(
-    segments.begin(),
-    segments.end(),
-    [&journal_tail_paddr](const auto &seg) -> bool {
-      auto& seg_addr = journal_tail_paddr.as_seg_paddr();
-      return seg.first == seg_addr.get_segment_id();
-    });
-  if (from->second.segment_seq != journal_tail.segment_seq) {
-    ERROR("journal_tail {} does not match {}",
-          journal_tail, from->second);
-    ceph_abort();
-  }
+  auto last_segment_id = segments.rbegin()->first;
+  auto last_header = segments.rbegin()->second;
+  return scan_last_segment(last_segment_id, last_header
+  ).safe_then([this, FNAME, segments=std::move(segments)] {
+    auto journal_tail = segment_provider.get_journal_tail();
+    auto journal_tail_paddr = journal_tail.offset;
+    ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
+    ceph_assert(journal_tail_paddr != P_ADDR_NULL);
+    auto from = std::find_if(
+      segments.begin(),
+      segments.end(),
+      [&journal_tail_paddr](const auto &seg) -> bool {
+        auto& seg_addr = journal_tail_paddr.as_seg_paddr();
+        return seg.first == seg_addr.get_segment_id();
+      });
+    if (from->second.segment_seq != journal_tail.segment_seq) {
+      ERROR("journal_tail {} does not match {}",
+            journal_tail, from->second);
+      ceph_abort();
+    }
 
-  auto num_segments = segments.end() - from;
-  INFO("{} segments to replay from {}",
-       num_segments, journal_tail);
-  auto ret = replay_segments_t(num_segments);
-  std::transform(
-    from, segments.end(), ret.begin(),
-    [this](const auto &p) {
-      auto ret = journal_seq_t{
-	p.second.segment_seq,
-	paddr_t::make_seg_paddr(
-	  p.first,
-	  sm_group.get_block_size())
-      };
-      return std::make_pair(ret, p.second);
-    });
-  ret[0].first.offset = journal_tail_paddr;
-  return prep_replay_segments_fut(
-    prep_replay_segments_ertr::ready_future_marker{},
-    std::move(ret));
+    auto num_segments = segments.end() - from;
+    INFO("{} segments to replay from {}",
+         num_segments, journal_tail);
+    auto ret = replay_segments_t(num_segments);
+    std::transform(
+      from, segments.end(), ret.begin(),
+      [this](const auto &p) {
+        auto ret = journal_seq_t{
+          p.second.segment_seq,
+          paddr_t::make_seg_paddr(
+            p.first,
+            sm_group.get_block_size())
+        };
+        return std::make_pair(ret, p.second);
+      });
+    ret[0].first.offset = journal_tail_paddr;
+    return prep_replay_segments_fut(
+      replay_ertr::ready_future_marker{},
+      std::move(ret));
+  });
+}
+
+SegmentedJournal::scan_last_segment_ertr::future<>
+SegmentedJournal::scan_last_segment(
+  const segment_id_t &segment_id,
+  const segment_header_t &segment_header)
+{
+  LOG_PREFIX(SegmentedJournal::scan_last_segment);
+  assert(segment_id == segment_header.physical_segment_id);
+  segment_provider.update_journal_tails(
+      segment_header.dirty_tail, segment_header.alloc_tail);
+  auto seq = journal_seq_t{
+    segment_header.segment_seq,
+    paddr_t::make_seg_paddr(segment_id, 0)
+  };
+  INFO("scanning {} for journal tail deltas", seq);
+  return seastar::do_with(
+    scan_valid_records_cursor(seq),
+    SegmentManagerGroup::found_record_handler_t(
+      [FNAME, this](
+        record_locator_t locator,
+        const record_group_header_t& record_group_header,
+        const bufferlist& mdbuf
+      ) -> SegmentManagerGroup::scan_valid_records_ertr::future<>
+    {
+      DEBUG("decoding {} at {}", record_group_header, locator);
+      bool has_tail_delta = false;
+      auto maybe_headers = try_decode_record_headers(
+          record_group_header, mdbuf);
+      if (!maybe_headers) {
+        // This should be impossible, we did check the crc on the mdbuf
+        ERROR("unable to decode headers from {} at {}",
+              record_group_header, locator);
+        ceph_abort();
+      }
+      for (auto &record_header : *maybe_headers) {
+        ceph_assert(is_valid_transaction(record_header.type));
+        if (is_cleaner_transaction(record_header.type)) {
+          has_tail_delta = true;
+        }
+      }
+      if (has_tail_delta) {
+        bool found_delta = false;
+        auto maybe_record_deltas_list = try_decode_deltas(
+          record_group_header, mdbuf, locator.record_block_base);
+        if (!maybe_record_deltas_list) {
+          ERROR("unable to decode deltas from {} at {}",
+                record_group_header, locator);
+          ceph_abort();
+        }
+        for (auto &record_deltas : *maybe_record_deltas_list) {
+          for (auto &[ctime, delta] : record_deltas.deltas) {
+            if (delta.type == extent_types_t::JOURNAL_TAIL) {
+              found_delta = true;
+              journal_tail_delta_t tail_delta;
+              decode(tail_delta, delta.bl);
+              if (tail_delta.alloc_tail == JOURNAL_SEQ_NULL) {
+                tail_delta.alloc_tail = locator.write_result.start_seq;
+              }
+              if (tail_delta.dirty_tail == JOURNAL_SEQ_NULL) {
+                tail_delta.dirty_tail = locator.write_result.start_seq;
+              }
+              segment_provider.update_journal_tails(
+                  tail_delta.dirty_tail, tail_delta.alloc_tail);
+            }
+          }
+        }
+        ceph_assert(found_delta);
+      }
+      return seastar::now();
+    }),
+    [this, nonce=segment_header.segment_nonce](auto &cursor, auto &handler)
+  {
+    return sm_group.scan_valid_records(
+      cursor,
+      nonce,
+      std::numeric_limits<std::size_t>::max(),
+      handler).discard_result();
+  });
 }
 
 SegmentedJournal::replay_ertr::future<>
@@ -226,7 +309,7 @@ SegmentedJournal::replay_segment(
 	    return handler(
 	      locator,
 	      delta,
-	      segment_provider.get_alloc_info_replay_from(),
+	      segment_provider.get_alloc_tail(),
               modify_time);
           });
         });
