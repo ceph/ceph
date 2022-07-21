@@ -406,6 +406,7 @@ int radosgw_Main(int argc, const char **argv)
   } 
 #ifdef WITH_RADOSGW_TRACER
   else if (config_filter == "d4n") {
+    dout(0) << "Sam: got to main" << dendl;
     rgw_filter = "d4n";
   }
 #endif
@@ -751,7 +752,7 @@ int radosgw_Main(int argc, const char **argv)
     reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, rgw_pauser.get());
 
     realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
-				  static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm());
+				  static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm()); //Should I cast? -Sam
     realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
     realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher.get());
   }
