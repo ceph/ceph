@@ -324,8 +324,8 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
 
   if (entry.op == "multi_object_delete") {
     formatter->open_object_section("op_data");
-    formatter->dump_bool("num_ok", entry.delete_multi_obj_meta.num_ok);
-    formatter->dump_bool("num_err", entry.delete_multi_obj_meta.num_err);
+    formatter->dump_int("num_ok", entry.delete_multi_obj_meta.num_ok);
+    formatter->dump_int("num_err", entry.delete_multi_obj_meta.num_err);
     formatter->open_array_section("objects");
     for (const auto& iter: entry.delete_multi_obj_meta.objects) {
       formatter->open_object_section("");
