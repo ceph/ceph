@@ -1164,10 +1164,10 @@ private:
   };
 
   template <typename CounterT>
-  using counter_by_src_t = std::array<CounterT, Transaction::SRC_MAX>;
+  using counter_by_src_t = std::array<CounterT, TRANSACTION_TYPE_MAX>;
 
   static constexpr std::size_t NUM_SRC_COMB =
-      Transaction::SRC_MAX * (Transaction::SRC_MAX + 1) / 2;
+      TRANSACTION_TYPE_MAX * (TRANSACTION_TYPE_MAX + 1) / 2;
 
   struct {
     counter_by_src_t<uint64_t> trans_created_by_src;
