@@ -8500,7 +8500,7 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
 void PrimaryLogPG::_make_clone(
   OpContext *ctx,
   PGTransaction* t,
-  ObjectContextRef obc,
+  ObjectContextRef clone_obc,
   const hobject_t& head, const hobject_t& coid,
   object_info_t *poi)
 {
@@ -8508,8 +8508,8 @@ void PrimaryLogPG::_make_clone(
   encode(*poi, bv, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 
   t->clone(coid, head);
-  setattr_maybe_cache(obc, t, OI_ATTR, bv);
-  rmattr_maybe_cache(obc, t, SS_ATTR);
+  setattr_maybe_cache(clone_obc, t, OI_ATTR, bv);
+  rmattr_maybe_cache(clone_obc, t, SS_ATTR);
 }
 
 void PrimaryLogPG::make_writeable(OpContext *ctx)
@@ -8570,14 +8570,12 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     hobject_t coid = soid;
     coid.snap = snapc.seq;
 
-    unsigned l;
-    for (l = 1;
-	 l < snapc.snaps.size() && snapc.snaps[l] > ctx->new_snapset.seq;
-	 l++) ;
-
-    vector<snapid_t> snaps(l);
-    for (unsigned i=0; i<l; i++)
-      snaps[i] = snapc.snaps[i];
+    const auto snaps = [&] {
+      auto last = find_if_not(
+        begin(snapc.snaps), end(snapc.snaps),
+        [&](snapid_t snap_id) { return snap_id > ctx->new_snapset.seq; });
+      return vector<snapid_t>{begin(snapc.snaps), last};
+    }();
 
     // prepare clone
     object_info_t static_snap_oi(coid);
@@ -8641,8 +8639,9 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     // clone_overlap should contain an entry for each clone
     // (an empty interval_set if there is no overlap)
     ctx->new_snapset.clone_overlap[coid.snap];
-    if (ctx->obs->oi.size)
+    if (ctx->obs->oi.size) {
       ctx->new_snapset.clone_overlap[coid.snap].insert(0, ctx->obs->oi.size);
+    }
 
     // log clone
     dout(10) << " cloning v " << ctx->obs->oi.version
