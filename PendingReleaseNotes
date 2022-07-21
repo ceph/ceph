@@ -65,3 +65,16 @@ Relevant tracker: https://tracker.ceph.com/issues/55521
   For more details, see:
 
   https://docs.ceph.com/en/latest/mgr/telemetry/
+
+>=15.2.17
+
+* OSD: Octopus modified the SnapMapper key format from
+  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
+  to
+  <MAPPING_PREFIX><pool>_<snapid>_<shardid>_<hobject_t::to_str()>
+  When this change was introduced, 94ebe0e also introduced a conversion
+  with a crucial bug which essentially destroyed legacy keys by mapping them
+  to
+  <MAPPING_PREFIX><poolid>_<snapid>_
+  without the object-unique suffix. The conversion is fixed in this release.
+  Relevant tracker: https://tracker.ceph.com/issues/5614
