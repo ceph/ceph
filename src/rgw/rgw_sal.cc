@@ -197,6 +197,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
 #endif
 
   if (filter.compare("base") == 0) {
+    dout(0) << "Sam: filter sal" << dendl;
     rgw::sal::Store* next = store;
     store = newBaseFilter(next);
 
@@ -207,16 +208,18 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     }
   } 
 #ifdef WITH_RADOSGW_TRACER 
-  else if (filter.compare("d4n") == 0) {
+//  else if (filter.compare("d4n") == 0) { // Fix later -Sam
+    dout(0) << "Sam: got to sal" << dendl;
     rgw::sal::Store* next = store;
     store = newD4NFilter(next);
 
     if (store->initialize(cct, dpp) < 0) {
+      dout(0) << "Sam: shouldn't be here" << dendl;
       delete store;
       delete next;
       return nullptr;
     }
-  }
+//  }
 #endif
 
   return store;

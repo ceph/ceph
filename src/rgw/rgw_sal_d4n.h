@@ -90,12 +90,10 @@ class D4NFilterObject : public FilterObject {
     };
 
     D4NFilterObject(std::unique_ptr<Object> _next) : FilterObject(std::move(_next)) {}
-    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket) : FilterObject(std::move(_next)),
-								      bucket(_bucket) {}
-    D4NFilterObject(D4NFilterObject& _o) : FilterObject(_o.next->clone()) { // Double check -Sam
-      bucket = _o.bucket;
-    }
+    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket) : FilterObject(std::move(_next), _bucket) {}
+    D4NFilterObject(D4NFilterObject& _o) : FilterObject(_o) {}
     virtual ~D4NFilterObject() = default;
+
     virtual const std::string &get_name() const override { return next->get_name(); }
 
     virtual Bucket* get_bucket(void) const override { return bucket; };

@@ -30,6 +30,7 @@ static inline Object* nextObject(Object* t)
 
 std::unique_ptr<Object> D4NFilterStore::get_object(const rgw_obj_key& k)
 {
+  dout(0) << "Sam: store get_object called" << dendl;
   std::unique_ptr<Object> o = next->get_object(k);
   return std::make_unique<D4NFilterObject>(std::move(o));
 }
@@ -44,6 +45,7 @@ std::unique_ptr<Writer> D4NFilterStore::get_atomic_writer(const DoutPrefixProvid
 {
   /* We're going to lose _head_obj here, but we don't use it, so I think it's
    * okay */
+  dout(0) << "Sam: store get_atomic_writer called" << dendl;
   std::unique_ptr<Object> no = nextObject(_head_obj.get())->clone();
 
   std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, std::move(no),
@@ -55,6 +57,7 @@ std::unique_ptr<Writer> D4NFilterStore::get_atomic_writer(const DoutPrefixProvid
 
 std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
 {
+  dout(0) << "Sam: bucket get_object called" << dendl;
   std::unique_ptr<Object> o = next->get_object(k);
 
   return std::make_unique<D4NFilterObject>(std::move(o), this);
@@ -62,18 +65,21 @@ std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
 
 std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op()
 {
+  dout(0) << "Sam: object get_read_op called" << dendl;
   std::unique_ptr<ReadOp> r = next->get_read_op();
   return std::make_unique<D4NFilterReadOp>(std::move(r), this);
 }
 
 std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
 {
+  dout(0) << "Sam: object get_delete_op called" << dendl;
   std::unique_ptr<DeleteOp> d = next->get_delete_op();
   return std::make_unique<D4NFilterDeleteOp>(std::move(d), this);
 }
 
 int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
+  dout(0) << "Sam: object prepare called" << dendl;
   if (source->trace->blk_dir->existKey(source->get_name())) { // Checks if object is in D4N
     int getReturn = source->trace->blk_dir->getValue(source->trace->c_blk);
 
@@ -90,6 +96,7 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y)
 {
+  dout(0) << "Sam: object delete_obj called" << dendl;
   if (source->trace->blk_dir->existKey(source->get_name())) { // Checks if object is in D4N
     int delReturn = source->trace->blk_dir->delValue(source->trace->c_blk);
 
@@ -112,6 +119,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
+  dout(0) << "Sam: writer complete called" << dendl;
   trace->c_blk->hosts_list.push_back("127.0.0.1:6379"); // Hardcoded until cct is added
   trace->c_blk->size_in_bytes = accounted_size;
   trace->c_blk->c_obj.bucket_name = head_obj->get_bucket()->get_name();

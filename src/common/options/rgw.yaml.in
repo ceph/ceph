@@ -3467,7 +3467,7 @@ options:
   enum_values:
   - none
   - base
-  - trace
+  - d4n
 - name: dbstore_db_dir
   type: str
   level: advanced
