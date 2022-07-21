@@ -282,7 +282,6 @@ std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail)
   return out << "segment_tail_t("
 	     << "segment_seq=" << tail.segment_seq
 	     << ", segment_id=" << tail.physical_segment_id
-	     << ", journal_tail=" << tail.journal_tail
 	     << ", segment_nonce=" << tail.segment_nonce
 	     << ", modify_time=" << mod_time_point_printer_t{tail.modify_time}
 	     << ", num_extents=" << tail.num_extents
