@@ -17,7 +17,6 @@
 
 namespace crimson::os::seastore {
 
-class ool_record_t;
 class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
@@ -557,7 +556,6 @@ protected:
     }
   }
 
-  friend class crimson::os::seastore::ool_record_t;
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
