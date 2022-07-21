@@ -862,6 +862,8 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
   f->dump_unsigned("file_data_version", file_data_version);
   f->dump_unsigned("xattr_version", xattr_version);
   f->dump_unsigned("backtrace_version", backtrace_version);
+  f->dump_unsigned("inline_data_version", inline_data.version);
+  f->dump_unsigned("inline_data_length", inline_data.length());
 
   f->dump_string("stray_prior_path", stray_prior_path);
   f->dump_unsigned("max_size_ever", max_size_ever);
