@@ -118,8 +118,11 @@ struct RGWTable : EmptyMetaTable {
          }
          break;
       case LUA_TSTRING:
-        value = lua_tolstring(L, 3, &len);
+      {
+        const auto str = lua_tolstring(L, 3, &len);
+        value = std::string{str, len};
         break;
+      }
       default:
         l.unlock();
         return luaL_error(L, "unsupported value type for RGW table");
