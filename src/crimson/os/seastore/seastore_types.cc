@@ -309,6 +309,28 @@ void record_size_t::account(const delta_info_t& delta)
   plain_mdlength += ceph::encoded_sizeof(delta);
 }
 
+std::ostream &operator<<(std::ostream &os, transaction_type_t type)
+{
+  switch (type) {
+  case transaction_type_t::MUTATE:
+    return os << "MUTATE";
+  case transaction_type_t::READ:
+    return os << "READ";
+  case transaction_type_t::CLEANER_TRIM:
+    return os << "CLEANER_TRIM";
+  case transaction_type_t::TRIM_BACKREF:
+    return os << "TRIM_BACKREF";
+  case transaction_type_t::CLEANER_RECLAIM:
+    return os << "CLEANER_RECLAIM";
+  case transaction_type_t::MAX:
+    return os << "TRANS_TYPE_NULL";
+  default:
+    return os << "INVALID_TRANS_TYPE("
+              << static_cast<std::size_t>(type)
+              << ")";
+  }
+}
+
 std::ostream &operator<<(std::ostream& out, const record_size_t& rsize)
 {
   return out << "record_size_t("

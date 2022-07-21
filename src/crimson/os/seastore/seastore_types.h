@@ -1541,6 +1541,31 @@ struct segment_tail_t {
 };
 std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail);
 
+enum class transaction_type_t : uint8_t {
+  MUTATE = 0,
+  READ, // including weak and non-weak read transactions
+  CLEANER_TRIM,
+  TRIM_BACKREF,
+  CLEANER_RECLAIM,
+  MAX
+};
+
+static constexpr auto TRANSACTION_TYPE_NULL = transaction_type_t::MAX;
+
+static constexpr auto TRANSACTION_TYPE_MAX = static_cast<std::size_t>(
+    transaction_type_t::MAX);
+
+std::ostream &operator<<(std::ostream &os, transaction_type_t type);
+
+constexpr bool is_valid_transaction(transaction_type_t type) {
+  return type < transaction_type_t::MAX;
+}
+
+constexpr bool is_cleaner_transaction(transaction_type_t type) {
+  return (type >= transaction_type_t::CLEANER_TRIM &&
+          type < transaction_type_t::MAX);
+}
+
 struct record_size_t {
   extent_len_t plain_mdlength = 0; // mdlength without the record header
   extent_len_t dlength = 0;
