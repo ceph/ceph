@@ -31,7 +31,7 @@ SegmentAllocator::SegmentAllocator(
 }
 
 SegmentAllocator::open_ret
-SegmentAllocator::do_open()
+SegmentAllocator::do_open(bool is_mkfs)
 {
   LOG_PREFIX(SegmentAllocator::do_open);
   ceph_assert(!current_segment);
@@ -51,18 +51,32 @@ SegmentAllocator::do_open()
     crimson::ct_error::assert_all{
       "Invalid error in SegmentAllocator::do_open open"
     }
-  ).safe_then([this, FNAME, new_segment_seq](auto sref) {
+  ).safe_then([this, is_mkfs, FNAME, new_segment_seq](auto sref) {
     // initialize new segment
+    segment_id_t segment_id = sref->get_segment_id();
     journal_seq_t new_journal_tail;
     journal_seq_t new_alloc_replay_from;
     if (type == segment_type_t::JOURNAL) {
       new_journal_tail = segment_provider.get_journal_tail_target();
       new_alloc_replay_from = segment_provider.get_alloc_info_replay_from();
+      if (is_mkfs) {
+        ceph_assert(new_journal_tail == JOURNAL_SEQ_NULL);
+        ceph_assert(new_alloc_replay_from == JOURNAL_SEQ_NULL);
+        auto mkfs_seq = journal_seq_t{
+          new_segment_seq,
+          paddr_t::make_seg_paddr(segment_id, 0)
+        };
+        new_journal_tail = mkfs_seq;
+        new_alloc_replay_from = mkfs_seq;
+      } else {
+        ceph_assert(new_journal_tail != JOURNAL_SEQ_NULL);
+        ceph_assert(new_alloc_replay_from != JOURNAL_SEQ_NULL);
+      }
     } else { // OOL
+      ceph_assert(!is_mkfs);
       new_journal_tail = NO_DELTAS;
       new_alloc_replay_from = NO_DELTAS;
     }
-    segment_id_t segment_id = sref->get_segment_id();
     auto header = segment_header_t{
       new_segment_seq,
       segment_id,
@@ -119,7 +133,7 @@ SegmentAllocator::do_open()
 }
 
 SegmentAllocator::open_ret
-SegmentAllocator::open()
+SegmentAllocator::open(bool is_mkfs)
 {
   LOG_PREFIX(SegmentAllocator::open);
   auto& device_ids = sm_group.get_device_ids();
@@ -132,7 +146,7 @@ SegmentAllocator::open()
   print_name = oss.str();
 
   INFO("{}", print_name);
-  return do_open();
+  return do_open(is_mkfs);
 }
 
 SegmentAllocator::roll_ertr::future<>
@@ -140,7 +154,7 @@ SegmentAllocator::roll()
 {
   ceph_assert(can_write());
   return close_segment().safe_then([this] {
-    return do_open().discard_result();
+    return do_open(false).discard_result();
   });
 }
 
@@ -583,9 +597,9 @@ RecordSubmitter::submit(record_t&& record)
 }
 
 RecordSubmitter::open_ret
-RecordSubmitter::open()
+RecordSubmitter::open(bool is_mkfs)
 {
-  return segment_allocator.open(
+  return segment_allocator.open(is_mkfs
   ).safe_then([this](journal_seq_t ret) {
     LOG_PREFIX(RecordSubmitter::open);
     DEBUG("{} register metrics", get_name());

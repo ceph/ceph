@@ -27,7 +27,9 @@ public:
   SegmentedJournal(SegmentProvider &segment_provider);
   ~SegmentedJournal() {}
 
-  open_for_write_ret open_for_write() final;
+  open_for_mkfs_ret open_for_mkfs() final;
+
+  open_for_mount_ret open_for_mount() final;
 
   close_ertr::future<> close() final;
 
