@@ -15639,32 +15639,27 @@ int BlueStore::_do_alloc_write(
 
     PExtentVector extents;
     int64_t left = final_length;
+    int64_t prefer_deferred_size_snapshot = prefer_deferred_size.load();
     bool has_chunk2defer = false;
-    auto prefer_deferred_size_snapshot = prefer_deferred_size.load();
     while (left > 0) {
       ceph_assert(prealloc_left > 0);
+      ceph_assert(prealloc_pos != prealloc.end());
       has_chunk2defer |= (prealloc_pos_length < prefer_deferred_size_snapshot);
-      if (prealloc_pos->length <= left) {
-	prealloc_left -= prealloc_pos->length;
-	left -= prealloc_pos->length;
-	txc->statfs_delta.allocated() += prealloc_pos->length;
-	extents.push_back(*prealloc_pos);
+      auto l = std::min(int64_t(prealloc_pos->length), left);
+      extents.emplace_back(prealloc_pos->offset, l);
+      txc->allocated.insert(prealloc_pos->offset, l);
+      txc->statfs_delta.allocated() += l;
+      prealloc_left -= l;
+      left -= l;
+      prealloc_pos->offset += l;
+      prealloc_pos->length -= l;
+      if (prealloc_pos->length == 0) {
 	++prealloc_pos;
-	if (prealloc_pos != prealloc.end()) {
-	  prealloc_pos_length = prealloc_pos->length;
-	}
-      } else {
-	extents.emplace_back(prealloc_pos->offset, left);
-	prealloc_pos->offset += left;
-	prealloc_pos->length -= left;
-	prealloc_left -= left;
-	txc->statfs_delta.allocated() += left;
-	left = 0;
-	break;
+        if (prealloc_pos != prealloc.end()) {
+          prealloc_pos_length = prealloc_pos->length;
+          has_chunk2defer |= (prealloc_pos->length < prefer_deferred_size_snapshot);
+        }
       }
-    }
-    for (auto& p : extents) {
-      txc->allocated.insert(p.offset, p.length);
     }
     dblob.allocated(p2align(b_off, min_alloc_size), final_length, extents);
 
@@ -15720,8 +15715,7 @@ int BlueStore::_do_alloc_write(
 	logger->inc(l_bluestore_write_new);
       }
     }
-  }
-  ceph_assert(prealloc_pos == prealloc.end());
+  } // for (auto& wi : wctx->writes)
   ceph_assert(prealloc_left == 0);
   return 0;
 }
