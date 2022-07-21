@@ -15,6 +15,7 @@
 #include "acconfig.h"
 #include <sys/types.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #if defined(__linux__)
@@ -349,7 +350,9 @@ extern _CRTIMP errno_t __cdecl _putenv_s(const char *_Name,const char *_Value);
 #define compat_closesocket closesocket
 // Use "aligned_free" when freeing memory allocated using posix_memalign or
 // _aligned_malloc. Using "free" will crash.
-#define aligned_free(ptr) _aligned_free(ptr)
+static inline void aligned_free(void* ptr) {
+  _aligned_free(ptr);
+}
 
 // O_CLOEXEC is not defined on Windows. Since handles aren't inherited
 // with subprocesses unless explicitly requested, we'll define this
@@ -363,7 +366,9 @@ extern _CRTIMP errno_t __cdecl _putenv_s(const char *_Name,const char *_Value);
 
 #define SOCKOPT_VAL_TYPE void*
 
-#define aligned_free(ptr) free(ptr)
+static inline void aligned_free(void* ptr) {
+  free(ptr);
+}
 static inline int compat_closesocket(int fildes) {
   return close(fildes);
 }
