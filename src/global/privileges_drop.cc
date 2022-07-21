@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#ifdef WITH_SEASTAR
+#include <stdlib.h>
+#endif
 #include <string>
 #ifndef _WIN32
 #include <pwd.h>
@@ -51,6 +54,12 @@ void _maybe_drop_privileges(LoggerT& logger, const int flags) {
     }
   } else if (g_conf()->setgroup.length() ||
              g_conf()->setuser.length()) {
+    #ifdef WITH_SEASTAR
+    // nowydays getpwnam looks look for "dynamic user names" via systemd
+    // and dbus if it can't be found elsewhere. Unfortunately, this way
+    // is uncompliant with Seastar's memory allocator.
+    setenv("SYSTEMD_NSS_DYNAMIC_BYPASS", "1", true);
+    #endif
     uid_t uid = 0;  // zero means no change; we can only drop privs here.
     gid_t gid = 0;
     std::string uid_string;
