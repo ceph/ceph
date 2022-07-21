@@ -709,7 +709,7 @@ endif()
 option(WITH_GRAFANA "install grafana dashboards" OFF)
 add_subdirectory(monitoring/ceph-mixin)
 
-CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
+CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" ON
   "NOT WITH_SYSTEM_BOOST" OFF)
 
 include(CTags)

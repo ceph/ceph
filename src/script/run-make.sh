@@ -39,12 +39,7 @@ function get_processors() {
 
 function detect_ceph_dev_pkgs() {
     local cmake_opts
-    local boost_root=/opt/ceph
-    if test -f $boost_root/include/boost/config.hpp; then
-        cmake_opts+=" -DWITH_SYSTEM_BOOST=ON -DBOOST_ROOT=$boost_root"
-    else
-        cmake_opts+=" -DBOOST_J=$(get_processors)"
-    fi
+    cmake_opts+=" -DBOOST_J=$(get_processors)"
 
     source /etc/os-release
     if [[ "$ID" == "ubuntu" ]]; then
