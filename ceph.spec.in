@@ -301,8 +301,12 @@ BuildRequires:  nlohmann_json-devel
 BuildRequires:  libevent-devel
 %endif
 %if 0%{with system_pmdk}
+%if 0%{?suse_version}
+BuildRequires:  libndctl-devel >= 63
+%else
 BuildRequires:  ndctl-devel >= 63
 BuildRequires:  daxctl-devel >= 63
+%endif
 BuildRequires:  libpmem-devel
 BuildRequires:  libpmemobj-devel >= 1.8
 %endif
