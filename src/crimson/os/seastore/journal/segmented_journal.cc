@@ -49,9 +49,16 @@ SegmentedJournal::SegmentedJournal(
 {
 }
 
-SegmentedJournal::open_for_write_ret SegmentedJournal::open_for_write()
+SegmentedJournal::open_for_mkfs_ret
+SegmentedJournal::open_for_mkfs()
 {
-  return record_submitter.open();
+  return record_submitter.open(true);
+}
+
+SegmentedJournal::open_for_mount_ret
+SegmentedJournal::open_for_mount()
+{
+  return record_submitter.open(false);
 }
 
 SegmentedJournal::close_ertr::future<> SegmentedJournal::close()
@@ -95,30 +102,25 @@ SegmentedJournal::prep_replay_segments(
 
   auto journal_tail = segments.rbegin()->second.journal_tail;
   segment_provider.update_journal_tail_committed(journal_tail);
-  auto replay_from = journal_tail.offset;
-  auto from = segments.begin();
-  if (replay_from != P_ADDR_NULL) {
-    from = std::find_if(
-      segments.begin(),
-      segments.end(),
-      [&replay_from](const auto &seg) -> bool {
-	auto& seg_addr = replay_from.as_seg_paddr();
-	return seg.first == seg_addr.get_segment_id();
-      });
-    if (from->second.segment_seq != journal_tail.segment_seq) {
-      ERROR("journal_tail {} does not match {}",
-            journal_tail, from->second);
-      ceph_abort();
-    }
-  } else {
-    replay_from = paddr_t::make_seg_paddr(
-      from->first,
-      journal_segment_allocator.get_block_size());
+  auto journal_tail_paddr = journal_tail.offset;
+  ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
+  ceph_assert(journal_tail_paddr != P_ADDR_NULL);
+  auto from = std::find_if(
+    segments.begin(),
+    segments.end(),
+    [&journal_tail_paddr](const auto &seg) -> bool {
+      auto& seg_addr = journal_tail_paddr.as_seg_paddr();
+      return seg.first == seg_addr.get_segment_id();
+    });
+  if (from->second.segment_seq != journal_tail.segment_seq) {
+    ERROR("journal_tail {} does not match {}",
+          journal_tail, from->second);
+    ceph_abort();
   }
 
   auto num_segments = segments.end() - from;
-  INFO("{} segments to replay, from {}",
-       num_segments, replay_from);
+  INFO("{} segments to replay from {}",
+       num_segments, journal_tail);
   auto ret = replay_segments_t(num_segments);
   std::transform(
     from, segments.end(), ret.begin(),
@@ -127,11 +129,11 @@ SegmentedJournal::prep_replay_segments(
 	p.second.segment_seq,
 	paddr_t::make_seg_paddr(
 	  p.first,
-	  journal_segment_allocator.get_block_size())
+	  sm_group.get_block_size())
       };
       return std::make_pair(ret, p.second);
     });
-  ret[0].first.offset = replay_from;
+  ret[0].first.offset = journal_tail_paddr;
   return prep_replay_segments_fut(
     prep_replay_segments_ertr::ready_future_marker{},
     std::move(ret));

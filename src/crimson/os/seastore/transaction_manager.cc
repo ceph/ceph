@@ -47,7 +47,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   INFO("enter");
   return async_cleaner->mount(
   ).safe_then([this] {
-    return journal->open_for_write();
+    return journal->open_for_mkfs();
   }).safe_then([this](auto) {
     async_cleaner->init_mkfs();
     return epm->open();
@@ -107,7 +107,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  modify_time);
       });
   }).safe_then([this] {
-    return journal->open_for_write();
+    return journal->open_for_mount();
   }).safe_then([this, FNAME](auto) {
     return seastar::do_with(
       create_weak_transaction(
