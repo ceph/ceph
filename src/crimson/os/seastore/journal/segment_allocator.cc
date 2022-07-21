@@ -210,15 +210,6 @@ SegmentAllocator::close_segment()
   auto close_segment_id = seg_to_close->get_segment_id();
   segment_provider.close_segment(close_segment_id);
   auto close_seg_info = segment_provider.get_seg_info(close_segment_id);
-  journal_seq_t cur_journal_tail;
-  journal_seq_t new_alloc_replay_from;
-  if (type == segment_type_t::JOURNAL) {
-    cur_journal_tail = segment_provider.get_journal_tail_target();
-    new_alloc_replay_from = segment_provider.get_alloc_info_replay_from();
-  } else { // OOL
-    cur_journal_tail = NO_DELTAS;
-    new_alloc_replay_from = NO_DELTAS;
-  }
   ceph_assert((close_seg_info.modify_time == NULL_TIME &&
                close_seg_info.num_extents == 0) ||
               (close_seg_info.modify_time != NULL_TIME &&
@@ -226,21 +217,18 @@ SegmentAllocator::close_segment()
   auto tail = segment_tail_t{
     close_seg_info.seq,
     close_segment_id,
-    cur_journal_tail,
-    new_alloc_replay_from,
     current_segment_nonce,
     type,
     timepoint_to_mod(close_seg_info.modify_time),
     close_seg_info.num_extents};
   ceph::bufferlist bl;
   encode(tail, bl);
-  INFO("{} close segment id={}, seq={}, written_to={}, nonce={}, journal_tail={}",
+  INFO("{} close segment id={}, seq={}, written_to={}, nonce={}",
        print_name,
        close_segment_id,
        close_seg_info.seq,
        written_to,
-       current_segment_nonce,
-       tail.journal_tail);
+       current_segment_nonce);
 
   bufferptr bp(ceph::buffer::create_page_aligned(get_block_size()));
   bp.zero();

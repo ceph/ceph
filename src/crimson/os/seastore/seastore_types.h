@@ -1513,8 +1513,6 @@ struct segment_tail_t {
   segment_seq_t segment_seq;
   segment_id_t physical_segment_id; // debugging
 
-  journal_seq_t journal_tail;
-  journal_seq_t alloc_replay_from;
   segment_nonce_t segment_nonce;
 
   segment_type_t type;
@@ -1530,8 +1528,6 @@ struct segment_tail_t {
     DENC_START(1, 1, p);
     denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
-    denc(v.journal_tail, p);
-    denc(v.alloc_replay_from, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
     denc(v.modify_time, p);

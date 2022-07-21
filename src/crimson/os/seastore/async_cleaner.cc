@@ -1129,12 +1129,6 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
         if (tail.segment_nonce != header.segment_nonce) {
           return scan_no_tail_segment(header, segment_id);
         }
-        if (tail.get_type() == segment_type_t::JOURNAL) {
-          update_journal_tail_committed(tail.journal_tail);
-          update_journal_tail_target(
-            tail.journal_tail,
-            tail.alloc_replay_from);
-        }
 
         sea_time_point modify_time = mod_to_timepoint(tail.modify_time);
         std::size_t num_extents = tail.num_extents;
