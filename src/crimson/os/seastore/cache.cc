@@ -150,7 +150,7 @@ void Cache::register_metrics()
     {extent_types_t::OBJECT_DATA_BLOCK,   sm::label_instance("ext", "OBJECT_DATA_BLOCK")},
     {extent_types_t::RETIRED_PLACEHOLDER, sm::label_instance("ext", "RETIRED_PLACEHOLDER")},
     {extent_types_t::ALLOC_INFO,      	  sm::label_instance("ext", "ALLOC_INFO")},
-    {extent_types_t::ALLOC_TAIL,          sm::label_instance("ext", "ALLOC_TAIL")},
+    {extent_types_t::JOURNAL_TAIL,        sm::label_instance("ext", "JOURNAL_TAIL")},
     {extent_types_t::TEST_BLOCK,          sm::label_instance("ext", "TEST_BLOCK")},
     {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")},
     {extent_types_t::BACKREF_INTERNAL,    sm::label_instance("ext", "BACKREF_INTERNAL")},
@@ -1045,7 +1045,7 @@ record_t Cache::prepare_record(
   t.read_set.clear();
   t.write_set.clear();
 
-  record_t record;
+  record_t record(trans_src);
   auto commit_time = seastar::lowres_system_clock::now();
 
   // Add new copy of mutated blocks, set_io_wait to block until written
@@ -1248,10 +1248,15 @@ record_t Cache::prepare_record(
   }
 
   if (is_cleaner_transaction(trans_src)) {
+    assert(cleaner != nullptr);
+    auto tails = journal_tail_delta_t{
+      get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
+      get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL)
+    };
     bufferlist bl;
-    encode(get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL), bl);
+    encode(tails, bl);
     delta_info_t delta;
-    delta.type = extent_types_t::ALLOC_TAIL;
+    delta.type = extent_types_t::JOURNAL_TAIL;
     delta.bl = bl;
     record.push_back(std::move(delta));
   }
@@ -1593,11 +1598,11 @@ Cache::replay_delta(
   journal_seq_t journal_seq,
   paddr_t record_base,
   const delta_info_t &delta,
-  const journal_seq_t &alloc_replay_from,
+  const journal_seq_t &alloc_tail,
   sea_time_point &modify_time)
 {
   LOG_PREFIX(Cache::replay_delta);
-  assert(alloc_replay_from != JOURNAL_SEQ_NULL);
+  assert(alloc_tail != JOURNAL_SEQ_NULL);
   ceph_assert(modify_time != NULL_TIME);
   if (delta.type == extent_types_t::ROOT) {
     TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
@@ -1612,9 +1617,9 @@ Cache::replay_delta(
     add_extent(root);
     return replay_delta_ertr::now();
   } else if (delta.type == extent_types_t::ALLOC_INFO) {
-    if (journal_seq < alloc_replay_from) {
-      DEBUG("journal_seq {} < alloc_replay_from {}, don't replay {}",
-	journal_seq, alloc_replay_from, delta);
+    if (journal_seq < alloc_tail) {
+      DEBUG("journal_seq {} < alloc_tail {}, don't replay {}",
+	journal_seq, alloc_tail, delta);
       return replay_delta_ertr::now();
     }
     alloc_delta_t alloc_delta;
@@ -1638,7 +1643,7 @@ Cache::replay_delta(
     if (!backref_list.empty())
       backref_batch_update(std::move(backref_list), journal_seq);
     return replay_delta_ertr::now();
-  } else if (delta.type == extent_types_t::ALLOC_TAIL) {
+  } else if (delta.type == extent_types_t::JOURNAL_TAIL) {
     // this delta should have been dealt with during segment cleaner mounting
     return replay_delta_ertr::now();
   } else {

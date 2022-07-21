@@ -65,13 +65,15 @@ private:
   /// return ordered vector of segments to replay
   using replay_segments_t = std::vector<
     std::pair<journal_seq_t, segment_header_t>>;
-  using prep_replay_segments_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error
-    >;
-  using prep_replay_segments_fut = prep_replay_segments_ertr::future<
+  using prep_replay_segments_fut = replay_ertr::future<
     replay_segments_t>;
   prep_replay_segments_fut prep_replay_segments(
     std::vector<std::pair<segment_id_t, segment_header_t>> segments);
+
+  /// scan the last segment for tail deltas
+  using scan_last_segment_ertr = replay_ertr;
+  scan_last_segment_ertr::future<> scan_last_segment(
+      const segment_id_t&, const segment_header_t&);
 
   /// replays records starting at start through end of segment
   replay_ertr::future<>
