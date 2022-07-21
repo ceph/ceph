@@ -5408,7 +5408,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
     def test_subvolume_snapshot_info_without_snapshot_clone(self):
         """
-        Verify subvolume snapshot info output without clonnnig snapshot.
+        Verify subvolume snapshot info output without cloning snapshot.
         If no clone is performed then path /volumes/_index/clone/{track_id}
         will not exist.
         """
