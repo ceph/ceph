@@ -2133,14 +2133,14 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
   utime_t lock_for_s(max_lock_secs, 0);
   const auto& lock_lambda = [&]() {
-    ret = lock->try_lock(this, lock_for_s, null_yield);
+    int ret = lock->try_lock(this, lock_for_s, null_yield);
     if (ret == 0) {
       return true;
     }
     if (ret == -EBUSY || ret == -EEXIST) {
       /* already locked by another lc processor */
       return false;
-      }
+    }
     return false;
   };
 
