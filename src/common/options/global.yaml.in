@@ -3528,6 +3528,36 @@ options:
 # osd_*_priority determines the ratio of available io between client and
 # recovery.  Each option may be set between
 # 1..63.
+- name: rocksdb_cf_compact_on_deletion
+  type: bool
+  level: dev
+  desc: Compact the column family when a certain number of tombstones are observed within a given window.
+  long_desc: 'This setting instructs RocksDB to compact a column family when a certain
+    number of tombstones are observed during iteration within a certain sliding window.
+    For instance if rocksdb_cf_compact_on_deletion_sliding_window is 8192 and
+    rocksdb_cf_compact_on_deletion_trigger is 4096,  then once 4096 tombstones are
+    observed after iteration over 8192 entries, the column family will be compacted.'
+  default: true
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion_sliding_window
+  - rocksdb_cf_compact_on_deletion_trigger
+- name: rocksdb_cf_compact_on_deletion_sliding_window
+  type: int
+  level: dev
+  desc: The sliding window to use when rocksdb_cf_compact_on_deletion is enabled.
+  default: 32768
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion
+- name: rocksdb_cf_compact_on_deletion_trigger
+  type: int
+  level: dev
+  desc: The trigger to use when rocksdb_cf_compact_on_deletion is enabled.
+  default: 16384
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion
 - name: osd_client_op_priority
   type: uint
   level: advanced
