@@ -8727,6 +8727,10 @@ std::vector<Option> get_mds_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("mds_inject_health_dummy", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
     Option("mds_inject_traceless_reply_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),

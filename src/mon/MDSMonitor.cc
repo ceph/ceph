@@ -248,6 +248,9 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       health.decode(bl_i);
     }
     for (const auto &metric : health.metrics) {
+      if (metric.type == MDS_HEALTH_DUMMY) {
+        continue;
+      }
       const auto rank = info.rank;
       health_check_t *check = &new_checks.get_or_add(
 	mds_metric_name(metric.type),
@@ -593,10 +596,16 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
   std::set<mds_metric_t> new_types;
   for (const auto &i : new_health) {
+    if (i.type == MDS_HEALTH_DUMMY) {
+      continue;
+    }
     new_types.insert(i.type);
   }
 
   for (const auto &new_metric: new_health) {
+    if (new_metric.type == MDS_HEALTH_DUMMY) {
+      continue;
+    }
     if (old_types.count(new_metric.type) == 0) {
       dout(10) << "MDS health message (" << m->get_orig_source()
 	       << "): " << new_metric.sev << " " << new_metric.message << dendl;
