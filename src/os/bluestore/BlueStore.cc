@@ -13937,6 +13937,15 @@ int BlueStore::_deferred_replay()
   dout(10) << __func__ << " start" << dendl;
   int count = 0;
   int r = 0;
+  interval_set<uint64_t> bluefs_extents;
+  if (bluefs) {
+    bluefs->foreach_block_extents(
+      bluefs_layout.shared_bdev,
+      [&] (uint64_t start, uint32_t len) {
+        bluefs_extents.insert(start, len);
+      }
+    );
+  }
   CollectionRef ch = _get_collection(coll_t::meta());
   bool fake_ch = false;
   if (!ch) {
@@ -13962,10 +13971,15 @@ int BlueStore::_deferred_replay()
       r = -EIO;
       goto out;
     }
-    TransContext *txc = _txc_create(ch.get(), osr,  nullptr);
-    txc->deferred_txn = deferred_txn;
-    txc->set_state(TransContext::STATE_KV_DONE);
-    _txc_state_proc(txc);
+    bool has_some = _eliminate_outdated_deferred(deferred_txn, bluefs_extents);
+    if (has_some) {
+      TransContext *txc = _txc_create(ch.get(), osr,  nullptr);
+      txc->deferred_txn = deferred_txn;
+      txc->set_state(TransContext::STATE_KV_DONE);
+      _txc_state_proc(txc);
+    } else {
+      delete deferred_txn;
+    }
   }
  out:
   dout(20) << __func__ << " draining osr" << dendl;
@@ -13976,6 +13990,76 @@ int BlueStore::_deferred_replay()
   }
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return r;
+}
+
+bool BlueStore::_eliminate_outdated_deferred(bluestore_deferred_transaction_t* deferred_txn,
+					     interval_set<uint64_t>& bluefs_extents)
+{
+  bool has_some = false;
+  dout(30) << __func__ << " bluefs_extents: " << std::hex << bluefs_extents << std::dec << dendl;
+  auto it = deferred_txn->ops.begin();
+  while (it != deferred_txn->ops.end()) {
+    // We process a pair of _data_/_extents_ (here: it->data/it->extents)
+    // by eliminating _extents_ that belong to bluefs, removing relevant parts of _data_
+    // example:
+    // +------------+---------------+---------------+---------------+
+    // | data       | aaaaaaaabbbbb | bbbbcccccdddd | ddddeeeeeefff |
+    // | extent     | 40000 - 44000 | 50000 - 58000 | 58000 - 60000 |
+    // | in bluefs? |       no      |      yes      |       no      |
+    // +------------+---------------+---------------+---------------+
+    // result:
+    // +------------+---------------+---------------+
+    // | data       | aaaaaaaabbbbb | ddddeeeeeefff |
+    // | extent     | 40000 - 44000 | 58000 - 60000 |
+    // +------------+---------------+---------------+
+    PExtentVector new_extents;
+    ceph::buffer::list new_data;
+    uint32_t data_offset = 0; // this tracks location of extent 'e' inside it->data
+    dout(30) << __func__ << " input extents: " << it->extents << dendl;
+    for (auto& e: it->extents) {
+      interval_set<uint64_t> region;
+      region.insert(e.offset, e.length);
+
+      auto mi = bluefs_extents.lower_bound(e.offset);
+      if (mi != bluefs_extents.begin()) {
+	--mi;
+	if (mi.get_end() <= e.offset) {
+	  ++mi;
+	}
+      }
+      while (mi != bluefs_extents.end() && mi.get_start() < e.offset + e.length) {
+	// The interval_set does not like (asserts) when we erase interval that does not exist.
+	// Hence we do we implement (region-mi) by ((region+mi)-mi).
+	region.union_insert(mi.get_start(), mi.get_len());
+	region.erase(mi.get_start(), mi.get_len());
+	++mi;
+      }
+      // 'region' is now a subset of e, without parts used by bluefs
+      // we trim coresponding parts from it->data (actally constructing new_data / new_extents)
+      for (auto ki = region.begin(); ki != region.end(); ki++) {
+	ceph::buffer::list chunk;
+	// A chunk from it->data; data_offset is a an offset where 'e' was located;
+	// 'ki.get_start() - e.offset' is an offset of ki inside 'e'.
+	chunk.substr_of(it->data, data_offset + (ki.get_start() - e.offset), ki.get_len());
+	new_data.claim_append(chunk);
+	new_extents.emplace_back(bluestore_pextent_t(ki.get_start(), ki.get_len()));
+      }
+      data_offset += e.length;
+    }
+    dout(30) << __func__ << " output extents: " << new_extents << dendl;
+    if (it->data.length() != new_data.length()) {
+      dout(10) << __func__ << " trimmed deferred extents: " << it->extents << "->" << new_extents << dendl;
+    }
+    if (new_extents.size() == 0) {
+      it = deferred_txn->ops.erase(it);
+    } else {
+      has_some = true;
+      std::swap(it->extents, new_extents);
+      std::swap(it->data, new_data);
+      ++it;
+    }
+  }
+  return has_some;
 }
 
 // ---------------------------
