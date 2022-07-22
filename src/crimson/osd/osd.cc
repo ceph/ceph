@@ -1036,8 +1036,9 @@ seastar::future<> OSD::handle_rep_op(crimson::net::ConnectionRef conn,
 seastar::future<> OSD::handle_rep_op_reply(crimson::net::ConnectionRef conn,
 					   Ref<MOSDRepOpReply> m)
 {
+  spg_t pgid = m->get_spg();
   return pg_shard_manager.with_pg(
-    m->get_spg(),
+    pgid,
     [conn=std::move(conn), m=std::move(m)](auto &&pg) {
       if (pg) {
 	m->finish_decode();
