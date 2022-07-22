@@ -12,10 +12,11 @@
     },
     "eofline": true,
     "forin": true,
-    "import-blacklist": [true,
+    "import-blacklist": [
+      true,
       "rxjs/Rx",
-      {"@angular/core/testing": ["async"]},
-      ["(\\.{1,2}\/){2,}"] // e.g import ../../foobar
+      { "@angular/core/testing": ["async"] },
+      ["(\\.{1,2}/){2,}"] // e.g import ../../foobar
     ],
     "import-spacing": true,
     "indent": [true, "spaces"],
@@ -112,7 +113,12 @@
           }
         ]
       }
-    ]
+    ],
+    "template-accessibility-alt-text": true,
+    "template-accessibility-tabindex-no-positive": true,
+    "template-accessibility-table-scope": true,
+    "template-accessibility-valid-aria": true,
+    "template-no-distracting-elements": true
   },
   "jsRules": { "no-empty": true }
 }
