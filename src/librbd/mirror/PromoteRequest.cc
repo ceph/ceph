@@ -59,7 +59,8 @@ void PromoteRequest<I>::handle_get_info(int r) {
     finish(-EINVAL);
     return;
   } else if (m_promotion_state == PROMOTION_STATE_NON_PRIMARY && !m_force) {
-    lderr(cct) << "image is still primary within a remote cluster" << dendl;
+    lderr(cct) << "image is primary within a remote cluster or demotion is not propagated yet"
+               << dendl;
     finish(-EBUSY);
     return;
   }
