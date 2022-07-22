@@ -1231,12 +1231,12 @@ private:
     // should be consistent with trans_srcs_invalidated in register_metrics()
     assert(!(src1 == Transaction::src_t::READ &&
              src2 == Transaction::src_t::READ));
-    assert(!(src1 == Transaction::src_t::CLEANER_TRIM &&
-             src2 == Transaction::src_t::CLEANER_TRIM));
+    assert(!(src1 == Transaction::src_t::CLEANER_TRIM_DIRTY &&
+             src2 == Transaction::src_t::CLEANER_TRIM_DIRTY));
     assert(!(src1 == Transaction::src_t::CLEANER_RECLAIM &&
              src2 == Transaction::src_t::CLEANER_RECLAIM));
-    assert(!(src1 == Transaction::src_t::TRIM_BACKREF &&
-             src2 == Transaction::src_t::TRIM_BACKREF));
+    assert(!(src1 == Transaction::src_t::CLEANER_TRIM_ALLOC &&
+             src2 == Transaction::src_t::CLEANER_TRIM_ALLOC));
 
     auto src1_value = static_cast<std::size_t>(src1);
     auto src2_value = static_cast<std::size_t>(src2);

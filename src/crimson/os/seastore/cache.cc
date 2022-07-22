@@ -133,8 +133,8 @@ void Cache::register_metrics()
   std::map<src_t, sm::label_instance> labels_by_src {
     {src_t::MUTATE, sm::label_instance("src", "MUTATE")},
     {src_t::READ, sm::label_instance("src", "READ")},
-    {src_t::CLEANER_TRIM, sm::label_instance("src", "CLEANER_TRIM")},
-    {src_t::TRIM_BACKREF, sm::label_instance("src", "TRIM_BACKREF")},
+    {src_t::CLEANER_TRIM_DIRTY, sm::label_instance("src", "CLEANER_TRIM_DIRTY")},
+    {src_t::CLEANER_TRIM_ALLOC, sm::label_instance("src", "CLEANER_TRIM_ALLOC")},
     {src_t::CLEANER_RECLAIM, sm::label_instance("src", "CLEANER_RECLAIM")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
@@ -622,12 +622,12 @@ void Cache::register_metrics()
       // should be consistent with checks in account_conflict()
       if ((src1 == Transaction::src_t::READ &&
            src2 == Transaction::src_t::READ) ||
-          (src1 == Transaction::src_t::CLEANER_TRIM &&
-           src2 == Transaction::src_t::CLEANER_TRIM) ||
+          (src1 == Transaction::src_t::CLEANER_TRIM_DIRTY &&
+           src2 == Transaction::src_t::CLEANER_TRIM_DIRTY) ||
           (src1 == Transaction::src_t::CLEANER_RECLAIM &&
            src2 == Transaction::src_t::CLEANER_RECLAIM) ||
-          (src1 == Transaction::src_t::TRIM_BACKREF &&
-           src2 == Transaction::src_t::TRIM_BACKREF)) {
+          (src1 == Transaction::src_t::CLEANER_TRIM_ALLOC &&
+           src2 == Transaction::src_t::CLEANER_TRIM_ALLOC)) {
         continue;
       }
       std::ostringstream oss;
@@ -1344,7 +1344,7 @@ record_t Cache::prepare_record(
     (record.size.get_raw_mdlength() - record.get_delta_size());
 
   auto &rewrite_version_stats = t.get_rewrite_version_stats();
-  if (trans_src == Transaction::src_t::CLEANER_TRIM) {
+  if (trans_src == Transaction::src_t::CLEANER_TRIM_DIRTY) {
     stats.committed_dirty_version.increment_stat(rewrite_version_stats);
   } else if (trans_src == Transaction::src_t::CLEANER_RECLAIM) {
     stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
