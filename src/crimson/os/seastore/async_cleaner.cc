@@ -1034,6 +1034,7 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   INFO("{} segment managers", sms.size());
   init_complete = false;
   stats = {};
+  journal_head = JOURNAL_SEQ_NULL;
   journal_alloc_tail = JOURNAL_SEQ_NULL;
   journal_dirty_tail = JOURNAL_SEQ_NULL;
   
@@ -1218,6 +1219,8 @@ void AsyncCleaner::complete_init()
   INFO("done, start GC, time_bound={}",
        sea_time_point_printer_t{segments.get_time_bound()});
   ceph_assert(journal_head != JOURNAL_SEQ_NULL);
+  ceph_assert(journal_alloc_tail != JOURNAL_SEQ_NULL);
+  ceph_assert(journal_dirty_tail != JOURNAL_SEQ_NULL);
   init_complete = true;
   gc_process.start();
 }

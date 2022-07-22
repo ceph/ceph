@@ -1126,14 +1126,11 @@ private:
    * Segments calculations
    */
   std::size_t get_segments_in_journal() const {
-    if (!init_complete) {
+    auto journal_tail = get_journal_tail();
+    if (journal_tail == JOURNAL_SEQ_NULL ||
+        journal_head == JOURNAL_SEQ_NULL) {
       return 0;
     }
-    auto journal_tail = get_journal_tail();
-    if (journal_tail == JOURNAL_SEQ_NULL) {
-      return segments.get_num_type_journal();
-    }
-    assert(journal_head != JOURNAL_SEQ_NULL);
     assert(journal_head.segment_seq >= journal_tail.segment_seq);
     return journal_head.segment_seq + 1 - journal_tail.segment_seq;
   }
