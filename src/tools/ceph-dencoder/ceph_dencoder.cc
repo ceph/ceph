@@ -25,12 +25,17 @@
 #include "common/errno.h"
 #include "denc_plugin.h"
 #include "denc_registry.h"
+#include "global/global_init.h"
 
 #define MB(m) ((m) * 1024 * 1024)
+
+#define dout_context g_ceph_context
 
 namespace fs = std::filesystem;
 
 using namespace std;
+
+#define PLUGIN_PREFIX "denc"
 
 void usage(ostream &out)
 {
@@ -64,10 +69,25 @@ void usage(ostream &out)
 
 vector<DencoderPlugin> load_plugins()
 {
-  fs::path mod_dir{CEPH_DENC_MOD_DIR};
+  /*
+   * Make it to be compatible with vstart.sh.
+   *
+   * The vstart.sh will set the "plugin_dir" option to
+   * "$CEPH_BUILD_DIR/lib" and there has no "denc/" under it.
+   *
+   * If there has a "denc/" it should be from install path
+   * "${CEPH_INSTALL_FULL_PKGLIBDIR}/denc".
+   */
+  std::string plugin_dir = g_conf().get_val<std::string>("plugin_dir");
+  fs::path mod_dir{plugin_dir};
+  if (fs::exists(plugin_dir + "/" + PLUGIN_PREFIX)) {
+    mod_dir += "/";
+    mod_dir += PLUGIN_PREFIX;
+  }
   if (auto ceph_lib = getenv("CEPH_LIB"); ceph_lib) {
     mod_dir = ceph_lib;
   }
+
   if (!fs::is_directory(mod_dir)) {
     std::cerr << "unable to load dencoders from "
 	      << std::quoted(mod_dir.native()) << ". "
@@ -92,6 +112,13 @@ vector<DencoderPlugin> load_plugins()
 
 int main(int argc, const char **argv)
 {
+  auto args = argv_to_vec(argc, argv);
+  env_to_vec(args);
+
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(cct.get());
+
   vector<DencoderPlugin> plugins = load_plugins();
   DencoderRegistry registry;
   for (auto& plugin : plugins) {
@@ -99,9 +126,6 @@ int main(int argc, const char **argv)
       registry.register_dencoder(name, denc);
     }
   }
-
-  auto args = argv_to_vec(argc, argv);
-  env_to_vec(args);
 
   Dencoder *den = NULL;
   uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT;
@@ -264,7 +288,7 @@ int main(int argc, const char **argv)
     } else {
       cerr << "unknown option '" << *i << "'" << std::endl;
       return 1;
-    }      
+    }
     if (err.length()) {
       cerr << "error: " << err << std::endl;
       return 1;

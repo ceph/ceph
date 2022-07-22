@@ -90,9 +90,6 @@ if(WITH_CEPHFS)
     mds)
 endif()
 
-target_compile_definitions(ceph-dencoder PRIVATE
-  "CEPH_DENC_MOD_DIR=\"${denc_plugin_dir}\"")
-
 target_link_libraries(ceph-dencoder
   StdFilesystem::filesystem
   global
