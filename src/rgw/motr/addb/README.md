@@ -2,7 +2,8 @@ ADDB is Motr sub-system, which provides convenient way for system events logging
 rgw_sal_motr.cc is instumented with ADDB() calls, which add entries into so-called ADDB storage object (ADDB stob). Entries are added in binary format and can be parsed to human-readable format by invoking `m0addb2dump` utility and RGW ADDB plugin, that allows to map binary entries to corresponding layer ID and parameters.
 `m0addb2utility` can found after standard installation of cortx-motr rpm, and RGW ADDB plugin (rgw_addb_plugin.so) is installed during cortx-rgw-integration rpm installation to /opt/seagate/cortx/rgw/bin path.
 RGW ADDB plugin can be compiled manually:
-```
+
+```console
 # git clone https://github.com/Seagate/cortx-rgw-integration
 # cd cortx-rgw-integration
 # cd src/addb_plugin
