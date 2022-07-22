@@ -293,15 +293,7 @@ public:
     return ret;
   }
 
-  enum class src_t : uint8_t {
-    MUTATE = 0,
-    READ, // including weak and non-weak read transactions
-    CLEANER_TRIM,
-    TRIM_BACKREF,
-    CLEANER_RECLAIM,
-    MAX
-  };
-  static constexpr auto SRC_MAX = static_cast<std::size_t>(src_t::MAX);
+  using src_t = transaction_type_t;
   src_t get_src() const {
     return src;
   }
@@ -541,29 +533,6 @@ private:
   const src_t src;
 };
 using TransactionRef = Transaction::Ref;
-
-inline std::ostream& operator<<(std::ostream& os,
-                                const Transaction::src_t& src) {
-  switch (src) {
-  case Transaction::src_t::MUTATE:
-    return os << "MUTATE";
-  case Transaction::src_t::READ:
-    return os << "READ";
-  case Transaction::src_t::CLEANER_TRIM:
-    return os << "CLEANER_TRIM";
-  case Transaction::src_t::TRIM_BACKREF:
-    return os << "TRIM_BACKREF";
-  case Transaction::src_t::CLEANER_RECLAIM:
-    return os << "CLEANER_RECLAIM";
-  default:
-    ceph_abort("impossible");
-  }
-}
-
-constexpr bool is_cleaner_transaction(Transaction::src_t src) {
-  return (src >= Transaction::src_t::CLEANER_TRIM &&
-          src < Transaction::src_t::MAX);
-}
 
 /// Should only be used with dummy staged-fltree node extent manager
 inline TransactionRef make_test_transaction() {

@@ -1183,7 +1183,7 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
       }
       case Transaction::OP_SETALLOCHINT:
       {
-        WARN("OP_SETALLOCHINT ignored as not-implemented-yet");
+        // TODO
         return tm_iertr::now();
       }
       default:

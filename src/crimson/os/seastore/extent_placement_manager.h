@@ -54,7 +54,7 @@ public:
                      SegmentSeqAllocator &ssa);
 
   open_ertr::future<> open() final {
-    return record_submitter.open().discard_result();
+    return record_submitter.open(false).discard_result();
   }
 
   alloc_write_iertr::future<> alloc_write_ool_extents(

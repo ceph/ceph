@@ -47,7 +47,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   INFO("enter");
   return async_cleaner->mount(
   ).safe_then([this] {
-    return journal->open_for_write();
+    return journal->open_for_mkfs();
   }).safe_then([this](auto) {
     async_cleaner->init_mkfs();
     return epm->open();
@@ -92,22 +92,22 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
       [this](
 	const auto &offsets,
 	const auto &e,
-	const journal_seq_t alloc_replay_from,
+	const journal_seq_t alloc_tail,
 	auto modify_time)
       {
 	auto start_seq = offsets.write_result.start_seq;
-	async_cleaner->update_journal_tail_target(
+	async_cleaner->update_journal_tails(
 	  cache->get_oldest_dirty_from().value_or(start_seq),
 	  cache->get_oldest_backref_dirty_from().value_or(start_seq));
 	return cache->replay_delta(
 	  start_seq,
 	  offsets.record_block_base,
 	  e,
-	  alloc_replay_from,
+	  alloc_tail,
 	  modify_time);
       });
   }).safe_then([this] {
-    return journal->open_for_write();
+    return journal->open_for_mount();
   }).safe_then([this, FNAME](auto) {
     return seastar::do_with(
       create_weak_transaction(
@@ -416,7 +416,7 @@ TransactionManager::submit_transaction_direct(
       lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
       backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
 
-      async_cleaner->update_journal_tail_target(
+      async_cleaner->update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
       return async_cleaner->maybe_release_segment(tref);

@@ -234,7 +234,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
   }
   void open() {
     cbj->open_device_read_header().unsafe_get0();
-    cbj->open_for_write().unsafe_get0();
+    cbj->open_for_mkfs().unsafe_get0();
   }
   auto get_available_size() {
     return cbj->get_available_size();

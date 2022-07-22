@@ -63,13 +63,13 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
   });
 }
 
-CircularBoundedJournal::open_for_write_ertr::future<>
+CircularBoundedJournal::open_for_mount_ertr::future<>
 CircularBoundedJournal::_open_device(const std::string &path)
 {
   ceph_assert(device);
   return device->open(path, seastar::open_flags::rw
   ).handle_error(
-    open_for_write_ertr::pass_further{},
+    open_for_mount_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error device->open"
     }
@@ -93,7 +93,14 @@ ceph::bufferlist CircularBoundedJournal::encode_header()
   return bl;
 }
 
-CircularBoundedJournal::open_for_write_ret CircularBoundedJournal::open_for_write()
+CircularBoundedJournal::open_for_mkfs_ret
+CircularBoundedJournal::open_for_mkfs()
+{
+  return open_for_mount();
+}
+
+CircularBoundedJournal::open_for_mount_ret
+CircularBoundedJournal::open_for_mount()
 {
   ceph_assert(initialized);
   paddr_t paddr = convert_abs_addr_to_paddr(
@@ -102,8 +109,8 @@ CircularBoundedJournal::open_for_write_ret CircularBoundedJournal::open_for_writ
   if (circulation_seq == NULL_SEG_SEQ) {
     circulation_seq = 0;
   }
-  return open_for_write_ret(
-    open_for_write_ertr::ready_future_marker{},
+  return open_for_mount_ret(
+    open_for_mount_ertr::ready_future_marker{},
     journal_seq_t{
       circulation_seq,
       paddr
@@ -117,14 +124,14 @@ CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
     initialized = false;
     return device->close();
   }).handle_error(
-    open_for_write_ertr::pass_further{},
+    open_for_mount_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error write_header"
     }
   );
 }
 
-CircularBoundedJournal::open_for_write_ret
+CircularBoundedJournal::open_for_mount_ret
 CircularBoundedJournal::open_device_read_header()
 {
   LOG_PREFIX(CircularBoundedJournal::open_device_read_header);
@@ -133,7 +140,7 @@ CircularBoundedJournal::open_device_read_header()
   ).safe_then([this, FNAME]() {
     return read_header(
     ).handle_error(
-      open_for_write_ertr::pass_further{},
+      open_for_mount_ertr::pass_further{},
       crimson::ct_error::assert_all{
 	"Invalid error read_header"
     }).safe_then([this, FNAME](auto p) mutable {
@@ -144,15 +151,15 @@ CircularBoundedJournal::open_device_read_header()
 	get_written_to(),
 	header.device_id);
       initialized = true;
-      return open_for_write_ret(
-	open_for_write_ertr::ready_future_marker{},
+      return open_for_mount_ret(
+	open_for_mount_ertr::ready_future_marker{},
 	journal_seq_t{
 	  circulation_seq,
 	  paddr
 	});
     });
   }).handle_error(
-    open_for_write_ertr::pass_further{},
+    open_for_mount_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error _open_device"
   });
