@@ -1555,8 +1555,8 @@ std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail);
 enum class transaction_type_t : uint8_t {
   MUTATE = 0,
   READ, // including weak and non-weak read transactions
-  CLEANER_TRIM,
-  TRIM_BACKREF,
+  CLEANER_TRIM_DIRTY,
+  CLEANER_TRIM_ALLOC,
   CLEANER_RECLAIM,
   MAX
 };
@@ -1573,7 +1573,7 @@ constexpr bool is_valid_transaction(transaction_type_t type) {
 }
 
 constexpr bool is_cleaner_transaction(transaction_type_t type) {
-  return (type >= transaction_type_t::CLEANER_TRIM &&
+  return (type >= transaction_type_t::CLEANER_TRIM_DIRTY &&
           type < transaction_type_t::MAX);
 }
 

@@ -688,7 +688,7 @@ void AsyncCleaner::close_segment(segment_id_t segment)
        seg_info);
 }
 
-AsyncCleaner::trim_backrefs_ret AsyncCleaner::trim_backrefs(
+AsyncCleaner::trim_alloc_ret AsyncCleaner::trim_alloc(
   Transaction &t,
   journal_seq_t limit)
 {
@@ -785,20 +785,20 @@ AsyncCleaner::gc_cycle_ret AsyncCleaner::GCProcess::run()
 
 AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
 {
-  if (gc_should_trim_backref()) {
-    return gc_trim_backref(get_alloc_tail_target()
+  if (gc_should_trim_alloc()) {
+    return gc_trim_alloc(get_alloc_tail_target()
     ).safe_then([](auto) {
       return seastar::now();
     }).handle_error(
       crimson::ct_error::assert_all{
-	"GCProcess::run encountered invalid error in gc_trim_backref"
+	"GCProcess::run encountered invalid error in gc_trim_alloc"
       }
     );
-  } else if (gc_should_trim_journal()) {
-    return gc_trim_journal(
+  } else if (gc_should_trim_dirty()) {
+    return gc_trim_dirty(
     ).handle_error(
       crimson::ct_error::assert_all{
-	"GCProcess::run encountered invalid error in gc_trim_journal"
+	"GCProcess::run encountered invalid error in gc_trim_dirty"
       }
     );
   } else if (gc_should_reclaim_space()) {
@@ -813,50 +813,50 @@ AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
   }
 }
 
-AsyncCleaner::gc_trim_backref_ret
-AsyncCleaner::gc_trim_backref(journal_seq_t limit) {
+AsyncCleaner::gc_trim_alloc_ret
+AsyncCleaner::gc_trim_alloc(journal_seq_t limit) {
   return seastar::do_with(
     journal_seq_t(),
     [this, limit=std::move(limit)](auto &seq) mutable {
     return repeat_eagain([this, limit=std::move(limit), &seq] {
       return ecb->with_transaction_intr(
-	Transaction::src_t::TRIM_BACKREF,
-	"trim_backref",
+	Transaction::src_t::CLEANER_TRIM_ALLOC,
+	"trim_alloc",
 	[this, limit](auto &t) {
-	return trim_backrefs(
+	return trim_alloc(
 	  t,
 	  limit
-	).si_then([this, &t, limit](auto trim_backrefs_to)
+	).si_then([this, &t, limit](auto trim_alloc_to)
 	  -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<
 	    journal_seq_t> {
-	  if (trim_backrefs_to != JOURNAL_SEQ_NULL) {
+	  if (trim_alloc_to != JOURNAL_SEQ_NULL) {
 	    return ecb->submit_transaction_direct(
-	      t, std::make_optional<journal_seq_t>(trim_backrefs_to)
-	    ).si_then([trim_backrefs_to=std::move(trim_backrefs_to)]() mutable {
+	      t, std::make_optional<journal_seq_t>(trim_alloc_to)
+	    ).si_then([trim_alloc_to=std::move(trim_alloc_to)]() mutable {
 	      return seastar::make_ready_future<
-		journal_seq_t>(std::move(trim_backrefs_to));
+		journal_seq_t>(std::move(trim_alloc_to));
 	    });
 	  }
 	  return seastar::make_ready_future<journal_seq_t>(std::move(limit));
 	});
-      }).safe_then([&seq](auto trim_backrefs_to) {
-	seq = std::move(trim_backrefs_to);
+      }).safe_then([&seq](auto trim_alloc_to) {
+	seq = std::move(trim_alloc_to);
       });
     }).safe_then([&seq] {
-      return gc_trim_backref_ertr::make_ready_future<
+      return gc_trim_alloc_ertr::make_ready_future<
 	journal_seq_t>(std::move(seq));
     });
   });
 }
 
-AsyncCleaner::gc_trim_journal_ret AsyncCleaner::gc_trim_journal()
+AsyncCleaner::gc_trim_dirty_ret AsyncCleaner::gc_trim_dirty()
 {
-  return gc_trim_backref(get_dirty_tail_target()
+  return gc_trim_alloc(get_dirty_tail_target()
   ).safe_then([this](auto seq) {
     return repeat_eagain([this, seq=std::move(seq)]() mutable {
       return ecb->with_transaction_intr(
-	Transaction::src_t::CLEANER_TRIM,
-	"trim_journal",
+	Transaction::src_t::CLEANER_TRIM_DIRTY,
+	"trim_dirty",
 	[this, seq=std::move(seq)](auto& t)
       {
 	return rewrite_dirty(t, seq
@@ -1378,7 +1378,8 @@ void AsyncCleaner::log_gc_state(const char *caller) const
       "alloc_tail_target {}, "
       "dirty_tail_target {}, "
       "tail_limit {}, "
-      "gc_should_trim_journal {}, ",
+      "gc_should_trim_dirty {}, "
+      "gc_should_trim_alloc{}, ",
       caller,
       segments.get_num_empty(),
       segments.get_num_open(),
@@ -1400,7 +1401,8 @@ void AsyncCleaner::log_gc_state(const char *caller) const
       get_alloc_tail_target(),
       get_dirty_tail_target(),
       get_tail_limit(),
-      gc_should_trim_journal()
+      gc_should_trim_dirty(),
+      gc_should_trim_alloc()
     );
   }
 }
