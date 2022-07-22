@@ -197,7 +197,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
        &delta_checker]
       (const auto &offsets,
        const auto &di,
-       const journal_seq_t,
+       const journal_seq_t &,
+       const journal_seq_t &,
        auto t) mutable {
 	if (!delta_checker) {
 	  EXPECT_FALSE("No Deltas Left");

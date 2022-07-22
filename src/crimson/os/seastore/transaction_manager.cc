@@ -91,7 +91,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
       [this](
 	const auto &offsets,
 	const auto &e,
-	const journal_seq_t alloc_tail,
+	const journal_seq_t &dirty_tail,
+	const journal_seq_t &alloc_tail,
 	auto modify_time)
       {
 	auto start_seq = offsets.write_result.start_seq;
@@ -102,6 +103,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  start_seq,
 	  offsets.record_block_base,
 	  e,
+	  dirty_tail,
 	  alloc_tail,
 	  modify_time);
       });
