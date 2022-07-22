@@ -7,7 +7,6 @@ set -x
 # set -ex
 
 KEYSTONE_BRANCH=${1:-master}
-DIR=$(pwd)
 TEST_DIR=${2:-$(pwd)}
 KEYSTONE_DIR=$TEST_DIR/keystone
 TOX_DIR=$TEST_DIR/tox-venv
@@ -35,6 +34,7 @@ echo "### STEP 3: Install Packages ###"
 source $TOX_DIR/bin/activate && pip install bindep
 source $TOX_DIR/bin/activate && bindep --brief --file $KEYSTONE_DIR/bindep.txt
 # TODO: postgresql-devel is required
+#sudo dnf install postgresql-devel
 # possibly install postgres and mariadb aka the output packages from above bindep command, but is this really necessary?
 
 echo "### STEP 4: Setup Venv ###"
@@ -48,7 +48,7 @@ cd $KEYSTONE_DIR && cp -f etc/keystone.conf.sample etc/keystone.conf
 cd $KEYSTONE_DIR && sed -e "s^#key_repository =.*^key_repository = $KEYREPO_DIR^" -i etc/keystone.conf
 $HOSTNAME=$(hostname -s)
 ARCHIVE_DIR=$TEST_DIR/archive
-mkdir $ARCHIVE_DIR
+mkdir -p $ARCHIVE_DIR
 LOG_FILE=$ARCHIVE_DIR/keystone.$HOSTNAME.log
 cd $KEYSTONE_DIR && sed -e "s^#log_file =.*^log_file = $LOG_FILE^" -i $KEYSTONE_DIR/etc/keystone.conf
 cd $KEYSTONE_DIR && cp $KEYSTONE_DIR/etc/keystone.conf $ARCHIVE_DIR/keystone.$HOSTNAME.conf
@@ -95,11 +95,32 @@ cd $KEYSTONE_DIR && source .tox/venv/bin/activate && sleep 3
 RGW_ENDPOINT=http://localhost:8000
 cd $KEYSTONE_DIR && source .tox/venv/bin/activate && openstack endpoint create --os-username admin --os-password ADMIN --os-user-domain-id default --os-project-name admin --os-project-domain-id default --os-identity-api-version 3 --os-auth-url $ADMIN_URL swift public "$RGW_ENDPOINT/v1/KEY_$(tenant_id)s" --debug
 
-
 # radosgw needs to be started up after this point
+cd $TEST_DIR
+MON=1 OSD=1 RGW=1 MGR=0 MDS=0 ../src/vstart.sh -n -d
+ps ax | grep ceph
 
+echo "### STEP 8: Download Tempest ###"
+
+TEMPEST_BRANCH=${3:-master}
+TEMPEST_DIR=$TEST_DIR/tempest
+git clone -b $TEMPEST_BRANCH https://github.com/openstack/tempest.git $TEMPEST_DIR
+
+echo "### STEP 9: Setup Venv for Tempest ###"
+cd $TEMPEST_DIR && source $TOX_DIR/bin/activate && tox -e venv --notest
+cd $TEMPEST_DIR && source .tox/venv/bin/activate && tempest init --workspace-path $TEMPEST_DIR/workspace.yaml rgw
+
+echo "### STEP 10: Configure Instance for Tempest ###"
+cp $TEST_DIR/tempest.conf $TEMPEST_ETC_DIR/tempest.conf
+
+echo "### STEP 10: Run Tempest ###"
+cd $TEMPEST_DIR && source .tox/venv/bin/activate && tempest run --workspace-path $TEMPEST_DIR/workspace.yaml --workspace rgw --regex '^tempest.api.object_storage' --black-regex '.*test_account_quotas_negative.AccountQuotasNegativeTest.test_user_modify_quota|.*test_container_acl_negative.ObjectACLsNegativeTest.*|.*test_container_services_negative.ContainerNegativeTest.test_create_container_metadata_.*|.*test_container_staticweb.StaticWebTest.test_web_index|.*test_container_staticweb.StaticWebTest.test_web_listing_css|.*test_container_synchronization.*|.*test_object_services.PublicObjectTest.test_access_public_container_object_without_using_creds|.*test_object_services.ObjectTest.test_create_object_with_transfer_encoding'
 
 echo "### CLEAN UP BEGINNING ###"
+
+cd $TEST_DIR
+#rm -rf $TEMPEST_DIR
+../src/stop.sh
 # Stoping Keyston Admin Instance
 kill $KEYSTONE_ADMIN_PID
 # Stoping Keyston Public Instance
@@ -109,4 +130,3 @@ rm -rf $ARCHIVE_DIR
 rm -rf $KEYSTONE_DIR
 rm -rf $TOX_DIR
 echo "### CLEAN UP: Keystone Dir Removed ###"
-
