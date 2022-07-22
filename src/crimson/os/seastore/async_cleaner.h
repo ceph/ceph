@@ -1097,8 +1097,8 @@ private:
   gc_trim_dirty_ret gc_trim_dirty();
 
   using gc_trim_alloc_ertr = gc_ertr;
-  using gc_trim_alloc_ret = gc_trim_alloc_ertr::future<journal_seq_t>;
-  gc_trim_alloc_ret gc_trim_alloc(journal_seq_t limit);
+  using gc_trim_alloc_ret = gc_trim_alloc_ertr::future<>;
+  gc_trim_alloc_ret gc_trim_alloc();
 
   using gc_reclaim_space_ertr = gc_ertr;
   using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
