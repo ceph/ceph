@@ -92,7 +92,7 @@ public:
   read_segment_tail_ret  read_segment_tail(segment_id_t segment);
 
   using read_ertr = SegmentManager::read_ertr;
-  using scan_valid_records_ertr = read_ertr::extend<crimson::ct_error::enodata>;
+  using scan_valid_records_ertr = read_ertr;
   using scan_valid_records_ret = scan_valid_records_ertr::future<
     size_t>;
   using found_record_handler_t = std::function<
