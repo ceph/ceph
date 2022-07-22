@@ -1,17 +1,9 @@
-<div class="card shadow-sm"
-     [ngClass]="cardClass">
-  <div class="card-body align-items-center justify-content-center">
-    <h4 class="card-title m-4">
-      <a *ngIf="link; else noLinkTitle"
-         [routerLink]="link">{{ cardTitle }}</a>
-
-      <ng-template #noLinkTitle>
-        {{ cardTitle }}
-      </ng-template>
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h4 class="card-title m-2">
+        {{ title }}
     </h4>
-
-    <div class="card-text text-center"
-         [ngClass]="contentClass">
+    <div class="card-text">
       <ng-content></ng-content>
     </div>
   </div>

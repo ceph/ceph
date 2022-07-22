@@ -1,8 +1,8 @@
 import { Component } from '@angular/core';
 
 @Component({
-  selector: 'cd-new-dashboard',
+  selector: 'cd-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss']
 })
-export class NewDashboardComponent {}
+export class DashboardComponent {}

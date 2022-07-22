@@ -24,8 +24,8 @@ import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/sil
 import { ServiceFormComponent } from './ceph/cluster/services/service-form/service-form.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
-import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
-import { NewDashboardComponent } from './ceph/new-dashboard/dashboard/dashboard.component';
+import { DeprecatedDashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
+import { DashboardComponent } from './ceph/new-dashboard/dashboard/dashboard.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
@@ -87,8 +87,8 @@ const routes: Routes = [
     canActivate: [AuthGuardService, ChangePasswordGuardService],
     canActivateChild: [AuthGuardService, ChangePasswordGuardService],
     children: [
-      { path: 'dashboard', component: DashboardComponent },
-      { path: 'dashboard_3', component: NewDashboardComponent },
+      { path: 'dashboard', component: DeprecatedDashboardComponent },
+      { path: 'dashboard_3', component: DashboardComponent },
       { path: 'error', component: ErrorComponent },
 
       // Cluster
