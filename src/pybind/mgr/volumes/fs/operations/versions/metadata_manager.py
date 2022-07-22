@@ -45,16 +45,17 @@ class MetadataManager(object):
     def refresh(self):
         fd = None
         conf_data = StringIO()
+        log.debug("opening config {0}".format(self.config_path))
         try:
-            log.debug("opening config {0}".format(self.config_path))
             fd = self.fs.open(self.config_path, os.O_RDONLY)
             while True:
                 data = self.fs.read(fd, -1, MetadataManager.MAX_IO_BYTES)
                 if not len(data):
                     break
                 conf_data.write(data.decode('utf-8'))
-            conf_data.seek(0)
-            self.config.readfp(conf_data)
+        except UnicodeDecodeError:
+            raise MetadataMgrException(-errno.EINVAL,
+                    "failed to decode, erroneous metadata config '{0}'".format(self.config_path))
         except cephfs.ObjectNotFound:
             raise MetadataMgrException(-errno.ENOENT, "metadata config '{0}' not found".format(self.config_path))
         except cephfs.Error as e:
@@ -62,6 +63,16 @@ class MetadataManager(object):
         finally:
             if fd is not None:
                 self.fs.close(fd)
+
+        conf_data.seek(0)
+        try:
+            if sys.version_info >= (3, 2):
+                self.config.read_file(conf_data)
+            else:
+                self.config.readfp(conf_data)
+        except configparser.Error:
+            raise MetadataMgrException(-errno.EINVAL, "failed to parse, erroneous metadata config "
+                    "'{0}'".format(self.config_path))
 
     def flush(self):
         # cull empty sections
