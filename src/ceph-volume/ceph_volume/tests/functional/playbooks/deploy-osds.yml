@@ -1,0 +1,7 @@
+---
+- hosts: mon0
+  become: true
+  tasks:
+    - name: Deploy osds
+      ansible.builtin.command: "cephadm shell ceph orch daemon add osd osd0:data_devices={{ ','.join(item.data_devices) }}{{ ',db_devices=' + ','.join(item.db_devices) if item.db_devices is defined else '' }}{{ ',wal_devices=' + ','.join(item.wal_devices) if item.wal_devices is defined else '' }},encrypted={{ dmcrypt }}{{ ',tpm2=True' if tpm2 | bool else '' }}{{ ' --method=' + method | default('lvm') }}"
+      loop: "{{ osd_devices }}"
