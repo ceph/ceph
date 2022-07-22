@@ -124,7 +124,10 @@ class Module(MgrModule):
 
         self.log.debug('Setting in-memory config option %s to: %s', option,
                        value)
-        self.config[option] = value
+        if option in ['zabbix_port', 'interval', 'discovery_interval']:
+            self.config[option] = int(value)
+        else:
+            self.config[option] = value
         return True
 
     def _parse_zabbix_hosts(self) -> None:
@@ -399,7 +402,7 @@ class Module(MgrModule):
             self.set_module_option(key, value)
             if key == 'zabbix_host' or key == 'zabbix_port':
                 self._parse_zabbix_hosts()
-                return 0, 'Configuration option {0} updated'.format(key), ''
+            return 0, 'Configuration option {0} updated'.format(key), ''
         return 1,\
             'Failed to update configuration option {0}'.format(key), ''
 
