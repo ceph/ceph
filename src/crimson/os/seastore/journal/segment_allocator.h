@@ -86,7 +86,7 @@ class SegmentAllocator {
   // open for write and generate the correct print name
   using open_ertr = base_ertr;
   using open_ret = open_ertr::future<journal_seq_t>;
-  open_ret open();
+  open_ret open(bool is_mkfs);
 
   // close the current segment and initialize next one
   using roll_ertr = base_ertr;
@@ -104,7 +104,7 @@ class SegmentAllocator {
   close_ertr::future<> close();
 
  private:
-  open_ret do_open();
+  open_ret do_open(bool is_mkfs);
 
   void reset() {
     current_segment.reset();
@@ -359,7 +359,7 @@ public:
   // open for write, generate the correct print name, and register metrics
   using open_ertr = base_ertr;
   using open_ret = open_ertr::future<journal_seq_t>;
-  open_ret open();
+  open_ret open(bool is_mkfs);
 
   using close_ertr = base_ertr;
   close_ertr::future<> close();
