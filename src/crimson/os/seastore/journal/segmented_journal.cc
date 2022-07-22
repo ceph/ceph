@@ -309,6 +309,7 @@ SegmentedJournal::replay_segment(
 	    return handler(
 	      locator,
 	      delta,
+	      segment_provider.get_dirty_tail(),
 	      segment_provider.get_alloc_tail(),
               modify_time);
           });

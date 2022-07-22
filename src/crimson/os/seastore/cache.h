@@ -763,8 +763,8 @@ public:
     journal_seq_t seq,
     paddr_t record_block_base,
     const delta_info_t &delta,
-    const journal_seq_t &, // journal seq from which alloc
-			   // delta should be replayed
+    const journal_seq_t &dirty_tail,
+    const journal_seq_t &alloc_tail,
     sea_time_point &modify_time);
 
   /**

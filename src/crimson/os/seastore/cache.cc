@@ -1598,30 +1598,28 @@ Cache::replay_delta(
   journal_seq_t journal_seq,
   paddr_t record_base,
   const delta_info_t &delta,
+  const journal_seq_t &dirty_tail,
   const journal_seq_t &alloc_tail,
   sea_time_point &modify_time)
 {
   LOG_PREFIX(Cache::replay_delta);
+  assert(dirty_tail != JOURNAL_SEQ_NULL);
   assert(alloc_tail != JOURNAL_SEQ_NULL);
   ceph_assert(modify_time != NULL_TIME);
-  if (delta.type == extent_types_t::ROOT) {
-    TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
-          journal_seq, record_base, delta, *root);
-    remove_extent(root);
-    root->apply_delta_and_adjust_crc(record_base, delta.bl);
-    root->dirty_from_or_retired_at = journal_seq;
-    root->state = CachedExtent::extent_state_t::DIRTY;
-    DEBUG("replayed root delta at {} {}, add extent -- {}, root={}",
-          journal_seq, record_base, delta, *root);
-    root->set_modify_time(modify_time);
-    add_extent(root);
+
+  if (delta.type == extent_types_t::JOURNAL_TAIL) {
+    // this delta should have been dealt with during segment cleaner mounting
     return replay_delta_ertr::now();
-  } else if (delta.type == extent_types_t::ALLOC_INFO) {
+  }
+
+  // replay alloc
+  if (delta.type == extent_types_t::ALLOC_INFO) {
     if (journal_seq < alloc_tail) {
       DEBUG("journal_seq {} < alloc_tail {}, don't replay {}",
 	journal_seq, alloc_tail, delta);
       return replay_delta_ertr::now();
     }
+
     alloc_delta_t alloc_delta;
     decode(alloc_delta, delta.bl);
     std::vector<backref_buf_entry_ref> backref_list;
@@ -1640,11 +1638,30 @@ Cache::replay_delta(
 	  alloc_blk.type,
 	  journal_seq));
     }
-    if (!backref_list.empty())
+    if (!backref_list.empty()) {
       backref_batch_update(std::move(backref_list), journal_seq);
+    }
     return replay_delta_ertr::now();
-  } else if (delta.type == extent_types_t::JOURNAL_TAIL) {
-    // this delta should have been dealt with during segment cleaner mounting
+  }
+
+  // replay dirty
+  if (journal_seq < dirty_tail) {
+    DEBUG("journal_seq {} < dirty_tail {}, don't replay {}",
+      journal_seq, alloc_tail, delta);
+    return replay_delta_ertr::now();
+  }
+
+  if (delta.type == extent_types_t::ROOT) {
+    TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
+          journal_seq, record_base, delta, *root);
+    remove_extent(root);
+    root->apply_delta_and_adjust_crc(record_base, delta.bl);
+    root->dirty_from_or_retired_at = journal_seq;
+    root->state = CachedExtent::extent_state_t::DIRTY;
+    DEBUG("replayed root delta at {} {}, add extent -- {}, root={}",
+          journal_seq, record_base, delta, *root);
+    root->set_modify_time(modify_time);
+    add_extent(root);
     return replay_delta_ertr::now();
   } else {
     auto _get_extent_if_cached = [this](paddr_t addr)
