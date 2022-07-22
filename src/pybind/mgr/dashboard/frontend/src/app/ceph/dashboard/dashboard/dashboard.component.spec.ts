@@ -4,20 +4,20 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { DashboardComponent } from './dashboard.component';
+import { DeprecatedDashboardComponent } from './dashboard.component';
 
 describe('DashboardComponent', () => {
-  let component: DashboardComponent;
-  let fixture: ComponentFixture<DashboardComponent>;
+  let component: DeprecatedDashboardComponent;
+  let fixture: ComponentFixture<DeprecatedDashboardComponent>;
 
   configureTestBed({
     imports: [NgbNavModule],
-    declarations: [DashboardComponent],
+    declarations: [DeprecatedDashboardComponent],
     schemas: [NO_ERRORS_SCHEMA]
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(DashboardComponent);
+    fixture = TestBed.createComponent(DeprecatedDashboardComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

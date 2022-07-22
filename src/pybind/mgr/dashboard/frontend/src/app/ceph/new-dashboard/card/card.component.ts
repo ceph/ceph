@@ -7,11 +7,5 @@ import { Component, Input } from '@angular/core';
 })
 export class CardComponent {
   @Input()
-  cardTitle: string;
-  @Input()
-  link: string;
-  @Input()
-  cardClass = '';
-  @Input()
-  contentClass: string;
+  title: string;
 }
