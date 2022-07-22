@@ -15,12 +15,12 @@ releases:
   quincy:
     target_eol: 2024-06-01
     releases:
-      - version: 17.2.0
-        released: 2022-04-19
-      - version: 17.2.1
-        released: 2022-06-23
       - version: 17.2.2
         released: 2022-07-21
+      - version: 17.2.1
+        released: 2022-06-23
+      - version: 17.2.0
+        released: 2022-04-19
 
   pacific:
     target_eol: 2023-06-01
