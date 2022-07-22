@@ -695,7 +695,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
     @property
     def state(self):
-        return SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
+        return super(SubvolumeV1, self).state
 
     @state.setter
     def state(self, val):
