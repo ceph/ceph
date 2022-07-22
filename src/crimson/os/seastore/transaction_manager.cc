@@ -49,7 +49,6 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   ).safe_then([this] {
     return journal->open_for_mkfs();
   }).safe_then([this](auto) {
-    async_cleaner->init_mkfs();
     return epm->open();
   }).safe_then([this, FNAME]() {
     return with_transaction_intr(
