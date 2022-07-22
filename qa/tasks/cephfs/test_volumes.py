@@ -7412,7 +7412,6 @@ class TestMisc(TestVolumesHelper):
         poor man's upgrade test -- theme continues...
         """
         subvol1, subvol2 = self._generate_random_subvolume_name(2)
-        group = self._generate_random_group_name()
 
         # emulate a old-fashioned subvolume in the default group
         createpath1 = os.path.join(".", "volumes", "_nogroup", subvol1)
