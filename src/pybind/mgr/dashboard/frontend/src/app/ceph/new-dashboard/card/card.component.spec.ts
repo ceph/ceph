@@ -21,4 +21,13 @@ describe('CardComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('Setting cards title makes title visible', () => {
+    const title = 'Card Title';
+    component.title = title;
+    fixture.detectChanges();
+    const titleDiv = fixture.debugElement.nativeElement.querySelector('.card-title');
+
+    expect(titleDiv.textContent).toContain(title);
+  });
 });
