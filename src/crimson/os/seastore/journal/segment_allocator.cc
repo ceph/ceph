@@ -68,6 +68,8 @@ SegmentAllocator::do_open(bool is_mkfs)
         };
         dirty_tail = mkfs_seq;
         alloc_tail = mkfs_seq;
+        segment_provider.update_journal_tails(
+            dirty_tail, alloc_tail);
       } else {
         ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
         ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);

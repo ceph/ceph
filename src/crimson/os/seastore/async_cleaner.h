@@ -812,12 +812,6 @@ public:
   void update_journal_tails(
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
 
-  void init_mkfs() {
-    ceph_assert(disable_trim || journal_head != JOURNAL_SEQ_NULL);
-    journal_alloc_tail = journal_head;
-    journal_dirty_tail = journal_head;
-  }
-
   using release_ertr = SegmentManagerGroup::release_ertr;
   release_ertr::future<> maybe_release_segment(Transaction &t);
 
