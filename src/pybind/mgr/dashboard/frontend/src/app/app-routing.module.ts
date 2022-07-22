@@ -88,13 +88,8 @@ const routes: Routes = [
     canActivate: [AuthGuardService, ChangePasswordGuardService],
     canActivateChild: [AuthGuardService, ChangePasswordGuardService],
     children: [
-<<<<<<< HEAD
       { path: 'dashboard', component: DeprecatedDashboardComponent },
       { path: 'dashboard_3', component: DashboardComponent },
-=======
-      { path: 'dashboard', component: DashboardComponent },
-      { path: 'dashboard_3', component: NewDashboardComponent },
->>>>>>> 5eabca4ef19 (Start of landing-page dashboard revamp v3)
       { path: 'error', component: ErrorComponent },
 
       // Cluster
