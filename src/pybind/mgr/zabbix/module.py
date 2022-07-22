@@ -22,17 +22,18 @@ def avg(data: Sequence[Union[int, float]]) -> float:
 
 
 class ZabbixSender(object):
-    def __init__(self, sender: str, host: str, port: int, log: logging.Logger) -> None:
+    def __init__(self, sender: str, host: str, port: int, timeout: int, log: logging.Logger) -> None:
         self.sender = sender
         self.host = host
         self.port = port
         self.log = log
+        self.timeout = timeout
 
     def send(self, hostname: str, data: Mapping[str, Union[int, float, str]]) -> None:
         if len(data) == 0:
             return
 
-        cmd = [self.sender, '-z', self.host, '-p', str(self.port), '-s',
+        cmd = ['/usr/bin/timeout', str(self.timeout), self.sender, '-z', self.host, '-p', str(self.port), '-s',
                hostname, '-vv', '-i', '-']
 
         self.log.debug('Executing: %s', cmd)
@@ -44,7 +45,9 @@ class ZabbixSender(object):
             proc.stdin.write('{0} ceph.{1} {2}\n'.format(hostname, key, value))
 
         stdout, stderr = proc.communicate()
-        if proc.returncode != 0:
+        if proc.returncode == 124:
+            raise RuntimeError('%s timed out while sending data' % (self.sender))
+        elif proc.returncode != 0:
             raise RuntimeError('%s exited non-zero: %s' % (self.sender,
                                                            stderr))
 
@@ -82,6 +85,10 @@ class Module(MgrModule):
             type='secs',
             default=60),
         Option(
+            name='timeout',
+            type='secs',
+            default=2),
+        Option(
             name='discovery_interval',
             type='uint',
             default=100)
@@ -106,7 +113,7 @@ class Module(MgrModule):
             raise RuntimeError('{0} is a unknown configuration '
                                'option'.format(option))
 
-        if option in ['zabbix_port', 'interval', 'discovery_interval']:
+        if option in ['zabbix_port', 'interval', 'timeout', 'discovery_interval']:
             try:
                 int_value = int(value)  # type: ignore
             except (ValueError, TypeError):
@@ -309,7 +316,8 @@ class Module(MgrModule):
             try:
                 zabbix = ZabbixSender(cast(str, self.config['zabbix_sender']),
                                       cast(str, server['zabbix_host']),
-                                      cast(int, server['zabbix_port']), self.log)
+                                      cast(int, server['zabbix_port']),
+                                      cast(int, self.config['timeout']), self.log)
                 zabbix.send(identifier, data)
             except Exception as exc:
                 self.log.exception('Failed to send.')
