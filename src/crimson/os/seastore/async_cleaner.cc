@@ -786,10 +786,8 @@ AsyncCleaner::gc_cycle_ret AsyncCleaner::GCProcess::run()
 AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
 {
   if (gc_should_trim_alloc()) {
-    return gc_trim_alloc(get_alloc_tail_target()
-    ).safe_then([](auto) {
-      return seastar::now();
-    }).handle_error(
+    return gc_trim_alloc(
+    ).handle_error(
       crimson::ct_error::assert_all{
 	"GCProcess::run encountered invalid error in gc_trim_alloc"
       }
@@ -814,55 +812,38 @@ AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
 }
 
 AsyncCleaner::gc_trim_alloc_ret
-AsyncCleaner::gc_trim_alloc(journal_seq_t limit) {
-  return seastar::do_with(
-    journal_seq_t(),
-    [this, limit=std::move(limit)](auto &seq) mutable {
-    return repeat_eagain([this, limit=std::move(limit), &seq] {
-      return ecb->with_transaction_intr(
-	Transaction::src_t::CLEANER_TRIM_ALLOC,
-	"trim_alloc",
-	[this, limit](auto &t) {
-	return trim_alloc(
-	  t,
-	  limit
-	).si_then([this, &t, limit](auto trim_alloc_to)
-	  -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<
-	    journal_seq_t> {
-	  if (trim_alloc_to != JOURNAL_SEQ_NULL) {
-	    return ecb->submit_transaction_direct(
-	      t, std::make_optional<journal_seq_t>(trim_alloc_to)
-	    ).si_then([trim_alloc_to=std::move(trim_alloc_to)]() mutable {
-	      return seastar::make_ready_future<
-		journal_seq_t>(std::move(trim_alloc_to));
-	    });
-	  }
-	  return seastar::make_ready_future<journal_seq_t>(std::move(limit));
-	});
-      }).safe_then([&seq](auto trim_alloc_to) {
-	seq = std::move(trim_alloc_to);
+AsyncCleaner::gc_trim_alloc() {
+  return repeat_eagain([this] {
+    return ecb->with_transaction_intr(
+      Transaction::src_t::CLEANER_TRIM_ALLOC,
+      "trim_alloc",
+      [this](auto &t)
+    {
+      return trim_alloc(t, get_alloc_tail_target()
+      ).si_then([this, &t](auto trim_alloc_to)
+        -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<>
+      {
+        if (trim_alloc_to != JOURNAL_SEQ_NULL) {
+          return ecb->submit_transaction_direct(
+            t, std::make_optional<journal_seq_t>(trim_alloc_to));
+        }
+        return seastar::now();
       });
-    }).safe_then([&seq] {
-      return gc_trim_alloc_ertr::make_ready_future<
-	journal_seq_t>(std::move(seq));
     });
   });
 }
 
 AsyncCleaner::gc_trim_dirty_ret AsyncCleaner::gc_trim_dirty()
 {
-  return gc_trim_alloc(get_dirty_tail_target()
-  ).safe_then([this](auto seq) {
-    return repeat_eagain([this, seq=std::move(seq)]() mutable {
-      return ecb->with_transaction_intr(
-	Transaction::src_t::CLEANER_TRIM_DIRTY,
-	"trim_dirty",
-	[this, seq=std::move(seq)](auto& t)
-      {
-	return rewrite_dirty(t, seq
-	).si_then([this, &t] {
-	  return ecb->submit_transaction_direct(t);
-	});
+  return repeat_eagain([this] {
+    return ecb->with_transaction_intr(
+      Transaction::src_t::CLEANER_TRIM_DIRTY,
+      "trim_dirty",
+      [this](auto &t)
+    {
+      return rewrite_dirty(t, get_dirty_tail_target()
+      ).si_then([this, &t] {
+        return ecb->submit_transaction_direct(t);
       });
     });
   });
