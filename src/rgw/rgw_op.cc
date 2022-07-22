@@ -984,9 +984,11 @@ int RGWGetObj::verify_permission(optional_yield y)
     return -EACCES;
   }
 
-  if (s->bucket->get_info().obj_lock_enabled()) {
-    get_retention = verify_object_permission(this, s, rgw::IAM::s3GetObjectRetention);
-    get_legal_hold = verify_object_permission(this, s, rgw::IAM::s3GetObjectLegalHold);
+  if (s->bucket_exists) {
+    if (s->bucket->get_info().obj_lock_enabled()) {
+      get_retention = verify_object_permission(this, s, rgw::IAM::s3GetObjectRetention);
+      get_legal_hold = verify_object_permission(this, s, rgw::IAM::s3GetObjectLegalHold);
+    }
   }
 
   return 0;
@@ -1141,6 +1143,12 @@ void RGWGetBucketTags::pre_exec()
 
 void RGWGetBucketTags::execute(optional_yield y)
 {
+
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }	
+
   auto iter = s->bucket_attrs.find(RGW_ATTR_TAGS);
   if (iter != s->bucket_attrs.end()) {
     has_tags = true;
@@ -1257,6 +1265,11 @@ void RGWPutBucketReplication::execute(optional_yield y) {
     return;
   }
 
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
     auto sync_policy = (s->bucket->get_info().sync_policy ? *s->bucket->get_info().sync_policy : rgw_sync_policy_info());
 
@@ -1296,6 +1309,11 @@ void RGWDeleteBucketReplication::execute(optional_yield y)
   op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
 
@@ -2715,6 +2733,11 @@ void RGWGetBucketWebsite::pre_exec()
 
 void RGWGetBucketWebsite::execute(optional_yield y)
 {
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   if (!s->bucket->get_info().has_website) {
     op_ret = -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
   }
@@ -4680,15 +4703,16 @@ void RGWPutMetadataBucket::execute(optional_yield y)
 	return op_ret;
       }
 
-      if (swift_ver_location) {
+      if (swift_ver_location && s->bucket_exists) {
 	s->bucket->get_info().swift_ver_location = *swift_ver_location;
 	s->bucket->get_info().swift_versioning = (!swift_ver_location->empty());
       }
 
       /* Web site of Swift API. */
-      filter_out_website(attrs, rmattr_names, s->bucket->get_info().website_conf);
-      s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
-
+      if (s->bucket_exists) {
+        filter_out_website(attrs, rmattr_names, s->bucket->get_info().website_conf);
+        s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
+      }
       /* Setting attributes also stores the provided bucket info. Due
        * to this fact, the new quota settings can be serialized with
        * the same call. */
@@ -4897,11 +4921,13 @@ int RGWDeleteObj::verify_permission(optional_yield y)
     return -EACCES;
   }
 
-  if (s->bucket->get_info().mfa_enabled() &&
+  if (s->bucket_exists) {
+    if (s->bucket->get_info().mfa_enabled() &&
       !s->object->get_instance().empty() &&
       !s->mfa_verified) {
-    ldpp_dout(this, 5) << "NOTICE: object delete request with a versioned object, mfa auth not provided" << dendl;
-    return -ERR_MFA_REQUIRED;
+      ldpp_dout(this, 5) << "NOTICE: object delete request with a versioned object, mfa auth not provided" << dendl;
+      return -ERR_MFA_REQUIRED;
+    }
   }
 
   return 0;
@@ -6030,6 +6056,10 @@ void RGWGetRequestPayment::pre_exec()
 
 void RGWGetRequestPayment::execute(optional_yield y)
 {
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
   requester_pays = s->bucket->get_info().requester_pays;
 }
 
@@ -6060,6 +6090,11 @@ void RGWSetRequestPayment::execute(optional_yield y)
 
   if (op_ret < 0)
     return;
+
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
 
   s->bucket->get_info().requester_pays = requester_pays;
   op_ret = s->bucket->put_info(this, false, real_time());
@@ -7370,14 +7405,14 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   rgw_obj_key object;
   std::tie(bucket_name, object) = *parse_path(path);
 
-  auto& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   std::unique_ptr<rgw::sal::Bucket> bucket;
   ACLOwner bowner;
 
   op_ret = store->get_bucket(this, s->user.get(), rgw_bucket(rgw_bucket_key(s->user->get_tenant(), bucket_name)), &bucket, y);
-  if (op_ret == -ENOENT) {
-    ldpp_dout(this, 20) << "non existent directory=" << bucket_name << dendl;
-  } else if (op_ret < 0) {
+  if (op_ret < 0) {
+    if (op_ret == -ENOENT) {
+      ldpp_dout(this, 20) << "non existent directory=" << bucket_name << dendl;
+    }
     return op_ret;
   }
 
@@ -7807,6 +7842,11 @@ void RGWConfigBucketMetaSearch::execute(optional_yield y)
     return;
   }
 
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   s->bucket->get_info().mdsearch_config = mdsearch_config;
 
   op_ret = s->bucket->put_info(this, false, real_time());
@@ -7848,6 +7888,12 @@ void RGWDelBucketMetaSearch::pre_exec()
 
 void RGWDelBucketMetaSearch::execute(optional_yield y)
 {
+
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   s->bucket->get_info().mdsearch_config.clear();
 
   op_ret = s->bucket->put_info(this, false, real_time());
@@ -8104,6 +8150,11 @@ int RGWPutBucketObjectLock::verify_permission(optional_yield y)
 
 void RGWPutBucketObjectLock::execute(optional_yield y)
 {
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   if (!s->bucket->get_info().obj_lock_enabled()) {
     s->err.message = "object lock configuration can't be set if bucket object lock not enabled";
     ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
@@ -8170,6 +8221,11 @@ int RGWGetBucketObjectLock::verify_permission(optional_yield y)
 
 void RGWGetBucketObjectLock::execute(optional_yield y)
 {
+  if (! s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   if (!s->bucket->get_info().obj_lock_enabled()) {
     op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
     return;
