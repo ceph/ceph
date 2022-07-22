@@ -1505,7 +1505,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yml %{buildroot}/etc/prometheus/ceph/ceph_default_alerts.yml
 
 # SNMP MIB
-install -m 644 -D -p monitoring/snmp/CEPH-MIB.txt %{buildroot}%{_datadir}/snmp/mibs
+install -m 644 -D -t %{buildroot}%{_datadir}/snmp/mibs monitoring/snmp/CEPH-MIB.txt
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -2587,7 +2587,6 @@ exit 0
 %config %{_sysconfdir}/prometheus/ceph/ceph_default_alerts.yml
 
 %files mib
-%attr(0755,root,root) %dir %{_datadir}/snmp
-%config %{_datadir}/snmp/mibs
+%{_datadir}/snmp/mibs
 
 %changelog
