@@ -10,6 +10,7 @@
 #include <mutex>
 #include <queue>
 #include <memory>
+#include <condition_variable>
 extern "C" {
 #include "cpa.h"
 #include "cpa_cy_sym_dp.h"
@@ -21,6 +22,70 @@ extern "C" {
 #include "icp_sal_poll.h"
 #include "qae_mem_utils.h"
 }
+
+class CompletionHandle;
+class RequestQueue {
+  public:
+    struct Node {
+        unsigned char *out;
+        const unsigned char *in;
+        size_t size;
+        Cpa8U *iv;
+        Cpa8U *key;
+        CpaCySymCipherDirection op_type;
+        CompletionHandle* completion;
+        Node(unsigned char* out,
+             const unsigned char* in,
+             size_t size,
+             Cpa8U *iv,
+             Cpa8U *key,
+             CpaCySymCipherDirection op_type,
+             CompletionHandle* completion):out(out), in(in), size(size),
+             iv(iv), key(key), op_type(op_type), completion(completion) {}
+        Node(): out(nullptr), in(nullptr), size(0),
+             iv(nullptr), key(nullptr), completion(nullptr) {}
+    };
+    std::queue<Node> requests;
+    std::mutex mutex;
+    // std::mutex takeLock;
+    std::condition_variable notEmpty;
+    // std::mutex putLock;
+    std::condition_variable notFull;
+    size_t capacity;
+    std::atomic<size_t> count;
+    void push(unsigned char* out,
+              const unsigned char* in,
+              size_t size,
+              Cpa8U *iv,
+              Cpa8U *key,
+              CpaCySymCipherDirection op_type,
+              CompletionHandle* completion) {
+      std::unique_lock lock{mutex};
+      notFull.wait(lock, [this](){return count < capacity;});
+      requests.emplace(out, in, size, iv, key, op_type, completion);
+      count++;
+      notEmpty.notify_one();
+    }
+    bool try_get(Node &node, size_t free_size) {
+      std::unique_lock lock{mutex};
+      bool not_timeout = notEmpty.wait_for(lock, std::chrono::milliseconds(1), [this](){
+        return !requests.empty();
+      });
+
+      if (not_timeout && requests.front().size <= free_size) {
+        std::swap(node, requests.front());
+        requests.pop();
+        count--;
+        notFull.notify_one();
+        return true;
+      }
+      return false;
+    }
+ public:
+  RequestQueue(): capacity(128), count(0) {}
+  ~RequestQueue() {
+  }
+};
 
 class QccCrypto {
   size_t chunk_size;
@@ -45,6 +110,7 @@ class QccCrypto {
     static const size_t AES_256_IV_LEN = 16;
     static const size_t AES_256_KEY_SIZE = 32;
     static const size_t MAX_NUM_SYM_REQ_BATCH = 32;
+    size_t threshold;
 
     /*
      * Struct to hold an instance of QAT to handle the crypto operations. These
@@ -61,29 +127,17 @@ class QccCrypto {
     } *qcc_inst;
 
     /*
-     * QAT Crypto Session
-     * Crypto Session Context and setupdata holds
-     * priority, type of crypto operation (cipher/chained),
-     * cipher algorithm (AES, DES, etc),
-     * single crypto or multi-buffer crypto.
-     */
-    struct QCCSESS {
-      Cpa32U sess_ctx_sz;
-      CpaCySymSessionCtx sess_ctx;
-    } *qcc_sess;
-
-    /*
      * Cipher Memory Allocations
-     * Holds bufferlist, flatbuffer, cipher opration data and buffermeta needed
-     * by QAT to perform the operation. Also buffers for IV, SRC, DEST.
+     * Holds cipher opration data and buffermeta needed
+     * by QAT to perform the operation. Also buffers for IV, SRC, DEST,
+     * Crypto Session Context.
      */
     struct QCCOPMEM {
-      // Op common  items
-      bool is_mem_alloc;
-      bool op_complete;
+      // Op common items
       CpaCySymDpOpData *sym_op_data[MAX_NUM_SYM_REQ_BATCH];
       Cpa8U *src_buff[MAX_NUM_SYM_REQ_BATCH];
       Cpa8U *iv_buff[MAX_NUM_SYM_REQ_BATCH];
+      CpaCySymSessionCtx sess_ctx[MAX_NUM_SYM_REQ_BATCH];
     } *qcc_op_mem;
 
     /*
@@ -93,6 +147,8 @@ class QccCrypto {
     int QccGetFreeInstance();
     void QccFreeInstance(int entry);
     std::thread qat_poll_thread;
+    std::thread qat_queue_thread;
+    RequestQueue request_queue;
     bool thread_stop{false};
 
     /*
@@ -152,6 +208,8 @@ class QccCrypto {
      */
     void poll_instances(void);
 
+    void perform_queue(void);
+
     bool symPerformOp(int avail_inst,
                       CpaCySymSessionCtx sessionCtx,
                       const Cpa8U *pSrc,
@@ -159,6 +217,7 @@ class QccCrypto {
                       Cpa32U size,
                       Cpa8U *pIv,
                       Cpa32U ivLen);
+    bool doQueuePerformOp(int avail_inst);
 
     CpaStatus initSession(CpaInstanceHandle cyInstHandle,
                           CpaCySymSessionCtx *sessionCtx,
@@ -169,4 +228,5 @@ class QccCrypto {
                             Cpa8U *pCipherKey,
                             CpaCySymCipherDirection cipherDirection);
 };
+
 #endif //QCCCRYPTO_H
