@@ -6,18 +6,18 @@
 
 <ng-template #serviceDetailsTpl>
   <ng-container>
-    <ul ngbNav
-        #nav="ngbNav"
-        class="nav-tabs"
-        cdStatefulTab="service-details">
-      <li ngbNavItem="details">
+    <nav ngbNav
+         #nav="ngbNav"
+         class="nav-tabs"
+         cdStatefulTab="service-details">
+      <ng-container ngbNavItem="details">
         <a ngbNavLink
            i18n>Details</a>
         <ng-template ngbNavContent>
           <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
         </ng-template>
-      </li>
-      <li ngbNavItem="service_events">
+      </ng-container>
+      <ng-container ngbNavItem="service_events">
         <a ngbNavLink
            i18n>Service Events</a>
         <ng-template ngbNavContent>
@@ -29,8 +29,8 @@
                     (fetchData)="getServices($event)">
           </cd-table>
         </ng-template>
-      </li>
-    </ul>
+      </ng-container>
+    </nav>
     <div [ngbNavOutlet]="nav"></div>
   </ng-container>
 </ng-template>

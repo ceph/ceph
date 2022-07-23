@@ -1,7 +1,7 @@
-<ul ngbNav
-    #nav="ngbNav"
-    class="nav-tabs">
-  <li ngbNavItem>
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs">
+  <ng-container ngbNavItem>
     <a ngbNavLink
        i18n>Daemons List</a>
     <ng-template ngbNavContent>
@@ -16,10 +16,10 @@
         </cd-rgw-daemon-details>
       </cd-table>
     </ng-template>
-  </li>
+  </ng-container>
 
-  <li ngbNavItem
-      *ngIf="grafanaPermission.read">
+  <ng-container ngbNavItem
+                *ngIf="grafanaPermission.read">
     <a ngbNavLink
        i18n>Overall Performance</a>
     <ng-template ngbNavContent>
@@ -31,10 +31,10 @@
                   grafanaStyle="two">
       </cd-grafana>
     </ng-template>
-  </li>
+  </ng-container>
 
-  <li ngbNavItem
-      *ngIf="grafanaPermission.read && isMultiSite">
+  <ng-container ngbNavItem
+                *ngIf="grafanaPermission.read && isMultiSite">
     <a ngbNavLink
        i18n>Sync Performance</a>
     <ng-template ngbNavContent>
@@ -46,7 +46,7 @@
                   grafanaStyle="two">
       </cd-grafana>
     </ng-template>
-  </li>
-</ul>
+  </ng-container>
+</nav>
 
 <div [ngbNavOutlet]="nav"></div>
