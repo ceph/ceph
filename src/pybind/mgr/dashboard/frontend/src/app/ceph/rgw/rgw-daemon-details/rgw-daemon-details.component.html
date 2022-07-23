@@ -1,9 +1,9 @@
 <ng-container *ngIf="selection">
-  <ul ngbNav
-      #nav="ngbNav"
-      class="nav-tabs"
-      cdStatefulTab="rgw-daemon-details">
-    <li ngbNavItem="details">
+  <nav ngbNav
+       #nav="ngbNav"
+       class="nav-tabs"
+       cdStatefulTab="rgw-daemon-details">
+    <ng-container ngbNavItem="details">
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
@@ -11,8 +11,8 @@
                             (fetchData)="getMetaData()">
         </cd-table-key-value>
       </ng-template>
-    </li>
-    <li ngbNavItem="performance-counters">
+    </ng-container>
+    <ng-container ngbNavItem="performance-counters">
       <a ngbNavLink
          i18n>Performance Counters</a>
       <ng-template ngbNavContent>
@@ -20,9 +20,9 @@
                                       [serviceId]="serviceMapId">
         </cd-table-performance-counter>
       </ng-template>
-    </li>
-    <li ngbNavItem="performance-details"
-        *ngIf="grafanaPermission.read">
+    </ng-container>
+    <ng-container ngbNavItem="performance-details"
+                  *ngIf="grafanaPermission.read">
       <a ngbNavLink
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
@@ -34,8 +34,8 @@
                     grafanaStyle="one">
         </cd-grafana>
       </ng-template>
-    </li>
-  </ul>
+    </ng-container>
+  </nav>
 
   <div [ngbNavOutlet]="nav"></div>
 </ng-container>
