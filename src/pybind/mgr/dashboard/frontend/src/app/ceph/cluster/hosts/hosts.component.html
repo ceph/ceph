@@ -1,7 +1,7 @@
-<ul ngbNav
-    #nav="ngbNav"
-    class="nav-tabs">
-  <li ngbNavItem>
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs">
+  <ng-container ngbNavItem>
     <a ngbNavLink
        i18n>Hosts List</a>
     <ng-template ngbNavContent>
@@ -29,9 +29,12 @@
         </cd-host-details>
       </cd-table>
     </ng-template>
-  </li>
-  <li ngbNavItem
-      *ngIf="permissions.grafana.read">
+  </ng-container>
+  <ng-container ngbNavItem
+                *ngIf="permissions.grafana.read">
+  </ng-container>
+  <ng-container ngbNavItem
+                *ngIf="permissions.grafana.read">
     <a ngbNavLink
        i18n>Overall Performance</a>
     <ng-template ngbNavContent>
@@ -43,8 +46,8 @@
                   grafanaStyle="two">
       </cd-grafana>
     </ng-template>
-  </li>
-</ul>
+  </ng-container>
+</nav>
 
 <div [ngbNavOutlet]="nav"></div>
 

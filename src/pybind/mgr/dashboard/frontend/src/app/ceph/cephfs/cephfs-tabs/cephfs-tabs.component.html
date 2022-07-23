@@ -1,18 +1,18 @@
 <ng-container *ngIf="selection">
-  <ul ngbNav
-      #nav="ngbNav"
-      (navChange)="softRefresh()"
-      class="nav-tabs"
-      cdStatefulTab="cephfs-tabs">
-    <li ngbNavItem="details">
+  <nav ngbNav
+       #nav="ngbNav"
+       (navChange)="softRefresh()"
+       class="nav-tabs"
+       cdStatefulTab="cephfs-tabs">
+    <ng-container ngbNavItem="details">
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
         <cd-cephfs-detail [data]="details">
         </cd-cephfs-detail>
       </ng-template>
-    </li>
-    <li ngbNavItem="clients">
+    </ng-container>
+    <ng-container ngbNavItem="clients">
       <a ngbNavLink>
         <ng-container i18n>Clients</ng-container>
         <span class="badge badge-pill badge-tab ml-1">{{ clients.data.length }}</span>
@@ -23,15 +23,15 @@
                            (triggerApiUpdate)="refresh()">
         </cd-cephfs-clients>
       </ng-template>
-    </li>
-    <li ngbNavItem="directories">
+    </ng-container>
+    <ng-container ngbNavItem="directories">
       <a ngbNavLink
          i18n>Directories</a>
       <ng-template ngbNavContent>
         <cd-cephfs-directories [id]="id"></cd-cephfs-directories>
       </ng-template>
-    </li>
-    <li ngbNavItem="performance-details">
+    </ng-container>
+    <ng-container ngbNavItem="performance-details">
       <a ngbNavLink
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
@@ -43,8 +43,8 @@
                     grafanaStyle="one">
         </cd-grafana>
       </ng-template>
-    </li>
-  </ul>
+    </ng-container>
+  </nav>
 
   <div [ngbNavOutlet]="nav"></div>
 </ng-container>

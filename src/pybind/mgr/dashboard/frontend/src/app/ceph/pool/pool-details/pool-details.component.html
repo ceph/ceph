@@ -1,10 +1,10 @@
 <ng-container *ngIf="selection"
               cdTableDetail>
-  <ul ngbNav
-      #nav="ngbNav"
-      class="nav-tabs"
-      cdStatefulTab="pool-details">
-    <li ngbNavItem="details">
+  <nav ngbNav
+       #nav="ngbNav"
+       class="nav-tabs"
+       cdStatefulTab="pool-details">
+    <ng-container ngbNavItem="details">
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
@@ -13,9 +13,9 @@
                             [autoReload]="false">
         </cd-table-key-value>
       </ng-template>
-    </li>
-    <li ngbNavItem="performance-details"
-        *ngIf="permissions.grafana.read">
+    </ng-container>
+    <ng-container ngbNavItem="performance-details"
+                  *ngIf="permissions.grafana.read">
       <a ngbNavLink
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
@@ -27,17 +27,17 @@
                     grafanaStyle="three">
         </cd-grafana>
       </ng-template>
-    </li>
-    <li ngbNavItem="configuration"
-        *ngIf="selection.type === 'replicated'">
+    </ng-container>
+    <ng-container ngbNavItem="configuration"
+                  *ngIf="selection.type === 'replicated'">
       <a ngbNavLink
          i18n>Configuration</a>
       <ng-template ngbNavContent>
         <cd-rbd-configuration-table [data]="selectedPoolConfiguration"></cd-rbd-configuration-table>
       </ng-template>
-    </li>
-    <li ngbNavItem="cache-tiers-details"
-        *ngIf="selection['tiers']?.length > 0">
+    </ng-container>
+    <ng-container ngbNavItem="cache-tiers-details"
+                  *ngIf="selection['tiers']?.length > 0">
       <a ngbNavLink
          i18n>Cache Tiers Details</a>
       <ng-template ngbNavContent>
@@ -47,8 +47,8 @@
                   columnMode="flex">
         </cd-table>
       </ng-template>
-    </li>
-  </ul>
+    </ng-container>
+  </nav>
 
   <div [ngbNavOutlet]="nav"></div>
 </ng-container>
