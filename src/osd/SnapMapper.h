@@ -15,18 +15,19 @@
 #ifndef SNAPMAPPER_H
 #define SNAPMAPPER_H
 
-#include <string>
-#include <set>
-#include <utility>
 #include <cstring>
+#include <set>
+#include <string>
+#include <utility>
 
-#include "common/map_cacher.hpp"
 #include "common/hobject.h"
+#include "common/map_cacher.hpp"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/object.h"
 #include "os/ObjectStore.h"
 #include "osd/OSDMap.h"
+#include "osd/SnapMapReaderI.h"
 
 class OSDriver : public MapCacher::StoreDriver<std::string, ceph::buffer::list> {
   ObjectStore *os;
@@ -61,6 +62,11 @@ public:
 
   OSTransaction get_transaction(
     ObjectStore::Transaction *t) {
+    return OSTransaction(ch->cid, hoid, t);
+  }
+
+  OSTransaction get_transaction(
+    ObjectStore::Transaction *t) const {
     return OSTransaction(ch->cid, hoid, t);
   }
 
@@ -99,7 +105,7 @@ public:
  * snap will sort together, and so that all objects in a pg for a
  * particular snap will group under up to 8 prefixes.
  */
-class SnapMapper {
+class SnapMapper : public Scrub::SnapMapReaderI {
   friend class MapperVerifier;
 public:
   CephContext* cct;
@@ -213,8 +219,9 @@ private:
     snapid_t end, std::map<std::string,ceph::buffer::list> *m);
   static std::string make_purged_snap_key(int64_t pool, snapid_t last);
 
-
-  MapCacher::MapCacher<std::string, ceph::buffer::list> backend;
+  // note: marked 'mutable', as functions as a cache and used in some 'const'
+  // functions.
+  mutable MapCacher::MapCacher<std::string, ceph::buffer::list> backend;
 
   static std::string get_legacy_prefix(snapid_t snap);
   std::string to_legacy_raw_key(
@@ -223,19 +230,28 @@ private:
 
   static std::string get_prefix(int64_t pool, snapid_t snap);
   std::string to_raw_key(
-    const std::pair<snapid_t, hobject_t> &to_map);
+    const std::pair<snapid_t, hobject_t> &to_map) const;
+
+  std::string to_raw_key(snapid_t snap, const hobject_t& clone) const;
 
   std::pair<std::string, ceph::buffer::list> to_raw(
-    const std::pair<snapid_t, hobject_t> &to_map);
+    const std::pair<snapid_t, hobject_t> &to_map) const;
 
   static bool is_mapping(const std::string &to_test);
 
   static std::pair<snapid_t, hobject_t> from_raw(
     const std::pair<std::string, ceph::buffer::list> &image);
 
-  std::string to_object_key(const hobject_t &hoid);
+  static std::pair<snapid_t, hobject_t> from_raw(
+    const ceph::buffer::list& image);
 
-  int get_snaps(const hobject_t &oid, object_snaps *out);
+  std::string to_object_key(const hobject_t &hoid) const;
+
+  int get_snaps(const hobject_t &oid, object_snaps *out) const;
+
+  std::set<std::string> to_raw_keys(
+    const hobject_t &clone,
+    const std::set<snapid_t> &snaps) const;
 
   void set_snaps(
     const hobject_t &oid,
@@ -254,7 +270,11 @@ private:
     MapCacher::Transaction<std::string, ceph::buffer::list> *t ///< [out] transaction
     );
 
-public:
+  /// Get snaps (as an 'object_snaps' object) for oid
+  tl::expected<object_snaps, SnapMapReaderI::result_t> get_snaps_common(
+    const hobject_t &hoid) const;
+
+ public:
   static std::string make_shard_prefix(shard_id_t shard) {
     if (shard == shard_id_t::NO_SHARD)
       return std::string();
@@ -330,7 +350,20 @@ public:
   int get_snaps(
     const hobject_t &oid,     ///< [in] oid to get snaps for
     std::set<snapid_t> *snaps ///< [out] snaps
-    ); ///< @return error, -ENOENT if oid is not recorded
+    ) const; ///< @return error, -ENOENT if oid is not recorded
+
+  /// Get snaps for oid - alternative interface
+  tl::expected<std::set<snapid_t>, SnapMapReaderI::result_t> get_snaps(
+    const hobject_t &hoid) const final;
+
+  /**
+   * get_snaps_check_consistency
+   *
+   * Returns snaps for hoid as in get_snaps(), but additionally validates the
+   * snap->hobject_t mappings ('SNA_' entries).
+   */
+  tl::expected<std::set<snapid_t>, SnapMapReaderI::result_t>
+  get_snaps_check_consistency(const hobject_t &hoid) const final;
 };
 WRITE_CLASS_ENCODER(SnapMapper::object_snaps)
 WRITE_CLASS_ENCODER(SnapMapper::Mapping)
