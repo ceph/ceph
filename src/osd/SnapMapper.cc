@@ -203,6 +203,36 @@ int SnapMapper::get_snaps(
   return 0;
 }
 
+tl::expected<std::set<snapid_t>, int> SnapMapper::get_snaps(
+  const hobject_t& oid)
+{
+  ceph_assert(check(oid));
+  set<string> keys;
+  keys.insert(to_object_key(oid));
+
+  map<string, bufferlist> got;
+  int r = backend.get_keys(keys, &got);
+  if (r < 0) {
+    dout(20) << __func__ << " " << oid << " got err " << r << dendl;
+    return tl::unexpected(r);
+  }
+  if (got.empty()) {
+    dout(20) << __func__ << " " << oid << " got.empty()" << dendl;
+    return tl::unexpected(-ENOENT);
+  }
+
+  object_snaps out;
+  auto bp = got.begin()->second.cbegin();
+  decode(out, bp);
+  dout(20) << __func__ << " " << oid << " " << out.snaps << dendl;
+  if (out.snaps.empty()) {
+    dout(1) << __func__ << " " << oid << " empty snapset" << dendl;
+    ceph_assert(!cct->_conf->osd_debug_verify_snaps);
+  }
+  return out.snaps;
+}
+
+
 void SnapMapper::clear_snaps(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, bufferlist> *t)

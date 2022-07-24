@@ -11,6 +11,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include "include/expected.hpp"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
 #include "os/ObjectStore.h"
@@ -142,6 +143,8 @@ class TestScrubber : public ScrubBeListener, public SnapMapperAccessor {
 
   int get_snaps(const hobject_t& hoid,
 		std::set<snapid_t>* snaps_set) const final;
+  tl::expected<std::set<snapid_t>, int> get_snaps(
+    const hobject_t& oid) const final;
 
   void set_snaps(const hobject_t& hoid, const std::vector<snapid_t>& snaps)
   {
@@ -194,6 +197,18 @@ int TestScrubber::get_snaps(const hobject_t& hoid,
 			   *snaps_set)
 	    << std::endl;
   return 0;
+}
+
+tl::expected<std::set<snapid_t>, int> TestScrubber::get_snaps(
+    const hobject_t& oid) const
+{
+  std::set<snapid_t> snapset;
+  auto r = get_snaps(oid, &snapset);
+  if (r >= 0) {
+    return snapset;
+  } else {
+    return tl::make_unexpected(r);
+  }
 }
 
 

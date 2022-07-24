@@ -15,15 +15,16 @@
 #ifndef SNAPMAPPER_H
 #define SNAPMAPPER_H
 
-#include <string>
-#include <set>
-#include <utility>
 #include <cstring>
+#include <set>
+#include <string>
+#include <utility>
 
-#include "common/map_cacher.hpp"
 #include "common/hobject.h"
+#include "common/map_cacher.hpp"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/expected.hpp"
 #include "include/object.h"
 #include "os/ObjectStore.h"
 #include "osd/OSDMap.h"
@@ -331,6 +332,9 @@ public:
     const hobject_t &oid,     ///< [in] oid to get snaps for
     std::set<snapid_t> *snaps ///< [out] snaps
     ); ///< @return error, -ENOENT if oid is not recorded
+
+  // alternative interface to the same data:
+  tl::expected<std::set<snapid_t>, int> get_snaps(const hobject_t& hoid);
 };
 WRITE_CLASS_ENCODER(SnapMapper::object_snaps)
 WRITE_CLASS_ENCODER(SnapMapper::Mapping)
