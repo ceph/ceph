@@ -1532,8 +1532,8 @@ void PgScrubber::handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from)
   if (m_reservations.has_value()) {
     m_reservations->handle_reserve_grant(op, from);
   } else {
-    derr << __func__ << ": received unsolicited reservation grant from osd " << from
-	 << " (" << op << ")" << dendl;
+    dout(20) << __func__ << ": late/unsolicited reservation grant from osd "
+	 << from << " (" << op << ")" << dendl;
   }
 }
 
