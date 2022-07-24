@@ -107,7 +107,8 @@ class TestPg : public PgScrubBeListener {
 // ///////////////////////////////////////////////////////////////////////////
 
 // and the scrubber
-class TestScrubber : public ScrubBeListener, public SnapMapperAccessor {
+class TestScrubber : public ScrubBeListener, public Scrub::SnapMapReaderI {
+  using result_t = Scrub::SnapMapReaderI::result_t;
  public:
   ~TestScrubber() = default;
 
@@ -143,7 +144,17 @@ class TestScrubber : public ScrubBeListener, public SnapMapperAccessor {
   }
 
   int get_snaps(const hobject_t& hoid,
-		std::set<snapid_t>* snaps_set) const final;
+		std::set<snapid_t>* snaps_set) const;
+
+  tl::expected<std::set<snapid_t>, result_t> get_snaps(
+    const hobject_t& oid) const final;
+
+  tl::expected<std::set<snapid_t>, result_t> get_snaps_check_consistency(
+    const hobject_t& oid) const final
+  {
+    /// \todo for now
+    return get_snaps(oid);
+  }
 
   void set_snaps(const hobject_t& hoid, const std::vector<snapid_t>& snaps)
   {
@@ -196,6 +207,19 @@ int TestScrubber::get_snaps(const hobject_t& hoid,
 			   *snaps_set)
 	    << std::endl;
   return 0;
+}
+
+tl::expected<std::set<snapid_t>, Scrub::SnapMapReaderI::result_t>
+TestScrubber::get_snaps(const hobject_t& oid) const
+{
+  std::set<snapid_t> snapset;
+  auto r = get_snaps(oid, &snapset);
+  if (r >= 0) {
+    return snapset;
+  }
+  return tl::make_unexpected(Scrub::SnapMapReaderI::result_t{
+    Scrub::SnapMapReaderI::result_t::code_t::not_found,
+    r});
 }
 
 
