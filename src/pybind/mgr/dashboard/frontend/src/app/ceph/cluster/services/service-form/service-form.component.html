@@ -17,7 +17,8 @@
             <select id="service_type"
                     name="service_type"
                     class="form-control"
-                    formControlName="service_type">
+                    formControlName="service_type"
+                    (change)="getServiceIds($event.target.value)">
               <option i18n
                       [ngValue]="null">-- Select a service type --</option>
               <option *ngFor="let serviceType of serviceTypes"
@@ -77,6 +78,9 @@
             <span class="invalid-feedback"
                   *ngIf="serviceForm.showError('service_id', frm, 'required')"
                   i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('service_id', frm, 'uniqueName')"
+                  i18n>This service id is already in use.</span>
             <span class="invalid-feedback"
                   *ngIf="serviceForm.showError('service_id', frm, 'rgwPattern')"
                   i18n>The value does not match the pattern <strong>&lt;service_id&gt;[.&lt;realm_name&gt;.&lt;zone_name&gt;]</strong>.</span>
