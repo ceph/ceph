@@ -24,8 +24,8 @@ static inline Object* nextObject(Object* t)
 {
   if (!t)
     return nullptr;
-
-  return dynamic_cast<D4NFilterObject*>(t)->get_next();
+  
+  return dynamic_cast<FilterObject*>(t)->get_next();
 }  
 
 std::unique_ptr<Object> D4NFilterStore::get_object(const rgw_obj_key& k)
@@ -80,7 +80,7 @@ std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
 int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
   dout(0) << "Sam: object prepare called" << dendl;
-  if (source->trace->blk_dir->existKey(source->get_name())) { // Checks if object is in D4N
+ // if (source->trace->blk_dir->existKey(source->get_name(), source->trace->blk_dir->&(cpp_redis::client))) { // Checks if object is in D4N
     int getReturn = source->trace->blk_dir->getValue(source->trace->c_blk);
 
     if (getReturn < 0) {
@@ -88,7 +88,7 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     } else {
       dout(0) << "D4N Filter: Directory get operation succeeded." << dendl;
     }
-  }
+  //}
 
   return next->prepare(y, dpp);
 }
@@ -97,7 +97,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 					   optional_yield y)
 {
   dout(0) << "Sam: object delete_obj called" << dendl;
-  if (source->trace->blk_dir->existKey(source->get_name())) { // Checks if object is in D4N
+  //if (source->trace->blk_dir->existKey(source->get_name(), source->trace->blk_dir->&(cpp_redis::client))) { // Checks if object is in D4N
     int delReturn = source->trace->blk_dir->delValue(source->trace->c_blk);
 
     if (delReturn < 0) {
@@ -105,7 +105,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     } else {
       dout(0) << "D4N Filter: Directory delete operation succeeded." << dendl;
     }
-  }
+ // }
 
   return next->delete_obj(dpp, y);
 }
