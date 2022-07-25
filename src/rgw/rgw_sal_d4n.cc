@@ -30,9 +30,9 @@ static inline Object* nextObject(Object* t)
 
 std::unique_ptr<Object> D4NFilterStore::get_object(const rgw_obj_key& k)
 {
-  dout(0) << "Sam: store get_object called" << dendl;
+  dout(0) << "Sam: store get_object called" << dendl; // Delete all Sam-labeled dout statements? -Sam
   std::unique_ptr<Object> o = next->get_object(k);
-  return std::make_unique<D4NFilterObject>(std::move(o));
+  return std::make_unique<D4NFilterObject>(std::move(o), this);
 }
 
 std::unique_ptr<Writer> D4NFilterStore::get_atomic_writer(const DoutPrefixProvider *dpp,
@@ -55,14 +55,6 @@ std::unique_ptr<Writer> D4NFilterStore::get_atomic_writer(const DoutPrefixProvid
   return std::make_unique<D4NFilterWriter>(std::move(writer), this, std::move(_head_obj));
 }
 
-std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
-{
-  dout(0) << "Sam: bucket get_object called" << dendl;
-  std::unique_ptr<Object> o = next->get_object(k);
-
-  return std::make_unique<D4NFilterObject>(std::move(o), this);
-}
-
 std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op()
 {
   dout(0) << "Sam: object get_read_op called" << dendl;
@@ -80,15 +72,13 @@ std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
 int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
   dout(0) << "Sam: object prepare called" << dendl;
- // if (source->trace->blk_dir->existKey(source->get_name(), source->trace->blk_dir->&(cpp_redis::client))) { // Checks if object is in D4N
-    int getReturn = source->trace->blk_dir->getValue(source->trace->c_blk);
+  int getReturn = source->trace->blk_dir->getValue(source->trace->c_blk);
 
-    if (getReturn < 0) {
-      dout(0) << "D4N Filter: Directory get operation failed." << dendl;
-    } else {
-      dout(0) << "D4N Filter: Directory get operation succeeded." << dendl;
-    }
-  //}
+  if (getReturn < 0) {
+    dout(0) << "D4N Filter: Directory get operation failed." << dendl;
+  } else {
+    dout(0) << "D4N Filter: Directory get operation succeeded." << dendl;
+  }
 
   return next->prepare(y, dpp);
 }
@@ -97,15 +87,13 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 					   optional_yield y)
 {
   dout(0) << "Sam: object delete_obj called" << dendl;
-  //if (source->trace->blk_dir->existKey(source->get_name(), source->trace->blk_dir->&(cpp_redis::client))) { // Checks if object is in D4N
-    int delReturn = source->trace->blk_dir->delValue(source->trace->c_blk);
+  int delReturn = source->trace->blk_dir->delValue(source->trace->c_blk);
 
-    if (delReturn < 0) {
-      dout(0) << "D4N Filter: Directory delete operation failed." << dendl;
-    } else {
-      dout(0) << "D4N Filter: Directory delete operation succeeded." << dendl;
-    }
- // }
+  if (delReturn < 0) {
+    dout(0) << "D4N Filter: Directory delete operation failed." << dendl;
+  } else {
+    dout(0) << "D4N Filter: Directory delete operation succeeded." << dendl;
+  }
 
   return next->delete_obj(dpp, y);
 }
@@ -120,7 +108,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        optional_yield y)
 {
   dout(0) << "Sam: writer complete called" << dendl;
-  trace->c_blk->hosts_list.push_back("127.0.0.1:6379"); // Hardcoded until cct is added
+  trace->c_blk->hosts_list.push_back("127.0.0.1:6379"); // Hardcoded until cct is added -Sam
   trace->c_blk->size_in_bytes = accounted_size;
   trace->c_blk->c_obj.bucket_name = head_obj->get_bucket()->get_name();
   trace->c_blk->c_obj.obj_name = head_obj->get_name();

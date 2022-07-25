@@ -51,20 +51,7 @@ class D4NFilterStore : public FilterStore {
 				  const std::string& unique_tag) override;
 };
 
-class D4NFilterBucket : public FilterBucket {
-  User* user;
-
-  public:
-
-    D4NFilterBucket(std::unique_ptr<Bucket> _next, User* _user) : FilterBucket(std::move(_next), _user) {}
-    
-    virtual ~D4NFilterBucket() = default;
-
-    virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
-};
-
 class D4NFilterObject : public FilterObject {
-  Bucket* bucket{nullptr};
   D4NFilterStore* trace;
 
   public:
@@ -89,20 +76,18 @@ class D4NFilterObject : public FilterObject {
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
     };
 
-    D4NFilterObject(std::unique_ptr<Object> _next) : FilterObject(std::move(_next)) {}
-    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket) : FilterObject(std::move(_next), _bucket) {}
-    D4NFilterObject(D4NFilterObject& _o) : FilterObject(_o) {}
+    D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterStore* _trace) : FilterObject(std::move(_next)),
+									     trace(_trace) {}
+    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket, D4NFilterStore* _trace) : FilterObject(std::move(_next), _bucket),
+											       trace(_trace) {}
+    D4NFilterObject(D4NFilterObject& _o, D4NFilterStore* _trace) : FilterObject(_o),
+								    trace(_trace) {}
     virtual ~D4NFilterObject() = default;
 
     virtual const std::string &get_name() const override { return next->get_name(); }
 
-    virtual Bucket* get_bucket(void) const override { return bucket; };
-    
     virtual std::unique_ptr<ReadOp> get_read_op() override;
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
-
-    /* Internal to Filters */
-    Object* get_next() { return next.get(); }
 };
 
 class D4NFilterWriter : public FilterWriter {
