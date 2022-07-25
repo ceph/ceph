@@ -11,6 +11,17 @@
 
 #include "include/types.h"
 
+template <class Key, class T>
+struct fmt::formatter<std::pair<const Key, T>> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const std::pair<const Key, T>& p, FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(), "{}={}", p.first, p.second);
+  }
+};
+
 template <class A, class B, class Comp, class Alloc>
 struct fmt::formatter<std::map<A, B, Comp, Alloc>> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
@@ -18,59 +29,39 @@ struct fmt::formatter<std::map<A, B, Comp, Alloc>> {
   template <typename FormatContext>
   auto format(const std::map<A, B, Comp, Alloc>& m, FormatContext& ctx)
   {
-    std::string_view sep = "{";
-    for (const auto& [k, v] : m) {
-      fmt::format_to(ctx.out(), "{}{}={}", sep, k, v);
-      sep = ",";
-    }
-    return fmt::format_to(ctx.out(), "}}");
+    return fmt::format_to(ctx.out(), "{{{}}}", fmt::join(m, ","));
   }
 };
 
-template <class A>
-struct fmt::formatter<std::list<A>> {
+template <class... Args>
+struct fmt::formatter<std::list<Args...>> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const std::list<A>& l, FormatContext& ctx)
+  auto format(const std::list<Args...>& l, FormatContext& ctx)
   {
-    std::string_view sep = "";
-    for (const auto& e : l) {
-      fmt::format_to(ctx.out(), "{}{}", sep, e);
-      sep = ",";
-    }
-    return ctx.out();
+    return fmt::format_to(ctx.out(), "{}", fmt::join(l, ","));
   }
 };
 
-template <class A>
-struct fmt::formatter<std::vector<A>> {
+template <class... Args>
+struct fmt::formatter<std::vector<Args...>> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const std::vector<A>& l, FormatContext& ctx)
+  auto format(const std::vector<Args...>& v, FormatContext& ctx)
   {
-    std::string_view sep = "[";
-    for (const auto& e : l) {
-      fmt::format_to(ctx.out(), "{}{}", sep, e);
-      sep = ",";
-    }
-    return fmt::format_to(ctx.out(), "]");
+    return fmt::format_to(ctx.out(), "[{}]", fmt::join(v, ","));
   }
 };
 
-template <class A>
-struct fmt::formatter<std::set<A>> {
+template <class... Args>
+struct fmt::formatter<std::set<Args...>> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const std::set<A>& l, FormatContext& ctx)
+  auto format(const std::set<Args...>& s, FormatContext& ctx)
   {
-    std::string_view sep = "";
-    for (const auto& e : l) {
-      fmt::format_to(ctx.out(), "{}{}", sep, e);
-      sep = ",";
-    }
-    return ctx.out();
+    return fmt::format_to(ctx.out(), "{}", fmt::join(s, ","));
   }
 };

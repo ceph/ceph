@@ -296,7 +296,7 @@ include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
-find_package(fmt 6.0.0 QUIET)
+find_package(fmt 7.0.0 QUIET)
 if(fmt_FOUND)
   include_directories(SYSTEM "${fmt_INCLUDE_DIR}")
 else()
@@ -306,6 +306,8 @@ else()
   add_subdirectory(fmt)
   set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
   unset(old_BUILD_SHARED_LIBS)
+  target_compile_definitions(fmt PUBLIC
+    $<$<BOOL:${WIN32}>:FMT_USE_TZSET=0>)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 endif()
 
