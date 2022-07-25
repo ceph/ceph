@@ -2911,7 +2911,7 @@ void Server::dispatch_peer_request(MDRequestRef& mdr)
 
       if (!lock) {
 	dout(10) << "don't have object, dropping" << dendl;
-	ceph_abort(); // can this happen, if we auth pinned properly.
+	ceph_abort_msg("don't have object"); // can this happen, if we auth pinned properly.
       }
       if (op == MMDSPeerRequest::OP_XLOCK && !lock->get_parent()->is_auth()) {
 	dout(10) << "not auth for remote xlock attempt, dropping on " 
@@ -2998,7 +2998,7 @@ void Server::dispatch_peer_request(MDRequestRef& mdr)
     break;
 
   default: 
-    ceph_abort();
+    ceph_abort_msg("unknown op "+ to_string(op)+ " received");
   }
 }
 
