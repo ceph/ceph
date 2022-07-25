@@ -2429,12 +2429,15 @@ public:
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
-                           RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx())
+                           RGWSI_BucketIndex *bi_svc,
+                           RGWSI_User* user_svc)
+  : cct(zone_svc->ctx())
 {
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
   svc.bucket_sync = bucket_sync_svc;
   svc.bi = bi_svc;
+  svc.user = user_svc;
 }
 
 void RGWBucketCtl::init(RGWUserCtl *user_ctl,
@@ -2819,7 +2822,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
     }
   }
 
-  ret = ctl.user->add_bucket(dpp, user_id, bucket, creation_time, y);
+  ret = svc.user->add_bucket(dpp, user_id, bucket, creation_time, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: error adding bucket to user directory:"
 		  << " user=" << user_id
@@ -2865,7 +2868,7 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
 				   optional_yield y,
                                    const DoutPrefixProvider *dpp)
 {
-  int ret = ctl.user->remove_bucket(dpp, user_id, bucket, y);
+  int ret = svc.user->remove_bucket(dpp, user_id, bucket, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -3021,7 +3024,7 @@ int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  return ctl.user->flush_bucket_stats(dpp, user_id, *pent, y);
+  return svc.user->flush_bucket_stats(dpp, user_id, *pent, y);
 }
 
 int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,

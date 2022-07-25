@@ -488,8 +488,7 @@ int RGWSI_Zone::replace_region_with_zonegroup(const DoutPrefixProvider *dpp, opt
   string oid  = "converted";
   bufferlist bl;
 
-  RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
-  RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  RGWSysObj sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
 
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0 && ret !=  -ENOENT) {
@@ -891,8 +890,7 @@ int RGWSI_Zone::convert_regionmap(const DoutPrefixProvider *dpp, optional_yield 
   rgw_pool pool(pool_name);
   bufferlist bl;
 
-  RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
-  RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  RGWSysObj sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
 
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0 && ret != -ENOENT) {
@@ -1261,9 +1259,7 @@ int RGWSI_Zone::select_legacy_bucket_placement(const DoutPrefixProvider *dpp, RG
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-
+  auto sysobj = sysobj_svc->get_obj(obj);
   int ret = sysobj.rop().read(dpp, &map_bl, y);
   if (ret < 0) {
     goto read_omap;
@@ -1331,9 +1327,7 @@ int RGWSI_Zone::update_placement_map(const DoutPrefixProvider *dpp, optional_yie
   map<string, bufferlist> m;
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-
+  auto sysobj = sysobj_svc->get_obj(obj);
   int ret = sysobj.omap().get_all(dpp, &m, y);
   if (ret < 0)
     return ret;
@@ -1356,8 +1350,7 @@ int RGWSI_Zone::add_bucket_placement(const DoutPrefixProvider *dpp, const rgw_po
   }
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
+  auto sysobj = sysobj_svc->get_obj(obj);
 
   bufferlist empty_bl;
   ret = sysobj.omap().set(dpp, new_pool.to_str(), empty_bl, y);
@@ -1371,9 +1364,7 @@ int RGWSI_Zone::add_bucket_placement(const DoutPrefixProvider *dpp, const rgw_po
 int RGWSI_Zone::remove_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& old_pool, optional_yield y)
 {
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-
+  auto sysobj = sysobj_svc->get_obj(obj);
   int ret = sysobj.omap().del(dpp, old_pool.to_str(), y);
 
   // don't care about return value
@@ -1388,8 +1379,7 @@ int RGWSI_Zone::list_placement_set(const DoutPrefixProvider *dpp, set<rgw_pool>&
   map<string, bufferlist> m;
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
+  auto sysobj = sysobj_svc->get_obj(obj);
   int ret = sysobj.omap().get_all(dpp, &m, y);
   if (ret < 0)
     return ret;

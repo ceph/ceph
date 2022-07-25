@@ -46,6 +46,7 @@
 #include "services/svc_config_key.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_role_rados.h"
+#include "services/svc_user.h"
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "rgw_pubsub.h"
@@ -307,12 +308,12 @@ int RadosUser::read_stats(const DoutPrefixProvider *dpp,
 
 int RadosUser::read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB* cb)
 {
-  return store->ctl()->user->read_stats_async(dpp, get_id(), cb);
+  return store->svc()->user->read_stats_async(dpp, get_id(), cb);
 }
 
 int RadosUser::complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return store->ctl()->user->complete_flush_stats(dpp, get_id(), y);
+  return store->svc()->user->complete_flush_stats(dpp, get_id(), y);
 }
 
 int RadosUser::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
@@ -591,10 +592,9 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
 
 int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   int ret;
 
-  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
+  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj();
   RGWObjVersionTracker ep_ot;
   if (info.bucket.bucket_id.empty()) {
     ret = store->ctl()->bucket->read_bucket_info(info.bucket, &info, y, dpp,
@@ -1459,7 +1459,6 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
 {
   std::string prefix = tenant + RGWOIDCProvider::oidc_url_oid_prefix;
   auto pool = svc()->zone->get_zone_params().oidc_pool;
-  auto obj_ctx = svc()->sysobj->init_obj_ctx();
 
   //Get the filtered objects
   list<std::string> result;
@@ -1477,7 +1476,7 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
       std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = get_oidc_provider();
       bufferlist bl;
 
-      r = rgw_get_system_obj(obj_ctx, pool, iter, bl, nullptr, nullptr, null_yield, dpp);
+      r = rgw_get_system_obj(svc()->sysobj, pool, iter, bl, nullptr, nullptr, null_yield, dpp);
       if (r < 0) {
         return r;
       }
@@ -1674,10 +1673,9 @@ int RadosObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string&
 				  std::map<std::string, bufferlist> *m,
 				  bool* pmore, optional_yield y)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   rgw_raw_obj raw_obj;
   get_raw_obj(&raw_obj);
-  auto sysobj = obj_ctx.get_obj(raw_obj);
+  auto sysobj = store->svc()->sysobj->get_obj(raw_obj);
 
   return sysobj.omap().get_vals(dpp, marker, count, m, pmore, y);
 }
@@ -1685,10 +1683,9 @@ int RadosObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string&
 int RadosObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
 				 optional_yield y)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   rgw_raw_obj raw_obj;
   get_raw_obj(&raw_obj);
-  auto sysobj = obj_ctx.get_obj(raw_obj);
+  auto sysobj = store->svc()->sysobj->get_obj(raw_obj);
 
   return sysobj.omap().get_all(dpp, m, y);
 }
@@ -1719,8 +1716,7 @@ int RadosObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
 
   store->getRados()->obj_to_raw(bucket->get_placement_rule(), obj, &raw_meta_obj);
 
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(raw_meta_obj);
+  auto sysobj = store->svc()->sysobj->get_obj(raw_meta_obj);
 
   return sysobj.omap().set_must_exist(must_exist).set(dpp, key, val, y);
 }
@@ -3020,10 +3016,9 @@ RadosLuaScriptManager::RadosLuaScriptManager(RadosStore* _s) : store(_s)
 
 int RadosLuaScriptManager::get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   bufferlist bl;
 
-  int r = rgw_get_system_obj(obj_ctx, pool, key, bl, nullptr, nullptr, y, dpp);
+  int r = rgw_get_system_obj(store->svc()->sysobj, pool, key, bl, nullptr, nullptr, y, dpp);
   if (r < 0) {
     return r;
   }
@@ -3040,11 +3035,10 @@ int RadosLuaScriptManager::get(const DoutPrefixProvider* dpp, optional_yield y, 
 
 int RadosLuaScriptManager::put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   bufferlist bl;
   ceph::encode(script, bl);
 
-  int r = rgw_put_system_obj(dpp, obj_ctx, pool, key, bl, false, nullptr, real_time(), y);
+  int r = rgw_put_system_obj(dpp, store->svc()->sysobj, pool, key, bl, false, nullptr, real_time(), y);
   if (r < 0) {
     return r;
   }
@@ -3064,23 +3058,23 @@ int RadosLuaScriptManager::del(const DoutPrefixProvider* dpp, optional_yield y, 
 
 int RadosOIDCProvider::store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  auto sysobj = store->svc()->sysobj;
   std::string oid = tenant + get_url_oid_prefix() + url;
 
   bufferlist bl;
   using ceph::encode;
   encode(*this, bl);
-  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
+  return rgw_put_system_obj(dpp, sysobj, store->svc()->zone->get_zone_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
 }
 
 int RadosOIDCProvider::read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  auto sysobj = store->svc()->sysobj;
   auto& pool = store->svc()->zone->get_zone_params().oidc_pool;
   std::string oid = tenant + get_url_oid_prefix() + url;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr, null_yield, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -3156,7 +3150,7 @@ int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optiona
 
 int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  auto sysobj = store->svc()->sysobj;
   RGWNameToId nameToId;
   nameToId.obj_id = info.id;
 
@@ -3166,26 +3160,26 @@ int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optiona
   using ceph::encode;
   encode(nameToId, bl);
 
-  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, &info.objv_tracker, real_time(), y);
+  return rgw_put_system_obj(dpp, sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, &info.objv_tracker, real_time(), y);
 }
 
 int RadosRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  auto sysobj = store->svc()->sysobj;
   std::string oid = info.tenant + get_path_oid_prefix() + info.path + get_info_oid_prefix() + info.id;
 
   bufferlist bl;
 
-  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, &info.objv_tracker, real_time(), y);
+  return rgw_put_system_obj(dpp, sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, &info.objv_tracker, real_time(), y);
 }
 
 int RadosRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  auto sysobj = store->svc()->sysobj;
   std::string oid = info.tenant + get_names_oid_prefix() + role_name;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  int ret = rgw_get_system_obj(sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -3205,11 +3199,11 @@ int RadosRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_na
 
 int RadosRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  auto sysobj = store->svc()->sysobj;
   std::string oid = info.tenant + get_names_oid_prefix() + info.name;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  int ret = rgw_get_system_obj(sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role name from Role pool: " << info.name <<
       ": " << cpp_strerror(-ret) << dendl;
@@ -3231,7 +3225,6 @@ int RadosRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
 
 int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   std::string oid;
 
   oid = info.id;

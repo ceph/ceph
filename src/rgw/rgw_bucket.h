@@ -419,6 +419,7 @@ class RGWBucketCtl {
     RGWSI_Bucket *bucket{nullptr};
     RGWSI_Bucket_Sync *bucket_sync{nullptr};
     RGWSI_BucketIndex *bi{nullptr};
+    RGWSI_User* user = nullptr;
   } svc;
 
   struct Ctl {
@@ -437,7 +438,8 @@ public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
                RGWSI_Bucket *bucket_svc,
                RGWSI_Bucket_Sync *bucket_sync_svc,
-               RGWSI_BucketIndex *bi_svc);
+               RGWSI_BucketIndex *bi_svc,
+               RGWSI_User* user_svc);
 
   void init(RGWUserCtl *user_ctl,
             RGWBucketMetadataHandler *_bm_handler,

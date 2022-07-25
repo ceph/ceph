@@ -96,19 +96,11 @@ protected:
 
 public:
   struct Context_SObj : public RGWSI_MetaBackend::Context {
-    RGWSI_SysObj *sysobj_svc{nullptr};
-
     RGWSI_MBSObj_Handler_Module *module{nullptr};
-    std::optional<RGWSysObjectCtx> _obj_ctx;
-    RGWSysObjectCtx *obj_ctx{nullptr};
     struct _list {
       std::optional<RGWSI_SysObj::Pool> pool;
       std::optional<RGWSI_SysObj::Pool::Op> op;
     } list;
-
-    Context_SObj(RGWSI_SysObj *_sysobj_svc,
-                 RGWSysObjectCtx *_oc = nullptr) : sysobj_svc(_sysobj_svc),
-                                                   obj_ctx(_oc) {}
 
     void init(RGWSI_MetaBackend_Handler *h) override;
   };

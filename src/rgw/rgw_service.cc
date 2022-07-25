@@ -378,7 +378,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
   bucket.reset(new RGWBucketCtl(svc.zone,
                                 svc.bucket,
                                 svc.bucket_sync,
-                                svc.bi));
+                                svc.bi, svc.user));
   otp.reset(new RGWOTPCtl(svc.zone, svc.otp));
 
   RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());

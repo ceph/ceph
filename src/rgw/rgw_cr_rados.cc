@@ -110,7 +110,7 @@ int RGWAsyncGetSystemObj::_send_request(const DoutPrefixProvider *dpp)
 {
   map<string, bufferlist> *pattrs = want_attrs ? &attrs : nullptr;
 
-  auto sysobj = obj_ctx.get_obj(obj);
+  auto sysobj = svc_sysobj->get_obj(obj);
   return sysobj.rop()
                .set_objv_tracker(&objv_tracker)
                .set_attrs(pattrs)
@@ -121,7 +121,7 @@ int RGWAsyncGetSystemObj::_send_request(const DoutPrefixProvider *dpp)
 RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(const DoutPrefixProvider *_dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                        bool want_attrs, bool raw_attrs)
-  : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), obj_ctx(_svc),
+  : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), svc_sysobj(_svc),
     obj(_obj), want_attrs(want_attrs), raw_attrs(raw_attrs)
 {
   if (_objv_tracker) {
@@ -150,8 +150,7 @@ int RGWSimpleRadosReadAttrsCR::request_complete()
 
 int RGWAsyncPutSystemObj::_send_request(const DoutPrefixProvider *dpp)
 {
-  auto obj_ctx = svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
+  auto sysobj = svc->get_obj(obj);
   return sysobj.wop()
                .set_objv_tracker(&objv_tracker)
                .set_exclusive(exclusive)
@@ -174,8 +173,7 @@ RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(const DoutPrefixProvider *_dpp,
 
 int RGWAsyncPutSystemObjAttrs::_send_request(const DoutPrefixProvider *dpp)
 {
-  auto obj_ctx = svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
+  auto sysobj = svc->get_obj(obj);
   return sysobj.wop()
                .set_objv_tracker(&objv_tracker)
                .set_exclusive(exclusive)
@@ -642,8 +640,7 @@ int RGWAsyncGetBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
 {
   int r;
   if (!bucket.bucket_id.empty()) {
-    RGWSysObjectCtx obj_ctx = store->svc()->sysobj->init_obj_ctx();
-    r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, &attrs, null_yield, dpp);
+    r = store->getRados()->get_bucket_instance_info(bucket, bucket_info, nullptr, &attrs, null_yield, dpp);
   } else {
     r = store->ctl()->bucket->read_bucket_info(bucket, &bucket_info, null_yield, dpp,
                                                RGWBucketCtl::BucketInstance::GetParams().set_attrs(&attrs));

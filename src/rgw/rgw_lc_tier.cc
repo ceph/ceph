@@ -112,10 +112,10 @@ static int read_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Store *st
 
   auto& pool = status_obj->pool;
   const auto oid = status_obj->oid;
-  auto obj_ctx = rados->svc()->sysobj->init_obj_ctx();
+  auto sysobj = rados->svc()->sysobj;
   bufferlist bl;
 
-  ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, nullptr, nullptr,
+  ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr,
       null_yield, dpp);
 
   if (ret < 0) {
@@ -151,11 +151,11 @@ static int put_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Store *sto
 
   auto& pool = status_obj->pool;
   const auto oid = status_obj->oid;
-  auto obj_ctx = rados->svc()->sysobj->init_obj_ctx();
+  auto sysobj = rados->svc()->sysobj;
   bufferlist bl;
   status->encode(bl);
 
-  ret = rgw_put_system_obj(dpp, obj_ctx, pool, oid, bl, true, nullptr,
+  ret = rgw_put_system_obj(dpp, sysobj, pool, oid, bl, true, nullptr,
       real_time{}, null_yield);
 
   return ret;
