@@ -1,4 +1,9 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { DashboardDetails } from '~/app/shared/models/cd-details';
+import { SummaryService } from '~/app/shared/services/summary.service';
 
 @Component({
   selector: 'cd-dashboard',
