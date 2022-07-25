@@ -718,7 +718,7 @@ int radosgw_Main(int argc, const char **argv)
   std::unique_ptr<RGWPauser> rgw_pauser;
   //std::unique_ptr<RGWFrontendPauser> pauser;
   //if (store->get_name() == "rados") { // Change later? -Sam
-  if (store->get_name() == "filter<rados>") {   
+  if (store->get_name() == "rados") {   
     // add a watcher to respond to realm configuration changes
     pusher = std::make_unique<RGWPeriodPusher>(&dp, store, null_yield);
     fe_pauser = std::make_unique<RGWFrontendPauser>(fes, implicit_tenant_context, pusher.get());

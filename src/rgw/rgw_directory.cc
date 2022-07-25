@@ -22,24 +22,24 @@ std::string RGWBlockDirectory::buildIndex(cache_block *ptr) {
   return ptr->c_obj.obj_name;
 }
 
-int RGWBlockDirectory::existKey(std::string key) {
+int RGWBlockDirectory::existKey(std::string key, cpp_redis::client *client) {
   int result = 0;
   std::vector<std::string> keys;
   keys.push_back(key);
-
-  if (!client.is_connected()) {
+  
+  if (!client->is_connected()) {
     return result;
   }
 
   try {
-    client.exists(keys, [&result](cpp_redis::reply &reply) {
+    client->exists(keys, [&result](cpp_redis::reply &reply) {
       if (reply.is_integer()) {
         result = reply.as_integer();
       }
     });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-}
+    
+    client->sync_commit(std::chrono::milliseconds(1000));
+  }
   catch(std::exception &e) {}
 
   return result;
@@ -133,7 +133,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
     findClient(&client);
   }
 
-  if (existKey(key)) {
+  if (existKey(key, &client)) {
     std::string hosts;
     std::string size;
     std::string bucket_name;
