@@ -810,6 +810,10 @@ void RGWPutBucketTags_ObjStore_S3::send_response()
 
 void RGWDeleteBucketTags_ObjStore_S3::send_response()
 {
+  // A successful DeleteBucketTagging should
+  // return a 204 status code.
+  if (op_ret == 0)
+    op_ret = STATUS_NO_CONTENT;
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
