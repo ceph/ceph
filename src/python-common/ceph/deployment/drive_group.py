@@ -150,7 +150,7 @@ class DriveGroupSpec(ServiceSpec):
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
         "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
-        "data_allocate_fraction", "method", "crush_device_class",
+        "data_allocate_fraction", "method", "crush_device_class", "config",
     ]
 
     def __init__(self,
@@ -178,10 +178,12 @@ class DriveGroupSpec(ServiceSpec):
                  data_allocate_fraction=None,  # type: Optional[float]
                  method=None,  # type: Optional[OSDMethod]
                  crush_device_class=None,  # type: Optional[str]
+                 config=None,  # type: Optional[Dict[str, str]]
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
                                              placement=placement,
+                                             config=config,
                                              unmanaged=unmanaged,
                                              preview_only=preview_only,
                                              extra_container_args=extra_container_args)
