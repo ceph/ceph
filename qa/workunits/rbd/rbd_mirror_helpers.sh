@@ -12,7 +12,7 @@
 #                          destroy the clusters and remove the temp directory)
 #                          on exit, so it is possible to check the test state
 #                          after failure.
-#  RBD_MIRROR_TEMDIR     - use this path when creating the temporary directory
+#  RBD_MIRROR_TEMPDIR     - use this path when creating the temporary directory
 #                          (should not exist) instead of running mktemp(1).
 #  RBD_MIRROR_ARGS       - use this to pass additional arguments to started
 #                          rbd-mirror daemons.
@@ -22,7 +22,7 @@
 #  RBD_MIRROR_CONFIG_KEY - if not empty, use config-key for remote cluster
 #                          secrets
 # The cleanup can be done as a separate step, running the script with
-# `cleanup ${RBD_MIRROR_TEMDIR}' arguments.
+# `cleanup ${RBD_MIRROR_TEMPDIR}' arguments.
 #
 # Note, as other workunits tests, rbd_mirror_journal.sh expects to find ceph binaries
 # in PATH.
@@ -34,7 +34,7 @@
 #
 #   cd $CEPH_SRC_PATH
 #   PATH=$CEPH_SRC_PATH:$PATH
-#   RBD_MIRROR_NOCLEANUP=1 RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
+#   RBD_MIRROR_NOCLEANUP=1 RBD_MIRROR_TEMPDIR=/tmp/tmp.rbd_mirror \
 #     ../qa/workunits/rbd/rbd_mirror_journal.sh
 #
 # After the test failure cd to TEMPDIR and check the current state:
@@ -52,7 +52,7 @@
 # Also you can execute commands (functions) from the script:
 #
 #   cd $CEPH_SRC_PATH
-#   export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
+#   export RBD_MIRROR_TEMPDIR=/tmp/tmp.rbd_mirror
 #   ../qa/workunits/rbd/rbd_mirror_journal.sh status
 #   ../qa/workunits/rbd/rbd_mirror_journal.sh stop_mirror cluster1
 #   ../qa/workunits/rbd/rbd_mirror_journal.sh start_mirror cluster2
@@ -62,7 +62,7 @@
 # Eventually, run the cleanup:
 #
 #   cd $CEPH_SRC_PATH
-#   RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
+#   RBD_MIRROR_TEMPDIR=/tmp/tmp.rbd_mirror \
 #     ../qa/workunits/rbd/rbd_mirror_journal.sh cleanup
 #
 
@@ -329,10 +329,10 @@ setup_pools()
 
 setup_tempdir()
 {
-    if [ -n "${RBD_MIRROR_TEMDIR}" ]; then
-        test -d "${RBD_MIRROR_TEMDIR}" ||
-        mkdir "${RBD_MIRROR_TEMDIR}"
-        TEMPDIR="${RBD_MIRROR_TEMDIR}"
+    if [ -n "${RBD_MIRROR_TEMPDIR}" ]; then
+        test -d "${RBD_MIRROR_TEMPDIR}" ||
+        mkdir "${RBD_MIRROR_TEMPDIR}"
+        TEMPDIR="${RBD_MIRROR_TEMPDIR}"
         cd ${TEMPDIR}
     else
         TEMPDIR=`mktemp -d`
@@ -388,7 +388,7 @@ cleanup()
             CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER1}
             CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER2}
         fi
-        test "${RBD_MIRROR_TEMDIR}" = "${TEMPDIR}" || rm -Rf ${TEMPDIR}
+        test "${RBD_MIRROR_TEMPDIR}" = "${TEMPDIR}" || rm -Rf ${TEMPDIR}
     fi
 
     if [ "${error_code}" -eq 0 ]; then
@@ -1465,13 +1465,13 @@ wait_for_image_in_omap()
 
 if [ "$#" -gt 0 ]
 then
-    if [ -z "${RBD_MIRROR_TEMDIR}" ]
+    if [ -z "${RBD_MIRROR_TEMPDIR}" ]
     then
-       echo "RBD_MIRROR_TEMDIR is not set" >&2
+       echo "RBD_MIRROR_TEMPDIR is not set" >&2
        exit 1
     fi
 
-    TEMPDIR="${RBD_MIRROR_TEMDIR}"
+    TEMPDIR="${RBD_MIRROR_TEMPDIR}"
     cd ${TEMPDIR}
     $@
     exit $?
