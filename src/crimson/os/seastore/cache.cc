@@ -759,7 +759,7 @@ void Cache::commit_retire_extent(
 {
   remove_extent(ref);
 
-  ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
+  ref->dirty_from_or_retired_at = JOURNAL_SEQ_NULL;
   invalidate_extent(t, *ref);
 }
 
@@ -1753,10 +1753,8 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     auto dirty_from = i->get_dirty_from();
-    if (unlikely(!(dirty_from != JOURNAL_SEQ_NULL &&
-                dirty_from != JOURNAL_SEQ_MAX &&
-                dirty_from != NO_DELTAS))) {
-      ERRORT("{}", t, *i);
+    if (unlikely(dirty_from == JOURNAL_SEQ_NULL)) {
+      ERRORT("got dirty extent with JOURNAL_SEQ_NULL -- {}", t, *i);
       ceph_abort();
     }
     if (dirty_from < seq) {
