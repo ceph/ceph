@@ -1120,6 +1120,8 @@ struct journal_tail_delta_t {
   }
 };
 
+std::ostream &operator<<(std::ostream &out, const journal_tail_delta_t &delta);
+
 class object_data_t {
   laddr_t reserved_data_base = L_ADDR_NULL;
   extent_len_t reserved_data_len = 0;

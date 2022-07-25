@@ -197,11 +197,13 @@ SegmentedJournal::scan_last_segment(
               found_delta = true;
               journal_tail_delta_t tail_delta;
               decode(tail_delta, delta.bl);
+              auto start_seq = locator.write_result.start_seq;
+              INFO("got {}, at seq {}", tail_delta, start_seq);
               if (tail_delta.alloc_tail == JOURNAL_SEQ_NULL) {
-                tail_delta.alloc_tail = locator.write_result.start_seq;
+                tail_delta.alloc_tail = start_seq;
               }
               if (tail_delta.dirty_tail == JOURNAL_SEQ_NULL) {
-                tail_delta.dirty_tail = locator.write_result.start_seq;
+                tail_delta.dirty_tail = start_seq;
               }
               segment_provider.update_journal_tails(
                   tail_delta.dirty_tail, tail_delta.alloc_tail);
