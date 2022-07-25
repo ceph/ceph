@@ -816,7 +816,11 @@ seastar::future<> Client::handle_auth_reply(crimson::net::ConnectionRef conn,
   if (found != pending_conns.end()) {
     return (*found)->handle_auth_reply(m);
   } else if (active_con) {
-    return active_con->handle_auth_reply(m);
+    return active_con->handle_auth_reply(m).then([this] {
+      return seastar::when_all_succeed(
+        active_con->renew_rotating_keyring(),
+        active_con->renew_tickets()).then_unpack([] {});
+    });
   } else {
     logger().error("unknown auth reply from {}", conn->get_peer_addr());
     return seastar::now();
