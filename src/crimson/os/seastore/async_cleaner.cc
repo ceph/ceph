@@ -819,6 +819,8 @@ AsyncCleaner::gc_trim_alloc() {
       "trim_alloc",
       [this](auto &t)
     {
+      LOG_PREFIX(AsyncCleaner::gc_trim_alloc);
+      DEBUGT("target {}", t, get_alloc_tail_target());
       return trim_alloc(t, get_alloc_tail_target()
       ).si_then([this, &t](auto trim_alloc_to)
         -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<>

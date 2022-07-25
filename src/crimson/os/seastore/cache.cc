@@ -1259,10 +1259,18 @@ record_t Cache::prepare_record(
     } else {
       dirty_tail = *maybe_dirty_tail;
     }
-    auto tails = journal_tail_delta_t{
-      get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
-      dirty_tail
-    };
+    journal_seq_t alloc_tail;
+    auto maybe_alloc_tail = get_oldest_backref_dirty_from();
+    if (!maybe_alloc_tail.has_value()) {
+      alloc_tail = JOURNAL_SEQ_NULL;
+      // see notes in Cache::complete_commit().
+      SUBWARNT(seastore_t, "backref_buffer all trimmed", t);
+    } else if (*maybe_alloc_tail == JOURNAL_SEQ_NULL) {
+      ceph_abort("impossible");
+    } else {
+      alloc_tail = *maybe_alloc_tail;
+    }
+    auto tails = journal_tail_delta_t{alloc_tail, dirty_tail};
     SUBDEBUGT(seastore_t, "update tails as delta {}", t, tails);
     bufferlist bl;
     encode(tails, bl);
@@ -1374,6 +1382,7 @@ void Cache::backref_batch_update(
 {
   LOG_PREFIX(Cache::backref_batch_update);
   DEBUG("inserting {} entries at {}", list.size(), seq);
+  ceph_assert(seq != JOURNAL_SEQ_NULL);
   if (!backref_buffer) {
     backref_buffer = std::make_unique<backref_cache_t>();
   }
@@ -1433,6 +1442,19 @@ void Cache::complete_commit(
 	       t,
 	       i->get_paddr(),
 	       i->get_length());
+        // FIXME: In theroy, adding backref_list in the finalize phase
+        //        can result in wrong alloc_tail for replay:
+        // * trans-1 enters prepare record with allocations.
+        // * trans-2 (cleaner) enters prepare record, see no alloc-tail,
+        //   so it assume the alloc-tail is the start-seq of trans-2.
+        // * trans-1 enters finalize and update the backref_list,
+        //   implying that alloc-tail is the start-seq of trans-1.
+        // * trans-2 (cleaner) enters finalize.
+        // During replay, the alloc-tail will be set to the start-seq of
+        //   trans-2 according to journal_tail_delta_t, but it should be
+        //   actually the start-seq of trans-1.
+        // This can only happen if alloc_tail trimming is able to trim to
+        //   the journal head.
 	backref_list.emplace_back(
 	  std::make_unique<backref_buf_entry_t>(
 	    i->get_paddr(),
@@ -1547,8 +1569,9 @@ void Cache::complete_commit(
       add_extent(i, &t_src);
     }
   }
-  if (!backref_list.empty())
+  if (!backref_list.empty()) {
     backref_batch_update(std::move(backref_list), seq);
+  }
 }
 
 void Cache::init()

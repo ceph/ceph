@@ -636,10 +636,18 @@ public:
     LOG_PREFIX(Cache::trim_backref_bufs);
     SUBDEBUG(seastore_cache, "trimming to {}", trim_to);
     if (backref_buffer && !backref_buffer->backrefs_by_seq.empty()) {
+      SUBDEBUG(seastore_cache, "backrefs {} ~ {}, size={}",
+               backref_buffer->backrefs_by_seq.rbegin()->first,
+               backref_buffer->backrefs_by_seq.begin()->first,
+               backref_buffer->backrefs_by_seq.size());
       assert(backref_buffer->backrefs_by_seq.rbegin()->first >= trim_to);
       auto iter = backref_buffer->backrefs_by_seq.upper_bound(trim_to);
       backref_buffer->backrefs_by_seq.erase(
 	backref_buffer->backrefs_by_seq.begin(), iter);
+    }
+    if (!backref_buffer || backref_buffer->backrefs_by_seq.empty()) {
+      // see notes in Cache::complete_commit().
+      SUBWARN(seastore_cache, "backref_buffer all trimmed");
     }
   }
 
@@ -889,20 +897,17 @@ public:
     journal_seq_t seq,
     size_t max_bytes);
 
+  /// returns std::nullopt if no pending alloc-infos
   std::optional<journal_seq_t> get_oldest_backref_dirty_from() const {
     LOG_PREFIX(Cache::get_oldest_backref_dirty_from);
-    journal_seq_t backref_oldest = JOURNAL_SEQ_NULL;
-    if (backref_buffer && !backref_buffer->backrefs_by_seq.empty()) {
-      backref_oldest = backref_buffer->backrefs_by_seq.begin()->first;
-    }
-    if (backref_oldest == JOURNAL_SEQ_NULL) {
+    if (!backref_buffer || backref_buffer->backrefs_by_seq.empty()) {
       SUBDEBUG(seastore_cache, "backref_oldest: null");
       return std::nullopt;
-    } else {
-      SUBDEBUG(seastore_cache, "backref_oldest: {}",
-	backref_oldest);
-      return backref_oldest;
     }
+    auto oldest = backref_buffer->backrefs_by_seq.begin()->first;
+    SUBDEBUG(seastore_cache, "backref_oldest: {}", oldest);
+    ceph_assert(oldest != JOURNAL_SEQ_NULL);
+    return oldest;
   }
 
   /// returns std::nullopt if no dirty extents
