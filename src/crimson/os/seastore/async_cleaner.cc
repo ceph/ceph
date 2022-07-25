@@ -631,16 +631,17 @@ void AsyncCleaner::update_journal_tails(
 {
   LOG_PREFIX(AsyncCleaner::update_journal_tails);
   if (disable_trim) return;
-  assert(dirty_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
-  assert(alloc_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
 
-  ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
-  ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
-  ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
-              (journal_head >= dirty_tail && journal_head >= alloc_tail));
-
-  if (journal_dirty_tail == JOURNAL_SEQ_NULL ||
-      dirty_tail > journal_dirty_tail) {
+  if (dirty_tail != JOURNAL_SEQ_NULL) {
+    assert(dirty_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
+    ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
+                journal_head >= dirty_tail);
+    if (journal_dirty_tail != JOURNAL_SEQ_NULL &&
+        journal_dirty_tail > dirty_tail) {
+      ERROR("journal_dirty_tail {} => {} is backwards!",
+            journal_dirty_tail, dirty_tail);
+      ceph_abort();
+    }
     if (journal_dirty_tail.segment_seq == dirty_tail.segment_seq) {
       DEBUG("journal_dirty_tail {} => {}", journal_dirty_tail, dirty_tail);
     } else {
@@ -649,8 +650,15 @@ void AsyncCleaner::update_journal_tails(
     journal_dirty_tail = dirty_tail;
   }
 
-  if (journal_alloc_tail == JOURNAL_SEQ_NULL ||
-      alloc_tail > journal_alloc_tail) {
+  if (alloc_tail != JOURNAL_SEQ_NULL) {
+    ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
+                journal_head >= alloc_tail);
+    assert(alloc_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
+    if (journal_alloc_tail != JOURNAL_SEQ_NULL &&
+        journal_alloc_tail > alloc_tail) {
+      ERROR("journal_alloc_tail {} => {} is backwards!",
+            journal_alloc_tail, alloc_tail);
+    }
     if (journal_alloc_tail.segment_seq == alloc_tail.segment_seq) {
       DEBUG("journal_alloc_tail {} => {}", journal_alloc_tail, alloc_tail);
     } else {

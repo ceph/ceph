@@ -774,6 +774,10 @@ public:
     ceph_assert(head != JOURNAL_SEQ_NULL);
     ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
                 head >= journal_head);
+    ceph_assert(journal_alloc_tail == JOURNAL_SEQ_NULL ||
+                head >= journal_alloc_tail);
+    ceph_assert(journal_dirty_tail == JOURNAL_SEQ_NULL ||
+                head >= journal_dirty_tail);
     journal_head = head;
     gc_process.maybe_wake_on_space_used();
   }
