@@ -255,6 +255,14 @@ std::ostream &operator<<(std::ostream &out, const delta_info_t &delta)
 	     << ")";
 }
 
+std::ostream &operator<<(std::ostream &out, const journal_tail_delta_t &delta)
+{
+  return out << "journal_tail_delta_t("
+             << "alloc_tail=" << delta.alloc_tail
+             << ", dirty_tail=" << delta.dirty_tail
+             << ")";
+}
+
 std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
 {
   return out << "extent_info_t("

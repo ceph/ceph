@@ -783,12 +783,13 @@ public:
   {
     LOG_PREFIX(Cache::init_cached_extents);
     SUBINFOT(seastore_cache,
-        "start with {}({}B) extents, {} dirty, from {}",
+        "start with {}({}B) extents, {} dirty, dirty_from={}, alloc_from={}",
         t,
         extents.size(),
         extents.get_bytes(),
         dirty.size(),
-        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL));
+        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
+        get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL));
 
     // journal replay should has been finished at this point,
     // Cache::root should have been inserted to the dirty list
@@ -824,12 +825,13 @@ public:
       }
     ).si_then([this, FNAME, &t] {
       SUBINFOT(seastore_cache,
-          "finish with {}({}B) extents, {} dirty, from {}",
+          "finish with {}({}B) extents, {} dirty, dirty_from={}, alloc_from={}",
           t,
           extents.size(),
           extents.get_bytes(),
           dirty.size(),
-          get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL));
+          get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
+          get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL));
     });
   }
 

@@ -1253,6 +1253,7 @@ record_t Cache::prepare_record(
       get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
       get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL)
     };
+    SUBDEBUGT(seastore_t, "update tails as delta {}", t, tails);
     bufferlist bl;
     encode(tails, bl);
     delta_info_t delta;
@@ -1284,11 +1285,13 @@ record_t Cache::prepare_record(
   }
 
   SUBDEBUGT(seastore_t,
-      "commit H{} dirty_from={}, {} read, {} fresh with {} invalid, "
+      "commit H{} dirty_from={}, alloc_from={}, "
+      "{} read, {} fresh with {} invalid, "
       "{} delta, {} retire, {}(md={}B, data={}B) ool-records, "
       "{}B md, {}B data, modify_time={}",
       t, (void*)&t.get_handle(),
       get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
+      get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
       read_stat,
       fresh_stat,
       fresh_invalid_stat,
@@ -1360,7 +1363,7 @@ void Cache::backref_batch_update(
   const journal_seq_t &seq)
 {
   LOG_PREFIX(Cache::backref_batch_update);
-  DEBUG("inserting {} entries", list.size());
+  DEBUG("inserting {} entries at {}", list.size(), seq);
   if (!backref_buffer) {
     backref_buffer = std::make_unique<backref_cache_t>();
   }
@@ -1571,10 +1574,12 @@ Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
 Cache::close_ertr::future<> Cache::close()
 {
   LOG_PREFIX(Cache::close);
-  INFO("close with {}({}B) dirty from {}, {}({}B) lru, totally {}({}B) indexed extents",
+  INFO("close with {}({}B) dirty, dirty_from={}, alloc_from={}, "
+       "{}({}B) lru, totally {}({}B) indexed extents",
        dirty.size(),
        stats.dirty_bytes,
        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
+       get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
        lru.get_current_contents_extents(),
        lru.get_current_contents_bytes(),
        extents.size(),
@@ -1647,7 +1652,7 @@ Cache::replay_delta(
   // replay dirty
   if (journal_seq < dirty_tail) {
     DEBUG("journal_seq {} < dirty_tail {}, don't replay {}",
-      journal_seq, alloc_tail, delta);
+      journal_seq, dirty_tail, delta);
     return replay_delta_ertr::now();
   }
 
