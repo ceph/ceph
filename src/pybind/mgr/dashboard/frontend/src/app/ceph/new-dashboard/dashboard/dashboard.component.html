@@ -3,7 +3,14 @@
     <cd-card title="Details"
              i18n-title
              class="col-sm-3 px-3">
-             Text
+      <dl>
+        <dt>FSID</dt>
+        <dd>{{ detailsCardData.fsid }}</dd>
+        <dt>Orchestror</dt>
+        <dd>{{ detailsCardData.orchestrator }}</dd>
+        <dt>Ceph version</dt>
+        <dd>{{ detailsCardData.cephVersion }}</dd>
+      </dl>
     </cd-card>
 
     <cd-card title="Status"
