@@ -135,16 +135,17 @@ class KernelMount(CephFSMount):
         log.debug('Unmounting client client.{id}...'.format(id=self.client_id))
 
         try:
-            cmd=['sudo', 'umount', self.hostfs_mntpt]
+            cmd=['sudo', 'timeout', str(UMOUNT_TIMEOUT), 'umount', self.hostfs_mntpt]
             if force:
                 cmd.append('-f')
-            self.client_remote.run(args=cmd, timeout=UMOUNT_TIMEOUT, omit_sudo=False)
+            self.client_remote.run(args=cmd, omit_sudo=False)
         except Exception as e:
             log.debug('Killing processes on client.{id}...'.format(id=self.client_id))
             self.client_remote.run(
-                args=['sudo', run.Raw('PATH=/usr/sbin:$PATH'), 'lsof',
+                args=['sudo', 'timeout', str(UMOUNT_TIMEOUT),
+                      run.Raw('PATH=/usr/sbin:$PATH'), 'lsof',
                       run.Raw(';'), 'ps', 'auxf'],
-                timeout=UMOUNT_TIMEOUT, omit_sudo=False)
+                omit_sudo=False)
             raise e
 
         if self.dynamic_debug:
@@ -174,8 +175,9 @@ class KernelMount(CephFSMount):
 
             # force delete the netns and umount
             log.debug('Force/lazy unmounting on client.{id}...'.format(id=self.client_id))
-            self.client_remote.run(args=['sudo', 'umount', '-f', '-l',
-                                         self.mountpoint], timeout=timeout,
+            self.client_remote.run(args=['sudo', 'timeout', str(timeout),
+                                         'umount', '-f', '-l',
+                                         self.mountpoint],
                                    omit_sudo=False)
 
             self.mounted = False
