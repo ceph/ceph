@@ -1249,9 +1249,19 @@ record_t Cache::prepare_record(
 
   if (is_cleaner_transaction(trans_src)) {
     assert(cleaner != nullptr);
+    journal_seq_t dirty_tail;
+    auto maybe_dirty_tail = get_oldest_dirty_from();
+    if (!maybe_dirty_tail.has_value()) {
+      dirty_tail = JOURNAL_SEQ_NULL;
+    } else if (*maybe_dirty_tail == JOURNAL_SEQ_NULL) {
+      dirty_tail = cleaner->get_dirty_tail();
+      ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
+    } else {
+      dirty_tail = *maybe_dirty_tail;
+    }
     auto tails = journal_tail_delta_t{
       get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
-      get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL)
+      dirty_tail
     };
     SUBDEBUGT(seastore_t, "update tails as delta {}", t, tails);
     bufferlist bl;
