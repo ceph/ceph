@@ -96,9 +96,6 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	auto modify_time)
       {
 	auto start_seq = offsets.write_result.start_seq;
-	async_cleaner->update_journal_tails(
-	  cache->get_oldest_dirty_from().value_or(start_seq),
-	  cache->get_oldest_backref_dirty_from().value_or(start_seq));
 	return cache->replay_delta(
 	  start_seq,
 	  offsets.record_block_base,
