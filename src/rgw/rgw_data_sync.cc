@@ -5187,7 +5187,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       if (bucket_status.state != BucketSyncState::Incremental ||
           bucket_stopped) { 
         // if state is Init or Stopped, we query the remote RGW for ther state
-        yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.dest_bucket, &info));
+        yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.source_bs.bucket, &info));
         if (retcode < 0) {
           return set_cr_error(retcode);
         }
