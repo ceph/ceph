@@ -905,21 +905,21 @@ public:
     }
   }
 
-  /// returns std::nullopt if no dirty extents or get_dirty_from() for oldest
+  /// returns std::nullopt if no dirty extents
+  /// returns JOURNAL_SEQ_NULL if the oldest dirty extent is still pending
   std::optional<journal_seq_t> get_oldest_dirty_from() const {
     LOG_PREFIX(Cache::get_oldest_dirty_from);
     if (dirty.empty()) {
-      SUBDEBUG(seastore_cache, "oldest: null");
+      SUBDEBUG(seastore_cache, "dirty_oldest: null");
       return std::nullopt;
     } else {
       auto oldest = dirty.begin()->get_dirty_from();
       if (oldest == JOURNAL_SEQ_NULL) {
-	SUBDEBUG(seastore_cache, "oldest: null");
-	return std::nullopt;
+	SUBINFO(seastore_cache, "dirty_oldest: pending");
       } else {
-	SUBDEBUG(seastore_cache, "oldest: {}", oldest);
-	return oldest;
+	SUBDEBUG(seastore_cache, "dirty_oldest: {}", oldest);
       }
+      return oldest;
     }
   }
 
