@@ -24,7 +24,7 @@ struct cache_test_t : public seastar_test_suite_t {
   ExtentPlacementManagerRef epm;
   CacheRef cache;
   paddr_t current;
-  journal_seq_t seq;
+  journal_seq_t seq = JOURNAL_SEQ_MIN;
 
   cache_test_t() = default;
 
