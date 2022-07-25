@@ -838,17 +838,13 @@ class RGWReadRemoteBucketIndexLogInfoCR : public RGWCoroutine {
   const string instance_key;
 
   rgw_bucket_index_marker_info *info;
-  RGWSyncTraceNodeRef tn;
-  bool error_inject;
 
 public:
   RGWReadRemoteBucketIndexLogInfoCR(RGWDataSyncCtx *_sc,
 				    const rgw_bucket& bucket,
-				    rgw_bucket_index_marker_info *_info, RGWSyncTraceNodeRef& _tn)
+				    rgw_bucket_index_marker_info *_info)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      instance_key(bucket.get_key()), info(_info), tn(_tn) {
-        error_inject = (sync_env->cct->_conf->rgw_read_bilog_info_inject_err_probability > 0);
-      }
+      instance_key(bucket.get_key()), info(_info) {}
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
@@ -859,14 +855,7 @@ public:
 	                                { NULL, NULL } };
 
         string p = "/admin/log/";
-
-        if (error_inject &&
-            rand() % 10000 < cct->_conf->rgw_read_bilog_info_inject_err_probability * 10000.0) {
-          tn->log(0, SSTR("injecting read bilog info error on key=" << instance_key));
-          retcode = -ENOENT;
-        } else {
-          call(new RGWReadRESTResourceCR<rgw_bucket_index_marker_info>(sync_env->cct, sc->conn, sync_env->http_manager, p, pairs, info));
-        }
+        call(new RGWReadRESTResourceCR<rgw_bucket_index_marker_info>(sync_env->cct, sc->conn, sync_env->http_manager, p, pairs, info));
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -1455,7 +1444,7 @@ public:
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, source_bs.bucket, &remote_info, tn));
+      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, source_bs.bucket, &remote_info));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -1538,6 +1527,7 @@ class RGWDataFullSyncSingleEntryCR : public RGWCoroutine {
   uint64_t i{0};
   RGWCoroutine* shard_cr = nullptr;
   bool first_shard = true;
+  bool error_inject;
 
 public:
   RGWDataFullSyncSingleEntryCR(RGWDataSyncCtx *_sc, rgw_pool& pool, const rgw_bucket_shard& _source_bs,
@@ -1548,12 +1538,22 @@ public:
                       RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env), source_bs(_source_bs), key(_key),
       error_repo(_error_repo), timestamp(_timestamp), lease_cr(_lease_cr),
-      bucket_shard_cache(_bucket_shard_cache), marker_tracker(_marker_tracker), tn(_tn) {}
+      bucket_shard_cache(_bucket_shard_cache), marker_tracker(_marker_tracker), tn(_tn) {
+        error_inject = (sync_env->cct->_conf->rgw_sync_data_full_inject_err_probability > 0);
+      }
 
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, source_bs.bucket, &remote_info, tn));
+      if (error_inject &&
+          rand() % 10000 < cct->_conf->rgw_sync_data_full_inject_err_probability * 10000.0) {
+        tn->log(0, SSTR("injecting read bilog info error on key=" << key));
+        retcode = -ENOENT;
+      } else {
+        tn->log(0, SSTR("read bilog info key=" << key));
+        yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, source_bs.bucket, &remote_info));
+      }
+
       if (retcode < 0) {
         tn->log(10, SSTR("full sync: failed to read remote bucket info. Writing "
                         << source_bs.shard_id << " to error repo for retry"));
