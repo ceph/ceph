@@ -747,6 +747,17 @@ mirror_image_snapshot()
     rbd --cluster "${cluster}" mirror image snapshot "${pool}/${image}"
 }
 
+snap_rollback()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap_name=$4
+
+    rbd --cluster "${cluster}" snap rollback "${pool}/${image}@${snap_name}"
+
+}
+
 get_newest_mirror_snapshot()
 {
     local cluster=$1
@@ -1205,6 +1216,22 @@ stress_write_image()
     return 1
 }
 
+xfs_io_write_image() {
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local pattern=$4
+    local offset=$5
+    local count=$6
+    local size=$7
+
+    test -n "${size}" || size=4096
+
+    DEV=$(sudo -E rbd --cluster ${cluster} device map ${pool}/${image})
+    sudo xfs_io -d -c "pwrite -S ${pattern} -b 4M $((size * offset)) $((size * count))" $DEV
+    sudo rbd device unmap $DEV
+}
+
 show_diff()
 {
     local file1=$1
@@ -1235,6 +1262,42 @@ compare_images()
     fi
     rm -f ${rmt_export} ${loc_export}
     return ${ret}
+}
+
+compare_two_snaps()
+{
+    local pool=$1
+    local image=$2
+    local snap1=$3
+    local snap2=$4
+    local ret=0
+
+
+    local rmt_export=${TEMPDIR}/$(mkfname ${CLUSTER2}-${pool}-${image}.export)
+    local loc_export=${TEMPDIR}/$(mkfname ${CLUSTER1}-${pool}-${image}.export)
+
+    rm -f ${rmt_export} ${loc_export}
+    rbd --cluster ${CLUSTER2} export ${pool}/${image}@${snap2} ${rmt_export}
+    rbd --cluster ${CLUSTER1} export ${pool}/${image}@${snap1} ${loc_export}
+    if ! cmp ${rmt_export} ${loc_export}
+    then
+        show_diff ${rmt_export} ${loc_export}
+        ret=1
+    fi
+    rm -f ${rmt_export} ${loc_export}
+    return ${ret}
+}
+
+wait_for_image_copying_start()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16 32 32; do
+        sleep ${s}
+        rbd --cluster=${cluster} snap ls --all ${pool}/${image} | grep "% copied" && return 0
+    done
 }
 
 compare_image_snapshots()
@@ -1274,10 +1337,10 @@ demote_image()
 
 promote_image()
 {
-    local cluster=$1
-    local pool=$2
-    local image=$3
-    local force=$4
+    local cluster=$1;
+    local pool=$2;
+    local image=$3;
+    local force=$4;
 
     rbd --cluster=${cluster} mirror image promote ${pool}/${image} ${force}
 }
