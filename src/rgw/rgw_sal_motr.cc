@@ -1508,10 +1508,55 @@ int MotrBucket::abort_multiparts(const DoutPrefixProvider *dpp, CephContext *cct
   return 0;
 }
 
-void MotrStore::finalize(void)
-{
+void MotrStore::finalize(void) {
+  // stop gc worker threads
+  stop_gc();
   // close connection with motr
   m0_client_fini(this->instance, true);
+}
+
+MotrStore& MotrStore::set_run_gc_thread(bool _use_gc_thread) {
+  use_gc_thread = _use_gc_thread;
+  return *this;
+}
+
+MotrStore& MotrStore::set_use_cache(bool _use_cache) {
+  use_cache = _use_cache;
+  return *this;
+}
+
+int MotrStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp) {
+  // Create metadata objects and set enabled=use_cache value
+  int rc = init_metadata_cache(dpp, cct);
+  if (rc != 0) {
+    ldpp_dout(dpp, 0) << __func__ << ": Metadata cache init failed " <<
+      "with rc = " << rc << dendl;
+    return rc;
+  }
+
+  if (use_gc_thread) {
+    // Create MotrGC object and start GCWorker threads
+    int rc = create_gc();
+    if (rc != 0)
+      ldpp_dout(dpp, 0) << __func__ << ": Failed to Create MotrGC " <<
+        "with rc = " << rc << dendl;
+  }
+  return rc;
+}
+
+int MotrStore::create_gc() {
+  int ret = 0;
+  motr_gc = std::make_unique<MotrGC>(cctx, this);
+  motr_gc->initialize();
+  motr_gc->start_processor();
+  return ret;
+}
+
+void MotrStore::stop_gc() {
+  if (motr_gc) {
+    motr_gc->stop_processor();
+    motr_gc->finalize();
+  }
 }
 
 uint64_t MotrStore::get_new_req_id()
@@ -5442,7 +5487,7 @@ std::string MotrStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_y
 }
 
 int MotrStore::init_metadata_cache(const DoutPrefixProvider *dpp,
-                                   CephContext *cct, bool use_cache)
+                                   CephContext *cct)
 {
   this->obj_meta_cache = new MotrMetaCache(dpp, cct);
   this->get_obj_meta_cache()->set_enabled(use_cache);

@@ -32,7 +32,10 @@ extern "C" {
 #include "rgw_role.h"
 #include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
+#include "motr/gc/gc.h"
 typedef void (*progress_cb)(off_t, void*);
+
+class MotrGC;
 
 namespace rgw::sal {
 
@@ -984,6 +987,10 @@ class MotrStore : public Store {
     MotrMetaCache* user_cache;
     MotrMetaCache* bucket_inst_cache;
 
+    std::unique_ptr<MotrGC> motr_gc;
+    bool use_gc_thread;
+    bool use_cache;
+
   public:
     CephContext *cctx;
     struct m0_client   *instance;
@@ -1099,7 +1106,12 @@ class MotrStore : public Store {
         uint64_t olh_epoch,
         const std::string& unique_tag) override;
 
+    virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
     virtual void finalize(void) override;
+    int create_gc();
+    void stop_gc();
+    MotrStore& set_run_gc_thread(bool _use_gc_thread);
+    MotrStore& set_use_cache(bool _use_cache);
 
     virtual CephContext *ctx(void) override {
       return cctx;
@@ -1135,7 +1147,7 @@ class MotrStore : public Store {
     int delete_access_key(const DoutPrefixProvider *dpp, optional_yield y, std::string access_key);
     int store_email_info(const DoutPrefixProvider *dpp, optional_yield y, MotrEmailInfo& email_info);
 
-    int init_metadata_cache(const DoutPrefixProvider *dpp, CephContext *cct, bool use_cache);
+    int init_metadata_cache(const DoutPrefixProvider *dpp, CephContext *cct);
     MotrMetaCache* get_obj_meta_cache() {return obj_meta_cache;}
     MotrMetaCache* get_user_cache() {return user_cache;}
     MotrMetaCache* get_bucket_inst_cache() {return bucket_inst_cache;}
