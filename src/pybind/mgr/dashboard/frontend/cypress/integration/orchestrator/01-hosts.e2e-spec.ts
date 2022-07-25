@@ -82,5 +82,10 @@ describe('Hosts page', () => {
       const hostname = Cypress._.sample(this.hosts).name;
       hosts.maintenance(hostname, true);
     });
+
+    it('should exit host from maintenance', function () {
+      const hostname = Cypress._.sample(this.hosts).name;
+      hosts.checkServiceInstancesExist(hostname, ['mgr: 1', 'prometheus: 1']);
+    });
   });
 });
