@@ -39,6 +39,20 @@ export class CephServiceService {
     );
   }
 
+  update(serviceSpec: { [key: string]: any }) {
+    const serviceName = serviceSpec['service_id']
+      ? `${serviceSpec['service_type']}.${serviceSpec['service_id']}`
+      : serviceSpec['service_type'];
+    return this.http.put(
+      `${this.url}/${serviceName}`,
+      {
+        service_name: serviceName,
+        service_spec: serviceSpec
+      },
+      { observe: 'response' }
+    );
+  }
+
   delete(serviceName: string) {
     return this.http.delete(`${this.url}/${serviceName}`, { observe: 'response' });
   }
