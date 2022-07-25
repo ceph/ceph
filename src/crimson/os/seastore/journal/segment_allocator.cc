@@ -76,8 +76,8 @@ SegmentAllocator::do_open(bool is_mkfs)
       }
     } else { // OOL
       ceph_assert(!is_mkfs);
-      dirty_tail = NO_DELTAS;
-      alloc_tail = NO_DELTAS;
+      dirty_tail = JOURNAL_SEQ_NULL;
+      alloc_tail = JOURNAL_SEQ_NULL;
     }
     auto header = segment_header_t{
       new_segment_seq,

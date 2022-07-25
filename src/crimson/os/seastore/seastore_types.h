@@ -854,10 +854,6 @@ constexpr journal_seq_t JOURNAL_SEQ_MAX{
 };
 // JOURNAL_SEQ_NULL == JOURNAL_SEQ_MAX == journal_seq_t{}
 constexpr journal_seq_t JOURNAL_SEQ_NULL = JOURNAL_SEQ_MAX;
-constexpr journal_seq_t NO_DELTAS = journal_seq_t{
-  NULL_SEG_SEQ,
-  P_ADDR_ZERO
-};
 
 // logical addr, see LBAManager, TransactionManager
 using laddr_t = uint64_t;
