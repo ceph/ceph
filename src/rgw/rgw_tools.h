@@ -17,7 +17,6 @@
 class RGWSI_SysObj;
 
 class RGWRados;
-class RGWSysObjectCtx;
 struct RGWObjVersionTracker;
 class optional_yield;
 
@@ -62,18 +61,26 @@ void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::s
 void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& section, const std::string& key, std::string& name);
 void rgw_shard_name(const std::string& prefix, unsigned shard_id, std::string& name);
 
-int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const std::string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, std::map<std::string, bufferlist> *pattrs = NULL);
-int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const std::string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *pattrs = NULL,
-                       rgw_cache_entry_info *cache_info = NULL,
-		       boost::optional<obj_version> refresh_version = boost::none, bool raw_attrs=false);
+int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
+                       const rgw_pool& pool, const std::string& oid,
+                       bufferlist& data, bool exclusive,
+                       RGWObjVersionTracker *objv_tracker,
+                       real_time set_mtime, optional_yield y,
+                       std::map<std::string, bufferlist> *pattrs = nullptr);
+int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool,
+                       const std::string& key, bufferlist& bl,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime,
+                       optional_yield y, const DoutPrefixProvider *dpp,
+                       std::map<std::string, bufferlist> *pattrs = nullptr,
+                       rgw_cache_entry_info *cache_info = nullptr,
+		       boost::optional<obj_version> refresh_version = boost::none,
+                       bool raw_attrs=false);
 int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
                           RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const std::string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y);
-int rgw_stat_system_obj(const DoutPrefixProvider *dpp,
-                        RGWSysObjectCtx& obj_Ctx, const rgw_pool& pool,
-                        const std::string& key, RGWObjVersionTracker *objv_tracker,
+int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
+                        const rgw_pool& pool, const std::string& key,
+                        RGWObjVersionTracker *objv_tracker,
                         real_time *pmtime, optional_yield y,
                         std::map<std::string, bufferlist> *pattrs = nullptr);
 

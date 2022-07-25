@@ -48,8 +48,6 @@ class RGWSI_MetaBackend_OTP : public RGWSI_MetaBackend_SObj
 public:
   struct Context_OTP : public RGWSI_MetaBackend_SObj::Context_SObj {
     otp_devices_list_t devices;
-
-    Context_OTP(RGWSI_SysObj*_sysobj_svc) : RGWSI_MetaBackend_SObj::Context_SObj(_sysobj_svc, nullptr) {}
   };
 
   RGWSI_MetaBackend_OTP(CephContext *cct);

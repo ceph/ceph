@@ -20,13 +20,6 @@
 
 #include <variant>
 
-struct RGWSysObjectCtx;
-
-struct RGWSI_MetaBackend_CtxParams_SObj {
-  RGWSysObjectCtx *sysobj_ctx{nullptr};
-
-  RGWSI_MetaBackend_CtxParams_SObj() {}
-  RGWSI_MetaBackend_CtxParams_SObj(RGWSysObjectCtx * _sysobj_ctx) : sysobj_ctx(_sysobj_ctx) {}
-};
+struct RGWSI_MetaBackend_CtxParams_SObj {};
 
 using RGWSI_MetaBackend_CtxParams = std::variant<RGWSI_MetaBackend_CtxParams_SObj>;

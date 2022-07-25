@@ -26,7 +26,7 @@ RGWSI_MetaBackend_Handler *RGWSI_MetaBackend_SObj::alloc_be_handler()
 
 RGWSI_MetaBackend::Context *RGWSI_MetaBackend_SObj::alloc_ctx()
 {
-  return new Context_SObj(sysobj_svc);
+  return new Context_SObj;
 }
 
 int RGWSI_MetaBackend_SObj::pre_modify(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *_ctx,
@@ -102,31 +102,14 @@ int RGWSI_MetaBackend_SObj::get_shard_id(RGWSI_MetaBackend::Context *_ctx,
 int RGWSI_MetaBackend_SObj::call(std::optional<RGWSI_MetaBackend_CtxParams> opt,
                                  std::function<int(RGWSI_MetaBackend::Context *)> f)
 {
-  if (!opt) {
-    RGWSI_MetaBackend_SObj::Context_SObj ctx(sysobj_svc);
-    return f(&ctx);
-  }
-
-  try {
-    auto& opt_sobj = std::get<RGWSI_MetaBackend_CtxParams_SObj>(*opt); // w contains int, not float: will throw
-
-    RGWSI_MetaBackend_SObj::Context_SObj ctx(sysobj_svc, opt_sobj.sysobj_ctx);
-    return f(&ctx);
-  } catch (const std::bad_variant_access&) {
-    ldout(cct, 0) << "ERROR: possible bug: " << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): bad variant access" << dendl;
-  }
-
-  return -EINVAL;
+  RGWSI_MetaBackend_SObj::Context_SObj ctx;
+  return f(&ctx);
 }
 
 void RGWSI_MetaBackend_SObj::Context_SObj::init(RGWSI_MetaBackend_Handler *h)
 {
   RGWSI_MetaBackend_Handler_SObj *handler = static_cast<RGWSI_MetaBackend_Handler_SObj *>(h);
   module = handler->module;
-  if (!obj_ctx) {
-    _obj_ctx.emplace(sysobj_svc->init_obj_ctx());
-    obj_ctx = &(*_obj_ctx);
-  }
 }
 
 int RGWSI_MetaBackend_SObj::call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb)
@@ -154,7 +137,7 @@ int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
   ctx->module->get_pool_and_oid(key, &pool, &oid);
 
   int ret = 0;
-  ret = rgw_get_system_obj(*ctx->obj_ctx, pool, oid, *params.pbl,
+  ret = rgw_get_system_obj(sysobj_svc, pool, oid, *params.pbl,
                             objv_tracker, params.pmtime,
                             y, dpp,
                             params.pattrs, params.cache_info,
@@ -177,7 +160,7 @@ int RGWSI_MetaBackend_SObj::put_entry(const DoutPrefixProvider *dpp,
   string oid;
   ctx->module->get_pool_and_oid(key, &pool, &oid);
 
-  return rgw_put_system_obj(dpp, *ctx->obj_ctx, pool, oid, params.bl, params.exclusive,
+  return rgw_put_system_obj(dpp, sysobj_svc, pool, oid, params.bl, params.exclusive,
                             objv_tracker, params.mtime, y, params.pattrs);
 }
 
@@ -195,7 +178,7 @@ int RGWSI_MetaBackend_SObj::remove_entry(const DoutPrefixProvider *dpp,
   ctx->module->get_pool_and_oid(key, &pool, &oid);
   rgw_raw_obj k(pool, oid);
 
-  auto sysobj = ctx->obj_ctx->get_obj(k);
+  auto sysobj = sysobj_svc->get_obj(k);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
                .remove(dpp, y);

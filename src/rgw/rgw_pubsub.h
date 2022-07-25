@@ -601,7 +601,7 @@ class RGWPubSub
 
   rgw::sal::RadosStore* store;
   const std::string tenant;
-  RGWSysObjectCtx obj_ctx;
+  RGWSI_SysObj* svc_sysobj;
 
   rgw_raw_obj meta_obj;
 
@@ -785,7 +785,7 @@ template <class T>
 int RGWPubSub::read(const rgw_raw_obj& obj, T* result, RGWObjVersionTracker* objv_tracker)
 {
   bufferlist bl;
-  int ret = rgw_get_system_obj(obj_ctx,
+  int ret = rgw_get_system_obj(svc_sysobj,
                                obj.pool, obj.oid,
                                bl,
                                objv_tracker,
@@ -811,15 +811,8 @@ int RGWPubSub::write(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, cons
   bufferlist bl;
   encode(info, bl);
 
-  int ret = rgw_put_system_obj(dpp, obj_ctx, obj.pool, obj.oid,
-			       bl, false, objv_tracker,
-			       real_time(), y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  obj_ctx.invalidate(obj);
-  return 0;
+  return rgw_put_system_obj(dpp, svc_sysobj, obj.pool, obj.oid,
+                            bl, false, objv_tracker, real_time(), y);
 }
 
 #endif

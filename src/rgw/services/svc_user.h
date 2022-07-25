@@ -90,17 +90,14 @@ public:
                                   const DoutPrefixProvider *dpp) = 0;
 
   virtual int add_bucket(const DoutPrefixProvider *dpp, 
-                         RGWSI_MetaBackend::Context *ctx,
                          const rgw_user& user,
                          const rgw_bucket& bucket,
                          ceph::real_time creation_time,
                          optional_yield y) = 0;
   virtual int remove_bucket(const DoutPrefixProvider *dpp, 
-                            RGWSI_MetaBackend::Context *ctx,
                             const rgw_user& user,
                             const rgw_bucket& _bucket, optional_yield) = 0;
   virtual int list_buckets(const DoutPrefixProvider *dpp, 
-                           RGWSI_MetaBackend::Context *ctx,
                            const rgw_user& user,
                            const std::string& marker,
                            const std::string& end_marker,
@@ -110,13 +107,11 @@ public:
                            optional_yield y) = 0;
 
   virtual int flush_bucket_stats(const DoutPrefixProvider *dpp, 
-                                 RGWSI_MetaBackend::Context *ctx,
                                  const rgw_user& user,
                                  const RGWBucketEnt& ent, optional_yield y) = 0;
-  virtual int complete_flush_stats(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx,
+  virtual int complete_flush_stats(const DoutPrefixProvider *dpp,
 				   const rgw_user& user, optional_yield y) = 0;
   virtual int reset_bucket_stats(const DoutPrefixProvider *dpp, 
-                                 RGWSI_MetaBackend::Context *ctx,
 				 const rgw_user& user,
                                  optional_yield y) = 0;
   virtual int read_stats(const DoutPrefixProvider *dpp, 
@@ -126,7 +121,7 @@ public:
 			 ceph::real_time *last_stats_update,
                          optional_yield y) = 0;  /* last time a stats update was done */
 
-  virtual int read_stats_async(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx,
+  virtual int read_stats_async(const DoutPrefixProvider *dpp,
 			       const rgw_user& user, RGWGetUserStats_CB *cb) = 0;
 };
 

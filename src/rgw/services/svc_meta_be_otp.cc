@@ -29,7 +29,7 @@ RGWSI_MetaBackend_Handler *RGWSI_MetaBackend_OTP::alloc_be_handler()
 
 RGWSI_MetaBackend::Context *RGWSI_MetaBackend_OTP::alloc_ctx()
 {
-  return new Context_OTP(sysobj_svc);
+  return new Context_OTP;
 }
 
 int RGWSI_MetaBackend_OTP::call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb)
