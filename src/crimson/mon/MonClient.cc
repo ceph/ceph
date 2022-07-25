@@ -137,6 +137,7 @@ seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 seastar::future<> Connection::renew_tickets()
 {
   if (auth->need_tickets()) {
+    logger().info("{}: retrieving new tickets", __func__);
     return do_auth(request_t::general).then([](const auth_result_t r) {
       if (r == auth_result_t::failure)  {
         throw std::system_error(
@@ -144,8 +145,10 @@ seastar::future<> Connection::renew_tickets()
 	    crimson::net::error::negotiation_failure));
       }
     });
+  } else {
+    logger().debug("{}: don't need new tickets", __func__);
+    return seastar::now();
   }
-  return seastar::now();
 }
 
 seastar::future<> Connection::renew_rotating_keyring()
