@@ -2395,7 +2395,7 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_read_bilog_info_inject_err_probability
+- name: rgw_sync_data_full_inject_err_probability
   type: float
   level: dev
   default: 0
