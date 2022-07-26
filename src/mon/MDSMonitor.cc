@@ -248,6 +248,9 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       health.decode(bl_i);
     }
     for (const auto &metric : health.metrics) {
+      if (metric.type == MDS_HEALTH_DUMMY) {
+        continue;
+      }
       const auto rank = info.rank;
       health_check_t *check = &new_checks.get_or_add(
 	mds_metric_name(metric.type),
@@ -593,10 +596,16 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
   std::set<mds_metric_t> new_types;
   for (const auto &i : new_health) {
+    if (i.type == MDS_HEALTH_DUMMY) {
+      continue;
+    }
     new_types.insert(i.type);
   }
 
   for (const auto &new_metric: new_health) {
+    if (new_metric.type == MDS_HEALTH_DUMMY) {
+      continue;
+    }
     if (old_types.count(new_metric.type) == 0) {
       dout(10) << "MDS health message (" << m->get_orig_source()
 	       << "): " << new_metric.sev << " " << new_metric.message << dendl;
@@ -698,12 +707,13 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       dout(10) << "mds_beacon mds can't activate itself (" << ceph_mds_state_name(info.state)
 	       << " -> " << ceph_mds_state_name(state) << ")" << dendl;
       goto evict;
-    } else if ((state == MDSMap::STATE_STANDBY || state == MDSMap::STATE_STANDBY_REPLAY)
-        && info.rank != MDS_RANK_NONE)
-    {
-      dout(4) << "mds_beacon MDS can't go back into standby after taking rank: "
+    } else if (info.state >= CEPH_MDS_STATE_REPLAY &&
+              (state == MDSMap::STATE_STANDBY ||
+               state == MDSMap::STATE_STANDBY_REPLAY)) {
+      dout(1) << "mds_beacon MDS can't go back into standby after taking rank: "
                  "held rank " << info.rank << " while requesting state "
-              << ceph_mds_state_name(state) << dendl;
+              << ceph_mds_state_name(state) << " from "
+              << ceph_mds_state_name(info.state) << dendl;
       goto evict;
     } else if (info.state == MDSMap::STATE_STOPPING &&
         state != MDSMap::STATE_STOPPING &&
