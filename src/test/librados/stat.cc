@@ -22,6 +22,32 @@ TEST_F(LibRadosStat, Stat) {
   ASSERT_EQ(-ENOENT, rados_stat(ioctx, "nonexistent", &size, &mtime));
 }
 
+TEST_F(LibRadosStat, Stat2) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  rados_write_op_t op = rados_create_write_op();
+  rados_write_op_write(op, buf, sizeof(buf), 0);
+  struct timespec ts;
+  ts.tv_sec = 1457129052;
+  ts.tv_nsec = 123456789;
+  ASSERT_EQ(0, rados_write_op_operate2(op, ioctx, "foo", &ts, 0));
+  rados_release_write_op(op);
+
+  uint64_t size;
+  time_t mtime;
+  ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
+  ASSERT_EQ(sizeof(buf), size);
+  ASSERT_EQ(mtime, ts.tv_sec);
+
+  struct timespec ts2;
+  ASSERT_EQ(0, rados_stat2(ioctx, "foo", &size, &ts2));
+  ASSERT_EQ(sizeof(buf), size);
+  ASSERT_EQ(ts2.tv_sec, ts.tv_sec);
+  ASSERT_EQ(ts2.tv_nsec, ts.tv_nsec);
+
+  ASSERT_EQ(-ENOENT, rados_stat2(ioctx, "nonexistent", &size, &ts2));
+}
+
 TEST_F(LibRadosStat, StatNS) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
