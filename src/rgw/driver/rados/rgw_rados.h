@@ -632,6 +632,7 @@ public:
 		    const std::string& zonegroup_id,
 		    const rgw_placement_rule& placement_rule,
 		    const std::string& swift_ver_location,
+		    bool obj_lock_enabled,
 		    const RGWQuotaInfo * pquota_info,
 		    std::map<std::string,bufferlist>& attrs,
 		    RGWBucketInfo& bucket_info,
