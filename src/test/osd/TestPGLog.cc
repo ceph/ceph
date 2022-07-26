@@ -1703,8 +1703,8 @@ TEST_F(PGLogTest, proc_replica_log) {
             |        |       |         |
             +--------+-------+---------+
 
-      The log entry (1,3) deletes the object x9 but the olog entry
-      (2,3) modifies it : remove it from omissing.
+      The log entry (2,3) deletes the object x9 but the olog entry
+      (1,3) modifies it : remove it from omissing.
 
   */
   {
