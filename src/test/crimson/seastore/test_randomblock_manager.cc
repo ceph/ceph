@@ -7,7 +7,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
-#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
+#include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
 using namespace crimson;
@@ -26,7 +26,7 @@ constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 struct rbm_test_t :
   public seastar_test_suite_t, TMTestState {
   std::unique_ptr<BlockRBManager> rbm_manager;
-  std::unique_ptr<nvme_device::NVMeBlockDevice> device;
+  std::unique_ptr<nvme_device::RBMDevice> device;
 
   struct rbm_transaction {
     void add_rbm_allocated_blocks(alloc_delta_t &d) {

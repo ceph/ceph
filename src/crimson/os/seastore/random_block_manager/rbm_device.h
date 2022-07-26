@@ -221,18 +221,7 @@ struct io_context_t {
   bool done = false;
 };
 
-/*
- * Interface between NVMe SSD and its user.
- *
- * NVMeBlockDevice provides not only the basic APIs for IO, but also helper APIs
- * to accelerate SSD IO performance and reduce system overhead. By aggresively
- * utilizing and abstract useful features of latest NVMe SSD, it helps user ease
- * to get high performance of NVMe SSD and low system overhead.
- *
- * Various implementations with different interfaces such as POSIX APIs, Seastar,
- * and SPDK, are available.
- */
-class NVMeBlockDevice : public Device {
+class RBMDevice : public Device {
 public:
   using Device::read;
   read_ertr::future<> read (
@@ -248,17 +237,12 @@ protected:
   // LBA Size
   uint64_t block_size = 4096;
 
-  uint64_t write_granularity = 4096;
-  uint64_t write_alignment = 4096;
-  uint32_t atomic_write_unit = 4096;
-
-  bool data_protection_enabled = false;
   device_id_t device_id;
   seastore_meta_t meta;
   secondary_device_set_t devices;
 public:
-  NVMeBlockDevice() {}
-  virtual ~NVMeBlockDevice() = default;
+  RBMDevice() {}
+  virtual ~RBMDevice() = default;
 
   template <typename T>
   static std::unique_ptr<T> create() {
@@ -287,31 +271,8 @@ public:
   secondary_device_set_t& get_secondary_devices() final {
     return devices;
   }
-
-  /*
-   * Service NVMe device relative size
-   *
-   * size : total size of device in byte.
-   *
-   * block_size : IO unit size in byte. Caller should follow every IO command
-   * aligned with block size.
-   *
-   * preffered_write_granularity(PWG), preffered_write_alignment(PWA) : IO unit
-   * size for write in byte. Caller should request every write IO sized multiple
-   * times of PWG and aligned starting address by PWA. Available only if NVMe
-   * Device supports NVMe protocol 1.4 or later versions.
-   * atomic_write_unit : The maximum size of write whose atomicity is guranteed
-   * by SSD even on power failure. The write equal to or smaller than 
-   * atomic_write_unit does not require fsync().
-   */
-
   std::size_t get_size() const { return size; }
   seastore_off_t get_block_size() const { return block_size; }
-
-  uint64_t get_preffered_write_granularity() const { return write_granularity; }
-  uint64_t get_preffered_write_alignment() const { return write_alignment; }
-
-  uint64_t get_atomic_write_unit() const { return atomic_write_unit; }
 
   virtual read_ertr::future<> read(
     uint64_t offset,
@@ -342,15 +303,74 @@ public:
     ceph::bufferlist bl,
     uint16_t stream = 0) = 0;
 
-  /*
-   * For passsing through nvme IO or Admin command to SSD
-   * Caller can construct and execute its own nvme command
-   */
-  virtual nvme_command_ertr::future<int> pass_through_io(
-    nvme_io_command_t& command) { return seastar::make_ready_future<int>(0); }
-  virtual nvme_command_ertr::future<int> pass_admin(
-    nvme_admin_command_t& command) { return seastar::make_ready_future<int>(0); }
+  bool is_data_protection_enabled() const { return false; }
+};
 
+/*
+ * Implementation of NVMeBlockDevice with POSIX APIs
+ *
+ * NVMeBlockDevice provides NVMe SSD interfaces through POSIX APIs which is
+ * generally available at most operating environment.
+ */
+class NVMeBlockDevice : public RBMDevice {
+public:
+
+  /*
+   * Service NVMe device relative size
+   *
+   * size : total size of device in byte.
+   *
+   * block_size : IO unit size in byte. Caller should follow every IO command
+   * aligned with block size.
+   *
+   * preffered_write_granularity(PWG), preffered_write_alignment(PWA) : IO unit
+   * size for write in byte. Caller should request every write IO sized multiple
+   * times of PWG and aligned starting address by PWA. Available only if NVMe
+   * Device supports NVMe protocol 1.4 or later versions.
+   * atomic_write_unit : The maximum size of write whose atomicity is guranteed
+   * by SSD even on power failure. The write equal to or smaller than 
+   * atomic_write_unit does not require fsync().
+   */
+
+  NVMeBlockDevice() {}
+  ~NVMeBlockDevice() = default;
+
+  open_ertr::future<> open(
+    const std::string &in_path,
+    seastar::open_flags mode) override;
+
+  write_ertr::future<> write(
+    uint64_t offset,
+    bufferptr &bptr,
+    uint16_t stream = 0) override;
+
+  using RBMDevice::read;
+  read_ertr::future<> read(
+    uint64_t offset,
+    bufferptr &bptr) final;
+
+  close_ertr::future<> close() override;
+
+  discard_ertr::future<> discard(
+    uint64_t offset,
+    uint64_t len) override;
+
+  mkfs_ret mkfs(device_config_t) final {
+    return mkfs_ertr::now();
+  }
+
+  mount_ret mount() final {
+    return mount_ertr::now();
+  }
+
+  write_ertr::future<> writev(
+    uint64_t offset,
+    ceph::bufferlist bl,
+    uint16_t stream = 0) final;
+
+  uint64_t get_preffered_write_granularity() const { return write_granularity; }
+  uint64_t get_preffered_write_alignment() const { return write_alignment; }
+  uint64_t get_atomic_write_unit() const { return atomic_write_unit; }
   /*
    * End-to-End Data Protection
    *
@@ -384,6 +404,17 @@ public:
    */
    virtual nvme_command_ertr::future<> set_data_recovery_level(
      uint32_t level) { return nvme_command_ertr::now(); }
+  /*
+   * For passsing through nvme IO or Admin command to SSD
+   * Caller can construct and execute its own nvme command
+   */
+  nvme_command_ertr::future<int> pass_admin(
+    nvme_admin_command_t& admin_cmd);
+  nvme_command_ertr::future<int> pass_through_io(
+    nvme_io_command_t& io_cmd);
+
+  bool support_multistream = false;
+  uint8_t data_protection_type = 0;
 
   /*
    * Predictable Latency
@@ -391,59 +422,6 @@ public:
    * NVMe device can guarantee IO latency within pre-defined time window. This
    * functionality will be analyzed soon.
    */
-};
-
-/*
- * Implementation of NVMeBlockDevice with POSIX APIs
- *
- * PosixNVMeDevice provides NVMe SSD interfaces through POSIX APIs which is
- * generally available at most operating environment.
- */
-class PosixNVMeDevice : public NVMeBlockDevice {
-public:
-  PosixNVMeDevice() {}
-  ~PosixNVMeDevice() = default;
-
-  open_ertr::future<> open(
-    const std::string &in_path,
-    seastar::open_flags mode) override;
-
-  write_ertr::future<> write(
-    uint64_t offset,
-    bufferptr &bptr,
-    uint16_t stream = 0) override;
-
-  using NVMeBlockDevice::read;
-  read_ertr::future<> read(
-    uint64_t offset,
-    bufferptr &bptr) final;
-
-  close_ertr::future<> close() override;
-
-  discard_ertr::future<> discard(
-    uint64_t offset,
-    uint64_t len) override;
-
-  mkfs_ret mkfs(device_config_t) final {
-    return mkfs_ertr::now();
-  }
-
-  mount_ret mount() final {
-    return mount_ertr::now();
-  }
-
-  write_ertr::future<> writev(
-    uint64_t offset,
-    ceph::bufferlist bl,
-    uint16_t stream = 0) final;
-
-  nvme_command_ertr::future<int> pass_admin(
-    nvme_admin_command_t& admin_cmd) override;
-  nvme_command_ertr::future<int> pass_through_io(
-    nvme_io_command_t& io_cmd) override;
-
-  bool support_multistream = false;
-  uint8_t data_protection_type = 0;
 
 private:
   // identify_controller/namespace are used to get SSD internal information such
@@ -460,10 +438,16 @@ private:
   uint32_t stream_index_to_open = WRITE_LIFE_NOT_SET;
   uint32_t stream_id_count = 1; // stream is disabled, defaultly.
   uint32_t awupf = 0;
+
+  uint64_t write_granularity = 4096;
+  uint64_t write_alignment = 4096;
+  uint32_t atomic_write_unit = 4096;
+
+  bool data_protection_enabled = false;
 };
 
 
-class TestMemory : public NVMeBlockDevice {
+class TestMemory : public RBMDevice {
 public:
 
   TestMemory(size_t size) : buf(nullptr), size(size) {}
@@ -491,7 +475,7 @@ public:
     bufferptr &bptr,
     uint16_t stream = 0) override;
 
-  using NVMeBlockDevice::read;
+  using RBMDevice::read;
   read_ertr::future<> read(
     uint64_t offset,
     bufferptr &bptr) override;

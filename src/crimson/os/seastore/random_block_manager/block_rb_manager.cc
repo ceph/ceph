@@ -7,7 +7,7 @@
 #include "crimson/os/seastore/logging.h"
 
 #include "include/buffer.h"
-#include "nvmedevice.h"
+#include "rbm_device.h"
 #include "include/interval_set.h"
 #include "include/intarith.h"
 #include "block_rb_manager.h"

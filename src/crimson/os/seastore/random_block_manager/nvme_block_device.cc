@@ -10,7 +10,7 @@
 #include "crimson/common/errorator-loop.h"
 
 #include "include/buffer.h"
-#include "nvmedevice.h"
+#include "rbm_device.h"
 
 namespace {
   seastar::logger& logger() {
@@ -20,7 +20,7 @@ namespace {
 
 namespace crimson::os::seastore::nvme_device {
 
-open_ertr::future<> PosixNVMeDevice::open(
+open_ertr::future<> NVMeBlockDevice::open(
   const std::string &in_path,
   seastar::open_flags mode) {
   return seastar::do_with(in_path, [this, mode](auto& in_path) {
@@ -62,7 +62,7 @@ open_ertr::future<> PosixNVMeDevice::open(
   });
 }
 
-open_ertr::future<> PosixNVMeDevice::open_for_io(
+open_ertr::future<> NVMeBlockDevice::open_for_io(
   const std::string& in_path,
   seastar::open_flags mode) {
   io_device.resize(stream_id_count);
@@ -80,7 +80,7 @@ open_ertr::future<> PosixNVMeDevice::open_for_io(
   });
 }
 
-write_ertr::future<> PosixNVMeDevice::write(
+write_ertr::future<> NVMeBlockDevice::write(
   uint64_t offset,
   bufferptr &bptr,
   uint16_t stream) {
@@ -109,7 +109,7 @@ write_ertr::future<> PosixNVMeDevice::write(
   });
 }
 
-read_ertr::future<> PosixNVMeDevice::read(
+read_ertr::future<> NVMeBlockDevice::read(
   uint64_t offset,
   bufferptr &bptr) {
   logger().debug(
@@ -133,7 +133,7 @@ read_ertr::future<> PosixNVMeDevice::read(
     });
 }
 
-write_ertr::future<> PosixNVMeDevice::writev(
+write_ertr::future<> NVMeBlockDevice::writev(
   uint64_t offset,
   ceph::bufferlist bl,
   uint16_t stream) {
@@ -179,7 +179,7 @@ write_ertr::future<> PosixNVMeDevice::writev(
   });
 }
 
-Device::close_ertr::future<> PosixNVMeDevice::close() {
+Device::close_ertr::future<> NVMeBlockDevice::close() {
   logger().debug(" close ");
   return device.close().then([this]() {
     return seastar::do_for_each(io_device, [](auto target_device) {
@@ -189,7 +189,7 @@ Device::close_ertr::future<> PosixNVMeDevice::close() {
 }
 
 nvme_command_ertr::future<nvme_identify_controller_data_t>
-PosixNVMeDevice::identify_controller() {
+NVMeBlockDevice::identify_controller() {
   return seastar::do_with(
     nvme_admin_command_t(),
     nvme_identify_controller_data_t(),
@@ -206,12 +206,12 @@ PosixNVMeDevice::identify_controller() {
   });
 }
 
-discard_ertr::future<> PosixNVMeDevice::discard(uint64_t offset, uint64_t len) {
+discard_ertr::future<> NVMeBlockDevice::discard(uint64_t offset, uint64_t len) {
   return device.discard(offset, len);
 }
 
 nvme_command_ertr::future<nvme_identify_namespace_data_t>
-PosixNVMeDevice::identify_namespace() {
+NVMeBlockDevice::identify_namespace() {
   return get_nsid().safe_then([this](auto nsid) {
     return seastar::do_with(
       nvme_admin_command_t(),
@@ -231,11 +231,11 @@ PosixNVMeDevice::identify_namespace() {
   });
 }
 
-nvme_command_ertr::future<int> PosixNVMeDevice::get_nsid() {
+nvme_command_ertr::future<int> NVMeBlockDevice::get_nsid() {
   return device.ioctl(NVME_IOCTL_ID, nullptr);
 }
 
-nvme_command_ertr::future<int> PosixNVMeDevice::pass_admin(
+nvme_command_ertr::future<int> NVMeBlockDevice::pass_admin(
   nvme_admin_command_t& admin_cmd) {
   return device.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd).handle_exception(
     [](auto e)->nvme_command_ertr::future<int> {
@@ -244,7 +244,7 @@ nvme_command_ertr::future<int> PosixNVMeDevice::pass_admin(
     });
 }
 
-nvme_command_ertr::future<int> PosixNVMeDevice::pass_through_io(
+nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
   nvme_io_command_t& io_cmd) {
   return device.ioctl(NVME_IOCTL_IO_CMD, &io_cmd);
 }

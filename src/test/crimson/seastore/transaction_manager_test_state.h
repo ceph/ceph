@@ -14,7 +14,7 @@
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
-#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
+#include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 
 using namespace crimson;
@@ -25,7 +25,7 @@ class EphemeralTestState {
 protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
-  std::unique_ptr<nvme_device::NVMeBlockDevice> rb_device;
+  std::unique_ptr<nvme_device::RBMDevice> rb_device;
   tm_make_config_t tm_config = tm_make_config_t::get_test_segmented_journal();
 
   EphemeralTestState(std::size_t num_segment_managers) {
