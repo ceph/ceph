@@ -140,7 +140,7 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
   int ret;
   bufferlist in_data;
   RGWBucketInfo master_info;
-  rgw_bucket* pmaster_bucket;
+  rgw_bucket* pmaster_bucket = nullptr;
   real_time creation_time;
   std::unique_ptr<Bucket> bucket;
   obj_version objv,* pobjv = NULL;
@@ -174,13 +174,7 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
     pobjv = &objv;
-    if (master_info.obj_lock_enabled()) {
-      info.flags = BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
-    }
-  } else {
-    pmaster_bucket = NULL;
-    if (obj_lock_enabled)
-      info.flags = BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
+    obj_lock_enabled = master_info.obj_lock_enabled();
   }
 
   std::string zid = zonegroup_id;
@@ -201,7 +195,8 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
   } else {
 
     ret = store->getRados()->create_bucket(this->get_info(), bucket->get_key(),
-				    zid, placement_rule, swift_ver_location, pquota_info,
+				    zid, placement_rule, swift_ver_location,
+				    obj_lock_enabled, pquota_info,
 				    attrs, info, pobjv, &ep_objv, creation_time,
 				    pmaster_bucket, y, dpp, exclusive);
     if (ret == -EEXIST) {
