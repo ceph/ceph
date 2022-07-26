@@ -670,7 +670,8 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
     return {};
   }
   bool dispatched = true;
-  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
+  gate.dispatch_in_background(__func__, *this, [this, conn,
+                                                m=std::move(m), &dispatched] {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_MAP:
       return handle_osd_map(conn, boost::static_pointer_cast<MOSDMap>(m));
