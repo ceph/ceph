@@ -405,13 +405,9 @@ std::unique_ptr<struct ds3_bucket_info> DaosBucket::get_encoded_info(
 }
 
 int DaosBucket::remove_bucket(const DoutPrefixProvider* dpp,
-                              bool delete_children, bool forward_to_master,
-                              req_info* req_info, optional_yield y) {
+                              bool delete_children, optional_yield y) {
   ldpp_dout(dpp, 20) << "DEBUG: remove_bucket, delete_children="
-                    
-                     << delete_children
-                    
-                     << " forward_to_master=" << forward_to_master << dendl;
+                     << delete_children << dendl;
 
   return ds3_bucket_destroy(get_name().c_str(), delete_children, store->ds3,
                             nullptr);

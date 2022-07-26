@@ -220,9 +220,19 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
   RESTArgs::get_bool(s, "purge-objects", false, &delete_children);
 
-  /* FIXME We're abusing the owner of the bucket to pass the user, so that it can be forwarded to
-   * the master.  This user is actually the OP caller, not the bucket owner. */
-  op_ret = driver->get_bucket(s, s->user.get(), string(), bucket_name, &bucket, y);
+  bufferlist data;
+  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    if (op_ret == -ENOENT) {
+      /* adjust error, we want to return with NoSuchBucket and not
+       * NoSuchKey */
+      op_ret = -ERR_NO_SUCH_BUCKET;
+    }
+    return;
+  }
+
+  op_ret = driver->get_bucket(s, nullptr, string(), bucket_name, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
     if (op_ret == -ENOENT) {
@@ -231,7 +241,7 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
     return;
   }
 
-  op_ret = bucket->remove_bucket(s, delete_children, true, &s->info, s->yield);
+  op_ret = bucket->remove_bucket(s, delete_children, s->yield);
 }
 
 class RGWOp_Set_Bucket_Quota : public RGWRESTOp {
