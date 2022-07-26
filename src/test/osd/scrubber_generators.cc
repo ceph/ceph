@@ -3,6 +3,8 @@
 
 #include "test/osd/scrubber_generators.h"
 
+#include <fmt/ranges.h>
+
 using namespace ScrubGenerator;
 
 // ref: PGLogTestRebuildMissing()
