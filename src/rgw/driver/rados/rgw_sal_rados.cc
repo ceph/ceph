@@ -77,51 +77,6 @@ namespace rgw::sal {
 static constexpr size_t listing_max_entries = 1000;
 static std::string pubsub_oid_prefix = "pubsub.";
 
-static int decode_policy(CephContext* cct,
-                         bufferlist& bl,
-                         RGWAccessControlPolicy* policy)
-{
-  auto iter = bl.cbegin();
-  try {
-    policy->decode(iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-    return -EIO;
-  }
-  if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
-    ldout(cct, 15) << __func__ << " Read AccessControlPolicy";
-    RGWAccessControlPolicy_S3* s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    s3policy->to_xml(*_dout);
-    *_dout << dendl;
-  }
-  return 0;
-}
-
-static int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider* dpp,
-					      RadosStore* store,
-					      User* user,
-					      Attrs& bucket_attrs,
-					      RGWAccessControlPolicy* policy,
-					      optional_yield y)
-{
-  auto aiter = bucket_attrs.find(RGW_ATTR_ACL);
-
-  if (aiter != bucket_attrs.end()) {
-    int ret = decode_policy(store->ctx(), aiter->second, policy);
-    if (ret < 0)
-      return ret;
-  } else {
-    ldout(store->ctx(), 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
-    /* object exists, but policy is broken */
-    int r = user->load_user(dpp, y);
-    if (r < 0)
-      return r;
-
-    policy->create_default(user->get_id(), user->get_display_name());
-  }
-  return 0;
-}
-
 static int drain_aio(std::list<librados::AioCompletion*>& handles)
 {
   int ret = 0;
@@ -196,20 +151,11 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
     return ret;
 
   if (ret != -ENOENT) {
-    RGWAccessControlPolicy old_policy(store->ctx());
     *existed = true;
     if (swift_ver_location.empty()) {
       swift_ver_location = bucket->get_info().swift_ver_location;
     }
     placement_rule.inherit_from(bucket->get_info().placement_rule);
-
-    // don't allow changes to the acl policy
-    int r = rgw_op_get_bucket_policy_from_attr(dpp, store, this, bucket->get_attrs(),
-					       &old_policy, y);
-    if (r >= 0 && old_policy != policy) {
-      bucket_out->swap(bucket);
-      return -EEXIST;
-    }
   } else {
     bucket = std::unique_ptr<Bucket>(new RadosBucket(store, b, this));
     *existed = false;
