@@ -136,8 +136,6 @@ std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq)
     return out << "JOURNAL_SEQ_NULL";
   } else if (seq == JOURNAL_SEQ_MIN) {
     return out << "JOURNAL_SEQ_MIN";
-  } else if (seq == NO_DELTAS) {
-    return out << "JOURNAL_SEQ_NO_DELTAS";
   } else {
     return out << "journal_seq_t("
                << "segment_seq=" << segment_seq_printer_t{seq.segment_seq}
@@ -255,6 +253,14 @@ std::ostream &operator<<(std::ostream &out, const delta_info_t &delta)
 	     << ")";
 }
 
+std::ostream &operator<<(std::ostream &out, const journal_tail_delta_t &delta)
+{
+  return out << "journal_tail_delta_t("
+             << "alloc_tail=" << delta.alloc_tail
+             << ", dirty_tail=" << delta.dirty_tail
+             << ")";
+}
+
 std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
 {
   return out << "extent_info_t("
@@ -316,10 +322,10 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "MUTATE";
   case transaction_type_t::READ:
     return os << "READ";
-  case transaction_type_t::CLEANER_TRIM:
-    return os << "CLEANER_TRIM";
-  case transaction_type_t::TRIM_BACKREF:
-    return os << "TRIM_BACKREF";
+  case transaction_type_t::CLEANER_TRIM_DIRTY:
+    return os << "CLEANER_TRIM_DIRTY";
+  case transaction_type_t::CLEANER_TRIM_ALLOC:
+    return os << "CLEANER_TRIM_ALLOC";
   case transaction_type_t::CLEANER_RECLAIM:
     return os << "CLEANER_RECLAIM";
   case transaction_type_t::MAX:

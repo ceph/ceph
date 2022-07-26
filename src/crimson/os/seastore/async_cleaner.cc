@@ -631,16 +631,17 @@ void AsyncCleaner::update_journal_tails(
 {
   LOG_PREFIX(AsyncCleaner::update_journal_tails);
   if (disable_trim) return;
-  assert(dirty_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
-  assert(alloc_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
 
-  ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
-  ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
-  ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
-              (journal_head >= dirty_tail && journal_head >= alloc_tail));
-
-  if (journal_dirty_tail == JOURNAL_SEQ_NULL ||
-      dirty_tail > journal_dirty_tail) {
+  if (dirty_tail != JOURNAL_SEQ_NULL) {
+    assert(dirty_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
+    ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
+                journal_head >= dirty_tail);
+    if (journal_dirty_tail != JOURNAL_SEQ_NULL &&
+        journal_dirty_tail > dirty_tail) {
+      ERROR("journal_dirty_tail {} => {} is backwards!",
+            journal_dirty_tail, dirty_tail);
+      ceph_abort();
+    }
     if (journal_dirty_tail.segment_seq == dirty_tail.segment_seq) {
       DEBUG("journal_dirty_tail {} => {}", journal_dirty_tail, dirty_tail);
     } else {
@@ -649,8 +650,15 @@ void AsyncCleaner::update_journal_tails(
     journal_dirty_tail = dirty_tail;
   }
 
-  if (journal_alloc_tail == JOURNAL_SEQ_NULL ||
-      alloc_tail > journal_alloc_tail) {
+  if (alloc_tail != JOURNAL_SEQ_NULL) {
+    ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
+                journal_head >= alloc_tail);
+    assert(alloc_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
+    if (journal_alloc_tail != JOURNAL_SEQ_NULL &&
+        journal_alloc_tail > alloc_tail) {
+      ERROR("journal_alloc_tail {} => {} is backwards!",
+            journal_alloc_tail, alloc_tail);
+    }
     if (journal_alloc_tail.segment_seq == alloc_tail.segment_seq) {
       DEBUG("journal_alloc_tail {} => {}", journal_alloc_tail, alloc_tail);
     } else {
@@ -688,7 +696,7 @@ void AsyncCleaner::close_segment(segment_id_t segment)
        seg_info);
 }
 
-AsyncCleaner::trim_backrefs_ret AsyncCleaner::trim_backrefs(
+AsyncCleaner::trim_alloc_ret AsyncCleaner::trim_alloc(
   Transaction &t,
   journal_seq_t limit)
 {
@@ -785,20 +793,18 @@ AsyncCleaner::gc_cycle_ret AsyncCleaner::GCProcess::run()
 
 AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
 {
-  if (gc_should_trim_backref()) {
-    return gc_trim_backref(get_alloc_tail_target()
-    ).safe_then([](auto) {
-      return seastar::now();
-    }).handle_error(
-      crimson::ct_error::assert_all{
-	"GCProcess::run encountered invalid error in gc_trim_backref"
-      }
-    );
-  } else if (gc_should_trim_journal()) {
-    return gc_trim_journal(
+  if (gc_should_trim_alloc()) {
+    return gc_trim_alloc(
     ).handle_error(
       crimson::ct_error::assert_all{
-	"GCProcess::run encountered invalid error in gc_trim_journal"
+	"GCProcess::run encountered invalid error in gc_trim_alloc"
+      }
+    );
+  } else if (gc_should_trim_dirty()) {
+    return gc_trim_dirty(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+	"GCProcess::run encountered invalid error in gc_trim_dirty"
       }
     );
   } else if (gc_should_reclaim_space()) {
@@ -813,56 +819,41 @@ AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
   }
 }
 
-AsyncCleaner::gc_trim_backref_ret
-AsyncCleaner::gc_trim_backref(journal_seq_t limit) {
-  return seastar::do_with(
-    journal_seq_t(),
-    [this, limit=std::move(limit)](auto &seq) mutable {
-    return repeat_eagain([this, limit=std::move(limit), &seq] {
-      return ecb->with_transaction_intr(
-	Transaction::src_t::TRIM_BACKREF,
-	"trim_backref",
-	[this, limit](auto &t) {
-	return trim_backrefs(
-	  t,
-	  limit
-	).si_then([this, &t, limit](auto trim_backrefs_to)
-	  -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<
-	    journal_seq_t> {
-	  if (trim_backrefs_to != JOURNAL_SEQ_NULL) {
-	    return ecb->submit_transaction_direct(
-	      t, std::make_optional<journal_seq_t>(trim_backrefs_to)
-	    ).si_then([trim_backrefs_to=std::move(trim_backrefs_to)]() mutable {
-	      return seastar::make_ready_future<
-		journal_seq_t>(std::move(trim_backrefs_to));
-	    });
-	  }
-	  return seastar::make_ready_future<journal_seq_t>(std::move(limit));
-	});
-      }).safe_then([&seq](auto trim_backrefs_to) {
-	seq = std::move(trim_backrefs_to);
+AsyncCleaner::gc_trim_alloc_ret
+AsyncCleaner::gc_trim_alloc() {
+  return repeat_eagain([this] {
+    return ecb->with_transaction_intr(
+      Transaction::src_t::CLEANER_TRIM_ALLOC,
+      "trim_alloc",
+      [this](auto &t)
+    {
+      LOG_PREFIX(AsyncCleaner::gc_trim_alloc);
+      DEBUGT("target {}", t, get_alloc_tail_target());
+      return trim_alloc(t, get_alloc_tail_target()
+      ).si_then([this, &t](auto trim_alloc_to)
+        -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<>
+      {
+        if (trim_alloc_to != JOURNAL_SEQ_NULL) {
+          return ecb->submit_transaction_direct(
+            t, std::make_optional<journal_seq_t>(trim_alloc_to));
+        }
+        return seastar::now();
       });
-    }).safe_then([&seq] {
-      return gc_trim_backref_ertr::make_ready_future<
-	journal_seq_t>(std::move(seq));
     });
   });
 }
 
-AsyncCleaner::gc_trim_journal_ret AsyncCleaner::gc_trim_journal()
+AsyncCleaner::gc_trim_dirty_ret AsyncCleaner::gc_trim_dirty()
 {
-  return gc_trim_backref(get_dirty_tail_target()
-  ).safe_then([this](auto seq) {
-    return repeat_eagain([this, seq=std::move(seq)]() mutable {
-      return ecb->with_transaction_intr(
-	Transaction::src_t::CLEANER_TRIM,
-	"trim_journal",
-	[this, seq=std::move(seq)](auto& t)
-      {
-	return rewrite_dirty(t, seq
-	).si_then([this, &t] {
-	  return ecb->submit_transaction_direct(t);
-	});
+  return repeat_eagain([this] {
+    return ecb->with_transaction_intr(
+      Transaction::src_t::CLEANER_TRIM_DIRTY,
+      "trim_dirty",
+      [this](auto &t)
+    {
+      return rewrite_dirty(t, get_dirty_tail_target()
+      ).si_then([this, &t] {
+        return ecb->submit_transaction_direct(t);
       });
     });
   });
@@ -1053,6 +1044,7 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   INFO("{} segment managers", sms.size());
   init_complete = false;
   stats = {};
+  journal_head = JOURNAL_SEQ_NULL;
   journal_alloc_tail = JOURNAL_SEQ_NULL;
   journal_dirty_tail = JOURNAL_SEQ_NULL;
   
@@ -1237,6 +1229,8 @@ void AsyncCleaner::complete_init()
   INFO("done, start GC, time_bound={}",
        sea_time_point_printer_t{segments.get_time_bound()});
   ceph_assert(journal_head != JOURNAL_SEQ_NULL);
+  ceph_assert(journal_alloc_tail != JOURNAL_SEQ_NULL);
+  ceph_assert(journal_dirty_tail != JOURNAL_SEQ_NULL);
   init_complete = true;
   gc_process.start();
 }
@@ -1378,7 +1372,8 @@ void AsyncCleaner::log_gc_state(const char *caller) const
       "alloc_tail_target {}, "
       "dirty_tail_target {}, "
       "tail_limit {}, "
-      "gc_should_trim_journal {}, ",
+      "gc_should_trim_dirty {}, "
+      "gc_should_trim_alloc{}, ",
       caller,
       segments.get_num_empty(),
       segments.get_num_open(),
@@ -1400,7 +1395,8 @@ void AsyncCleaner::log_gc_state(const char *caller) const
       get_alloc_tail_target(),
       get_dirty_tail_target(),
       get_tail_limit(),
-      gc_should_trim_journal()
+      gc_should_trim_dirty(),
+      gc_should_trim_alloc()
     );
   }
 }

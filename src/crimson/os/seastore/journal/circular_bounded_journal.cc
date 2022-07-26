@@ -392,8 +392,10 @@ Journal::replay_ret CircularBoundedJournal::replay(
 		&d_handler](auto& p) {
 		auto& modify_time = p.first;
 		auto& delta = p.second;
-		return d_handler(locator,
+		return d_handler(
+		  locator,
 		  delta,
+		  locator.write_result.start_seq,
 		  locator.write_result.start_seq,
 		  modify_time);
 	      });

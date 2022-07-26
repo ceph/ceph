@@ -133,8 +133,8 @@ void Cache::register_metrics()
   std::map<src_t, sm::label_instance> labels_by_src {
     {src_t::MUTATE, sm::label_instance("src", "MUTATE")},
     {src_t::READ, sm::label_instance("src", "READ")},
-    {src_t::CLEANER_TRIM, sm::label_instance("src", "CLEANER_TRIM")},
-    {src_t::TRIM_BACKREF, sm::label_instance("src", "TRIM_BACKREF")},
+    {src_t::CLEANER_TRIM_DIRTY, sm::label_instance("src", "CLEANER_TRIM_DIRTY")},
+    {src_t::CLEANER_TRIM_ALLOC, sm::label_instance("src", "CLEANER_TRIM_ALLOC")},
     {src_t::CLEANER_RECLAIM, sm::label_instance("src", "CLEANER_RECLAIM")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
@@ -622,12 +622,12 @@ void Cache::register_metrics()
       // should be consistent with checks in account_conflict()
       if ((src1 == Transaction::src_t::READ &&
            src2 == Transaction::src_t::READ) ||
-          (src1 == Transaction::src_t::CLEANER_TRIM &&
-           src2 == Transaction::src_t::CLEANER_TRIM) ||
+          (src1 == Transaction::src_t::CLEANER_TRIM_DIRTY &&
+           src2 == Transaction::src_t::CLEANER_TRIM_DIRTY) ||
           (src1 == Transaction::src_t::CLEANER_RECLAIM &&
            src2 == Transaction::src_t::CLEANER_RECLAIM) ||
-          (src1 == Transaction::src_t::TRIM_BACKREF &&
-           src2 == Transaction::src_t::TRIM_BACKREF)) {
+          (src1 == Transaction::src_t::CLEANER_TRIM_ALLOC &&
+           src2 == Transaction::src_t::CLEANER_TRIM_ALLOC)) {
         continue;
       }
       std::ostringstream oss;
@@ -759,7 +759,7 @@ void Cache::commit_retire_extent(
 {
   remove_extent(ref);
 
-  ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
+  ref->dirty_from_or_retired_at = JOURNAL_SEQ_NULL;
   invalidate_extent(t, *ref);
 }
 
@@ -1249,10 +1249,29 @@ record_t Cache::prepare_record(
 
   if (is_cleaner_transaction(trans_src)) {
     assert(cleaner != nullptr);
-    auto tails = journal_tail_delta_t{
-      get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
-      get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL)
-    };
+    journal_seq_t dirty_tail;
+    auto maybe_dirty_tail = get_oldest_dirty_from();
+    if (!maybe_dirty_tail.has_value()) {
+      dirty_tail = JOURNAL_SEQ_NULL;
+    } else if (*maybe_dirty_tail == JOURNAL_SEQ_NULL) {
+      dirty_tail = cleaner->get_dirty_tail();
+      ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
+    } else {
+      dirty_tail = *maybe_dirty_tail;
+    }
+    journal_seq_t alloc_tail;
+    auto maybe_alloc_tail = get_oldest_backref_dirty_from();
+    if (!maybe_alloc_tail.has_value()) {
+      alloc_tail = JOURNAL_SEQ_NULL;
+      // see notes in Cache::complete_commit().
+      SUBWARNT(seastore_t, "backref_buffer all trimmed", t);
+    } else if (*maybe_alloc_tail == JOURNAL_SEQ_NULL) {
+      ceph_abort("impossible");
+    } else {
+      alloc_tail = *maybe_alloc_tail;
+    }
+    auto tails = journal_tail_delta_t{alloc_tail, dirty_tail};
+    SUBDEBUGT(seastore_t, "update tails as delta {}", t, tails);
     bufferlist bl;
     encode(tails, bl);
     delta_info_t delta;
@@ -1284,11 +1303,13 @@ record_t Cache::prepare_record(
   }
 
   SUBDEBUGT(seastore_t,
-      "commit H{} dirty_from={}, {} read, {} fresh with {} invalid, "
+      "commit H{} dirty_from={}, alloc_from={}, "
+      "{} read, {} fresh with {} invalid, "
       "{} delta, {} retire, {}(md={}B, data={}B) ool-records, "
       "{}B md, {}B data, modify_time={}",
       t, (void*)&t.get_handle(),
       get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
+      get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
       read_stat,
       fresh_stat,
       fresh_invalid_stat,
@@ -1344,7 +1365,7 @@ record_t Cache::prepare_record(
     (record.size.get_raw_mdlength() - record.get_delta_size());
 
   auto &rewrite_version_stats = t.get_rewrite_version_stats();
-  if (trans_src == Transaction::src_t::CLEANER_TRIM) {
+  if (trans_src == Transaction::src_t::CLEANER_TRIM_DIRTY) {
     stats.committed_dirty_version.increment_stat(rewrite_version_stats);
   } else if (trans_src == Transaction::src_t::CLEANER_RECLAIM) {
     stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
@@ -1360,7 +1381,8 @@ void Cache::backref_batch_update(
   const journal_seq_t &seq)
 {
   LOG_PREFIX(Cache::backref_batch_update);
-  DEBUG("inserting {} entries", list.size());
+  DEBUG("inserting {} entries at {}", list.size(), seq);
+  ceph_assert(seq != JOURNAL_SEQ_NULL);
   if (!backref_buffer) {
     backref_buffer = std::make_unique<backref_cache_t>();
   }
@@ -1420,6 +1442,19 @@ void Cache::complete_commit(
 	       t,
 	       i->get_paddr(),
 	       i->get_length());
+        // FIXME: In theroy, adding backref_list in the finalize phase
+        //        can result in wrong alloc_tail for replay:
+        // * trans-1 enters prepare record with allocations.
+        // * trans-2 (cleaner) enters prepare record, see no alloc-tail,
+        //   so it assume the alloc-tail is the start-seq of trans-2.
+        // * trans-1 enters finalize and update the backref_list,
+        //   implying that alloc-tail is the start-seq of trans-1.
+        // * trans-2 (cleaner) enters finalize.
+        // During replay, the alloc-tail will be set to the start-seq of
+        //   trans-2 according to journal_tail_delta_t, but it should be
+        //   actually the start-seq of trans-1.
+        // This can only happen if alloc_tail trimming is able to trim to
+        //   the journal head.
 	backref_list.emplace_back(
 	  std::make_unique<backref_buf_entry_t>(
 	    i->get_paddr(),
@@ -1534,8 +1569,9 @@ void Cache::complete_commit(
       add_extent(i, &t_src);
     }
   }
-  if (!backref_list.empty())
+  if (!backref_list.empty()) {
     backref_batch_update(std::move(backref_list), seq);
+  }
 }
 
 void Cache::init()
@@ -1571,10 +1607,12 @@ Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
 Cache::close_ertr::future<> Cache::close()
 {
   LOG_PREFIX(Cache::close);
-  INFO("close with {}({}B) dirty from {}, {}({}B) lru, totally {}({}B) indexed extents",
+  INFO("close with {}({}B) dirty, dirty_from={}, alloc_from={}, "
+       "{}({}B) lru, totally {}({}B) indexed extents",
        dirty.size(),
        stats.dirty_bytes,
        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
+       get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
        lru.get_current_contents_extents(),
        lru.get_current_contents_bytes(),
        extents.size(),
@@ -1598,30 +1636,28 @@ Cache::replay_delta(
   journal_seq_t journal_seq,
   paddr_t record_base,
   const delta_info_t &delta,
+  const journal_seq_t &dirty_tail,
   const journal_seq_t &alloc_tail,
   sea_time_point &modify_time)
 {
   LOG_PREFIX(Cache::replay_delta);
+  assert(dirty_tail != JOURNAL_SEQ_NULL);
   assert(alloc_tail != JOURNAL_SEQ_NULL);
   ceph_assert(modify_time != NULL_TIME);
-  if (delta.type == extent_types_t::ROOT) {
-    TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
-          journal_seq, record_base, delta, *root);
-    remove_extent(root);
-    root->apply_delta_and_adjust_crc(record_base, delta.bl);
-    root->dirty_from_or_retired_at = journal_seq;
-    root->state = CachedExtent::extent_state_t::DIRTY;
-    DEBUG("replayed root delta at {} {}, add extent -- {}, root={}",
-          journal_seq, record_base, delta, *root);
-    root->set_modify_time(modify_time);
-    add_extent(root);
+
+  if (delta.type == extent_types_t::JOURNAL_TAIL) {
+    // this delta should have been dealt with during segment cleaner mounting
     return replay_delta_ertr::now();
-  } else if (delta.type == extent_types_t::ALLOC_INFO) {
+  }
+
+  // replay alloc
+  if (delta.type == extent_types_t::ALLOC_INFO) {
     if (journal_seq < alloc_tail) {
       DEBUG("journal_seq {} < alloc_tail {}, don't replay {}",
 	journal_seq, alloc_tail, delta);
       return replay_delta_ertr::now();
     }
+
     alloc_delta_t alloc_delta;
     decode(alloc_delta, delta.bl);
     std::vector<backref_buf_entry_ref> backref_list;
@@ -1640,11 +1676,30 @@ Cache::replay_delta(
 	  alloc_blk.type,
 	  journal_seq));
     }
-    if (!backref_list.empty())
+    if (!backref_list.empty()) {
       backref_batch_update(std::move(backref_list), journal_seq);
+    }
     return replay_delta_ertr::now();
-  } else if (delta.type == extent_types_t::JOURNAL_TAIL) {
-    // this delta should have been dealt with during segment cleaner mounting
+  }
+
+  // replay dirty
+  if (journal_seq < dirty_tail) {
+    DEBUG("journal_seq {} < dirty_tail {}, don't replay {}",
+      journal_seq, dirty_tail, delta);
+    return replay_delta_ertr::now();
+  }
+
+  if (delta.type == extent_types_t::ROOT) {
+    TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
+          journal_seq, record_base, delta, *root);
+    remove_extent(root);
+    root->apply_delta_and_adjust_crc(record_base, delta.bl);
+    root->dirty_from_or_retired_at = journal_seq;
+    root->state = CachedExtent::extent_state_t::DIRTY;
+    DEBUG("replayed root delta at {} {}, add extent -- {}, root={}",
+          journal_seq, record_base, delta, *root);
+    root->set_modify_time(modify_time);
+    add_extent(root);
     return replay_delta_ertr::now();
   } else {
     auto _get_extent_if_cached = [this](paddr_t addr)
@@ -1731,10 +1786,8 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     auto dirty_from = i->get_dirty_from();
-    if (unlikely(!(dirty_from != JOURNAL_SEQ_NULL &&
-                dirty_from != JOURNAL_SEQ_MAX &&
-                dirty_from != NO_DELTAS))) {
-      ERRORT("{}", t, *i);
+    if (unlikely(dirty_from == JOURNAL_SEQ_NULL)) {
+      ERRORT("got dirty extent with JOURNAL_SEQ_NULL -- {}", t, *i);
       ceph_abort();
     }
     if (dirty_from < seq) {

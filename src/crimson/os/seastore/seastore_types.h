@@ -854,10 +854,6 @@ constexpr journal_seq_t JOURNAL_SEQ_MAX{
 };
 // JOURNAL_SEQ_NULL == JOURNAL_SEQ_MAX == journal_seq_t{}
 constexpr journal_seq_t JOURNAL_SEQ_NULL = JOURNAL_SEQ_MAX;
-constexpr journal_seq_t NO_DELTAS = journal_seq_t{
-  NULL_SEG_SEQ,
-  P_ADDR_ZERO
-};
 
 // logical addr, see LBAManager, TransactionManager
 using laddr_t = uint64_t;
@@ -1119,6 +1115,8 @@ struct journal_tail_delta_t {
     DENC_FINISH(p);
   }
 };
+
+std::ostream &operator<<(std::ostream &out, const journal_tail_delta_t &delta);
 
 class object_data_t {
   laddr_t reserved_data_base = L_ADDR_NULL;
@@ -1555,8 +1553,8 @@ std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail);
 enum class transaction_type_t : uint8_t {
   MUTATE = 0,
   READ, // including weak and non-weak read transactions
-  CLEANER_TRIM,
-  TRIM_BACKREF,
+  CLEANER_TRIM_DIRTY,
+  CLEANER_TRIM_ALLOC,
   CLEANER_RECLAIM,
   MAX
 };
@@ -1573,7 +1571,7 @@ constexpr bool is_valid_transaction(transaction_type_t type) {
 }
 
 constexpr bool is_cleaner_transaction(transaction_type_t type) {
-  return (type >= transaction_type_t::CLEANER_TRIM &&
+  return (type >= transaction_type_t::CLEANER_TRIM_DIRTY &&
           type < transaction_type_t::MAX);
 }
 
