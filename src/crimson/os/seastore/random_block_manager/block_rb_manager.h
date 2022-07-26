@@ -173,7 +173,7 @@ WRITE_CLASS_DENC_BOUNDED(
 
 namespace crimson::os::seastore {
 
-class NVMeManager final : public RandomBlockManager {
+class BlockRBManager final : public RandomBlockManager {
 public:
   /*
    * Ondisk layout
@@ -294,7 +294,7 @@ public:
    * on a device, so start and end location of the device are needed to
    * support such case.
    */
-  NVMeManager(NVMeBlockDevice * device, std::string path)
+  BlockRBManager(NVMeBlockDevice * device, std::string path)
     : device(device), path(path) {}
 
   /*
@@ -374,6 +374,6 @@ private:
   std::string path;
   int stream_id; // for multi-stream
 };
-using NVMeManagerRef = std::unique_ptr<NVMeManager>;
+using BlockRBManagerRef = std::unique_ptr<BlockRBManager>;
 
 }
