@@ -37,10 +37,7 @@ execute_process(
      print(\
      sysconfig.get_path(\
      scheme='deb_system' in sysconfig.get_scheme_names() and 'deb_system' or 'posix_prefix',\
-     name='purelib',\
-     vars=\
-     {'base': '${PYTHON_INSTALL_TEMPLATE}',\
-      'py_version_short': sysconfig.get_config_var('py_version_short')}))"
+     name='purelib'))"
   OUTPUT_VARIABLE "PYTHON3_INSTDIR"
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
