@@ -156,9 +156,14 @@ seastar::future<> Connection::renew_rotating_keyring()
   auto now = clock_t::now();
   auto ttl = std::chrono::seconds{
     static_cast<long>(crimson::common::local_conf()->auth_service_ticket_ttl)};
-  auto cutoff = now - ttl / 4;
-  if (!rotating_keyring->need_new_secrets(utime_t(cutoff))) {
+  auto cutoff = utime_t{now - std::min(std::chrono::seconds{30}, ttl / 4)};
+  if (!rotating_keyring->need_new_secrets(cutoff)) {
+    logger().debug("renew_rotating_keyring secrets are up-to-date "
+                   "(they expire after {})", cutoff);
     return seastar::now();
+  } else {
+    logger().info("renew_rotating_keyring renewing rotating keys "
+                  " (they expired before {})", cutoff);
   }
   if (now - last_rotating_renew_sent < std::chrono::seconds{1}) {
     logger().info("renew_rotating_keyring called too often");
