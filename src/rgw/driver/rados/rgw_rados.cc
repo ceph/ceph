@@ -2276,6 +2276,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const rgw_placement_rule& placement_rule,
                             const string& swift_ver_location,
+                            bool obj_lock_enabled,
                             const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
@@ -2322,6 +2323,9 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     info.placement_rule = selected_placement_rule;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
+    if (obj_lock_enabled) {
+      info.flags |= BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
+    }
 
     init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
 			       rule_info.index_type);
