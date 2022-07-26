@@ -46,7 +46,7 @@ PerShardState::PerShardState(
   cct.get_perfcounters_collection()->add(recoverystate_perf);
 }
 
-CoreState::CoreState(
+OSDSingletonState::OSDSingletonState(
   int whoami,
   crimson::net::Messenger &cluster_msgr,
   crimson::net::Messenger &public_msgr,
@@ -54,7 +54,7 @@ CoreState::CoreState(
   crimson::mgr::Client &mgrc,
   crimson::os::FuturizedStore &store)
   : whoami(whoami),
-    osdmap_gate("CoreState::osdmap_gate"),
+    osdmap_gate("OSDSingletonState::osdmap_gate"),
     cluster_msgr(cluster_msgr),
     public_msgr(public_msgr),
     monc(monc),
@@ -75,7 +75,7 @@ CoreState::CoreState(
   osdmaps[0] = boost::make_local_shared<OSDMap>();
 }
 
-seastar::future<> CoreState::send_to_osd(
+seastar::future<> OSDSingletonState::send_to_osd(
   int peer, MessageURef m, epoch_t from_epoch)
 {
   if (osdmap->is_down(peer)) {
@@ -92,7 +92,7 @@ seastar::future<> CoreState::send_to_osd(
   }
 }
 
-seastar::future<> CoreState::osdmap_subscribe(
+seastar::future<> OSDSingletonState::osdmap_subscribe(
   version_t epoch, bool force_request)
 {
   logger().info("{}({})", __func__, epoch);
@@ -104,7 +104,7 @@ seastar::future<> CoreState::osdmap_subscribe(
   }
 }
 
-void CoreState::queue_want_pg_temp(
+void OSDSingletonState::queue_want_pg_temp(
   pg_t pgid,
   const vector<int>& want,
   bool forced)
@@ -117,13 +117,13 @@ void CoreState::queue_want_pg_temp(
   }
 }
 
-void CoreState::remove_want_pg_temp(pg_t pgid)
+void OSDSingletonState::remove_want_pg_temp(pg_t pgid)
 {
   pg_temp_wanted.erase(pgid);
   pg_temp_pending.erase(pgid);
 }
 
-void CoreState::requeue_pg_temp()
+void OSDSingletonState::requeue_pg_temp()
 {
   unsigned old_wanted = pg_temp_wanted.size();
   unsigned old_pending = pg_temp_pending.size();
@@ -137,7 +137,7 @@ void CoreState::requeue_pg_temp()
     pg_temp_wanted.size());
 }
 
-seastar::future<> CoreState::send_pg_temp()
+seastar::future<> OSDSingletonState::send_pg_temp()
 {
   if (pg_temp_wanted.empty())
     return seastar::now();
@@ -165,7 +165,7 @@ seastar::future<> CoreState::send_pg_temp()
 
 std::ostream& operator<<(
   std::ostream& out,
-  const CoreState::pg_temp_t& pg_temp)
+  const OSDSingletonState::pg_temp_t& pg_temp)
 {
   out << pg_temp.acting;
   if (pg_temp.forced) {
@@ -174,7 +174,7 @@ std::ostream& operator<<(
   return out;
 }
 
-seastar::future<> CoreState::send_pg_created(pg_t pgid)
+seastar::future<> OSDSingletonState::send_pg_created(pg_t pgid)
 {
   logger().debug(__func__);
   auto o = get_osdmap();
@@ -183,7 +183,7 @@ seastar::future<> CoreState::send_pg_created(pg_t pgid)
   return monc.send_message(crimson::make_message<MOSDPGCreated>(pgid));
 }
 
-seastar::future<> CoreState::send_pg_created()
+seastar::future<> OSDSingletonState::send_pg_created()
 {
   logger().debug(__func__);
   auto o = get_osdmap();
@@ -194,7 +194,7 @@ seastar::future<> CoreState::send_pg_created()
     });
 }
 
-void CoreState::prune_pg_created()
+void OSDSingletonState::prune_pg_created()
 {
   logger().debug(__func__);
   auto o = get_osdmap();
@@ -211,7 +211,7 @@ void CoreState::prune_pg_created()
   }
 }
 
-HeartbeatStampsRef CoreState::get_hb_stamps(int peer)
+HeartbeatStampsRef OSDSingletonState::get_hb_stamps(int peer)
 {
   auto [stamps, added] = heartbeat_stamps.try_emplace(peer);
   if (added) {
@@ -220,7 +220,7 @@ HeartbeatStampsRef CoreState::get_hb_stamps(int peer)
   return stamps->second;
 }
 
-seastar::future<> CoreState::send_alive(const epoch_t want)
+seastar::future<> OSDSingletonState::send_alive(const epoch_t want)
 {
   logger().info(
     "{} want={} up_thru_wanted={}",
@@ -249,7 +249,7 @@ seastar::future<> CoreState::send_alive(const epoch_t want)
   }
 }
 
-const char** CoreState::get_tracked_conf_keys() const
+const char** OSDSingletonState::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "osd_max_backfills",
@@ -259,7 +259,7 @@ const char** CoreState::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void CoreState::handle_conf_change(
+void OSDSingletonState::handle_conf_change(
   const ConfigProxy& conf,
   const std::set <std::string> &changed)
 {
@@ -273,12 +273,12 @@ void CoreState::handle_conf_change(
   }
 }
 
-CoreState::cached_map_t CoreState::get_map() const
+OSDSingletonState::cached_map_t OSDSingletonState::get_map() const
 {
   return osdmap;
 }
 
-seastar::future<CoreState::cached_map_t> CoreState::get_map(epoch_t e)
+seastar::future<OSDSingletonState::cached_map_t> OSDSingletonState::get_map(epoch_t e)
 {
   // TODO: use LRU cache for managing osdmap, fallback to disk if we have to
   if (auto found = osdmaps.find(e); found) {
@@ -291,7 +291,7 @@ seastar::future<CoreState::cached_map_t> CoreState::get_map(epoch_t e)
   }
 }
 
-void CoreState::store_map_bl(
+void OSDSingletonState::store_map_bl(
   ceph::os::Transaction& t,
   epoch_t e, bufferlist&& bl)
 {
@@ -299,7 +299,7 @@ void CoreState::store_map_bl(
   map_bl_cache.insert(e, std::move(bl));
 }
 
-seastar::future<bufferlist> CoreState::load_map_bl(
+seastar::future<bufferlist> OSDSingletonState::load_map_bl(
   epoch_t e)
 {
   if (std::optional<bufferlist> found = map_bl_cache.find(e); found) {
@@ -309,7 +309,7 @@ seastar::future<bufferlist> CoreState::load_map_bl(
   }
 }
 
-seastar::future<std::map<epoch_t, bufferlist>> CoreState::load_map_bls(
+seastar::future<std::map<epoch_t, bufferlist>> OSDSingletonState::load_map_bls(
   epoch_t first,
   epoch_t last)
 {
@@ -328,7 +328,7 @@ seastar::future<std::map<epoch_t, bufferlist>> CoreState::load_map_bls(
   });
 }
 
-seastar::future<std::unique_ptr<OSDMap>> CoreState::load_map(epoch_t e)
+seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
 {
   auto o = std::make_unique<OSDMap>();
   if (e > 0) {
@@ -341,7 +341,7 @@ seastar::future<std::unique_ptr<OSDMap>> CoreState::load_map(epoch_t e)
   }
 }
 
-seastar::future<> CoreState::store_maps(ceph::os::Transaction& t,
+seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
                                   epoch_t start, Ref<MOSDMap> m)
 {
   return seastar::do_for_each(
@@ -375,7 +375,7 @@ seastar::future<> CoreState::store_maps(ceph::os::Transaction& t,
     });
 }
 
-seastar::future<Ref<PG>> CoreState::make_pg(
+seastar::future<Ref<PG>> OSDSingletonState::make_pg(
   ShardServices &shard_services,
   OSDMapService::cached_map_t create_map,
   spg_t pgid,
@@ -429,7 +429,7 @@ seastar::future<Ref<PG>> CoreState::make_pg(
   });
 }
 
-seastar::future<Ref<PG>> CoreState::handle_pg_create_info(
+seastar::future<Ref<PG>> OSDSingletonState::handle_pg_create_info(
   PGShardManager &shard_manager,
   ShardServices &shard_services,
   std::unique_ptr<PGCreateInfo> info) {
@@ -520,7 +520,7 @@ seastar::future<Ref<PG>> CoreState::handle_pg_create_info(
 
 
 seastar::future<Ref<PG>>
-CoreState::get_or_create_pg(
+OSDSingletonState::get_or_create_pg(
   PGShardManager &shard_manager,
   ShardServices &shard_services,
   PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
@@ -541,18 +541,18 @@ CoreState::get_or_create_pg(
   }
 }
 
-seastar::future<Ref<PG>> CoreState::wait_for_pg(
+seastar::future<Ref<PG>> OSDSingletonState::wait_for_pg(
   PGMap::PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
 {
   return pg_map.wait_for_pg(std::move(trigger), pgid).first;
 }
 
-Ref<PG> CoreState::get_pg(spg_t pgid)
+Ref<PG> OSDSingletonState::get_pg(spg_t pgid)
 {
   return pg_map.get_pg(pgid);
 }
 
-seastar::future<> CoreState::load_pgs(
+seastar::future<> OSDSingletonState::load_pgs(
   ShardServices &shard_services)
 {
   return store.list_collections(
@@ -585,7 +585,7 @@ seastar::future<> CoreState::load_pgs(
   });
 }
 
-seastar::future<Ref<PG>> CoreState::load_pg(
+seastar::future<Ref<PG>> OSDSingletonState::load_pg(
   ShardServices &shard_services,
   spg_t pgid)
 {
@@ -608,7 +608,7 @@ seastar::future<Ref<PG>> CoreState::load_pg(
   });
 }
 
-seastar::future<> CoreState::stop_pgs()
+seastar::future<> OSDSingletonState::stop_pgs()
 {
   return seastar::parallel_for_each(
     pg_map.get_pgs(),
@@ -617,7 +617,7 @@ seastar::future<> CoreState::stop_pgs()
     });
 }
 
-std::map<pg_t, pg_stat_t> CoreState::get_pg_stats() const
+std::map<pg_t, pg_stat_t> OSDSingletonState::get_pg_stats() const
 {
   std::map<pg_t, pg_stat_t> ret;
   for (auto [pgid, pg] : pg_map.get_pgs()) {
@@ -631,7 +631,7 @@ std::map<pg_t, pg_stat_t> CoreState::get_pg_stats() const
   return ret;
 }
 
-seastar::future<> CoreState::broadcast_map_to_pgs(
+seastar::future<> OSDSingletonState::broadcast_map_to_pgs(
   PGShardManager &shard_manager,
   ShardServices &shard_services,
   epoch_t epoch)

@@ -12,10 +12,10 @@ PGShardManager::PGShardManager(
   crimson::mon::Client &monc,
   crimson::mgr::Client &mgrc,
   crimson::os::FuturizedStore &store)
-  : core_state(whoami, cluster_msgr, public_msgr,
-	       monc, mgrc, store),
+  : osd_singleton_state(whoami, cluster_msgr, public_msgr,
+			monc, mgrc, store),
     local_state(whoami),
-    shard_services(core_state, local_state)
+    shard_services(osd_singleton_state, local_state)
 {}
 
 }
