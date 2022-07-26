@@ -166,6 +166,11 @@ public:
     return *this;
   }
 
+
+  bool operator ==(std::nullptr_t) const {
+    return !operate;
+  }
+
   // In-place construction!
   //
   // This is basically what you want, and I didn't include value
@@ -323,15 +328,6 @@ static_ptr<U, Z> resize_pointer_cast(static_ptr<T, S>&& p) {
     r.operate = p.operate;
   }
   return r;
-}
-
-template<typename Base, std::size_t Size>
-bool operator ==(const static_ptr<Base, Size>& s, std::nullptr_t) {
-  return !s;
-}
-template<typename Base, std::size_t Size>
-bool operator ==(static_ptr<Base, Size>& s, std::nullptr_t) {
-  return !s;
 }
 
 // Since `make_unique` and `make_shared` exist, we should follow their
