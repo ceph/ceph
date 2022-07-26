@@ -7322,7 +7322,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     goto auth_fail;
   }
 
-  if (!path.obj_key.empty()) {
+  if (!path.obj_key.empty()) { // object deletion
     ACLOwner bucket_owner;
 
     bucket_owner.set_id(bucket->get_info().owner);
@@ -7338,8 +7338,20 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     if (ret < 0) {
       goto delop_fail;
     }
-  } else {
-    ret = bucket->remove_bucket(dpp, false, true, &s->info, s->yield);
+  } else { // bucket deletion
+    if (!driver->is_meta_master()) {
+      // apply bucket deletion on the master zone first
+      req_info req = s->info;
+      forward_req_info(dpp, s->cct, req, path.bucket_name);
+
+      bufferlist data;
+      ret = driver->forward_request_to_master(dpp, s->user.get(), nullptr,
+                                              data, nullptr, req, y);
+      if (ret < 0) {
+        goto delop_fail;
+      }
+    }
+    ret = bucket->remove_bucket(dpp, false, false, nullptr, s->yield);
     if (ret < 0) {
       goto delop_fail;
     }
