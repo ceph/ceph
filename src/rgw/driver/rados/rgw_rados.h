@@ -638,8 +638,7 @@ public:
 		    obj_version *pobjv,
 		    obj_version *pep_objv,
 		    ceph::real_time creation_time,
-		    rgw_bucket *master_bucket,
-		    uint32_t *master_num_shards,
+		    const rgw_bucket *master_bucket,
 		    optional_yield y,
                     const DoutPrefixProvider *dpp,
 		    bool exclusive = true);

@@ -186,7 +186,6 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
   bufferlist in_data;
   RGWBucketInfo master_info;
   rgw_bucket* pmaster_bucket;
-  uint32_t* pmaster_num_shards;
   real_time creation_time;
   std::unique_ptr<Bucket> bucket;
   obj_version objv,* pobjv = NULL;
@@ -232,14 +231,12 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 20) << "got creation time: << " << std::put_time(std::localtime(&ctime), "%F %T") << dendl;
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
-    pmaster_num_shards = &master_info.layout.current_index.layout.normal.num_shards;
     pobjv = &objv;
     if (master_info.obj_lock_enabled()) {
       info.flags = BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
     }
   } else {
     pmaster_bucket = NULL;
-    pmaster_num_shards = NULL;
     if (obj_lock_enabled)
       info.flags = BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
   }
@@ -264,8 +261,7 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
     ret = store->getRados()->create_bucket(this->get_info(), bucket->get_key(),
 				    zid, placement_rule, swift_ver_location, pquota_info,
 				    attrs, info, pobjv, &ep_objv, creation_time,
-				    pmaster_bucket, pmaster_num_shards, y, dpp,
-				    exclusive);
+				    pmaster_bucket, y, dpp, exclusive);
     if (ret == -EEXIST) {
       *existed = true;
       /* bucket already existed, might have raced with another bucket creation,
