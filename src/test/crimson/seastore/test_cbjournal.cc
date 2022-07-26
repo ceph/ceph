@@ -212,7 +212,11 @@ struct cbjournal_test_t : public seastar_test_suite_t
 
   auto replay() {
     cbj->replay(
-      [this](const auto &offsets, const auto &e, auto j_seq, auto last_modified) 
+      [this](const auto &offsets,
+             const auto &e,
+             auto &dirty_seq,
+             auto &alloc_seq,
+             auto last_modified)
       -> Journal::replay_ret {
       bool found = false;
       for (auto &i : entries) {
