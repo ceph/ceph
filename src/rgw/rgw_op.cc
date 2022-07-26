@@ -3328,10 +3328,6 @@ static void filter_out_website(std::map<std::string, ceph::bufferlist>& add_attr
 
 void RGWCreateBucket::execute(optional_yield y)
 {
-  buffer::list aclbl;
-  buffer::list corsbl;
-  string bucket_name = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
-
   op_ret = get_params(y);
   if (op_ret < 0)
     return;
@@ -3418,10 +3414,12 @@ void RGWCreateBucket::execute(optional_yield y)
   /* Encode special metadata first as we're using std::map::emplace under
    * the hood. This method will add the new items only if the map doesn't
    * contain such keys yet. */
+  buffer::list aclbl;
   policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   if (has_cors) {
+    buffer::list corsbl;
     cors_config.encode(corsbl);
     emplace_attr(RGW_ATTR_CORS, std::move(corsbl));
   }
@@ -3441,9 +3439,8 @@ void RGWCreateBucket::execute(optional_yield y)
     op_ret = filter_out_quota_info(attrs, rmattr_names, quota_info);
     if (op_ret < 0) {
       return;
-    } else {
-      pquota_info = &quota_info;
     }
+    pquota_info = &quota_info;
 
     /* Web site of Swift API. */
     filter_out_website(attrs, rmattr_names, info.website_conf);
