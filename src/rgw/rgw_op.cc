@@ -227,7 +227,7 @@ static int get_user_policy_from_attr(const DoutPrefixProvider *dpp,
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp, 
                                        CephContext *cct,
 				       rgw::sal::Driver* driver,
-				       RGWBucketInfo& bucket_info,
+				       const rgw_user& bucket_owner,
 				       map<string, bufferlist>& bucket_attrs,
 				       RGWAccessControlPolicy *policy,
 				       optional_yield y)
@@ -240,13 +240,13 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
       return ret;
   } else {
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(bucket_info.owner);
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(bucket_owner);
     /* object exists, but policy is broken */
     int r = user->load_user(dpp, y);
     if (r < 0)
       return r;
 
-    policy->create_default(bucket_info.owner, user->get_display_name());
+    policy->create_default(user->get_id(), user->get_display_name());
   }
   return 0;
 }
@@ -360,7 +360,8 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
     return 0;
   }
 
-  int ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, driver, bucket_info, bucket_attrs, policy, y);
+  int ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, driver, bucket_info.owner,
+                                               bucket_attrs, policy, y);
   if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -411,7 +412,8 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
-    ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, driver, bucket_info, bucket_attrs, &bucket_policy, y);
+    ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, driver, bucket_info.owner,
+                                             bucket_attrs, &bucket_policy, y);
     if (ret < 0) {
       return ret;
     }
@@ -3385,6 +3387,17 @@ void RGWCreateBucket::execute(optional_yield y)
       }
       /* Initialize info from req_state */
       info = tmp_bucket->get_info();
+
+      // don't allow changes to the acl policy
+      RGWAccessControlPolicy old_policy(get_cct());
+      int r = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver, info.owner,
+                                                 tmp_bucket->get_attrs(),
+                                                 &old_policy, y);
+      if (r >= 0 && old_policy != policy) {
+        s->err.message = "Cannot modify existing access control policy";
+        op_ret = -EEXIST;
+        return;
+      }
     }
   }
 

@@ -79,11 +79,11 @@ class StrategyRegistry;
 
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
                                        CephContext *cct,
-				       rgw::sal::Driver* driver,
-                                       RGWBucketInfo& bucket_info,
+                                       rgw::sal::Driver* driver,
+                                       const rgw_user& bucket_owner,
                                        std::map<std::string, bufferlist>& bucket_attrs,
                                        RGWAccessControlPolicy *policy,
-				       optional_yield y);
+                                       optional_yield y);
 
 class RGWHandler {
 protected:
