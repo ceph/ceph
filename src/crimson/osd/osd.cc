@@ -669,6 +669,9 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
   if (pg_shard_manager.is_stopping()) {
     return {};
   }
+  // XXX: we're assuming the `switch` part is executed immediately, and thus
+  // we won't smash the stack. Taking into account how `seastar::with_gate`
+  // is currently implemented, this seems to be the case (Summer 2022).
   bool dispatched = true;
   gate.dispatch_in_background(__func__, *this, [this, conn=std::move(conn),
                                                 m=std::move(m), &dispatched] {
