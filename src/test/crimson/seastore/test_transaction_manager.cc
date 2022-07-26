@@ -89,6 +89,7 @@ struct transaction_manager_test_t :
 
   struct test_extents_t : std::map<laddr_t, test_extent_record_t> {
     using delta_t = std::map<laddr_t, std::optional<test_extent_record_t>>;
+    std::map<laddr_t, uint64_t> laddr_write_seq;
 
     struct delta_overlay_t {
       const test_extents_t &extents;
@@ -339,10 +340,14 @@ struct transaction_manager_test_t :
       }
     }
 
-    void consume(const delta_t &delta) {
+    void consume(const delta_t &delta, const uint64_t write_seq = 0) {
       for (const auto &i : delta) {
 	if (i.second) {
-	  (*this)[i.first] = *i.second;
+	  if (laddr_write_seq.find(i.first) == laddr_write_seq.end() ||
+	      laddr_write_seq[i.first] <= write_seq) {
+	    (*this)[i.first] = *i.second;
+	    laddr_write_seq[i.first] = write_seq;
+	  }
 	} else {
 	  erase(i.first);
 	}
@@ -591,8 +596,10 @@ struct transaction_manager_test_t :
   bool try_submit_transaction(test_transaction_t t) {
     using ertr = with_trans_ertr<TransactionManager::submit_transaction_iertr>;
     using ret = ertr::future<bool>;
-    bool success = submit_transaction_fut(*t.t
-    ).safe_then([]() -> ret {
+    uint64_t write_seq = 0;
+    bool success = submit_transaction_fut_with_seq(*t.t
+    ).safe_then([&write_seq](auto seq) -> ret {
+      write_seq = seq;
       return ertr::make_ready_future<bool>(true);
     }).handle_error(
       [](const crimson::ct_error::eagain &e) {
@@ -606,7 +613,7 @@ struct transaction_manager_test_t :
     }).get0();
 
     if (success) {
-      test_mappings.consume(t.mapping_delta);
+      test_mappings.consume(t.mapping_delta, write_seq);
     }
 
     return success;
