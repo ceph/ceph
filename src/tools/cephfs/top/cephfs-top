@@ -13,6 +13,7 @@ import threading
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum, unique
+from curses import ascii
 
 import rados
 
@@ -104,6 +105,12 @@ last_read_size = {}
 last_write_size = {}
 
 fs_list = []
+# store the current states of cephfs-top
+# last_fs    : last filesystem visited
+# last_field : last field selected for sorting
+# limit      : last limit value
+current_states = {"last_fs": "", "last_field": 'chit', "limit": None}
+metrics_dict = {}
 
 
 def calc_perc(c):
@@ -233,12 +240,7 @@ class FSTop(object):
     def display_fs_menu(self, stdscr, selected_row_idx):
         stdscr.clear()
         h, w = stdscr.getmaxyx()
-        global fs_list
-        if not fs_list:
-            title = ['No filesystem available',
-                     'Press "q" to go back to home (All Filesystem Info) screen']
-        else:
-            title = ['Filesystems', 'Press "q" to go back to home (All Filesystem Info) screen']
+        title = ['Filesystems', 'Press "q" to go back to the previous screen']
         pos_x1 = w // 2 - len(title[0]) // 2
         pos_x2 = w // 2 - len(title[1]) // 2
         stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
@@ -252,6 +254,35 @@ class FSTop(object):
                 stdscr.attroff(curses.color_pair(1))
             else:
                 stdscr.addstr(y, x, name)
+        stdscr.refresh()
+
+    def display_sort_menu(self, stdscr, selected_row_idx, field_menu):
+        stdscr.clear()
+        title = ['Fields', 'Press "q" to go back to the previous screen']
+        pos_x1 = 0
+        pos_x2 = 0
+        stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
+        stdscr.addstr(3, pos_x2, title[1], curses.A_DIM)
+        for index, name in enumerate(field_menu):
+            x = 0
+            y = 5 + index
+            if index == selected_row_idx:
+                stdscr.attron(curses.color_pair(1))
+                stdscr.addstr(y, x, name)
+                stdscr.attroff(curses.color_pair(1))
+            else:
+                stdscr.addstr(y, x, name)
+        stdscr.refresh()
+
+    def display_menu(self, stdscr):
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+        title = ['No filesystem available',
+                 'Press "q" to go back to home (all filesystem info) screen']
+        pos_x1 = w // 2 - len(title[0]) // 2
+        pos_x2 = w // 2 - len(title[1]) // 2
+        stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
+        stdscr.addstr(3, pos_x2, title[1], curses.A_DIM)
         stdscr.refresh()
 
     def set_key(self, stdscr):
@@ -270,19 +301,161 @@ class FSTop(object):
                 curr_row += 1
             elif (key in [curses.KEY_ENTER, 10, 13]) and fs_list:
                 self.stdscr.erase()
-                self.run_display(fs_list[curr_row])
+                current_states['last_fs'] = fs_list[curr_row]
+                self.run_display()
                 endmenu = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                self.run_all_display()
+                if isinstance(current_states['last_fs'], list):
+                    self.run_all_display()
+                else:
+                    self.run_display()
                 endmenu = True
 
             try:
-                self.display_fs_menu(stdscr, curr_row)
+                if not fs_list:
+                    self.display_menu(stdscr)
+                else:
+                    self.display_fs_menu(stdscr, curr_row)
             except curses.error:
                 pass
             curses.halfdelay(self.refresh_interval_secs)
             key = stdscr.getch()
+
+    def choose_field(self, stdscr):
+        curses.curs_set(0)
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        field_menu = ["chit= CAP_HIT", "dlease= DENTRY_LEASE", "ofiles= OPENED_FILES",
+                      "oicaps= PINNED_ICAPS", "oinodes= OPENED_INODES",
+                      "rtio= READ_IO_SIZES", "raio= READ_AVG_IO_SIZES",
+                      "rsp= READ_IO_SPEED", "wtio= WRITE_IO_SIZES",
+                      "waio= WRITE_AVG_IO_SIZES", "wsp= WRITE_IO_SPEED",
+                      "rlatavg= AVG_READ_LATENCY", "rlatsd= STDEV_READ_LATENCY",
+                      "wlatavg= AVG_WRITE_LATENCY", "wlatsd= STDEV_WRITE_LATENCY",
+                      "mlatavg= AVG_METADATA_LATENCY", "mlatsd= STDEV_METADATA_LATENCY",
+                      "Default"]
+        curr_row1 = 0
+        key = 0
+        endwhile = False
+        while not endwhile:
+            global current_states
+
+            if key == curses.KEY_UP and curr_row1 > 0:
+                curr_row1 -= 1
+            elif key == curses.KEY_DOWN and curr_row1 < len(field_menu) - 1:
+                curr_row1 += 1
+            elif key == curses.KEY_ENTER or key in [10, 13]:
+                self.stdscr.erase()
+                last_fs = current_states["last_fs"]
+                if curr_row1 != len(field_menu) - 1:
+                    current_states["last_field"] = (field_menu[curr_row1].split('='))[0]
+                else:
+                    current_states["last_field"] = 'chit'
+                if isinstance(last_fs, list):
+                    self.run_all_display()
+                else:
+                    self.run_display()
+                endwhile = True
+            elif key == ord('q'):
+                self.stdscr.erase()
+                if isinstance(current_states['last_fs'], list):
+                    self.run_all_display()
+                else:
+                    self.run_display()
+                endwhile = True
+
+            try:
+                if not fs_list:
+                    self.display_menu(stdscr)
+                else:
+                    self.display_sort_menu(stdscr, curr_row1, field_menu)
+            except curses.error:
+                pass
+            curses.halfdelay(self.refresh_interval_secs)
+            key = stdscr.getch()
+
+    def set_limit(self, stdscr):
+        key = ''
+        endwhile = False
+        while not endwhile:
+            stdscr.clear()
+            h, w = stdscr.getmaxyx()
+            title = 'Enter the limit you want to set (number) and press ENTER,'\
+                    ' press "d" for default, "q" to go back to previous screen '
+            pos_x1 = w // 2 - len(title) // 2
+            try:
+                stdscr.addstr(1, pos_x1, title, curses.A_STANDOUT | curses.A_BOLD)
+            except curses.error:
+                pass
+            curses.halfdelay(self.refresh_interval_secs)
+            inp = stdscr.getch()
+            if inp in [ord('d'), ord('q')] or ascii.isdigit(inp):
+                key = key + chr(inp)
+                if key == 'd':
+                    current_states["limit"] = None
+                elif key == 'q':
+                    endwhile = True
+                elif (key).isnumeric():
+                    i = 1
+                    length = 4
+                    while i <= length:
+                        pos = w // 2 - len(key) // 2
+                        try:
+                            stdscr.move(3, 0)
+                            stdscr.clrtoeol()
+                            stdscr.addstr(3, pos, key, curses.A_BOLD)
+                        except curses.error:
+                            pass
+                        if key[i - 1] == '\n':
+                            break
+                        inp = stdscr.getch()
+                        if inp == ord('q'):
+                            if current_states['limit'] is None:
+                                key = current_states["limit"]
+                            else:
+                                key = current_states['limit'] + " "
+                            break
+                        if inp == curses.KEY_RESIZE:
+                            stdscr.clear()
+                            windowsize = stdscr.getmaxyx()
+                            wd = windowsize[1] - 1
+                            pos_x1 = wd // 2 - len(title) // 2
+                            try:
+                                stdscr.addstr(1, pos_x1, title, curses.A_STANDOUT | curses.A_BOLD)
+                            except curses.error:
+                                pass
+                        if inp == curses.KEY_BACKSPACE or inp == curses.KEY_DC or inp == 127:
+                            if i > 1:
+                                key = key[:-1]
+                                i = i - 1
+                                stdscr.move(4, 0)
+                                stdscr.clrtoeol()
+                            elif i == 1:
+                                curses.wrapper(self.set_limit)
+                        elif i == length:
+                            if inp == ord('\n'):
+                                key = key + chr(inp)
+                                i = i + 1
+                            else:
+                                info = "Max length is reached, press Backspace" \
+                                    " to edit or Enter to set the limit!"
+                                pos = w // 2 - len(info) // 2
+                                try:
+                                    stdscr.addstr(4, pos, info, curses.A_BOLD)
+                                except curses.error:
+                                    pass
+                        elif ascii.isdigit(inp) or inp == ord('\n'):
+                            key = key + chr(inp)
+                            i = i + 1
+                    if key is None:
+                        current_states["limit"] = key
+                    elif int(key) != 0:
+                        current_states["limit"] = key[:-1]
+                self.stdscr.erase()
+                if isinstance(current_states['last_fs'], list):
+                    self.run_all_display()
+                else:
+                    self.run_display()
 
     def set_option(self, opt):
         if opt == ord('m'):
@@ -290,6 +463,23 @@ class FSTop(object):
                 curses.wrapper(self.set_key)
             else:
                 return False
+        elif opt == ord('s'):
+            if fs_list:
+                curses.wrapper(self.choose_field)
+            else:
+                return False
+        elif opt == ord('l'):
+            if fs_list:
+                curses.wrapper(self.set_limit)
+            else:
+                return False
+        elif opt == ord('r'):
+            current_states['last_field'] = 'chit'
+            current_states["limit"] = None
+            if isinstance(current_states['last_fs'], list):
+                self.run_all_display()
+            else:
+                self.run_display()
         elif opt == ord('q'):
             if self.current_screen == FS_TOP_ALL_FS_APP:
                 quit()
@@ -455,10 +645,11 @@ class FSTop(object):
         self.fsstats.addstr(self.tablehead_y, 0, title, curses.A_STANDOUT | curses.A_BOLD)
         return x_coord_map
 
-    def create_client(self, client_id, metrics, counters,
+    def create_client(self, fs_name, client_id, metrics, counters,
                       client_meta, x_coord_map, y_coord):
         global last_time
-        size = 0
+        metrics_dict.setdefault(fs_name, {})
+        metrics_dict[fs_name].setdefault(client_id, {})
         cur_time = time.time()
         duration = cur_time - last_time
         last_time = cur_time
@@ -489,25 +680,35 @@ class FSTop(object):
             if item.lower() in client_meta.get(
                     CLIENT_METADATA_VALID_METRICS_KEY, []):
                 if typ == MetricType.METRIC_TYPE_PERCENTAGE:
+                    perc = calc_perc(m)
+                    metrics_dict[fs_name][client_id][self.items(item)] = perc
                     self.fsstats.addstr(y_coord, coord[0],
-                                        f'{calc_perc(m)}', curses.A_DIM)
+                                        f'{perc}', curses.A_DIM)
                 elif typ == MetricType.METRIC_TYPE_LATENCY:
+                    lat = calc_lat(m)
+                    metrics_dict[fs_name][client_id][self.items(item)] = lat
                     self.fsstats.addstr(y_coord, coord[0],
-                                        f'{calc_lat(m)}', curses.A_DIM)
+                                        f'{lat}', curses.A_DIM)
                 elif typ == MetricType.METRIC_TYPE_STDEV:
+                    stdev = calc_stdev(m)
+                    metrics_dict[fs_name][client_id][self.items(item)] = stdev
                     self.fsstats.addstr(y_coord, coord[0],
-                                        f'{calc_stdev(m)}', curses.A_DIM)
+                                        f'{stdev}', curses.A_DIM)
                 elif typ == MetricType.METRIC_TYPE_SIZE:
+                    size = calc_size(m)
+                    metrics_dict[fs_name][client_id][self.items(item)] = size
                     self.fsstats.addstr(y_coord, coord[0],
-                                        f'{calc_size(m)}', curses.A_DIM)
+                                        f'{size}', curses.A_DIM)
 
                     # average io sizes
                     if key == "READ_IO_SIZES":
                         coord = x_coord_map["READ_IO_AVG"]
                     elif key == "WRITE_IO_SIZES":
                         coord = x_coord_map["WRITE_IO_AVG"]
+                    avg_size = calc_avg_size(m)
+                    metrics_dict[fs_name][client_id][self.avg_items(key)] = avg_size
                     self.fsstats.addstr(y_coord, coord[0],
-                                        f'{calc_avg_size(m)}', curses.A_DIM)
+                                        f'{avg_size}', curses.A_DIM)
 
                     # io speeds
                     if key == "READ_IO_SIZES":
@@ -527,8 +728,10 @@ class FSTop(object):
                             last_size = last_write_size.get(client_id, 0)
                             size = m[1] - last_size
                             last_write_size[client_id] = m[1]
+                    speed = calc_speed(abs(size), duration)
+                    metrics_dict[fs_name][client_id][self.speed_items(key)] = speed
                     self.fsstats.addstr(y_coord, coord[0],
-                                        f'{calc_speed(abs(size), duration)}', curses.A_DIM)
+                                        f'{speed}', curses.A_DIM)
                 else:
                     # display 0th element from metric tuple
                     self.fsstats.addstr(y_coord, coord[0], f'{m[0]}', curses.A_DIM)
@@ -556,6 +759,7 @@ class FSTop(object):
                     self.fsstats.addstr(y_coord, coord[0], "N/A", curses.A_DIM)
 
     def create_clients(self, x_coord_map, stats_json, fs_name):
+        global metrics_dict, current_states
         counters = [m.upper() for m in stats_json[GLOBAL_COUNTERS_KEY]]
         self.tablehead_y += 2
         res = stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
@@ -564,10 +768,19 @@ class FSTop(object):
             fs_name=fs_name, client_count=client_cnt), curses.A_BOLD)
         self.tablehead_y += 2
         if client_cnt:
-            for client_id, metrics in \
-                    stats_json[GLOBAL_METRICS_KEY][fs_name].items():
+            if len(metrics_dict.get(fs_name, {})) != client_cnt:
+                sort_list = sorted(list(stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).keys()))
+            else:
+                sort_arg = current_states['last_field']
+                sort_list = sorted(list(stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).keys()),
+                                   key=lambda x: metrics_dict[fs_name][x][sort_arg], reverse=True)
+            if current_states['limit'] is not None and int(current_states['limit']) < client_cnt:
+                sort_list = sort_list[0:int(current_states['limit'])]
+            for client_id in sort_list:
                 self.create_client(
-                    client_id, metrics, counters, res[client_id],
+                    fs_name, client_id,
+                    stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).get(client_id, {}),
+                    counters, res.get(client_id, {}),
                     x_coord_map, self.tablehead_y)
                 self.tablehead_y += 1
 
@@ -601,15 +814,15 @@ class FSTop(object):
         self.header.addstr(4, 0, help, curses.A_DIM)
         return True
 
-    def run_display(self, fs):
+    def run_display(self):
         # clear the pads to have a smooth refresh
         self.header.erase()
         self.fsstats.erase()
 
         self.current_screen = FS_TOP_FS_SELECTED_APP
         screen_title = "Selected Filesystem Info"
-        help_commands = "Press 'q' to go back to home (All Filesystem Info) screen"\
-            " | Press 'm' to select another filesystem"
+        help_commands = "m - select a filesystem | s - sort menu | l - limit number of clients"\
+                        " | r - reset to default | q - home (All Filesystem Info) screen"
         curses.init_pair(3, curses.COLOR_MAGENTA, -1)
 
         top, left = 0, 0  # where to place pad
@@ -631,13 +844,13 @@ class FSTop(object):
         curses.halfdelay(1)
         cmd = self.stdscr.getch()
         while not self.exit_ev.is_set():
-            if cmd in [ord('m'), ord('q')]:
+            if cmd in [ord('m'), ord('s'), ord('l'), ord('r'), ord('q')]:
                 self.set_option(cmd)
                 self.exit_ev.set()
 
-            # header display
-            global fs_list
+            global fs_list, current_states
             fs_list = self.get_fs_names()
+            fs = current_states["last_fs"]
             stats_json = self.perf_stats_query()
             vscrollEnd = 0
             if fs not in fs_list:
@@ -646,10 +859,16 @@ class FSTop(object):
                 self.create_header(stats_json, help, screen_title, 3)
             else:
                 self.tablehead_y = 0
-                help = "HELP: " + help_commands
+                help = "COMMANDS: " + help_commands
                 self.fsstats.erase()  # erase previous text
 
-                vscrollEnd = len(stats_json[CLIENT_METADATA_KEY].get(fs, {}))
+                client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs, {})
+                if current_states['limit'] is not None and \
+                   int(current_states['limit']) < len(client_metadata):
+                    num_client = int(current_states['limit'])
+                else:
+                    num_client = len(client_metadata)
+                vscrollEnd += num_client
                 if self.create_header(stats_json, help, screen_title, 3):
                     x_coord_map = self.create_top_line_and_build_coord()
                     self.create_clients(x_coord_map, stats_json, fs)
@@ -749,13 +968,14 @@ class FSTop(object):
         curses.halfdelay(1)
         cmd = self.stdscr.getch()
         while not self.exit_ev.is_set():
-            if cmd in [ord('m'), ord('q')]:
+            if cmd in [ord('m'), ord('s'), ord('l'), ord('r'), ord('q')]:
                 if self.set_option(cmd):
                     self.exit_ev.set()
 
             # header display
-            global fs_list
+            global fs_list, current_states
             fs_list = self.get_fs_names()
+            current_states["last_fs"] = fs_list
             stats_json = self.perf_stats_query()
             vscrollEnd = 0
             if not fs_list:
@@ -765,11 +985,19 @@ class FSTop(object):
                 self.create_header(stats_json, help, screen_title, 2)
             else:
                 self.tablehead_y = 0
-                help = "HELP: Press 'm' to select a filesystem | Press 'q' to quit"
+                num_client = 0
+                help = "COMMANDS: m - select a filesystem | s - sort menu |"\
+                    " l - limit number of clients | r - reset to default | q - quit"
                 self.fsstats.erase()  # erase previous text
                 for index, fs in enumerate(fs_list):
                     #  Get the vscrollEnd in advance
-                    vscrollEnd += len(stats_json[CLIENT_METADATA_KEY].get(fs, {}))
+                    client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs, {})
+                    if current_states['limit'] is not None and \
+                       int(current_states['limit']) < len(client_metadata):
+                        num_client = int(current_states['limit'])
+                    else:
+                        num_client = len(client_metadata)
+                    vscrollEnd += num_client
                     if self.create_header(stats_json, help, screen_title, 2):
                         if not index:  # do it only for the first fs
                             x_coord_map = self.create_top_line_and_build_coord()
