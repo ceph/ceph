@@ -1250,8 +1250,7 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpSt
   if (bypass_gc)
     ret = bucket->remove_bucket_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
   else
-    ret = bucket->remove_bucket(dpp, op_state.will_delete_children(),
-				false, nullptr, y);
+    ret = bucket->remove_bucket(dpp, op_state.will_delete_children(), y);
 
   return ret;
 }

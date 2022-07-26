@@ -404,8 +404,6 @@ RadosBucket::~RadosBucket() {}
 
 int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
 			       bool delete_children,
-			       bool forward_to_master,
-			       req_info* req_info,
 			       optional_yield y)
 {
   int ret;
@@ -486,19 +484,6 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
   ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, y, dpp, false);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: unable to remove user bucket information" << dendl;
-  }
-
-  if (forward_to_master) {
-    bufferlist in_data;
-    ret = store->forward_request_to_master(dpp, owner, &ot.read_version, in_data, nullptr, *req_info, y);
-    if (ret < 0) {
-      if (ret == -ENOENT) {
-	/* adjust error, we want to return with NoSuchBucket and not
-	 * NoSuchKey */
-	ret = -ERR_NO_SUCH_BUCKET;
-      }
-      return ret;
-    }
   }
 
   return ret;
@@ -631,7 +616,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   // this function can only be run if caller wanted children to be
   // deleted, so we can ignore the check for children as any that
   // remain are detritus from a prior bug
-  ret = remove_bucket(dpp, true, false, nullptr, y);
+  ret = remove_bucket(dpp, true, y);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " << this << dendl;
     return ret;

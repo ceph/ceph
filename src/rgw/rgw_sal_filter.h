@@ -413,7 +413,6 @@ public:
   virtual Attrs& get_attrs(void) override { return next->get_attrs(); }
   virtual int set_attrs(Attrs a) override { return next->set_attrs(a); }
   virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children,
-			    bool forward_to_master, req_info* req_info,
 			    optional_yield y) override;
   virtual int remove_bucket_bypass_gc(int concurrent_max, bool
 				      keep_index_consistent,

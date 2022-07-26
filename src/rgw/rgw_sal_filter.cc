@@ -649,11 +649,9 @@ int FilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int ma
 
 int FilterBucket::remove_bucket(const DoutPrefixProvider* dpp,
 				bool delete_children,
-				bool forward_to_master,
-				req_info* req_info,
 				optional_yield y)
 {
-  return next->remove_bucket(dpp, delete_children, forward_to_master, req_info, y);
+  return next->remove_bucket(dpp, delete_children, y);
 }
 
 int FilterBucket::remove_bucket_bypass_gc(int concurrent_max,

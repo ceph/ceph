@@ -236,7 +236,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y)
+  int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
   {
     int ret;
 
