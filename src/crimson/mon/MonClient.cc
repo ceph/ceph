@@ -137,6 +137,7 @@ seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 seastar::future<> Connection::renew_tickets()
 {
   if (auth->need_tickets()) {
+    logger().info("{}: retrieving new tickets", __func__);
     return do_auth(request_t::general).then([](const auth_result_t r) {
       if (r == auth_result_t::failure)  {
         throw std::system_error(
@@ -144,8 +145,10 @@ seastar::future<> Connection::renew_tickets()
 	    crimson::net::error::negotiation_failure));
       }
     });
+  } else {
+    logger().debug("{}: don't need new tickets", __func__);
+    return seastar::now();
   }
-  return seastar::now();
 }
 
 seastar::future<> Connection::renew_rotating_keyring()
@@ -153,12 +156,19 @@ seastar::future<> Connection::renew_rotating_keyring()
   auto now = clock_t::now();
   auto ttl = std::chrono::seconds{
     static_cast<long>(crimson::common::local_conf()->auth_service_ticket_ttl)};
-  auto cutoff = now - ttl / 4;
-  if (!rotating_keyring->need_new_secrets(utime_t(cutoff))) {
+  auto cutoff = utime_t{now - std::min(std::chrono::seconds{30}, ttl / 4)};
+  if (!rotating_keyring->need_new_secrets(cutoff)) {
+    logger().debug("renew_rotating_keyring secrets are up-to-date "
+                   "(they expire after {})", cutoff);
     return seastar::now();
+  } else {
+    logger().info("renew_rotating_keyring renewing rotating keys "
+                  " (they expired before {})", cutoff);
   }
-  if (now - last_rotating_renew_sent < std::chrono::seconds{1}) {
-    logger().info("renew_rotating_keyring called too often");
+  if ((now > last_rotating_renew_sent) &&
+      (now - last_rotating_renew_sent < std::chrono::seconds{1})) {
+    logger().info("renew_rotating_keyring called too often (last: {})",
+                  utime_t{last_rotating_renew_sent});
     return seastar::now();
   }
   last_rotating_renew_sent = now;
@@ -816,7 +826,11 @@ seastar::future<> Client::handle_auth_reply(crimson::net::ConnectionRef conn,
   if (found != pending_conns.end()) {
     return (*found)->handle_auth_reply(m);
   } else if (active_con) {
-    return active_con->handle_auth_reply(m);
+    return active_con->handle_auth_reply(m).then([this] {
+      return seastar::when_all_succeed(
+        active_con->renew_rotating_keyring(),
+        active_con->renew_tickets()).then_unpack([] {});
+    });
   } else {
     logger().error("unknown auth reply from {}", conn->get_peer_addr());
     return seastar::now();
