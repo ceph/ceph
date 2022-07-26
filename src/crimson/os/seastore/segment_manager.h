@@ -128,6 +128,16 @@ public:
   virtual write_ertr::future<> write(
     seastore_off_t offset, ceph::bufferlist bl) = 0;
 
+  /**
+   * advance_wp
+   *
+   * advance the segment write pointer,
+   * needed when writing at wp is strictly implemented. ex: ZNS backed segments
+   * @param offset: advance write pointer till the given offset
+   */
+  virtual write_ertr::future<> advance_wp(
+    seastore_off_t offset) = 0;
+
   virtual ~Segment() {}
 };
 using SegmentRef = boost::intrusive_ptr<Segment>;

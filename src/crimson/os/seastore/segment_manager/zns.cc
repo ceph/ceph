@@ -14,6 +14,8 @@ SET_SUBSYS(seastore_device);
 
 #define SECT_SHIFT	9
 #define RESERVED_ZONES 	1
+// limit the max padding buf size to 1MB
+#define MAX_PADDING_SIZE 1048576
 
 namespace crimson::os::seastore::segment_manager::zns {
 
@@ -428,7 +430,7 @@ ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
       );
     }
   ).safe_then([=] {
-    DEBUG("segment open successful");
+    DEBUG("segment {}, open successful", id);
     return open_ertr::future<SegmentRef>(
       open_ertr::ready_future_marker{},
       SegmentRef(new ZNSSegment(*this, id))
@@ -591,9 +593,9 @@ Segment::write_ertr::future<> ZNSSegment::write(
 {
   LOG_PREFIX(ZNSSegment::write);
   if (offset != write_pointer || offset % manager.metadata.block_size != 0) {
-    ERROR("Invalid segment write on segment {} to offset {}",
-      id,
-      offset);
+    ERROR("Segment offset and zone write pointer mismatch. "
+          "segment {} segment-offset {} write pointer {}",
+          id, offset, write_pointer);
     return crimson::ct_error::invarg::make();
   }
   if (offset + bl.length() > manager.metadata.segment_size)
@@ -601,6 +603,58 @@ Segment::write_ertr::future<> ZNSSegment::write(
   
   write_pointer = offset + bl.length();
   return manager.segment_write(paddr_t::make_seg_paddr(id, offset), bl);
+}
+
+Segment::write_ertr::future<> ZNSSegment::write_padding_bytes(
+  size_t padding_bytes)
+{
+  LOG_PREFIX(ZNSSegment::write_padding_bytes);
+  DEBUG("Writing {} padding bytes to segment {} at wp {}",
+        padding_bytes, id, write_pointer);
+
+  return crimson::repeat([FNAME, padding_bytes, this] () mutable {
+    size_t bufsize = 0;
+    if (padding_bytes >= MAX_PADDING_SIZE) {
+      bufsize = MAX_PADDING_SIZE;
+    } else {
+      bufsize = padding_bytes;
+    }
+
+    padding_bytes -= bufsize;
+    bufferptr bp(ceph::buffer::create_page_aligned(bufsize));
+    bp.zero();
+    bufferlist padd_bl;
+    padd_bl.append(bp);
+    return write(write_pointer, padd_bl).safe_then([FNAME, padding_bytes, this]() {
+      if (padding_bytes == 0) {
+        return write_ertr::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+      } else {
+        return write_ertr::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
+      }
+    });
+  });
+}
+
+// Advance write pointer, to given offset.
+Segment::write_ertr::future<> ZNSSegment::advance_wp(
+  seastore_off_t offset)
+{
+  LOG_PREFIX(ZNSSegment::advance_wp);
+
+  DEBUG("Advancing write pointer from {} to {}", write_pointer, offset);
+  if (offset < write_pointer) {
+    return crimson::ct_error::invarg::make();
+  }
+
+  size_t padding_bytes = offset - write_pointer;
+
+  if (padding_bytes == 0) {
+    return write_ertr::now();
+  }
+
+  assert(padding_bytes % manager.metadata.block_size == 0);
+
+  return write_padding_bytes(padding_bytes);
 }
 
 }

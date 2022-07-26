@@ -219,7 +219,6 @@ SegmentAllocator::close_segment()
   // Note: make sure no one can access the current segment once closing
   auto seg_to_close = std::move(current_segment);
   auto close_segment_id = seg_to_close->get_segment_id();
-  segment_provider.close_segment(close_segment_id);
   auto close_seg_info = segment_provider.get_seg_info(close_segment_id);
   ceph_assert((close_seg_info.modify_time == NULL_TIME &&
                close_seg_info.num_extents == 0) ||
@@ -247,17 +246,25 @@ SegmentAllocator::close_segment()
   bl.append(bp);
 
   assert(bl.length() == sm_group.get_rounded_tail_length());
-  return seg_to_close->write(
-    sm_group.get_segment_size() - sm_group.get_rounded_tail_length(),
-    bl
-  ).safe_then([seg_to_close=std::move(seg_to_close)] {
-    return seg_to_close->close();
+
+  auto p_seg_to_close = seg_to_close.get();
+  return p_seg_to_close->advance_wp(
+    sm_group.get_segment_size() - sm_group.get_rounded_tail_length()
+  ).safe_then([this, FNAME, bl=std::move(bl), p_seg_to_close]() mutable {
+    DEBUG("Writing tail info to segment {}", p_seg_to_close->get_segment_id());
+    return p_seg_to_close->write(
+      sm_group.get_segment_size() - sm_group.get_rounded_tail_length(),
+      std::move(bl));
+  }).safe_then([p_seg_to_close] {
+    return p_seg_to_close->close();
+  }).safe_then([this, seg_to_close=std::move(seg_to_close)] {
+    segment_provider.close_segment(seg_to_close->get_segment_id());
   }).handle_error(
     close_segment_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in SegmentAllocator::close_segment"
-    }
-  );
+    crimson::ct_error::assert_all {
+    "Invalid error in SegmentAllocator::close_segment"
+  });
+
 }
 
 RecordBatch::add_pending_ret
