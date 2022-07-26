@@ -438,6 +438,33 @@ ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
   });
 }
 
+using blk_finish_zone_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
+using blk_finish_zone_ret = blk_finish_zone_ertr::future<>;
+static blk_finish_zone_ret blk_finish_zone(
+    seastar::file &device,
+    blk_zone_range &range)
+{
+  LOG_PREFIX(ZNSSegmentManager::blk_finish_zone);
+  return device.ioctl(
+    BLKFINISHZONE,
+    &range
+  ).then_wrapped([=](auto f) -> blk_finish_zone_ret {
+    if (f.failed()) {
+      DEBUG("BLKFINISHZONE ioctl failed");
+      return crimson::ct_error::input_output_error::make();
+    } else {
+      int ret = f.get();
+      if (ret == 0) {
+        return seastar::now();
+      } else {
+        DEBUG("BLKFINISHZONE ioctl failed with return code {}", ret);
+        return crimson::ct_error::input_output_error::make();
+      }
+    }
+  });
+}
+
 using blk_close_zone_ertr = crimson::errorator<
   crimson::ct_error::input_output_error>;
 using blk_close_zone_ret = blk_close_zone_ertr::future<>;
@@ -514,7 +541,7 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
 Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
   segment_id_t id, seastore_off_t write_pointer)
 {
-  LOG_PREFIX(ZNSSegmentManager::close);
+  LOG_PREFIX(ZNSSegmentManager::segment_close);
   return seastar::do_with(
     blk_zone_range{},
     [=](auto &range) {
@@ -522,13 +549,13 @@ Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
 	id,
 	metadata.segment_size,
         metadata.first_segment_offset);
-      return blk_close_zone(
+      return blk_finish_zone(
 	device,
 	range
       );
     }
   ).safe_then([=] {
-    DEBUG("close successful");
+    DEBUG("zone finish successful");
     return Segment::close_ertr::now();
   });
 }
