@@ -408,11 +408,14 @@ class Device(object):
         # If we come from Devices(), self.lsblk_all is set already.
         # Otherwise, we have to grab the data.
         details = self.lsblk_all or disk.lsblk_all()
+        _is_member = False
         if self.sys_api.get("partitions"):
             for part in self.sys_api.get("partitions").keys():
                 for dev in details:
-                    if dev['NAME'] == part:
-                        return is_member(dev)
+                    if part.startswith(dev['NAME']):
+                        if is_member(dev):
+                            _is_member = True
+                return _is_member
         else:
             return is_member(self.disk_api)
         raise RuntimeError(f"Couln't check if device {self.path} is a ceph-disk member.")
