@@ -78,7 +78,7 @@ public:
     return 0;
   }
 
-  virtual int create_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, const std::string& zonegroup_id, rgw_placement_rule& placement_rule, std::string& swift_ver_location, const RGWQuotaInfo* pquota_info, const RGWAccessControlPolicy& policy, sal::Attrs& attrs, RGWBucketInfo& info, obj_version& ep_objv, bool exclusive, bool obj_lock_enabled, bool* existed, req_info& req_info, std::unique_ptr<sal::Bucket>* bucket, optional_yield y) override {
+  virtual int create_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, const std::string& zonegroup_id, const rgw_placement_rule& placement_rule, const std::string& swift_ver_location, const RGWQuotaInfo* pquota_info, const RGWAccessControlPolicy& policy, sal::Attrs& attrs, RGWBucketInfo& info, obj_version& ep_objv, bool exclusive, bool obj_lock_enabled, bool* existed, req_info& req_info, std::unique_ptr<sal::Bucket>* bucket, optional_yield y) override {
     return 0;
   }
 
