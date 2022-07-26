@@ -87,4 +87,5 @@ target_link_libraries(rbd-mirror
   heap_profiler
   ${ALLOC_LIBS}
   OpenSSL::SSL)
-install(TARGETS rbd-mirror DESTINATION bin)
+install(TARGETS rbd-mirror
+        DESTINATION ${CMAKE_INSTALL_BINDIR})
