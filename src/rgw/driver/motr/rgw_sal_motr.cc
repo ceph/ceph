@@ -210,8 +210,8 @@ int MotrUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
 int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
                             const rgw_bucket& b,
                             const std::string& zonegroup_id,
-                            rgw_placement_rule& placement_rule,
-                            std::string& swift_ver_location,
+                            const rgw_placement_rule& placement_rule,
+                            const std::string& swift_ver_location,
                             const RGWQuotaInfo* pquota_info,
                             const RGWAccessControlPolicy& policy,
                             Attrs& attrs,
@@ -234,24 +234,7 @@ int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
 
   if (ret != -ENOENT) {
     *existed = true;
-    // if (swift_ver_location.empty()) {
-    //   swift_ver_location = bucket->get_info().swift_ver_location;
-    // }
-    // placement_rule.inherit_from(bucket->get_info().placement_rule);
-
-    // TODO: ACL policy
-    // // don't allow changes to the acl policy
-    //RGWAccessControlPolicy old_policy(ctx());
-    //int rc = rgw_op_get_bucket_policy_from_attr(
-    //           dpp, this, u, bucket->get_attrs(), &old_policy, y);
-    //if (rc >= 0 && old_policy != policy) {
-    //    bucket_out->swap(bucket);
-    //    return -EEXIST;
-    //}
   } else {
-
-    placement_rule.name = "default";
-    placement_rule.storage_class = "STANDARD";
     bucket = std::make_unique<MotrBucket>(store, b, this);
     bucket->set_attrs(attrs);
     *existed = false;

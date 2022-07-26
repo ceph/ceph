@@ -123,8 +123,8 @@ int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
 int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
 				 const rgw_bucket& b,
 				 const std::string& zonegroup_id,
-				 rgw_placement_rule& placement_rule,
-				 std::string& swift_ver_location,
+				 const rgw_placement_rule& placement_rule,
+				 const std::string& swift_ver_location,
 				 const RGWQuotaInfo * pquota_info,
 				 const RGWAccessControlPolicy& policy,
 				 Attrs& attrs,
@@ -152,10 +152,6 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
 
   if (ret != -ENOENT) {
     *existed = true;
-    if (swift_ver_location.empty()) {
-      swift_ver_location = bucket->get_info().swift_ver_location;
-    }
-    placement_rule.inherit_from(bucket->get_info().placement_rule);
   } else {
     bucket = std::unique_ptr<Bucket>(new RadosBucket(store, b, this));
     *existed = false;

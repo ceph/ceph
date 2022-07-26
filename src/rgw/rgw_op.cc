@@ -3384,6 +3384,11 @@ void RGWCreateBucket::execute(optional_yield y)
       /* Initialize info from req_state */
       info = tmp_bucket->get_info();
 
+      if (!swift_ver_location) {
+        swift_ver_location = info.swift_ver_location;
+      }
+      placement_rule.inherit_from(info.placement_rule);
+
       // don't allow changes to the acl policy
       RGWAccessControlPolicy old_policy(get_cct());
       int r = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver, info.owner,

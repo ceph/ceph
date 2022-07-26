@@ -61,8 +61,8 @@ namespace rgw::sal {
   int DBUser::create_bucket(const DoutPrefixProvider *dpp,
       const rgw_bucket& b,
       const string& zonegroup_id,
-      rgw_placement_rule& placement_rule,
-      string& swift_ver_location,
+      const rgw_placement_rule& placement_rule,
+      const string& swift_ver_location,
       const RGWQuotaInfo * pquota_info,
       const RGWAccessControlPolicy& policy,
       Attrs& attrs,
@@ -79,7 +79,6 @@ namespace rgw::sal {
     bufferlist in_data;
     RGWBucketInfo master_info;
     rgw_bucket *pmaster_bucket = nullptr;
-    uint32_t *pmaster_num_shards = nullptr;
     real_time creation_time;
     std::unique_ptr<Bucket> bucket;
     obj_version objv, *pobjv = NULL;
@@ -90,28 +89,11 @@ namespace rgw::sal {
       return ret;
 
     if (ret != -ENOENT) {
-      RGWAccessControlPolicy old_policy(store->ctx());
       *existed = true;
-      if (swift_ver_location.empty()) {
-        swift_ver_location = bucket->get_info().swift_ver_location;
-      }
-      placement_rule.inherit_from(bucket->get_info().placement_rule);
-
-      // don't allow changes to the acl policy
-      /*    int r = rgw_op_get_bucket_policy_from_attr(dpp, this, this, bucket->get_attrs(),
-            &old_policy, y);
-            if (r >= 0 && old_policy != policy) {
-            bucket_out->swap(bucket);
-            return -EEXIST;
-            }*/
     } else {
       bucket = std::make_unique<DBBucket>(store, b, this);
       *existed = false;
       bucket->set_attrs(attrs);
-      // XXX: For now single default zone and STANDARD storage class
-      // supported.
-      placement_rule.name = "default";
-      placement_rule.storage_class = "STANDARD";
     }
 
     /*
@@ -123,8 +105,13 @@ namespace rgw::sal {
        zid = svc()->zone->get_zonegroup().get_id();
        } */
 
+    // XXX: For now single default zone and STANDARD storage class
+    // supported.
+    rgw_placement_rule selected_placement_rule;
+    selected_placement_rule.name = "default";
+    selected_placement_rule.storage_class = "STANDARD";
+
     if (*existed) {
-      rgw_placement_rule selected_placement_rule;
       /* XXX: Handle this when zone is implemented
          ret = svc()->zone->select_bucket_placement(this.get_info(),
          zid, placement_rule,
@@ -138,9 +125,9 @@ namespace rgw::sal {
 
       /* XXX: We may not need to send all these params. Cleanup the unused ones */
       ret = store->getDB()->create_bucket(dpp, this->get_info(), bucket->get_key(),
-          zid, placement_rule, swift_ver_location, pquota_info,
+          zid, selected_placement_rule, swift_ver_location, pquota_info,
           attrs, info, pobjv, &ep_objv, creation_time,
-          pmaster_bucket, pmaster_num_shards, y, exclusive);
+          pmaster_bucket, nullptr, y, exclusive);
       if (ret == -EEXIST) {
         *existed = true;
         ret = 0;
