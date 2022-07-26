@@ -10,7 +10,7 @@
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/random_block_manager.h"
-#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
+#include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
 using namespace crimson;
@@ -126,7 +126,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
   Cache cache;
   std::vector<entry_validator_t> entries;
   std::unique_ptr<CircularBoundedJournal> cbj;
-  nvme_device::NVMeBlockDevice *device;
+  nvme_device::RBMDevice *device;
 
   std::default_random_engine generator;
   uint64_t block_size;

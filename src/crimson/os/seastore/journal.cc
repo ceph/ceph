@@ -13,7 +13,7 @@ JournalRef make_segmented(SegmentProvider &provider)
 }
 
 JournalRef make_circularbounded(
-  crimson::os::seastore::nvme_device::NVMeBlockDevice* device,
+  crimson::os::seastore::nvme_device::RBMDevice* device,
   std::string path)
 {
   return std::make_unique<CircularBoundedJournal>(device, path);
