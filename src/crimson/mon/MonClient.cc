@@ -165,8 +165,10 @@ seastar::future<> Connection::renew_rotating_keyring()
     logger().info("renew_rotating_keyring renewing rotating keys "
                   " (they expired before {})", cutoff);
   }
-  if (now - last_rotating_renew_sent < std::chrono::seconds{1}) {
-    logger().info("renew_rotating_keyring called too often");
+  if ((now > last_rotating_renew_sent) &&
+      (now - last_rotating_renew_sent < std::chrono::seconds{1})) {
+    logger().info("renew_rotating_keyring called too often (last: {})",
+                  utime_t{last_rotating_renew_sent});
     return seastar::now();
   }
   last_rotating_renew_sent = now;
