@@ -148,6 +148,7 @@ protected:
   BackrefManager *backref_manager;
   Cache* cache;
   AsyncCleaner *async_cleaner;
+  uint64_t seq = 0;
 
   TMTestState() : EphemeralTestState(1) {}
 
@@ -247,6 +248,17 @@ protected:
       t,
       [this](auto &t) {
 	return tm->submit_transaction(t);
+      });
+  }
+  auto submit_transaction_fut_with_seq(Transaction &t) {
+    using ertr = TransactionManager::base_iertr;
+    return with_trans_intr(
+      t,
+      [this](auto &t) {
+	return tm->submit_transaction(t
+	).si_then([this] {
+	  return ertr::make_ready_future<uint64_t>(seq++);
+	});
       });
   }
 
