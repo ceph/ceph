@@ -87,6 +87,12 @@ Segment::write_ertr::future<> EphemeralSegment::write(
   return manager.segment_write(paddr_t::make_seg_paddr(id, offset), bl);
 }
 
+Segment::write_ertr::future<> EphemeralSegment::advance_wp(
+  seastore_off_t offset)
+{
+  return write_ertr::now();
+}
+
 Segment::close_ertr::future<> EphemeralSegmentManager::segment_close(segment_id_t id)
 {
   auto s_id = id.device_segment_id();

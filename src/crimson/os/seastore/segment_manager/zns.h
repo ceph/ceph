@@ -73,6 +73,7 @@ namespace crimson::os::seastore::segment_manager::zns {
     seastore_off_t get_write_ptr() const final { return write_pointer; }
     close_ertr::future<> close() final;
     write_ertr::future<> write(seastore_off_t offset, ceph::bufferlist bl) final;
+    write_ertr::future<> advance_wp(seastore_off_t offset) final;
 
     ~ZNSSegment() {}
   private:
@@ -80,6 +81,7 @@ namespace crimson::os::seastore::segment_manager::zns {
     ZNSSegmentManager &manager;
     const segment_id_t id;
     seastore_off_t write_pointer = 0;
+    write_ertr::future<> write_padding_bytes(size_t padding_bytes);
   };
 
   class ZNSSegmentManager final : public SegmentManager{
