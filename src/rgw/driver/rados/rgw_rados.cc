@@ -2282,8 +2282,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             obj_version *pobjv,
                             obj_version *pep_objv,
                             real_time creation_time,
-                            rgw_bucket *pmaster_bucket,
-                            uint32_t *pmaster_num_shards,
+                            const rgw_bucket* pmaster_bucket,
 			    optional_yield y,
                             const DoutPrefixProvider *dpp,
 			    bool exclusive)
@@ -2325,9 +2324,6 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     info.swift_versioning = (!swift_ver_location.empty());
 
     init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
-			       pmaster_num_shards ?
-			       std::optional{*pmaster_num_shards} :
-			       std::nullopt,
 			       rule_info.index_type);
 
     info.requester_pays = false;
