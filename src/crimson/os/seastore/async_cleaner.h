@@ -269,6 +269,9 @@ private:
  */
 class SegmentProvider {
 public:
+  // get the committed journal head
+  virtual journal_seq_t get_journal_head() const = 0;
+
   // set the committed journal head
   virtual void set_journal_head(journal_seq_t) = 0;
 
@@ -772,6 +775,10 @@ public:
   /*
    * SegmentProvider interfaces
    */
+  journal_seq_t get_journal_head() const final {
+    return journal_head;
+  }
+
   const segment_info_t& get_seg_info(segment_id_t id) const final {
     return segments[id];
   }

@@ -1252,24 +1252,32 @@ record_t Cache::prepare_record(
     journal_seq_t dirty_tail;
     auto maybe_dirty_tail = get_oldest_dirty_from();
     if (!maybe_dirty_tail.has_value()) {
-      dirty_tail = JOURNAL_SEQ_NULL;
+      dirty_tail = cleaner->get_journal_head();
+      SUBINFOT(seastore_t, "dirty_tail all trimmed, set to head {}, src={}",
+               t, dirty_tail, trans_src);
     } else if (*maybe_dirty_tail == JOURNAL_SEQ_NULL) {
       dirty_tail = cleaner->get_dirty_tail();
-      ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
+      SUBINFOT(seastore_t, "dirty_tail is pending, set to {}, src={}",
+               t, dirty_tail, trans_src);
     } else {
       dirty_tail = *maybe_dirty_tail;
     }
+    ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
     journal_seq_t alloc_tail;
     auto maybe_alloc_tail = get_oldest_backref_dirty_from();
     if (!maybe_alloc_tail.has_value()) {
-      alloc_tail = JOURNAL_SEQ_NULL;
-      // see notes in Cache::complete_commit().
-      SUBWARNT(seastore_t, "backref_buffer all trimmed", t);
+      // FIXME: the replay point of the allocations requires to be accurate.
+      // Setting the alloc_tail to get_journal_head() cannot skip replaying the
+      // last unnecessary record.
+      alloc_tail = cleaner->get_journal_head();
+      SUBINFOT(seastore_t, "alloc_tail all trimmed, set to head {}, src={}",
+               t, alloc_tail, trans_src);
     } else if (*maybe_alloc_tail == JOURNAL_SEQ_NULL) {
       ceph_abort("impossible");
     } else {
       alloc_tail = *maybe_alloc_tail;
     }
+    ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
     auto tails = journal_tail_delta_t{alloc_tail, dirty_tail};
     SUBDEBUGT(seastore_t, "update tails as delta {}", t, tails);
     bufferlist bl;
@@ -1409,12 +1417,12 @@ void Cache::backref_batch_update(
 void Cache::complete_commit(
   Transaction &t,
   paddr_t final_block_start,
-  journal_seq_t seq,
+  journal_seq_t start_seq,
   AsyncCleaner *cleaner)
 {
   LOG_PREFIX(Cache::complete_commit);
-  SUBTRACET(seastore_t, "final_block_start={}, seq={}",
-            t, final_block_start, seq);
+  SUBTRACET(seastore_t, "final_block_start={}, start_seq={}",
+            t, final_block_start, start_seq);
 
   std::vector<backref_buf_entry_ref> backref_list;
   t.for_each_fresh_block([&](const CachedExtentRef &i) {
@@ -1442,19 +1450,6 @@ void Cache::complete_commit(
 	       t,
 	       i->get_paddr(),
 	       i->get_length());
-        // FIXME: In theroy, adding backref_list in the finalize phase
-        //        can result in wrong alloc_tail for replay:
-        // * trans-1 enters prepare record with allocations.
-        // * trans-2 (cleaner) enters prepare record, see no alloc-tail,
-        //   so it assume the alloc-tail is the start-seq of trans-2.
-        // * trans-1 enters finalize and update the backref_list,
-        //   implying that alloc-tail is the start-seq of trans-1.
-        // * trans-2 (cleaner) enters finalize.
-        // During replay, the alloc-tail will be set to the start-seq of
-        //   trans-2 according to journal_tail_delta_t, but it should be
-        //   actually the start-seq of trans-1.
-        // This can only happen if alloc_tail trimming is able to trim to
-        //   the journal head.
 	backref_list.emplace_back(
 	  std::make_unique<backref_buf_entry_t>(
 	    i->get_paddr(),
@@ -1465,7 +1460,7 @@ void Cache::complete_commit(
 	      : L_ADDR_NULL),
 	    i->get_length(),
 	    i->get_type(),
-	    seq));
+	    start_seq));
       } else if (is_backref_node(i->get_type())) {
 	add_backref_extent(i->get_paddr(), i->get_type());
       } else {
@@ -1487,7 +1482,7 @@ void Cache::complete_commit(
     i->state = CachedExtent::extent_state_t::DIRTY;
     assert(i->version > 0);
     if (i->version == 1 || i->get_type() == extent_types_t::ROOT) {
-      i->dirty_from_or_retired_at = seq;
+      i->dirty_from_or_retired_at = start_seq;
       DEBUGT("commit extent done, become dirty -- {}", t, *i);
     } else {
       DEBUGT("commit extent done -- {}", t, *i);
@@ -1516,9 +1511,9 @@ void Cache::complete_commit(
     i->complete_io();
   }
 
-  last_commit = seq;
+  last_commit = start_seq;
   for (auto &i: t.retired_set) {
-    i->dirty_from_or_retired_at = last_commit;
+    i->dirty_from_or_retired_at = start_seq;
     if (is_backref_mapped_extent_node(i)
 	  || is_retired_placeholder(i->get_type())) {
       DEBUGT("backref_list free {} len {}",
@@ -1531,7 +1526,7 @@ void Cache::complete_commit(
 	  L_ADDR_NULL,
 	  i->get_length(),
 	  i->get_type(),
-	  seq));
+	  start_seq));
     } else if (is_backref_node(i->get_type())) {
       remove_backref_extent(i->get_paddr());
     } else {
@@ -1564,13 +1559,13 @@ void Cache::complete_commit(
 	  i->cast<LogicalCachedExtent>()->get_laddr(),
 	  i->get_length(),
 	  i->get_type(),
-	  seq));
+	  start_seq));
       const auto t_src = t.get_src();
       add_extent(i, &t_src);
     }
   }
   if (!backref_list.empty()) {
-    backref_batch_update(std::move(backref_list), seq);
+    backref_batch_update(std::move(backref_list), start_seq);
   }
 }
 
