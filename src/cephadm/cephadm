@@ -112,7 +112,24 @@ You can invoke cephadm in two ways:
 """
 cached_stdin = None
 
+
 ##################################
+
+
+async def run_func(func: Callable, cmd: str) -> subprocess.CompletedProcess:
+    logger.debug(f'running function {func.__name__}, with parms: {cmd}')
+    response = func(cmd)
+    return response
+
+
+async def concurrent_tasks(func: Callable, cmd_list: List[str]) -> List[Any]:
+    tasks = []
+    for cmd in cmd_list:
+        tasks.append(run_func(func, cmd))
+
+    data = await asyncio.gather(*tasks)
+
+    return data
 
 
 class EndPoint:
@@ -8050,6 +8067,50 @@ def command_install(ctx: CephadmContext) -> None:
     pkg = create_packager(ctx)
     pkg.install(ctx.packages)
 
+
+def command_rescan_disks(ctx: CephadmContext) -> str:
+
+    def probe_hba(scan_path: str) -> None:
+        """Tell the adapter to rescan"""
+        with open(scan_path, 'w') as f:
+            f.write('- - -')
+
+    cmd = ctx.func.__name__.replace('command_', '')
+    logger.info(f'{cmd}: starting')
+    start = time.time()
+
+    all_scan_files = glob('/sys/class/scsi_host/*/scan')
+    scan_files = []
+    skipped = []
+    for scan_path in all_scan_files:
+        adapter_name = os.path.basename(os.path.dirname(scan_path))
+        proc_name = read_file([os.path.join(os.path.dirname(scan_path), 'proc_name')])
+        if proc_name in ['unknown', 'usb-storage']:
+            skipped.append(os.path.basename(scan_path))
+            logger.info(f'{cmd}: rescan skipping incompatible host adapter {adapter_name} : {proc_name}')
+            continue
+
+        scan_files.append(scan_path)
+
+    if not scan_files:
+        logger.info(f'{cmd}: no compatible HBAs found')
+        return 'Ok. No compatible HBAs found'
+
+    responses = async_run(concurrent_tasks(probe_hba, scan_files))
+    failures = [r for r in responses if r]
+
+    logger.info(f'{cmd}: Complete. {len(scan_files)} adapters rescanned, {len(failures)} failures, {len(skipped)} skipped')
+
+    elapsed = time.time() - start
+    if failures:
+        plural = 's' if len(failures) > 1 else ''
+        if len(failures) == len(scan_files):
+            return f'Failed. All {len(scan_files)} rescan requests failed'
+        else:
+            return f'Partial. {len(scan_files) - len(failures)} successful, {len(failures)} failure{plural} against: {", ".join(failures)}'
+
+    return f'Ok. {len(all_scan_files)} adapters detected: {len(scan_files)} rescanned, {len(skipped)} skipped, {len(failures)} failed ({elapsed:.2f}s)'
+
 ##################################
 
 
@@ -9601,6 +9662,10 @@ def _get_parser():
     parser_agent.add_argument(
         '--daemon-id',
         help='daemon id for agent')
+
+    parser_agent = subparsers.add_parser(
+        'disk-rescan', help='rescan all HBAs to detect new/removed devices')
+    parser_agent.set_defaults(func=command_rescan_disks)
 
     return parser
 
