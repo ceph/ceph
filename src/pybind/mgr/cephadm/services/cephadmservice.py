@@ -40,7 +40,8 @@ class CephadmDaemonDeploySpec:
                  ports: Optional[List[int]] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
-                 extra_container_args: Optional[List[str]] = None):
+                 extra_container_args: Optional[List[str]] = None,
+                 ):
         """
         A data struction to encapsulate `cephadm deploy ...
         """
@@ -178,10 +179,6 @@ class CephadmService(metaclass=ABCMeta):
             rank: Optional[int] = None,
             rank_generation: Optional[int] = None,
     ) -> CephadmDaemonDeploySpec:
-        try:
-            eca = spec.extra_container_args
-        except AttributeError:
-            eca = None
         return CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
@@ -192,7 +189,8 @@ class CephadmService(metaclass=ABCMeta):
             ip=ip,
             rank=rank,
             rank_generation=rank_generation,
-            extra_container_args=eca,
+            extra_container_args=spec.extra_container_args if hasattr(
+                spec, 'extra_container_args') else None,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:

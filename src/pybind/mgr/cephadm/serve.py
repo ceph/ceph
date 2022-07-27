@@ -1132,6 +1132,12 @@ class CephadmServe:
                 except AttributeError:
                     eca = None
 
+                if daemon_spec.service_name in self.mgr.spec_store:
+                    configs = self.mgr.spec_store[daemon_spec.service_name].spec.custom_configs
+                    if configs is not None:
+                        daemon_spec.final_config.update(
+                            {'custom_config_files': [c.to_json() for c in configs]})
+
                 if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
                     await self._registry_login(daemon_spec.host, json.loads(str(self.mgr.get_store('registry_credentials'))))
 

@@ -2760,10 +2760,46 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
         sg = SNMPGateway.init(ctx, fsid, daemon_id)
         sg.create_daemon_conf()
 
+    _write_custom_conf_files(ctx, daemon_type, str(daemon_id), fsid, uid, gid)
 
-def get_parm(option):
-    # type: (str) -> Dict[str, str]
 
+def _write_custom_conf_files(ctx: CephadmContext, daemon_type: str, daemon_id: str, fsid: str, uid: int, gid: int) -> None:
+    # mostly making this its own function to make unit testing easier
+    if 'config_json' not in ctx or not ctx.config_json:
+        return
+    config_json = get_custom_config_files(ctx.config_json)
+    custom_config_dir = os.path.join(ctx.data_dir, fsid, 'custom_config_files', f'{daemon_type}.{daemon_id}')
+    if not os.path.exists(custom_config_dir):
+        makedirs(custom_config_dir, uid, gid, 0o755)
+    mandatory_keys = ['mount_path', 'content']
+    for ccf in config_json['custom_config_files']:
+        if all(k in ccf for k in mandatory_keys):
+            file_path = os.path.join(custom_config_dir, os.path.basename(ccf['mount_path']))
+            with open(file_path, 'w+', encoding='utf-8') as f:
+                os.fchown(f.fileno(), uid, gid)
+                os.fchmod(f.fileno(), 0o600)
+                f.write(ccf['content'])
+
+
+def get_parm(option: str) -> Dict[str, str]:
+    js = _get_config_json(option)
+    # custom_config_files is a special field that may be in the config
+    # dict. It is used for mounting custom config files into daemon's containers
+    # and should be accessed through the "get_custom_config_files" function.
+    # For get_parm we need to discard it.
+    js.pop('custom_config_files', None)
+    return js
+
+
+def get_custom_config_files(option: str) -> Dict[str, List[Dict[str, str]]]:
+    js = _get_config_json(option)
+    res: Dict[str, List[Dict[str, str]]] = {'custom_config_files': []}
+    if 'custom_config_files' in js:
+        res['custom_config_files'] = js['custom_config_files']
+    return res
+
+
+def _get_config_json(option: str) -> Dict[str, Any]:
     if not option:
         return dict()
 
@@ -5789,16 +5825,30 @@ def extract_uid_gid_monitoring(ctx, daemon_type):
     return uid, gid
 
 
-def get_container_with_extra_args(ctx: CephadmContext,
-                                  fsid: str, daemon_type: str, daemon_id: Union[int, str],
-                                  privileged: bool = False,
-                                  ptrace: bool = False,
-                                  container_args: Optional[List[str]] = None) -> 'CephContainer':
-    # wrapper for get_container that additionally adds extra_container_args if present
-    # used for deploying daemons with additional podman/docker container arguments
+def get_deployment_container(ctx: CephadmContext,
+                             fsid: str, daemon_type: str, daemon_id: Union[int, str],
+                             privileged: bool = False,
+                             ptrace: bool = False,
+                             container_args: Optional[List[str]] = None) -> 'CephContainer':
+    # wrapper for get_container specifically for containers made during the `cephadm deploy`
+    # command. Adds some extra things such as extra container args and custom config files
     c = get_container(ctx, fsid, daemon_type, daemon_id, privileged, ptrace, container_args)
     if 'extra_container_args' in ctx and ctx.extra_container_args:
         c.container_args.extend(ctx.extra_container_args)
+    if 'config_json' in ctx and ctx.config_json:
+        conf_files = get_custom_config_files(ctx.config_json)
+        mandatory_keys = ['mount_path', 'content']
+        for conf in conf_files['custom_config_files']:
+            if all(k in conf for k in mandatory_keys):
+                mount_path = conf['mount_path']
+                file_path = os.path.join(
+                    ctx.data_dir,
+                    fsid,
+                    'custom_config_files',
+                    f'{daemon_type}.{daemon_id}',
+                    os.path.basename(mount_path)
+                )
+                c.volume_mounts[file_path] = mount_path
     return c
 
 
@@ -5843,8 +5893,8 @@ def command_deploy(ctx):
         uid, gid = extract_uid_gid(ctx)
         make_var_run(ctx, ctx.fsid, uid, gid)
 
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id,
-                                          ptrace=ctx.allow_ptrace)
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id,
+                                     ptrace=ctx.allow_ptrace)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       osd_fsid=ctx.osd_fsid,
@@ -5868,7 +5918,7 @@ def command_deploy(ctx):
                             'contain arg for {}'.format(daemon_type.capitalize(), ', '.join(required_args)))
 
         uid, gid = extract_uid_gid_monitoring(ctx, daemon_type)
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
@@ -5880,7 +5930,7 @@ def command_deploy(ctx):
         config, keyring = get_config_and_keyring(ctx)
         # TODO: extract ganesha uid/gid (997, 994) ?
         uid, gid = extract_uid_gid(ctx)
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       reconfig=ctx.reconfig,
@@ -5889,7 +5939,7 @@ def command_deploy(ctx):
     elif daemon_type == CephIscsi.daemon_type:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = extract_uid_gid(ctx)
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       reconfig=ctx.reconfig,
@@ -5903,7 +5953,7 @@ def command_deploy(ctx):
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(ctx, ctx.fsid, daemon_id)
         uid, gid = haproxy.extract_uid_gid_haproxy()
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
@@ -5911,7 +5961,7 @@ def command_deploy(ctx):
     elif daemon_type == Keepalived.daemon_type:
         keepalived = Keepalived.init(ctx, ctx.fsid, daemon_id)
         uid, gid = keepalived.extract_uid_gid_keepalived()
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
@@ -5920,9 +5970,9 @@ def command_deploy(ctx):
         cc = CustomContainer.init(ctx, ctx.fsid, daemon_id)
         if not ctx.reconfig and not redeploy:
             daemon_ports.extend(cc.ports)
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id,
-                                          privileged=cc.privileged,
-                                          ptrace=ctx.allow_ptrace)
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id,
+                                     privileged=cc.privileged,
+                                     ptrace=ctx.allow_ptrace)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
                       uid=cc.uid, gid=cc.gid, config=None,
                       keyring=None, reconfig=ctx.reconfig,
@@ -5937,7 +5987,7 @@ def command_deploy(ctx):
 
     elif daemon_type == SNMPGateway.daemon_type:
         sc = SNMPGateway.init(ctx, ctx.fsid, daemon_id)
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
                       sc.uid, sc.gid,
                       ports=daemon_ports)
