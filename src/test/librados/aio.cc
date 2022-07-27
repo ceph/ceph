@@ -1147,9 +1147,9 @@ TEST(LibRadosAioEC, RoundTripAppend) {
   ASSERT_EQ("", test_data.init());
   ASSERT_EQ(0, rados_aio_create_completion2(nullptr,
 	      nullptr, &my_completion));
-  int requires;
-  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(test_data.m_ioctx, &requires));
-  ASSERT_NE(0, requires);
+  int req;
+  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(test_data.m_ioctx, &req));
+  ASSERT_NE(0, req);
   uint64_t alignment;
   ASSERT_EQ(0, rados_ioctx_pool_required_alignment2(test_data.m_ioctx, &alignment));
   ASSERT_NE(0U, alignment);

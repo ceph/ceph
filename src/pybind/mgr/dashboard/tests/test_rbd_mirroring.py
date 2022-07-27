@@ -10,8 +10,10 @@ except ImportError:
     import unittest.mock as mock
 
 from .. import mgr
+from ..controllers.orchestrator import Orchestrator
 from ..controllers.rbd_mirroring import RbdMirroring, \
-    RbdMirroringPoolBootstrap, RbdMirroringSummary, get_daemons, get_pools
+    RbdMirroringPoolBootstrap, RbdMirroringStatus, RbdMirroringSummary, \
+    get_daemons, get_pools
 from ..controllers.summary import Summary
 from ..services import progress
 from ..tests import ControllerTestCase
@@ -279,3 +281,25 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
 
         summary = self.json_body()['rbd_mirroring']
         self.assertEqual(summary, {'errors': 0, 'warnings': 1})
+
+
+class RbdMirroringStatusControllerTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([RbdMirroringStatus, Orchestrator])
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_status(self, instance):
+        status = {'available': False, 'description': ''}
+        fake_client = mock.Mock()
+        fake_client.status.return_value = status
+        instance.return_value = fake_client
+
+        self._get('/ui-api/block/mirroring/status')
+        self.assertStatus(200)
+        self.assertJsonBody({'available': True, 'message': None})
+
+    def test_configure(self):
+        self._post('/ui-api/block/mirroring/configure')
+        self.assertStatus(200)

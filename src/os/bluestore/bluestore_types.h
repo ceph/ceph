@@ -16,8 +16,9 @@
 #define CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 
 #include <ostream>
-#include <bitset>
 #include <type_traits>
+#include <vector>
+#include <array>
 #include "include/mempool.h"
 #include "include/types.h"
 #include "include/interval_set.h"
@@ -26,6 +27,7 @@
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
 #include "include/mempool.h"
+#include "include/ceph_hash.h"
 
 namespace ceph {
   class Formatter;
@@ -238,17 +240,18 @@ static inline bool operator!=(const bluestore_extent_ref_map_t& l,
   return !(l == r);
 }
 
-/// blob_use_tracker: a set of per-alloc unit ref counters to track blob usage
+/// blob_use_tracker: a set of per-alloc unit ref buckets to track blob usage
 struct bluestore_blob_use_tracker_t {
   // N.B.: There is no need to minimize au_size/num_au
   //   as much as possible (e.g. have just a single byte for au_size) since:
   //   1) Struct isn't packed hence it's padded. And even if it's packed see 2)
   //   2) Mem manager has its own granularity, most probably >= 8 bytes
   //
-  uint32_t au_size; // Allocation (=tracking) unit size,
-                    // == 0 if uninitialized
-  uint32_t num_au;  // Amount of allocation units tracked
-                    // == 0 if single unit or the whole blob is tracked
+  uint32_t au_size;  // Allocation (=tracking) unit size,
+                     // == 0 if uninitialized
+  uint32_t num_au;   // Amount of allocation units tracked
+                     // == 0 if single unit or the whole blob is tracked
+  uint32_t alloc_au; // Amount of allocation units allocated
                        
   union {
     uint32_t* bytes_per_au;
@@ -256,7 +259,7 @@ struct bluestore_blob_use_tracker_t {
   };
   
   bluestore_blob_use_tracker_t()
-    : au_size(0), num_au(0), bytes_per_au(nullptr) {
+    : au_size(0), num_au(0), alloc_au(0), bytes_per_au(nullptr) {
   }
   bluestore_blob_use_tracker_t(const bluestore_blob_use_tracker_t& tracker);
   bluestore_blob_use_tracker_t& operator=(const bluestore_blob_use_tracker_t& rhs);
@@ -265,15 +268,11 @@ struct bluestore_blob_use_tracker_t {
   }
 
   void clear() {
-    if (num_au != 0) {
-      delete[] bytes_per_au;
-      mempool::get_pool(
-        mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
-          adjust_count(-1, -sizeof(uint32_t) * num_au);
-    }
+    release(alloc_au, bytes_per_au);
+    num_au = 0;
+    alloc_au = 0;
     bytes_per_au = 0;
     au_size = 0;
-    num_au = 0;
   }
 
   uint32_t get_referenced_bytes() const {
@@ -309,7 +308,6 @@ struct bluestore_blob_use_tracker_t {
       ceph_assert(_num_au <= num_au);
       if (_num_au) {
         num_au = _num_au; // bytes_per_au array is left unmodified
-
       } else {
         clear();
       }
@@ -335,15 +333,17 @@ struct bluestore_blob_use_tracker_t {
       if (_num_au > num_au) {
 	auto old_bytes = bytes_per_au;
 	auto old_num_au = num_au;
-	num_au = _num_au;
-	allocate();
+	auto old_alloc_au = alloc_au;
+	alloc_au = num_au = 0; // to bypass an assertion in allocate()
+	bytes_per_au = nullptr;
+	allocate(_num_au);
 	for (size_t i = 0; i < old_num_au; i++) {
 	  bytes_per_au[i] = old_bytes[i];
 	}
 	for (size_t i = old_num_au; i < num_au; i++) {
 	  bytes_per_au[i] = 0;
 	}
-	delete[] old_bytes;
+	release(old_alloc_au, old_bytes);
       }
     }
   }
@@ -408,12 +408,14 @@ struct bluestore_blob_use_tracker_t {
     clear();
     denc_varint(au_size, p);
     if (au_size) {
-      denc_varint(num_au, p);
-      if (!num_au) {
+      uint32_t _num_au;
+      denc_varint(_num_au, p);
+      if (!_num_au) {
+        num_au = 0;
         denc_varint(total_bytes, p);
       } else {
-        allocate();
-        for (size_t i = 0; i < num_au; ++i) {
+        allocate(_num_au);
+        for (size_t i = 0; i < _num_au; ++i) {
 	  denc_varint(bytes_per_au[i], p);
         }
       }
@@ -423,7 +425,8 @@ struct bluestore_blob_use_tracker_t {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bluestore_blob_use_tracker_t*>& o);
 private:
-  void allocate();
+  void allocate(uint32_t _num_au);
+  void release(uint32_t _num_au, uint32_t* ptr);
 };
 WRITE_CLASS_DENC(bluestore_blob_use_tracker_t)
 std::ostream& operator<<(std::ostream& out, const bluestore_blob_use_tracker_t& rm);
@@ -1029,7 +1032,10 @@ struct bluestore_onode_t {
   }
 
   void clear_omap_flag() {
-    clear_flag(FLAG_OMAP);
+    clear_flag(FLAG_OMAP |
+	       FLAG_PGMETA_OMAP |
+	       FLAG_PERPOOL_OMAP |
+	       FLAG_PERPG_OMAP);
   }
 
   DENC(bluestore_onode_t, v, p) {
@@ -1101,7 +1107,7 @@ WRITE_CLASS_DENC(bluestore_deferred_transaction_t)
 struct bluestore_compression_header_t {
   uint8_t type = Compressor::COMP_ALG_NONE;
   uint32_t length = 0;
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
 
   bluestore_compression_header_t() {}
   bluestore_compression_header_t(uint8_t _type)
@@ -1121,5 +1127,250 @@ struct bluestore_compression_header_t {
 };
 WRITE_CLASS_DENC(bluestore_compression_header_t)
 
+template <template <typename> typename V, class COUNTER_TYPE = int32_t>
+class ref_counter_2hash_tracker_t {
+  size_t num_non_zero = 0;
+  size_t num_buckets = 0;
+  V<COUNTER_TYPE> buckets1;
+  V<COUNTER_TYPE> buckets2;
+
+public:
+  ref_counter_2hash_tracker_t(uint64_t mem_cap) {
+    num_buckets = mem_cap / sizeof(COUNTER_TYPE) / 2;
+    ceph_assert(num_buckets);
+    buckets1.resize(num_buckets);
+    buckets2.resize(num_buckets);
+    reset();
+  }
+
+  size_t get_num_buckets() const {
+    return num_buckets;
+  }
+
+  void inc(const char* hash_val, size_t hash_val_len, int n) {
+    auto h = ceph_str_hash_rjenkins((const char*)hash_val, hash_val_len) %
+      num_buckets;
+    if (buckets1[h] == 0 && n) {
+      ++num_non_zero;
+    } else if (buckets1[h] == -n) {
+      --num_non_zero;
+    }
+    buckets1[h] += n;
+    h = ceph_str_hash_linux((const char*)hash_val, hash_val_len) % num_buckets;
+    if (buckets2[h] == 0 && n) {
+      ++num_non_zero;
+    } else if (buckets2[h] == -n) {
+      --num_non_zero;
+    }
+    buckets2[h] += n;
+  }
+
+  bool test_hash_conflict(
+    const char* hash_val1,
+    const char* hash_val2,
+    size_t hash_val_len) const {
+
+    auto h1 = ceph_str_hash_rjenkins((const char*)hash_val1, hash_val_len);
+    auto h2 = ceph_str_hash_rjenkins((const char*)hash_val2, hash_val_len);
+    auto h3 = ceph_str_hash_linux((const char*)hash_val1, hash_val_len);
+    auto h4 = ceph_str_hash_linux((const char*)hash_val2, hash_val_len);
+    return ((h1 % num_buckets) == (h2 % num_buckets)) &&
+      ((h3 % num_buckets) == (h4 % num_buckets));
+  }
+
+  bool test_all_zero(const char* hash_val, size_t hash_val_len) const {
+    auto h = ceph_str_hash_rjenkins((const char*)hash_val, hash_val_len);
+    if (buckets1[h % num_buckets] != 0) {
+      return false;
+    }
+    h = ceph_str_hash_linux((const char*)hash_val, hash_val_len);
+    return buckets2[h % num_buckets] == 0;
+  }
+
+  // returns number of mismatching buckets
+  size_t count_non_zero() const {
+    return num_non_zero;
+  }
+  void reset() {
+    for (size_t i = 0; i < num_buckets; i++) {
+      buckets1[i] = 0;
+      buckets2[i] = 0;
+    }
+    num_non_zero = 0;
+  }
+};
+
+class shared_blob_2hash_tracker_t
+  : public ref_counter_2hash_tracker_t<mempool::bluestore_fsck::vector> {
+
+  static const size_t hash_input_len = 3;
+
+  typedef std::array<uint64_t, hash_input_len> hash_input_t;
+
+  static size_t get_hash_input_size() {
+    return hash_input_len * sizeof(hash_input_t::value_type);
+  }
+
+  inline hash_input_t build_hash_input(uint64_t sbid, uint64_t offset) const;
+
+  size_t au_void_bits = 0;
+
+
+public:
+  shared_blob_2hash_tracker_t(uint64_t mem_cap, size_t alloc_unit)
+    : ref_counter_2hash_tracker_t(mem_cap) {
+    ceph_assert(alloc_unit);
+    ceph_assert(isp2(alloc_unit));
+    au_void_bits = ctz(alloc_unit);
+  }
+  void inc(uint64_t sbid, uint64_t offset, int n);
+  void inc_range(uint64_t sbid, uint64_t offset, uint32_t len, int n);
+
+  bool test_hash_conflict(
+    uint64_t sbid,
+    uint64_t offset,
+    uint64_t sbid2,
+    uint64_t offset2) const;
+  bool test_all_zero(
+    uint64_t sbid,
+    uint64_t offset) const;
+  bool test_all_zero_range(
+    uint64_t sbid,
+    uint64_t offset,
+    uint32_t len) const;
+};
+
+class sb_info_t {
+  // subzero value indicates (potentially) stray blob,
+  // i.e. blob that has got no real references from onodes
+  int64_t sbid = 0;
+
+public:
+  enum {
+    INVALID_POOL_ID = INT64_MIN
+  };
+
+  int64_t pool_id = INVALID_POOL_ID;
+  // subzero value indicates compressed_allocated as well
+  int32_t allocated_chunks = 0;
+
+  sb_info_t(int64_t _sbid = 0) : sbid(_sbid)
+  {
+  }
+  bool operator< (const sb_info_t& other) const {
+    return std::abs(sbid) < std::abs(other.sbid);
+  }
+  bool operator< (const uint64_t& other_sbid) const {
+    return uint64_t(std::abs(sbid)) < other_sbid;
+  }
+  bool is_stray() const {
+    return sbid < 0;
+  }
+  uint64_t get_sbid() const {
+    return uint64_t(std::abs(sbid));
+  }
+  void adopt() {
+    sbid = std::abs(sbid);
+  }
+} __attribute__((packed));
+
+// Space-efficient container to keep a set of sb_info structures
+// given that the majority of entries are appended in a proper id-sorted
+// order. Hence one can keep them in a regular vector and apply binary search
+// whenever specific entry to be found.
+// For the rare occasions when out-of-order append takes place - an auxilliary
+// regular map is used.
+struct sb_info_space_efficient_map_t {
+  // large array sorted by the user
+  mempool::bluestore_fsck::vector<sb_info_t> items;
+  // small additional set of items we maintain sorting ourselves
+  // this would never keep an entry with id > items.back().id
+  mempool::bluestore_fsck::vector<sb_info_t> aux_items;
+
+  sb_info_t& add_maybe_stray(uint64_t sbid) {
+    return _add(-int64_t(sbid));
+  }
+  sb_info_t& add_or_adopt(uint64_t sbid) {
+    auto& r = _add(sbid);
+    r.adopt();
+    return r;
+  }
+  auto find(uint64_t id) {
+    if (items.size() != 0) {
+      auto it = std::lower_bound(
+	items.begin(),
+	items.end() - 1,
+	id,
+	[](const sb_info_t& a, const uint64_t& b) {
+	  return a < b;
+	});
+      if (it->get_sbid() == id) {
+	return it;
+      }
+      if (aux_items.size() != 0) {
+	auto it = std::lower_bound(
+	  aux_items.begin(),
+	  aux_items.end(),
+	  id,
+	  [](const sb_info_t& a, const uint64_t& b) {
+	    return a < b;
+	  });
+	if (it->get_sbid() == id) {
+	  return it;
+	}
+      }
+    }
+    return items.end();
+  }
+  // enumerates strays, order isn't guaranteed.
+  void foreach_stray(std::function<void(const sb_info_t&)> cb) {
+    for (auto& sbi : items) {
+      if (sbi.is_stray()) {
+	cb(sbi);
+      }
+    }
+    for (auto& sbi : aux_items) {
+      if (sbi.is_stray()) {
+	cb(sbi);
+      }
+    }
+  }
+  auto end() {
+    return items.end();
+  }
+
+  void shrink() {
+    items.shrink_to_fit();
+    aux_items.shrink_to_fit();
+  }
+  void clear() {
+    items.clear();
+    aux_items.clear();
+    shrink();
+  }
+private:
+  sb_info_t& _add(int64_t id) {
+    uint64_t n_id = uint64_t(std::abs(id));
+    if (items.size() == 0 || n_id > items.back().get_sbid()) {
+      return items.emplace_back(id);
+    }
+    auto it = find(n_id);
+    if (it != items.end()) {
+      return *it;
+    }
+    if (aux_items.size() == 0 || n_id > aux_items.back().get_sbid()) {
+      return aux_items.emplace_back(id);
+    }
+    // do sorted insertion, may be expensive!
+    it = std::upper_bound(
+      aux_items.begin(),
+      aux_items.end(),
+      n_id,
+      [](const uint64_t& a, const sb_info_t& b) {
+	return a < b.get_sbid();
+      });
+    return *aux_items.emplace(it, id);
+  }
+};
 
 #endif

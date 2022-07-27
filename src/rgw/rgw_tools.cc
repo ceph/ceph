@@ -80,17 +80,6 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
 	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
       }
-      // set pg_num_min
-      int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
-      r = rados->mon_command(
-	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
-	pool.name + "\", \"var\": \"pg_num_min\", \"val\": \"" +
-	stringify(min) + "\"}",
-	inbl, NULL, NULL);
-      if (r < 0) {
-	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_num_min on "
-		 << pool.name << dendl;
-      }
       // set recovery_priority
       int p = g_conf().get_val<uint64_t>("rgw_rados_pool_recovery_priority");
       r = rados->mon_command(
@@ -112,54 +101,13 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
-{
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  char buf[16];
-  if (shard_id) {
-    *shard_id = val % max_shards;
-  }
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
+map<string, bufferlist>* no_change_attrs() {
+  static map<string, bufferlist> no_change;
+  return &no_change;
 }
 
-void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name)
-{
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  val ^= ceph_str_hash_linux(section.c_str(), section.size());
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
-}
-
-void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
-{
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", shard_id);
-  name = prefix + buf;
-}
-
-int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
-			    const string& str, uint32_t *perm)
-{
-  list<string> strs;
-  get_str_list(str, strs);
-  list<string>::iterator iter;
-  uint32_t v = 0;
-  for (iter = strs.begin(); iter != strs.end(); ++iter) {
-    string& s = *iter;
-    for (int i = 0; mapping[i].type_name; i++) {
-      if (s.compare(mapping[i].type_name) == 0)
-        v |= mapping[i].flag;
-    }
-  }
-
-  *perm = v;
-  return 0;
-}
-
-int rgw_put_system_obj(const DoutPrefixProvider *dpp, 
-                       RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
+                       const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
@@ -169,76 +117,65 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp,
 
   rgw_raw_obj obj(pool, oid);
 
-  auto sysobj = obj_ctx.get_obj(obj);
-  int ret = sysobj.wop()
-                  .set_objv_tracker(objv_tracker)
-                  .set_exclusive(exclusive)
-                  .set_mtime(set_mtime)
-                  .set_attrs(*pattrs)
-                  .write(dpp, data, y);
+  auto sysobj = svc_sysobj->get_obj(obj);
+  int ret;
+
+  if (pattrs != no_change_attrs()) {
+    ret = sysobj.wop()
+      .set_objv_tracker(objv_tracker)
+      .set_exclusive(exclusive)
+      .set_mtime(set_mtime)
+      .set_attrs(*pattrs)
+      .write(dpp, data, y);
+  } else {
+    ret = sysobj.wop()
+      .set_objv_tracker(objv_tracker)
+      .set_exclusive(exclusive)
+      .set_mtime(set_mtime)
+      .write_data(dpp, data, y);
+  }
 
   return ret;
 }
 
-int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,
+int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
+                        const rgw_pool& pool, const std::string& key,
+                        RGWObjVersionTracker *objv_tracker,
+			real_time *pmtime, optional_yield y,
+			std::map<std::string, bufferlist> *pattrs)
+{
+  rgw_raw_obj obj(pool, key);
+  auto sysobj = svc_sysobj->get_obj(obj);
+  return sysobj.rop()
+               .set_attrs(pattrs)
+               .set_last_mod(pmtime)
+               .stat(y, dpp);
+}
+
+
+int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool, const string& key, bufferlist& bl,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y,
+                       const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info,
 		       boost::optional<obj_version> refresh_version, bool raw_attrs)
 {
-  bufferlist::iterator iter;
-  int request_len = READ_CHUNK_LEN;
-  rgw_raw_obj obj(pool, key);
-
-  obj_version original_readv;
-  if (objv_tracker && !objv_tracker->read_version.empty()) {
-    original_readv = objv_tracker->read_version;
-  }
-
-  do {
-    auto sysobj = obj_ctx.get_obj(obj);
-    auto rop = sysobj.rop();
-
-    int ret = rop.set_attrs(pattrs)
-                 .set_last_mod(pmtime)
-                 .set_objv_tracker(objv_tracker)
-                 .set_raw_attrs(raw_attrs)
-                 .stat(y, dpp);
-    if (ret < 0)
-      return ret;
-
-    ret = rop.set_cache_info(cache_info)
-             .set_refresh_version(refresh_version)
-             .read(dpp, &bl, y);
-    if (ret == -ECANCELED) {
-      /* raced, restart */
-      if (!original_readv.empty()) {
-        /* we were asked to read a specific obj_version, failed */
-        return ret;
-      }
-      if (objv_tracker) {
-        objv_tracker->read_version.clear();
-      }
-      sysobj.invalidate();
-      continue;
-    }
-    if (ret < 0)
-      return ret;
-
-    if (ret < request_len)
-      break;
-    bl.clear();
-    request_len *= 2;
-  } while (true);
-
-  return 0;
+  const rgw_raw_obj obj(pool, key);
+  auto sysobj = svc_sysobj->get_obj(obj);
+  auto rop = sysobj.rop();
+  return rop.set_attrs(pattrs)
+            .set_last_mod(pmtime)
+            .set_objv_tracker(objv_tracker)
+            .set_raw_attrs(raw_attrs)
+            .set_cache_info(cache_info)
+            .set_refresh_version(refresh_version)
+            .read(dpp, &bl, y);
 }
 
 int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
                           RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(rgw_raw_obj{pool, oid});
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
   rgw_raw_obj obj(pool, oid);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
@@ -482,7 +419,6 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
-  RGWObjectCtx obj_ctx(store);
   std::unique_ptr<rgw::sal::Bucket> b;
   store->get_bucket(NULL, bucket_info, &b);
   std::unique_ptr<rgw::sal::Object> obj = b->get_object(key);
@@ -493,7 +429,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   std::unique_ptr<rgw::sal::Writer> processor;
   processor = store->get_atomic_writer(dpp, y, std::move(obj),
-				       owner.get_id(), obj_ctx,
+				       owner.get_id(),
 				       nullptr, olh_epoch, req_id);
 
   int ret = processor->prepare(y);
@@ -505,7 +441,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  const auto& compression_type = store->get_zone()->get_params().get_compression_type(bucket_info.placement_rule);
+  const auto& compression_type = store->get_compression_type(bucket_info.placement_rule);
   if (compression_type != "none") {
     plugin = Compressor::create(store->ctx(), compression_type);
     if (!plugin) {

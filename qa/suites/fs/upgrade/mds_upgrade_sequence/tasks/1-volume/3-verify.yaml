@@ -1,7 +1,0 @@
-tasks:
-- cephadm.shell:
-    host.a:
-      - ceph fs dump
-      - ceph --format=json fs dump | jq -e ".filesystems | length == 1"
-      - ceph --format=json mds versions | jq -e ". | add == 4"
-- fs.pre_upgrade_save:

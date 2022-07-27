@@ -1854,8 +1854,8 @@ public:
   }
   osd_id_t pop_osd() {
     ceph_assert(!is_empty());
-    auto ret = osds.back();
-    osds.pop_back();
+    auto ret = osds.front();
+    osds.pop_front();
     return ret.second;
   }
 
@@ -1864,7 +1864,7 @@ public:
 
   osd_ord_t get_ord() const {
     return osds.empty() ? std::make_tuple(false, eversion_t())
-      : osds.back().first;
+      : osds.front().first;
   }
 
   bool is_empty() const { return osds.empty(); }
@@ -3238,6 +3238,8 @@ void PeeringState::split_into(
   child->info.stats.parent_split_bits = split_bits;
   info.stats.stats_invalid = true;
   child->info.stats.stats_invalid = true;
+  child->info.stats.objects_trimmed = 0;
+  child->info.stats.snaptrim_duration = 0.0;
   child->info.last_epoch_started = info.last_epoch_started;
   child->info.last_interval_started = info.last_interval_started;
 
@@ -3512,6 +3514,7 @@ void PeeringState::update_calc_stats()
   info.stats.last_epoch_clean = info.history.last_epoch_clean;
 
   info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
+  info.stats.log_dups_size = pg_log.get_log().dups.size();
   info.stats.ondisk_log_size = info.stats.log_size;
   info.stats.log_start = pg_log.get_tail();
   info.stats.ondisk_log_start = pg_log.get_tail();
@@ -4162,6 +4165,8 @@ void PeeringState::append_log(
 
   psdout(10) << __func__ << " approx pg log length =  "
 	     << pg_log.get_log().approx_size() << dendl;
+  psdout(10) << __func__ << " dups pg log length =  "
+	     << pg_log.get_log().dups.size() << dendl;
   psdout(10) << __func__ << " transaction_applied = "
 	     << transaction_applied << dendl;
   if (!transaction_applied || async)
@@ -6224,6 +6229,8 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   if (ps->pool.info.has_flag(pg_pool_t::FLAG_CREATING)) {
     pl->send_pg_created(pgid);
   }
+
+  psdout(1) << __func__ << " AllReplicasActivated Activating complete" << dendl;
 
   ps->info.history.last_epoch_started = ps->info.last_epoch_started;
   ps->info.history.last_interval_started = ps->info.last_interval_started;

@@ -151,7 +151,7 @@ You can identify which client(s) are using unpatched ceph client code with::
 
   ceph health detail
 
-Clients global_id reclaim rehavior can also seen in the
+Clients' global_id reclaim behavior can also seen in the
 ``global_id_status`` field in the dump of clients connected to an
 individual monitor (``reclaim_insecure`` means the client is
 unpatched and is contributing to this health alert)::
@@ -438,6 +438,25 @@ The ``sortbitwise`` flag must be set before luminous v12.y.z or newer
 OSDs can start.  You can safely set the flag with::
 
   ceph osd set sortbitwise
+
+OSD_FILESTORE
+__________________
+
+Filestore has been deprecated, considering that Bluestore has been the default
+objectstore for quite some time. Warn if OSDs are running Filestore.
+
+The 'mclock_scheduler' is not supported for filestore OSDs. Therefore, the
+default 'osd_op_queue' is set to 'wpq' for filestore OSDs and is enforced
+even if the user attempts to change it.
+
+Filestore OSDs can be listed with::
+
+  ceph report | jq -c '."osd_metadata" | .[] | select(.osd_objectstore | contains("filestore")) | {id, osd_objectstore}'
+
+If it is not feasible to migrate Filestore OSDs to Bluestore immediately, you can silence
+this warning temporarily with::
+
+  ceph health mute OSD_FILESTORE
 
 POOL_FULL
 _________

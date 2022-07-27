@@ -1,6 +1,6 @@
 # Ceph - a scalable distributed storage system
 
-Please see http://ceph.com/ for current info.
+Please see https://ceph.com/ for current info.
 
 
 ## Contributing Code
@@ -97,6 +97,14 @@ for a couple of external dependencies:
 	cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" \
 	-DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-Og -g3 -gdwarf-4" \
 	..
+
+Ceph has several bundled dependencies such as Boost, RocksDB and Arrow. By
+default, cmake will build these bundled dependencies from source instead of
+using libraries that are already installed on the system. You can opt-in to
+using these system libraries, provided they meet the minimum version required
+by Ceph, with cmake options like `WITH_SYSTEM_BOOST`:
+
+	cmake -DWITH_SYSTEM_BOOST=ON [...]
 
 To view an exhaustive list of -D options, you can invoke `cmake` with:
 
@@ -213,3 +221,6 @@ To build the documentation, ensure that you are in the top-level
 
 	admin/build-doc
 
+## Reporting Issues
+
+To report an issue and view existing issues, please visit https://tracker.ceph.com/projects/ceph.

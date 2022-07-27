@@ -5,6 +5,7 @@ import errno
 import logging
 from hashlib import md5
 from typing import Dict, Union
+from pathlib import Path
 
 import cephfs
 
@@ -15,6 +16,7 @@ from ..trash import create_trashcan, open_trashcan
 from ...fs_util import get_ancestor_xattr
 from ...exception import MetadataMgrException, VolumeException
 from .auth_metadata import AuthMetadataManager
+from .subvolume_attrs import SubvolumeStates
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +117,7 @@ class SubvolumeBase(object):
     @property
     def state(self):
         """ Subvolume state, one of SubvolumeStates """
-        raise NotImplementedError
+        return SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
 
     @property
     def subvol_type(self):
@@ -128,6 +130,15 @@ class SubvolumeBase(object):
         raise NotImplementedError
 
     def load_config(self):
+        try:
+            self.fs.stat(self.legacy_config_path)
+            self.legacy_mode = True
+        except cephfs.Error as e:
+            pass
+
+        log.debug("loading config "
+                  "'{0}' [mode: {1}]".format(self.subvolname, "legacy"
+                                             if self.legacy_mode else "new"))
         if self.legacy_mode:
             self.metadata_mgr = MetadataManager(self.fs,
                                                 self.legacy_config_path,
@@ -250,6 +261,11 @@ class SubvolumeBase(object):
         if uid is not None and gid is not None:
             self.fs.chown(path, uid, gid)
 
+        # set mode
+        mode = attrs.get("mode", None)
+        if mode is not None:
+            self.fs.lchmod(path, mode)
+
     def _resize(self, path, newsize, noshrink):
         try:
             newsize = int(newsize)
@@ -313,8 +329,16 @@ class SubvolumeBase(object):
             self.fs.stat(self.base_path)
             self.metadata_mgr.refresh()
             log.debug("loaded subvolume '{0}'".format(self.subvolname))
+            subvolpath = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH)
+            # subvolume with retained snapshots has empty path, don't mistake it for
+            # fabricated metadata.
+            if (not self.legacy_mode and self.state != SubvolumeStates.STATE_RETAINED and
+                self.base_path.decode('utf-8') != str(Path(subvolpath).parent)):
+                raise MetadataMgrException(-errno.ENOENT, 'fabricated .meta')
         except MetadataMgrException as me:
-            if me.errno == -errno.ENOENT and not self.legacy_mode:
+            if me.errno in (-errno.ENOENT, -errno.EINVAL) and not self.legacy_mode:
+                log.warn("subvolume '{0}', {1}, "
+                          "assuming legacy_mode".format(self.subvolname, me.error_str))
                 self.legacy_mode = True
                 self.load_config()
                 self.discover()
@@ -400,3 +424,64 @@ class SubvolumeBase(object):
                 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
                 'pool_namespace': pool_namespace,
                 'features': self.features, 'state': self.state.value}
+
+    def set_user_metadata(self, keyname, value):
+        self.metadata_mgr.add_section(MetadataManager.USER_METADATA_SECTION)
+        self.metadata_mgr.update_section(MetadataManager.USER_METADATA_SECTION, keyname, str(value))
+        self.metadata_mgr.flush()
+
+    def get_user_metadata(self, keyname):
+        try:
+            value = self.metadata_mgr.get_option(MetadataManager.USER_METADATA_SECTION, keyname)
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "key '{0}' does not exist.".format(keyname))
+            raise VolumeException(-me.args[0], me.args[1])
+        return value
+
+    def list_user_metadata(self):
+        return self.metadata_mgr.list_all_options_from_section(MetadataManager.USER_METADATA_SECTION)
+
+    def remove_user_metadata(self, keyname):
+        try:
+            ret = self.metadata_mgr.remove_option(MetadataManager.USER_METADATA_SECTION, keyname)
+            if not ret:
+                raise VolumeException(-errno.ENOENT, "key '{0}' does not exist.".format(keyname))
+            self.metadata_mgr.flush()
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "subvolume metadata not does not exist")
+            raise VolumeException(-me.args[0], me.args[1])
+
+    def get_snap_section_name(self, snapname):
+        section = "SNAP_METADATA" + "_" + snapname;
+        return section;
+
+    def set_snapshot_metadata(self, snapname, keyname, value):
+        section = self.get_snap_section_name(snapname)
+        self.metadata_mgr.add_section(section)
+        self.metadata_mgr.update_section(section, keyname, str(value))
+        self.metadata_mgr.flush()
+
+    def get_snapshot_metadata(self, snapname, keyname):
+        try:
+            value = self.metadata_mgr.get_option(self.get_snap_section_name(snapname), keyname)
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "key '{0}' does not exist.".format(keyname))
+            raise VolumeException(-me.args[0], me.args[1])
+        return value
+
+    def list_snapshot_metadata(self, snapname):
+        return self.metadata_mgr.list_all_options_from_section(self.get_snap_section_name(snapname))
+
+    def remove_snapshot_metadata(self, snapname, keyname):
+        try:
+            ret = self.metadata_mgr.remove_option(self.get_snap_section_name(snapname), keyname)
+            if not ret:
+                raise VolumeException(-errno.ENOENT, "key '{0}' does not exist.".format(keyname))
+            self.metadata_mgr.flush()
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "snapshot metadata not does not exist")
+            raise VolumeException(-me.args[0], me.args[1])

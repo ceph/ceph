@@ -45,6 +45,7 @@ enum mds_metric_t {
   MDS_HEALTH_SLOW_REQUEST,
   MDS_HEALTH_CACHE_OVERSIZED,
   MDS_HEALTH_SLOW_METADATA_IO,
+  MDS_HEALTH_DUMMY, // not a real health warning, for testing
 };
 
 inline const char *mds_metric_name(mds_metric_t m)
@@ -62,6 +63,7 @@ inline const char *mds_metric_name(mds_metric_t m)
   case MDS_HEALTH_SLOW_REQUEST: return "MDS_SLOW_REQUEST";
   case MDS_HEALTH_CACHE_OVERSIZED: return "MDS_CACHE_OVERSIZED";
   case MDS_HEALTH_SLOW_METADATA_IO: return "MDS_SLOW_METADATA_IO";
+  case MDS_HEALTH_DUMMY: return "MDS_DUMMY";
   default:
     return "???";
   }

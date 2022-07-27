@@ -255,6 +255,19 @@ struct PriCache : public PriorityCache::PriCache {
     m_cache_ratio = ratio;
   }
 
+  void shift_bins() override {
+  }
+
+  void import_bins(const std::vector<uint64_t> &intervals) override {
+  }
+
+  void set_bins(PriorityCache::Priority pri, uint64_t end_interval) override {
+  }
+
+  uint64_t get_bins(PriorityCache::Priority pri) const override {
+    return 0;
+  }
+
   std::string get_cache_name() const override {
     return m_name;
   }

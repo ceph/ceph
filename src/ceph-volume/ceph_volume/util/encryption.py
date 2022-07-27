@@ -1,29 +1,38 @@
 import base64
 import os
 import logging
-from ceph_volume import process, conf
+from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
+def get_key_size_from_conf():
+    """
+    Return the osd dmcrypt key size from config file.
+    Default is 512.
+    """
+    default_key_size = '512'
+    key_size = conf.ceph.get_safe(
+        'osd',
+        'osd_dmcrypt_key_size',
+        default='512', check_valid=False)
+
+    if key_size not in ['256', '512']:
+        logger.warning(("Invalid value set for osd_dmcrypt_key_size ({}). "
+                        "Falling back to {}bits".format(key_size, default_key_size)))
+        return default_key_size
+
+    return key_size
 
 def create_dmcrypt_key():
     """
-    Create the secret dm-crypt key used to decrypt a device.
+    Create the secret dm-crypt key (KEK) used to encrypt/decrypt the Volume Key.
     """
-    # get the customizable dmcrypt key size (in bits) from ceph.conf fallback
-    # to the default of 1024
-    dmcrypt_key_size = conf.ceph.get_safe(
-        'osd',
-        'osd_dmcrypt_key_size',
-        default=1024,
-    )
-    # The size of the key is defined in bits, so we must transform that
-    # value to bytes (dividing by 8) because we read in bytes, not bits
-    random_string = os.urandom(int(dmcrypt_key_size / 8))
+    random_string = os.urandom(128)
     key = base64.b64encode(random_string).decode('utf-8')
     return key
 
@@ -38,6 +47,8 @@ def luks_format(key, device):
     command = [
         'cryptsetup',
         '--batch-mode', # do not prompt
+        '--key-size',
+        get_key_size_from_conf(),
         '--key-file', # misnomer, should be key
         '-',          # because we indicate stdin for the key here
         'luksFormat',
@@ -83,6 +94,8 @@ def luks_open(key, device, mapping):
     """
     command = [
         'cryptsetup',
+        '--key-size',
+        get_key_size_from_conf(),
         '--key-file',
         '-',
         '--allow-discards',  # allow discards (aka TRIM) requests for device
@@ -123,6 +136,7 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
     name = 'client.osd-lockbox.%s' % osd_fsid
     config_key = 'dm-crypt/osd/%s/luks' % osd_fsid
 
+    mlogger.info(f'Running ceph config-key get {config_key}')
     stdout, stderr, returncode = process.call(
         [
             'ceph',
@@ -133,7 +147,8 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
             'get',
             config_key
         ],
-        show_command=True
+        show_command=True,
+        logfile_verbose=False
     )
     if returncode != 0:
         raise RuntimeError('Unable to retrieve dmcrypt secret')

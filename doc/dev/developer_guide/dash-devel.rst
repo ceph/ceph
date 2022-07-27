@@ -31,7 +31,7 @@ introduced in this chapter are based on a so called ``vstart`` environment.
 
 .. note::
 
-  Every ``vstart`` environment needs Ceph `to be compiled`_ from its Github
+  Every ``vstart`` environment needs Ceph `to be compiled`_ from its GitHub
   repository, though Docker environments simplify that step by providing a
   shell script that contains those instructions.
 
@@ -54,7 +54,7 @@ You can read more about vstart in `Deploying a development cluster`_.
 Additional information for developers can also be found in the `Developer
 Guide`_.
 
-.. _Deploying a development cluster: https://docs.ceph.com/docs/master/dev/dev_cluster_deployement/
+.. _Deploying a development cluster: https://docs.ceph.com/docs/master/dev/dev_cluster_deployment/
 .. _Developer Guide: https://docs.ceph.com/docs/master/dev/quick_guide/
 
 Host-based vs Docker-based Development Environments
@@ -96,7 +96,7 @@ based on vstart. Those are:
 
   `ceph-dev`_ is an exception to this rule as one of the options it provides
   is `build-free`_. This is accomplished through a Ceph installation using
-  RPM system packages. You will still be able to work with a local Github
+  RPM system packages. You will still be able to work with a local GitHub
   repository like you are used to.
 
 
@@ -215,8 +215,8 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
- * Node 10.0.0 or higher
- * NPM 5.7.0 or higher
+ * Node 12.18.2 or higher
+ * NPM 6.13.4 or higher
 
 nodeenv:
   During Ceph's build we create a virtualenv with ``node`` and ``npm``
@@ -445,6 +445,14 @@ Start E2E tests by running::
   $ cd <your/ceph/repo/dir>
   $ sudo chown -R $(id -un) src/pybind/mgr/dashboard/frontend/{dist,node_modules,src/environments}
   $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh
+
+Note:
+  In fedora 35, there can occur a permission error when trying to mount the shared_folders. This can be
+  fixed by running::
+
+    $ sudo setfacl -R -m u:qemu:rwx <abs-path-to-your-user-home>
+
+  or also by setting the appropriate permission to your $HOME directory
 
 You can also start a cluster in development mode (so the frontend build starts in watch mode and you
 only have to reload the page for the changes to be reflected) by running::
@@ -1773,7 +1781,7 @@ To specify the grafana dashboard properties such as title, uid etc we can create
 
     local dashboardSchema(title, uid, time_from, refresh, schemaVersion, tags,timezone, timepicker)
 
-To add a graph panel we can spcify the graph schema in a local function such as -
+To add a graph panel we can specify the graph schema in a local function such as -
 
 ::
 
@@ -2332,7 +2340,7 @@ If that checker failed, it means that the current Pull Request is modifying the
 Ceph API and therefore:
 
 #. The versioned OpenAPI specification should be updated explicitly: ``tox -e openapi-fix``.
-#. The team @ceph/api will be requested for reviews (this is automated via Github CODEOWNERS), in order to asses the impact of changes.
+#. The team @ceph/api will be requested for reviews (this is automated via GitHub CODEOWNERS), in order to asses the impact of changes.
 
 Additionally, Sphinx documentation can be generated from the OpenAPI
 specification with ``tox -e openapi-doc``.

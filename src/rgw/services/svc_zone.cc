@@ -358,7 +358,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
       continue;
     }
     ldpp_dout(dpp, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-    RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints, zonegroup->api_name);
+    RGWRESTConn *conn = new RGWRESTConn(cct, z.id, z.endpoints, zone_params->system_key, zonegroup->get_id(), zonegroup->api_name);
     zone_conn_map[id] = conn;
 
     bool zone_is_source = source_zones.find(z.id) != source_zones.end();
@@ -488,8 +488,7 @@ int RGWSI_Zone::replace_region_with_zonegroup(const DoutPrefixProvider *dpp, opt
   string oid  = "converted";
   bufferlist bl;
 
-  RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
-  RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  RGWSysObj sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
 
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0 && ret !=  -ENOENT) {
@@ -805,10 +804,10 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, optional_yiel
       }
     }
     const auto& endpoints = master->second.endpoints;
-    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), endpoints, zg.api_name));
+    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, zg.get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zg.api_name));
     if (!current_period->get_master_zonegroup().empty() &&
         zg.get_id() == current_period->get_master_zonegroup()) {
-      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), endpoints, zg.api_name);
+      rest_master_conn = new RGWRESTConn(cct, zg.get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zg.api_name);
     }
   }
 
@@ -872,7 +871,7 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield
       }
     }
     const auto& endpoints = master->second.endpoints;
-    rest_master_conn = new RGWRESTConn(cct, this, zonegroup->get_id(), endpoints, zonegroup->api_name);
+    rest_master_conn = new RGWRESTConn(cct, zonegroup->get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zonegroup->api_name);
   }
 
   return 0;
@@ -891,8 +890,7 @@ int RGWSI_Zone::convert_regionmap(const DoutPrefixProvider *dpp, optional_yield 
   rgw_pool pool(pool_name);
   bufferlist bl;
 
-  RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
-  RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  RGWSysObj sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
 
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0 && ret != -ENOENT) {
@@ -928,8 +926,8 @@ int RGWSI_Zone::convert_regionmap(const DoutPrefixProvider *dpp, optional_yield 
     }
   }
 
-  current_period->set_user_quota(zonegroupmap.user_quota);
-  current_period->set_bucket_quota(zonegroupmap.bucket_quota);
+  current_period->set_user_quota(zonegroupmap.quota.user_quota);
+  current_period->set_bucket_quota(zonegroupmap.quota.bucket_quota);
 
   // remove the region_map so we don't try to convert again
   ret = sysobj.wop().remove(dpp, y);
@@ -1010,14 +1008,13 @@ const string& RGWSI_Zone::zone_name() const
   return get_zone_params().get_name();
 }
 
-bool RGWSI_Zone::find_zone(const rgw_zone_id& id, RGWZone **zone)
+RGWZone* RGWSI_Zone::find_zone(const rgw_zone_id& id)
 {
   auto iter = zone_by_id.find(id);
   if (iter == zone_by_id.end()) {
-    return false;
+    return nullptr;
   }
-  *zone = &(iter->second);
-  return true;
+  return &(iter->second);
 }
 
 RGWRESTConn *RGWSI_Zone::get_zone_conn(const rgw_zone_id& zone_id) {
@@ -1076,8 +1073,14 @@ bool RGWSI_Zone::need_to_log_metadata() const
 
 bool RGWSI_Zone::can_reshard() const
 {
-  return current_period->get_id().empty() ||
-    (zonegroup->zones.size() == 1 && current_period->is_single_zonegroup());
+  if (current_period->get_id().empty()) {
+    return true; // no realm
+  }
+  if (zonegroup->zones.size() == 1 && current_period->is_single_zonegroup()) {
+    return true; // single zone/zonegroup
+  }
+  // 'resharding' feature enabled in zonegroup
+  return zonegroup->supports(rgw::zone_features::resharding);
 }
 
 /**
@@ -1256,9 +1259,7 @@ int RGWSI_Zone::select_legacy_bucket_placement(const DoutPrefixProvider *dpp, RG
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-
+  auto sysobj = sysobj_svc->get_obj(obj);
   int ret = sysobj.rop().read(dpp, &map_bl, y);
   if (ret < 0) {
     goto read_omap;
@@ -1326,9 +1327,7 @@ int RGWSI_Zone::update_placement_map(const DoutPrefixProvider *dpp, optional_yie
   map<string, bufferlist> m;
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-
+  auto sysobj = sysobj_svc->get_obj(obj);
   int ret = sysobj.omap().get_all(dpp, &m, y);
   if (ret < 0)
     return ret;
@@ -1351,8 +1350,7 @@ int RGWSI_Zone::add_bucket_placement(const DoutPrefixProvider *dpp, const rgw_po
   }
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
+  auto sysobj = sysobj_svc->get_obj(obj);
 
   bufferlist empty_bl;
   ret = sysobj.omap().set(dpp, new_pool.to_str(), empty_bl, y);
@@ -1366,9 +1364,7 @@ int RGWSI_Zone::add_bucket_placement(const DoutPrefixProvider *dpp, const rgw_po
 int RGWSI_Zone::remove_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& old_pool, optional_yield y)
 {
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-
+  auto sysobj = sysobj_svc->get_obj(obj);
   int ret = sysobj.omap().del(dpp, old_pool.to_str(), y);
 
   // don't care about return value
@@ -1383,8 +1379,7 @@ int RGWSI_Zone::list_placement_set(const DoutPrefixProvider *dpp, set<rgw_pool>&
   map<string, bufferlist> m;
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
+  auto sysobj = sysobj_svc->get_obj(obj);
   int ret = sysobj.omap().get_all(dpp, &m, y);
   if (ret < 0)
     return ret;

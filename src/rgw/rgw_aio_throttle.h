@@ -45,7 +45,7 @@ class Throttle {
  public:
   Throttle(uint64_t window) : window(window) {}
 
-  ~Throttle() {
+  virtual ~Throttle() {
     // must drain before destructing
     ceph_assert(pending.empty());
     ceph_assert(completed.empty());
@@ -65,6 +65,8 @@ class BlockingAioThrottle final : public Aio, private Throttle {
   };
  public:
   BlockingAioThrottle(uint64_t window) : Throttle(window) {}
+
+  virtual ~BlockingAioThrottle() override {};
 
   AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
                     uint64_t cost, uint64_t id) override final;
@@ -99,6 +101,8 @@ class YieldingAioThrottle final : public Aio, private Throttle {
                       yield_context yield)
     : Throttle(window), context(context), yield(yield)
   {}
+
+  virtual ~YieldingAioThrottle() override {};
 
   AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
                     uint64_t cost, uint64_t id) override final;

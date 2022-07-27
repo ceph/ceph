@@ -1191,7 +1191,7 @@ class DummyChildPool {
       EXPECT_EQ(pool_clone.p_dummy->size(), 3);
 
       // erase and merge
-      auto pivot_key = node_to_split->get_pivot_key();
+      [[maybe_unused]] auto pivot_key = node_to_split->get_pivot_key();
       logger().info("\n\nERASE-MERGE {}:", node_to_split->get_name());
       assert(pivot_key.compare_to(key_hobj_t(key)) == MatchKindCMP::EQ);
       with_trans_intr(pool_clone.get_context().t, [&] (auto &t) {
@@ -1591,7 +1591,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
       auto t = create_mutate_transaction();
       INTR(tree->bootstrap, *t).unsafe_get();
       submit_transaction(std::move(t));
-      segment_cleaner->run_until_halt().get0();
+      async_cleaner->run_until_halt().get0();
     }
 
     // test insert
@@ -1599,7 +1599,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
       auto t = create_mutate_transaction();
       INTR(tree->insert, *t).unsafe_get();
       submit_transaction(std::move(t));
-      segment_cleaner->run_until_halt().get0();
+      async_cleaner->run_until_halt().get0();
     }
     {
       auto t = create_read_transaction();
@@ -1623,7 +1623,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
       auto size = kvs.size() / 4 * 3;
       INTR_R(tree->erase, *t, size).unsafe_get();
       submit_transaction(std::move(t));
-      segment_cleaner->run_until_halt().get0();
+      async_cleaner->run_until_halt().get0();
     }
     {
       auto t = create_read_transaction();
@@ -1646,7 +1646,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
       auto size = kvs.size();
       INTR_R(tree->erase, *t, size).unsafe_get();
       submit_transaction(std::move(t));
-      segment_cleaner->run_until_halt().get0();
+      async_cleaner->run_until_halt().get0();
     }
     {
       auto t = create_read_transaction();
@@ -1703,7 +1703,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	  });
 	});
     }).unsafe_get0();
-    segment_cleaner->run_until_halt().get0();
+    async_cleaner->run_until_halt().get0();
 
     // insert
     logger().warn("start inserting {} kvs ...", kvs.size());
@@ -1723,7 +1723,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	      });
 	    });
         }).unsafe_get0();
-        segment_cleaner->run_until_halt().get0();
+        async_cleaner->run_until_halt().get0();
         ++iter;
       }
     }
@@ -1769,7 +1769,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	      });
 	    });
         }).unsafe_get0();
-        segment_cleaner->run_until_halt().get0();
+        async_cleaner->run_until_halt().get0();
         ++iter;
       }
       kvs.erase_from_random(kvs.random_begin(), kvs.random_end());

@@ -22,6 +22,12 @@ Layout fields
 pool
     String, giving ID or name. String can only have characters in the set [a-zA-Z0-9\_-.]. Which RADOS pool a file's data objects will be stored in.
 
+pool_id
+    String of digits. This is the system assigned pool id for the RADOS pool whenever it is created.
+
+pool_name
+    String, given name. This is the user defined name for the RADOS pool whenever user creates it.
+
 pool_namespace
     String with only characters in the set [a-zA-Z0-9\_-.].  Within the data pool, which RADOS namespace the objects will
     be written to.  Empty by default (i.e. default namespace).
@@ -59,6 +65,12 @@ Read individual layout fields:
 
 .. code-block:: bash
 
+    $ getfattr -n ceph.file.layout.pool_name file
+    # file: file
+    ceph.file.layout.pool_name="cephfs_data"
+    $ getfattr -n ceph.file.layout.pool_id file
+    # file: file
+    ceph.file.layout.pool_id="5"
     $ getfattr -n ceph.file.layout.pool file
     # file: file
     ceph.file.layout.pool="cephfs_data"
@@ -91,6 +103,23 @@ next ancestor directory with an explicit layout will be used.
     # file: dir
     ceph.dir.layout="stripe_unit=4194304 stripe_count=2 object_size=4194304 pool=cephfs_data"
 
+Getting the layout in json format. If there's no specific layout set for the
+particular inode, the system traverses the directory path backwards and finds
+the closest ancestor directory with a layout and returns it in json format.
+A file layout also can be retrieved in json format using ``ceph.file.layout.json`` vxattr.
+
+A virtual field named ``inheritance`` is added to the json output to show the status of layout.
+The ``inheritance`` field can have the following values:
+
+``@default`` implies the system default layout
+``@set`` implies that a specific layout has been set for that particular inode
+``@inherited`` implies that the returned layout has been inherited from an ancestor
+
+.. code-block:: bash
+
+   $ getfattr -n ceph.dir.layout.json --only-values /mnt/mycephs/accounts
+   {"stripe_unit": 4194304, "stripe_count": 1, "object_size": 4194304, "pool_name": "cephfs.a.data", "pool_id": 3, "pool_namespace": "", "inheritance": "@default"}
+
 
 Writing layouts with ``setfattr``
 ---------------------------------
@@ -109,6 +138,8 @@ Layout fields are modified using ``setfattr``:
     $ setfattr -n ceph.file.layout.object_size -v 10485760 file2
     $ setfattr -n ceph.file.layout.pool -v 1 file2  # Setting pool by ID
     $ setfattr -n ceph.file.layout.pool -v cephfs_data file2  # Setting pool by name
+    $ setfattr -n ceph.file.layout.pool_id -v 1 file2  # Setting pool by ID
+    $ setfattr -n ceph.file.layout.pool_name -v cephfs_data file2  # Setting pool by name
 
 .. note::
 
@@ -125,6 +156,15 @@ Layout fields are modified using ``setfattr``:
     $ echo "hello world" > file1
     $ setfattr -n ceph.file.layout.stripe_count -v 4 file1
     setfattr: file1: Directory not empty
+
+File and Directory layouts can also be set using the json format.
+The ``inheritance`` field is ignored when setting the layout.
+Also, if both, ``pool_name`` and ``pool_id`` fields are specified, then the
+``pool_name`` is given preference for better disambiguation.
+
+.. code-block:: bash
+
+   $ setfattr -n ceph.file.layout.json -v '{"stripe_unit": 4194304, "stripe_count": 1, "object_size": 4194304, "pool_name": "cephfs.a.data", "pool_id": 3, "pool_namespace": "", "inheritance": "@default"}' file1
     
 Clearing layouts
 ----------------

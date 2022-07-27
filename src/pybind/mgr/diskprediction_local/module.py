@@ -121,7 +121,7 @@ class Module(MgrModule):
         return datetime.datetime.fromtimestamp(
             predicted_timestamp / (1000 ** 3) + life_expectancy_day).strftime('%Y-%m-%d')
 
-    def _predict_life_expentancy(self, devid: str) -> str:
+    def _predict_life_expectancy(self, devid: str) -> str:
         predicted_result = ''
         health_data: Dict[str, Dict[str, Any]] = {}
         predict_datas: List[DevSmartT] = []
@@ -206,7 +206,7 @@ class Module(MgrModule):
         return predicted_result
 
     def predict_life_expectancy(self, devid: str) -> Tuple[int, str, str]:
-        result = self._predict_life_expentancy(devid)
+        result = self._predict_life_expectancy(devid)
         if result.lower() == 'good':
             return 0, '>6w', ''
         elif result.lower() == 'warning':
@@ -262,7 +262,7 @@ class Module(MgrModule):
             if not devInfo.get('devid'):
                 continue
             self.log.debug('%s' % devInfo)
-            result = self._predict_life_expentancy(devInfo['devid'])
+            result = self._predict_life_expectancy(devInfo['devid'])
             if result == 'unknown':
                 self._reset_device_life_expectancy(devInfo['devid'])
                 continue

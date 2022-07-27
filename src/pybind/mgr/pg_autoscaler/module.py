@@ -135,6 +135,12 @@ class PgAutoscaler(MgrModule):
                        '`PG_NUM` before being accepted. Cannot be less than 1.0'),
             default=3.0,
             min=1.0),
+        Option(
+            name='noautoscale',
+            type='bool',
+            desc='global autoscale flag',
+            long_desc=('Option to turn on/off the autoscaler for all pools'),
+            default=False),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -149,6 +155,7 @@ class PgAutoscaler(MgrModule):
             self.sleep_interval = 60
             self.mon_target_pg_per_osd = 0
             self.threshold = 3.0
+            self.noautoscale = False
 
     def config_notify(self) -> None:
         for opt in self.NATIVE_OPTIONS:
@@ -246,6 +253,79 @@ class PgAutoscaler(MgrModule):
             return 22, "", "threshold cannot be set less than 1.0"
         self.set_module_option("threshold", num)
         return 0, "threshold updated", ""
+
+    def complete_all_progress_events(self) -> None:
+        for pool_id in list(self._event):
+            ev = self._event[pool_id]
+            self.remote('progress', 'complete', ev.ev_id)
+            del self._event[pool_id]
+
+    def set_autoscale_mode_all_pools(self, status: str) -> None:
+        osdmap = self.get_osdmap()
+        pools = osdmap.get_pools_by_name()
+        for pool_name, _ in pools.items():
+            self.mon_command({
+                'prefix': 'osd pool set',
+                'pool': pool_name,
+                'var': 'pg_autoscale_mode',
+                'val': status
+            })
+    @CLIWriteCommand("osd pool get noautoscale")
+    def get_noautoscale(self) -> Tuple[int, str, str]:
+        """
+        Get the noautoscale flag to see if all pools
+        are setting the autoscaler on or off as well
+        as newly created pools in the future.
+        """
+
+        if self.noautoscale == None:
+            raise TypeError("noautoscale cannot be None")
+        elif self.noautoscale:
+            return 0, "", "noautoscale is on"
+        else:
+            return 0, "", "noautoscale is off"
+
+    @CLIWriteCommand("osd pool unset noautoscale")
+    def unset_noautoscale(self) -> Tuple[int, str, str]:
+        """
+        Unset the noautoscale flag so all pools will
+        have autoscale enabled (including newly created
+        pools in the future).
+        """
+        if not self.noautoscale:
+            return 0, "", "noautoscale is already unset!"
+        else:
+            self.set_module_option("noautoscale", False)
+            self.mon_command({
+                'prefix': 'config set',
+                'who': 'global',
+                'name': 'osd_pool_default_pg_autoscale_mode',
+                'value': 'on'
+            })
+            self.set_autoscale_mode_all_pools("on")
+            return 0, "", "noautoscale is unset, all pools now have autoscale on"
+
+    @CLIWriteCommand("osd pool set noautoscale")
+    def set_noautoscale(self) -> Tuple[int, str, str]:
+        """
+        set the noautoscale for all pools (including
+        newly created pools in the future)
+        and complete all on-going progress events
+        regarding PG-autoscaling.
+        """
+        if self.noautoscale:
+            return 0, "", "noautoscale is already set!"
+        else:
+            self.set_module_option("noautoscale", True)
+            self.mon_command({
+                'prefix': 'config set',
+                'who': 'global',
+                'name': 'osd_pool_default_pg_autoscale_mode',
+                'value': 'off'
+            })
+            self.set_autoscale_mode_all_pools("off")
+            self.complete_all_progress_events()
+            return 0, "", "noautoscale is set, all pools now have autoscale off"
 
     def serve(self) -> None:
         self.config_notify()
@@ -413,8 +493,11 @@ class PgAutoscaler(MgrModule):
             final_ratio = 1 / (pool_count - root_map[root_id].pool_used)
             pool_pg_target = (final_ratio * root_map[root_id].pg_left) / p['size'] * bias
 
-        final_pg_target = max(p.get('options', {}).get('pg_num_min', PG_NUM_MIN),
-                              nearest_power_of_two(pool_pg_target))
+        min_pg = p.get('options', {}).get('pg_num_min', PG_NUM_MIN)
+        max_pg = p.get('options', {}).get('pg_num_max')
+        final_pg_target = max(min_pg, nearest_power_of_two(pool_pg_target))
+        if max_pg and max_pg < final_pg_target:
+            final_pg_target = max_pg
         self.log.info("Pool '{0}' root_id {1} using {2} of space, bias {3}, "
                       "pg target {4} quantized to {5} (current {6})".format(
                       p['pool_name'],
@@ -519,7 +602,8 @@ class PgAutoscaler(MgrModule):
             if (final_pg_target > p['pg_num_target'] * threshold or
                     final_pg_target < p['pg_num_target'] / threshold) and \
                     final_ratio >= 0.0 and \
-                    final_ratio <= 1.0:
+                    final_ratio <= 1.0 and \
+                    p['pg_autoscale_mode'] == 'on':
                 adjust = True
 
             assert pool_pg_target is not None
@@ -583,6 +667,8 @@ class PgAutoscaler(MgrModule):
         return (ret, root_map)
 
     def _update_progress_events(self) -> None:
+        if self.noautoscale:
+            return
         osdmap = self.get_osdmap()
         pools = osdmap.get_pools()
         for pool_id in list(self._event):
@@ -596,11 +682,15 @@ class PgAutoscaler(MgrModule):
             ev.update(self, (ev.pg_num - pool_data['pg_num']) / (ev.pg_num - ev.pg_num_target))
 
     def _maybe_adjust(self) -> None:
+        if self.noautoscale:
+            return
         self.log.info('_maybe_adjust')
         osdmap = self.get_osdmap()
         if osdmap.get_require_osd_release() < 'nautilus':
             return
         pools = osdmap.get_pools_by_name()
+        self.log.debug("pool: {0}".format(json.dumps(pools, indent=4,
+                                sort_keys=True)))
         ps, root_map = self._get_pool_status(osdmap, pools)
 
         # Anyone in 'warn', set the health message for them and then

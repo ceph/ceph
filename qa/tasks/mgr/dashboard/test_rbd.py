@@ -10,10 +10,12 @@ from .helper import DashboardTestCase, JLeaf, JList, JObj
 
 class RbdTest(DashboardTestCase):
     AUTH_ROLES = ['pool-manager', 'block-manager', 'cluster-manager']
+    LIST_VERSION = '2.0'
 
     @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
-        self._get('/api/block/image')
+        self._get('/api/block/image?offset=0&limit=-1&search=&sort=+name',
+                  version=RbdTest.LIST_VERSION)
         self.assertStatus(403)
         self.get_image('pool', None, 'image')
         self.assertStatus(403)
@@ -205,12 +207,14 @@ class RbdTest(DashboardTestCase):
         {
             "size": 1073741824,
             "obj_size": 4194304,
+            "mirror_mode": "journal",
             "num_objs": 256,
             "order": 22,
             "block_name_prefix": "rbd_data.10ae2ae8944a",
             "name": "img1",
             "pool_name": "rbd",
             "features": 61,
+            "primary": true,
             "features_name": ["deep-flatten", "exclusive-lock", "fast-diff", "layering",
                               "object-map"]
         }
@@ -227,6 +231,7 @@ class RbdTest(DashboardTestCase):
             'image_format': JLeaf(int),
             'pool_name': JLeaf(str),
             'namespace': JLeaf(str, none=True),
+            'primary': JLeaf(bool, none=True),
             'features': JLeaf(int),
             'features_name': JList(JLeaf(str)),
             'stripe_count': JLeaf(int, none=True),
@@ -245,6 +250,7 @@ class RbdTest(DashboardTestCase):
                 'source': JLeaf(int),
                 'value': JLeaf(str),
             })),
+            'mirror_mode': JLeaf(str),
         })
         self.assertSchema(img, schema)
 
@@ -280,12 +286,12 @@ class RbdTest(DashboardTestCase):
             self.fail("Snapshot {} not found".format(snap_name))
 
     def test_list(self):
-        data = self._view_cache_get('/api/block/image')
+        data = self._get('/api/block/image?offset=0&limit=-1&search=&sort=+name',
+                         version=RbdTest.LIST_VERSION)
         self.assertStatus(200)
         self.assertEqual(len(data), 2)
 
         for pool_view in data:
-            self.assertEqual(pool_view['status'], 0)
             self.assertIsNotNone(pool_view['value'])
             self.assertIn('pool_name', pool_view)
             self.assertIn(pool_view['pool_name'], ['rbd', 'rbd_iscsi'])

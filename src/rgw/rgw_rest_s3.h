@@ -355,7 +355,7 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() override {}
 
-  int get_policy_from_state(rgw::sal::Store* store, struct req_state *s, std::stringstream& ss) override;
+  int get_policy_from_state(rgw::sal::Store* store, req_state *s, std::stringstream& ss) override;
   void send_response() override;
   int get_params(optional_yield y) override;
 };
@@ -617,7 +617,7 @@ public:
   static int authorize(const DoutPrefixProvider *dpp,
                        rgw::sal::Store* store,
                        const rgw::auth::StrategyRegistry& auth_registry,
-                       struct req_state *s, optional_yield y);
+                       req_state *s, optional_yield y);
 };
 
 class RGWHandler_Auth_S3 : public RGWHandler_REST {
@@ -636,7 +636,7 @@ public:
   static int validate_object_name(const std::string& bucket);
 
   int init(rgw::sal::Store* store,
-           struct req_state *s,
+           req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override {
     return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
@@ -649,7 +649,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
-  static int init_from_header(rgw::sal::Store* store, struct req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(rgw::sal::Store* store, req_state *s, int default_formatter, bool configurable_format);
 
   explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
@@ -658,7 +658,7 @@ public:
   ~RGWHandler_REST_S3() override = default;
 
   int init(rgw::sal::Store* store,
-           struct req_state *s,
+           req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield y) override;
@@ -793,7 +793,7 @@ public:
   ~RGWRESTMgr_S3() override = default;
 
   RGWHandler_REST *get_handler(rgw::sal::Store* store,
-			       struct req_state* s,
+			       req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
@@ -907,161 +907,6 @@ inline int valid_s3_bucket_name(const std::string& name, bool relaxed=false)
 
   return 0;
 }
-
-namespace s3selectEngine
-{
-class s3select;
-class csv_object;
-}
-
-
-class aws_response_handler
-{//TODO this class should reside on s3select submodule 
-
-private:
-  std::string sql_result;
-  struct req_state *s;//TODO will be replace by callback
-  uint32_t header_size;
-  // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
-  boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true> crc32;
-  RGWOp *m_rgwop;
-  std::string m_buff_header;
-  uint64_t total_bytes_returned;
-  uint64_t processed_size;
-
-  enum class header_name_En
-  {
-    EVENT_TYPE,
-    CONTENT_TYPE,
-    MESSAGE_TYPE,
-    ERROR_CODE,
-    ERROR_MESSAGE
-  };
-
-  enum class header_value_En
-  {
-    RECORDS,
-    OCTET_STREAM,
-    EVENT,
-    CONT,
-    PROGRESS,
-    END,
-    XML,
-    STATS,
-    ENGINE_ERROR,
-    ERROR_TYPE
-  };
-
-  const char *PAYLOAD_LINE= "\n<Payload>\n<Records>\n<Payload>\n";
-  const char *END_PAYLOAD_LINE= "\n</Payload></Records></Payload>";
-  const char *header_name_str[5] =  {":event-type", ":content-type", ":message-type",":error-code",":error-message"};
-  const char *header_value_str[10] = {"Records", "application/octet-stream", "event", "Cont", "Progress", "End", "text/xml", "Stats", "s3select-engine-error","error"};
-  static constexpr size_t header_crc_size = 12;
-
-  void push_header(const char * header_name,const char* header_value);
-
-  int create_message(u_int32_t header_len);
-
-public:
-  //12 positions for header-crc
-  aws_response_handler(struct req_state *ps,RGWOp *rgwop) : sql_result("012345678901"), s(ps),m_rgwop(rgwop),total_bytes_returned{0},processed_size{0}
-  { }
-
-  std::string &get_sql_result();
-
-  uint64_t get_processed_size();
-
-  void update_processed_size(uint64_t value);
-
-  uint64_t get_total_bytes_returned();
-
-  void update_total_bytes_returned(uint64_t value);
-
-  int create_header_records();
-
-  int create_header_continuation();
-
-  int create_header_progress();
-
-  int create_header_stats();
-
-  int create_header_end();
-
-  int create_error_header_records(const char* error_message);
-
-  void init_response();
-
-  void init_success_response();
-
-  void send_continuation_response();
-
-  void init_progress_response();
-
-  void init_end_response();
-
-  void init_stats_response();
-
-  void init_error_response(const char* error_message);
-
-  void send_success_response();
-
-  void send_progress_response();
-
-  void send_stats_response();
-
-  void send_error_response(const char* error_code,
-                          const char* error_message,
-                          const char* resource_id);
-
-}; //end class aws_response_handler
-
-class RGWSelectObj_ObjStore_S3 : public RGWGetObj_ObjStore_S3
-{
-
-private:
-  std::unique_ptr<s3selectEngine::s3select> s3select_syntax;
-  std::string m_s3select_query;
-  std::string m_s3select_input;
-  std::string m_s3select_output;
-  std::unique_ptr<s3selectEngine::csv_object> m_s3_csv_object;
-  std::string m_column_delimiter;
-  std::string m_quot;
-  std::string m_row_delimiter;
-  std::string m_compression_type;
-  std::string m_escape_char;
-  std::string m_header_info;
-  std::string m_sql_query;
-  std::string m_enable_progress;
-  std::string output_column_delimiter;
-  std::string output_quot;
-  std::string output_escape_char;
-  std::string output_quote_fields;
-  std::string output_row_delimiter;
-
-  std::unique_ptr<aws_response_handler> m_aws_response_handler;
-  bool enable_progress;
-
-public:
-  unsigned int chunk_number;
-
-  RGWSelectObj_ObjStore_S3();
-  virtual ~RGWSelectObj_ObjStore_S3();
-
-  virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
-
-  virtual int get_params(optional_yield y) override;
-
-private:
-
-  int run_s3select(const char* query, const char* input, size_t input_length);
-
-  int extract_by_tag(std::string input, std::string tag_name, std::string& result);
-
-  void convert_escape_seq(std::string& esc);
-
-  int handle_aws_cli_parameters(std::string& sql_query);
-};
-
 
 namespace rgw::auth::s3 {
 

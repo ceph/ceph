@@ -41,8 +41,6 @@ struct delta_t {
   denc_coll_t coll;
   uint32_t bits = 0;
 
-  delta_t() = default;
-
   DENC(delta_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.op, p);

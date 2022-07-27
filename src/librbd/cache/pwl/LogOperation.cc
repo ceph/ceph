@@ -20,11 +20,11 @@ GenericLogOperation::GenericLogOperation(utime_t dispatch_time,
 }
 
 std::ostream& GenericLogOperation::format(std::ostream &os) const {
-  os << "dispatch_time=[" << dispatch_time << "], "
-     << "buf_persist_start_time=[" << buf_persist_start_time << "], "
-     << "buf_persist_comp_time=[" << buf_persist_comp_time << "], "
-     << "log_append_start_time=[" << log_append_start_time << "], "
-     << "log_append_comp_time=[" << log_append_comp_time << "], ";
+  os << "dispatch_time=[" << dispatch_time
+     << "], buf_persist_start_time=[" << buf_persist_start_time
+     << "], buf_persist_comp_time=[" << buf_persist_comp_time
+     << "], log_append_start_time=[" << log_append_start_time
+     << "], log_append_comp_time=[" << log_append_comp_time << "]";
   return os;
 }
 
@@ -47,8 +47,7 @@ SyncPointLogOperation::~SyncPointLogOperation() { }
 std::ostream &SyncPointLogOperation::format(std::ostream &os) const {
   os << "(Sync Point) ";
   GenericLogOperation::format(os);
-  os << ", "
-     << "sync_point=[" << *sync_point << "]";
+  os << ", sync_point=[" << *sync_point << "]";
   return os;
 }
 
@@ -207,14 +206,12 @@ std::ostream &WriteLogOperation::format(std::ostream &os) const {
   std::string op_name = is_writesame ? "(Write Same) " : "(Write) ";
   os << op_name;
   GenericWriteLogOperation::format(os);
-  os << ", ";
   if (log_entry) {
-    os << "log_entry=[" << *log_entry << "], ";
+    os << ", log_entry=[" << *log_entry << "]";
   } else {
-    os << "log_entry=nullptr, ";
+    os << ", log_entry=nullptr";
   }
-  os << "bl=[" << bl << "],"
-     << "buffer_alloc=" << buffer_alloc;
+  os << ", bl=[" << bl << "], buffer_alloc=" << buffer_alloc;
   return os;
 }
 
@@ -269,9 +266,9 @@ WriteLogOperationSet::~WriteLogOperationSet() { }
 
 std::ostream &operator<<(std::ostream &os,
                          const WriteLogOperationSet &s) {
-  os << "cell=" << (void*)s.cell << ", "
-     << "extent_ops_appending=[" << s.extent_ops_appending << ", "
-     << "extent_ops_persist=[" << s.extent_ops_persist << "]";
+  os << "cell=" << (void*)s.cell
+     << ", extent_ops_appending=" << s.extent_ops_appending
+     << ", extent_ops_persist=" << s.extent_ops_persist;
   return os;
 }
 
@@ -297,11 +294,10 @@ DiscardLogOperation::~DiscardLogOperation() { }
 std::ostream &DiscardLogOperation::format(std::ostream &os) const {
   os << "(Discard) ";
   GenericWriteLogOperation::format(os);
-  os << ", ";
   if (log_entry) {
-    os << "log_entry=[" << *log_entry << "], ";
+    os << ", log_entry=[" << *log_entry << "]";
   } else {
-    os << "log_entry=nullptr, ";
+    os << ", log_entry=nullptr";
   }
   return os;
 }

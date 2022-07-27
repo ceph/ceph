@@ -120,15 +120,15 @@ void inconsistent_obj_wrapper::add_shard(const pg_shard_t& pgs,
 
 void
 inconsistent_obj_wrapper::set_auth_missing(const hobject_t& hoid,
-                                           const map<pg_shard_t, ScrubMap*>& maps,
+                                           const map<pg_shard_t, ScrubMap>& maps,
 					   map<pg_shard_t, shard_info_wrapper> &shard_map,
 					   int &shallow_errors, int &deep_errors,
 					   const pg_shard_t &primary)
 {
   for (auto pg_map : maps) {
-    auto oid_object = pg_map.second->objects.find(hoid);
+    auto oid_object = pg_map.second.objects.find(hoid);
     shard_map[pg_map.first].primary = (pg_map.first == primary);
-    if (oid_object == pg_map.second->objects.end())
+    if (oid_object == pg_map.second.objects.end())
       shard_map[pg_map.first].set_missing();
     else
       shard_map[pg_map.first].set_object(oid_object->second);

@@ -3639,11 +3639,11 @@ int main(int argc, char** argv)
     ("v2-testpeer-islocal", bpo::value<bool>()->default_value(true),
      "create a local crimson testpeer, or connect to a remote testpeer");
   return app.run(argc, argv, [&app] {
-    // This test normally succeeds within 60 seconds, so kill it after 120
+    // This test normally succeeds within 60 seconds, so kill it after 300
     // seconds in case it is blocked forever due to unaddressed bugs.
-    return seastar::with_timeout(seastar::lowres_clock::now() + 120s, do_test(app))
+    return seastar::with_timeout(seastar::lowres_clock::now() + 300s, do_test(app))
       .handle_exception_type([](seastar::timed_out_error&) {
-        logger().error("test_messenger timeout after 120s, abort! "
+        logger().error("test_messenger timeout after 300s, abort! "
                        "Consider to extend the period if the test is still running.");
         // use the retcode of timeout(1)
         return 124;

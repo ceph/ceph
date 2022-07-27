@@ -11,6 +11,7 @@
 
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/seastore/seastore.h"
+#include "crimson/os/seastore/onode.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -24,6 +25,33 @@ namespace {
   }
 }
 
+ghobject_t make_oid(int i) {
+  stringstream ss;
+  ss << "object_" << i;
+  auto ret = ghobject_t(
+    hobject_t(
+      sobject_t(ss.str(), CEPH_NOSNAP)));
+  ret.set_shard(shard_id_t(shard_id_t::NO_SHARD));
+  ret.hobj.nspace = "asdf";
+  ret.hobj.pool = 0;
+  uint32_t reverse_hash = hobject_t::_reverse_bits(0);
+  ret.hobj.set_bitwise_key_u32(reverse_hash + i * 100);
+  return ret;
+}
+
+ghobject_t make_temp_oid(int i) {
+  stringstream ss;
+  ss << "temp_object_" << i;
+  auto ret = ghobject_t(
+    hobject_t(
+      sobject_t(ss.str(), CEPH_NOSNAP)));
+  ret.set_shard(shard_id_t(shard_id_t::NO_SHARD));
+  ret.hobj.nspace = "hjkl";
+  ret.hobj.pool = -2ll;
+  uint32_t reverse_hash = hobject_t::_reverse_bits(0);
+  ret.hobj.set_bitwise_key_u32(reverse_hash + i * 100);
+  return ret;
+}
 
 struct seastore_test_t :
   public seastar_test_suite_t,
@@ -41,7 +69,7 @@ struct seastore_test_t :
     }).then([this](auto coll_ref) {
       coll = coll_ref;
       CTransaction t;
-      t.create_collection(coll_name, 4);
+      t.create_collection(coll_name, 0);
       return seastore->do_transaction(
 	coll,
 	std::move(t));
@@ -92,9 +120,39 @@ struct seastore_test_t :
         std::move(t)).get0();
     }
 
+    void truncate(
+      CTransaction &t,
+      uint64_t off) {
+      t.truncate(cid, oid, off);
+    }
+
+    void truncate(
+      SeaStore &seastore,
+      uint64_t off) {
+      CTransaction t;
+      truncate(t, off);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
+    std::map<uint64_t, uint64_t> fiemap(
+      SeaStore &seastore,
+      uint64_t off,
+      uint64_t len) {
+      return seastore.fiemap(coll, oid, off, len).unsafe_get0();
+    }
+
+    bufferlist readv(
+      SeaStore &seastore,
+      interval_set<uint64_t>&m) {
+      return seastore.readv(coll, oid, m).unsafe_get0();
+    }
+
     void remove(
       CTransaction &t) {
       t.remove(cid, oid);
+      t.remove_collection(cid);
     }
 
     void remove(
@@ -186,6 +244,53 @@ struct seastore_test_t :
       write(seastore, offset, bl);
     }
 
+    void zero(
+      SeaStore &seastore,
+      CTransaction &t,
+      uint64_t offset,
+      size_t len) {
+      ceph::buffer::list bl;
+      bl.append_zero(len);
+      bufferlist new_contents;
+      if (offset > 0 && contents.length()) {
+        new_contents.substr_of(
+          contents,
+          0,
+          std::min<size_t>(offset, contents.length())
+        );
+      }
+      new_contents.append_zero(offset - new_contents.length());
+      new_contents.append(bl);
+
+      auto tail_offset = offset + bl.length();
+      if (contents.length() > tail_offset) {
+        bufferlist tail;
+        tail.substr_of(
+          contents,
+          tail_offset,
+          contents.length() - tail_offset);
+        new_contents.append(tail);
+      }
+      contents.swap(new_contents);
+
+      t.zero(
+        cid,
+        oid,
+        offset,
+        len);
+    }
+
+    void zero(
+      SeaStore &seastore,
+      uint64_t offset,
+      size_t len) {
+      CTransaction t;
+      zero(seastore, t, offset, len);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
     void read(
       SeaStore &seastore,
       uint64_t offset,
@@ -217,6 +322,25 @@ struct seastore_test_t :
       bufferlist& val) {
       CTransaction t;
       t.setattr(cid, oid, key, val);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
+    void rm_attr(
+      SeaStore &seastore,
+      std::string key) {
+      CTransaction t;
+      t.rmattr(cid, oid, key);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
+    void rm_attrs(
+      SeaStore &seastore) {
+      CTransaction t;
+      t.rmattrs(cid, oid);
       seastore.do_transaction(
         coll,
         std::move(t)).get0();
@@ -318,18 +442,138 @@ struct seastore_test_t :
     EXPECT_EQ(std::get<1>(ret), ghobject_t::get_max());
     EXPECT_EQ(std::get<0>(ret), oids);
   }
-};
 
-ghobject_t make_oid(int i) {
-  stringstream ss;
-  ss << "object_" << i;
-  auto ret = ghobject_t(
-    hobject_t(
-      sobject_t(ss.str(), CEPH_NOSNAP)));
-  ret.set_shard(shard_id_t(0));
-  ret.hobj.nspace = "asdf";
-  return ret;
-}
+  // create temp objects
+  struct bound_t {
+    enum class type_t {
+      MIN,
+      MAX,
+      TEMP,
+      TEMP_END,
+      NORMAL_BEGIN,
+      NORMAL,
+    } type = type_t::MIN;
+    unsigned index = 0;
+
+    static bound_t get_temp(unsigned index) {
+      return bound_t{type_t::TEMP, index};
+    }
+    static bound_t get_normal(unsigned index) {
+      return bound_t{type_t::NORMAL, index};
+    }
+    static bound_t get_min() { return bound_t{type_t::MIN}; }
+    static bound_t get_max() { return bound_t{type_t::MAX}; }
+    static bound_t get_temp_end() { return bound_t{type_t::TEMP_END}; }
+    static bound_t get_normal_begin() {
+      return bound_t{type_t::NORMAL_BEGIN};
+    }
+
+    ghobject_t get_oid(SeaStore &seastore, CollectionRef &coll) const {
+      switch (type) {
+      case type_t::MIN:
+	return ghobject_t();
+      case type_t::MAX:
+	return ghobject_t::get_max();
+      case type_t::TEMP:
+	return make_temp_oid(index);
+      case type_t::TEMP_END:
+	return seastore.get_objs_range(coll, 0).temp_end;
+      case type_t::NORMAL_BEGIN:
+	return seastore.get_objs_range(coll, 0).obj_begin;
+      case type_t::NORMAL:
+	return make_oid(index);
+      default:
+	assert(0 == "impossible");
+	return ghobject_t();
+      }
+    }
+  };
+  struct list_test_case_t {
+    bound_t left;
+    bound_t right;
+    unsigned limit;
+  };
+  // list_test_cases_t :: [<limit, left_bound, right_bound>]
+  using list_test_cases_t = std::list<std::tuple<unsigned, bound_t, bound_t>>;
+
+  void test_list(
+    unsigned temp_to_create,   /// create temp 0..temp_to_create-1
+    unsigned normal_to_create, /// create normal 0..normal_to_create-1
+    list_test_cases_t cases              /// cases to test
+  ) {
+    std::vector<ghobject_t> objs;
+
+    // setup
+    auto create = [this, &objs](ghobject_t hoid) {
+      objs.emplace_back(std::move(hoid));
+      auto &obj = get_object(objs.back());
+      obj.touch(*seastore);
+      obj.check_size(*seastore);
+    };
+    for (unsigned i = 0; i < temp_to_create; ++i) {
+      create(make_temp_oid(i));
+    }
+    for (unsigned i = 0; i < normal_to_create; ++i) {
+      create(make_oid(i));
+    }
+
+    // list and validate each case
+    for (auto [limit, in_left_bound, in_right_bound] : cases) {
+      auto left_bound = in_left_bound.get_oid(*seastore, coll);
+      auto right_bound = in_right_bound.get_oid(*seastore, coll);
+
+      // get results from seastore
+      auto [listed, next] = seastore->list_objects(
+	coll, left_bound, right_bound, limit).get0();
+
+      // compute correct answer
+      auto correct_begin = std::find_if(
+	objs.begin(), objs.end(),
+	[&left_bound](const auto &in) {
+	  return in >= left_bound;
+	});
+      unsigned count = 0;
+      auto correct_end = correct_begin;
+      for (; count < limit &&
+	     correct_end != objs.end() &&
+	     *correct_end < right_bound;
+	   ++correct_end, ++count);
+
+      // validate return -- [correct_begin, correct_end) should match listed
+      decltype(objs) correct_listed(correct_begin, correct_end);
+      EXPECT_EQ(listed, correct_listed);
+
+      if (count < limit) {
+	if (correct_end == objs.end()) {
+	  // if listed extends to end of range, next should be >= right_bound
+	  EXPECT_GE(next, right_bound);
+	} else {
+	  // next <= *correct_end since *correct_end is the next object to list
+	  EXPECT_LE(next, *correct_end);
+	  // next > *(correct_end - 1) since we already listed it
+	  EXPECT_GT(next, *(correct_end - 1));
+	}
+      } else {
+	// we listed exactly limit objects
+	EXPECT_EQ(limit, listed.size());
+
+	EXPECT_GE(next, left_bound);
+	if (limit == 0) {
+	  if (correct_end != objs.end()) {
+	    // next <= *correct_end since *correct_end is the next object to list
+	    EXPECT_LE(next, *correct_end);
+	  }
+	} else {
+	  // next > *(correct_end - 1) since we already listed it
+	  EXPECT_GT(next, *(correct_end - 1));
+	}
+      }
+    }
+
+    // teardown
+    for (auto &&hoid : objs) { get_object(hoid).remove(*seastore); }
+  }
+};
 
 template <typename T, typename V>
 auto contains(const T &t, const V &v) {
@@ -396,6 +640,78 @@ TEST_F(seastore_test_t, touch_stat_list_remove)
   });
 }
 
+using bound_t = seastore_test_t::bound_t;
+constexpr unsigned MAX_LIMIT = std::numeric_limits<unsigned>::max();
+static const seastore_test_t::list_test_cases_t temp_list_cases{
+  // list all temp, maybe overlap to normal on right
+  {MAX_LIMIT, bound_t::get_min()     , bound_t::get_max()     },
+  {        5, bound_t::get_min()     , bound_t::get_temp_end()},
+  {        6, bound_t::get_min()     , bound_t::get_temp_end()},
+  {        6, bound_t::get_min()     , bound_t::get_max()     },
+
+  // list temp starting at min up to but not past boundary
+  {        3, bound_t::get_min()     , bound_t::get_temp(3)   },
+  {        3, bound_t::get_min()     , bound_t::get_temp(4)   },
+  {        3, bound_t::get_min()     , bound_t::get_temp(2)   },
+
+  // list temp starting > min up to or past boundary
+  {        3, bound_t::get_temp(2)   , bound_t::get_temp_end()},
+  {        3, bound_t::get_temp(2)   , bound_t::get_max()     },
+  {        3, bound_t::get_temp(3)   , bound_t::get_max()     },
+  {        3, bound_t::get_temp(1)   , bound_t::get_max()     },
+
+  // 0 limit
+  {        0, bound_t::get_min()     , bound_t::get_max()     },
+  {        0, bound_t::get_temp(1)   , bound_t::get_max()     },
+  {        0, bound_t::get_temp_end(), bound_t::get_max()     },
+};
+
+TEST_F(seastore_test_t, list_objects_temp_only)
+{
+  run_async([this] { test_list(5, 0, temp_list_cases); });
+}
+
+TEST_F(seastore_test_t, list_objects_temp_overlap)
+{
+  run_async([this] { test_list(5, 5, temp_list_cases); });
+}
+
+static const seastore_test_t::list_test_cases_t normal_list_cases{
+  // list all normal, maybe overlap to temp on left
+  {MAX_LIMIT, bound_t::get_min()         , bound_t::get_max()    },
+  {        5, bound_t::get_normal_begin(), bound_t::get_max()    },
+  {        6, bound_t::get_normal_begin(), bound_t::get_max()    },
+  {        6, bound_t::get_temp(4)       , bound_t::get_max()    },
+
+  // list normal starting <= normal_begin < end
+  {        3, bound_t::get_normal_begin(), bound_t::get_normal(3)},
+  {        3, bound_t::get_normal_begin(), bound_t::get_normal(4)},
+  {        3, bound_t::get_normal_begin(), bound_t::get_normal(2)},
+  {        3, bound_t::get_temp(5)       , bound_t::get_normal(2)},
+  {        3, bound_t::get_temp(4)       , bound_t::get_normal(2)},
+
+  // list normal starting > min up to end
+  {        3, bound_t::get_normal(2)     , bound_t::get_max()    },
+  {        3, bound_t::get_normal(2)     , bound_t::get_max()    },
+  {        3, bound_t::get_normal(3)     , bound_t::get_max()    },
+  {        3, bound_t::get_normal(1)     , bound_t::get_max()    },
+
+  // 0 limit
+  {        0, bound_t::get_min()         , bound_t::get_max()    },
+  {        0, bound_t::get_normal(1)     , bound_t::get_max()    },
+  {        0, bound_t::get_normal_begin(), bound_t::get_max()    },
+};
+
+TEST_F(seastore_test_t, list_objects_normal_only)
+{
+  run_async([this] { test_list(5, 0, normal_list_cases); });
+}
+
+TEST_F(seastore_test_t, list_objects_normal_overlap)
+{
+  run_async([this] { test_list(5, 5, normal_list_cases); });
+}
+
 bufferlist make_bufferlist(size_t len) {
   bufferptr ptr(len);
   bufferlist bl;
@@ -407,6 +723,7 @@ TEST_F(seastore_test_t, omap_test_simple)
 {
   run_async([this] {
     auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
     test_obj.set_omap(
       *seastore,
       "asdf",
@@ -421,7 +738,8 @@ TEST_F(seastore_test_t, attr)
 {
   run_async([this] {
     auto& test_obj = get_object(make_oid(0));
-
+    test_obj.touch(*seastore);
+  {
     std::string oi("asdfasdfasdf");
     bufferlist bl;
     encode(oi, bl);
@@ -458,16 +776,35 @@ TEST_F(seastore_test_t, attr)
     test_val2.clear();
     decode(test_val2, bl2);
     EXPECT_EQ(test_val, test_val2);
+    //test rm_attrs
+    test_obj.rm_attrs(*seastore);
+    attrs = test_obj.get_attrs(*seastore);
+    EXPECT_EQ(attrs.find(OI_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find(SS_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find("test_key"), attrs.end());
 
     std::cout << "test_key passed" << std::endl;
-    char ss_array[256] = {0};
-    std::string ss_str(&ss_array[0], 256);
+    //create OI_ATTR with len > onode_layout_t::MAX_OI_LENGTH, rm OI_ATTR
+    //create SS_ATTR with len > onode_layout_t::MAX_SS_LENGTH, rm SS_ATTR
+    char oi_array[onode_layout_t::MAX_OI_LENGTH + 1] = {'a'};
+    std::string oi_str(&oi_array[0], sizeof(oi_array));
+    bl.clear();
+    encode(oi_str, bl);
+    test_obj.set_attr(*seastore, OI_ATTR, bl);
+
+    char ss_array[onode_layout_t::MAX_SS_LENGTH + 1] = {'b'};
+    std::string ss_str(&ss_array[0], sizeof(ss_array));
     bl.clear();
     encode(ss_str, bl);
     test_obj.set_attr(*seastore, SS_ATTR, bl);
 
     attrs = test_obj.get_attrs(*seastore);
-    std::cout << "got attr" << std::endl;
+    bl2.clear();
+    bl2 = attrs[OI_ATTR];
+    std::string oi_str2;
+    decode(oi_str2, bl2);
+    EXPECT_EQ(oi_str, oi_str2);
+
     bl2.clear();
     bl2 = attrs[SS_ATTR];
     std::string ss_str2;
@@ -479,6 +816,63 @@ TEST_F(seastore_test_t, attr)
     bl2 = test_obj.get_attr(*seastore, SS_ATTR);
     decode(ss_str2, bl2);
     EXPECT_EQ(ss_str, ss_str2);
+
+    bl2.clear();
+    oi_str2.clear();
+    bl2 = test_obj.get_attr(*seastore, OI_ATTR);
+    decode(oi_str2, bl2);
+    EXPECT_EQ(oi_str, oi_str2);
+
+    test_obj.rm_attr(*seastore, OI_ATTR);
+    test_obj.rm_attr(*seastore, SS_ATTR);
+
+    attrs = test_obj.get_attrs(*seastore);
+    EXPECT_EQ(attrs.find(OI_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find(SS_ATTR), attrs.end());
+  }
+  {
+    //create OI_ATTR with len <= onode_layout_t::MAX_OI_LENGTH, rm OI_ATTR
+    //create SS_ATTR with len <= onode_layout_t::MAX_SS_LENGTH, rm SS_ATTR
+    std::string oi("asdfasdfasdf");
+    bufferlist bl;
+    encode(oi, bl);
+    test_obj.set_attr(*seastore, OI_ATTR, bl);
+
+    std::string ss("f");
+    bl.clear();
+    encode(ss, bl);
+    test_obj.set_attr(*seastore, SS_ATTR, bl);
+
+    std::string test_val("ssssssssssss");
+    bl.clear();
+    encode(test_val, bl);
+    test_obj.set_attr(*seastore, "test_key", bl);
+
+    auto attrs = test_obj.get_attrs(*seastore);
+    std::string oi2;
+    bufferlist bl2 = attrs[OI_ATTR];
+    decode(oi2, bl2);
+    bl2.clear();
+    bl2 = attrs[SS_ATTR];
+    std::string ss2;
+    decode(ss2, bl2);
+    std::string test_val2;
+    bl2.clear();
+    bl2 = attrs["test_key"];
+    decode(test_val2, bl2);
+    EXPECT_EQ(ss, ss2);
+    EXPECT_EQ(oi, oi2);
+    EXPECT_EQ(test_val, test_val2);
+
+    test_obj.rm_attr(*seastore, OI_ATTR);
+    test_obj.rm_attr(*seastore, SS_ATTR);
+    test_obj.rm_attr(*seastore, "test_key");
+
+    attrs = test_obj.get_attrs(*seastore);
+    EXPECT_EQ(attrs.find(OI_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find(SS_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find("test_key"), attrs.end());
+  }
   });
 }
 
@@ -491,6 +885,7 @@ TEST_F(seastore_test_t, omap_test_iterator)
       return ss.str();
     };
     auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
     for (unsigned i = 0; i < 20; ++i) {
       test_obj.set_omap(
 	*seastore,
@@ -516,5 +911,158 @@ TEST_F(seastore_test_t, simple_extent_test)
       1024,
       1024);
     test_obj.check_size(*seastore);
+  });
+}
+
+TEST_F(seastore_test_t, fiemap_empty)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
+    test_obj.truncate(*seastore, 100000);
+
+    std::map<uint64_t, uint64_t> m;
+    m = test_obj.fiemap(*seastore, 0, 100000);
+    EXPECT_TRUE(m.empty());
+
+    test_obj.remove(*seastore);
+  });
+}
+
+TEST_F(seastore_test_t, fiemap_holes)
+{
+  run_async([this] {
+    const uint64_t MAX_EXTENTS = 100;
+
+    // large enough to ensure that seastore will allocate each write seperately
+    const uint64_t SKIP_STEP = 16 << 10;
+    auto &test_obj = get_object(make_oid(0));
+    bufferlist bl;
+    bl.append("foo");
+
+    test_obj.touch(*seastore);
+    for (uint64_t i = 0; i < MAX_EXTENTS; i++) {
+      test_obj.write(*seastore, SKIP_STEP * i, bl);
+    }
+
+    { // fiemap test from 0 to SKIP_STEP * (MAX_EXTENTS - 1) + 3
+      auto m = test_obj.fiemap(
+	*seastore, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3);
+      ASSERT_EQ(m.size(), MAX_EXTENTS);
+      for (uint64_t i = 0; i < MAX_EXTENTS; i++) {
+	ASSERT_TRUE(m.count(SKIP_STEP * i));
+	ASSERT_GE(m[SKIP_STEP * i], bl.length());
+      }
+    }
+
+    { // fiemap test from SKIP_STEP to SKIP_STEP * (MAX_EXTENTS - 2) + 3
+      auto m = test_obj.fiemap(
+	*seastore, SKIP_STEP, SKIP_STEP * (MAX_EXTENTS - 3) + 3);
+      ASSERT_EQ(m.size(), MAX_EXTENTS - 2);
+      for (uint64_t i = 1; i < MAX_EXTENTS - 1; i++) {
+	ASSERT_TRUE(m.count(SKIP_STEP * i));
+	ASSERT_GE(m[SKIP_STEP * i], bl.length());
+      }
+    }
+
+    { // fiemap test SKIP_STEP + 1 to 2 * SKIP_STEP + 1 (partial overlap)
+      auto m = test_obj.fiemap(
+	*seastore, SKIP_STEP + 1, SKIP_STEP + 1);
+      ASSERT_EQ(m.size(), 2);
+      ASSERT_EQ(m.begin()->first, SKIP_STEP + 1);
+      ASSERT_GE(m.begin()->second, bl.length());
+      ASSERT_LE(m.rbegin()->first, (2 * SKIP_STEP) + 1);
+      ASSERT_EQ(m.rbegin()->first + m.rbegin()->second, 2 * SKIP_STEP + 2);
+    }
+
+    test_obj.remove(*seastore);
+  });
+}
+
+TEST_F(seastore_test_t, sparse_read)
+{
+  run_async([this] {
+    const uint64_t MAX_EXTENTS = 100;
+    const uint64_t SKIP_STEP = 16 << 10;
+    auto &test_obj = get_object(make_oid(0));
+    bufferlist wbl;
+    wbl.append("foo");
+
+    test_obj.touch(*seastore);
+    for (uint64_t i = 0; i < MAX_EXTENTS; i++) {
+      test_obj.write(*seastore, SKIP_STEP * i, wbl);
+    }
+    interval_set<uint64_t> m;
+    m = interval_set<uint64_t>(
+	test_obj.fiemap(*seastore, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3));
+    ASSERT_TRUE(!m.empty());
+    uint64_t off = 0;
+    auto rbl = test_obj.readv(*seastore, m);
+
+    for (auto &&miter : m) {
+      bufferlist subl;
+      subl.substr_of(rbl, off, std::min(miter.second, uint64_t(wbl.length())));
+      ASSERT_TRUE(subl.contents_equal(wbl));
+      off += miter.second;
+    }
+    test_obj.remove(*seastore);
+  });
+}
+
+TEST_F(seastore_test_t, zero)
+{
+  run_async([this] {
+    auto test_zero = [this](
+      // [(off, len, repeat)]
+      std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> writes,
+      uint64_t zero_off, uint64_t zero_len) {
+
+      // Test zero within a block
+      auto &test_obj = get_object(make_oid(0));
+      uint64_t size = 0;
+      for (auto &[off, len, repeat]: writes) {
+	for (decltype(repeat) i = 0; i < repeat; ++i) {
+	  test_obj.write(*seastore, off + (len * repeat), len, 'a');
+	}
+	size = off + (len * (repeat + 1));
+      }
+      test_obj.read(
+	*seastore,
+	0,
+	size);
+      test_obj.check_size(*seastore);
+      test_obj.zero(*seastore, zero_off, zero_len);
+      test_obj.read(
+	*seastore,
+	0,
+	size);
+      test_obj.check_size(*seastore);
+      remove_object(test_obj);
+    };
+
+    const uint64_t BS = 4<<10;
+
+    // Test zero within a block
+    test_zero(
+      {{1<<10, 1<<10, 1}},
+      1124, 200);
+
+    // Multiple writes, partial on left, partial on right.
+    test_zero(
+      {{BS, BS, 10}},
+      BS + 128,
+      BS * 4);
+
+    // Single large write, block boundary on right, partial on left.
+    test_zero(
+      {{BS, BS * 10, 1}},
+      BS + 128,
+      (BS * 4) - 128);
+
+    // Multiple writes, block boundary on left, partial on right.
+    test_zero(
+      {{BS, BS, 10}},
+      BS,
+      (BS * 4) + 128);
   });
 }

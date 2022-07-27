@@ -37,6 +37,11 @@ using namespace std;
 #include "common/config.h"
 #include "common/errno.h"
 
+/* Note, by default debug_mds_balancer is 1/5. For debug messages 1<lvl<=5,
+ * should_gather (below) will be true; so, debug_mds will be ignored even if
+ * set to 20/20. For this reason, some messages may not appear in the log.
+ * Increase both debug levels to get expected output!
+ */
 #define dout_context g_ceph_context
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".bal " << __func__ << " "
@@ -1190,13 +1195,13 @@ void MDBalancer::find_exports(CDir *dir,
   }
 }
 
-void MDBalancer::hit_inode(CInode *in, int type, int who)
+void MDBalancer::hit_inode(CInode *in, int type)
 {
   // hit inode
   in->pop.get(type).hit();
 
   if (in->get_parent_dn())
-    hit_dir(in->get_parent_dn()->get_dir(), type, who);
+    hit_dir(in->get_parent_dn()->get_dir(), type);
 }
 
 void MDBalancer::maybe_fragment(CDir *dir, bool hot)
@@ -1229,7 +1234,7 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
   }
 }
 
-void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
+void MDBalancer::hit_dir(CDir *dir, int type, double amount)
 {
   if (dir->inode->is_stray())
     return;
@@ -1245,31 +1250,16 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
   maybe_fragment(dir, hot);
 
   // replicate?
-  if (type == META_POP_IRD && who >= 0) {
-    dir->pop_spread.hit(who);
-  }
-
+  const bool readop = (type == META_POP_IRD || type == META_POP_READDIR);
   double rd_adj = 0.0;
-  if (type == META_POP_IRD &&
-      dir->last_popularity_sample < last_sample) {
+  if (readop && dir->last_popularity_sample < last_sample) {
     double dir_pop = dir->pop_auth_subtree.get(type).get();    // hmm??
+    dir_pop += v * 10;
     dir->last_popularity_sample = last_sample;
-    double pop_sp = dir->pop_spread.get();
-    dir_pop += pop_sp * 10;
 
-    //if (dir->ino() == inodeno_t(0x10000000002))
-    if (pop_sp > 0) {
-      dout(20) << type << " pop " << dir_pop << " spread " << pop_sp
-	      << " " << dir->pop_spread.last[0]
-	      << " " << dir->pop_spread.last[1]
-	      << " " << dir->pop_spread.last[2]
-	      << " " << dir->pop_spread.last[3]
-	      << " in " << *dir << dendl;
-    }
-
-    if (dir->is_auth() && !dir->is_ambiguous_auth()) {
-      if (dir->can_rep() &&
-	  dir_pop >= g_conf()->mds_bal_replicate_threshold) {
+    dout(20) << type << " pop " << dir_pop << " spread in " << *dir << dendl;
+    if (dir->is_auth() && !dir->is_ambiguous_auth() && dir->can_rep()) {
+      if (dir_pop >= g_conf()->mds_bal_replicate_threshold) {
 	// replicate
 	double rdp = dir->pop_me.get(META_POP_IRD).get();
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;

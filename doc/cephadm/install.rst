@@ -110,6 +110,15 @@ that case, you can install cephadm directly. For example:
 
      apt install -y cephadm
 
+  In CentOS Stream:
+
+  .. prompt:: bash #
+     :substitutions:
+
+     dnf search release-ceph
+     dnf install --assumeyes centos-release-ceph-|stable-release|
+     dnf install --assumeyes cephadm
+
   In Fedora:
 
   .. prompt:: bash #
@@ -229,49 +238,6 @@ available options.
 
 .. _cephadm-enable-cli:
 
-Different deployment scenarios
-==============================
-
-Single host
------------
-
-To configure a Ceph cluster to run on a single host, use the ``--single-host-defaults`` flag when bootstrapping.
-
-Deployment in an isolated environment
--------------------------------------
-
-You can install Cephadm in an isolated environment by using a custom container registry and configuring Docker to use an insecure registry. Ensure your container image is inside the registry and that you have access to all hosts you wish to add to the cluster. Currently, to add multiple hosts to a Ceph cluster in an isolated environment, you must use Docker. This may require you to uninstall Podman if it's present on your host as Cephadm prefers to use Podman over Docker.
-
-Run a local container registry:
-
-.. prompt:: bash #
-
-   docker run --privileged -d --name registry -p 5000:5000 -v /var/lib/registry:/var/lib/registry --restart=always registry:2
-
-Edit the ``/etc/docker/daemon.json`` file with the hostname and port where the registry is running:
-
-.. code-block:: bash
-
-   { "insecure-registries":["*<hostname>*:5000"] }
-
-.. note:: For every host which accesses the local registry, you will need to repeat this step and edit the ``/etc/docker/daemon.json`` file on the host.
-
-Restart docker:
-
-.. prompt:: bash #
-
-   systemctl daemon-reload
-   systemctl restart docker
-   
-Next, push your container image to your local registry.
-
-Then run bootstrap using the ``--image`` flag with your container image. For example:
-
-.. prompt:: bash #
-
-   cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
-
-
 Enable Ceph CLI
 ===============
 
@@ -362,11 +328,14 @@ See :ref:`cephadm-deploy-osds` for more detailed instructions.
 Enabling OSD memory autotuning
 ------------------------------
 
-It is recommended to enable ``osd_memory_target_autotune``. 
-in order to maximise the performance of the cluster. See :ref:`osd_autotune`.
+.. warning:: By default, cephadm enables ``osd_memory_target_autotune`` on bootstrap, with ``mgr/cephadm/autotune_memory_target_ratio`` set to ``.7`` of total host memory.
 
-In case the cluster hardware is not exclusively used by Ceph (hyperconverged),
-reduce the memory consuption of Ceph like so:
+See :ref:`osd_autotune`.
+
+To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/cephadm.html#scenario-deploy-hyperconverged-ceph>`_
+
+In other cases where the cluster hardware is not exclusively used by Ceph (hyperconverged),
+reduce the memory consumption of Ceph like so:
 
   .. prompt:: bash #
 
@@ -403,10 +372,10 @@ To configure a Ceph cluster to run on a single host, use the ``--single-host-def
 
 The ``--single-host-defaults`` flag sets the following configuration options::
 
-  global/osd_crush_choose_leaf_type = 0
+  global/osd_crush_chooseleaf_type = 0
   global/osd_pool_default_size = 2
   mgr/mgr_standby_modules = False
-   
+
 For more information on these options, see :ref:`one-node-cluster` and ``mgr_standby_modules`` in :ref:`mgr-administrator-guide`.
 
 Deployment in an isolated environment

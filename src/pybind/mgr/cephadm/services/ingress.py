@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class IngressService(CephService):
     TYPE = 'ingress'
+    MAX_KEEPALIVED_PASS_LEN = 8
 
     def primary_daemon_type(self) -> str:
         return 'haproxy'
@@ -77,7 +78,7 @@ class IngressService(CephService):
         password = self.mgr.get_store(pw_key)
         if password is None:
             if not spec.monitor_password:
-                password = ''.join(random.choice(string.ascii_lowercase) for _ in range(20))
+                password = ''.join(random.choice(string.ascii_lowercase) for _ in range(self.MAX_KEEPALIVED_PASS_LEN))
                 self.mgr.set_store(pw_key, password)
         else:
             if spec.monitor_password:
@@ -129,7 +130,7 @@ class IngressService(CephService):
                 'servers': servers,
                 'user': spec.monitor_user or 'admin',
                 'password': password,
-                'ip': daemon_spec.ip or '*',
+                'ip': str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '*',
                 'frontend_port': daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port,
                 'monitor_port': daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
             }
@@ -176,7 +177,7 @@ class IngressService(CephService):
         password = self.mgr.get_store(pw_key)
         if password is None:
             if not spec.keepalived_password:
-                password = ''.join(random.choice(string.ascii_lowercase) for _ in range(20))
+                password = ''.join(random.choice(string.ascii_lowercase) for _ in range(self.MAX_KEEPALIVED_PASS_LEN))
                 self.mgr.set_store(pw_key, password)
         else:
             if spec.keepalived_password:

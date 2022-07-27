@@ -1,0 +1,6 @@
+# See .readthedocs.yml
+set -ex
+if git symbolic-ref HEAD; then
+  git checkout origin/main -- doc/releases
+fi
+git status

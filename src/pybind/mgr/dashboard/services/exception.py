@@ -4,6 +4,7 @@ import json
 import logging
 from contextlib import contextmanager
 
+import cephfs
 import cherrypy
 import rados
 import rbd
@@ -44,7 +45,9 @@ def dashboard_exception_handler(handler, *args, **kwargs):
     try:
         with handle_rados_error(component=None):  # make the None controller the fallback.
             return handler(*args, **kwargs)
-    # Don't catch cherrypy.* Exceptions.
+    # pylint: disable=try-except-raise
+    except (cherrypy.HTTPRedirect, cherrypy.NotFound, cherrypy.HTTPError):
+        raise
     except (ViewCacheNoDataException, DashboardException) as error:
         logger.exception('Dashboard Exception')
         cherrypy.response.headers['Content-Type'] = 'application/json'
@@ -53,6 +56,14 @@ def dashboard_exception_handler(handler, *args, **kwargs):
     except Exception as error:
         logger.exception('Internal Server Error')
         raise error
+
+
+@contextmanager
+def handle_cephfs_error():
+    try:
+        yield
+    except cephfs.OSError as e:
+        raise DashboardException(e, component='cephfs') from e
 
 
 @contextmanager
@@ -103,3 +114,11 @@ def handle_request_error(component):
                 raise DashboardException(
                     msg=content_message, component=component)
         raise DashboardException(e=e, component=component)
+
+
+@contextmanager
+def handle_error(component, http_status_code=None):
+    try:
+        yield
+    except Exception as e:  # pylint: disable=broad-except
+        raise DashboardException(e, component=component, http_status_code=http_status_code)

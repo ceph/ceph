@@ -13,28 +13,53 @@
 
 namespace crimson::osd {
 
-class OSD;
+class PGShardManager;
 class PG;
 
 using osd_id_t = int;
 
-class CompoundPeeringRequest : public OperationT<CompoundPeeringRequest> {
+class CompoundPeeringRequest : public TrackableOperationT<CompoundPeeringRequest> {
+  friend class LttngBackendCompoundPeering;
 public:
   static constexpr OperationTypeCode type =
     OperationTypeCode::compound_peering_request;
 
+  struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
+    static constexpr const char * type_name = "CompoundOpBlocker";
+
+    std::vector<crimson::OperationRef> subops;
+    SubOpBlocker(std::vector<crimson::OperationRef> &&subops)
+      : subops(subops) {}
+
+    virtual void dump_detail(Formatter *f) const {
+      f->open_array_section("dependent_operations");
+      {
+        for (auto &i : subops) {
+          i->dump_brief(f);
+        }
+      }
+      f->close_section();
+    }
+  };
+
 private:
-  OSD &osd;
+  PGShardManager &pg_shard_manager;
   crimson::net::ConnectionRef conn;
   Ref<Message> m;
 
 public:
   CompoundPeeringRequest(
-    OSD &osd, crimson::net::ConnectionRef conn, Ref<Message> m);
+    PGShardManager &pg_shard_manager, crimson::net::ConnectionRef conn, Ref<Message> m);
 
   void print(std::ostream &) const final;
   void dump_detail(Formatter *f) const final;
   seastar::future<> start();
+
+  std::tuple<
+    StartEvent,
+    SubOpBlocker::BlockingEvent,
+    CompletionEvent
+  > tracking_events;
 };
 
 }

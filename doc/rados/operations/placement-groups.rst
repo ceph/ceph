@@ -33,6 +33,20 @@ set on any pools that are subsequently created::
 
   ceph config set global osd_pool_default_pg_autoscale_mode <mode>
 
+You can disable or enable the autoscaler for all pools with
+the ``noautoscale`` flag. By default this flag is set to  be ``off``,
+but you can turn it ``on`` by using the command::
+
+  ceph osd pool set noautoscale
+
+You can turn it ``off`` using the command::
+
+  ceph osd pool unset noautoscale
+
+To ``get`` the value of the flag use the command::
+
+  ceph osd pool get noautoscale
+
 Viewing PG scaling recommendations
 ----------------------------------
 
@@ -103,6 +117,27 @@ with large amount of PGs for performance purposes. On the other hand,
 pools without the ``bulk`` flag are expected to be smaller e.g.,
 .mgr or meta pools.
 
+.. note::
+
+   If ``ceph osd pool autoscale-status`` returns no output at all, most likely
+   you have at least one pool that spans multiple CRUSH roots.  One scenario is
+   when a new deployment auto-creates the ``.mgr`` pool on the ``default`` CRUSH
+   root, then subsequent pools are created with rules that constrain them to a
+   specific shadow CRUSH tree.  If one, for example, creates an RBD metadata pool
+   constrained to ``deviceclass = ssd`` and an RBD data pool constrained to
+   ``deviceclass = hdd``, this will occur.  This may be remedied by simply
+   constraining the spanning pool to one device class.  In the above scenario
+   most likely there is a ``replicated-ssd`` CRUSH rule defined, so one would
+   run the below if the ``.mgr`` pool should be constrained to ``ssd`` devices:
+
+.. code-block:: bash
+
+   root# ceph osd pool set .mgr crush_rule replicated-ssd
+   set pool 1 crush_rule to replicated-ssd
+
+This will result in a small amount of backfill traffic that should complete
+quickly.
+
 
 Automated scaling
 -----------------
@@ -130,22 +165,22 @@ to OSDs of class `hdd` will each have optimal PG counts that depend on
 the number of those respective device types.
 
 The autoscaler uses the `bulk` flag to determine which pool
-should start out with a full complements of PGs and only
-scales down when the the usage ratio across the pool is not even. 
+should start out with a full complement of PGs and only
+scales down when the usage ratio across the pool is not even.
 However, if the pool doesn't have the `bulk` flag, the pool will
 start out with minimal PGs and only when there is more usage in the pool.
 
-The autoscaler identifies any overlapping roots and prevents the pools 
+The autoscaler identifies any overlapping roots and prevents the pools
 with such roots from scaling because overlapping roots can cause problems
 with the scaling process.
 
 To create pool with `bulk` flag::
 
-  ceph osd create <pool-name> --bulk
+  ceph osd pool create <pool-name> --bulk
 
 To set/unset `bulk` flag of existing pool::
 
-  ceph osd pool set <pool-name> bulk=true/false/1/0
+  ceph osd pool set <pool-name> bulk <true/false/1/0>
 
 To get `bulk` flag of existing pool::
 
@@ -204,13 +239,14 @@ parallelism client will see when doing IO, even when a pool is mostly
 empty.  Setting the lower bound prevents Ceph from reducing (or
 recommending you reduce) the PG number below the configured number.
 
-You can set the minimum number of PGs for a pool with::
+You can set the minimum or maximum number of PGs for a pool with::
 
   ceph osd pool set <pool-name> pg_num_min <num>
+  ceph osd pool set <pool-name> pg_num_max <num>
 
-You can also specify the minimum PG count at pool creation time with
-the optional ``--pg-num-min <num>`` argument to the ``ceph osd pool
-create`` command.
+You can also specify the minimum or maximum PG count at pool creation
+time with the optional ``--pg-num-min <num>`` or ``--pg-num-max
+<num>`` arguments to the ``ceph osd pool create`` command.
 
 .. _preselection:
 
@@ -709,4 +745,4 @@ entirely. To mark the "unfound" objects as "lost", execute the following::
 
 .. _Create a Pool: ../pools#createpool
 .. _Mapping PGs to OSDs: ../../../architecture#mapping-pgs-to-osds
-.. _pgcalc: http://ceph.com/pgcalc/
+.. _pgcalc: https://old.ceph.com/pgcalc/

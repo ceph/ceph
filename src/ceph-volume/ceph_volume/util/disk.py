@@ -229,6 +229,11 @@ def _udevadm_info(device):
 
 
 def lsblk(device, columns=None, abspath=False):
+    return lsblk_all(device=device,
+                     columns=columns,
+                     abspath=abspath)
+
+def lsblk_all(device='', columns=None, abspath=False):
     """
     Create a dictionary of identifying values for a device using ``lsblk``.
     Each supported column is a key, in its *raw* format (all uppercase
@@ -241,6 +246,7 @@ def lsblk(device, columns=None, abspath=False):
 
          NAME  device name
         KNAME  internal kernel device name
+        PKNAME internal kernel parent device name
       MAJ:MIN  major:minor device number
        FSTYPE  filesystem type
    MOUNTPOINT  where the device is mounted
@@ -284,38 +290,46 @@ def lsblk(device, columns=None, abspath=False):
 
     Normal CLI output, as filtered by the flags in this function will look like ::
 
-        $ lsblk --nodeps -P -o NAME,KNAME,MAJ:MIN,FSTYPE,MOUNTPOINT
+        $ lsblk -P -o NAME,KNAME,PKNAME,MAJ:MIN,FSTYPE,MOUNTPOINT
         NAME="sda1" KNAME="sda1" MAJ:MIN="8:1" FSTYPE="ext4" MOUNTPOINT="/"
 
     :param columns: A list of columns to report as keys in its original form.
     :param abspath: Set the flag for absolute paths on the report
     """
     default_columns = [
-        'NAME', 'KNAME', 'MAJ:MIN', 'FSTYPE', 'MOUNTPOINT', 'LABEL', 'UUID',
-        'RO', 'RM', 'MODEL', 'SIZE', 'STATE', 'OWNER', 'GROUP', 'MODE',
+        'NAME', 'KNAME', 'PKNAME', 'MAJ:MIN', 'FSTYPE', 'MOUNTPOINT', 'LABEL',
+        'UUID', 'RO', 'RM', 'MODEL', 'SIZE', 'STATE', 'OWNER', 'GROUP', 'MODE',
         'ALIGNMENT', 'PHY-SEC', 'LOG-SEC', 'ROTA', 'SCHED', 'TYPE', 'DISC-ALN',
         'DISC-GRAN', 'DISC-MAX', 'DISC-ZERO', 'PKNAME', 'PARTLABEL'
     ]
-    device = device.rstrip('/')
     columns = columns or default_columns
-    # --nodeps -> Avoid adding children/parents to the device, only give information
-    #             on the actual device we are querying for
     # -P       -> Produce pairs of COLUMN="value"
     # -p       -> Return full paths to devices, not just the names, when ``abspath`` is set
     # -o       -> Use the columns specified or default ones provided by this function
-    base_command = ['lsblk', '--nodeps', '-P']
+    base_command = ['lsblk', '-P']
     if abspath:
         base_command.append('-p')
     base_command.append('-o')
     base_command.append(','.join(columns))
-    base_command.append(device)
+
     out, err, rc = process.call(base_command)
 
     if rc != 0:
-        return {}
+        raise RuntimeError(f"Error: {err}")
 
-    return _lsblk_parser(' '.join(out))
+    result = []
 
+    for line in out:
+        result.append(_lsblk_parser(line))
+
+    if not device:
+        return result
+
+    for dev in result:
+        if dev['NAME'] == os.path.basename(device):
+            return dev
+
+    return {}
 
 def is_device(dev):
     """
@@ -326,16 +340,14 @@ def is_device(dev):
     """
     if not os.path.exists(dev):
         return False
-    # use lsblk first, fall back to using stat
-    TYPE = lsblk(dev).get('TYPE')
-    if TYPE:
-        return TYPE in ['disk', 'mpath']
+    if not dev.startswith('/dev/'):
+        return False
+    if dev[len('/dev/'):].startswith('loop'):
+        if not allow_loop_devices():
+            return False
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
-    if stat.S_ISBLK(os.lstat(dev)):
-        return True
-    return False
 
 
 def is_partition(dev):
@@ -359,6 +371,13 @@ def is_partition(dev):
     if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
         return True
     return False
+
+
+def is_ceph_rbd(dev):
+    """
+    Boolean to determine if a given device is a ceph RBD device, like /dev/rbd0
+    """
+    return dev.startswith(('/dev/rbd'))
 
 
 class BaseFloatUnit(float):
@@ -724,24 +743,67 @@ def is_locked_raw_device(disk_path):
     return 0
 
 
-def get_block_devs_lsblk():
-    '''
-    This returns a list of lists with 3 items per inner list.
-    KNAME - reflects the kernel device name , for example /dev/sda or /dev/dm-0
-    NAME - the device name, for example /dev/sda or
-           /dev/mapper/<vg_name>-<lv_name>
-    TYPE - the block device type: disk, partition, lvm and such
+class AllowLoopDevices(object):
+    allow = False
+    warned = False
 
-    '''
-    cmd = ['lsblk', '-plno', 'KNAME,NAME,TYPE']
-    stdout, stderr, rc = process.call(cmd)
-    # lsblk returns 1 on failure
-    if rc == 1:
-        raise OSError('lsblk returned failure, stderr: {}'.format(stderr))
-    return [re.split(r'\s+', line) for line in stdout]
+    @classmethod
+    def __call__(cls):
+        val = os.environ.get("CEPH_VOLUME_ALLOW_LOOP_DEVICES", "false").lower()
+        if val not in ("false", 'no', '0'):
+            cls.allow = True
+            if not cls.warned:
+                logger.warning(
+                    "CEPH_VOLUME_ALLOW_LOOP_DEVICES is set in your "
+                    "environment, so we will allow the use of unattached loop"
+                    " devices as disks. This feature is intended for "
+                    "development purposes only and will never be supported in"
+                    " production. Issues filed based on this behavior will "
+                    "likely be ignored."
+                )
+                cls.warned = True
+        return cls.allow
 
 
-def get_devices(_sys_block_path='/sys/block'):
+allow_loop_devices = AllowLoopDevices()
+
+
+def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys/dev/block'):
+    # First, get devices that are _not_ partitions
+    result = list()
+    dev_names = os.listdir(_sys_block_path)
+    for dev in dev_names:
+        name = kname = os.path.join("/dev", dev)
+        if not os.path.exists(name):
+            continue
+        type_ = 'disk'
+        if get_file_contents(os.path.join(_sys_block_path, dev, 'removable')) == "1":
+            continue
+        dm_dir_path = os.path.join(_sys_block_path, dev, 'dm')
+        if os.path.isdir(dm_dir_path):
+            type_ = 'lvm'
+            basename = get_file_contents(os.path.join(dm_dir_path, 'name'))
+            name = os.path.join("/dev/mapper", basename)
+        if dev.startswith('loop'):
+            if not allow_loop_devices():
+                continue
+            # Skip loop devices that are not attached
+            if not os.path.exists(os.path.join(_sys_block_path, dev, 'loop')):
+                continue
+            type_ = 'loop'
+        result.append([kname, name, type_])
+    # Next, look for devices that _are_ partitions
+    for item in os.listdir(_sys_dev_block_path):
+        is_part = get_file_contents(os.path.join(_sys_dev_block_path, item, 'partition')) == "1"
+        dev = os.path.basename(os.readlink(os.path.join(_sys_dev_block_path, item)))
+        if not is_part:
+            continue
+        name = kname = os.path.join("/dev", dev)
+        result.append([name, kname, "part"])
+    return sorted(result, key=lambda x: x[0])
+
+
+def get_devices(_sys_block_path='/sys/block', device=''):
     """
     Captures all available block devices as reported by lsblk.
     Additional interesting metadata like sectors, size, vendor,
@@ -754,15 +816,23 @@ def get_devices(_sys_block_path='/sys/block'):
 
     device_facts = {}
 
-    block_devs = get_block_devs_lsblk()
+    block_devs = get_block_devs_sysfs(_sys_block_path)
+
+    block_types = ['disk', 'mpath']
+    if allow_loop_devices():
+        block_types.append('loop')
 
     for block in block_devs:
         devname = os.path.basename(block[0])
         diskname = block[1]
-        if block[2] not in ['disk', 'mpath']:
+        if block[2] not in block_types:
             continue
         sysdir = os.path.join(_sys_block_path, devname)
         metadata = {}
+
+        # If the device is ceph rbd it gets excluded
+        if is_ceph_rbd(diskname):
+            continue
 
         # If the mapper device is a logical volume it gets excluded
         if is_mapper_device(diskname):
@@ -805,6 +875,7 @@ def get_devices(_sys_block_path='/sys/block'):
         metadata['human_readable_size'] = human_readable_size(metadata['size'])
         metadata['path'] = diskname
         metadata['locked'] = is_locked_raw_device(metadata['path'])
+        metadata['type'] = block[2]
 
         device_facts[diskname] = metadata
     return device_facts

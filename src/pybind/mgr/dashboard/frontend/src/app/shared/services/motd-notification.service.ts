@@ -5,6 +5,7 @@ import { BehaviorSubject, EMPTY, Observable, of, Subscription } from 'rxjs';
 import { catchError, delay, mergeMap, repeat, tap } from 'rxjs/operators';
 
 import { Motd, MotdService } from '~/app/shared/api/motd.service';
+import { whenPageVisible } from '../rxjs/operators/page-visibilty.operator';
 
 @Injectable({
   providedIn: 'root'
@@ -31,7 +32,8 @@ export class MotdNotificationService implements OnDestroy {
         }),
         tap((motd: Motd | null) => this.processResponse(motd)),
         delay(60000),
-        repeat()
+        repeat(),
+        whenPageVisible()
       )
       .subscribe();
   }

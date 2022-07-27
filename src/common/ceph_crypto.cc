@@ -27,6 +27,12 @@
 #  include <openssl/err.h>
 #endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 namespace TOPNSPC::crypto::ssl {
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -213,3 +219,6 @@ void ssl::OpenSSLDigest::Final(unsigned char *digest) {
 }
 
 }
+
+#pragma clang diagnostic pop
+#pragma GCC diagnostic pop

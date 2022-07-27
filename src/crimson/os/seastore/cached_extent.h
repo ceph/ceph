@@ -17,7 +17,6 @@
 
 namespace crimson::os::seastore {
 
-class ool_record_t;
 class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
@@ -88,6 +87,17 @@ class CachedExtent : public boost::intrusive_ref_counter<
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
                            //  version > 0
+    EXIST_CLEAN,           // Similar to CLEAN, but its metadata not yet
+			   //  persisted to disk.
+    			   //  In Transaction::write_set and existing_block_list.
+			   //  After transaction commits, state becomes CLEAN
+			   //  and add extent to Cache. Modifing such extents
+			   //  will cause state turn to EXIST_MUTATION_PENDING.
+    EXIST_MUTATION_PENDING,// Similar to MUTATION_PENDING, but its prior_instance
+			   //  is empty.
+			   //  In Transaction::write_set, existing_block_list and
+			   //  mutated_block_list. State becomes DIRTY and it is
+			   //  added to Cache after transaction commits.
     INVALID                // Part of no ExtentIndex set
   } state = extent_state_t::INVALID;
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
@@ -100,7 +110,28 @@ class CachedExtent : public boost::intrusive_ref_counter<
   // Points at current version while in state MUTATION_PENDING
   CachedExtentRef prior_instance;
 
+  // time of the last modification
+  sea_time_point modify_time = NULL_TIME;
+
 public:
+  void init(extent_state_t _state,
+            paddr_t paddr,
+            placement_hint_t hint,
+            reclaim_gen_t gen) {
+    state = _state;
+    set_paddr(paddr);
+    user_hint = hint;
+    reclaim_generation = gen;
+  }
+
+  void set_modify_time(sea_time_point t) {
+    modify_time = t;
+  }
+
+  sea_time_point get_modify_time() const {
+    return modify_time;
+  }
+
   /**
    *  duplicate_for_write
    *
@@ -163,6 +194,10 @@ public:
     return false;
   }
 
+  virtual bool may_conflict() const {
+    return true;
+  }
+
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
@@ -170,11 +205,14 @@ public:
 	<< ", type=" << get_type()
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
+	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
 	<< ", paddr=" << get_paddr()
 	<< ", length=" << get_length()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
-	<< ", refcount=" << use_count();
+	<< ", refcount=" << use_count()
+	<< ", user_hint=" << user_hint
+	<< ", reclaim_gen=" << reclaim_generation;
     if (state != extent_state_t::INVALID &&
         state != extent_state_t::CLEAN_PENDING) {
       print_detail(out);
@@ -240,7 +278,8 @@ public:
   /// Returns true if extent is part of an open transaction
   bool is_pending() const {
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
-      state == extent_state_t::MUTATION_PENDING;
+      state == extent_state_t::MUTATION_PENDING ||
+      state == extent_state_t::EXIST_MUTATION_PENDING;
   }
 
   /// Returns true if extent has a pending delta
@@ -258,7 +297,18 @@ public:
     ceph_assert(is_valid());
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
            state == extent_state_t::CLEAN ||
-           state == extent_state_t::CLEAN_PENDING;
+           state == extent_state_t::CLEAN_PENDING ||
+           state == extent_state_t::EXIST_CLEAN;
+  }
+
+  /// Ruturns true if data is persisted while metadata isn't
+  bool is_exist_clean() const {
+    return state == extent_state_t::EXIST_CLEAN;
+  }
+
+  /// Returns true if the extent with EXTIST_CLEAN is modified
+  bool is_exist_mutation_pending() const {
+    return state == extent_state_t::EXIST_MUTATION_PENDING;
   }
 
   /// Returns true if extent is dirty (has deltas on disk)
@@ -275,6 +325,15 @@ public:
   /// Returns true if extent or prior_instance has been invalidated
   bool has_been_invalidated() const {
     return !is_valid() || (prior_instance && !prior_instance->is_valid());
+  }
+
+  /// Returns true if extent is a plcaeholder
+  bool is_placeholder() const {
+    return get_type() == extent_types_t::RETIRED_PLACEHOLDER;
+  }
+
+  bool is_pending_io() const {
+    return !!io_wait_promise;
   }
 
   /// Return journal location of oldest relevant delta, only valid while DIRTY
@@ -330,11 +389,24 @@ public:
 
   virtual ~CachedExtent();
 
-  /// type of the backend device that will hold this extent
-  device_type_t backend_type = device_type_t::NONE;
+  placement_hint_t get_user_hint() const {
+    return user_hint;
+  }
 
-  /// hint for allocators
-  placement_hint_t hint = placement_hint_t::NUM_HINTS;
+  reclaim_gen_t get_reclaim_generation() const {
+    return reclaim_generation;
+  }
+
+  void invalidate_hints() {
+    user_hint = PLACEMENT_HINT_NULL;
+    reclaim_generation = NULL_GENERATION;
+  }
+
+  void set_reclaim_generation(reclaim_gen_t gen) {
+    assert(gen < RECLAIM_GENERATIONS);
+    user_hint = placement_hint_t::REWRITE;
+    reclaim_generation = gen;
+  }
 
   bool is_inline() const {
     return poffset.is_relative();
@@ -386,7 +458,7 @@ private:
   ceph::bufferptr ptr;
 
   /// number of deltas since initial write
-  extent_version_t version = EXTENT_VERSION_NULL;
+  extent_version_t version = 0;
 
   /// address of original block -- relative iff is_pending() and is_clean()
   paddr_t poffset;
@@ -412,6 +484,11 @@ private:
   }
 
   read_set_item_t<Transaction>::list transactions;
+
+  placement_hint_t user_hint;
+
+  /// > 0 and not null means the extent is under reclaimming
+  reclaim_gen_t reclaim_generation;
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;
@@ -479,7 +556,6 @@ protected:
     }
   }
 
-  friend class crimson::os::seastore::ool_record_t;
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
@@ -487,6 +563,8 @@ protected:
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
 std::ostream &operator<<(std::ostream &, const CachedExtent&);
+
+bool is_backref_mapped_extent_node(const CachedExtentRef &extent);
 
 /// Compare extents by paddr
 struct paddr_cmp {
@@ -541,7 +619,7 @@ class ExtentIndex {
   friend class Cache;
   CachedExtent::index extent_index;
 public:
-  auto get_overlap(paddr_t addr, segment_off_t len) {
+  auto get_overlap(paddr_t addr, seastore_off_t len) {
     auto bottom = extent_index.upper_bound(addr, paddr_cmp());
     if (bottom != extent_index.begin())
       --bottom;
@@ -633,25 +711,41 @@ private:
 };
 
 class LogicalCachedExtent;
-class LBAPin;
-using LBAPinRef = std::unique_ptr<LBAPin>;
-class LBAPin {
+
+template <typename key_t, typename>
+class PhysicalNodePin;
+
+template <typename key_t, typename val_t>
+using PhysicalNodePinRef = std::unique_ptr<PhysicalNodePin<key_t, val_t>>;
+
+template <typename key_t, typename val_t>
+class PhysicalNodePin {
 public:
   virtual void link_extent(LogicalCachedExtent *ref) = 0;
-  virtual void take_pin(LBAPin &pin) = 0;
+  virtual void take_pin(PhysicalNodePin<key_t, val_t> &pin) = 0;
   virtual extent_len_t get_length() const = 0;
-  virtual paddr_t get_paddr() const = 0;
-  virtual laddr_t get_laddr() const = 0;
-  virtual LBAPinRef duplicate() const = 0;
+  virtual extent_types_t get_type() const = 0;
+  virtual val_t get_val() const = 0;
+  virtual key_t get_key() const = 0;
+  virtual PhysicalNodePinRef<key_t, val_t> duplicate() const = 0;
   virtual bool has_been_invalidated() const = 0;
 
-  virtual ~LBAPin() {}
+  virtual ~PhysicalNodePin() {}
 };
+
+using LBAPin = PhysicalNodePin<laddr_t, paddr_t>;
+using LBAPinRef = PhysicalNodePinRef<laddr_t, paddr_t>;
+
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
 
 using lba_pin_list_t = std::list<LBAPinRef>;
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
+
+using BackrefPin = PhysicalNodePin<paddr_t, laddr_t>;
+using BackrefPinRef = PhysicalNodePinRef<paddr_t, laddr_t>;
+
+using backref_pin_list_t = std::list<BackrefPinRef>;
 
 /**
  * RetiredExtentPlaceholder
@@ -723,7 +817,7 @@ public:
   void set_pin(LBAPinRef &&npin) {
     assert(!pin);
     pin = std::move(npin);
-    laddr = pin->get_laddr();
+    laddr = pin->get_key();
     pin->link_extent(this);
   }
 
@@ -765,8 +859,11 @@ protected:
   virtual void logical_on_delta_write() {}
 
   void on_delta_write(paddr_t record_block_offset) final {
-    assert(get_prior_instance());
-    pin->take_pin(*(get_prior_instance()->cast<LogicalCachedExtent>()->pin));
+    assert(is_exist_mutation_pending() ||
+	   get_prior_instance());
+    if (get_prior_instance()) {
+      pin->take_pin(*(get_prior_instance()->cast<LogicalCachedExtent>()->pin));
+    }
     logical_on_delta_write();
   }
 

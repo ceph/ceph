@@ -121,7 +121,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   else()
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -rdynamic")
   endif()
-  string(APPEND CMAKE_CXX_FLAGS_DEBUG " -Og")
+  string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-Og ")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wstrict-null-sentinel>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-new-ttp-matching>)
@@ -135,7 +135,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_EXPORTS_C_FLAG}")
   string(APPEND CMAKE_LINKER_FLAGS " -rdynamic -export-dynamic ${CMAKE_EXE_EXPORTS_C_FLAG}")
-  string(APPEND CMAKE_CXX_FLAGS_DEBUG " -g")
+  string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-g ")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-inconsistent-missing-override>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-mismatched-tags>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-private-field>)
@@ -157,12 +157,6 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
     string(APPEND CMAKE_SHARED_LINKER_FLAGS " -undefined dynamic_lookup")
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-
-if(NOT CMAKE_BUILD_TYPE AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
-  set(default_build_type "Debug")
-  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
-      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
-endif()
 
 if(WITH_CEPH_DEBUG_MUTEX)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DCEPH_DEBUG_MUTEX>)
@@ -282,27 +276,6 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
-# sort out which allocator to use
-if(ALLOCATOR STREQUAL "tcmalloc")
-  set(ALLOC_LIBS gperftools::tcmalloc)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
-elseif(ALLOCATOR STREQUAL "tcmalloc_minimal")
-  set(ALLOC_LIBS gperftools::tcmalloc_minimal)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
-elseif(ALLOCATOR STREQUAL "jemalloc")
-  set(ALLOC_LIBS JeMalloc::JeMalloc)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
-endif()
-
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
@@ -323,7 +296,7 @@ include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
-find_package(fmt 6.0.0 QUIET)
+find_package(fmt 7.0.0 QUIET)
 if(fmt_FOUND)
   include_directories(SYSTEM "${fmt_INCLUDE_DIR}")
 else()
@@ -333,6 +306,8 @@ else()
   add_subdirectory(fmt)
   set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
   unset(old_BUILD_SHARED_LIBS)
+  target_compile_definitions(fmt PUBLIC
+    $<$<BOOL:${WIN32}>:FMT_USE_TZSET=0>)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 endif()
 
@@ -369,6 +344,7 @@ if(WITH_SEASTAR)
     endif()
   endif()
   list(APPEND Seastar_CXX_FLAGS
+    "-DSEASTAR_NO_EXCEPTION_HACK"
     "-Wno-error"
     "-Wno-sign-compare"
     "-Wno-attributes"
@@ -432,9 +408,11 @@ if(WITH_JAEGER)
   find_package(thrift 0.13.0 REQUIRED)
   include(BuildOpentelemetry)
   build_opentelemetry()
-  set(jaeger_base opentelemetry::libopentelemetry thrift::libthrift)
-  add_dependencies(common-objs ${jaeger_base})
-  target_link_libraries(common-objs ${jaeger_base})
+  add_library(jaeger_base INTERFACE)
+  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry
+    thrift::libthrift)
+  add_dependencies(common-objs jaeger_base)
+  target_link_libraries(common-objs jaeger_base)
 endif()
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
@@ -490,7 +468,7 @@ if(NOT WITH_SYSTEM_BOOST)
 endif()
 
 if(HAVE_QATZIP)
-  list(APPEND ceph_common_deps ${QATZIP_LIBRARIES})
+  list(APPEND ceph_common_deps ${qatzip_LIBRARIES})
 endif()
 
 if(WITH_DPDK)
@@ -498,7 +476,7 @@ if(WITH_DPDK)
 endif()
 
 if(WITH_JAEGER)
-  list(APPEND ceph_common_deps ${jaeger_base})
+  list(APPEND ceph_common_deps jaeger_base)
 endif()
 
 if(WIN32)
@@ -508,27 +486,53 @@ endif()
 
 if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
   if(WITH_SYSTEM_PMDK)
-    set(pmem_COMPONENTS)
+    set(pmdk_COMPONENTS)
     if(WITH_BLUESTORE_PMEM)
-      list(APPEND pmem_COMPONENTS pmem)
+      list(APPEND pmdk_COMPONENTS pmem)
     endif()
     if(WITH_RBD_RWL)
-      list(APPEND pmem_COMPONENTS pmemobj)
+      list(APPEND pmdk_COMPONENTS pmemobj)
     endif()
-    find_package(pmem 1.10 REQUIRED COMPONENTS ${pmem_COMPONENTS})
+    find_package(pmdk 1.8 REQUIRED COMPONENTS ${pmdk_COMPONENTS})
   else()
-    include(Buildpmem)
-    build_pmem()
+    include(Buildpmdk)
+    if(WITH_BLUESTORE_PMEM)
+      set(enable_ndctl ON)
+      find_package(ndctl 63 REQUIRED)
+      find_package(daxctl 63 REQUIRED)
+    else()
+      set(enable_ndctl OFF)
+    endif()
+    build_pmdk(${enable_ndctl})
   endif()
 endif()
 
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
-add_dependencies(common legacy-option-headers ${jaeger_base})
+add_dependencies(common legacy-option-headers)
+if(WITH_JAEGER)
+add_dependencies(common jaeger_base)
+endif()
 
-add_library(ceph-common SHARED ${ceph_common_objs})
+if (WIN32)
+  # Statically building ceph-common on Windows fails. We're temporarily
+  # reverting this: 22fefb2338cfc4fcb03ece3cbf77aa964a7f17f2
+  add_library(ceph-common SHARED ${ceph_common_objs})
+else()
+  add_library(ceph-common ${CEPH_SHARED} ${ceph_common_objs})
+endif()
+
 target_link_libraries(ceph-common ${ceph_common_deps})
-add_dependencies(ceph-common legacy-option-headers ${jaeger_base})
+if(ENABLE_COVERAGE)
+  target_link_libraries(ceph-common gcov)
+endif(ENABLE_COVERAGE)
+
+add_dependencies(ceph-common legacy-option-headers)
+
+if(WITH_JAEGER)
+add_dependencies(ceph-common jaeger_base)
+endif()
+
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 2
@@ -593,6 +597,13 @@ if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
 
+# make rocksdb statically
+
+if(NOT WITH_SYSTEM_ROCKSDB)
+  include(BuildRocksDB)
+  build_rocksdb()
+endif(NOT WITH_SYSTEM_ROCKSDB)
+
 if(WITH_MGR)
   add_subdirectory(mgr)
 endif()
@@ -625,17 +636,13 @@ add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon os global-static ceph-common
+  ${ALLOC_LIBS}
   ${EXTRALIBS}
-  ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
+  ${CMAKE_DL_LIBS}
+  ${GSSAPI_LIBRARIES})
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
-# make rocksdb statically
-
-if(NOT WITH_SYSTEM_ROCKSDB)
-  include(BuildRocksDB)
-  build_rocksdb()
-endif(NOT WITH_SYSTEM_ROCKSDB)
 
 include(TestBigEndian)
 test_big_endian(CEPH_BIG_ENDIAN)
@@ -660,6 +667,7 @@ set(ceph_osd_srcs
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
+  ${ALLOC_LIBS}
   ${BLKID_LIBRARIES})
 if(WITH_FUSE)
   target_link_libraries(ceph-osd FUSE::FUSE)
@@ -677,7 +685,8 @@ if (WITH_CEPHFS)
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs})
   target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
-    Boost::thread)
+    Boost::thread
+    ${ALLOC_LIBS})
   install(TARGETS ceph-mds DESTINATION bin)
 endif()
 
@@ -735,8 +744,8 @@ install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash
-  ${CMAKE_SOURCE_DIR}/src/ceph-run
-  ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
+  ceph-run
+  ceph-clsinfo
   DESTINATION bin)
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
@@ -755,7 +764,7 @@ install(PROGRAMS
   DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/ceph)
 
 install(PROGRAMS
-  ${CMAKE_SOURCE_DIR}/src/ceph-create-keys
+  ceph-create-keys
   DESTINATION sbin)
 
 add_subdirectory(bash_completion)
@@ -780,7 +789,7 @@ if(WITH_LIBCEPHFS)
   endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
-    "${CMAKE_SOURCE_DIR}/src/include/cephfs"
+    "include/cephfs"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   set(ceph_syn_srcs
     ceph_syn.cc
@@ -838,9 +847,9 @@ if(WITH_RBD)
   endif()
 
   install(PROGRAMS
-    ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer
-    ${CMAKE_SOURCE_DIR}/src/rbd-replay-many
-    ${CMAKE_SOURCE_DIR}/src/rbdmap
+    ceph-rbdnamer
+    rbd-replay-many
+    rbdmap
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_subdirectory(rbd_replay)
 endif(WITH_RBD)
@@ -855,6 +864,25 @@ if(WITH_KVS)
 endif(WITH_KVS)
 
 if(WITH_RADOSGW)
+  if(WITH_RADOSGW_SELECT_PARQUET)
+    if(WITH_SYSTEM_ARROW)
+      find_package(Arrow 4 REQUIRED QUIET)
+      find_package(Parquet 4 REQUIRED QUIET)
+    else()
+      # find arrow's dependencies
+      if (WITH_SYSTEM_UTF8PROC)
+        find_package(utf8proc 2.2.0 REQUIRED)
+      else()
+        include(BuildUtf8proc)
+        build_utf8proc()
+      endif()
+      find_package(thrift 0.13 REQUIRED)
+
+      include(BuildArrow)
+      build_arrow()
+    endif()
+  endif()
+
   add_subdirectory(libkmip)
   add_subdirectory(rgw)
 endif(WITH_RADOSGW)
@@ -996,4 +1024,3 @@ if(DOXYGEN_FOUND)
     rgw
     COMMENT "Generate C++ documentation")
 endif()
-

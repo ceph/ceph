@@ -134,7 +134,7 @@ endif(WITH_RADOSGW)
 if(WITH_LIBCEPHFS)
   # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
   add_executable(test_build_libcephfs buildtest_skeleton.cc)
-  target_link_libraries(test_build_libcephfs cephfs pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+  target_link_libraries(test_build_libcephfs cephfs pthread ceph-common ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(WITH_LIBCEPHFS)
 
 add_executable(test_build_librados buildtest_skeleton.cc)
@@ -575,6 +575,9 @@ if(WITH_RBD)
   if(FREEBSD)
     add_dependencies(tests rbd-ggate)
   endif(FREEBSD)
+  if(WITH_RBD_MIRROR)
+    add_dependencies(tests unittest_librbd rbd-mirror)
+  endif(WITH_RBD_MIRROR)
 endif(WITH_RBD)
 if(WITH_RADOSGW)
   add_dependencies(tests radosgwd radosgw-admin)
@@ -609,27 +612,6 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 #add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
-
-if(DEFINED PROMTOOL_EXECUTABLE)
-  set(promtool_executable_checked TRUE)
-endif()
-
-find_program(PROMTOOL_EXECUTABLE promtool)
-if(PROMTOOL_EXECUTABLE)
-  execute_process(
-    COMMAND ${PROMTOOL_EXECUTABLE} test rules /dev/null
-    RESULT_VARIABLE rc
-    OUTPUT_QUIET)
-  if(NOT rc)
-    add_ceph_test(run-promtool-unittests
-      ${PROMTOOL_EXECUTABLE} test rules ${CMAKE_SOURCE_DIR}/monitoring/prometheus/tests/test_alerts.yml)
-  elseif(NOT promtool_executable_checked)
-    message(WARNING "'${PROMTOOL_EXECUTABLE} test rules' does not work, "
-      "please use a newer prometheus")
-  endif()
-elseif(NOT promtool_executable_checked)
-  message(WARNING "run-promtool-unittests is skipped due to missing promtool")
-endif()
 
 set_property(
   TEST ${tox_tests}

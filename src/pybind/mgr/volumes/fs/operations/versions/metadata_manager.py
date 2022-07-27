@@ -21,10 +21,15 @@ log = logging.getLogger(__name__)
 
 class MetadataManager(object):
     GLOBAL_SECTION = "GLOBAL"
+    USER_METADATA_SECTION   = "USER_METADATA"
     GLOBAL_META_KEY_VERSION = "version"
     GLOBAL_META_KEY_TYPE    = "type"
     GLOBAL_META_KEY_PATH    = "path"
     GLOBAL_META_KEY_STATE   = "state"
+
+    CLONE_FAILURE_SECTION = "CLONE_FAILURE"
+    CLONE_FAILURE_META_KEY_ERRNO = "errno"
+    CLONE_FAILURE_META_KEY_ERROR_MSG = "error_msg"
 
     MAX_IO_BYTES = 8 * 1024
 
@@ -40,16 +45,17 @@ class MetadataManager(object):
     def refresh(self):
         fd = None
         conf_data = StringIO()
+        log.debug("opening config {0}".format(self.config_path))
         try:
-            log.debug("opening config {0}".format(self.config_path))
             fd = self.fs.open(self.config_path, os.O_RDONLY)
             while True:
                 data = self.fs.read(fd, -1, MetadataManager.MAX_IO_BYTES)
                 if not len(data):
                     break
                 conf_data.write(data.decode('utf-8'))
-            conf_data.seek(0)
-            self.config.readfp(conf_data)
+        except UnicodeDecodeError:
+            raise MetadataMgrException(-errno.EINVAL,
+                    "failed to decode, erroneous metadata config '{0}'".format(self.config_path))
         except cephfs.ObjectNotFound:
             raise MetadataMgrException(-errno.ENOENT, "metadata config '{0}' not found".format(self.config_path))
         except cephfs.Error as e:
@@ -57,6 +63,16 @@ class MetadataManager(object):
         finally:
             if fd is not None:
                 self.fs.close(fd)
+
+        conf_data.seek(0)
+        try:
+            if sys.version_info >= (3, 2):
+                self.config.read_file(conf_data)
+            else:
+                self.config.readfp(conf_data)
+        except configparser.Error:
+            raise MetadataMgrException(-errno.EINVAL, "failed to parse, erroneous metadata config "
+                    "'{0}'".format(self.config_path))
 
     def flush(self):
         # cull empty sections
@@ -109,7 +125,7 @@ class MetadataManager(object):
     def remove_option(self, section, key):
         if not self.config.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
-        self.config.remove_option(section, key)
+        return self.config.remove_option(section, key)
 
     def remove_section(self, section):
         self.config.remove_section(section)
@@ -137,6 +153,23 @@ class MetadataManager(object):
 
     def get_global_option(self, key):
         return self.get_option(MetadataManager.GLOBAL_SECTION, key)
+
+    def list_all_options_from_section(self, section):
+        metadata_dict = {}
+        if self.config.has_section(section):
+            options = self.config.options(section)
+            for option in options:
+                metadata_dict[option] = self.config.get(section,option)
+        return metadata_dict
+
+    def list_all_keys_with_specified_values_from_section(self, section, value):
+        keys = []
+        if self.config.has_section(section):
+            options = self.config.options(section)
+            for option in options:
+                if (value == self.config.get(section, option)) :
+                    keys.append(option)
+        return keys
 
     def section_has_item(self, section, item):
         if not self.config.has_section(section):

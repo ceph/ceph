@@ -1813,9 +1813,7 @@ CEPH_RADOS_API unsigned int rados_omap_iter_size(rados_omap_iter_t iter);
 CEPH_RADOS_API void rados_omap_get_end(rados_omap_iter_t iter);
 
 /**
- * Get object stats (size/mtime)
- *
- * TODO: when are these set, and by whom? can they be out of date?
+ * Get object size and most recent update time from the OSD.
  *
  * @param io ioctx
  * @param o object name
@@ -3995,12 +3993,6 @@ CEPH_RADOS_API int rados_pg_command(rados_t cluster, const char *pgstr,
 		                    const char *inbuf, size_t inbuflen,
 		                    char **outbuf, size_t *outbuflen,
 		                    char **outs, size_t *outslen);
-
-CEPH_RADOS_API int rados_mgr_command(rados_t cluster,
-                                     const char **cmd, size_t cmdlen,
-		                     const char *inbuf, size_t inbuflen,
-		                     char **outbuf, size_t *outbuflen,
-		                     char **outs, size_t *outslen);
 
 /*
  * This is not a doxygen comment leadin, because doxygen breaks on

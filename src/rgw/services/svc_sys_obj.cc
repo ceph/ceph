@@ -12,19 +12,9 @@
 
 using namespace std;
 
-RGWSysObjectCtx RGWSI_SysObj::init_obj_ctx()
+RGWSI_SysObj::Obj RGWSI_SysObj::get_obj(const rgw_raw_obj& obj)
 {
-  return RGWSysObjectCtx(this);
-}
-
-RGWSI_SysObj::Obj RGWSI_SysObj::get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_obj& obj)
-{
-  return Obj(core_svc, obj_ctx, obj);
-}
-
-void RGWSI_SysObj::Obj::invalidate()
-{
-  ctx.invalidate(obj);
+  return Obj(core_svc, obj);
 }
 
 RGWSI_SysObj::Obj::ROp::ROp(Obj& _source) : source(_source) {
@@ -36,10 +26,8 @@ int RGWSI_SysObj::Obj::ROp::stat(optional_yield y, const DoutPrefixProvider *dpp
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
 
-  return svc->stat(source.get_ctx(), *state, obj,
-		   attrs, raw_attrs,
-                   lastmod, obj_size,
-                   objv_tracker, y, dpp);
+  return svc->stat(*state, obj, attrs, raw_attrs,
+                   lastmod, obj_size, objv_tracker, y, dpp);
 }
 
 int RGWSI_SysObj::Obj::ROp::read(const DoutPrefixProvider *dpp,
@@ -49,7 +37,7 @@ int RGWSI_SysObj::Obj::ROp::read(const DoutPrefixProvider *dpp,
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  return svc->read(dpp, source.get_ctx(), *state,
+  return svc->read(dpp, *state,
                    objv_tracker,
                    obj, bl, ofs, end,
                    attrs,
@@ -73,9 +61,7 @@ int RGWSI_SysObj::Obj::WOp::remove(const DoutPrefixProvider *dpp, optional_yield
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  return svc->remove(dpp, source.get_ctx(),
-                     objv_tracker,
-                     obj, y);
+  return svc->remove(dpp, objv_tracker, obj, y);
 }
 
 int RGWSI_SysObj::Obj::WOp::write(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y)
@@ -100,7 +86,7 @@ int RGWSI_SysObj::Obj::WOp::write_attrs(const DoutPrefixProvider *dpp, optional_
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  return svc->set_attrs(dpp, obj, attrs, nullptr, objv_tracker, y);
+  return svc->set_attrs(dpp, obj, attrs, nullptr, objv_tracker, exclusive, y);
 }
 
 int RGWSI_SysObj::Obj::WOp::write_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& bl,
@@ -112,7 +98,7 @@ int RGWSI_SysObj::Obj::WOp::write_attr(const DoutPrefixProvider *dpp, const char
   map<string, bufferlist> m;
   m[name] = bl;
 
-  return svc->set_attrs(dpp, obj, m, nullptr, objv_tracker, y);
+  return svc->set_attrs(dpp, obj, m, nullptr, objv_tracker, exclusive, y);
 }
 
 int RGWSI_SysObj::Pool::list_prefixed_objs(const DoutPrefixProvider *dpp, const string& prefix, std::function<void(const string&)> cb)

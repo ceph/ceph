@@ -4,6 +4,7 @@ import { Injectable } from '@angular/core';
 import _ from 'lodash';
 import { map } from 'rxjs/operators';
 
+import { ApiClient } from '~/app/shared/api/api-client';
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { ImageSpec } from '../models/image-spec';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
@@ -13,8 +14,10 @@ import { RbdPool } from './rbd.model';
 @Injectable({
   providedIn: 'root'
 })
-export class RbdService {
-  constructor(private http: HttpClient, private rbdConfigurationService: RbdConfigurationService) {}
+export class RbdService extends ApiClient {
+  constructor(private http: HttpClient, private rbdConfigurationService: RbdConfigurationService) {
+    super();
+  }
 
   isRBDPool(pool: any) {
     return _.indexOf(pool.application_metadata, 'rbd') !== -1 && !pool.pool_name.includes('/');
@@ -40,23 +43,30 @@ export class RbdService {
     return this.http.get(`api/block/image/${imageSpec.toStringEncoded()}`);
   }
 
-  list() {
-    return this.http.get<RbdPool[]>('api/block/image').pipe(
-      map((pools) =>
-        pools.map((pool) => {
-          pool.value.map((image) => {
-            if (!image.configuration) {
+  list(params: any) {
+    return this.http
+      .get<RbdPool[]>('api/block/image', {
+        params: params,
+        headers: { Accept: this.getVersionHeaderValue(2, 0) },
+        observe: 'response'
+      })
+      .pipe(
+        map((response: any) => {
+          return response['body'].map((pool: any) => {
+            pool.value.map((image: any) => {
+              if (!image.configuration) {
+                return image;
+              }
+              image.configuration.map((option: any) =>
+                Object.assign(option, this.rbdConfigurationService.getOptionByName(option.name))
+              );
               return image;
-            }
-            image.configuration.map((option) =>
-              Object.assign(option, this.rbdConfigurationService.getOptionByName(option.name))
-            );
-            return image;
+            });
+            pool['headers'] = response.headers;
+            return pool;
           });
-          return pool;
         })
-      )
-    );
+      );
   }
 
   copy(imageSpec: ImageSpec, rbd: any) {

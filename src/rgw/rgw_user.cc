@@ -118,7 +118,7 @@ int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
       marker = i.first;
 
       auto& bucket_ent = i.second;
-      ret = bucket_ent->load_bucket(dpp, y);
+      ret = bucket_ent->load_bucket(dpp, y, true /* load user stats */);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
         return ret;
@@ -134,6 +134,18 @@ int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
   } while (!done);
 
   return 0;
+}
+
+static string key_type_to_str(int key_type) {
+  switch (key_type) {
+    case KEY_TYPE_SWIFT:
+      return "swift";
+      break;
+
+    default:
+      return "s3";
+      break;
+  }
 }
 
 static bool char_is_unreserved_url(char c)
@@ -269,8 +281,8 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("default_placement", info.default_placement.name, f);
   encode_json("default_storage_class", info.default_placement.storage_class, f);
   encode_json("placement_tags", info.placement_tags, f);
-  encode_json("bucket_quota", info.bucket_quota, f);
-  encode_json("user_quota", info.user_quota, f);
+  encode_json("bucket_quota", info.quota.bucket_quota, f);
+  encode_json("user_quota", info.quota.user_quota, f);
   encode_json("temp_url_keys", info.temp_url_keys, f);
 
   string user_source_type;
@@ -358,7 +370,7 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
   const rgw_user& uid = op_state.get_user_id();
   if (uid.compare(RGW_USER_ANON_ID) == 0) {
     keys_allowed = false;
-    return -EACCES;
+    return -EINVAL;
   }
 
   swift_keys = op_state.get_swift_keys();
@@ -407,6 +419,11 @@ void RGWUserAdminOpState::set_subuser(std::string& _subuser)
 void RGWUserAdminOpState::set_user_info(RGWUserInfo& user_info)
 {
   user->get_info() = user_info;
+}
+
+void RGWUserAdminOpState::set_user_version_tracker(RGWObjVersionTracker& objv_tracker)
+{
+  user->get_version_tracker() = objv_tracker;
 }
 
 const rgw_user& RGWUserAdminOpState::get_user_id()
@@ -855,7 +872,8 @@ int RGWAccessKeyPool::execute_remove(const DoutPrefixProvider *dpp,
   map<std::string, RGWAccessKey> *keys_map;
 
   if (!op_state.has_existing_key()) {
-    set_err_msg(err_msg, "unable to find access key");
+    set_err_msg(err_msg, "unable to find access key,  with key type: " +
+                             key_type_to_str(key_type));
     return -ERR_INVALID_ACCESS_KEY;
   }
 
@@ -1502,6 +1520,7 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     op_state.set_user_info(user->get_info());
     op_state.set_populated();
     op_state.objv = user->get_version_tracker();
+    op_state.set_user_version_tracker(user->get_version_tracker());
 
     old_info = user->get_info();
     set_populated();
@@ -1555,6 +1574,8 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
 
   ret = user->store_user(dpp, y, false, pold_info);
   op_state.objv = user->get_version_tracker();
+  op_state.set_user_version_tracker(user->get_version_tracker());
+
   if (ret < 0) {
     set_err_msg(err_msg, "unable to store user info");
     return ret;
@@ -1704,6 +1725,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   RGWUserInfo& user_info = op_state.get_user_info();
   user_info.user_id = new_user->get_id();
   op_state.objv = user->get_version_tracker();
+  op_state.set_user_version_tracker(user->get_version_tracker());
 
   rename_swift_keys(new_user->get_id(), user_info.swift_keys);
 
@@ -1743,9 +1765,9 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
     user_info.op_mask = op_state.get_op_mask();
 
   if (op_state.has_bucket_quota()) {
-    user_info.bucket_quota = op_state.get_bucket_quota();
+    user_info.quota.bucket_quota = op_state.get_bucket_quota();
   } else {
-    rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
+    rgw_apply_default_bucket_quota(user_info.quota.bucket_quota, cct->_conf);
   }
 
   if (op_state.temp_url_key_specified) {
@@ -1757,9 +1779,9 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
   }
 
   if (op_state.has_user_quota()) {
-    user_info.user_quota = op_state.get_user_quota();
+    user_info.quota.user_quota = op_state.get_user_quota();
   } else {
-    rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
+    rgw_apply_default_user_quota(user_info.quota.user_quota, cct->_conf);
   }
 
   if (op_state.default_placement_specified) {
@@ -2001,10 +2023,10 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     user_info.op_mask = op_state.get_op_mask();
 
   if (op_state.has_bucket_quota())
-    user_info.bucket_quota = op_state.get_bucket_quota();
+    user_info.quota.bucket_quota = op_state.get_bucket_quota();
 
   if (op_state.has_user_quota())
-    user_info.user_quota = op_state.get_user_quota();
+    user_info.quota.user_quota = op_state.get_user_quota();
 
   if (op_state.has_suspension_op()) {
     __u8 suspended = op_state.get_suspension_status();
@@ -2822,29 +2844,6 @@ int RGWUserCtl::remove_info(const DoutPrefixProvider *dpp,
   });
 }
 
-int RGWUserCtl::add_bucket(const DoutPrefixProvider *dpp, 
-                           const rgw_user& user,
-                           const rgw_bucket& bucket,
-                           ceph::real_time creation_time,
-			   optional_yield y)
-
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->add_bucket(dpp, op->ctx(), user, bucket, creation_time, y);
-  });
-}
-
-int RGWUserCtl::remove_bucket(const DoutPrefixProvider *dpp, 
-                              const rgw_user& user,
-                              const rgw_bucket& bucket,
-			      optional_yield y)
-
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->remove_bucket(dpp, op->ctx(), user, bucket, y);
-  });
-}
-
 int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp, 
                              const rgw_user& user,
                              const string& marker,
@@ -2860,46 +2859,20 @@ int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp,
     max = default_max;
   }
 
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    int ret = svc.user->list_buckets(dpp, op->ctx(), user, marker, end_marker,
-                                     max, buckets, is_truncated, y);
-    if (ret < 0) {
+  int ret = svc.user->list_buckets(dpp, user, marker, end_marker,
+                                   max, buckets, is_truncated, y);
+  if (ret < 0) {
+    return ret;
+  }
+  if (need_stats) {
+    map<string, RGWBucketEnt>& m = buckets->get_buckets();
+    ret = ctl.bucket->read_buckets_stats(m, y, dpp);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: could not get stats for buckets" << dendl;
       return ret;
     }
-    if (need_stats) {
-      map<string, RGWBucketEnt>& m = buckets->get_buckets();
-      ret = ctl.bucket->read_buckets_stats(m, y, dpp);
-      if (ret < 0 && ret != -ENOENT) {
-        ldpp_dout(dpp, 0) << "ERROR: could not get stats for buckets" << dendl;
-        return ret;
-      }
-    }
-    return 0;
-  });
-}
-
-int RGWUserCtl::flush_bucket_stats(const DoutPrefixProvider *dpp, 
-                                   const rgw_user& user,
-                                   const RGWBucketEnt& ent,
-				   optional_yield y)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->flush_bucket_stats(dpp, op->ctx(), user, ent, y);
-  });
-}
-
-int RGWUserCtl::complete_flush_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->complete_flush_stats(dpp, op->ctx(), user, y);
-  });
-}
-
-int RGWUserCtl::reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->reset_bucket_stats(dpp, op->ctx(), user, y);
-  });
+  }
+  return 0;
 }
 
 int RGWUserCtl::read_stats(const DoutPrefixProvider *dpp, 
@@ -2911,13 +2884,6 @@ int RGWUserCtl::read_stats(const DoutPrefixProvider *dpp,
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->read_stats(dpp, op->ctx(), user, stats,
 				last_stats_sync, last_stats_update, y);
-  });
-}
-
-int RGWUserCtl::read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& user, RGWGetUserStats_CB *cb)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->read_stats_async(dpp, op->ctx(), user, cb);
   });
 }
 

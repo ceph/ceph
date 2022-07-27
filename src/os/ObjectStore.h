@@ -288,7 +288,8 @@ public:
   virtual bool needs_journal() = 0;  //< requires a journal
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
-
+  virtual void prepare_for_fast_shutdown() {}
+  virtual bool has_null_manager() { return false; }
   // return store min allocation size, if applicable
   virtual uint64_t get_min_alloc_size() const {
     return 0;

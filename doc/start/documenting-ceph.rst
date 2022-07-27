@@ -349,7 +349,7 @@ distributions, execute the following:
 
 .. prompt:: bash $
 
-	sudo apt-get install gcc python-dev python-pip libxml2-dev libxslt-dev doxygen graphviz ant ditaa
+	sudo apt-get install gcc python-dev python3-pip libxml2-dev libxslt-dev doxygen graphviz ant ditaa
 	sudo apt-get install python-sphinx
 
 For Fedora distributions, execute the following:
@@ -667,7 +667,7 @@ improves the readability of the document in a command line interface.
 
 
 .. _Python Sphinx: http://sphinx-doc.org
-.. _resturcturedText: http://docutils.sourceforge.net/rst.html
+.. _restructuredText: http://docutils.sourceforge.net/rst.html
 .. _Fork and Pull: https://help.github.com/articles/using-pull-requests
 .. _github: http://github.com
 .. _ditaa: http://ditaa.sourceforge.net/

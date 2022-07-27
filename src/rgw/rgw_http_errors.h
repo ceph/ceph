@@ -31,6 +31,8 @@ static inline int rgw_http_error_to_errno(int http_err)
         return -EACCES;
     case 404:
         return -ENOENT;
+    case 405:
+        return -ERR_METHOD_NOT_ALLOWED;
     case 409:
         return -ENOTEMPTY;
     case 503:

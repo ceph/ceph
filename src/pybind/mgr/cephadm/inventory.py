@@ -1,17 +1,20 @@
 import datetime
+import enum
 from copy import copy
 import ipaddress
 import json
 import logging
+import math
 import socket
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
     NamedTuple, Type
 
 import orchestrator
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, TunedProfileSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
 from .utils import resolve_ip
 from .migrations import queue_migrate_nfs_spec
@@ -24,6 +27,13 @@ logger = logging.getLogger(__name__)
 
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
+AGENT_CACHE_PREFIX = 'agent.'
+
+
+class HostCacheStatus(enum.Enum):
+    stray = 'stray'
+    host = 'host'
+    devices = 'devices'
 
 
 class Inventory:
@@ -395,6 +405,77 @@ class ClientKeyringStore():
             self.save()
 
 
+class TunedProfileStore():
+    """
+    Store for out tuned profile information
+    """
+
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        self.mgr: CephadmOrchestrator = mgr
+        self.mgr = mgr
+        self.profiles: Dict[str, TunedProfileSpec] = {}
+
+    def __contains__(self, profile: str) -> bool:
+        return profile in self.profiles
+
+    def load(self) -> None:
+        c = self.mgr.get_store('tuned_profiles') or b'{}'
+        j = json.loads(c)
+        for k, v in j.items():
+            self.profiles[k] = TunedProfileSpec.from_json(v)
+            self.profiles[k]._last_updated = datetime_to_str(datetime_now())
+
+    def save(self) -> None:
+        profiles_json = {k: v.to_json() for k, v in self.profiles.items()}
+        self.mgr.set_store('tuned_profiles', json.dumps(profiles_json))
+
+    def add_setting(self, profile: str, setting: str, value: str) -> None:
+        if profile in self.profiles:
+            self.profiles[profile].settings[setting] = value
+            self.profiles[profile]._last_updated = datetime_to_str(datetime_now())
+            self.save()
+        else:
+            logger.error(
+                f'Attempted to set setting "{setting}" for nonexistent os tuning profile "{profile}"')
+
+    def rm_setting(self, profile: str, setting: str) -> None:
+        if profile in self.profiles:
+            if setting in self.profiles[profile].settings:
+                self.profiles[profile].settings.pop(setting, '')
+                self.profiles[profile]._last_updated = datetime_to_str(datetime_now())
+                self.save()
+            else:
+                logger.error(
+                    f'Attemped to remove nonexistent setting "{setting}" from os tuning profile "{profile}"')
+        else:
+            logger.error(
+                f'Attempted to remove setting "{setting}" from nonexistent os tuning profile "{profile}"')
+
+    def add_profile(self, spec: TunedProfileSpec) -> None:
+        spec._last_updated = datetime_to_str(datetime_now())
+        self.profiles[spec.profile_name] = spec
+        self.save()
+
+    def rm_profile(self, profile: str) -> None:
+        if profile in self.profiles:
+            self.profiles.pop(profile, TunedProfileSpec(''))
+        else:
+            logger.error(f'Attempted to remove nonexistent os tuning profile "{profile}"')
+        self.save()
+
+    def last_updated(self, profile: str) -> Optional[datetime.datetime]:
+        if profile not in self.profiles or not self.profiles[profile]._last_updated:
+            return None
+        return str_to_datetime(self.profiles[profile]._last_updated)
+
+    def set_last_updated(self, profile: str, new_datetime: datetime.datetime) -> None:
+        if profile in self.profiles:
+            self.profiles[profile]._last_updated = datetime_to_str(new_datetime)
+
+    def list_profiles(self) -> List[TunedProfileSpec]:
+        return [p for p in self.profiles.values()]
+
+
 class HostCache():
     """
     HostCache stores different things:
@@ -441,6 +522,7 @@ class HostCache():
         self.last_network_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
+        self.last_tuned_profile_update = {}  # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = []  # type: List[str]
         self.device_refresh_queue = []  # type: List[str]
         self.network_refresh_queue = []  # type: List[str]
@@ -455,18 +537,15 @@ class HostCache():
 
         self.scheduled_daemon_actions: Dict[str, Dict[str, str]] = {}
 
-        self.agent_counter = {}  # type: Dict[str, int]
-        self.agent_timestamp = {}  # type: Dict[str, datetime.datetime]
         self.metadata_up_to_date = {}  # type: Dict[str, bool]
-        self.agent_keys = {}  # type: Dict[str, str]
-        self.agent_ports = {}  # type: Dict[str, int]
-        self.sending_agent_message = {}  # type: Dict[str, bool]
 
     def load(self):
         # type: () -> None
         for k, v in self.mgr.get_store_prefix(HOST_CACHE_PREFIX).items():
             host = k[len(HOST_CACHE_PREFIX):]
-            if host not in self.mgr.inventory:
+            if self._get_host_cache_entry_status(host) != HostCacheStatus.host:
+                if self._get_host_cache_entry_status(host) == HostCacheStatus.devices:
+                    continue
                 self.mgr.log.warning('removing stray HostCache host record %s' % (
                     host))
                 self.mgr.set_store(k, None)
@@ -485,14 +564,16 @@ class HostCache():
                 self.daemons[host] = {}
                 self.osdspec_previews[host] = []
                 self.osdspec_last_applied[host] = {}
-                self.devices[host] = []
                 self.networks[host] = {}
                 self.daemon_config_deps[host] = {}
                 for name, d in j.get('daemons', {}).items():
                     self.daemons[host][name] = \
                         orchestrator.DaemonDescription.from_json(d)
+                self.devices[host] = []
+                # still want to check old device location for upgrade scenarios
                 for d in j.get('devices', []):
                     self.devices[host].append(inventory.Device.from_json(d))
+                self.devices[host] += self.load_host_devices(host)
                 self.networks[host] = j.get('networks_and_interfaces', {})
                 self.osdspec_previews[host] = j.get('osdspec_previews', {})
                 self.last_client_files[host] = j.get('last_client_files', {})
@@ -506,12 +587,12 @@ class HostCache():
                     }
                 if 'last_host_check' in j:
                     self.last_host_check[host] = str_to_datetime(j['last_host_check'])
+                if 'last_tuned_profile_update' in j:
+                    self.last_tuned_profile_update[host] = str_to_datetime(
+                        j['last_tuned_profile_update'])
                 self.registry_login_queue.add(host)
                 self.scheduled_daemon_actions[host] = j.get('scheduled_daemon_actions', {})
-
-                self.agent_counter[host] = int(j.get('agent_counter', 1))
-                self.metadata_up_to_date[host] = False
-                self.agent_keys[host] = str(j.get('agent_keys', ''))
+                self.metadata_up_to_date[host] = j.get('metadata_up_to_date', False)
 
                 self.mgr.log.debug(
                     'HostCache.load: host %s has %d daemons, '
@@ -522,6 +603,23 @@ class HostCache():
                 self.mgr.log.warning('unable to load cached state for %s: %s' % (
                     host, e))
                 pass
+
+    def _get_host_cache_entry_status(self, host: str) -> HostCacheStatus:
+        # return whether a host cache entry in the config-key
+        # store is for a host, a set of devices or is stray.
+        # for a host, the entry name will match a hostname in our
+        # inventory. For devices, it will be formatted
+        # <hostname>.devices.<integer> where <hostname> is
+        # in out inventory. If neither case applies, it is stray
+        if host in self.mgr.inventory:
+            return HostCacheStatus.host
+        try:
+            # try stripping off the ".devices.<integer>" and see if we get
+            # a host name that matches our inventory
+            actual_host = '.'.join(host.split('.')[:-2])
+            return HostCacheStatus.devices if actual_host in self.mgr.inventory else HostCacheStatus.stray
+        except Exception:
+            return HostCacheStatus.stray
 
     def update_host_daemons(self, host, dm):
         # type: (str, Dict[str, orchestrator.DaemonDescription]) -> None
@@ -674,12 +772,11 @@ class HostCache():
             j['last_network_update'] = datetime_to_str(self.last_network_update[host])
         if host in self.last_device_change:
             j['last_device_change'] = datetime_to_str(self.last_device_change[host])
+        if host in self.last_tuned_profile_update:
+            j['last_tuned_profile_update'] = datetime_to_str(self.last_tuned_profile_update[host])
         if host in self.daemons:
             for name, dd in self.daemons[host].items():
                 j['daemons'][name] = dd.to_json()
-        if host in self.devices:
-            for d in self.devices[host]:
-                j['devices'].append(d.to_json())
         if host in self.networks:
             j['networks_and_interfaces'] = self.networks[host]
         if host in self.daemon_config_deps:
@@ -701,13 +798,72 @@ class HostCache():
             j['last_client_files'] = self.last_client_files[host]
         if host in self.scheduled_daemon_actions:
             j['scheduled_daemon_actions'] = self.scheduled_daemon_actions[host]
-
-        if host in self.agent_counter:
-            j['agent_counter'] = self.agent_counter[host]
-        if host in self.agent_keys:
-            j['agent_keys'] = self.agent_keys[host]
+        if host in self.metadata_up_to_date:
+            j['metadata_up_to_date'] = self.metadata_up_to_date[host]
+        if host in self.devices:
+            self.save_host_devices(host)
 
         self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
+
+    def save_host_devices(self, host: str) -> None:
+        if host not in self.devices or not self.devices[host]:
+            logger.debug(f'Host {host} has no devices to save')
+            return
+
+        devs: List[Dict[str, Any]] = []
+        for d in self.devices[host]:
+            devs.append(d.to_json())
+
+        def byte_len(s: str) -> int:
+            return len(s.encode('utf-8'))
+
+        dev_cache_counter: int = 0
+        cache_size: int = self.mgr.get_foreign_ceph_option('mon', 'mon_config_key_max_entry_size')
+        if cache_size is not None and cache_size != 0 and byte_len(json.dumps(devs)) > cache_size - 1024:
+            # no guarantee all device entries take up the same amount of space
+            # splitting it up so there's one more entry than we need should be fairly
+            # safe and save a lot of extra logic checking sizes
+            cache_entries_needed = math.ceil(byte_len(json.dumps(devs)) / cache_size) + 1
+            dev_sublist_size = math.ceil(len(devs) / cache_entries_needed)
+            dev_lists: List[List[Dict[str, Any]]] = [devs[i:i + dev_sublist_size]
+                                                     for i in range(0, len(devs), dev_sublist_size)]
+            for dev_list in dev_lists:
+                dev_dict: Dict[str, Any] = {'devices': dev_list}
+                if dev_cache_counter == 0:
+                    dev_dict.update({'entries': len(dev_lists)})
+                self.mgr.set_store(HOST_CACHE_PREFIX + host + '.devices.'
+                                   + str(dev_cache_counter), json.dumps(dev_dict))
+                dev_cache_counter += 1
+        else:
+            self.mgr.set_store(HOST_CACHE_PREFIX + host + '.devices.'
+                               + str(dev_cache_counter), json.dumps({'devices': devs, 'entries': 1}))
+
+    def load_host_devices(self, host: str) -> List[inventory.Device]:
+        dev_cache_counter: int = 0
+        devs: List[Dict[str, Any]] = []
+        dev_entries: int = 0
+        try:
+            # number of entries for the host's devices should be in
+            # the "entries" field of the first entry
+            dev_entries = json.loads(self.mgr.get_store(
+                HOST_CACHE_PREFIX + host + '.devices.0')).get('entries')
+        except Exception:
+            logger.debug(f'No device entries found for host {host}')
+        for i in range(dev_entries):
+            try:
+                new_devs = json.loads(self.mgr.get_store(
+                    HOST_CACHE_PREFIX + host + '.devices.' + str(i))).get('devices', [])
+                if len(new_devs) > 0:
+                    # verify list contains actual device objects by trying to load one from json
+                    inventory.Device.from_json(new_devs[0])
+                    # if we didn't throw an Exception on above line, we can add the devices
+                    devs = devs + new_devs
+                    dev_cache_counter += 1
+            except Exception as e:
+                logger.error(('Hit exception trying to load devices from '
+                             + f'{HOST_CACHE_PREFIX + host + ".devices." + str(dev_cache_counter)} in key store: {e}'))
+                return []
+        return [inventory.Device.from_json(d) for d in devs]
 
     def rm_host(self, host):
         # type: (str) -> None
@@ -737,6 +893,8 @@ class HostCache():
             del self.last_network_update[host]
         if host in self.last_device_change:
             del self.last_device_change[host]
+        if host in self.last_tuned_profile_update:
+            del self.last_tuned_profile_update[host]
         if host in self.daemon_config_deps:
             del self.daemon_config_deps[host]
         if host in self.scheduled_daemon_actions:
@@ -920,6 +1078,24 @@ class HostCache():
             return True
         return False
 
+    def host_needs_tuned_profile_update(self, host: str, profile: str) -> bool:
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Cannot apply tuned profile')
+            return False
+        if profile not in self.mgr.tuned_profiles:
+            logger.debug(
+                f'Cannot apply tuned profile {profile} on host {host}. Profile does not exist')
+            return False
+        if host not in self.last_tuned_profile_update:
+            return True
+        last_profile_update = self.mgr.tuned_profiles.last_updated(profile)
+        if last_profile_update is None:
+            self.mgr.tuned_profiles.set_last_updated(profile, datetime_now())
+            return True
+        if self.last_tuned_profile_update[host] < last_profile_update:
+            return True
+        return False
+
     def host_had_daemon_refresh(self, host: str) -> bool:
         """
         ... at least once.
@@ -1001,11 +1177,6 @@ class HostCache():
             return True
         return False
 
-    def messaging_agent(self, host: str) -> bool:
-        if host not in self.sending_agent_message or not self.sending_agent_message[host]:
-            return False
-        return True
-
     def host_metadata_up_to_date(self, host: str) -> bool:
         if host not in self.metadata_up_to_date or not self.metadata_up_to_date[host]:
             return False
@@ -1078,6 +1249,95 @@ class HostCache():
         assert not daemon.startswith('ha-rgw.')
 
         return self.scheduled_daemon_actions.get(host, {}).get(daemon)
+
+
+class AgentCache():
+    """
+    AgentCache is used for storing metadata about agent daemons that must be kept
+    through MGR failovers
+    """
+
+    def __init__(self, mgr):
+        # type: (CephadmOrchestrator) -> None
+        self.mgr: CephadmOrchestrator = mgr
+        self.agent_config_deps = {}   # type: Dict[str, Dict[str,Any]]
+        self.agent_counter = {}  # type: Dict[str, int]
+        self.agent_timestamp = {}  # type: Dict[str, datetime.datetime]
+        self.agent_keys = {}  # type: Dict[str, str]
+        self.agent_ports = {}  # type: Dict[str, int]
+        self.sending_agent_message = {}  # type: Dict[str, bool]
+
+    def load(self):
+        # type: () -> None
+        for k, v in self.mgr.get_store_prefix(AGENT_CACHE_PREFIX).items():
+            host = k[len(AGENT_CACHE_PREFIX):]
+            if host not in self.mgr.inventory:
+                self.mgr.log.warning('removing stray AgentCache record for agent on %s' % (
+                    host))
+                self.mgr.set_store(k, None)
+            try:
+                j = json.loads(v)
+                self.agent_config_deps[host] = {}
+                conf_deps = j.get('agent_config_deps', {})
+                if conf_deps:
+                    conf_deps['last_config'] = str_to_datetime(conf_deps['last_config'])
+                self.agent_config_deps[host] = conf_deps
+                self.agent_counter[host] = int(j.get('agent_counter', 1))
+                self.agent_timestamp[host] = str_to_datetime(
+                    j.get('agent_timestamp', datetime_to_str(datetime_now())))
+                self.agent_keys[host] = str(j.get('agent_keys', ''))
+                agent_port = int(j.get('agent_ports', 0))
+                if agent_port:
+                    self.agent_ports[host] = agent_port
+
+            except Exception as e:
+                self.mgr.log.warning('unable to load cached state for agent on host %s: %s' % (
+                    host, e))
+                pass
+
+    def save_agent(self, host: str) -> None:
+        j: Dict[str, Any] = {}
+        if host in self.agent_config_deps:
+            j['agent_config_deps'] = {
+                'deps': self.agent_config_deps[host].get('deps', []),
+                'last_config': datetime_to_str(self.agent_config_deps[host]['last_config']),
+            }
+        if host in self.agent_counter:
+            j['agent_counter'] = self.agent_counter[host]
+        if host in self.agent_keys:
+            j['agent_keys'] = self.agent_keys[host]
+        if host in self.agent_ports:
+            j['agent_ports'] = self.agent_ports[host]
+        if host in self.agent_timestamp:
+            j['agent_timestamp'] = datetime_to_str(self.agent_timestamp[host])
+
+        self.mgr.set_store(AGENT_CACHE_PREFIX + host, json.dumps(j))
+
+    def update_agent_config_deps(self, host: str, deps: List[str], stamp: datetime.datetime) -> None:
+        self.agent_config_deps[host] = {
+            'deps': deps,
+            'last_config': stamp,
+        }
+
+    def get_agent_last_config_deps(self, host: str) -> Tuple[Optional[List[str]], Optional[datetime.datetime]]:
+        if host in self.agent_config_deps:
+            return self.agent_config_deps[host].get('deps', []), \
+                self.agent_config_deps[host].get('last_config', None)
+        return None, None
+
+    def messaging_agent(self, host: str) -> bool:
+        if host not in self.sending_agent_message or not self.sending_agent_message[host]:
+            return False
+        return True
+
+    def agent_config_successfully_delivered(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
+        # agent successfully received new config. Update config/deps
+        assert daemon_spec.service_name == 'agent'
+        self.update_agent_config_deps(
+            daemon_spec.host, daemon_spec.deps, datetime_now())
+        self.agent_timestamp[daemon_spec.host] = datetime_now()
+        self.agent_counter[daemon_spec.host] = 1
+        self.save_agent(daemon_spec.host)
 
 
 class EventStore():

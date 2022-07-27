@@ -40,9 +40,6 @@ public:
   ExtentsSummary<io::Extents> image_extents_summary;
   bool detained = false;                /* Detained in blockguard (overlapped with a prior IO) */
   utime_t allocated_time;               /* When allocation began */
-  bool waited_lanes = false;            /* This IO waited for free persist/replicate lanes */
-  bool waited_entries = false;          /* This IO waited for free log entries */
-  bool waited_buffers = false;          /* This IO waited for data buffers (pmemobj_reserve() failed) */
 
   C_BlockIORequest(T &pwl, const utime_t arrived, io::Extents &&extents,
                    bufferlist&& bl, const int fadvise_flags, Context *user_req);
@@ -71,21 +68,11 @@ public:
   virtual const char *get_name() const {
     return "C_BlockIORequest";
   }
+
   uint64_t get_image_extents_size() {
     return image_extents.size();
   }
-  void set_io_waited_for_lanes(bool waited) {
-    waited_lanes = waited;
-  }
-  void set_io_waited_for_entries(bool waited) {
-    waited_entries = waited;
-  }
-  void set_io_waited_for_buffers(bool waited) {
-    waited_buffers = waited;
-  }
-  bool has_io_waited_for_buffers() {
-    return waited_buffers;
-  }
+
   std::vector<WriteBufferAllocation>& get_resources_buffers() {
     return m_resources.buffers;
   }
@@ -322,10 +309,10 @@ struct BlockGuardReqState {
   bool queued = false; /* Queued for barrier */
   friend std::ostream &operator<<(std::ostream &os,
                                   const BlockGuardReqState &r) {
-    os << "barrier=" << r.barrier << ", "
-       << "current_barrier=" << r.current_barrier << ", "
-       << "detained=" << r.detained << ", "
-       << "queued=" << r.queued;
+    os << "barrier=" << r.barrier
+       << ", current_barrier=" << r.current_barrier
+       << ", detained=" << r.detained
+       << ", queued=" << r.queued;
     return os;
   }
 };
@@ -360,9 +347,9 @@ public:
   }
   friend std::ostream &operator<<(std::ostream &os,
                                   const GuardedRequest &r) {
-    os << "guard_ctx->state=[" << r.guard_ctx->state << "], "
-       << "block_extent.block_start=" << r.block_extent.block_start << ", "
-       << "block_extent.block_start=" << r.block_extent.block_end;
+    os << "guard_ctx->state=[" << r.guard_ctx->state
+       << "], block_extent.block_start=" << r.block_extent.block_start
+       << ", block_extent.block_end=" << r.block_extent.block_end;
     return os;
   }
 };

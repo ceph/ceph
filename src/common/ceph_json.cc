@@ -249,7 +249,12 @@ bool JSONParser::parse(const char *buf_, int len)
       if (data.type() == str_type) {
         val.set(data.get_str(), true);
       } else {
-        val.set(json_spirit::write_string(data), false);
+        const std::string& s = json_spirit::write_string(data);
+        if (s.size() == (uint64_t)len) { /* Check if entire string is read */
+          val.set(s, false);
+        } else {
+          set_failure();
+        }
       }
     }
   } else {
@@ -519,6 +524,11 @@ void decode_json_obj(ceph_dir_layout& i, JSONObj *obj){
     i.dl_unused3 = tmp;
 }
 
+void encode_json(const char *name, std::string_view val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
 void encode_json(const char *name, const string& val, Formatter *f)
 {
   f->dump_string(name, val);
@@ -531,13 +541,7 @@ void encode_json(const char *name, const char *val, Formatter *f)
 
 void encode_json(const char *name, bool val, Formatter *f)
 {
-  string s;
-  if (val)
-    s = "true";
-  else
-    s = "false";
-
-  f->dump_string(name, s);
+  f->dump_bool(name, val);
 }
 
 void encode_json(const char *name, int val, Formatter *f)

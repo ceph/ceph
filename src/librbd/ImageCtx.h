@@ -75,8 +75,8 @@ namespace librbd {
     struct SnapKeyComparator {
       inline bool operator()(const SnapKey& lhs, const SnapKey& rhs) const {
         // only compare by namespace type and name
-        if (lhs.first.which() != rhs.first.which()) {
-          return lhs.first.which() < rhs.first.which();
+        if (lhs.first.index() != rhs.first.index()) {
+          return lhs.first.index() < rhs.first.index();
         }
         return lhs.second < rhs.second;
       }

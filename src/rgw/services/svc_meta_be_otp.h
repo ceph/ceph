@@ -48,8 +48,6 @@ class RGWSI_MetaBackend_OTP : public RGWSI_MetaBackend_SObj
 public:
   struct Context_OTP : public RGWSI_MetaBackend_SObj::Context_SObj {
     otp_devices_list_t devices;
-
-    Context_OTP(RGWSI_SysObj*_sysobj_svc) : RGWSI_MetaBackend_SObj::Context_SObj(_sysobj_svc, nullptr) {}
   };
 
   RGWSI_MetaBackend_OTP(CephContext *cct);
@@ -78,7 +76,8 @@ public:
                 RGWSI_MetaBackend::GetParams& _params,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y,
-                const DoutPrefixProvider *dpp);
+                const DoutPrefixProvider *dpp,
+                bool get_raw_attrs=false);
   int put_entry(const DoutPrefixProvider *dpp, 
                 RGWSI_MetaBackend::Context *ctx,
                 const std::string& key,

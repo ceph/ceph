@@ -13,10 +13,9 @@ class CapsHelper(CephFSTestCase):
         fsls = self.run_cluster_cmd(f'fs ls --id {self.client_id} -k '
                                     f'{keyring_path}')
 
-        # we need to check only for default FS when fsname clause is absent
-        # in MON/MDS caps
-        if 'fsname' not in moncap:
-            self.assertIn(self.fs.name, fsls)
+        if 'fsname=' not in moncap:
+            fsls_admin = self.run_cluster_cmd('fs ls')
+            self.assertEqual(fsls, fsls_admin)
             return
 
         fss = (self.fs1.name, self.fs2.name) if hasattr(self, 'fs1') else \
@@ -60,6 +59,7 @@ class CapsHelper(CephFSTestCase):
                     self.assertEqual(data, contents1)
 
     def conduct_neg_test_for_write_caps(self, filepaths, mounts):
+        possible_errmsgs = ('permission denied', 'operation not permitted')
         cmdargs = ['echo', 'some random data', Raw('|'), 'tee']
 
         for mount in mounts:
@@ -67,7 +67,8 @@ class CapsHelper(CephFSTestCase):
                 if path.find(mount.hostfs_mntpt) != -1:
                     cmdargs.append(path)
                     mount.negtestcmd(args=cmdargs, retval=1,
-                                     errmsg='permission denied')
+                                     errmsgs=possible_errmsgs)
+                    cmdargs.pop(-1)
 
     def get_mon_cap_from_keyring(self, client_name):
         keyring = self.run_cluster_cmd(cmd=f'auth get {client_name}')

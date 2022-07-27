@@ -40,7 +40,7 @@ Ceph clusters using Ansible.
 
 * ceph-ansible is widely deployed.
 * ceph-ansible is not integrated with the new orchestrator APIs,
-  introduced in Nautlius and Octopus, which means that newer
+  introduced in Nautilus and Octopus, which means that newer
   management features and dashboard integration are not available.
 
 

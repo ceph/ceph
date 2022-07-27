@@ -2,5 +2,5 @@ tasks:
 - cephadm.shell:
     mon.a:
       - ceph orch upgrade ls
-      - ceph orch upgrade ls --image quay.io/ceph/ceph | grep 16.2.0
+      - ceph orch upgrade ls --image quay.io/ceph/ceph --show-all-versions | grep 16.2.0
       - ceph orch upgrade ls --image quay.io/ceph/ceph --tags | grep v16.2.2

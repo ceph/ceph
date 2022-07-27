@@ -3,6 +3,7 @@
 
 #include "tools/rbd/OptionPrinter.h"
 #include "tools/rbd/IndentStream.h"
+#include "include/ceph_assert.h"
 
 namespace rbd {
 
@@ -43,9 +44,21 @@ void OptionPrinter::print_short(std::ostream &os, size_t initial_offset) {
   for (size_t i = 0; i < m_positional.options().size(); ++i) {
     std::stringstream option;
 
+    // we overload po::value<std::string>()->default_value("") to signify
+    // an optional positional argument (purely for help printing purposes)
+    boost::any v;
+    bool required = !m_positional.options()[i]->semantic()->apply_default(v);
+    if (!required) {
+      auto ptr = boost::any_cast<std::string>(&v);
+      ceph_assert(ptr && ptr->empty());
+      option << "[";
+    }
     option << "<" << m_positional.options()[i]->long_name() << ">";
     if (m_positional.options()[i]->semantic()->max_tokens() > 1) {
       option << " [<" << m_positional.options()[i]->long_name() << "> ...]";
+    }
+    if (!required) {
+      option << "]";
     }
 
     max_option_width = std::max(max_option_width, option.str().size());

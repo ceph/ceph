@@ -1,7 +1,7 @@
-import { HostsPageHelper } from 'cypress/integration/cluster/hosts.po';
-import { ServicesPageHelper } from 'cypress/integration/cluster/services.po';
-import { PageHelper } from 'cypress/integration/page-helper.po';
-import { NotificationSidebarPageHelper } from 'cypress/integration/ui/notification.po';
+import { PageHelper } from '../page-helper.po';
+import { NotificationSidebarPageHelper } from '../ui/notification.po';
+import { HostsPageHelper } from './hosts.po';
+import { ServicesPageHelper } from './services.po';
 
 const pages = {
   index: { url: '#/expand-cluster', id: 'cd-create-cluster' }
@@ -23,20 +23,6 @@ export class CreateClusterWizardHelper extends PageHelper {
     const notification = new NotificationSidebarPageHelper();
     notification.open();
     notification.getNotifications().should('contain', 'Cluster expansion skipped by user');
-  }
-
-  createOSD(deviceType: 'hdd' | 'ssd') {
-    // Click Primary devices Add button
-    cy.get('cd-osd-devices-selection-groups[name="Primary"]').as('primaryGroups');
-    cy.get('@primaryGroups').find('button').click();
-
-    // Select all devices with `deviceType`
-    cy.get('cd-osd-devices-selection-modal').within(() => {
-      cy.get('.modal-footer .tc_submitButton').as('addButton').should('be.disabled');
-      this.filterTable('Type', deviceType);
-      this.getTableCount('total').should('be.gte', 1);
-      cy.get('@addButton').click();
-    });
   }
 }
 

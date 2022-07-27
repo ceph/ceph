@@ -359,7 +359,8 @@ private:
     std::string events_str = s->info.args.get("events", &exists);
     if (!exists) {
       // if no events are provided, we notify on all of them
-      events_str = "OBJECT_CREATE,OBJECT_DELETE,DELETE_MARKER_CREATE";
+      events_str =
+	"OBJECT_CREATE,OBJECT_DELETE,DELETE_MARKER_CREATE,OBJECT_EXPIRATION";
     }
     rgw::notify::from_string_list(events_str, events);
     if (std::find(events.begin(), events.end(), rgw::notify::UnknownEvent) != events.end()) {
@@ -499,7 +500,7 @@ public:
 
 // factory for ceph specific PubSub REST handlers 
 RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::Store* store,
-						struct req_state* const s,
+						req_state* const s,
 						const rgw::auth::StrategyRegistry& auth_registry,
 						const std::string& frontend_prefix)
 {

@@ -14,6 +14,7 @@ from teuthology import contextutil
 from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
+from teuthology.packaging import install_package, remove_package
 
 log = logging.getLogger(__name__)
 
@@ -159,6 +160,25 @@ def create_dirs(ctx, config):
                 )
 
 @contextlib.contextmanager
+def install_block_rbd_driver(ctx, config):
+    """
+    Make sure qemu rbd block driver (block-rbd.so) is installed
+    """
+    for client, client_config in config.items():
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        if remote.os.package_type == 'rpm':
+            block_rbd_pkg = 'qemu-kvm-block-rbd'
+        else:
+            block_rbd_pkg = 'qemu-block-extra'
+        install_package(block_rbd_pkg, remote)
+    try:
+        yield
+    finally:
+        for client, client_config in config.items():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remove_package(block_rbd_pkg, remote)
+
+@contextlib.contextmanager
 def generate_iso(ctx, config):
     """Execute system commands to generate iso"""
     log.info('generating iso...')
@@ -203,14 +223,18 @@ def generate_iso(ctx, config):
                     'device_letter' not in disk or \
                     'image_url' in disk:
                 continue
-            dev_letter = disk['device_letter']
+            if disk['encryption_format'] == 'none':
+                dev_name = 'vd' + disk['device_letter']
+            else:
+                # encrypted disks use if=ide interface, instead of if=virtio
+                dev_name = 'sd' + disk['device_letter']
             user_data += """
 - |
   #!/bin/bash
-  mkdir /mnt/test_{dev_letter}
-  mkfs -t xfs /dev/vd{dev_letter}
-  mount -t xfs /dev/vd{dev_letter} /mnt/test_{dev_letter}
-""".format(dev_letter=dev_letter)
+  mkdir /mnt/test_{dev_name}
+  mkfs -t xfs /dev/{dev_name}
+  mount -t xfs /dev/{dev_name} /mnt/test_{dev_name}
+""".format(dev_name=dev_name)
 
         user_data += """
 - |
@@ -496,17 +520,23 @@ def run_qemu(ctx, config):
                 continue
 
             if disk['encryption_format'] == 'none':
+                interface = 'virtio'
                 disk_spec = 'rbd:rbd/{img}:id={id}'.format(
                     img=disk['image_name'],
                     id=client[len('client.'):]
                     )
             else:
+                # encrypted disks use ide as a temporary workaround for
+                # a bug in qemu when using virtio over nbd
+                # TODO: use librbd encryption directly via qemu (not via nbd)
+                interface = 'ide'
                 disk_spec = disk['device_path']
 
             args.extend([
                 '-drive',
-                'file={disk_spec},format=raw,if=virtio,cache={cachemode}'.format(
+                'file={disk_spec},format=raw,if={interface},cache={cachemode}'.format(
                     disk_spec=disk_spec,
+                    interface=interface,
                     cachemode=cachemode,
                     ),
                 ])
@@ -650,6 +680,7 @@ def task(ctx, config):
     create_images(ctx=ctx, config=config, managers=managers)
     managers.extend([
         lambda: create_dirs(ctx=ctx, config=config),
+        lambda: install_block_rbd_driver(ctx=ctx, config=config),
         lambda: generate_iso(ctx=ctx, config=config),
         lambda: download_image(ctx=ctx, config=config),
         ])

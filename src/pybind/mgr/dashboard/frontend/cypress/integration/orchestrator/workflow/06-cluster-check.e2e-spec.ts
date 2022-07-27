@@ -1,12 +1,17 @@
-import { CreateClusterWizardHelper } from 'cypress/integration/cluster/create-cluster.po';
-import { HostsPageHelper } from 'cypress/integration/cluster/hosts.po';
-import { OSDsPageHelper } from 'cypress/integration/cluster/osds.po';
-import { ServicesPageHelper } from 'cypress/integration/cluster/services.po';
+/* tslint:disable*/
+import { Input, ManagerModulesPageHelper } from '../../cluster/mgr-modules.po';
+import { CreateClusterWizardHelper } from '../../cluster/create-cluster.po';
+import { HostsPageHelper } from '../../cluster/hosts.po';
+import { ServicesPageHelper } from '../../cluster/services.po';
+/* tslint:enable*/
 
 describe('when cluster creation is completed', () => {
   const createCluster = new CreateClusterWizardHelper();
   const services = new ServicesPageHelper();
-  const serviceName = 'rgw.foo';
+  const hosts = new HostsPageHelper();
+  const mgrmodules = new ManagerModulesPageHelper();
+
+  const hostnames = ['ceph-node-00', 'ceph-node-01', 'ceph-node-02', 'ceph-node-03'];
 
   beforeEach(() => {
     cy.login();
@@ -23,16 +28,53 @@ describe('when cluster creation is completed', () => {
   });
 
   describe('Hosts page', () => {
-    const hosts = new HostsPageHelper();
-    const hostnames = [
-      'ceph-node-00.cephlab.com',
-      'ceph-node-01.cephlab.com',
-      'ceph-node-02.cephlab.com',
-      'ceph-node-03.cephlab.com'
-    ];
-
     beforeEach(() => {
       hosts.navigateTo();
+    });
+
+    // grafana ip address is set to the fqdn by default.
+    // kcli is not working with that, so setting the IP manually.
+    it('should change ip address of grafana, prometheus and alertmanager', () => {
+      const dashboardArr: Input[] = [
+        {
+          id: 'GRAFANA_API_URL',
+          newValue: 'https://192.168.100.100:3000',
+          oldValue: ''
+        },
+        {
+          id: 'PROMETHEUS_API_HOST',
+          newValue: 'http://192.168.100.100:9095',
+          oldValue: ''
+        },
+        {
+          id: 'ALERTMANAGER_API_HOST',
+          newValue: 'http://192.168.100.100:9093',
+          oldValue: ''
+        }
+      ];
+      mgrmodules.editMgrModule('dashboard', dashboardArr);
+    });
+
+    // avoid creating node-exporter on the newly added host
+    // to favour the host draining process
+    it('should reduce the count for node-exporter', { retries: 2 }, () => {
+      services.editService('node-exporter', '3');
+    });
+
+    it('should check if monitoring stacks are running on the root host', { retries: 2 }, () => {
+      const monitoringStack = ['alertmanager', 'grafana', 'node-exporter', 'prometheus'];
+      hosts.clickTab('cd-host-details', 'ceph-node-00', 'Daemons');
+      for (const daemon of monitoringStack) {
+        cy.get('cd-host-details').within(() => {
+          services.checkServiceStatus(daemon);
+        });
+      }
+    });
+
+    it('should add one more host', () => {
+      hosts.navigateTo('add');
+      hosts.add(hostnames[3]);
+      hosts.checkExist(hostnames[3], true);
     });
 
     it('should have removed "_no_schedule" label', () => {
@@ -55,45 +97,13 @@ describe('when cluster creation is completed', () => {
       });
     });
 
-    it('should check if rgw service is running', () => {
-      hosts.clickTab('cd-host-details', hostnames[3], 'Daemons');
-      cy.get('cd-host-details').within(() => {
-        services.checkServiceStatus('rgw');
-      });
-    });
-
-    it('should drain, remove and add the host back', () => {
-      hosts.drain(hostnames[1]);
-      hosts.remove(hostnames[1]);
-      hosts.navigateTo('add');
-      hosts.add(hostnames[1]);
-      hosts.checkExist(hostnames[1], true);
-    });
-
-    it('should force maintenance and exit', { retries: 1 }, () => {
-      hosts.maintenance(hostnames[3], true, true);
-    });
-  });
-
-  describe('OSDs page', () => {
-    const osds = new OSDsPageHelper();
-
-    beforeEach(() => {
-      osds.navigateTo();
-    });
-
-    it('should check if osds are created', { retries: 1 }, () => {
-      osds.getTableCount('total').should('be.gte', 1);
-    });
-  });
-
-  describe('Services page', () => {
-    beforeEach(() => {
-      services.navigateTo();
-    });
-
-    it('should check if services are created', () => {
-      services.checkExist(serviceName, true);
+    it('should check if mon daemon is running on all hosts', () => {
+      for (const hostname of hostnames) {
+        hosts.clickTab('cd-host-details', hostname, 'Daemons');
+        cy.get('cd-host-details').within(() => {
+          services.checkServiceStatus('mon');
+        });
+      }
     });
   });
 });

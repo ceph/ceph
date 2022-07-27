@@ -69,9 +69,9 @@ struct SeastarRunner {
     auto ret = app.run(argc, argv, [this] {
       on_end.reset(new seastar::readable_eventfd);
       return seastar::now().then([this] {
-	auto r = ::eventfd_write(begin_fd.get(), APP_RUNNING);
-	assert(r == 0);
 	begin_signaled = true;
+	[[maybe_unused]] auto r = ::eventfd_write(begin_fd.get(), APP_RUNNING);
+	assert(r == 0);
 	return seastar::now();
       }).then([this] {
 	return on_end->wait().then([](size_t){});
@@ -85,8 +85,8 @@ struct SeastarRunner {
       std::cerr << "Seastar app returns " << ret << std::endl;
     }
     if (!begin_signaled) {
-      ::eventfd_write(begin_fd.get(), APP_NOT_RUN);
       begin_signaled = true;
+      ::eventfd_write(begin_fd.get(), APP_NOT_RUN);
     }
   }
 

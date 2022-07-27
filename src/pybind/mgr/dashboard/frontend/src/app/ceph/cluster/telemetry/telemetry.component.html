@@ -185,6 +185,19 @@
                        i18n-placeholder>
               </div>
             </div>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="organization"
+                     i18n>Organization</label>
+              <div class="cd-col-form-input">
+                <input id="organization"
+                       class="form-control"
+                       type="text"
+                       formControlName="organization"
+                       placeholder="Organization name"
+                       i18n-placeholder>
+              </div>
+            </div>
           </ng-container>
             <legend i18n>Advanced Settings</legend>
             <div class="form-group row">
@@ -198,7 +211,8 @@
                 <input id="interval"
                        class="form-control"
                        type="number"
-                       formControlName="interval">
+                       formControlName="interval"
+                       min="8">
                 <span class="invalid-feedback"
                       *ngIf="configForm.showError('interval', formDir, 'min')"
                       i18n>The entered value is too low! It must be greater or equal to 8.</span>
@@ -274,7 +288,8 @@
                      for="report"
                      class="cd-col-form-label">Report preview
                 <cd-helper i18n-html
-                           html="The actual telemetry data that will be submitted.">
+                           html="The actual telemetry data that will be submitted."><em>Note: Please select 'Download' to
+                                   view the full report, including metrics from the perf channel.</em>
                 </cd-helper>
               </label>
               <div class="cd-col-form-input">

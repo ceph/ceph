@@ -76,6 +76,17 @@ service.
 For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
 
+Deployment of NFS daemons and the ingress service is asynchronous: the
+command may return before the services have completely started. You may
+wish to check that these services do successfully start and stay running.
+When using cephadm orchestration, these commands check service status:
+
+.. code:: bash
+
+    $ ceph orch ls --service_name=nfs.<cluster_id>
+    $ ceph orch ls --service_name=ingress.nfs.<cluster_id>
+
+
 Ingress
 -------
 
@@ -127,6 +138,18 @@ Delete NFS Ganesha Cluster
     $ ceph nfs cluster rm <cluster_id>
 
 This deletes the deployed cluster.
+
+
+Removal of NFS daemons and the ingress service is asynchronous: the
+command may return before the services have been completely deleted. You may
+wish to check that these services are no longer reported. When using cephadm
+orchestration, these commands check service status:
+
+.. code:: bash
+
+    $ ceph orch ls --service_name=nfs.<cluster_id>
+    $ ceph orch ls --service_name=ingress.nfs.<cluster_id>
+
 
 Updating an NFS Cluster
 -----------------------
@@ -533,20 +556,26 @@ The NFS log level can be adjusted using `nfs cluster config set` command (see :r
 Manual Ganesha deployment
 =========================
 
-It may be possible to deploy and manage the NFS ganesha daemons manually
-instead of allowing cephadm or rook to do so.
+It may be possible to deploy and manage the NFS ganesha daemons without
+orchestration frameworks such as cephadm or rook.
 
 .. note:: Manual configuration is not tested or fully documented; your
           mileage may vary. If you make this work, please help us by
           updating this documentation.
 
-Known issues
+Limitations
 ------------
 
-* The ``mgr/nfs`` module enumerates NFS clusters via the orchestrator API; if NFS is
-  not managed by the orchestrator (e.g., cephadm or rook) then this will not work.  It
-  may be possible to create the cluster, mark the cephadm service as 'unmanaged', but this
-  is awkward and not ideal.
+If no orchestrator module is enabled for the Ceph Manager the NFS cluster
+management commands, such as those starting with ``ceph nfs cluster``, will not
+function. However, commands that manage NFS exports, like those prefixed with
+``ceph nfs export`` are expected to work as long as the necessary RADOS objects
+have already been created. The exact RADOS objects required are not documented
+at this time as support for this feature is incomplete. A curious reader can
+find some details about the object by reading the source code for the
+``mgr/nfs`` module (found in the ceph source tree under
+``src/pybind/mgr/nfs``).
+
 
 Requirements
 ------------

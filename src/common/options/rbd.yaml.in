@@ -466,7 +466,7 @@ options:
   type: uint
   level: advanced
   desc: mirroring snapshots limit
-  default: 3
+  default: 5
   services:
   - rbd
   min: 3
@@ -481,6 +481,9 @@ options:
   type: uint
   level: advanced
   desc: default order (data block object size) for new images
+  long_desc: This configures the default object size for new images. The value is used as a
+    power of two, meaning ``default_object_size = 2 ^ rbd_default_order``. Configure a value
+    between 12 and 25 (inclusive), translating to 4KiB lower and 32MiB upper limit.
   default: 22
   services:
   - rbd
@@ -739,6 +742,10 @@ options:
   type: uint
   level: advanced
   desc: minimum schedule tick (in milliseconds) for QoS
+  long_desc: This determines the minimum time (in milliseconds) at which I/Os
+    can become unblocked if the limit of a throttle is hit. In terms of the
+    token bucket algorithm, this is the minimum interval at which tokens are
+    added to the bucket.
   default: 50
   services:
   - rbd
@@ -823,13 +830,6 @@ options:
   - disabled
   - rwl
   - ssd
-- name: rbd_persistent_cache_log_periodic_stats
-  type: bool
-  level: advanced
-  desc: emit periodic perf stats to debug log
-  default: false
-  services:
-  - rbd
 - name: rbd_persistent_cache_size
   type: uint
   level: advanced
