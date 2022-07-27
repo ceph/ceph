@@ -311,3 +311,11 @@ def device_info(monkeypatch, patch_bluestore_label):
 @pytest.fixture(params=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.999, 1.0])
 def data_allocate_fraction(request):
     return request.param
+
+@pytest.fixture
+def fake_filesystem(fs):
+
+    fs.create_dir('/sys/block/sda/slaves')
+    fs.create_dir('/sys/block/sda/queue')
+    fs.create_dir('/sys/block/rbd0')
+    yield fs
