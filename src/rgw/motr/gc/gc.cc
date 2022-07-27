@@ -35,18 +35,26 @@ void *MotrGC::GCWorker::entry() {
 
 void MotrGC::initialize() {
   // fetch max gc indices from config
-  auto max_indices = std::min(cct->_conf->rgw_gc_max_objs,
-                              GC_MAX_SHARDS_PRIME);
-  ldpp_dout(this, 50) << __func__ << ": max_indices = " << max_indices << dendl;
-
-  index_names.reserve(max_indices);
-  for (int i = 0; i < max_indices; i++) {
-    // Append index name to the gc index list
-    index_names.push_back(gc_index_prefix + std::to_string(i));
-
-    // [To be Implemented] create index in motr dix
+  uint64_t rgw_gc_max_objs = cct->_conf->rgw_gc_max_objs;
+  if(rgw_gc_max_objs) {
+    rgw_gc_max_objs = pow(2, ceil(log2(rgw_gc_max_objs)));
+    max_indices = static_cast<int>(std::min(rgw_gc_max_objs,
+                              GC_MAX_QUEUES));
   }
-
+  else {
+    max_indices = GC_DEFAULT_QUEUES;
+  }
+  index_names.reserve(max_indices);
+  ldpp_dout(this, 50) << __func__ << ": max_indices = " << max_indices << dendl;
+  for (int ind_suf = 0; ind_suf < max_indices; ind_suf++) {
+    std::string iname = gc_index_prefix + "." + std::to_string(ind_suf);
+    int rc = static_cast<rgw::sal::MotrStore*>(store)->create_motr_idx_by_name(iname);
+    if (rc < 0 && rc != -EEXIST){
+      ldout(cct, 0) << "ERROR: GC index creation failed with rc: " << rc << dendl;
+      break;
+    }
+    index_names.push_back(iname);
+  }
 }
 
 void MotrGC::finalize() {
@@ -85,6 +93,23 @@ void MotrGC::GCWorker::stop() {
 
 bool MotrGC::going_down() {
   return down_flag;
+}
+
+int MotrGC::dequeue(const DoutPrefixProvider* dpp, std::string iname, motr_gc_obj_info obj)
+{
+  int rc;
+  bufferlist bl;
+  rc = static_cast<rgw::sal::MotrStore*>(store)->do_idx_op_by_name(iname,
+                                M0_IC_DEL, obj.tag, bl);
+  if (rc < 0){
+    ldout(cct, 0) << "ERROR: failed to delete tag entry "<<obj.tag<<" rc: " << rc << dendl;
+  }
+  rc = static_cast<rgw::sal::MotrStore*>(store)->do_idx_op_by_name(iname,
+                                M0_IC_DEL, std::to_string(obj.time), bl);
+  if (rc < 0 && rc != -EEXIST){
+    ldout(cct, 0) << "ERROR: failed to delete time entry "<<obj.time<<" rc: " << rc << dendl;
+  }
+  return rc;
 }
 
 unsigned MotrGC::get_subsys() const {
