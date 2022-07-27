@@ -3783,8 +3783,8 @@ ExecStopPost=-/bin/bash {data_dir}/{fsid}/%i/unit.poststop
 KillMode=none
 Restart=on-failure
 RestartSec=10s
-TimeoutStartSec=120
-TimeoutStopSec=120
+TimeoutStartSec=900
+TimeoutStopSec=900
 StartLimitInterval=30min
 StartLimitBurst=5
 {extra_args}
