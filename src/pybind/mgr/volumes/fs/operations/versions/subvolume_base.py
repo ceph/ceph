@@ -3,7 +3,7 @@ import stat
 
 import errno
 import logging
-from hashlib import md5
+import hashlib
 from typing import Dict, Union
 from pathlib import Path
 
@@ -76,9 +76,16 @@ class SubvolumeBase(object):
 
     @property
     def legacy_config_path(self):
-        m = md5()
-        m.update(self.base_path)
-        meta_config = "{0}.meta".format(m.digest().hex())
+        try:
+            m = hashlib.md5(self.base_path)
+        except ValueError:
+            try:
+                m = hashlib.md5(self.base_path, usedforsecurity=False) # type: ignore
+            except TypeError:
+                raise VolumeException(-errno.EINVAL,
+                                      "require python's hashlib library to support usedforsecurity flag in FIPS enabled systems")
+
+        meta_config = "{0}.meta".format(m.hexdigest())
         return os.path.join(self.legacy_dir, meta_config.encode('utf-8'))
 
     @property
