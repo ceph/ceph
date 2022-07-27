@@ -25,7 +25,7 @@ static uint64_t ceph_pthread_self() {
   static_assert(std::is_convertible_v<decltype(me), uint64_t> ||
                 std::is_pointer_v<decltype(me)>,
                 "we need to use pthread_self() for the owner parameter");
-  return reinterpret_cast<uint64_t>(me);
+  return static_cast<uint64_t>(me);
 }
 
 #endif

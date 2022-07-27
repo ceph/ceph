@@ -580,10 +580,13 @@ static int list_lc_head(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stm
   if (!stmt)
     return -1;
 
+  int64_t start_date;
+
   op.lc_head.index = (const char*)sqlite3_column_text(stmt, LCHeadIndex);
   op.lc_head.head.set_marker((const char*)sqlite3_column_text(stmt, LCHeadMarker));
  
-  SQL_DECODE_BLOB_PARAM(dpp, stmt, LCHeadStartDate, op.lc_head.head.get_start_date(), sdb);
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, LCHeadStartDate, start_date, sdb);
+  op.lc_head.head.get_start_date() = start_date;
 
   return 0;
 }
@@ -2803,7 +2806,7 @@ int SQLInsertLCHead::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.head.get_marker().c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.start_date, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.lc_head.head.get_start_date(), sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, static_cast<int64_t>(params->op.lc_head.head.start_date), sdb);
 
 out:
   return rc;
