@@ -774,6 +774,8 @@ def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys
     dev_names = os.listdir(_sys_block_path)
     for dev in dev_names:
         name = kname = os.path.join("/dev", dev)
+        if not os.path.exists(name):
+            continue
         type_ = 'disk'
         if get_file_contents(os.path.join(_sys_block_path, dev, 'removable')) == "1":
             continue

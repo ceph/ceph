@@ -237,7 +237,11 @@ def lsblk_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
                                       'NAME': 'sda',
                                       'PARTLABEL': ceph_partlabel,
                                       'PARTTYPE': ceph_parttype})
-
+    monkeypatch.setattr("ceph_volume.util.device.disk.lsblk_all",
+                        lambda: [{'TYPE': 'disk',
+                                  'NAME': 'sda',
+                                  'PARTLABEL': ceph_partlabel,
+                                  'PARTTYPE': ceph_parttype}])
 
 @pytest.fixture
 def blkid_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
@@ -258,6 +262,10 @@ def device_info_not_ceph_disk_member(monkeypatch, request):
                         lambda path: {'TYPE': 'disk',
                                       'NAME': 'sda',
                                       'PARTLABEL': request.param[0]})
+    monkeypatch.setattr("ceph_volume.util.device.disk.lsblk_all",
+                        lambda: [{'TYPE': 'disk',
+                                  'NAME': 'sda',
+                                  'PARTLABEL': request.param[0]}])
     monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
                         lambda path: {'TYPE': 'disk',
                                       'PARTLABEL': request.param[1]})
