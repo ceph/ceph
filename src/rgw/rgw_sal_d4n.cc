@@ -30,7 +30,6 @@ static inline Object* nextObject(Object* t)
 
 std::unique_ptr<Object> D4NFilterStore::get_object(const rgw_obj_key& k)
 {
-  dout(0) << "Sam: store get_object called" << dendl; // Delete all Sam-labeled dout statements? -Sam
   std::unique_ptr<Object> o = next->get_object(k);
   return std::make_unique<D4NFilterObject>(std::move(o), this);
 }
@@ -45,39 +44,35 @@ std::unique_ptr<Writer> D4NFilterStore::get_atomic_writer(const DoutPrefixProvid
 {
   /* We're going to lose _head_obj here, but we don't use it, so I think it's
    * okay */
-  dout(0) << "Sam: store get_atomic_writer called" << dendl;
   std::unique_ptr<Object> no = nextObject(_head_obj.get())->clone();
 
   std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, std::move(no),
 							   owner, ptail_placement_rule,
 							   olh_epoch, unique_tag);
 
-  return std::make_unique<D4NFilterWriter>(std::move(writer), this, std::move(_head_obj));
+  return std::make_unique<D4NFilterWriter>(std::move(writer), this, std::move(_head_obj), dpp);
 }
 
 std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op()
 {
-  dout(0) << "Sam: object get_read_op called" << dendl;
   std::unique_ptr<ReadOp> r = next->get_read_op();
   return std::make_unique<D4NFilterReadOp>(std::move(r), this);
 }
 
 std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
 {
-  dout(0) << "Sam: object get_delete_op called" << dendl;
   std::unique_ptr<DeleteOp> d = next->get_delete_op();
   return std::make_unique<D4NFilterDeleteOp>(std::move(d), this);
 }
 
 int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  dout(0) << "Sam: object prepare called" << dendl;
-  int getReturn = source->trace->blk_dir->getValue(source->trace->c_blk);
+  int getReturn = source->filter->get_block_dir()->getValue(source->filter->get_cache_block());
 
   if (getReturn < 0) {
-    dout(0) << "D4N Filter: Directory get operation failed." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation failed." << dendl;
   } else {
-    dout(0) << "D4N Filter: Directory get operation succeeded." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation succeeded." << dendl;
   }
 
   return next->prepare(y, dpp);
@@ -86,13 +81,12 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y)
 {
-  dout(0) << "Sam: object delete_obj called" << dendl;
-  int delReturn = source->trace->blk_dir->delValue(source->trace->c_blk);
+  int delReturn = source->filter->get_block_dir()->delValue(source->filter->get_cache_block());
 
   if (delReturn < 0) {
-    dout(0) << "D4N Filter: Directory delete operation failed." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Directory delete operation failed." << dendl;
   } else {
-    dout(0) << "D4N Filter: Directory delete operation succeeded." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Directory delete operation succeeded." << dendl;
   }
 
   return next->delete_obj(dpp, y);
@@ -107,18 +101,18 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
-  dout(0) << "Sam: writer complete called" << dendl;
-  trace->c_blk->hosts_list.push_back("127.0.0.1:6379"); // Hardcoded until cct is added -Sam
-  trace->c_blk->size_in_bytes = accounted_size;
-  trace->c_blk->c_obj.bucket_name = head_obj->get_bucket()->get_name();
-  trace->c_blk->c_obj.obj_name = head_obj->get_name();
+  cache_block* temp = filter->get_cache_block();
+  temp->hosts_list.push_back("127.0.0.1:6379"); // Hardcoded until cct is added -Sam
+  temp->size_in_bytes = accounted_size;
+  temp->c_obj.bucket_name = head_obj->get_bucket()->get_name();
+  temp->c_obj.obj_name = head_obj->get_name();
 
-  int setReturn = trace->blk_dir->setValue(trace->c_blk);
+  int setReturn = filter->get_block_dir()->setValue(temp);
 
   if (setReturn < 0) {
-    dout(0) << "D4N Filter: Directory set operation failed." << dendl;
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Directory set operation failed." << dendl;
   } else {
-    dout(0) << "D4N Filter: Directory set operation succeeded." << dendl;
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Directory set operation succeeded." << dendl;
   }
 
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs,

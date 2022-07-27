@@ -39,15 +39,15 @@ class RGWBlockDirectory: RGWDirectory {
       cct = _cct;
     }
 	
-    void findClient(cpp_redis::client *client); // Should I keep the client parameter? -Sam
+    void findClient(cpp_redis::client *client);
     int existKey(std::string key);
     int setValue(cache_block *ptr);
     int getValue(cache_block *ptr);
     int delValue(cache_block *ptr);
-    cpp_redis::client client; // Change later -Sam
   
   private:
     std::string buildIndex(cache_block *ptr);
+    cpp_redis::client client; 
     std::string host;
     int port;
 };

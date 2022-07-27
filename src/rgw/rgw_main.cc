@@ -59,7 +59,7 @@
 #include "rgw_sal_dbstore.h"
 #endif
 #include "rgw_lua_background.h"
-#ifdef WITH_RADOSGW_TRACER
+#ifdef WITH_RADOSGW_D4N_FILTER
 #include "rgw_sal_d4n.h" //insert #ifdef statement for later -Daniel P
 #endif
 
@@ -404,9 +404,8 @@ int radosgw_Main(int argc, const char **argv)
   if (config_store == "base") {
     rgw_filter = "base";
   } 
-#ifdef WITH_RADOSGW_TRACER
+#ifdef WITH_RADOSGW_D4N_FILTER
   else if (config_filter == "d4n") {
-    dout(0) << "Sam: got to main" << dendl;
     rgw_filter = "d4n";
   }
 #endif
@@ -716,8 +715,7 @@ int radosgw_Main(int argc, const char **argv)
   std::unique_ptr<RGWFrontendPauser> fe_pauser;
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
   std::unique_ptr<RGWPauser> rgw_pauser;
-  //std::unique_ptr<RGWFrontendPauser> pauser;
-  //if (store->get_name() == "rados") { // Change later? -Sam
+  
   if (store->get_name() == "rados") {   
     // add a watcher to respond to realm configuration changes
     pusher = std::make_unique<RGWPeriodPusher>(&dp, store, null_yield);
@@ -727,28 +725,7 @@ int radosgw_Main(int argc, const char **argv)
     if (lua_background) {
       rgw_pauser->add_pauser(lua_background.get());
     }
-    ///////////////////////////////////////////////Change later//////////////////////////////////////////////
-    /*pauser = std::make_unique<RGWFrontendPauser>(fes, implicit_tenant_context, pusher.get());
-    reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, pauser.get());
-
-    dout(1) << "pre daemon setup ~682" << dendl;
-    int with_tracer = -1;
-    #ifdef WITH_RADOSGW_TRACER
-      dout(1) << "pre daemon setup ~685" << dendl;
-      rgw::sal::Store* rados_store = static_cast<rgw::sal::D4NFilterStore*>(store)->get_next();
-      realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
-				    static_cast<rgw::sal::RadosStore*>(rados_store)->svc()->zone->get_realm());
-      with_tracer = 0;      
-      dout(1) << "pre daemon setup ~690" << dendl;
-    #endif
-    if (with_tracer < -1)
-    {
-      dout(1) << "pre daemon setup ~694" << dendl;
-      realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
-				    static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm());
-            dout(1) << "pre daemon setup ~697" << dendl;
-    }*/
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
     reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, rgw_pauser.get());
 
     realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,

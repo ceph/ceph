@@ -29,7 +29,7 @@
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
-#ifdef WITH_RADOSGW_TRACER
+#ifdef WITH_RADOSGW_D4N_FILTER
 #include "rgw_sal_d4n.h" 
 #endif
 
@@ -49,7 +49,7 @@ extern rgw::sal::Store* newDBStore(CephContext *cct);
 extern rgw::sal::Store* newMotrStore(CephContext *cct);
 #endif
 extern rgw::sal::Store* newBaseFilter(rgw::sal::Store* next);
-#ifdef WITH_RADOSGW_TRACER
+#ifdef WITH_RADOSGW_D4N_FILTER
 extern rgw::sal::Store* newD4NFilter(rgw::sal::Store* next);
 #endif
 }
@@ -197,7 +197,6 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
 #endif
 
   if (filter.compare("base") == 0) {
-    dout(0) << "Sam: filter sal" << dendl;
     rgw::sal::Store* next = store;
     store = newBaseFilter(next);
 
@@ -207,14 +206,12 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       return nullptr;
     }
   } 
-#ifdef WITH_RADOSGW_TRACER 
+#ifdef WITH_RADOSGW_D4N_FILTER 
 //  else if (filter.compare("d4n") == 0) { // Fix later -Sam
-    dout(0) << "Sam: got to sal" << dendl;
     rgw::sal::Store* next = store;
     store = newD4NFilter(next);
 
     if (store->initialize(cct, dpp) < 0) {
-      dout(0) << "Sam: shouldn't be here" << dendl;
       delete store;
       delete next;
       return nullptr;

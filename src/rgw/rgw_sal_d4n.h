@@ -26,10 +26,11 @@
 namespace rgw { namespace sal {
 
 class D4NFilterStore : public FilterStore {
-  public:
-    RGWBlockDirectory* blk_dir; // Change to private later -Sam
+  private:
+    RGWBlockDirectory* blk_dir; 
     cache_block* c_blk;
 
+  public:
     D4NFilterStore(Store* _next) : FilterStore(_next) 
     {
       blk_dir = new RGWBlockDirectory("127.0.0.1", 6379); // Change so it's not hardcoded -Sam
@@ -49,10 +50,13 @@ class D4NFilterStore : public FilterStore {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
+    RGWBlockDirectory* get_block_dir() { return blk_dir; }
+    cache_block* get_cache_block() { return c_blk; }
 };
 
 class D4NFilterObject : public FilterObject {
-  D4NFilterStore* trace;
+  private:
+    D4NFilterStore* filter;
 
   public:
 
@@ -76,12 +80,12 @@ class D4NFilterObject : public FilterObject {
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
     };
 
-    D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterStore* _trace) : FilterObject(std::move(_next)),
-									     trace(_trace) {}
-    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket, D4NFilterStore* _trace) : FilterObject(std::move(_next), _bucket),
-											       trace(_trace) {}
-    D4NFilterObject(D4NFilterObject& _o, D4NFilterStore* _trace) : FilterObject(_o),
-								    trace(_trace) {}
+    D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterStore* _filter) : FilterObject(std::move(_next)),
+									     filter(_filter) {}
+    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket, D4NFilterStore* _filter) : FilterObject(std::move(_next), _bucket),
+											       filter(_filter) {}
+    D4NFilterObject(D4NFilterObject& _o, D4NFilterStore* _filter) : FilterObject(_o),
+								    filter(_filter) {}
     virtual ~D4NFilterObject() = default;
 
     virtual const std::string &get_name() const override { return next->get_name(); }
@@ -91,18 +95,22 @@ class D4NFilterObject : public FilterObject {
 };
 
 class D4NFilterWriter : public FilterWriter {
-  D4NFilterStore* trace; // Change name to something different? -Sam
-  std::unique_ptr<rgw::sal::Object> head_obj;
+  private:
+    D4NFilterStore* filter;
+    std::unique_ptr<rgw::sal::Object> head_obj;
+    const DoutPrefixProvider* save_dpp;
 
-public:
-  D4NFilterWriter(std::unique_ptr<Writer> _next) : FilterWriter(std::move(_next)) {} 
-  D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _trace, std::unique_ptr<Object> _head_obj) 
-  : FilterWriter(std::move(_next)),
-  trace(_trace),
-  head_obj(std::move(_head_obj)) {}
-  virtual ~D4NFilterWriter() = default;
+  public:
+    D4NFilterWriter(std::unique_ptr<Writer> _next, const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next)),
+										     save_dpp(_dpp) {} 
+    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, const DoutPrefixProvider* _dpp) : 
+										     FilterWriter(std::move(_next)),
+										     filter(_filter), 
+										     head_obj(std::move(_head_obj)),
+										     save_dpp(_dpp) {}
+    virtual ~D4NFilterWriter() = default;
 
-  virtual int complete(size_t accounted_size, const std::string& etag,
+    virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
                        ceph::real_time delete_at,
@@ -110,6 +118,7 @@ public:
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y) override;
+   const DoutPrefixProvider* dpp() { return save_dpp; }
 };
 
 } } // namespace rgw::sal

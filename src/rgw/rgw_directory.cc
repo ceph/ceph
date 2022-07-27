@@ -45,7 +45,7 @@ int RGWBlockDirectory::existKey(std::string key) {
   return result;
 }
 
-int RGWBlockDirectory::setValue(cache_block *ptr) { // Possibly need to check if key exists? -Sam
+int RGWBlockDirectory::setValue(cache_block *ptr) { 
   //creating the index based on obj_name
   std::string key = buildIndex(ptr);
   if (!client.is_connected()) { 
@@ -72,13 +72,14 @@ int RGWBlockDirectory::setValue(cache_block *ptr) { // Possibly need to check if
 
   if (!exist) {
     std::vector<std::pair<std::string, std::string>> list;
-
+    std::string endpoint = "127.0.0.1:6379"; // change to endpoint from cct -Sam
+    
     //creating a list of key's properties
     list.push_back(make_pair("key", key));
     list.push_back(make_pair("size", std::to_string(ptr->size_in_bytes)));
     list.push_back(make_pair("bucket_name", ptr->c_obj.bucket_name));
     list.push_back(make_pair("obj_name", ptr->c_obj.obj_name));
-    list.push_back(make_pair("hosts", ptr->hosts_list[0])); // change to endpoint from cct -Sam
+    list.push_back(make_pair("hosts", endpoint)); 
 
     client.hmset(key, list, [&result](cpp_redis::reply &reply) {
       if (!reply.is_null()) {
