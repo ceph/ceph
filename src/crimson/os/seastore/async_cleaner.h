@@ -179,7 +179,7 @@ public:
     return (double)get_available_bytes() / (double)total_bytes;
   }
 
-  journal_seq_t get_journal_head() const {
+  journal_seq_t get_submitted_journal_head() const {
     if (unlikely(journal_segment_id == NULL_SEG_ID)) {
       return JOURNAL_SEQ_NULL;
     }
@@ -269,16 +269,21 @@ private:
  */
 class SegmentProvider {
 public:
+  // set the committed journal head
   virtual void set_journal_head(journal_seq_t) = 0;
 
+  // get the committed journal tail
   journal_seq_t get_journal_tail() const {
     return std::min(get_alloc_tail(), get_dirty_tail());
   }
 
+  // get the committed journal dirty tail
   virtual journal_seq_t get_dirty_tail() const = 0;
 
+  // get the committed journal alloc tail
   virtual journal_seq_t get_alloc_tail() const = 0;
 
+  // set the committed journal tails
   virtual void update_journal_tails(
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) = 0;
 
@@ -289,6 +294,7 @@ public:
 
   virtual void close_segment(segment_id_t) = 0;
 
+  // set the submitted segment writes in order
   virtual void update_segment_avail_bytes(segment_type_t, paddr_t) = 0;
 
   virtual void update_modify_time(
@@ -729,7 +735,7 @@ private:
 
   journal_seq_t journal_dirty_tail;
 
-  /// head of journal
+  /// the committed journal head
   journal_seq_t journal_head;
 
   ExtentCallbackInterface *ecb = nullptr;
@@ -778,6 +784,13 @@ public:
                 head >= journal_alloc_tail);
     ceph_assert(journal_dirty_tail == JOURNAL_SEQ_NULL ||
                 head >= journal_dirty_tail);
+
+    if (head.offset.get_addr_type() == addr_types_t::SEGMENT) {
+      auto submitted_journal_head = segments.get_submitted_journal_head();
+      ceph_assert(submitted_journal_head != JOURNAL_SEQ_NULL &&
+                  head <= submitted_journal_head);
+    }
+
     journal_head = head;
     gc_process.maybe_wake_on_space_used();
   }
@@ -789,11 +802,7 @@ public:
 
   void update_segment_avail_bytes(segment_type_t type, paddr_t offset) final {
     segments.update_written_to(type, offset);
-    if (type == segment_type_t::JOURNAL) {
-      set_journal_head(segments.get_journal_head());
-    } else {
-      gc_process.maybe_wake_on_space_used();
-    }
+    gc_process.maybe_wake_on_space_used();
   }
 
   void update_modify_time(
@@ -1228,12 +1237,16 @@ private:
    */
   bool should_block_on_trim() const {
     if (disable_trim) return false;
+    if (!init_complete) {
+      return false;
+    }
     return get_tail_limit() > get_journal_tail();
   }
 
   bool should_block_on_reclaim() const {
     if (disable_trim) return false;
-    if (get_segments_reclaimable() == 0) {
+    if (!init_complete ||
+        get_segments_reclaimable() == 0) {
       return false;
     }
     auto aratio = get_projected_available_ratio();
