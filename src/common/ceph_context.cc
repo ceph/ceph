@@ -679,7 +679,7 @@ int CephContext::_do_command(
 CephContext::CephContext(uint32_t module_type_,
                          enum code_environment_t code_env,
                          int init_flags_)
-  :CephContext(module_type_, create_options{code_env, init_flags_, nullptr})
+  : CephContext(module_type_, create_options{code_env, init_flags_, nullptr})
 {}
 
 CephContext::CephContext(uint32_t module_type_,
