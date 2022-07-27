@@ -4,6 +4,7 @@
 
 #include "test/librados/test_cxx.h"
 #include "test/librados/testcase_cxx.h"
+#include "crimson_utils.h"
 
 using namespace librados;
 
@@ -72,6 +73,7 @@ TEST_F(LibRadosStatPP, PoolStatPP) {
 }
 
 TEST_F(LibRadosStatECPP, StatPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -85,11 +87,13 @@ TEST_F(LibRadosStatECPP, StatPP) {
 }
 
 TEST_F(LibRadosStatECPP, ClusterStatPP) {
+  SKIP_IF_CRIMSON();
   cluster_stat_t cstat;
   ASSERT_EQ(0, cluster.cluster_stat(cstat));
 }
 
 TEST_F(LibRadosStatECPP, PoolStatPP) {
+  SKIP_IF_CRIMSON();
   std::string n = ioctx.get_pool_name();
   ASSERT_EQ(n, pool_name);
   char buf[128];
@@ -133,6 +137,7 @@ TEST_F(LibRadosStatPP, StatPPNS) {
 }
 
 TEST_F(LibRadosStatECPP, StatPPNS) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;

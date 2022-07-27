@@ -15,6 +15,8 @@
 #include "test/librados/testcase_cxx.h"
 #include "global/global_context.h"
 
+#include "crimson_utils.h"
+
 using namespace librados;
 
 typedef RadosTestPPNSCleanup LibRadosListPP;
@@ -394,6 +396,7 @@ TEST_F(LibRadosListPP, ListObjectsCursorPP) {
 }
 
 TEST_F(LibRadosListECPP, ListObjectsPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -410,6 +413,7 @@ TEST_F(LibRadosListECPP, ListObjectsPP) {
 }
 
 TEST_F(LibRadosListECPP, ListObjectsTwicePP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -436,6 +440,7 @@ TEST_F(LibRadosListECPP, ListObjectsTwicePP) {
 }
 
 TEST_F(LibRadosListECPP, ListObjectsCopyIterPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -468,6 +473,7 @@ TEST_F(LibRadosListECPP, ListObjectsCopyIterPP) {
 }
 
 TEST_F(LibRadosListECPP, ListObjectsEndIter) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -493,6 +499,7 @@ TEST_F(LibRadosListECPP, ListObjectsEndIter) {
 }
 
 TEST_F(LibRadosListECPP, ListObjectsPPNS) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -533,6 +540,7 @@ TEST_F(LibRadosListECPP, ListObjectsPPNS) {
 }
 
 TEST_F(LibRadosListECPP, ListObjectsManyPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -559,6 +567,7 @@ TEST_F(LibRadosListECPP, ListObjectsManyPP) {
 }
 
 TEST_F(LibRadosListECPP, ListObjectsStartPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;

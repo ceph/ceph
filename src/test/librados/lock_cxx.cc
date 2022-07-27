@@ -11,6 +11,8 @@
 #include "test/librados/test_cxx.h"
 #include "test/librados/testcase_cxx.h"
 
+#include "crimson_utils.h"
+
 using namespace std::chrono_literals;
 using namespace librados;
 
@@ -106,16 +108,19 @@ TEST_F(LibRadosLockPP, BreakLockPP) {
 
 // EC testing
 TEST_F(LibRadosLockECPP, LockExclusivePP) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP1", "Cookie", "", NULL,  0));
   ASSERT_EQ(-EEXIST, ioctx.lock_exclusive("foo", "TestLockECPP1", "Cookie", "", NULL, 0));
 }
 
 TEST_F(LibRadosLockECPP, LockSharedPP) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockECPP2", "Cookie", "Tag", "", NULL, 0));
   ASSERT_EQ(-EEXIST, ioctx.lock_shared("foo", "TestLockECPP2", "Cookie", "Tag", "", NULL, 0));
 }
 
 TEST_F(LibRadosLockECPP, LockExclusiveDurPP) {
+  SKIP_IF_CRIMSON();
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
@@ -128,6 +133,7 @@ TEST_F(LibRadosLockECPP, LockExclusiveDurPP) {
 }
 
 TEST_F(LibRadosLockECPP, LockSharedDurPP) {
+  SKIP_IF_CRIMSON();
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
@@ -140,18 +146,21 @@ TEST_F(LibRadosLockECPP, LockSharedDurPP) {
 }
 
 TEST_F(LibRadosLockECPP, LockMayRenewPP) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP5", "Cookie", "", NULL, 0));
   ASSERT_EQ(-EEXIST, ioctx.lock_exclusive("foo", "TestLockECPP5", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP5", "Cookie", "", NULL, LOCK_FLAG_MAY_RENEW));
 }
 
 TEST_F(LibRadosLockECPP, UnlockPP) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP6", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, ioctx.unlock("foo", "TestLockECPP6", "Cookie"));
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP6", "Cookie", "", NULL, 0));
 }
 
 TEST_F(LibRadosLockECPP, ListLockersPP) {
+  SKIP_IF_CRIMSON();
   std::stringstream sstm;
   sstm << "client." << cluster.get_instance_id();
   std::string me = sstm.str();
@@ -177,6 +186,7 @@ TEST_F(LibRadosLockECPP, ListLockersPP) {
 }
 
 TEST_F(LibRadosLockECPP, BreakLockPP) {
+  SKIP_IF_CRIMSON();
   int exclusive;
   std::string tag;
   std::list<librados::locker_t> lockers;

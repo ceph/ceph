@@ -21,6 +21,8 @@
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
 
+#include "crimson_utils.h"
+
 using namespace std;
 using namespace librados;
 
@@ -381,6 +383,7 @@ TEST_F(LibRadosMiscPP, BigAttrPP) {
 }
 
 TEST_F(LibRadosMiscPP, CopyPP) {
+  SKIP_IF_CRIMSON();
   bufferlist bl, x;
   bl.append("hi there");
   x.append("bar");
@@ -512,6 +515,7 @@ std::string LibRadosTwoPoolsECPP::src_pool_name;
 
 //copy_from between ecpool and no-ecpool.
 TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
+  SKIP_IF_CRIMSON();
   bufferlist z;
   z.append_zero(4194304*2);
   bufferlist b;
@@ -538,6 +542,7 @@ TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
 }
 
 TEST_F(LibRadosMiscPP, CopyScrubPP) {
+  SKIP_IF_CRIMSON();
   bufferlist inbl, bl, x;
   for (int i=0; i<100; ++i)
     x.append("barrrrrrrrrrrrrrrrrrrrrrrrrr");
@@ -858,6 +863,7 @@ TEST_F(LibRadosMiscPP, Applications) {
 }
 
 TEST_F(LibRadosMiscECPP, CompareExtentRange) {
+  SKIP_IF_CRIMSON();
   bufferlist bl1;
   bl1.append("ceph");
   ObjectWriteOperation write;
