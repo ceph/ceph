@@ -75,6 +75,9 @@ manage_lnk_files_pattern(ceph_t, ceph_var_run_t, ceph_var_run_t)
 
 kernel_read_system_state(ceph_t)
 kernel_read_network_state(ceph_t)
+ifdef(`kernel_io_uring_use',`
+	kernel_io_uring_use(ceph_t)
+')
 allow ceph_t kernel_t:system module_request;
 
 corenet_all_recvfrom_unlabeled(ceph_t)
