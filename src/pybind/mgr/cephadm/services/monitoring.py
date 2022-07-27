@@ -41,10 +41,13 @@ class GrafanaService(CephadmService):
 
         daemons = self.mgr.cache.get_daemons_by_service('loki')
         loki_host = ''
-        if daemons:
-            assert daemons[0].hostname is not None
-            addr = daemons[0].ip if daemons[0].ip else self._inventory_get_fqdn(daemons[0].hostname)
-            loki_host = build_url(scheme='http', host=addr, port=3100)
+        for i, dd in enumerate(daemons):
+            assert dd.hostname is not None
+            if i == 0:
+                addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
+                loki_host = build_url(scheme='http', host=addr, port=3100)
+
+            deps.append(dd.name())
 
         grafana_data_sources = self.mgr.template.render(
             'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services, 'loki_host': loki_host})
@@ -444,11 +447,15 @@ class PromtailService(CephadmService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = []
+
         daemons = self.mgr.cache.get_daemons_by_service('loki')
         loki_host = ''
-        if daemons:
-            assert daemons[0].hostname is not None
-            loki_host = daemons[0].ip or self._inventory_get_fqdn(daemons[0].hostname)
+        for i, dd in enumerate(daemons):
+            assert dd.hostname is not None
+            if i == 0:
+                loki_host = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
+
+            deps.append(dd.name())
 
         context = {
             'client_hostname': loki_host,
