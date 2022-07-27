@@ -16,7 +16,8 @@ except ImportError:
     pass
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
-    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec, MDSSpec
+    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec, MDSSpec, \
+    CustomConfig
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now
@@ -472,6 +473,37 @@ class TestCephadm(object):
                         '--extra-container-args=--quiet'
                     ],
                     stdin='{"config": "", "keyring": ""}',
+                    image='',
+                )
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_custom_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        test_cert = ['-----BEGIN PRIVATE KEY-----',
+                     'YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg',
+                     'ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=',
+                     '-----END PRIVATE KEY-----',
+                     '-----BEGIN CERTIFICATE-----',
+                     'YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg',
+                     'ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=',
+                     '-----END CERTIFICATE-----']
+        configs = [
+            CustomConfig(content='something something something',
+                         mount_path='/etc/test.conf'),
+            CustomConfig(content='\n'.join(test_cert), mount_path='/usr/share/grafana/thing.crt')
+        ]
+        conf_outs = [json.dumps(c.to_json()) for c in configs]
+        stdin_str = '{' + \
+            f'"config": "", "keyring": "", "custom_config_files": [{conf_outs[0]}, {conf_outs[1]}]' + '}'
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='crash', custom_configs=configs), CephadmOrchestrator.apply_crash):
+                _run_cephadm.assert_called_with(
+                    'test', 'crash.test', 'deploy', [
+                        '--name', 'crash.test',
+                        '--meta-json', '{"service_name": "crash", "ports": [], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        '--config-json', '-',
+                    ],
+                    stdin=stdin_str,
                     image='',
                 )
 

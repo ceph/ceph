@@ -2,7 +2,7 @@ import enum
 import yaml
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CustomConfig
 from ceph.deployment.hostspec import SpecValidationError
 
 try:
@@ -179,6 +179,7 @@ class DriveGroupSpec(ServiceSpec):
                  method=None,  # type: Optional[OSDMethod]
                  crush_device_class=None,  # type: Optional[str]
                  config=None,  # type: Optional[Dict[str, str]]
+                 custom_configs=None,  # type: Optional[List[CustomConfig]]
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -186,7 +187,8 @@ class DriveGroupSpec(ServiceSpec):
                                              config=config,
                                              unmanaged=unmanaged,
                                              preview_only=preview_only,
-                                             extra_container_args=extra_container_args)
+                                             extra_container_args=extra_container_args,
+                                             custom_configs=custom_configs)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices
