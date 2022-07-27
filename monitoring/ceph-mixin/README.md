@@ -15,7 +15,13 @@ In `dashboards_out` you can find a collection of
 These dashboards are based on metrics collected
 from [prometheus](https://prometheus.io/) scraping the [prometheus mgr
 plugin](http://docs.ceph.com/en/latest/mgr/prometheus/) and the
-[node_exporter](https://github.com/prometheus/node_exporter).
+[node_exporter (0.17.0)](https://github.com/prometheus/node_exporter).
+
+
+##### Recommended versions: 
+-grafana 8.3.5
+    -grafana-piechart-panel 1.6.2
+    -grafana-status-panel 1.0.11
 
 #### Requirements
 
@@ -40,12 +46,19 @@ showMultiCluster: true,
 clusterLabel: '<your cluster label>',
 ```
 
+##### Recommended versions: 
+-prometheus v2.33.4
+
 #### SNMP
-Ceph provides a MIB (CEPH-PROMETHEUS-ALERT-MIB.txt) to support sending Prometheus
-alerts through to an SNMP management platform. The translation from Prometheus
-alert to SNMP trap requires the Prometheus alert to contain an OID that maps to
-a definition within the MIB. When making changes to the Prometheus alert rules
-file, developers should include any necessary changes to the MIB.
+Ceph provides a MIB (CEPH-PROMETHEUS-ALERT-MIB.txt) to support sending
+Prometheus alerts to an SNMP management platform. The translation from
+Prometheus alert to SNMP trap requires the Prometheus alert to contain an OID
+that maps to a definition within the MIB. When making changes to the Prometheus
+alert rules file, developers should include any necessary changes to the MIB.
+
+
+##### Recommended: 
+-alertmanager 0.16.2
 
 ### Building from Jsonnet
 
@@ -59,3 +72,5 @@ To rebuild all the generated files, you can run `tox -egrafonnet-fix`.
 The jsonnet code located in this directory depends on some Jsonnet third party
 libraries. To update those libraries you can run `jb update` and then update
 the generated files using `tox -egrafonnet-fix`.
+
+##### Any upgrade or downgrade to different major versions of the recommended tools mentioned above is not supported.
