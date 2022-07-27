@@ -775,7 +775,8 @@ void AsyncConnection::tick(uint64_t id)
           (now - last_connect_started).count()) {
       ldout(async_msgr->cct, 1) << __func__ << " see no progress in more than "
                                 << connect_timeout_us
-                                << " us during connecting, fault."
+                                << " us during connecting to "
+                                << target_addr << ", fault."
                                 << dendl;
       protocol->fault();
     } else {
