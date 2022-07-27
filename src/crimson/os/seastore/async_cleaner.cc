@@ -654,6 +654,7 @@ void AsyncCleaner::update_journal_tails(
         journal_alloc_tail > alloc_tail) {
       ERROR("journal_alloc_tail {} => {} is backwards!",
             journal_alloc_tail, alloc_tail);
+      ceph_abort();
     }
     if (journal_alloc_tail.segment_seq == alloc_tail.segment_seq) {
       DEBUG("journal_alloc_tail {} => {}", journal_alloc_tail, alloc_tail);
