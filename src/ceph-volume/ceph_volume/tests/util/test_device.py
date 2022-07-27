@@ -38,6 +38,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.lvm_size.gb == 4
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_lvm_size_rounds_down(self, fake_call, device_info):
         # 5.5GB in size
         data = {"/dev/sda": {"size": "5905580032"}}
@@ -53,6 +54,7 @@ class TestDevice(object):
         disk = device.Device("vg/lv")
         assert disk.is_lv
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_vgs_is_empty(self, fake_call, device_info, monkeypatch):
         BarPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000",
                                  pv_tags={})
@@ -65,6 +67,7 @@ class TestDevice(object):
         disk = device.Device("/dev/nvme0n1")
         assert disk.vgs == []
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_vgs_is_not_empty(self, fake_call, device_info, monkeypatch):
         vg = api.VolumeGroup(pv_name='/dev/nvme0n1', vg_name='foo/bar', vg_free_count=6,
                              vg_extent_size=1073741824)
@@ -74,6 +77,7 @@ class TestDevice(object):
         disk = device.Device("/dev/nvme0n1")
         assert len(disk.vgs) == 1
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_device_is_device(self, fake_call, device_info):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "device", "NAME": "sda"}
@@ -81,6 +85,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.is_device is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_loop_device_is_not_device(self, fake_call, device_info):
         data = {"/dev/loop0": {"foo": "bar"}}
         lsblk = {"TYPE": "loop"}
@@ -88,6 +93,7 @@ class TestDevice(object):
         disk = device.Device("/dev/loop0")
         assert disk.is_device is False
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_loop_device_is_device(self, fake_call, device_info):
         data = {"/dev/loop0": {"foo": "bar"}}
         lsblk = {"TYPE": "loop"}
@@ -97,6 +103,7 @@ class TestDevice(object):
         assert disk.is_device is True
         del os.environ["CEPH_VOLUME_ALLOW_LOOP_DEVICES"]
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_device_is_rotational(self, fake_call, device_info):
         data = {"/dev/sda": {"rotational": "1"}}
         lsblk = {"TYPE": "device", "NAME": "sda"}
@@ -104,6 +111,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.rotational
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_device_is_not_rotational(self, fake_call, device_info):
         data = {"/dev/sda": {"rotational": "0"}}
         lsblk = {"TYPE": "device", "NAME": "sda"}
@@ -111,6 +119,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert not disk.rotational
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_device_is_rotational_lsblk(self, fake_call, device_info):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "device", "ROTA": "1", "NAME": "sda"}
@@ -118,6 +127,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.rotational
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_device_is_not_rotational_lsblk(self, fake_call, device_info):
         data = {"/dev/sda": {"rotational": "0"}}
         lsblk = {"TYPE": "device", "ROTA": "0", "NAME": "sda"}
@@ -125,6 +135,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert not disk.rotational
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_device_is_rotational_defaults_true(self, fake_call, device_info):
         # rotational will default true if no info from sys_api or lsblk is found
         data = {"/dev/sda": {"foo": "bar"}}
@@ -133,6 +144,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.rotational
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_disk_is_device(self, fake_call, device_info):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "disk", "NAME": "sda"}
@@ -140,6 +152,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.is_device is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_partition(self, fake_call, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "NAME": "sda1", "PKNAME": "sda"}
@@ -147,6 +160,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda1")
         assert disk.is_partition
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_mpath_device_is_device(self, fake_call, device_info):
         data = {"/dev/foo": {"foo": "bar"}}
         lsblk = {"TYPE": "mpath", "NAME": "foo"}
@@ -154,6 +168,7 @@ class TestDevice(object):
         disk = device.Device("/dev/foo")
         assert disk.is_device is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_not_lvm_member(self, fake_call, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "NAME": "sda1", "PKNAME": "sda"}
@@ -161,6 +176,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda1")
         assert not disk.is_lvm_member
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_lvm_member(self, fake_call, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "NAME": "sda1", "PKNAME": "sda"}
@@ -168,18 +184,21 @@ class TestDevice(object):
         disk = device.Device("/dev/sda1")
         assert not disk.is_lvm_member
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_mapper_device(self, fake_call, device_info):
         lsblk = {"TYPE": "lvm", "NAME": "foo"}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/mapper/foo")
         assert disk.is_mapper
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_dm_is_mapper_device(self, fake_call, device_info):
         lsblk = {"TYPE": "lvm", "NAME": "dm-4"}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/dm-4")
         assert disk.is_mapper
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_not_mapper_device(self, fake_call, device_info):
         lsblk = {"TYPE": "disk", "NAME": "sda"}
         device_info(lsblk=lsblk)
@@ -188,6 +207,7 @@ class TestDevice(object):
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries")
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_ceph_disk_lsblk(self, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
@@ -195,12 +215,14 @@ class TestDevice(object):
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "lsblk_ceph_disk_member",
                              "disable_kernel_queries")
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_ceph_disk_blkid(self, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries")
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_ceph_disk_member_not_available_lsblk(self, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
@@ -210,12 +232,14 @@ class TestDevice(object):
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "lsblk_ceph_disk_member",
                              "disable_kernel_queries")
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_ceph_disk_member_not_available_blkid(self, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
         assert not disk.available
         assert "Used by ceph-disk" in disk.rejected_reasons
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_removable_device(self, fake_call, device_info):
         data = {"/dev/sdb": {"removable": 1}}
         lsblk = {"TYPE": "disk", "NAME": "sdb"}
@@ -223,6 +247,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sdb")
         assert not disk.available
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_device_with_gpt_headers(self, fake_call, device_info):
         data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
         lsblk = {"TYPE": "disk", "NAME": "sdb"}
@@ -235,6 +260,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sdb")
         assert not disk.available
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_accept_non_removable_device(self, fake_call, device_info):
         data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
         lsblk = {"TYPE": "disk", "NAME": "sdb"}
@@ -242,6 +268,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sdb")
         assert disk.available
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_not_acceptable_device(self, fake_call, device_info):
         data = {"/dev/dm-0": {"foo": "bar"}}
         lsblk = {"TYPE": "mpath", "NAME": "dm-0"}
@@ -249,6 +276,7 @@ class TestDevice(object):
         disk = device.Device("/dev/dm-0")
         assert not disk.available
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_readonly_device(self, fake_call, device_info):
         data = {"/dev/cdrom": {"ro": 1}}
         lsblk = {"TYPE": "disk", "NAME": "cdrom"}
@@ -256,6 +284,7 @@ class TestDevice(object):
         disk = device.Device("/dev/cdrom")
         assert not disk.available
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_smaller_than_5gb(self, fake_call, device_info):
         data = {"/dev/sda": {"size": 5368709119}}
         lsblk = {"TYPE": "disk", "NAME": "sda"}
@@ -263,6 +292,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert not disk.available, 'too small device is available'
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_accept_non_readonly_device(self, fake_call, device_info):
         data = {"/dev/sda": {"ro": 0, "size": 5368709120}}
         lsblk = {"TYPE": "disk", "NAME": "sda"}
@@ -270,6 +300,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.available
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_bluestore_device(self, fake_call, monkeypatch, patch_bluestore_label, device_info):
         patch_bluestore_label.return_value = True
         lsblk = {"TYPE": "disk", "NAME": "sda"}
@@ -278,6 +309,7 @@ class TestDevice(object):
         assert not disk.available
         assert "Has BlueStore device label" in disk.rejected_reasons
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_device_with_oserror(self, fake_call, monkeypatch, patch_bluestore_label, device_info):
         patch_bluestore_label.side_effect = OSError('test failure')
         lsblk = {"TYPE": "disk", "NAME": "sda"}
@@ -289,10 +321,12 @@ class TestDevice(object):
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "device_info_not_ceph_disk_member",
                              "disable_kernel_queries")
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_not_ceph_disk_member_lsblk(self, fake_call, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member is False
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_existing_vg_available(self, fake_call, monkeypatch, device_info):
         vg = api.VolumeGroup(pv_name='/dev/nvme0n1', vg_name='foo/bar', vg_free_count=1536,
                              vg_extent_size=4194304)
@@ -305,6 +339,7 @@ class TestDevice(object):
         assert not disk.available
         assert not disk.available_raw
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_existing_vg_too_small(self, fake_call, monkeypatch, device_info):
         vg = api.VolumeGroup(pv_name='/dev/nvme0n1', vg_name='foo/bar', vg_free_count=4,
                              vg_extent_size=1073741824)
@@ -317,6 +352,7 @@ class TestDevice(object):
         assert not disk.available
         assert not disk.available_raw
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_multiple_existing_vgs(self, fake_call, monkeypatch, device_info):
         vg1 = api.VolumeGroup(pv_name='/dev/nvme0n1', vg_name='foo/bar', vg_free_count=1000,
                              vg_extent_size=4194304)
@@ -357,6 +393,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.used_by_ceph
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_not_used_by_ceph(self, fake_call, device_info, monkeypatch):
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes = []
@@ -370,6 +407,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert not disk.used_by_ceph
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_get_device_id(self, fake_call, device_info):
         udev = {k:k for k in ['ID_VENDOR', 'ID_MODEL', 'ID_SCSI_SERIAL']}
         lsblk = {"TYPE": "disk", "NAME": "sda"}
@@ -391,18 +429,21 @@ class TestDevice(object):
 
 class TestDeviceEncryption(object):
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_partition_is_not_encrypted_lsblk(self, fake_call, device_info):
         lsblk = {'TYPE': 'part', 'FSTYPE': 'xfs', 'NAME': 'sda', 'PKNAME': 'sda'}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is False
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_partition_is_encrypted_lsblk(self, fake_call, device_info):
         lsblk = {'TYPE': 'part', 'FSTYPE': 'crypto_LUKS', 'NAME': 'sda', 'PKNAME': 'sda'}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_partition_is_not_encrypted_blkid(self, fake_call, device_info):
         lsblk = {'TYPE': 'part', 'NAME': 'sda', 'PKNAME': 'sda'}
         blkid = {'TYPE': 'ceph data'}
@@ -410,6 +451,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is False
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_partition_is_encrypted_blkid(self, fake_call, device_info):
         lsblk = {'TYPE': 'part', 'NAME': 'sda' ,'PKNAME': 'sda'}
         blkid = {'TYPE': 'crypto_LUKS'}
@@ -417,6 +459,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_mapper_is_encrypted_luks1(self, fake_call, device_info, monkeypatch):
         status = {'type': 'LUKS1'}
         monkeypatch.setattr(device, 'encryption_status', lambda x: status)
@@ -426,6 +469,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_mapper_is_encrypted_luks2(self, fake_call, device_info, monkeypatch):
         status = {'type': 'LUKS2'}
         monkeypatch.setattr(device, 'encryption_status', lambda x: status)
@@ -435,6 +479,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_mapper_is_encrypted_plain(self, fake_call, device_info, monkeypatch):
         status = {'type': 'PLAIN'}
         monkeypatch.setattr(device, 'encryption_status', lambda x: status)
@@ -444,6 +489,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_mapper_is_not_encrypted_plain(self, fake_call, device_info, monkeypatch):
         monkeypatch.setattr(device, 'encryption_status', lambda x: {})
         lsblk = {'FSTYPE': 'xfs', 'NAME': 'uuid', 'TYPE': 'lvm'}
@@ -452,6 +498,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is False
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_lv_is_encrypted_blkid(self, fake_call, device_info):
         lsblk = {'TYPE': 'lvm', 'NAME': 'sda'}
         blkid = {'TYPE': 'crypto_LUKS'}
@@ -460,6 +507,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = {}
         assert disk.is_encrypted is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_lv_is_not_encrypted_blkid(self, fake_call, factory, device_info):
         lsblk = {'TYPE': 'lvm', 'NAME': 'sda'}
         blkid = {'TYPE': 'xfs'}
@@ -468,6 +516,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = factory(encrypted=None)
         assert disk.is_encrypted is False
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_lv_is_encrypted_lsblk(self, fake_call, device_info):
         lsblk = {'FSTYPE': 'crypto_LUKS', 'NAME': 'sda', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}
@@ -476,6 +525,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = {}
         assert disk.is_encrypted is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_lv_is_not_encrypted_lsblk(self, fake_call, factory, device_info):
         lsblk = {'FSTYPE': 'xfs', 'NAME': 'sda', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}
@@ -484,6 +534,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = factory(encrypted=None)
         assert disk.is_encrypted is False
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_lv_is_encrypted_lvm_api(self, fake_call, factory, device_info):
         lsblk = {'FSTYPE': 'xfs', 'NAME': 'sda', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}
@@ -492,6 +543,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = factory(encrypted=True)
         assert disk.is_encrypted is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_lv_is_not_encrypted_lvm_api(self, fake_call, factory, device_info):
         lsblk = {'FSTYPE': 'xfs', 'NAME': 'sda', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}
@@ -511,6 +563,7 @@ class TestDeviceOrdering(object):
                 "/dev/sdd": {"removable": 1}, # invalid
         }
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_valid_before_invalid(self, fake_call, device_info):
         lsblk_sda = {"NAME": "sda", "TYPE": "disk"}
         lsblk_sdb = {"NAME": "sdb", "TYPE": "disk"}
@@ -522,6 +575,7 @@ class TestDeviceOrdering(object):
         assert sda < sdb
         assert sdb > sda
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_valid_alphabetical_ordering(self, fake_call, device_info):
         lsblk_sda = {"NAME": "sda", "TYPE": "disk"}
         lsblk_sdc = {"NAME": "sdc", "TYPE": "disk"}
@@ -533,6 +587,7 @@ class TestDeviceOrdering(object):
         assert sda < sdc
         assert sdc > sda
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_invalid_alphabetical_ordering(self, fake_call, device_info):
         lsblk_sdb = {"NAME": "sdb", "TYPE": "disk"}
         lsblk_sdd = {"NAME": "sdd", "TYPE": "disk"}
@@ -547,6 +602,7 @@ class TestDeviceOrdering(object):
 
 class TestCephDiskDevice(object):
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_partlabel_lsblk(self, fake_call, device_info):
         lsblk = {"TYPE": "disk", "NAME": "sda", "PARTLABEL": ""}
         device_info(lsblk=lsblk)
@@ -554,6 +610,7 @@ class TestCephDiskDevice(object):
 
         assert disk.partlabel == ''
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_partlabel_blkid(self, fake_call, device_info):
         lsblk = {"TYPE": "disk", "NAME": "sda", "PARTLABEL": "ceph data"}
         blkid = {"TYPE": "disk", "PARTLABEL": "ceph data"}
@@ -565,13 +622,15 @@ class TestCephDiskDevice(object):
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "blkid_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_is_member_blkid(self, fake_call, monkeypatch, patch_bluestore_label):
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    def test_is_member_blkid(self, fake_call, monkeypatch):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.is_member is True
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries")
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_is_member_lsblk(self, fake_call, patch_bluestore_label, device_info):
         lsblk = {"TYPE": "disk", "NAME": "sda", "PARTLABEL": "ceph"}
         device_info(lsblk=lsblk)
@@ -579,6 +638,7 @@ class TestCephDiskDevice(object):
 
         assert disk.is_member is True
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_unknown_type(self, fake_call, device_info):
         lsblk = {"TYPE": "disk", "NAME": "sda", "PARTLABEL": "gluster"}
         device_info(lsblk=lsblk)
@@ -588,6 +648,7 @@ class TestCephDiskDevice(object):
 
     ceph_types = ['data', 'wal', 'db', 'lockbox', 'journal', 'block']
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "blkid_ceph_disk_member",
                              "disable_kernel_queries")
@@ -599,6 +660,7 @@ class TestCephDiskDevice(object):
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "lsblk_ceph_disk_member",
                              "disable_kernel_queries")
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_type_lsblk(self, fake_call, device_info, ceph_partlabel):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
