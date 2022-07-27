@@ -11,6 +11,7 @@ import sys
 import tempfile
 import threading
 import time
+import socket
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -193,7 +194,7 @@ class CherryPyConfig(object):
             server_addr = self.get_mgr_ip()  # type: ignore
         base_url = build_url(
             scheme='https' if use_ssl else 'http',
-            host=server_addr,
+            host=socket.gethostbyaddr(server_addr)[0],
             port=server_port,
         )
         uri = f'{base_url}{self.url_prefix}/'
