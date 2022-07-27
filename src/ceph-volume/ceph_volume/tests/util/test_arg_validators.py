@@ -16,11 +16,12 @@ class TestOSDPath(object):
         with pytest.raises(exceptions.SuperUserError):
             self.validator('')
 
-    def test_path_is_not_a_directory(self, is_root, tmpfile, monkeypatch):
+    def test_path_is_not_a_directory(self, is_root, monkeypatch, fake_filesystem):
+        fake_file = fake_filesystem.create_file('/tmp/foo')
         monkeypatch.setattr(arg_validators.disk, 'is_partition', lambda x: False)
         validator = arg_validators.OSDPath()
         with pytest.raises(argparse.ArgumentError):
-            validator(tmpfile())
+            validator(fake_file.path)
 
     def test_files_are_missing(self, is_root, tmpdir, monkeypatch):
         tmppath = str(tmpdir)
