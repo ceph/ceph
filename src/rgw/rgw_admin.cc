@@ -686,9 +686,6 @@ enum class OPT {
   BUCKET_OBJECT_SHARD,
   BUCKET_RESYNC_ENCRYPTED_MULTIPART,
   POLICY,
-  POOL_ADD,
-  POOL_RM,
-  POOLS_LIST,
   LOG_LIST,
   LOG_SHOW,
   LOG_RM,
@@ -910,10 +907,6 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
   { "policy", OPT::POLICY },
-  { "pool add", OPT::POOL_ADD },
-  { "pool rm", OPT::POOL_RM },
-  { "pool list", OPT::POOLS_LIST },
-  { "pools list", OPT::POOLS_LIST },
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
   { "log rm", OPT::LOG_RM },
@@ -7411,47 +7404,6 @@ next:
 	return -r;
       }
     }
-  }
-
-  if (opt_cmd == OPT::POOL_ADD) {
-    if (pool_name.empty()) {
-      cerr << "need to specify pool to add!" << std::endl;
-      exit(1);
-    }
-
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->add_bucket_placement(dpp(), pool, null_yield);
-    if (ret < 0)
-      cerr << "failed to add bucket placement: " << cpp_strerror(-ret) << std::endl;
-  }
-
-  if (opt_cmd == OPT::POOL_RM) {
-    if (pool_name.empty()) {
-      cerr << "need to specify pool to remove!" << std::endl;
-      exit(1);
-    }
-
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->remove_bucket_placement(dpp(), pool, null_yield);
-    if (ret < 0)
-      cerr << "failed to remove bucket placement: " << cpp_strerror(-ret) << std::endl;
-  }
-
-  if (opt_cmd == OPT::POOLS_LIST) {
-    set<rgw_pool> pools;
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->list_placement_set(dpp(), pools, null_yield);
-    if (ret < 0) {
-      cerr << "could not list placement set: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    formatter->reset();
-    formatter->open_array_section("pools");
-    for (auto siter = pools.begin(); siter != pools.end(); ++siter) {
-      formatter->open_object_section("pool");
-      formatter->dump_string("name",  siter->to_str());
-      formatter->close_section();
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-    cout << std::endl;
   }
 
   if (opt_cmd == OPT::USAGE_SHOW) {
