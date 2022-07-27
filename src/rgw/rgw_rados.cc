@@ -3252,6 +3252,12 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
   }
 
+  
+  if(storage_class.compare("InfrequentAccess") == 0)
+  {
+  	meta.category = RGWObjCategory::InfrequentAccess;
+  }
+
   tracepoint(rgw_rados, complete_enter, req_id.c_str());
   r = index_op->complete(dpp, poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type,
