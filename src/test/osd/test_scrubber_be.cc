@@ -7,6 +7,8 @@
 #include <signal.h>
 #include <stdio.h>
 
+#include <fmt/ranges.h>
+
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"

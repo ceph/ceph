@@ -7,6 +7,8 @@
 #include <iostream>
 #include <vector>
 
+#include <fmt/ranges.h>
+
 #include "debug.h"
 
 #include "common/errno.h"
