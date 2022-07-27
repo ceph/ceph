@@ -299,3 +299,11 @@ def device_info(monkeypatch, patch_bluestore_label):
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
         monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: udevadm)
     return apply
+
+@pytest.fixture
+def fake_filesystem(fs):
+
+    fs.create_dir('/sys/block/sda/slaves')
+    fs.create_dir('/sys/block/sda/queue')
+    fs.create_dir('/sys/block/rbd0')
+    yield fs

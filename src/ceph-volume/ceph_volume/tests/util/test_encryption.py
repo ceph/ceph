@@ -48,9 +48,9 @@ class TestStatus(object):
 
 class TestDmcryptClose(object):
 
-    def test_mapper_exists(self, fake_run, tmpfile):
-        file_name = tmpfile(name='mapper-device')
-        encryption.dmcrypt_close(file_name)
+    def test_mapper_exists(self, fake_run, fake_filesystem):
+        file_name = fake_filesystem.create_file('mapper-device')
+        encryption.dmcrypt_close(file_name.path)
         arguments = fake_run.calls[0]['args'][0]
         assert arguments[0] == 'cryptsetup'
         assert arguments[1] == 'remove'
