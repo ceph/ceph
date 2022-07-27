@@ -11,6 +11,7 @@
 
 #include "include/buffer.h"
 #include "rbm_device.h"
+#include "nvme_block_device.h"
 
 namespace {
   seastar::logger& logger() {
@@ -18,7 +19,7 @@ namespace {
   }
 }
 
-namespace crimson::os::seastore::nvme_device {
+namespace crimson::os::seastore::random_block_device::nvme {
 
 open_ertr::future<> NVMeBlockDevice::open(
   const std::string &in_path,
@@ -248,6 +249,10 @@ nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
   nvme_io_command_t& io_cmd) {
   return device.ioctl(NVME_IOCTL_IO_CMD, &io_cmd);
 }
+
+}
+
+namespace crimson::os::seastore::random_block_device {
 
 open_ertr::future<> TestMemory::open(
   const std::string &in_path,

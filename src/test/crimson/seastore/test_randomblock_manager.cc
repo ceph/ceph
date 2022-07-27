@@ -26,7 +26,7 @@ constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 struct rbm_test_t :
   public seastar_test_suite_t, TMTestState {
   std::unique_ptr<BlockRBManager> rbm_manager;
-  std::unique_ptr<nvme_device::RBMDevice> device;
+  std::unique_ptr<random_block_device::RBMDevice> device;
 
   struct rbm_transaction {
     void add_rbm_allocated_blocks(alloc_delta_t &d) {
@@ -53,7 +53,7 @@ struct rbm_test_t :
   rbm_test_t() = default;
 
   seastar::future<> set_up_fut() final {
-    device.reset(new nvme_device::TestMemory(DEFAULT_TEST_SIZE));
+    device.reset(new random_block_device::TestMemory(DEFAULT_TEST_SIZE));
     rbm_manager.reset(new BlockRBManager(device.get(), std::string()));
     device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
     config.start = paddr_t::make_blk_paddr(d_id, 0);

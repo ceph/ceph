@@ -25,7 +25,7 @@ class EphemeralTestState {
 protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
-  std::unique_ptr<nvme_device::RBMDevice> rb_device;
+  std::unique_ptr<random_block_device::RBMDevice> rb_device;
   tm_make_config_t tm_config = tm_make_config_t::get_test_segmented_journal();
 
   EphemeralTestState(std::size_t num_segment_managers) {
@@ -72,7 +72,7 @@ protected:
     if (tm_config.j_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
       auto config =
 	journal::CircularBoundedJournal::mkfs_config_t::get_default();
-      rb_device.reset(new nvme_device::TestMemory(config.total_size));
+      rb_device.reset(new random_block_device::TestMemory(config.total_size));
       rb_device->set_device_id(
 	1 << (std::numeric_limits<device_id_t>::digits - 1));
     }

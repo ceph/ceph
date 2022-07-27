@@ -3,13 +3,15 @@
 
 #include "include/buffer.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
+#include "crimson/os/seastore/random_block_manager/nvme_block_device.h"
 #include "test/crimson/gtest_seastar.h"
 #include "include/stringify.h"
 
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
-using namespace nvme_device;
+using namespace random_block_device;
+using namespace random_block_device::nvme;
 
 struct nvdev_test_t : seastar_test_suite_t {
   std::unique_ptr<RBMDevice> device;
