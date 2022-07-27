@@ -78,13 +78,14 @@ class TestExcludeGroupOptions(object):
 
 class TestValidDevice(object):
 
-    def setup(self):
+    def setup(self, fake_filesystem):
         self.validator = arg_validators.ValidDevice()
 
     @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
     def test_path_is_valid(self, m_has_bs_label,
                            fake_call, patch_bluestore_label,
-                           device_info):
+                           device_info, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.device.Device.exists', lambda: True)
         lsblk = {"TYPE": "disk", "NAME": "sda"}
         device_info(lsblk=lsblk)
         result = self.validator('/dev/sda')
