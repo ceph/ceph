@@ -62,6 +62,7 @@ namespace ceph {
   class HeartbeatMap;
   namespace logging {
     class Log;
+    class SubsystemMap;
   }
 }
 
@@ -114,7 +115,13 @@ public:
   CephContext(uint32_t module_type_,
               enum code_environment_t code_env=CODE_ENVIRONMENT_UTILITY,
               int init_flags_ = 0);
-
+  struct create_options {
+    enum code_environment_t code_env=CODE_ENVIRONMENT_UTILITY;
+    int init_flags = 0;
+    std::function<ceph::logging::Log* (const ceph::logging::SubsystemMap *)> create_log;
+  };
+  CephContext(uint32_t module_type_,
+	      const create_options& options);
   CephContext(const CephContext&) = delete;
   CephContext& operator =(const CephContext&) = delete;
   CephContext(CephContext&&) = delete;
