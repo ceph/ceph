@@ -29,8 +29,10 @@ class SubsystemMap;
 
 class Log : private Thread
 {
-  using EntryRing = boost::circular_buffer<ConcreteEntry>;
+protected:
   using EntryVector = std::vector<ConcreteEntry>;
+private:
+  using EntryRing = boost::circular_buffer<ConcreteEntry>;
 
   static const std::size_t DEFAULT_MAX_NEW = 100;
   static const std::size_t DEFAULT_MAX_RECENT = 10000;
@@ -80,9 +82,9 @@ class Log : private Thread
 
   void _log_safe_write(std::string_view sv);
   void _flush_logbuf();
-  void _flush(EntryVector& q, bool crash);
-
   void _log_message(std::string_view s, bool crash);
+protected:
+  virtual void _flush(EntryVector& q, bool crash);
 
 public:
   using Thread::is_started;
