@@ -25,7 +25,7 @@ namespace crimson::os::seastore::journal {
 
 constexpr rbm_abs_addr CBJOURNAL_START_ADDRESS = 0;
 constexpr uint64_t CBJOURNAL_MAGIC = 0xCCCC;
-using RBMDevice = nvme_device::RBMDevice;
+using RBMDevice = random_block_device::RBMDevice;
 
 /**
  * CircularBoundedJournal

@@ -26,7 +26,7 @@ namespace crimson::os::seastore {
 
 constexpr uint32_t RBM_SUPERBLOCK_SIZE = 4096;
 
-using RBMDevice = nvme_device::RBMDevice;
+using RBMDevice = random_block_device::RBMDevice;
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
 
 enum {
