@@ -531,17 +531,23 @@ void WriteLog<I>::release_ram(std::shared_ptr<GenericLogEntry> log_entry) {
 
 template <typename I>
 void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops) {
-  std::lock_guard locker(m_lock);
-
-  for (auto &operation : ops) {
-    auto &log_entry = operation->get_log_entry();
-    log_entry->ram_entry.set_entry_valid(true);
-    m_log_entries.push_back(log_entry);
-    ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
+  bool need_update_state = false;
+  {
+    std::lock_guard locker(m_lock);
+    for (auto &operation : ops) {
+      auto &log_entry = operation->get_log_entry();
+      log_entry->ram_entry.set_entry_valid(true);
+      m_log_entries.push_back(log_entry);
+      ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
+    }
+    if (m_cache_state->empty && !m_log_entries.empty()) {
+      m_cache_state->empty = false;
+      this->update_image_cache_state();
+      need_update_state = true;
+    }
   }
-  if (m_cache_state->empty && !m_log_entries.empty()) {
-    m_cache_state->empty = false;
-    this->update_image_cache_state();
+  if (need_update_state) {
+    this->write_image_cache_state();
   }
 }
 
@@ -807,6 +813,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
             allocated_bytes += entry->get_aligned_data_size();
           }
         }
+        bool need_update_state = false;
         {
           std::lock_guard locker(m_lock);
           m_first_valid_entry = first_valid_entry;
@@ -818,6 +825,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           if (!m_cache_state->empty && m_log_entries.empty()) {
             m_cache_state->empty = true;
             this->update_image_cache_state();
+            need_update_state = true;
           }
 
           ldout(m_image_ctx.cct, 20)
@@ -831,6 +839,9 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
 
           this->m_alloc_failed_since_retire = false;
           this->wake_up();
+        }
+        if (need_update_state) {
+          this->write_image_cache_state();
         }
 
         this->dispatch_deferred_writes();
