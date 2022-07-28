@@ -1914,6 +1914,13 @@ public:
     ObjectContextRef obc,
     PGTransaction *t,
     const std::string &key);
+  /** 
+   * getattr_maybe_cache 
+   *
+   * Populates val (if non-null) with the value of the attr with the specified key. 
+   * Returns -ENOENT if object does not exist, -ENODATA if the object exists, 
+   * but the specified key does not. 
+   */
   int getattr_maybe_cache(
     ObjectContextRef obc,
     const std::string &key,
