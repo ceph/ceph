@@ -1,4 +1,5 @@
 tasks:
 - s3tests:
     client.0:
+      scan_logs: False
       rgw_server: client.0

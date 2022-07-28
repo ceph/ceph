@@ -5,6 +5,7 @@ tasks:
       keycloak_version: 11.0.0
 - s3tests:
     client.0:
+      scan_logs: False
       sts_tests: True
       rgw_server: client.0
       extra_attrs: ['webidentity_test']

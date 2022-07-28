@@ -1,6 +1,7 @@
 tasks:
 - s3tests:
     client.0:
+      scan_logs: False
       sts_tests: True
       extra_attrs: ["test_of_sts"]
       rgw_server: client.0

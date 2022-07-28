@@ -10,6 +10,7 @@ tasks:
 - rgw: [client.0]
 - s3tests:
     client.0:
+      scan_logs: False
       rgw_server: client.0
       force-branch: ceph-master
 overrides:
