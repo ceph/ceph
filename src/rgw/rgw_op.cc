@@ -3450,6 +3450,12 @@ void RGWDeleteBucket::execute(optional_yield y)
 int RGWPutObj::init_processing(optional_yield y) {
   copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
   copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
+  // Upload Part copy operation is not supported yet in MGW
+  if(copy_source_range) {
+      ldpp_dout(this, 0) << "ERROR: Upload Part copy (range copy) has not been implemented." << dendl;
+      s->err.message = "Unsupported Action Requested.";
+      return - ERR_NOT_IMPLEMENTED;
+  }
   size_t pos;
   int ret;
 
