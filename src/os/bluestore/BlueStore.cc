@@ -6507,6 +6507,11 @@ void BlueStore::_close_db_and_around()
   if (db) {
     _close_db();
   }
+  _close_around_db();
+}
+
+void BlueStore::_close_around_db()
+{
   if (bluefs) {
     _close_bluefs();
   }
@@ -6531,7 +6536,11 @@ int BlueStore::open_db_environment(KeyValueDB **pdb, bool to_repair)
 
 int BlueStore::close_db_environment()
 {
-  _close_db_and_around();
+  if (db) {
+    delete db;
+    db = nullptr;
+  }
+  _close_around_db();
   return 0;
 }
 
