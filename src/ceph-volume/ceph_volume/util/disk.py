@@ -769,6 +769,13 @@ allow_loop_devices = AllowLoopDevices()
 
 
 def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys/dev/block'):
+    def holder_inner_loop():
+        for holder in holders:
+            # /sys/block/sdy/holders/dm-8/dm/uuid
+            holder_dm_type = get_file_contents(os.path.join(_sys_block_path, dev, f'holders/{holder}/dm/uuid')).split('-')[0].lower()
+            if holder_dm_type == 'mpath':
+                return True
+
     # First, get devices that are _not_ partitions
     result = list()
     dev_names = os.listdir(_sys_block_path)
@@ -777,11 +784,15 @@ def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys
         if not os.path.exists(name):
             continue
         type_ = 'disk'
+        holders = os.listdir(os.path.join(_sys_block_path, dev, 'holders'))
         if get_file_contents(os.path.join(_sys_block_path, dev, 'removable')) == "1":
+            continue
+        if holder_inner_loop():
             continue
         dm_dir_path = os.path.join(_sys_block_path, dev, 'dm')
         if os.path.isdir(dm_dir_path):
-            type_ = 'lvm'
+            dm_type = get_file_contents(os.path.join(dm_dir_path, 'uuid'))
+            type_ = dm_type.split('-')[0].lower()
             basename = get_file_contents(os.path.join(dm_dir_path, 'name'))
             name = os.path.join("/dev/mapper", basename)
         if dev.startswith('loop'):
