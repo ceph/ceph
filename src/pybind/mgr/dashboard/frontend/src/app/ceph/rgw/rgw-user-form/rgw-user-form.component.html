@@ -83,6 +83,9 @@
                    type="text"
                    formControlName="display_name">
             <span class="invalid-feedback"
+                  *ngIf="userForm.showError('display_name', frm, 'pattern')"
+                  i18n>The value is not valid.</span>
+            <span class="invalid-feedback"
                   *ngIf="userForm.showError('display_name', frm, 'required')"
                   i18n>This field is required.</span>
           </div>
