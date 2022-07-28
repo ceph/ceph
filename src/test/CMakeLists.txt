@@ -316,13 +316,16 @@ install(TARGETS ceph_test_librgw_file_gp DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(ceph_test_librgw_file_nfsns
   librgw_file_nfsns.cc
   )
-target_include_directories(ceph_test_librgw_file_nfsns SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(ceph_test_librgw_file_nfsns
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_librgw_file_nfsns
   rgw
   librados
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${LUA_LIBRARIES}
   )
   target_link_libraries(ceph_test_librgw_file_nfsns spawn)
 install(TARGETS ceph_test_librgw_file_nfsns DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -344,13 +347,16 @@ install(TARGETS ceph_test_librgw_file_aw DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(ceph_test_librgw_file_marker
   librgw_file_marker.cc
   )
-target_include_directories(ceph_test_librgw_file_marker SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(ceph_test_librgw_file_marker
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_librgw_file_marker
   rgw
   librados
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${LUA_LIBRARIES}
   )
   target_link_libraries(ceph_test_librgw_file_marker spawn)
 install(TARGETS ceph_test_librgw_file_marker DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -359,13 +365,16 @@ install(TARGETS ceph_test_librgw_file_marker DESTINATION ${CMAKE_INSTALL_BINDIR}
 add_executable(ceph_test_librgw_file_xattr
   librgw_file_xattr.cc
   )
-target_include_directories(ceph_test_librgw_file_xattr SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(ceph_test_librgw_file_xattr
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_librgw_file_xattr
   rgw
   librados
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${LUA_LIBRARIES}
   )
 target_link_libraries(ceph_test_librgw_file_xattr spawn)
 

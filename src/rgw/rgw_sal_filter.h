@@ -86,7 +86,7 @@ class FilterStore : public Store {
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) = 0;
     virtual const RGWSyncModuleInstanceRef& get_sync_module() = 0;
     virtual std::string get_host_id() = 0;
-    virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() = 0;
+    virtual std::unique_ptr<LuaManager> get_lua_manager() = 0;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					      std::string tenant,
 					      std::string path="",
@@ -610,13 +610,16 @@ class FilterZone : public Zone {
     virtual const std::string& get_realm_id() = 0;
 };
 
-class FilterLuaScriptManager : public LuaScriptManager {
+class FilterLuaManager : public LuaManager {
 public:
-  virtual ~FilterLuaScriptManager() = default;
+  virtual ~FilterLuaManager() = default;
 
-  virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) = 0;
-  virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) = 0;
-  virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) = 0;
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) = 0;
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) = 0;
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) = 0;
+  virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) = 0;
+  virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) = 0;
+  virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) = 0;
 };
 
 } } // namespace rgw::sal

@@ -404,9 +404,22 @@ class StoreZone : public Zone {
     virtual ~StoreZone() = default;
 };
 
-class StoreLuaScriptManager : public LuaScriptManager {
+class StoreLuaManager : public LuaManager {
 public:
-  virtual ~StoreLuaScriptManager() = default;
+  virtual ~StoreLuaManager() = default;
+
+  /** Get a script named with the given key from the backing store */
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) { return -ENOENT; }
+  /** Put a script named with the given key to the backing store */
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) { return -ENOENT; }
+  /** Delete a script named with the given key from the backing store */
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) { return -ENOENT; }
+  /** Add a lua package */
+  virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) { return -ENOENT; }
+  /** Remove a lua package */
+  virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) { return -ENOENT; }
+  /** List lua packages */
+  virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) { return -ENOENT; }
 };
 
 } } // namespace rgw::sal
