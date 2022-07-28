@@ -483,7 +483,7 @@
                "refId": "A"
             },
             {
-               "expr": "absent(ceph_bluefs_wal_total_bytes{job=~\"$job\")} * count(ceph_osd_metadata{job=~\"$job\"})",
+               "expr": "absent(ceph_bluefs_wal_total_bytes{job=~\"$job\"}) * count(ceph_osd_metadata{job=~\"$job\"})",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "filestore",
