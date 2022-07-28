@@ -4665,11 +4665,11 @@ class TestVolumes(CephFSTestCase):
 
         # emulate a old-fashioned subvolume in the default group
         createpath1 = os.path.join(".", "volumes", "_nogroup", subvol1)
-        self.mount_a.run_shell(['mkdir', '-p', createpath1], sudo=True)
+        self.mount_a.run_shell(['mkdir', '-p', createpath1])
 
         # add required xattrs to subvolume
         default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath1, 'ceph.dir.layout.pool', default_pool, sudo=True)
+        self.mount_a.setfattr(createpath1, 'ceph.dir.layout.pool', default_pool)
 
         # create v2 subvolume
         self._fs_cmd("subvolume", "create", self.volname, subvol2)
@@ -4677,7 +4677,7 @@ class TestVolumes(CephFSTestCase):
         # Create malicious .meta file in legacy subvolume root. Copy v2 subvolume
         # .meta into legacy subvol1's root
         subvol2_metapath = os.path.join(".", "volumes", "_nogroup", subvol2, ".meta")
-        self.mount_a.run_shell(["cp", subvol2_metapath, createpath1], sudo=True)
+        self.mount_a.run_shell(["cp", subvol2_metapath, createpath1])
 
         # Upgrade legacy subvol1 to v1
         subvolpath1 = self._fs_cmd("subvolume", "getpath", self.volname, subvol1)
@@ -4719,16 +4719,16 @@ class TestVolumes(CephFSTestCase):
 
         # emulate a old-fashioned subvolume -- in a custom group
         createpath = os.path.join(".", "volumes", group, subvol)
-        self.mount_a.run_shell(['mkdir', '-p', createpath], sudo=True)
+        self.mount_a.run_shell(['mkdir', '-p', createpath])
 
         # add required xattrs to subvolume
         default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
+        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool)
 
         # Create unparseable binary .meta file on legacy subvol's root
         meta_contents = os.urandom(4096)
         meta_filepath = os.path.join(self.mount_a.mountpoint, createpath, ".meta")
-        self.mount_a.client_remote.write_file(meta_filepath, meta_contents, sudo=True)
+        sudo_write_file(self.mount_a.client_remote, meta_filepath, meta_contents)
 
         # Upgrade legacy subvol to v1
         subvolpath = self._fs_cmd("subvolume", "getpath", self.volname, subvol, group)
@@ -4762,16 +4762,16 @@ class TestVolumes(CephFSTestCase):
 
         # emulate a old-fashioned subvolume -- in a custom group
         createpath = os.path.join(".", "volumes", group, subvol)
-        self.mount_a.run_shell(['mkdir', '-p', createpath], sudo=True)
+        self.mount_a.run_shell(['mkdir', '-p', createpath])
 
         # add required xattrs to subvolume
         default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
+        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool)
 
         # Create unparseable text .meta file on legacy subvol's root
         meta_contents = "unparseable config\nfile ...\nunparseable config\nfile ...\n"
         meta_filepath = os.path.join(self.mount_a.mountpoint, createpath, ".meta")
-        self.mount_a.client_remote.write_file(meta_filepath, meta_contents, sudo=True)
+        sudo_write_file(self.mount_a.client_remote, meta_filepath, meta_contents)
 
         # Upgrade legacy subvol to v1
         subvolpath = self._fs_cmd("subvolume", "getpath", self.volname, subvol, group)
