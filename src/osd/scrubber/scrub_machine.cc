@@ -26,6 +26,11 @@ using namespace std::chrono_literals;
   auto pg_id = context<ScrubMachine>().m_pg_id;                  \
   std::ignore = pg_id;
 
+NamedSimply::NamedSimply(ScrubMachineListener* scrubber, const char* name)
+{
+  scrubber->set_state_name(name);
+}
+
 namespace Scrub {
 
 // --------- trace/debug auxiliaries -------------------------------
@@ -38,19 +43,6 @@ void on_event_creation(std::string_view nm)
 void on_event_discard(std::string_view nm)
 {
   dout(20) << " event: --^^^^---- " << nm << dendl;
-}
-
-std::string ScrubMachine::current_states_desc() const
-{
-  std::string sts{"<"};
-  for (auto si = state_begin(); si != state_end(); ++si) {
-    const auto& siw{*si};  // prevents a warning re side-effects
-    // the '7' is the size of the 'scrub::'
-    sts +=
-      boost::core::demangle(typeid(siw).name()).substr(7, std::string::npos) +
-      "/";
-  }
-  return sts + ">";
 }
 
 void ScrubMachine::assert_not_active() const
@@ -90,7 +82,9 @@ std::ostream& ScrubMachine::gen_prefix(std::ostream& out) const
 
 // ----------------------- NotActive -----------------------------------------
 
-NotActive::NotActive(my_context ctx) : my_base(ctx)
+NotActive::NotActive(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "NotActive")
 {
   dout(10) << "-- state -->> NotActive" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -115,7 +109,9 @@ sc::result NotActive::react(const AfterRepairScrub&)
 
 // ----------------------- ReservingReplicas ---------------------------------
 
-ReservingReplicas::ReservingReplicas(my_context ctx) : my_base(ctx)
+ReservingReplicas::ReservingReplicas(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReservingReplicas")
 {
   dout(10) << "-- state -->> ReservingReplicas" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -153,7 +149,9 @@ sc::result ReservingReplicas::react(const FullReset&)
 
 // ----------------------- ActiveScrubbing -----------------------------------
 
-ActiveScrubbing::ActiveScrubbing(my_context ctx) : my_base(ctx)
+ActiveScrubbing::ActiveScrubbing(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "ActiveScrubbing")
 {
   dout(10) << "-- state -->> ActiveScrubbing" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -203,7 +201,9 @@ sc::result ActiveScrubbing::react(const FullReset&)
  * If that happens, all we can do is to issue a warning message to help
  * with the debugging.
  */
-RangeBlocked::RangeBlocked(my_context ctx) : my_base(ctx)
+RangeBlocked::RangeBlocked(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/RangeBlocked")
 {
   dout(10) << "-- state -->> Act/RangeBlocked" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -218,7 +218,9 @@ RangeBlocked::RangeBlocked(my_context ctx) : my_base(ctx)
 /**
  *  Sleeping till timer reactivation - or just requeuing
  */
-PendingTimer::PendingTimer(my_context ctx) : my_base(ctx)
+PendingTimer::PendingTimer(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/PendingTimer")
 {
   dout(10) << "-- state -->> Act/PendingTimer" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -233,7 +235,9 @@ PendingTimer::PendingTimer(my_context ctx) : my_base(ctx)
  *  - preemption data was set
  *  - epoch start was updated
  */
-NewChunk::NewChunk(my_context ctx) : my_base(ctx)
+NewChunk::NewChunk(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/NewChunk")
 {
   dout(10) << "-- state -->> Act/NewChunk" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -258,7 +262,9 @@ sc::result NewChunk::react(const SelectedChunkFree&)
 
 // ----------------------- WaitPushes -----------------------------------
 
-WaitPushes::WaitPushes(my_context ctx) : my_base(ctx)
+WaitPushes::WaitPushes(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/WaitPushes")
 {
   dout(10) << " -- state -->> Act/WaitPushes" << dendl;
   post_event(ActivePushesUpd{});
@@ -284,7 +290,9 @@ sc::result WaitPushes::react(const ActivePushesUpd&)
 
 // ----------------------- WaitLastUpdate -----------------------------------
 
-WaitLastUpdate::WaitLastUpdate(my_context ctx) : my_base(ctx)
+WaitLastUpdate::WaitLastUpdate(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/WaitLastUpdate")
 {
   dout(10) << " -- state -->> Act/WaitLastUpdate" << dendl;
   post_event(UpdatesApplied{});
@@ -326,7 +334,9 @@ sc::result WaitLastUpdate::react(const InternalAllUpdates&)
 
 // ----------------------- BuildMap -----------------------------------
 
-BuildMap::BuildMap(my_context ctx) : my_base(ctx)
+BuildMap::BuildMap(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/BuildMap")
 {
   dout(10) << " -- state -->> Act/BuildMap" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -374,7 +384,9 @@ sc::result BuildMap::react(const IntLocalMapDone&)
 
 // ----------------------- DrainReplMaps -----------------------------------
 
-DrainReplMaps::DrainReplMaps(my_context ctx) : my_base(ctx)
+DrainReplMaps::DrainReplMaps(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/DrainReplMaps")
 {
   dout(10) << "-- state -->> Act/DrainReplMaps" << dendl;
   // we may have got all maps already. Send the event that will make us check.
@@ -399,7 +411,9 @@ sc::result DrainReplMaps::react(const GotReplicas&)
 
 // ----------------------- WaitReplicas -----------------------------------
 
-WaitReplicas::WaitReplicas(my_context ctx) : my_base(ctx)
+WaitReplicas::WaitReplicas(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/WaitReplicas")
 {
   dout(10) << "-- state -->> Act/WaitReplicas" << dendl;
   post_event(GotReplicas{});
@@ -460,7 +474,9 @@ sc::result WaitReplicas::react(const DigestUpdate&)
 
 // ----------------------- WaitDigestUpdate -----------------------------------
 
-WaitDigestUpdate::WaitDigestUpdate(my_context ctx) : my_base(ctx)
+WaitDigestUpdate::WaitDigestUpdate(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/WaitDigestUpdate")
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> Act/WaitDigestUpdate" << dendl;
@@ -505,7 +521,9 @@ ScrubMachine::~ScrubMachine() = default;
 
 // ----------------------- ReplicaWaitUpdates --------------------------------
 
-ReplicaWaitUpdates::ReplicaWaitUpdates(my_context ctx) : my_base(ctx)
+ReplicaWaitUpdates::ReplicaWaitUpdates(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReplicaWaitUpdates")
 {
   dout(10) << "-- state -->> ReplicaWaitUpdates" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -541,7 +559,9 @@ sc::result ReplicaWaitUpdates::react(const FullReset&)
 
 // ----------------------- ActiveReplica -----------------------------------
 
-ActiveReplica::ActiveReplica(my_context ctx) : my_base(ctx)
+ActiveReplica::ActiveReplica(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "ActiveReplica")
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> ActiveReplica" << dendl;
