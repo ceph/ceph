@@ -7616,7 +7616,7 @@ class Packager(object):
 
     def repo_gpgkey(self) -> Tuple[str, str]:
         if self.ctx.gpg_url:
-            return self.ctx.gpg_url
+            return self.ctx.gpg_url, 'manual'
         if self.stable or self.version:
             return 'https://download.ceph.com/keys/release.gpg', 'release'
         else:
