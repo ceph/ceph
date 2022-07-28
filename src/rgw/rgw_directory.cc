@@ -8,6 +8,9 @@
 #include <vector>
 #include <list>
 
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
+
 void RGWBlockDirectory::findClient(cpp_redis::client *client) {
   if (client->is_connected())
     return;
@@ -45,7 +48,7 @@ int RGWBlockDirectory::existKey(std::string key) {
   return result;
 }
 
-int RGWBlockDirectory::setValue(cache_block *ptr) { 
+int RGWBlockDirectory::setValue(cache_block *ptr) {
   //creating the index based on obj_name
   std::string key = buildIndex(ptr);
   if (!client.is_connected()) { 
@@ -72,7 +75,13 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
 
   if (!exist) {
     std::vector<std::pair<std::string, std::string>> list;
-    std::string endpoint = "127.0.0.1:6379"; // change to endpoint from cct -Sam
+    
+    if (host == "" || port == 0) {
+      dout(20) << "RGW directory error: directory endpoint not configured correctly" << dendl;
+      return -2;
+    }
+    
+    std::string endpoint = host + std::to_string(port);
     
     //creating a list of key's properties
     list.push_back(make_pair("key", key));

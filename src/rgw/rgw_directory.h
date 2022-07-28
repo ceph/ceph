@@ -37,6 +37,8 @@ class RGWBlockDirectory: RGWDirectory {
     
     void init(CephContext *_cct) {
       cct = _cct;
+      host = cct->_conf->rgw_directory_host;
+      port = cct->_conf->rgw_directory_port;
     }
 	
     void findClient(cpp_redis::client *client);
@@ -44,12 +46,14 @@ class RGWBlockDirectory: RGWDirectory {
     int setValue(cache_block *ptr);
     int getValue(cache_block *ptr);
     int delValue(cache_block *ptr);
-  
+    std::string get_host() { return host; }
+    int get_port() { return port; }
+
   private:
+    cpp_redis::client client;
     std::string buildIndex(cache_block *ptr);
-    cpp_redis::client client; 
-    std::string host;
-    int port;
+    std::string host = "";
+    int port = 0;
 };
 
 #endif

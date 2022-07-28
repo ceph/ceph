@@ -27,19 +27,21 @@ namespace rgw { namespace sal {
 
 class D4NFilterStore : public FilterStore {
   private:
-    RGWBlockDirectory* blk_dir; 
+    RGWBlockDirectory* blk_dir;
     cache_block* c_blk;
 
   public:
     D4NFilterStore(Store* _next) : FilterStore(_next) 
     {
-      blk_dir = new RGWBlockDirectory("127.0.0.1", 6379); // Change so it's not hardcoded -Sam
+      blk_dir = new RGWBlockDirectory(); // Uses cct to initialize directory address 
       c_blk = new cache_block();
     }
     virtual ~D4NFilterStore() {
       delete blk_dir; 
       delete c_blk;
     }
+
+    virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
 
@@ -81,7 +83,7 @@ class D4NFilterObject : public FilterObject {
     };
 
     D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterStore* _filter) : FilterObject(std::move(_next)),
-									     filter(_filter) {}
+									      filter(_filter) {}
     D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket, D4NFilterStore* _filter) : FilterObject(std::move(_next), _bucket),
 											       filter(_filter) {}
     D4NFilterObject(D4NFilterObject& _o, D4NFilterStore* _filter) : FilterObject(_o),
@@ -96,18 +98,17 @@ class D4NFilterObject : public FilterObject {
 
 class D4NFilterWriter : public FilterWriter {
   private:
-    D4NFilterStore* filter;
+    D4NFilterStore* filter; 
     std::unique_ptr<rgw::sal::Object> head_obj;
     const DoutPrefixProvider* save_dpp;
 
   public:
-    D4NFilterWriter(std::unique_ptr<Writer> _next, const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next)),
-										     save_dpp(_dpp) {} 
-    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, const DoutPrefixProvider* _dpp) : 
-										     FilterWriter(std::move(_next)),
-										     filter(_filter), 
-										     head_obj(std::move(_head_obj)),
-										     save_dpp(_dpp) {}
+    D4NFilterWriter(std::unique_ptr<Writer> _next) : FilterWriter(std::move(_next)) {} 
+    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, const DoutPrefixProvider* _dpp) 
+    : FilterWriter(std::move(_next)),
+    filter(_filter),
+    head_obj(std::move(_head_obj)),
+    save_dpp(_dpp) {}
     virtual ~D4NFilterWriter() = default;
 
     virtual int complete(size_t accounted_size, const std::string& etag,

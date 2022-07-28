@@ -28,6 +28,15 @@ static inline Object* nextObject(Object* t)
   return dynamic_cast<FilterObject*>(t)->get_next();
 }  
 
+int D4NFilterStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+{
+  FilterStore::initialize(cct, dpp);
+  blk_dir->init(cct);
+  
+  return 0;
+}
+
+std::unique_ptr<Object> D4NFilterStore::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
   return std::make_unique<D4NFilterObject>(std::move(o), this);
@@ -100,13 +109,16 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
-  cache_block* temp = filter->get_cache_block();
-  temp->hosts_list.push_back("127.0.0.1:6379"); // Hardcoded until cct is added -Sam
-  temp->size_in_bytes = accounted_size;
-  temp->c_obj.bucket_name = head_obj->get_bucket()->get_name();
-  temp->c_obj.obj_name = head_obj->get_name();
+  RGWBlockDirectory* temp_block_dir = filter->get_block_dir();
+  cache_block* temp_cache_block = filter->get_cache_block();
+  std::string temp_address = temp_block_dir->get_host() + ":" + std::to_string(temp_block_dir->get_port());
 
-  int setReturn = filter->get_block_dir()->setValue(temp);
+  temp_cache_block->hosts_list.push_back(temp_address); 
+  temp_cache_block->size_in_bytes = accounted_size;
+  temp_cache_block->c_obj.bucket_name = head_obj->get_bucket()->get_name();
+  temp_cache_block->c_obj.obj_name = head_obj->get_name();
+
+  int setReturn = temp_block_dir->setValue(temp_cache_block);
 
   if (setReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Directory set operation failed." << dendl;
