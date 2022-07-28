@@ -1300,6 +1300,24 @@ int MotrBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max,
     }
   }
 
+  // Return an error in case of invalid version-id-marker
+  bufferlist bl;
+  std::string marker_key;
+  ceph::real_time marker_mtime;
+
+  if (params.marker.instance == "null")
+    marker_key = params.marker.name + '\a';
+  else
+    marker_key = params.marker.name + '\a' + params.marker.instance;
+
+  if (params.marker.instance != "") {
+    rc = store->do_idx_op_by_name(bucket_index_iname, M0_IC_GET, marker_key, bl);
+    if (rc < 0) {
+      ldpp_dout(dpp, 0) <<__func__<< ": ERROR: invalid version-id-marker, rc=" << rc << dendl;
+      return -EINVAL;
+    }
+  }
+
   results.is_truncated = false;
   int keycount=0; // how many keys we've put to the results so far
   std::string next_key;
@@ -1333,8 +1351,12 @@ int MotrBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max,
               ((!null_ent.key.empty() && params.marker.instance == "null" &&
                  null_ent.meta.mtime < ent.meta.mtime) ||
                (key.instance != "" &&
-                key.instance < params.marker.instance)))
-            continue;
+                key.instance < params.marker.instance))) {
+              // Store the modified time of null version entry
+              if(null_ent.meta.mtime >= ent.meta.mtime)
+                marker_mtime = null_ent.meta.mtime;
+              continue;
+          }
 check_keycount:
           if (keycount >= max) {
             if (!null_ent.key.empty() &&
@@ -1356,9 +1378,11 @@ check_keycount:
                 key.instance == params.marker.instance)
               null_ent.key = {}; // filtered out by the marker
             else {
-              results.objs.emplace_back(std::move(null_ent));
-              keycount++;
-              goto check_keycount;
+              if (null_ent.meta.mtime != marker_mtime) {
+                results.objs.emplace_back(std::move(null_ent));
+                keycount++;
+                goto check_keycount;
+              }
             }
           }
           if (key.instance == "")
@@ -1382,8 +1406,10 @@ check_keycount:
   }
 
   if (!null_ent.key.empty() && !results.is_truncated) {
-    if (keycount < max)
-      results.objs.emplace_back(std::move(null_ent));
+    if (keycount < max) {
+      if (null_ent.meta.mtime != marker_mtime)
+          results.objs.emplace_back(std::move(null_ent));
+    }
     else { // there was no more records in the bucket
       results.next_marker = rgw_obj_key(null_ent.key.name, "null");
       results.is_truncated = true;
