@@ -1680,3 +1680,19 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_server_dispatch_killpoint_random
+  type: float
+  level: dev
+  default: 0.0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_server_dispatch_client_request_delay
+  type: millisecs
+  level: dev
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime

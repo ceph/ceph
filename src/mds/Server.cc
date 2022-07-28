@@ -273,6 +273,8 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   caps_throttle_retry_request_timeout = g_conf().get_val<double>("mds_cap_acquisition_throttle_retry_request_timeout");
   dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
   bal_fragment_size_max = g_conf().get_val<int64_t>("mds_bal_fragment_size_max");
+  dispatch_client_request_delay = g_conf().get_val<std::chrono::milliseconds>("mds_server_dispatch_client_request_delay");
+  dispatch_killpoint_random = g_conf().get_val<double>("mds_server_dispatch_killpoint_random");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
   supported_metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
 }
@@ -1374,6 +1376,16 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
   }
   if (changed.count("mds_inject_rename_corrupt_dentry_first")) {
     inject_rename_corrupt_dentry_first = g_conf().get_val<double>("mds_inject_rename_corrupt_dentry_first");
+  }
+  if (changed.count("mds_server_dispatch_client_request_delay")) {
+    dispatch_client_request_delay = g_conf().get_val<std::chrono::milliseconds>("mds_server_dispatch_client_request_delay");
+    dout(20) << __func__ << " mds_server_dispatch_client_request_delay now "
+            << dispatch_client_request_delay << dendl;
+  }
+  if (changed.count("mds_server_dispatch_killpoint_random")) {
+    dispatch_killpoint_random = g_conf().get_val<double>("mds_server_dispatch_killpoint_random");
+    dout(20) << __func__ << " mds_server_dispatch_killpoint_random now "
+            << dispatch_killpoint_random << dendl;
   }
 }
 
@@ -2666,6 +2678,14 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
   if (logger) logger->inc(l_mdss_dispatch_client_request);
 
   dout(7) << "dispatch_client_request " << *req << dendl;
+
+  auto zeroms = std::chrono::milliseconds::zero();
+  if (unlikely(dispatch_client_request_delay > zeroms)) {
+    std::this_thread::sleep_for(dispatch_client_request_delay);
+  }
+  if (unlikely(dispatch_killpoint_random > 0.0) && dispatch_killpoint_random >= ceph::util::generate_random_number(0.0, 1.0)) {
+    ceph_abort("dispatch_killpoint_random");
+  }
 
   if (req->may_write() && mdcache->is_readonly()) {
     dout(10) << " read-only FS" << dendl;

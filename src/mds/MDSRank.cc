@@ -4029,6 +4029,8 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_debug_subtrees",
     "mds_dir_max_entries",
     "mds_dump_cache_threshold_file",
+    "mds_server_dispatch_client_request_delay",
+    "mds_server_dispatch_killpoint_random",
     "mds_dump_cache_threshold_formatter",
     "mds_enable_op_tracker",
     "mds_export_ephemeral_distributed",
