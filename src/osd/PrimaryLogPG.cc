@@ -15421,7 +15421,11 @@ int PrimaryLogPG::getattr_maybe_cache(
 	*val = i->second;
       return 0;
     } else {
-      return -ENODATA;
+      if (obc->obs.exists) {
+        return -ENODATA;
+      } else {
+        return -ENOENT;
+      }
     }
   }
   return pgbackend->objects_get_attr(obc->obs.oi.soid, key, val);
