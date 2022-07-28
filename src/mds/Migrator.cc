@@ -153,21 +153,6 @@ void Migrator::dispatch(const cref_t<Message> &m)
   }
 }
 
-
-class C_MDC_EmptyImport : public MigratorContext {
-  CDir *dir;
-public:
-  C_MDC_EmptyImport(Migrator *m, CDir *d) :
-    MigratorContext(m), dir(d) {
-    dir->get(CDir::PIN_PTRWAITER);
-  }
-  void finish(int r) override {
-    mig->export_empty_import(dir);
-    dir->put(CDir::PIN_PTRWAITER);
-  }
-};
-
-
 void Migrator::export_empty_import(CDir *dir)
 {
   dout(7) << *dir << dendl;
