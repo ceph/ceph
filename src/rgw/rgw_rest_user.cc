@@ -41,7 +41,14 @@ void RGWOp_User_List::execute(optional_yield y)
   std::string marker;
   RESTArgs::get_uint32(s, "max-entries", 1000, &max_entries);
   RESTArgs::get_string(s, "marker", marker, &marker);
-
+  bool exists;
+  string sval = s->info.args.get("max-entries", &exists);
+  if(!std::all_of(sval.begin(), sval.end(), ::isdigit))
+  {
+   ldpp_dout(this, 0) << "ERROR: Invalid argument for max-entries : "<< sval << dendl;
+   op_ret = -EINVAL;
+   return;
+  }
   op_state.max_entries = max_entries;
   op_state.marker = marker;
   op_ret = RGWUserAdminOp_User::list(this, store, op_state, flusher);
