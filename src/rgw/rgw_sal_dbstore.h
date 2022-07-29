@@ -55,7 +55,9 @@ public:
   virtual int rm_entry(const std::string& oid, LCEntry& entry) override;
   virtual int get_head(const std::string& oid, std::unique_ptr<LCHead>* head) override;
   virtual int put_head(const std::string& oid, LCHead& head) override;
-  virtual LCSerializer* get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie) override;
+  virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
+						       const std::string& oid,
+						       const std::string& cookie) override;
 };
 
 class DBNotification : public StoreNotification {
@@ -287,6 +289,10 @@ protected:
 				   std::unique_ptr<PlacementTier>* tier) {
       return -1;
     }
+    virtual std::unique_ptr<ZoneGroup> clone() override {
+      std::unique_ptr<RGWZoneGroup>zg = std::make_unique<RGWZoneGroup>(*group.get());
+      return std::make_unique<DBZoneGroup>(store, std::move(zg));
+    }
   };
 
   class DBZone : public StoreZone {
@@ -323,6 +329,9 @@ protected:
 	delete current_period;
       }
 
+      virtual std::unique_ptr<Zone> clone() override {
+	return std::make_unique<DBZone>(store);
+      }
       virtual ZoneGroup& get_zonegroup() override;
       virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
       const RGWZoneParams& get_rgw_params();
@@ -576,7 +585,8 @@ protected:
       virtual std::unique_ptr<Object> clone() override {
         return std::unique_ptr<Object>(new DBObject(*this));
       }
-      virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) override;
+      virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+							   const std::string& lock_name) override;
       virtual int transition(Bucket* bucket,
           const rgw_placement_rule& placement_rule,
           const real_time& mtime,

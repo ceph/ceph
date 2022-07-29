@@ -722,9 +722,10 @@ namespace rgw::sal {
     return op_target.obj_omap_set_val_by_key(dpp, key, val, must_exist);
   }
 
-  MPSerializer* DBObject::get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name)
+  std::unique_ptr<MPSerializer> DBObject::get_serializer(const DoutPrefixProvider *dpp,
+							 const std::string& lock_name)
   {
-    return new MPDBSerializer(dpp, store, this, lock_name);
+    return std::make_unique<MPDBSerializer>(dpp, store, this, lock_name);
   }
 
   int DBObject::transition(Bucket* bucket,
@@ -1807,9 +1808,11 @@ namespace rgw::sal {
     return store->getDB()->put_head(oid, head);
   }
 
-  LCSerializer* DBLifecycle::get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie)
+  std::unique_ptr<LCSerializer> DBLifecycle::get_serializer(const std::string& lock_name,
+							    const std::string& oid,
+							    const std::string& cookie)
   {
-    return new LCDBSerializer(store, oid, lock_name, cookie);
+    return std::make_unique<LCDBSerializer>(store, oid, lock_name, cookie);
   }
 
   std::unique_ptr<Notification> DBStore::get_notification(
