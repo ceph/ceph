@@ -7458,7 +7458,7 @@ class Apt(Packager):
         self.update()
 
     def rm_repo(self) -> None:
-        for name in ['autobuild', 'release']:
+        for name in ['autobuild', 'release', 'manual']:
             p = '/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name
             if os.path.exists(p):
                 logger.info('Removing repo GPG key %s...' % p)
