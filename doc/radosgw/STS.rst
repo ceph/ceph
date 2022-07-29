@@ -110,8 +110,8 @@ Examples
 
    radosgw-admin caps add --uid="TESTER" --caps="roles=*"
 
-2. The following is an example of AssumeRole API call, which shows steps to create a role, assign a policy to it
-   (that allows access to S3 resources), assuming a role to get temporary credentials and accessing s3 resources using
+2. The following is an example of the AssumeRole API call, which shows steps to create a role, assign a policy to it
+   (that allows access to S3 resources), assuming a role to get temporary credentials and accessing S3 resources using
    those credentials. In this example, TESTER1 assumes a role created by TESTER, to access S3 resources owned by TESTER,
    according to the permission policy attached to the role.
 
