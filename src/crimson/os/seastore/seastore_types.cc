@@ -92,10 +92,10 @@ std::ostream& operator<<(std::ostream& out, segment_type_t t)
 std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
 {
   if (seq.seq == NULL_SEG_SEQ) {
-    return out << "NULL_SEG_SEQ";
+    return out << "sseq(NULL)";
   } else {
     assert(seq.seq <= MAX_VALID_SEG_SEQ);
-    return out << seq.seq;
+    return out << "sseq(" << seq.seq << ")";
   }
 }
 
@@ -137,9 +137,9 @@ std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq)
   } else if (seq == JOURNAL_SEQ_MIN) {
     return out << "JOURNAL_SEQ_MIN";
   } else {
-    return out << "journal_seq_t("
-               << "segment_seq=" << segment_seq_printer_t{seq.segment_seq}
-               << ", offset=" << seq.offset
+    return out << "jseq("
+               << segment_seq_printer_t{seq.segment_seq}
+               << ", " << seq.offset
                << ")";
   }
 }
@@ -273,26 +273,27 @@ std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
 std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 {
   return out << "segment_header_t("
-	     << "segment_seq=" << segment_seq_printer_t{header.segment_seq}
-	     << ", segment_id=" << header.physical_segment_id
-	     << ", dirty_tail=" << header.dirty_tail
-	     << ", alloc_tail=" << header.alloc_tail
-	     << ", segment_nonce=" << header.segment_nonce
-	     << ", type=" << header.type
-	     << ", category=" << header.category
-	     << ", generaton=" << (unsigned)header.generation
-	     << ")";
+             << header.physical_segment_id
+             << " " << header.type
+             << " " << segment_seq_printer_t{header.segment_seq}
+             << " " << header.category
+             << " " << reclaim_gen_printer_t{header.generation}
+             << ", dirty_tail=" << header.dirty_tail
+             << ", alloc_tail=" << header.alloc_tail
+             << ", segment_nonce=" << header.segment_nonce
+             << ")";
 }
 
 std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail)
 {
   return out << "segment_tail_t("
-	     << "segment_seq=" << tail.segment_seq
-	     << ", segment_id=" << tail.physical_segment_id
-	     << ", segment_nonce=" << tail.segment_nonce
-	     << ", modify_time=" << mod_time_point_printer_t{tail.modify_time}
-	     << ", num_extents=" << tail.num_extents
-	     << ")";
+             << tail.physical_segment_id
+             << " " << tail.type
+             << " " << segment_seq_printer_t{tail.segment_seq}
+             << ", segment_nonce=" << tail.segment_nonce
+             << ", modify_time=" << mod_time_point_printer_t{tail.modify_time}
+             << ", num_extents=" << tail.num_extents
+             << ")";
 }
 
 extent_len_t record_size_t::get_raw_mdlength() const
