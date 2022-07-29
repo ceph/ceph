@@ -195,7 +195,6 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     }
   }
 #endif
-
   if (filter.compare("base") == 0) {
     rgw::sal::Store* next = store;
     store = newBaseFilter(next);

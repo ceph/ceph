@@ -157,8 +157,8 @@
 /* define if radosgw has openssl support */
 #cmakedefine WITH_CURL_OPENSSL
 
-/*define if tracer driver enabled */
-#cmakedefine WITH_RADOSGW_TRACER
+/*define if D4N filter enabled */
+#cmakedefine WITH_RADOSGW_D4N_FILTER 
 
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY

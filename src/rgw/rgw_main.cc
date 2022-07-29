@@ -60,7 +60,7 @@
 #endif
 #include "rgw_lua_background.h"
 #ifdef WITH_RADOSGW_D4N_FILTER
-#include "rgw_sal_d4n.h" //insert #ifdef statement for later -Daniel P
+#include "rgw_sal_d4n.h" 
 #endif
 
 #include "services/svc_zone.h"

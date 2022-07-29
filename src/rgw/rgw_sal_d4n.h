@@ -99,15 +99,13 @@ class D4NFilterObject : public FilterObject {
 class D4NFilterWriter : public FilterWriter {
   private:
     D4NFilterStore* filter; 
-    std::unique_ptr<rgw::sal::Object> head_obj;
     const DoutPrefixProvider* save_dpp;
 
   public:
-    D4NFilterWriter(std::unique_ptr<Writer> _next) : FilterWriter(std::move(_next)) {} 
+    D4NFilterWriter(std::unique_ptr<Writer> _next, std::unique_ptr<Object> _head_obj) : FilterWriter(std::move(_next), std::move(_head_obj)) {} 
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, const DoutPrefixProvider* _dpp) 
-    : FilterWriter(std::move(_next)),
+    : FilterWriter(std::move(_next), std::move(_head_obj)),
     filter(_filter),
-    head_obj(std::move(_head_obj)),
     save_dpp(_dpp) {}
     virtual ~D4NFilterWriter() = default;
 

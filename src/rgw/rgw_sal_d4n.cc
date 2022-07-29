@@ -109,11 +109,10 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
-  RGWBlockDirectory* temp_block_dir = filter->get_block_dir();
   cache_block* temp_cache_block = filter->get_cache_block();
-  std::string temp_address = temp_block_dir->get_host() + ":" + std::to_string(temp_block_dir->get_port());
+  RGWBlockDirectory* temp_block_dir = filter->get_block_dir();
 
-  temp_cache_block->hosts_list.push_back(temp_address); 
+  temp_cache_block->hosts_list.push_back(temp_block_dir->get_host() + ":" + std::to_string(temp_block_dir->get_port())); 
   temp_cache_block->size_in_bytes = accounted_size;
   temp_cache_block->c_obj.bucket_name = head_obj->get_bucket()->get_name();
   temp_cache_block->c_obj.obj_name = head_obj->get_name();
