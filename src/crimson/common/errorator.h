@@ -1147,7 +1147,8 @@ namespace ct_error {
   using enametoolong = ct_error_code<static_cast<int>(std::errc::filename_too_long)>;
   using eexist = ct_error_code<static_cast<int>(std::errc::file_exists)>;
   using edquot = ct_error_code<int(122)>;
-  using cmp_fail = ct_error_code<int(4095)>;
+  constexpr int cmp_fail_error_value = 4095;
+  using cmp_fail = ct_error_code<int(cmp_fail_error_value)>;
 
   struct pass_further_all {
     template <class ErrorT>

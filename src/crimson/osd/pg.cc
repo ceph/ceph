@@ -831,6 +831,17 @@ PG::do_osd_ops(
             m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK) {
             reply->set_result(0);
           }
+          // For all ops except for CMPEXT, the correct error value is encoded
+          // in e.value(). For CMPEXT, osdop.rval has the actual error value.
+          if (e.value() == ct_error::cmp_fail_error_value) {
+            assert(!m->ops.empty());
+            for (auto &osdop : m->ops) {
+              if (osdop.rval < 0) {
+                reply->set_result(osdop.rval);
+                break;
+              }
+            }
+          }
           reply->set_enoent_reply_versions(
           peering_state.get_info().last_update,
           peering_state.get_info().last_user_version);
