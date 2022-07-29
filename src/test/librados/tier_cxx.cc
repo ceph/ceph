@@ -213,6 +213,7 @@ protected:
   static std::string cache_pool_name;
 
   void SetUp() override {
+    SKIP_IF_CRIMSON();
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestPP::SetUp();
@@ -222,6 +223,7 @@ protected:
     cache_ioctx.set_namespace(nspace);
   }
   void TearDown() override {
+    SKIP_IF_CRIMSON();
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 
@@ -6267,6 +6269,7 @@ protected:
   static std::string cache_pool_name;
 
   void SetUp() override {
+    SKIP_IF_CRIMSON();
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestECPP::SetUp();
@@ -6276,6 +6279,7 @@ protected:
     cache_ioctx.set_namespace(nspace);
   }
   void TearDown() override {
+    SKIP_IF_CRIMSON();
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 
