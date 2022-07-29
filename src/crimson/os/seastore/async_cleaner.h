@@ -264,6 +264,8 @@ private:
   std::multiset<sea_time_point> modify_times;
 };
 
+std::ostream &operator<<(std::ostream &, const segments_info_t &);
+
 /**
  * Callback interface for managing available segments
  */
@@ -872,9 +874,7 @@ public:
     return st;
   }
 
-  seastar::future<> stop() {
-    return gc_process.stop();
-  }
+  seastar::future<> stop();
 
   seastar::future<> run_until_halt() {
     return gc_process.run_until_halt();
@@ -948,6 +948,7 @@ private:
     journal_seq_t limit);
 
   journal_seq_t get_dirty_tail_target() const {
+    assert(init_complete);
     auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.target_journal_dirty_segments) {
@@ -960,6 +961,7 @@ private:
   }
 
   journal_seq_t get_tail_limit() const {
+    assert(init_complete);
     auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.max_journal_segments) {
@@ -972,6 +974,7 @@ private:
   }
 
   journal_seq_t get_alloc_tail_target() const {
+    assert(init_complete);
     auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.target_journal_alloc_segments) {
@@ -1243,17 +1246,15 @@ private:
    * Encapsulates whether block pending gc.
    */
   bool should_block_on_trim() const {
+    assert(init_complete);
     if (disable_trim) return false;
-    if (!init_complete) {
-      return false;
-    }
     return get_tail_limit() > get_journal_tail();
   }
 
   bool should_block_on_reclaim() const {
+    assert(init_complete);
     if (disable_trim) return false;
-    if (!init_complete ||
-        get_segments_reclaimable() == 0) {
+    if (get_segments_reclaimable() == 0) {
       return false;
     }
     auto aratio = get_projected_available_ratio();
@@ -1261,6 +1262,7 @@ private:
   }
 
   bool should_block_on_gc() const {
+    assert(init_complete);
     return should_block_on_trim() || should_block_on_reclaim();
   }
 
@@ -1294,6 +1296,7 @@ private:
    * Encapsulates logic for whether gc should be reclaiming segment space.
    */
   bool gc_should_reclaim_space() const {
+    assert(init_complete);
     if (disable_trim) return false;
     if (get_segments_reclaimable() == 0) {
       return false;
@@ -1308,10 +1311,12 @@ private:
   }
 
   bool gc_should_trim_dirty() const {
+    assert(init_complete);
     return get_dirty_tail_target() > journal_dirty_tail;
   }
 
   bool gc_should_trim_alloc() const {
+    assert(init_complete);
     return get_alloc_tail_target() > journal_alloc_tail;
   }
   /**
@@ -1342,7 +1347,15 @@ private:
       ool_segment_seq_allocator->set_next_segment_seq(seq);
     }
   }
+
+  struct gc_stat_printer_t {
+    const AsyncCleaner *cleaner;
+    bool detailed = false;
+  };
+  friend std::ostream &operator<<(std::ostream &, gc_stat_printer_t);
 };
 using AsyncCleanerRef = std::unique_ptr<AsyncCleaner>;
+
+std::ostream &operator<<(std::ostream &, AsyncCleaner::gc_stat_printer_t);
 
 }
