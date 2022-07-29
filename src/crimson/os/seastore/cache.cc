@@ -1579,7 +1579,10 @@ void Cache::init()
     root = nullptr;
   }
   root = new RootBlock();
-  root->state = CachedExtent::extent_state_t::CLEAN;
+  root->init(CachedExtent::extent_state_t::CLEAN,
+             P_ADDR_NULL,
+             PLACEMENT_HINT_NULL,
+             NULL_GENERATION);
   INFO("init root -- {}", *root);
   extents.insert(*root);
 }
