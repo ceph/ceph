@@ -80,7 +80,10 @@ int main(const int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw object expirer: ");
-  store = StoreManager::get_storage(&dp, g_ceph_context, "rados", "none", false, false, false, false, false);
+  StoreManager::Config cfg;
+  cfg.store_name = "rados";
+  cfg.filter_name = "none";
+  store = StoreManager::get_storage(&dp, g_ceph_context, cfg, false, false, false, false, false);
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;
