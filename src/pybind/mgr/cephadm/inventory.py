@@ -936,6 +936,15 @@ class HostCache():
             h for h in self.mgr.inventory.all_specs() if '_no_schedule' not in h.labels
         ]
 
+    def get_draining_hosts(self) -> List[HostSpec]:
+        """
+        Returns all hosts that have _no_schedule label and therefore should have
+        no daemons placed on them, but are potentially still reachable
+        """
+        return [
+            h for h in self.mgr.inventory.all_specs() if '_no_schedule' in h.labels
+        ]
+
     def get_unreachable_hosts(self) -> List[HostSpec]:
         """
         Return all hosts that are offline or in maintenance mode.
