@@ -75,12 +75,20 @@ private:
   scan_last_segment_ertr::future<> scan_last_segment(
       const segment_id_t&, const segment_header_t&);
 
+  struct replay_stats_t {
+    std::size_t num_record_groups = 0;
+    std::size_t num_records = 0;
+    std::size_t num_alloc_deltas = 0;
+    std::size_t num_dirty_deltas = 0;
+  };
+
   /// replays records starting at start through end of segment
   replay_ertr::future<>
   replay_segment(
     journal_seq_t start,             ///< [in] starting addr, seq
     segment_header_t header,         ///< [in] segment header
-    delta_handler_t &delta_handler   ///< [in] processes deltas in order
+    delta_handler_t &delta_handler,  ///< [in] processes deltas in order
+    replay_stats_t &stats            ///< [out] replay stats
   );
 };
 

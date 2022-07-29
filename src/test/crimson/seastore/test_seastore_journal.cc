@@ -209,7 +209,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 	  delta_checker = std::nullopt;
 	  advance();
 	}
-	return Journal::replay_ertr::now();
+	return Journal::replay_ertr::make_ready_future<bool>(true);
       }).unsafe_get0();
     ASSERT_EQ(record_iter, records.end());
     for (auto &i : records) {
