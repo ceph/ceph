@@ -112,6 +112,7 @@ class Migrations:
                 spec=spec,
                 hosts=self.mgr.inventory.all_specs(),
                 unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
+                draining_hosts=self.mgr.cache.get_draining_hosts(),
                 daemons=existing_daemons,
             ).place()
 
