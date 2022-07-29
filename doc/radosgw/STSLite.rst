@@ -35,7 +35,7 @@ Parameters:
     **TokenCode** (String/ Optional): The value provided by the MFA device, if MFA is required.
 
 An administrative user needs to attach a policy to allow invocation of GetSessionToken API using its permanent
-credentials and to allow subsequent s3 operations invocation using only the temporary credentials returned
+credentials and to allow subsequent S3 operations invocation using only the temporary credentials returned
 by GetSessionToken.
 
 The user attaching the policy needs to have admin caps. For example::
