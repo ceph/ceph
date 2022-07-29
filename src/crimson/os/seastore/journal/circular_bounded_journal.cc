@@ -397,7 +397,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 		  delta,
 		  locator.write_result.start_seq,
 		  locator.write_result.start_seq,
-		  modify_time);
+		  modify_time).discard_result();
 	      });
 	    }).safe_then([]() {
 	      return replay_ertr::make_ready_future<

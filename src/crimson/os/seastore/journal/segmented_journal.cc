@@ -224,20 +224,22 @@ SegmentedJournal::replay_ertr::future<>
 SegmentedJournal::replay_segment(
   journal_seq_t seq,
   segment_header_t header,
-  delta_handler_t &handler)
+  delta_handler_t &handler,
+  replay_stats_t &stats)
 {
   LOG_PREFIX(Journal::replay_segment);
   INFO("starting at {} -- {}", seq, header);
   return seastar::do_with(
     scan_valid_records_cursor(seq),
     SegmentManagerGroup::found_record_handler_t(
-      [s_type=header.type, &handler, this](
+      [s_type=header.type, &handler, this, &stats](
       record_locator_t locator,
       const record_group_header_t& header,
       const bufferlist& mdbuf)
       -> SegmentManagerGroup::scan_valid_records_ertr::future<>
     {
       LOG_PREFIX(Journal::replay_segment);
+      ++stats.num_record_groups;
       auto maybe_record_deltas_list = try_decode_deltas(
           header, mdbuf, locator.record_block_base);
       if (!maybe_record_deltas_list) {
@@ -253,7 +255,8 @@ SegmentedJournal::replay_segment(
 	 s_type,
          this,
          FNAME,
-         &handler](auto& record_deltas_list)
+         &handler,
+         &stats](auto& record_deltas_list)
       {
         return crimson::do_for_each(
           record_deltas_list,
@@ -261,8 +264,10 @@ SegmentedJournal::replay_segment(
 	   s_type,
            this,
            FNAME,
-           &handler](record_deltas_t& record_deltas)
+           &handler,
+           &stats](record_deltas_t& record_deltas)
         {
+          ++stats.num_records;
           auto locator = record_locator_t{
             record_deltas.record_block_base,
             write_result
@@ -276,7 +281,8 @@ SegmentedJournal::replay_segment(
 	     s_type,
              this,
              FNAME,
-             &handler](auto &p)
+             &handler,
+             &stats](auto &p)
           {
 	    auto& modify_time = p.first;
 	    auto& delta = p.second;
@@ -309,7 +315,18 @@ SegmentedJournal::replay_segment(
 	      delta,
 	      segment_provider.get_dirty_tail(),
 	      segment_provider.get_alloc_tail(),
-              modify_time);
+              modify_time
+            ).safe_then([&stats, delta_type=delta.type](bool is_applied) {
+              if (is_applied) {
+                // see Cache::replay_delta()
+                assert(delta_type != extent_types_t::JOURNAL_TAIL);
+                if (delta_type == extent_types_t::ALLOC_INFO) {
+                  ++stats.num_alloc_deltas;
+                } else {
+                  ++stats.num_dirty_deltas;
+                }
+              }
+            });
           });
         });
       });
@@ -339,16 +356,25 @@ SegmentedJournal::replay_ret SegmentedJournal::replay(
     (auto &&segment_headers) mutable -> replay_ret {
     INFO("got {} segments", segment_headers.size());
     return seastar::do_with(
-      std::move(delta_handler), replay_segments_t(),
-      [this, segment_headers=std::move(segment_headers)]
-      (auto &handler, auto &segments) mutable -> replay_ret {
+      std::move(delta_handler),
+      replay_segments_t(),
+      replay_stats_t(),
+      [this, segment_headers=std::move(segment_headers), FNAME]
+      (auto &handler, auto &segments, auto &stats) mutable -> replay_ret {
 	return prep_replay_segments(std::move(segment_headers)
-	).safe_then([this, &handler, &segments](auto replay_segs) mutable {
+	).safe_then([this, &handler, &segments, &stats](auto replay_segs) mutable {
 	  segments = std::move(replay_segs);
-	  return crimson::do_for_each(segments, [this, &handler](auto i) mutable {
-	    return replay_segment(i.first, i.second, handler);
+	  return crimson::do_for_each(segments,[this, &handler, &stats](auto i) mutable {
+	    return replay_segment(i.first, i.second, handler, stats);
 	  });
-	});
+        }).safe_then([&stats, FNAME] {
+          INFO("replay done, record_groups={}, records={}, "
+               "alloc_deltas={}, dirty_deltas={}",
+               stats.num_record_groups,
+               stats.num_records,
+               stats.num_alloc_deltas,
+               stats.num_dirty_deltas);
+        });
       });
   });
 }
