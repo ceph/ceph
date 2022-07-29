@@ -168,7 +168,7 @@ void segments_info_t::init_closed(
   ++num_closed;
   if (type == segment_type_t::JOURNAL) {
     // init_closed won't initialize journal_segment_id
-    ceph_assert(get_journal_head() == JOURNAL_SEQ_NULL);
+    ceph_assert(get_submitted_journal_head() == JOURNAL_SEQ_NULL);
     ++num_type_journal;
   } else {
     ++num_type_ool;
@@ -603,11 +603,7 @@ segment_id_t AsyncCleaner::allocate_segment(
     if (segment_info.is_empty()) {
       auto old_usage = calc_utilization(seg_id);
       segments.mark_open(seg_id, seq, type, category, generation);
-      if (type == segment_type_t::JOURNAL) {
-        set_journal_head(segments.get_journal_head());
-      } else {
-        gc_process.maybe_wake_on_space_used();
-      }
+      gc_process.maybe_wake_on_space_used();
       auto new_usage = calc_utilization(seg_id);
       adjust_segment_util(old_usage, new_usage);
       INFO("opened, should_block_on_trim {}, should_block_on_reclaim {}, "
@@ -658,6 +654,7 @@ void AsyncCleaner::update_journal_tails(
         journal_alloc_tail > alloc_tail) {
       ERROR("journal_alloc_tail {} => {} is backwards!",
             journal_alloc_tail, alloc_tail);
+      ceph_abort();
     }
     if (journal_alloc_tail.segment_seq == alloc_tail.segment_seq) {
       DEBUG("journal_alloc_tail {} => {}", journal_alloc_tail, alloc_tail);

@@ -48,7 +48,9 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   return async_cleaner->mount(
   ).safe_then([this] {
     return journal->open_for_mkfs();
-  }).safe_then([this](auto) {
+  }).safe_then([this](auto start_seq) {
+    async_cleaner->update_journal_tails(start_seq, start_seq);
+    async_cleaner->set_journal_head(start_seq);
     return epm->open();
   }).safe_then([this, FNAME]() {
     return with_transaction_intr(
@@ -106,7 +108,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
       });
   }).safe_then([this] {
     return journal->open_for_mount();
-  }).safe_then([this, FNAME](auto) {
+  }).safe_then([this, FNAME](auto start_seq) {
+    async_cleaner->set_journal_head(start_seq);
     return seastar::do_with(
       create_weak_transaction(
         Transaction::src_t::READ, "mount"),
@@ -372,6 +375,7 @@ TransactionManager::submit_transaction_direct(
     ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
+      async_cleaner->set_journal_head(start_seq);
       cache->complete_commit(
           tref,
           submit_result.record_block_base,
