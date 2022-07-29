@@ -177,8 +177,26 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
-      frontend_port: [null, [CdValidators.number(false)]],
-      monitor_port: [null, [CdValidators.number(false)]],
+      frontend_port: [
+        null,
+        [
+          CdValidators.number(false),
+          CdValidators.requiredIf({
+            service_type: 'ingress',
+            unmanaged: false
+          })
+        ]
+      ],
+      monitor_port: [
+        null,
+        [
+          CdValidators.number(false),
+          CdValidators.requiredIf({
+            service_type: 'ingress',
+            unmanaged: false
+          })
+        ]
+      ],
       virtual_interface_networks: [null],
       // RGW, Ingress & iSCSI
       ssl: [false],
