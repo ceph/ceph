@@ -1902,8 +1902,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   int ret = 0;
   std::unique_ptr<rgw::sal::LCSerializer> serializer =
     sal_lc->get_serializer(lc_index_lock_name, obj_names[index],
-			   std::string());
-
+			   worker->thr_name());
   std::unique_ptr<rgw::sal::Lifecycle::LCEntry> entry;
   if (max_lock_secs <= 0) {
     return -EAGAIN;
@@ -2054,7 +2053,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  << dendl;
 
   std::unique_ptr<rgw::sal::LCSerializer> lock =
-    sal_lc->get_serializer(lc_index_lock_name, lc_shard, std::string());
+    sal_lc->get_serializer(lc_index_lock_name, lc_shard, worker->thr_name());
 
   utime_t lock_for_s(max_lock_secs, 0);
   const auto& lock_lambda = [&]() {
@@ -2418,14 +2417,19 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
   utime_t time(max_lock_secs, 0);
 
   int ret;
+  uint16_t retries{0};
 
+  // due to reports of starvation trying to save lifecycle policy, try hard
   do {
     ret = lock->try_lock(dpp, time, null_yield);
     if (ret == -EBUSY || ret == -EEXIST) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
-          << oid << ", sleep 5, try again" << dendl;
-      sleep(5); // XXX: return retryable error
-      continue;
+			<< oid << ", retry in 100ms, ret=" << ret << dendl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      // the typical S3 client will time out in 60s
+      if(retries++ < 500) {
+	continue;
+      }
     }
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
