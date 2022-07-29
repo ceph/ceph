@@ -515,3 +515,10 @@ class TestAllowLoopDevsWarning(object):
         log = caplog.records[0]
         assert log.levelname == "WARNING"
         assert "will never be supported in production" in log.message
+
+
+class TestHasBlueStoreLabel(object):
+    def test_device_path_is_a_path(self, fake_filesystem):
+        device_path = '/var/lib/ceph/osd/ceph-0'
+        fake_filesystem.create_dir(device_path)
+        assert not disk.has_bluestore_label(device_path)
