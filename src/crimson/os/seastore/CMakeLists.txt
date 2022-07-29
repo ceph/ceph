@@ -36,8 +36,8 @@ set(crimson_seastore_srcs
   extent_placement_manager.cc
   object_data_handler.cc
   seastore.cc
-  random_block_manager/nvme_manager.cc
-  random_block_manager/nvmedevice.cc
+  random_block_manager/block_rb_manager.cc
+  random_block_manager/nvme_block_device.cc
   journal/segmented_journal.cc
   journal/segment_allocator.cc
   journal.cc

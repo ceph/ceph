@@ -11,8 +11,8 @@
 
 namespace crimson::os::seastore {
 
-namespace nvme_device {
-class NVMeBlockDevice;
+namespace random_block_device {
+class RBMDevice;
 }
 
 class SegmentManagerGroup;
@@ -110,7 +110,7 @@ namespace journal {
 JournalRef make_segmented(SegmentProvider &provider);
 
 JournalRef make_circularbounded(
-  crimson::os::seastore::nvme_device::NVMeBlockDevice* device,
+  crimson::os::seastore::random_block_device::RBMDevice* device,
   std::string path);
 
 }
