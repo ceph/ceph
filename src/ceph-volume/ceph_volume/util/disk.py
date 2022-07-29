@@ -903,10 +903,13 @@ def has_bluestore_label(device_path):
 
     # throws OSError on failure
     logger.info("opening device {} to check for BlueStore label".format(device_path))
-    with open(device_path, "rb") as fd:
-        # read first 22 bytes looking for bluestore disk signature
-        signature = fd.read(22)
-        if signature.decode('ascii', 'replace') == bluestoreDiskSignature:
-            isBluestore = True
+    try:
+        with open(device_path, "rb") as fd:
+            # read first 22 bytes looking for bluestore disk signature
+            signature = fd.read(22)
+            if signature.decode('ascii', 'replace') == bluestoreDiskSignature:
+                isBluestore = True
+    except IsADirectoryError:
+        logger.info(f'{device_path} is a directory, skipping.')
 
     return isBluestore
