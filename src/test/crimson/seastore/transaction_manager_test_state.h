@@ -8,6 +8,7 @@
 
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 #include "crimson/os/seastore/seastore.h"
@@ -52,6 +53,8 @@ protected:
   virtual FuturizedStore::mount_ertr::future<> _mount() = 0;
 
   void restart() {
+    LOG_PREFIX(EphemeralTestState::restart);
+    SUBINFO(test, "begin ...");
     _teardown().get0();
     destroy();
     segment_manager->remount();
@@ -60,10 +63,13 @@ protected:
     }
     init();
     _mount().handle_error(crimson::ct_error::assert_all{}).get0();
+    SUBINFO(test, "finish");
   }
 
   seastar::future<> tm_setup(
     tm_make_config_t config = tm_make_config_t::get_test_segmented_journal()) {
+    LOG_PREFIX(EphemeralTestState::tm_setup);
+    SUBINFO(test, "begin with {} devices ...", get_num_devices());
     tm_config = config;
     segment_manager = segment_manager::create_test_ephemeral();
     for (auto &sec_sm : secondary_segment_managers) {
@@ -113,16 +119,23 @@ protected:
       }
       init();
       return _mount();
-    }).handle_error(crimson::ct_error::assert_all{});
+    }).handle_error(
+      crimson::ct_error::assert_all{}
+    ).then([FNAME] {
+      SUBINFO(test, "finish");
+    });
   }
 
   seastar::future<> tm_teardown() {
-    return _teardown().then([this] {
+    LOG_PREFIX(EphemeralTestState::tm_teardown);
+    SUBINFO(test, "begin");
+    return _teardown().then([this, FNAME] {
       segment_manager.reset();
       for (auto &sec_sm : secondary_segment_managers) {
         sec_sm.reset();
       }
       rb_device.reset();
+      SUBINFO(test, "finish");
     });
   }
 };

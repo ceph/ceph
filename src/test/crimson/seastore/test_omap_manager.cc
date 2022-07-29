@@ -208,10 +208,8 @@ struct omap_manager_test_t :
   }
 
   void replay() {
-    logger().debug("{}: begin", __func__);
     restart();
     omap_manager = omap_manager::create_omap_manager(*tm);
-    logger().debug("{}: end", __func__);
   }
 
   auto initialize() {
