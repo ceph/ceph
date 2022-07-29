@@ -18,6 +18,7 @@ import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdFormComponent } from './ceph/cluster/osd/osd-form/osd-form.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { ActiveAlertListComponent } from './ceph/cluster/prometheus/active-alert-list/active-alert-list.component';
+import { CapacityComponent } from './ceph/cluster/capacity/capacity.component';
 import { RulesListComponent } from './ceph/cluster/prometheus/rules-list/rules-list.component';
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/silence-list.component';
@@ -88,6 +89,7 @@ const routes: Routes = [
     children: [
       { path: 'dashboard', component: DashboardComponent },
       { path: 'error', component: ErrorComponent },
+      { path: 'capacity', component: CapacityComponent },
 
       // Cluster
       {

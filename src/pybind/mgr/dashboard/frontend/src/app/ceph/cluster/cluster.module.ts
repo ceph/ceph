@@ -57,12 +57,15 @@ import { ServiceDetailsComponent } from './services/service-details/service-deta
 import { ServiceFormComponent } from './services/service-form/service-form.component';
 import { ServicesComponent } from './services/services.component';
 import { TelemetryComponent } from './telemetry/telemetry.component';
+import { CapacityComponent } from './capacity/capacity.component';
+import { ChartsModule } from 'ng2-charts';
 
 @NgModule({
   imports: [
     CommonModule,
     PerformanceCounterModule,
     NgbNavModule,
+    ChartsModule,
     SharedModule,
     RouterModule,
     FormsModule,
@@ -116,7 +119,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     OsdFlagsIndivModalComponent,
     PlacementPipe,
     CreateClusterComponent,
-    CreateClusterReviewComponent
+    CreateClusterReviewComponent,
+    CapacityComponent
   ],
   providers: [NgbActiveModal]
 })

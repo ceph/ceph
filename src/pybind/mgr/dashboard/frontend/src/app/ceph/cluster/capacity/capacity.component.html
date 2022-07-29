@@ -1,0 +1,20 @@
+<div>
+  <div style="display: block">
+  <span> Linear scaled </span>
+  <canvas baseChart
+          #canvasChart
+          [datasets]="barChartData"
+          [options]="barChartOptions"
+          [labels]="labels"
+          [chartType]="chartType">
+    </canvas>
+  <span> Log scaled </span>
+  <canvas baseChart
+          #canvasChart
+          [datasets]="barChartData"
+          [options]="barChartOptionsLog"
+          [labels]="labels"
+          [chartType]="chartType">
+    </canvas>
+  </div>
+</div>
