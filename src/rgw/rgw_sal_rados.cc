@@ -1243,8 +1243,9 @@ int RadosStore::get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_
 
 int RadosStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
-  RadosZoneGroup zg(this, svc()->zone->get_zonegroup());
-  zone = make_unique<RadosZone>(this, zg);
+  std::unique_ptr<ZoneGroup> zg =
+    std::make_unique<RadosZoneGroup>(this, svc()->zone->get_zonegroup());
+  zone = make_unique<RadosZone>(this, std::move(zg));
   return 0;
 }
 
@@ -1721,9 +1722,9 @@ int RadosObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
   return sysobj.omap().set_must_exist(must_exist).set(dpp, key, val, y);
 }
 
-MPSerializer* RadosObject::get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name)
+std::unique_ptr<MPSerializer> RadosObject::get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name)
 {
-  return new MPRadosSerializer(dpp, store, this, lock_name);
+  return std::make_unique<MPRadosSerializer>(dpp, store, this, lock_name);
 }
 
 int RadosObject::transition(Bucket* bucket,
@@ -2799,9 +2800,11 @@ int RadosLifecycle::put_head(const std::string& oid, LCHead& head)
   return cls_rgw_lc_put_head(*store->getRados()->get_lc_pool_ctx(), oid, cls_head);
 }
 
-LCSerializer* RadosLifecycle::get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie)
+std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& lock_name,
+							     const std::string& oid,
+							     const std::string& cookie)
 {
-  return new LCRadosSerializer(store, oid, lock_name, cookie);
+  return std::make_unique<LCRadosSerializer>(store, oid, lock_name, cookie);
 }
 
 int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)
@@ -2936,11 +2939,6 @@ int RadosZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
 
   tier->reset(t);
   return 0;
-}
-
-ZoneGroup& RadosZone::get_zonegroup()
-{
-  return group;
 }
 
 int RadosZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup)

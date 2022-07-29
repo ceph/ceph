@@ -395,9 +395,17 @@ int radosgw_Main(int argc, const char **argv)
   }
 #endif
 
+  // Get the filter
+  std::string rgw_filter = "none";
+  const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
+  if (config_filter == "base") {
+    rgw_filter = "base";
+  }
+
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
 				 rgw_store,
+				 rgw_filter,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
 				 g_conf()->rgw_enable_quota_threads,

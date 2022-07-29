@@ -108,6 +108,7 @@ void RGWRealmReloader::reload()
     store =
       StoreManager::get_storage(&dp, cct,
 				   "rados",
+				   "none",
 				   cct->_conf->rgw_enable_gc_threads,
 				   cct->_conf->rgw_enable_lc_threads,
 				   cct->_conf->rgw_enable_quota_threads,

@@ -3456,6 +3456,18 @@ options:
   - rados
   - dbstore
   - motr
+- name: rgw_filter
+  type: str
+  level: advanced
+  desc: experimental Option to set a filter
+  long_desc: defaults to none. Other valid values are base and trace (both experimental).
+  default: none
+  services:
+  - rgw
+  enum_values:
+  - none
+  - base
+  - trace
 - name: dbstore_db_dir
   type: str
   level: advanced
