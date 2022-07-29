@@ -25,6 +25,11 @@ Notable Changes
   without the object-unique suffix. The conversion is fixed in this release.
   Relevant tracker: https://tracker.ceph.com/issues/5614
 
+* The ability to blend all RBD pools together into a single view by invoking
+  "rbd perf image iostat" or "rbd perf image iotop" commands without any options
+  or positional arguments is resurrected.  Such invocations accidentally became
+  limited to just the default pool (``rbd_default_pool``) in v15.2.14.
+
 Changelog
 ---------------
 
