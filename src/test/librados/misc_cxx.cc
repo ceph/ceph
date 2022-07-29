@@ -493,11 +493,13 @@ protected:
   static std::string src_pool_name;
 
   void SetUp() override {
+    SKIP_IF_CRIMSON();
     RadosTestECPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(src_pool_name.c_str(), src_ioctx));
     src_ioctx.set_namespace(nspace);
   }
   void TearDown() override {
+    SKIP_IF_CRIMSON();
     // wait for maps to settle before next test
     cluster.wait_for_latest_osdmap();
 
