@@ -403,7 +403,7 @@ int radosgw_Main(int argc, const char **argv)
   const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
   if (config_filter == "base") {
     rgw_filter = "base";
-  } 
+  }
 #ifdef WITH_RADOSGW_D4N_FILTER
   else if (config_filter == "d4n") {
     rgw_filter = "d4n";
@@ -715,7 +715,6 @@ int radosgw_Main(int argc, const char **argv)
   std::unique_ptr<RGWFrontendPauser> fe_pauser;
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
   std::unique_ptr<RGWPauser> rgw_pauser;
-  
   if (store->get_name() == "rados") {   
     // add a watcher to respond to realm configuration changes
     pusher = std::make_unique<RGWPeriodPusher>(&dp, store, null_yield);
@@ -725,7 +724,6 @@ int radosgw_Main(int argc, const char **argv)
     if (lua_background) {
       rgw_pauser->add_pauser(lua_background.get());
     }
-    
     reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, rgw_pauser.get());
 
     realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,

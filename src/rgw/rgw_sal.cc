@@ -207,7 +207,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     }
   } 
 #ifdef WITH_RADOSGW_D4N_FILTER 
-//  else if (filter.compare("d4n") == 0) { // Fix later -Sam
+  else if (filter.compare("d4n") == 0) {
     rgw::sal::Store* next = store;
     store = newD4NFilter(next);
 
@@ -216,7 +216,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       delete next;
       return nullptr;
     }
-//  }
+  }
 #endif
 
   return store;
