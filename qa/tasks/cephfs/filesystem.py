@@ -640,15 +640,27 @@ class Filesystem(MDSCluster):
 
         log.debug("Creating filesystem '{0}'".format(self.name))
 
-        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                         self.metadata_pool_name,
-                                         '--pg_num_min', str(self.pg_num_min))
+        try:
+            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                             self.metadata_pool_name,
+                                             '--pg_num_min', str(self.pg_num_min))
 
-        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                         data_pool_name, str(self.pg_num),
-                                         '--pg_num_min', str(self.pg_num_min),
-                                         '--target_size_ratio',
-                                         str(self.target_size_ratio))
+            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                             data_pool_name, str(self.pg_num),
+                                             '--pg_num_min', str(self.pg_num_min),
+                                             '--target_size_ratio',
+                                             str(self.target_size_ratio))
+        except CommandFailedError as e:
+            if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
+                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                                 self.metadata_pool_name,
+                                                 str(self.pg_num_min))
+
+                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                                 data_pool_name, str(self.pg_num),
+                                                 str(self.pg_num_min))
+            else:
+                raise
 
         if self.metadata_overlay:
             self.mon_manager.raw_cluster_cmd('fs', 'new',
@@ -666,11 +678,19 @@ class Filesystem(MDSCluster):
                 cmd = ['osd', 'erasure-code-profile', 'set', ec_data_pool_name]
                 cmd.extend(self.ec_profile)
                 self.mon_manager.raw_cluster_cmd(*cmd)
-                self.mon_manager.raw_cluster_cmd(
-                    'osd', 'pool', 'create', ec_data_pool_name,
-                    'erasure', ec_data_pool_name,
-                    '--pg_num_min', str(self.pg_num_min),
-                    '--target_size_ratio', str(self.target_size_ratio_ec))
+                try:
+                    self.mon_manager.raw_cluster_cmd(
+                        'osd', 'pool', 'create', ec_data_pool_name,
+                        'erasure', ec_data_pool_name,
+                        '--pg_num_min', str(self.pg_num_min),
+                        '--target_size_ratio', str(self.target_size_ratio_ec))
+                except CommandFailedError as e:
+                    if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
+                        self.mon_manager.raw_cluster_cmd(
+                            'osd', 'pool', 'create', ec_data_pool_name,
+                            str(self.pg_num_min), 'erasure', ec_data_pool_name)
+                    else:
+                        raise
                 self.mon_manager.raw_cluster_cmd(
                     'osd', 'pool', 'set',
                     ec_data_pool_name, 'allow_ec_overwrites', 'true')
@@ -832,8 +852,15 @@ class Filesystem(MDSCluster):
 
     def add_data_pool(self, name, create=True):
         if create:
-            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name,
-                                             '--pg_num_min', str(self.pg_num_min))
+            try:
+                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name,
+                                                 '--pg_num_min', str(self.pg_num_min))
+            except CommandFailedError as e:
+                if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
+                  self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name,
+                                                   str(self.pg_num_min))
+                else:
+                    raise
         self.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', self.name, name)
         self.get_pool_names(refresh = True)
         for poolid, fs_name in self.data_pools.items():
