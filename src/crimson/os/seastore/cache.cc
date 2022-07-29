@@ -1633,7 +1633,7 @@ Cache::replay_delta(
   const delta_info_t &delta,
   const journal_seq_t &dirty_tail,
   const journal_seq_t &alloc_tail,
-  sea_time_point &modify_time)
+  sea_time_point modify_time)
 {
   LOG_PREFIX(Cache::replay_delta);
   assert(dirty_tail != JOURNAL_SEQ_NULL);
@@ -1642,7 +1642,7 @@ Cache::replay_delta(
 
   if (delta.type == extent_types_t::JOURNAL_TAIL) {
     // this delta should have been dealt with during segment cleaner mounting
-    return replay_delta_ertr::now();
+    return replay_delta_ertr::make_ready_future<bool>(false);
   }
 
   // replay alloc
@@ -1650,7 +1650,7 @@ Cache::replay_delta(
     if (journal_seq < alloc_tail) {
       DEBUG("journal_seq {} < alloc_tail {}, don't replay {}",
 	journal_seq, alloc_tail, delta);
-      return replay_delta_ertr::now();
+      return replay_delta_ertr::make_ready_future<bool>(false);
     }
 
     alloc_delta_t alloc_delta;
@@ -1674,14 +1674,14 @@ Cache::replay_delta(
     if (!backref_list.empty()) {
       backref_batch_update(std::move(backref_list), journal_seq);
     }
-    return replay_delta_ertr::now();
+    return replay_delta_ertr::make_ready_future<bool>(true);
   }
 
   // replay dirty
   if (journal_seq < dirty_tail) {
     DEBUG("journal_seq {} < dirty_tail {}, don't replay {}",
       journal_seq, dirty_tail, delta);
-    return replay_delta_ertr::now();
+    return replay_delta_ertr::make_ready_future<bool>(false);
   }
 
   if (delta.type == extent_types_t::ROOT) {
@@ -1695,7 +1695,7 @@ Cache::replay_delta(
           journal_seq, record_base, delta, *root);
     root->set_modify_time(modify_time);
     add_extent(root);
-    return replay_delta_ertr::now();
+    return replay_delta_ertr::make_ready_future<bool>(true);
   } else {
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
@@ -1735,7 +1735,7 @@ Cache::replay_delta(
 	DEBUG("replay extent is not present, so delta is obsolete at {} {} -- {}",
 	      journal_seq, record_base, delta);
 	assert(delta.pversion > 0);
-	return;
+	return replay_delta_ertr::make_ready_future<bool>(true);
       }
 
       DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
@@ -1758,6 +1758,7 @@ Cache::replay_delta(
               journal_seq, record_base, delta, *extent);
       }
       mark_dirty(extent);
+      return replay_delta_ertr::make_ready_future<bool>(true);
     });
   }
 }
