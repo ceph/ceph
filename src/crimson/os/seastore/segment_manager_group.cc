@@ -338,8 +338,8 @@ SegmentManagerGroup::find_journal_segment_headers()
       LOG_PREFIX(SegmentManagerGroup::find_journal_segment_headers);
       auto device_id = sm->get_device_id();
       auto num_segments = sm->get_num_segments();
-      INFO("processing {} with {} segments",
-           device_id_printer_t{device_id}, num_segments);
+      DEBUG("processing {} with {} segments",
+            device_id_printer_t{device_id}, num_segments);
       return crimson::do_for_each(
         boost::counting_iterator<device_segment_id_t>(0),
         boost::counting_iterator<device_segment_id_t>(num_segments),
