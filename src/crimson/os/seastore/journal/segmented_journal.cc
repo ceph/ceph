@@ -104,6 +104,9 @@ SegmentedJournal::prep_replay_segments(
   auto last_header = segments.rbegin()->second;
   return scan_last_segment(last_segment_id, last_header
   ).safe_then([this, FNAME, segments=std::move(segments)] {
+    INFO("dirty_tail={}, alloc_tail={}",
+         segment_provider.get_dirty_tail(),
+         segment_provider.get_alloc_tail());
     auto journal_tail = segment_provider.get_journal_tail();
     auto journal_tail_paddr = journal_tail.offset;
     ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
@@ -122,8 +125,7 @@ SegmentedJournal::prep_replay_segments(
     }
 
     auto num_segments = segments.end() - from;
-    INFO("{} segments to replay from {}",
-         num_segments, journal_tail);
+    INFO("{} segments to replay", num_segments);
     auto ret = replay_segments_t(num_segments);
     std::transform(
       from, segments.end(), ret.begin(),
@@ -156,7 +158,7 @@ SegmentedJournal::scan_last_segment(
     segment_header.segment_seq,
     paddr_t::make_seg_paddr(segment_id, 0)
   };
-  INFO("scanning {} for journal tail deltas", seq);
+  INFO("scanning journal tail deltas -- {}", segment_header);
   return seastar::do_with(
     scan_valid_records_cursor(seq),
     SegmentManagerGroup::found_record_handler_t(
@@ -198,7 +200,7 @@ SegmentedJournal::scan_last_segment(
               journal_tail_delta_t tail_delta;
               decode(tail_delta, delta.bl);
               auto start_seq = locator.write_result.start_seq;
-              INFO("got {}, at seq {}", tail_delta, start_seq);
+              DEBUG("got {}, at {}", tail_delta, start_seq);
               ceph_assert(tail_delta.dirty_tail != JOURNAL_SEQ_NULL);
               ceph_assert(tail_delta.alloc_tail != JOURNAL_SEQ_NULL);
               segment_provider.update_journal_tails(

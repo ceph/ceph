@@ -1077,7 +1077,7 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
     return sm_group->read_segment_header(
       segment_id
     ).safe_then([segment_id, this, FNAME](auto header) {
-      INFO("segment_id={} -- {}", segment_id, header);
+      DEBUG("segment_id={} -- {}", segment_id, header);
       auto s_type = header.get_type();
       if (s_type == segment_type_t::NULL_SEG) {
         ERROR("got null segment, segment_id={} -- {}", segment_id, header);
@@ -1134,19 +1134,20 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
   const segment_header_t &segment_header,
   segment_id_t segment_id)
 {
+  LOG_PREFIX(AsyncCleaner::scan_no_tail_segment);
+  INFO("scan {} {}", segment_id, segment_header);
   return seastar::do_with(
     scan_valid_records_cursor({
       segments[segment_id].seq,
       paddr_t::make_seg_paddr(segment_id, 0)
     }),
     SegmentManagerGroup::found_record_handler_t(
-      [this, segment_id, segment_header](
+      [this, segment_id, segment_header, FNAME](
         record_locator_t locator,
         const record_group_header_t &record_group_header,
         const bufferlist& mdbuf
       ) mutable -> SegmentManagerGroup::scan_valid_records_ertr::future<>
     {
-      LOG_PREFIX(AsyncCleaner::scan_no_tail_segment);
       DEBUG("{} {}, decoding {} records",
             segment_id, segment_header.get_type(), record_group_header.records);
 
