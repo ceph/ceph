@@ -76,15 +76,16 @@ void segment_info_t::init_closed(
 
 std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
 {
-  out << "seg_info_t(" << info.id
-      << ", state=" << info.state;
+  out << "seg_info_t("
+      << "state=" << info.state
+      << ", " << info.id;
   if (info.is_empty()) {
     // pass
   } else { // open or closed
-    out << ", seq=" << segment_seq_printer_t{info.seq}
-        << ", type=" << info.type
-        << ", category=" << info.category
-        << ", generation=" << reclaim_gen_printer_t{info.generation}
+    out << " " << info.type
+        << " " << segment_seq_printer_t{info.seq}
+        << " " << info.category
+        << " " << reclaim_gen_printer_t{info.generation}
         << ", modify_time=" << sea_time_point_printer_t{info.modify_time}
         << ", num_extents=" << info.num_extents
         << ", written_to=" << info.written_to;
@@ -157,11 +158,11 @@ void segments_info_t::init_closed(
 {
   LOG_PREFIX(segments_info_t::init_closed);
   auto& segment_info = segments[segment];
-  INFO("initiating {} {} {} {} {}, {}, "
-       "num_segments(empty={}, opened={}, closed={})",
-       segment, segment_seq_printer_t{seq}, type,
-       category, reclaim_gen_printer_t{generation},
-       segment_info, num_empty, num_open, num_closed);
+  DEBUG("initiating {} {} {} {} {}, {}, "
+        "num_segments(empty={}, opened={}, closed={})",
+        segment, type, segment_seq_printer_t{seq},
+        category, reclaim_gen_printer_t{generation},
+        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
   ceph_assert(num_empty > 0);
   --num_empty;
@@ -193,7 +194,7 @@ void segments_info_t::mark_open(
   auto& segment_info = segments[segment];
   INFO("opening {} {} {} {} {}, {}, "
        "num_segments(empty={}, opened={}, closed={})",
-       segment, segment_seq_printer_t{seq}, type,
+       segment, type, segment_seq_printer_t{seq},
        category, reclaim_gen_printer_t{generation},
        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
@@ -627,7 +628,9 @@ segment_id_t AsyncCleaner::allocate_segment(
       return seg_id;
     }
   }
-  ERROR("out of space with segment_seq={}", segment_seq_printer_t{seq});
+  ERROR("out of space with {} {} {} {}",
+        type, segment_seq_printer_t{seq}, category,
+        reclaim_gen_printer_t{generation});
   ceph_abort();
   return NULL_SEG_ID;
 }
