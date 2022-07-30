@@ -3,6 +3,7 @@
 
 #include "alien_collection.h"
 #include "alien_store.h"
+#include "alien_log.h"
 
 #include <map>
 #include <string_view>
@@ -74,15 +75,29 @@ AlienStore::AlienStore(const std::string& type,
                        const std::string& path,
                        const ConfigValues& values)
   : type(type),
-    path{path}
+    path{path},
+    values(values)
 {
-  cct = std::make_unique<CephContext>(CEPH_ENTITY_TYPE_OSD);
-  g_ceph_context = cct.get();
-  cct->_conf.set_config_values(values);
+}
+
+AlienStore::~AlienStore()
+{
 }
 
 seastar::future<> AlienStore::start()
 {
+  cct = std::make_unique<CephContext>(
+    CEPH_ENTITY_TYPE_OSD,
+    CephContext::create_options { CODE_ENVIRONMENT_UTILITY, 0,
+      [](const ceph::logging::SubsystemMap* subsys_map) {
+	return new ceph::logging::CnLog(subsys_map, seastar::engine().alien(), seastar::this_shard_id());
+      }
+    }
+  );
+  g_ceph_context = cct.get();
+  cct->_conf.set_config_values(values);
+  cct->_log->start();
+
   store = ObjectStore::create(cct.get(), type, path);
   if (!store) {
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
@@ -119,12 +134,13 @@ seastar::future<> AlienStore::stop()
       static_cast<AlienCollection*>(ch.get())->collection.reset();
     }
     store.reset();
+    cct.reset();
+    g_ceph_context = nullptr;
+
   }).then([this] {
     return tp->stop();
   });
 }
-
-AlienStore::~AlienStore() = default;
 
 AlienStore::mount_ertr::future<> AlienStore::mount()
 {

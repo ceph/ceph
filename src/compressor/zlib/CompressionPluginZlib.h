@@ -42,6 +42,11 @@ public:
       ceph_arch_probe();
       isal = (ceph_arch_intel_pclmul && ceph_arch_intel_sse41);
     }
+#elif defined(__aarch64__)
+    if (cct->_conf->compressor_zlib_isal) {
+      ceph_arch_probe();
+      isal = (ceph_arch_aarch64_pmull && ceph_arch_neon);
+    }
 #endif
     if (compressor == 0 || has_isal != isal) {
       compressor = std::make_shared<ZlibCompressor>(cct, isal);

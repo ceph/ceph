@@ -1861,12 +1861,12 @@ protected:
   std::string etag;
   std::string version_id;
   bufferlist data;
-  rgw::sal::MPSerializer* serializer;
+  std::unique_ptr<rgw::sal::MPSerializer> serializer;
   jspan multipart_trace;
 
 public:
-  RGWCompleteMultipart() : serializer(nullptr) {}
-  ~RGWCompleteMultipart() override { delete serializer; }
+  RGWCompleteMultipart() {}
+  ~RGWCompleteMultipart() = default;
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;

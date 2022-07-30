@@ -86,17 +86,23 @@ public:
   }
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier);
   const RGWZoneGroup& get_group() const { return group; }
+  virtual std::unique_ptr<ZoneGroup> clone() override {
+    return std::make_unique<RadosZoneGroup>(store, group);
+  }
 };
 
 class RadosZone : public StoreZone {
   protected:
     RadosStore* store;
-    RadosZoneGroup group;
+    std::unique_ptr<ZoneGroup> group;
   public:
-    RadosZone(RadosStore* _store, RadosZoneGroup _zg) : store(_store), group(_zg) {}
+    RadosZone(RadosStore* _store, std::unique_ptr<ZoneGroup> _zg) : store(_store), group(std::move(_zg)) {}
     ~RadosZone() = default;
 
-    virtual ZoneGroup& get_zonegroup() override;
+    virtual std::unique_ptr<Zone> clone() override {
+      return std::make_unique<RadosZone>(store, group->clone());
+    }
+    virtual ZoneGroup& get_zonegroup() override { return *(group.get()); }
     virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
     virtual const rgw_zone_id& get_id() override;
     virtual const std::string& get_name() const override;
@@ -418,7 +424,8 @@ class RadosObject : public StoreObject {
     virtual std::unique_ptr<Object> clone() override {
       return std::unique_ptr<Object>(new RadosObject(*this));
     }
-    virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) override;
+    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+							 const std::string& lock_name) override;
     virtual int transition(Bucket* bucket,
 			   const rgw_placement_rule& placement_rule,
 			   const real_time& mtime,
@@ -704,7 +711,9 @@ public:
   virtual int rm_entry(const std::string& oid, LCEntry& entry) override;
   virtual int get_head(const std::string& oid, std::unique_ptr<LCHead>* head) override;
   virtual int put_head(const std::string& oid, LCHead& head) override;
-  virtual LCSerializer* get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie) override;
+  virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
+						       const std::string& oid,
+						       const std::string& cookie) override;
 };
 
 class RadosNotification : public StoreNotification {

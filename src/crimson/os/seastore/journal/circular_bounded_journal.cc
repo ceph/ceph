@@ -24,7 +24,7 @@ std::ostream &operator<<(std::ostream &out,
              << ")";
 }
 
-CircularBoundedJournal::CircularBoundedJournal(NVMeBlockDevice* device,
+CircularBoundedJournal::CircularBoundedJournal(RBMDevice* device,
     const std::string &path)
   : device(device), path(path) {}
 

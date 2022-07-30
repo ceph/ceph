@@ -20,8 +20,16 @@
 
 #include "scrub_machine_lstnr.h"
 
+/// a wrapper that sets the FSM state description used by the
+/// PgScrubber
+/// \todo consider using the full NamedState as in Peering
+struct NamedSimply {
+  explicit NamedSimply(ScrubMachineListener* scrubber, const char* name);
+};
+
 class PG;  // holding a pointer to that one - just for testing
 class PgScrubber;
+
 namespace Scrub {
 
 namespace sc = ::boost::statechart;
@@ -145,7 +153,6 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   ScrubMachineListener* m_scrbr;
   std::ostream& gen_prefix(std::ostream& out) const;
 
-  std::string current_states_desc() const;
   void assert_not_active() const;
   [[nodiscard]] bool is_reserving() const;
   [[nodiscard]] bool is_accepting_updates() const;
@@ -169,7 +176,7 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
  *  using the resource-request to identify and tag the scrub session, this
  *  bypass cannot be supported anymore.
  */
-struct NotActive : sc::state<NotActive, ScrubMachine> {
+struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
   explicit NotActive(my_context ctx);
 
   using reactions =
@@ -182,7 +189,8 @@ struct NotActive : sc::state<NotActive, ScrubMachine> {
   sc::result react(const AfterRepairScrub&);
 };
 
-struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine> {
+struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine>,
+			   NamedSimply {
 
   explicit ReservingReplicas(my_context ctx);
   ~ReservingReplicas();
@@ -222,7 +230,7 @@ struct WaitReplicas;
 struct WaitDigestUpdate;
 
 struct ActiveScrubbing
-    : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer> {
+    : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer>, NamedSimply {
 
   explicit ActiveScrubbing(my_context ctx);
   ~ActiveScrubbing();
@@ -234,21 +242,21 @@ struct ActiveScrubbing
   sc::result react(const InternalError&);
 };
 
-struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing> {
+struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, NamedSimply {
   explicit RangeBlocked(my_context ctx);
   using reactions = mpl::list<sc::transition<Unblocked, PendingTimer>>;
 
   Scrub::BlockedRangeWarning m_timeout;
 };
 
-struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing> {
+struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing>, NamedSimply {
 
   explicit PendingTimer(my_context ctx);
 
   using reactions = mpl::list<sc::transition<InternalSchedScrub, NewChunk>>;
 };
 
-struct NewChunk : sc::state<NewChunk, ActiveScrubbing> {
+struct NewChunk : sc::state<NewChunk, ActiveScrubbing>, NamedSimply {
 
   explicit NewChunk(my_context ctx);
 
@@ -267,7 +275,7 @@ struct NewChunk : sc::state<NewChunk, ActiveScrubbing> {
  * (in-flight data to the Objectstore is not readable until written to
  * disk, termed 'applied' here)
  */
-struct WaitPushes : sc::state<WaitPushes, ActiveScrubbing> {
+struct WaitPushes : sc::state<WaitPushes, ActiveScrubbing>, NamedSimply {
 
   explicit WaitPushes(my_context ctx);
 
@@ -276,7 +284,8 @@ struct WaitPushes : sc::state<WaitPushes, ActiveScrubbing> {
   sc::result react(const ActivePushesUpd&);
 };
 
-struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing> {
+struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing>,
+			NamedSimply {
 
   explicit WaitLastUpdate(my_context ctx);
 
@@ -291,7 +300,7 @@ struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing> {
   sc::result react(const InternalAllUpdates&);
 };
 
-struct BuildMap : sc::state<BuildMap, ActiveScrubbing> {
+struct BuildMap : sc::state<BuildMap, ActiveScrubbing>, NamedSimply {
   explicit BuildMap(my_context ctx);
 
   // possible error scenarios:
@@ -312,7 +321,7 @@ struct BuildMap : sc::state<BuildMap, ActiveScrubbing> {
 /*
  *  "drain" scrub-maps responses from replicas
  */
-struct DrainReplMaps : sc::state<DrainReplMaps, ActiveScrubbing> {
+struct DrainReplMaps : sc::state<DrainReplMaps, ActiveScrubbing>, NamedSimply {
   explicit DrainReplMaps(my_context ctx);
 
   using reactions =
@@ -322,7 +331,7 @@ struct DrainReplMaps : sc::state<DrainReplMaps, ActiveScrubbing> {
   sc::result react(const GotReplicas&);
 };
 
-struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing> {
+struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing>, NamedSimply {
   explicit WaitReplicas(my_context ctx);
 
   using reactions = mpl::list<
@@ -336,7 +345,8 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing> {
   bool all_maps_already_called{false};	// see comment in react code
 };
 
-struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing> {
+struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
+			  NamedSimply {
   explicit WaitDigestUpdate(my_context ctx);
 
   using reactions = mpl::list<sc::custom_reaction<DigestUpdate>,
@@ -355,7 +365,8 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing> {
  * - the details of the Primary's request were internalized by PgScrubber;
  * - 'active' scrubbing is set
  */
-struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine> {
+struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine>,
+			    NamedSimply {
   explicit ReplicaWaitUpdates(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<ReplicaPushesUpd>,
 			      sc::custom_reaction<FullReset>>;
@@ -365,7 +376,7 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine> {
 };
 
 
-struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine> {
+struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine>, NamedSimply {
   explicit ActiveReplica(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<SchedReplica>,
 			      sc::custom_reaction<FullReset>,

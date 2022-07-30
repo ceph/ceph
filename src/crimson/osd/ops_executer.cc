@@ -479,7 +479,11 @@ OpsExecuter::execute_op(OSDOp& osd_op)
   return do_execute_op(osd_op).handle_error_interruptible(
     osd_op_errorator::all_same_way([&osd_op](auto e, auto&& e_raw)
       -> OpsExecuter::osd_op_errorator::future<> {
-        osd_op.rval = -e.value();
+        // All ops except for CMPEXT should have rval set to -e.value(),
+        // CMPEXT sets rval itself and shouldn't be overridden.
+        if (e.value() != ct_error::cmp_fail_error_value) {
+          osd_op.rval = -e.value();
+        }
         if ((osd_op.op.flags & CEPH_OSD_OP_FLAG_FAILOK) &&
 	  e.value() != EAGAIN && e.value() != EINPROGRESS) {
           return osd_op_errorator::now();

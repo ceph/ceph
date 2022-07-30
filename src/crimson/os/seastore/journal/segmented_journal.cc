@@ -199,12 +199,8 @@ SegmentedJournal::scan_last_segment(
               decode(tail_delta, delta.bl);
               auto start_seq = locator.write_result.start_seq;
               INFO("got {}, at seq {}", tail_delta, start_seq);
-              if (tail_delta.alloc_tail == JOURNAL_SEQ_NULL) {
-                tail_delta.alloc_tail = start_seq;
-              }
-              if (tail_delta.dirty_tail == JOURNAL_SEQ_NULL) {
-                tail_delta.dirty_tail = start_seq;
-              }
+              ceph_assert(tail_delta.dirty_tail != JOURNAL_SEQ_NULL);
+              ceph_assert(tail_delta.alloc_tail != JOURNAL_SEQ_NULL);
               segment_provider.update_journal_tails(
                   tail_delta.dirty_tail, tail_delta.alloc_tail);
             }

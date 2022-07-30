@@ -6,7 +6,6 @@
  */
 
 #include "common/hobject_fmt.h"
-#include "include/types_fmt.h"
 #include "osd/osd_types.h"
 #include <fmt/chrono.h>
 
@@ -194,23 +193,6 @@ struct fmt::formatter<pg_info_t> {
 };
 
 // snaps and snap-sets
-
-template <typename T, template <typename, typename, typename...> class C>
-struct fmt::formatter<interval_set<T, C>> {
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const interval_set<T, C>& inter, FormatContext& ctx)
-  {
-    bool first = true;
-    fmt::format_to(ctx.out(), "[");
-    for (const auto& [start, len] : inter) {
-      fmt::format_to(ctx.out(), "{}{}~{}", (first ? "" : ","), start, len);
-      first = false;
-    }
-    return fmt::format_to(ctx.out(), "]");
-  }
-};
 
 template <>
 struct fmt::formatter<SnapSet> {

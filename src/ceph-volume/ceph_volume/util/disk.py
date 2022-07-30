@@ -134,10 +134,10 @@ def remove_partition(device):
 
     :param device: A ``Device()`` object
     """
-    udev_info = udevadm_property(device.abspath)
+    udev_info = udevadm_property(device.path)
     partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
     if not partition_number:
-        raise RuntimeError('Unable to detect the partition number for device: %s' % device.abspath)
+        raise RuntimeError('Unable to detect the partition number for device: %s' % device.path)
 
     process.run(
         ['parted', device.parent_device, '--script', '--', 'rm', partition_number]
@@ -769,6 +769,13 @@ allow_loop_devices = AllowLoopDevices()
 
 
 def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys/dev/block'):
+    def holder_inner_loop():
+        for holder in holders:
+            # /sys/block/sdy/holders/dm-8/dm/uuid
+            holder_dm_type = get_file_contents(os.path.join(_sys_block_path, dev, f'holders/{holder}/dm/uuid')).split('-')[0].lower()
+            if holder_dm_type == 'mpath':
+                return True
+
     # First, get devices that are _not_ partitions
     result = list()
     dev_names = os.listdir(_sys_block_path)
@@ -777,11 +784,15 @@ def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys
         if not os.path.exists(name):
             continue
         type_ = 'disk'
+        holders = os.listdir(os.path.join(_sys_block_path, dev, 'holders'))
         if get_file_contents(os.path.join(_sys_block_path, dev, 'removable')) == "1":
+            continue
+        if holder_inner_loop():
             continue
         dm_dir_path = os.path.join(_sys_block_path, dev, 'dm')
         if os.path.isdir(dm_dir_path):
-            type_ = 'lvm'
+            dm_type = get_file_contents(os.path.join(dm_dir_path, 'uuid'))
+            type_ = dm_type.split('-')[0].lower()
             basename = get_file_contents(os.path.join(dm_dir_path, 'name'))
             name = os.path.join("/dev/mapper", basename)
         if dev.startswith('loop'):
@@ -854,6 +865,12 @@ def get_devices(_sys_block_path='/sys/block', device=''):
                 ]
         for key, file_ in facts:
             metadata[key] = get_file_contents(os.path.join(sysdir, file_))
+
+        device_slaves = os.listdir(os.path.join(sysdir, 'slaves'))
+        if device_slaves:
+            metadata['device_nodes'] = ','.join(device_slaves)
+        else:
+            metadata['device_nodes'] = devname
 
         metadata['scheduler_mode'] = ""
         scheduler = get_file_contents(sysdir + "/queue/scheduler")

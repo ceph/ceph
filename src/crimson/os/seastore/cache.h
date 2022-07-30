@@ -646,8 +646,7 @@ public:
 	backref_buffer->backrefs_by_seq.begin(), iter);
     }
     if (!backref_buffer || backref_buffer->backrefs_by_seq.empty()) {
-      // see notes in Cache::complete_commit().
-      SUBWARN(seastore_cache, "backref_buffer all trimmed");
+      SUBDEBUG(seastore_cache, "backref_buffer all trimmed");
     }
   }
 
@@ -920,7 +919,7 @@ public:
     } else {
       auto oldest = dirty.begin()->get_dirty_from();
       if (oldest == JOURNAL_SEQ_NULL) {
-	SUBINFO(seastore_cache, "dirty_oldest: pending");
+	SUBDEBUG(seastore_cache, "dirty_oldest: pending");
       } else {
 	SUBDEBUG(seastore_cache, "dirty_oldest: {}", oldest);
       }

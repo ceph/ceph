@@ -5,6 +5,8 @@
 
 #include <algorithm>
 
+#include <fmt/ranges.h>
+
 #include "common/debug.h"
 
 #include "include/utime_fmt.h"

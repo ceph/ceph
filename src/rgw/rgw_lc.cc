@@ -1707,9 +1707,8 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 {
   utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
 
-  rgw::sal::LCSerializer* lock = sal_lc->get_serializer(lc_index_lock_name,
-							obj_names[index],
-							cookie);
+  std::unique_ptr<rgw::sal::LCSerializer> lock =
+    sal_lc->get_serializer(lc_index_lock_name, obj_names[index], cookie);
 
   ldpp_dout(this, 5) << "RGWLC::bucket_lc_post(): POST " << entry
 	  << " index: " << index << " worker ix: " << worker->ix
@@ -1753,7 +1752,6 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
     }
 clean:
     lock->unlock();
-    delete lock;
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() unlock "
 			<< obj_names[index] << dendl;
     return 0;
@@ -1902,10 +1900,9 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 	  << dendl;
 
   int ret = 0;
-  std::unique_ptr<rgw::sal::LCSerializer> serializer(
+  std::unique_ptr<rgw::sal::LCSerializer> serializer =
     sal_lc->get_serializer(lc_index_lock_name, obj_names[index],
-			   std::string()));
-
+			   worker->thr_name());
   std::unique_ptr<rgw::sal::Lifecycle::LCEntry> entry;
   if (max_lock_secs <= 0) {
     return -EAGAIN;
@@ -2055,8 +2052,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  << "index: " << index << " worker ix: " << worker->ix
 	  << dendl;
 
-  rgw::sal::LCSerializer* lock =
-    sal_lc->get_serializer(lc_index_lock_name, lc_shard, std::string());
+  std::unique_ptr<rgw::sal::LCSerializer> lock =
+    sal_lc->get_serializer(lc_index_lock_name, lc_shard, worker->thr_name());
 
   utime_t lock_for_s(max_lock_secs, 0);
   const auto& lock_lambda = [&]() {
@@ -2076,7 +2073,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
 		       << lc_shard << " after " << shard_lock.get_retries()
 		       << dendl;
-    goto notlocked;
+    return 0;
   }
 
   do {
@@ -2235,7 +2232,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
 			 << lc_shard << " after " << shard_lock.get_retries()
 			 << dendl;
-      goto notlocked;
+      return 0;
     }
 
     if (ret == -ENOENT) {
@@ -2284,8 +2281,6 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
 exit:
   lock->unlock();
-notlocked:
-  delete lock;
   return 0;
 }
 
@@ -2417,20 +2412,24 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
   entry->set_status(lc_uninitial);
   int max_lock_secs = cct->_conf->rgw_lc_lock_max_time;
 
-  rgw::sal::LCSerializer* lock = sal_lc->get_serializer(lc_index_lock_name,
-							oid,
-							cookie);
+  std::unique_ptr<rgw::sal::LCSerializer> lock =
+    sal_lc->get_serializer(lc_index_lock_name, oid, cookie);
   utime_t time(max_lock_secs, 0);
 
   int ret;
+  uint16_t retries{0};
 
+  // due to reports of starvation trying to save lifecycle policy, try hard
   do {
     ret = lock->try_lock(dpp, time, null_yield);
     if (ret == -EBUSY || ret == -EEXIST) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
-          << oid << ", sleep 5, try again" << dendl;
-      sleep(5); // XXX: return retryable error
-      continue;
+			<< oid << ", retry in 100ms, ret=" << ret << dendl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      // the typical S3 client will time out in 60s
+      if(retries++ < 500) {
+	continue;
+      }
     }
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
@@ -2445,7 +2444,6 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
     break;
   } while(true);
   lock->unlock();
-  delete lock;
   return ret;
 }
 

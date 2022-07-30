@@ -34,7 +34,7 @@
 	url = https://github.com/facebook/zstd
 [submodule "src/crypto/isa-l/isa-l_crypto"]
 	path = src/crypto/isa-l/isa-l_crypto
-	url = https://github.com/01org/isa-l_crypto
+	url = https://github.com/intel/isa-l_crypto
 [submodule "src/blkin"]
 	path = src/blkin
 	url = https://github.com/ceph/blkin
