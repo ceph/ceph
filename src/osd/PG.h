@@ -557,7 +557,7 @@ public:
 
   void add_objects_trimmed_count(int64_t count) {
     recovery_state.update_stats_wo_resched(
-      [=](auto &history, auto &stats) {
+      [count](auto &history, auto &stats) {
         add_objects_trimmed_count(count, stats);
       });
   }
@@ -568,7 +568,7 @@ public:
 
   void reset_objects_trimmed() {
     recovery_state.update_stats_wo_resched(
-      [=](auto &history, auto &stats) {
+      [](auto &history, auto &stats) {
         reset_objects_trimmed(stats);
       });
   }
@@ -583,7 +583,7 @@ public:
     utime_t cur_stamp = ceph_clock_now();
     utime_t duration = cur_stamp - snaptrim_begin_stamp;
     recovery_state.update_stats_wo_resched(
-      [=](auto &history, auto &stats) {
+      [duration](auto &history, auto &stats) {
         stats.snaptrim_duration = double(duration);
     });
   }
