@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <errno.h>
 #include "gtest/gtest.h"
+#include "crimson_utils.h"
 
 typedef RadosTest LibRadosStat;
 typedef RadosTestEC LibRadosStatEC;
@@ -67,6 +68,7 @@ TEST_F(LibRadosStat, PoolStat) {
 }
 
 TEST_F(LibRadosStatEC, Stat) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -78,6 +80,7 @@ TEST_F(LibRadosStatEC, Stat) {
 }
 
 TEST_F(LibRadosStatEC, StatNS) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   rados_ioctx_set_namespace(ioctx, "");
@@ -104,11 +107,13 @@ TEST_F(LibRadosStatEC, StatNS) {
 }
 
 TEST_F(LibRadosStatEC, ClusterStat) {
+  SKIP_IF_CRIMSON();
   struct rados_cluster_stat_t result;
   ASSERT_EQ(0, rados_cluster_stat(cluster, &result));
 }
 
 TEST_F(LibRadosStatEC, PoolStat) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   char actual_pool_name[80];
   unsigned l = rados_ioctx_get_pool_name(ioctx, actual_pool_name, sizeof(actual_pool_name));
