@@ -9663,9 +9663,9 @@ def _get_parser():
         '--daemon-id',
         help='daemon id for agent')
 
-    parser_agent = subparsers.add_parser(
+    parser_disk_rescan = subparsers.add_parser(
         'disk-rescan', help='rescan all HBAs to detect new/removed devices')
-    parser_agent.set_defaults(func=command_rescan_disks)
+    parser_disk_rescan.set_defaults(func=command_rescan_disks)
 
     return parser
 
