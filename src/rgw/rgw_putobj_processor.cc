@@ -110,7 +110,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     op.write(offset, data);
   }
   constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y, &head_obj->get_trace()), cost, id);
   return process_completed(c, &written);
 }
 
@@ -124,7 +124,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.write_full(data);
 
   constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y, &head_obj->get_trace()), cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);

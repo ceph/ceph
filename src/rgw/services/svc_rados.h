@@ -175,7 +175,7 @@ public:
 		int flags = 0);
     int operate(const DoutPrefixProvider *dpp, librados::ObjectReadOperation *op, bufferlist *pbl,
                 optional_yield y, int flags = 0);
-    int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
+    int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op, const jspan_context *trace_ctx = nullptr);
     int aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
                     bufferlist *pbl);
 

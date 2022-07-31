@@ -4,7 +4,7 @@
 #pragma once
 
 #include "acconfig.h"
-#include "include/buffer.h"
+#include "include/encoding.h"
 
 #ifdef HAVE_JAEGER
 #include "opentelemetry/trace/provider.h"
@@ -45,8 +45,41 @@ class Tracer {
 
 };
 
-void encode(const jspan_context& span, ceph::buffer::list& bl, uint64_t f = 0);
-void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl);
+inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
+  ENCODE_START(1, 1, bl);
+  using namespace opentelemetry;
+  using namespace trace;
+  auto is_valid = span_ctx.IsValid();
+  encode(is_valid, bl);
+  if (is_valid) {
+    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.trace_id().Id().data()), TraceId::kSize), bl);
+    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.span_id().Id().data()), SpanId::kSize), bl);
+    encode(span_ctx.trace_flags().flags(), bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+inline void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
+  using namespace opentelemetry;
+  using namespace trace;
+  DECODE_START(1, bl);
+  bool is_valid;
+  decode(is_valid, bl);
+  if (is_valid) {
+    std::array<uint8_t, TraceId::kSize> trace_id;
+    std::array<uint8_t, SpanId::kSize> span_id;
+    uint8_t flags;
+    decode(trace_id, bl);
+    decode(span_id, bl);
+    decode(flags, bl);
+    span_ctx = SpanContext(
+      TraceId(nostd::span<uint8_t, TraceId::kSize>(trace_id)),
+      SpanId(nostd::span<uint8_t, SpanId::kSize>(span_id)),
+      TraceFlags(flags),
+      true);
+  }
+  DECODE_FINISH(bl);
+}
 
 } // namespace tracing
 

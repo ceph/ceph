@@ -143,7 +143,7 @@ auto async_write(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
 template <typename ExecutionContext, typename CompletionToken>
 auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
                    ObjectReadOperation *read_op, int flags,
-                   CompletionToken&& token)
+                   CompletionToken&& token, const jspan_context* trace_ctx = nullptr)
 {
   using Op = detail::AsyncOp<bufferlist>;
   using Signature = typename Op::Signature;
@@ -167,7 +167,7 @@ auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
 template <typename ExecutionContext, typename CompletionToken>
 auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
                    ObjectWriteOperation *write_op, int flags,
-                   CompletionToken &&token)
+                   CompletionToken &&token, const jspan_context* trace_ctx = nullptr)
 {
   using Op = detail::AsyncOp<void>;
   using Signature = typename Op::Signature;
@@ -175,7 +175,7 @@ auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
   auto p = Op::create(ctx.get_executor(), init.completion_handler);
   auto& op = p->user_data;
 
-  int ret = io.aio_operate(oid, op.aio_completion.get(), write_op, flags);
+  int ret = io.aio_operate(oid, op.aio_completion.get(), write_op, flags, trace_ctx);
   if (ret < 0) {
     auto ec = boost::system::error_code{-ret, boost::system::system_category()};
     ceph::async::post(std::move(p), ec);

@@ -140,9 +140,9 @@ int RGWSI_RADOS::Obj::operate(const DoutPrefixProvider *dpp, librados::ObjectRea
   return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, op, pbl, y, flags);
 }
 
-int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op)
+int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op, const jspan_context *trace_ctx)
 {
-  return ref.pool.ioctx().aio_operate(ref.obj.oid, c, op);
+  return ref.pool.ioctx().aio_operate(ref.obj.oid, c, op, 0, trace_ctx);
 }
 
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,

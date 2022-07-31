@@ -14,6 +14,8 @@
 #include "librados_fwd.hpp"
 #include "rados_types.hpp"
 
+typedef opentelemetry::trace::SpanContext jspan_context;
+
 namespace libradosstriper
 {
   class RadosStriper;
@@ -1168,11 +1170,11 @@ inline namespace v14_2_0 {
 
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
-    int operate(const std::string& oid, ObjectWriteOperation *op, int flags);
+    int operate(const std::string& oid, ObjectWriteOperation *op, int flags, const jspan_context *trace_info = nullptr);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl, int flags);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
-    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags, const jspan_context *trace_info = nullptr);
     /**
      * Schedule an async write operation with explicit snapshot parameters
      *

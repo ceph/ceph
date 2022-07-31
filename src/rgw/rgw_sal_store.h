@@ -158,6 +158,7 @@ class StoreObject : public Object {
     Bucket* bucket;
     Attrs attrs;
     bool delete_marker{false};
+    jspan_context trace_ctx{false, false};
 
   public:
 
@@ -245,6 +246,8 @@ class StoreObject : public Object {
        * work with lifecycle */
       return -1;
     }
+    virtual jspan_context& get_trace() { return trace_ctx; }
+    virtual void set_trace (jspan_context&& _trace_ctx) { trace_ctx = _trace_ctx; }
 
     virtual void print(std::ostream& out) const override {
       if (bucket)
