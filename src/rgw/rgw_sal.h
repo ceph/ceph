@@ -912,6 +912,7 @@ class Object {
     Bucket* bucket; /**< @a Bucket containing this object */
     Attrs attrs; /**< Cache of attributes for this object */
     bool delete_marker{false}; /**< True if this object has a delete marker */
+    jspan_context trace_ctx{false, false};
 
   public:
 
@@ -1173,6 +1174,10 @@ class Object {
     static bool empty(Object* o) { return (!o || o->empty()); }
     /** Get a unique copy of this object */
     virtual std::unique_ptr<Object> clone() = 0;
+
+    jspan_context& get_trace() { return trace_ctx; }
+
+    void set_trace (jspan_context&& _trace_ctx) { trace_ctx = _trace_ctx; }
 
     /* dang - This is temporary, until the API is completed */
     /** Get the key for this object */

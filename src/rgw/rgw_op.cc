@@ -3951,6 +3951,7 @@ void RGWPutObj::execute(optional_yield y)
 
     s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, multipart_upload_id);
     multipart_trace = tracing::rgw::tracer.add_span(name(), upload->get_trace());
+    s->object->set_trace(multipart_trace->GetContext());
 
     if (op_ret < 0) {
       if (op_ret != -ENOENT) {
@@ -6213,7 +6214,8 @@ void RGWInitMultipart::execute(optional_yield y)
   if (op_ret == 0) {
     upload_id = upload->get_upload_id();
   }
-  s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
+  multipart_trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
+  multipart_trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
   multipart_trace->UpdateName(tracing::rgw::MULTIPART + upload_id);
 
 }
