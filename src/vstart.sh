@@ -36,8 +36,8 @@ if [ -n "$VSTART_DEST" ]; then
     SRC_PATH=`(cd $SRC_PATH; pwd)`
 
     CEPH_DIR=$SRC_PATH
-    CEPH_BIN=${PWD}/bin
-    CEPH_LIB=${PWD}/lib
+    CEPH_BIN=${CEPH_BIN:-${PWD}/bin}
+    CEPH_LIB=${CEPH_LIB:-${PWD}/lib}
 
     CEPH_CONF_PATH=$VSTART_DEST
     CEPH_DEV_DIR=$VSTART_DEST/dev
