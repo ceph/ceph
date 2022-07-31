@@ -409,6 +409,7 @@ if(WITH_JAEGER)
   add_library(jaeger_base INTERFACE)
   target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry
     thrift::libthrift)
+  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/opentelemetry-cpp/api/include/")
   add_dependencies(common-objs jaeger_base)
   target_link_libraries(common-objs jaeger_base)
 endif()
