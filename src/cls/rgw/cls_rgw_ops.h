@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "opentelemetry/trace/span_context.h"
+#include "common/tracer.h"
 #include "cls/rgw/cls_rgw_types.h"
 
 struct rgw_cls_tag_timeout_op
@@ -94,11 +96,12 @@ struct rgw_cls_obj_complete_op
 
   std::list<cls_rgw_obj_key> remove_objs;
   rgw_zone_set zones_trace;
+  jspan_context bi_trace;
 
-  rgw_cls_obj_complete_op() : op(CLS_RGW_OP_ADD), log_op(false), bilog_flags(0) {}
+  rgw_cls_obj_complete_op() : op(CLS_RGW_OP_ADD), log_op(false), bilog_flags(0), bi_trace(false, false) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(9, 7, bl);
+    ENCODE_START(10, 7, bl);
     uint8_t c = (uint8_t)op;
     encode(c, bl);
     encode(ver.epoch, bl);
@@ -111,10 +114,11 @@ struct rgw_cls_obj_complete_op
     encode(key, bl);
     encode(bilog_flags, bl);
     encode(zones_trace, bl);
+    tracing::encode(bi_trace, bl);
     ENCODE_FINISH(bl);
  }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
     uint8_t c;
     decode(c, bl);
     op = (RGWModifyOp)c;
@@ -156,6 +160,9 @@ struct rgw_cls_obj_complete_op
     }
     if (struct_v >= 9) {
       decode(zones_trace, bl);
+    }
+    if (struct_v >= 10) {
+      tracing::decode(bi_trace, bl);
     }
     DECODE_FINISH(bl);
   }
