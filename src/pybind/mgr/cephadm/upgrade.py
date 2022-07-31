@@ -456,6 +456,7 @@ class CephadmUpgrade:
         if not self.upgrade_state.paused:
             return 'Upgrade to %s not paused' % self.target_image
         self.upgrade_state.paused = False
+        self.upgrade_state.error = ''
         self.mgr.log.info('Upgrade: Resumed upgrade to %s' % self.target_image)
         self._save_upgrade_state()
         self.mgr.event.set()
