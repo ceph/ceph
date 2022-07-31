@@ -1562,14 +1562,14 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				  io_ctx_impl->snapc, 0);
 }
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
-				 ObjectWriteOperation *o, int flags)
+				 ObjectWriteOperation *o, int flags, const jspan_context* trace_info)
 {
   object_t obj(oid);
   if (unlikely(!o->impl))
     return -EINVAL;
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
 				  io_ctx_impl->snapc,
-				  translate_flags(flags));
+				  translate_flags(flags), trace_info);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1602,7 +1602,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
-          snapc, 0, trace_info);
+          snapc, 0);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1619,7 +1619,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc, snapc,
-                                  translate_flags(flags), trace_info);
+                                  translate_flags(flags));
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
