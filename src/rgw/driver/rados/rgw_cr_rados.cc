@@ -811,6 +811,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   } else {
     stat_dest_obj = src_obj;
   }
+  dest_obj.set_trace(std::move(trace_ctx));
 
   std::string etag;
 
@@ -848,6 +849,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        stat_follow_olh,
                        stat_dest_obj,
                        source_trace_entry,
+		                   dest_obj.get_trace(),
                        &zones_trace,
                        &bytes_transferred,
                        keep_tags);

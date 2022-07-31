@@ -3465,6 +3465,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
       return r;
   }
 
+  auto index_span = tracing::rgw::tracer.add_span("update_index", trace);
+  index_op->set_bilog_trace(index_span->GetContext());
   auto& ioctx = ref.ioctx;
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
@@ -4490,6 +4492,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                bool stat_follow_olh,
                const rgw_obj& stat_dest_obj,
                std::optional<rgw_zone_set_entry> source_trace_entry,
+               jspan_context& trace_ctx,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred,
                bool keep_tags)
@@ -4511,13 +4514,16 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   // use an empty owner until we decode RGW_ATTR_ACL
   ACLOwner owner;
   RGWAccessControlPolicy policy;
+  auto trace = tracing::rgw::tracer.add_span("fetch_remote_obj", trace_ctx);
+  trace->SetAttribute(tracing::rgw::OBJECT_NAME, dest_obj.key.name);
+  trace->SetAttribute(tracing::rgw::BUCKET_NAME, dest_bucket_info.bucket.name);
 
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  jspan_context no_trace{false, false};
+  auto trace_subctx = trace->GetContext();
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
                                   owner, dest_obj_ctx, dest_obj, olh_epoch,
-				  tag, rctx.dpp, rctx.y, no_trace);
+				  tag, rctx.dpp, rctx.y, trace_subctx);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -5039,7 +5045,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                    unmod_ptr, high_precision_time,
                    if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                    olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, rctx,
-                   nullptr /* filter */, stat_follow_olh, stat_dest_obj, std::nullopt);
+                   nullptr /* filter */, stat_follow_olh, stat_dest_obj, std::nullopt, trace);
 
         progress_tracker.done = true;
         progress_tracker.cv.notify_one();
@@ -8104,7 +8110,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
 
   bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-  ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace, add_log);
+  ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace, add_log, &bilog_trace);
   if (add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
 			    target->bucket_info, bs->shard_id, y);
@@ -10530,7 +10536,8 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
                                   int64_t pool, uint64_t epoch,
                                   rgw_bucket_dir_entry& ent, RGWObjCategory category,
                                   list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
-                                  rgw_zone_set *_zones_trace, bool log_op)
+                                  rgw_zone_set *_zones_trace, bool log_op,
+                        				  const jspan_context *bilog_trace )
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx_c(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs <<
@@ -10558,7 +10565,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
   cls_rgw_obj_key key(ent.key.name, ent.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
   cls_rgw_bucket_complete_op(o, op, tag, ver, key, dir_meta, remove_objs,
-                             log_op, bilog_flags, &zones_trace, obj.key.get_loc());
+                             log_op, bilog_flags, &zones_trace, obj.key.get_loc(), bilog_trace);
   complete_op_data *arg;
   index_completion_manager->create_completion(obj, op, tag, ver, key, dir_meta, remove_objs,
                                               log_op, bilog_flags, &zones_trace, &arg);
@@ -10574,11 +10581,12 @@ int RGWRados::cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, string& 
                                    int64_t pool, uint64_t epoch,
                                    rgw_bucket_dir_entry& ent, RGWObjCategory category,
                                    list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
-                                   rgw_zone_set *zones_trace, bool log_op)
+                                   rgw_zone_set *zones_trace, bool log_op,
+                                   const jspan_context* bilog_trace)
 {
   return cls_obj_complete_op(bs, obj, CLS_RGW_OP_ADD, tag, pool, epoch,
                              ent, category, remove_objs, bilog_flags,
-                             zones_trace, log_op);
+                             zones_trace, log_op, bilog_trace);
 }
 
 int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
