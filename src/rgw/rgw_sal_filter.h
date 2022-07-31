@@ -678,6 +678,9 @@ public:
     return std::make_unique<FilterObject>(*this);
   }
 
+  virtual jspan_context& get_trace() { return next->get_trace(); }
+  virtual void set_trace (jspan_context&& _trace_ctx) { next->set_trace(std::move(_trace_ctx)); }
+
   virtual void print(std::ostream& out) const override { return next->print(out); }
 
   /* Internal to Filters */

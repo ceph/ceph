@@ -3240,7 +3240,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   auto& ioctx = ref.pool.ioctx();
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
+  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, null_yield, 0, &target->get_target()->get_trace());
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
