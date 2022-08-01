@@ -12318,7 +12318,7 @@ int PrimaryLogPG::recover_missing(
     recovering.insert(make_pair(soid, ObjectContextRef()));
     epoch_t cur_epoch = get_osdmap_epoch();
     remove_missing_object(soid, v, new LambdaContext(
-     [=](int) {
+     [=, this](int) {
        std::scoped_lock locker{*this};
        if (!pg_has_reset_since(cur_epoch)) {
 	 bool object_missing = false;
@@ -12401,7 +12401,7 @@ void PrimaryLogPG::remove_missing_object(const hobject_t &soid,
 
   epoch_t cur_epoch = get_osdmap_epoch();
   t.register_on_complete(new LambdaContext(
-     [=](int) {
+     [=, this](int) {
        std::unique_lock locker{*this};
        if (!pg_has_reset_since(cur_epoch)) {
 	 ObjectStore::Transaction t2;
@@ -12564,7 +12564,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
   eversion_t new_lcod = info.last_complete;
 
   Context *complete = new LambdaContext(
-    [=](int) {
+    [=, this](int) {
       const MOSDPGUpdateLogMissing *msg = static_cast<const MOSDPGUpdateLogMissing*>(
 	op->get_req());
       std::scoped_lock locker{*this};
@@ -15300,7 +15300,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
 	    << TierAgentState::get_flush_mode_name(flush_mode)
 	    << dendl;
     recovery_state.update_stats(
-      [=](auto &history, auto &stats) {
+      [=, this](auto &history, auto &stats) {
 	if (flush_mode == TierAgentState::FLUSH_MODE_HIGH) {
 	  osd->agent_inc_high_count();
 	  stats.stats.sum.num_flush_mode_high = 1;
@@ -15336,7 +15336,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
       requeued = true;
     }
     recovery_state.update_stats(
-      [=](auto &history, auto &stats) {
+      [=, this](auto &history, auto &stats) {
 	if (evict_mode == TierAgentState::EVICT_MODE_SOME) {
 	  stats.stats.sum.num_evict_mode_some = 1;
 	} else if (evict_mode == TierAgentState::EVICT_MODE_FULL) {
