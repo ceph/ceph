@@ -1,8 +1,20 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 
+import _ from 'lodash';
+import { Observable, Subscription } from 'rxjs';
+import { take } from 'rxjs/operators';
+
+import { ClusterService } from '~/app/shared/api/cluster.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { OsdService } from '~/app/shared/api/osd.service';
 import { DashboardDetails } from '~/app/shared/models/cd-details';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import {
+  FeatureTogglesMap$,
+  FeatureTogglesService
+} from '~/app/shared/services/feature-toggles.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 
 @Component({

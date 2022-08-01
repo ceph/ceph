@@ -79,13 +79,11 @@
              class="col-sm-3 px-3"
              [ngClass]="{'d-flex': flexHeight}">
       <ng-container class="ms-4 me-4"
-                    *ngIf="{osdSettings: osdSettings$ | async, capacity: capacity$ | async} as values">
-        <ng-container *ngIf="values.osdSettings && values.capacity">
-          <cd-dashboard-pie [data]="{max: values.capacity.total_bytes, current: values.capacity.total_used_raw_bytes}"
-                            [lowThreshold]="values.osdSettings.nearfull_ratio"
-                            [highThreshold]="values.osdSettings.full_ratio">
-          </cd-dashboard-pie>
-        </ng-container>
+                    *ngIf="capacity && osdSettings">
+        <cd-dashboard-pie [data]="{max: capacity.total_bytes, current: capacity.total_used_raw_bytes}"
+                          [lowThreshold]="osdSettings.nearfull_ratio"
+                          [highThreshold]="osdSettings.full_ratio">
+        </cd-dashboard-pie>
       </ng-container>
     </cd-card>
   </div>
