@@ -1,7 +1,14 @@
 # -*- coding: utf-8 -*-
 from enum import Enum
+from typing import NamedTuple
 
 from .. import mgr
+
+
+class ClusterCapacity(NamedTuple):
+    total_avail_bytes: int
+    total_bytes: int
+    total_used_raw_bytes: int
 
 
 class ClusterModel:
@@ -33,3 +40,10 @@ class ClusterModel:
         If the status is not set, assume it is already fully functional.
         """
         return cls(status=mgr.get_store('cluster/status', cls.Status.POST_INSTALLED.name))
+
+    @classmethod
+    def get_capacity(cls) -> ClusterCapacity:
+        df = mgr.get('df')
+        return ClusterCapacity(total_avail_bytes=df['stats']['total_avail_bytes'],
+                               total_bytes=df['stats']['total_bytes'],
+                               total_used_raw_bytes=df['stats']['total_used_raw_bytes'])._asdict()
