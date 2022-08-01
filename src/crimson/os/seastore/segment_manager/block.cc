@@ -466,11 +466,11 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
   LOG_PREFIX(BlockSegmentManager::mount);
   return open_device(
     device_path
-  ).safe_then([=](auto p) {
+  ).safe_then([=, this](auto p) {
     device = std::move(p.first);
     auto sd = p.second;
     return read_superblock(device, sd);
-  }).safe_then([=](auto sb) {
+  }).safe_then([=, this](auto sb) {
     set_device_id(sb.config.spec.id);
     INFO("{} read {}", device_id_printer_t{get_device_id()}, sb);
     sb.validate();
@@ -513,7 +513,7 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
     seastar::stat_data{},
     block_sm_superblock_t{},
     std::unique_ptr<SegmentStateTracker>(),
-    [=](auto &device, auto &stat, auto &sb, auto &tracker)
+    [=, this](auto &device, auto &stat, auto &sb, auto &tracker)
   {
     check_create_device_ret maybe_create = check_create_device_ertr::now();
     using crimson::common::get_conf;

@@ -644,7 +644,7 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
     Transaction::src_t::READ,
     "read_obj",
     op_type_t::READ,
-    [=](auto &t, auto &onode) -> ObjectDataHandler::read_ret {
+    [=, this](auto &t, auto &onode) -> ObjectDataHandler::read_ret {
       size_t size = onode.get_layout().size;
 
       if (offset >= size) {
@@ -675,10 +675,10 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::readv(
   return seastar::do_with(
     _oid,
     ceph::bufferlist{},
-    [=, &m](auto &oid, auto &ret) {
+    [=, this, &m](auto &oid, auto &ret) {
     return crimson::do_for_each(
       m,
-      [=, &oid, &ret](auto &p) {
+      [=, this, &oid, &ret](auto &p) {
       return read(
 	ch, oid, p.first, p.second, op_flags
 	).safe_then([&ret](auto bl) {
@@ -708,7 +708,7 @@ SeaStore::get_attr_errorator::future<ceph::bufferlist> SeaStore::get_attr(
     Transaction::src_t::READ,
     "get_attr",
     op_type_t::GET_ATTR,
-    [=](auto &t, auto& onode) -> _omap_get_value_ret {
+    [=, this](auto &t, auto& onode) -> _omap_get_value_ret {
       auto& layout = onode.get_layout();
       if (name == OI_ATTR && layout.oi_size) {
         ceph::bufferlist bl;
@@ -745,7 +745,7 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
     Transaction::src_t::READ,
     "get_addrs",
     op_type_t::GET_ATTRS,
-    [=](auto &t, auto& onode) {
+    [=, this](auto &t, auto& onode) {
       auto& layout = onode.get_layout();
       return _omap_list(onode, layout.xattr_root, t, std::nullopt,
         OMapManager::omap_list_config_t::with_inclusive(false)
@@ -781,7 +781,7 @@ seastar::future<struct stat> SeaStore::stat(
     Transaction::src_t::READ,
     "stat",
     op_type_t::STAT,
-    [=, &oid](auto &t, auto &onode) {
+    [=, this, &oid](auto &t, auto &onode) {
       struct stat st;
       auto &olayout = onode.get_layout();
       st.st_size = olayout.size;
@@ -1065,7 +1065,7 @@ SeaStore::_fiemap_ret SeaStore::_fiemap(
 {
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
-    [=, &t, &onode] (auto &objhandler) {
+    [=, this, &t, &onode] (auto &objhandler) {
     return objhandler.fiemap(
       ObjectDataHandler::context_t{
         *transaction_manager,
@@ -1091,7 +1091,7 @@ SeaStore::read_errorator::future<std::map<uint64_t, uint64_t>> SeaStore::fiemap(
     Transaction::src_t::READ,
     "fiemap_read",
     op_type_t::READ,
-    [=](auto &t, auto &onode) -> _fiemap_ret {
+    [=, this](auto &t, auto &onode) -> _fiemap_ret {
     size_t size = onode.get_layout().size;
     if (off >= size) {
       INFOT("fiemap offset is over onode size!", t);
@@ -1400,7 +1400,7 @@ SeaStore::tm_ret SeaStore::_write(
   return seastar::do_with(
     std::move(_bl),
     ObjectDataHandler(max_object_size),
-    [=, &ctx, &onode](auto &bl, auto &objhandler) {
+    [=, this, &ctx, &onode](auto &bl, auto &objhandler) {
       return objhandler.write(
         ObjectDataHandler::context_t{
           *transaction_manager,
@@ -1427,7 +1427,7 @@ SeaStore::tm_ret SeaStore::_zero(
   object_size = std::max<uint64_t>(offset + len, object_size);
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
-    [=, &ctx, &onode](auto &objhandler) {
+    [=, this, &ctx, &onode](auto &objhandler) {
       return objhandler.zero(
         ObjectDataHandler::context_t{
           *transaction_manager,
@@ -1597,7 +1597,7 @@ SeaStore::tm_ret SeaStore::_truncate(
   onode->get_mutable_layout(*ctx.transaction).size = size;
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
-    [=, &ctx, &onode](auto &objhandler) {
+    [=, this, &ctx, &onode](auto &objhandler) {
     return objhandler.truncate(
       ObjectDataHandler::context_t{
         *transaction_manager,
@@ -1758,16 +1758,16 @@ SeaStore::tm_ret SeaStore::_create_collection(
 {
   return transaction_manager->read_collection_root(
     *ctx.transaction
-  ).si_then([=, &ctx](auto _cmroot) {
+  ).si_then([=, this, &ctx](auto _cmroot) {
     return seastar::do_with(
       _cmroot,
-      [=, &ctx](auto &cmroot) {
+      [=, this, &ctx](auto &cmroot) {
         return collection_manager->create(
           cmroot,
           *ctx.transaction,
           cid,
           bits
-        ).si_then([=, &ctx, &cmroot] {
+        ).si_then([this, &ctx, &cmroot] {
           if (cmroot.must_update()) {
             transaction_manager->write_collection_root(
               *ctx.transaction,
@@ -1790,15 +1790,15 @@ SeaStore::tm_ret SeaStore::_remove_collection(
 {
   return transaction_manager->read_collection_root(
     *ctx.transaction
-  ).si_then([=, &ctx](auto _cmroot) {
+  ).si_then([=, this, &ctx](auto _cmroot) {
     return seastar::do_with(
       _cmroot,
-      [=, &ctx](auto &cmroot) {
+      [=, this, &ctx](auto &cmroot) {
         return collection_manager->remove(
           cmroot,
           *ctx.transaction,
           cid
-        ).si_then([=, &ctx, &cmroot] {
+        ).si_then([this, &ctx, &cmroot] {
           // param here denotes whether it already existed, probably error
           if (cmroot.must_update()) {
             transaction_manager->write_collection_root(
