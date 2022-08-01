@@ -251,7 +251,7 @@ public:
 			  std::string& metadata_key, optional_yield y) override;
   virtual const RGWSyncModuleInstanceRef& get_sync_module() override;
   virtual std::string get_host_id() override { return next->get_host_id(); }
-  virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
+  virtual std::unique_ptr<LuaManager> get_lua_manager() override;
   virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					    std::string tenant,
 					    std::string path="",
@@ -858,18 +858,20 @@ public:
                        optional_yield y) override;
 };
 
-class FilterLuaScriptManager : public LuaScriptManager {
+class FilterLuaManager : public LuaManager {
 protected:
-  std::unique_ptr<LuaScriptManager> next;
+  std::unique_ptr<LuaManager> next;
 
 public:
-  FilterLuaScriptManager(std::unique_ptr<LuaScriptManager> _next) : next(std::move(_next)) {}
-  virtual ~FilterLuaScriptManager() = default;
+  FilterLuaManager(std::unique_ptr<LuaManager> _next) : next(std::move(_next)) {}
+  virtual ~FilterLuaManager() = default;
 
-  virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
-  virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
-  virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
+  virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
+  virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
+  virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
 };
-
 
 } } // namespace rgw::sal
