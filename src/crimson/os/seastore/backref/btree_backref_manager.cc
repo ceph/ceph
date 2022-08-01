@@ -285,36 +285,100 @@ BtreeBackrefManager::scan_mapped_space(
   BtreeBackrefManager::scan_mapped_space_func_t &&f)
 {
   LOG_PREFIX(BtreeBackrefManager::scan_mapped_space);
-  DEBUGT("start", t);
+  DEBUGT("scan backref tree", t);
   auto c = get_context(t);
   return seastar::do_with(
     std::move(f),
-    [this, c](auto &visitor) {
+    [this, c, FNAME](auto &scan_visitor)
+  {
+    auto block_size = cache.get_block_size();
+    BackrefBtree::mapped_space_visitor_t f =
+      [&scan_visitor, block_size, FNAME, c](
+        paddr_t paddr, extent_len_t len,
+        depth_t depth, extent_types_t type) {
+      TRACET("tree node {}~{} {}, depth={} used",
+             c.trans, paddr, len, type, depth);
+      ceph_assert(paddr.is_absolute());
+      ceph_assert(len > 0 && len % block_size == 0);
+      ceph_assert(depth >= 1);
+      ceph_assert(is_backref_node(type));
+      return scan_visitor(paddr, len, type, L_ADDR_NULL);
+    };
+    return seastar::do_with(
+      std::move(f),
+      [this, c, &scan_visitor, block_size, FNAME](auto &tree_visitor)
+    {
       return with_btree<BackrefBtree>(
-	cache,
-	c,
-	[c, &visitor](auto &btree) {
-	  return BackrefBtree::iterate_repeat(
-	    c,
-	    btree.lower_bound(
-	      c,
-	      paddr_t::make_seg_paddr(
-		segment_id_t{0, 0}, 0),
-	      &visitor),
-	    [&visitor](auto &pos) {
-	      if (pos.is_end()) {
-		return BackrefBtree::iterate_repeat_ret_inner(
-		  interruptible::ready_future_marker{},
-		  seastar::stop_iteration::yes);
-	      }
-	      visitor(pos.get_key(), pos.get_val().len, 0, pos.get_val().type);
-	      return BackrefBtree::iterate_repeat_ret_inner(
-		interruptible::ready_future_marker{},
-		seastar::stop_iteration::no);
-	    },
-	    &visitor);
-	});
+        cache, c,
+        [c, &scan_visitor, &tree_visitor, block_size, FNAME](auto &btree)
+      {
+        return BackrefBtree::iterate_repeat(
+          c,
+          btree.lower_bound(
+            c,
+            paddr_t::make_seg_paddr(segment_id_t{0, 0}, 0),
+            &tree_visitor),
+          [c, &scan_visitor, block_size, FNAME](auto &pos) {
+            if (pos.is_end()) {
+              return BackrefBtree::iterate_repeat_ret_inner(
+                interruptible::ready_future_marker{},
+                seastar::stop_iteration::yes);
+            }
+            TRACET("tree value {}~{} {}~{} {} used",
+                   c.trans,
+                   pos.get_key(),
+                   pos.get_val().len,
+                   pos.get_val().laddr,
+                   pos.get_val().len,
+                   pos.get_val().type);
+            ceph_assert(pos.get_key().is_absolute());
+            ceph_assert(pos.get_val().len > 0 &&
+                        pos.get_val().len % block_size == 0);
+            ceph_assert(!is_backref_node(pos.get_val().type));
+            ceph_assert(pos.get_val().laddr != L_ADDR_NULL);
+            scan_visitor(
+                pos.get_key(),
+                pos.get_val().len,
+                pos.get_val().type,
+                pos.get_val().laddr);
+            return BackrefBtree::iterate_repeat_ret_inner(
+              interruptible::ready_future_marker{},
+              seastar::stop_iteration::no);
+          },
+          &tree_visitor
+        );
+      });
+    }).si_then([this, &scan_visitor, c, FNAME, block_size] {
+      DEBUGT("scan backref cache", c.trans);
+      auto &backrefs = cache.get_backrefs();
+      for (auto &backref : backrefs) {
+        if (backref.laddr == L_ADDR_NULL) {
+          TRACET("backref entry {}~{} {} free",
+                 c.trans,
+                 backref.paddr,
+                 backref.len,
+                 backref.type);
+        } else {
+          TRACET("backref entry {}~{} {}~{} {} used",
+                 c.trans,
+                 backref.paddr,
+                 backref.len,
+                 backref.laddr,
+                 backref.len,
+                 backref.type);
+        }
+        ceph_assert(backref.paddr.is_absolute());
+        ceph_assert(backref.len > 0 &&
+                    backref.len % block_size == 0);
+        ceph_assert(!is_backref_node(backref.type));
+        scan_visitor(
+            backref.paddr,
+            backref.len,
+            backref.type,
+            backref.laddr);
+      }
     });
+  });
 }
 
 BtreeBackrefManager::base_iertr::future<> _init_cached_extent(

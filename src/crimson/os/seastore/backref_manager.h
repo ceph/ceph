@@ -133,13 +133,14 @@ public:
     paddr_t offset) = 0;
 
   /**
-   * scan all extents, including backref extents, logical extents and lba extents,
+   * scan all extents in both tree and cache,
+   * including backref extents, logical extents and lba extents,
    * visit them with scan_mapped_space_func_t
    */
   using scan_mapped_space_iertr = base_iertr;
   using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
   using scan_mapped_space_func_t = std::function<
-    void(paddr_t, extent_len_t, depth_t, extent_types_t)>;
+    void(paddr_t, extent_len_t, extent_types_t, laddr_t)>;
   virtual scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) = 0;
