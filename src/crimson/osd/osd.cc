@@ -1036,8 +1036,11 @@ seastar::future<> OSD::handle_rep_op(crimson::net::ConnectionRef conn,
 seastar::future<> OSD::handle_rep_op_reply(crimson::net::ConnectionRef conn,
 					   Ref<MOSDRepOpReply> m)
 {
+  // XXX: there is no sequence point between evaluation of arguments on
+  // function call. If so, we can't do `m->do(), [m=std::move(m)] {}`.
+  const auto* m_no_seq_point_workarounder = m.get();
   return pg_shard_manager.with_pg(
-    m->get_spg(),
+    m_no_seq_point_workarounder->get_spg(),
     [conn=std::move(conn), m=std::move(m)](auto &&pg) {
       if (pg) {
 	m->finish_decode();
