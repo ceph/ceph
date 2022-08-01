@@ -1606,10 +1606,8 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
       INTR(tree->get_stats, *t).unsafe_get();
     }
     if constexpr (TEST_SEASTORE) {
-      logger().info("seastore replay insert begin");
       restart();
       tree->reload(NodeExtentManager::create_seastore(*tm));
-      logger().info("seastore replay insert end");
     }
     {
       // Note: create_weak_transaction() can also work, but too slow.
@@ -1630,10 +1628,8 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
       INTR(tree->get_stats, *t).unsafe_get();
     }
     if constexpr (TEST_SEASTORE) {
-      logger().info("seastore replay erase-1 begin");
       restart();
       tree->reload(NodeExtentManager::create_seastore(*tm));
-      logger().info("seastore replay erase-1 end");
     }
     {
       auto t = create_read_transaction();
@@ -1653,10 +1649,8 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
       INTR(tree->get_stats, *t).unsafe_get();
     }
     if constexpr (TEST_SEASTORE) {
-      logger().info("seastore replay erase-2 begin");
       restart();
       tree->reload(NodeExtentManager::create_seastore(*tm));
-      logger().info("seastore replay erase-2 end");
     }
     {
       auto t = create_read_transaction();

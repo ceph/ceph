@@ -95,7 +95,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	const auto &e,
 	const journal_seq_t &dirty_tail,
 	const journal_seq_t &alloc_tail,
-	auto modify_time)
+	sea_time_point modify_time)
       {
 	auto start_seq = offsets.write_result.start_seq;
 	return cache->replay_delta(

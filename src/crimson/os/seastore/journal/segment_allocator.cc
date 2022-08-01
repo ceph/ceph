@@ -86,8 +86,7 @@ SegmentAllocator::do_open(bool is_mkfs)
       type,
       category,
       gen};
-    INFO("{} writing header to new segment ... -- {}",
-         print_name, header);
+    INFO("{} writing header {}", print_name, header);
 
     auto header_length = get_block_size();
     bufferlist bl;
@@ -141,7 +140,7 @@ SegmentAllocator::open(bool is_mkfs)
   oss << fmt::format("{}_G{}", category, gen);
   print_name = oss.str();
 
-  INFO("{}", print_name);
+  DEBUG("{}", print_name);
   return do_open(is_mkfs);
 }
 
@@ -199,7 +198,7 @@ SegmentAllocator::close()
   return [this] {
     LOG_PREFIX(SegmentAllocator::close);
     if (current_segment) {
-      INFO("{} close current segment", print_name);
+      DEBUG("{} close current segment", print_name);
       return close_segment();
     } else {
       INFO("{} no current segment", print_name);
@@ -233,12 +232,10 @@ SegmentAllocator::close_segment()
     close_seg_info.num_extents};
   ceph::bufferlist bl;
   encode(tail, bl);
-  INFO("{} close segment id={}, seq={}, written_to={}, nonce={}",
+  INFO("{} close segment {}, written_to={}",
        print_name,
-       close_segment_id,
-       close_seg_info.seq,
-       written_to,
-       current_segment_nonce);
+       tail,
+       written_to);
 
   bufferptr bp(ceph::buffer::create_page_aligned(get_block_size()));
   bp.zero();
