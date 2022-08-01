@@ -6329,7 +6329,7 @@ def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, Set[str]]]:
         net = [n for n in r.keys()
                if ipaddress.ip_address(ip) in ipaddress.ip_network(n)]
         if net and iface in r[net[0]]:
-            assert(iface)
+            assert iface
             r[net[0]][iface].add(ip)
 
     return r

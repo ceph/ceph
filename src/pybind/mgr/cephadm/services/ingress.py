@@ -99,7 +99,7 @@ class IngressService(CephService):
             for rank in range(num_ranks):
                 if rank in by_rank:
                     d = by_rank[rank]
-                    assert(d.ports)
+                    assert d.ports
                     servers.append({
                         'name': f"{spec.backend_service}.{rank}",
                         'ip': d.ip or resolve_ip(self.mgr.inventory.get_addr(str(d.hostname))),
