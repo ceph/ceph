@@ -561,38 +561,30 @@ static int remove_expired_obj(
   del_op->params.unmod_since = meta.mtime;
   del_op->params.marker_version_id = version_id;
 
-  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(oc.store);
-  if (rados) {
-    // notification supported only for RADOS store for now
-    notify
-      = store->get_notification(dpp, obj.get(), nullptr, event_type,
-			      bucket.get(), lc_id,
-			      const_cast<std::string&>(oc.bucket->get_tenant()),
-			      lc_req_id, null_yield);
+  // notification supported only for RADOS store for now
+  notify = store->get_notification(dpp, obj.get(), nullptr, event_type,
+				   bucket.get(), lc_id,
+				   const_cast<std::string&>(oc.bucket->get_tenant()),
+				   lc_req_id, null_yield);
 
-    /* can eliminate cast when reservation is lifted into Notification */
-    auto notify_res = static_cast<rgw::sal::RadosNotification*>(notify.get())->get_reservation();
-
-    ret = rgw::notify::publish_reserve(dpp, event_type, notify_res, nullptr);
-    if ( ret < 0) {
-      ldpp_dout(dpp, 1)
-        << "ERROR: notify reservation failed, deferring delete of object k="
-        << o.key
-        << dendl;
-      return ret;
-    }
+  ret = notify->publish_reserve(dpp, nullptr);
+  if ( ret < 0) {
+    ldpp_dout(dpp, 1)
+      << "ERROR: notify reservation failed, deferring delete of object k="
+      << o.key
+      << dendl;
+    return ret;
   }
   ret =  del_op->delete_obj(dpp, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
       "ERROR: publishing notification failed, with error: " << ret << dendl;
-  } else if (rados) {
+  } else {
     // send request to notification manager
-    auto notify_res = static_cast<rgw::sal::RadosNotification*>(notify.get())->get_reservation();
-    (void) rgw::notify::publish_commit(
-      obj.get(), obj->get_obj_size(), ceph::real_clock::now(),
-      obj->get_attrs()[RGW_ATTR_ETAG].to_str(), version_id, event_type,
-      notify_res, dpp);
+    (void) notify->publish_commit(dpp, obj->get_obj_size(),
+				  ceph::real_clock::now(),
+				  obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
+				  version_id);
   }
 
   return ret;
