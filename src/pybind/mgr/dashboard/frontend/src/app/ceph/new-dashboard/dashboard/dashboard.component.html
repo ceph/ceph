@@ -22,7 +22,14 @@
     <cd-card title="Capacity"
              i18n-title
              class="col-sm-3 px-3">
-             Text
+      <ng-container *ngIf="{osdSettings: osdSettings$ | async, capacity: capacity$ | async} as values">
+        <ng-container *ngIf="values.osdSettings && values.capacity">
+          <cd-dashboard-pie [data]="{max: values.capacity.total_bytes, current: values.capacity.total_used_raw_bytes}"
+                            [lowThreshold]="values.osdSettings.nearfull_ratio"
+                            [highThreshold]="values.osdSettings.full_ratio">
+          </cd-dashboard-pie>
+        </ng-container>
+      </ng-container>
     </cd-card>
   </div>
 
