@@ -1087,7 +1087,7 @@ int PgScrubber::build_replica_map_chunk()
       auto required_fixes = m_be->replica_clean_meta(replica_scrubmap,
 						     m_end.is_max(),
 						     m_start,
-						     *this);
+						     get_snap_mapper_accessor());
       // actuate snap-mapper changes:
       apply_snap_mapper_fixes(required_fixes);
 
@@ -1261,14 +1261,19 @@ void PgScrubber::apply_snap_mapper_fixes(
 
   for (auto& [fix_op, hoid, snaps, bogus_snaps] : fix_list) {
 
-    if (fix_op == snap_mapper_op_t::update) {
+    if (fix_op != snap_mapper_op_t::add) {
 
       // must remove the existing snap-set before inserting the correct one
       if (auto r = m_pg->snap_mapper.remove_oid(hoid, &t_drv); r < 0) {
 
 	derr << __func__ << ": remove_oid returned " << cpp_strerror(r)
 	     << dendl;
-	ceph_abort();
+	if (fix_op == snap_mapper_op_t::update) {
+	  // for inconsistent snapmapper objects (i.e. for
+	  // snap_mapper_op_t::inconsistent), we don't fret if we can't remove
+	  // the old entries
+	  ceph_abort();
+	}
       }
 
       m_osds->clog->error() << fmt::format(
@@ -1293,7 +1298,6 @@ void PgScrubber::apply_snap_mapper_fixes(
     }
 
     // now - insert the correct snap-set
-
     m_pg->snap_mapper.add_oid(hoid, snaps, &t_drv);
   }
 
@@ -1325,7 +1329,8 @@ void PgScrubber::maps_compare_n_cleanup()
 {
   m_pg->add_objects_scrubbed_count(m_be->get_primary_scrubmap().objects.size());
 
-  auto required_fixes = m_be->scrub_compare_maps(m_end.is_max(), *this);
+  auto required_fixes =
+    m_be->scrub_compare_maps(m_end.is_max(), get_snap_mapper_accessor());
   if (!required_fixes.inconsistent_objs.empty()) {
     if (state_test(PG_STATE_REPAIR)) {
       dout(10) << __func__ << ": discarding scrub results (repairing)" << dendl;
