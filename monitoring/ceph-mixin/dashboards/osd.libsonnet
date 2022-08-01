@@ -211,7 +211,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       )
       .addTarget(
         $.addTargetSchema(
-          'absent(ceph_bluefs_wal_total_bytes{%(matchers)s)} * count(ceph_osd_metadata{%(matchers)s})' % $.matchers(), 'filestore', 'time_series', 2
+          'absent(ceph_bluefs_wal_total_bytes{%(matchers)s}) * count(ceph_osd_metadata{%(matchers)s})' % $.matchers(), 'filestore', 'time_series', 2
         )
       ) + { gridPos: { x: 4, y: 8, w: 4, h: 8 } },
       $.simplePieChart(
