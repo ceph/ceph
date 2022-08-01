@@ -5,7 +5,6 @@
 
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
@@ -137,8 +136,7 @@ public:
    * scan all extents, including backref extents, logical extents and lba extents,
    * visit them with scan_mapped_space_func_t
    */
-  using scan_mapped_space_iertr = base_iertr::extend_ertr<
-    SegmentManager::read_ertr>;
+  using scan_mapped_space_iertr = base_iertr;
   using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
   using scan_mapped_space_func_t = std::function<
     void(paddr_t, extent_len_t, depth_t, extent_types_t)>;
