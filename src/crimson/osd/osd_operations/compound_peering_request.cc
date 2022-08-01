@@ -60,13 +60,13 @@ public:
   }
 };
 
-std::vector<crimson::OperationRef> handle_pg_create(
+std::vector<crimson::Operation::id_t> handle_pg_create(
   PGShardManager &pg_shard_manager,
   crimson::net::ConnectionRef conn,
   compound_state_ref state,
   Ref<MOSDPGCreate2> m)
 {
-  std::vector<crimson::OperationRef> ret;
+  std::vector<crimson::Operation::id_t> ret;
   for (auto& [pgid, when] : m->pgs) {
     const auto &[created, created_stamp] = when;
     auto q = m->pg_extra.find(pgid);
@@ -85,7 +85,7 @@ std::vector<crimson::OperationRef> handle_pg_create(
         pgid, m->epoch,
         pi, history);
     } else {
-      auto op = pg_shard_manager.start_pg_operation<PeeringSubEvent>(
+      auto [op_id, fut] = pg_shard_manager.start_pg_operation<PeeringSubEvent>(
 	  state,
 	  conn,
 	  pg_shard_t(),
@@ -94,8 +94,8 @@ std::vector<crimson::OperationRef> handle_pg_create(
 	  m->epoch,
 	  NullEvt(),
 	  true,
-	  new PGCreateInfo(pgid, m->epoch, history, pi, true)).first;
-      ret.push_back(op);
+	  new PGCreateInfo(pgid, m->epoch, history, pi, true));
+      ret.push_back(op_id);
     }
   }
   return ret;

@@ -27,15 +27,15 @@ public:
   struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
     static constexpr const char * type_name = "CompoundOpBlocker";
 
-    std::vector<crimson::OperationRef> subops;
-    SubOpBlocker(std::vector<crimson::OperationRef> &&subops)
+    std::vector<crimson::Operation::id_t> subops;
+    SubOpBlocker(std::vector<crimson::Operation::id_t> &&subops)
       : subops(subops) {}
 
     virtual void dump_detail(Formatter *f) const {
       f->open_array_section("dependent_operations");
       {
         for (auto &i : subops) {
-          i->dump_brief(f);
+          f->dump_unsigned("op_id", i);
         }
       }
       f->close_section();
