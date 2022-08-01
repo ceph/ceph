@@ -2960,24 +2960,72 @@ int RadosZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
   return 0;
 }
 
-const rgw_zone_id& RadosZone::get_id()
+int RadosZoneGroup::get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone)
 {
-  return store->svc()->zone->zone_id();
+  RGWZone* rz = store->svc()->zone->find_zone(id);
+  if (!rz)
+    return -ENOENT;
+
+  Zone* z = new RadosZone(store, clone(), *rz);
+  zone->reset(z);
+  return 0;
+}
+
+int RadosZoneGroup::get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone)
+{
+  rgw_zone_id id;
+  int ret = store->svc()->zone->find_zone_id_by_name(name, &id);
+  if (ret < 0)
+    return ret;
+
+  RGWZone* rz = store->svc()->zone->find_zone(id.id);
+  if (!rz)
+    return -ENOENT;
+
+  Zone* z = new RadosZone(store, clone(), *rz);
+  zone->reset(z);
+  return 0;
+}
+
+std::unique_ptr<Zone> RadosZone::clone()
+{
+  if (local_zone)
+    return std::make_unique<RadosZone>(store, group->clone());
+
+  return std::make_unique<RadosZone>(store, group->clone(), rgw_zone);
+}
+
+const std::string& RadosZone::get_id()
+{
+  if (local_zone)
+    return store->svc()->zone->zone_id().id;
+
+  return rgw_zone.id;
 }
 
 const std::string& RadosZone::get_name() const
 {
-  return store->svc()->zone->zone_name();
+  if (local_zone)
+    return store->svc()->zone->zone_name();
+
+  return rgw_zone.name;
 }
 
 bool RadosZone::is_writeable()
 {
-  return store->svc()->zone->zone_is_writeable();
+  if (local_zone)
+    return store->svc()->zone->zone_is_writeable();
+
+  return !rgw_zone.read_only;
 }
 
 bool RadosZone::get_redirect_endpoint(std::string* endpoint)
 {
-  return store->svc()->zone->get_redirect_zone_endpoint(endpoint);
+  if (local_zone)
+    return store->svc()->zone->get_redirect_zone_endpoint(endpoint);
+
+  endpoint = &rgw_zone.redirect_zone;
+  return true;
 }
 
 bool RadosZone::has_zonegroup_api(const std::string& api) const
@@ -3007,7 +3055,10 @@ const std::string& RadosZone::get_realm_id()
 
 const std::string_view RadosZone::get_tier_type()
 {
-  return store->svc()->zone->get_zone().tier_type;
+  if (local_zone)
+    return store->svc()->zone->get_zone().tier_type;
+
+  return rgw_zone.id;
 }
 
 RadosLuaManager::RadosLuaManager(RadosStore* _s) : 

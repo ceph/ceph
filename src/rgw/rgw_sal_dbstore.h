@@ -289,6 +289,12 @@ protected:
 				   std::unique_ptr<PlacementTier>* tier) {
       return -1;
     }
+    virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) override {
+      return -1;
+    }
+    virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override {
+      return -1;
+    }
     virtual std::unique_ptr<ZoneGroup> clone() override {
       std::unique_ptr<RGWZoneGroup>zg = std::make_unique<RGWZoneGroup>(*group.get());
       return std::make_unique<DBZoneGroup>(store, std::move(zg));
@@ -303,7 +309,6 @@ protected:
       RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */  
       RGWZoneParams *zone_params{nullptr}; /* internal zone params, e.g., rados pools */
       RGWPeriod *current_period{nullptr};
-      rgw_zone_id cur_zone_id;
 
     public:
       DBZone(DBStore* _store) : store(_store) {
@@ -312,7 +317,6 @@ protected:
         zone_public_config = new RGWZone();
         zone_params = new RGWZoneParams();
         current_period = new RGWPeriod();
-        cur_zone_id = rgw_zone_id(zone_params->get_id());
 
         // XXX: only default and STANDARD supported for now
         RGWZonePlacementInfo info;
@@ -334,7 +338,7 @@ protected:
       }
       virtual ZoneGroup& get_zonegroup() override;
       const RGWZoneParams& get_rgw_params();
-      virtual const rgw_zone_id& get_id() override;
+      virtual const std::string& get_id() override;
       virtual const std::string& get_name() const override;
       virtual bool is_writeable() override;
       virtual bool get_redirect_endpoint(std::string* endpoint) override;
