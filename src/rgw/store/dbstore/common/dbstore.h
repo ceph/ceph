@@ -51,7 +51,7 @@ struct DBOpBucketInfo {
 
 struct DBOpObjectInfo {
   RGWAccessControlPolicy acls;
-  RGWObjState state;
+  RGWObjState state = {};
 
   /* Below are taken from rgw_bucket_dir_entry */
   RGWObjCategory category;
@@ -91,6 +91,10 @@ struct DBOpObjectInfo {
   std::string prefix;
   std::list<rgw_bucket_dir_entry> list_entries;
   /* XXX: Maybe use std::vector instead of std::list */
+
+  /* for versioned objects */
+  bool is_versioned;
+  uint64_t version_num = 0;
 };
 
 struct DBOpObjectDataInfo {
@@ -144,6 +148,7 @@ struct DBOpParams {
   DBOpInfo op;
 
   std::string objectdata_table;
+  std::string object_trigger;
   std::string object_view;
   std::string quota_table;
   std::string lc_head_table;
@@ -259,8 +264,8 @@ struct DBOpObjectPrepareInfo {
   static constexpr const char* fake_tag = ":fake_tag";
   static constexpr const char* shadow_obj = ":shadow_obj";
   static constexpr const char* has_data = ":has_data";
-  static constexpr const char* is_olh = ":is_ols";
-  static constexpr const char* olh_tag = ":olh_tag";
+  static constexpr const char* is_versioned = ":is_versioned";
+  static constexpr const char* version_num = ":version_num";
   static constexpr const char* pg_ver = ":pg_ver";
   static constexpr const char* zone_short_id = ":zone_short_id";
   static constexpr const char* obj_version = ":obj_version";
@@ -334,6 +339,7 @@ struct DBOpPrepareParams {
 
 
   std::string objectdata_table;
+  std::string object_trigger;
   std::string object_view;
   std::string quota_table;
   std::string lc_head_table;
@@ -369,6 +375,7 @@ class ObjectOp {
     std::shared_ptr<class GetObjectOp> GetObject;
     std::shared_ptr<class UpdateObjectOp> UpdateObject;
     std::shared_ptr<class ListBucketObjectsOp> ListBucketObjects;
+    std::shared_ptr<class ListVersionedObjectsOp> ListVersionedObjects;
     std::shared_ptr<class PutObjectDataOp> PutObjectData;
     std::shared_ptr<class UpdateObjectDataOp> UpdateObjectData;
     std::shared_ptr<class GetObjectDataOp> GetObjectData;
@@ -484,6 +491,15 @@ class DBOp {
       FOREIGN KEY (OwnerID) \
       REFERENCES '{}' (UserID) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
+    static constexpr std::string_view CreateObjectTableTriggerQ =
+      "CREATE TRIGGER IF NOT EXISTS '{}' \
+          AFTER INSERT ON '{}' \
+       BEGIN \
+          UPDATE '{}' \
+          SET VersionNum = (SELECT COALESCE(max(VersionNum), 0) from '{}' where ObjName = new.ObjName) + 1 \
+          where ObjName = new.ObjName and ObjInstance = new.ObjInstance; \
+       END;";
+
     static constexpr std::string_view CreateObjectTableQ =
       /* Corresponds to rgw::sal::Object
        *
@@ -542,8 +558,8 @@ class DBOp {
       FakeTag BOOL,   \
       ShadowObj   TEXT,   \
       HasData  BOOL,  \
-      IsOLH BOOL,  \
-      OLHTag    BLOB, \
+      IsVersioned BOOL,  \
+      VersionNum  INTEGER, \
       PGVer   INTEGER, \
       ZoneShortID  INTEGER,  \
       ObjVersion   INTEGER,    \
@@ -655,6 +671,12 @@ class DBOp {
         return fmt::format(CreateObjectTableQ,
             params->object_table,
             params->bucket_table);
+      if (!type.compare("ObjectTrigger"))
+        return fmt::format(CreateObjectTableTriggerQ,
+            params->object_trigger,
+            params->object_table,
+            params->object_table,
+            params->object_table);
       if (!type.compare("ObjectData"))
         return fmt::format(CreateObjectDataTableQ,
             params->objectdata_table,
@@ -784,7 +806,7 @@ class GetUserOp: virtual public DBOp {
                                   System, PlacementName, PlacementStorageClass, PlacementTags, \
                                   BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                                   UserAttrs, UserVersion, UserVersionTag \
-                                  from '{}' where Tenant = {} and UserID = {} and NS = {}";
+                                  from '{}' where UserID = {}";
 
   public:
     virtual ~GetUserOp() {}
@@ -800,9 +822,7 @@ class GetUserOp: virtual public DBOp {
       } else if (params.op.query_str == "user_id") {
         return fmt::format(QueryByUserID,
             params.user_table,
-            params.op.user.tenant,
-            params.op.user.user_id,
-            params.op.user.ns);
+            params.op.user.user_id);
       } else {
         return fmt::format(Query, params.user_table,
             params.op.user.user_id);
@@ -985,13 +1005,15 @@ class PutObjectOp: virtual public DBOp {
        Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
        StorageClass, Appendable, ContentType, IndexHashSource, ObjSize, \
        AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag, \
-       ShadowObj, HasData, IsOLH, OLHTag, PGVer, ZoneShortID, \
+       ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID, \
        ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize, \
        ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
        TailPlacementRuleName, TailPlacementStorageClass, \
-       ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, HeadData )     \
+       ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, \
+       HeadData)     \
       VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-          {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
+          {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
+          {}, {}, {}, \
           {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
 
   public:
@@ -1010,7 +1032,8 @@ class PutObjectOp: virtual public DBOp {
           params.op.obj.accounted_size, params.op.obj.mtime,
           params.op.obj.epoch, params.op.obj.obj_tag, params.op.obj.tail_tag,
           params.op.obj.write_tag, params.op.obj.fake_tag, params.op.obj.shadow_obj,
-          params.op.obj.has_data, params.op.obj.is_olh, params.op.obj.olh_tag,
+          params.op.obj.has_data, params.op.obj.is_versioned,
+          params.op.obj.version_num,
           params.op.obj.pg_ver, params.op.obj.zone_short_id,
           params.op.obj.obj_version, params.op.obj.obj_version_tag,
           params.op.obj.obj_attrs, params.op.obj.head_size,
@@ -1022,7 +1045,8 @@ class PutObjectOp: virtual public DBOp {
           params.op.obj.tail_placement_storage_class,
           params.op.obj.manifest_part_objs,
           params.op.obj.manifest_part_rules, params.op.obj.omap,
-          params.op.obj.is_multipart, params.op.obj.mp_parts, params.op.obj.head_data);
+          params.op.obj.is_multipart, params.op.obj.mp_parts,
+          params.op.obj.head_data);
     }
 };
 
@@ -1050,11 +1074,12 @@ class GetObjectOp: virtual public DBOp {
       Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
       StorageClass, Appendable, ContentType, IndexHashSource, ObjSize, \
       AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag, \
-      ShadowObj, HasData, IsOLH, OLHTag, PGVer, ZoneShortID, \
+      ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID, \
       ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize, \
       ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
       TailPlacementRuleName, TailPlacementStorageClass, \
-      ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, HeadData from '{}' \
+      ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, \
+      HeadData from '{}' \
       where BucketName = {} and ObjName = {} and ObjInstance = {}";
 
   public:
@@ -1079,12 +1104,12 @@ class ListBucketObjectsOp: virtual public DBOp {
       Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
       StorageClass, Appendable, ContentType, IndexHashSource, ObjSize, \
       AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag, \
-      ShadowObj, HasData, IsOLH, OLHTag, PGVer, ZoneShortID, \
+      ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID, \
       ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize, \
       ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
       TailPlacementRuleName, TailPlacementStorageClass, \
       ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, HeadData from '{}' \
-      where BucketName = {} and ObjName >= {} and ObjName LIKE {} ORDER BY ObjName ASC LIMIT {}";
+      where BucketName = {} and ObjName >= {} and ObjName LIKE {} ORDER BY ObjName ASC, VersionNum DESC LIMIT {}";
   public:
     virtual ~ListBucketObjectsOp() {}
 
@@ -1095,6 +1120,37 @@ class ListBucketObjectsOp: virtual public DBOp {
           params.op.bucket.bucket_name,
           params.op.obj.min_marker,
           params.op.obj.prefix,
+          params.op.list_max_count);
+    }
+};
+
+#define MAX_VERSIONED_OBJECTS 20
+class ListVersionedObjectsOp: virtual public DBOp {
+  private:
+    // once we have stats also stored, may have to update this query to join
+    // these two tables.
+    static constexpr std::string_view Query =
+      "SELECT  \
+      ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
+      Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
+      StorageClass, Appendable, ContentType, IndexHashSource, ObjSize, \
+      AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag, \
+      ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID, \
+      ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize, \
+      ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
+      TailPlacementRuleName, TailPlacementStorageClass, \
+      ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, \
+      HeadData from '{}' \
+      where BucketName = {} and ObjName = {} ORDER BY VersionNum DESC LIMIT {}";
+  public:
+    virtual ~ListVersionedObjectsOp() {}
+
+    static std::string Schema(DBOpPrepareParams &params) {
+      /* XXX: Include obj_id, delim */
+      return fmt::format(Query,
+          params.object_table,
+          params.op.bucket.bucket_name,
+          params.op.obj.obj_name,
           params.op.list_max_count);
     }
 };
@@ -1118,7 +1174,7 @@ class UpdateObjectOp: virtual public DBOp {
        StorageClass = {}, Appendable = {}, ContentType = {}, \
        IndexHashSource = {}, ObjSize = {}, AccountedSize = {}, Mtime = {}, \
        Epoch = {}, ObjTag = {}, TailTag = {}, WriteTag = {}, FakeTag = {}, \
-       ShadowObj = {}, HasData = {}, IsOLH = {}, OLHTag = {}, PGVer = {}, \
+       ShadowObj = {}, HasData = {}, IsVersioned = {}, VersionNum = {}, PGVer = {}, \
        ZoneShortID = {}, ObjVersion = {}, ObjVersionTag = {}, ObjAttrs = {}, \
        HeadSize = {}, MaxHeadSize = {}, ObjID = {}, TailInstance = {}, \
        HeadPlacementRuleName = {}, HeadPlacementRuleStorageClass = {}, \
@@ -1167,7 +1223,7 @@ class UpdateObjectOp: virtual public DBOp {
           params.op.obj.accounted_size, params.op.obj.mtime,
           params.op.obj.epoch, params.op.obj.obj_tag, params.op.obj.tail_tag,
           params.op.obj.write_tag, params.op.obj.fake_tag, params.op.obj.shadow_obj,
-          params.op.obj.has_data, params.op.obj.is_olh, params.op.obj.olh_tag,
+          params.op.obj.has_data, params.op.obj.is_versioned, params.op.obj.version_num,
           params.op.obj.pg_ver, params.op.obj.zone_short_id,
           params.op.obj.obj_version, params.op.obj.obj_version_tag,
           params.op.obj.obj_attrs, params.op.obj.head_size,
@@ -1179,7 +1235,8 @@ class UpdateObjectOp: virtual public DBOp {
           params.op.obj.tail_placement_storage_class,
           params.op.obj.manifest_part_objs,
           params.op.obj.manifest_part_rules, params.op.obj.omap,
-          params.op.obj.is_multipart, params.op.obj.mp_parts, params.op.obj.head_data,
+          params.op.obj.is_multipart, params.op.obj.mp_parts,
+          params.op.obj.head_data, 
           params.op.obj.obj_name, params.op.obj.obj_instance,
           params.op.bucket.bucket_name);
       }
@@ -1233,6 +1290,7 @@ class UpdateObjectDataOp: virtual public DBOp {
           params.op.obj.obj_id);
     }
 };
+
 class GetObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
@@ -1484,6 +1542,8 @@ class DB {
       return db_name+"_"+bucket+"_objectdata_table"; }
     const std::string getObjectView(std::string bucket) {
       return db_name+"_"+bucket+"_object_view"; }
+    const std::string getObjectTrigger(std::string bucket) {
+      return db_name+"_"+bucket+"_object_trigger"; }
 
     std::map<std::string, class ObjectOp*> getObjectMap();
 
@@ -1887,19 +1947,19 @@ class DB {
         explicit Delete(DB::Object *_target) : target(_target) {}
 
         int delete_obj(const DoutPrefixProvider *dpp);
+        int delete_obj_impl(const DoutPrefixProvider *dpp, DBOpParams& del_params);
+        int create_dm(const DoutPrefixProvider *dpp, DBOpParams& del_params);
       };
 
       /* XXX: the parameters may be subject to change. All we need is bucket name
        * & obj name,instance - keys */
+      int get_object_impl(const DoutPrefixProvider *dpp, DBOpParams& params);
       int get_obj_state(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
                         const rgw_obj& obj,
                         bool follow_olh, RGWObjState **state);
-      int get_olh_target_state(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
-          RGWObjState* olh_state, RGWObjState** target);
-      int follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState *state,
-          const rgw_obj& olh_obj, rgw_obj *target);
-
       int get_state(const DoutPrefixProvider *dpp, RGWObjState **pstate, bool follow_olh);
+      int list_versioned_objects(const DoutPrefixProvider *dpp,
+                                 std::list<rgw_bucket_dir_entry>& list_entries);
 
       DB *get_store() { return store; }
       rgw_obj& get_obj() { return obj; }

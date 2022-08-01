@@ -51,6 +51,7 @@ class SQLiteDB : public DB, virtual public DBOp {
     int createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectView(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createObjectTableTrigger(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     void populate_object_params(const DoutPrefixProvider *dpp,
                                 struct DBOpPrepareParams& p_params,
@@ -319,6 +320,24 @@ class SQLListBucketObjects : public SQLiteDB, public ListBucketObjectsOp {
     SQLListBucketObjects(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLListBucketObjects() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListVersionedObjects : public SQLiteDB, public ListVersionedObjectsOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLListVersionedObjects(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLListVersionedObjects(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+
+    ~SQLListVersionedObjects() {
       if (stmt)
         sqlite3_finalize(stmt);
     }
