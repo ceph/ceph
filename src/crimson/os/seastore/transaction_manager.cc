@@ -110,72 +110,67 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     return journal->open_for_mount();
   }).safe_then([this, FNAME](auto start_seq) {
     async_cleaner->set_journal_head(start_seq);
-    return seastar::do_with(
-      create_weak_transaction(
-        Transaction::src_t::READ, "mount"),
-      [this, FNAME](auto &tref) {
-	return with_trans_intr(
-	  *tref,
-	  [this, FNAME](auto &t) {
-	    return cache->init_cached_extents(t, [this](auto &t, auto &e) {
-	      if (is_backref_node(e->get_type()))
-		return backref_manager->init_cached_extent(t, e);
-	      else
-		return lba_manager->init_cached_extent(t, e);
-	    }).si_then([this, FNAME, &t] {
-	      assert(async_cleaner->debug_check_space(
-		       *async_cleaner->get_empty_space_tracker()));
-	      return backref_manager->scan_mapped_space(
-		t,
-		[this, FNAME, &t](
-		  paddr_t addr,
-		  extent_len_t len,
-		  depth_t depth,
-		  extent_types_t type)
-		{
-		  TRACET(
-		    "marking {}~{} used",
-		    t,
-		    addr,
-		    len);
-		  async_cleaner->mark_space_used(
-		    addr,
-		    len ,
-		    /* init_scan = */ true);
-		  if (is_backref_node(type)) {
-		    ceph_assert(depth);
-		    backref_manager->cache_new_backref_extent(addr, type);
-		    cache->update_tree_extents_num(type, 1);
-		    return seastar::now();
-		  } else {
-		    ceph_assert(!depth);
-		    cache->update_tree_extents_num(type, 1);
-		    return seastar::now();
-		  }
-		}).si_then([this, &t] {
-		  LOG_PREFIX(TransactionManager::mount);
-		  auto &backrefs = backref_manager->get_cached_backrefs();
-		  DEBUGT("scan backref cache", t);
-		  for (auto &backref : backrefs) {
-		    if (backref.laddr == L_ADDR_NULL) {
-		      async_cleaner->mark_space_free(
-			backref.paddr,
-			backref.len,
-			true);
-		      cache->update_tree_extents_num(backref.type, -1);
-		    } else {
-		      async_cleaner->mark_space_used(
-			backref.paddr,
-			backref.len,
-			true);
-		      cache->update_tree_extents_num(backref.type, 1);
-		    }
-		  }
-		  return seastar::now();
-		});
-	    });
-	  });
+    return with_transaction_weak(
+      "mount",
+      [this, FNAME](auto &t)
+    {
+      return cache->init_cached_extents(t, [this](auto &t, auto &e) {
+        if (is_backref_node(e->get_type())) {
+          return backref_manager->init_cached_extent(t, e);
+        } else {
+          return lba_manager->init_cached_extent(t, e);
+        }
+      }).si_then([this, FNAME, &t] {
+        assert(async_cleaner->debug_check_space(
+                 *async_cleaner->get_empty_space_tracker()));
+        return backref_manager->scan_mapped_space(
+          t,
+          [this, FNAME, &t](
+            paddr_t addr,
+            extent_len_t len,
+            depth_t depth,
+            extent_types_t type) {
+          TRACET(
+            "marking {}~{} used",
+            t,
+            addr,
+            len);
+          async_cleaner->mark_space_used(
+            addr,
+            len ,
+            /* init_scan = */ true);
+          if (is_backref_node(type)) {
+            ceph_assert(depth);
+            backref_manager->cache_new_backref_extent(addr, type);
+            cache->update_tree_extents_num(type, 1);
+            return seastar::now();
+          } else {
+            ceph_assert(!depth);
+            cache->update_tree_extents_num(type, 1);
+            return seastar::now();
+          }
+        });
+      }).si_then([this, FNAME, &t] {
+        auto &backrefs = backref_manager->get_cached_backrefs();
+        DEBUGT("scan backref cache", t);
+        for (auto &backref : backrefs) {
+          if (backref.laddr == L_ADDR_NULL) {
+            async_cleaner->mark_space_free(
+              backref.paddr,
+              backref.len,
+              true);
+            cache->update_tree_extents_num(backref.type, -1);
+          } else {
+            async_cleaner->mark_space_used(
+              backref.paddr,
+              backref.len,
+              true);
+            cache->update_tree_extents_num(backref.type, 1);
+          }
+        }
+        return seastar::now();
       });
+    });
   }).safe_then([this] {
     return epm->open();
   }).safe_then([FNAME, this] {
@@ -186,7 +181,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     crimson::ct_error::all_same_way([] {
       ceph_assert(0 == "unhandled error");
       return mount_ertr::now();
-    }));
+    })
+  );
 }
 
 TransactionManager::close_ertr::future<> TransactionManager::close() {
