@@ -718,6 +718,15 @@ Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 %description -n cephfs-mirror
 Daemon for mirroring CephFS snapshots between Ceph clusters.
 
+%package -n ceph-exporter
+Summary: Daemon for exposing perf counters as Prometheus metrics
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
+%description -n ceph-exporter
+Daemon for exposing perf counters as Prometheus metrics
+
 %package -n rbd-fuse
 Summary:	Ceph fuse-based client
 %if 0%{?suse_version}
@@ -1970,6 +1979,9 @@ if [ $1 -ge 1 ] ; then
     /usr/bin/systemctl try-restart cephfs-mirror@\*.service > /dev/null 2>&1 || :
   fi
 fi
+
+%files -n ceph-exporter
+%{_bindir}/ceph-exporter
 
 %files -n rbd-fuse
 %{_bindir}/rbd-fuse
