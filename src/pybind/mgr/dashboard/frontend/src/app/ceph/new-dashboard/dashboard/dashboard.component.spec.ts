@@ -1,13 +1,18 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { BehaviorSubject, of } from 'rxjs';
 
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { CssHelper } from '~/app/shared/classes/css-helper';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { CardComponent } from '../card/card.component';
+import { DashboardPieComponent } from '../dashboard-pie/dashboard-pie.component';
 import { DashboardComponent } from './dashboard.component';
 
 export class SummaryServiceMock {
@@ -47,9 +52,14 @@ describe('CardComponent', () => {
   };
 
   configureTestBed({
-    imports: [HttpClientTestingModule],
-    declarations: [DashboardComponent, CardComponent],
-    providers: [{ provide: SummaryService, useClass: SummaryServiceMock }]
+    imports: [RouterTestingModule, HttpClientTestingModule],
+    declarations: [DashboardComponent, CardComponent, DashboardPieComponent],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [
+      CssHelper,
+      DimlessBinaryPipe,
+      { provide: SummaryService, useClass: SummaryServiceMock }
+    ]
   });
 
   beforeEach(() => {

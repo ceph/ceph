@@ -24,4 +24,8 @@ export class ClusterService {
       { headers: { Accept: 'application/vnd.ceph.api.v0.1+json' } }
     );
   }
+
+  getCapacity() {
+    return this.http.get(`${this.baseURL}/capacity`, {});
+  }
 }
