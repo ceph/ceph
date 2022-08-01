@@ -310,7 +310,8 @@ private:
 class Operation : public boost::intrusive_ref_counter<
   Operation, boost::thread_unsafe_counter> {
  public:
-  uint64_t get_id() const {
+  using id_t = uint64_t;
+  id_t get_id() const {
     return id;
   }
 
@@ -327,8 +328,8 @@ class Operation : public boost::intrusive_ref_counter<
 
   registry_hook_t registry_hook;
 
-  uint64_t id = 0;
-  void set_id(uint64_t in_id) {
+  id_t id = 0;
+  void set_id(id_t in_id) {
     id = in_id;
   }
 
