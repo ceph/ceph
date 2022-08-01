@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 
+from ..exceptions import DashboardException
 from ..services.ceph_service import CephService
 
 
@@ -65,6 +66,13 @@ class CephServiceTest(unittest.TestCase):
 
     def test_get_pg_status_without_match(self):
         self.assertEqual(self.service.get_pool_pg_status('no-pool'), {})
+
+    @mock.patch('dashboard.services.ceph_service.CephService.get_service_map')
+    def test_send_command(self, get_service_map):
+        get_service_map.return_value = {}
+        with self.assertRaises(DashboardException) as ctx:
+            CephService.send_command('mds', 'session ls')
+        self.assertEqual(str(ctx.exception), 'mds service might be down')
 
 
 @contextmanager

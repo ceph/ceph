@@ -8,6 +8,7 @@ from mgr_module import CommandResult
 from mgr_util import get_most_recent_rate, get_time_series_rates
 
 from .. import mgr
+from ..exceptions import DashboardException
 
 try:
     from typing import Any, Dict, Optional, Union
@@ -210,6 +211,10 @@ class CephService(object):
         :raises TimedOut: See rados.make_ex
         :raises ValueError: return code != 0
         """
+        if not CephService.get_service_map(srv_type):
+            raise DashboardException(msg=f'{srv_type} service might be down', http_status_code=500,
+                                     code='send_command_no_service')
+
         argdict = {
             "prefix": prefix,
             "format": "json",
