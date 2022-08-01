@@ -3943,6 +3943,8 @@ void RGWPutObj::execute(optional_yield y)
 
   rgw_placement_rule *pdest_placement = &s->dest_placement;
 
+  s->object->set_trace(s->trace->GetContext());
+
   if (multipart) {
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = s->bucket->get_multipart_upload(s->object->get_name(),
@@ -3951,7 +3953,6 @@ void RGWPutObj::execute(optional_yield y)
 
     s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, multipart_upload_id);
     multipart_trace = tracing::rgw::tracer.add_span(name(), upload->get_trace());
-    s->object->set_trace(multipart_trace->GetContext());
 
     if (op_ret < 0) {
       if (op_ret != -ENOENT) {
