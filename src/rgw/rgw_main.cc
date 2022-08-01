@@ -724,6 +724,7 @@ int radosgw_Main(int argc, const char **argv)
     if (lua_background) {
       rgw_pauser->add_pauser(lua_background.get());
     }
+    
     reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, rgw_pauser.get());
 
     realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
