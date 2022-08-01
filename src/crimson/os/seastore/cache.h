@@ -762,17 +762,19 @@ public:
    * Intended for use in Journal::delta. For each delta, should decode delta,
    * read relevant block from disk or cache (using correct type), and call
    * CachedExtent::apply_delta marking the extent dirty.
+   *
+   * Returns whether the delta is applied.
    */
   using replay_delta_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  using replay_delta_ret = replay_delta_ertr::future<>;
+  using replay_delta_ret = replay_delta_ertr::future<bool>;
   replay_delta_ret replay_delta(
     journal_seq_t seq,
     paddr_t record_block_base,
     const delta_info_t &delta,
     const journal_seq_t &dirty_tail,
     const journal_seq_t &alloc_tail,
-    sea_time_point &modify_time);
+    sea_time_point modify_time);
 
   /**
    * init_cached_extents

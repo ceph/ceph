@@ -216,8 +216,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
              const auto &e,
              auto &dirty_seq,
              auto &alloc_seq,
-             auto last_modified)
-      -> Journal::replay_ret {
+             auto last_modified) {
       bool found = false;
       for (auto &i : entries) {
 	paddr_t base = offsets.write_result.start_seq.offset; 
@@ -229,7 +228,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
 	}
       }
       assert(found == true);
-      return Journal::replay_ertr::now();
+      return Journal::replay_ertr::make_ready_future<bool>(true);
     }).unsafe_get0();
   }
 

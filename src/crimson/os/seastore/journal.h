@@ -91,11 +91,12 @@ public:
     crimson::ct_error::erange>;
   using replay_ret = replay_ertr::future<>;
   using delta_handler_t = std::function<
-    replay_ret(const record_locator_t&,
-	       const delta_info_t&,
-	       const journal_seq_t&, // dirty_tail
-	       const journal_seq_t&, // alloc_tail
-	       sea_time_point modify_time)>;
+    replay_ertr::future<bool>(
+      const record_locator_t&,
+      const delta_info_t&,
+      const journal_seq_t&, // dirty_tail
+      const journal_seq_t&, // alloc_tail
+      sea_time_point modify_time)>;
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;
 
