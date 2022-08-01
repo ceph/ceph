@@ -102,10 +102,8 @@ struct BuildMap;
  * std::vector: no need to pre-reserve.
  */
 class ReplicaReservations {
-  using OrigSet = decltype(std::declval<PG>().get_actingset());
-
   PG* m_pg;
-  OrigSet m_acting_set;
+  std::set<pg_shard_t> m_acting_set;
   OSDService* m_osds;
   std::vector<pg_shard_t> m_waited_for_peers;
   std::vector<pg_shard_t> m_reserved_peers;
@@ -273,7 +271,6 @@ ostream& operator<<(ostream& out, const scrub_flags_t& sf);
  */
 class PgScrubber : public ScrubPgIF,
                    public ScrubMachineListener,
-                   public SnapMapperAccessor,
                    public ScrubBeListener {
  public:
   explicit PgScrubber(PG* pg);
@@ -549,11 +546,10 @@ class PgScrubber : public ScrubPgIF,
   utime_t scrub_begin_stamp;
   std::ostream& gen_prefix(std::ostream& out) const final;
 
-  //  fetching the snap-set for a given object (used by the scrub-backend)
-  int get_snaps(const hobject_t& hoid,
-		std::set<snapid_t>* snaps_set) const final
+  /// facilitate scrub-backend access to SnapMapper mappings
+  Scrub::SnapMapReaderI& get_snap_mapper_accessor()
   {
-    return m_pg->snap_mapper.get_snaps(hoid, snaps_set);
+    return m_pg->snap_mapper;
   }
 
   void log_cluster_warning(const std::string& warning) const final;
