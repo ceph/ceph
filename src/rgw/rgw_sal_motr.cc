@@ -899,16 +899,6 @@ ZoneGroup& MotrZone::get_zonegroup()
   return zonegroup;
 }
 
-int MotrZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* group)
-{
-  /* XXX: for now only one zonegroup supported */
-  ZoneGroup* zg;
-  zg = new MotrZoneGroup(store, zonegroup.get_group());
-
-  group->reset(zg);
-  return 0;
-}
-
 const rgw_zone_id& MotrZone::get_id()
 {
   return cur_zone_id;
@@ -2953,6 +2943,16 @@ std::string MotrStore::zone_unique_id(uint64_t unique_num)
 std::string MotrStore::zone_unique_trans_id(const uint64_t unique_num)
 {
   return "";
+}
+
+int MotrStore::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* group)
+{
+  /* XXX: for now only one zonegroup supported */
+  ZoneGroup* zg;
+  zg = new MotrZoneGroup(this, zone.zonegroup.get_group());
+
+  group->reset(zg);
+  return 0;
 }
 
 int MotrStore::cluster_stat(RGWClusterStat& stats)

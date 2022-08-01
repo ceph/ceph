@@ -2033,7 +2033,7 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   std::unique_ptr<rgw::sal::ZoneGroup> zonegroup;
   string api_name;
 
-  int ret = store->get_zone()->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
+  int ret = store->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
   if (ret >= 0) {
     api_name = zonegroup->get_api_name();
   } else  {

@@ -320,6 +320,8 @@ class Store {
     virtual std::string zone_unique_id(uint64_t unique_num) = 0;
     /** Get a unique Swift transaction ID specific to this zone */
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) = 0;
+    /** Lookup a zonegroup by ID */
+    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) = 0;
     /** Get statistics about the cluster represented by this Store */
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
@@ -1483,8 +1485,6 @@ class Zone {
     virtual std::unique_ptr<Zone> clone() = 0;
     /** Get info about the zonegroup containing this zone */
     virtual ZoneGroup& get_zonegroup() = 0;
-    /** Get info about a zonegroup by ID */
-    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) = 0;
     /** Get the ID of this zone */
     virtual const rgw_zone_id& get_id() = 0;
     /** Get the name of this zone */

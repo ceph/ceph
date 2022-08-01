@@ -1183,6 +1183,23 @@ std::string RadosStore::zone_unique_trans_id(const uint64_t unique_num)
   return svc()->zone_utils->unique_trans_id(unique_num);
 }
 
+int RadosStore::get_zonegroup(const std::string& id,
+			      std::unique_ptr<ZoneGroup>* zonegroup)
+{
+  ZoneGroup* zg;
+  RGWZoneGroup rzg;
+  int r = svc()->zone->get_zonegroup(id, rzg);
+  if (r < 0)
+    return r;
+
+  zg = new RadosZoneGroup(this, rzg);
+  if (!zg)
+    return -ENOMEM;
+
+  zonegroup->reset(zg);
+  return 0;
+}
+
 int RadosStore::cluster_stat(RGWClusterStat& stats)
 {
   rados_cluster_stat_t rados_stats;
@@ -2940,22 +2957,6 @@ int RadosZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
     return -ENOMEM;
 
   tier->reset(t);
-  return 0;
-}
-
-int RadosZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup)
-{
-  ZoneGroup* zg;
-  RGWZoneGroup rzg;
-  int r = store->svc()->zone->get_zonegroup(id, rzg);
-  if (r < 0)
-    return r;
-
-  zg = new RadosZoneGroup(store, rzg);
-  if (!zg)
-    return -ENOMEM;
-
-  zonegroup->reset(zg);
   return 0;
 }
 
