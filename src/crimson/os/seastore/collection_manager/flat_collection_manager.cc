@@ -62,10 +62,10 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 {
   logger().debug("FlatCollectionManager: {}", __func__);
   return get_coll_root(coll_root, t
-  ).si_then([=, &coll_root, &t] (auto &&extent) {
+  ).si_then([=, this, &coll_root, &t] (auto &&extent) {
     return extent->create(
       get_coll_context(t), cid, info.split_bits
-    ).si_then([=, &coll_root, &t] (auto ret) {
+    ).si_then([=, this, &coll_root, &t] (auto ret) {
       switch (ret) {
       case CollectionNode::create_result_t::OVERFLOW: {
         logger().debug("FlatCollectionManager: {} overflow!", __func__);
@@ -76,14 +76,14 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 	assert(new_size < MAX_FLAT_BLOCK_SIZE);
         return tm.alloc_extent<CollectionNode>(
 	  t, L_ADDR_MIN, new_size
-	).si_then([=, &coll_root, &t] (auto &&root_extent) {
+	).si_then([=, this, &coll_root, &t] (auto &&root_extent) {
           coll_root.update(root_extent->get_laddr(), root_extent->get_length());
 
 	  root_extent->decoded = extent->decoded;
 	  root_extent->loaded = true;
 	  return root_extent->create(
 	    get_coll_context(t), cid, info.split_bits
-	  ).si_then([=, &t](auto result) {
+	  ).si_then([=, this, &t](auto result) {
 	    assert(result == CollectionNode::create_result_t::SUCCESS);
 	    return tm.dec_ref(t, extent->get_laddr());
 	  }).si_then([] (auto) {

@@ -580,14 +580,14 @@ TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_l
 	t,
 	laddr,
 	len
-      ).si_then([=, &t](lba_pin_list_t pin_list) {
+      ).si_then([=, this, &t](lba_pin_list_t pin_list) {
 	return seastar::do_with(
 	  std::list<CachedExtentRef>(),
 	  std::move(pin_list),
-	  [=, &t](std::list<CachedExtentRef> &list, lba_pin_list_t &pin_list) {
+	  [=, this, &t](std::list<CachedExtentRef> &list, lba_pin_list_t &pin_list) {
 	    auto &seg_addr = addr.as_seg_paddr();
 	    auto seg_addr_id = seg_addr.get_segment_id();
-	    return trans_intr::parallel_for_each(pin_list, [=, &seg_addr, &list, &t](LBAPinRef &pin) ->
+	    return trans_intr::parallel_for_each(pin_list, [=, this, &seg_addr, &list, &t](LBAPinRef &pin) ->
 						 Cache::get_extent_iertr::future<> {
 	      auto pin_laddr = pin->get_key();
 	      auto pin_paddr = pin->get_val();

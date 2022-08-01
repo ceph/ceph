@@ -1733,7 +1733,7 @@ Cache::replay_delta(
 	"Invalid error in Cache::replay_delta"
       }
     );
-    return extent_fut.safe_then([=, &delta](auto extent) {
+    return extent_fut.safe_then([=, this, &delta](auto extent) {
       if (!extent) {
 	DEBUG("replay extent is not present, so delta is obsolete at {} {} -- {}",
 	      journal_seq, record_base, delta);
@@ -1877,7 +1877,7 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::_get_extent_by_type(
   extent_init_func_t &&extent_init_func,
   extent_init_func_t &&on_cache)
 {
-  return [=, extent_init_func=std::move(extent_init_func)]() mutable {
+  return [=, this, extent_init_func=std::move(extent_init_func)]() mutable {
     src_ext_t* p_metric_key = nullptr;
     src_ext_t metric_key;
     if (p_src) {
