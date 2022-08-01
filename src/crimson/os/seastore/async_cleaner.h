@@ -592,8 +592,10 @@ public:
   public:
     virtual ~ExtentCallbackInterface() = default;
 
+    /// Creates empty transaction
+    /// weak transaction should be type READ
     virtual TransactionRef create_transaction(
-        Transaction::src_t, const char*) = 0;
+        Transaction::src_t, const char *name, bool is_weak=false) = 0;
 
     /// Creates empty transaction with interruptible context
     template <typename Func>
@@ -601,16 +603,21 @@ public:
         Transaction::src_t src,
         const char* name,
         Func &&f) {
-      return seastar::do_with(
-        create_transaction(src, name),
-        [f=std::forward<Func>(f)](auto &ref_t) mutable {
-          return with_trans_intr(
-            *ref_t,
-            [f=std::forward<Func>(f)](auto& t) mutable {
-              return f(t);
-            }
-          );
-        }
+      return do_with_transaction_intr<Func, false>(
+          src, name, std::forward<Func>(f));
+    }
+
+    template <typename Func>
+    auto with_transaction_weak(
+        const char* name,
+        Func &&f) {
+      return do_with_transaction_intr<Func, true>(
+          Transaction::src_t::READ, name, std::forward<Func>(f)
+      ).handle_error(
+        crimson::ct_error::eagain::handle([] {
+          ceph_assert(0 == "eagain impossible");
+        }),
+        crimson::ct_error::pass_further_all{}
       );
     }
 
@@ -684,6 +691,25 @@ public:
     virtual submit_transaction_direct_ret submit_transaction_direct(
       Transaction &t,
       std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
+
+  private:
+    template <typename Func, bool IsWeak>
+    auto do_with_transaction_intr(
+        Transaction::src_t src,
+        const char* name,
+        Func &&f) {
+      return seastar::do_with(
+        create_transaction(src, name, IsWeak),
+        [f=std::forward<Func>(f)](auto &ref_t) mutable {
+          return with_trans_intr(
+            *ref_t,
+            [f=std::forward<Func>(f)](auto& t) mutable {
+              return f(t);
+            }
+          );
+        }
+      );
+    }
   };
 
 private:

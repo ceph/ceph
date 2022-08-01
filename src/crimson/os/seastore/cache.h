@@ -237,6 +237,7 @@ public:
     );
     SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
              *ret, name, src, is_weak);
+    assert(!is_weak || src == Transaction::src_t::READ);
     return ret;
   }
 
