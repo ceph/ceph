@@ -1467,6 +1467,10 @@ public:
   virtual int get_zone_count() const = 0;
   /** Get the placement tier associated with the rule */
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier) = 0;
+  /** Get a zone by ID */
+  virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) = 0;
+  /** Get a zone by Name */
+  virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) = 0;
   /** Clone a copy of this zonegroup. */
   virtual std::unique_ptr<ZoneGroup> clone() = 0;
 };
@@ -1486,7 +1490,7 @@ class Zone {
     /** Get info about the zonegroup containing this zone */
     virtual ZoneGroup& get_zonegroup() = 0;
     /** Get the ID of this zone */
-    virtual const rgw_zone_id& get_id() = 0;
+    virtual const std::string& get_id() = 0;
     /** Get the name of this zone */
     virtual const std::string& get_name() const = 0;
     /** True if this zone is writable */

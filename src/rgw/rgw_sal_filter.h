@@ -79,6 +79,8 @@ public:
   virtual int get_zone_count() const override
     { return next->get_zone_count(); }
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier) override;
+  virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) override;
+  virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override;
   virtual std::unique_ptr<ZoneGroup> clone() override {
     std::unique_ptr<ZoneGroup> nzg = next->clone();
     return std::make_unique<FilterZoneGroup>(std::move(nzg));
@@ -105,7 +107,7 @@ public:
   virtual ZoneGroup& get_zonegroup() override {
       return *group.get();
   }
-  virtual const rgw_zone_id& get_id() override {
+  virtual const std::string& get_id() override {
       return next->get_id();
   }
   virtual const std::string& get_name() const override {

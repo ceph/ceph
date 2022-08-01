@@ -899,9 +899,9 @@ ZoneGroup& MotrZone::get_zonegroup()
   return zonegroup;
 }
 
-const rgw_zone_id& MotrZone::get_id()
+const std::string& MotrZone::get_id()
 {
-  return cur_zone_id;
+  return zone_params->get_id();
 }
 
 const std::string& MotrZone::get_name() const

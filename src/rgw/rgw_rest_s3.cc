@@ -1066,8 +1066,10 @@ struct ReplicationConfiguration {
       set<rgw_zone_id> ids;
 
       for (auto& name : zone_names) {
-	rgw_zone_id id;
-	if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(name, &id)) {
+	std::unique_ptr<rgw::sal::Zone> zone;
+	int ret = store->get_zone()->get_zonegroup().get_zone_by_name(name, &zone);
+	if (ret >= 0) {
+	  rgw_zone_id id = zone->get_id();
 	  ids.insert(std::move(id));
         }
       }
@@ -1080,9 +1082,10 @@ struct ReplicationConfiguration {
       vector<string> names;
 
       for (auto& id : zone_ids) {
-	RGWZone *zone;
-	if ((zone = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(id))) {
-	  names.emplace_back(zone->name);
+	std::unique_ptr<rgw::sal::Zone> zone;
+	int ret = store->get_zone()->get_zonegroup().get_zone_by_id(id.id, &zone);
+	if (ret >= 0) {
+	  names.emplace_back(zone->get_name());
 	}
       }
 

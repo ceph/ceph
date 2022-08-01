@@ -402,6 +402,12 @@ public:
     return group.zones.size();
   }
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier);
+  virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) override {
+    return -1;
+  }
+  virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override {
+    return -1;
+  }
   const RGWZoneGroup& get_group() { return group; }
   virtual std::unique_ptr<ZoneGroup> clone() override {
     return std::make_unique<MotrZoneGroup>(store, group);
@@ -416,7 +422,6 @@ class MotrZone : public StoreZone {
     RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */
     RGWZoneParams *zone_params{nullptr}; /* internal zone params, e.g., rados pools */
     RGWPeriod *current_period{nullptr};
-    rgw_zone_id cur_zone_id;
 
   public:
     MotrZone(MotrStore* _store) : store(_store), zonegroup(_store) {
@@ -424,7 +429,6 @@ class MotrZone : public StoreZone {
       zone_public_config = new RGWZone();
       zone_params = new RGWZoneParams();
       current_period = new RGWPeriod();
-      cur_zone_id = rgw_zone_id(zone_params->get_id());
 
       // XXX: only default and STANDARD supported for now
       RGWZonePlacementInfo info;
@@ -438,7 +442,6 @@ class MotrZone : public StoreZone {
       zone_public_config = new RGWZone();
       zone_params = new RGWZoneParams();
       current_period = new RGWPeriod();
-      cur_zone_id = rgw_zone_id(zone_params->get_id());
 
       // XXX: only default and STANDARD supported for now
       RGWZonePlacementInfo info;
@@ -453,7 +456,7 @@ class MotrZone : public StoreZone {
       return std::make_unique<MotrZone>(store);
     }
     virtual ZoneGroup& get_zonegroup() override;
-    virtual const rgw_zone_id& get_id() override;
+    virtual const std::string& get_id() override;
     virtual const std::string& get_name() const override;
     virtual bool is_writeable() override;
     virtual bool get_redirect_endpoint(std::string* endpoint) override;

@@ -545,9 +545,9 @@ namespace rgw::sal {
     return *zone_params;
   }
 
-  const rgw_zone_id& DBZone::get_id()
+  const std::string& DBZone::get_id()
   {
-    return cur_zone_id;
+    return zone_params->get_id();
   }
 
 
