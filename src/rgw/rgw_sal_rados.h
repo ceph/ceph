@@ -103,7 +103,6 @@ class RadosZone : public StoreZone {
       return std::make_unique<RadosZone>(store, group->clone());
     }
     virtual ZoneGroup& get_zonegroup() override { return *(group.get()); }
-    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
     virtual const rgw_zone_id& get_id() override;
     virtual const std::string& get_name() const override;
     virtual bool is_writeable() override;
@@ -155,6 +154,7 @@ class RadosStore : public StoreStore {
     virtual Zone* get_zone() { return zone.get(); }
     virtual std::string zone_unique_id(uint64_t unique_num) override;
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
+    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Completions> get_completions(void) override;

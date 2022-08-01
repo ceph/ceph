@@ -540,17 +540,6 @@ namespace rgw::sal {
     return *zonegroup;
   }
 
-  int DBZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
-  {
-    /* XXX: for now only one zonegroup supported */
-    ZoneGroup* group = new DBZoneGroup(store, std::make_unique<RGWZoneGroup>());
-    if (!group)
-      return -ENOMEM;
-
-    zg->reset(group);
-    return 0;
-  }
-
   const RGWZoneParams& DBZone::get_rgw_params()
   {
     return *zone_params;
@@ -1755,6 +1744,17 @@ namespace rgw::sal {
   std::string DBStore::zone_unique_trans_id(const uint64_t unique_num)
   {
     return "";
+  }
+
+  int DBStore::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
+  {
+    /* XXX: for now only one zonegroup supported */
+    ZoneGroup* group = new DBZoneGroup(this, std::make_unique<RGWZoneGroup>());
+    if (!group)
+      return -ENOMEM;
+
+    zg->reset(group);
+    return 0;
   }
 
   int DBStore::cluster_stat(RGWClusterStat& stats)

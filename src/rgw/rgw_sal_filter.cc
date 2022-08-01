@@ -65,21 +65,6 @@ int FilterZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
   return 0;
 }
 
-int FilterZone::get_zonegroup(const std::string& id,
-			      std::unique_ptr<ZoneGroup>* zonegroup)
-{
-  std::unique_ptr<ZoneGroup> ngz;
-  int ret;
-
-  ret = next->get_zonegroup(id, &ngz);
-  if (ret != 0)
-    return ret;
-
-  ZoneGroup* zg = new FilterZoneGroup(std::move(ngz));
-  zonegroup->reset(zg);
-  return 0;
-}
-
 int FilterStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   zone = std::make_unique<FilterZone>(next->get_zone()->clone());
@@ -230,6 +215,21 @@ std::string FilterStore::zone_unique_id(uint64_t unique_num)
 std::string FilterStore::zone_unique_trans_id(uint64_t unique_num)
 {
   return next->zone_unique_trans_id(unique_num);
+}
+
+int FilterStore::get_zonegroup(const std::string& id,
+			       std::unique_ptr<ZoneGroup>* zonegroup)
+{
+  std::unique_ptr<ZoneGroup> ngz;
+  int ret;
+
+  ret = next->get_zonegroup(id, &ngz);
+  if (ret != 0)
+    return ret;
+
+  ZoneGroup* zg = new FilterZoneGroup(std::move(ngz));
+  zonegroup->reset(zg);
+  return 0;
 }
 
 int FilterStore::cluster_stat(RGWClusterStat& stats)
