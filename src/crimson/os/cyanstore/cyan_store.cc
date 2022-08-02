@@ -107,7 +107,7 @@ CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
   static const char read_meta_errmsg[]{"read_meta"};
   static const char parse_fsid_errmsg[]{"failed to parse fsid"};
   static const char match_ofsid_errmsg[]{"unmatched osd_fsid"};
-  return read_meta("fsid").then([=](auto&& ret) -> mkfs_ertr::future<> {
+  return read_meta("fsid").then([=, this](auto&& ret) -> mkfs_ertr::future<> {
     auto& [r, fsid_str] = ret;
     if (r == -ENOENT) {
       if (new_osd_fsid.is_zero()) {

@@ -865,8 +865,8 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
   }
 
   return seastar::do_with(ceph::os::Transaction{},
-                          [=](auto& t) {
-    return pg_shard_manager.store_maps(t, start, m).then([=, &t] {
+                          [=, this](auto& t) {
+    return pg_shard_manager.store_maps(t, start, m).then([=, this, &t] {
       // even if this map isn't from a mon, we may have satisfied our subscription
       monc->sub_got("osdmap", last);
       if (!superblock.oldest_map || skip_maps) {
@@ -886,7 +886,7 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
 	pg_shard_manager.get_meta_coll().collection(),
 	std::move(t));
     });
-  }).then([=] {
+  }).then([=, this] {
     // TODO: write to superblock and commit the transaction
     return committed_osd_maps(start, last, m);
   });

@@ -27,7 +27,7 @@ open_ertr::future<> NVMeBlockDevice::open(
   return seastar::do_with(in_path, [this, mode](auto& in_path) {
     return seastar::file_stat(in_path).then([this, mode, in_path](auto stat) {
       size = stat.size;
-      return seastar::open_file_dma(in_path, mode).then([=](auto file) {
+      return seastar::open_file_dma(in_path, mode).then([=, this](auto file) {
         device = file;
         logger().debug("open");
         // Get SSD's features from identify_controller and namespace command.
@@ -67,7 +67,7 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
   const std::string& in_path,
   seastar::open_flags mode) {
   io_device.resize(stream_id_count);
-  return seastar::do_for_each(io_device, [=](auto &target_device) {
+  return seastar::do_for_each(io_device, [=, this](auto &target_device) {
     return seastar::open_file_dma(in_path, mode).then([this](
       auto file) {
       io_device[stream_index_to_open] = file;

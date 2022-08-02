@@ -361,7 +361,7 @@ OMapInnerNode::merge_entry(
   auto is_left = (iter + 1) == iter_cend();
   auto donor_iter = is_left ? iter - 1 : iter + 1;
   return omap_load_extent(oc, donor_iter->get_val(), get_meta().depth - 1)
-    .si_then([=] (auto &&donor) mutable {
+    .si_then([=, this] (auto &&donor) mutable {
     LOG_PREFIX(OMapInnerNode::merge_entry);
     auto [l, r] = is_left ?
       std::make_pair(donor, entry) : std::make_pair(entry, donor);
