@@ -61,7 +61,6 @@
 #include "rgw_bucket_sync.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_cls.h"
 
 #include "include/ceph_assert.h"
 #include "rgw_role.h"
@@ -4830,37 +4829,6 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Store* store,
   return 0;
 }
 
-static int verify_mfa(rgw::sal::Store* store, RGWUserInfo *user,
-		      const string& mfa_str, bool *verified, const DoutPrefixProvider *dpp, optional_yield y)
-{
-  vector<string> params;
-  get_str_vec(mfa_str, " ", params);
-
-  if (params.size() != 2) {
-    ldpp_dout(dpp, 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;
-    return -EINVAL;
-  }
-
-  string& serial = params[0];
-  string& pin = params[1];
-
-  auto i = user->mfa_ids.find(serial);
-  if (i == user->mfa_ids.end()) {
-    ldpp_dout(dpp, 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
-    return -EACCES;
-  }
-
-  int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->cls->mfa.check_mfa(dpp, user->user_id, serial, pin, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
-    return -EACCES;
-  }
-
-  *verified = true;
-
-  return 0;
-}
-
 int RGWHandler_REST_S3::postauth_init(optional_yield y)
 {
   struct req_init_state *t = &s->init_state;
@@ -4901,7 +4869,7 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
 
   const char *mfa = s->info.env->get("HTTP_X_AMZ_MFA");
   if (mfa) {
-    ret = verify_mfa(store, &s->user->get_info(), string(mfa), &s->mfa_verified, s, y);
+    ret = s->user->verify_mfa(string(mfa), &s->mfa_verified, s, y);
   }
 
   return 0;

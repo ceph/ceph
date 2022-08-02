@@ -660,6 +660,12 @@ int FilterUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
   return next->remove_user(dpp, y);
 }
 
+int FilterUser::verify_mfa(const std::string& mfa_str, bool* verified,
+			   const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return next->verify_mfa(mfa_str, verified, dpp, y);
+}
+
 std::unique_ptr<Object> FilterBucket::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);

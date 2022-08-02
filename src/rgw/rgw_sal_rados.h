@@ -314,6 +314,7 @@ class RadosUser : public StoreUser {
     virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) override;
     virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
+    virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) override;
 
     friend class RadosBucket;
 };

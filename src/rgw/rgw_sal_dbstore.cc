@@ -226,6 +226,12 @@ namespace rgw::sal {
     return ret;
   }
 
+  int DBUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider *dpp, optional_yield y)
+  {
+    *verified = false;
+    return 0;
+  }
+
   int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y)
   {
     int ret;

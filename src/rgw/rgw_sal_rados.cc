@@ -42,6 +42,7 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
+#include "services/svc_cls.h"
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
 #include "services/svc_quota.h"
@@ -354,6 +355,37 @@ int RadosUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
     return store->ctl()->user->remove_info(dpp, info, y,
 					  RGWUserCtl::RemoveParams().set_objv_tracker(&objv_tracker));
+}
+
+int RadosUser::verify_mfa(const std::string& mfa_str, bool* verified,
+			  const DoutPrefixProvider* dpp, optional_yield y)
+{
+  vector<string> params;
+  get_str_vec(mfa_str, " ", params);
+
+  if (params.size() != 2) {
+    ldpp_dout(dpp, 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;
+    return -EINVAL;
+  }
+
+  string& serial = params[0];
+  string& pin = params[1];
+
+  auto i = info.mfa_ids.find(serial);
+  if (i == info.mfa_ids.end()) {
+    ldpp_dout(dpp, 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
+    return -EACCES;
+  }
+
+  int ret = store->svc()->cls->mfa.check_mfa(dpp, info.user_id, serial, pin, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
+    return -EACCES;
+  }
+
+  *verified = true;
+
+  return 0;
 }
 
 RadosBucket::~RadosBucket() {}
