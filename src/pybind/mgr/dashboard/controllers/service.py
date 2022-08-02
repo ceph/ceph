@@ -3,12 +3,11 @@ from typing import Dict, List, Optional
 import cherrypy
 from ceph.deployment.service_spec import ServiceSpec
 
-from ..exceptions import DashboardException
 from ..security import Scope
-from ..services.exception import handle_orchestrator_error
+from ..services.exception import handle_custom_error, handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
-    ReadPermission, RESTController, Task
+    ReadPermission, RESTController, Task, UpdatePermission
 from .orchestrator import raise_if_no_orchestrator
 
 
@@ -50,6 +49,7 @@ class Service(RESTController):
         return [d.to_dict() for d in daemons]
 
     @CreatePermission
+    @handle_custom_error('service', exceptions=(ValueError, TypeError))
     @raise_if_no_orchestrator([OrchFeature.SERVICE_CREATE])
     @handle_orchestrator_error('service')
     @service_task('create', {'service_name': '{service_name}'})
@@ -59,11 +59,22 @@ class Service(RESTController):
         :param service_name: The service name, e.g. 'alertmanager'.
         :return: None
         """
-        try:
-            orch = OrchClient.instance()
-            orch.services.apply(service_spec)
-        except (ValueError, TypeError) as e:
-            raise DashboardException(e, component='service')
+
+        OrchClient.instance().services.apply(service_spec, no_overwrite=True)
+
+    @UpdatePermission
+    @handle_custom_error('service', exceptions=(ValueError, TypeError))
+    @raise_if_no_orchestrator([OrchFeature.SERVICE_CREATE])
+    @handle_orchestrator_error('service')
+    @service_task('edit', {'service_name': '{service_name}'})
+    def set(self, service_spec: Dict, service_name: str):  # pylint: disable=W0613
+        """
+        :param service_spec: The service specification as JSON.
+        :param service_name: The service name, e.g. 'alertmanager'.
+        :return: None
+        """
+
+        OrchClient.instance().services.apply(service_spec, no_overwrite=False)
 
     @DeletePermission
     @raise_if_no_orchestrator([OrchFeature.SERVICE_DELETE])

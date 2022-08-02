@@ -46,6 +46,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   serviceTypes: string[] = [];
+  serviceIds: string[] = [];
   hosts: any;
   labels: string[];
   labelClick = new Subject<string>();
@@ -53,6 +54,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   pools: Array<object>;
   services: Array<CephServiceSpec> = [];
   pageURL: string;
+  serviceList: CephServiceSpec[];
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -109,7 +111,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 return !this.RGW_SVC_ID_PATTERN.test(value);
               })
             ]
-          )
+          ),
+          CdValidators.custom('uniqueName', (service_id: string) => {
+            return this.serviceIds && this.serviceIds.includes(service_id);
+          })
         ]
       ],
       placement: ['hosts'],
@@ -337,6 +342,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         this.serviceType = params.type;
       });
     }
+
+    this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
+      this.serviceList = services;
+      this.services = services.filter((service: any) =>
+        this.INGRESS_SUPPORTED_SERVICE_TYPES.includes(service.service_type)
+      );
+    });
+
     this.cephServiceService.getKnownTypes().subscribe((resp: Array<string>) => {
       // Remove service types:
       // osd       - This is deployed a different way.
@@ -360,11 +373,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     });
     this.poolService.getList().subscribe((resp: Array<object>) => {
       this.pools = resp;
-    });
-    this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
-      this.services = services.filter((service: any) =>
-        this.INGRESS_SUPPORTED_SERVICE_TYPES.includes(service.service_type)
-      );
     });
 
     if (this.editing) {
@@ -461,6 +469,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         }
       });
     }
+  }
+
+  getServiceIds(selectedServiceType: string) {
+    this.serviceIds = this.serviceList
+      .filter((service) => service['service_type'] === selectedServiceType)
+      .map((service) => service['service_id']);
   }
 
   disableForEditing(serviceType: string) {
@@ -622,7 +636,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         task: new FinishedTask(taskUrl, {
           service_name: serviceName
         }),
-        call: this.cephServiceService.create(serviceSpec)
+        call: this.editing
+          ? this.cephServiceService.update(serviceSpec)
+          : this.cephServiceService.create(serviceSpec)
       })
       .subscribe({
         error() {
