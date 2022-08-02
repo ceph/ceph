@@ -3,11 +3,7 @@ import errno
 import logging
 import sys
 import threading
-
-if sys.version_info >= (3, 2):
-    import configparser
-else:
-    import ConfigParser as configparser
+import configparser
 
 import cephfs
 
@@ -71,10 +67,7 @@ class MetadataManager(object):
         self.fs = fs
         self.mode = mode
         self.config_path = config_path
-        if sys.version_info >= (3, 2):
-            self.config = configparser.ConfigParser()
-        else:
-            self.config = configparser.SafeConfigParser()
+        self.config = configparser.ConfigParser()
 
     def refresh(self):
         fd = None
