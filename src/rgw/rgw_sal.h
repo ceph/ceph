@@ -556,6 +556,8 @@ class User {
     virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) = 0;
     /** Remove this User from the backing store */
     virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    /** Verify multi-factor authentication for this user */
+    virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
     /* dang temporary; will be removed when User is complete */
     virtual RGWUserInfo& get_info() = 0;
