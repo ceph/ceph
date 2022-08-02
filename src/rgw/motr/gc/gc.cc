@@ -91,7 +91,7 @@ void MotrGC::initialize() {
   }
   index_names.reserve(max_indices);
   ldpp_dout(this, 50) << __func__ << ": max_indices = " << max_indices << dendl;
-  for (int ind_suf = 0; ind_suf < max_indices; ind_suf++) {
+  for (uint32_t ind_suf = 0; ind_suf < max_indices; ind_suf++) {
     std::string iname = gc_index_prefix + "." + std::to_string(ind_suf);
     int rc = static_cast<rgw::sal::MotrStore*>(store)->create_motr_idx_by_name(iname);
     if (rc < 0 && rc != -EEXIST){
@@ -167,7 +167,7 @@ int MotrGC::get_locked_gc_index(uint32_t& rand_ind)
   int rc = -1;
   uint32_t new_index = 0;
   // attempt to lock GC starting with passed in index
-  for (int ind = 0; ind < max_indices; ind++)
+  for (uint32_t ind = 0; ind < max_indices; ind++)
   {
     new_index = (ind + rand_ind) % max_indices;
     // try locking index
