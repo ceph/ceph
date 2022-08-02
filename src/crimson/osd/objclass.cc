@@ -444,6 +444,17 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
 int cls_cxx_list_watchers(cls_method_context_t hctx,
                           obj_list_watch_response_t *watchers)
 {
+  OSDOp op{CEPH_OSD_OP_LIST_WATCHERS};
+  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+    return ret;
+  }
+
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*watchers, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
   return 0;
 }
 
