@@ -60,8 +60,6 @@
 #include "rgw_zone.h"
 #include "rgw_bucket_sync.h"
 
-#include "services/svc_zone.h"
-
 #include "include/ceph_assert.h"
 #include "rgw_role.h"
 #include "rgw_rest_sts.h"
@@ -4595,8 +4593,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
   } else if (is_notification_op()) {
     return RGWHandler_REST_PSNotifs_S3::create_put_op();
   } else if (is_replication_op()) {
-    auto sync_policy_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_sync_policy_handler(nullopt);
-    if (!sync_policy_handler ||
+    RGWBucketSyncPolicyHandlerRef sync_policy_handler;
+    int ret = store->get_sync_policy_handler(s, nullopt, nullopt,
+					     &sync_policy_handler, null_yield);
+    if (ret < 0 || !sync_policy_handler ||
         sync_policy_handler->is_legacy_config()) {
       return nullptr;
     }

@@ -25,15 +25,9 @@
 
 class RGWAccessListFilter;
 class RGWLC;
-class RGWObjManifest;
-struct RGWZoneGroup;
-struct RGWZoneParams;
-class RGWRealm;
-struct RGWCtl;
 struct rgw_user_bucket;
 class RGWUsageBatch;
 class RGWCoroutinesManagerRegistry;
-class RGWListRawObjsCtx;
 class RGWBucketSyncPolicyHandler;
 using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler>;
 class RGWDataSyncStatusManager;

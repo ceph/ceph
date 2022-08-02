@@ -1323,14 +1323,6 @@ public:
         return 0;
       }
 
-      /* Allow transition for only RadosStore */
-      rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(oc.store);
-
-      if (!rados) {
-        ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is not on RadosStore. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
-        return -1;
-      }
-
       r = transition_obj_to_cloud(oc);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj(key:" << oc.o.key << ") to cloud (r=" << r << ")"
