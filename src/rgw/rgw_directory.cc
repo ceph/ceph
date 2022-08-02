@@ -29,7 +29,7 @@ int RGWBlockDirectory::existKey(std::string key) {
   int result = 0;
   std::vector<std::string> keys;
   keys.push_back(key);
-  
+
   if (!client.is_connected()) {
     return result;
   }
@@ -40,7 +40,7 @@ int RGWBlockDirectory::existKey(std::string key) {
         result = reply.as_integer();
       }
     });
-    
+
     client.sync_commit(std::chrono::milliseconds(1000));
   }
   catch(std::exception &e) {}
@@ -75,20 +75,20 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
 
   if (!exist) {
     std::vector<std::pair<std::string, std::string>> list;
-    
+
     if (host == "" || port == 0) {
       dout(20) << "RGW directory error: directory endpoint not configured correctly" << dendl;
       return -2;
     }
-    
-    std::string endpoint = host + std::to_string(port);
-    
+
+    std::string endpoint = host + ":" + std::to_string(port);
+
     //creating a list of key's properties
     list.push_back(make_pair("key", key));
-    //list.push_back(make_pair("size", std::to_string(ptr->size_in_bytes)));
+    list.push_back(make_pair("size", std::to_string(ptr->size_in_bytes)));
     list.push_back(make_pair("bucket_name", ptr->c_obj.bucket_name));
     list.push_back(make_pair("obj_name", ptr->c_obj.obj_name));
-    list.push_back(make_pair("hosts", endpoint)); 
+    list.push_back(make_pair("hosts", endpoint));
 
     client.hmset(key, list, [&result](cpp_redis::reply &reply) {
       if (!reply.is_null()) {
@@ -118,7 +118,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
       client.sync_commit(std::chrono::milliseconds(1000));
     }
     catch(std::exception &e) {
-      return 0; 
+      return 0;
     }
 
     std::string hosts;
@@ -145,20 +145,19 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
 
   if (existKey(key)) {
     std::string hosts;
-    //std::string size;
+    std::string size;
     std::string bucket_name;
     std::string obj_name;
     std::vector<std::string> fields;
 
     fields.push_back("key");
     fields.push_back("hosts");
-    //fields.push_back("size");
+    fields.push_back("size");
     fields.push_back("bucket_name");
     fields.push_back("obj_name");
 
     try {
-      //client.hmget(key, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply &reply) {
-      client.hmget(key, fields, [&key, &hosts, &bucket_name, &obj_name, &key_exist](cpp_redis::reply &reply) {
+      client.hmget(key, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply &reply) {
         if (reply.is_array()) {
 	  auto arr = reply.as_array();
 
@@ -166,7 +165,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
 	    key_exist = 0;
 	    key = arr[0].as_string();
 	    hosts = arr[1].as_string();
-	    //size = arr[2].as_string();
+	    size = arr[2].as_string();
 	    bucket_name = arr[3].as_string();
 	    obj_name = arr[4].as_string();
 	  }
@@ -186,8 +185,8 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
         return -1;
       }
 
-      //ptr->size_in_bytes = stoull(size);
-      ptr->c_obj.bucket_name = bucket_name; 
+      ptr->size_in_bytes = stoull(size);
+      ptr->c_obj.bucket_name = bucket_name;
       ptr->c_obj.obj_name = obj_name;
     }
     catch(std::exception &e) {
@@ -203,11 +202,11 @@ int RGWBlockDirectory::delValue(cache_block *ptr){
   std::vector<std::string> keys;
   std::string key = buildIndex(ptr);
   keys.push_back(key);
-  
+
   if (!client.is_connected()){
     findClient(&client);
   }
-  
+
   if (existKey(key)) {
     try {
       client.del(keys, [&result](cpp_redis::reply &reply) {
@@ -215,8 +214,8 @@ int RGWBlockDirectory::delValue(cache_block *ptr){
           result = reply.as_integer();
         }
       });
-	
-      client.sync_commit(std::chrono::milliseconds(1000));	
+
+      client.sync_commit(std::chrono::milliseconds(1000));
       return result-1;
     }
     catch(std::exception &e) {

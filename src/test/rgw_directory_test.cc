@@ -119,8 +119,8 @@ int main(int argc, char *argv[]) {
 
   // Other ports can be passed to the program
   if (argc == 1) {
-    portStr = "6379";
     hostStr = "127.0.0.1";
+    portStr = "6379";
   } else if (argc == 3) {
     hostStr = argv[1];
     portStr = argv[2];
@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  redisHost = hostStr + portStr;
+  redisHost = hostStr + ":" + portStr;
 
   return RUN_ALL_TESTS();
 }
