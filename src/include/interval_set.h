@@ -106,6 +106,21 @@ class interval_set {
           return prev;
         }
 
+        // Predecrement
+        iterator& operator--()
+        {
+          --_iter;
+          return *this;
+        }
+
+        // Postdecrement
+        iterator operator--(int)
+        {
+          iterator prev(_iter);
+          --_iter;
+          return prev;
+        }
+
     friend class interval_set::const_iterator;
 
     protected:
@@ -171,6 +186,21 @@ class interval_set {
         {
           const_iterator prev(_iter);
           ++_iter;
+          return prev;
+        }
+
+        // Predecrement
+        iterator& operator--()
+        {
+          --_iter;
+          return *this;
+        }
+
+        // Postdecrement
+        iterator operator--(int)
+        {
+          iterator prev(_iter);
+          --_iter;
           return prev;
         }
 
