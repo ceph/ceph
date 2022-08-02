@@ -22,8 +22,9 @@
 #include <condition_variable>
 #include <atomic>
 
-const uint64_t GC_DEFAULT_QUEUES = 64;
-const uint64_t GC_MAX_QUEUES = 4096;
+const uint32_t GC_DEFAULT_QUEUES = 64;
+const uint32_t GC_DEFAULT_COUNT = 256;
+const uint32_t GC_MAX_QUEUES = 4096;
 static std::string gc_index_prefix = "motr.rgw.gc";
 static std::string gc_thread_prefix = "motr_gc_";
 
@@ -117,7 +118,8 @@ class MotrGC : public DoutPrefixProvider {
  private:
   CephContext *cct;
   rgw::sal::Store *store;
-  int max_indices = 0;
+  uint32_t max_indices = 0;
+  uint32_t max_count = 0;
   std::vector<std::string> index_names;
   std::atomic<bool> down_flag = false;
 
@@ -159,6 +161,7 @@ class MotrGC : public DoutPrefixProvider {
   void start_processor();
   void stop_processor();
   int dequeue(const DoutPrefixProvider* dpp, std::string iname, motr_gc_obj_info obj);
+  int get_locked_gc_index(uint32_t& rand_ind);
   bool going_down();
 
   // Set Up logging prefix for GC
