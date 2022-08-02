@@ -3,10 +3,12 @@
 import pytest
 from ceph_volume.util.device import Devices
 from ceph_volume.util.lsmdisk import LSMDisk
+from mock.mock import patch
 import ceph_volume.util.lsmdisk as lsmdisk
 
 
 @pytest.fixture
+@patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
 def device_report_keys(device_info):
     device_info(devices={
         # example output of disk.get_devices()
@@ -28,13 +30,15 @@ def device_report_keys(device_info):
                      'size': 1999844147200.0,
                      'support_discard': '',
                      'vendor': 'DELL',
-                     'device_id': 'Vendor-Model-Serial'}
+                     'device_id': 'Vendor-Model-Serial',
+                     'device_nodes': 'sdb'}
     }
  )
     report = Devices().json_report()[0]
     return list(report.keys())
 
 @pytest.fixture
+@patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
 def device_sys_api_keys(device_info):
     device_info(devices={
         # example output of disk.get_devices()
@@ -55,13 +59,15 @@ def device_sys_api_keys(device_info):
                      'sectorsize': '512',
                      'size': 1999844147200.0,
                      'support_discard': '',
-                     'vendor': 'DELL'}
+                     'vendor': 'DELL',
+                     'device_nodes': 'sdb'}
     }
  )
     report = Devices().json_report()[0]
     return list(report['sys_api'].keys())
 
 @pytest.fixture
+@patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
 def device_data(device_info):
     device_info(
         devices={
@@ -85,6 +91,7 @@ def device_data(device_info):
                 'size': 1999844147200.0,
                 'support_discard': '',
                 'vendor': 'DELL',
+                'device_nodes': 'sdb'
             }
         }
     )
@@ -140,6 +147,7 @@ class TestInventory(object):
         'size',
         'support_discard',
         'vendor',
+        'device_nodes'
     ]
 
     expected_lsm_keys = [

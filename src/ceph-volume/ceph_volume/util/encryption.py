@@ -273,6 +273,6 @@ def legacy_encrypted(device):
     devices = [Device(i['NAME']) for i in device_family(parent_device)]
     for d in devices:
         if d.ceph_disk.type == 'lockbox':
-            metadata['lockbox'] = d.abspath
+            metadata['lockbox'] = d.path
             break
     return metadata
