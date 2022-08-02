@@ -3,6 +3,7 @@ overrides:
     conf:
       osd:
         osd max markdown count: 1000
+        osd blocked scrub grace period: 3600
     log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)

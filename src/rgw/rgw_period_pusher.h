@@ -10,12 +10,7 @@
 
 #include "common/async/yield_context.h"
 #include "rgw_realm_reloader.h"
-
-namespace rgw {
-namespace sal {
-class Store;
-}
-}
+#include "rgw_sal_fwd.h"
 
 class RGWPeriod;
 

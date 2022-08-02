@@ -93,7 +93,7 @@ will be on the ``master`` branch by default, which is the unstable
 development branch. You may choose other branches too.
 
 - ``master``: The unstable development branch.
-- ``stable``: The bugfix branch.
+- ``stable-release-name``: The name of the stable, :ref:`active release <ceph-releases-index>`. e.g. ``Pacific``
 - ``next``: The release candidate branch.
 
 ::

@@ -27,6 +27,7 @@ import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { EmptyPipe } from '~/app/shared/pipes/empty.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -109,6 +110,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   constructor(
     private authStorageService: AuthStorageService,
     private dimlessBinary: DimlessBinaryPipe,
+    private emptyPipe: EmptyPipe,
     private hostService: HostService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
@@ -195,9 +197,9 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         flexGrow: 1
       },
       {
-        name: $localize`Services`,
-        prop: 'services',
-        flexGrow: 2,
+        name: $localize`Service Instances`,
+        prop: 'service_instances',
+        flexGrow: 1,
         cellTemplate: this.servicesTpl
       },
       {
@@ -464,13 +466,14 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   transformHostsData() {
     if (this.checkHostsFactsAvailable()) {
       _.forEach(this.hosts, (hostKey) => {
-        hostKey['memory_total_bytes'] = hostKey['memory_total_kb'] * 1024;
-        hostKey['raw_capacity'] = hostKey['hdd_capacity_bytes'] + hostKey['flash_capacity_bytes'];
+        hostKey['memory_total_bytes'] = this.emptyPipe.transform(hostKey['memory_total_kb'] * 1024);
+        hostKey['raw_capacity'] = this.emptyPipe.transform(
+          hostKey['hdd_capacity_bytes'] + hostKey['flash_capacity_bytes']
+        );
       });
     } else {
       // mark host facts columns unavailable
       for (let column = 4; column < this.columns.length; column++) {
-        this.columns[column]['prop'] = '';
         this.columns[column]['cellTemplate'] = this.orchTmpl;
       }
     }
@@ -480,15 +483,6 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     if (this.isLoadingHosts) {
       return;
     }
-    const typeToPermissionKey = {
-      mds: 'cephfs',
-      mon: 'monitor',
-      osd: 'osd',
-      rgw: 'rgw',
-      'rbd-mirror': 'rbdMirroring',
-      mgr: 'manager',
-      'tcmu-runner': 'iscsi'
-    };
     this.isLoadingHosts = true;
     this.sub = this.orchService
       .status()
@@ -500,11 +494,13 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         }),
         map((hostList: object[]) =>
           hostList.map((host) => {
+            const counts = {};
+            host['service_instances'] = new Set<string>();
+            host['services'].forEach((service: any) => {
+              counts[service.type] = (counts[service.type] || 0) + 1;
+            });
             host['services'].map((service: any) => {
-              service.cdLink = `/perf_counters/${service.type}/${encodeURIComponent(service.id)}`;
-              const permission = this.permissions[typeToPermissionKey[service.type]];
-              service.canRead = permission ? permission.read : false;
-              return service;
+              host['service_instances'].add(`${service.type}: ${counts[service.type]}`);
             });
             return host;
           })

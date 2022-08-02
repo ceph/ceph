@@ -743,7 +743,7 @@ void RGWSTSAssumeRole::execute(optional_yield y)
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
                             rgw::sal::Store* store,
                             const rgw::auth::StrategyRegistry& auth_registry,
-                            struct req_state *s, optional_yield y)
+                            req_state *s, optional_yield y)
 {
   return rgw::auth::Strategy::apply(dpp, auth_registry.get_sts(), s, y);
 }
@@ -788,7 +788,7 @@ RGWOp *RGWHandler_REST_STS::op_post()
 }
 
 int RGWHandler_REST_STS::init(rgw::sal::Store* store,
-                              struct req_state *s,
+                              req_state *s,
                               rgw::io::BasicClient *cio)
 {
   s->dialect = "sts";
@@ -809,7 +809,7 @@ int RGWHandler_REST_STS::authorize(const DoutPrefixProvider* dpp, optional_yield
   return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
 }
 
-int RGWHandler_REST_STS::init_from_header(struct req_state* s,
+int RGWHandler_REST_STS::init_from_header(req_state* s,
                                           int default_formatter,
                                           bool configurable_format)
 {
@@ -853,7 +853,7 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
 
 RGWHandler_REST*
 RGWRESTMgr_STS::get_handler(rgw::sal::Store* store,
-			    struct req_state* const s,
+			    req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)
 {

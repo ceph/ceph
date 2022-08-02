@@ -223,6 +223,11 @@ static int build_map_buf(CephContext *cct, const krbd_spec& spec,
     }
   }
 
+  if (oss.tellp() == 0) {
+    std::cerr << "rbd: failed to get mon address (possible ms_mode mismatch)" << std::endl;
+    return -ENOENT;
+  }
+
   oss << " name=" << cct->_conf->name.get_id();
 
   KeyRing keyring;

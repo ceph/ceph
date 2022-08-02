@@ -15,10 +15,13 @@ timeout 1800 git clone git://git.ceph.com/ceph.git
 trap - EXIT
 cd ceph
 
-versions=`seq 1 21`
+versions=`seq 1 90`
 
 for v in $versions
 do
+    if [ $v -eq 48 ]; then
+        continue
+    fi
     ver="v0.$v"
     echo $ver
     git reset --hard $ver
@@ -27,6 +30,9 @@ done
 
 for v in $versions
 do
+    if [ $v -eq 48 ]; then
+        continue
+    fi
     ver="v0.$v"
     echo checking $ver
     cd .snap/$ver
@@ -36,6 +42,9 @@ done
 
 for v in $versions
 do
+    if [ $v -eq 48 ]; then
+        continue
+    fi
     ver="v0.$v"
     rmdir .snap/$ver
 done

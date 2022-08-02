@@ -34,6 +34,8 @@ public:
 
   void remove_all_queries();
 
+  void reregister_queries();
+
   std::map<Query, Limits> get_queries() const {
     std::lock_guard locker(lock);
 

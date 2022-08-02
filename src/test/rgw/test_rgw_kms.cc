@@ -18,7 +18,7 @@ using ::testing::StrEq;
 class MockTransitSecretEngine : public TransitSecretEngine {
 
 public:
-  MockTransitSecretEngine(CephContext *cct, EngineParmMap parms) : TransitSecretEngine(cct, parms){}
+  MockTransitSecretEngine(CephContext *cct, SSEContext & kctx, EngineParmMap parms) : TransitSecretEngine(cct, kctx, parms){}
 
   MOCK_METHOD(int, send_request, (const DoutPrefixProvider *dpp, const char *method, std::string_view infix, std::string_view key_id, const std::string& postdata, bufferlist &bl), (override));
 
@@ -27,7 +27,7 @@ public:
 class MockKvSecretEngine : public KvSecretEngine {
 
 public:
-  MockKvSecretEngine(CephContext *cct, EngineParmMap parms) : KvSecretEngine(cct, parms){}
+  MockKvSecretEngine(CephContext *cct, SSEContext & kctx, EngineParmMap parms) : KvSecretEngine(cct, kctx, parms){}
 
   MOCK_METHOD(int, send_request, (const DoutPrefixProvider *dpp, const char *method, std::string_view infix, std::string_view key_id, const std::string& postdata, bufferlist &bl), (override));
 
@@ -44,11 +44,12 @@ protected:
   void SetUp() override {
     EngineParmMap old_parms, kv_parms, new_parms;
     cct = (new CephContext(CEPH_ENTITY_TYPE_ANY))->get();
+    KMSContext kctx { cct };
     old_parms["compat"] = "2";
-    old_engine = new MockTransitSecretEngine(cct, std::move(old_parms));
-    kv_engine = new MockKvSecretEngine(cct, std::move(kv_parms));
+    old_engine = new MockTransitSecretEngine(cct, kctx, std::move(old_parms));
+    kv_engine = new MockKvSecretEngine(cct, kctx, std::move(kv_parms));
     new_parms["compat"] = "1";
-    transit_engine = new MockTransitSecretEngine(cct, std::move(new_parms));
+    transit_engine = new MockTransitSecretEngine(cct, kctx, std::move(new_parms));
   }
 
   void TearDown() {
@@ -64,8 +65,9 @@ TEST_F(TestSSEKMS, vault_token_file_unset)
 {
   cct->_conf.set_val("rgw_crypt_vault_auth", "token");
   EngineParmMap old_parms, kv_parms;
-  TransitSecretEngine te(cct, std::move(old_parms));
-  KvSecretEngine kv(cct, std::move(kv_parms));
+  KMSContext kctx { cct };
+  TransitSecretEngine te(cct, kctx, std::move(old_parms));
+  KvSecretEngine kv(cct, kctx, std::move(kv_parms));
   const NoDoutPrefix no_dpp(cct, 1);
 
   std::string_view key_id("my_key");
@@ -81,8 +83,9 @@ TEST_F(TestSSEKMS, non_existent_vault_token_file)
   cct->_conf.set_val("rgw_crypt_vault_auth", "token");
   cct->_conf.set_val("rgw_crypt_vault_token_file", "/nonexistent/file");
   EngineParmMap old_parms, kv_parms;
-  TransitSecretEngine te(cct, std::move(old_parms));
-  KvSecretEngine kv(cct, std::move(kv_parms));
+  KMSContext kctx { cct };
+  TransitSecretEngine te(cct, kctx, std::move(old_parms));
+  KvSecretEngine kv(cct, kctx, std::move(kv_parms));
   const NoDoutPrefix no_dpp(cct, 1);
 
   std::string_view key_id("my_key/1");

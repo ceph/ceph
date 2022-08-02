@@ -137,6 +137,10 @@ class tree_cursor_t final
   std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
   prepare_mutate_value_payload(context_t c) {
     assert(is_tracked());
+    if (!is_mutated) {
+      is_mutated = true;
+      ++(c.t.get_onode_tree_stats().num_updates);
+    }
     return cache.prepare_mutate_value_payload(c, position);
   }
 
@@ -152,7 +156,9 @@ class tree_cursor_t final
   }
 
  private:
+  // create from insert
   tree_cursor_t(Ref<LeafNode>, const search_position_t&);
+  // create from lookup
   tree_cursor_t(Ref<LeafNode>, const search_position_t&,
                 const key_view_t&, const value_header_t*);
   // lookup reaches the end, contain leaf node for further insert
@@ -168,12 +174,14 @@ class tree_cursor_t final
                               const value_header_t*) const;
   void invalidate();
 
-  static Ref<tree_cursor_t> create(Ref<LeafNode> node, const search_position_t& pos) {
+  static Ref<tree_cursor_t> create_inserted(
+      Ref<LeafNode> node, const search_position_t& pos) {
     return new tree_cursor_t(node, pos);
   }
 
-  static Ref<tree_cursor_t> create(Ref<LeafNode> node, const search_position_t& pos,
-                                   const key_view_t& key, const value_header_t* p_header) {
+  static Ref<tree_cursor_t> create_tracked(
+      Ref<LeafNode> node, const search_position_t& pos,
+      const key_view_t& key, const value_header_t* p_header) {
     return new tree_cursor_t(node, pos, key, p_header);
   }
 
@@ -189,6 +197,9 @@ class tree_cursor_t final
    */
   Ref<LeafNode> ref_leaf_node;
   search_position_t position;
+
+  // account 1 update even if there are multiple updates to the same value
+  bool is_mutated = false;
 
   /** Cache
    *

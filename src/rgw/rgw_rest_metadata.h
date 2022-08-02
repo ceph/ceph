@@ -99,7 +99,7 @@ public:
   ~RGWRESTMgr_Metadata() override = default;
 
   RGWHandler_REST* get_handler(rgw::sal::Store* store,
-			       struct req_state* const s,
+			       req_state* const s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override {
     return new RGWHandler_Metadata(auth_registry);

@@ -3,6 +3,11 @@
 
 global:
   resolve_timeout: 5m
+{% if not secure %}
+  http_config:
+    tls_config:
+      insecure_skip_verify: true
+{% endif %}
 
 route:
   receiver: 'default'

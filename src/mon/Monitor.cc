@@ -421,6 +421,11 @@ int Monitor::do_admin_command(
     cmd_getval(cmdmap, "devid", want_devid);
 
     string devname = store->get_devname();
+    if (devname.empty()) {
+      err << "could not determine device name for " << store->get_path();
+      r = -ENOENT;
+      goto abort;
+    }
     set<string> devnames;
     get_raw_devices(devname, &devnames);
     json_spirit::mObject json_map;
@@ -496,6 +501,7 @@ void Monitor::handle_signal(int signum)
   derr << "*** Got Signal " << sig_str(signum) << " ***" << dendl;
   if (signum == SIGHUP) {
     sighup_handler(signum);
+    logmon()->reopen_logs();
   } else {
     ceph_assert(signum == SIGINT || signum == SIGTERM);
     shutdown();
@@ -930,6 +936,9 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(&mgr_client);
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
   mgrmon()->prime_mgr_client();
+
+  // generate list of filestore OSDs
+  osdmon()->get_filestore_osd_list();
 
   state = STATE_PROBING;
   bootstrap();
@@ -2957,6 +2966,19 @@ void Monitor::log_health(
   }
 }
 
+void Monitor::update_pending_metadata()
+{
+  Metadata metadata;
+  collect_metadata(&metadata);
+  size_t version_size = mon_metadata[rank]["ceph_version_short"].size();
+  const std::string current_version = mon_metadata[rank]["ceph_version_short"];
+  const std::string pending_version = metadata["ceph_version_short"];
+
+  if (current_version.compare(0, version_size, pending_version) < 0) {
+    mgr_client.update_daemon_metadata("mon", name, metadata);
+  }
+}
+
 void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
 				 MonSession *session)
 {
@@ -3416,7 +3438,15 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   // validate user's permissions for requested command
   map<string,string> param_str_map;
-  _generate_command_map(cmdmap, param_str_map);
+
+  // Catch bad_cmd_get exception if _generate_command_map() throws it
+  try {
+    _generate_command_map(cmdmap, param_str_map);
+  }
+  catch(bad_cmd_get& e) {
+    reply_command(op, -EINVAL, e.what(), 0);
+  }
+
   if (!_allowed_command(session, service, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
@@ -3648,7 +3678,16 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "report") {
-
+    // some of the report data is only known by leader, e.g. osdmap_clean_epochs
+    if (!is_leader() && !is_peon()) {
+      dout(10) << " waiting for quorum" << dendl;
+      waitfor_quorum.push_back(new C_RetryMessage(this, op));
+      return;
+    }
+    if (!is_leader()) {
+      forward_request_leader(op);
+      return;
+    }
     // this must be formatted, in its current form
     if (!f)
       f.reset(Formatter::create("json-pretty"));
@@ -3672,6 +3711,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     mdsmon()->dump_info(f.get());
     authmon()->dump_info(f.get());
     mgrstatmon()->dump_info(f.get());
+    logmon()->dump_info(f.get());
 
     paxos->dump_info(f.get());
 
@@ -3812,7 +3852,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "mon ok-to-stop") {
-    vector<string> ids;
+    vector<string> ids, invalid_ids;
     if (!cmd_getval(cmdmap, "ids", ids)) {
       r = -EINVAL;
       goto out;
@@ -3824,8 +3864,16 @@ void Monitor::handle_command(MonOpRequestRef op)
     for (auto& n : ids) {
       if (monmap->contains(n)) {
 	wouldbe.erase(n);
+      } else {
+        invalid_ids.push_back(n);
       }
     }
+    if (!invalid_ids.empty()) {
+      r = 0;
+      rs = "invalid mon(s) specified: " + stringify(invalid_ids);
+      goto out;
+    }
+
     if (wouldbe.size() < monmap->min_quorum_size()) {
       r = -EBUSY;
       rs = "not enough monitors would be available (" + stringify(wouldbe) +
@@ -6541,7 +6589,7 @@ void Monitor::notify_new_monmap(bool can_change_external_state)
   dout(30) << __func__ << "we have " << monmap->removed_ranks.size() << " removed ranks" << dendl;
   for (auto i = monmap->removed_ranks.rbegin();
        i != monmap->removed_ranks.rend(); ++i) {
-    int rank = *i;
+    unsigned rank = *i;
     dout(10) << __func__ << "removing rank " << rank << dendl;
     elector.notify_rank_removed(rank);
   }

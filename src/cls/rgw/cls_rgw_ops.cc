@@ -83,7 +83,6 @@ void cls_rgw_gc_list_ret::generate_test_instances(list<cls_rgw_gc_list_ret*>& ls
   ls.back()->truncated = true;
 }
 
-
 void cls_rgw_gc_remove_op::dump(Formatter *f) const
 {
   encode_json("tags", tags, f);
@@ -95,6 +94,18 @@ void cls_rgw_gc_remove_op::generate_test_instances(list<cls_rgw_gc_remove_op*>& 
   ls.push_back(new cls_rgw_gc_remove_op);
   ls.back()->tags.push_back("tag1");
   ls.back()->tags.push_back("tag2");
+}
+
+void cls_rgw_lc_get_entry_ret::dump(Formatter *f) const
+{
+  encode_json("entry", entry, f);
+}
+
+void cls_rgw_lc_get_entry_ret::generate_test_instances(list<cls_rgw_lc_get_entry_ret*>& ls)
+{
+  cls_rgw_lc_entry entry("bucket1", 6000, 0);
+  ls.push_back(new cls_rgw_lc_get_entry_ret);
+  ls.back()->entry = entry;
 }
 
 void rgw_cls_obj_prepare_op::generate_test_instances(list<rgw_cls_obj_prepare_op*>& o)

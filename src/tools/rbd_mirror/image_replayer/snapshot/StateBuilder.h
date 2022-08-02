@@ -42,7 +42,6 @@ public:
   void close(Context* on_finish) override;
 
   bool is_disconnected() const override;
-  bool is_linked() const override;
 
   cls::rbd::MirrorImageMode get_mirror_image_mode() const override;
 
@@ -79,6 +78,9 @@ public:
   std::string remote_mirror_peer_uuid;
 
   librbd::mirror::snapshot::ImageMeta<ImageCtxT>* local_image_meta = nullptr;
+
+private:
+  bool is_linked_impl() const override;
 };
 
 } // namespace snapshot

@@ -404,7 +404,7 @@ public:
 
 
 RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Store* store,
-						     struct req_state* const s,
+						     req_state* const s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
                                                      const std::string& frontend_prefix)
 {

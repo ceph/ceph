@@ -1,1 +1,4 @@
 cephfs python3-cephfs; PEP386
+ceph_argparse python3-ceph-argparse
+ceph_common python3-ceph-common
+distutils python3-distutils

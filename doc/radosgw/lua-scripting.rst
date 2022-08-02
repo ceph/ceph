@@ -6,9 +6,10 @@ Lua Scripting
 
 .. contents::
 
-This feature allows users to upload Lua scripts to different context in the radosgw. The two supported context are "preRequest" that will execute a script before the
-operation was taken, and "postRequest" that will execute after each operation is taken. Script may be uploaded to address requests for users of a specific tenant.
-The script can access fields in the request and modify some fields. All Lua language features can be used in the script.
+This feature allows users to assign execution context to Lua scripts. The three supported contexts are ``preRequest``" which will execute a script before each
+operation is performed, ``postRequest`` which will execute after each operation is performed, and ``background`` which will execute within a specified time interval.
+A request context script may be constrained to operations belonging to a specific tenant's users.
+The request context script can also access fields in the request and modify some fields. All Lua language features can be used.
 
 By default, all lua standard libraries are available in the script, however, in order to allow for other lua modules to be used in the script, we support adding packages to an allowlist:
 
@@ -28,23 +29,27 @@ Script Management via CLI
 
 To upload a script:
    
+
 ::
    
-   # radosgw-admin script put --infile={lua-file} --context={preRequest|postRequest} [--tenant={tenant-name}]
+   # radosgw-admin script put --infile={lua-file} --context={preRequest|postRequest|background} [--tenant={tenant-name}]
+
+
+* When uploading a script with the ``background`` context, a tenant name may not be specified.
 
 
 To print the content of the script to standard output:
 
 ::
    
-   # radosgw-admin script get --context={preRequest|postRequest} [--tenant={tenant-name}]
+   # radosgw-admin script get --context={preRequest|postRequest|background} [--tenant={tenant-name}]
 
 
 To remove the script:
 
 ::
    
-   # radosgw-admin script rm --context={preRequest|postRequest} [--tenant={tenant-name}]
+   # radosgw-admin script rm --context={preRequest|postRequest|background} [--tenant={tenant-name}]
 
 
 Package Management via CLI
@@ -140,27 +145,27 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.SwiftAccountName``                       | string   | swift account name                                           | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket``                                 | table    | info on the bucket                                           | no       | no        | yes      |
+| ``Request.Bucket``                                 | table    | info on the bucket                                           | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Tenant``                          | string   | tenant of the bucket                                         | no       | no        | no       |
+| ``Request.Bucket.Tenant``                          | string   | tenant of the bucket                                         | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Name``                            | string   | bucket name                                                  | no       | no        | no       |
+| ``Request.Bucket.Name``                            | string   | bucket name (writeable only in `preRequest` context)         | no       | yes       | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Marker``                          | string   | bucket marker (initial id)                                   | no       | no        | no       |
+| ``Request.Bucket.Marker``                          | string   | bucket marker (initial id)                                   | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Id``                              | string   | bucket id                                                    | no       | no        | no       |
+| ``Request.Bucket.Id``                              | string   | bucket id                                                    | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Count``                           | integer  | number of objects in the bucket                              | no       | no        | no       |
+| ``Request.Bucket.Count``                           | integer  | number of objects in the bucket                              | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Size``                            | integer  | total size of objects in the bucket                          | no       | no        | no       |
+| ``Request.Bucket.Size``                            | integer  | total size of objects in the bucket                          | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.ZoneGroupId``                     | string   | zone group of the bucket                                     | no       | no        | no       |
+| ``Request.Bucket.ZoneGroupId``                     | string   | zone group of the bucket                                     | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.CreationTime``                    | time     | creation time of the bucket                                  | no       | no        | no       |
+| ``Request.Bucket.CreationTime``                    | time     | creation time of the bucket                                  | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.MTime``                           | time     | modification time of the bucket                              | no       | no        | no       |
+| ``Request.Bucket.MTime``                           | time     | modification time of the bucket                              | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Quota``                           | table    | bucket quota                                                 | no       | no        | no       |
+| ``Request.Bucket.Quota``                           | table    | bucket quota                                                 | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Quota.MaxSize``                   | integer  | bucket quota max size                                        | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -170,13 +175,13 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Quota.Rounded``                   | boolean  | bucket quota is rounded to 4K                                | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.PlacementRule``                   | table    | bucket placement rule                                        | no       | no        | no       |
+| ``Request.Bucket.PlacementRule``                   | table    | bucket placement rule                                        | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.PlacementRule.Name``              | string   | bucket placement rule name                                   | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.PlacementRule.StorageClass``      | string   | bucket placement rule storage class                          | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.User``                            | table    | bucket owner                                                 | no       | no        | no       |
+| ``Request.Bucket.User``                            | table    | bucket owner                                                 | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.User.Tenant``                     | string   | bucket owner tenant                                          | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -290,12 +295,53 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.User.Id``                                | string   | triggering user id                                           | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.Trace``                                  | table    | info on trace                                                | no       | no        | no       |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.Trace.Enable``                           | boolean  | tracing is enabled                                           | no       | yes       | no       |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 
 Request Functions
 --------------------
 Operations Log
 ~~~~~~~~~~~~~~
 The ``Request.Log()`` function prints the requests into the operations log. This function has no parameters. It returns 0 for success and an error code if it fails.
+
+Background Context
+--------------------
+The ``background`` context may be used for purposes that include analytics, monitoring, caching data for other context executions.
+- Background script execution default interval is 5 seconds.
+
+Global ``RGW`` Table
+--------------------
+The ``RGW`` Lua table is accessible from all contexts and saves data written to it
+during execution so that it may be read and used later during other executions, from the same context of a different one.
+- Each RGW instance has its own private and ephemeral ``RGW`` Lua table that is lost when the daemon restarts. Note that ``background`` context scripts will run on every instance.
+- The maximum number of entries in the table is 100,000. Each entry has a string key a value with a combined length of no more than 1KB.
+A Lua script will abort with an error if the number of entries or entry size exceeds these limits.
+- The ``RGW`` Lua table uses string indices and can store values of type: string, integer, double and boolean
+
+Increment/Decrement Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Since entries in the ``RGW`` table could be accessed from multiple places at the same time we need a way
+to atomically increment and decrement numeric values in it. For that the following functions should be used:
+- ``RGW.increment(<key>, [value])`` would increment the value of ``key`` by ``value`` if value is provided or by 1 if not
+- ``RGW.decrement(<key>, [value])`` would decrement the value of ``key`` by ``value`` if value is provided or by 1 if not
+- if the value of ``key`` is not numeric, the execution of the script would fail
+- if we try to increment or decrement by non-numeric values, the execution of the script would fail
+
+
+Tracing
+~~~~~~~
+Tracing functions can be used only in `postRequest` context.
+
+- ``Request.Trace.SetAttribute()`` - sets the attribute for the request's trace.
+  Takes two arguments. The first is the `key`, which should be a string. The second is the value, which can either be a string or a number.
+  Using the attribute, you can locate specific traces.
+
+- ``Request.Trace.AddEvent()`` - adds an event to the first span of the request's trace
+  An event is defined by event name, event time, and zero or more event attributes.
+  Therefore, the function accepts one or two arguments. A string containing the event name should be the first argument, followed by the event attributes, which is optional for events without attributes.
+  An event's attributes must be a table of strings.
 
 Lua Code Samples
 ----------------
@@ -423,4 +469,45 @@ Then, do a restart for the radosgw and upload the following script to the `postR
     assert(s:send(json.encode(msg).."\n"))
     assert(s:close())
   end
+
+
+- Trace only requests of specific bucket
+
+Tracing is disabled by default, so we should enable tracing for this specific bucket
+
+.. code-block:: lua
+
+  if Request.Bucket.Name == "my-bucket" then
+      Request.Trace.Enable = true
+  end
+
+
+If `tracing is enabled <https://docs.ceph.com/en/latest/jaegertracing/#how-to-enable-tracing-in-ceph/>`_ on the RGW, the value of Request.Trace.Enable is true, so we should disable tracing for all other requests that do not match the bucket name.
+In the `preRequest` context:
+
+.. code-block:: lua
+
+  if Request.Bucket.Name ~= "my-bucket" then
+      Request.Trace.Enable = false
+  end
+
+Note that changing `Request.Trace.Enable` does not change the tracer's state, but disables or enables the tracing for the request only.
+
+
+- Add Information for requests traces
+
+in `postRequest` context, we can add attributes and events to the request's trace.
+
+.. code-block:: lua
+
+  Request.Trace.AddEvent("lua script execution started")
+
+  Request.Trace.SetAttribute("HTTPStatusCode", Request.Response.HTTPStatusCode)
+
+  event_attrs = {}
+  for k,v in pairs(Request.GenericAttributes) do
+    event_attrs[k] = v
+  end
+
+  Request.Trace.AddEvent("second event", event_attrs)
 

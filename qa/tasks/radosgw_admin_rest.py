@@ -69,6 +69,8 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
             return 'usage', ''
         elif cmd[0] == 'info':
             return 'info', ''
+        elif cmd[0] == 'ratelimit':
+            return 'ratelimit', ''
         elif cmd[0] == 'zone' or cmd[0] in zone_sub_resources:
             if cmd[0] == 'zone':
                 return 'zone', ''
@@ -139,10 +141,11 @@ def task(ctx, config):
     admin_display_name = 'Ms. Admin User'
     admin_access_key = 'MH1WC2XQ1S8UISFDZC8W'
     admin_secret_key = 'dQyrTPA0s248YeN5bBv4ukvKU0kh54LWWywkrpoG'
-    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read'
+    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read;ratelimit=read, write'
 
     user1 = 'foo'
     user2 = 'fud'
+    ratelimit_user = 'ratelimit_user'
     subuser1 = 'foo:foo1'
     subuser2 = 'foo:foo2'
     display_name1 = 'Foo'
@@ -733,3 +736,80 @@ def task(ctx, config):
     assert len(name) > 0
     # fsid is a uuid, but I'm not going to try to parse it
     assert len(fsid) > 0
+    
+    # TESTCASE 'ratelimit' 'user' 'info' 'succeeds'
+    (ret, out) = rgwadmin_rest(admin_conn,
+        ['user', 'create'],
+        {'uid' : ratelimit_user,
+         'display-name' :  display_name1,
+         'email' : email,
+         'access-key' : access_key,
+         'secret-key' : secret_key,
+         'max-buckets' : '1000'
+        })
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user})
+    assert ret == 200
+
+    # TESTCASE 'ratelimit' 'user' 'info'  'not existing user' 'fails'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user + 'string'})
+    assert ret == 404
+
+    # TESTCASE 'ratelimit' 'user' 'info'  'uid not specified' 'fails'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user'})
+    assert ret == 400
+
+    # TESTCASE 'ratelimit' 'bucket' 'info' 'succeeds'
+    ratelimit_bucket = 'ratelimitbucket'
+    connection.create_bucket(ratelimit_bucket)
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket})
+    assert ret == 200
+
+    # TESTCASE 'ratelimit' 'bucket' 'info'  'not existing bucket' 'fails'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket + 'string'})
+    assert ret == 404
+
+    # TESTCASE 'ratelimit' 'bucket' 'info' 'bucket not specified' 'fails'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket'})
+    assert ret == 400
+
+    # TESTCASE 'ratelimit' 'global' 'info' 'succeeds'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'global' : 'true'})
+    assert ret == 200
+
+    # TESTCASE 'ratelimit' 'user' 'modify'  'not existing user' 'fails'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user + 'string', 'enabled' : 'true'})
+    assert ret == 404
+
+    # TESTCASE 'ratelimit' 'user' 'modify'  'uid not specified' 'fails'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user'})
+    assert ret == 400
+    
+    # TESTCASE 'ratelimit' 'bucket' 'modify'  'not existing bucket' 'fails'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket + 'string', 'enabled' : 'true'})
+    assert ret == 404
+
+    # TESTCASE 'ratelimit' 'bucket' 'modify' 'bucket not specified' 'fails'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'enabled' : 'true'})
+    assert ret == 400
+
+    # TESTCASE 'ratelimit' 'user' 'modifiy' 'enabled' 'max-read-bytes = 2' 'succeeds'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user, 'enabled' : 'true', 'max-read-bytes' : '2'})
+    assert ret == 200
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user})
+    assert ret == 200
+    user_ratelimit = out['user_ratelimit']
+    assert user_ratelimit['enabled'] == True
+    assert user_ratelimit['max_read_bytes'] ==  2
+
+    # TESTCASE 'ratelimit' 'bucket' 'modifiy' 'enabled' 'max-write-bytes = 2' 'succeeds'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket, 'enabled' : 'true', 'max-write-bytes' : '2'})
+    assert ret == 200
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket})
+    assert ret == 200
+    bucket_ratelimit = out['bucket_ratelimit']
+    assert bucket_ratelimit['enabled'] == True
+    assert bucket_ratelimit['max_write_bytes'] == 2
+
+    # TESTCASE 'ratelimit' 'global' 'modify' 'anonymous' 'enabled' 'succeeds'
+    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'global': 'true', 'enabled' : 'true'})
+    assert ret == 200

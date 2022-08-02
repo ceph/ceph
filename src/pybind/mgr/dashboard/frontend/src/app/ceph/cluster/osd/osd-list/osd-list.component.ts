@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -23,6 +24,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
+import { OsdSettings } from '~/app/shared/models/osd-settings';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -67,6 +69,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[];
   clusterWideActions: CdTableAction[];
   icons = Icons;
+  osdSettings = new OsdSettings();
 
   selection = new CdTableSelection();
   osds: any[] = [];
@@ -344,6 +347,13 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     ];
 
     this.orchService.status().subscribe((status: OrchestratorStatus) => (this.orchStatus = status));
+
+    this.osdService
+      .getOsdSettings()
+      .pipe(take(1))
+      .subscribe((data: any) => {
+        this.osdSettings = data;
+      });
   }
 
   getDisable(action: 'create' | 'delete', selection: CdTableSelection): boolean | string {

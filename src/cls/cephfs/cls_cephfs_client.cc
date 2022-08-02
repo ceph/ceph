@@ -75,6 +75,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   const std::string &oid,
   inode_backtrace_t *backtrace,
   file_layout_t *layout,
+  std::string *symlink,
   AccumulateResult *result)
 {
   ceph_assert(backtrace != NULL);
@@ -102,6 +103,11 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   int layout_r = 0;
   bufferlist layout_bl;
   op.getxattr("layout", &layout_bl, &layout_r);
+  op.set_op_flags2(librados::OP_FAILOK);
+
+  int symlink_r = 0;
+  bufferlist symlink_bl;
+  op.getxattr("symlink", &symlink_bl, &symlink_r);
   op.set_op_flags2(librados::OP_FAILOK);
 
   bufferlist op_bl;
@@ -156,6 +162,16 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
     try {
       auto q = layout_bl.cbegin();
       decode(*layout, q);
+    } catch (ceph::buffer::error &e) {
+      return -EINVAL;
+    }
+  }
+
+  // Deserialize symlink
+  if (symlink_bl.length()) {
+    try {
+      auto q = symlink_bl.cbegin();
+      decode(*symlink, q);
     } catch (ceph::buffer::error &e) {
       return -EINVAL;
     }

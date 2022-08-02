@@ -11,3 +11,4 @@ op_workload:
           - rbd/qemu_dynamic_features.sh
         env:
           IMAGE_NAME: client.0.1-clone
+        timeout: 0

@@ -4,26 +4,11 @@ import subprocess
 from select import select
 from ceph_volume import terminal
 from ceph_volume.util import as_bytes
+from ceph_volume.util.system import which, run_host_cmd, host_rootfs
 
 import logging
 
 logger = logging.getLogger(__name__)
-host_rootfs = '/rootfs'
-run_host_cmd = [
-        'nsenter',
-        '--mount={}/proc/1/ns/mnt'.format(host_rootfs),
-        '--ipc={}/proc/1/ns/ipc'.format(host_rootfs),
-        '--net={}/proc/1/ns/net'.format(host_rootfs),
-        '--uts={}/proc/1/ns/uts'.format(host_rootfs)
-]
-
-def which(executable):
-    """
-    Proxy function to ceph_volume.util.system.which because the ``system``
-    module does import ``process``
-    """
-    from ceph_volume.util import system
-    return system.which(executable)
 
 
 def log_output(descriptor, message, terminal_logging, logfile_logging):
@@ -119,7 +104,7 @@ def run(command, run_on_host=False, **kw):
     :param stop_on_error: If a nonzero exit status is return, it raises a ``RuntimeError``
     :param fail_msg: If a nonzero exit status is returned this message will be included in the log
     """
-    executable = which(command.pop(0))
+    executable = which(command.pop(0), run_on_host)
     command.insert(0, executable)
     if run_on_host and path.isdir(host_rootfs):
         command = run_host_cmd + command
@@ -189,7 +174,7 @@ def call(command, run_on_host=False, **kw):
     :param verbose_on_failure: On a non-zero exit status, it will forcefully set logging ON for
                                the terminal. Defaults to True
     """
-    executable = which(command.pop(0))
+    executable = which(command.pop(0), run_on_host)
     command.insert(0, executable)
     if run_on_host and path.isdir(host_rootfs):
         command = run_host_cmd + command

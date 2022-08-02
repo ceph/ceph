@@ -1,11 +1,43 @@
 <div class="row">
   <div class="col-md-12">
-    <span><strong i18n>Site Name:</strong> {{siteName}}</span>
-    <cd-table-actions class="table-actions float-right"
-                      [permission]="permission"
-                      [selection]="selection"
-                      [tableActions]="tableActions">
-    </cd-table-actions>
+    <form name="rbdmirroringForm"
+          #formDir="ngForm"
+          [formGroup]="rbdmirroringForm"
+          novalidate>
+
+      <div class="d-flex flex-row">
+        <label class="col-form-label"
+               for="siteName"
+               i18n>Site Name</label>
+
+        <div class="col-md-4 input-group mb-3 mr-auto">
+          <input type="text"
+                 class="form-control"
+                 id="siteName"
+                 name="siteName"
+                 formControlName="siteName"
+                 [attr.disabled]="!editing ? true : null">
+          <div class="input-group-append">
+            <button class="btn btn-light"
+                    id="editSiteName"
+                    (click)="updateSiteName()">
+              <i [ngClass]="icons.edit"
+                 *ngIf="!editing"></i>
+              <i [ngClass]="icons.check"
+                 *ngIf="editing"></i>
+            </button>
+            <cd-copy-2-clipboard-button [source]="siteName"
+                                        [byId]="false">
+            </cd-copy-2-clipboard-button>
+          </div>
+        </div>
+        <cd-table-actions class="table-actions"
+                          [permission]="permission"
+                          [selection]="selection"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
+    </form>
   </div>
 </div>
 

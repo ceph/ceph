@@ -28,6 +28,13 @@ def get_ceph_option(_, key):
     return __file__
 
 
+def get_module_option_ex(_, module, key, default=None):
+    if module == 'prometheus':
+        if key == 'server_port':
+            return 9283
+    return None
+
+
 def _run_cephadm(ret):
     async def foo(s, host, entity, cmd, e, **kwargs):
         if cmd == 'gather-facts':
@@ -85,12 +92,15 @@ def with_cephadm_module(module_options=None, store=None):
     """
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option),\
             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
+            mock.patch('cephadm.module.CephadmOrchestrator.get_module_option_ex', get_module_option_ex),\
             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
             mock.patch("cephadm.module.CephadmOrchestrator.remote"), \
             mock.patch("cephadm.agent.CephadmAgentHelpers._request_agent_acks"), \
             mock.patch("cephadm.agent.CephadmAgentHelpers._apply_agent", return_value=False), \
             mock.patch("cephadm.agent.CephadmAgentHelpers._agent_down", return_value=False), \
-            mock.patch('cephadm.agent.CherryPyThread.run'):
+            mock.patch('cephadm.agent.CherryPyThread.run'), \
+            mock.patch('cephadm.offline_watcher.OfflineHostWatcher.run'), \
+            mock.patch('cephadm.tuned_profiles.TunedProfileUtils._remove_stray_tuned_profiles'):
 
         m = CephadmOrchestrator.__new__(CephadmOrchestrator)
         if module_options is not None:
@@ -176,7 +186,7 @@ def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth=No
 
     dds = wait(cephadm_module, cephadm_module.list_daemons())
     own_dds = [dd for dd in dds if dd.service_name() == spec.service_name()]
-    if host:
+    if host and spec.service_type != 'osd':
         assert own_dds
 
     yield [dd.name() for dd in own_dds]

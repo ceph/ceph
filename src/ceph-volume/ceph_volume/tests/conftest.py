@@ -58,32 +58,28 @@ def mock_lv_device_generator():
         return dev
     return mock_lv
 
-
-@pytest.fixture
-def mock_devices_available():
+def mock_device():
     dev = create_autospec(device.Device)
     dev.path = '/dev/foo'
     dev.vg_name = 'vg_foo'
     dev.lv_name = 'lv_foo'
+    dev.symlink = None
     dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
     dev.available_lvm = True
     dev.vg_size = [21474836480]
     dev.vg_free = dev.vg_size
-    return [dev]
+    dev.lvs = []
+    return dev
+
+@pytest.fixture(params=range(1,3))
+def mock_devices_available(request):
+    ret = []
+    for _ in range(request.param):
+        ret.append(mock_device())
+    return ret
 
 @pytest.fixture
 def mock_device_generator():
-    def mock_device():
-        dev = create_autospec(device.Device)
-        dev.path = '/dev/foo'
-        dev.vg_name = 'vg_foo'
-        dev.lv_name = 'lv_foo'
-        dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
-        dev.available_lvm = True
-        dev.vg_size = [21474836480]
-        dev.vg_free = dev.vg_size
-        dev.lvs = []
-        return dev
     return mock_device
 
 
@@ -238,14 +234,15 @@ def ceph_parttype(request):
 @pytest.fixture
 def lsblk_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
     monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
-                        lambda path: {'TYPE': 'disk', 'PARTLABEL': ceph_partlabel})
-    # setting blkid here too in order to be able to fall back to PARTTYPE based
-    # membership
-    monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
                         lambda path: {'TYPE': 'disk',
-                                      'PARTLABEL': '',
+                                      'NAME': 'sda',
+                                      'PARTLABEL': ceph_partlabel,
                                       'PARTTYPE': ceph_parttype})
-
+    monkeypatch.setattr("ceph_volume.util.device.disk.lsblk_all",
+                        lambda: [{'TYPE': 'disk',
+                                  'NAME': 'sda',
+                                  'PARTLABEL': ceph_partlabel,
+                                  'PARTTYPE': ceph_parttype}])
 
 @pytest.fixture
 def blkid_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
@@ -264,14 +261,19 @@ def blkid_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
 def device_info_not_ceph_disk_member(monkeypatch, request):
     monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
                         lambda path: {'TYPE': 'disk',
+                                      'NAME': 'sda',
                                       'PARTLABEL': request.param[0]})
+    monkeypatch.setattr("ceph_volume.util.device.disk.lsblk_all",
+                        lambda: [{'TYPE': 'disk',
+                                  'NAME': 'sda',
+                                  'PARTLABEL': request.param[0]}])
     monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
                         lambda path: {'TYPE': 'disk',
                                       'PARTLABEL': request.param[1]})
 
 @pytest.fixture
-def patched_get_block_devs_lsblk():
-    with patch('ceph_volume.util.disk.get_block_devs_lsblk') as p:
+def patched_get_block_devs_sysfs():
+    with patch('ceph_volume.util.disk.get_block_devs_sysfs') as p:
         yield p
 
 @pytest.fixture
@@ -285,7 +287,11 @@ def patch_bluestore_label():
 def device_info(monkeypatch, patch_bluestore_label):
     def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None,
               has_bluestore_label=False):
-        devices = devices if devices else {}
+        if devices:
+            for dev in devices.keys():
+                devices[dev]['device_nodes'] = os.path.basename(dev)
+        else:
+            devices = {}
         lsblk = lsblk if lsblk else {}
         blkid = blkid if blkid else {}
         udevadm = udevadm if udevadm else {}
@@ -305,3 +311,11 @@ def device_info(monkeypatch, patch_bluestore_label):
 @pytest.fixture(params=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.999, 1.0])
 def data_allocate_fraction(request):
     return request.param
+
+@pytest.fixture
+def fake_filesystem(fs):
+
+    fs.create_dir('/sys/block/sda/slaves')
+    fs.create_dir('/sys/block/sda/queue')
+    fs.create_dir('/sys/block/rbd0')
+    yield fs

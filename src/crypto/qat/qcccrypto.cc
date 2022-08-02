@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include "common/debug.h"
 #include "include/scope_guard.h"
+#include "common/dout.h"
+#include "common/errno.h"
 
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
@@ -11,8 +13,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
-static ostream&
-_prefix(std::ostream* _dout)
+static std::ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "QccCrypto: ";
 }
@@ -28,6 +29,7 @@ static std::atomic<bool> init_called = { false };
 void* QccCrypto::crypt_thread(void *args) {
   struct qcc_thread_args *thread_args = (struct qcc_thread_args *)args;
   thread_args->qccinstance->do_crypt(thread_args);
+  return thread_args;
 }
 
 void QccCrypto::QccFreeInstance(int entry) {

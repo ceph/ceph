@@ -11,7 +11,8 @@ except ImportError:
     import unittest.mock as mock
 
 from .. import mgr
-from ..services.rbd import RbdConfiguration, RbdService, get_image_spec, parse_image_spec
+from ..services.rbd import RbdConfiguration, RBDSchedulerInterval, RbdService, \
+    get_image_spec, parse_image_spec
 
 
 class ImageNotFoundStub(Exception):
@@ -128,8 +129,8 @@ class RbdServiceTest(unittest.TestCase):
             'namespace': ''
         }
 
-        rbd_pool_list = RbdService.rbd_pool_list('test_pool')
-        self.assertEqual(rbd_pool_list, (0, [{
+        rbd_pool_list = RbdService.rbd_pool_list(['test_pool'], offset=0, limit=5)
+        self.assertEqual(rbd_pool_list, ([{
             'id': '3c1a5ee60a88',
             'unique_id': 'test_pool/3c1a5ee60a88',
             'name': 'test_rbd',
@@ -138,4 +139,22 @@ class RbdServiceTest(unittest.TestCase):
             'deferment_end_time': '{}Z'.format(time.isoformat()),
             'pool_name': 'test_pool',
             'namespace': ''
-        }]))
+        }], 1))
+
+    def test_valid_interval(self):
+        test_cases = [
+            ('15m', False),
+            ('1h', False),
+            ('5d', False),
+            ('m', True),
+            ('d', True),
+            ('1s', True),
+            ('11', True),
+            ('1m1', True),
+        ]
+        for interval, error in test_cases:
+            if error:
+                with self.assertRaises(ValueError):
+                    RBDSchedulerInterval(interval)
+            else:
+                self.assertEqual(str(RBDSchedulerInterval(interval)), interval)

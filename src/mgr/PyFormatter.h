@@ -141,5 +141,23 @@ private:
 
 };
 
+class PyJSONFormatter : public JSONFormatter {
+public:
+  PyObject *get();
+  PyJSONFormatter (const PyJSONFormatter&) = default;
+  PyJSONFormatter(bool pretty=false, bool is_array=false) : JSONFormatter(pretty) {
+    if(is_array) {
+      open_array_section("");
+    } else {
+      open_object_section("");
+    }
+}
+
+private:
+  using json_formatter = JSONFormatter;
+  template <class T> void add_value(std::string_view name, T val);
+  void add_value(std::string_view name, std::string_view val, bool quoted);
+};
+
 #endif
 

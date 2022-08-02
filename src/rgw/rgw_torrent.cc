@@ -37,7 +37,7 @@ seed::~seed()
   store = NULL;
 }
 
-void seed::init(struct req_state *p_req, rgw::sal::Store* p_store)
+void seed::init(req_state *p_req, rgw::sal::Store* p_store)
 {
   s = p_req;
   store = p_store;

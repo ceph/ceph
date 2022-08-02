@@ -122,6 +122,11 @@ int RGWZoneGroup::create_default(const DoutPrefixProvider *dpp, optional_yield y
   default_zone.name = zone_params.get_name();
   default_zone.id = zone_params.get_id();
   master_zone = default_zone.id;
+
+  // enable all supported features
+  enabled_features.insert(rgw::zone_features::supported.begin(),
+                          rgw::zone_features::supported.end());
+  default_zone.supported_features = enabled_features;
   
   r = create(dpp, y);
   if (r < 0 && r != -EEXIST) {
@@ -202,6 +207,8 @@ int RGWZoneGroup::add_zone(const DoutPrefixProvider *dpp,
                            bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
                            string *predirect_zone, std::optional<int> bucket_index_max_shards,
                            RGWSyncModulesManager *sync_mgr,
+                           const rgw::zone_features::set& enable_features,
+                           const rgw::zone_features::set& disable_features,
 			   optional_yield y)
 {
   auto& zone_id = zone_params.get_id();
@@ -267,6 +274,24 @@ int RGWZoneGroup::add_zone(const DoutPrefixProvider *dpp,
 
   for (auto rm : sync_from_rm) {
     zone.sync_from.erase(rm);
+  }
+
+  zone.supported_features.insert(enable_features.begin(),
+                                 enable_features.end());
+
+  for (const auto& feature : disable_features) {
+    if (enabled_features.contains(feature)) {
+      lderr(cct) << "ERROR: Cannot disable zone feature \"" << feature
+          << "\" until it's been disabled in zonegroup " << name << dendl;
+      return -EINVAL;
+    }
+    auto i = zone.supported_features.find(feature);
+    if (i == zone.supported_features.end()) {
+      ldout(cct, 1) << "WARNING: zone feature \"" << feature
+          << "\" was not enabled in zone " << zone.name << dendl;
+      continue;
+    }
+    zone.supported_features.erase(i);
   }
 
   post_process_params(dpp, y);
@@ -435,8 +460,7 @@ int RGWSystemMetaObj::read_default(const DoutPrefixProvider *dpp,
   auto pool = get_pool(cct);
   bufferlist bl;
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0)
     return ret;
@@ -485,8 +509,7 @@ int RGWSystemMetaObj::set_as_default(const DoutPrefixProvider *dpp, optional_yie
 
   encode(default_info, bl);
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
   int ret = sysobj.wop()
                   .set_exclusive(exclusive)
                   .write(dpp, bl, y);
@@ -505,8 +528,7 @@ int RGWSystemMetaObj::read_id(const DoutPrefixProvider *dpp, const string& obj_n
 
   string oid = get_names_oid_prefix() + obj_name;
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0) {
     return ret;
@@ -528,8 +550,6 @@ int RGWSystemMetaObj::delete_obj(const DoutPrefixProvider *dpp, optional_yield y
 {
   rgw_pool pool(get_pool(cct));
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-
   /* check to see if obj is the default */
   RGWDefaultSystemMetaObjInfo default_info;
   int ret = read_default(dpp, default_info, get_default_oid(old_format), y);
@@ -538,7 +558,7 @@ int RGWSystemMetaObj::delete_obj(const DoutPrefixProvider *dpp, optional_yield y
   if (default_info.default_id == id || (old_format && default_info.default_id == name)) {
     string oid = get_default_oid(old_format);
     rgw_raw_obj default_named_obj(pool, oid);
-    auto sysobj = sysobj_svc->get_obj(obj_ctx, default_named_obj);
+    auto sysobj = sysobj_svc->get_obj(default_named_obj);
     ret = sysobj.wop().remove(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "Error delete default obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
@@ -548,7 +568,7 @@ int RGWSystemMetaObj::delete_obj(const DoutPrefixProvider *dpp, optional_yield y
   if (!old_format) {
     string oid  = get_names_oid_prefix() + name;
     rgw_raw_obj object_name(pool, oid);
-    auto sysobj = sysobj_svc->get_obj(obj_ctx, object_name);
+    auto sysobj = sysobj_svc->get_obj(object_name);
     ret = sysobj.wop().remove(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "Error delete obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
@@ -564,7 +584,7 @@ int RGWSystemMetaObj::delete_obj(const DoutPrefixProvider *dpp, optional_yield y
   }
 
   rgw_raw_obj object_id(pool, oid);
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, object_id);
+  auto sysobj = sysobj_svc->get_obj(object_id);
   ret = sysobj.wop().remove(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -584,8 +604,7 @@ int RGWSystemMetaObj::store_name(const DoutPrefixProvider *dpp, bool exclusive, 
   bufferlist bl;
   using ceph::encode;
   encode(nameToId, bl);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
   return sysobj.wop()
                .set_exclusive(exclusive)
                .write(dpp, bl, y);
@@ -618,8 +637,7 @@ int RGWSystemMetaObj::rename(const DoutPrefixProvider *dpp, const string& new_na
   rgw_pool pool(get_pool(cct));
   string oid = get_names_oid_prefix() + old_name;
   rgw_raw_obj old_name_obj(pool, oid);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, old_name_obj);
+  auto sysobj = sysobj_svc->get_obj(old_name_obj);
   ret = sysobj.wop().remove(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "Error delete old obj name  " << old_name << ": " << cpp_strerror(-ret) << dendl;
@@ -638,8 +656,7 @@ int RGWSystemMetaObj::read_info(const DoutPrefixProvider *dpp, const string& obj
 
   string oid = get_info_oid_prefix(old_format) + obj_id;
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "failed reading obj info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
@@ -709,8 +726,7 @@ int RGWSystemMetaObj::store_info(const DoutPrefixProvider *dpp, bool exclusive, 
   bufferlist bl;
   using ceph::encode;
   encode(*this, bl);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
   return sysobj.wop()
                .set_exclusive(exclusive)
                .write(dpp, bl, y);
@@ -809,8 +825,7 @@ int RGWRealm::create_control(const DoutPrefixProvider *dpp, bool exclusive, opti
   auto pool = rgw_pool{get_pool(cct)};
   auto oid = get_control_oid();
   bufferlist bl;
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
   return sysobj.wop()
                .set_exclusive(exclusive)
                .write(dpp, bl, y);
@@ -820,8 +835,7 @@ int RGWRealm::delete_control(const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto pool = rgw_pool{get_pool(cct)};
   auto obj = rgw_raw_obj{pool, get_control_oid()};
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, obj);
+  auto sysobj = sysobj_svc->get_obj(obj);
   return sysobj.wop().remove(dpp, y);
 }
 
@@ -892,8 +906,7 @@ string RGWRealm::get_control_oid() const
 int RGWRealm::notify_zone(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y)
 {
   rgw_pool pool{get_pool(cct)};
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, get_control_oid()});
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, get_control_oid()});
   int ret = sysobj.wn().notify(dpp, bl, 0, nullptr, y);
   if (ret < 0) {
     return ret;
@@ -967,8 +980,7 @@ int RGWPeriodConfig::read(const DoutPrefixProvider *dpp, RGWSI_SysObj *sysobj_sv
   const auto& oid = get_oid(realm_id);
   bufferlist bl;
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0) {
     return ret;
@@ -992,8 +1004,7 @@ int RGWPeriodConfig::write(const DoutPrefixProvider *dpp,
   bufferlist bl;
   using ceph::encode;
   encode(*this, bl);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
   return sysobj.wop()
                .set_exclusive(false)
                .write(dpp, bl, y);
@@ -1121,8 +1132,7 @@ int RGWPeriod::read_latest_epoch(const DoutPrefixProvider *dpp,
 
   rgw_pool pool(get_pool(cct));
   bufferlist bl;
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
@@ -1183,8 +1193,7 @@ int RGWPeriod::set_latest_epoch(const DoutPrefixProvider *dpp,
   using ceph::encode;
   encode(info, bl);
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
   return sysobj.wop()
                .set_exclusive(exclusive)
                .write(dpp, bl, y);
@@ -1243,8 +1252,7 @@ int RGWPeriod::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
   for (epoch_t e = 1; e <= epoch; e++) {
     RGWPeriod p{get_id(), e};
     rgw_raw_obj oid{pool, p.get_period_oid()};
-    auto obj_ctx = sysobj_svc->init_obj_ctx();
-    auto sysobj = sysobj_svc->get_obj(obj_ctx, oid);
+    auto sysobj = sysobj_svc->get_obj(oid);
     int ret = sysobj.wop().remove(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "WARNING: failed to delete period object " << oid
@@ -1254,8 +1262,7 @@ int RGWPeriod::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
   // delete the .latest_epoch object
   rgw_raw_obj oid{pool, get_period_oid_prefix() + get_latest_epoch_oid()};
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, oid);
+  auto sysobj = sysobj_svc->get_obj(oid);
   int ret = sysobj.wop().remove(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "WARNING: failed to delete period object " << oid
@@ -1270,8 +1277,7 @@ int RGWPeriod::read_info(const DoutPrefixProvider *dpp, optional_yield y)
 
   bufferlist bl;
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, get_period_oid()});
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, get_period_oid()});
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "failed reading obj info from " << pool << ":" << get_period_oid() << ": " << cpp_strerror(-ret) << dendl;
@@ -1328,8 +1334,7 @@ int RGWPeriod::store_info(const DoutPrefixProvider *dpp, bool exclusive, optiona
   using ceph::encode;
   encode(*this, bl);
 
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
   return sysobj.wop()
                .set_exclusive(exclusive)
                .write(dpp, bl, y);
@@ -1787,8 +1792,7 @@ int RGWZoneParams::create(const DoutPrefixProvider *dpp, optional_yield y, bool 
 {
   /* check for old pools config */
   rgw_raw_obj obj(domain_root, avail_pools);
-  auto obj_ctx = sysobj_svc->init_obj_ctx();
-  auto sysobj = sysobj_svc->get_obj(obj_ctx, obj);
+  auto sysobj = sysobj_svc->get_obj(obj);
   int r = sysobj.rop().stat(y, dpp);
   if (r < 0) {
     ldpp_dout(dpp, 10) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
@@ -2066,8 +2070,8 @@ int RGWZoneGroupMap::read(const DoutPrefixProvider *dpp, CephContext *cct, RGWSI
     return ret;
   }
 
-  bucket_quota = period.get_config().bucket_quota;
-  user_quota = period.get_config().user_quota;
+  quota.bucket_quota = period.get_config().quota.bucket_quota;
+  quota.user_quota = period.get_config().quota.user_quota;
   zonegroups = period.get_map().zonegroups;
   zonegroups_by_api = period.get_map().zonegroups_by_api;
   master_zonegroup = period.get_map().master_zonegroup;
@@ -2079,8 +2083,8 @@ void RGWRegionMap::encode(bufferlist& bl) const {
   ENCODE_START( 3, 1, bl);
   encode(regions, bl);
   encode(master_region, bl);
-  encode(bucket_quota, bl);
-  encode(user_quota, bl);
+  encode(quota.bucket_quota, bl);
+  encode(quota.user_quota, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2089,9 +2093,9 @@ void RGWRegionMap::decode(bufferlist::const_iterator& bl) {
   decode(regions, bl);
   decode(master_region, bl);
   if (struct_v >= 2)
-    decode(bucket_quota, bl);
+    decode(quota.bucket_quota, bl);
   if (struct_v >= 3)
-    decode(user_quota, bl);
+    decode(quota.user_quota, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2099,8 +2103,8 @@ void RGWZoneGroupMap::encode(bufferlist& bl) const {
   ENCODE_START( 3, 1, bl);
   encode(zonegroups, bl);
   encode(master_zonegroup, bl);
-  encode(bucket_quota, bl);
-  encode(user_quota, bl);
+  encode(quota.bucket_quota, bl);
+  encode(quota.user_quota, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2109,9 +2113,9 @@ void RGWZoneGroupMap::decode(bufferlist::const_iterator& bl) {
   decode(zonegroups, bl);
   decode(master_zonegroup, bl);
   if (struct_v >= 2)
-    decode(bucket_quota, bl);
+    decode(quota.bucket_quota, bl);
   if (struct_v >= 3)
-    decode(user_quota, bl);
+    decode(quota.user_quota, bl);
   DECODE_FINISH(bl);
 
   zonegroups_by_api.clear();
@@ -2379,6 +2383,7 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json("default_placement", default_placement, f);
   encode_json("realm_id", realm_id, f);
   encode_json("sync_policy", sync_policy, f);
+  encode_json("enabled_features", enabled_features, f);
 }
 
 static void decode_zones(map<rgw_zone_id, RGWZone>& zones, JSONObj *o)
@@ -2418,10 +2423,12 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("master_zone", master_zone, obj);
   JSONDecoder::decode_json("zones", zones, decode_zones, obj);
   JSONDecoder::decode_json("placement_targets", placement_targets, decode_placement_targets, obj);
-  JSONDecoder::decode_json("default_placement", default_placement.name, obj);
-  JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
+  string pr;
+  JSONDecoder::decode_json("default_placement", pr, obj);
+  default_placement.from_str(pr);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("sync_policy", sync_policy, obj);
+  JSONDecoder::decode_json("enabled_features", enabled_features, obj);
 }
 
 void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
@@ -2674,6 +2681,7 @@ void RGWZone::dump(Formatter *f) const
   encode_json("sync_from_all", sync_from_all, f);
   encode_json("sync_from", sync_from, f);
   encode_json("redirect_zone", redirect_zone, f);
+  encode_json("supported_features", supported_features, f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
@@ -2692,6 +2700,7 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("sync_from_all", sync_from_all, true, obj);
   JSONDecoder::decode_json("sync_from", sync_from, obj);
   JSONDecoder::decode_json("redirect_zone", redirect_zone, obj);
+  JSONDecoder::decode_json("supported_features", supported_features, obj);
 }
 
 void RGWTierACLMapping::dump(Formatter *f) const
@@ -2753,38 +2762,44 @@ void RGWPeriodMap::decode_json(JSONObj *obj)
 
 void RGWPeriodConfig::dump(Formatter *f) const
 {
-  encode_json("bucket_quota", bucket_quota, f);
-  encode_json("user_quota", user_quota, f);
+  encode_json("bucket_quota", quota.bucket_quota, f);
+  encode_json("user_quota", quota.user_quota, f);
+  encode_json("user_ratelimit", user_ratelimit, f);
+  encode_json("bucket_ratelimit", bucket_ratelimit, f);
+  encode_json("anonymous_ratelimit", anon_ratelimit, f);
 }
 
 void RGWPeriodConfig::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
-  JSONDecoder::decode_json("user_quota", user_quota, obj);
+  JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
+  JSONDecoder::decode_json("user_ratelimit", user_ratelimit, obj);
+  JSONDecoder::decode_json("bucket_ratelimit", bucket_ratelimit, obj);
+  JSONDecoder::decode_json("anonymous_ratelimit", anon_ratelimit, obj);
 }
 
 void RGWRegionMap::dump(Formatter *f) const
 {
   encode_json("regions", regions, f);
   encode_json("master_region", master_region, f);
-  encode_json("bucket_quota", bucket_quota, f);
-  encode_json("user_quota", user_quota, f);
+  encode_json("bucket_quota", quota.bucket_quota, f);
+  encode_json("user_quota", quota.user_quota, f);
 }
 
 void RGWRegionMap::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("regions", regions, obj);
   JSONDecoder::decode_json("master_region", master_region, obj);
-  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
-  JSONDecoder::decode_json("user_quota", user_quota, obj);
+  JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
 }
 
 void RGWZoneGroupMap::dump(Formatter *f) const
 {
   encode_json("zonegroups", zonegroups, f);
   encode_json("master_zonegroup", master_zonegroup, f);
-  encode_json("bucket_quota", bucket_quota, f);
-  encode_json("user_quota", user_quota, f);
+  encode_json("bucket_quota", quota.bucket_quota, f);
+  encode_json("user_quota", quota.user_quota, f);
 }
 
 void RGWZoneGroupMap::decode_json(JSONObj *obj)
@@ -2800,7 +2815,7 @@ void RGWZoneGroupMap::decode_json(JSONObj *obj)
     JSONDecoder::decode_json("master_region", master_zonegroup, obj);
   }
 
-  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
-  JSONDecoder::decode_json("user_quota", user_quota, obj);
+  JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
 }
 

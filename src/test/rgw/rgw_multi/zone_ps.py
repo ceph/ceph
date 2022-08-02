@@ -54,6 +54,8 @@ class PSZone(Zone):  # pylint: disable=too-many-ancestors
     def has_buckets(self):
         return False
 
+    def has_roles(self):
+        return False
 
 NO_HTTP_BODY = ''
 

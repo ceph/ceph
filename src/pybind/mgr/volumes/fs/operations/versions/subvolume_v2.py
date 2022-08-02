@@ -219,6 +219,13 @@ class SubvolumeV2(SubvolumeV1):
             # attributes of subvolume's content though, are synced during the cloning process.
             attrs = source_subvolume.get_attrs(source_subvolume.snapshot_data_path(snapname))
 
+            # The source of the clone may have exceeded its quota limit as
+            # CephFS quotas are imprecise. Cloning such a source may fail if
+            # the quota on the destination is set before starting the clone
+            # copy. So always set the quota on destination after cloning is
+            # successful.
+            attrs["quota"] = None
+
             # override snapshot pool setting, if one is provided for the clone
             if pool is not None:
                 attrs["data_pool"] = pool
@@ -345,7 +352,7 @@ class SubvolumeV2(SubvolumeV1):
         # machine which removes the entry from the index. Hence, it's safe to removed clone with
         # force option for both.
         acceptable_rm_clone_states = [SubvolumeStates.STATE_COMPLETE, SubvolumeStates.STATE_CANCELED,
-                                      SubvolumeStates.STATE_FAILED]
+                                      SubvolumeStates.STATE_FAILED, SubvolumeStates.STATE_RETAINED]
         if subvol_state not in acceptable_rm_clone_states:
             return False
         return True
@@ -365,6 +372,7 @@ class SubvolumeV2(SubvolumeV1):
                 return
         if self.state != SubvolumeStates.STATE_RETAINED:
             self.trash_incarnation_dir()
+            self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
             self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
             self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
             self.metadata_mgr.flush()

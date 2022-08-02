@@ -43,7 +43,7 @@
                    formControlName="{{ moduleOption.value.name }}"
                    *ngIf="moduleOption.value.enum_allowed.length === 0">
             <select id="{{ moduleOption.value.name }}"
-                    class="form-control custom-select"
+                    class="form-control"
                     formControlName="{{ moduleOption.value.name }}"
                     *ngIf="moduleOption.value.enum_allowed.length > 0">
               <option *ngFor="let value of moduleOption.value.enum_allowed"

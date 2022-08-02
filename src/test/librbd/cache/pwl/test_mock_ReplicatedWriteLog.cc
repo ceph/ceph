@@ -75,7 +75,6 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
                             bool present, bool empty, bool clean,
                             string host, string path,
                             uint64_t size) {
-    ConfigProxy &config = image_ctx->config;
     ASSERT_EQ(present, state.present);
     ASSERT_EQ(empty, state.empty);
     ASSERT_EQ(clean, state.clean);
@@ -83,15 +82,6 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
     ASSERT_EQ(host, state.host);
     ASSERT_EQ(path, state.path);
     ASSERT_EQ(size, state.size);
-    ASSERT_EQ(config.get_val<bool>("rbd_persistent_cache_log_periodic_stats"),
-	      state.log_periodic_stats);
-  }
-
-  void expect_op_work_queue(MockImageCtx& mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.op_work_queue, queue(_, _))
-      .WillRepeatedly(Invoke([](Context* ctx, int r) {
-                        ctx->complete(r);
-                      }));
   }
 
   void expect_context_complete(MockContextRWL& mock_context, int r) {
@@ -135,36 +125,22 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_state_write) {
   ASSERT_EQ(0, finish_ctx.wait());
 }
 
-static void get_jf(const string& s, JSONFormattable *f)
-{
-  JSONParser p;
-  bool result = p.parse(s.c_str(), s.size());
-  if (!result) {
-    cout << "Failed to parse: '" << s << "'" << std::endl;
-  }
-  ASSERT_EQ(true, result);
-  try {
-    decode_json_obj(*f, &p);
-  } catch (JSONDecoder::err& e) {
-    ASSERT_TRUE(0 == "Failed to decode JSON object");
-  }
-}
-
 TEST_F(TestMockCacheReplicatedWriteLog, init_state_json_write) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-
-  JSONFormattable f;
-  string strf = "{ \"present\": \"1\", \"empty\": \"0\", \"clean\": \"0\", \
-                   \"pwl_host\": \"testhost\", \
-                   \"pwl_path\": \"/tmp\", \
-                   \"pwl_size\": \"1024\" }";
-  get_jf(strf, &f);
   MockApi mock_api;
-  MockImageCacheStateRWL image_cache_state(&mock_image_ctx, f, mock_api);
+  MockImageCacheStateRWL image_cache_state(&mock_image_ctx, mock_api);
 
+  string strf = "{ \"present\": true, \"empty\": false, \"clean\": false, \
+                   \"host\": \"testhost\", \
+                   \"path\": \"/tmp\", \
+                   \"mode\": \"rwl\", \
+                   \"size\": 1024 }";
+  json_spirit::mValue json_root;
+  ASSERT_TRUE(json_spirit::read(strf.c_str(), json_root));
+  ASSERT_TRUE(image_cache_state.init_from_metadata(json_root));
   validate_cache_state(ictx, image_cache_state, true, false, false,
                        "testhost", "/tmp", 1024);
 

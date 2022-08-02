@@ -12,8 +12,9 @@
  *
  */
 
-#include "common/static_ptr.h"
+#include <compare>
 #include <gtest/gtest.h>
+#include "common/static_ptr.h"
 
 using ceph::static_ptr;
 using ceph::make_static;
@@ -49,6 +50,7 @@ public:
   int call(int n) override { return n + val; }
 };
 
+#ifdef __cpp_lib_three_way_comparison
 TEST(StaticPtr, EmptyCreation) {
   static_ptr<base, sizeof(grandchild)> p;
   EXPECT_FALSE(p);
@@ -100,6 +102,7 @@ TEST(StaticPtr, CreateReset) {
     EXPECT_TRUE(p.get() == nullptr);
   }
 }
+#endif // __cpp_lib_three_way_comparison
 
 TEST(StaticPtr, CreateEmplace) {
   static_ptr<base, sizeof(grandchild)> p(std::in_place_type_t<sibling1>{});

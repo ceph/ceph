@@ -4,10 +4,7 @@
 #ifndef CEPH_RGW_OTP_H
 #define CEPH_RGW_OTP_H
 
-namespace rgw { namespace sal {
-class Store;
-} }
-
+#include "rgw_sal_fwd.h"
 #include "cls/otp/cls_otp_types.h"
 #include "services/svc_meta_be_otp.h"
 

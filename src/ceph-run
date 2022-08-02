@@ -1,12 +1,18 @@
 #!/bin/sh
 
 sleep=5
+no_restart=0
+
+if [ $1 == "--no-restart" ]; then
+    no_restart=1
+    shift
+fi
 
 while [ true ]; do
     "$@"
     exit_code=$?
     
-    if [ $exit_code -gt 128 ]; then
+    if [ $exit_code -gt 128 ] && [ $no_restart -eq 0 ]; then
 	case $(($exit_code-128)) in
 	    3 | 4 | 5 | 6 | 8 | 11)
 		;;

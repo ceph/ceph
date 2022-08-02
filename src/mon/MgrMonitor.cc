@@ -461,7 +461,7 @@ public:
     mm(a), op(c) {}
   void finish(int r) override {
     if (r >= 0) {
-      // Success 
+      // Success
     } else if (r == -ECANCELED) {
       mm->mon.no_reply(op);
     } else {

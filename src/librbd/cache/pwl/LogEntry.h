@@ -93,7 +93,7 @@ public:
   std::shared_ptr<SyncPointLogEntry> next_sync_point_entry = nullptr;
   SyncPointLogEntry(uint64_t sync_gen_number) {
     ram_entry.sync_gen_number = sync_gen_number;
-    ram_entry.sync_point = 1;
+    ram_entry.set_sync_point(true);
   };
   ~SyncPointLogEntry() override {};
   SyncPointLogEntry(const SyncPointLogEntry&) = delete;
@@ -185,14 +185,14 @@ public:
                     uint64_t image_offset_bytes, uint64_t write_bytes,
                     uint32_t data_length)
     : WriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes) {
-    ram_entry.writesame = 1;
+    ram_entry.set_writesame(true);
     ram_entry.ws_datalen = data_length;
     is_writesame = true;
   };
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes,
                     uint32_t data_length)
     : WriteLogEntry(nullptr, image_offset_bytes, write_bytes) {
-    ram_entry.writesame = 1;
+    ram_entry.set_writesame(true);
     ram_entry.ws_datalen = data_length;
     is_writesame = true;
   };
@@ -241,11 +241,11 @@ public:
                   uint32_t discard_granularity_bytes)
     : GenericWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes),
       m_discard_granularity_bytes(discard_granularity_bytes) {
-    ram_entry.discard = 1;
+    ram_entry.set_discard(true);
   };
   DiscardLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes)
     : GenericWriteLogEntry(nullptr, image_offset_bytes, write_bytes) {
-    ram_entry.discard = 1;
+    ram_entry.set_discard(true);
   };
   DiscardLogEntry(const DiscardLogEntry&) = delete;
   DiscardLogEntry &operator=(const DiscardLogEntry&) = delete;

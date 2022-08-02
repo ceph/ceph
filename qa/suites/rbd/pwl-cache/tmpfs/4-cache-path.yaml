@@ -1,0 +1,22 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd_persistent_cache_path: /home/ubuntu/cephtest/rbd-pwl-cache
+        rbd_plugins: pwl_cache
+tasks:
+- exec:
+    client.0:
+      - "mkdir /home/ubuntu/cephtest/tmpfs"
+      - "mkdir /home/ubuntu/cephtest/rbd-pwl-cache"
+      - "sudo mount -t tmpfs -o size=20G tmpfs /home/ubuntu/cephtest/tmpfs"
+      - "truncate -s 20G /home/ubuntu/cephtest/tmpfs/loopfile"
+      - "mkfs.ext4 /home/ubuntu/cephtest/tmpfs/loopfile"
+      - "sudo mount -o loop /home/ubuntu/cephtest/tmpfs/loopfile /home/ubuntu/cephtest/rbd-pwl-cache"
+      - "sudo chmod 777 /home/ubuntu/cephtest/rbd-pwl-cache"
+- exec_on_cleanup:
+    client.0:
+      - "sudo umount /home/ubuntu/cephtest/rbd-pwl-cache"
+      - "sudo umount /home/ubuntu/cephtest/tmpfs"
+      - "rm -rf /home/ubuntu/cephtest/rbd-pwl-cache"
+      - "rm -rf /home/ubuntu/cephtest/tmpfs"

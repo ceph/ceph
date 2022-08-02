@@ -14,8 +14,17 @@ cmake_policy(SET CMP0065 NEW)
 cmake_policy(SET CMP0074 NEW)
 cmake_policy(SET CMP0075 NEW)
 cmake_policy(SET CMP0093 NEW)
+if(POLICY CMP0127)
+  cmake_policy(SET CMP0127 NEW)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
+
+if(NOT CMAKE_BUILD_TYPE AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  set(default_build_type "Debug")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
+endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
@@ -51,16 +60,17 @@ endif()
 
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
-  find_program(CCACHE_EXECUTABLE ccache)
-  if(NOT CCACHE_EXECUTABLE)
-    message(FATAL_ERROR "Can't find ccache. Is it installed?")
+  if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
+    message(WARNING "Compiler launcher already set. stop configuring ccache")
+  else()
+    find_program(CCACHE_EXECUTABLE ccache)
+    if(NOT CCACHE_EXECUTABLE)
+      message(FATAL_ERROR "Can't find ccache. Is it installed?")
+    endif()
+    message(STATUS "Building with ccache: ${CCACHE_EXECUTABLE}, CCACHE_DIR=$ENV{CCACHE_DIR}")
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
   endif()
-  message(STATUS "Building with ccache: ${CCACHE_EXECUTABLE}, CCACHE_DIR=$ENV{CCACHE_DIR}")
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_EXECUTABLE}")
-  # ccache does not accelerate link (ld), but let it handle it. by passing it
-  # along with cc to python's distutils, we are able to workaround
-  # https://bugs.python.org/issue8027.
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK "${CCACHE_EXECUTABLE}")
 endif(WITH_CCACHE)
 
 option(WITH_MANPAGE "Build man pages." ON)
@@ -154,6 +164,7 @@ if(LINUX)
 elseif(FREEBSD)
   set(HAVE_UDEV OFF)
   set(HAVE_LIBAIO OFF)
+  set(HAVE_LIBDML OFF)
   set(HAVE_BLKID OFF)
   set(HAVE_KEYUTILS OFF)
 else()
@@ -175,7 +186,7 @@ endif()
 
 option(WITH_FUSE "Fuse is here" ON)
 if(WITH_FUSE)
-  find_package(FUSE)
+  find_package(FUSE REQUIRED)
   set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif()
 
@@ -191,12 +202,6 @@ option(WITH_ZFS "enable LibZFS if found" OFF)
 if(WITH_ZFS)
   find_package(zfs)
   set(HAVE_LIBZFS ${ZFS_FOUND})
-endif()
-
-option(WITH_ZNS "enable zns support" OFF)
-if (WITH_ZNS)
-  # TODO: add detection, need kernel header >= 5.5
-  set(HAVE_ZNS ON)
 endif()
 
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
@@ -234,6 +239,13 @@ CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system libur
 
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
   "WITH_BLUESTORE" OFF)
+if(WITH_BLUESTORE_PMEM)
+  find_package(dml)
+  set(HAVE_LIBDML ${DML_FOUND})
+endif()
+
+CMAKE_DEPENDENT_OPTION(WITH_RBD_MIRROR "Enable build for rbd-mirror daemon executable" OFF
+    "WITH_RBD" OFF)
 
 CMAKE_DEPENDENT_OPTION(WITH_RBD_MIGRATION_FORMAT_QCOW_V1
   "Enable librbd QCOW v1 migration format support" ON
@@ -273,10 +285,16 @@ endif()
 
 option(WITH_BLUEFS "libbluefs library" OFF)
 
+option(WITH_QAT "Enable Qat driver" OFF)
+if(WITH_QAT)
+  find_package(QatDrv REQUIRED COMPONENTS qat_s usdm_drv_s)
+  set(HAVE_QATDRV $(QatDrv_FOUND))
+endif()
+
 option(WITH_QATZIP "Enable QATZIP" OFF)
 if(WITH_QATZIP)
   find_package(qatzip REQUIRED)
-  set(HAVE_QATZIP ${QATZIP_FOUND})
+  set(HAVE_QATZIP ${qatzip_FOUND})
 endif(WITH_QATZIP)
 
 # needs mds and? XXX
@@ -327,9 +345,11 @@ and then jemalloc. If neither of then is found. use the one in libc.")
 if(ALLOCATOR)
   if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
     find_package(gperftools 2.6.2 REQUIRED)
+    set(ALLOC_LIBS gperftools::${ALLOCATOR})
     set(HAVE_LIBTCMALLOC ON)
   elseif(${ALLOCATOR} STREQUAL "jemalloc")
     find_package(JeMalloc REQUIRED)
+    set(ALLOC_LIBS JeMalloc::JeMalloc)
     set(HAVE_JEMALLOC 1)
   elseif(NOT ALLOCATOR STREQUAL "libc")
     message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
@@ -342,8 +362,10 @@ else(ALLOCATOR)
   endif()
   if(gperftools_FOUND)
     set(ALLOCATOR tcmalloc)
+    set(ALLOC_LIBS gperftools::tcmalloc)
   elseif(JeMalloc_FOUND)
     set(ALLOCATOR jemalloc)
+    set(ALLOC_LIBS JeMalloc::JeMalloc)
   else()
     if(NOT FREEBSD)
       # FreeBSD already has jemalloc as its default allocator
@@ -352,6 +374,13 @@ else(ALLOCATOR)
     set(ALLOCATOR "libc")
   endif(gperftools_FOUND)
 endif(ALLOCATOR)
+if(NOT ALLOCATOR STREQUAL "libc")
+  add_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
+endif()
 
 # Mingw generates incorrect entry points when using "-pie".
 if(WIN32 OR (HAVE_LIBTCMALLOC AND WITH_STATIC_LIBSTDCXX))
@@ -360,10 +389,8 @@ else()
   set(EXE_LINKER_USE_PIE ${ENABLE_SHARED})
 endif()
 
-find_package(CURL REQUIRED)
-set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
-set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
-CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
+# require libcurl with good curl_multi_wait(), see https://tracker.ceph.com/issues/15915
+find_package(CURL 7.32 REQUIRED)
 
 find_package(OpenSSL REQUIRED)
 set(CRYPTO_LIBS OpenSSL::Crypto)
@@ -385,7 +412,7 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
-option(WITH_JAEGER "Enable jaegertracing and it's dependent libraries" OFF)
+option(WITH_JAEGER "Enable jaegertracing and it's dependent libraries" ON)
 if(WITH_JAEGER)
   set(HAVE_JAEGER TRUE)
 endif()
@@ -397,6 +424,11 @@ option(WITH_RADOSGW_AMQP_ENDPOINT "Rados Gateway's pubsub support for AMQP push 
 option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka push endpoint" ON)
 option(WITH_RADOSGW_LUA_PACKAGES "Rados Gateway's support for dynamically adding lua packagess" ON)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for Rados Gateway" ON)
+option(WITH_RADOSGW_MOTR "CORTX-Motr backend for Rados Gateway" OFF)
+option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
+
+option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
+option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
@@ -457,12 +489,8 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 if(NOT WIN32)
 # Please specify 3.[0-7] if you want to build with a certain version of python3.
 set(WITH_PYTHON3 "3" CACHE STRING "build with specified python3 version")
-if(NOT WITH_PYTHON3 STREQUAL "3")
-  set(find_python3_exact "EXACT")
-endif()
-find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
+find_package(Python3 ${WITH_PYTHON3} EXACT REQUIRED
   COMPONENTS Interpreter Development)
-unset(find_python3_exact)
 
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
@@ -605,17 +633,21 @@ if(WITH_SYSTEM_BOOST)
   if(BOOST_ROOT AND CMAKE_LIBRARY_ARCHITECTURE)
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
   endif()
-  find_package(Boost 1.73 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.79 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
   if(NOT ENABLE_SHARED)
     set_property(TARGET Boost::iostreams APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
   endif()
 else()
-  set(BOOST_J 1 CACHE STRING
-    "max jobs for Boost build") # override w/-DBOOST_J=<n>
+  include(ProcessorCount)
+  ProcessorCount(DEFAULT_BOOST_J)
+  if(DEFAULT_BOOST_J EQUAL 0)
+    set(DEFAULT_BOOST_J 1)
+  endif()
+  set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.75
+  build_boost(1.79
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
@@ -664,8 +696,6 @@ option(WITH_SYSTEMD "build with systemd support" ON)
 add_subdirectory(src)
 
 add_subdirectory(qa)
-add_subdirectory(monitoring)
-
 add_subdirectory(doc)
 if(WITH_MANPAGE)
   add_subdirectory(man)
@@ -680,9 +710,7 @@ if(LINUX)
 endif()
 
 option(WITH_GRAFANA "install grafana dashboards" OFF)
-if(WITH_GRAFANA)
-  add_subdirectory(monitoring/grafana/dashboards)
-endif()
+add_subdirectory(monitoring/ceph-mixin)
 
 CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
   "NOT WITH_SYSTEM_BOOST" OFF)

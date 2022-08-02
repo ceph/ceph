@@ -31,11 +31,7 @@ export class OsdReweightModalComponent implements OnInit {
 
   ngOnInit() {
     this.reweightForm = this.fb.group({
-      weight: this.fb.control(this.currentWeight, [
-        Validators.required,
-        Validators.max(1),
-        Validators.min(0)
-      ])
+      weight: this.fb.control(this.currentWeight, [Validators.required])
     });
   }
 

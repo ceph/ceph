@@ -7,9 +7,9 @@
 #include <seastar/core/future.hh>
 
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osd_operations/peering_event.h"
 #include "osd/osd_types.h"
 #include "crimson/common/type_helpers.h"
-#include "osd/PeeringState.h"
 
 namespace ceph {
   class Formatter;
@@ -17,18 +17,17 @@ namespace ceph {
 
 namespace crimson::osd {
 
-class OSD;
+class PGShardManager;
 class PG;
 
-class PGAdvanceMap : public OperationT<PGAdvanceMap> {
+class PGAdvanceMap : public PhasedOperationT<PGAdvanceMap> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::pg_advance_map;
 
 protected:
-  PipelineHandle handle;
-
-  OSD &osd;
+  PGShardManager &shard_manager;
   Ref<PG> pg;
+  PipelineHandle handle;
 
   epoch_t from;
   epoch_t to;
@@ -38,13 +37,18 @@ protected:
 
 public:
   PGAdvanceMap(
-    OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to,
+    PGShardManager &shard_manager, Ref<PG> pg, epoch_t from, epoch_t to,
     PeeringCtx &&rctx, bool do_init);
   ~PGAdvanceMap();
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter *f) const final;
   seastar::future<> start();
+  PipelineHandle &get_handle() { return handle; }
+
+  std::tuple<
+    PGPeeringPipeline::Process::BlockingEvent
+  > tracking_events;
 };
 
 }

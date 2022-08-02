@@ -19,13 +19,17 @@
 
 namespace ceph::osd::scheduler {
 
+std::ostream& operator<<(std::ostream& out, const op_scheduler_class& class_id) {
+  out << static_cast<size_t>(class_id);
+  return out;
+}
+
 void PGOpItem::run(
   OSD *osd,
   OSDShard *sdata,
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
-  [[maybe_unused]] auto span = tracing::osd::tracer.add_span("PGOpItem::run", op->osd_parent_span);
   osd->dequeue_op(pg, op, handle);
   pg->unlock();
 }

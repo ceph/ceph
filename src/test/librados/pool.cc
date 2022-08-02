@@ -63,6 +63,40 @@ TEST(LibRadosPools, PoolLookup2) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosPools, PoolLookupOtherInstance) {
+  rados_t cluster1;
+  ASSERT_EQ("", connect_cluster(&cluster1));
+
+  rados_t cluster2;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster2));
+  int64_t pool_id = rados_pool_lookup(cluster2, pool_name.c_str());
+  ASSERT_GT(pool_id, 0);
+
+  ASSERT_EQ(pool_id, rados_pool_lookup(cluster1, pool_name.c_str()));
+
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster2));
+  rados_shutdown(cluster1);
+}
+
+TEST(LibRadosPools, PoolReverseLookupOtherInstance) {
+  rados_t cluster1;
+  ASSERT_EQ("", connect_cluster(&cluster1));
+
+  rados_t cluster2;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster2));
+  int64_t pool_id = rados_pool_lookup(cluster2, pool_name.c_str());
+  ASSERT_GT(pool_id, 0);
+
+  char buf[100];
+  ASSERT_LT(0, rados_pool_reverse_lookup(cluster1, pool_id, buf, 100));
+  ASSERT_EQ(0, strcmp(buf, pool_name.c_str()));
+
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster2));
+  rados_shutdown(cluster1);
+}
+
 TEST(LibRadosPools, PoolDelete) {
   rados_t cluster;
   std::string pool_name = get_temp_pool_name();

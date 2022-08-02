@@ -5,7 +5,29 @@ import pytest
 from textwrap import dedent
 from ceph_volume.util import system
 from mock.mock import patch
+from ceph_volume.tests.conftest import Factory
 
+
+@pytest.fixture
+def mock_find_executable_on_host(monkeypatch):
+    """
+    Monkeypatches util.system.find_executable_on_host, so that a caller can add behavior to the response
+    """
+    def apply(stdout=None, stderr=None, returncode=0):
+        stdout_stream = Factory(read=lambda: stdout)
+        stderr_stream = Factory(read=lambda: stderr)
+        return_value = Factory(
+            stdout=stdout_stream,
+            stderr=stderr_stream,
+            wait=lambda: returncode,
+            communicate=lambda x: (stdout, stderr, returncode)
+        )
+
+        monkeypatch.setattr(
+            'ceph_volume.util.system.subprocess.Popen',
+            lambda *a, **kw: return_value)
+
+    return apply
 
 class TestMkdirP(object):
 
@@ -160,13 +182,13 @@ class TestGetMounts(object):
 
 class TestIsBinary(object):
 
-    def test_is_binary(self, tmpfile):
-        binary_path = tmpfile(contents='asd\n\nlkjh\x00')
-        assert system.is_binary(binary_path)
+    def test_is_binary(self, fake_filesystem):
+        binary_path = fake_filesystem.create_file('/tmp/fake-file', contents='asd\n\nlkjh\x00')
+        assert system.is_binary(binary_path.path)
 
-    def test_is_not_binary(self, tmpfile):
-        binary_path = tmpfile(contents='asd\n\nlkjh0')
-        assert system.is_binary(binary_path) is False
+    def test_is_not_binary(self, fake_filesystem):
+        binary_path = fake_filesystem.create_file('/tmp/fake-file', contents='asd\n\nlkjh0')
+        assert system.is_binary(binary_path.path) is False
 
 
 class TestGetFileContents(object):
@@ -175,21 +197,21 @@ class TestGetFileContents(object):
         filepath = os.path.join(str(tmpdir), 'doesnotexist')
         assert system.get_file_contents(filepath, 'default') == 'default'
 
-    def test_path_has_contents(self, tmpfile):
-        interesting_file = tmpfile(contents="1")
-        result = system.get_file_contents(interesting_file)
+    def test_path_has_contents(self, fake_filesystem):
+        interesting_file = fake_filesystem.create_file('/tmp/fake-file', contents="1")
+        result = system.get_file_contents(interesting_file.path)
         assert result == "1"
 
-    def test_path_has_multiline_contents(self, tmpfile):
-        interesting_file = tmpfile(contents="0\n1")
-        result = system.get_file_contents(interesting_file)
+    def test_path_has_multiline_contents(self, fake_filesystem):
+        interesting_file = fake_filesystem.create_file('/tmp/fake-file', contents="0\n1")
+        result = system.get_file_contents(interesting_file.path)
         assert result == "0\n1"
 
-    def test_exception_returns_default(self, tmpfile):
-        interesting_file = tmpfile(contents="0")
+    def test_exception_returns_default(self, fake_filesystem):
+        interesting_file = fake_filesystem.create_file('/tmp/fake-file', contents="0")
         # remove read, causes IOError
-        os.chmod(interesting_file, 0o000)
-        result = system.get_file_contents(interesting_file)
+        os.chmod(interesting_file.path, 0o000)
+        result = system.get_file_contents(interesting_file.path)
         assert result == ''
 
 
@@ -217,6 +239,14 @@ class TestWhich(object):
         system.which('exedir')
         cap = capsys.readouterr()
         assert 'Executable exedir not in PATH' in cap.err
+
+    def test_run_on_host_found(self, mock_find_executable_on_host):
+        mock_find_executable_on_host(stdout="/sbin/lvs\n", stderr="some stderr message\n")
+        assert system.which('lvs', run_on_host=True) == '/sbin/lvs'
+
+    def test_run_on_host_not_found(self, mock_find_executable_on_host):
+        mock_find_executable_on_host(stdout="", stderr="some stderr message\n")
+        assert system.which('lvs', run_on_host=True) == 'lvs'
 
 @pytest.fixture
 def stub_which(monkeypatch):

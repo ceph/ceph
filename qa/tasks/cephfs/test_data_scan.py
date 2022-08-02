@@ -8,6 +8,7 @@ import logging
 import os
 import time
 import traceback
+import stat
 
 from io import BytesIO, StringIO
 from collections import namedtuple, defaultdict
@@ -38,6 +39,15 @@ class Workload(object):
         try:
             if a != b:
                 raise AssertionError("{0} != {1}".format(a, b))
+        except AssertionError as e:
+            self._errors.append(
+                ValidationError(e, traceback.format_exc(3))
+            )
+
+    def assert_true(self, a):
+        try:
+            if not a:
+                raise AssertionError("{0} is not true".format(a))
         except AssertionError as e:
             self._errors.append(
                 ValidationError(e, traceback.format_exc(3))
@@ -82,9 +92,33 @@ class SimpleWorkload(Workload):
         self._initial_state = self._mount.stat("subdir/sixmegs")
 
     def validate(self):
-        self._mount.run_shell(["ls", "subdir"], sudo=True)
+        self._mount.run_shell(["sudo", "ls", "subdir"], omit_sudo=False)
         st = self._mount.stat("subdir/sixmegs", sudo=True)
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
+        return self._errors
+
+
+class SymlinkWorkload(Workload):
+    """
+    Symlink file, check that it gets recovered as symlink
+    """
+    def write(self):
+        self._mount.run_shell(["mkdir", "symdir"])
+        self._mount.write_n_mb("symdir/onemegs", 1)
+        self._mount.run_shell(["ln", "-s", "onemegs", "symdir/symlink_onemegs"])
+        self._mount.run_shell(["ln", "-s", "symdir/onemegs", "symlink1_onemegs"])
+
+    def validate(self):
+        self._mount.run_shell(["sudo", "ls", "symdir"], omit_sudo=False)
+        st = self._mount.lstat("symdir/symlink_onemegs")
+        self.assert_true(stat.S_ISLNK(st['st_mode']))
+        target = self._mount.readlink("symdir/symlink_onemegs")
+        self.assert_equal(target, "onemegs")
+
+        st = self._mount.lstat("symlink1_onemegs")
+        self.assert_true(stat.S_ISLNK(st['st_mode']))
+        target = self._mount.readlink("symlink1_onemegs")
+        self.assert_equal(target, "symdir/onemegs")
         return self._errors
 
 
@@ -394,6 +428,9 @@ class TestDataScan(CephFSTestCase):
     def test_rebuild_simple(self):
         self._rebuild_metadata(SimpleWorkload(self.fs, self.mount_a))
 
+    def test_rebuild_symlink(self):
+        self._rebuild_metadata(SymlinkWorkload(self.fs, self.mount_a))
+
     def test_rebuild_moved_file(self):
         self._rebuild_metadata(MovedFile(self.fs, self.mount_a))
 
@@ -492,7 +529,7 @@ class TestDataScan(CephFSTestCase):
         self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "-l", "subdir/"]) # debugging
         # Use sudo because cephfs-data-scan will reinsert the dentry with root ownership, it can't know the real owner.
-        out = self.mount_a.run_shell_payload(f"cat subdir/{victim_dentry}", sudo=True).stdout.getvalue().strip()
+        out = self.mount_a.run_shell_payload(f"sudo cat subdir/{victim_dentry}", omit_sudo=False).stdout.getvalue().strip()
         self.assertEqual(out, victim_dentry)
 
         # Finally, close the loop by checking our injected dentry survives a merge

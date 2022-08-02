@@ -5,7 +5,6 @@ import json
 import logging
 import re
 import xml.etree.ElementTree as ET  # noqa: N814
-from distutils.util import strtobool
 from subprocess import SubprocessError
 
 from mgr_util import build_url
@@ -467,7 +466,7 @@ class RgwClient(RestClient):
     def _is_system_user(self, admin_path, userid, request=None) -> bool:
         # pylint: disable=unused-argument
         response = request()
-        return strtobool(response['data']['system'])
+        return response['data']['system']
 
     def is_system_user(self) -> bool:
         return self._is_system_user(self.admin_path, self.userid)
@@ -706,27 +705,8 @@ class RgwClient(RestClient):
         """
         # pylint: disable=unused-argument
 
-        # Do some validations.
-        try:
-            retention_period_days = int(retention_period_days) if retention_period_days else 0
-            retention_period_years = int(retention_period_years) if retention_period_years else 0
-            if retention_period_days < 0 or retention_period_years < 0:
-                raise ValueError
-        except (TypeError, ValueError):
-            msg = "Retention period must be a positive integer."
-            raise DashboardException(msg=msg, component='rgw')
-        if retention_period_days and retention_period_years:
-            # https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTBucketPUTObjectLockConfiguration.html
-            msg = "Retention period requires either Days or Years. "\
-                "You can't specify both at the same time."
-            raise DashboardException(msg=msg, component='rgw')
-        if not retention_period_days and not retention_period_years:
-            msg = "Retention period requires either Days or Years. "\
-                "You must specify at least one."
-            raise DashboardException(msg=msg, component='rgw')
-        if not isinstance(mode, str) or mode.upper() not in ['COMPLIANCE', 'GOVERNANCE']:
-            msg = "Retention mode must be either COMPLIANCE or GOVERNANCE."
-            raise DashboardException(msg=msg, component='rgw')
+        retention_period_days, retention_period_years = self.perform_validations(
+            retention_period_days, retention_period_years, mode)
 
         # Generate the XML data like this:
         # <ObjectLockConfiguration>
@@ -761,3 +741,26 @@ class RgwClient(RestClient):
             _ = request(data=data)  # type: ignore
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
+
+    def perform_validations(self, retention_period_days, retention_period_years, mode):
+        try:
+            retention_period_days = int(retention_period_days) if retention_period_days else 0
+            retention_period_years = int(retention_period_years) if retention_period_years else 0
+            if retention_period_days < 0 or retention_period_years < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            msg = "Retention period must be a positive integer."
+            raise DashboardException(msg=msg, component='rgw')
+        if retention_period_days and retention_period_years:
+            # https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTBucketPUTObjectLockConfiguration.html
+            msg = "Retention period requires either Days or Years. "\
+                "You can't specify both at the same time."
+            raise DashboardException(msg=msg, component='rgw')
+        if not retention_period_days and not retention_period_years:
+            msg = "Retention period requires either Days or Years. "\
+                "You must specify at least one."
+            raise DashboardException(msg=msg, component='rgw')
+        if not isinstance(mode, str) or mode.upper() not in ['COMPLIANCE', 'GOVERNANCE']:
+            msg = "Retention mode must be either COMPLIANCE or GOVERNANCE."
+            raise DashboardException(msg=msg, component='rgw')
+        return retention_period_days, retention_period_years

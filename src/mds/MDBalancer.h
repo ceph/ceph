@@ -55,8 +55,8 @@ public:
   void add_import(CDir *im);
   void adjust_pop_for_rename(CDir *pdir, CDir *dir, bool inc);
 
-  void hit_inode(CInode *in, int type, int who=-1);
-  void hit_dir(CDir *dir, int type, int who=-1, double amount=1.0);
+  void hit_inode(CInode *in, int type);
+  void hit_dir(CDir *dir, int type, double amount=1.0);
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);

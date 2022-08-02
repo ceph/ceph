@@ -2,7 +2,7 @@
 
 RGW Module
 ============
-The rgw module helps with bootstraping and configuring RGW realm
+The rgw module helps with bootstrapping and configuring RGW realm
 and the different related entities.
 
 Enabling

@@ -96,7 +96,7 @@ const routes: Routes = [
         canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'orchestrator',
+            uiApiPath: 'orchestrator',
             redirectTo: 'dashboard',
             backend: 'cephadm'
           },
@@ -126,7 +126,7 @@ const routes: Routes = [
         canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'orchestrator',
+            uiApiPath: 'orchestrator',
             redirectTo: 'error',
             section: 'orch',
             section_info: 'Orchestrator',
@@ -153,7 +153,7 @@ const routes: Routes = [
         component: InventoryComponent,
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'orchestrator',
+            uiApiPath: 'orchestrator',
             redirectTo: 'error',
             section: 'orch',
             section_info: 'Orchestrator',
@@ -298,7 +298,7 @@ const routes: Routes = [
         canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'rgw',
+            uiApiPath: 'rgw',
             redirectTo: 'error',
             section: 'rgw',
             section_info: 'Object Gateway',
@@ -335,7 +335,7 @@ const routes: Routes = [
         canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'nfs-ganesha',
+            uiApiPath: 'nfs-ganesha',
             redirectTo: 'error',
             section: 'nfs-ganesha',
             section_info: 'NFS GANESHA',

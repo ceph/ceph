@@ -16,7 +16,7 @@ export class InventoryPageHelper extends PageHelper {
       cy.get('#duration').select('10 minutes');
       cy.get('cd-back-button').click();
     });
-    cy.get('cd-modal').should('not.visible');
+    cy.get('cd-modal').should('not.exist');
     cy.get(`${this.pages.index.id}`);
   }
 }

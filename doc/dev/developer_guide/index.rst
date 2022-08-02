@@ -22,3 +22,4 @@ Contributing to Ceph: A Guide for Developers
    Ceph Dashboard Developer Documentation (formerly HACKING.rst) <dash-devel>
    Tracing Developer Documentation <jaegertracing>
    Cephadm Developer Documentation  <../cephadm/index>
+   Debugging with GDB <debugging-gdb>

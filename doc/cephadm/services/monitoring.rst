@@ -65,7 +65,7 @@ steps below:
      ceph orch apply alertmanager
 
 #. Deploy Prometheus. A single Prometheus instance is sufficient, but
-   for high availablility (HA) you might want to deploy two:
+   for high availability (HA) you might want to deploy two:
 
    .. prompt:: bash #
 
@@ -82,6 +82,28 @@ steps below:
    .. prompt:: bash #
 
      ceph orch apply grafana
+
+.. _cephadm-monitoring-centralized-logs:
+
+Centralized Logging in Ceph
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Ceph now provides centralized logging with Loki & Promtail. Centralized Log Management (CLM) consolidates all log data and pushes it to a central repository, 
+with an accessible and easy-to-use interface. Centralized logging is designed to make your life easier. 
+Some of the advantages are:
+
+#. **Linear event timeline**: it is easier to troubleshoot issues analyzing a single chain of events than thousands of different logs from a hundred nodes.
+#. **Real-time live log monitoring**: it is impractical to follow logs from thousands of different sources.
+#. **Flexible retention policies**: with per-daemon logs, log rotation is usually set to a short interval (1-2 weeks) to save disk usage.
+#. **Increased security & backup**: logs can contain sensitive information and expose usage patterns. Additionally, centralized logging allows for HA, etc.
+
+Centralized Logging in Ceph is implemented using two new services - ``loki`` & ``promtail``.
+
+Loki: It is basically a log aggregation system and is used to query logs. It can be configured as a datasource in Grafana. 
+
+Promtail: It acts as an agent that gathers logs from the system and makes them available to Loki.
+
+These two services are not deployed by default in a Ceph cluster. To enable the centralized logging you can follow the steps mentioned here :ref:`centralized-logging`.
 
 .. _cephadm-monitoring-networks-ports:
 
@@ -195,6 +217,8 @@ set``:
 - ``services/grafana/ceph-dashboard.yml``
 - ``services/grafana/grafana.ini``
 - ``services/prometheus/prometheus.yml``
+- ``services/loki.yml``
+- ``services/promtail.yml``
 
 You can look up the file templates that are currently used by cephadm in
 ``src/pybind/mgr/cephadm/templates``:
@@ -203,6 +227,8 @@ You can look up the file templates that are currently used by cephadm in
 - ``services/grafana/ceph-dashboard.yml.j2``
 - ``services/grafana/grafana.ini.j2``
 - ``services/prometheus/prometheus.yml.j2``
+- ``services/loki.yml.j2``
+- ``services/promtail.yml.j2``
 
 Usage
 """""
@@ -386,6 +412,26 @@ Where ``default_webhook_urls`` is a list of additional URLs that are
 added to the default receivers' ``<webhook_configs>`` configuration.
 
 Run ``reconfig`` on the service to update its configuration:
+
+.. prompt:: bash #
+
+  ceph orch reconfig alertmanager
+
+Turn on Certificate Validation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you are using certificates for alertmanager and want to make sure
+these certs are verified, you should set the "secure" option to
+true in your alertmanager spec (this defaults to false).
+
+.. code-block:: yaml
+
+    service_type: alertmanager
+    spec:
+      secure: true
+
+If you already had alertmanager daemons running before applying the spec
+you must reconfigure them to update their configuration
 
 .. prompt:: bash #
 

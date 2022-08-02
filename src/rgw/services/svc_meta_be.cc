@@ -115,9 +115,10 @@ int RGWSI_MetaBackend::get(Context *ctx,
 			   GetParams& params,
 			   RGWObjVersionTracker *objv_tracker,
                            optional_yield y,
-                           const DoutPrefixProvider *dpp)
+                           const DoutPrefixProvider *dpp,
+                           bool get_raw_attrs)
 {
-  return get_entry(ctx, key, params, objv_tracker, y, dpp);
+  return get_entry(ctx, key, params, objv_tracker, y, dpp, get_raw_attrs);
 }
 
 int RGWSI_MetaBackend::put(Context *ctx,

@@ -336,7 +336,8 @@ def parse_cmdargs(args=None, target='') -> Tuple[argparse.ArgumentParser,
                         help="make less verbose")
 
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
-                        'xml', 'xml-pretty', 'plain', 'yaml'], dest='output_format')
+                        'xml', 'xml-pretty', 'plain', 'yaml'],
+                        help="Note: yaml is only valid for orch commands", dest='output_format')
 
     parser.add_argument('--connect-timeout', dest='cluster_timeout',
                         type=int,

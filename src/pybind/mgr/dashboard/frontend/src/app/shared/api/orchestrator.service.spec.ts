@@ -7,7 +7,7 @@ import { OrchestratorService } from './orchestrator.service';
 describe('OrchestratorService', () => {
   let service: OrchestratorService;
   let httpTesting: HttpTestingController;
-  const apiPath = 'api/orchestrator';
+  const uiApiPath = 'ui-api/orchestrator';
 
   configureTestBed({
     providers: [OrchestratorService],
@@ -29,7 +29,7 @@ describe('OrchestratorService', () => {
 
   it('should call status', () => {
     service.status().subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/status`);
+    const req = httpTesting.expectOne(`${uiApiPath}/status`);
     expect(req.request.method).toBe('GET');
   });
 });

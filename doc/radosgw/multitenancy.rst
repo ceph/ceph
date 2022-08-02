@@ -25,7 +25,7 @@ Administering Users With Explicit Tenants
 Tenants as such do not have any operations on them. They appear and
 disappear as needed, when users are administered. In order to create,
 modify, and remove users with explicit tenants, either an additional
-option --tenant is supplied, or a syntax "<tenant>$<user>" is used
+option --tenant is supplied, or a syntax '<tenant>$<user>' is used
 in the parameters of the radosgw-admin command.
 
 Examples

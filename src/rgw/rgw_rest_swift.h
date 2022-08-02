@@ -385,7 +385,7 @@ protected:
     return false;
   }
 
-  static int init_from_header(rgw::sal::Store* store, struct req_state* s,
+  static int init_from_header(rgw::sal::Store* store, req_state* s,
                               const std::string& frontend_prefix);
 public:
   explicit RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
@@ -395,7 +395,7 @@ public:
 
   int validate_bucket_name(const std::string& bucket);
 
-  int init(rgw::sal::Store* store, struct req_state *s, rgw::io::BasicClient *cio) override;
+  int init(rgw::sal::Store* store, req_state *s, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield y) override;
 
@@ -444,7 +444,7 @@ public:
   }
 
   int init(rgw::sal::Store* const store,
-           struct req_state* const s,
+           req_state* const s,
            rgw::io::BasicClient* const cio) override {
     website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
     return RGWHandler_REST_SWIFT::init(store, s, cio);
@@ -483,7 +483,7 @@ public:
   }
 
   int init(rgw::sal::Store* const store,
-           struct req_state* const s,
+           req_state* const s,
            rgw::io::BasicClient* const cio) override {
     website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
     return RGWHandler_REST_SWIFT::init(store, s, cio);
@@ -492,7 +492,7 @@ public:
 
 class RGWRESTMgr_SWIFT : public RGWRESTMgr {
 protected:
-  RGWRESTMgr* get_resource_mgr_as_default(struct req_state* const s,
+  RGWRESTMgr* get_resource_mgr_as_default(req_state* const s,
                                           const std::string& uri,
                                           std::string* const out_uri) override {
     return this->get_resource_mgr(s, uri, out_uri);
@@ -503,7 +503,7 @@ public:
   ~RGWRESTMgr_SWIFT() override = default;
 
   RGWHandler_REST *get_handler(rgw::sal::Store* store,
-			       struct req_state *s,
+			       req_state *s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
@@ -537,7 +537,7 @@ public:
   }
 
   int init(rgw::sal::Store* const store,
-           struct req_state* const state,
+           req_state* const state,
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
     state->formatter = new JSONFormatter;
@@ -564,7 +564,7 @@ public:
 
 class RGWRESTMgr_SWIFT_CrossDomain : public RGWRESTMgr {
 protected:
-  RGWRESTMgr *get_resource_mgr(struct req_state* const s,
+  RGWRESTMgr *get_resource_mgr(req_state* const s,
                                const std::string& uri,
                                std::string* const out_uri) override {
     return this;
@@ -575,7 +575,7 @@ public:
   ~RGWRESTMgr_SWIFT_CrossDomain() override = default;
 
   RGWHandler_REST* get_handler(rgw::sal::Store* store,
-			       struct req_state* const s,
+			       req_state* const s,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
@@ -594,7 +594,7 @@ public:
   }
 
   int init(rgw::sal::Store* const store,
-           struct req_state* const state,
+           req_state* const state,
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
     state->formatter = new JSONFormatter;
@@ -621,7 +621,7 @@ public:
 
 class RGWRESTMgr_SWIFT_HealthCheck : public RGWRESTMgr {
 protected:
-  RGWRESTMgr *get_resource_mgr(struct req_state* const s,
+  RGWRESTMgr *get_resource_mgr(req_state* const s,
                                const std::string& uri,
                                std::string* const out_uri) override {
     return this;
@@ -632,7 +632,7 @@ public:
   ~RGWRESTMgr_SWIFT_HealthCheck() override = default;
 
   RGWHandler_REST* get_handler(rgw::sal::Store* store,
-			       struct req_state* const s,
+			       req_state* const s,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
@@ -651,7 +651,7 @@ public:
   }
 
   int init(rgw::sal::Store* const store,
-           struct req_state* const state,
+           req_state* const state,
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
     state->formatter = new JSONFormatter;
@@ -679,7 +679,7 @@ public:
   ~RGWRESTMgr_SWIFT_Info() override = default;
 
   RGWHandler_REST *get_handler(rgw::sal::Store* store,
-			       struct req_state* s,
+			       req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };

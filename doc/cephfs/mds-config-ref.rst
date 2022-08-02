@@ -61,3 +61,4 @@
 .. confval:: mds_wipe_ino_prealloc
 .. confval:: mds_skip_ino
 .. confval:: mds_min_caps_per_client
+.. confval:: mds_symlink_recovery

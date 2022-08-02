@@ -63,7 +63,8 @@ public:
   using rep_op_fut_t =
     std::tuple<interruptible_future<>,
 	       interruptible_future<crimson::osd::acked_peers_t>>;
-  PGBackend(shard_id_t shard, CollectionRef coll, crimson::os::FuturizedStore* store);
+  PGBackend(shard_id_t shard, CollectionRef coll,
+            crimson::osd::ShardServices &shard_services);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
@@ -98,7 +99,8 @@ public:
     const ObjectState& os,
     OSDOp& osd_op);
   using cmp_ext_errorator = ll_read_errorator::extend<
-    crimson::ct_error::invarg>;
+    crimson::ct_error::invarg,
+    crimson::ct_error::cmp_fail>;
   using cmp_ext_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -118,24 +120,43 @@ public:
 
   // TODO: switch the entire write family to errorator.
   using write_ertr = crimson::errorator<
-    crimson::ct_error::file_too_large>;
+    crimson::ct_error::file_too_large,
+    crimson::ct_error::invarg>;
   using write_iertr =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
       write_ertr>;
-  interruptible_future<> create(
+  using create_ertr = crimson::errorator<
+    crimson::ct_error::invarg,
+    crimson::ct_error::eexist>;
+  using create_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      create_ertr>;
+  create_iertr::future<> create(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     object_stat_sum_t& delta_stats);
-  interruptible_future<> remove(
+  using remove_ertr = crimson::errorator<
+    crimson::ct_error::enoent>;
+  using remove_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      remove_ertr>;
+  remove_iertr::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn,
     object_stat_sum_t& delta_stats);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
-  interruptible_future<> write(
+  interruptible_future<> set_allochint(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    object_stat_sum_t& delta_stats);
+  write_iertr::future<> write(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
@@ -147,7 +168,7 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
-  interruptible_future<> writefull(
+  write_iertr::future<> writefull(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
@@ -188,7 +209,14 @@ public:
   interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>> list_objects(
     const hobject_t& start,
     uint64_t limit) const;
-  interruptible_future<> setxattr(
+  using setxattr_errorator = crimson::errorator<
+    crimson::ct_error::file_too_large,
+    crimson::ct_error::enametoolong>;
+  using setxattr_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      setxattr_errorator>;
+  setxattr_ierrorator::future<> setxattr(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
@@ -205,11 +233,16 @@ public:
   get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,
     std::string_view key) const;
+  get_attr_ierrorator::future<ceph::bufferlist> getxattr(
+    const hobject_t& soid,
+    std::string&& key) const;
   get_attr_ierrorator::future<> get_xattrs(
     const ObjectState& os,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
-  using cmp_xattr_errorator = ::crimson::os::FuturizedStore::get_attr_errorator;
+  using cmp_xattr_errorator = get_attr_errorator::extend<
+    crimson::ct_error::ecanceled,
+    crimson::ct_error::invarg>;
   using cmp_xattr_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -230,7 +263,7 @@ public:
   interruptible_future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
-  interruptible_future<std::map<uint64_t, uint64_t>> fiemap(
+  read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef c,
     const ghobject_t& oid,
     uint64_t off,
@@ -238,6 +271,18 @@ public:
 
   // OMAP
   ll_read_ierrorator::future<> omap_get_keys(
+    const ObjectState& os,
+    OSDOp& osd_op,
+    object_stat_sum_t& delta_stats) const;
+  using omap_cmp_ertr =
+    crimson::os::FuturizedStore::read_errorator::extend<
+      crimson::ct_error::ecanceled,
+      crimson::ct_error::invarg>;
+  using omap_cmp_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      omap_cmp_ertr>;
+  omap_cmp_iertr::future<> omap_cmp(
     const ObjectState& os,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
@@ -273,6 +318,10 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     object_stat_sum_t& delta_stats);
+  interruptible_future<> omap_remove_key(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
   using omap_clear_ertr = crimson::errorator<crimson::ct_error::enoent>;
   using omap_clear_iertr =
     ::crimson::interruptible::interruptible_errorator<
@@ -295,6 +344,7 @@ public:
 protected:
   const shard_id_t shard;
   CollectionRef coll;
+  crimson::osd::ShardServices &shard_services;
   crimson::os::FuturizedStore* store;
   bool stopping = false;
   std::optional<peering_info_t> peering;

@@ -59,6 +59,7 @@
 class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
+class SimpleBitmap;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
@@ -141,6 +142,11 @@ enum {
   l_bluestore_issued_deferred_write_bytes,
   l_bluestore_submitted_deferred_writes,
   l_bluestore_submitted_deferred_write_bytes,
+
+  l_bluestore_write_big_skipped_blobs,
+  l_bluestore_write_big_skipped_bytes,
+  l_bluestore_write_small_skipped,
+  l_bluestore_write_small_skipped_bytes,
   //****************************************
 
   // compressions stats
@@ -182,6 +188,13 @@ enum {
   l_bluestore_gc_merged,
   //****************************************
 
+  // misc
+  //****************************************
+  l_bluestore_omap_iterator_count,
+  l_bluestore_omap_rmkeys_count,
+  l_bluestore_omap_rmkey_ranges_count,
+  //****************************************
+
   // other client ops latencies
   //****************************************
   l_bluestore_omap_seek_to_first_lat,
@@ -190,8 +203,10 @@ enum {
   l_bluestore_omap_next_lat,
   l_bluestore_omap_get_keys_lat,
   l_bluestore_omap_get_values_lat,
+  l_bluestore_omap_clear_lat,
   l_bluestore_clist_lat,
   l_bluestore_remove_lat,
+  l_bluestore_truncate_lat,
   //****************************************
 
   // allocation stats
@@ -274,6 +289,7 @@ public:
     uint64_t seq;
     uint32_t offset, length;
     ceph::buffer::list data;
+    std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
 
     boost::intrusive::list_member_hook<> lru_item;
     boost::intrusive::list_member_hook<> state_item;
@@ -1145,6 +1161,7 @@ public:
     /// protect flush_txns
     ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_meta::string& k)
@@ -1253,8 +1270,11 @@ public:
 
     std::atomic<uint64_t> max = {0};
     std::atomic<uint64_t> num = {0};
+    boost::circular_buffer<std::shared_ptr<int64_t>> age_bins;
 
-    CacheShard(CephContext* cct) : cct(cct), logger(nullptr) {}
+    CacheShard(CephContext* cct) : cct(cct), logger(nullptr), age_bins(1) {
+      shift_bins();
+    }
     virtual ~CacheShard() {}
 
     void set_max(uint64_t max_) {
@@ -1281,8 +1301,34 @@ public:
     void flush() {
       std::lock_guard l(lock);
       // we should not be shutting down after the blackhole is enabled
-      assert(!cct->_conf->objectstore_blackhole);
+      ceph_assert(!cct->_conf->objectstore_blackhole);
       _trim_to(0);
+    }
+
+    virtual void shift_bins() {
+      std::lock_guard l(lock);
+      age_bins.push_front(std::make_shared<int64_t>(0));
+    }
+    virtual uint32_t get_bin_count() {
+      std::lock_guard l(lock);
+      return age_bins.capacity();
+    }
+    virtual void set_bin_count(uint32_t count) {
+      std::lock_guard l(lock);
+      age_bins.set_capacity(count);
+    }
+    virtual uint64_t sum_bins(uint32_t start, uint32_t end) {
+      std::lock_guard l(lock);
+      auto size = age_bins.size();
+      if (size < start) {
+        return 0;
+      }
+      uint64_t count = 0;
+      end = (size < end) ? size : end;
+      for (auto i = start; i < end; i++) {
+        count += *(age_bins[i]);
+      }
+      return count;
     }
 
 #ifdef DEBUG_CACHE
@@ -1295,7 +1341,6 @@ public:
   /// A Generic onode Cache Shard
   struct OnodeCacheShard : public CacheShard {
     std::atomic<uint64_t> num_pinned = {0};
-
     std::array<std::pair<ghobject_t, ceph::mono_clock::time_point>, 64> dumped_onodes;
 
     virtual void _pin(Onode* o) = 0;
@@ -1468,15 +1513,17 @@ public:
   };
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
+
+    PerfCounters* logger = nullptr;
     CollectionRef c;
     OnodeRef o;
     KeyValueDB::Iterator it;
     std::string head, tail;
 
     std::string _stringify() const;
-
   public:
-    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+    OmapIteratorImpl(PerfCounters* l, CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+    virtual ~OmapIteratorImpl();
     int seek_to_first() override;
     int upper_bound(const std::string &after) override;
     int lower_bound(const std::string &to) override;
@@ -1983,7 +2030,7 @@ public:
 
     void flush_all_but_last() {
       std::unique_lock l(qlock);
-      assert (q.size() >= 1);
+      ceph_assert (q.size() >= 1);
       while (true) {
 	// std::set flag before the check because the condition
 	// may become true outside qlock, and we need to make
@@ -2110,7 +2157,8 @@ private:
   bool db_was_opened_read_only = true;
   bool need_to_destage_allocation_file = false;
 
-  ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");  ///< rwlock to protect coll_map
+  ///< rwlock to protect coll_map/new_coll_map
+  ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");
   mempool::bluestore_cache_other::unordered_map<coll_t, CollectionRef> coll_map;
   bool collections_had_errors = false;
   std::map<coll_t,CollectionRef> new_coll_map;
@@ -2184,9 +2232,9 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
   uint64_t optimal_io_size = 0;///< best performance io size for block device
 
-  uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
-  ///< bits for min_alloc_size
-  uint8_t min_alloc_size_order = 0;
+  uint64_t min_alloc_size;     ///< minimum allocation unit (power of 2)
+  uint8_t  min_alloc_size_order = 0;///< bits to shift to get min_alloc_size
+  uint64_t min_alloc_size_mask;///< mask for fast checking of allocation alignment
   static_assert(std::numeric_limits<uint8_t>::max() >
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
@@ -2232,7 +2280,12 @@ private:
   double cache_kv_onode_ratio = 0; ///< cache ratio dedicated to kv onodes (e.g., rocksdb onode CF)
   double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
   bool cache_autotune = false;   ///< cache autotune setting
+  double cache_age_bin_interval = 0; ///< time to wait between cache age bin rotations
   double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
+  std::vector<uint64_t> kv_bins; ///< kv autotune bins
+  std::vector<uint64_t> kv_onode_bins; ///< kv onode autotune bins
+  std::vector<uint64_t> meta_bins; ///< meta autotune bins
+  std::vector<uint64_t> data_bins; ///< data autotune bins
   uint64_t osd_memory_target = 0;   ///< OSD memory target when autotuning cache
   uint64_t osd_memory_base = 0;     ///< OSD base memory when autotuning cache
   double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
@@ -2262,6 +2315,7 @@ private:
 
     struct MempoolCache : public PriorityCache::PriCache {
       BlueStore *store;
+      uint64_t bins[PriorityCache::Priority::LAST+1] = {0};
       int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
       int64_t committed_bytes = 0;
       double cache_ratio = 0;
@@ -2269,21 +2323,34 @@ private:
       MempoolCache(BlueStore *s) : store(s) {};
 
       virtual uint64_t _get_used_bytes() const = 0;
+      virtual uint64_t _sum_bins(uint32_t start, uint32_t end) const = 0;
 
       virtual int64_t request_cache_bytes(
           PriorityCache::Priority pri, uint64_t total_cache) const {
         int64_t assigned = get_cache_bytes(pri);
 
         switch (pri) {
-        // All cache items are currently shoved into the PRI1 priority 
-        case PriorityCache::Priority::PRI1:
+        case PriorityCache::Priority::PRI0:
+	  {
+            // BlueStore caches currently don't put anything in PRI0
+	    break;
+	  }
+        case PriorityCache::Priority::LAST:
           {
-            int64_t request = _get_used_bytes();
+            uint32_t max = get_bin_count();
+	    int64_t request = _get_used_bytes() - _sum_bins(0, max);
             return(request > assigned) ? request - assigned : 0;
           }
         default:
-          break;
-        }
+	  {
+	    ceph_assert(pri > 0 && pri < PriorityCache::Priority::LAST);
+            auto prev_pri = static_cast<PriorityCache::Priority>(pri - 1);
+            uint64_t start = get_bins(prev_pri);
+            uint64_t end = get_bins(pri);
+            int64_t request = _sum_bins(start, end);
+            return(request > assigned) ? request - assigned : 0;
+	  }
+	}
         return -EOPNOTSUPP;
       }
  
@@ -2313,6 +2380,42 @@ private:
       virtual int64_t get_committed_size() const {
         return committed_bytes;
       }
+      virtual uint64_t get_bins(PriorityCache::Priority pri) const {
+        if (pri > PriorityCache::Priority::PRI0 &&
+            pri < PriorityCache::Priority::LAST) {
+          return bins[pri];
+        }
+        return 0;
+      }
+      virtual void set_bins(PriorityCache::Priority pri, uint64_t end_bin) {
+        if (pri <= PriorityCache::Priority::PRI0 ||
+            pri >= PriorityCache::Priority::LAST) {
+          return;
+        }
+        bins[pri] = end_bin;
+        uint64_t max = 0;
+        for (int pri = 1; pri < PriorityCache::Priority::LAST; pri++) {
+          if (bins[pri] > max) {
+            max = bins[pri];
+          }
+        }
+        set_bin_count(max);
+      }
+      virtual void import_bins(const std::vector<uint64_t> &bins_v) {
+        uint64_t max = 0;
+        for (int pri = 1; pri < PriorityCache::Priority::LAST; pri++) {
+          unsigned i = (unsigned) pri - 1;
+          if (i < bins_v.size()) {
+            bins[pri] = bins_v[i];
+            if (bins[pri] > max) {
+              max = bins[pri];
+            }
+          } else {
+            bins[pri] = 0;
+          }
+        }
+        set_bin_count(max);
+      }
       virtual double get_cache_ratio() const {
         return cache_ratio;
       }
@@ -2320,11 +2423,21 @@ private:
         cache_ratio = ratio;
       }
       virtual std::string get_cache_name() const = 0;
+      virtual uint32_t get_bin_count() const = 0;
+      virtual void set_bin_count(uint32_t count) = 0;
     };
 
     struct MetaCache : public MempoolCache {
       MetaCache(BlueStore *s) : MempoolCache(s) {};
 
+      virtual uint32_t get_bin_count() const {
+        return store->onode_cache_shards[0]->get_bin_count();
+      }
+      virtual void set_bin_count(uint32_t count) {
+        for (auto i : store->onode_cache_shards) {
+          i->set_bin_count(count);
+        }
+      }
       virtual uint64_t _get_used_bytes() const {
         return mempool::bluestore_Buffer::allocated_bytes() +
           mempool::bluestore_Blob::allocated_bytes() +
@@ -2335,17 +2448,26 @@ private:
           mempool::bluestore_SharedBlob::allocated_bytes() +
           mempool::bluestore_inline_bl::allocated_bytes();
       }
-
+      virtual void shift_bins() {
+        for (auto i : store->onode_cache_shards) {
+          i->shift_bins();
+        }
+      }
+      virtual uint64_t _sum_bins(uint32_t start, uint32_t end) const {
+        uint64_t onodes = 0;
+	for (auto i : store->onode_cache_shards) {
+	  onodes += i->sum_bins(start, end);
+	}
+	return onodes*get_bytes_per_onode();
+      }
       virtual std::string get_cache_name() const {
         return "BlueStore Meta Cache";
       }
-
       uint64_t _get_num_onodes() const {
         uint64_t onode_num =
             mempool::bluestore_cache_onode::allocated_items();
         return (2 > onode_num) ? 2 : onode_num;
       }
-
       double get_bytes_per_onode() const {
         return (double)_get_used_bytes() / (double)_get_num_onodes();
       }
@@ -2355,12 +2477,32 @@ private:
     struct DataCache : public MempoolCache {
       DataCache(BlueStore *s) : MempoolCache(s) {};
 
+      virtual uint32_t get_bin_count() const {
+        return store->buffer_cache_shards[0]->get_bin_count();
+      }
+      virtual void set_bin_count(uint32_t count) {
+        for (auto i : store->buffer_cache_shards) {
+          i->set_bin_count(count);
+        }
+      }
       virtual uint64_t _get_used_bytes() const {
         uint64_t bytes = 0;
         for (auto i : store->buffer_cache_shards) {
           bytes += i->_get_bytes();
         }
         return bytes; 
+      }
+      virtual void shift_bins() {
+        for (auto i : store->buffer_cache_shards) {
+          i->shift_bins();
+        }
+      }
+      virtual uint64_t _sum_bins(uint32_t start, uint32_t end) const {
+        uint64_t bytes = 0;
+        for (auto i : store->buffer_cache_shards) {
+          bytes += i->sum_bins(start, end);
+        }
+        return bytes;
       }
       virtual std::string get_cache_name() const {
         return "BlueStore Data Cache";
@@ -2388,7 +2530,6 @@ private:
     }
 
   private:
-    void _adjust_cache_settings();
     void _update_cache_settings();
     void _resize_shards(bool interval_stats);
   } mempool_thread;
@@ -2490,7 +2631,7 @@ private:
   CollectionRef _get_collection_by_oid(const ghobject_t& oid);
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();
-  void _update_cache_logger();
+  void _update_logger();
 
   void _assign_nid(TransContext *txc, OnodeRef o);
   uint64_t _assign_blobid(TransContext *txc);
@@ -2552,6 +2693,8 @@ private:
   void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
   int _deferred_replay();
+  bool _eliminate_outdated_deferred(bluestore_deferred_transaction_t* deferred_txn,
+				    interval_set<uint64_t>& bluefs_extents);
 
 public:
   using mempool_dynamic_bitset =
@@ -2571,8 +2714,7 @@ public:
 
 private:
   int _fsck_check_extents(
-    const coll_t& cid,
-    const ghobject_t& oid,
+    std::string_view ctx_descr,
     const PExtentVector& extents,
     bool compressed,
     mempool_dynamic_bitset &used_blocks,
@@ -2586,6 +2728,10 @@ private:
     int64_t& errors,
     int64_t &warnings,
     BlueStoreRepairer* repairer);
+  void _fsck_repair_shared_blobs(
+    BlueStoreRepairer& repairer,
+    shared_blob_2hash_tracker_t& sb_ref_counts,
+    sb_info_space_efficient_map_t& sb_info);
 
   int _fsck(FSCKDepth depth, bool repair);
   int _fsck_on_open(BlueStore::FSCKDepth depth, bool repair);
@@ -2608,7 +2754,7 @@ private:
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
     //NB: opt_name reserved for future use
-    boost::optional<T> val2 = f();
+    std::optional<T> val2 = f();
     if (val2) {
       return *val2;
     }
@@ -2629,7 +2775,7 @@ public:
 
 private:
   int32_t ondisk_format = 0;  ///< value detected on mount
-
+  bool    m_fast_shutdown = false;
   int _upgrade_super();  ///< upgrade (called during open_super)
   uint64_t _get_ondisk_reserved() const;
   void _prepare_ondisk_format_super(KeyValueDB::Transaction& t);
@@ -2648,6 +2794,9 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
+  void prepare_for_fast_shutdown() override;
+  virtual bool has_null_manager();
+
   uint64_t get_min_alloc_size() const override {
     return min_alloc_size;
   }
@@ -2656,6 +2805,7 @@ public:
 
   bool is_rotational() override;
   bool is_journal_rotational() override;
+  bool is_db_rotational() ;
 
   std::string get_default_device_class() override {
     std::string device_class;
@@ -3051,6 +3201,7 @@ public:
   void inject_broken_shared_blob_key(const std::string& key,
 			 const ceph::buffer::list& bl);
   void inject_no_shared_blob_key();
+  void inject_stray_shared_blob_key(uint64_t sbid);
 
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
@@ -3257,7 +3408,6 @@ private:
       uint64_t loffs_end,
       uint64_t min_alloc_size);
   };
-
   void _do_write_small(
     TransContext *txc,
     CollectionRef &c,
@@ -3443,21 +3593,10 @@ private:
   inline bool _use_rotational_settings();
 
 public:
-  struct sb_info_t {
-    coll_t cid;
-    int64_t pool_id = INT64_MIN;
-    std::list<ghobject_t> oids;
-    BlueStore::SharedBlobRef sb;
-    bluestore_extent_ref_map_t ref_map;
-    bool compressed = false;
-    bool passed = false;
-    bool updated = false;
-  };
   typedef btree::btree_set<
     uint64_t, std::less<uint64_t>,
     mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
 
-  typedef mempool::bluestore_fsck::map<uint64_t, sb_info_t> sb_info_map_t;
   struct FSCK_ObjectCtx {
     int64_t& errors;
     int64_t& warnings;
@@ -3472,7 +3611,9 @@ public:
     std::vector<std::unordered_map<ghobject_t, uint64_t>> *zone_refs;
 
     ceph::mutex* sb_info_lock;
-    sb_info_map_t& sb_info;
+    sb_info_space_efficient_map_t& sb_info;
+    // approximate amount of references per <shared blob, chunk>
+    shared_blob_2hash_tracker_t& sb_ref_counts;
 
     store_statfs_t& expected_store_statfs;
     per_pool_statfs& expected_pool_statfs;
@@ -3488,8 +3629,10 @@ public:
                    mempool_dynamic_bitset* _ub,
                    uint64_t_btree_t* _used_omap_head,
 		   std::vector<std::unordered_map<ghobject_t, uint64_t>> *_zone_refs,
-		   ceph::mutex* _sb_info_lock,
-                   sb_info_map_t& _sb_info,
+
+                   ceph::mutex* _sb_info_lock,
+                   sb_info_space_efficient_map_t& _sb_info,
+		   shared_blob_2hash_tracker_t& _sb_ref_counts,
                    store_statfs_t& _store_statfs,
                    per_pool_statfs& _pool_statfs,
                    BlueStoreRepairer* _repairer) :
@@ -3505,6 +3648,7 @@ public:
       zone_refs(_zone_refs),
       sb_info_lock(_sb_info_lock),
       sb_info(_sb_info),
+      sb_ref_counts(_sb_ref_counts),
       expected_store_statfs(_store_statfs),
       expected_pool_statfs(_pool_statfs),
       repairer(_repairer) {
@@ -3523,8 +3667,7 @@ public:
     const BlueStore::FSCK_ObjectCtx& ctx);
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
   int  push_allocation_to_rocksdb();
-  int  read_allocation_from_drive_for_bluestore_tool(bool test_store_and_restore);
-  int  read_allocation_from_drive_for_fsck() { return read_allocation_from_drive_for_bluestore_tool(false); }
+  int  read_allocation_from_drive_for_bluestore_tool();
 #endif
 private:
 #define MAX_BLOBS_IN_ONODE 128
@@ -3602,8 +3745,10 @@ private:
   int  __restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  read_allocation_from_drive_on_startup();
-  int  reconstruct_allocations(Allocator* allocator, read_alloc_stats_t &stats);
-  int  read_allocation_from_onodes(Allocator* allocator, read_alloc_stats_t& stats);
+  int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
+  int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
+  void read_allocation_from_single_onode(SimpleBitmap *smbmp, BlueStore::OnodeRef& onode_ref, read_alloc_stats_t&  stats);
+  void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);
   int  commit_to_null_manager();
   int  commit_to_real_manager();
   int  db_cleanup(int ret);
@@ -3612,7 +3757,7 @@ private:
   Allocator* clone_allocator_without_bluefs(Allocator *src_allocator);
   Allocator* initialize_allocator_from_freelist(FreelistManager *real_fm);
   void copy_allocator_content_to_fm(Allocator *allocator, FreelistManager *real_fm);
-  void read_allocation_from_single_onode(Allocator* allocator, BlueStore::OnodeRef& onode_ref, read_alloc_stats_t&  stats);
+
 
   void _fsck_check_object_omap(FSCKDepth depth,
     OnodeRef& o,
@@ -3784,9 +3929,10 @@ public:
 public:
   void fix_per_pool_omap(KeyValueDB *db, int);
   bool remove_key(KeyValueDB *db, const std::string& prefix, const std::string& key);
-  bool fix_shared_blob(KeyValueDB *db,
-		         uint64_t sbid,
-		       const ceph::buffer::list* bl);
+  bool fix_shared_blob(KeyValueDB::Transaction txn,
+			uint64_t sbid,
+			bluestore_extent_ref_map_t* ref_map,
+			size_t repaired = 1);
   bool fix_statfs(KeyValueDB *db, const std::string& key,
     const store_statfs_t& new_statfs);
 
@@ -3813,8 +3959,8 @@ public:
   }
   //////////////////////
   //In fact two methods below are the only ones in this class which are thread-safe!!
-  void inc_repaired() {
-    ++to_repair_cnt;
+  void inc_repaired(size_t n = 1) {
+    to_repair_cnt += n;
   }
   void request_compaction() {
     need_compact = true;
@@ -3907,11 +4053,11 @@ class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
   };
   // add +1 row for corresponding per-device totals
   // add +1 column for per-level actual (taken from file size) total
-  typedef matrix_2d<uint64_t, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_FIRST + 1> per_level_per_dev_usage_t;
+  typedef matrix_2d<std::atomic<uint64_t>, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_FIRST + 1> per_level_per_dev_usage_t;
 
   per_level_per_dev_usage_t per_level_per_dev_usage;
   // file count per level, add +1 to keep total file count
-  uint64_t per_level_files[LEVEL_MAX - LEVEL_FIRST + 1] = { 0 };
+  std::atomic<uint64_t> per_level_files[LEVEL_MAX - LEVEL_FIRST + 1] = { 0 };
 
   // Note: maximum per-device totals below might be smaller than corresponding
   // perf counters by up to a single alloc unit (1M) due to superblock extent.
@@ -3984,27 +4130,27 @@ public:
     for (auto& p : fnode.extents) {
       auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
       auto& max = per_level_per_dev_max.at(p.bdev, pos);
-      cur += p.length;
-      if (cur > max) {
-        max = cur;
+      uint64_t v = cur.fetch_add(p.length) + p.length;
+      while (v > max) {
+	max.exchange(v);
       }
       {
         //update per-device totals
         auto& cur = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
         auto& max = per_level_per_dev_max.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
-        cur += p.length;
-        if (cur > max) {
-          max = cur;
-        }
+        uint64_t v = cur.fetch_add(p.length) + p.length;
+	while (v > max) {
+	  max.exchange(v);
+	}
       }
     }
     {
       //update per-level actual totals
       auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
       auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
-      cur += fnode.size;
-      if (cur > max) {
-        max = cur;
+      uint64_t v = cur.fetch_add(fnode.size) + fnode.size;
+      while (v > max) {
+	max.exchange(v);
       }
     }
     ++per_level_files[pos];
@@ -4033,26 +4179,26 @@ public:
     ceph_assert(per_level_files[LEVEL_MAX - LEVEL_FIRST] > 0);
     --per_level_files[LEVEL_MAX - LEVEL_FIRST];
   }
-  void add_usage(void* hint, uint64_t fsize) override {
+  void add_usage(void* hint, uint64_t size_more) override {
     if (hint == nullptr)
       return;
     size_t pos = (size_t)hint - LEVEL_FIRST;
     //update per-level actual totals
     auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
     auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
-    cur += fsize;
-    if (cur > max) {
-      max = cur;
+    uint64_t v = cur.fetch_add(size_more) + size_more;
+    while (v > max) {
+      max.exchange(v);
     }
   }
-  void sub_usage(void* hint, uint64_t fsize) override {
+  void sub_usage(void* hint, uint64_t size_less) override {
     if (hint == nullptr)
       return;
     size_t pos = (size_t)hint - LEVEL_FIRST;
     //update per-level actual totals
     auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
-    ceph_assert(cur >= fsize);
-    per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos) -= fsize;
+    ceph_assert(cur >= size_less);
+    cur -= size_less;
   }
 
   uint8_t select_prefer_bdev(void* h) override;
@@ -4061,6 +4207,8 @@ public:
     BlueFSVolumeSelector::paths& res) const override;
 
   void dump(std::ostream& sout) override;
+  BlueFSVolumeSelector* clone_empty() const override;
+  bool compare(BlueFSVolumeSelector* other) override;
 };
 
 #endif

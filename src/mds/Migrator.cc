@@ -2850,7 +2850,7 @@ void Migrator::import_reverse(CDir *dir)
       CDentry *dn = p.second;
 
       // dentry
-      dn->state_clear(CDentry::STATE_AUTH);
+      dn->clear_auth();
       dn->clear_replica_map();
       dn->set_replica_nonce(CDentry::EXPORT_NONCE);
       if (dn->is_dirty()) 
@@ -2859,7 +2859,7 @@ void Migrator::import_reverse(CDir *dir)
       // inode?
       if (dn->get_linkage()->is_primary()) {
 	CInode *in = dn->get_linkage()->get_inode();
-	in->state_clear(CDentry::STATE_AUTH);
+	in->state_clear(CInode::STATE_AUTH);
 	in->clear_replica_map();
 	in->set_replica_nonce(CInode::EXPORT_NONCE);
 	if (in->is_dirty()) 

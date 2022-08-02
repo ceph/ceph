@@ -1,8 +1,10 @@
 parameters:
  nodes: 4
+ node_ip_offset: 100
  pool: ceph-dashboard
  network: ceph-dashboard
- domain: cephlab.com
+ gateway: 192.168.100.1
+ netmask: 255.255.255.0
  prefix: ceph
  numcpus: 1
  memory: 2048
@@ -11,6 +13,7 @@ parameters:
  admin_password: password
  disks:
  - 15
+ - 5
  - 5
 
 {% for number in range(0, nodes) %}
@@ -21,9 +24,12 @@ parameters:
  reserveip: true
  reservedns: true
  sharedkey: true
- domain: {{ domain }}
  nets:
-  - {{ network }}
+  - name: {{ network }}
+    ip: 192.168.100.{{ node_ip_offset + number }}
+    gateway: {{ gateway }}
+    mask: {{ netmask }}
+    dns: {{ gateway }}
  disks: {{ disks }}
  pool: {{ pool }}
  sharedfolders: [{{ ceph_dev_folder }}]

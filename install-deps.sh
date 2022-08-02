@@ -19,9 +19,13 @@ mkdir -p $DIR
 if test $(id -u) != 0 ; then
     SUDO=sudo
 fi
-export LC_ALL=C # the following is vulnerable to i18n
+export LC_ALL=en_US.UTF-8 # the following is vulnerable to i18n
 
 ARCH=$(uname -m)
+
+function in_jenkins() {
+    test -n "$JENKINS_HOME"
+}
 
 function munge_ceph_spec_in {
     local with_seastar=$1
@@ -30,16 +34,11 @@ function munge_ceph_spec_in {
     shift
     local for_make_check=$1
     shift
-    local with_jaeger=$1
-    shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
     if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
-    fi
-    if $with_jaeger; then
-        sed -i -e 's/%bcond_with jaeger/%bcond_without jaeger/g' $OUTFILE
     fi
     if $with_zbd; then
         sed -i -e 's/%bcond_with zbd/%bcond_without zbd/g' $OUTFILE
@@ -59,14 +58,11 @@ function munge_debian_control {
 	    grep -v babeltrace debian/control > $control
 	    ;;
     esac
-    if $with_jaeger; then
-	sed -i -e 's/^# Jaeger[[:space:]]//g' $control
-	sed -i -e 's/^# Crimson      libyaml-cpp-dev,/d' $control
-    fi
     echo $control
 }
 
 function ensure_decent_gcc_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Start ensure_decent_gcc_on_ubuntu() in install-deps.sh"
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
     local old=$(gcc -dumpfullversion -dumpversion)
@@ -101,33 +97,11 @@ ENDOFKEY
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
     fi
 
-    case "$codename" in
-        trusty)
-            old=4.8;;
-        xenial)
-            old=5;;
-        bionic)
-            old=7;;
-    esac
-    $SUDO update-alternatives --remove-all gcc || true
-    $SUDO update-alternatives \
-	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
-	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
-
-    if [ -f /usr/bin/g++-${old} ]; then
-      $SUDO update-alternatives \
-  	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
-  	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
-    fi
-
-    $SUDO update-alternatives --auto gcc
-
-    # cmake uses the latter by default
-    $SUDO ln -nsf /usr/bin/gcc /usr/bin/${ARCH}-linux-gnu-gcc
-    $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
+    in_jenkins && echo "CI_DEBUG: End ensure_decent_gcc_on_ubuntu() in install-deps.sh"
 }
 
 function ensure_python3_sphinx_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Running ensure_python3_sphinx_on_ubuntu() in install-deps.sh"
     local sphinx_command=/usr/bin/sphinx-build
     # python-sphinx points $sphinx_command to
     # ../share/sphinx/scripts/python2/sphinx-build when it's installed
@@ -138,6 +112,7 @@ function ensure_python3_sphinx_on_ubuntu {
 }
 
 function install_pkg_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Running install_pkg_on_ubuntu() in install-deps.sh"
     local project=$1
     shift
     local sha1=$1
@@ -154,6 +129,7 @@ function install_pkg_on_ubuntu {
 	for pkg in $pkgs; do
 	    if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
 		missing_pkgs+=" $pkg"
+                in_jenkins && echo "CI_DEBUG: missing_pkgs=$missing_pkgs"
 	    fi
 	done
     fi
@@ -166,7 +142,8 @@ function install_pkg_on_ubuntu {
 }
 
 function install_boost_on_ubuntu {
-    local ver=1.75
+    in_jenkins && echo "CI_DEBUG: Running install_boost_on_ubuntu() in install-deps.sh"
+    local ver=1.79
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
@@ -181,7 +158,7 @@ function install_boost_on_ubuntu {
     fi
     local codename=$1
     local project=libboost
-    local sha1=7aba8a1882670522ee1d1ee1bba0ea170b292dec
+    local sha1=892ab89e76b91b505ffbf083f6fb7f2a666d4132
     install_pkg_on_ubuntu \
 	$project \
 	$sha1 \
@@ -206,6 +183,7 @@ function install_boost_on_ubuntu {
 }
 
 function install_libzbd_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Running install_libzbd_on_ubuntu() in install-deps.sh"
     local codename=$1
     local project=libzbd
     local sha1=1fadde94b08fab574b17637c2bebd2b1e7f9127b
@@ -217,21 +195,33 @@ function install_libzbd_on_ubuntu {
         libzbd-dev
 }
 
-function install_libpmem_on_ubuntu {
-    local codename=$1
-    local project=pmem
-    local sha1=7c18b4b1413ae965ea8bcbfc69eb9784f9212319
-    install_pkg_on_ubuntu \
-        $project \
-        $sha1 \
-        $codename \
-        check \
-        libpmem-dev \
-        libpmemobj-dev
-}
-
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
+}
+
+function ensure_decent_gcc_on_rh {
+    local old=$(gcc -dumpversion)
+    local expected=10.2
+    local dts_ver=$1
+    if version_lt $old $expected; then
+	if test -t 1; then
+	    # interactive shell
+	    cat <<EOF
+Your GCC is too old. Please run following command to add DTS to your environment:
+
+scl enable devtoolset-8 bash
+
+Or add following line to the end of ~/.bashrc to add it permanently:
+
+source scl_source enable devtoolset-8
+
+see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
+EOF
+	else
+	    # non-interactive shell
+	    source /opt/rh/devtoolset-$dts_ver/enable
+	fi
+    fi
 }
 
 for_make_check=false
@@ -303,9 +293,10 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
-    [ $WITH_JAEGER ] && with_jaeger=true || with_jaeger=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
+    [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
+    motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
@@ -320,9 +311,9 @@ else
                 $with_zbd && install_libzbd_on_ubuntu bionic
                 ;;
             *Focal*)
+                ensure_decent_gcc_on_ubuntu 11 focal
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 $with_zbd && install_libzbd_on_ubuntu focal
-                $with_pmem && install_libpmem_on_ubuntu focal
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -334,6 +325,7 @@ else
         fi
         touch $DIR/status
 
+        in_jenkins && echo "CI_DEBUG: Running munge_debian_control() in install-deps.sh"
 	backports=""
 	control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
@@ -352,24 +344,54 @@ else
 	if $with_seastar; then
 	    build_profiles+=",pkg.ceph.crimson"
 	fi
-	if $with_jaeger; then
-	    build_profiles+=",pkg.ceph.jaeger"
+	if $with_pmem; then
+	    build_profiles+=",pkg.ceph.pmdk"
 	fi
+
+        in_jenkins && cat <<EOF
+CI_DEBUG: for_make_check=$for_make_check
+CI_DEBUG: with_seastar=$with_seastar
+CI_DEBUG: with_jaeger=$with_jaeger
+CI_DEBUG: build_profiles=$build_profiles
+CI_DEBUG: Now running 'mk-build-deps' and installing ceph-build-deps package
+EOF
+
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
 	      --build-profiles "${build_profiles#,}" \
 	      --install --remove \
 	      --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
+        in_jenkins && echo "CI_DEBUG: Removing ceph-build-deps"
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
+
+        # for rgw motr backend build checks
+        if ! dpkg -l cortx-motr-dev &> /dev/null &&
+            { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
+            deb_arch=$(dpkg --print-architecture)
+            motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
+            motr_dev_pkg="cortx-motr-dev_2.0.0.git3252d623_$deb_arch.deb"
+            $SUDO curl -sL -o/var/cache/apt/archives/$motr_pkg $motr_pkgs_url/$motr_pkg
+            $SUDO curl -sL -o/var/cache/apt/archives/$motr_dev_pkg $motr_pkgs_url/$motr_dev_pkg
+            # For some reason libfabric pkg is not available in arm64 version
+            # of Ubuntu 20.04 (Focal Fossa), so we borrow it from more recent
+            # versions for now.
+            if [[ "$deb_arch" == 'arm64' ]]; then
+                lf_pkg='libfabric1_1.11.0-2_arm64.deb'
+                $SUDO curl -sL -o/var/cache/apt/archives/$lf_pkg http://ports.ubuntu.com/pool/universe/libf/libfabric/$lf_pkg
+                $SUDO apt-get install -y /var/cache/apt/archives/$lf_pkg
+            fi
+            $SUDO apt-get install -y /var/cache/apt/archives/{$motr_pkg,$motr_dev_pkg}
+            $SUDO apt-get install -y libisal-dev
+        fi
         ;;
-    centos|fedora|rhel|ol|virtuozzo)
+    rocky|centos|fedora|rhel|ol|virtuozzo)
         builddepcmd="dnf -y builddep --allowerasing"
         echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
                 $SUDO dnf install -y dnf-utils
                 ;;
-            centos|rhel|ol|virtuozzo)
+            rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO dnf install -y dnf-utils
                 rpm --quiet --query epel-release || \
@@ -379,29 +401,59 @@ else
 		if test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     # Enable 'powertools' or 'PowerTools' repo
                     $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
+		    case "$ARCH" in
+			x86_64)
+			    $SUDO dnf -y install centos-release-scl
+			    dts_ver=10
+			    ;;
+			aarch64)
+			    $SUDO dnf -y install centos-release-scl-rh
+			    $SUDO dnf config-manager --disable centos-sclo-rh
+			    $SUDO dnf config-manager --enable centos-sclo-rh-testing
+			    dts_ver=10
+			    ;;
+		    esac
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
+                    $SUDO dnf -y module enable javapackages-tools
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
+                    $SUDO dnf config-manager \
+			  --enable rhel-server-rhscl-8-rpms \
+			  --enable rhel-8-server-optional-rpms \
+			  --enable rhel-8-server-devtools-rpms
+                    dts_ver=10
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
+		    $SUDO dnf -y module enable javapackages-tools
                 fi
                 ;;
         esac
-        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $with_jaeger $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
+	if [ -n "$dts_ver" ]; then
+            ensure_decent_gcc_on_rh $dts_ver
+	fi
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -qi "error:" && exit 1
+        # for rgw motr backend build checks
+        if ! rpm --quiet -q cortx-motr-devel &&
+              { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
+            $SUDO dnf install -y \
+                  "$motr_pkgs_url/isa-l-2.30.0-1.el7.${ARCH}.rpm" \
+                  "$motr_pkgs_url/cortx-motr-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm" \
+                  "$motr_pkgs_url/cortx-motr-devel-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm"
+        fi
         ;;
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
-        munge_ceph_spec_in $with_seastar false $for_make_check $with_jaeger $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar false $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)
@@ -412,6 +464,7 @@ else
 fi
 
 function populate_wheelhouse() {
+    in_jenkins && echo "CI_DEBUG: Running populate_wheelhouse() in install-deps.sh"
     local install=$1
     shift
 
@@ -429,6 +482,7 @@ function populate_wheelhouse() {
 }
 
 function activate_virtualenv() {
+    in_jenkins && echo "CI_DEBUG: Running activate_virtualenv() in install-deps.sh"
     local top_srcdir=$1
     local env_dir=$top_srcdir/install-deps-python3
 
@@ -444,6 +498,7 @@ function activate_virtualenv() {
 }
 
 function preload_wheels_for_tox() {
+    in_jenkins && echo "CI_DEBUG: Running preload_wheels_for_tox() in install-deps.sh"
     local ini=$1
     shift
     pushd . > /dev/null
@@ -486,3 +541,5 @@ if $for_make_check; then
     rm -rf $XDG_CACHE_HOME
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
+
+in_jenkins && echo "CI_DEBUG: End install-deps.sh" || true

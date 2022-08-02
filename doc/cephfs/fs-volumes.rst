@@ -79,18 +79,38 @@ List volumes using::
 
     $ ceph fs volume ls
 
+Rename a volume using::
+
+    $ ceph fs volume rename <vol_name> <new_vol_name> [--yes-i-really-mean-it]
+
+Renaming a volume can be an expensive operation. It does the following:
+
+- renames the orchestrator managed MDS service to match the <new_vol_name>.
+  This involves launching a MDS service with <new_vol_name> and bringing down
+  the MDS service with <vol_name>.
+- renames the file system matching <vol_name> to <new_vol_name>
+- changes the application tags on the data and metadata pools of the file system
+  to <new_vol_name>
+- renames the  metadata and data pools of the file system.
+
+The CephX IDs authorized to <vol_name> need to be reauthorized to <new_vol_name>. Any
+on-going operations of the clients using these IDs may be disrupted. Mirroring is
+expected to be disabled on the volume.
+
 FS Subvolume groups
 -------------------
 
 Create a subvolume group using::
 
-    $ ceph fs subvolumegroup create <vol_name> <group_name> [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>]
+    $ ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>]
 
 The command succeeds even if the subvolume group already exists.
 
 When creating a subvolume group you can specify its data pool layout (see
-:doc:`/cephfs/file-layouts`), uid, gid, and file mode in octal numerals. By default, the
-subvolume group is created with an octal file mode '755', uid '0', gid '0' and data pool
+:doc:`/cephfs/file-layouts`), uid, gid, file mode in octal numerals and
+size in bytes. The size of the subvolume group is specified by setting
+a quota on it (see :doc:`/cephfs/quota`). By default, the subvolume group
+is created with an octal file mode '755', uid '0', gid '0' and data pool
 layout of its parent directory.
 
 
@@ -112,6 +132,36 @@ List subvolume groups using::
 
 .. note:: Subvolume group snapshot feature is no longer supported in mainline CephFS (existing group
           snapshots can still be listed and deleted)
+
+Fetch the metadata of a subvolume group using::
+
+    $ ceph fs subvolumegroup info <vol_name> <group_name>
+
+The output format is json and contains fields as follows.
+
+* atime: access time of subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
+* mtime: modification time of subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
+* ctime: change time of subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
+* uid: uid of subvolume group path
+* gid: gid of subvolume group path
+* mode: mode of subvolume group path
+* mon_addrs: list of monitor addresses
+* bytes_pcent: quota used in percentage if quota is set, else displays "undefined"
+* bytes_quota: quota size in bytes if quota is set, else displays "infinite"
+* bytes_used: current used size of the subvolume group in bytes
+* created_at: time of creation of subvolume group in the format "YYYY-MM-DD HH:MM:SS"
+* data_pool: data pool the subvolume group belongs to
+
+Resize a subvolume group using::
+
+    $ ceph fs subvolumegroup resize <vol_name> <group_name> <new_size> [--no_shrink]
+
+The command resizes the subvolume group quota using the size specified by 'new_size'.
+The '--no_shrink' flag prevents the subvolume group to shrink below the current used
+size of the subvolume group.
+
+The subvolume group can be resized to an infinite size by passing 'inf' or 'infinite'
+as the new_size.
 
 Remove a snapshot of a subvolume group using::
 
@@ -194,7 +244,7 @@ Fetch the absolute path of a subvolume using::
 
     $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-Fetch the metadata of a subvolume using::
+Fetch the information of a subvolume using::
 
     $ ceph fs subvolume info <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
@@ -242,6 +292,31 @@ List subvolumes using::
 
 .. note:: subvolumes that are removed but have snapshots retained, are also listed.
 
+Set custom metadata on the subvolume as a key-value pair using::
+
+    $ ceph fs subvolume metadata set <vol_name> <subvol_name> <key_name> <value> [--group_name <subvol_group_name>]
+
+.. note:: If the key_name already exists then the old value will get replaced by the new value.
+
+.. note:: key_name and value should be a string of ASCII characters (as specified in python's string.printable). key_name is case-insensitive and always stored in lower case.
+
+.. note:: Custom metadata on a subvolume is not preserved when snapshotting the subvolume, and hence, is also not preserved when cloning the subvolume snapshot.
+
+Get custom metadata set on the subvolume using the metadata key::
+
+    $ ceph fs subvolume metadata get <vol_name> <subvol_name> <key_name> [--group_name <subvol_group_name>]
+
+List custom metadata (key-value pairs) set on the subvolume using::
+
+    $ ceph fs subvolume metadata ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Remove custom metadata set on the subvolume using the metadata key::
+
+    $ ceph fs subvolume metadata rm <vol_name> <subvol_name> <key_name> [--group_name <subvol_group_name>] [--force]
+
+Using the '--force' flag allows the command to succeed that would otherwise
+fail if the metadata key did not exist.
+
 Create a snapshot of a subvolume using::
 
     $ ceph fs subvolume snapshot create <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
@@ -260,7 +335,7 @@ List snapshots of a subvolume using::
 
     $ ceph fs subvolume snapshot ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-Fetch the metadata of a snapshot using::
+Fetch the information of a snapshot using::
 
     $ ceph fs subvolume snapshot info <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
 
@@ -269,7 +344,64 @@ The output format is json and contains fields as follows.
 * created_at: time of creation of snapshot in the format "YYYY-MM-DD HH:MM:SS:ffffff"
 * data_pool: data pool the snapshot belongs to
 * has_pending_clones: "yes" if snapshot clone is in progress otherwise "no"
-* size: snapshot size in bytes
+* pending_clones: list of in progress or pending clones and their target group if exist otherwise this field is not shown
+* orphan_clones_count: count of orphan clones if snapshot has orphan clones otherwise this field is not shown
+
+Sample output if snapshot clones are in progress or pending state::
+
+  $ ceph fs subvolume snapshot info cephfs subvol snap
+  {
+      "created_at": "2022-06-14 13:54:58.618769",
+      "data_pool": "cephfs.cephfs.data",
+      "has_pending_clones": "yes",
+      "pending_clones": [
+          {
+              "name": "clone_1",
+              "target_group": "target_subvol_group"
+          },
+          {
+              "name": "clone_2"
+          },
+          {
+              "name": "clone_3",
+              "target_group": "target_subvol_group"
+          }
+      ]
+  }
+
+Sample output if no snapshot clone is in progress or pending state::
+
+  $ ceph fs subvolume snapshot info cephfs subvol snap
+  {
+      "created_at": "2022-06-14 13:54:58.618769",
+      "data_pool": "cephfs.cephfs.data",
+      "has_pending_clones": "no"
+  }
+
+Set custom metadata on the snapshot as a key-value pair using::
+
+    $ ceph fs subvolume snapshot metadata set <vol_name> <subvol_name> <snap_name> <key_name> <value> [--group_name <subvol_group_name>]
+
+.. note:: If the key_name already exists then the old value will get replaced by the new value.
+
+.. note:: The key_name and value should be a string of ASCII characters (as specified in python's string.printable). The key_name is case-insensitive and always stored in lower case.
+
+.. note:: Custom metadata on a snapshots is not preserved when snapshotting the subvolume, and hence, is also not preserved when cloning the subvolume snapshot.
+
+Get custom metadata set on the snapshot using the metadata key::
+
+    $ ceph fs subvolume snapshot metadata get <vol_name> <subvol_name> <snap_name> <key_name> [--group_name <subvol_group_name>]
+
+List custom metadata (key-value pairs) set on the snapshot using::
+
+    $ ceph fs subvolume snapshot metadata ls <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+
+Remove custom metadata set on the snapshot using the metadata key::
+
+    $ ceph fs subvolume snapshot metadata rm <vol_name> <subvol_name> <snap_name> <key_name> [--group_name <subvol_group_name>] [--force]
+
+Using the '--force' flag allows the command to succeed that would otherwise
+fail if the metadata key did not exist.
 
 Cloning Snapshots
 -----------------
@@ -322,8 +454,14 @@ A clone can be in one of the following states:
 #. `in-progress` : Clone operation is in progress
 #. `complete`    : Clone operation has successfully finished
 #. `failed`      : Clone operation has failed
+#. `canceled`    : Clone operation is cancelled by user
 
-Sample output from an `in-progress` clone operation::
+The reason for a clone failure is shown as below:
+
+#. `errno`     : error number
+#. `error_msg` : failure error string
+
+Sample output of an `in-progress` clone operation::
 
   $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
   $ ceph fs clone status cephfs clone1
@@ -334,6 +472,28 @@ Sample output from an `in-progress` clone operation::
         "volume": "cephfs",
         "subvolume": "subvol1",
         "snapshot": "snap1"
+      }
+    }
+  }
+
+.. note:: The `failure` section will be shown only if the clone is in failed or cancelled state
+
+Sample output of a `failed` clone operation::
+
+  $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
+  $ ceph fs clone status cephfs clone1
+  {
+    "status": {
+      "state": "failed",
+      "source": {
+        "volume": "cephfs",
+        "subvolume": "subvol1",
+        "snapshot": "snap1"
+        "size": "104857600"
+      },
+      "failure": {
+        "errno": "122",
+        "errstr": "Disk quota exceeded"
       }
     }
   }

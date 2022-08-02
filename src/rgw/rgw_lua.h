@@ -2,11 +2,11 @@
 
 #include <string>
 #include "common/async/yield_context.h"
+#include "rgw_sal_fwd.h"
 
 class lua_State;
 class rgw_user;
 namespace rgw::sal {
-  class Store;
   class RadosStore;
 }
 
@@ -15,6 +15,7 @@ namespace rgw::lua {
 enum class context {
   preRequest,
   postRequest,
+  background,
   none
 };
 

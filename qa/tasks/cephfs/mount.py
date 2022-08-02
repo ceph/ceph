@@ -21,6 +21,10 @@ from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
+
+UMOUNT_TIMEOUT = 300
+
+
 class CephFSMount(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
@@ -452,7 +456,8 @@ class CephFSMount(object):
     def umount(self):
         raise NotImplementedError()
 
-    def umount_wait(self, force=False, require_clean=False, timeout=None):
+    def umount_wait(self, force=False, require_clean=False,
+                    timeout=UMOUNT_TIMEOUT):
         """
 
         :param force: Expect that the mount will not shutdown cleanly: kill
@@ -572,12 +577,16 @@ class CephFSMount(object):
 
     def get_key_from_keyfile(self):
         # XXX: don't call run_shell(), since CephFS might be unmounted.
-        keyring = self.client_remote.run(
-            args=['sudo', 'cat', self.client_keyring_path], stdout=StringIO(),
-            omit_sudo=False).stdout.getvalue()
+        keyring = self.client_remote.read_file(self.client_keyring_path).\
+            decode()
+
         for line in keyring.split('\n'):
             if line.find('key') != -1:
                 return line[line.find('=') + 1 : ].strip()
+
+        raise RuntimeError('Key not found in keyring file '
+                           f'{self.client_keyring_path}. Its contents are -\n'
+                           f'{keyring}')
 
     @property
     def config_path(self):
@@ -684,32 +693,35 @@ class CephFSMount(object):
         ])
 
     def _run_python(self, pyscript, py_version='python3', sudo=False):
-        args = []
+        args, omit_sudo = [], True
         if sudo:
             args.append('sudo')
+            omit_sudo = False
         args += ['adjust-ulimits', 'daemon-helper', 'kill', py_version, '-c', pyscript]
-        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE, stdout=StringIO())
+        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE,
+                                      stdout=StringIO(), omit_sudo=omit_sudo)
 
     def run_python(self, pyscript, py_version='python3', sudo=False):
         p = self._run_python(pyscript, py_version, sudo=sudo)
         p.wait()
         return p.stdout.getvalue().strip()
 
-    def run_shell(self, args, timeout=900, **kwargs):
-        args = args.split() if isinstance(args, str) else args
-        kwargs.pop('omit_sudo', False)
-        sudo = kwargs.pop('sudo', False)
+    def run_shell(self, args, timeout=300, **kwargs):
+        omit_sudo = kwargs.pop('omit_sudo', False)
         cwd = kwargs.pop('cwd', self.mountpoint)
         stdout = kwargs.pop('stdout', StringIO())
         stderr = kwargs.pop('stderr', StringIO())
 
-        if sudo:
-            args.insert(0, 'sudo')
-
-        return self.client_remote.run(args=args, cwd=cwd, timeout=timeout, stdout=stdout, stderr=stderr, **kwargs)
+        return self.client_remote.run(args=args, cwd=cwd, timeout=timeout,
+                                      stdout=stdout, stderr=stderr,
+                                      omit_sudo=omit_sudo, **kwargs)
 
     def run_shell_payload(self, payload, **kwargs):
-        return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
+        kwargs['args'] = ["bash", "-c", Raw(f"'{payload}'")]
+        if kwargs.pop('sudo', False):
+            kwargs['args'].insert(0, 'sudo')
+            kwargs['omit_sudo'] = False
+        return self.run_shell(**kwargs)
 
     def run_as_user(self, **kwargs):
         """
@@ -731,6 +743,7 @@ class CephFSMount(object):
             args = ['sudo', '-u', user, '-s', '/bin/bash', '-c', cmd]
 
         kwargs['args'] = args
+        kwargs['omit_sudo'] = False
         return self.run_shell(**kwargs)
 
     def run_as_root(self, **kwargs):
@@ -740,44 +753,66 @@ class CephFSMount(object):
         kwargs['user'] = 'root'
         return self.run_as_user(**kwargs)
 
-    def _verify(self, proc, retval=None, errmsg=None):
-        if retval:
-            msg = ('expected return value: {}\nreceived return value: '
-                   '{}\n'.format(retval, proc.returncode))
-            assert proc.returncode == retval, msg
+    def assert_retval(self, proc_retval, exp_retval):
+        msg = (f'expected return value: {exp_retval}\n'
+               f'received return value: {proc_retval}\n')
+        assert proc_retval == exp_retval, msg
 
-        if errmsg:
-            stderr = proc.stderr.getvalue().lower()
-            msg = ('didn\'t find given string in stderr -\nexpected string: '
-                   '{}\nreceived error message: {}\nnote: received error '
-                   'message is converted to lowercase'.format(errmsg, stderr))
-            assert errmsg in stderr, msg
+    def _verify(self, proc, exp_retval=None, exp_errmsgs=None):
+        if exp_retval is None and exp_errmsgs is None:
+            raise RuntimeError('Method didn\'t get enough parameters. Pass '
+                               'return value or error message expected from '
+                               'the command/process.')
 
-    def negtestcmd(self, args, retval=None, errmsg=None, stdin=None,
+        if exp_retval is not None:
+            self.assert_retval(proc.returncode, exp_retval)
+        if exp_errmsgs is None:
+            return
+
+        if isinstance(exp_errmsgs, str):
+            exp_errmsgs = (exp_errmsgs, )
+
+        proc_stderr = proc.stderr.getvalue().lower()
+        msg = ('didn\'t find any of the expected string in stderr.\n'
+               f'expected string: {exp_errmsgs}\n'
+               f'received error message: {proc_stderr}\n'
+               'note: received error message is converted to lowercase')
+        for e in exp_errmsgs:
+            if e in proc_stderr:
+                break
+        # this else is meant for for loop.
+        else:
+            assert False, msg
+
+    def negtestcmd(self, args, retval=None, errmsgs=None, stdin=None,
                    cwd=None, wait=True):
         """
         Conduct a negative test for the given command.
 
-        retval and errmsg are parameters to confirm the cause of command
+        retval and errmsgs are parameters to confirm the cause of command
         failure.
+
+        Note: errmsgs is expected to be a tuple, but in case there's only
+        error message, it can also be a string. This method will handle
+        that internally.
         """
         proc = self.run_shell(args=args, wait=wait, stdin=stdin, cwd=cwd,
                               check_status=False)
-        self._verify(proc, retval, errmsg)
+        self._verify(proc, retval, errmsgs)
         return proc
 
-    def negtestcmd_as_user(self, args, user, retval=None, errmsg=None,
+    def negtestcmd_as_user(self, args, user, retval=None, errmsgs=None,
                            stdin=None, cwd=None, wait=True):
         proc = self.run_as_user(args=args, user=user, wait=wait, stdin=stdin,
                                 cwd=cwd, check_status=False)
-        self._verify(proc, retval, errmsg)
+        self._verify(proc, retval, errmsgs)
         return proc
 
-    def negtestcmd_as_root(self, args, retval=None, errmsg=None, stdin=None,
+    def negtestcmd_as_root(self, args, retval=None, errmsgs=None, stdin=None,
                            cwd=None, wait=True):
         proc = self.run_as_root(args=args, wait=wait, stdin=stdin, cwd=cwd,
                                 check_status=False)
-        self._verify(proc, retval, errmsg)
+        self._verify(proc, retval, errmsgs)
         return proc
 
     def open_no_data(self, basename):
@@ -833,6 +868,31 @@ class CephFSMount(object):
         # This wait would not be sufficient if the file had already
         # existed, but it's simple and in practice users of open_background
         # are not using it on existing files.
+        self.wait_for_visible(basename)
+
+        return rproc
+
+    def open_dir_background(self, basename):
+        """
+        Create and hold a capability to a directory.
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.hostfs_mntpt, basename)
+
+        pyscript = dedent("""
+            import time
+            import os
+
+            os.mkdir("{path}")
+            fd = os.open("{path}", os.O_RDONLY)
+            while True:
+                time.sleep(1)
+            """).format(path=path)
+
+        rproc = self._run_python(pyscript)
+        self.background_procs.append(rproc)
+
         self.wait_for_visible(basename)
 
         return rproc
@@ -1156,6 +1216,20 @@ class CephFSMount(object):
     def get_op_read_count(self):
         raise NotImplementedError()
 
+    def readlink(self, fs_path):
+        abs_path = os.path.join(self.hostfs_mntpt, fs_path)
+
+        pyscript = dedent("""
+            import os
+
+            print(os.readlink("{path}"))
+            """).format(path=abs_path)
+
+        proc = self._run_python(pyscript)
+        proc.wait()
+        return str(proc.stdout.getvalue().strip())
+
+
     def lstat(self, fs_path, follow_symlinks=False, wait=True):
         return self.stat(fs_path, follow_symlinks=False, wait=True)
 
@@ -1269,11 +1343,13 @@ class CephFSMount(object):
         """
         Wrap ls: return a list of strings
         """
-        cmd = ["ls"]
+        kwargs['args'] = ["ls"]
         if path:
-            cmd.append(path)
-
-        ls_text = self.run_shell(cmd, **kwargs).stdout.getvalue().strip()
+            kwargs['args'].append(path)
+        if kwargs.pop('sudo', False):
+            kwargs['args'].insert(0, 'sudo')
+            kwargs['omit_sudo'] = False
+        ls_text = self.run_shell(**kwargs).stdout.getvalue().strip()
 
         if ls_text:
             return ls_text.split("\n")
@@ -1291,7 +1367,11 @@ class CephFSMount(object):
         :param val: xattr value
         :return: None
         """
-        self.run_shell(["setfattr", "-n", key, "-v", val, path], **kwargs)
+        kwargs['args'] = ["setfattr", "-n", key, "-v", val, path]
+        if kwargs.pop('sudo', False):
+            kwargs['args'].insert(0, 'sudo')
+            kwargs['omit_sudo'] = False
+        self.run_shell(**kwargs)
 
     def getfattr(self, path, attr, **kwargs):
         """
@@ -1300,7 +1380,12 @@ class CephFSMount(object):
 
         :return: a string
         """
-        p = self.run_shell(["getfattr", "--only-values", "-n", attr, path], wait=False, **kwargs)
+        kwargs['args'] = ["getfattr", "--only-values", "-n", attr, path]
+        if kwargs.pop('sudo', False):
+            kwargs['args'].insert(0, 'sudo')
+            kwargs['omit_sudo'] = False
+        kwargs['wait'] = False
+        p = self.run_shell(**kwargs)
         try:
             p.wait()
         except CommandFailedError as e:
@@ -1337,3 +1422,22 @@ class CephFSMount(object):
         checksum_text = self.run_shell(cmd).stdout.getvalue().strip()
         checksum_sorted = sorted(checksum_text.split('\n'), key=lambda v: v.split()[1])
         return hashlib.md5(('\n'.join(checksum_sorted)).encode('utf-8')).hexdigest()
+
+    def validate_subvol_options(self):
+        mount_subvol_num = self.client_config.get('mount_subvol_num', None)
+        if self.cephfs_mntpt and mount_subvol_num is not None:
+            log.warning("You cannot specify both: cephfs_mntpt and mount_subvol_num")
+            log.info(f"Mounting subvol {mount_subvol_num} for now")
+
+        if mount_subvol_num is not None:
+            # mount_subvol must be an index into the subvol path array for the fs
+            if not self.cephfs_name:
+                self.cephfs_name = 'cephfs'
+            assert(hasattr(self.ctx, "created_subvols"))
+            # mount_subvol must be specified under client.[0-9] yaml section
+            subvol_paths = self.ctx.created_subvols[self.cephfs_name]
+            path_to_mount = subvol_paths[mount_subvol_num]
+            self.cephfs_mntpt = path_to_mount
+        elif not self.cephfs_mntpt:
+            # default to the "/" path
+            self.cephfs_mntpt = "/"

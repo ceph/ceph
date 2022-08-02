@@ -109,23 +109,61 @@ def test_get_smart_data(caplog, by, args, log):
 
 
 @mock.patch.object(CephService, 'send_command')
-def test_get_smart_data_from_appropriate_ceph_command(send_command):
+def test_get_smart_data_by_device(send_command):
     # pylint: disable=protected-access
-    send_command.side_effect = [
-        {'nodes': [{'name': 'osd.1', 'status': 'up'}, {'name': 'mon.1', 'status': 'down'}]},
-        {'fake': {'device': {'name': '/dev/sda'}}}
-    ]
-    CephService._get_smart_data_by_device({'devid': '1', 'daemons': ['osd.1', 'mon.1']})
-    send_command.assert_has_calls([mock.call('mon', 'osd tree'),
-                                   mock.call('osd', 'smart', '1', devid='1')])
+    device_id = 'Hitachi_HUA72201_JPW9K0N20D22SE'
+    osd_tree_payload = {'nodes':
+                        [
+                            {'name': 'osd.1', 'status': 'down'},
+                            {'name': 'osd.2', 'status': 'up'},
+                            {'name': 'osd.3', 'status': 'up'}
+                        ]}
+    health_metrics_payload = {device_id: {'ata_apm': {'enabled': False}}}
+    side_effect = [osd_tree_payload, health_metrics_payload]
 
-    send_command.side_effect = [
-        {'nodes': [{'name': 'osd.1', 'status': 'down'}, {'name': 'mon.1', 'status': 'up'}]},
-        {'fake': {'device': {'name': '/dev/sda'}}}
-    ]
-    CephService._get_smart_data_by_device({'devid': '1', 'daemons': ['osd.1', 'mon.1']})
+    # Daemons associated: 1 osd down, 2 osd up.
+    send_command.side_effect = side_effect
+    smart_data = CephService._get_smart_data_by_device(
+        {'devid': device_id, 'daemons': ['osd.1', 'osd.2', 'osd.3']})
+    assert smart_data == health_metrics_payload
     send_command.assert_has_calls([mock.call('mon', 'osd tree'),
-                                   mock.call('osd', 'smart', '1', devid='1'),
-                                   mock.call('mon', 'osd tree'),
+                                   mock.call('osd', 'smart', '2', devid=device_id)])
+
+    # Daemons associated: 1 osd down.
+    send_command.reset_mock()
+    send_command.side_effect = [osd_tree_payload]
+    smart_data = CephService._get_smart_data_by_device({'devid': device_id, 'daemons': ['osd.1']})
+    assert smart_data == {}
+    send_command.assert_has_calls([mock.call('mon', 'osd tree')])
+
+    # Daemons associated: 1 osd down, 1 mon.
+    send_command.reset_mock()
+    send_command.side_effect = side_effect
+    smart_data = CephService._get_smart_data_by_device(
+        {'devid': device_id, 'daemons': ['osd.1', 'mon.1']})
+    assert smart_data == health_metrics_payload
+    send_command.assert_has_calls([mock.call('mon', 'osd tree'),
                                    mock.call('mon', 'device query-daemon-health-metrics',
                                              who='mon.1')])
+
+    # Daemons associated: 1 mon.
+    send_command.reset_mock()
+    send_command.side_effect = side_effect
+    smart_data = CephService._get_smart_data_by_device({'devid': device_id, 'daemons': ['mon.1']})
+    assert smart_data == health_metrics_payload
+    send_command.assert_has_calls([mock.call('mon', 'osd tree'),
+                                   mock.call('mon', 'device query-daemon-health-metrics',
+                                             who='mon.1')])
+
+    # Daemons associated: 1 other (non-osd, non-mon).
+    send_command.reset_mock()
+    send_command.side_effect = [osd_tree_payload]
+    smart_data = CephService._get_smart_data_by_device({'devid': device_id, 'daemons': ['rgw.1']})
+    assert smart_data == {}
+    send_command.assert_has_calls([mock.call('mon', 'osd tree')])
+
+    # Daemons associated: no daemons.
+    send_command.reset_mock()
+    smart_data = CephService._get_smart_data_by_device({'devid': device_id, 'daemons': []})
+    assert smart_data == {}
+    send_command.assert_has_calls([])

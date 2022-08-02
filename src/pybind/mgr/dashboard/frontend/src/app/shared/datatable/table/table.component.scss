@@ -10,6 +10,13 @@
 
 .dataTables_wrapper {
   margin-bottom: 25px;
+  // after bootstrap 8.0 the details table started to
+  // have an issue where the columns keep expanding to
+  // infinity.
+  // https://github.com/ceph/ceph/pull/40618#pullrequestreview-629010639
+  // making the max-width to 99.9% solves the issue as a temporary fix
+  // until we get a conclusive fix, this needs to be kept.
+  max-width: 99.9%;
 
   .separator {
     border-left: 1px solid vv.$datatable-divider-color;

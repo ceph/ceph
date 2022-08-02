@@ -40,6 +40,11 @@ POSIX semantics for various reasons:
   code.  The name of this hidden directory can be changed at mount
   time with ``-o snapdirname=.somethingelse`` (Linux) or the config
   option ``client_snapdir`` (libcephfs, ceph-fuse).
+- CephFS does not currently maintain the ``atime`` field. Most applications
+  do not care, though this impacts some backup and data tiering
+  applications that can move unused data to a secondary storage system.
+  You may be able to workaround this for some use cases, as CephFS does
+  support setting ``atime`` via the ``setattr`` operation.
 
 Perspective
 -----------

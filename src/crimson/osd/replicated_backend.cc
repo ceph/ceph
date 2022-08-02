@@ -21,10 +21,9 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
                                      pg_shard_t whoami,
                                      ReplicatedBackend::CollectionRef coll,
                                      crimson::osd::ShardServices& shard_services)
-  : PGBackend{whoami.shard, coll, &shard_services.get_store()},
+  : PGBackend{whoami.shard, coll, shard_services},
     pgid{pgid},
-    whoami{whoami},
-    shard_services{shard_services}
+    whoami{whoami}
 {}
 
 ReplicatedBackend::ll_read_ierrorator::future<ceph::bufferlist>
@@ -54,12 +53,13 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
     throw crimson::common::actingset_changed(peering->is_primary);
   }
 
-  const ceph_tid_t tid = next_txn_id++;
+  const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
     pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
+  logger().debug("ReplicatedBackend::_submit_transaction: do_transaction...");
   auto all_completed = interruptor::make_interruptible(
       shard_services.get_store().do_transaction(coll, std::move(txn)))
   .then_interruptible([this, peers=pending_txn->second.weak_from_this()] {

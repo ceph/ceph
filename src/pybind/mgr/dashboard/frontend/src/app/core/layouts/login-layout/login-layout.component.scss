@@ -31,7 +31,7 @@
   }
 
   .list-inline {
-    margin-bottom: 20%;
+    margin-bottom: 0;
     margin-left: 20%;
   }
 
@@ -40,6 +40,22 @@
 
     &:hover {
       color: vv.$fg-hover-color-over-dark-bg;
+    }
+  }
+
+  @media screen and (min-width: vv.$screen-sm-min) {
+    .login-form,
+    .branding-info {
+      padding-top: 30vh;
+    }
+  }
+  @media screen and (max-width: vv.$screen-sm-max) {
+    .login-form {
+      padding-top: 10vh;
+    }
+
+    .branding-info {
+      padding-top: 0;
     }
   }
 }

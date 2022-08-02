@@ -23,7 +23,7 @@ namespace dmc = crimson::dmclock;
 using namespace std::placeholders;
 
 #define dout_context cct
-#define dout_subsys ceph_subsys_osd
+#define dout_subsys ceph_subsys_mclock
 #undef dout_prefix
 #define dout_prefix *_dout << "mClockScheduler: "
 
@@ -345,28 +345,37 @@ void mClockScheduler::set_profile_config()
     static_cast<size_t>(op_scheduler_class::background_best_effort)];
 
   // Set external client params
-  cct->_conf.set_val("osd_mclock_scheduler_client_res",
+  cct->_conf.set_val_default("osd_mclock_scheduler_client_res",
     std::to_string(client.res));
-  cct->_conf.set_val("osd_mclock_scheduler_client_wgt",
+  cct->_conf.set_val_default("osd_mclock_scheduler_client_wgt",
     std::to_string(client.wgt));
-  cct->_conf.set_val("osd_mclock_scheduler_client_lim",
+  cct->_conf.set_val_default("osd_mclock_scheduler_client_lim",
     std::to_string(client.lim));
+  dout(10) << __func__ << " client QoS params: " << "["
+           << client.res << "," << client.wgt << "," << client.lim
+           << "]" << dendl;
 
   // Set background recovery client params
-  cct->_conf.set_val("osd_mclock_scheduler_background_recovery_res",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_recovery_res",
     std::to_string(rec.res));
-  cct->_conf.set_val("osd_mclock_scheduler_background_recovery_wgt",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_recovery_wgt",
     std::to_string(rec.wgt));
-  cct->_conf.set_val("osd_mclock_scheduler_background_recovery_lim",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_recovery_lim",
     std::to_string(rec.lim));
+  dout(10) << __func__ << " Recovery QoS params: " << "["
+           << rec.res << "," << rec.wgt << "," << rec.lim
+           << "]" << dendl;
 
   // Set background best effort client params
-  cct->_conf.set_val("osd_mclock_scheduler_background_best_effort_res",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_best_effort_res",
     std::to_string(best_effort.res));
-  cct->_conf.set_val("osd_mclock_scheduler_background_best_effort_wgt",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_best_effort_wgt",
     std::to_string(best_effort.wgt));
-  cct->_conf.set_val("osd_mclock_scheduler_background_best_effort_lim",
+  cct->_conf.set_val_default("osd_mclock_scheduler_background_best_effort_lim",
     std::to_string(best_effort.lim));
+  dout(10) << __func__ << " Best effort QoS params: " << "["
+    << best_effort.res << "," << best_effort.wgt << "," << best_effort.lim
+    << "]" << dendl;
 }
 
 int mClockScheduler::calc_scaled_cost(int item_cost)
@@ -387,6 +396,24 @@ void mClockScheduler::update_configuration()
 
 void mClockScheduler::dump(ceph::Formatter &f) const
 {
+  // Display queue sizes
+  f.open_object_section("queue_sizes");
+  f.dump_int("immediate", immediate.size());
+  f.dump_int("scheduler", scheduler.request_count());
+  f.close_section();
+
+  // client map and queue tops (res, wgt, lim)
+  std::ostringstream out;
+  f.open_object_section("mClockClients");
+  f.dump_int("client_count", scheduler.client_count());
+  out << scheduler;
+  f.dump_string("clients", out.str());
+  f.close_section();
+
+  // Display sorted queues (res, wgt, lim)
+  f.open_object_section("mClockQueues");
+  f.dump_string("queues", display_queues());
+  f.close_section();
 }
 
 void mClockScheduler::enqueue(OpSchedulerItem&& item)
@@ -398,12 +425,29 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
     immediate.push_front(std::move(item));
   } else {
     int cost = calc_scaled_cost(item.get_cost());
+    item.set_qos_cost(cost);
+    dout(20) << __func__ << " " << id
+             << " item_cost: " << item.get_cost()
+             << " scaled_cost: " << cost
+             << dendl;
+
     // Add item to scheduler queue
     scheduler.add_request(
       std::move(item),
       id,
       cost);
   }
+
+ dout(20) << __func__ << " client_count: " << scheduler.client_count()
+          << " queue_sizes: [ imm: " << immediate.size()
+          << " sched: " << scheduler.request_count() << " ]"
+          << dendl;
+ dout(30) << __func__ << " mClockClients: "
+          << scheduler
+          << dendl;
+ dout(30) << __func__ << " mClockQueues: { "
+          << display_queues() << " }"
+          << dendl;
 }
 
 void mClockScheduler::enqueue_front(OpSchedulerItem&& item)
@@ -434,6 +478,13 @@ WorkItem mClockScheduler::dequeue()
       return std::move(*retn.request);
     }
   }
+}
+
+std::string mClockScheduler::display_queues() const
+{
+  std::ostringstream out;
+  scheduler.display_queues(out);
+  return out.str();
 }
 
 const char** mClockScheduler::get_tracked_conf_keys() const

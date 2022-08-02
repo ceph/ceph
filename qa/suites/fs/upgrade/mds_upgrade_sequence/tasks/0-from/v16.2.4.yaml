@@ -15,7 +15,7 @@ tasks:
 - print: "**** done install task..."
 - cephadm:
     roleless: true
-    image: docker.io/ceph/ceph:v16.2.4
+    image: quay.io/ceph/ceph:v16.2.4
     cephadm_branch: v16.2.4
     cephadm_git_url: https://github.com/ceph/ceph
     # needed for v16.2.4 due to --skip-admin-label

@@ -34,12 +34,12 @@ public:
 #endif
   }
 
-  int compress(const ceph::buffer::list &in, ceph::buffer::list &out, boost::optional<int32_t> &compressor_message) override;
-  int decompress(const ceph::buffer::list &in, ceph::buffer::list &out, boost::optional<int32_t> compressor_message) override;
-  int decompress(ceph::buffer::list::const_iterator &p, size_t compressed_len, ceph::buffer::list &out, boost::optional<int32_t> compressor_message) override;
+  int compress(const ceph::buffer::list &in, ceph::buffer::list &out, std::optional<int32_t> &compressor_message) override;
+  int decompress(const ceph::buffer::list &in, ceph::buffer::list &out, std::optional<int32_t> compressor_message) override;
+  int decompress(ceph::buffer::list::const_iterator &p, size_t compressed_len, ceph::buffer::list &out, std::optional<int32_t> compressor_message) override;
 private:
-  int zlib_compress(const ceph::buffer::list &in, ceph::buffer::list &out, boost::optional<int32_t> &compressor_message);
-  int isal_compress(const ceph::buffer::list &in, ceph::buffer::list &out, boost::optional<int32_t> &compressor_message);
+  int zlib_compress(const ceph::buffer::list &in, ceph::buffer::list &out, std::optional<int32_t> &compressor_message);
+  int isal_compress(const ceph::buffer::list &in, ceph::buffer::list &out, std::optional<int32_t> &compressor_message);
  };
 
 

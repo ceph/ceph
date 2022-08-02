@@ -1066,6 +1066,10 @@ void FSMap::insert(const MDSMap::mds_info_t &new_info)
     // or older) MDS.
     info.compat = MDSMap::get_compat_set_v16_2_4();
   }
+  /* TODO remove after R is released
+   * Insert INLINE; see comment in MDSMap::decode.
+   */
+  info.compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
   standby_epochs[new_info.global_id] = epoch;
 }
 
@@ -1086,8 +1090,11 @@ std::vector<mds_gid_t> FSMap::stop(mds_gid_t who)
     if (other_info.rank == info.rank
         && other_info.state == MDSMap::STATE_STANDBY_REPLAY) {
       standbys.push_back(other_gid);
-      erase(other_gid, 0);
     }
+  }
+
+  for (const auto &other_gid : standbys) {
+    erase(other_gid, 0);
   }
 
   fs->mds_map.mds_info.erase(who);
