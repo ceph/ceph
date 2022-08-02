@@ -1122,18 +1122,6 @@ int MotrObject::transition(Bucket* bucket,
   return 0;
 }
 
-int MotrObject::transition_to_cloud(Bucket* bucket,
-			   rgw::sal::PlacementTier* tier,
-			   rgw_bucket_dir_entry& o,
-			   std::set<std::string>& cloud_targets,
-			   CephContext* cct,
-			   bool update_object,
-			   const DoutPrefixProvider* dpp,
-			   optional_yield y)
-{
-  return 0;
-}
-
 bool MotrObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)
 {
   /* XXX: support single default zone and zonegroup for now */

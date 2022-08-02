@@ -1302,28 +1302,6 @@ int RGWBucketAdminOp::set_quota(rgw::sal::Store* store, RGWBucketAdminOpState& o
   return bucket.set_quota(op_state, dpp);
 }
 
-static int purge_bucket_instance(rgw::sal::Store* store, const RGWBucketInfo& bucket_info, const DoutPrefixProvider *dpp)
-{
-  const auto& index = bucket_info.layout.current_index;
-  const int max_shards = num_shards(index);
-  for (int i = 0; i < max_shards; i++) {
-    RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(store)->getRados());
-    int ret = bs.init(dpp, bucket_info, index, i);
-    if (ret < 0) {
-      cerr << "ERROR: bs.init(bucket=" << bucket_info.bucket << ", shard=" << i
-           << "): " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-    ret = static_cast<rgw::sal::RadosStore*>(store)->getRados()->bi_remove(dpp, bs);
-    if (ret < 0) {
-      cerr << "ERROR: failed to remove bucket index object: "
-           << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-  }
-  return 0;
-}
-
 inline auto split_tenant(const std::string& bucket_name){
   auto p = bucket_name.find('/');
   if(p != std::string::npos) {
@@ -1501,7 +1479,9 @@ int RGWBucketAdminOp::clear_stale_instances(rgw::sal::Store* store,
                       Formatter *formatter,
                       rgw::sal::Store* store){
                      for (const auto &binfo: lst) {
-                       int ret = purge_bucket_instance(store, binfo, dpp);
+		       std::unique_ptr<rgw::sal::Bucket> bucket;
+		       store->get_bucket(nullptr, binfo, &bucket);
+		       int ret = bucket->purge_instance(dpp);
                        if (ret == 0){
                          auto md_key = "bucket.instance:" + binfo.bucket.get_key();
                          ret = store->meta_remove(dpp, md_key, null_yield);
