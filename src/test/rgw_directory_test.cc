@@ -82,7 +82,7 @@ TEST_F(DirectoryFixture, SetGetValueTest) {
       obj_name = arr[4].as_string();
     }
   });
-  
+
   client.sync_commit(std::chrono::milliseconds(1000));
   
   EXPECT_EQ(key_exist, 0);
@@ -128,8 +128,8 @@ int main(int argc, char *argv[]) {
     cout << "Incorrect number of arguments." << std::endl;
     return -1;
   }
-  
+
   redisHost = hostStr + portStr;
-  
+
   return RUN_ALL_TESTS();
 }
