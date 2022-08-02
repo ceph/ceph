@@ -128,9 +128,11 @@ class ServiceManager(ResourceManager):
             raise_if_exception(c)
 
     @wait_api_result
-    def apply(self, service_spec: Dict) -> OrchResult[List[str]]:
+    def apply(self,
+              service_spec: Dict,
+              no_overwrite: Optional[bool] = False) -> OrchResult[List[str]]:
         spec = ServiceSpec.from_json(service_spec)
-        return self.api.apply([spec])
+        return self.api.apply([spec], no_overwrite)
 
     @wait_api_result
     def remove(self, service_name: str) -> List[str]:
