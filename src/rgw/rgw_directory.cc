@@ -81,7 +81,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
       return -2;
     }
     
-    std::string endpoint = host + std::to_string(port);
+    std::string endpoint = host + ":" + std::to_string(port);
     
     //creating a list of key's properties
     list.push_back(make_pair("key", key));

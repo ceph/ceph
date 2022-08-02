@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  redisHost = hostStr + portStr;
+  redisHost = hostStr + ":" + portStr;
 
   return RUN_ALL_TESTS();
 }
