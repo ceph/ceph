@@ -3,8 +3,9 @@ import stat
 import uuid
 import errno
 import logging
-from hashlib import md5
+import hashlib
 from typing import Dict, Union
+from pathlib import Path
 
 import cephfs
 
@@ -16,6 +17,7 @@ from ...fs_util import get_ancestor_xattr
 from ...exception import MetadataMgrException, VolumeException
 from .op_sm import SubvolumeOpSm
 from .auth_metadata import AuthMetadataManager
+from .subvolume_attrs import SubvolumeStates
 
 log = logging.getLogger(__name__)
 
@@ -73,9 +75,16 @@ class SubvolumeBase(object):
 
     @property
     def legacy_config_path(self):
-        m = md5()
-        m.update(self.base_path)
-        meta_config = "{0}.meta".format(m.digest().hex())
+        try:
+            m = hashlib.md5(self.base_path)
+        except ValueError:
+            try:
+                m = hashlib.md5(self.base_path, usedforsecurity=False) # type: ignore
+            except TypeError:
+                raise VolumeException(-errno.EINVAL,
+                                      "require python's hashlib library to support usedforsecurity flag in FIPS enabled systems")
+
+        meta_config = "{0}.meta".format(m.hexdigest())
         return os.path.join(self.legacy_dir, meta_config.encode('utf-8'))
 
     @property
@@ -111,7 +120,7 @@ class SubvolumeBase(object):
     @property
     def state(self):
         """ Subvolume state, one of SubvolumeStates """
-        raise NotImplementedError
+        return SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
 
     @property
     def subvol_type(self):
@@ -123,6 +132,15 @@ class SubvolumeBase(object):
         raise NotImplementedError
 
     def load_config(self):
+        try:
+            self.fs.stat(self.legacy_config_path)
+            self.legacy_mode = True
+        except cephfs.Error as e:
+            pass
+
+        log.debug("loading config "
+                  "'{0}' [mode: {1}]".format(self.subvolname, "legacy"
+                                             if self.legacy_mode else "new"))
         if self.legacy_mode:
             self.metadata_mgr = MetadataManager(self.fs, self.legacy_config_path, 0o640)
         else:
@@ -271,8 +289,16 @@ class SubvolumeBase(object):
             self.fs.stat(self.base_path)
             self.metadata_mgr.refresh()
             log.debug("loaded subvolume '{0}'".format(self.subvolname))
+            subvolpath = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH)
+            # subvolume with retained snapshots has empty path, don't mistake it for
+            # fabricated metadata.
+            if (not self.legacy_mode and self.state != SubvolumeStates.STATE_RETAINED and
+                self.base_path.decode('utf-8') != str(Path(subvolpath).parent)):
+                raise MetadataMgrException(-errno.ENOENT, 'fabricated .meta')
         except MetadataMgrException as me:
-            if me.errno == -errno.ENOENT and not self.legacy_mode:
+            if me.errno in (-errno.ENOENT, -errno.EINVAL) and not self.legacy_mode:
+                log.warn("subvolume '{0}', {1}, "
+                          "assuming legacy_mode".format(self.subvolname, me.error_str))
                 self.legacy_mode = True
                 self.load_config()
                 self.discover()
