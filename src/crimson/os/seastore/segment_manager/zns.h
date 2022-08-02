@@ -42,8 +42,9 @@ namespace crimson::os::seastore::segment_manager::zns {
       DENC_START(1, 1, p);
       denc(v.size, p);
       denc(v.segment_size, p);
-      denc(v.zone_capacity, p);
+      denc(v.segment_capacity, p);
       denc(v.zones_per_segment, p);
+      denc(v.zone_capacity, p);
       denc(v.block_size, p);
       denc(v.segments, p);
       denc(v.zone_size, p);
