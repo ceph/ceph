@@ -3898,11 +3898,17 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   if ((! copy_source.empty()) && !copy_source_range) {
-    rgw::sal::RGWRadosObject obj(store, rgw_obj_key(copy_source_object_name, copy_source_version_id));
-    rgw::sal::RGWRadosBucket bucket(store, copy_source_bucket_info);
+    std::unique_ptr<rgw::sal::RGWBucket> bucket;
+    op_ret = store->get_bucket(nullptr, copy_source_bucket_info, &bucket);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: failed to get bucket with error" << op_ret << dendl;
+      return;
+    }
+    std::unique_ptr<rgw::sal::RGWObject> obj =
+        bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
 
     RGWObjState *astate;
-    op_ret = obj.get_obj_state(this, &obj_ctx, bucket, &astate, s->yield);
+    op_ret = obj->get_obj_state(this, &obj_ctx, *bucket, &astate, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
       return;
