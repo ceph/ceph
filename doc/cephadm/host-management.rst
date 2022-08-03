@@ -228,6 +228,90 @@ create a new CRUSH host located in the specified hierarchy.
 
 See also :ref:`crush_map_default_types`.
 
+OS Tuning Profiles
+==================
+
+Cephadm can manage operating system tuning profiles that apply a set of sysctl settings
+to a given set of hosts. First create a YAML spec file in the following format
+
+.. code-block:: yaml
+
+    profile_name: 23-mon-host-profile
+    placement:
+      hosts:
+        - mon-host-01
+        - mon-host-02
+    settings:
+      fs.file-max: 1000000
+      vm.swappiness: '13'
+
+Then apply the tuning profile with::
+
+    ceph orch tuned-profile apply -i <tuned-profile-file-name>
+
+This profile will then be written to ``/etc/sysctl.d/`` on each host matching the
+given placement and `sysctl --system` will be run on the host.
+
+.. note:: 
+
+  The exact filename the profile will be written to is within ``/etc/sysctl.d/`` is
+  ``<profile-name>-cephadm-tuned-profile.conf`` where <profile-name>
+  is the `profile_name` setting specified in the provided YAML spec. Since sysctl
+  settings are applied in lexicographical order by the filename the setting is
+  specified in, you may want to set the `profile_name` in your spec so
+  that it is applied before or after other conf files that may exist.
+
+.. note::
+
+  These settings are applied only at the host level, and are not specific
+  to any certain daemon or container
+
+
+Viewing Profiles
+----------------
+
+To view all current profiles cephadm is managing::
+
+    ceph orch tuned-profile ls
+
+.. note:: 
+
+  If you'd like to make modifications and re-apply a profile passing `--format yaml` to the
+  ``tuned-profile ls`` command will present the profiles in a format where they can be copied
+  and re-applied.
+
+
+Removing Profiles
+-----------------
+
+If you no longer want one of the previously applied profiles, it can be removed with::
+
+    ceph orch tuned-profile rm <profile-name>
+
+When a profile is removed, cephadm will clean up the file previously written to /etc/sysctl.d
+
+
+Modifying Profiles
+------------------
+
+While you can modify a profile by simply re-applying a YAML spec with the same profile name,
+you may also want to adjust a setting within a given profile, so there are commands
+for this purpose.
+
+To add or modify a setting for an existing profile::
+
+    ceph orch tuned-profile add-setting <setting-name> <value>
+
+To remove a setting from an existing profile::
+
+    ceph orch tuned-profile rm-setting <setting-name>
+
+.. note:: 
+
+  Modifying the placement will require re-applying a profile with the same name. Keep
+  in mind that profiles are tracked by their name, so whenever a profile with the same
+  name as an existing profile is applied, it will overwrite the old profile.
+
 SSH Configuration
 =================
 
