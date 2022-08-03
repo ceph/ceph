@@ -578,9 +578,19 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.setxattr(os, osd_op, txn, delta_stats);
     });
   case CEPH_OSD_OP_DELETE:
-    return do_write_op([this](auto& backend, auto& os, auto& txn) {
-      return backend.remove(os, txn, delta_stats);
+  {
+    bool whiteout = false;
+    if (!obc->ssc->snapset.clones.empty() ||
+        (snapc.snaps.size() &&                      // there are snaps
+        snapc.snaps[0] > obc->ssc->snapset.seq)) {  // existing obj is old
+      logger().debug("{} has or will have clones, will whiteout {}",
+                     __func__, obc->obs.oi.soid);
+      whiteout = true;
+    }
+    return do_write_op([this, whiteout](auto& backend, auto& os, auto& txn) {
+      return backend.remove(os, txn, delta_stats, whiteout);
     });
+  }
   case CEPH_OSD_OP_CALL:
     return this->do_op_call(osd_op);
   case CEPH_OSD_OP_STAT:
@@ -815,6 +825,10 @@ const object_info_t OpsExecuter::prepare_clone(
   static_snap_oi.version = osd_op_params->at_version;
   static_snap_oi.prior_version = obc->obs.oi.version;
   static_snap_oi.copy_user_bits(obc->obs.oi);
+  if (static_snap_oi.is_whiteout()) {
+    // clone shouldn't be marked as whiteout
+    static_snap_oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+  }
 
   if (pg->is_primary()) {
     // lookup_or_create
