@@ -5,7 +5,7 @@
 # uring_FOUND - True if uring found.
 
 find_path(URING_INCLUDE_DIR liburing.h)
-find_library(URING_LIBRARIES liburing.a liburing)
+find_library(URING_LIBRARIES uring)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(uring DEFAULT_MSG URING_LIBRARIES URING_INCLUDE_DIR)

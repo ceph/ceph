@@ -328,6 +328,10 @@ if(WITH_RADOSGW_DAOS)
   link_directories( ${PC_DAOS_LIBRARY_DIRS} )
 endif()
 
+find_package(uring REQUIRED)
+target_link_libraries(rgw_common PUBLIC uring::uring)
+target_compile_definitions(rgw_common PUBLIC "BOOST_ASIO_HAS_IO_URING")
+
 set(rgw_a_srcs
   rgw_appmain.cc
   rgw_asio_client.cc
