@@ -1160,8 +1160,8 @@ private:
   retrieve_live_extents_ret _retrieve_live_extents(
     Transaction &t,
     std::set<
-      backref_buf_entry_t,
-      backref_buf_entry_t::cmp_t> &&backrefs,
+      backref_entry_t,
+      backref_entry_t::cmp_t> &&backrefs,
     std::vector<CachedExtentRef> &extents);
 
   using retrieve_backref_mappings_ertr = work_ertr;

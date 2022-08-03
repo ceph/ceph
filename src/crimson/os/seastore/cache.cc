@@ -28,8 +28,8 @@ SET_SUBSYS(seastore_cache);
 
 namespace crimson::os::seastore {
 
-std::ostream &operator<<(std::ostream &out, const backref_buf_entry_t &ent) {
-  return out << "backref_buf_entry_t{"
+std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent) {
+  return out << "backref_entry_t{"
 	     << ent.paddr << "~" << ent.len << ", "
 	     << "laddr: " << ent.laddr << ", "
 	     << "type: " << ent.type << ", "
@@ -1385,7 +1385,7 @@ record_t Cache::prepare_record(
 }
 
 void Cache::backref_batch_update(
-  std::vector<backref_buf_entry_ref> &&list,
+  std::vector<backref_entry_ref> &&list,
   const journal_seq_t &seq)
 {
   LOG_PREFIX(Cache::backref_batch_update);
@@ -1393,7 +1393,7 @@ void Cache::backref_batch_update(
   ceph_assert(seq != JOURNAL_SEQ_NULL);
 
   for (auto &ent : list) {
-    backref_set.insert(*ent);
+    backref_entry_mset.insert(*ent);
   }
 
   auto iter = backref_entryrefs_by_seq.find(seq);
@@ -1417,7 +1417,7 @@ void Cache::complete_commit(
   SUBTRACET(seastore_t, "final_block_start={}, start_seq={}",
             t, final_block_start, start_seq);
 
-  std::vector<backref_buf_entry_ref> backref_list;
+  std::vector<backref_entry_ref> backref_list;
   t.for_each_fresh_block([&](const CachedExtentRef &i) {
     bool is_inline = false;
     if (i->is_inline()) {
@@ -1444,7 +1444,7 @@ void Cache::complete_commit(
 	       i->get_paddr(),
 	       i->get_length());
 	backref_list.emplace_back(
-	  std::make_unique<backref_buf_entry_t>(
+	  std::make_unique<backref_entry_t>(
 	    i->get_paddr(),
 	    i->is_logical()
 	    ? i->cast<LogicalCachedExtent>()->get_laddr()
@@ -1514,7 +1514,7 @@ void Cache::complete_commit(
 	     i->get_paddr(),
 	     i->get_length());
       backref_list.emplace_back(
-	std::make_unique<backref_buf_entry_t>(
+	std::make_unique<backref_entry_t>(
 	  i->get_paddr(),
 	  L_ADDR_NULL,
 	  i->get_length(),
@@ -1547,7 +1547,7 @@ void Cache::complete_commit(
 	     i->get_paddr(),
 	     i->get_length());
       backref_list.emplace_back(
-        std::make_unique<backref_buf_entry_t>(
+        std::make_unique<backref_entry_t>(
 	  i->get_paddr(),
 	  i->cast<LogicalCachedExtent>()->get_laddr(),
 	  i->get_length(),
@@ -1651,7 +1651,7 @@ Cache::replay_delta(
 
     alloc_delta_t alloc_delta;
     decode(alloc_delta, delta.bl);
-    std::vector<backref_buf_entry_ref> backref_list;
+    std::vector<backref_entry_ref> backref_list;
     for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
       if (alloc_blk.paddr.is_relative()) {
 	assert(alloc_blk.paddr.is_record_relative());
@@ -1660,7 +1660,7 @@ Cache::replay_delta(
       DEBUG("replay alloc_blk {}~{} {}, journal_seq: {}",
 	alloc_blk.paddr, alloc_blk.len, alloc_blk.laddr, journal_seq);
       backref_list.emplace_back(
-	std::make_unique<backref_buf_entry_t>(
+	std::make_unique<backref_entry_t>(
 	  alloc_blk.paddr,
 	  alloc_blk.laddr,
 	  alloc_blk.len,

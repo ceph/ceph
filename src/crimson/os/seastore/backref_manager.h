@@ -82,13 +82,12 @@ public:
     Transaction &t,
     CachedExtentRef e) = 0;
 
-  virtual Cache::backref_buf_entry_query_set_t
+  virtual Cache::backref_entry_query_mset_t
   get_cached_backref_entries_in_range(
     paddr_t start,
     paddr_t end) = 0;
-  virtual const backref_set_t& get_cached_backrefs() = 0;
 
-  virtual Cache::backref_extent_buf_entry_query_set_t
+  virtual Cache::backref_extent_entry_query_set_t
   get_cached_backref_extents_in_range(
     paddr_t start,
     paddr_t end) = 0;
@@ -101,7 +100,7 @@ public:
     retrieve_backref_extents_iertr::future<>;
   virtual retrieve_backref_extents_ret retrieve_backref_extents(
     Transaction &t,
-    Cache::backref_extent_buf_entry_query_set_t &&backref_extents,
+    Cache::backref_extent_entry_query_set_t &&backref_extents,
     std::vector<CachedExtentRef> &extents) = 0;
 
   virtual void cache_new_backref_extent(paddr_t paddr, extent_types_t type) = 0;
