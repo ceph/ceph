@@ -353,33 +353,33 @@ BtreeBackrefManager::scan_mapped_space(
         );
       });
     }).si_then([this, &scan_visitor, c, FNAME, block_size] {
-      DEBUGT("scan backref cache", c.trans);
-      auto &backrefs = cache.get_backrefs();
-      for (auto &backref : backrefs) {
-        if (backref.laddr == L_ADDR_NULL) {
+      auto &backref_entry_mset = cache.get_backref_entry_mset();
+      DEBUGT("scan {} backref entries", c.trans, backref_entry_mset.size());
+      for (auto &backref_entry : backref_entry_mset) {
+        if (backref_entry.laddr == L_ADDR_NULL) {
           TRACET("backref entry {}~{} {} free",
                  c.trans,
-                 backref.paddr,
-                 backref.len,
-                 backref.type);
+                 backref_entry.paddr,
+                 backref_entry.len,
+                 backref_entry.type);
         } else {
           TRACET("backref entry {}~{} {}~{} {} used",
                  c.trans,
-                 backref.paddr,
-                 backref.len,
-                 backref.laddr,
-                 backref.len,
-                 backref.type);
+                 backref_entry.paddr,
+                 backref_entry.len,
+                 backref_entry.laddr,
+                 backref_entry.len,
+                 backref_entry.type);
         }
-        ceph_assert(backref.paddr.is_absolute());
-        ceph_assert(backref.len > 0 &&
-                    backref.len % block_size == 0);
-        ceph_assert(!is_backref_node(backref.type));
+        ceph_assert(backref_entry.paddr.is_absolute());
+        ceph_assert(backref_entry.len > 0 &&
+                    backref_entry.len % block_size == 0);
+        ceph_assert(!is_backref_node(backref_entry.type));
         scan_visitor(
-            backref.paddr,
-            backref.len,
-            backref.type,
-            backref.laddr);
+            backref_entry.paddr,
+            backref_entry.len,
+            backref_entry.type,
+            backref_entry.laddr);
       }
     });
   });
@@ -497,7 +497,7 @@ void BtreeBackrefManager::complete_transaction(
   }
 }
 
-Cache::backref_buf_entry_query_set_t
+Cache::backref_entry_query_mset_t
 BtreeBackrefManager::get_cached_backref_entries_in_range(
   paddr_t start,
   paddr_t end)
@@ -505,13 +505,7 @@ BtreeBackrefManager::get_cached_backref_entries_in_range(
   return cache.get_backref_entries_in_range(start, end);
 }
 
-const backref_set_t&
-BtreeBackrefManager::get_cached_backrefs()
-{
-  return cache.get_backrefs();
-}
-
-Cache::backref_extent_buf_entry_query_set_t
+Cache::backref_extent_entry_query_set_t
 BtreeBackrefManager::get_cached_backref_extents_in_range(
   paddr_t start,
   paddr_t end)
@@ -529,7 +523,7 @@ void BtreeBackrefManager::cache_new_backref_extent(
 BtreeBackrefManager::retrieve_backref_extents_ret
 BtreeBackrefManager::retrieve_backref_extents(
   Transaction &t,
-  Cache::backref_extent_buf_entry_query_set_t &&backref_extents,
+  Cache::backref_extent_entry_query_set_t &&backref_extents,
   std::vector<CachedExtentRef> &extents)
 {
   return trans_intr::parallel_for_each(

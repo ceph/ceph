@@ -28,8 +28,8 @@ namespace crimson::os::seastore {
 class BackrefManager;
 class AsyncCleaner;
 
-struct backref_buf_entry_t {
-  backref_buf_entry_t(
+struct backref_entry_t {
+  backref_entry_t(
     const paddr_t paddr,
     const laddr_t laddr,
     const extent_len_t len,
@@ -41,7 +41,7 @@ struct backref_buf_entry_t {
       type(type),
       seq(seq)
   {}
-  backref_buf_entry_t(alloc_blk_t alloc_blk)
+  backref_entry_t(alloc_blk_t alloc_blk)
     : paddr(alloc_blk.paddr),
       laddr(alloc_blk.laddr),
       len(alloc_blk.len),
@@ -54,18 +54,18 @@ struct backref_buf_entry_t {
     extent_types_t::ROOT;
   journal_seq_t seq;
   friend bool operator< (
-    const backref_buf_entry_t &l,
-    const backref_buf_entry_t &r) {
+    const backref_entry_t &l,
+    const backref_entry_t &r) {
     return l.paddr < r.paddr;
   }
   friend bool operator> (
-    const backref_buf_entry_t &l,
-    const backref_buf_entry_t &r) {
+    const backref_entry_t &l,
+    const backref_entry_t &r) {
     return l.paddr > r.paddr;
   }
   friend bool operator== (
-    const backref_buf_entry_t &l,
-    const backref_buf_entry_t &r) {
+    const backref_entry_t &l,
+    const backref_entry_t &r) {
     return l.paddr == r.paddr;
   }
 
@@ -75,35 +75,35 @@ struct backref_buf_entry_t {
 	boost::intrusive::auto_unlink>>;
   set_hook_t backref_set_hook;
   using backref_set_member_options = boost::intrusive::member_hook<
-    backref_buf_entry_t,
+    backref_entry_t,
     set_hook_t,
-    &backref_buf_entry_t::backref_set_hook>;
-  using set_t = boost::intrusive::multiset<
-    backref_buf_entry_t,
+    &backref_entry_t::backref_set_hook>;
+  using multiset_t = boost::intrusive::multiset<
+    backref_entry_t,
     backref_set_member_options,
     boost::intrusive::constant_time_size<false>>;
 
   struct cmp_t {
     using is_transparent = paddr_t;
     bool operator()(
-      const backref_buf_entry_t &l,
-      const backref_buf_entry_t &r) const {
+      const backref_entry_t &l,
+      const backref_entry_t &r) const {
       return l.paddr < r.paddr;
     }
-    bool operator()(const paddr_t l, const backref_buf_entry_t &r) const {
+    bool operator()(const paddr_t l, const backref_entry_t &r) const {
       return l < r.paddr;
     }
-    bool operator()(const backref_buf_entry_t &l, const paddr_t r) const {
+    bool operator()(const backref_entry_t &l, const paddr_t r) const {
       return l.paddr < r;
     }
   };
 };
 
-std::ostream &operator<<(std::ostream &out, const backref_buf_entry_t &ent);
+std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent);
 
-using backref_buf_entry_ref = std::unique_ptr<backref_buf_entry_t>;
-using backref_set_t = backref_buf_entry_t::set_t;
-using backref_entry_refs_t = std::vector<backref_buf_entry_ref>;
+using backref_entry_ref = std::unique_ptr<backref_entry_t>;
+using backref_entry_mset_t = backref_entry_t::multiset_t;
+using backref_entry_refs_t = std::vector<backref_entry_ref>;
 using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_entry_refs_t>;
 
 /**
@@ -535,23 +535,23 @@ private:
   }
 
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
-  backref_set_t backref_set; // in cache backrefs indexed by paddr_t
+  backref_entry_mset_t backref_entry_mset;
 
-  using backref_buf_entry_query_set_t =
+  using backref_entry_query_mset_t =
     std::multiset<
-      backref_buf_entry_t,
-      backref_buf_entry_t::cmp_t>;
+      backref_entry_t,
+      backref_entry_t::cmp_t>;
 
-  backref_buf_entry_query_set_t get_backref_entries_in_range(
+  backref_entry_query_mset_t get_backref_entries_in_range(
     paddr_t start,
     paddr_t end) {
-    auto start_iter = backref_set.lower_bound(
+    auto start_iter = backref_entry_mset.lower_bound(
       start,
-      backref_buf_entry_t::cmp_t());
-    auto end_iter = backref_set.lower_bound(
+      backref_entry_t::cmp_t());
+    auto end_iter = backref_entry_mset.lower_bound(
       end,
-      backref_buf_entry_t::cmp_t());
-    backref_buf_entry_query_set_t res;
+      backref_entry_t::cmp_t());
+    backref_entry_query_mset_t res;
     for (auto it = start_iter;
 	 it != end_iter;
 	 it++) {
@@ -560,8 +560,8 @@ private:
     return res;
   }
 
-  const backref_set_t& get_backrefs() {
-    return backref_set;
+  const backref_entry_mset_t& get_backref_entry_mset() {
+    return backref_entry_mset;
   }
 
   backref_entryrefs_by_seq_t& get_backref_entryrefs_by_seq() {
@@ -902,8 +902,8 @@ public:
   /// Dump live extents
   void dump_contents();
 
-  struct backref_extent_buf_entry_t {
-    backref_extent_buf_entry_t(
+  struct backref_extent_entry_t {
+    backref_extent_entry_t(
       paddr_t paddr,
       extent_types_t type)
       : paddr(paddr), type(type) {}
@@ -912,17 +912,17 @@ public:
     struct cmp_t {
       using is_transparent = paddr_t;
       bool operator()(
-	const backref_extent_buf_entry_t &l,
-	const backref_extent_buf_entry_t &r) const {
+	const backref_extent_entry_t &l,
+	const backref_extent_entry_t &r) const {
 	return l.paddr < r.paddr;
       }
       bool operator()(
 	const paddr_t &l,
-	const backref_extent_buf_entry_t &r) const {
+	const backref_extent_entry_t &r) const {
 	return l < r.paddr;
       }
       bool operator()(
-	const backref_extent_buf_entry_t &l,
+	const backref_extent_entry_t &l,
 	const paddr_t &r) const {
 	return l.paddr < r;
       }
@@ -975,11 +975,11 @@ private:
    */
   CachedExtent::list dirty;
 
-  using backref_extent_buf_entry_query_set_t =
+  using backref_extent_entry_query_set_t =
     std::set<
-      backref_extent_buf_entry_t,
-      backref_extent_buf_entry_t::cmp_t>;
-  backref_extent_buf_entry_query_set_t backref_extents;
+      backref_extent_entry_t,
+      backref_extent_entry_t::cmp_t>;
+  backref_extent_entry_query_set_t backref_extents;
 
   void add_backref_extent(paddr_t paddr, extent_types_t type) {
     assert(!paddr.is_relative());
@@ -994,12 +994,12 @@ private:
       backref_extents.erase(iter);
   }
 
-  backref_extent_buf_entry_query_set_t get_backref_extents_in_range(
+  backref_extent_entry_query_set_t get_backref_extents_in_range(
     paddr_t start,
     paddr_t end) {
     auto start_iter = backref_extents.lower_bound(start);
     auto end_iter = backref_extents.upper_bound(end);
-    backref_extent_buf_entry_query_set_t res;
+    backref_extent_entry_query_set_t res;
     res.insert(start_iter, end_iter);
     return res;
   }
@@ -1250,7 +1250,7 @@ private:
   }
 
   void backref_batch_update(
-    std::vector<backref_buf_entry_ref> &&,
+    std::vector<backref_entry_ref> &&,
     const journal_seq_t &);
 
   /// Add extent to extents handling dirty and refcounting

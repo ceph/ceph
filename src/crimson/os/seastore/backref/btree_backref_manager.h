@@ -97,20 +97,19 @@ public:
     pin_set.retire(bpin->get_range_pin());
   }
 
-  Cache::backref_buf_entry_query_set_t
+  Cache::backref_entry_query_mset_t
   get_cached_backref_entries_in_range(
     paddr_t start,
     paddr_t end) final;
-  const backref_set_t& get_cached_backrefs() final;
 
-  Cache::backref_extent_buf_entry_query_set_t
+  Cache::backref_extent_entry_query_set_t
   get_cached_backref_extents_in_range(
     paddr_t start,
     paddr_t end) final;
 
   retrieve_backref_extents_ret retrieve_backref_extents(
     Transaction &t,
-    Cache::backref_extent_buf_entry_query_set_t &&backref_extents,
+    Cache::backref_extent_entry_query_set_t &&backref_extents,
     std::vector<CachedExtentRef> &extents) final;
 
   void cache_new_backref_extent(paddr_t paddr, extent_types_t type) final;
