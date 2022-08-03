@@ -204,15 +204,12 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
-%if 0%{?fedora}
+%if 0%{?fedora} || 0%{?suse_version}
 BuildRequires:	gcc-c++ >= 11
 %endif
 %if 0%{?rhel} >= 8
 BuildRequires:	gcc-toolset-11-gcc-c++
 BuildRequires:	gcc-toolset-11-build
-%endif
-%if 0%{?suse_version}
-BuildRequires:	gcc11-c++
 %endif
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
@@ -1311,10 +1308,6 @@ env | sort
 mkdir -p %{_vpath_builddir}
 pushd %{_vpath_builddir}
 cmake .. \
-%if 0%{?suse_version}
-    -DCMAKE_C_COMPILER=gcc-11 \
-    -DCMAKE_CXX_COMPILER=g++-11 \
-%endif
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
     -DCMAKE_INSTALL_LIBEXECDIR:PATH=%{_libexecdir} \
