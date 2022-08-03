@@ -26,11 +26,11 @@ struct backref_map_val_t {
     laddr_t laddr,
     extent_types_t type)
     : len(len), laddr(laddr), type(type) {}
+
+  bool operator==(const backref_map_val_t& rhs) const noexcept {
+    return len == rhs.len && laddr == rhs.laddr;
+  }
 };
-WRITE_EQ_OPERATORS_2(
-  backref_map_val_t,
-  len,
-  laddr);
 
 std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
 

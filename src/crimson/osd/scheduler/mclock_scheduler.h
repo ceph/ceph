@@ -25,7 +25,6 @@
 
 #include "crimson/osd/scheduler/scheduler.h"
 #include "common/config.h"
-#include "include/cmp.h"
 #include "common/ceph_context.h"
 
 
@@ -37,19 +36,15 @@ using profile_id_t = uint64_t;
 struct client_profile_id_t {
   client_id_t client_id;
   profile_id_t profile_id;
+  auto operator<=>(const client_profile_id_t&) const = default;
 };
-
-WRITE_EQ_OPERATORS_2(client_profile_id_t, client_id, profile_id)
-WRITE_CMP_OPERATORS_2(client_profile_id_t, client_id, profile_id)
 
 
 struct scheduler_id_t {
   scheduler_class_t class_id;
   client_profile_id_t client_profile_id;
+  auto operator<=>(const scheduler_id_t&) const = default;
 };
-
-WRITE_EQ_OPERATORS_2(scheduler_id_t, class_id, client_profile_id)
-WRITE_CMP_OPERATORS_2(scheduler_id_t, class_id, client_profile_id)
 
 /**
  * Scheduler implementation based on mclock.
