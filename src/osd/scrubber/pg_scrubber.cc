@@ -977,7 +977,7 @@ void PgScrubber::on_replica_init()
 }
 
 void PgScrubber::apply_snap_mapper_fixes(
-    const std::vector<snap_mapper_fix_t>& fix_list)
+    const std::vector<Scrub::snap_mapper_fix_t>& fix_list)
 {
   dout(15) << __func__ << " " << fix_list.size() << " fixes" << dendl;
 
@@ -1048,9 +1048,9 @@ void PgScrubber::apply_snap_mapper_fixes(
 }
 
 
-std::vector<snap_mapper_fix_t> PgScrubber::_scan_snaps(ScrubMap& smap)
+std::vector<Scrub::snap_mapper_fix_t> PgScrubber::_scan_snaps(ScrubMap& smap)
 {
-  std::vector<snap_mapper_fix_t> out_orders;
+  std::vector<Scrub::snap_mapper_fix_t> out_orders;
   hobject_t head;
   SnapSet snapset;
 
@@ -1122,7 +1122,7 @@ std::vector<snap_mapper_fix_t> PgScrubber::_scan_snaps(ScrubMap& smap)
   return out_orders;
 }
 
-std::optional<snap_mapper_fix_t> PgScrubber::scan_object_snaps(
+std::optional<Scrub::snap_mapper_fix_t> PgScrubber::scan_object_snaps(
   const hobject_t& hoid,
   const SnapSet& snapset,
   SnapMapReaderI& snaps_getter)
@@ -1164,17 +1164,17 @@ std::optional<snap_mapper_fix_t> PgScrubber::scan_object_snaps(
       case result_t::code_t::not_found:
 	dout(10) << __func__ << ": no snaps for " << hoid << ". Adding."
 		 << dendl;
-	return snap_mapper_fix_t{snap_mapper_op_t::add, hoid, obj_snaps, {}};
+	return Scrub::snap_mapper_fix_t{snap_mapper_op_t::add, hoid, obj_snaps, {}};
       case result_t::code_t::inconsistent:
 	dout(10) << __func__ << ": inconsistent snapmapper data for " << hoid
 		 << ". Recreating." << dendl;
-	return snap_mapper_fix_t{
+	return Scrub::snap_mapper_fix_t{
 	  snap_mapper_op_t::overwrite, hoid, obj_snaps, {}};
       default:
 	dout(10) << __func__ << ": error (" << cpp_strerror(e.backend_error)
 		 << ") fetching snapmapper data for " << hoid << ". Recreating."
 		 << dendl;
-	return snap_mapper_fix_t{
+	return Scrub::snap_mapper_fix_t{
 	  snap_mapper_op_t::overwrite, hoid, obj_snaps, {}};
     }
     __builtin_unreachable();
@@ -1194,7 +1194,7 @@ std::optional<snap_mapper_fix_t> PgScrubber::scan_object_snaps(
 		"{}: obj {}: was: {} updating to: {}", __func__, hoid,
 		*cur_snaps, obj_snaps)
 	   << dendl;
-  return snap_mapper_fix_t{
+  return Scrub::snap_mapper_fix_t{
     snap_mapper_op_t::update, hoid, obj_snaps, *cur_snaps};
 }
 
