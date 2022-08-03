@@ -44,13 +44,8 @@ struct lba_map_val_t {
     uint32_t refcount,
     uint32_t checksum)
     : len(len), paddr(paddr), refcount(refcount), checksum(checksum) {}
+  bool operator==(const lba_map_val_t&) const = default;
 };
-WRITE_EQ_OPERATORS_4(
-  lba_map_val_t,
-  len,
-  paddr,
-  refcount,
-  checksum);
 
 std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
 
