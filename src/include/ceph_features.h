@@ -184,7 +184,8 @@ DEFINE_CEPH_FEATURE(60, 1, OSD_RECOVERY_DELETES) // *do not share this bit*
 DEFINE_CEPH_FEATURE(61, 1, CEPHX_V2)         // 4.19, *do not share this bit*
 
 DEFINE_CEPH_FEATURE(62, 1, RESERVED)           // do not use; used as a sentinel
-DEFINE_CEPH_FEATURE_DEPRECATED(63, 1, RESERVED_BROKEN, LUMINOUS) // client-facing
+DEFINE_CEPH_FEATURE_RETIRED(63, 1, RESERVED_BROKEN, LUMINOUS, QUINCY) // client-facing
+// available
 
 
 /*
@@ -273,9 +274,7 @@ DEFINE_CEPH_FEATURE_DEPRECATED(63, 1, RESERVED_BROKEN, LUMINOUS) // client-facin
 #define CEPH_STATIC_ASSERT(x) (void)(sizeof(int[((x)==0) ? -1 : 0]))
 
 static inline void ____build_time_check_for_reserved_bits(void) {
-	CEPH_STATIC_ASSERT((CEPH_FEATURES_ALL &
-			    (CEPH_FEATURE_RESERVED |
-			     DEPRECATED_CEPH_FEATURE_RESERVED_BROKEN)) == 0);
+	CEPH_STATIC_ASSERT((CEPH_FEATURES_ALL & CEPH_FEATURE_RESERVED) == 0);
 }
 
 #endif

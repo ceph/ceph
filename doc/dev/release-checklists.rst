@@ -47,7 +47,7 @@ Feature bits
 ------------
 
 - [x] ensure that `SERVER_X` is defined
-- [ ] change any features `DEPRECATED` in release X-3 are now marked `RETIRED`.
+- [x] change any features `DEPRECATED` in release X-3 are now marked `RETIRED`.
 - [ ] look for features that (1) were present in X-2 and (2) have no
   client dependency and mark them `DEPRECATED` as of X.
 
