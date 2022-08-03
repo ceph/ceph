@@ -29,7 +29,6 @@
 #include "hash.h"
 #include "encoding.h"
 #include "ceph_hash.h"
-#include "cmp.h"
 
 struct object_t {
   std::string name;
