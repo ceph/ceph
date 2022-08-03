@@ -15,7 +15,6 @@
 #include "include/byteorder.h"
 #include "include/denc.h"
 #include "include/buffer.h"
-#include "include/cmp.h"
 #include "include/uuid.h"
 #include "include/interval_set.h"
 
@@ -564,15 +563,8 @@ public:
   friend struct paddr_le_t;
   friend struct seg_paddr_t;
 
-  friend bool operator==(const paddr_t &, const paddr_t&);
-  friend bool operator!=(const paddr_t &, const paddr_t&);
-  friend bool operator<=(const paddr_t &, const paddr_t&);
-  friend bool operator<(const paddr_t &, const paddr_t&);
-  friend bool operator>=(const paddr_t &, const paddr_t&);
-  friend bool operator>(const paddr_t &, const paddr_t&);
+  auto operator<=>(const paddr_t &) const = default;
 };
-WRITE_EQ_OPERATORS_1(paddr_t, dev_addr);
-WRITE_CMP_OPERATORS_1(paddr_t, dev_addr);
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
 
@@ -1593,8 +1585,9 @@ struct record_size_t {
   }
 
   void account(const delta_info_t& delta);
+
+  bool operator==(const record_size_t &) const = default;
 };
-WRITE_EQ_OPERATORS_2(record_size_t, plain_mdlength, dlength);
 std::ostream &operator<<(std::ostream&, const record_size_t&);
 
 struct record_t {
@@ -1739,8 +1732,9 @@ struct record_group_size_t {
 
   void account(const record_size_t& rsize,
                extent_len_t block_size);
+
+  bool operator==(const record_group_size_t &) const = default;
 };
-WRITE_EQ_OPERATORS_3(record_group_size_t, plain_mdlength, dlength, block_size);
 std::ostream& operator<<(std::ostream&, const record_group_size_t&);
 
 struct record_group_t {
