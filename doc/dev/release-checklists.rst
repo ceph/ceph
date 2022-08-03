@@ -15,8 +15,8 @@ that was just released (X-1).2.0.
 Versions and tags
 -----------------
 
-- [ ] Update CMakeLists.txt VERSION (right at the top to X.0.0)
-- [ ] Update src/ceph_release with the new release name, number, and type ('dev')
+- [x] Update CMakeLists.txt VERSION (right at the top to X.0.0)
+- [x] Update src/ceph_release with the new release name, number, and type ('dev')
 - [ ] Initial tag vX.0.0 (so that we can distinguish from (and sort
   after) the backported (X-1).2.Z versions.
 
