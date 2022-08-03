@@ -97,11 +97,11 @@ seastar::future<bufferlist> TMDriver::read(
   assert(size % (size_t)device->get_block_size() == 0);
   auto blptrret = std::make_unique<bufferlist>();
   auto &blret = *blptrret;
-  return repeat_eagain([=, &blret] {
+  return repeat_eagain([=, &blret, this] {
     return tm->with_transaction_intr(
       Transaction::src_t::READ,
       "read",
-      [=, &blret](auto& t)
+      [=, &blret, this](auto& t)
     {
       return read_extents(t, offset, size
       ).si_then([=, &blret](auto ext_list) {
