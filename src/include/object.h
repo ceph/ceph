@@ -42,6 +42,8 @@ struct object_t {
   object_t(std::string&& s) : name(std::move(s)) {}
   object_t(std::string_view s) : name(s) {}
 
+  auto operator<=>(const object_t&) const noexcept = default;
+
   void swap(object_t& o) {
     name.swap(o.name);
   }
@@ -60,24 +62,6 @@ struct object_t {
 };
 WRITE_CLASS_ENCODER(object_t)
 
-inline bool operator==(const object_t& l, const object_t& r) {
-  return l.name == r.name;
-}
-inline bool operator!=(const object_t& l, const object_t& r) {
-  return l.name != r.name;
-}
-inline bool operator>(const object_t& l, const object_t& r) {
-  return l.name > r.name;
-}
-inline bool operator<(const object_t& l, const object_t& r) {
-  return l.name < r.name;
-}
-inline bool operator>=(const object_t& l, const object_t& r) {
-  return l.name >= r.name;
-}
-inline bool operator<=(const object_t& l, const object_t& r) {
-  return l.name <= r.name;
-}
 inline std::ostream& operator<<(std::ostream& out, const object_t& o) {
   return out << o.name;
 }
@@ -168,6 +152,8 @@ struct sobject_t {
   sobject_t() : snap(0) {}
   sobject_t(object_t o, snapid_t s) : oid(o), snap(s) {}
 
+  auto operator<=>(const sobject_t&) const noexcept = default;
+
   void swap(sobject_t& o) {
     oid.swap(o.oid);
     snapid_t t = snap;
@@ -188,24 +174,6 @@ struct sobject_t {
 };
 WRITE_CLASS_ENCODER(sobject_t)
 
-inline bool operator==(const sobject_t &l, const sobject_t &r) {
-  return l.oid == r.oid && l.snap == r.snap;
-}
-inline bool operator!=(const sobject_t &l, const sobject_t &r) {
-  return l.oid != r.oid || l.snap != r.snap;
-}
-inline bool operator>(const sobject_t &l, const sobject_t &r) {
-  return l.oid > r.oid || (l.oid == r.oid && l.snap > r.snap);
-}
-inline bool operator<(const sobject_t &l, const sobject_t &r) {
-  return l.oid < r.oid || (l.oid == r.oid && l.snap < r.snap);
-}
-inline bool operator>=(const sobject_t &l, const sobject_t &r) {
-  return l.oid > r.oid || (l.oid == r.oid && l.snap >= r.snap);
-}
-inline bool operator<=(const sobject_t &l, const sobject_t &r) {
-  return l.oid < r.oid || (l.oid == r.oid && l.snap <= r.snap);
-}
 inline std::ostream& operator<<(std::ostream& out, const sobject_t &o) {
   return out << o.oid << "/" << o.snap;
 }
