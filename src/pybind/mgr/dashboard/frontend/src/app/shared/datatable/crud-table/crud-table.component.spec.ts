@@ -12,6 +12,7 @@ import { ComponentsModule } from '~/app/shared/components/components.module';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TableKeyValueComponent } from '../table-key-value/table-key-value.component';
+import { TablePaginationComponent } from '../table-pagination/table-pagination.component';
 import { TableComponent } from '../table/table.component';
 import { CRUDTableComponent } from './crud-table.component';
 
@@ -20,7 +21,12 @@ describe('CRUDTableComponent', () => {
   let fixture: ComponentFixture<CRUDTableComponent>;
 
   configureTestBed({
-    declarations: [CRUDTableComponent, TableComponent, TableKeyValueComponent],
+    declarations: [
+      CRUDTableComponent,
+      TableComponent,
+      TableKeyValueComponent,
+      TablePaginationComponent
+    ],
     imports: [
       NgxDatatableModule,
       FormsModule,
