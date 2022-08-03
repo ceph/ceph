@@ -74,13 +74,6 @@ struct backref_buf_entry_t {
       boost::intrusive::link_mode<
 	boost::intrusive::auto_unlink>>;
   set_hook_t backref_set_hook;
-
-  using list_hook_t =
-    boost::intrusive::list_member_hook<
-      boost::intrusive::link_mode<
-	boost::intrusive::auto_unlink>>;
-  list_hook_t backref_buf_hook;
-
   using backref_set_member_options = boost::intrusive::member_hook<
     backref_buf_entry_t,
     set_hook_t,
@@ -90,14 +83,6 @@ struct backref_buf_entry_t {
     backref_set_member_options,
     boost::intrusive::constant_time_size<false>>;
 
-  using backref_list_member_options = boost::intrusive::member_hook<
-    backref_buf_entry_t,
-    list_hook_t,
-    &backref_buf_entry_t::backref_buf_hook>;
-  using list_t = boost::intrusive::list<
-    backref_buf_entry_t,
-    backref_list_member_options,
-    boost::intrusive::constant_time_size<false>>;
   struct cmp_t {
     using is_transparent = paddr_t;
     bool operator()(
@@ -116,22 +101,10 @@ struct backref_buf_entry_t {
 
 std::ostream &operator<<(std::ostream &out, const backref_buf_entry_t &ent);
 
-using backref_buf_entry_ref =
-  std::unique_ptr<backref_buf_entry_t>;
-
+using backref_buf_entry_ref = std::unique_ptr<backref_buf_entry_t>;
 using backref_set_t = backref_buf_entry_t::set_t;
-
-struct backref_buf_t {
-  backref_buf_t(std::vector<backref_buf_entry_ref> &&refs) : backrefs(std::move(refs)) {
-    for (auto &ref : backrefs) {
-      br_list.push_back(*ref);
-    }
-  }
-  std::vector<backref_buf_entry_ref> backrefs;
-  backref_buf_entry_t::list_t br_list;
-};
-
-using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_buf_t>;
+using backref_entry_refs_t = std::vector<backref_buf_entry_ref>;
+using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_entry_refs_t>;
 
 /**
  * Cache

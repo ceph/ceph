@@ -228,32 +228,37 @@ BtreeBackrefManager::merge_cached_backrefs(
             seastar::stop_iteration::yes);
         }
         auto &seq = iter->first;
-        auto &backref_list = iter->second.br_list;
+        auto &backref_entry_refs = iter->second;
         LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
         DEBUGT("seq {}, limit {}, num_fresh_backref {}"
           , t, seq, limit, t.get_num_fresh_backref());
         if (seq <= limit && t.get_num_fresh_backref() * BACKREF_NODE_SIZE < max) {
           inserted_to = seq;
           return trans_intr::do_for_each(
-            backref_list,
-            [this, &t](auto &backref) {
+            backref_entry_refs,
+            [this, &t](auto &backref_entry_ref) {
             LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
-            if (backref.laddr != L_ADDR_NULL) {
+            auto &backref_entry = *backref_entry_ref;
+            if (backref_entry.laddr != L_ADDR_NULL) {
               DEBUGT("new mapping: {}~{} -> {}",
-                t, backref.paddr, backref.len, backref.laddr);
+                t,
+                backref_entry.paddr,
+                backref_entry.len,
+                backref_entry.laddr);
               return new_mapping(
                 t,
-                backref.paddr,
-                backref.len,
-                backref.laddr,
-                backref.type).si_then([](auto &&pin) {
+                backref_entry.paddr,
+                backref_entry.len,
+                backref_entry.laddr,
+                backref_entry.type).si_then([](auto &&pin) {
                 return seastar::now();
               });
             } else {
-              DEBUGT("remove mapping: {}", t, backref.paddr);
+              DEBUGT("remove mapping: {}", t, backref_entry.paddr);
               return remove_mapping(
                 t,
-                backref.paddr).si_then([](auto&&) {
+                backref_entry.paddr
+              ).si_then([](auto&&) {
                 return seastar::now();
               }).handle_error_interruptible(
                 crimson::ct_error::input_output_error::pass_further(),
