@@ -22,6 +22,7 @@ from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from tasks.util.rados import cmd_erasure_code_profile
 from tasks.util import get_remote
+
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
@@ -1534,10 +1535,12 @@ class CephManager:
         self.rook = rook
         self.cephadm = cephadm
         self.testdir = teuthology.get_testdir(self.ctx)
-        self.run_cluster_cmd_prefix = [
-            'sudo', 'adjust-ulimits', 'ceph-coverage',
-            f'{self.testdir}/archive/coverage', 'timeout', '120', 'ceph',
-            '--cluster', self.cluster]
+        # prefix args for ceph cmds to be executed
+        pre = ['adjust-ulimits', 'ceph-coverage',
+               f'{self.testdir}/archive/coverage']
+        self.CEPH_CMD = ['sudo'] + pre + ['timeout', '120', 'ceph',
+                                          '--cluster', self.cluster]
+        self.RADOS_CMD = pre + ['rados', '--cluster', self.cluster]
         self.run_ceph_w_prefix = ['sudo', 'daemon-helper', 'kill', 'ceph',
                                   '--cluster', self.cluster]
 
@@ -1584,7 +1587,7 @@ class CephManager:
                            stdout=StringIO(),
                            check_status=kwargs.get('check_status', True))
 
-        kwargs['args'] = self.run_cluster_cmd_prefix + kwargs['args']
+        kwargs['args'] = self.CEPH_CMD + kwargs['args']
         return self.controller.run(**kwargs)
 
     def raw_cluster_cmd(self, *args, **kwargs) -> str:
@@ -1736,14 +1739,7 @@ class CephManager:
         if remote is None:
             remote = self.controller
 
-        pre = [
-            'adjust-ulimits',
-            'ceph-coverage',
-           f'{self.testdir}/archive/coverage',
-            'rados',
-            '--cluster',
-            self.cluster,
-            ]
+        pre = self.RADOS_CMD + [] # deep-copying!
         if pool is not None:
             pre += ['--pool', pool]
         if namespace is not None:
