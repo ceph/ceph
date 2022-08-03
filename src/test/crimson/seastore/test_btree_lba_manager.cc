@@ -255,7 +255,7 @@ struct lba_btree_test : btree_test_base {
   void insert(laddr_t addr, extent_len_t len) {
     ceph_assert(check.count(addr) == 0);
     check.emplace(addr, get_map_val(len));
-    lba_btree_update([=](auto &btree, auto &t) {
+    lba_btree_update([=, this](auto &btree, auto &t) {
       return btree.insert(
 	get_op_context(t), addr, get_map_val(len)
       ).si_then([](auto){});
@@ -267,7 +267,7 @@ struct lba_btree_test : btree_test_base {
     ceph_assert(iter != check.end());
     auto len = iter->second.len;
     check.erase(iter++);
-    lba_btree_update([=](auto &btree, auto &t) {
+    lba_btree_update([=, this](auto &btree, auto &t) {
       return btree.lower_bound(
 	get_op_context(t), addr
       ).si_then([this, len, addr, &btree, &t](auto iter) {
@@ -283,7 +283,7 @@ struct lba_btree_test : btree_test_base {
 
   void check_lower_bound(laddr_t addr) {
     auto iter = check.lower_bound(addr);
-    auto result = lba_btree_read([=](auto &btree, auto &t) {
+    auto result = lba_btree_read([=, this](auto &btree, auto &t) {
       return btree.lower_bound(
 	get_op_context(t), addr
       ).si_then([](auto iter)
@@ -425,7 +425,7 @@ struct btree_lba_manager_test : btree_test_base {
     paddr_t paddr) {
     auto ret = with_trans_intr(
       *t.t,
-      [=](auto &t) {
+      [=, this](auto &t) {
 	return lba_manager->alloc_extent(t, hint, len, paddr);
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
@@ -459,7 +459,7 @@ struct btree_lba_manager_test : btree_test_base {
 
     auto refcnt = with_trans_intr(
       *t.t,
-      [=](auto &t) {
+      [=, this](auto &t) {
 	return lba_manager->decref_extent(
 	  t,
 	  target->first);
@@ -483,7 +483,7 @@ struct btree_lba_manager_test : btree_test_base {
     target->second.refcount++;
     auto refcnt = with_trans_intr(
       *t.t,
-      [=](auto &t) {
+      [=, this](auto &t) {
 	return lba_manager->incref_extent(
 	  t,
 	  target->first);
@@ -521,7 +521,7 @@ struct btree_lba_manager_test : btree_test_base {
 
       auto ret_list = with_trans_intr(
 	*t.t,
-	[=](auto &t) {
+	[=, this](auto &t) {
 	  return lba_manager->get_mappings(
 	    t, laddr, len);
 	}).unsafe_get0();
@@ -533,7 +533,7 @@ struct btree_lba_manager_test : btree_test_base {
 
       auto ret_pin = with_trans_intr(
 	*t.t,
-	[=](auto &t) {
+	[=, this](auto &t) {
 	  return lba_manager->get_mapping(
 	    t, laddr);
 	}).unsafe_get0();
@@ -543,7 +543,7 @@ struct btree_lba_manager_test : btree_test_base {
     }
     with_trans_intr(
       *t.t,
-      [=, &t](auto &) {
+      [=, &t, this](auto &) {
 	return lba_manager->scan_mappings(
 	  *t.t,
 	  0,
