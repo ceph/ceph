@@ -140,9 +140,7 @@ seastar::future<> Connection::renew_tickets()
     logger().info("{}: retrieving new tickets", __func__);
     return do_auth(request_t::general).then([](const auth_result_t r) {
       if (r == auth_result_t::failure)  {
-        throw std::system_error(
-	  make_error_code(
-	    crimson::net::error::negotiation_failure));
+        logger().info("renew_tickets: ignoring failed auth reply");
       }
     });
   } else {
@@ -174,8 +172,7 @@ seastar::future<> Connection::renew_rotating_keyring()
   last_rotating_renew_sent = now;
   return do_auth(request_t::rotating).then([](const auth_result_t r) {
     if (r == auth_result_t::failure)  {
-      throw std::system_error(make_error_code(
-        crimson::net::error::negotiation_failure));
+      logger().info("renew_rotating_keyring: ignoring failed auth reply");
     }
   });
 }
