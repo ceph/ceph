@@ -5,6 +5,7 @@ import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { ChartsModule } from 'ng2-charts';
+import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
@@ -22,7 +23,8 @@ import { DashboardComponent } from './dashboard/dashboard.component';
     RouterModule,
     NgbPopoverModule,
     FormsModule,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    SimplebarAngularModule
   ],
 
   declarations: [DashboardComponent, CardComponent, DashboardPieComponent]

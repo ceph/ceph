@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
@@ -6,10 +6,14 @@ import { take } from 'rxjs/operators';
 
 import { ClusterService } from '~/app/shared/api/cluster.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { OsdService } from '~/app/shared/api/osd.service';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { DashboardDetails } from '~/app/shared/models/cd-details';
 import { Permissions } from '~/app/shared/models/permissions';
+import { AlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import {
   FeatureTogglesMap$,
@@ -96,13 +100,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.interval.unsubscribe();
-  }
-
-  getHealth() {
-    this.healthService.getMinimalHealth().subscribe((data: any) => {
-      this.healthData = data;
-    });
+    window.clearInterval(this.interval);
   }
 
   toggleAlertsWindow(type: string, isToggleButton: boolean = false) {
