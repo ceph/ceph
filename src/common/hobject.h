@@ -305,20 +305,26 @@ public:
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<hobject_t*>& o);
   friend int cmp(const hobject_t& l, const hobject_t& r);
-  friend bool operator>(const hobject_t& l, const hobject_t& r) {
-    return cmp(l, r) > 0;
+  auto operator<=>(const hobject_t &rhs) const noexcept {
+    auto cmp = max <=> rhs.max;
+    if (cmp != 0) return cmp;
+    cmp = pool <=> rhs.pool;
+    if (cmp != 0) return cmp;
+    cmp = get_bitwise_key() <=> rhs.get_bitwise_key();
+    if (cmp != 0) return cmp;
+    cmp = nspace <=> rhs.nspace;
+    if (cmp != 0) return cmp;
+    if (!(get_key().empty() && rhs.get_key().empty())) {
+      cmp = get_effective_key() <=> rhs.get_effective_key();
+      if (cmp != 0) return cmp;
+    }
+    cmp = oid <=> rhs.oid;
+    if (cmp != 0) return cmp;
+    return snap <=> rhs.snap;
   }
-  friend bool operator>=(const hobject_t& l, const hobject_t& r) {
-    return cmp(l, r) >= 0;
+  bool operator==(const hobject_t& rhs) const noexcept {
+    return operator<=>(rhs) == 0;
   }
-  friend bool operator<(const hobject_t& l, const hobject_t& r) {
-    return cmp(l, r) < 0;
-  }
-  friend bool operator<=(const hobject_t& l, const hobject_t& r) {
-    return cmp(l, r) <= 0;
-  }
-  friend bool operator==(const hobject_t&, const hobject_t&);
-  friend bool operator!=(const hobject_t&, const hobject_t&);
   friend struct ghobject_t;
 };
 WRITE_CLASS_ENCODER(hobject_t)
@@ -333,8 +339,6 @@ template<> struct hash<hobject_t> {
 } // namespace std
 
 std::ostream& operator<<(std::ostream& out, const hobject_t& o);
-
-WRITE_EQ_OPERATORS_7(hobject_t, hash, oid, get_key(), snap, pool, max, nspace)
 
 template <typename T>
 struct always_false {
