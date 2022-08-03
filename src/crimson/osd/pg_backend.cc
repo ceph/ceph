@@ -83,9 +83,14 @@ PGBackend::load_metadata(const hobject_t& oid)
         loaded_object_md_t::ref ret(new loaded_object_md_t());
         if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
           bufferlist bl = std::move(oiiter->second);
-          ret->os = ObjectState(
-            object_info_t(bl, oid),
-            true);
+          try {
+            ret->os = ObjectState(
+              object_info_t(bl, oid),
+              true);
+          } catch (const buffer::error&) {
+            logger().warn("unable to decode ObjectState");
+            throw crimson::osd::invalid_argument();
+          }
         } else {
           logger().error(
             "load_metadata: object {} present but missing object info",
