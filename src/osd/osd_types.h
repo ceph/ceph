@@ -47,7 +47,6 @@
 #include "common/snap_types.h"
 #include "HitSet.h"
 #include "Watch.h"
-#include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
 #include "compressor/Compressor.h"
 #include "osd_perf_counters.h"
@@ -196,10 +195,9 @@ struct pg_shard_t {
       f->dump_unsigned("shard", shard);
     }
   }
+  auto operator<=>(const pg_shard_t&) const = default;
 };
 WRITE_CLASS_ENCODER(pg_shard_t)
-WRITE_EQ_OPERATORS_2(pg_shard_t, osd, shard)
-WRITE_CMP_OPERATORS_2(pg_shard_t, osd, shard)
 std::ostream& operator<<(std::ostream &lhs, const pg_shard_t &rhs);
 
 using HobjToShardSetMapping = std::map<hobject_t, std::set<pg_shard_t>>;
@@ -546,6 +544,7 @@ struct spg_t {
   spg_t() : shard(shard_id_t::NO_SHARD) {}
   spg_t(pg_t pgid, shard_id_t shard) : pgid(pgid), shard(shard) {}
   explicit spg_t(pg_t pgid) : pgid(pgid), shard(shard_id_t::NO_SHARD) {}
+  auto operator<=>(const spg_t&) const = default;
   unsigned get_split_bits(unsigned pg_num) const {
     return pgid.get_split_bits(pg_num);
   }
@@ -639,8 +638,6 @@ struct spg_t {
   }
 };
 WRITE_CLASS_ENCODER(spg_t)
-WRITE_EQ_OPERATORS_2(spg_t, pgid, shard)
-WRITE_CMP_OPERATORS_2(spg_t, pgid, shard)
 
 namespace std {
   template<> struct hash< spg_t >
