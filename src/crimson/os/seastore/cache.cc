@@ -1400,11 +1400,8 @@ void Cache::backref_batch_update(
   if (iter == backref_entryrefs_by_seq.end()) {
     backref_entryrefs_by_seq.emplace(seq, std::move(list));
   } else {
-    for (auto &ref : list) {
-      iter->second.br_list.push_back(*ref);
-    }
-    iter->second.backrefs.insert(
-      iter->second.backrefs.end(),
+    iter->second.insert(
+      iter->second.end(),
       std::make_move_iterator(list.begin()),
       std::make_move_iterator(list.end()));
   }
