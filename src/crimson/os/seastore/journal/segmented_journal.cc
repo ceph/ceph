@@ -333,7 +333,7 @@ SegmentedJournal::replay_segment(
         });
       });
     }),
-    [=](auto &cursor, auto &dhandler) {
+    [=, this](auto &cursor, auto &dhandler) {
       return sm_group.scan_valid_records(
 	cursor,
 	header.segment_nonce,
