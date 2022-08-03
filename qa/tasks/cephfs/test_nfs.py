@@ -83,11 +83,16 @@ class TestNFS(MgrTestCase):
         '''
         event_occurred = False
         # Wait few seconds for NFS daemons' status to be updated
-        with contextutil.safe_while(sleep=10, tries=12, _raise=False) as proceed:
+        with contextutil.safe_while(sleep=10, tries=18, _raise=False) as proceed:
             while not event_occurred and proceed():
                 daemons_details = json.loads(
                     self._fetch_nfs_daemons_details(enable_json=True))
                 log.info('daemons details %s', daemons_details)
+                # 'events' key may not exist in the daemon description
+                # after a mgr fail over and could take some time to appear
+                # (it's populated on first daemon event)
+                if 'events' not in daemons_details[0]:
+                    continue
                 for event in daemons_details[0]['events']:
                     log.info('daemon event %s', event)
                     if expected_event in event:
