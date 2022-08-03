@@ -4096,7 +4096,7 @@ struct OSDOp {
   sobject_t soid;
 
   ceph::buffer::list indata, outdata;
-  errorcode32_t rval = 0;
+  errorcode32_t rval;
 
   OSDOp() {
     // FIPS zeroization audit 20191115: this memset clean for security
