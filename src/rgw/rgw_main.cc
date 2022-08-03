@@ -103,6 +103,12 @@ int main(int argc, char *argv[])
   DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::AppMain main(&dp);
 
+#if BOOST_ASIO_HAS_IO_URING_AS_DEFAULT
+  ldpp_dout(&dp, 1) << "Using io_uring backend" << dendl;
+#else
+  ldpp_dout(&dp, 1) << "Using epoll backend" << dendl;
+#endif
+
   main.init_frontends1(false /* nfs */);
   main.init_numa();
 

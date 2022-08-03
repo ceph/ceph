@@ -367,6 +367,12 @@ target_link_libraries(rgw_a
     rgw_common
     spawn)
 
+if(WITH_RADOSGW_URING)
+  find_package(uring REQUIRED)
+  target_link_libraries(rgw_a PUBLIC uring::uring)
+  target_compile_definitions(rgw_a PUBLIC "-DBOOST_ASIO_HAS_IO_URING -DBOOST_ASIO_DISABLE_EPOLL")
+endif()
+
 if(WITH_CURL_OPENSSL)
   # used by rgw_http_client_curl.cc
   target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
