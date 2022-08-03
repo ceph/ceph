@@ -761,7 +761,7 @@ AsyncCleaner::rewrite_dirty_ret AsyncCleaner::rewrite_dirty(
     t,
     limit,
     config.rewrite_dirty_bytes_per_cycle
-  ).si_then([=, &t](auto dirty_list) {
+  ).si_then([=, &t, this](auto dirty_list) {
     LOG_PREFIX(AsyncCleaner::rewrite_dirty);
     DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
     return seastar::do_with(

@@ -666,7 +666,7 @@ seastar::future<> ShardServices::dispatch_context_messages(
       auto& [peer, messages] = osd_messages;
       logger().debug("dispatch_context_messages sending messages to {}", peer);
       return seastar::parallel_for_each(
-        std::move(messages), [=, peer=peer](auto& m) {
+        std::move(messages), [=, peer=peer, this](auto& m) {
         return send_to_osd(peer, std::move(m), local_state.osdmap->get_epoch());
       });
     });

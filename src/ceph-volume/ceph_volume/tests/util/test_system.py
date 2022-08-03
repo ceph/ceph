@@ -207,11 +207,10 @@ class TestGetFileContents(object):
         result = system.get_file_contents(interesting_file.path)
         assert result == "0\n1"
 
-    def test_exception_returns_default(self, fake_filesystem):
-        interesting_file = fake_filesystem.create_file('/tmp/fake-file', contents="0")
-        # remove read, causes IOError
-        os.chmod(interesting_file.path, 0o000)
-        result = system.get_file_contents(interesting_file.path)
+    def test_exception_returns_default(self):
+        with patch('builtins.open') as mocked_open:
+            mocked_open.side_effect = Exception()
+            result = system.get_file_contents('/tmp/fake-file')
         assert result == ''
 
 

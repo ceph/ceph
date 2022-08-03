@@ -110,9 +110,9 @@ SegmentManagerGroup::scan_valid_records(
   auto retref = std::make_unique<size_t>(0);
   auto &budget_used = *retref;
   return crimson::repeat(
-    [=, &cursor, &budget_used, &handler]() mutable
+    [=, &cursor, &budget_used, &handler, this]() mutable
     -> scan_valid_records_ertr::future<seastar::stop_iteration> {
-      return [=, &handler, &cursor, &budget_used] {
+      return [=, &handler, &cursor, &budget_used, this] {
 	if (!cursor.last_valid_header_found) {
 	  return read_validate_record_metadata(cursor.seq.offset, nonce
 	  ).safe_then([=, &cursor](auto md) {
@@ -134,12 +134,12 @@ SegmentManagerGroup::scan_valid_records(
 	      cursor.emplace_record_group(header, std::move(md_bl));
 	      return scan_valid_records_ertr::now();
 	    }
-	  }).safe_then([=, &cursor, &budget_used, &handler] {
+	  }).safe_then([=, &cursor, &budget_used, &handler, this] {
 	    DEBUG("processing committed record groups until {}, {} pending",
 		  cursor.last_committed,
 		  cursor.pending_record_groups.size());
 	    return crimson::repeat(
-	      [=, &budget_used, &cursor, &handler] {
+	      [=, &budget_used, &cursor, &handler, this] {
 		if (cursor.pending_record_groups.empty()) {
 		  /* This is only possible if the segment is empty.
 		   * A record's last_commited must be prior to its own
