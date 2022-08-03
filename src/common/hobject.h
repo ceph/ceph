@@ -379,39 +379,30 @@ static inline int cmp(const T&, const hobject_t&r) {
 typedef version_t gen_t;
 
 struct ghobject_t {
-  hobject_t hobj;
-  gen_t generation;
-  shard_id_t shard_id;
-  bool max;
-
-public:
   static const gen_t NO_GEN = UINT64_MAX;
 
-  ghobject_t()
-    : generation(NO_GEN),
-      shard_id(shard_id_t::NO_SHARD),
-      max(false) {}
+  bool max = false;
+  shard_id_t shard_id = shard_id_t::NO_SHARD;
+  hobject_t hobj;
+  gen_t generation = NO_GEN;
+
+  ghobject_t() = default;
 
   explicit ghobject_t(const hobject_t &obj)
-    : hobj(obj),
-      generation(NO_GEN),
-      shard_id(shard_id_t::NO_SHARD),
-      max(false) {}
+    : hobj(obj) {}
 
   ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard)
-    : hobj(obj),
-      generation(gen),
-      shard_id(shard),
-      max(false) {}
+    : shard_id(shard),
+      hobj(obj),
+      generation(gen) {}
 
   // used by Crimson
   ghobject_t(shard_id_t shard, int64_t pool, uint32_t reversed_hash,
              const std::string& nspace, const std::string& oid,
              snapid_t snap, gen_t gen)
-    : hobj(oid, snap, reversed_hash, pool, nspace),
-      generation(gen),
-      shard_id(shard),
-      max(false) {}
+    : shard_id(shard),
+      hobj(oid, snap, reversed_hash, pool, nspace),
+      generation(gen) {}
 
   static ghobject_t make_pgmeta(int64_t pool, uint32_t hash, shard_id_t shard) {
     hobject_t h(object_t(), std::string(), CEPH_NOSNAP, hash, pool, std::string());
@@ -487,21 +478,8 @@ public:
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<ghobject_t*>& o);
   friend int cmp(const ghobject_t& l, const ghobject_t& r);
-  friend bool operator>(const ghobject_t& l, const ghobject_t& r) {
-    return cmp(l, r) > 0;
-  }
-  friend bool operator>=(const ghobject_t& l, const ghobject_t& r) {
-    return cmp(l, r) >= 0;
-  }
-  friend bool operator<(const ghobject_t& l, const ghobject_t& r) {
-    return cmp(l, r) < 0;
-  }
-  friend bool operator<=(const ghobject_t& l, const ghobject_t& r) {
-    return cmp(l, r) <= 0;
-  }
-  friend bool operator==(const ghobject_t&, const ghobject_t&);
-  friend bool operator!=(const ghobject_t&, const ghobject_t&);
-
+  auto operator<=>(const ghobject_t&) const = default;
+  bool operator==(const ghobject_t&) const = default;
 };
 WRITE_CLASS_ENCODER(ghobject_t)
 
@@ -519,8 +497,6 @@ namespace std {
 } // namespace std
 
 std::ostream& operator<<(std::ostream& out, const ghobject_t& o);
-
-WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, hobj, generation)
 
 extern int cmp(const ghobject_t& l, const ghobject_t& r);
 
