@@ -133,6 +133,9 @@ Replayer<I>::~Replayer() {
     unregister_perf_counters();
   }
 
+  //TODO (WIP): handle this better
+  delete m_deep_copy_handler;
+  m_deep_copy_handler = nullptr;
   ceph_assert(m_state == STATE_COMPLETE);
   ceph_assert(m_update_watch_ctx == nullptr);
   ceph_assert(m_deep_copy_handler == nullptr);
@@ -196,8 +199,12 @@ void Replayer<I>::shut_down(Context* on_finish) {
 
     // TODO interrupt snapshot copy and image copy state machines even if remote
     // cluster is unreachable
-    dout(10) << "shut down pending on completion of snapshot replay" << dendl;
-    return;
+    if (!m_snapshot_copy_request->is_finished()) {
+      m_snapshot_copy_request->cancel();
+      dout(10) << "shut down pending on completion of snapshot replay" << dendl;
+      return;
+    }
+    m_image_copy_request->cancel();
   }
   locker.unlock();
 
@@ -804,12 +811,12 @@ void Replayer<I>::copy_snapshots() {
   m_local_mirror_snap_ns = {};
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_copy_snapshots>(this);
-  auto req = librbd::deep_copy::SnapshotCopyRequest<I>::create(
+  m_snapshot_copy_request = librbd::deep_copy::SnapshotCopyRequest<I>::create(
     m_state_builder->remote_image_ctx, m_state_builder->local_image_ctx,
     m_remote_snap_id_start, m_remote_snap_id_end, m_local_snap_id_start,
     false, m_threads->work_queue, &m_local_mirror_snap_ns.snap_seqs,
     ctx);
-  req->send();
+  m_snapshot_copy_request->send();
 }
 
 template <typename I>
@@ -1075,7 +1082,7 @@ void Replayer<I>::copy_image() {
   m_deep_copy_handler = new DeepCopyHandler(this);
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_copy_image>(this);
-  auto req = librbd::deep_copy::ImageCopyRequest<I>::create(
+  m_image_copy_request = librbd::deep_copy::ImageCopyRequest<I>::create(
     m_state_builder->remote_image_ctx,  m_state_builder->local_image_ctx,
     m_remote_snap_id_start, m_remote_snap_id_end, m_local_snap_id_start, false,
     (m_local_mirror_snap_ns.last_copied_object_number > 0 ?
@@ -1083,7 +1090,7 @@ void Replayer<I>::copy_image() {
         m_local_mirror_snap_ns.last_copied_object_number} :
       librbd::deep_copy::ObjectNumber{}),
     m_local_mirror_snap_ns.snap_seqs, m_deep_copy_handler, ctx);
-  req->send();
+  m_image_copy_request->send();
 }
 
 template <typename I>
@@ -1094,6 +1101,9 @@ void Replayer<I>::handle_copy_image(int r) {
   m_deep_copy_handler = nullptr;
 
   if (r < 0) {
+    if (m_state_builder->local_image_ctx->pending_stop) {
+      m_state_builder->local_image_ctx->pending_stop = false;
+    }
     derr << "failed to copy remote image to local image: " << cpp_strerror(r)
          << dendl;
     handle_replay_complete(r, "failed to copy remote image");

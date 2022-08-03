@@ -37,6 +37,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
   }
 
   MOCK_METHOD0(destroy, void());
+  std::atomic<bool> pending_stop;
 };
 
 MockTestImageCtx* MockTestImageCtx::s_instance = nullptr;

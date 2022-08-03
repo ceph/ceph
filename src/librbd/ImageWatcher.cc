@@ -1153,6 +1153,7 @@ bool ImageWatcher<I>::handle_payload(const SnapCreatePayload &payload,
     &payload.snap_namespace);
   if (mirror_ns != nullptr && mirror_ns->is_orphan()) {
     request_type = exclusive_lock::OPERATION_REQUEST_TYPE_FORCE_PROMOTION;
+    m_image_ctx.pending_stop = true;
   }
 
   return handle_operation_request(

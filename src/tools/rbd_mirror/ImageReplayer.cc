@@ -28,6 +28,7 @@
 #include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/image_replayer/journal/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
+#include "librados/AioCompletionImpl.h"
 #include <map>
 
 #define dout_context g_ceph_context
@@ -659,6 +660,32 @@ bool ImageReplayer<I>::on_replay_interrupted()
     on_stop_journal_replay();
   }
   return shut_down;
+}
+
+template <typename I>
+void ImageReplayer<I>::check_pending_stop(){
+  if (m_state_builder && m_state_builder->local_image_ctx && m_state_builder->local_image_ctx->pending_stop) {
+    auto m_remote_image_ctx = m_state_builder->remote_image_ctx;
+    auto ctx = new LambdaContext(
+      [this, m_remote_image_ctx](int r) {
+      for (ceph_tid_t tid : m_remote_image_ctx->pending_ops){
+        librados::AioCompletion *rados_completion =
+        librados::Rados::aio_create_completion();
+
+        rados_completion->pc->tid = tid;
+        r = m_remote_image_ctx->data_ctx.aio_cancel(rados_completion);
+
+	{
+	std::unique_lock l{m_remote_image_ctx->image_lock};
+	m_remote_image_ctx->pending_ops.erase(tid);
+	}
+
+        rados_completion->release();
+      }
+    });
+    m_remote_image_ctx->op_work_queue->queue(ctx, 0);
+  }
+
 }
 
 template <typename I>

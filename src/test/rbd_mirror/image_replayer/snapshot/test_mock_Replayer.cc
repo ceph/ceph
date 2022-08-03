@@ -32,6 +32,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
   explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
+  std::atomic<bool> pending_stop;
 };
 
 } // anonymous namespace

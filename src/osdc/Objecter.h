@@ -2997,7 +2997,7 @@ public:
     int *data_offset = NULL,
     uint64_t features = 0) {
     Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver,
-			    data_offset);
+			    data_offset, 0);
     if (features)
       o->features = features;
     ceph_tid_t tid;
@@ -3005,7 +3005,7 @@ public:
     return tid;
   }
 
-  void read(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
 	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
 	    int flags, std::unique_ptr<Op::OpComp>&& onack,
 	    version_t *objver = nullptr, int *data_offset = nullptr,
@@ -3027,7 +3027,9 @@ public:
     if (features)
       o->features = features;
     op.clear();
-    op_submit(o);
+    ceph_tid_t tid;
+    op_submit(o, &tid);
+    return tid;
   }
 
 

@@ -107,6 +107,11 @@ void SnapshotCopyRequest<I>::cancel() {
 }
 
 template <typename I>
+bool SnapshotCopyRequest<I>::is_finished() {
+  return m_finish;
+}
+
+template <typename I>
 void SnapshotCopyRequest<I>::send_snap_unprotect() {
 
   SnapIdSet::iterator snap_id_it = m_dst_snap_ids.begin();
@@ -713,12 +718,14 @@ Context *SnapshotCopyRequest<I>::start_lock_op(ceph::shared_mutex &owner_lock, i
 
 template <typename I>
 void SnapshotCopyRequest<I>::finish(int r) {
+  //TODO figure out why lock is failing
+///  std::lock_guard locker{m_lock};
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   if (r == 0) {
     *m_snap_seqs_result = m_snap_seqs;
   }
-
+  m_finish = true;
   m_on_finish->complete(r);
   put();
 }

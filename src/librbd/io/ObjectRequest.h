@@ -77,6 +77,7 @@ protected:
   bool compute_parent_extents(Extents *parent_extents, bool read_request);
 
   ImageCtxT *m_ictx;
+  ceph_tid_t tid;
   uint64_t m_object_no;
   IOContext m_io_context;
   Context *m_completion;

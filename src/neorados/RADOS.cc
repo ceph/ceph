@@ -815,7 +815,7 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, ReadOp&& _op,
   }
 
   trace.event("init");
-  impl->objecter->read(
+  _op.tid = impl->objecter->read(
     *oid, ioc->oloc, std::move(op->op), ioc->snap_seq, bl, flags,
     std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace);
 

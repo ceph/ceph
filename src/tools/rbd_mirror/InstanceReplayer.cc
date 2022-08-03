@@ -331,9 +331,11 @@ template <typename I>
 void InstanceReplayer<I>::start_image_replayer(
     ImageReplayer<I> *image_replayer) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
-
+  dout(20) << dendl;
   std::string global_image_id = image_replayer->get_global_image_id();
   if (!image_replayer->is_stopped()) {
+    image_replayer->check_pending_stop();
+    dout(20) << "image is NOT stopped!!" << dendl;
     return;
   } else if (image_replayer->is_blocklisted()) {
     derr << "global_image_id=" << global_image_id << ": blocklisted detected "
@@ -348,6 +350,7 @@ void InstanceReplayer<I>::start_image_replayer(
     image_replayer->destroy();
     return;
   } else if (m_manual_stop) {
+    dout(20) << "manual stop!!" << dendl;
     return;
   }
 

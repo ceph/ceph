@@ -40,6 +40,8 @@
 
 #include "include/function2.hpp"
 
+#include "include/types.h"
+
 // Things broken out so we can decode them in Objecter.
 
 #include "include/neorados/RADOS_Decodable.hpp"
@@ -220,7 +222,7 @@ public:
   Op(Op&&);
   Op& operator =(Op&&);
   ~Op();
-
+  ceph_tid_t tid;
   void set_excl();
   void set_failok();
   void set_fadvise_random();

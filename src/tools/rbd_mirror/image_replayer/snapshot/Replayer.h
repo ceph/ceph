@@ -3,7 +3,8 @@
 
 #ifndef RBD_MIRROR_IMAGE_REPLAYER_SNAPSHOT_REPLAYER_H
 #define RBD_MIRROR_IMAGE_REPLAYER_SNAPSHOT_REPLAYER_H
-
+#include "librbd/deep_copy/SnapshotCopyRequest.h"
+#include "librbd/deep_copy/ImageCopyRequest.h"
 #include "tools/rbd_mirror/image_replayer/Replayer.h"
 #include "common/ceph_mutex.h"
 #include "common/AsyncOpTracker.h"
@@ -254,6 +255,8 @@ private:
 
   PerfCounters *m_perf_counters = nullptr;
 
+  librbd::deep_copy::SnapshotCopyRequest<ImageCtxT> *m_snapshot_copy_request = nullptr;
+  librbd::deep_copy::ImageCopyRequest<ImageCtxT> *m_image_copy_request = nullptr;
   void load_local_image_meta();
   void handle_load_local_image_meta(int r);
 

@@ -252,6 +252,11 @@ void ObjectReadRequest<I>::read_object() {
     librbd::asio::util::get_callback_adapter(
       [this](int r) { handle_read_object(r); }), m_version,
       (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+  this->tid = read_op.tid;
+  {
+    std::unique_lock l{image_ctx->image_lock};
+    image_ctx->pending_ops.insert(read_op.tid);
+  }
 }
 
 template <typename I>
@@ -260,6 +265,10 @@ void ObjectReadRequest<I>::handle_read_object(int r) {
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
   if (m_version != nullptr) {
     ldout(image_ctx->cct, 20) << "version=" << *m_version << dendl;
+  }
+  {
+    std::unique_lock l{image_ctx->image_lock};
+    image_ctx->pending_ops.erase(this->tid);
   }
 
   if (r == -ENOENT) {
@@ -758,6 +767,7 @@ void ObjectListSnapsRequest<I>::send() {
 template <typename I>
 void ObjectListSnapsRequest<I>::list_snaps() {
   I *image_ctx = this->m_ictx;
+
   ldout(image_ctx->cct, 20) << dendl;
 
   neorados::ReadOp read_op;
@@ -769,8 +779,13 @@ void ObjectListSnapsRequest<I>::list_snaps() {
     librbd::asio::util::get_callback_adapter(
       [this](int r) { handle_list_snaps(r); }), nullptr,
       (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
-}
 
+  {
+    std::unique_lock image_locker{image_ctx->image_lock};
+    image_ctx->pending_ops.insert(read_op.tid);
+  }
+  this->tid = read_op.tid;
+}
 template <typename I>
 void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   I *image_ctx = this->m_ictx;
@@ -781,7 +796,10 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   }
 
   ldout(cct, 20) << "r=" << r << dendl;
-
+  {
+    std::unique_lock l{image_ctx->image_lock};
+    image_ctx->pending_ops.erase(this->tid);
+  }
   m_snapshot_delta->clear();
   auto& snapshot_delta = *m_snapshot_delta;
 

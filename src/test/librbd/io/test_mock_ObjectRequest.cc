@@ -20,6 +20,7 @@ namespace {
 struct MockTestImageCtx : public MockImageCtx {
   MockTestImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
   }
+  std::set<ceph_tid_t> pending_ops;
 };
 
 } // anonymous namespace

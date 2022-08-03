@@ -106,6 +106,8 @@ public:
   void restart(Context *on_finish = nullptr);
   void flush();
 
+  void check_pending_stop();
+
   void print_status(Formatter *f);
 
 protected:

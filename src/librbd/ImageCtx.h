@@ -172,6 +172,9 @@ namespace librbd {
     utime_t access_timestamp;
     utime_t modify_timestamp;
 
+    std::atomic<bool> pending_stop = false;
+    std::set<ceph_tid_t> pending_ops;
+
     file_layout_t layout;
 
     Readahead readahead;

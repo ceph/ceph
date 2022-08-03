@@ -48,6 +48,7 @@ public:
 
   void send();
   void cancel();
+  bool is_finished();
 
 private:
   /**
@@ -140,6 +141,7 @@ private:
   Context *start_lock_op(int* r);
   Context *start_lock_op(ceph::shared_mutex &owner_locki, int* r);
 
+  bool m_finish = false;
   void finish(int r);
 };
 
