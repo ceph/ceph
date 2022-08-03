@@ -7648,6 +7648,7 @@ class YumDnf(Packager):
     DISTRO_NAMES = {
         'centos': ('centos', 'el'),
         'rhel': ('centos', 'el'),
+        'ol' : ('centos', 'el'),
         'scientific': ('centos', 'el'),
         'rocky': ('centos', 'el'),
         'almalinux': ('centos', 'el'),
