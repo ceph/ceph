@@ -5,28 +5,6 @@
  * macros to define comparison operators for classes with small numbers of members.
  */
 
-#define WRITE_EQ_OPERATORS_1(type, a)					\
-  inline bool operator==(const type &l, const type &r) {		\
-    return l.a == r.a;							\
-  }									\
-  inline bool operator!=(const type &l, const type &r) {		\
-    return l.a != r.a;							\
-  }
-
-#define WRITE_CMP_OPERATORS_1(type, a)					\
-  inline bool operator>(const type &l, const type &r) {			\
-    return l.a > r.a;							\
-  }									\
-  inline bool operator<(const type &l, const type &r) {			\
-    return l.a < r.a;							\
-  }									\
-  inline bool operator>=(const type &l, const type &r) {		\
-    return l.a >= r.a;							\
-  }									\
-  inline bool operator<=(const type &l, const type &r) {		\
-    return l.a <= r.a;							\
-  }
-
 #define WRITE_EQ_OPERATORS_2(type, a, b)				\
   inline bool operator==(const type &l, const type &r) {		\
     return l.a == r.a && l.b == r.b;					\
