@@ -404,13 +404,7 @@ describe('SilenceFormComponent', () => {
     it('should show added matcher', () => {
       addMatcher('job', 'someJob', true);
       fixtureH.expectIdElementsVisible(
-        [
-          'matcher-name-0',
-          'matcher-value-0',
-          'matcher-isRegex-0',
-          'matcher-edit-0',
-          'matcher-delete-0'
-        ],
+        ['matcher-name-0', 'matcher-value-0', 'matcher-edit-0', 'matcher-delete-0'],
         true
       );
       expectMatch(null);
@@ -423,12 +417,10 @@ describe('SilenceFormComponent', () => {
         [
           'matcher-name-0',
           'matcher-value-0',
-          'matcher-isRegex-0',
           'matcher-edit-0',
           'matcher-delete-0',
           'matcher-name-1',
           'matcher-value-1',
-          'matcher-isRegex-1',
           'matcher-edit-1',
           'matcher-delete-1'
         ],
@@ -443,8 +435,6 @@ describe('SilenceFormComponent', () => {
       fixture.detectChanges();
       fixtureH.expectFormFieldToBe('#matcher-name-0', 'alertname');
       fixtureH.expectFormFieldToBe('#matcher-value-0', 'alert.*');
-      fixtureH.expectFormFieldToBe('#matcher-isRegex-0', 'true');
-      fixtureH.expectFormFieldToBe('#matcher-isRegex-1', 'false');
       expectMatch(null);
     });
 
@@ -467,7 +457,6 @@ describe('SilenceFormComponent', () => {
 
       fixtureH.expectFormFieldToBe('#matcher-name-0', 'alertname');
       fixtureH.expectFormFieldToBe('#matcher-value-0', 'alert0');
-      fixtureH.expectFormFieldToBe('#matcher-isRegex-0', 'false');
       expectMatch('Matches 1 rule with 1 active alert.');
     });
 
