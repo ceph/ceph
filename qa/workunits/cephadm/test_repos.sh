@@ -24,7 +24,7 @@ sudo $CEPHADM -v add-repo --release octopus
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 
-sudo $CEPHADM -v add-repo --dev master
+sudo $CEPHADM -v add-repo --dev main
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 
