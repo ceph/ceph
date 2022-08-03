@@ -16,7 +16,6 @@
 #define __CEPH_OS_HOBJECT_H
 
 #include "include/types.h"
-#include "include/cmp.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "include/ceph_assert.h"   // spirit clobbers it!
