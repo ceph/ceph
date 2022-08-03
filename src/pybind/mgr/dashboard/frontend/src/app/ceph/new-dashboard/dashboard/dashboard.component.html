@@ -13,10 +13,44 @@
       </dl>
     </cd-card>
 
-    <cd-card title="Status"
+    <cd-card *ngIf="healthData"
+             title="Status"
              i18n-title
              class="col-sm-6 px-3">
-             Text
+      <div class="d-flex">
+        <i *ngIf="healthData.health?.status != 'HEALTH_OK'"
+           class="pl-2 fa fa-exclamation-triangle text-warning"></i>
+        <i *ngIf="healthData.health?.status == 'HEALTH_OK'"
+           class="pl-2 fa fa-check-circle text-success"></i>
+        <p class="pl-2 pr-5">Cluster</p>
+        <i class="fa fa-exclamation-triangle"></i>
+        <p class="pl-2">Data Health</p>
+      </div>
+      <hr />
+      <div class="d-flex flex-wrap">
+        <p>Notifications</p>
+        <!-- Potentially make widget component -->
+        <button class="ml-3 btn btn-outline-danger rounded-pill">
+          <i class="fa fa-exclamation-circle"></i>
+          <a>1</a>
+        </button>
+        <span class="ml-2 btn btn-outline-warning rounded-pill">
+          <i class="fa fa-exclamation-triangle"></i>
+          <a>1</a>
+        </span>
+        <span class="ml-2 btn btn-outline-success rounded-pill">
+          <i class="fa fa-check-circle"></i>
+          <a>1</a>
+        </span>
+        <span class="ml-2 btn btn-outline-primary rounded-pill">
+          <i class="fa fa-info-circle"></i>
+          <a>1</a>
+        </span>
+        <span class="ml-2 btn btn-outline-info rounded-pill">
+          <i class="fa fa-bell"></i>
+          <a>1</a>
+        </span>
+      </div>
     </cd-card>
 
     <cd-card title="Capacity"

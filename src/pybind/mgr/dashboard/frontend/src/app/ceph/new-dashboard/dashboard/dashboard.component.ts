@@ -5,6 +5,7 @@ import { Observable, Subscription } from 'rxjs';
 
 import { ClusterService } from '~/app/shared/api/cluster.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { DashboardDetails } from '~/app/shared/models/cd-details';
@@ -29,6 +30,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   enabledFeature$: FeatureTogglesMap$;
   color: string;
   capacity$: Observable<any>;
+  healthData: any;
   constructor(
     private summaryService: SummaryService,
     private configService: ConfigurationService,
@@ -36,7 +38,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private clusterService: ClusterService,
     private osdService: OsdService,
     private authStorageService: AuthStorageService,
-    private featureToggles: FeatureTogglesService
+    private featureToggles: FeatureTogglesService,
+    private healthService: HealthService
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -47,6 +50,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     this.osdSettings$ = this.osdService.getOsdSettings();
     this.capacity$ = this.clusterService.getCapacity();
+    this.getHealth();
   }
 
   ngOnDestroy() {
@@ -65,6 +69,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const version = summary.version.replace('ceph version ', '').split(' ');
       this.detailsCardData.cephVersion =
         version[0] + ' ' + version.slice(2, version.length).join(' ');
+    });
+  }
+
+  getHealth() {
+    this.healthService.getMinimalHealth().subscribe((data: any) => {
+      this.healthData = data;
     });
   }
 }
