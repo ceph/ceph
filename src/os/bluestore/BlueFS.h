@@ -400,6 +400,7 @@ private:
 
   std::unique_ptr<BlueFSVolumeSelector> vselector;
 
+  bool read_only = true;
   bluefs_shared_alloc_context_t* shared_alloc = nullptr;
   unsigned shared_alloc_id = unsigned(-1);
   inline bool is_shared_alloc(unsigned id) const {
@@ -549,7 +550,7 @@ public:
 
   // the super is always stored on bdev 0
   int mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout);
-  int mount();
+  int mount(bool write_enabled = true);
   int maybe_verify_layout(const bluefs_layout_t& layout) const;
   void umount(bool avoid_compact = false);
   int prepare_new_device(int id, const bluefs_layout_t& layout);

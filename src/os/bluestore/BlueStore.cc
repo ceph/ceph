@@ -6211,6 +6211,7 @@ free_bluefs:
 
 int BlueStore::_open_bluefs(bool create, bool read_only)
 {
+  ceph_assert(!(create && read_only)); // can't have create and read_only at the same time
   int r = _minimal_open_bluefs(create);
   if (r < 0) {
     return r;
@@ -6264,7 +6265,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
     bluefs->mkfs(fsid, bluefs_layout);
   }
   bluefs->set_volume_selector(vselector);
-  r = bluefs->mount();
+  r = bluefs->mount(!read_only);
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
   }
@@ -6274,7 +6275,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
 
 void BlueStore::_close_bluefs()
 {
-  bluefs->umount(db_was_opened_read_only);
+  bluefs->umount();
   _minimal_close_bluefs();
 }
 
@@ -6647,6 +6648,9 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
 
 int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
 {
+  dout(10) << __func__ << " create=" << create
+	   << " to_repair_db=" << to_repair_db
+	   << " read_only=" << read_only << dendl;
   int r;
   ceph_assert(!(create && read_only));
   string options;
@@ -6655,16 +6659,12 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   string kv_dir_fn;
   string kv_backend;
   std::string sharding_def;
-  // prevent write attempts to BlueFS in case we failed before BlueFS was opened
-  db_was_opened_read_only = true;
   r = _prepare_db_environment(create, read_only, &kv_dir_fn, &kv_backend);
   if (r < 0) {
     derr << __func__ << " failed to prepare db environment: " << err.str() << dendl;
     return -EIO;
   }
   // if reached here then BlueFS is already opened
-  db_was_opened_read_only = read_only;
-  dout(10) << __func__ << "::db_was_opened_read_only was set to " << read_only << dendl;
   if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
     options_annex = cct->_conf->bluestore_rocksdb_options_annex;
