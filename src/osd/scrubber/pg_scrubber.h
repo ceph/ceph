@@ -881,7 +881,8 @@ class PgScrubber : public ScrubPgIF,
   Scrub::MapsCollectionStatus m_maps_status;
 
   void persist_scrub_results(inconsistent_objs_t&& all_errors);
-  void apply_snap_mapper_fixes(const std::vector<snap_mapper_fix_t>& fix_list);
+  void apply_snap_mapper_fixes(
+    const std::vector<Scrub::snap_mapper_fix_t>& fix_list);
 
   // our latest periodic 'publish_stats_to_osd()'. Required frequency depends on
   // scrub state.

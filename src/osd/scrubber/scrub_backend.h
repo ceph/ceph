@@ -103,7 +103,7 @@ struct ScrubBeListener {
 // objects:
 struct objs_fix_list_t {
   inconsistent_objs_t inconsistent_objs;
-  std::vector<snap_mapper_fix_t> snap_fix_list;
+  std::vector<Scrub::snap_mapper_fix_t> snap_fix_list;
 };
 
 /**
@@ -321,7 +321,7 @@ class ScrubBackend {
    */
   void update_repair_status(bool should_repair);
 
-  std::vector<snap_mapper_fix_t> replica_clean_meta(
+  std::vector<Scrub::snap_mapper_fix_t> replica_clean_meta(
     ScrubMap& smap,
     bool max_reached,
     const hobject_t& start,
@@ -500,7 +500,7 @@ class ScrubBackend {
   /**
    * returns a list of snaps "fix orders"
    */
-  std::vector<snap_mapper_fix_t> scan_snaps(
+  std::vector<Scrub::snap_mapper_fix_t> scan_snaps(
     ScrubMap& smap,
     Scrub::SnapMapReaderI& snaps_getter);
 
@@ -508,7 +508,7 @@ class ScrubBackend {
    * an aux used by scan_snaps(), possibly returning a fix-order
    * for a specific hobject.
    */
-  std::optional<snap_mapper_fix_t> scan_object_snaps(
+  std::optional<Scrub::snap_mapper_fix_t> scan_object_snaps(
     const hobject_t& hoid,
     const SnapSet& snapset,
     Scrub::SnapMapReaderI& snaps_getter);

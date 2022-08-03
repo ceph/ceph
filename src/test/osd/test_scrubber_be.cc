@@ -595,6 +595,7 @@ TEST_F(TestTScrubberBe_data_1, smaps_creation_1)
 /// corrupt the snap_mapper data
 TEST_F(TestTScrubberBe_data_1, snapmapper_1)
 {
+  using snap_mapper_op_t = Scrub::snap_mapper_op_t;
   ASSERT_TRUE(sbe);
 
   // a bogus version of hobj_ms1_snp30 (a clone) snap_ids
