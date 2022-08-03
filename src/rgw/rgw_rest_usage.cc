@@ -12,6 +12,128 @@
 
 using namespace std;
 
+
+static inline RGWObjCategory   rgw_obj_get_category_by_name(string name)
+{
+	std::string::iterator end_pos = std::remove(name.begin(), name.end(), ' ');
+	name.erase(end_pos, name.end()); 
+	 
+     if(name.compare("rgw.none") == 0)
+			return  RGWObjCategory::None;
+     if(name.compare("rgw.main") == 0)
+			return RGWObjCategory:: Main;
+     if(name.compare("rgw.shadow") == 0)
+			return RGWObjCategory:: Shadow;
+     if(name.compare("rgw.multimeta") == 0)
+			return RGWObjCategory:: MultiMeta;
+     if(name.compare("InfrequentAccess") == 0)
+			return RGWObjCategory:: InfrequentAccess;
+	 if(name.compare(RGW_STORAGE_CLASS_STANDARD) == 0)
+	 		return RGWObjCategory:: Main;
+	return RGWObjCategory::None;
+}
+
+
+class RGWOp_StorageClass_Get : public RGWRESTOp {
+
+public:
+
+	uint64_t ScSize;
+	RGWOp_StorageClass_Get() {}
+
+	int check_caps(const RGWUserCaps& caps) override {
+		return caps.check_cap("usage", RGW_CAP_READ);
+	}
+	void execute(optional_yield y) override;
+	const char* name() const override { return "get_storageclass"; }
+	void send_response() override;
+};
+
+
+void RGWOp_StorageClass_Get::execute(optional_yield y) { 
+	string sc = s->info.args.get("HTTP_X_AMZ_STORAGE_CLASS");
+	
+	string bucket_name ;
+	string  tenant_name ; 
+	RGWBucketInfo bucket_info;
+	map<RGWObjCategory, RGWStorageStats> stats;   
+	map<string, bufferlist> attrs;
+	
+	
+	//RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+	RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
+
+	real_time mtime;
+	op_ret  = store->getRados()->get_bucket_info(store->svc(),    
+	        tenant_name, bucket_name, bucket_info,
+	        &mtime, null_yield, this, &attrs);
+	if (op_ret < 0)
+	{
+	    cerr << "error getting Storage class   bucket info =" << bucket_name << " ret=" << op_ret << std::endl;
+		return ;
+	}
+	rgw_bucket& bucket = bucket_info.bucket;
+
+	string bucket_ver, master_ver;
+	string max_marker;
+	op_ret = store->getRados()->get_bucket_stats(this, bucket_info, RGW_NO_SHARD,    
+	          &bucket_ver, &master_ver, stats,
+	          &max_marker);
+	if (op_ret < 0)
+	{
+		cerr << "error getting Storage class  stats bucket=" << bucket_name << " ret=" << op_ret << std::endl;
+		return ;
+	}
+	
+	if(sc.empty()){
+		sc = RGW_STORAGE_CLASS_STANDARD;
+	}
+
+
+	RGWObjCategory  cate = rgw_obj_get_category_by_name (sc);
+	if(cate == RGWObjCategory::None){
+	    op_ret = -ENOENT;
+	    cerr << "error unknow category" << std::endl;
+	}
+	ScSize = stats [cate].size;
+	return ;
+/*
+
+Formatter *formatter = flusher.get_formatter();
+flusher.start(0);
+formatter->open_object_section("storage class");
+formatter-> dump_unsigned (storage_class, ScSize);   //???
+formatter->close_section();
+
+flusher.flush();
+		*/	 
+}
+	 
+
+void RGWOp_StorageClass_Get::send_response()
+{
+    string ss = s->info.args.get("HTTP_X_AMZ_STORAGE_CLASS");
+	const char *sc = ss.c_str(); 
+	set_req_state_err(s, op_ret);
+	dump_errno(s);
+
+	if (op_ret < 0) {
+		end_header(s);
+		return;
+	}
+
+	s->formatter->open_object_section("cs size ");
+	encode_json(sc, ScSize, s->formatter);
+	s->formatter->close_section();
+	end_header(s, NULL, "application/json", s->formatter->get_len());
+	flusher.flush();
+}
+
+
+
+
+
+
 class RGWOp_Usage_Get : public RGWRESTOp {
 
 public:
@@ -110,6 +232,11 @@ void RGWOp_Usage_Delete::execute(optional_yield y) {
 
 RGWOp *RGWHandler_Usage::op_get()
 {
+  if(is_storageclass_op())
+  {
+    return new RGWOp_StorageClass_Get;
+  }
+
   return new RGWOp_Usage_Get;
 }
 

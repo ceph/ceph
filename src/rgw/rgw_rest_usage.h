@@ -11,6 +11,12 @@ class RGWHandler_Usage : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get() override;
   RGWOp *op_delete() override;
+
+  bool is_storageclass_op() const {
+    return s->info.args.exists("storageclass");
+  }
+
+  
 public:
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
   ~RGWHandler_Usage() override = default;
