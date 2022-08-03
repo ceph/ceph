@@ -827,7 +827,8 @@ PGBackend::create_iertr::future<> PGBackend::create(
     }
   }
   maybe_create_new_object(os, txn, delta_stats);
-  txn.nop();
+  txn.create(coll->get_cid(),
+             ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   return seastar::now();
 }
 
@@ -849,24 +850,38 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn)
 
 PGBackend::remove_iertr::future<>
 PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
-  object_stat_sum_t& delta_stats)
+  object_stat_sum_t& delta_stats, bool whiteout)
 {
   if (!os.exists) {
     return crimson::ct_error::enoent::make();
   }
-  // todo: snapset
+
+  if (whiteout && os.oi.is_whiteout()) {
+    logger().debug("{} whiteout set on {} ",__func__, os.oi.soid);
+    return seastar::now();
+  }
   txn.remove(coll->get_cid(),
 	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   delta_stats.num_bytes -= os.oi.size;
   os.oi.size = 0;
   os.oi.new_object();
-  os.exists = false;
+
+  // todo: clone_overlap
+  if (whiteout) {
+    logger().debug("{} setting whiteout on {} ",__func__, os.oi.soid);
+    os.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    delta_stats.num_whiteouts++;
+    txn.create(coll->get_cid(),
+               ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+    return seastar::now();
+  }
   // todo: update watchers
   if (os.oi.is_whiteout()) {
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     delta_stats.num_whiteouts--;
   }
   delta_stats.num_objects--;
+  os.exists = false;
   return seastar::now();
 }
 

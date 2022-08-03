@@ -147,7 +147,8 @@ public:
   remove_iertr::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn,
-    object_stat_sum_t& delta_stats);
+    object_stat_sum_t& delta_stats,
+    bool whiteout);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);

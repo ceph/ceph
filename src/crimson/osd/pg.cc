@@ -1053,6 +1053,10 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
   assert(!oid.is_head());
   return with_head_obc<RWState::RWREAD>(oid.get_head(),
     [oid, func=std::move(func), this](auto head) -> load_obc_iertr::future<> {
+    if (!head->obs.exists) {
+      logger().error("with_clone_obc: {} head doesn't exist", head->obs.oi.soid);
+      return load_obc_iertr::future<>{crimson::ct_error::object_corrupted::make()};
+    }
     auto coid = resolve_oid(head->get_ro_ss(), oid);
     if (!coid) {
       logger().error("with_clone_obc: {} clone not found", coid);
@@ -1067,6 +1071,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
         logger().debug("with_clone_obc: found {} in cache", clone->get_oid());
       } else {
         logger().debug("with_clone_obc: cache miss on {}", clone->get_oid());
+        //TODO: generalize load_head_obc -> load_obc (support head/clone obc)
         loaded = clone->template with_promoted_lock<State, IOInterruptCondition>(
           [clone, head, this] {
           return backend->load_metadata(clone->get_oid()).safe_then_interruptible(
