@@ -1391,18 +1391,14 @@ void Cache::backref_batch_update(
   LOG_PREFIX(Cache::backref_batch_update);
   DEBUG("inserting {} entries at {}", list.size(), seq);
   ceph_assert(seq != JOURNAL_SEQ_NULL);
-  if (!backref_buffer) {
-    backref_buffer = std::make_unique<backref_cache_t>();
-  }
 
   for (auto &ent : list) {
     backref_set.insert(*ent);
   }
 
-  auto iter = backref_buffer->backrefs_by_seq.find(seq);
-  if (iter == backref_buffer->backrefs_by_seq.end()) {
-    backref_buffer->backrefs_by_seq.emplace(
-      seq, std::move(list));
+  auto iter = backref_entryrefs_by_seq.find(seq);
+  if (iter == backref_entryrefs_by_seq.end()) {
+    backref_entryrefs_by_seq.emplace(seq, std::move(list));
   } else {
     for (auto &ref : list) {
       iter->second.br_list.push_back(*ref);
@@ -1623,7 +1619,7 @@ Cache::close_ertr::future<> Cache::close()
     intrusive_ptr_release(ptr);
   }
   backref_extents.clear();
-  backref_buffer.reset();
+  backref_entryrefs_by_seq.clear();
   assert(stats.dirty_bytes == 0);
   lru.clear();
   return close_ertr::now();

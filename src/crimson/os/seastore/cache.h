@@ -131,10 +131,7 @@ struct backref_buf_t {
   backref_buf_entry_t::list_t br_list;
 };
 
-struct backref_cache_t {
-  std::map<journal_seq_t, backref_buf_t> backrefs_by_seq;
-};
-using backref_cache_ref = std::unique_ptr<backref_cache_t>;
+using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_buf_t>;
 
 /**
  * Cache
@@ -564,7 +561,7 @@ private:
     }
   }
 
-  backref_cache_ref backref_buffer;
+  backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_set_t backref_set; // in cache backrefs indexed by paddr_t
 
   using backref_buf_entry_query_set_t =
@@ -594,8 +591,8 @@ private:
     return backref_set;
   }
 
-  backref_cache_ref& get_backref_buffer() {
-    return backref_buffer;
+  backref_entryrefs_by_seq_t& get_backref_entryrefs_by_seq() {
+    return backref_entryrefs_by_seq;
   }
 
 public:
@@ -636,18 +633,17 @@ public:
   void trim_backref_bufs(const journal_seq_t &trim_to) {
     LOG_PREFIX(Cache::trim_backref_bufs);
     SUBDEBUG(seastore_cache, "trimming to {}", trim_to);
-    if (backref_buffer && !backref_buffer->backrefs_by_seq.empty()) {
-      SUBDEBUG(seastore_cache, "backrefs {} ~ {}, size={}",
-               backref_buffer->backrefs_by_seq.rbegin()->first,
-               backref_buffer->backrefs_by_seq.begin()->first,
-               backref_buffer->backrefs_by_seq.size());
-      assert(backref_buffer->backrefs_by_seq.rbegin()->first >= trim_to);
-      auto iter = backref_buffer->backrefs_by_seq.upper_bound(trim_to);
-      backref_buffer->backrefs_by_seq.erase(
-	backref_buffer->backrefs_by_seq.begin(), iter);
+    if (!backref_entryrefs_by_seq.empty()) {
+      SUBDEBUG(seastore_cache, "backref_entryrefs_by_seq {} ~ {}, size={}",
+               backref_entryrefs_by_seq.rbegin()->first,
+               backref_entryrefs_by_seq.begin()->first,
+               backref_entryrefs_by_seq.size());
+      assert(backref_entryrefs_by_seq.rbegin()->first >= trim_to);
+      auto iter = backref_entryrefs_by_seq.upper_bound(trim_to);
+      backref_entryrefs_by_seq.erase(backref_entryrefs_by_seq.begin(), iter);
     }
-    if (!backref_buffer || backref_buffer->backrefs_by_seq.empty()) {
-      SUBDEBUG(seastore_cache, "backref_buffer all trimmed");
+    if (backref_entryrefs_by_seq.empty()) {
+      SUBDEBUG(seastore_cache, "backref_entryrefs_by_seq all trimmed");
     }
   }
 
@@ -902,11 +898,11 @@ public:
   /// returns std::nullopt if no pending alloc-infos
   std::optional<journal_seq_t> get_oldest_backref_dirty_from() const {
     LOG_PREFIX(Cache::get_oldest_backref_dirty_from);
-    if (!backref_buffer || backref_buffer->backrefs_by_seq.empty()) {
+    if (backref_entryrefs_by_seq.empty()) {
       SUBDEBUG(seastore_cache, "backref_oldest: null");
       return std::nullopt;
     }
-    auto oldest = backref_buffer->backrefs_by_seq.begin()->first;
+    auto oldest = backref_entryrefs_by_seq.begin()->first;
     SUBDEBUG(seastore_cache, "backref_oldest: {}", oldest);
     ceph_assert(oldest != JOURNAL_SEQ_NULL);
     return oldest;
