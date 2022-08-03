@@ -11,6 +11,7 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_data_sync.h"
 #include "rgw_multi.h"
+#include "rgw_bucket_encryption.h"
 
 #include "common/Formatter.h"
 
@@ -26,4 +27,15 @@ void obj_version::generate_test_instances(list<obj_version*>& o)
 
   o.push_back(v);
   o.push_back(new obj_version);
+}
+
+void RGWBucketEncryptionConfig::generate_test_instances(std::list<RGWBucketEncryptionConfig*>& o)
+{
+  auto *bc = new RGWBucketEncryptionConfig("aws:kms", "some:key", true);
+  o.push_back(bc);
+
+  bc = new RGWBucketEncryptionConfig("AES256");
+  o.push_back(bc);
+
+  o.push_back(new RGWBucketEncryptionConfig);
 }

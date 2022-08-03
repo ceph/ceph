@@ -39,6 +39,18 @@ int make_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
 int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
                             std::map<std::string, bufferlist>& attrs,
                             std::string& actual_key);
+int make_actual_key_from_sse_s3(const DoutPrefixProvider *dpp, CephContext *cct,
+                            std::map<std::string, bufferlist>& attrs,
+                            std::string& actual_key);
+int reconstitute_actual_key_from_sse_s3(const DoutPrefixProvider *dpp, CephContext *cct,
+                            std::map<std::string, bufferlist>& attrs,
+                            std::string& actual_key);
+
+int create_sse_s3_bucket_key(const DoutPrefixProvider *dpp, CephContext *cct,
+                            const std::string& actual_key);
+
+int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp, CephContext *cct,
+                            const std::string& actual_key);
 
 /**
  * SecretEngine Interface
