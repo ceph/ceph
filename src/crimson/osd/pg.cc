@@ -1060,18 +1060,17 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
     }
     auto [clone, existed] = shard_services.get_cached_obc(*coid);
     return clone->template with_lock<State, IOInterruptCondition>(
-      [coid=*coid, existed=existed,
-       head=std::move(head), clone=std::move(clone),
+      [existed=existed, head=std::move(head), clone=std::move(clone),
        func=std::move(func), this]() -> load_obc_iertr::future<> {
       auto loaded = load_obc_iertr::make_ready_future<ObjectContextRef>(clone);
       if (existed) {
-        logger().debug("with_clone_obc: found {} in cache", coid);
+        logger().debug("with_clone_obc: found {} in cache", clone->get_oid());
       } else {
-        logger().debug("with_clone_obc: cache miss on {}", coid);
+        logger().debug("with_clone_obc: cache miss on {}", clone->get_oid());
         loaded = clone->template with_promoted_lock<State, IOInterruptCondition>(
-          [coid, clone, head, this] {
-          return backend->load_metadata(coid).safe_then_interruptible(
-            [coid, clone=std::move(clone), head=std::move(head)](auto md) mutable {
+          [clone, head, this] {
+          return backend->load_metadata(clone->get_oid()).safe_then_interruptible(
+            [clone=std::move(clone), head=std::move(head)](auto md) mutable {
             clone->set_clone_state(std::move(md->os), std::move(head));
             return clone;
           });
