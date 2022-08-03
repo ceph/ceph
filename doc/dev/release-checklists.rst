@@ -26,11 +26,11 @@ Define release names and constants
 
 Make sure X (and, ideally, X+1) is defined:
 
-- [ ] src/common/ceph_releases.h (`ceph_release_t`)
-- [ ] src/common/ceph_strings.cc (`ceph_release_name()`)
-- [ ] src/include/rados.h (`CEPH_RELEASE_*` and `MAX`)
-- [ ] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers; note that monmaptool CLI test output will need adjustment)
-- [ ] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
+- [x] src/common/ceph_releases.h (`ceph_release_t`)
+- [x] src/common/ceph_strings.cc (`ceph_release_name()`)
+- [x] src/include/rados.h (`CEPH_RELEASE_*` and `MAX`)
+- [x] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers; note that monmaptool CLI test output will need adjustment)
+- [x] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
 
 Scripts
 ~~~~~~~
