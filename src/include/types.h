@@ -518,10 +518,11 @@ struct shard_id_t {
     using ceph::decode;
     decode(id, bl);
   }
+
+  bool operator==(const shard_id_t&) const = default;
+  auto operator<=>(const shard_id_t&) const = default;
 };
 WRITE_CLASS_ENCODER(shard_id_t)
-WRITE_EQ_OPERATORS_1(shard_id_t, id)
-WRITE_CMP_OPERATORS_1(shard_id_t, id)
 std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
 
 #if defined(__sun) || defined(_AIX) || defined(__APPLE__) || \
@@ -540,15 +541,16 @@ struct errorcode32_t {
 
   errorcode32_t() : code(0) {}
   // cppcheck-suppress noExplicitConstructor
-  errorcode32_t(int32_t i) : code(i) {}
+  explicit errorcode32_t(int32_t i) : code(i) {}
 
   operator int() const  { return code; }
   int* operator&()      { return &code; }
-  int operator==(int i) { return code == i; }
-  int operator>(int i)  { return code > i; }
-  int operator>=(int i) { return code >= i; }
-  int operator<(int i)  { return code < i; }
-  int operator<=(int i) { return code <= i; }
+  errorcode32_t& operator=(int32_t i) {
+    code = i;
+    return *this;
+  }
+  bool operator==(const errorcode32_t&) const = default;
+  auto operator<=>(const errorcode32_t&) const = default;
 
   void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
@@ -562,8 +564,6 @@ struct errorcode32_t {
   }
 };
 WRITE_CLASS_ENCODER(errorcode32_t)
-WRITE_EQ_OPERATORS_1(errorcode32_t, code)
-WRITE_CMP_OPERATORS_1(errorcode32_t, code)
 
 template <uint8_t S>
 struct sha_digest_t {
