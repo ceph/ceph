@@ -77,7 +77,7 @@ describe('RgwDaemonListComponent', () => {
     expect(listDaemonsSpy).toHaveBeenCalledTimes(1);
     expect(component.daemons).toEqual([daemon]);
     expect(fixture.debugElement.query(By.css('cd-table')).nativeElement.textContent).toContain(
-      'total 1'
+      'total of 1'
     );
 
     fixture.destroy();
