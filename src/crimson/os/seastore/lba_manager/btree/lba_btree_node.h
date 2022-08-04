@@ -201,7 +201,7 @@ struct LBALeafNode
 	if (val.paddr.is_relative()) {
 	  auto val = i->get_val();
 	  assert(val.paddr.is_record_relative());
-	  val.paddr = val.paddr - get_paddr();
+	  val.paddr = val.paddr.block_relative_to(get_paddr());
 	  i->set_val(val);
 	}
       }

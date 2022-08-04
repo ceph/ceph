@@ -836,7 +836,8 @@ public:
        * against the real final address.
        */
       n_fixed_kv_extent->resolve_relative_addrs(
-        make_record_relative_paddr(0) - n_fixed_kv_extent->get_paddr());
+        make_record_relative_paddr(0).block_relative_to(
+          n_fixed_kv_extent->get_paddr()));
       
       SUBTRACET(
         seastore_fixedkv_tree,
