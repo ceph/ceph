@@ -5,7 +5,7 @@
 #include "rgw_usage.h"
 #include "rgw_rest_usage.h"
 #include "rgw_sal.h"
-
+#include "rgw_sal_rados.h"
 #include "include/str_list.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -64,7 +64,8 @@ void RGWOp_StorageClass_Get::execute(optional_yield y) {
 	RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
 
 	real_time mtime;
-	op_ret  = store->getRados()->get_bucket_info(store->svc(),    
+	rgw::sal::RadosStore* st = static_cast<rgw::sal::RadosStore*>(store);
+	op_ret  = st->getRados()->get_bucket_info(st->svc(),    
 	        tenant_name, bucket_name, bucket_info,
 	        &mtime, null_yield, this, &attrs);
 	if (op_ret < 0)
@@ -73,10 +74,11 @@ void RGWOp_StorageClass_Get::execute(optional_yield y) {
 		return ;
 	}
 	rgw_bucket& bucket = bucket_info.bucket;
+	 const auto& index = bucket_info.get_current_index();
 
 	string bucket_ver, master_ver;
 	string max_marker;
-	op_ret = store->getRados()->get_bucket_stats(this, bucket_info, RGW_NO_SHARD,    
+	op_ret = st->getRados()->get_bucket_stats(this, bucket_info, index, RGW_NO_SHARD,    
 	          &bucket_ver, &master_ver, stats,
 	          &max_marker);
 	if (op_ret < 0)
