@@ -138,7 +138,7 @@ private:
                   uint64_t offset, uint64_t length, Context *on_finish);
   void handle_read_cache(ceph::immutable_obj_cache::ObjectCacheRequest* ack,
                          uint64_t object_no, io::ReadExtents* extents,
-                         IOContext io_context,
+                         IOContext io_context, int read_flags,
                          const ZTracer::Trace &parent_trace,
                          io::DispatchResult* dispatch_result,
                          Context* on_dispatched);
