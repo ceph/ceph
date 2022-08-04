@@ -74,7 +74,8 @@ struct C_AlignedObjectReadRequest : public Context {
     void handle_read(int r) {
       auto cct = image_ctx->cct;
       ldout(cct, 20) << "aligned read r=" << r << dendl;
-      if (r == 0) {
+      if (r >= 0) {
+        r = 0;
         for (auto& extent: *extents) {
           auto crypto_ret = crypto->decrypt_aligned_extent(
                   extent,
