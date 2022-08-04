@@ -27,8 +27,12 @@ public:
 
     LoadRequest(I* image_ctx, EncryptionFormat format, Context* on_finish);
     void send();
+    void flush();
+    void handle_flush(int r);
     void load();
     void handle_load(int r);
+    void invalidate_cache();
+    void handle_invalidate_cache(int r);
     void finish(int r);
 
 private:
