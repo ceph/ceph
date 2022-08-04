@@ -54,10 +54,9 @@ bool is_aligned(uint64_t offset, uint64_t alignment);
 // identifies a specific physical device within seastore
 using device_id_t = uint8_t;
 
-constexpr uint16_t SEGMENT_ID_LEN_BITS = 24;
+constexpr auto DEVICE_ID_BITS = std::numeric_limits<device_id_t>::digits;
 
-// order of device_id_t
-constexpr uint16_t DEVICE_ID_LEN_BITS = 8;
+constexpr uint16_t SEGMENT_ID_LEN_BITS = 24;
 
 // 1 bit to identify address type
 
@@ -66,9 +65,8 @@ using device_segment_id_t = uint32_t;
 
 constexpr device_id_t DEVICE_ID_GLOBAL_MAX =
   std::numeric_limits<device_id_t>::max();
-constexpr device_id_t DEVICE_ID_MAX = // the max value regardless of addrs_type_t prefix
-  (DEVICE_ID_GLOBAL_MAX >>
-   (std::numeric_limits<device_id_t>::digits - DEVICE_ID_LEN_BITS + 1));
+// the max value regardless of addrs_type_t prefix
+constexpr device_id_t DEVICE_ID_MAX = DEVICE_ID_GLOBAL_MAX >> 1;
 constexpr device_id_t DEVICE_ID_NULL = DEVICE_ID_MAX;
 constexpr device_id_t DEVICE_ID_RECORD_RELATIVE = DEVICE_ID_MAX - 1;
 constexpr device_id_t DEVICE_ID_BLOCK_RELATIVE = DEVICE_ID_MAX - 2;
@@ -84,20 +82,20 @@ struct device_id_printer_t {
 std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id);
 
 constexpr device_segment_id_t DEVICE_SEGMENT_ID_MAX =
-  (1 << SEGMENT_ID_LEN_BITS) - 1;
+  (1 << SEGMENT_ID_BITS) - 1;
 
 // Identifies segment location on disk, see SegmentManager,
 struct segment_id_t {
 private:
   // internal segment id type of segment_id_t, basically
-  // this is a unsigned int with the top "DEVICE_ID_LEN_BITS"
+  // this is a unsigned int with the top "DEVICE_ID_BITS"
   // bits representing the id of the device on which the
   // segment resides
   using internal_segment_id_t = uint32_t;
 
   // mask for segment manager id
   static constexpr internal_segment_id_t SM_ID_MASK =
-    0xFF << (std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_LEN_BITS);
+    0xFF << (std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_BITS);
   // default internal segment id
   static constexpr internal_segment_id_t DEFAULT_INTERNAL_SEG_ID =
     (std::numeric_limits<internal_segment_id_t>::max() >> 1) - 1;
@@ -145,7 +143,7 @@ public:
   }
 private:
   static constexpr unsigned segment_bits = (
-    std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_LEN_BITS
+    std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_BITS
   );
 
   static inline device_id_t internal_to_device(internal_segment_id_t id) {
@@ -443,7 +441,7 @@ using block_off_t = uint64_t;
  * Fresh extents during a transaction are refered to by
  * record_relative paddrs.
  */
-constexpr uint16_t DEV_ADDR_LEN_BITS = 64 - DEVICE_ID_LEN_BITS;
+constexpr uint16_t DEV_ADDR_LEN_BITS = 64 - DEVICE_ID_BITS;
 static constexpr uint16_t SEG_OFF_LEN_BITS = 32;
 enum class addr_types_t : uint8_t {
   SEGMENT = 0,
@@ -463,8 +461,8 @@ private:
   constexpr paddr_t(device_id_t d_id, block_off_t offset)
     : dev_addr(
       (static_cast<common_addr_t>(d_id) <<
-	(std::numeric_limits<block_off_t>::digits - DEVICE_ID_LEN_BITS)) |
-      (offset & (std::numeric_limits<block_off_t>::max() >> DEVICE_ID_LEN_BITS)))
+	(std::numeric_limits<block_off_t>::digits - DEVICE_ID_BITS)) |
+      (offset & (std::numeric_limits<block_off_t>::max() >> DEVICE_ID_BITS)))
   {}
 public:
   static constexpr paddr_t make_seg_paddr(
@@ -483,16 +481,6 @@ public:
     device_id_t device,
     block_off_t offset) {
     return paddr_t(device, offset);
-  }
-
-  // use 1bit in device_id_t for address type
-  void set_device_id(device_id_t id, addr_types_t type = addr_types_t::SEGMENT) {
-    dev_addr &= static_cast<common_addr_t>(
-      std::numeric_limits<common_addr_t>::max() >> DEVICE_ID_LEN_BITS);
-    dev_addr |= (static_cast<common_addr_t>(id &
-      std::numeric_limits<device_id_t>::max() >> 1) << DEV_ADDR_LEN_BITS);
-    dev_addr |= (static_cast<common_addr_t>(type)
-      << (std::numeric_limits<common_addr_t>::digits - 1));
   }
 
   device_id_t get_device_id() const {
@@ -652,7 +640,7 @@ struct seg_paddr_t : public paddr_t {
 };
 
 constexpr block_off_t BLK_OFF_MAX =
-  std::numeric_limits<block_off_t>::max() >> DEVICE_ID_LEN_BITS;
+  std::numeric_limits<block_off_t>::max() >> DEVICE_ID_BITS;
 struct blk_paddr_t : public paddr_t {
 
   blk_paddr_t(const blk_paddr_t&) = delete;
@@ -661,7 +649,7 @@ struct blk_paddr_t : public paddr_t {
   blk_paddr_t& operator=(blk_paddr_t&) = delete;
 
   static constexpr uint64_t BLK_OFF_MASK = std::numeric_limits<uint64_t>::max()
-    >> DEVICE_ID_LEN_BITS;
+    >> DEVICE_ID_BITS;
   void set_block_off(const block_off_t off) {
     check_blk_off_valid(off);
     uint64_t val = off & BLK_OFF_MASK;
