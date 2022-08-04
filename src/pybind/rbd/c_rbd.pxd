@@ -287,6 +287,11 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef void* rbd_encryption_options_t
 
+    ctypedef struct rbd_encryption_spec_t:
+        rbd_encryption_format_t format
+        rbd_encryption_options_t opts
+        size_t opts_size
+
     ctypedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg)
 
     void rbd_version(int *major, int *minor, int *extra)
@@ -720,5 +725,8 @@ cdef extern from "rbd/librbd.h" nogil:
                               rbd_encryption_format_t format,
                               rbd_encryption_options_t opts, size_t opts_size)
     int rbd_encryption_load(rbd_image_t image,
-                              rbd_encryption_format_t format,
-                              rbd_encryption_options_t opts, size_t opts_size)
+                            rbd_encryption_format_t format,
+                            rbd_encryption_options_t opts, size_t opts_size)
+    int rbd_encryption_load2(rbd_image_t image,
+                             rbd_encryption_spec_t *specs,
+                             size_t spec_count)
