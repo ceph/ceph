@@ -1341,8 +1341,8 @@ public:
           progress = ceph::real_time{};
 
           ldout(cct, 4) << "starting sync on " << bucket_shard_str{state->key.first}
-              << ' ' << *state->obligation << "progress timestamp " << state->progress_timestamp
-              << "progress " << progress << dendl;
+              << ' ' << *state->obligation << " progress timestamp " << state->progress_timestamp
+              << " progress " << progress << dendl;
           yield call(new RGWRunBucketSourcesSyncCR(sc, lease_cr,
                                                    state->key.first, tn,
                                                    state->obligation->gen,
@@ -1608,13 +1608,6 @@ public:
                 return retcode;
               });
       }
-
-      drain_all_cb([&](uint64_t stack_id, int ret) {
-        if (ret < 0) {
-          tn->log(10, SSTR("a sync operation returned error: " << ret));
-        }
-        return ret;
-      });
 
       yield call(marker_tracker->finish(key));
 
