@@ -208,6 +208,9 @@ BuildRequires:	gcc-c++ >= 11
 %if 0%{?rhel} >= 8
 BuildRequires:	gcc-toolset-11-gcc-c++
 BuildRequires:	gcc-toolset-11-build
+%ifarch aarch64
+BuildRequires:	gcc-toolset-11-libatomic-devel
+%endif
 %endif
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
@@ -334,7 +337,6 @@ BuildRequires:  gcc-toolset-11-annobin
 BuildRequires:  gcc-toolset-11-annobin-plugin-gcc
 BuildRequires:  gcc-toolset-11-libubsan-devel
 BuildRequires:  gcc-toolset-11-libasan-devel
-BuildRequires:  gcc-toolset-11-libatomic-devel
 %endif
 %endif
 #################################################################################
