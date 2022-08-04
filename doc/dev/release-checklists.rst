@@ -87,10 +87,10 @@ QA suite
 --------
 
 - [ ] create qa/suites/upgrade/(X-1)-x
-- [ ] remove qa/suites/upgrade/(X-3)-x-*
+- [x] remove qa/suites/upgrade/(X-3)-x-*
 - [ ] remove qa/suites/rados/upgrade/(X-3)-x-singleton symlink
-- [ ] create qa/releases/X.yaml
-- [ ] create qa/suites/rados/cephadm/thrash-old-clients/1-install/(X-1).yaml
+- [x] create qa/releases/X.yaml
+- [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
 
 
 
