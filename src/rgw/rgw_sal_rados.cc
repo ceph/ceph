@@ -426,7 +426,9 @@ int RGWObject::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
 
 int RGWRadosObject::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucket& bucket, RGWObjState **state, optional_yield y, bool follow_olh)
 {
-  rgw_obj obj(bucket.get_key(), key.name);
+  rgw_obj obj(bucket.get_key(), key);
+  obj.set_in_extra_data(in_extra_data);
+  obj.index_hash_source = index_hash_source;
 
   return store->getRados()->get_obj_state(dpp, rctx, bucket.get_info(), obj, state, follow_olh, y);
 }
