@@ -1,4 +1,4 @@
 #! /usr/bin/dh-exec
 
-usr/lib/python3*/site-packages/ceph_argparse.py /usr/lib/python3/dist-packages/
-usr/lib/python3*/site-packages/ceph_daemon.py /usr/lib/python3/dist-packages/
+usr/lib/python3*/*-packages/ceph_argparse.py /usr/lib/python3/dist-packages/
+usr/lib/python3*/*-packages/ceph_daemon.py /usr/lib/python3/dist-packages/

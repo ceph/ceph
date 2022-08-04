@@ -36,6 +36,7 @@ execute_process(
     "import sysconfig;\
      print(\
      sysconfig.get_path(\
+     scheme='deb_system' in sysconfig.get_scheme_names() and 'deb_system' or 'posix_prefix',\
      name='purelib',\
      vars=\
      {'base': '${PYTHON_INSTALL_TEMPLATE}',\
