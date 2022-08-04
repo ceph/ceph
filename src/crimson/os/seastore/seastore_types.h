@@ -56,12 +56,7 @@ using device_id_t = uint8_t;
 
 constexpr auto DEVICE_ID_BITS = std::numeric_limits<device_id_t>::digits;
 
-constexpr uint16_t SEGMENT_ID_LEN_BITS = 24;
-
 // 1 bit to identify address type
-
-// segment ids without a device id encapsulated
-using device_segment_id_t = uint32_t;
 
 constexpr device_id_t DEVICE_ID_GLOBAL_MAX =
   std::numeric_limits<device_id_t>::max();
@@ -81,42 +76,37 @@ struct device_id_printer_t {
 
 std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id);
 
-constexpr device_segment_id_t DEVICE_SEGMENT_ID_MAX =
-  (1 << SEGMENT_ID_BITS) - 1;
+// internal segment id type of segment_id_t below, with the top
+// "DEVICE_ID_BITS" bits representing the device id of the segment.
+using internal_segment_id_t = uint32_t;
+constexpr auto SEGMENT_ID_BITS = std::numeric_limits<internal_segment_id_t>::digits;
+
+// segment ids without a device id encapsulated
+using device_segment_id_t = uint32_t;
+constexpr auto DEVICE_SEGMENT_ID_BITS = SEGMENT_ID_BITS - DEVICE_ID_BITS;
+constexpr device_segment_id_t DEVICE_SEGMENT_ID_MAX = (1 << DEVICE_SEGMENT_ID_BITS) - 1;
 
 // Identifies segment location on disk, see SegmentManager,
 struct segment_id_t {
-private:
-  // internal segment id type of segment_id_t, basically
-  // this is a unsigned int with the top "DEVICE_ID_BITS"
-  // bits representing the id of the device on which the
-  // segment resides
-  using internal_segment_id_t = uint32_t;
-
-  // mask for segment manager id
-  static constexpr internal_segment_id_t SM_ID_MASK =
-    0xFF << (std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_BITS);
-  // default internal segment id
-  static constexpr internal_segment_id_t DEFAULT_INTERNAL_SEG_ID =
-    (std::numeric_limits<internal_segment_id_t>::max() >> 1) - 1;
-
-  internal_segment_id_t segment = DEFAULT_INTERNAL_SEG_ID;
-
-  constexpr segment_id_t(uint32_t encoded) : segment(encoded) {}
-
 public:
-  segment_id_t() = default;
-  constexpr segment_id_t(device_id_t id, device_segment_id_t segment)
-    : segment(make_internal(segment, id)) {}
+  constexpr segment_id_t()
+    : segment_id_t(DEVICE_ID_MAX, DEVICE_SEGMENT_ID_MAX) {}
+
+  constexpr segment_id_t(device_id_t id, device_segment_id_t _segment)
+    : segment_id_t(make_internal(id, _segment)) {}
+
+  constexpr segment_id_t(internal_segment_id_t _segment)
+    : segment(_segment) {}
 
   [[gnu::always_inline]]
   device_id_t device_id() const {
-    return internal_to_device(segment);
+    return static_cast<device_id_t>(segment >> DEVICE_SEGMENT_ID_BITS);
   }
 
   [[gnu::always_inline]]
   constexpr device_segment_id_t device_segment_id() const {
-    return internal_to_segment(segment);
+    constexpr internal_segment_id_t _SEGMENT_ID_MASK = (1u << DEVICE_SEGMENT_ID_BITS) - 1;
+    return segment & _SEGMENT_ID_MASK;
   }
 
   bool operator==(const segment_id_t& other) const {
@@ -141,38 +131,26 @@ public:
   DENC(segment_id_t, v, p) {
     denc(v.segment, p);
   }
+
 private:
-  static constexpr unsigned segment_bits = (
-    std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_BITS
-  );
-
-  static inline device_id_t internal_to_device(internal_segment_id_t id) {
-    return static_cast<device_id_t>((id & SM_ID_MASK) >> segment_bits);
-  }
-
-  constexpr static inline device_segment_id_t internal_to_segment(
-    internal_segment_id_t id) {
-    return id & (~SM_ID_MASK);
-  }
-
   constexpr static inline internal_segment_id_t make_internal(
-    device_segment_id_t id,
-    device_id_t sm_id) {
-    return static_cast<internal_segment_id_t>(id) |
-      (static_cast<internal_segment_id_t>(sm_id) << segment_bits);
+    device_id_t d_id,
+    device_segment_id_t s_id) {
+    return static_cast<internal_segment_id_t>(s_id) |
+      (static_cast<internal_segment_id_t>(d_id) << DEVICE_SEGMENT_ID_BITS);
   }
+
+  internal_segment_id_t segment;
 
   friend struct segment_id_le_t;
-  friend struct seg_paddr_t;
   friend struct paddr_t;
-  friend struct paddr_le_t;
 };
 
 std::ostream &operator<<(std::ostream &out, const segment_id_t&);
 
 // ondisk type of segment_id_t
 struct __attribute((packed)) segment_id_le_t {
-  ceph_le32 segment = ceph_le32(segment_id_t::DEFAULT_INTERNAL_SEG_ID);
+  ceph_le32 segment = ceph_le32(segment_id_t().segment);
 
   segment_id_le_t(const segment_id_t id) :
     segment(ceph_le32(id.segment)) {}
@@ -183,10 +161,7 @@ struct __attribute((packed)) segment_id_le_t {
 };
 
 constexpr segment_id_t MIN_SEG_ID = segment_id_t(0, 0);
-constexpr segment_id_t MAX_SEG_ID = segment_id_t(
-  DEVICE_ID_MAX,
-  DEVICE_SEGMENT_ID_MAX
-);
+constexpr segment_id_t MAX_SEG_ID = segment_id_t();
 // for tests which generate fake paddrs
 constexpr segment_id_t NULL_SEG_ID = MAX_SEG_ID;
 constexpr segment_id_t FAKE_SEG_ID = segment_id_t(DEVICE_ID_FAKE, 0);
@@ -210,7 +185,6 @@ using segment_seq_t = uint32_t;
 static constexpr segment_seq_t MAX_SEG_SEQ =
   std::numeric_limits<segment_seq_t>::max();
 static constexpr segment_seq_t NULL_SEG_SEQ = MAX_SEG_SEQ;
-static constexpr segment_seq_t MAX_VALID_SEG_SEQ = MAX_SEG_SEQ - 2;
 
 enum class segment_type_t : uint8_t {
   JOURNAL = 0,
