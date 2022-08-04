@@ -63,15 +63,15 @@ Compatsets
 Mon
 ---
 
-- [ ] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
+- [x] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
 - [x] mon/MgrMonitor.cc adjust `always_on_modules`
-- [ ] common/options.cc define `mon_debug_no_require_X`
-- [ ] common/options.cc remove `mon_debug_no_require_X-2`
-- [ ] mon/OSDMonitor.cc `create_initial`: adjust new `require_osd_release`, and add associated `mon_debug_no_require_X`
-- [ ] mon/OSDMonitor.cc `preprocess_boot`: adjust "disallow boot of " condition to disallow X if `require_osd_release` < X-2.
-- [ ] mon/OSDMonitor.cc: adjust "osd require-osd-release" to (1) allow setting X, and (2) check that all mons *and* OSDs have X
-- [ ] mon/MonCommands.h: adjust "osd require-osd-release" allows options to include X
-- [ ] qa/workunits/cephtool/test.sh: adjust `require-osd-release` test
+- [x] common/options/global.yaml.in define `mon_debug_no_require_X`
+- [x] common/options/global.yaml.in remove `mon_debug_no_require_X-2`
+- [x] mon/OSDMonitor.cc `create_initial`: adjust new `require_osd_release`, and add associated `mon_debug_no_require_X`
+- [x] mon/OSDMonitor.cc `preprocess_boot`: adjust "disallow boot of " condition to disallow X if `require_osd_release` < X-2.
+- [x] mon/OSDMonitor.cc: adjust "osd require-osd-release" to (1) allow setting X, and (2) check that all mons *and* OSDs have X
+- [x] mon/MonCommands.h: adjust "osd require-osd-release" allows options to include X
+- [x] qa/workunits/cephtool/test.sh: adjust `require-osd-release` test
 
 
 Code cleanup

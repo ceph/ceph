@@ -674,16 +674,16 @@ void OSDMonitor::create_initial()
   if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
 
   // new cluster should require latest by default
-  if (g_conf().get_val<bool>("mon_debug_no_require_quincy")) {
-    if (g_conf().get_val<bool>("mon_debug_no_require_pacific")) {
-      derr << __func__ << " mon_debug_no_require_quincy and pacific=true" << dendl;
-      newmap.require_osd_release = ceph_release_t::nautilus;
-    } else {
-      derr << __func__ << " mon_debug_no_require_quincy=true" << dendl;
+  if (g_conf().get_val<bool>("mon_debug_no_require_reef")) {
+    if (g_conf().get_val<bool>("mon_debug_no_require_quincy")) {
+      derr << __func__ << " mon_debug_no_require_reef and quincy=true" << dendl;
       newmap.require_osd_release = ceph_release_t::pacific;
+    } else {
+      derr << __func__ << " mon_debug_no_require_reef=true" << dendl;
+      newmap.require_osd_release = ceph_release_t::quincy;
     }
   } else {
-    newmap.require_osd_release = ceph_release_t::quincy;
+    newmap.require_osd_release = ceph_release_t::reef;
   }
 
   ceph_release_t r = ceph_release_from_name(g_conf()->mon_osd_initial_require_min_compat_client);
@@ -3523,26 +3523,26 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   ceph_assert(m->get_orig_source_inst().name.is_osd());
 
   // lower bound of N-2
-  if (!HAVE_FEATURE(m->osd_features, SERVER_OCTOPUS)) {
+  if (!HAVE_FEATURE(m->osd_features, SERVER_PACIFIC)) {
     mon.clog->info() << "disallowing boot of OSD "
 		     << m->get_orig_source_inst()
-		     << " because the osd lacks CEPH_FEATURE_SERVER_OCTOPUS";
+		     << " because the osd lacks CEPH_FEATURE_SERVER_PACIFIC";
     goto ignore;
   }
 
   // make sure osd versions do not span more than 3 releases
-  if (HAVE_FEATURE(m->osd_features, SERVER_PACIFIC) &&
-      osdmap.require_osd_release < ceph_release_t::nautilus) {
-    mon.clog->info() << "disallowing boot of pacific+ OSD "
-		      << m->get_orig_source_inst()
-		      << " because require_osd_release < nautilus";
-    goto ignore;
-  }
   if (HAVE_FEATURE(m->osd_features, SERVER_QUINCY) &&
       osdmap.require_osd_release < ceph_release_t::octopus) {
     mon.clog->info() << "disallowing boot of quincy+ OSD "
 		      << m->get_orig_source_inst()
 		      << " because require_osd_release < octopus";
+    goto ignore;
+  }
+  if (HAVE_FEATURE(m->osd_features, SERVER_REEF) &&
+      osdmap.require_osd_release < ceph_release_t::pacific) {
+    mon.clog->info() << "disallowing boot of reef+ OSD "
+		      << m->get_orig_source_inst()
+		      << " because require_osd_release < pacific";
     goto ignore;
   }
 
@@ -11595,27 +11595,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply;
     }
-    ceph_assert(osdmap.require_osd_release >= ceph_release_t::octopus);
+    ceph_assert(osdmap.require_osd_release >= ceph_release_t::pacific);
     if (!osdmap.get_num_up_osds() && !sure) {
       ss << "Not advisable to continue since no OSDs are up. Pass "
 	 << "--yes-i-really-mean-it if you really wish to continue.";
       err = -EPERM;
       goto reply;
     }
-    if (rel == ceph_release_t::octopus) {
-      if (!mon.monmap->get_required_features().contains_all(
-	    ceph::features::mon::FEATURE_OCTOPUS)) {
-	ss << "not all mons are octopus";
-	err = -EPERM;
-	goto reply;
-      }
-      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_OCTOPUS))
-           && !sure) {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_OCTOPUS feature";
-	err = -EPERM;
-	goto reply;
-      }
-    } else if (rel == ceph_release_t::pacific) {
+    if (rel == ceph_release_t::pacific) {
       if (!mon.monmap->get_required_features().contains_all(
 	    ceph::features::mon::FEATURE_PACIFIC)) {
 	ss << "not all mons are pacific";
@@ -11638,6 +11625,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_QUINCY))
            && !sure) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_QUINCY feature";
+	err = -EPERM;
+	goto reply;
+      }
+    } else if (rel == ceph_release_t::reef) {
+      if (!mon.monmap->get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_REEF)) {
+	ss << "not all mons are reef";
+	err = -EPERM;
+	goto reply;
+      }
+      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_REEF))
+           && !sure) {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_REEF feature";
 	err = -EPERM;
 	goto reply;
       }
