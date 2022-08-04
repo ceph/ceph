@@ -75,3 +75,6 @@
 [submodule "src/jaegertracing/opentelemetry-cpp"]
 	path = src/jaegertracing/opentelemetry-cpp
 	url = https://github.com/open-telemetry/opentelemetry-cpp.git
+[submodule "src/libpqxx"]
+	path = src/libpqxx
+	url = https://github.com/jtv/libpqxx.git
