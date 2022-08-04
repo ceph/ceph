@@ -125,7 +125,7 @@ void RemotePeeringEvent::on_pg_absent(ShardServices &shard_services)
   if (auto& e = get_event().get_event();
       e.dynamic_type() == MQuery::static_type()) {
     const auto map_epoch =
-      shard_services.get_osdmap_service().get_map()->get_epoch();
+      shard_services.get_map()->get_epoch();
     const auto& q = static_cast<const MQuery&>(e);
     const pg_info_t empty{spg_t{pgid.pgid, q.query.to}};
     if (q.query.type == q.query.LOG ||

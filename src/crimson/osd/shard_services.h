@@ -55,6 +55,8 @@ class PGShardManager;
 class PerShardState {
   friend class ShardServices;
   friend class PGShardManager;
+  using cached_map_t = OSDMapService::cached_map_t;
+  using local_cached_map_t = OSDMapService::local_cached_map_t;
 
   const int whoami;
   crimson::common::CephContext cct;
@@ -66,11 +68,13 @@ class PerShardState {
   OSDOperationRegistry registry;
   OperationThrottler throttler;
 
+  epoch_t up_epoch = 0;
   OSDMapService::cached_map_t osdmap;
-  OSDMapService::cached_map_t &get_osdmap() { return osdmap; }
+  const auto &get_osdmap() const { return osdmap; }
   void update_map(OSDMapService::cached_map_t new_osdmap) {
     osdmap = std::move(new_osdmap);
   }
+  void set_up_epoch(epoch_t epoch) { up_epoch = epoch; }
 
   crimson::osd::ObjectContextRegistry obc_registry;
 
@@ -110,9 +114,13 @@ class PerShardState {
  * OSD-wide singleton holding instances that need to be accessible
  * from all PGs.
  */
-class OSDSingletonState : public md_config_obs_t, public OSDMapService {
+class OSDSingletonState : public md_config_obs_t {
   friend class ShardServices;
   friend class PGShardManager;
+  using cached_map_t = OSDMapService::cached_map_t;
+  using local_cached_map_t = OSDMapService::local_cached_map_t;
+
+public:
   OSDSingletonState(
     int whoami,
     crimson::net::Messenger &cluster_msgr,
@@ -126,6 +134,9 @@ class OSDSingletonState : public md_config_obs_t, public OSDMapService {
   crimson::common::CephContext cct;
 
   OSDState osd_state;
+
+  SharedLRU<epoch_t, OSDMap> osdmaps;
+  SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
 
   cached_map_t osdmap;
   cached_map_t &get_osdmap() { return osdmap; }
@@ -218,20 +229,7 @@ class OSDSingletonState : public md_config_obs_t, public OSDMapService {
     const ConfigProxy& conf,
     const std::set <std::string> &changed) final;
 
-  // OSDMapService
-  epoch_t up_epoch = 0;
-  epoch_t get_up_epoch() const final {
-    return up_epoch;
-  }
-  void set_up_epoch(epoch_t e) {
-    up_epoch = e;
-  }
-
-  SharedLRU<epoch_t, OSDMap> osdmaps;
-  SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
-
-  seastar::future<cached_map_t> get_map(epoch_t e) final;
-  cached_map_t get_map() const final;
+  seastar::future<local_cached_map_t> get_local_map(epoch_t e);
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
   seastar::future<std::map<epoch_t, bufferlist>>
@@ -301,11 +299,17 @@ class OSDSingletonState : public md_config_obs_t, public OSDMapService {
 /**
  * Represents services available to each PG
  */
-class ShardServices {
-  using cached_map_t = boost::local_shared_ptr<const OSDMap>;
+class ShardServices : public OSDMapService {
+  using cached_map_t = OSDMapService::cached_map_t;
+  using local_cached_map_t = OSDMapService::local_cached_map_t;
 
   OSDSingletonState &osd_singleton_state;
   PerShardState &local_state;
+
+  template <typename F, typename... Args>
+  auto with_singleton(F &&f, Args&&... args) {
+    return std::invoke(f, osd_singleton_state, std::forward<Args>(args)...);
+  }
 public:
   ShardServices(
     OSDSingletonState &osd_singleton_state,
@@ -320,11 +324,6 @@ public:
 
   crimson::common::CephContext *get_cct() {
     return &(local_state.cct);
-  }
-
-  // OSDMapService
-  const OSDMapService &get_osdmap_service() const {
-    return osd_singleton_state;
   }
 
   template <typename T, typename... Args>
@@ -361,7 +360,22 @@ public:
     return dispatch_context({}, std::move(ctx));
   }
 
-  FORWARD_TO_LOCAL(get_osdmap)
+  // OSDMapService
+  cached_map_t get_map() const final { return local_state.get_osdmap(); }
+  epoch_t get_up_epoch() const final { return local_state.up_epoch; }
+  seastar::future<cached_map_t> get_map(epoch_t e) final {
+    return with_singleton(
+      [](auto &sstate, epoch_t e) {
+	return sstate.get_local_map(
+	  e
+	).then([](auto lmap) {
+	  return seastar::foreign_ptr<local_cached_map_t>(lmap);
+	});
+      }, e).then([](auto fmap) {
+	return make_local_shared_foreign(std::move(fmap));
+      });
+  }
+
   FORWARD_TO_OSD_SINGLETON(get_pg_num)
   FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
 

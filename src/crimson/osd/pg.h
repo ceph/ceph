@@ -6,7 +6,6 @@
 #include <memory>
 #include <optional>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
-#include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
 
@@ -67,7 +66,7 @@ class PG : public boost::intrusive_ref_counter<
   DoutPrefixProvider
 {
   using ec_profile_t = std::map<std::string,std::string>;
-  using cached_map_t = boost::local_shared_ptr<const OSDMap>;
+  using cached_map_t = OSDMapService::cached_map_t;
 
   ClientRequest::PGPipeline client_request_pg_pipeline;
   PGPeeringPipeline peering_request_pg_pipeline;

@@ -18,4 +18,9 @@ PGShardManager::PGShardManager(
     shard_services(osd_singleton_state, local_state)
 {}
 
+seastar::future<> PGShardManager::set_up_epoch(epoch_t e) {
+  local_state.set_up_epoch(e);
+  return seastar::now();
+}
+
 }
