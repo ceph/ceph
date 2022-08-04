@@ -149,14 +149,12 @@
 %endif
 %endif
 
-%if 0%{with seastar}
 # disable -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1, as gcc-toolset-{10,11}-annobin
 # do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
 # redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
 %undefine _annotated_build
-%if 0%{?enable_devtoolset11:1}
+%if 0%{?rhel} >= 8
 %enable_devtoolset11
-%endif
 %endif
 
 #################################################################################
@@ -210,6 +208,9 @@ BuildRequires:	gcc-c++ >= 11
 %if 0%{?rhel} >= 8
 BuildRequires:	gcc-toolset-11-gcc-c++
 BuildRequires:	gcc-toolset-11-build
+%ifarch aarch64
+BuildRequires:	gcc-toolset-11-libatomic-devel
+%endif
 %endif
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
@@ -336,7 +337,6 @@ BuildRequires:  gcc-toolset-11-annobin
 BuildRequires:  gcc-toolset-11-annobin-plugin-gcc
 BuildRequires:  gcc-toolset-11-libubsan-devel
 BuildRequires:  gcc-toolset-11-libasan-devel
-BuildRequires:  gcc-toolset-11-libatomic-devel
 %endif
 %endif
 #################################################################################
@@ -735,6 +735,15 @@ Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 %description -n cephfs-mirror
 Daemon for mirroring CephFS snapshots between Ceph clusters.
+
+%package -n ceph-exporter
+Summary: Daemon for exposing perf counters as Prometheus metrics
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
+%description -n ceph-exporter
+Daemon for exposing perf counters as Prometheus metrics
 
 %package -n rbd-fuse
 Summary:	Ceph fuse-based client
@@ -1997,6 +2006,9 @@ if [ $1 -ge 1 ] ; then
     /usr/bin/systemctl try-restart cephfs-mirror@\*.service > /dev/null 2>&1 || :
   fi
 fi
+
+%files -n ceph-exporter
+%{_bindir}/ceph-exporter
 
 %files -n rbd-fuse
 %{_bindir}/rbd-fuse

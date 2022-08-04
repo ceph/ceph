@@ -42,4 +42,8 @@ describe('Host Page', () => {
     hosts.add(hostnames[3]);
     hosts.checkExist(hostnames[3], true);
   });
+
+  it('should show the exact count of daemons', () => {
+    hosts.checkServiceInstancesExist(hostnames[0], ['mgr: 1', 'prometheus: 1']);
+  });
 });
