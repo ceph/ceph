@@ -94,7 +94,6 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   if (seq.seq == NULL_SEG_SEQ) {
     return out << "sseq(NULL)";
   } else {
-    assert(seq.seq <= MAX_VALID_SEG_SEQ);
     return out << "sseq(" << seq.seq << ")";
   }
 }
