@@ -1,13 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <seastar/core/future.hh>
 
 #include "include/types.h"
 #include "common/Formatter.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_shard_manager.h"
+#include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include "osd/PeeringState.h"
@@ -54,7 +54,7 @@ void PGAdvanceMap::dump_detail(Formatter *f) const
 
 seastar::future<> PGAdvanceMap::start()
 {
-  using cached_map_t = boost::local_shared_ptr<const OSDMap>;
+  using cached_map_t = OSDMapService::cached_map_t;
 
   logger().debug("{}: start", *this);
 
@@ -71,7 +71,7 @@ seastar::future<> PGAdvanceMap::start()
       boost::make_counting_iterator(*from + 1),
       boost::make_counting_iterator(to + 1),
       [this](epoch_t next_epoch) {
-        return shard_manager.get_map(next_epoch).then(
+        return shard_manager.get_shard_services().get_map(next_epoch).then(
           [this] (cached_map_t&& next_map) {
             logger().debug("{}: advancing map to {}",
                            *this, next_map->get_epoch());

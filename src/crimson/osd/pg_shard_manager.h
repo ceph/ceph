@@ -26,6 +26,9 @@ class PGShardManager {
   ShardServices shard_services;
 
 public:
+  using cached_map_t = OSDMapService::cached_map_t;
+  using local_cached_map_t = OSDMapService::local_cached_map_t;
+
   PGShardManager(
     const int whoami,
     crimson::net::Messenger &cluster_msgr,
@@ -36,9 +39,11 @@ public:
 
   auto &get_shard_services() { return shard_services; }
 
-  void update_map(OSDMapService::cached_map_t map) {
-    osd_singleton_state.update_map(map);
-    local_state.update_map(map);
+  seastar::future<> update_map(local_cached_map_t &&map) {
+    auto fmap = make_local_shared_foreign(std::move(map));
+    osd_singleton_state.update_map(fmap);
+    local_state.update_map(std::move(fmap));
+    return seastar::now();
   }
 
   auto stop_registries() {
@@ -70,12 +75,12 @@ public:
   FORWARD_TO_OSD_SINGLETON(get_meta_coll)
 
   // Core OSDMap methods
-  FORWARD_TO_OSD_SINGLETON(get_map)
+  FORWARD_TO_OSD_SINGLETON(get_local_map)
   FORWARD_TO_OSD_SINGLETON(load_map_bl)
   FORWARD_TO_OSD_SINGLETON(load_map_bls)
   FORWARD_TO_OSD_SINGLETON(store_maps)
-  FORWARD_TO_OSD_SINGLETON(get_up_epoch)
-  FORWARD_TO_OSD_SINGLETON(set_up_epoch)
+
+  seastar::future<> set_up_epoch(epoch_t e);
 
   FORWARD(pg_created, pg_created, osd_singleton_state.pg_map)
   auto load_pgs() {

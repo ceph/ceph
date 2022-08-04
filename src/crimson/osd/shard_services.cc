@@ -273,20 +273,16 @@ void OSDSingletonState::handle_conf_change(
   }
 }
 
-OSDSingletonState::cached_map_t OSDSingletonState::get_map() const
-{
-  return osdmap;
-}
-
-seastar::future<OSDSingletonState::cached_map_t> OSDSingletonState::get_map(epoch_t e)
+seastar::future<OSDSingletonState::local_cached_map_t>
+OSDSingletonState::get_local_map(epoch_t e)
 {
   // TODO: use LRU cache for managing osdmap, fallback to disk if we have to
   if (auto found = osdmaps.find(e); found) {
-    return seastar::make_ready_future<cached_map_t>(std::move(found));
+    return seastar::make_ready_future<local_cached_map_t>(std::move(found));
   } else {
     return load_map(e).then([e, this](std::unique_ptr<OSDMap> osdmap) {
-      return seastar::make_ready_future<cached_map_t>(
-        osdmaps.insert(e, std::move(osdmap)));
+      return seastar::make_ready_future<local_cached_map_t>(
+	osdmaps.insert(e, std::move(osdmap)));
     });
   }
 }
@@ -437,13 +433,13 @@ seastar::future<Ref<PG>> OSDSingletonState::handle_pg_create_info(
     std::move(info),
     [this, &shard_manager, &shard_services](auto &info)
     -> seastar::future<Ref<PG>> {
-      return get_map(info->epoch).then(
+      return shard_services.get_map(info->epoch).then(
 	[&info, &shard_services, this](OSDMapService::cached_map_t startmap)
 	-> seastar::future<std::tuple<Ref<PG>, OSDMapService::cached_map_t>> {
 	  const spg_t &pgid = info->pgid;
 	  if (info->by_mon) {
 	    int64_t pool_id = pgid.pgid.pool();
-	    const pg_pool_t *pool = get_osdmap()->get_pg_pool(pool_id);
+	    const pg_pool_t *pool = shard_services.get_map()->get_pg_pool(pool_id);
 	    if (!pool) {
 	      logger().debug(
 		"{} ignoring pgid {}, pool dne",
@@ -593,8 +589,8 @@ seastar::future<Ref<PG>> OSDSingletonState::load_pg(
 
   return seastar::do_with(PGMeta(store, pgid), [](auto& pg_meta) {
     return pg_meta.get_epoch();
-  }).then([this](epoch_t e) {
-    return get_map(e);
+  }).then([&shard_services](epoch_t e) {
+    return shard_services.get_map(e);
   }).then([pgid, this, &shard_services] (auto&& create_map) {
     return make_pg(shard_services, std::move(create_map), pgid, false);
   }).then([this](Ref<PG> pg) {

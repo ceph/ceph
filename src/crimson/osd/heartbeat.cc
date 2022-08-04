@@ -137,7 +137,7 @@ Heartbeat::osds_t Heartbeat::remove_down_peers()
 {
   osds_t old_osds; // osds not added in this epoch
   for (auto i = peers.begin(); i != peers.end(); ) {
-    auto osdmap = service.get_osdmap_service().get_map();
+    auto osdmap = service.get_map();
     const auto& [osd, peer] = *i;
     if (!osdmap->is_up(osd)) {
       i = peers.erase(i);
@@ -153,7 +153,7 @@ Heartbeat::osds_t Heartbeat::remove_down_peers()
 
 void Heartbeat::add_reporter_peers(int whoami)
 {
-  auto osdmap = service.get_osdmap_service().get_map();
+  auto osdmap = service.get_map();
   // include next and previous up osds to ensure we have a fully-connected set
   set<int> want;
   if (auto next = osdmap->get_next_up_osd_after(whoami); next >= 0) {
@@ -188,7 +188,7 @@ void Heartbeat::update_peers(int whoami)
     remove_peer(osd);
   }
   // or too few?
-  auto osdmap = service.get_osdmap_service().get_map();
+  auto osdmap = service.get_map();
   auto epoch = osdmap->get_epoch();
   for (auto next = osdmap->get_next_up_osd_after(whoami);
     peers.size() < min_peers && next >= 0 && next != whoami;
@@ -291,12 +291,12 @@ seastar::future<> Heartbeat::handle_ping(crimson::net::ConnectionRef conn,
   auto reply =
     crimson::make_message<MOSDPing>(
       m->fsid,
-      service.get_osdmap_service().get_map()->get_epoch(),
+      service.get_map()->get_epoch(),
       MOSDPing::PING_REPLY,
       m->ping_stamp,
       m->mono_ping_stamp,
       service.get_mnow(),
-      service.get_osdmap_service().get_up_epoch(),
+      service.get_up_epoch(),
       min_message);
   return conn->send(std::move(reply));
 }
@@ -586,7 +586,7 @@ seastar::future<> Heartbeat::Peer::handle_reply(
 
 entity_addr_t Heartbeat::Peer::get_peer_addr(type_t type)
 {
-  const auto osdmap = heartbeat.service.get_osdmap_service().get_map();
+  const auto osdmap = heartbeat.service.get_map();
   if (type == type_t::front) {
     return osdmap->get_hb_front_addrs(peer).front();
   } else {
@@ -625,12 +625,12 @@ void Heartbeat::Peer::do_send_heartbeat(
       local_conf()->osd_heartbeat_min_size);
     auto ping = crimson::make_message<MOSDPing>(
       heartbeat.monc.get_fsid(),
-      heartbeat.service.get_osdmap_service().get_map()->get_epoch(),
+      heartbeat.service.get_map()->get_epoch(),
       MOSDPing::PING,
       sent_stamp,
       mnow,
       mnow,
-      heartbeat.service.get_osdmap_service().get_up_epoch(),
+      heartbeat.service.get_up_epoch(),
       min_message);
     if (futures) {
       futures->push_back(conn.send(std::move(ping)));
@@ -649,7 +649,7 @@ bool Heartbeat::FailingPeers::add_pending(
   }
   auto failed_for = std::chrono::duration_cast<std::chrono::seconds>(
       now - failed_since).count();
-  auto osdmap = heartbeat.service.get_osdmap_service().get_map();
+  auto osdmap = heartbeat.service.get_map();
   auto failure_report =
       crimson::make_message<MOSDFailure>(heartbeat.monc.get_fsid(),
                                 peer,
@@ -683,7 +683,7 @@ Heartbeat::FailingPeers::send_still_alive(
     osd,
     addrs,
     0,
-    heartbeat.service.get_osdmap_service().get_map()->get_epoch(),
+    heartbeat.service.get_map()->get_epoch(),
     MOSDFailure::FLAG_ALIVE);
   logger().info("{}: osd.{}", __func__, osd);
   return heartbeat.monc.send_message(std::move(still_alive));

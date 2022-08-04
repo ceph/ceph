@@ -369,7 +369,7 @@ public:
   {
     ghobject_t obj;
     try {
-      obj = test_ops_get_object_name(*shard_services.get_osdmap(), cmdmap);
+      obj = test_ops_get_object_name(*shard_services.get_map(), cmdmap);
     } catch (const std::invalid_argument& e) {
       logger().info("error during data error injection: {}", e.what());
       return seastar::make_ready_future<tell_result_t>(-EINVAL,
@@ -411,7 +411,7 @@ public:
   {
     ghobject_t obj;
     try {
-      obj = test_ops_get_object_name(*shard_services.get_osdmap(), cmdmap);
+      obj = test_ops_get_object_name(*shard_services.get_map(), cmdmap);
     } catch (const std::invalid_argument& e) {
       logger().info("error during metadata error injection: {}", e.what());
       return seastar::make_ready_future<tell_result_t>(-EINVAL,
