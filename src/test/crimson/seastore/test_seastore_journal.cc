@@ -92,6 +92,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   /*
    * SegmentProvider interfaces
    */
+  journal_seq_t get_journal_head() const final { return dummy_tail; }
+
   void set_journal_head(journal_seq_t) final {}
 
   journal_seq_t get_dirty_tail() const final { return dummy_tail; }
@@ -197,7 +199,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
        &delta_checker]
       (const auto &offsets,
        const auto &di,
-       const journal_seq_t,
+       const journal_seq_t &,
+       const journal_seq_t &,
        auto t) mutable {
 	if (!delta_checker) {
 	  EXPECT_FALSE("No Deltas Left");
@@ -206,7 +209,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 	  delta_checker = std::nullopt;
 	  advance();
 	}
-	return Journal::replay_ertr::now();
+	return Journal::replay_ertr::make_ready_future<bool>(true);
       }).unsafe_get0();
     ASSERT_EQ(record_iter, records.end());
     for (auto &i : records) {

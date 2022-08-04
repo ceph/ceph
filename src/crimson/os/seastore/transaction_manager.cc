@@ -48,8 +48,9 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   return async_cleaner->mount(
   ).safe_then([this] {
     return journal->open_for_mkfs();
-  }).safe_then([this](auto) {
-    async_cleaner->init_mkfs();
+  }).safe_then([this](auto start_seq) {
+    async_cleaner->update_journal_tails(start_seq, start_seq);
+    async_cleaner->set_journal_head(start_seq);
     return epm->open();
   }).safe_then([this, FNAME]() {
     return with_transaction_intr(
@@ -92,23 +93,23 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
       [this](
 	const auto &offsets,
 	const auto &e,
-	const journal_seq_t alloc_tail,
-	auto modify_time)
+	const journal_seq_t &dirty_tail,
+	const journal_seq_t &alloc_tail,
+	sea_time_point modify_time)
       {
 	auto start_seq = offsets.write_result.start_seq;
-	async_cleaner->update_journal_tails(
-	  cache->get_oldest_dirty_from().value_or(start_seq),
-	  cache->get_oldest_backref_dirty_from().value_or(start_seq));
 	return cache->replay_delta(
 	  start_seq,
 	  offsets.record_block_base,
 	  e,
+	  dirty_tail,
 	  alloc_tail,
 	  modify_time);
       });
   }).safe_then([this] {
     return journal->open_for_mount();
-  }).safe_then([this, FNAME](auto) {
+  }).safe_then([this, FNAME](auto start_seq) {
+    async_cleaner->set_journal_head(start_seq);
     return seastar::do_with(
       create_weak_transaction(
         Transaction::src_t::READ, "mount"),
@@ -326,7 +327,7 @@ TransactionManager::submit_transaction(
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::submit_transaction_direct(
   Transaction &tref,
-  std::optional<journal_seq_t> seq_to_trim)
+  std::optional<journal_seq_t> trim_alloc_to)
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
   SUBTRACET(seastore_t, "start", tref);
@@ -359,10 +360,10 @@ TransactionManager::submit_transaction_direct(
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
-  }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]() mutable
+  }).si_then([this, FNAME, &tref, trim_alloc_to=std::move(trim_alloc_to)]() mutable
 	      -> submit_transaction_iertr::future<> {
-    if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
-      cache->trim_backref_bufs(*seq_to_trim);
+    if (trim_alloc_to && *trim_alloc_to != JOURNAL_SEQ_NULL) {
+      cache->trim_backref_bufs(*trim_alloc_to);
     }
 
     auto record = cache->prepare_record(tref, async_cleaner.get());
@@ -371,10 +372,10 @@ TransactionManager::submit_transaction_direct(
 
     SUBTRACET(seastore_t, "about to submit to journal", tref);
     return journal->submit_record(std::move(record), tref.get_handle()
-    ).safe_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]
-      (auto submit_result) mutable {
+    ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
+      async_cleaner->set_journal_head(start_seq);
       cache->complete_commit(
           tref,
           submit_result.record_block_base,
@@ -579,14 +580,14 @@ TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_l
 	t,
 	laddr,
 	len
-      ).si_then([=, &t](lba_pin_list_t pin_list) {
+      ).si_then([=, this, &t](lba_pin_list_t pin_list) {
 	return seastar::do_with(
 	  std::list<CachedExtentRef>(),
 	  std::move(pin_list),
-	  [=, &t](std::list<CachedExtentRef> &list, lba_pin_list_t &pin_list) {
+	  [=, this, &t](std::list<CachedExtentRef> &list, lba_pin_list_t &pin_list) {
 	    auto &seg_addr = addr.as_seg_paddr();
 	    auto seg_addr_id = seg_addr.get_segment_id();
-	    return trans_intr::parallel_for_each(pin_list, [=, &seg_addr, &list, &t](LBAPinRef &pin) ->
+	    return trans_intr::parallel_for_each(pin_list, [=, this, &seg_addr, &list, &t](LBAPinRef &pin) ->
 						 Cache::get_extent_iertr::future<> {
 	      auto pin_laddr = pin->get_key();
 	      auto pin_paddr = pin->get_val();

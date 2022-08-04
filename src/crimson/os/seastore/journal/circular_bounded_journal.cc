@@ -24,7 +24,7 @@ std::ostream &operator<<(std::ostream &out,
              << ")";
 }
 
-CircularBoundedJournal::CircularBoundedJournal(NVMeBlockDevice* device,
+CircularBoundedJournal::CircularBoundedJournal(RBMDevice* device,
     const std::string &path)
   : device(device), path(path) {}
 
@@ -392,10 +392,12 @@ Journal::replay_ret CircularBoundedJournal::replay(
 		&d_handler](auto& p) {
 		auto& modify_time = p.first;
 		auto& delta = p.second;
-		return d_handler(locator,
+		return d_handler(
+		  locator,
 		  delta,
 		  locator.write_result.start_seq,
-		  modify_time);
+		  locator.write_result.start_seq,
+		  modify_time).discard_result();
 	      });
 	    }).safe_then([]() {
 	      return replay_ertr::make_ready_future<

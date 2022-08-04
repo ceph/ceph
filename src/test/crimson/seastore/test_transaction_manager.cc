@@ -435,10 +435,8 @@ struct transaction_manager_test_t :
   }
 
   void replay() {
-    logger().info("{}: begin", __func__);
     EXPECT_TRUE(check_usage());
     restart();
-    logger().info("{}: end", __func__);
   }
 
   void check() {

@@ -10,7 +10,7 @@
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/random_block_manager.h"
-#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
+#include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
 using namespace crimson;
@@ -126,7 +126,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
   Cache cache;
   std::vector<entry_validator_t> entries;
   std::unique_ptr<CircularBoundedJournal> cbj;
-  nvme_device::NVMeBlockDevice *device;
+  random_block_device::RBMDevice *device;
 
   std::default_random_engine generator;
   uint64_t block_size;
@@ -138,7 +138,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
       epm(new ExtentPlacementManager(true)),
       cache(*epm)
   {
-    device = new nvme_device::TestMemory(CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE);
+    device = new random_block_device::TestMemory(CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE);
     cbj.reset(new CircularBoundedJournal(device, std::string()));
     device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
     config.block_size = CBTEST_DEFAULT_BLOCK_SIZE;
@@ -212,8 +212,11 @@ struct cbjournal_test_t : public seastar_test_suite_t
 
   auto replay() {
     cbj->replay(
-      [this](const auto &offsets, const auto &e, auto j_seq, auto last_modified) 
-      -> Journal::replay_ret {
+      [this](const auto &offsets,
+             const auto &e,
+             auto &dirty_seq,
+             auto &alloc_seq,
+             auto last_modified) {
       bool found = false;
       for (auto &i : entries) {
 	paddr_t base = offsets.write_result.start_seq.offset; 
@@ -225,7 +228,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
 	}
       }
       assert(found == true);
-      return Journal::replay_ertr::now();
+      return Journal::replay_ertr::make_ready_future<bool>(true);
     }).unsafe_get0();
   }
 

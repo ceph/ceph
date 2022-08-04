@@ -110,9 +110,9 @@ SegmentManagerGroup::scan_valid_records(
   auto retref = std::make_unique<size_t>(0);
   auto &budget_used = *retref;
   return crimson::repeat(
-    [=, &cursor, &budget_used, &handler]() mutable
+    [=, &cursor, &budget_used, &handler, this]() mutable
     -> scan_valid_records_ertr::future<seastar::stop_iteration> {
-      return [=, &handler, &cursor, &budget_used] {
+      return [=, &handler, &cursor, &budget_used, this] {
 	if (!cursor.last_valid_header_found) {
 	  return read_validate_record_metadata(cursor.seq.offset, nonce
 	  ).safe_then([=, &cursor](auto md) {
@@ -134,12 +134,12 @@ SegmentManagerGroup::scan_valid_records(
 	      cursor.emplace_record_group(header, std::move(md_bl));
 	      return scan_valid_records_ertr::now();
 	    }
-	  }).safe_then([=, &cursor, &budget_used, &handler] {
+	  }).safe_then([=, &cursor, &budget_used, &handler, this] {
 	    DEBUG("processing committed record groups until {}, {} pending",
 		  cursor.last_committed,
 		  cursor.pending_record_groups.size());
 	    return crimson::repeat(
-	      [=, &budget_used, &cursor, &handler] {
+	      [=, &budget_used, &cursor, &handler, this] {
 		if (cursor.pending_record_groups.empty()) {
 		  /* This is only possible if the segment is empty.
 		   * A record's last_commited must be prior to its own
@@ -338,8 +338,8 @@ SegmentManagerGroup::find_journal_segment_headers()
       LOG_PREFIX(SegmentManagerGroup::find_journal_segment_headers);
       auto device_id = sm->get_device_id();
       auto num_segments = sm->get_num_segments();
-      INFO("processing {} with {} segments",
-           device_id_printer_t{device_id}, num_segments);
+      DEBUG("processing {} with {} segments",
+            device_id_printer_t{device_id}, num_segments);
       return crimson::do_for_each(
         boost::counting_iterator<device_segment_id_t>(0),
         boost::counting_iterator<device_segment_id_t>(num_segments),

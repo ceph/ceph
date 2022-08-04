@@ -669,8 +669,12 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
   if (pg_shard_manager.is_stopping()) {
     return {};
   }
+  // XXX: we're assuming the `switch` part is executed immediately, and thus
+  // we won't smash the stack. Taking into account how `seastar::with_gate`
+  // is currently implemented, this seems to be the case (Summer 2022).
   bool dispatched = true;
-  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
+  gate.dispatch_in_background(__func__, *this, [this, conn=std::move(conn),
+                                                m=std::move(m), &dispatched] {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_MAP:
       return handle_osd_map(conn, boost::static_pointer_cast<MOSDMap>(m));
@@ -861,8 +865,8 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
   }
 
   return seastar::do_with(ceph::os::Transaction{},
-                          [=](auto& t) {
-    return pg_shard_manager.store_maps(t, start, m).then([=, &t] {
+                          [=, this](auto& t) {
+    return pg_shard_manager.store_maps(t, start, m).then([=, this, &t] {
       // even if this map isn't from a mon, we may have satisfied our subscription
       monc->sub_got("osdmap", last);
       if (!superblock.oldest_map || skip_maps) {
@@ -882,7 +886,7 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
 	pg_shard_manager.get_meta_coll().collection(),
 	std::move(t));
     });
-  }).then([=] {
+  }).then([=, this] {
     // TODO: write to superblock and commit the transaction
     return committed_osd_maps(start, last, m);
   });

@@ -117,7 +117,7 @@ void PrimaryLogScrub::_scrub_finish()
 	   << " m_is_repair: " << m_is_repair << dendl;
 
   if (info.stats.stats_invalid) {
-    m_pl_pg->recovery_state.update_stats([=](auto& history, auto& stats) {
+    m_pl_pg->recovery_state.update_stats([=, this](auto& history, auto& stats) {
       stats.stats = m_scrub_cstat;
       stats.stats_invalid = false;
       return false;

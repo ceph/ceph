@@ -7,6 +7,7 @@ set_target_properties(alien::cflags PROPERTIES
 
 set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
+  ${PROJECT_SOURCE_DIR}/src/common/url_escape.cc
   ${PROJECT_SOURCE_DIR}/src/common/blkdev.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
@@ -25,6 +26,7 @@ set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
+  ${PROJECT_SOURCE_DIR}/src/log/Log.cc
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common_prioritycache_obj>)
 if(WITH_CEPH_DEBUG_MUTEX)
@@ -44,6 +46,7 @@ target_link_libraries(crimson-alien-common
 set(alien_store_srcs
   alien_store.cc
   thread_pool.cc
+  alien_log.cc
   ${PROJECT_SOURCE_DIR}/src/os/ObjectStore.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Allocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/AvlAllocator.cc

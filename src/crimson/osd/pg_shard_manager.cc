@@ -3,12 +3,6 @@
 
 #include "crimson/osd/pg_shard_manager.h"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_osd);
-  }
-}
-
 namespace crimson::osd {
 
 PGShardManager::PGShardManager(

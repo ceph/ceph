@@ -831,6 +831,17 @@ PG::do_osd_ops(
             m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK) {
             reply->set_result(0);
           }
+          // For all ops except for CMPEXT, the correct error value is encoded
+          // in e.value(). For CMPEXT, osdop.rval has the actual error value.
+          if (e.value() == ct_error::cmp_fail_error_value) {
+            assert(!m->ops.empty());
+            for (auto &osdop : m->ops) {
+              if (osdop.rval < 0) {
+                reply->set_result(osdop.rval);
+                break;
+              }
+            }
+          }
           reply->set_enoent_reply_versions(
           peering_state.get_info().last_update,
           peering_state.get_info().last_user_version);
@@ -878,7 +889,7 @@ PG::do_osd_ops(
   do_osd_ops_success_func_t success_func,
   do_osd_ops_failure_func_t failure_func)
 {
-  return seastar::do_with(std::move(msg_params), [=, &ops, &op_info]
+  return seastar::do_with(std::move(msg_params), [=, this, &ops, &op_info]
     (auto &msg_params) {
     return do_osd_ops_execute<void>(
       seastar::make_lw_shared<OpsExecuter>(
@@ -908,7 +919,7 @@ PG::interruptible_future<MURef<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
     reply->set_reply_versions(peering_state.get_info().last_update,
       peering_state.get_info().last_user_version);
     return seastar::make_ready_future<MURef<MOSDOpReply>>(std::move(reply));
-  }).handle_exception_type_interruptible([=](const crimson::osd::error& e) {
+  }).handle_exception_type_interruptible([=, this](const crimson::osd::error& e) {
     auto reply = crimson::make_message<MOSDOpReply>(
       m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
     reply->set_enoent_reply_versions(peering_state.get_info().last_update,

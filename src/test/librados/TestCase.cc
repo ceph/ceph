@@ -5,7 +5,7 @@
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #include "include/scope_guard.h"
-
+#include "crimson_utils.h"
 
 std::string RadosTestNS::pool_name;
 rados_t RadosTestNS::s_cluster = NULL;
@@ -76,6 +76,7 @@ void RadosTestECNS::TearDownTestCase()
 
 void RadosTestECNS::SetUp()
 {
+  SKIP_IF_CRIMSON();
   cluster = RadosTestECNS::s_cluster;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
   int req;
@@ -87,6 +88,7 @@ void RadosTestECNS::SetUp()
 
 void RadosTestECNS::TearDown()
 {
+  SKIP_IF_CRIMSON();
   if (cleanup)
     cleanup_all_objects(ioctx);
   rados_ioctx_destroy(ioctx);

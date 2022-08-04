@@ -44,6 +44,7 @@ extern rgw::sal::Store* newDBStore(CephContext *cct);
 #ifdef WITH_RADOSGW_MOTR
 extern rgw::sal::Store* newMotrStore(CephContext *cct);
 #endif
+extern rgw::sal::Store* newBaseFilter(rgw::sal::Store* next);
 }
 
 RGWObjState::RGWObjState() {
@@ -81,10 +82,12 @@ RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
   compressed = rhs.compressed;
 }
 
-rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache, bool use_gc)
+rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, const std::string filter, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache, bool use_gc)
 {
+  rgw::sal::Store* store{nullptr};
+
   if (svc.compare("rados") == 0) {
-    rgw::sal::Store* store = newStore();
+    store = newStore();
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(store)->getRados();
 
     if ((*rados).set_use_cache(use_cache)
@@ -107,12 +110,11 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       delete store;
       return nullptr;
     }
-    return store;
   }
   else if (svc.compare("d3n") == 0) {
-    rgw::sal::RadosStore *store = new rgw::sal::RadosStore();
+    store = new rgw::sal::RadosStore();
     RGWRados* rados = new D3nRGWDataCache<RGWRados>;
-    store->setRados(rados);
+    dynamic_cast<rgw::sal::RadosStore*>(store)->setRados(rados);
     rados->set_store(static_cast<rgw::sal::RadosStore* >(store));
 
     if ((*rados).set_use_cache(use_cache)
@@ -134,26 +136,22 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       delete store;
       return nullptr;
     }
-    return store;
   }
-
 #ifdef WITH_RADOSGW_DBSTORE
-  if (svc.compare("dbstore") == 0) {
-    rgw::sal::Store* store = newDBStore(cct);
+  else if (svc.compare("dbstore") == 0) {
+    store = newDBStore(cct);
 
     if ((*(rgw::sal::DBStore*)store).set_run_lc_thread(use_lc_thread)
                                     .initialize(cct, dpp) < 0) {
       delete store;
       return nullptr;
     }
-
-    return store;
   }
 #endif
 
 #ifdef WITH_RADOSGW_MOTR
-  if (svc.compare("motr") == 0) {
-    rgw::sal::Store* store = newMotrStore(cct);
+  else if (svc.compare("motr") == 0) {
+    store = newMotrStore(cct);
     if (store == nullptr) {
       ldpp_dout(dpp, 0) << "newMotrStore() failed!" << dendl;
       return store;
@@ -188,15 +186,24 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       ldpp_dout(dpp, 20) << "User display name = " << suser->get_info().display_name << dendl;
       ldpp_dout(dpp, 20) << "User email = " << suser->get_info().user_email << dendl;
     }
-
-    return store;
   }
 #endif
 
-  return nullptr;
+  if (filter.compare("base") == 0) {
+    rgw::sal::Store* next = store;
+    store = newBaseFilter(next);
+
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      delete next;
+      return nullptr;
+    }
+  }
+
+  return store;
 }
 
-rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc)
+rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, const std::string filter)
 {
   rgw::sal::Store* store = nullptr;
   if (svc.compare("rados") == 0) {
@@ -220,9 +227,7 @@ rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvide
       delete store;
       return nullptr;
     }
-  }
-
-  if (svc.compare("dbstore") == 0) {
+  } else if (svc.compare("dbstore") == 0) {
 #ifdef WITH_RADOSGW_DBSTORE
     store = newDBStore(cct);
 
@@ -230,19 +235,28 @@ rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvide
       delete store;
       return nullptr;
     }
-
 #else
     store = nullptr;
 #endif
-  }
-
-  if (svc.compare("motr") == 0) {
+  } else if (svc.compare("motr") == 0) {
 #ifdef WITH_RADOSGW_MOTR
     store = newMotrStore(cct);
 #else
     store = nullptr;
 #endif
   }
+
+  if (filter.compare("base") == 0) {
+    rgw::sal::Store* next = store;
+    store = newBaseFilter(next);
+
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      delete next;
+      return nullptr;
+    }
+  }
+
   return store;
 }
 

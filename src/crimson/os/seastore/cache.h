@@ -636,10 +636,17 @@ public:
     LOG_PREFIX(Cache::trim_backref_bufs);
     SUBDEBUG(seastore_cache, "trimming to {}", trim_to);
     if (backref_buffer && !backref_buffer->backrefs_by_seq.empty()) {
+      SUBDEBUG(seastore_cache, "backrefs {} ~ {}, size={}",
+               backref_buffer->backrefs_by_seq.rbegin()->first,
+               backref_buffer->backrefs_by_seq.begin()->first,
+               backref_buffer->backrefs_by_seq.size());
       assert(backref_buffer->backrefs_by_seq.rbegin()->first >= trim_to);
       auto iter = backref_buffer->backrefs_by_seq.upper_bound(trim_to);
       backref_buffer->backrefs_by_seq.erase(
 	backref_buffer->backrefs_by_seq.begin(), iter);
+    }
+    if (!backref_buffer || backref_buffer->backrefs_by_seq.empty()) {
+      SUBDEBUG(seastore_cache, "backref_buffer all trimmed");
     }
   }
 
@@ -755,17 +762,19 @@ public:
    * Intended for use in Journal::delta. For each delta, should decode delta,
    * read relevant block from disk or cache (using correct type), and call
    * CachedExtent::apply_delta marking the extent dirty.
+   *
+   * Returns whether the delta is applied.
    */
   using replay_delta_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  using replay_delta_ret = replay_delta_ertr::future<>;
+  using replay_delta_ret = replay_delta_ertr::future<bool>;
   replay_delta_ret replay_delta(
     journal_seq_t seq,
     paddr_t record_block_base,
     const delta_info_t &delta,
-    const journal_seq_t &, // journal seq from which alloc
-			   // delta should be replayed
-    sea_time_point &modify_time);
+    const journal_seq_t &dirty_tail,
+    const journal_seq_t &alloc_tail,
+    sea_time_point modify_time);
 
   /**
    * init_cached_extents
@@ -783,12 +792,13 @@ public:
   {
     LOG_PREFIX(Cache::init_cached_extents);
     SUBINFOT(seastore_cache,
-        "start with {}({}B) extents, {} dirty, from {}",
+        "start with {}({}B) extents, {} dirty, dirty_from={}, alloc_from={}",
         t,
         extents.size(),
         extents.get_bytes(),
         dirty.size(),
-        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL));
+        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
+        get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL));
 
     // journal replay should has been finished at this point,
     // Cache::root should have been inserted to the dirty list
@@ -824,12 +834,13 @@ public:
       }
     ).si_then([this, FNAME, &t] {
       SUBINFOT(seastore_cache,
-          "finish with {}({}B) extents, {} dirty, from {}",
+          "finish with {}({}B) extents, {} dirty, dirty_from={}, alloc_from={}",
           t,
           extents.size(),
           extents.get_bytes(),
           dirty.size(),
-          get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL));
+          get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
+          get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL));
     });
   }
 
@@ -887,37 +898,34 @@ public:
     journal_seq_t seq,
     size_t max_bytes);
 
+  /// returns std::nullopt if no pending alloc-infos
   std::optional<journal_seq_t> get_oldest_backref_dirty_from() const {
     LOG_PREFIX(Cache::get_oldest_backref_dirty_from);
-    journal_seq_t backref_oldest = JOURNAL_SEQ_NULL;
-    if (backref_buffer && !backref_buffer->backrefs_by_seq.empty()) {
-      backref_oldest = backref_buffer->backrefs_by_seq.begin()->first;
-    }
-    if (backref_oldest == JOURNAL_SEQ_NULL) {
+    if (!backref_buffer || backref_buffer->backrefs_by_seq.empty()) {
       SUBDEBUG(seastore_cache, "backref_oldest: null");
       return std::nullopt;
-    } else {
-      SUBDEBUG(seastore_cache, "backref_oldest: {}",
-	backref_oldest);
-      return backref_oldest;
     }
+    auto oldest = backref_buffer->backrefs_by_seq.begin()->first;
+    SUBDEBUG(seastore_cache, "backref_oldest: {}", oldest);
+    ceph_assert(oldest != JOURNAL_SEQ_NULL);
+    return oldest;
   }
 
-  /// returns std::nullopt if no dirty extents or get_dirty_from() for oldest
+  /// returns std::nullopt if no dirty extents
+  /// returns JOURNAL_SEQ_NULL if the oldest dirty extent is still pending
   std::optional<journal_seq_t> get_oldest_dirty_from() const {
     LOG_PREFIX(Cache::get_oldest_dirty_from);
     if (dirty.empty()) {
-      SUBDEBUG(seastore_cache, "oldest: null");
+      SUBDEBUG(seastore_cache, "dirty_oldest: null");
       return std::nullopt;
     } else {
       auto oldest = dirty.begin()->get_dirty_from();
       if (oldest == JOURNAL_SEQ_NULL) {
-	SUBDEBUG(seastore_cache, "oldest: null");
-	return std::nullopt;
+	SUBDEBUG(seastore_cache, "dirty_oldest: pending");
       } else {
-	SUBDEBUG(seastore_cache, "oldest: {}", oldest);
-	return oldest;
+	SUBDEBUG(seastore_cache, "dirty_oldest: {}", oldest);
       }
+      return oldest;
     }
   }
 
@@ -1231,12 +1239,12 @@ private:
     // should be consistent with trans_srcs_invalidated in register_metrics()
     assert(!(src1 == Transaction::src_t::READ &&
              src2 == Transaction::src_t::READ));
-    assert(!(src1 == Transaction::src_t::CLEANER_TRIM &&
-             src2 == Transaction::src_t::CLEANER_TRIM));
+    assert(!(src1 == Transaction::src_t::CLEANER_TRIM_DIRTY &&
+             src2 == Transaction::src_t::CLEANER_TRIM_DIRTY));
     assert(!(src1 == Transaction::src_t::CLEANER_RECLAIM &&
              src2 == Transaction::src_t::CLEANER_RECLAIM));
-    assert(!(src1 == Transaction::src_t::TRIM_BACKREF &&
-             src2 == Transaction::src_t::TRIM_BACKREF));
+    assert(!(src1 == Transaction::src_t::CLEANER_TRIM_ALLOC &&
+             src2 == Transaction::src_t::CLEANER_TRIM_ALLOC));
 
     auto src1_value = static_cast<std::size_t>(src1);
     auto src2_value = static_cast<std::size_t>(src2);

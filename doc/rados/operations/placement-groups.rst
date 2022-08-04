@@ -117,6 +117,27 @@ with large amount of PGs for performance purposes. On the other hand,
 pools without the ``bulk`` flag are expected to be smaller e.g.,
 .mgr or meta pools.
 
+.. note::
+
+   If ``ceph osd pool autoscale-status`` returns no output at all, most likely
+   you have at least one pool that spans multiple CRUSH roots.  One scenario is
+   when a new deployment auto-creates the ``.mgr`` pool on the ``default`` CRUSH
+   root, then subsequent pools are created with rules that constrain them to a
+   specific shadow CRUSH tree.  If one, for example, creates an RBD metadata pool
+   constrained to ``deviceclass = ssd`` and an RBD data pool constrained to
+   ``deviceclass = hdd``, this will occur.  This may be remedied by simply
+   constraining the spanning pool to one device class.  In the above scenario
+   most likely there is a ``replicated-ssd`` CRUSH rule defined, so one would
+   run the below if the ``.mgr`` pool should be constrained to ``ssd`` devices:
+
+.. code-block:: bash
+
+   root# ceph osd pool set .mgr crush_rule replicated-ssd
+   set pool 1 crush_rule to replicated-ssd
+
+This will result in a small amount of backfill traffic that should complete
+quickly.
+
 
 Automated scaling
 -----------------

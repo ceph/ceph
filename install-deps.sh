@@ -97,31 +97,6 @@ ENDOFKEY
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
     fi
 
-    case "$codename" in
-        trusty)
-            old=4.8;;
-        xenial)
-            old=5;;
-        bionic)
-            old=7;;
-    esac
-    $SUDO update-alternatives --remove-all gcc || true
-    $SUDO update-alternatives \
-	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
-	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
-
-    if [ -f /usr/bin/g++-${old} ]; then
-      $SUDO update-alternatives \
-  	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
-  	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
-    fi
-
-    $SUDO update-alternatives --auto gcc
-
-    # cmake uses the latter by default
-    $SUDO ln -nsf /usr/bin/gcc /usr/bin/${ARCH}-linux-gnu-gcc
-    $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
-
     in_jenkins && echo "CI_DEBUG: End ensure_decent_gcc_on_ubuntu() in install-deps.sh"
 }
 
@@ -168,7 +143,7 @@ function install_pkg_on_ubuntu {
 
 function install_boost_on_ubuntu {
     in_jenkins && echo "CI_DEBUG: Running install_boost_on_ubuntu() in install-deps.sh"
-    local ver=1.75
+    local ver=1.79
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
@@ -183,7 +158,7 @@ function install_boost_on_ubuntu {
     fi
     local codename=$1
     local project=libboost
-    local sha1=7aba8a1882670522ee1d1ee1bba0ea170b292dec
+    local sha1=892ab89e76b91b505ffbf083f6fb7f2a666d4132
     install_pkg_on_ubuntu \
 	$project \
 	$sha1 \
@@ -222,6 +197,31 @@ function install_libzbd_on_ubuntu {
 
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
+}
+
+function ensure_decent_gcc_on_rh {
+    local old=$(gcc -dumpversion)
+    local expected=10.2
+    local dts_ver=$1
+    if version_lt $old $expected; then
+	if test -t 1; then
+	    # interactive shell
+	    cat <<EOF
+Your GCC is too old. Please run following command to add DTS to your environment:
+
+scl enable devtoolset-8 bash
+
+Or add following line to the end of ~/.bashrc to add it permanently:
+
+source scl_source enable devtoolset-8
+
+see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
+EOF
+	else
+	    # non-interactive shell
+	    source /opt/rh/devtoolset-$dts_ver/enable
+	fi
+    fi
 }
 
 for_make_check=false
@@ -311,6 +311,7 @@ else
                 $with_zbd && install_libzbd_on_ubuntu bionic
                 ;;
             *Focal*)
+                ensure_decent_gcc_on_ubuntu 11 focal
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 $with_zbd && install_libzbd_on_ubuntu focal
                 ;;
@@ -400,11 +401,28 @@ EOF
 		if test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     # Enable 'powertools' or 'PowerTools' repo
                     $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
+		    case "$ARCH" in
+			x86_64)
+			    $SUDO dnf -y install centos-release-scl
+			    dts_ver=10
+			    ;;
+			aarch64)
+			    $SUDO dnf -y install centos-release-scl-rh
+			    $SUDO dnf config-manager --disable centos-sclo-rh
+			    $SUDO dnf config-manager --enable centos-sclo-rh-testing
+			    dts_ver=10
+			    ;;
+		    esac
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
+                    $SUDO dnf config-manager \
+			  --enable rhel-server-rhscl-8-rpms \
+			  --enable rhel-8-server-optional-rpms \
+			  --enable rhel-8-server-devtools-rpms
+                    dts_ver=10
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
@@ -417,6 +435,9 @@ EOF
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
+	if [ -n "$dts_ver" ]; then
+            ensure_decent_gcc_on_rh $dts_ver
+	fi
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -qi "error:" && exit 1
         # for rgw motr backend build checks

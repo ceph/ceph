@@ -274,7 +274,7 @@ PGRecovery::recover_missing(
       trigger,
       pg->get_recovery_backend()->recover_object(soid, need)
       .handle_exception_interruptible(
-	[=, soid = std::move(soid)] (auto e) {
+	[=, this, soid = std::move(soid)] (auto e) {
 	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
 	return seastar::make_ready_future<>();
       })
@@ -290,7 +290,7 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_deletes(
   return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
     trigger,
     pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
-      [=] {
+      [=, this] {
       object_stat_sum_t stat_diff;
       stat_diff.num_objects_recovered = 1;
       on_global_recover(soid, stat_diff, true);
@@ -308,7 +308,7 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_pushes(
     trigger,
     pg->get_recovery_backend()->recover_object(soid, need)
     .handle_exception_interruptible(
-      [=, soid = std::move(soid)] (auto e) {
+      [=, this, soid = std::move(soid)] (auto e) {
       on_failed_recover({ pg->get_pg_whoami() }, soid, need);
       return seastar::make_ready_future<>();
     })

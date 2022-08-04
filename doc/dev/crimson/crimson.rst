@@ -24,6 +24,45 @@ cloned using git.
 
 .. _ASan: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
+Installing Crimson with ready-to-use images
+===========================================
+
+An alternative to building Crimson from source is to use container images built
+by Ceph CI/CD and deploy them with one of the orchestrators: ``cephadm`` or ``Rook``.
+In this chapter documents the ``cephadm`` way.
+
+NOTE: We know that this procedure is suboptimal, but it has passed internal
+external quality assurance.::
+
+
+  $ curl -L https://raw.githubusercontent.com/ceph/ceph-ci/wip-bharat-crimson/src/cephadm/cephadm -o cephadm
+  $ cp cephadm /usr/sbin
+  $ vi /usr/sbin/cephadm
+
+In the file change ``DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'``
+to ``DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:<sha1>-crimson`` where ``<sha1>``
+is the commit ID built by the Ceph CI/CD. You may use
+https://shaman.ceph.com/builds/ceph/ to monitor branches built by Ceph's Jenkins
+and to also discover those IDs.
+
+An example::
+
+  DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:1647216bf4ebac6bcf5ad7739e02b38569736cfd-crimson
+
+When the edition is finished::
+
+  chmod 777 cephadm
+  podman pull quay.ceph.io/ceph-ci/ceph:<sha1>-crimson
+  cephadm bootstrap --mon-ip 10.1.172.208 --allow-fqdn-hostname
+  # Set "PermitRootLogin yes" for other nodes you want to use
+  echo 'PermitRootLogin yes' >>  /etc/ssh/sshd_config
+  systemctl restart sshd
+
+  ssh-copy-id -f -i /etc/ceph/ceph.pub root@<nodename>
+  cephadm shell
+  ceph orch host add <nodename>
+  ceph orch apply osd --all-available-devices
+
 Running Crimson
 ===============
 

@@ -1054,6 +1054,12 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_inject_health_dummy
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
 #  percentage of MDS modify replies to skip sending the client a trace on [0-1]
 - name: mds_inject_traceless_reply_probability
   type: float

@@ -269,16 +269,26 @@ OMapInnerNode::clear(omap_context_t oc)
 {
   LOG_PREFIX(OMapInnerNode::clear);
   DEBUGT("this: {}", oc.t, *this);
-  return trans_intr::do_for_each(iter_begin(), iter_end(), [this, oc] (auto iter) {
+  return trans_intr::do_for_each(iter_begin(), iter_end(),
+    [oc, this](auto iter) {
     auto laddr = iter->get_val();
-    return omap_load_extent(oc, laddr, get_meta().depth - 1).si_then(
-      [oc] (auto &&extent) {
-      return extent->clear(oc);
-    }).si_then([oc, laddr] {
-      return dec_ref(oc, laddr);
-    }).si_then([ref = OMapNodeRef(this)] {
-      return clear_iertr::now();
-    });
+    auto ndepth = get_meta().depth - 1;
+    if (ndepth > 1) {
+      return omap_load_extent(oc, laddr, ndepth
+      ).si_then([oc](auto &&extent) {
+	return extent->clear(oc);
+      }).si_then([oc, laddr] {
+	return dec_ref(oc, laddr);
+      }).si_then([ref = OMapNodeRef(this)] {
+	return clear_iertr::now();
+      });
+    } else {
+      assert(ndepth == 1);
+      return dec_ref(oc, laddr
+      ).si_then([ref = OMapNodeRef(this)] {
+	return clear_iertr::now();
+      });
+    }
   });
 }
 
@@ -351,7 +361,7 @@ OMapInnerNode::merge_entry(
   auto is_left = (iter + 1) == iter_cend();
   auto donor_iter = is_left ? iter - 1 : iter + 1;
   return omap_load_extent(oc, donor_iter->get_val(), get_meta().depth - 1)
-    .si_then([=] (auto &&donor) mutable {
+    .si_then([=, this] (auto &&donor) mutable {
     LOG_PREFIX(OMapInnerNode::merge_entry);
     auto [l, r] = is_left ?
       std::make_pair(donor, entry) : std::make_pair(entry, donor);

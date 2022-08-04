@@ -1545,7 +1545,6 @@ struct req_init_state {
 #include "rgw_auth.h"
 
 class RGWObjectCtx;
-class RGWSysObjectCtx;
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state : DoutPrefixProvider {

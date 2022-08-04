@@ -24,8 +24,8 @@ curlSrcDir="${depsSrcDir}/curl"
 curlDir="${depsToolsetDir}/curl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.tar.gz"
-boostSrcDir="${depsSrcDir}/boost_1_75_0"
+boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.79.0/source/boost_1_79_0.tar.gz"
+boostSrcDir="${depsSrcDir}/boost_1_79_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"

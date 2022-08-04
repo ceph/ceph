@@ -422,6 +422,8 @@ PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
       char byte_from_disk = (index < read_bl.length() ? read_bl[index] : 0);
       if (byte_in_op != byte_from_disk) {
         logger().debug("cmp_ext: mismatch at {}", index);
+        // Unlike other ops, we set osd_op.rval here and return a different
+        // error code via ct_error::cmp_fail.
         osd_op.rval = -MAX_ERRNO - index;
         return crimson::ct_error::cmp_fail::make();
       }

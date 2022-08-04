@@ -1802,6 +1802,34 @@ Then run the following:
 
         return f"Ceph cluster {self._cluster_fsid} on {hostname} has exited maintenance mode"
 
+    @handle_orch_error
+    @host_exists()
+    def rescan_host(self, hostname: str) -> str:
+        """Use cephadm to issue a disk rescan on each HBA
+
+        Some HBAs and external enclosures don't automatically register
+        device insertion with the kernel, so for these scenarios we need
+        to manually rescan
+
+        :param hostname: (str) host name
+        """
+        self.log.info(f'disk rescan request sent to host "{hostname}"')
+        _out, _err, _code = self.wait_async(CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, "disk-rescan",
+                                                                            [],
+                                                                            no_fsid=True,
+                                                                            error_ok=True))
+        if not _err:
+            raise OrchestratorError('Unexpected response from cephadm disk-rescan call')
+
+        msg = _err[0].split('\n')[-1]
+        log_msg = f'disk rescan: {msg}'
+        if msg.upper().startswith('OK'):
+            self.log.info(log_msg)
+        else:
+            self.log.warning(log_msg)
+
+        return f'{msg}'
+
     def get_minimal_ceph_conf(self) -> str:
         _, config, _ = self.check_mon_command({
             "prefix": "config generate-minimal-conf",

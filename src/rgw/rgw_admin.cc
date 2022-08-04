@@ -69,6 +69,7 @@ extern "C" {
 #include "services/svc_bilog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta_be_otp.h"
+#include "services/svc_user.h"
 #include "services/svc_zone.h"
 
 #define dout_context g_ceph_context
@@ -4366,14 +4367,23 @@ int main(int argc, const char **argv)
     }
 #endif
 
+    // Get the filter
+    std::string rgw_filter = "none";
+    const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
+    if (config_filter == "base") {
+      rgw_filter = "base";
+    }
+
     if (raw_storage_op) {
       store = StoreManager::get_raw_storage(dpp(),
 					    g_ceph_context,
-					    rgw_store);
+					    rgw_store,
+					    rgw_filter);
     } else {
       store = StoreManager::get_storage(dpp(),
 					g_ceph_context,
 					rgw_store,
+					rgw_filter,
 					false,
 					false,
 					false,
@@ -8397,7 +8407,7 @@ next:
 	  "so at most one of the two should be specified" << std::endl;
 	return EINVAL;
       }
-      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->user->reset_stats(dpp(), user->get_id(), null_yield);
+      ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->user->reset_bucket_stats(dpp(), user->get_id(), null_yield);
       if (ret < 0) {
 	cerr << "ERROR: could not reset user stats: " << cpp_strerror(-ret) <<
 	  std::endl;

@@ -378,7 +378,7 @@ INSTANTIATE_TEST_SUITE_P(
 #ifdef HAVE_LZ4
     "lz4",
 #endif
-#ifdef __x86_64__
+#if defined(__x86_64__) || defined(__aarch64__)
     "zlib/isal",
 #endif
     "zlib/noisal",
@@ -388,7 +388,7 @@ INSTANTIATE_TEST_SUITE_P(
 #endif
     "zstd"));
 
-#ifdef __x86_64__
+#if defined(__x86_64__) || defined(__aarch64__)
 
 TEST(ZlibCompressor, zlib_isal_compatibility)
 {
@@ -453,7 +453,7 @@ TEST(CompressionPlugin, all)
   }
 }
 
-#ifdef __x86_64__
+#if defined(__x86_64__) || defined(__aarch64__)
 
 TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
 {

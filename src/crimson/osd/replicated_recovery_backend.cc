@@ -488,7 +488,7 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
   // 1. get the extents in the interested range
   return interruptor::make_interruptible(backend->fiemap(coll, ghobject_t{oid},
     0, copy_subset.range_end())).safe_then_interruptible(
-    [=](auto&& fiemap_included) mutable {
+    [=, this](auto&& fiemap_included) mutable {
     interval_set<uint64_t> extents;
     try {
       extents.intersection_of(copy_subset, std::move(fiemap_included));

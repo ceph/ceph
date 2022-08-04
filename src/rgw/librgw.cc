@@ -573,8 +573,16 @@ namespace rgw {
     }
 #endif
 
+    // Get the filter
+    std::string rgw_filter = "none";
+    const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
+    if (config_filter == "base") {
+      rgw_filter = "base";
+    }
+
     store = StoreManager::get_storage(this, g_ceph_context,
 					 rgw_store,
+					 rgw_filter,
 					 run_gc,
 					 run_lc,
 					 run_quota,

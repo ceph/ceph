@@ -104,6 +104,9 @@ SegmentedJournal::prep_replay_segments(
   auto last_header = segments.rbegin()->second;
   return scan_last_segment(last_segment_id, last_header
   ).safe_then([this, FNAME, segments=std::move(segments)] {
+    INFO("dirty_tail={}, alloc_tail={}",
+         segment_provider.get_dirty_tail(),
+         segment_provider.get_alloc_tail());
     auto journal_tail = segment_provider.get_journal_tail();
     auto journal_tail_paddr = journal_tail.offset;
     ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
@@ -122,8 +125,7 @@ SegmentedJournal::prep_replay_segments(
     }
 
     auto num_segments = segments.end() - from;
-    INFO("{} segments to replay from {}",
-         num_segments, journal_tail);
+    INFO("{} segments to replay", num_segments);
     auto ret = replay_segments_t(num_segments);
     std::transform(
       from, segments.end(), ret.begin(),
@@ -156,7 +158,7 @@ SegmentedJournal::scan_last_segment(
     segment_header.segment_seq,
     paddr_t::make_seg_paddr(segment_id, 0)
   };
-  INFO("scanning {} for journal tail deltas", seq);
+  INFO("scanning journal tail deltas -- {}", segment_header);
   return seastar::do_with(
     scan_valid_records_cursor(seq),
     SegmentManagerGroup::found_record_handler_t(
@@ -197,12 +199,10 @@ SegmentedJournal::scan_last_segment(
               found_delta = true;
               journal_tail_delta_t tail_delta;
               decode(tail_delta, delta.bl);
-              if (tail_delta.alloc_tail == JOURNAL_SEQ_NULL) {
-                tail_delta.alloc_tail = locator.write_result.start_seq;
-              }
-              if (tail_delta.dirty_tail == JOURNAL_SEQ_NULL) {
-                tail_delta.dirty_tail = locator.write_result.start_seq;
-              }
+              auto start_seq = locator.write_result.start_seq;
+              DEBUG("got {}, at {}", tail_delta, start_seq);
+              ceph_assert(tail_delta.dirty_tail != JOURNAL_SEQ_NULL);
+              ceph_assert(tail_delta.alloc_tail != JOURNAL_SEQ_NULL);
               segment_provider.update_journal_tails(
                   tail_delta.dirty_tail, tail_delta.alloc_tail);
             }
@@ -226,20 +226,22 @@ SegmentedJournal::replay_ertr::future<>
 SegmentedJournal::replay_segment(
   journal_seq_t seq,
   segment_header_t header,
-  delta_handler_t &handler)
+  delta_handler_t &handler,
+  replay_stats_t &stats)
 {
   LOG_PREFIX(Journal::replay_segment);
   INFO("starting at {} -- {}", seq, header);
   return seastar::do_with(
     scan_valid_records_cursor(seq),
     SegmentManagerGroup::found_record_handler_t(
-      [s_type=header.type, &handler, this](
+      [s_type=header.type, &handler, this, &stats](
       record_locator_t locator,
       const record_group_header_t& header,
       const bufferlist& mdbuf)
       -> SegmentManagerGroup::scan_valid_records_ertr::future<>
     {
       LOG_PREFIX(Journal::replay_segment);
+      ++stats.num_record_groups;
       auto maybe_record_deltas_list = try_decode_deltas(
           header, mdbuf, locator.record_block_base);
       if (!maybe_record_deltas_list) {
@@ -255,7 +257,8 @@ SegmentedJournal::replay_segment(
 	 s_type,
          this,
          FNAME,
-         &handler](auto& record_deltas_list)
+         &handler,
+         &stats](auto& record_deltas_list)
       {
         return crimson::do_for_each(
           record_deltas_list,
@@ -263,8 +266,10 @@ SegmentedJournal::replay_segment(
 	   s_type,
            this,
            FNAME,
-           &handler](record_deltas_t& record_deltas)
+           &handler,
+           &stats](record_deltas_t& record_deltas)
         {
+          ++stats.num_records;
           auto locator = record_locator_t{
             record_deltas.record_block_base,
             write_result
@@ -278,7 +283,8 @@ SegmentedJournal::replay_segment(
 	     s_type,
              this,
              FNAME,
-             &handler](auto &p)
+             &handler,
+             &stats](auto &p)
           {
 	    auto& modify_time = p.first;
 	    auto& delta = p.second;
@@ -309,13 +315,25 @@ SegmentedJournal::replay_segment(
 	    return handler(
 	      locator,
 	      delta,
+	      segment_provider.get_dirty_tail(),
 	      segment_provider.get_alloc_tail(),
-              modify_time);
+              modify_time
+            ).safe_then([&stats, delta_type=delta.type](bool is_applied) {
+              if (is_applied) {
+                // see Cache::replay_delta()
+                assert(delta_type != extent_types_t::JOURNAL_TAIL);
+                if (delta_type == extent_types_t::ALLOC_INFO) {
+                  ++stats.num_alloc_deltas;
+                } else {
+                  ++stats.num_dirty_deltas;
+                }
+              }
+            });
           });
         });
       });
     }),
-    [=](auto &cursor, auto &dhandler) {
+    [=, this](auto &cursor, auto &dhandler) {
       return sm_group.scan_valid_records(
 	cursor,
 	header.segment_nonce,
@@ -340,16 +358,25 @@ SegmentedJournal::replay_ret SegmentedJournal::replay(
     (auto &&segment_headers) mutable -> replay_ret {
     INFO("got {} segments", segment_headers.size());
     return seastar::do_with(
-      std::move(delta_handler), replay_segments_t(),
-      [this, segment_headers=std::move(segment_headers)]
-      (auto &handler, auto &segments) mutable -> replay_ret {
+      std::move(delta_handler),
+      replay_segments_t(),
+      replay_stats_t(),
+      [this, segment_headers=std::move(segment_headers), FNAME]
+      (auto &handler, auto &segments, auto &stats) mutable -> replay_ret {
 	return prep_replay_segments(std::move(segment_headers)
-	).safe_then([this, &handler, &segments](auto replay_segs) mutable {
+	).safe_then([this, &handler, &segments, &stats](auto replay_segs) mutable {
 	  segments = std::move(replay_segs);
-	  return crimson::do_for_each(segments, [this, &handler](auto i) mutable {
-	    return replay_segment(i.first, i.second, handler);
+	  return crimson::do_for_each(segments,[this, &handler, &stats](auto i) mutable {
+	    return replay_segment(i.first, i.second, handler, stats);
 	  });
-	});
+        }).safe_then([&stats, FNAME] {
+          INFO("replay done, record_groups={}, records={}, "
+               "alloc_deltas={}, dirty_deltas={}",
+               stats.num_record_groups,
+               stats.num_records,
+               stats.num_alloc_deltas,
+               stats.num_dirty_deltas);
+        });
       });
   });
 }

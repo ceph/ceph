@@ -888,7 +888,7 @@ public:
 
     return lower_bound(
       c, laddr
-    ).si_then([=](auto iter) {
+    ).si_then([=, this](auto iter) {
       assert(iter.get_depth() >= depth);
       if (depth == iter.get_depth()) {
         SUBTRACET(seastore_fixedkv_tree, "update at root", c.trans);

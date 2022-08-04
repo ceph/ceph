@@ -403,6 +403,9 @@ public:
   }
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier);
   const RGWZoneGroup& get_group() { return group; }
+  virtual std::unique_ptr<ZoneGroup> clone() override {
+    return std::make_unique<MotrZoneGroup>(store, group);
+  }
 };
 
 class MotrZone : public StoreZone {
@@ -446,6 +449,9 @@ class MotrZone : public StoreZone {
     }
     ~MotrZone() = default;
 
+    virtual std::unique_ptr<Zone> clone() override {
+      return std::make_unique<MotrZone>(store);
+    }
     virtual ZoneGroup& get_zonegroup() override;
     virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
     virtual const rgw_zone_id& get_id() override;
@@ -609,7 +615,7 @@ class MotrObject : public StoreObject {
     virtual std::unique_ptr<Object> clone() override {
       return std::unique_ptr<Object>(new MotrObject(*this));
     }
-    virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) override;
+    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) override;
     virtual int transition(Bucket* bucket,
         const rgw_placement_rule& placement_rule,
         const real_time& mtime,

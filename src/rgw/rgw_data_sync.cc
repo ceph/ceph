@@ -5187,7 +5187,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       if (bucket_status.state != BucketSyncState::Incremental ||
           bucket_stopped) { 
         // if state is Init or Stopped, we query the remote RGW for ther state
-        yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.dest_bucket, &info));
+        yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.source_bs.bucket, &info));
         if (retcode < 0) {
           return set_cr_error(retcode);
         }
@@ -5938,8 +5938,7 @@ int rgw_read_bucket_full_sync_status(const DoutPrefixProvider *dpp,
                         get_oid(*pipe.source.zone, *pipe.source.bucket, *pipe.dest.bucket)};
 
   auto svc = store->svc()->sysobj;
-  auto obj_ctx = svc->init_obj_ctx();
-  auto sysobj = svc->get_obj(obj_ctx, obj);
+  auto sysobj = svc->get_obj(obj);
   bufferlist bl;
   int ret = sysobj.rop().read(dpp, &bl, y);
   if (ret < 0)
