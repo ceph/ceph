@@ -4696,6 +4696,20 @@ KeyValueDB* BlueStore::get_db()
   return db;
 }
 
+int BlueStore::open_bluefs(bool read_only)
+{
+  dout(5) << __func__ << " mode=" << (read_only ? "RO" : "RW") << dendl;
+  int r = _open_bluefs(false, read_only);
+  return r;
+}
+
+int BlueStore::close_bluefs()
+{
+  dout(5) << __func__ << dendl;
+  _close_bluefs();
+  return 0;
+}
+
 void BlueStore::_dump_alloc_on_failure()
 {
   auto dump_interval =
