@@ -241,10 +241,9 @@ static void bluefs_import(
     exit(EXIT_FAILURE);
   }
   BlueStore bluestore(cct, path);
-  KeyValueDB *db_ptr;
-  r = bluestore.open_db_environment(&db_ptr, false);
+  r = bluestore.open_bluefs(false);
   if (r < 0) {
-    cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+    cerr << "error accessing bluefs: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
   }
   BlueFS* bs = bluestore.get_bluefs();
@@ -267,7 +266,7 @@ static void bluefs_import(
   f.close();
   bs->fsync(h);
   bs->close_writer(h);
-  bluestore.close_db_environment();
+  bluestore.close_bluefs();
   return;
 }
 

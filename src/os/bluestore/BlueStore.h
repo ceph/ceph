@@ -2922,6 +2922,9 @@ public:
   int close_db();
   KeyValueDB* get_db();
 
+  int open_bluefs(bool read_only = false);
+  int close_bluefs();
+
   int open_db_environment(KeyValueDB **pdb, bool to_repair);
   int close_db_environment();
   BlueFS* get_bluefs();
