@@ -95,8 +95,17 @@ void ShutDownCryptoRequest<I>::finish(int r) {
   ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
 
   if (r == 0) {
-    std::unique_lock image_locker{m_image_ctx->image_lock};
-    m_image_ctx->encryption_format.reset();
+    {
+      std::unique_lock image_locker{m_image_ctx->image_lock};
+      m_image_ctx->encryption_format.reset();
+    }
+
+    if (m_image_ctx->parent != nullptr) {
+      // move to shutting down parent crypto
+      m_image_ctx = m_image_ctx->parent;
+      shut_down_object_dispatch();
+      return;
+    }
   }
 
   m_on_finish->complete(r);
