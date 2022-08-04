@@ -2220,6 +2220,10 @@ private:
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
   bool mounted = false;
 
+  bool init_to_mount = false;
+  bool init_to_db = false;
+  bool init_to_bluefs = false;
+
   // store open_db options:
   bool db_was_opened_read_only = true;
   bool need_to_destage_allocation_file = false;
@@ -2913,16 +2917,17 @@ public:
   }
   int umount() override;
 
+  int create_db();
+  int open_db(bool read_only = false, bool to_repair = false);
+  int close_db();
+  KeyValueDB* get_db();
+
   int open_db_environment(KeyValueDB **pdb, bool to_repair);
   int close_db_environment();
   BlueFS* get_bluefs();
 
   int write_meta(const std::string& key, const std::string& value) override;
   int read_meta(const std::string& key, std::string *value) override;
-
-  // open in read-only and limited mode
-  int cold_open();
-  int cold_close();
 
   int fsck(bool deep) override {
     return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, false);

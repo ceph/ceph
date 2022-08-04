@@ -1035,9 +1035,9 @@ int main(int argc, char **argv)
                               action == "free-score" ? "score" : "fragmentation";
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.cold_open();
+    int r = bluestore.open_db(true/*read_only*/);
     if (r < 0) {
-      cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
+      cerr << "error from open_db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
 
@@ -1055,7 +1055,7 @@ int main(int argc, char **argv)
       }
     }
 
-    bluestore.cold_close();
+    bluestore.close_db();
   } else  if (action == "bluefs-stats") {
     AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
@@ -1066,9 +1066,9 @@ int main(int argc, char **argv)
     g_conf().set_val_or_die("bluestore_volume_selection_policy",
                             "use_some_extra_enforced");
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.cold_open();
+    int r = bluestore.open_db(true/*read_only*/);
     if (r < 0) {
-      cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
+      cerr << "error from open_db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
 
@@ -1082,7 +1082,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     cout << std::string(out.c_str(), out.length()) << std::endl;
-     bluestore.cold_close();
+     bluestore.close_db();
   } else if (action == "reshard") {
     auto get_ctrl = [&](size_t& val) {
       if (!resharding_ctrl.empty()) {
