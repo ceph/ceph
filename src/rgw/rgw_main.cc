@@ -410,13 +410,6 @@ int radosgw_Main(int argc, const char **argv)
   }
 #endif
 
-#ifdef WITH_RADOSGW_TRACER
-  else if (config_filter == "d4n") {
-    dout(0) << "Sam: got to main" << dendl;
-    rgw_filter = "d4n";
-  }
-#endif
-
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
 				 rgw_store,
