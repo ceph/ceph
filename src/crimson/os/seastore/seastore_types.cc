@@ -98,8 +98,7 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
-  // TODO: extend reserved id to 8 bits.
-  auto id = rhs.get_device_id() & 0x7F;
+  auto id = rhs.get_device_id();
   out << "paddr<";
   if (rhs == P_ADDR_NULL) {
     out << "NULL";

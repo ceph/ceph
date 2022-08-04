@@ -56,10 +56,7 @@ using device_id_t = uint8_t;
 
 constexpr auto DEVICE_ID_BITS = std::numeric_limits<device_id_t>::digits;
 
-constexpr device_id_t DEVICE_ID_GLOBAL_MAX =
-  std::numeric_limits<device_id_t>::max();
-// the max value regardless of addrs_type_t prefix
-constexpr device_id_t DEVICE_ID_MAX = DEVICE_ID_GLOBAL_MAX >> 1;
+constexpr device_id_t DEVICE_ID_MAX = std::numeric_limits<device_id_t>::max();
 constexpr device_id_t DEVICE_ID_NULL = DEVICE_ID_MAX;
 constexpr device_id_t DEVICE_ID_RECORD_RELATIVE = DEVICE_ID_MAX - 1;
 constexpr device_id_t DEVICE_ID_BLOCK_RELATIVE = DEVICE_ID_MAX - 2;
@@ -68,6 +65,7 @@ constexpr device_id_t DEVICE_ID_DELAYED = DEVICE_ID_MAX - 3;
 constexpr device_id_t DEVICE_ID_FAKE = DEVICE_ID_MAX - 4;
 constexpr device_id_t DEVICE_ID_ZERO = DEVICE_ID_MAX - 5;
 constexpr device_id_t DEVICE_ID_MAX_VALID = DEVICE_ID_MAX - 6;
+constexpr device_id_t DEVICE_ID_MAX_VALID_SEGMENT = DEVICE_ID_MAX >> 1;
 
 struct device_id_printer_t {
   device_id_t id;
@@ -83,8 +81,7 @@ enum class paddr_types_t {
 };
 
 constexpr paddr_types_t device_id_to_paddr_type(device_id_t id) {
-  // TODO: extend reserved id to 8 bits.
-  if ((id & 0x7F) > DEVICE_ID_MAX_VALID) {
+  if (id > DEVICE_ID_MAX_VALID) {
     return paddr_types_t::RESERVED;
   } else if ((id & 0x80) == 0) {
     return paddr_types_t::SEGMENT;
@@ -94,8 +91,6 @@ constexpr paddr_types_t device_id_to_paddr_type(device_id_t id) {
 }
 
 constexpr bool has_seastore_off(device_id_t id) {
-  // TODO: extend reserved id to 8 bits.
-  id = id & 0x7F;
   return id == DEVICE_ID_RECORD_RELATIVE ||
          id == DEVICE_ID_BLOCK_RELATIVE ||
          id == DEVICE_ID_DELAYED ||
@@ -117,7 +112,7 @@ struct segment_id_t {
 public:
   // segment_id_t() == MAX_SEG_ID == NULL_SEG_ID
   segment_id_t()
-    : segment_id_t(DEVICE_ID_MAX_VALID, DEVICE_SEGMENT_ID_MAX) {}
+    : segment_id_t(DEVICE_ID_MAX_VALID_SEGMENT, DEVICE_SEGMENT_ID_MAX) {}
 
   segment_id_t(device_id_t id, device_segment_id_t _segment)
     : segment_id_t(make_internal(id, _segment)) {}
@@ -201,7 +196,7 @@ struct __attribute((packed)) segment_id_le_t {
 constexpr segment_id_t MIN_SEG_ID = segment_id_t::create_const(0, 0);
 // segment_id_t() == MAX_SEG_ID == NULL_SEG_ID
 constexpr segment_id_t MAX_SEG_ID =
-  segment_id_t::create_const(DEVICE_ID_MAX_VALID, DEVICE_SEGMENT_ID_MAX);
+  segment_id_t::create_const(DEVICE_ID_MAX_VALID_SEGMENT, DEVICE_SEGMENT_ID_MAX);
 constexpr segment_id_t NULL_SEG_ID = MAX_SEG_ID;
 
 /* Monotonically increasing segment seq, uniquely identifies
@@ -475,7 +470,7 @@ struct res_paddr_t;
 struct paddr_t {
 public:
   // P_ADDR_MAX == P_ADDR_NULL == paddr_t{}
-  paddr_t() : paddr_t(DEVICE_ID_GLOBAL_MAX, 0) {}
+  paddr_t() : paddr_t(DEVICE_ID_MAX, seastore_off_t(0)) {}
 
   static paddr_t make_seg_paddr(
     segment_id_t seg,
@@ -734,7 +729,7 @@ struct res_paddr_t : public paddr_t {
 
 constexpr paddr_t P_ADDR_MIN = paddr_t::create_const(0, 0, 0);
 // P_ADDR_MAX == P_ADDR_NULL == paddr_t{}
-constexpr paddr_t P_ADDR_MAX = paddr_t::create_const(DEVICE_ID_GLOBAL_MAX, 0, 0);
+constexpr paddr_t P_ADDR_MAX = paddr_t::create_const(DEVICE_ID_MAX, 0, 0);
 constexpr paddr_t P_ADDR_NULL = P_ADDR_MAX;
 constexpr paddr_t P_ADDR_ZERO = paddr_t::create_const(DEVICE_ID_ZERO, 0, 0);
 
