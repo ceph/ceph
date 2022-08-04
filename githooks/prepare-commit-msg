@@ -1,43 +1,52 @@
-#!/usr/bin/sh
-#
-# An example hook script to prepare the commit log message.
-# Called by "git commit" with the name of the file that has the
-# commit message, followed by the description of the commit
-# message's source.  The hook's purpose is to edit the commit
-# message file.  If the hook fails with a non-zero status,
-# the commit is aborted.
-#
-# To enable this hook, rename this file to "prepare-commit-msg".
+#!/usr/bin/python
 
-COMMIT_MSG_FILE=$1
-COMMIT_SOURCE=$2
-SHA1=$3
+import subprocess
+import re, os, sys
+from ComponentMapper import PathToComponent
 
+COMMIT_MSG_FILE = sys.argv[1]
 
-# Removes the "# Please enter the commit message..." help message.
-# /usr/bin/perl -i.bak -ne 'print unless(m/^. Please enter the commit message/..m/^#$/)' "$COMMIT_MSG_FILE"
+def get_signoff():
+  try:
+    signoff_ = subprocess.check_output(['git', 'var', 'GIT_COMMITTER_IDENT'])
+    signoff_ = signoff_.decode('utf-8').split(' ')
+    signoff = f'Signed-off-by: {" ".join(signoff_[:-2])}'
+    return signoff
+  except:
+    print("Error reading commiter info for commit signature")
 
-if [[ -z "$COMMIT_SOURCE" ]]
-then
-  COMMIT_MSG_HEADERS="# Possible commit messages: "
-  for FILE in $(git diff --cached --name-only -r)
-  do
-    # According to files changed the commit message would start "<project_name>: <commit_message>"
-    # src/<project>/file.txt - "<project>:"
-    # file.txt               - "file.txt:"
-    # <project>/file.txt     - "<project>:" 
-    COMMIT_MSG_HEADERS+="\n$(echo "# $FILE: <commit_message>" | sed -E 's|src/+||g' | sed -r 's/(.*)(\/[a-z0-9.-]+)/\1 /')" 
-  done
-  sed -i "1s;^;$COMMIT_MSG_HEADERS\n;" $COMMIT_MSG_FILE
-fi
+def get_titles():
+  try:
+    files_changed = subprocess.check_output(['git','diff','--cached','--name-only'])
+    files_changed = files_changed.decode('utf-8').split('\n')
+    component_mapper = PathToComponent()
+    components = component_mapper.get_all_components(files_changed)
+    return components
+  except:
+    return []
 
+try:
+  with open(COMMIT_MSG_FILE, 'r+') as f:
+    commit_txt_ = f.read()
+    commit_txt = commit_txt_.split("\n")
+    f.seek(0, 0)
 
-# Adds a Signed-off-by line to the message, that can still be edited (This is rarely a good idea).
-SOB=$(git var GIT_COMMITTER_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
-printf "\n$SOB" >> "$COMMIT_MSG_FILE"
+    f.write(commit_txt[0] + "\n") # add title on top in case `git commit -m` is used
 
-# Adds a newline at the start of the message
-# if test -z "$COMMIT_SOURCE"
-# then
-#   /usr/bin/perl -i.bak -pe 'print "\n" if !$first_line++' "$COMMIT_MSG_FILE"
-# fi
+    if commit_txt[0] == "": # editor used for commit msg
+      f.write('#' * 72 + '\n') # 72 char title
+      f.write('# Possible commit messages:\n')
+      title_components = get_titles()
+      for component in title_components:
+        f.write(f'# {component}: <commit_message>\n')
+      f.write("\n\n# Fixes: \n")
+
+    is_signoff = re.search(r'Signed-off-by', commit_txt_)
+    if not is_signoff:
+      signoff = get_signoff()
+      f.write('\n' + signoff + '\n\n')
+
+    f.write("\n".join(commit_txt[1:]))
+
+except Exception as exc:
+  print("Error in prepare-commit-msg hook: '{exc}'".format(exc=repr(exc)))
