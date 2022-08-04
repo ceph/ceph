@@ -29,11 +29,12 @@ function(build_pmdk enable_ndctl)
     set(PMDK_LIB_DIR "nondebug")
   endif()
 
+  set(pmdk_cflags "-Wno-error -fno-lto")
   include(ExternalProject)
   ExternalProject_Add(pmdk_ext
       ${source_dir_args}
       CONFIGURE_COMMAND ""
-      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} EXTRA_CFLAGS=-Wno-error NDCTL_ENABLE=${ndctl} BUILD_EXAMPLES=n BUILD_BENCHMARKS=n DOC=n
+      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} "EXTRA_CFLAGS=${pmdk_cflags}" NDCTL_ENABLE=${ndctl} BUILD_EXAMPLES=n BUILD_BENCHMARKS=n DOC=n
       BUILD_IN_SOURCE 1
       BUILD_BYPRODUCTS "<SOURCE_DIR>/src/${PMDK_LIB_DIR}/libpmem.a" "<SOURCE_DIR>/src/${PMDK_LIB_DIR}/libpmemobj.a"
       INSTALL_COMMAND "")
