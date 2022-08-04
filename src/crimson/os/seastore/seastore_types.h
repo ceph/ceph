@@ -539,13 +539,14 @@ public:
   }
 
   /**
-   * operator-
+   * block_relative_to
    *
    * Only defined for record_relative paddr_ts.  Yields a
    * block_relative address.
    */
-  paddr_t operator-(paddr_t rhs) const;
+  paddr_t block_relative_to(paddr_t rhs) const;
 
+  // To be compatible with laddr_t operator+
   paddr_t operator+(seastore_off_t o) const {
     return add_offset(o);
   }
@@ -716,12 +717,10 @@ struct res_paddr_t : public paddr_t {
     return paddr_t::make_res_paddr(get_device_id(), off);
   }
 
-  paddr_t operator-(paddr_t rhs) const {
-    assert(rhs.is_relative() && is_relative());
-    assert(rhs.get_device_id() == get_device_id());
-    auto &r = rhs.as_res_paddr();
-    auto off = get_seastore_off() - r.get_seastore_off();
-    assert(r.get_seastore_off() >= 0 ?
+  paddr_t block_relative_to(const res_paddr_t &rhs) const {
+    assert(rhs.is_record_relative() && is_record_relative());
+    auto off = get_seastore_off() - rhs.get_seastore_off();
+    assert(rhs.get_seastore_off() >= 0 ?
            off <= get_seastore_off() : off > get_seastore_off());
     return paddr_t::make_res_paddr(DEVICE_ID_BLOCK_RELATIVE, off);
   }
@@ -811,10 +810,8 @@ inline paddr_t paddr_t::add_relative(paddr_t o) const {
   return add_offset(res_o.get_seastore_off());
 }
 
-inline paddr_t paddr_t::operator-(paddr_t rhs) const {
-  PADDR_OPERATION(paddr_types_t::RESERVED, res_paddr_t, operator-(rhs))
-  ceph_assert(0 == "not supported type");
-  return P_ADDR_NULL;
+inline paddr_t paddr_t::block_relative_to(paddr_t rhs) const {
+  return as_res_paddr().block_relative_to(rhs.as_res_paddr());
 }
 
 struct __attribute((packed)) paddr_le_t {

@@ -549,7 +549,7 @@ protected:
    */
   paddr_t maybe_generate_relative(paddr_t addr) {
     if (is_initial_pending() && addr.is_record_relative()) {
-      return addr - get_paddr();
+      return addr.block_relative_to(get_paddr());
     } else {
       ceph_assert(!addr.is_record_relative() || is_mutation_pending());
       return addr;
