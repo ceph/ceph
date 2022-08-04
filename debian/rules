@@ -3,7 +3,8 @@
 export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/tmp
 
-export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+include /usr/share/dpkg/default.mk
+
 extraopts += -DCMAKE_C_COMPILER=gcc-11 -DCMAKE_CXX_COMPILER=g++-11
 ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # dh_auto_build sets LDFLAGS with `dpkg-buildflags --get LDFLAGS` on ubuntu,
