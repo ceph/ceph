@@ -403,7 +403,7 @@ struct transaction_manager_test_t :
 	return backref_manager->scan_mapped_space(
 	  t,
 	  [&tracker](auto offset, auto len, depth_t, extent_types_t) {
-	    if (offset.get_addr_type() == addr_types_t::SEGMENT) {
+	    if (offset.get_addr_type() == paddr_types_t::SEGMENT) {
 	      logger().debug("check_usage: tracker alloc {}~{}",
 		offset, len);
 	      tracker->allocate(
@@ -414,7 +414,7 @@ struct transaction_manager_test_t :
 	  }).si_then([&tracker, this] {
 	    auto &backrefs = backref_manager->get_cached_backrefs();
 	    for (auto &backref : backrefs) {
-	      if (backref.paddr.get_addr_type() == addr_types_t::SEGMENT) {
+	      if (backref.paddr.get_addr_type() == paddr_types_t::SEGMENT) {
 		if (backref.laddr == L_ADDR_NULL) {
 		  tracker->release(
 		    backref.paddr.as_seg_paddr().get_segment_id(),

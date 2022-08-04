@@ -1103,7 +1103,7 @@ record_t Cache::prepare_record(
       auto sseq = NULL_SEG_SEQ;
       auto stype = segment_type_t::NULL_SEG;
       if (cleaner != nullptr && i->get_paddr().get_addr_type() ==
-	  addr_types_t::SEGMENT) {
+	  paddr_types_t::SEGMENT) {
         auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
         auto &sinfo = cleaner->get_seg_info(sid);
         sseq = sinfo.seq;
