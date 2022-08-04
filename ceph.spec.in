@@ -149,14 +149,12 @@
 %endif
 %endif
 
-%if 0%{with seastar}
 # disable -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1, as gcc-toolset-{10,11}-annobin
 # do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
 # redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
 %undefine _annotated_build
-%if 0%{?enable_devtoolset11:1}
+%if 0%{?rhel} >= 8
 %enable_devtoolset11
-%endif
 %endif
 
 #################################################################################
