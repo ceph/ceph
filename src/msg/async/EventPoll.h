@@ -16,12 +16,13 @@
 #ifndef CEPH_MSG_EVENTPOLL_H
 #define CEPH_MSG_EVENTPOLL_H
 
-#include "Event.h"
 #ifdef _WIN32
 #include <winsock2.h>
 #else
 #include <poll.h>
 #endif
+
+#include "Event.h"
 
 typedef struct pollfd POLLFD;
 
