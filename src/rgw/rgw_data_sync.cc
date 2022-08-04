@@ -1531,7 +1531,7 @@ class RGWDataFullSyncSingleEntryCR : public RGWCoroutine {
   bool error_inject;
 
 public:
-  RGWDataFullSyncSingleEntryCR(RGWDataSyncCtx *_sc, rgw_pool& _pool, const rgw_bucket_shard& _source_bs,
+  RGWDataFullSyncSingleEntryCR(RGWDataSyncCtx *_sc, const rgw_pool& _pool, const rgw_bucket_shard& _source_bs,
                       const std::string& _key, const rgw_data_sync_status& sync_status, const rgw_raw_obj& _error_repo,
                       ceph::real_time _timestamp, boost::intrusive_ptr<RGWContinuousLeaseCR> _lease_cr,
                       boost::intrusive_ptr<rgw::bucket_sync::Cache> _bucket_shard_cache,
@@ -1617,7 +1617,43 @@ public:
   }
 };
 
-#define DATA_SYNC_MAX_ERR_ENTRIES 10
+static constexpr auto DATA_SYNC_MAX_ERR_ENTRIES = 10;
+
+class RGWDataBaseSyncShardCR : public RGWCoroutine {
+protected:
+  RGWDataSyncCtx *const sc;
+  const rgw_pool& pool;
+  const uint32_t shard_id;
+  rgw_data_sync_marker& sync_marker;
+  RGWSyncTraceNodeRef tn;
+  const string& status_oid;
+  const rgw_raw_obj& error_repo;
+  const boost::intrusive_ptr<RGWContinuousLeaseCR>& lease_cr;
+  const rgw_data_sync_status& sync_status;
+  boost::intrusive_ptr<rgw::bucket_sync::Cache> bucket_shard_cache;
+
+  std::optional<RGWDataSyncShardMarkerTrack> marker_tracker;
+  RGWRadosGetOmapValsCR::ResultPtr omapvals;
+  rgw_bucket_shard source_bs;
+
+  int parse_bucket_key(const std::string& key, rgw_bucket_shard& bs) const {
+    return rgw_bucket_parse_bucket_key(sc->env->cct, key,
+                                       &bs.bucket, &bs.shard_id);
+  }
+
+  RGWDataBaseSyncShardCR(
+    RGWDataSyncCtx *const _sc, const rgw_pool& pool, const uint32_t shard_id,
+    rgw_data_sync_marker& sync_marker, RGWSyncTraceNodeRef tn,
+    const string& status_oid, const rgw_raw_obj& error_repo,
+    const boost::intrusive_ptr<RGWContinuousLeaseCR>& lease_cr,
+    const rgw_data_sync_status& sync_status,
+    const boost::intrusive_ptr<rgw::bucket_sync::Cache>& bucket_shard_cache)
+    : RGWCoroutine(_sc->cct), sc(_sc), pool(pool), shard_id(shard_id),
+      sync_marker(sync_marker), tn(tn), status_oid(status_oid),
+      error_repo(error_repo), lease_cr(lease_cr),
+      sync_status(sync_status), bucket_shard_cache(bucket_shard_cache) {}
+};
+
 
 class RGWDataSyncShardCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
