@@ -49,6 +49,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_WRITESAME 1
 #define LIBRBD_SUPPORTS_WRITE_ZEROES 1
 #define LIBRBD_SUPPORTS_ENCRYPTION 1
+#define LIBRBD_SUPPORTS_ENCRYPTION_LOAD2 1
 
 #if __GNUC__ >= 4
   #define CEPH_RBD_API          __attribute__ ((visibility ("default")))
@@ -385,6 +386,12 @@ typedef enum {
 } rbd_encryption_algorithm_t;
 
 typedef void *rbd_encryption_options_t;
+
+typedef struct {
+    rbd_encryption_format_t format;
+    rbd_encryption_options_t opts;
+    size_t opts_size;
+} rbd_encryption_spec_t;
 
 typedef struct {
     rbd_encryption_algorithm_t alg;
@@ -823,16 +830,49 @@ CEPH_RBD_API int rbd_deep_copy_with_progress(rbd_image_t image,
                                              void *cbdata);
 
 /* encryption */
+
+/*
+ * Format the image using the encryption spec specified by
+ * (format, opts, opts_size) tuple.
+ *
+ * For a flat (i.e. non-cloned) image, the new encryption is loaded
+ * implicitly, calling rbd_encryption_load() afterwards is not needed.
+ * If existing encryption is already loaded, it is automatically
+ * replaced with the new encryption.
+ *
+ * For a cloned image, the new encryption must be loaded explicitly.
+ * Existing encryption (if any) must not be loaded.
+ */
 CEPH_RBD_API int rbd_encryption_format(rbd_image_t image,
                                        rbd_encryption_format_t format,
                                        rbd_encryption_options_t opts,
                                        size_t opts_size);
-/* encryption will be loaded on all ancestor images,
- * until reaching an ancestor image which does not match any known format */
+/*
+ * Load the encryption spec specified by (format, opts, opts_size)
+ * tuple for the image and all ancestor images.  If an ancestor image
+ * which does not match any encryption format known to librbd is
+ * encountered, it - along with remaining ancestor images - is
+ * interpreted as plaintext.
+ */
 CEPH_RBD_API int rbd_encryption_load(rbd_image_t image,
                                      rbd_encryption_format_t format,
                                      rbd_encryption_options_t opts,
                                      size_t opts_size);
+/*
+ * Load encryption specs.  The first spec in the passed array is
+ * applied to the image itself, the second spec is applied to its
+ * ancestor image, the third spec is applied to the ancestor of
+ * that ancestor image and so on.
+ *
+ * If not enough specs are passed, the last spec is reused exactly as
+ * in rbd_encryption_load().  If an ancestor image for which the last
+ * spec is being reused turns out to not match any encryption format
+ * known to librbd, it - along with remaining ancestor images - is
+ * interpreted as plaintext.
+ */
+CEPH_RBD_API int rbd_encryption_load2(rbd_image_t image,
+                                      rbd_encryption_spec_t *specs,
+                                      size_t spec_count);
 
 /* snapshots */
 CEPH_RBD_API int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,

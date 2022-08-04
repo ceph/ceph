@@ -217,6 +217,7 @@ namespace librbd {
   typedef rbd_encryption_format_t encryption_format_t;
   typedef rbd_encryption_algorithm_t encryption_algorithm_t;
   typedef rbd_encryption_options_t encryption_options_t;
+  typedef rbd_encryption_spec_t encryption_spec_t;
 
   typedef struct {
     encryption_algorithm_t alg;
@@ -597,10 +598,9 @@ public:
   /* encryption */
   int encryption_format(encryption_format_t format, encryption_options_t opts,
                         size_t opts_size);
-  /* encryption will be loaded on all ancestor images,
-   * until reaching an ancestor image which does not match any known format */
   int encryption_load(encryption_format_t format, encryption_options_t opts,
                       size_t opts_size);
+  int encryption_load2(encryption_spec_t *specs, size_t spec_count);
 
   /* striping */
   uint64_t get_stripe_unit() const;

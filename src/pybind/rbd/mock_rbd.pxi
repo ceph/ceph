@@ -289,6 +289,11 @@ cdef nogil:
 
     ctypedef void* rbd_encryption_options_t
 
+    ctypedef struct rbd_encryption_spec_t:
+        rbd_encryption_format_t format
+        rbd_encryption_options_t opts
+        size_t opts_size
+
     void rbd_version(int *major, int *minor, int *extra):
         pass
     void rbd_image_spec_list_cleanup(rbd_image_spec_t *image, size_t num_images):
@@ -909,6 +914,10 @@ cdef nogil:
                               rbd_encryption_options_t opts, size_t opts_size):
         pass
     int rbd_encryption_load(rbd_image_t image,
-                              rbd_encryption_format_t format,
-                              rbd_encryption_options_t opts, size_t opts_size):
+                            rbd_encryption_format_t format,
+                            rbd_encryption_options_t opts, size_t opts_size):
+        pass
+    int rbd_encryption_load2(rbd_image_t image,
+                             rbd_encryption_spec_t *specs,
+                             size_t spec_count):
         pass
