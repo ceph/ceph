@@ -853,10 +853,12 @@ def ceph_osds(ctx, config):
                 osd, remote.shortname, dev))
             _shell(ctx, cluster_name, remote, [
                 'ceph-volume', 'lvm', 'zap', dev])
-            _shell(ctx, cluster_name, remote, [
-                'ceph', 'orch', 'daemon', 'add', 'osd',
-                remote.shortname + ':' + short_dev
-            ])
+            add_osd_args = ['ceph', 'orch', 'daemon', 'add', 'osd',
+                            remote.shortname + ':' + short_dev]
+            osd_method = config.get('osd_method')
+            if osd_method:
+                add_osd_args.append(osd_method)
+            _shell(ctx, cluster_name, remote, add_osd_args)
             ctx.daemons.register_daemon(
                 remote, 'osd', id_,
                 cluster=cluster_name,
