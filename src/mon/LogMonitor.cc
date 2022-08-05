@@ -391,39 +391,42 @@ void LogMonitor::log_external(const LogEntry& le)
       this->log_external_close_fds();
     }
 
-    auto p = channel_fds.find(channel);
-    int fd;
-    if (p == channel_fds.end()) {
-      string log_file = channels.get_log_file(channel);
-      dout(20) << __func__ << " logging for channel '" << channel
-	       << "' to file '" << log_file << "'" << dendl;
-      if (log_file.empty()) {
-	// do not log this channel
-	fd = -1;
+    int log_level = LogEntry::str_to_level(channels.get_log_file_level(channel));
+    if (log_level <= le.prio) {
+      auto p = channel_fds.find(channel);
+      int fd;
+      if (p == channel_fds.end()) {
+        string log_file = channels.get_log_file(channel);
+        dout(20) << __func__ << " logging for channel '" << channel
+              << "' to file '" << log_file << "'" << dendl;
+        if (log_file.empty()) {
+          // do not log this channel
+          fd = -1;
+        } else {
+          fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT|O_CLOEXEC, 0600);
+          if (fd < 0) {
+            int err = -errno;
+            dout(1) << "unable to write to '" << log_file << "' for channel '"
+                    << channel << "': " << cpp_strerror(err) << dendl;
+          } else {
+            channel_fds[channel] = fd;
+          }
+        }
       } else {
-	fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT|O_CLOEXEC, 0600);
-	if (fd < 0) {
-	  int err = -errno;
-	  dout(1) << "unable to write to '" << log_file << "' for channel '"
-		  << channel << "': " << cpp_strerror(err) << dendl;
-	} else {
-	  channel_fds[channel] = fd;
-	}
+        fd = p->second;
       }
-    } else {
-      fd = p->second;
-    }
 
-    if (fd >= 0) {
-      fmt::format_to(std::back_inserter(file_log_buffer), "{}\n", le);
-      int err = safe_write(fd, file_log_buffer.data(), file_log_buffer.size());
-      file_log_buffer.clear();
-      if (err < 0) {
-	dout(1) << "error writing to '" << channels.get_log_file(channel)
-		<< "' for channel '" << channel
-		<< ": " << cpp_strerror(err) << dendl;
-	::close(fd);
-	channel_fds.erase(channel);
+      if (fd >= 0) {
+        fmt::format_to(std::back_inserter(file_log_buffer), "{}\n", le);
+        int err = safe_write(fd, file_log_buffer.data(), file_log_buffer.size());
+        file_log_buffer.clear();
+        if (err < 0) {
+          dout(1) << "error writing to '" << channels.get_log_file(channel)
+                  << "' for channel '" << channel
+                  << ": " << cpp_strerror(err) << dendl;
+          ::close(fd);
+          channel_fds.erase(channel);
+        }
       }
     }
   }
