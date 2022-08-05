@@ -292,7 +292,7 @@ void usage()
   cout << "  reshard process            process of scheduled reshard jobs\n";
   cout << "  reshard cancel             cancel resharding a bucket\n";
   cout << "  reshard stale-instances list list stale-instances from bucket resharding\n";
-  cout << "  reshard stale-instances rm   cleanup stale-instances from bucket resharding\n";
+  cout << "  reshard stale-instances delete   cleanup stale-instances from bucket resharding\n";
   cout << "  sync error list            list sync error\n";
   cout << "  sync error trim            trim sync error\n";
   cout << "  mfa create                 create a new MFA TOTP token\n";
