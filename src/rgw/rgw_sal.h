@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <boost/container/flat_map.hpp>
 #include "rgw_sal_fwd.h"
 #include "rgw_lua.h"
 #include "rgw_user.h"
@@ -1543,11 +1544,15 @@ public:
  */
 class StoreManager {
 public:
+  using ArgsMap = boost::container::flat_map<std::string, std::string>;
+
   struct Config {
     /** Name of store to create */
     std::string store_name;
     /** Name of filter to create or "none" */
     std::string filter_name;
+    /** Optional Arguments */
+    ArgsMap args_map;
   };
 
   StoreManager() {}

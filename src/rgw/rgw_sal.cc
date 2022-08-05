@@ -17,9 +17,10 @@
 #include <stdlib.h>
 #include <system_error>
 #include <unistd.h>
-#include <sstream>
+#include <regex>
 
 #include "common/errno.h"
+#include "common/split.h"
 
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -296,8 +297,30 @@ StoreManager::Config StoreManager::get_config(bool admin, CephContext* cct)
 {
   StoreManager::Config cfg;
 
-  // Get the store backend
-  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+  // Get the store backend and optional arguments
+  const std::string& config_store_str = g_conf().get_val<std::string>("rgw_backend_store");
+  std::string config_store{""};
+  std::string store_args{""};
+  std::regex store_regex("(\\w+)(\\w.*)*");
+  std::smatch store_match;
+  if (std::regex_match(config_store_str, store_match, store_regex)) {
+    if (store_match.size() > 2) {
+      store_args = store_match[2].str();
+    }
+      config_store = store_match[1].str();
+  }
+
+  // Populate args_map
+  for (std::string_view arg : ceph::split(store_args, " \t")) {
+    auto kv = ceph::split(arg, "=");
+    auto k = kv.begin();
+    if (std::distance(k, kv.end()) != 2) {
+      continue;
+    }
+    auto v = std::next(k);
+    cfg.args_map.insert(std::pair<std::string,std::string>(*k, *v));
+  }
+
   if (config_store == "rados") {
     cfg.store_name = "rados";
 
