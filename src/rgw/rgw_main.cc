@@ -52,9 +52,7 @@
 #endif
 #include "rgw_asio_frontend.h"
 #include "rgw_dmclock_scheduler_ctx.h"
-#ifdef WITH_RADOSGW_LUA_PACKAGES
 #include "rgw_lua.h"
-#endif
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
@@ -491,20 +489,17 @@ int radosgw_Main(int argc, const char **argv)
     store->set_luarocks_path(luarocks_path+"/"+g_conf()->name.to_str());
   }
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
-  if (rados) { /* Supported for only RadosStore */
-    rgw::lua::packages_t failed_packages;
-    std::string output;
-    r = rgw::lua::install_packages(&dp, rados, null_yield, failed_packages, output);
-    if (r < 0) {
-      dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
-    }
-    if (!output.empty()) {
-      dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
-    }
-    for (const auto& p : failed_packages) {
-      dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
-    }
+  rgw::lua::packages_t failed_packages;
+  std::string output;
+  r = rgw::lua::install_packages(&dp, store, null_yield, failed_packages, output);
+  if (r < 0) {
+    dout(1) << "WARNING: failed to install lua packages from allowlist" << dendl;
+  }
+  if (!output.empty()) {
+    dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
+  }
+  for (const auto& p : failed_packages) {
+    dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
   }
 #endif
 
@@ -634,7 +629,7 @@ int radosgw_Main(int argc, const char **argv)
   int fe_count = 0;
 
   std::unique_ptr<rgw::lua::Background> lua_background;
-  if (rados) { /* Supported for only RadosStore */
+  if (store->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<rgw::lua::Background>(store, cct.get(), store->get_luarocks_path());
     lua_background->start();
   }

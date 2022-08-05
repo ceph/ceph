@@ -467,18 +467,27 @@ class MotrZone : public StoreZone {
     friend class MotrStore;
 };
 
-class MotrLuaScriptManager : public StoreLuaScriptManager {
+class MotrLuaManager : public StoreLuaManager {
   MotrStore* store;
 
   public:
-  MotrLuaScriptManager(MotrStore* _s) : store(_s)
+  MotrLuaManager(MotrStore* _s) : store(_s)
   {
   }
-  virtual ~MotrLuaScriptManager() = default;
+  virtual ~MotrLuaManager() = default;
 
-  virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override { return -ENOENT; }
-  virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override { return -ENOENT; }
-  virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override { return -ENOENT; }
+  /** Get a script named with the given key from the backing store */
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  /** Put a script named with the given key to the backing store */
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
+  /** Delete a script named with the given key from the backing store */
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
+  /** Add a lua package */
+  virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
+  /** Remove a lua package */
+  virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
+  /** List lua packages */
+  virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
 };
 
 class MotrOIDCProvider : public RGWOIDCProvider {
@@ -969,7 +978,7 @@ class MotrStore : public StoreStore {
     virtual const RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
     virtual std::string get_host_id() { return ""; }
 
-    virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
+    virtual std::unique_ptr<LuaManager> get_lua_manager() override;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
         std::string tenant,
         std::string path="",
