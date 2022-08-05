@@ -1357,6 +1357,7 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
           op->op == Transaction::OP_OMAP_SETHEADER) {
         ceph_abort_msg("unexpected enoent error");
       }
+      return seastar::now();
     }),
     crimson::ct_error::assert_all{
       "Invalid error in SeaStore::do_transaction_step"
