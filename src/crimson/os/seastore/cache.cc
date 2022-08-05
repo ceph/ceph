@@ -1580,7 +1580,7 @@ void Cache::init()
   }
   root = new RootBlock();
   root->init(CachedExtent::extent_state_t::CLEAN,
-             P_ADDR_NULL,
+             P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,
              NULL_GENERATION);
   INFO("init root -- {}", *root);

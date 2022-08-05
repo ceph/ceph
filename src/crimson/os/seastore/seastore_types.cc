@@ -48,6 +48,8 @@ std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id)
     return out << "Dev(FAKE)";
   } else if (_id == DEVICE_ID_ZERO) {
     return out << "Dev(ZERO)";
+  } else if (_id == DEVICE_ID_ROOT) {
+    return out << "Dev(ROOT)";
   } else {
     return out << "Dev(" << (unsigned)_id << ")";
   }

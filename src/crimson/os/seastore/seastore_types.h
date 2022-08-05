@@ -64,7 +64,8 @@ constexpr device_id_t DEVICE_ID_DELAYED = DEVICE_ID_MAX - 3;
 // for tests which generate fake paddrs
 constexpr device_id_t DEVICE_ID_FAKE = DEVICE_ID_MAX - 4;
 constexpr device_id_t DEVICE_ID_ZERO = DEVICE_ID_MAX - 5;
-constexpr device_id_t DEVICE_ID_MAX_VALID = DEVICE_ID_MAX - 6;
+constexpr device_id_t DEVICE_ID_ROOT = DEVICE_ID_MAX - 6;
+constexpr device_id_t DEVICE_ID_MAX_VALID = DEVICE_ID_MAX - 7;
 constexpr device_id_t DEVICE_ID_MAX_VALID_SEGMENT = DEVICE_ID_MAX >> 1;
 
 struct device_id_printer_t {
@@ -94,7 +95,8 @@ constexpr bool has_seastore_off(device_id_t id) {
   return id == DEVICE_ID_RECORD_RELATIVE ||
          id == DEVICE_ID_BLOCK_RELATIVE ||
          id == DEVICE_ID_DELAYED ||
-         id == DEVICE_ID_FAKE;
+         id == DEVICE_ID_FAKE ||
+         id == DEVICE_ID_ROOT;
 }
 
 // internal segment id type of segment_id_t below, with the top
@@ -578,6 +580,10 @@ public:
   bool is_zero() const {
     return get_device_id() == DEVICE_ID_ZERO;
   }
+  /// Denotes the root addr
+  bool is_root() const {
+    return get_device_id() == DEVICE_ID_ROOT;
+  }
 
   /**
    * is_real
@@ -587,7 +593,7 @@ public:
    * which unit tests use them.
    */
   bool is_real() const {
-    return !is_zero() && !is_null();
+    return !is_zero() && !is_null() && !is_root();
   }
 
   bool is_absolute() const {
@@ -731,6 +737,7 @@ constexpr paddr_t P_ADDR_MIN = paddr_t::create_const(0, 0, 0);
 constexpr paddr_t P_ADDR_MAX = paddr_t::create_const(DEVICE_ID_MAX, 0, 0);
 constexpr paddr_t P_ADDR_NULL = P_ADDR_MAX;
 constexpr paddr_t P_ADDR_ZERO = paddr_t::create_const(DEVICE_ID_ZERO, 0, 0);
+constexpr paddr_t P_ADDR_ROOT = paddr_t::create_const(DEVICE_ID_ROOT, 0, 0);
 
 inline paddr_t make_record_relative_paddr(seastore_off_t off) {
   return paddr_t::make_res_paddr(DEVICE_ID_RECORD_RELATIVE, off);
