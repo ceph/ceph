@@ -954,7 +954,7 @@ int do_map() {
           <<". Mountpoint: " << to_string(g_cfg->mountpoint) << dendl;
 
   DWORD status = DokanMain(dokan_options, dokan_operations);
-  switch (status) {
+  switch (static_cast<int>(status)) {
   case DOKAN_SUCCESS:
     dout(2) << "Dokan has returned successfully" << dendl;
     break;
