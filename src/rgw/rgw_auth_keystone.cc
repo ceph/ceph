@@ -56,9 +56,11 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
   }
 
   const auto keystone_version = config.get_api_version();
-  if (keystone_version == rgw::keystone::ApiVersion::VER_2) {
+  switch (keystone_version) {
+  case rgw::keystone::ApiVersion::VER_2:
     url.append("v2.0/tokens/" + token);
-  } else if (keystone_version == rgw::keystone::ApiVersion::VER_3) {
+    break;
+  case rgw::keystone::ApiVersion::VER_3:
     url.append("v3/auth/tokens");
 
     if (allow_expired) {
@@ -66,11 +68,19 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
     }
 
     validate.append_header("X-Subject-Token", token);
+    break;
+  default:
+    ldpp_dout(dpp, 0) << "unsupported keystone version " << keystone_version << dendl;
+    throw -EINVAL;
   }
 
   std::string admin_token;
   if (rgw::keystone::Service::get_admin_token(dpp, cct, token_cache, config,
                                               admin_token) < 0) {
+    throw -EINVAL;
+  }
+  if (admin_token.empty()) {
+    ldpp_dout(dpp, 0) << "empty admin token (can't happen)" <<dendl;
     throw -EINVAL;
   }
 
@@ -93,8 +103,12 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
    * or similar) and thus improves logging. */
   if (validate.get_http_status() ==
           /* Most likely: wrong admin credentials or admin token. */
-          RGWValidateKeystoneToken::HTTP_STATUS_UNAUTHORIZED ||
-      validate.get_http_status() ==
+          RGWValidateKeystoneToken::HTTP_STATUS_UNAUTHORIZED) {
+    ldpp_dout(dpp, 5) << "No service; failed keystone auth from " << url << " with "
+                  << validate.get_http_status() << dendl;
+    throw -ERR_SERVICE_UNAVAILABLE;
+  }
+  if (validate.get_http_status() ==
           /* Most likely: non-existent token supplied by the client. */
           RGWValidateKeystoneToken::HTTP_STATUS_NOTFOUND) {
     ldpp_dout(dpp, 5) << "Failed keystone auth from " << url << " with "
@@ -391,10 +405,16 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   }
 
   const auto api_version = config.get_api_version();
-  if (api_version == rgw::keystone::ApiVersion::VER_3) {
+  switch (api_version) {
+  case rgw::keystone::ApiVersion::VER_3:
     keystone_url.append("v3/s3tokens");
-  } else {
+    break;
+  case rgw::keystone::ApiVersion::VER_2:
     keystone_url.append("v2.0/s3tokens");
+    break;
+  default:
+    ldpp_dout(dpp, 2) << "unsupported keystone version " << api_version << dendl;
+    throw -EINVAL;
   }
 
   /* get authentication token for Keystone. */

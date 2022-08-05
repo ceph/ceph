@@ -136,6 +136,35 @@ std::string CephCtxConfig::get_admin_password() const noexcept  {
   return empty;
 }
 
+#define SMALL_TIME_SLOP 300
+#define BIG_TIME_SLOP 86400
+int Service::validate_admin_token(TokenEnvelope& t)
+{
+  const uint64_t now = ceph_clock_now().sec();
+  int ret = ~0xffff;
+  if (t.token.id.empty()) {
+    ret |= 1;
+  }
+  if (t.get_expires() < t.get_issued() + SMALL_TIME_SLOP
+    || now - t.get_issued() > BIG_TIME_SLOP
+    || t.get_issued() - now  > BIG_TIME_SLOP) {
+    ret |= 2;
+  }
+  if (static_cast<uint64_t>(t.get_issued()) > now) {
+    t.token.expires -= (t.get_issued() - now);
+  }
+  if (t.get_expires() - now < SMALL_TIME_SLOP) {
+    ret |= 4;
+  }
+  if (t.get_user_name().empty()) {
+    ret |= 8;
+  }
+  if (!(ret & 0xffff)) {
+    ret = 0;
+  }
+  return ret;
+}
+
 int Service::get_admin_token(const DoutPrefixProvider *dpp,
                              CephContext* const cct,
                              TokenCache& token_cache,
@@ -223,6 +252,13 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
 
   if (t.parse(dpp, cct, token_req.get_subject_token(), token_bl,
               keystone_version) != 0) {
+    return -EINVAL;
+  }
+
+  const auto admin_ret = validate_admin_token(t);
+  if (admin_ret < 0) {
+    lderr(cct) << "Received invalid admin token flags=" << (admin_ret & 0xffff)
+             << " data=" << std::string_view(token_bl.c_str(), token_bl.length()) << dendl;
     return -EINVAL;
   }
 
@@ -576,8 +612,10 @@ void rgw::keystone::TokenEnvelope::User::decode_json(JSONObj *obj)
 void rgw::keystone::TokenEnvelope::decode_v3(JSONObj* const root_obj)
 {
   std::string expires_iso8601;
+  std::string issued_iso8601;
 
   JSONDecoder::decode_json("user", user, root_obj, true);
+  JSONDecoder::decode_json("issued_at", issued_iso8601, root_obj, true);
   JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
   JSONDecoder::decode_json("roles", roles, root_obj, true);
   JSONDecoder::decode_json("project", project, root_obj, true);
@@ -588,6 +626,13 @@ void rgw::keystone::TokenEnvelope::decode_v3(JSONObj* const root_obj)
   } else {
     token.expires = 0;
     throw JSONDecoder::err("Failed to parse ISO8601 expiration date"
+                           "from Keystone response.");
+  }
+  if (parse_iso8601(issued_iso8601.c_str(), &t)) {
+    token.issued = internal_timegm(&t);
+  } else {
+    token.issued = 0;
+    throw JSONDecoder::err("Failed to parse ISO8601 issue date"
                            "from Keystone response.");
   }
 }
