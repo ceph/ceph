@@ -1388,11 +1388,12 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
     }
-    int r = bluestore.open_db_environment(&db_ptr, false, true);
+    int r = bluestore.open_db(false, true);
     if (r < 0) {
-      cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+      cerr << "error opening db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+    db_ptr = bluestore.get_db();
     ceph_assert(db_ptr);
     RocksDBStore* rocks_db = dynamic_cast<RocksDBStore*>(db_ptr);
     ceph_assert(rocks_db);
@@ -1402,21 +1403,26 @@ int main(int argc, char **argv)
     } else {
       cout << "reshard success" << std::endl;
     }
-    bluestore.close_db_environment();
+    bluestore.close_db();
   } else if (action == "show-sharding") {
     BlueStore bluestore(cct.get(), path);
     KeyValueDB *db_ptr;
-    int r = bluestore.open_db_environment(&db_ptr, false, false);
+    //fixme: we are opening DB in read-only mode; it means we will not save file allocator state
+    //       if we needed to recover it. We could open DB in read-write but it takes longer.
+    //       The fact is that we do not even need to access DB. For DB/BlueFS case we can read
+    //       directly from ALLOCATOR_NCB_DIR/ALLOCATOR_NCB_FILE.
+    int r = bluestore.open_db(true, false);
     if (r < 0) {
-      cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+      cerr << "error opening db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+    db_ptr = bluestore.get_db();
     ceph_assert(db_ptr);
     RocksDBStore* rocks_db = dynamic_cast<RocksDBStore*>(db_ptr);
     ceph_assert(rocks_db);
     std::string sharding;
     bool res = rocks_db->get_sharding(sharding);
-    bluestore.close_db_environment();
+    bluestore.close_db();
     if (!res) {
       cerr << "failed to retrieve sharding def" << std::endl;
       exit(EXIT_FAILURE);

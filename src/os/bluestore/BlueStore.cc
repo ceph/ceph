@@ -4346,28 +4346,6 @@ void BlueStore::_close_around_db()
   _close_path();
 }
 
-int BlueStore::open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair)
-{
-  _kv_only = true;
-  int r = _open_db_and_around(read_only, to_repair);
-  if (r == 0) {
-    *pdb = db;
-  } else {
-    *pdb = nullptr;
-  }
-  return r;
-}
-
-int BlueStore::close_db_environment()
-{
-  if (db) {
-    delete db;
-    db = nullptr;
-  }
-  _close_around_db();
-  return 0;
-}
-
 /* gets access to bluefs supporting RocksDB */
 BlueFS* BlueStore::get_bluefs() {
   return bluefs;
@@ -4684,10 +4662,17 @@ int BlueStore::open_db(bool read_only, bool to_repair)
   return r;
 }
 
+// A pair to open_db()/close_db() call.
+// This function should not be mistaken with _close_db(),
+// The _close_db() is doing extra actions.
 int BlueStore::close_db()
 {
   dout(5) << __func__ << dendl;
-  _close_db_and_around();
+    if (db) {
+    delete db;
+    db = nullptr;
+  }
+  _close_around_db();
   return 0;
 }
 

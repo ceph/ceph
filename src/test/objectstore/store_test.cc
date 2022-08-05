@@ -4316,9 +4316,9 @@ TEST_P(StoreTestSpecificAUSize, BlueStoreReconstructAllocationsTest)
     {
       auto bluestore = new BlueStore(g_ceph_context, data_dir);
       KeyValueDB* db_ptr;
-      int r = bluestore->open_db_environment(&db_ptr, false, false);
+      int r = bluestore->open_db(false, false);
       ASSERT_EQ(r, 0);
-
+      db_ptr = bluestore->get_db();
       {
 	// to be inline with BlueStore.cc
 	const std::string PREFIX_SHARED_BLOB = "X";
@@ -4343,7 +4343,7 @@ TEST_P(StoreTestSpecificAUSize, BlueStoreReconstructAllocationsTest)
 	ASSERT_EQ(r, 0);
       }
 
-      bluestore->close_db_environment();
+      bluestore->close_db();
       delete bluestore;
     }
 
