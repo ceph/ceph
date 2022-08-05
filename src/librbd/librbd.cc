@@ -2674,8 +2674,8 @@ namespace librbd {
                ictx->read_only, ofs, len, cmp_bl.length() < len ? NULL : cmp_bl.c_str(),
                bl.length() < len ? NULL : bl.c_str(), op_flags);
 
-    if (bl.length() < len) {
-      tracepoint(librbd, write_exit, -EINVAL);
+    if (bl.length() < len || cmp_bl.length() < len) {
+      tracepoint(librbd, compare_and_write_exit, -EINVAL);
       return -EINVAL;
     }
 
@@ -2825,8 +2825,8 @@ namespace librbd {
                ictx->read_only, off, len, cmp_bl.length() < len ? NULL : cmp_bl.c_str(),
                bl.length() < len ? NULL : bl.c_str(), c->pc, op_flags);
 
-    if (bl.length() < len) {
-      tracepoint(librbd, compare_and_write_exit, -EINVAL);
+    if (bl.length() < len || cmp_bl.length() < len) {
+      tracepoint(librbd, aio_compare_and_write_exit, -EINVAL);
       return -EINVAL;
     }
 
