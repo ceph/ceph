@@ -291,6 +291,12 @@ public:
   Transaction(const Transaction& other) = default;
   Transaction& operator=(const Transaction& other) = default;
 
+  ~Transaction() {
+    ceph_assert(on_applied.empty());
+    ceph_assert(on_commit.empty());
+    ceph_assert(on_applied_sync.empty());
+  }
+
   // expose object_index for FileStore::Op's benefit
   const std::map<ghobject_t, uint32_t>& get_object_index() const {
     return object_index;
