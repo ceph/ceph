@@ -1579,6 +1579,9 @@ To enable, add '--license {LICENSE}' to the 'ceph telemetry on' command.'''
                 msg = f"{msg}\nSome channels are disabled, please enable with:\n"\
                         f"`ceph telemetry enable channel{disabled_channels}`"
 
+            # wake up serve() to reset health warning
+            self.event.set()
+
             return 0, msg, ''
 
     @CLICommand('telemetry off')
