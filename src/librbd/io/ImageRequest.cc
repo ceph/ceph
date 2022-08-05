@@ -759,12 +759,17 @@ uint64_t ImageCompareAndWriteRequest<I>::append_journal_event(
 
 template <typename I>
 void ImageCompareAndWriteRequest<I>::assemble_extent(
-  const LightweightObjectExtent &object_extent, bufferlist *bl) {
+    const LightweightObjectExtent &object_extent, bufferlist *bl,
+    bufferlist *cmp_bl) {
   for (auto q = object_extent.buffer_extents.begin();
        q != object_extent.buffer_extents.end(); ++q) {
     bufferlist sub_bl;
     sub_bl.substr_of(m_bl, q->first, q->second);
     bl->claim_append(sub_bl);
+
+    bufferlist sub_cmp_bl;
+    sub_cmp_bl.substr_of(m_cmp_bl, q->first, q->second);
+    cmp_bl->claim_append(sub_cmp_bl);
   }
 }
 
@@ -774,13 +779,12 @@ ObjectDispatchSpec *ImageCompareAndWriteRequest<I>::create_object_request(
     uint64_t journal_tid, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
-  // NOTE: safe to move m_cmp_bl since we only support this op against
-  // a single object
   bufferlist bl;
-  assemble_extent(object_extent, &bl);
+  bufferlist cmp_bl;
+  assemble_extent(object_extent, &bl, &cmp_bl);
   auto req = ObjectDispatchSpec::create_compare_and_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-    object_extent.offset, std::move(m_cmp_bl), std::move(bl), io_context,
+    object_extent.offset, std::move(cmp_bl), std::move(bl), io_context,
     m_mismatch_offset, m_op_flags, journal_tid, this->m_trace, on_finish);
   return req;
 }
