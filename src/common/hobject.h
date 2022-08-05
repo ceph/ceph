@@ -16,7 +16,6 @@
 #define __CEPH_OS_HOBJECT_H
 
 #include "include/types.h"
-#include "include/cmp.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "include/ceph_assert.h"   // spirit clobbers it!
@@ -305,20 +304,26 @@ public:
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<hobject_t*>& o);
   friend int cmp(const hobject_t& l, const hobject_t& r);
-  friend bool operator>(const hobject_t& l, const hobject_t& r) {
-    return cmp(l, r) > 0;
+  auto operator<=>(const hobject_t &rhs) const noexcept {
+    auto cmp = max <=> rhs.max;
+    if (cmp != 0) return cmp;
+    cmp = pool <=> rhs.pool;
+    if (cmp != 0) return cmp;
+    cmp = get_bitwise_key() <=> rhs.get_bitwise_key();
+    if (cmp != 0) return cmp;
+    cmp = nspace <=> rhs.nspace;
+    if (cmp != 0) return cmp;
+    if (!(get_key().empty() && rhs.get_key().empty())) {
+      cmp = get_effective_key() <=> rhs.get_effective_key();
+      if (cmp != 0) return cmp;
+    }
+    cmp = oid <=> rhs.oid;
+    if (cmp != 0) return cmp;
+    return snap <=> rhs.snap;
   }
-  friend bool operator>=(const hobject_t& l, const hobject_t& r) {
-    return cmp(l, r) >= 0;
+  bool operator==(const hobject_t& rhs) const noexcept {
+    return operator<=>(rhs) == 0;
   }
-  friend bool operator<(const hobject_t& l, const hobject_t& r) {
-    return cmp(l, r) < 0;
-  }
-  friend bool operator<=(const hobject_t& l, const hobject_t& r) {
-    return cmp(l, r) <= 0;
-  }
-  friend bool operator==(const hobject_t&, const hobject_t&);
-  friend bool operator!=(const hobject_t&, const hobject_t&);
   friend struct ghobject_t;
 };
 WRITE_CLASS_ENCODER(hobject_t)
@@ -333,8 +338,6 @@ template<> struct hash<hobject_t> {
 } // namespace std
 
 std::ostream& operator<<(std::ostream& out, const hobject_t& o);
-
-WRITE_EQ_OPERATORS_7(hobject_t, hash, oid, get_key(), snap, pool, max, nspace)
 
 template <typename T>
 struct always_false {
@@ -379,39 +382,30 @@ static inline int cmp(const T&, const hobject_t&r) {
 typedef version_t gen_t;
 
 struct ghobject_t {
-  hobject_t hobj;
-  gen_t generation;
-  shard_id_t shard_id;
-  bool max;
-
-public:
   static const gen_t NO_GEN = UINT64_MAX;
 
-  ghobject_t()
-    : generation(NO_GEN),
-      shard_id(shard_id_t::NO_SHARD),
-      max(false) {}
+  bool max = false;
+  shard_id_t shard_id = shard_id_t::NO_SHARD;
+  hobject_t hobj;
+  gen_t generation = NO_GEN;
+
+  ghobject_t() = default;
 
   explicit ghobject_t(const hobject_t &obj)
-    : hobj(obj),
-      generation(NO_GEN),
-      shard_id(shard_id_t::NO_SHARD),
-      max(false) {}
+    : hobj(obj) {}
 
   ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard)
-    : hobj(obj),
-      generation(gen),
-      shard_id(shard),
-      max(false) {}
+    : shard_id(shard),
+      hobj(obj),
+      generation(gen) {}
 
   // used by Crimson
   ghobject_t(shard_id_t shard, int64_t pool, uint32_t reversed_hash,
              const std::string& nspace, const std::string& oid,
              snapid_t snap, gen_t gen)
-    : hobj(oid, snap, reversed_hash, pool, nspace),
-      generation(gen),
-      shard_id(shard),
-      max(false) {}
+    : shard_id(shard),
+      hobj(oid, snap, reversed_hash, pool, nspace),
+      generation(gen) {}
 
   static ghobject_t make_pgmeta(int64_t pool, uint32_t hash, shard_id_t shard) {
     hobject_t h(object_t(), std::string(), CEPH_NOSNAP, hash, pool, std::string());
@@ -487,21 +481,8 @@ public:
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<ghobject_t*>& o);
   friend int cmp(const ghobject_t& l, const ghobject_t& r);
-  friend bool operator>(const ghobject_t& l, const ghobject_t& r) {
-    return cmp(l, r) > 0;
-  }
-  friend bool operator>=(const ghobject_t& l, const ghobject_t& r) {
-    return cmp(l, r) >= 0;
-  }
-  friend bool operator<(const ghobject_t& l, const ghobject_t& r) {
-    return cmp(l, r) < 0;
-  }
-  friend bool operator<=(const ghobject_t& l, const ghobject_t& r) {
-    return cmp(l, r) <= 0;
-  }
-  friend bool operator==(const ghobject_t&, const ghobject_t&);
-  friend bool operator!=(const ghobject_t&, const ghobject_t&);
-
+  auto operator<=>(const ghobject_t&) const = default;
+  bool operator==(const ghobject_t&) const = default;
 };
 WRITE_CLASS_ENCODER(ghobject_t)
 
@@ -519,8 +500,6 @@ namespace std {
 } // namespace std
 
 std::ostream& operator<<(std::ostream& out, const ghobject_t& o);
-
-WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, hobj, generation)
 
 extern int cmp(const ghobject_t& l, const ghobject_t& r);
 
