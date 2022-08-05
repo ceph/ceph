@@ -16,9 +16,11 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <system_error>
+#include <filesystem>
 #include <unistd.h>
 #include <sstream>
 #include <boost/algorithm/string.hpp>
+#include <boost/process.hpp>
 
 #include "common/Clock.h"
 #include "common/errno.h"
@@ -1364,9 +1366,9 @@ void RadosStore::finalize(void)
     rados->finalize();
 }
 
-std::unique_ptr<LuaScriptManager> RadosStore::get_lua_script_manager()
+std::unique_ptr<LuaManager> RadosStore::get_lua_manager()
 {
-  return std::make_unique<RadosLuaScriptManager>(this);
+  return std::make_unique<RadosLuaManager>(this);
 }
 
 std::unique_ptr<RGWRole> RadosStore::get_role(std::string name,
@@ -3007,12 +3009,12 @@ const std::string_view RadosZone::get_tier_type()
   return store->svc()->zone->get_zone().tier_type;
 }
 
-RadosLuaScriptManager::RadosLuaScriptManager(RadosStore* _s) : store(_s)
+RadosLuaManager::RadosLuaManager(RadosStore* _s) : store(_s)
 {
   pool = store->svc()->zone->get_zone_params().log_pool;
 }
 
-int RadosLuaScriptManager::get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
 {
   bufferlist bl;
 
@@ -3031,7 +3033,7 @@ int RadosLuaScriptManager::get(const DoutPrefixProvider* dpp, optional_yield y, 
   return 0;
 }
 
-int RadosLuaScriptManager::put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
+int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
 {
   bufferlist bl;
   ceph::encode(script, bl);
@@ -3044,7 +3046,7 @@ int RadosLuaScriptManager::put(const DoutPrefixProvider* dpp, optional_yield y, 
   return 0;
 }
 
-int RadosLuaScriptManager::del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
+int RadosLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
 {
   int r = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, key, nullptr, y);
   if (r < 0 && r != -ENOENT) {
@@ -3053,6 +3055,83 @@ int RadosLuaScriptManager::del(const DoutPrefixProvider* dpp, optional_yield y, 
 
   return 0;
 }
+
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+const std::string PACKAGE_LIST_OBJECT_NAME = "lua_package_allowlist";
+
+int RadosLuaManager::add_package(const DoutPrefixProvider *dpp, optional_yield y, const std::string& package_name)
+{
+  // add package to list
+  const bufferlist empty_bl;
+  std::map<std::string, bufferlist> new_package{{package_name, empty_bl}};
+  librados::ObjectWriteOperation op;
+  op.omap_set(new_package);
+  auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+      PACKAGE_LIST_OBJECT_NAME, &op, y);
+
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
+}
+
+int RadosLuaManager::remove_package(const DoutPrefixProvider *dpp, optional_yield y, const std::string& package_name)
+{
+  librados::ObjectWriteOperation op;
+  size_t pos = package_name.find(" ");
+  if (pos != package_name.npos) {
+    // remove specfic version of the the package
+    op.omap_rm_keys(std::set<std::string>({package_name}));
+    auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+        PACKAGE_LIST_OBJECT_NAME, &op, y);
+    if (ret < 0) {
+        return ret;
+    }
+    return 0;
+  }
+  // otherwise, remove any existing versions of the package
+  rgw::lua::packages_t packages;
+  auto ret = list_packages(dpp, y, packages);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  for(const auto& package : packages) {
+    const std::string package_no_version = package.substr(0, package.find(" "));
+    if (package_no_version.compare(package_name) == 0) {
+        op.omap_rm_keys(std::set<std::string>({package}));
+        ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+            PACKAGE_LIST_OBJECT_NAME, &op, y);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+  }
+  return 0;
+}
+
+int RadosLuaManager::list_packages(const DoutPrefixProvider *dpp, optional_yield y, rgw::lua::packages_t& packages)
+{
+  constexpr auto max_chunk = 1024U;
+  std::string start_after;
+  bool more = true;
+  int rval;
+  while (more) {
+    librados::ObjectReadOperation op;
+    rgw::lua::packages_t packages_chunk;
+    op.omap_get_keys2(start_after, max_chunk, &packages_chunk, &more, &rval);
+    const auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+      PACKAGE_LIST_OBJECT_NAME, &op, nullptr, y);
+
+    if (ret < 0) {
+      return ret;
+    }
+
+    packages.merge(packages_chunk);
+  }
+
+  return 0;
+}
+#endif
 
 int RadosOIDCProvider::store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y)
 {

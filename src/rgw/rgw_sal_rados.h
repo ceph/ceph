@@ -195,7 +195,7 @@ class RadosStore : public StoreStore {
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override;
     virtual const RGWSyncModuleInstanceRef& get_sync_module() { return rados->get_sync_module(); }
     virtual std::string get_host_id() { return rados->host_id; }
-    virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
+    virtual std::unique_ptr<LuaManager> get_lua_manager() override;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					      std::string tenant,
 					      std::string path="",
@@ -878,17 +878,20 @@ public:
                        optional_yield y) override;
 };
 
-class RadosLuaScriptManager : public StoreLuaScriptManager {
+class RadosLuaManager : public StoreLuaManager {
   RadosStore* store;
   rgw_pool pool;
 
 public:
-  RadosLuaScriptManager(RadosStore* _s);
-  virtual ~RadosLuaScriptManager() = default;
+  RadosLuaManager(RadosStore* _s);
+  virtual ~RadosLuaManager() = default;
 
-  virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
-  virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
-  virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script);
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script);
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key);
+  virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name);
+  virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name);
+  virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages);
 };
 
 class RadosOIDCProvider : public RGWOIDCProvider {

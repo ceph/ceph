@@ -404,9 +404,9 @@ class StoreZone : public Zone {
     virtual ~StoreZone() = default;
 };
 
-class StoreLuaScriptManager : public LuaScriptManager {
+class StoreLuaManager : public LuaManager {
 public:
-  virtual ~StoreLuaScriptManager() = default;
+  virtual ~StoreLuaManager() = default;
 };
 
 } } // namespace rgw::sal

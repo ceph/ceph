@@ -602,9 +602,9 @@ namespace rgw::sal {
     return realm->get_id();
   }
 
-  std::unique_ptr<LuaScriptManager> DBStore::get_lua_script_manager()
+  std::unique_ptr<LuaManager> DBStore::get_lua_manager()
   {
-    return std::make_unique<DBLuaScriptManager>(this);
+    return std::make_unique<DBLuaManager>(this);
   }
 
   int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
@@ -1980,6 +1980,36 @@ namespace rgw::sal {
     }
 
     return ret;
+  }
+
+  int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+  {
+    return -ENOENT;
+  }
+
+  int DBLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
+  {
+    return -ENOENT;
+  }
+
+  int DBLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
+  {
+    return -ENOENT;
+  }
+
+  int DBLuaManager::add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name)
+  {
+    return -ENOENT;
+  }
+
+  int DBLuaManager::remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name)
+  {
+    return -ENOENT;
+  }
+
+  int DBLuaManager::list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages)
+  {
+    return -ENOENT;
   }
 } // namespace rgw::sal
 
