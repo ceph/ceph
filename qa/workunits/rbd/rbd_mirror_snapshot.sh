@@ -239,6 +239,29 @@ write_image ${CLUSTER2} ${POOL} ${force_promote_image} 100
 remove_image_retry ${CLUSTER1} ${POOL} ${force_promote_image}
 remove_image_retry ${CLUSTER2} ${POOL} ${force_promote_image}
 
+# force promote when peer is unresponsive
+testlog "TEST: force promote unresponsive"
+force_promote_image=test_force_promote
+create_image ${CLUSTER2} ${POOL} ${force_promote_image} 100G
+enable_mirror ${CLUSTER2} ${POOL} ${force_promote_image} snapshot
+timeout 1m rbd --cluster ${CLUSTER2} bench --io-type write --io-size 64K --io-threads 2 --io-total 50G --io-pattern seq ${POOL}/${force_promote_image} --debug-ms 0 --debug-rbd 0 || true
+mirror_image_snapshot ${CLUSTER2} ${POOL} ${force_promote_image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${force_promote_image} 'up+replaying' syncing
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd set noup
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd down 0
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd out 0
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd down 1
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd out 1
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd down 2
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd out 2
+promote_image ${CLUSTER1} ${POOL} ${force_promote_image} '--force'
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd unset noup
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd in 0
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd in 1
+CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd in 2
+remove_image_retry ${CLUSTER1} ${POOL} ${force_promote_image}
+remove_image_retry ${CLUSTER2} ${POOL} ${force_promote_image}
+
 testlog "TEST: cloned images"
 testlog " - default"
 parent_image=test_parent
