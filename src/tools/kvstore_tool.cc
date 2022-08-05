@@ -51,10 +51,12 @@ int StoreTool::load_bluestore(const string& path, bool to_repair)
 {
     auto bluestore = new BlueStore(g_ceph_context, path);
     KeyValueDB *db_ptr;
-    int r = bluestore->open_db_environment(&db_ptr, to_repair);
+    int r = bluestore->open_db(false, to_repair);
     if (r < 0) {
      return -EINVAL;
     }
+    db_ptr = bluestore->get_db();
+    ceph_assert(db_ptr);
     db = decltype(db){db_ptr, Deleter(bluestore)};
     return 0;
 }

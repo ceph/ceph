@@ -6470,28 +6470,6 @@ void BlueStore::_close_around_db()
   _close_path();
 }
 
-int BlueStore::open_db_environment(KeyValueDB **pdb, bool to_repair)
-{
-  _kv_only = true;
-  int r = _open_db_and_around(false, to_repair);
-  if (r == 0) {
-    *pdb = db;
-  } else {
-    *pdb = nullptr;
-  }
-  return r;
-}
-
-int BlueStore::close_db_environment()
-{
-  if (db) {
-    delete db;
-    db = nullptr;
-  }
-  _close_around_db();
-  return 0;
-}
-
 /* gets access to bluefs supporting RocksDB */
 BlueFS* BlueStore::get_bluefs() {
   return bluefs;

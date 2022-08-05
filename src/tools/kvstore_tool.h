@@ -26,7 +26,7 @@ class StoreTool
       : bluestore(store) {}
     void operator()(KeyValueDB *db) {
       if (bluestore) {
-	bluestore->umount();
+	bluestore->close_db();
 	delete bluestore;
       } else {
 	delete db;
