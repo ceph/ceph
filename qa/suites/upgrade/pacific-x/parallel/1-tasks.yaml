@@ -22,8 +22,23 @@ tasks:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
 - print: "**** done cephadm.shell ceph config set mgr..."
 
+- print: "**** start cls tests against pacific"
+- workunit:
+  branch: pacific
+  clients:
+    client.0:
+      - cls
+- print: "**** end cls tests against pacific"
+
 - print: "**** done start parallel"
 - parallel:
     - workload
     - upgrade-sequence
 - print: "**** done end parallel"
+
+- print: "**** start cls tests after upgrade"
+- workunit:
+  clients:
+    client.0:
+      - cls
+- print: "**** end cls tests after upgrade"
