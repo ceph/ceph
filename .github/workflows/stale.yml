@@ -51,7 +51,7 @@ jobs:
           exempt-all-pr-milestones: true
           
           # Max number of operations per run
-          operations-per-run: 30
+          operations-per-run: 100
 
           # Change the order used to fetch the issues and pull requests from GitHub
           # So we now start with the oldest PRs and work our way backwards
