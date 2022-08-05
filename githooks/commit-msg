@@ -1,0 +1,32 @@
+#!/usr/bin/python
+
+import sys
+from ComponentMapper import PathToComponent, extract_component_name
+
+
+COMMIT_MSG_FILE = sys.argv[1]
+
+try:
+	with open(COMMIT_MSG_FILE, 'r+') as f:
+		commit_txt_ = f.read()
+		commit_txt = commit_txt_.split("\n")
+		title = commit_txt[0]
+		component = extract_component_name(title)
+
+    # Check: Title should be 72 chars long
+		if len(title) > 72:
+			print("Warning: commit title should be less than 72 chars!")
+			print("Your commit is {commit_len} chars long".format(commit_len=len(title)))
+
+		# Check: Title should be in format `<component>: <message>`
+		if not component:
+			print("Warning: commit title be prefixed with the subsystem or module you are changing.")
+			print("Example: `doc/dashboard: fix a typo`")
+
+		# Check: <component> should be a valid name from file_component_mapping
+		if not PathToComponent.does_component_exist(component):
+			print("Warning: the prefixed module name is not in ceph's pre-defined list.")
+			print("Checkout module list names in ./githooks/components-map.")
+
+except Exception as exc:
+  print("Error in prepare-commit-msg hook: '{exc}'".format(exc=repr(exc)))

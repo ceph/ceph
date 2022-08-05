@@ -3,6 +3,12 @@ import fnmatch, re
 from collections import Counter
 
 
+def extract_component_name(title) -> str:
+  comp_index = title.find(":")
+  if comp_index == -1:
+    return ""
+  return title[:comp_index].strip()
+
 class PathToComponent():
   def __init__(self) -> None:
     self.components = set()
