@@ -51,8 +51,23 @@ tasks:
 
 - print: "**** done cephadm.shell ceph config set mgr..."
 
+- print: "**** start cls tests against octopus"
+- workunit:
+  branch: octopus
+  clients:
+    client.0:
+      - cls
+- print: "**** end cls tests against octopus"
+
 - print: "**** done start parallel"
 - parallel:
     - workload
     - upgrade-sequence
 - print: "**** done end parallel"
+
+- print: "**** start cls tests after upgrade"
+- workunit:
+  clients:
+    client.0:
+      - cls
+- print: "**** end cls tests after upgrade"
