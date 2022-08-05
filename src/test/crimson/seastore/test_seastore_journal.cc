@@ -33,9 +33,7 @@ struct record_validator_t {
       auto test = manager.read(
 	record_final_offset.add_relative(addr),
 	block.bl.length()).unsafe_get0();
-      addr.as_seg_paddr().set_segment_off(
-	addr.as_seg_paddr().get_segment_off()
-	+ block.bl.length());
+      addr = addr.add_offset(block.bl.length());
       bufferlist bl;
       bl.push_back(test);
       ASSERT_EQ(

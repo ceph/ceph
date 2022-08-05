@@ -48,6 +48,8 @@ std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id)
     return out << "Dev(FAKE)";
   } else if (_id == DEVICE_ID_ZERO) {
     return out << "Dev(ZERO)";
+  } else if (_id == DEVICE_ID_ROOT) {
+    return out << "Dev(ROOT)";
   } else {
     return out << "Dev(" << (unsigned)_id << ")";
   }
@@ -57,8 +59,6 @@ std::ostream &operator<<(std::ostream &out, const segment_id_t &segment)
 {
   if (segment == NULL_SEG_ID) {
     return out << "Seg[NULL]";
-  } else if (segment == FAKE_SEG_ID) {
-    return out << "Seg[FAKE]";
   } else {
     return out << "Seg[" << device_id_printer_t{segment.device_id()}
                << "," << segment.device_segment_id()
@@ -94,36 +94,35 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   if (seq.seq == NULL_SEG_SEQ) {
     return out << "sseq(NULL)";
   } else {
-    assert(seq.seq <= MAX_VALID_SEG_SEQ);
     return out << "sseq(" << seq.seq << ")";
   }
 }
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
-  out << "paddr_t<";
+  auto id = rhs.get_device_id();
+  out << "paddr<";
   if (rhs == P_ADDR_NULL) {
     out << "NULL";
   } else if (rhs == P_ADDR_MIN) {
     out << "MIN";
   } else if (rhs == P_ADDR_ZERO) {
     out << "ZERO";
-  } else if (rhs.is_delayed()) {
-    out << "DELAYED_TEMP";
-  } else if (rhs.is_block_relative()) {
-    const seg_paddr_t& s = rhs.as_seg_paddr();
-    out << "BLOCK_REG, " << s.get_segment_off();
-  } else if (rhs.is_record_relative()) {
-    const seg_paddr_t& s = rhs.as_seg_paddr();
-    out << "RECORD_REG, " << s.get_segment_off();
-  } else if (rhs.get_addr_type() == addr_types_t::SEGMENT) {
-    const seg_paddr_t& s = rhs.as_seg_paddr();
+  } else if (has_seastore_off(id)) {
+    auto &s = rhs.as_res_paddr();
+    out << device_id_printer_t{id}
+        << ","
+        << seastore_off_printer_t{s.get_seastore_off()};
+  } else if (rhs.get_addr_type() == paddr_types_t::SEGMENT) {
+    auto &s = rhs.as_seg_paddr();
     out << s.get_segment_id()
-        << ", "
+        << ","
         << seastore_off_printer_t{s.get_segment_off()};
-  } else if (rhs.get_addr_type() == addr_types_t::RANDOM_BLOCK) {
-    const blk_paddr_t& s = rhs.as_blk_paddr();
-    out << s.get_block_off();
+  } else if (rhs.get_addr_type() == paddr_types_t::RANDOM_BLOCK) {
+    auto &s = rhs.as_blk_paddr();
+    out << device_id_printer_t{s.get_device_id()}
+        << ","
+        << s.get_block_off();
   } else {
     out << "INVALID!";
   }

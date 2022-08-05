@@ -243,7 +243,7 @@ struct FixedKVInternalNode
       for (auto i = from; i != to; ++i) {
 	if (i->get_val().is_relative()) {
 	  assert(i->get_val().is_record_relative());
-	  i->set_val(i->get_val() - this->get_paddr());
+	  i->set_val(i->get_val().block_relative_to(this->get_paddr()));
 	}
       }
     }

@@ -1103,7 +1103,7 @@ record_t Cache::prepare_record(
       auto sseq = NULL_SEG_SEQ;
       auto stype = segment_type_t::NULL_SEG;
       if (cleaner != nullptr && i->get_paddr().get_addr_type() ==
-	  addr_types_t::SEGMENT) {
+	  paddr_types_t::SEGMENT) {
         auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
         auto &sinfo = cleaner->get_seg_info(sid);
         sseq = sinfo.seq;
@@ -1580,7 +1580,7 @@ void Cache::init()
   }
   root = new RootBlock();
   root->init(CachedExtent::extent_state_t::CLEAN,
-             P_ADDR_NULL,
+             P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,
              NULL_GENERATION);
   INFO("init root -- {}", *root);
