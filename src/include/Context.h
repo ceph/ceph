@@ -203,10 +203,19 @@ inline void finish_contexts(CephContext *cct, C& finished, int result = 0)
 
   if (cct)
     mydout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
-  for (Context* c : ls) {
-    if (cct)
-      mydout(cct,10) << "---- " << c << dendl;
-    c->complete(result);
+  if constexpr (std::is_same_v<C, std::list<std::unique_ptr<Context>>>) {
+    for (std::unique_ptr<Context>& c : ls) {
+      if (cct)
+        mydout(cct,10) << "---- " << c.get() << dendl;
+      // Context frees itself
+      c.release()->complete(result);
+    }
+  } else {
+    for (Context* c : ls) {
+      if (cct)
+        mydout(cct,10) << "---- " << c << dendl;
+      c->complete(result);
+    }
   }
 }
 
@@ -238,7 +247,9 @@ struct C_Lock : public Context {
  * ContextType must be an ancestor class of ContextInstanceType, or the same class.
  * ContextInstanceType must be default-constructable.
  */
-template <class ContextType, class ContextInstanceType, class Container = std::list<ContextType *>>
+template <class ContextType,
+          class ContextInstanceType,
+          class Container = std::list<std::unique_ptr<ContextType>>>
 class C_ContextsBase : public ContextInstanceType {
 public:
   CephContext *cct;
@@ -248,18 +259,13 @@ public:
     : cct(cct_)
   {
   }
-  ~C_ContextsBase() override {
-    for (auto c : contexts) {
-      delete c;
-    }
-  }
   void add(ContextType* c) {
     contexts.push_back(c);
   }
-  void take(Container& ls) {
+  void take(Container&& ls) {
     Container c;
     c.swap(ls);
-    if constexpr (std::is_same_v<Container, std::list<ContextType *>>) {
+    if constexpr (std::is_same_v<Container, std::list<std::unique_ptr<ContextType>>>) {
       contexts.splice(contexts.end(), c);
     } else {
       contexts.insert(contexts.end(), c.begin(), c.end());
@@ -275,17 +281,16 @@ public:
   }
   bool empty() { return contexts.empty(); }
 
-  template<class C>
-  static ContextType *list_to_context(C& cs) {
+  static ContextType *list_to_context(Container&& cs) {
     if (cs.size() == 0) {
       return 0;
     } else if (cs.size() == 1) {
-      ContextType *c = cs.front();
+      ContextType *c = cs.front().release();
       cs.clear();
       return c;
     } else {
       C_ContextsBase<ContextType, ContextInstanceType> *c(new C_ContextsBase<ContextType, ContextInstanceType>(0));
-      c->take(cs);
+      c->take(std::move(cs));
       return c;
     }
   }

@@ -241,9 +241,17 @@ private:
   ceph::buffer::list data_bl;
   ceph::buffer::list op_bl;
 
-  std::list<Context *> on_applied;
-  std::list<Context *> on_commit;
-  std::list<Context *> on_applied_sync;
+  std::list<std::unique_ptr<Context>> on_applied;
+  std::list<std::unique_ptr<Context>> on_commit;
+  std::list<std::unique_ptr<Context>> on_applied_sync;
+
+  static void _transform_contexts(
+    std::list<std::unique_ptr<Context>> &from,
+    std::list<Context*> &to) {
+    std::transform(std::begin(from), std::end(from), std::back_inserter(to),
+                   [] (auto& uptr) { return uptr.release(); });
+    from.clear();
+  }
 
 public:
   Transaction() = default;
@@ -291,12 +299,6 @@ public:
   Transaction(const Transaction& other) = delete;
   Transaction& operator=(const Transaction& other) = delete;
 
-  ~Transaction() {
-    ceph_assert(on_applied.empty());
-    ceph_assert(on_commit.empty());
-    ceph_assert(on_applied_sync.empty());
-  }
-
   // expose object_index for FileStore::Op's benefit
   const std::map<ghobject_t, uint32_t>& get_object_index() const {
     return object_index;
@@ -305,15 +307,15 @@ public:
   /* Operations on callback contexts */
   void register_on_applied(Context *c) {
     if (!c) return;
-    on_applied.push_back(c);
+    on_applied.push_back(std::unique_ptr<Context>{c});
   }
   void register_on_commit(Context *c) {
     if (!c) return;
-    on_commit.push_back(c);
+    on_commit.push_back(std::unique_ptr<Context>{c});
   }
   void register_on_applied_sync(Context *c) {
     if (!c) return;
-    on_applied_sync.push_back(c);
+    on_applied_sync.push_back(std::unique_ptr<Context>{c});
   }
   void register_on_complete(Context *c) {
     if (!c) return;
@@ -336,15 +338,15 @@ public:
     ceph_assert(out_on_applied);
     ceph_assert(out_on_commit);
     ceph_assert(out_on_applied_sync);
-    std::list<Context *> on_applied, on_commit, on_applied_sync;
+    std::list<std::unique_ptr<Context>> on_applied, on_commit, on_applied_sync;
     for (auto& i : t) {
 	on_applied.splice(on_applied.end(), i.on_applied);
 	on_commit.splice(on_commit.end(), i.on_commit);
 	on_applied_sync.splice(on_applied_sync.end(), i.on_applied_sync);
     }
-    *out_on_applied = C_Contexts::list_to_context(on_applied);
-    *out_on_commit = C_Contexts::list_to_context(on_commit);
-    *out_on_applied_sync = C_Contexts::list_to_context(on_applied_sync);
+    *out_on_applied = C_Contexts::list_to_context(std::move(on_applied));
+    *out_on_commit = C_Contexts::list_to_context(std::move(on_commit));
+    *out_on_applied_sync = C_Contexts::list_to_context(std::move(on_applied_sync));
   }
   static void collect_contexts(
     std::vector<Transaction>& t,
@@ -355,29 +357,28 @@ public:
     ceph_assert(out_on_commit);
     ceph_assert(out_on_applied_sync);
     for (auto& i : t) {
-	out_on_applied->splice(out_on_applied->end(), i.on_applied);
-	out_on_commit->splice(out_on_commit->end(), i.on_commit);
-	out_on_applied_sync->splice(out_on_applied_sync->end(),
-				    i.on_applied_sync);
-    }
+      _transform_contexts(i.on_applied, *out_on_applied);
+      _transform_contexts(i.on_commit, *out_on_commit);
+      _transform_contexts(i.on_applied_sync, *out_on_applied_sync);
+   }
   }
   static Context *collect_all_contexts(
     Transaction& t) {
-    std::list<Context*> contexts;
+    std::list<std::unique_ptr<Context>> contexts;
     contexts.splice(contexts.end(), t.on_applied);
     contexts.splice(contexts.end(), t.on_commit);
     contexts.splice(contexts.end(), t.on_applied_sync);
-    return C_Contexts::list_to_context(contexts);
+    return C_Contexts::list_to_context(std::move(contexts));
   }
 
   Context *get_on_applied() {
-    return C_Contexts::list_to_context(on_applied);
+    return C_Contexts::list_to_context(std::move(on_applied));
   }
   Context *get_on_commit() {
-    return C_Contexts::list_to_context(on_commit);
+    return C_Contexts::list_to_context(std::move(on_commit));
   }
   Context *get_on_applied_sync() {
-    return C_Contexts::list_to_context(on_applied_sync);
+    return C_Contexts::list_to_context(std::move(on_applied_sync));
   }
 
   void set_fadvise_flags(uint32_t flags) {
