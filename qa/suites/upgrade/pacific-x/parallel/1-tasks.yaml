@@ -24,10 +24,10 @@ tasks:
 
 - print: "**** start cls tests against pacific"
 - workunit:
-  branch: pacific
-  clients:
-    client.0:
-      - cls
+    branch: pacific
+    clients:
+      client.0:
+        - cls
 - print: "**** end cls tests against pacific"
 
 - print: "**** done start parallel"
@@ -38,7 +38,7 @@ tasks:
 
 - print: "**** start cls tests after upgrade"
 - workunit:
-  clients:
-    client.0:
-      - cls
+    clients:
+      client.0:
+        - cls
 - print: "**** end cls tests after upgrade"
