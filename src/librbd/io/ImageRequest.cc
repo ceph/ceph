@@ -748,12 +748,11 @@ uint64_t ImageCompareAndWriteRequest<I>::append_journal_event(
   uint64_t tid = 0;
   ceph_assert(this->m_image_extents.size() == 1);
   auto &extent = this->m_image_extents.front();
-  journal::EventEntry event_entry(
-    journal::AioCompareAndWriteEvent(extent.first, extent.second, m_cmp_bl,
-                                     m_bl));
-  tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                           extent.first, extent.second,
-                                           synchronous, -EILSEQ);
+  tid = image_ctx.journal->append_compare_and_write_event(extent.first,
+                                                          extent.second,
+                                                          m_cmp_bl,
+                                                          m_bl,
+                                                          synchronous);
 
   return tid;
 }
@@ -800,11 +799,9 @@ int ImageCompareAndWriteRequest<I>::prune_object_extents(
     return -EINVAL;
 
   I &image_ctx = this->m_image_ctx;
-  uint64_t sector_size = 512ULL;
   uint64_t su = image_ctx.layout.stripe_unit;
   auto& object_extent = object_extents->front();
-  if (object_extent.offset % sector_size + object_extent.length > sector_size ||
-      (su != 0 && (object_extent.offset % su + object_extent.length > su)))
+  if (su == 0 || (object_extent.offset % su + object_extent.length > su))
     return -EINVAL;
 
   return 0;
