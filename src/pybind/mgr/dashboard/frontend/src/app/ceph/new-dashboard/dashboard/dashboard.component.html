@@ -18,10 +18,12 @@
              i18n-title
              class="col-sm-6 px-3">
       <div class="d-flex">
-        <i *ngIf="healthData.health?.status != 'HEALTH_OK'"
-           class="pl-2 fa fa-exclamation-triangle text-warning"></i>
         <i *ngIf="healthData.health?.status == 'HEALTH_OK'"
            class="pl-2 fa fa-check-circle text-success"></i>
+        <i *ngIf="healthData.health?.status == 'HEALTH_WARN'"
+           class="pl-2 fa fa-exclamation-triangle text-warning"></i>
+        <i *ngIf="healthData.health?.status == 'HEALTH_ERR'"
+           class="pl-2 fa fa-exclamation-triangle text-danger"></i>
         <p class="pl-2 pr-5">Cluster</p>
         <i class="fa fa-exclamation-triangle"></i>
         <p class="pl-2">Data Health</p>
