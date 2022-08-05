@@ -3181,6 +3181,11 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
   key.set(ent.key);
   obj_key = key.name + '\a' + key.instance;
 
+  // Set the instance value as "null" to show
+  // the VersionId field in the GET/HEAD object response
+  if (this->get_key().have_null_instance())
+    ent.key.instance = "null";
+
   // Put into the cache
   this->store->get_obj_meta_cache()->put(dpp, obj_key, bl);
 
