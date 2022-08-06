@@ -135,7 +135,7 @@ class KVPool {
   }
 
   void shuffle() {
-    std::random_shuffle(random_p_kvs.begin(), random_p_kvs.end());
+    std::shuffle(random_p_kvs.begin(), random_p_kvs.end(), std::default_random_engine{});
   }
 
   void erase_from_random(iterator_t begin, iterator_t end) {
