@@ -149,21 +149,7 @@ struct staged_position_t {
     }
   }
 
-  MatchKindCMP compare_to(const me_t& o) const {
-    if (index > o.index) {
-      return MatchKindCMP::GT;
-    } else if (index < o.index) {
-      return MatchKindCMP::LT;
-    } else {
-      return nxt.compare_to(o.nxt);
-    }
-  }
-  bool operator>(const me_t& o) const { return (int)compare_to(o) > 0; }
-  bool operator>=(const me_t& o) const { return (int)compare_to(o) >= 0; }
-  bool operator<(const me_t& o) const { return (int)compare_to(o) < 0; }
-  bool operator<=(const me_t& o) const { return (int)compare_to(o) <= 0; }
-  bool operator==(const me_t& o) const { return (int)compare_to(o) == 0; }
-  bool operator!=(const me_t& o) const { return (int)compare_to(o) != 0; }
+  auto operator<=>(const me_t& o) const = default;
 
   void assert_next_to(const me_t& prv) const {
 #ifndef NDEBUG
@@ -251,21 +237,7 @@ struct staged_position_t<STAGE_BOTTOM> {
     return index;
   }
 
-  MatchKindCMP compare_to(const staged_position_t<STAGE_BOTTOM>& o) const {
-    if (index > o.index) {
-      return MatchKindCMP::GT;
-    } else if (index < o.index) {
-      return MatchKindCMP::LT;
-    } else {
-      return MatchKindCMP::EQ;
-    }
-  }
-  bool operator>(const me_t& o) const { return (int)compare_to(o) > 0; }
-  bool operator>=(const me_t& o) const { return (int)compare_to(o) >= 0; }
-  bool operator<(const me_t& o) const { return (int)compare_to(o) < 0; }
-  bool operator<=(const me_t& o) const { return (int)compare_to(o) <= 0; }
-  bool operator==(const me_t& o) const { return (int)compare_to(o) == 0; }
-  bool operator!=(const me_t& o) const { return (int)compare_to(o) != 0; }
+  auto operator<=>(const me_t&) const = default;
 
   me_t& operator-=(const me_t& o) {
     assert(is_valid_index(o.index));
