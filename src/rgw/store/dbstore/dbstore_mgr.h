@@ -28,11 +28,13 @@ private:
   CephContext *cct;
 
 public:
-  DBStoreManager(CephContext *_cct): DBStoreHandles() {
+  DBStoreManager(CephContext *_cct, const StoreManager::Config& cfg)
+    : DBStoreHandles() {
     cct = _cct;
-	default_db = createDB(default_tenant);
+    default_db = createDB(default_tenant);
   };
-  DBStoreManager(CephContext *_cct, std::string logfile, int loglevel): DBStoreHandles() {
+  DBStoreManager(CephContext *_cct, const StoreManager::Config& cfg,
+		 std::string logfile, int loglevel): DBStoreHandles() {
     /* No ceph context. Create one with log args provided */
     cct = _cct;
     cct->_log->set_log_file(logfile);

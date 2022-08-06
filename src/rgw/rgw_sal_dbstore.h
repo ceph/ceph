@@ -742,6 +742,7 @@ public:
 
   class DBStore : public StoreStore {
     private:
+      StoreManager::Config cfg; // XXX needed?
       /* DBStoreManager is used in case multiple
        * connections are needed one for each tenant.
        */
@@ -759,8 +760,10 @@ public:
       bool use_lc_thread;
 
     public:
-      DBStore(): dbsm(nullptr), zone(this), cct(nullptr), dpp(nullptr),
-                 use_lc_thread(false) {}
+    DBStore(CephContext *cct, const StoreManager::Config& cfg)
+      : dbsm(nullptr), zone(this), cct(cct), dpp(nullptr),
+	use_lc_thread(false)
+      {}
       ~DBStore() { delete dbsm; }
 
       DBStore& set_run_lc_thread(bool _use_lc_thread) {

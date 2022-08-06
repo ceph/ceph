@@ -2015,11 +2015,11 @@ namespace rgw::sal {
 
 extern "C" {
 
-  void *newDBStore(CephContext *cct)
+  void *newDBStore(CephContext *cct, const StoreManager::Config& cfg)
   {
-    rgw::sal::DBStore *store = new rgw::sal::DBStore();
+    rgw::sal::DBStore* store = new rgw::sal::DBStore(cct, cfg);
     if (store) {
-      DBStoreManager *dbsm = new DBStoreManager(cct);
+      DBStoreManager *dbsm = new DBStoreManager(cct, cfg);
 
       if (!dbsm ) {
         delete store; store = nullptr;
