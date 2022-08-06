@@ -1193,7 +1193,7 @@ class DummyChildPool {
       // erase and merge
       [[maybe_unused]] auto pivot_key = node_to_split->get_pivot_key();
       logger().info("\n\nERASE-MERGE {}:", node_to_split->get_name());
-      assert(pivot_key.compare_to(key_hobj_t(key)) == MatchKindCMP::EQ);
+      assert(pivot_key == key_hobj_t(key));
       with_trans_intr(pool_clone.get_context().t, [&] (auto &t) {
         return node_to_split->merge(
           pool_clone.get_context(), std::move(node_to_split));
