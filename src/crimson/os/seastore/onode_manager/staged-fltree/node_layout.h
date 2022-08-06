@@ -47,12 +47,13 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   using parent_t = typename node_impl_type<NODE_TYPE>::type;
   using marker_t = typename node_marker_type<NODE_TYPE>::type;
   using node_stage_t = typename extent_t::node_stage_t;
+  using stage_t = node_to_stage_t<node_stage_t>;
   using position_t = typename extent_t::position_t;
   using value_input_t = typename extent_t::value_input_t;
   using value_t = typename extent_t::value_t;
   static constexpr auto FIELD_TYPE = extent_t::FIELD_TYPE;
   static constexpr auto KEY_TYPE = insert_key_type<NODE_TYPE>::type;
-  static constexpr auto STAGE = STAGE_T::STAGE;
+  static constexpr auto STAGE = stage_t::STAGE;
 
   NodeLayoutT(const NodeLayoutT&) = delete;
   NodeLayoutT(NodeLayoutT&&) = delete;
@@ -123,9 +124,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     validate_non_empty();
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       return ((is_level_tail() && is_keys_empty()) ||
-              (!is_level_tail() && STAGE_T::is_keys_one(extent.read())));
+              (!is_level_tail() && stage_t::is_keys_one(extent.read())));
     } else {
-      return STAGE_T::is_keys_one(extent.read());
+      return stage_t::is_keys_one(extent.read());
     }
   }
 
@@ -140,7 +141,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     }
     assert(!is_keys_empty());
     key_view_t pivot_index;
-    STAGE_T::template get_largest_slot<false, true, false>(
+    stage_t::template get_largest_slot<false, true, false>(
         extent.read(), nullptr, &pivot_index, nullptr);
     return {pivot_index};
   }
@@ -226,9 +227,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       }
     } else {
       key_view_t left_pivot_index;
-      STAGE_T::template get_largest_slot<false, true, false>(
+      stage_t::template get_largest_slot<false, true, false>(
           left_node_stage, nullptr, &left_pivot_index, nullptr);
-      std::tie(merge_stage, size_comp) = STAGE_T::evaluate_merge(
+      std::tie(merge_stage, size_comp) = stage_t::evaluate_merge(
           left_pivot_index, right_node_stage);
     }
     auto size_left = filled_size();
@@ -271,7 +272,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       build_name();
     }
     position_t left_last_pos;
-    STAGE_T::template get_largest_slot<true, false, false>(
+    stage_t::template get_largest_slot<true, false, false>(
         left_node_stage, &left_last_pos, nullptr, nullptr);
 
     if (right_node.is_keys_empty()) {
@@ -284,14 +285,14 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         ceph_abort("impossible path");
       }
     } else {
-      typename STAGE_T::template StagedAppender<KeyT::VIEW> left_appender;
+      typename stage_t::template StagedAppender<KeyT::VIEW> left_appender;
       left_appender.init_tail(&mut, left_node_stage, merge_stage);
 
-      typename STAGE_T::StagedIterator right_append_at;
+      typename stage_t::StagedIterator right_append_at;
       right_append_at.set(right_node_stage);
 
       auto pos_end = position_t::end();
-      STAGE_T::template append_until<KeyT::VIEW>(
+      stage_t::template append_until<KeyT::VIEW>(
           right_append_at, left_appender, pos_end, STAGE);
       assert(right_append_at.is_end());
       left_appender.wrap();
@@ -310,7 +311,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   rebuild_extent(context_t c) override {
     assert(!is_keys_empty());
     full_key_t<KeyT::VIEW> first_index;
-    STAGE_T::template get_slot<true, false>(
+    stage_t::template get_slot<true, false>(
         extent.read(), position_t::begin(), &first_index, nullptr);
     auto hint = first_index.get_hint();
     return extent.rebuild(c, hint).si_then([this] (auto mut) {
@@ -336,7 +337,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     auto& node_stage = extent.read();
     key_view_t index_key;
     if (!is_keys_empty()) {
-      STAGE_T::get_stats(node_stage, stats, index_key);
+      stage_t::get_stats(node_stage, stats, index_key);
     }
     stats.size_persistent = extent.get_length();
     stats.size_filled = filled_size();
@@ -362,7 +363,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     os << ":\n  header: " << node_stage_t::header_size() << "B";
     size_t size = 0u;
     if (!is_keys_empty()) {
-      STAGE_T::dump(node_stage, os, "  ", size, p_start);
+      stage_t::dump(node_stage, os, "  ", size, p_start);
     } else {
       size += node_stage_t::header_size();
       if (NODE_TYPE == node_type_t::LEAF || !node_stage.is_level_tail()) {
@@ -395,7 +396,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
   void validate_layout() const override {
 #ifndef NDEBUG
-    STAGE_T::validate(extent.read());
+    stage_t::validate(extent.read());
 #endif
   }
 
@@ -417,13 +418,13 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(!is_keys_empty());
     assert(!pos.is_end());
     if (p_index_key && pp_value) {
-      STAGE_T::template get_slot<true, true>(
+      stage_t::template get_slot<true, true>(
           extent.read(), cast_down<STAGE>(pos), p_index_key, pp_value);
     } else if (!p_index_key && pp_value) {
-      STAGE_T::template get_slot<false, true>(
+      stage_t::template get_slot<false, true>(
           extent.read(), cast_down<STAGE>(pos), nullptr, pp_value);
     } else if (p_index_key && !pp_value) {
-      STAGE_T::template get_slot<true, false>(
+      stage_t::template get_slot<true, false>(
           extent.read(), cast_down<STAGE>(pos), p_index_key, nullptr);
     } else {
       ceph_abort("impossible path");
@@ -446,14 +447,14 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     auto nxt_pos = _pos;
 #endif
     if (!p_index_key && pp_value) {
-      STAGE_T::template get_prev_slot<false, true>(
+      stage_t::template get_prev_slot<false, true>(
           extent.read(), _pos, nullptr, pp_value);
     } else {
       ceph_abort("not implemented");
     }
 #ifndef NDEBUG
     auto _nxt_pos = _pos;
-    STAGE_T::template get_next_slot<false, false>(
+    stage_t::template get_next_slot<false, false>(
         extent.read(), _nxt_pos, nullptr, nullptr);
     assert(nxt_pos == _nxt_pos);
 #endif
@@ -466,10 +467,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(!pos.is_end());
     bool find_next;
     if (p_index_key && pp_value) {
-      find_next = STAGE_T::template get_next_slot<true, true>(
+      find_next = stage_t::template get_next_slot<true, true>(
           extent.read(), cast_down<STAGE>(pos), p_index_key, pp_value);
     } else if (!p_index_key && pp_value) {
-      find_next = STAGE_T::template get_next_slot<false, true>(
+      find_next = stage_t::template get_next_slot<false, true>(
           extent.read(), cast_down<STAGE>(pos), nullptr, pp_value);
     } else {
       ceph_abort("not implemented");
@@ -484,16 +485,16 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
                         const value_t** pp_value = nullptr) const override {
     assert(!is_keys_empty());
     if (p_pos && p_index_key && pp_value) {
-      STAGE_T::template get_largest_slot<true, true, true>(
+      stage_t::template get_largest_slot<true, true, true>(
           extent.read(), &cast_down_fill_0<STAGE>(*p_pos), p_index_key, pp_value);
     } else if (!p_pos && p_index_key && !pp_value) {
-      STAGE_T::template get_largest_slot<false, true, false>(
+      stage_t::template get_largest_slot<false, true, false>(
           extent.read(), nullptr, p_index_key, nullptr);
     } else if (p_pos && !p_index_key && pp_value) {
-      STAGE_T::template get_largest_slot<true, false, true>(
+      stage_t::template get_largest_slot<true, false, true>(
           extent.read(), &cast_down_fill_0<STAGE>(*p_pos), nullptr, pp_value);
     } else if (p_pos && !p_index_key && !pp_value) {
-      STAGE_T::template get_largest_slot<true, false, false>(
+      stage_t::template get_largest_slot<true, false, false>(
           extent.read(), &cast_down_fill_0<STAGE>(*p_pos), nullptr, nullptr);
     } else {
       ceph_abort("not implemented");
@@ -513,27 +514,27 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     }
     assert(!is_keys_empty());
 
-    typename STAGE_T::result_t result_raw;
+    typename stage_t::result_t result_raw;
     if (index_key) {
-      result_raw = STAGE_T::template lower_bound<true>(
+      result_raw = stage_t::template lower_bound<true>(
           node_stage, key, history, index_key);
 #ifndef NDEBUG
       if (!result_raw.is_end()) {
         full_key_t<KeyT::VIEW> index;
-        STAGE_T::template get_slot<true, false>(
+        stage_t::template get_slot<true, false>(
             node_stage, result_raw.position, &index, nullptr);
         assert(index.compare_to(*index_key) == MatchKindCMP::EQ);
       }
 #endif
     } else {
-      result_raw = STAGE_T::lower_bound(node_stage, key, history);
+      result_raw = stage_t::lower_bound(node_stage, key, history);
     }
 #ifndef NDEBUG
     if (result_raw.is_end()) {
       assert(result_raw.mstat == MSTAT_END);
     } else {
       full_key_t<KeyT::VIEW> index;
-      STAGE_T::template get_slot<true, false>(
+      stage_t::template get_slot<true, false>(
           node_stage, result_raw.position, &index, nullptr);
       assert_mstat(key, index, result_raw.mstat);
     }
@@ -622,7 +623,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
     auto& insert_pos = cast_down<STAGE>(_insert_pos);
     auto& node_stage = extent.read();
-    typename STAGE_T::StagedIterator split_at;
+    typename stage_t::StagedIterator split_at;
     bool is_insert_left;
     size_t split_size;
     size_t target_split_size;
@@ -709,7 +710,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       std::optional<bool> _is_insert_left;
       split_at.set(node_stage);
       split_size = 0;
-      bool locate_nxt = STAGE_T::recursively_locate_split_inserted(
+      bool locate_nxt = stage_t::recursively_locate_split_inserted(
           split_size, 0, target_split_size, insert_pos,
           insert_stage, insert_size, _is_insert_left, split_at);
       is_insert_left = *_is_insert_left;
@@ -730,12 +731,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
     auto append_at = split_at;
     // TODO(cross-node string dedup)
-    typename STAGE_T::template StagedAppender<KEY_TYPE> right_appender;
+    typename stage_t::template StagedAppender<KEY_TYPE> right_appender;
     right_appender.init_empty(&right_mut, right_mut.get_write());
     const value_t* p_value = nullptr;
     if (!is_insert_left) {
       // right node: append [start(append_at), insert_pos)
-      STAGE_T::template append_until<KEY_TYPE>(
+      stage_t::template append_until<KEY_TYPE>(
           append_at, right_appender, insert_pos, insert_stage);
       SUBDEBUG(seastore_onode,
           "-- right appended until "
@@ -743,7 +744,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
           insert_pos, insert_stage);
       // right node: append [insert_pos(key, value)]
       bool is_front_insert = (insert_pos == position_t::begin());
-      [[maybe_unused]] bool is_end = STAGE_T::template append_insert<KEY_TYPE>(
+      [[maybe_unused]] bool is_end = stage_t::template append_insert<KEY_TYPE>(
           key, value, append_at, right_appender,
           is_front_insert, insert_stage, p_value);
       assert(append_at.is_end() == is_end);
@@ -753,7 +754,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
     // right node: append (insert_pos, end)
     auto pos_end = position_t::end();
-    STAGE_T::template append_until<KEY_TYPE>(
+    stage_t::template append_until<KEY_TYPE>(
         append_at, right_appender, pos_end, STAGE);
     assert(append_at.is_end());
     right_appender.wrap();
@@ -809,12 +810,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     InsertType insert_type;
     search_position_t last_pos;
     if (is_insert_left) {
-      STAGE_T::template get_largest_slot<true, false, false>(
+      stage_t::template get_largest_slot<true, false, false>(
           extent.read(), &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
     } else {
       node_stage_t right_stage{reinterpret_cast<FieldType*>(right_mut.get_write()),
                                right_mut.get_length()};
-      STAGE_T::template get_largest_slot<true, false, false>(
+      stage_t::template get_largest_slot<true, false, false>(
           right_stage, &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
     }
     if (_insert_pos == search_position_t::begin()) {
@@ -870,9 +871,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       if (unlikely(is_keys_empty())) {
         assert(insert_pos.is_end());
         insert_stage = STAGE;
-        insert_size = STAGE_T::template insert_size<KeyT::VIEW>(key, value);
+        insert_size = stage_t::template insert_size<KeyT::VIEW>(key, value);
       } else {
-        std::tie(insert_stage, insert_size) = STAGE_T::evaluate_insert(
+        std::tie(insert_stage, insert_size) = stage_t::evaluate_insert(
             node_stage, key, value, cast_down<STAGE>(insert_pos), false);
       }
       return {insert_stage, insert_size};
@@ -892,9 +893,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       if (unlikely(is_keys_empty())) {
         assert(insert_pos.is_end());
         assert(is_level_tail());
-        return {STAGE, STAGE_T::template insert_size<KeyT::HOBJ>(key, value)};
+        return {STAGE, stage_t::template insert_size<KeyT::HOBJ>(key, value)};
       } else {
-        return STAGE_T::evaluate_insert(
+        return stage_t::evaluate_insert(
             key, value, history, mstat, cast_down<STAGE>(insert_pos));
       }
     } else {
