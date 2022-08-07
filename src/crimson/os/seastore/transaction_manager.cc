@@ -654,6 +654,10 @@ TransactionManagerRef make_transaction_manager(
     *backref_manager,
     cleaner_is_detailed);
 
+  if (primary_device->get_device_type() == device_type_t::SEGMENTED) {
+    cache->set_segment_provider(*async_cleaner);
+  }
+
   auto p_device_type = primary_device->get_device_type();
   JournalRef journal;
   if (p_device_type == device_type_t::SEGMENTED) {

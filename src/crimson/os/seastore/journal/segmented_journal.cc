@@ -234,7 +234,7 @@ SegmentedJournal::replay_segment(
   return seastar::do_with(
     scan_valid_records_cursor(seq),
     SegmentManagerGroup::found_record_handler_t(
-      [s_type=header.type, &handler, this, &stats](
+      [&handler, this, &stats](
       record_locator_t locator,
       const record_group_header_t& header,
       const bufferlist& mdbuf)
@@ -254,7 +254,6 @@ SegmentedJournal::replay_segment(
       return seastar::do_with(
         std::move(*maybe_record_deltas_list),
         [write_result=locator.write_result,
-	 s_type,
          this,
          FNAME,
          &handler,
@@ -263,7 +262,6 @@ SegmentedJournal::replay_segment(
         return crimson::do_for_each(
           record_deltas_list,
           [write_result,
-	   s_type,
            this,
            FNAME,
            &handler,
@@ -280,38 +278,12 @@ SegmentedJournal::replay_segment(
           return crimson::do_for_each(
             record_deltas.deltas,
             [locator,
-	     s_type,
              this,
-             FNAME,
              &handler,
              &stats](auto &p)
           {
 	    auto& modify_time = p.first;
 	    auto& delta = p.second;
-            /* The journal may validly contain deltas for extents in
-             * since released segments.  We can detect those cases by
-             * checking whether the segment in question currently has a
-             * sequence number > the current journal segment seq. We can
-             * safetly skip these deltas because the extent must already
-             * have been rewritten.
-             */
-            if (delta.paddr != P_ADDR_NULL) {
-              auto& seg_addr = delta.paddr.as_seg_paddr();
-              auto& seg_info = segment_provider.get_seg_info(seg_addr.get_segment_id());
-              auto delta_paddr_segment_seq = seg_info.seq;
-	      auto delta_paddr_segment_type = seg_info.type;
-              if (s_type == segment_type_t::NULL_SEG ||
-                  (delta_paddr_segment_seq != delta.ext_seq ||
-		   delta_paddr_segment_type != delta.seg_type)) {
-                SUBDEBUG(seastore_cache,
-                         "delta is obsolete, delta_paddr_segment_seq={},"
-			 " delta_paddr_segment_type={} -- {}",
-                         segment_seq_printer_t{delta_paddr_segment_seq},
-			 delta_paddr_segment_type,
-                         delta);
-                return replay_ertr::now();
-              }
-            }
 	    return handler(
 	      locator,
 	      delta,
