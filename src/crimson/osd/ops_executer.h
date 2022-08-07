@@ -168,12 +168,12 @@ private:
   Ref<PG> pg; // for the sake of object class
   ObjectContextRef obc;
   ObjectContextRef clone_obc; // if we create a clone
+  ObjectState head_os;
   const OpInfo& op_info;
   ceph::static_ptr<ExecutableMessage,
                    sizeof(ExecutableMessagePimpl<void>)> msg;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
-  bool head_existed = false;
   ceph::os::Transaction txn;
 
   size_t num_read = 0;    ///< count read ops
