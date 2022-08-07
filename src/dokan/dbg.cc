@@ -139,7 +139,7 @@ void print_open_params(
   check_flag(o, FlagsAndAttributes, SECURITY_EFFECTIVE_ONLY);
   check_flag(o, FlagsAndAttributes, SECURITY_SQOS_PRESENT);
 
-  o << "\n\tIsDirectory: " << (DokanFileInfo->IsDirectory != NULL);
+  o << "\n\tIsDirectory: " << static_cast<bool>(DokanFileInfo->IsDirectory);
 
   o << "\n\tCreateOptions: " << hex << CreateOptions << " ";
   check_flag(o, CreateOptions, FILE_DIRECTORY_FILE);

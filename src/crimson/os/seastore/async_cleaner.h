@@ -794,7 +794,7 @@ public:
     ceph_assert(journal_dirty_tail == JOURNAL_SEQ_NULL ||
                 head >= journal_dirty_tail);
 
-    if (head.offset.get_addr_type() == addr_types_t::SEGMENT) {
+    if (head.offset.get_addr_type() == paddr_types_t::SEGMENT) {
       auto submitted_journal_head = segments.get_submitted_journal_head();
       ceph_assert(submitted_journal_head != JOURNAL_SEQ_NULL &&
                   head <= submitted_journal_head);

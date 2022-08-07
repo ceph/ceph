@@ -47,15 +47,6 @@ class Btree {
   Btree& operator=(const Btree&) = delete;
   Btree& operator=(Btree&&) = delete;
 
-  /**
-   * compare
-   *
-   * This defines the internal order of Btree from ghobject_t perspective.
-   */
-  static int compare(const ghobject_t &l, const ghobject_t &r) {
-    return static_cast<int>(key_hobj_t(l).compare_to(key_hobj_t(r)));
-  }
-
   eagain_ifuture<> mkfs(Transaction& t) {
     return Node::mkfs(get_context(t), *root_tracker);
   }

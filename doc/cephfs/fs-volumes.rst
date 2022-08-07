@@ -357,7 +357,7 @@ Fetch the information of a snapshot using::
 
     $ ceph fs subvolume snapshot info <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
 
-The output format is json and contains fields as follows.
+The output format is JSON and contains fields as follows.
 
 * created_at: time of creation of snapshot in the format "YYYY-MM-DD HH:MM:SS:ffffff"
 * data_pool: data pool the snapshot belongs to
@@ -365,7 +365,7 @@ The output format is json and contains fields as follows.
 * pending_clones: list of in progress or pending clones and their target group if exist otherwise this field is not shown
 * orphan_clones_count: count of orphan clones if snapshot has orphan clones otherwise this field is not shown
 
-Sample output if snapshot clones are in progress or pending state::
+Sample output when snapshot clones are in progress or pending state::
 
   $ ceph fs subvolume snapshot info cephfs subvol snap
   {
@@ -387,7 +387,7 @@ Sample output if snapshot clones are in progress or pending state::
       ]
   }
 
-Sample output if no snapshot clone is in progress or pending state::
+Sample output when no snapshot clone is in progress or pending state::
 
   $ ceph fs subvolume snapshot info cephfs subvol snap
   {

@@ -643,7 +643,7 @@ void AsyncCleaner::update_journal_tails(
   if (disable_trim) return;
 
   if (dirty_tail != JOURNAL_SEQ_NULL) {
-    assert(dirty_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
+    assert(dirty_tail.offset.get_addr_type() != paddr_types_t::RANDOM_BLOCK);
     ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
                 journal_head >= dirty_tail);
     if (journal_dirty_tail != JOURNAL_SEQ_NULL &&
@@ -663,7 +663,7 @@ void AsyncCleaner::update_journal_tails(
   if (alloc_tail != JOURNAL_SEQ_NULL) {
     ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
                 journal_head >= alloc_tail);
-    assert(alloc_tail.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
+    assert(alloc_tail.offset.get_addr_type() != paddr_types_t::RANDOM_BLOCK);
     if (journal_alloc_tail != JOURNAL_SEQ_NULL &&
         journal_alloc_tail > alloc_tail) {
       ERROR("journal_alloc_tail {} => {} is backwards!",
@@ -1249,7 +1249,7 @@ void AsyncCleaner::mark_space_used(
   bool init_scan)
 {
   LOG_PREFIX(AsyncCleaner::mark_space_used);
-  if (addr.get_addr_type() != addr_types_t::SEGMENT) {
+  if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
   }
   auto& seg_addr = addr.as_seg_paddr();
@@ -1285,7 +1285,7 @@ void AsyncCleaner::mark_space_free(
   if (!init_complete && !init_scan) {
     return;
   }
-  if (addr.get_addr_type() != addr_types_t::SEGMENT) {
+  if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
   }
 

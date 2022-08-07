@@ -19,7 +19,7 @@ sslTag="OpenSSL_1_1_1c"
 sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
-curlTag="curl-7_66_0"
+curlTag="curl-7_84_0"
 curlSrcDir="${depsSrcDir}/curl"
 curlDir="${depsToolsetDir}/curl"
 
@@ -201,7 +201,7 @@ EOL
 ./b2 install --user-config=user-config.jam toolset=gcc-mingw32 \
     target-os=windows release \
     link=static,shared \
-    threadapi=pthread --prefix=$boostDir \
+    threadapi=win32 --prefix=$boostDir \
     address-model=64 architecture=x86 \
     binary-format=pe abi=ms -j $NUM_WORKERS \
     -sZLIB_INCLUDE=$zlibDir/include -sZLIB_LIBRARY_PATH=$zlibDir/lib \

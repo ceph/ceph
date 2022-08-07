@@ -104,7 +104,7 @@ BtreeBackrefManager::get_mappings(
 	  }
 	  TRACET("{}~{} got {}, {}, repeat ...",
 	         c.trans, offset, end, pos.get_key(), pos.get_val());
-	  ceph_assert((pos.get_key() + pos.get_val().len) > offset);
+	  ceph_assert((pos.get_key().add_offset(pos.get_val().len)) > offset);
 	  ret.push_back(pos.get_pin());
 	  return BackrefBtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},

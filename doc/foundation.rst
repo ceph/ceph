@@ -36,6 +36,7 @@ Premier
 * `SoftIron <https://www.softiron.com/>`_
 * `SUSE <https://www.suse.com/>`_
 * `Western Digital <https://www.wdc.com/>`_
+* `XSKY <https://www.xsky.com/en/>`_
 * `ZTE <https://www.zte.com.cn/global/>`_
 
 General
@@ -51,6 +52,7 @@ General
 * `ISS <http://iss-integration.com/>`_
 * `Linode <https://linode.com/>`_
 * `OSNexus <https://osnexus.com/>`_
+* `Seagate <https://seagate.com/>`_
 * `SinoRail <http://www.sinorail.com/>`_
 * `Vexxhost <https://vexxhost.com>`_
 
@@ -64,7 +66,7 @@ Associate
 * `grnet <https://grnet.gr/>`_
 * `Monash University <http://www.monash.edu/>`_
 * `NRF SARAO <http://www.ska.ac.za/about/sarao/>`_
-* `Science & Technology Facilities Council (STFC) <https://stfc.ukri.org/>`_
+* `Science & Technology Facilities Councel (STFC) <https://stfc.ukri.org/>`_
 * `University of Michigan <http://www.osris.org/>`_
 * `SWITCH <https://switch.ch/>`_
 
@@ -95,16 +97,18 @@ Members
 -------
 
 * Anjaneya "Reddy" Chagam (Intel)
-* Dan van der Ster (CERN) - Associate member representative
+* Carlos Maltzahn (UCSC) - Associate member representative
+* Dan van der Ster (CERN) - Ceph Council representative
 * Haomai Wang (XSKY)
 * James Page (Canonical)
-* Lenz Grimmer (SUSE) - Ceph Leadership Team representative
-* Lars Marowsky-Bree (SUSE)
+* Joao Luis (SUSE)
+* Josh Durgin (Red Hat) - Ceph Council representative
 * Matias Bjorling (Western Digital)
 * Matthew Leonard (Bloomberg)
 * Mike Perez (Red Hat) - Ceph community manager
 * Myoungwon Oh (Samsung Electronics)
-* Martin Verges (croit) - General member representative
+* Neha Ojha (Red Hat) - Ceph Council Representative
+* Steven Umbehocker (OSNexus) - General member representative
 * Pawel Sadowski (OVH)
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
@@ -116,4 +120,3 @@ Joining
 
 For information about joining the Ceph Foundation, please contact
 membership@linuxfoundation.org.
-

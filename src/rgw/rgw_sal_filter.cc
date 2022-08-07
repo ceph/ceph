@@ -414,11 +414,11 @@ const RGWSyncModuleInstanceRef& FilterStore::get_sync_module()
   return next->get_sync_module();
 }
 
-std::unique_ptr<LuaScriptManager> FilterStore::get_lua_script_manager()
+std::unique_ptr<LuaManager> FilterStore::get_lua_manager()
 {
-  std::unique_ptr<LuaScriptManager> nm = next->get_lua_script_manager();
+  std::unique_ptr<LuaManager> nm = next->get_lua_manager();
 
-  return std::make_unique<FilterLuaScriptManager>(std::move(nm));
+  return std::make_unique<FilterLuaManager>(std::move(nm));
 }
 
 std::unique_ptr<RGWRole> FilterStore::get_role(std::string name,
@@ -1303,22 +1303,40 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
 			canceled, y);
 }
 
-int FilterLuaScriptManager::get(const DoutPrefixProvider* dpp, optional_yield y,
+int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
 				const std::string& key, std::string& script)
 {
-  return next->get(dpp, y, key, script);
+  return next->get_script(dpp, y, key, script);
 }
 
-int FilterLuaScriptManager::put(const DoutPrefixProvider* dpp, optional_yield y,
+int FilterLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
 				const std::string& key, const std::string& script)
 {
-  return next->put(dpp, y, key, script);
+  return next->put_script(dpp, y, key, script);
 }
 
-int FilterLuaScriptManager::del(const DoutPrefixProvider* dpp, optional_yield y,
+int FilterLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y,
 				const std::string& key)
 {
-  return next->del(dpp, y, key);
+  return next->del_script(dpp, y, key);
+}
+
+int FilterLuaManager::add_package(const DoutPrefixProvider* dpp, optional_yield y,
+                                 const std::string& package_name)
+{
+  return next->add_package(dpp, y, package_name);
+}
+
+int FilterLuaManager::remove_package(const DoutPrefixProvider* dpp, optional_yield y, 
+                                    const std::string& package_name)
+{
+  return next->remove_package(dpp, y, package_name);
+}
+
+int FilterLuaManager::list_packages(const DoutPrefixProvider* dpp, optional_yield y,
+                                   rgw::lua::packages_t& packages)
+{
+  return next->list_packages(dpp, y, packages);
 }
 
 } } // namespace rgw::sal
