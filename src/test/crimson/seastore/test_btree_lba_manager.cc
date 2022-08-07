@@ -115,7 +115,7 @@ struct btree_test_base :
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
       journal = journal::make_segmented(*this);
-      epm.reset(new ExtentPlacementManager(false));
+      epm.reset(new ExtentPlacementManager());
       cache.reset(new Cache(*epm));
 
       block_size = segment_manager->get_block_size();

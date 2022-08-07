@@ -624,7 +624,7 @@ TransactionManager::~TransactionManager() {}
 TransactionManagerRef make_transaction_manager(tm_make_config_t config)
 {
   LOG_PREFIX(make_transaction_manager);
-  auto epm = std::make_unique<ExtentPlacementManager>(config.epm_prefer_ool);
+  auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
