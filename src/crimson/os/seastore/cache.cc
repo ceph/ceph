@@ -1018,7 +1018,8 @@ CachedExtentRef Cache::duplicate_for_write(
 
 record_t Cache::prepare_record(
   Transaction &t,
-  SegmentProvider *cleaner)
+  const journal_seq_t &journal_head,
+  const journal_seq_t &journal_dirty_tail)
 {
   LOG_PREFIX(Cache::prepare_record);
   SUBTRACET(seastore_t, "enter", t);
@@ -1251,15 +1252,16 @@ record_t Cache::prepare_record(
   }
 
   if (is_cleaner_transaction(trans_src)) {
-    assert(cleaner != nullptr);
+    assert(journal_head != JOURNAL_SEQ_NULL);
+    assert(journal_dirty_tail != JOURNAL_SEQ_NULL);
     journal_seq_t dirty_tail;
     auto maybe_dirty_tail = get_oldest_dirty_from();
     if (!maybe_dirty_tail.has_value()) {
-      dirty_tail = cleaner->get_journal_head();
+      dirty_tail = journal_head;
       SUBINFOT(seastore_t, "dirty_tail all trimmed, set to head {}, src={}",
                t, dirty_tail, trans_src);
     } else if (*maybe_dirty_tail == JOURNAL_SEQ_NULL) {
-      dirty_tail = cleaner->get_dirty_tail();
+      dirty_tail = journal_dirty_tail;
       SUBINFOT(seastore_t, "dirty_tail is pending, set to {}, src={}",
                t, dirty_tail, trans_src);
     } else {
@@ -1272,7 +1274,7 @@ record_t Cache::prepare_record(
       // FIXME: the replay point of the allocations requires to be accurate.
       // Setting the alloc_tail to get_journal_head() cannot skip replaying the
       // last unnecessary record.
-      alloc_tail = cleaner->get_journal_head();
+      alloc_tail = journal_head;
       SUBINFOT(seastore_t, "alloc_tail all trimmed, set to head {}, src={}",
                t, alloc_tail, trans_src);
     } else if (*maybe_alloc_tail == JOURNAL_SEQ_NULL) {

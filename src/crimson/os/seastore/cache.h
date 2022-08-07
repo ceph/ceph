@@ -699,7 +699,8 @@ public:
    */
   record_t prepare_record(
     Transaction &t, ///< [in, out] current transaction
-    SegmentProvider *cleaner
+    const journal_seq_t &journal_head,
+    const journal_seq_t &journal_dirty_tail
   );
 
   /**

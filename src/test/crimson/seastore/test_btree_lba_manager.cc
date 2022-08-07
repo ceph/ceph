@@ -94,7 +94,7 @@ struct btree_test_base :
   virtual void complete_commit(Transaction &t) {}
   seastar::future<> submit_transaction(TransactionRef t)
   {
-    auto record = cache->prepare_record(*t, this);
+    auto record = cache->prepare_record(*t, JOURNAL_SEQ_NULL, JOURNAL_SEQ_NULL);
     return journal->submit_record(std::move(record), t->get_handle()).safe_then(
       [this, t=std::move(t)](auto submit_result) mutable {
 	cache->complete_commit(
