@@ -250,10 +250,6 @@ public:
       return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
         return writer->close();
       });
-    }).safe_then([this] {
-      devices_by_id.clear();
-      devices_by_id.resize(DEVICE_ID_MAX, nullptr);
-      primary_device = nullptr;
     });
   }
 

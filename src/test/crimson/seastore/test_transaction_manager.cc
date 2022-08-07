@@ -75,9 +75,9 @@ struct transaction_manager_test_t :
   seastar::future<> set_up_fut() final {
     std::string j_type = GetParam();
     if (j_type == "segmented") {
-      return tm_setup(tm_make_config_t::get_test_segmented_journal());
+      return tm_setup(journal_type_t::SEGMENT_JOURNAL);
     } else if (j_type == "circularbounded") {
-      return tm_setup(tm_make_config_t::get_test_cb_journal());
+      return tm_setup(journal_type_t::CIRCULARBOUNDED_JOURNAL);
     } else {
       ceph_assert(0 == "no support");
     }

@@ -29,47 +29,9 @@
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/device.h"
-#include "crimson/os/seastore/segment_manager_group.h"
 
 namespace crimson::os::seastore {
 class Journal;
-
-struct tm_make_config_t {
-  bool is_test;
-  journal_type_t j_type;
-
-  static tm_make_config_t get_default() {
-    return tm_make_config_t {
-      false,
-      journal_type_t::SEGMENT_JOURNAL
-    };
-  }
-  static tm_make_config_t get_test_segmented_journal() {
-    LOG_PREFIX(get_test_segmented_journal);
-    SUBWARN(seastore_tm, "test mode enabled!");
-    return tm_make_config_t {
-      true,
-      journal_type_t::SEGMENT_JOURNAL
-    };
-  }
-  static tm_make_config_t get_test_cb_journal() {
-    LOG_PREFIX(get_test_cb_journal);
-    SUBWARN(seastore_tm, "test mode enabled!");
-    return tm_make_config_t {
-      true,
-      journal_type_t::CIRCULARBOUNDED_JOURNAL
-    };
-  }
-
-  tm_make_config_t(const tm_make_config_t &) = default;
-  tm_make_config_t &operator=(const tm_make_config_t &) = default;
-private:
-  tm_make_config_t(
-    bool is_test,
-    journal_type_t j_type)
-    : is_test(is_test), j_type(j_type)
-  {}
-};
 
 template <typename F>
 auto repeat_eagain(F &&f) {
@@ -625,19 +587,6 @@ public:
     return async_cleaner->stat();
   }
 
-  void add_device(Device* dev, bool is_primary) {
-    LOG_PREFIX(TransactionManager::add_device);
-    SUBDEBUG(seastore_tm, "adding device {}, is_primary={}",
-             dev->get_device_id(), is_primary);
-    epm->add_device(dev, is_primary);
-
-    if (dev->get_device_type() == device_type_t::SEGMENTED) {
-      auto sm = dynamic_cast<SegmentManager*>(dev);
-      ceph_assert(sm != nullptr);
-      sm_group.add_segment_manager(sm);
-    }
-  }
-
   ~TransactionManager();
 
 private:
@@ -649,7 +598,6 @@ private:
   JournalRef journal;
   ExtentPlacementManagerRef epm;
   BackrefManagerRef backref_manager;
-  SegmentManagerGroup &sm_group;
 
   WritePipeline write_pipeline;
 
@@ -680,5 +628,8 @@ public:
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
-TransactionManagerRef make_transaction_manager(tm_make_config_t config);
+TransactionManagerRef make_transaction_manager(
+    Device *primary_device,
+    const std::vector<Device*> &secondary_devices,
+    bool is_test);
 }
