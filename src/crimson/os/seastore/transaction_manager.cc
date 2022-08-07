@@ -389,9 +389,6 @@ TransactionManager::submit_transaction_direct(
       async_cleaner->update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
-      return async_cleaner->maybe_release_segment(tref);
-    }).safe_then([FNAME, &tref] {
-      SUBTRACET(seastore_t, "completed", tref);
       return tref.get_handle().complete();
     }).handle_error(
       submit_transaction_iertr::pass_further{},

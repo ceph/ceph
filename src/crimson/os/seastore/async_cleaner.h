@@ -861,9 +861,6 @@ public:
   void update_journal_tails(
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
 
-  using release_ertr = SegmentManagerGroup::release_ertr;
-  release_ertr::future<> maybe_release_segment(Transaction &t);
-
   void adjust_segment_util(double old_usage, double new_usage) {
     auto old_index = get_bucket_index(old_usage);
     auto new_index = get_bucket_index(new_usage);
