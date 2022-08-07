@@ -8,6 +8,7 @@
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/random_block_manager/rbm_device.h"
 
 /*
  * TransactionManager logs
@@ -34,8 +35,7 @@ TransactionManager::TransactionManager(
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
-    backref_manager(std::move(backref_manager)),
-    sm_group(*async_cleaner->get_segment_manager_group())
+    backref_manager(std::move(backref_manager))
 {
   async_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -170,9 +170,8 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
     return journal->close();
   }).safe_then([this] {
     return epm->close();
-  }).safe_then([FNAME, this] {
+  }).safe_then([FNAME] {
     INFO("completed");
-    sm_group.reset();
     return seastar::now();
   });
 }
@@ -621,7 +620,10 @@ TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_l
 
 TransactionManager::~TransactionManager() {}
 
-TransactionManagerRef make_transaction_manager(tm_make_config_t config)
+TransactionManagerRef make_transaction_manager(
+    Device *primary_device,
+    const std::vector<Device*> &secondary_devices,
+    bool is_test)
 {
   LOG_PREFIX(make_transaction_manager);
   auto epm = std::make_unique<ExtentPlacementManager>();
@@ -630,9 +632,19 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto backref_manager = create_backref_manager(*cache);
 
+  epm->add_device(primary_device, true);
+  if (primary_device->get_device_type() == device_type_t::SEGMENTED) {
+    sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
+  }
+  for (auto &p_dev : secondary_devices) {
+    epm->add_device(p_dev, false);
+    ceph_assert(p_dev->get_device_type() == device_type_t::SEGMENTED);
+    sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+  }
+
   bool cleaner_is_detailed;
   AsyncCleaner::config_t cleaner_config;
-  if (config.is_test) {
+  if (is_test) {
     cleaner_is_detailed = true;
     cleaner_config = AsyncCleaner::config_t::get_test();
   } else {
@@ -645,15 +657,18 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
     *backref_manager,
     cleaner_is_detailed);
 
+  auto p_device_type = primary_device->get_device_type();
   JournalRef journal;
-  if (config.j_type == journal_type_t::SEGMENT_JOURNAL) {
+  if (p_device_type == device_type_t::SEGMENTED) {
     journal = journal::make_segmented(*async_cleaner);
   } else {
+    ceph_assert(p_device_type == device_type_t::RANDOM_BLOCK);
     journal = journal::make_circularbounded(
-      nullptr, "");
+      static_cast<random_block_device::RBMDevice*>(primary_device),
+      "");
     async_cleaner->set_disable_trim(true);
-    ERROR("disabling journal trimming since support for CircularBoundedJournal\
-	  hasn't been added yet");
+    ERROR("disabling journal trimming since support for CircularBoundedJournal "
+          "hasn't been added yet");
   }
   epm->init_ool_writers(
       *async_cleaner,

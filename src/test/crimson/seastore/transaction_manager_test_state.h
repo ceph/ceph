@@ -27,7 +27,7 @@ protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
   std::unique_ptr<random_block_device::RBMDevice> rb_device;
-  tm_make_config_t tm_config = tm_make_config_t::get_test_segmented_journal();
+  journal_type_t journal_type;
 
   EphemeralTestState(std::size_t num_segment_managers) {
     assert(num_segment_managers > 0);
@@ -67,15 +67,16 @@ protected:
   }
 
   seastar::future<> tm_setup(
-    tm_make_config_t config = tm_make_config_t::get_test_segmented_journal()) {
+      journal_type_t type = journal_type_t::SEGMENT_JOURNAL) {
     LOG_PREFIX(EphemeralTestState::tm_setup);
     SUBINFO(test, "begin with {} devices ...", get_num_devices());
-    tm_config = config;
+    journal_type = type;
+    // FIXME: should not initialize segment_manager with circularbounded-journal
     segment_manager = segment_manager::create_test_ephemeral();
     for (auto &sec_sm : secondary_segment_managers) {
       sec_sm = segment_manager::create_test_ephemeral();
     }
-    if (tm_config.j_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
+    if (journal_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
       auto config =
 	journal::CircularBoundedJournal::mkfs_config_t::get_default();
       rb_device.reset(new random_block_device::TestMemory(config.total_size));
@@ -140,19 +141,6 @@ protected:
   }
 };
 
-auto get_seastore(SeaStore::MDStoreRef mdstore, SegmentManagerRef sm) {
-  auto tm = make_transaction_manager(tm_make_config_t::get_test_segmented_journal());
-  auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
-  return std::make_unique<SeaStore>(
-    "",
-    std::move(mdstore),
-    std::move(sm),
-    std::move(tm),
-    std::move(cm),
-    std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(*tm));
-}
-
-
 class TMTestState : public EphemeralTestState {
 protected:
   TransactionManagerRef tm;
@@ -166,17 +154,17 @@ protected:
   TMTestState(std::size_t num_devices) : EphemeralTestState(num_devices) {}
 
   virtual void _init() override {
-    tm = make_transaction_manager(tm_config);
-    tm->add_device(segment_manager.get(), true);
-    if (tm_config.j_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
-      tm->add_device(rb_device.get(), false);
-      static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->
-	add_device(rb_device.get());
+    std::vector<Device*> sec_devices;
+    for (auto &sec_sm : secondary_segment_managers) {
+      sec_devices.emplace_back(sec_sm.get());
     }
-    if (get_num_devices() > 1) {
-      for (auto &sec_sm : secondary_segment_managers) {
-        tm->add_device(sec_sm.get(), false);
-      }
+    if (journal_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
+      // FIXME: should not initialize segment_manager with circularbounded-journal
+      // FIXME: no secondary device in the single device test
+      sec_devices.emplace_back(segment_manager.get());
+      tm = make_transaction_manager(rb_device.get(), sec_devices, true);
+    } else {
+      tm = make_transaction_manager(segment_manager.get(), sec_devices, true);
     }
     async_cleaner = tm->get_async_cleaner();
     lba_manager = tm->get_lba_manager();
@@ -211,7 +199,7 @@ protected:
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
-    if (tm_config.j_type == journal_type_t::SEGMENT_JOURNAL) {
+    if (journal_type == journal_type_t::SEGMENT_JOURNAL) {
       return tm->mkfs(
       ).handle_error(
 	crimson::ct_error::assert_all{"Error in mkfs"}
@@ -365,9 +353,9 @@ protected:
   SeaStoreTestState() : EphemeralTestState(1) {}
 
   virtual void _init() final {
-    seastore = get_seastore(
-      std::make_unique<TestMDStoreState::Store>(mdstore_state.get_mdstore()),
-      std::make_unique<TestSegmentManagerWrapper>(*segment_manager));
+    seastore = make_test_seastore(
+      std::make_unique<TestSegmentManagerWrapper>(*segment_manager),
+      std::make_unique<TestMDStoreState::Store>(mdstore_state.get_mdstore()));
   }
 
   virtual void _destroy() final {
