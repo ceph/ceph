@@ -86,8 +86,7 @@ private:
 
 class ExtentPlacementManager {
 public:
-  ExtentPlacementManager(bool prefer_ool)
-    : prefer_ool{prefer_ool} {
+  ExtentPlacementManager() {
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
@@ -115,9 +114,16 @@ public:
     auto device_id = device->get_device_id();
     ceph_assert(devices_by_id[device_id] == nullptr);
     devices_by_id[device_id] = device;
+    ++num_devices;
     if (is_primary) {
       ceph_assert(primary_device == nullptr);
       primary_device = device;
+      if (device->get_device_type() == device_type_t::SEGMENTED) {
+        prefer_ool = false;
+      } else {
+        ceph_assert(device->get_device_type() == device_type_t::RANDOM_BLOCK);
+        prefer_ool = true;
+      }
     }
   }
 
@@ -135,7 +141,8 @@ public:
   using open_ertr = ExtentOolWriter::open_ertr;
   open_ertr::future<> open() {
     LOG_PREFIX(ExtentPlacementManager::open);
-    SUBINFO(seastore_journal, "started");
+    SUBINFO(seastore_journal, "started with {} devices", num_devices);
+    ceph_assert(primary_device != nullptr);
     return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
       return writer->open();
     }).safe_then([this] {
@@ -284,6 +291,7 @@ private:
 
   std::vector<Device*> devices_by_id;
   Device* primary_device = nullptr;
+  std::size_t num_devices = 0;
 };
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
 

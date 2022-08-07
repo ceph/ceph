@@ -37,14 +37,11 @@ class Journal;
 struct tm_make_config_t {
   bool is_test;
   journal_type_t j_type;
-  bool epm_prefer_ool;
-  reclaim_gen_t default_generation;
 
   static tm_make_config_t get_default() {
     return tm_make_config_t {
       false,
-      journal_type_t::SEGMENT_JOURNAL,
-      false
+      journal_type_t::SEGMENT_JOURNAL
     };
   }
   static tm_make_config_t get_test_segmented_journal() {
@@ -52,8 +49,7 @@ struct tm_make_config_t {
     SUBWARN(seastore_tm, "test mode enabled!");
     return tm_make_config_t {
       true,
-      journal_type_t::SEGMENT_JOURNAL,
-      false
+      journal_type_t::SEGMENT_JOURNAL
     };
   }
   static tm_make_config_t get_test_cb_journal() {
@@ -61,8 +57,7 @@ struct tm_make_config_t {
     SUBWARN(seastore_tm, "test mode enabled!");
     return tm_make_config_t {
       true,
-      journal_type_t::CIRCULARBOUNDED_JOURNAL,
-      true
+      journal_type_t::CIRCULARBOUNDED_JOURNAL
     };
   }
 
@@ -71,10 +66,8 @@ struct tm_make_config_t {
 private:
   tm_make_config_t(
     bool is_test,
-    journal_type_t j_type,
-    bool epm_prefer_ool)
-    : is_test(is_test), j_type(j_type),
-      epm_prefer_ool(epm_prefer_ool)
+    journal_type_t j_type)
+    : is_test(is_test), j_type(j_type)
   {}
 };
 

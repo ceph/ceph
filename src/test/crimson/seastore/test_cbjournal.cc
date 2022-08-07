@@ -121,9 +121,6 @@ struct entry_validator_t {
 
 struct cbjournal_test_t : public seastar_test_suite_t
 {
-  segment_manager::EphemeralSegmentManagerRef segment_manager; // Need to be deleted, just for Cache
-  ExtentPlacementManagerRef epm;
-  Cache cache;
   std::vector<entry_validator_t> entries;
   std::unique_ptr<CircularBoundedJournal> cbj;
   random_block_device::RBMDevice *device;
@@ -133,11 +130,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
   CircularBoundedJournal::mkfs_config_t config;
   WritePipeline pipeline;
 
-  cbjournal_test_t() :
-      segment_manager(segment_manager::create_test_ephemeral()),
-      epm(new ExtentPlacementManager(true)),
-      cache(*epm)
-  {
+  cbjournal_test_t() {
     device = new random_block_device::TestMemory(CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE);
     cbj.reset(new CircularBoundedJournal(device, std::string()));
     device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
