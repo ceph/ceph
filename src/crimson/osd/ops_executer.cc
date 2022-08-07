@@ -476,7 +476,7 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
-  head_existed = obc->obs.exists;
+  head_os = obc->obs;
   return do_execute_op(osd_op).handle_error_interruptible(
     osd_op_errorator::all_same_way([&osd_op](auto e, auto&& e_raw)
       -> OpsExecuter::osd_op_errorator::future<> {
@@ -748,7 +748,7 @@ void OpsExecuter::make_writeable(std::vector<pg_log_entry_t>& log_entries)
                  obc->ssc->snapset, snapc);
 
   // clone?
-  if (head_existed &&                            // old obs.exists
+  if (head_os.exists &&                          // old obs.exists
       snapc.snaps.size() &&                      // there are snaps
       snapc.snaps[0] > obc->ssc->snapset.seq) {  // existing obj is old
 
@@ -823,8 +823,8 @@ const object_info_t OpsExecuter::prepare_clone(
 {
   object_info_t static_snap_oi(coid);
   static_snap_oi.version = osd_op_params->at_version;
-  static_snap_oi.prior_version = obc->obs.oi.version;
-  static_snap_oi.copy_user_bits(obc->obs.oi);
+  static_snap_oi.prior_version = head_os.oi.version;
+  static_snap_oi.copy_user_bits(head_os.oi);
   if (static_snap_oi.is_whiteout()) {
     // clone shouldn't be marked as whiteout
     static_snap_oi.clear_flag(object_info_t::FLAG_WHITEOUT);
