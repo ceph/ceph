@@ -226,15 +226,6 @@ public:
     }
   }
 
-  void mark_segment_to_release(segment_id_t segment) {
-    assert(to_release == NULL_SEG_ID);
-    to_release = segment;
-  }
-
-  segment_id_t get_segment_to_release() const {
-    return to_release;
-  }
-
   auto get_delayed_alloc_list() {
     std::list<LogicalCachedExtentRef> ret;
     for (auto& extent : delayed_alloc_list) {
@@ -363,7 +354,6 @@ public:
     backref_tree_stats = {};
     ool_write_stats = {};
     rewrite_version_stats = {};
-    to_release = NULL_SEG_ID;
     conflicted = false;
     if (!has_reset) {
       has_reset = true;
@@ -518,9 +508,6 @@ private:
   tree_stats_t backref_tree_stats;
   ool_write_stats_t ool_write_stats;
   version_stat_t rewrite_version_stats;
-
-  ///< if != NULL_SEG_ID, release this segment after completion
-  segment_id_t to_release = NULL_SEG_ID;
 
   bool conflicted = false;
 
