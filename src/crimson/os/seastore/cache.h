@@ -27,6 +27,7 @@ namespace crimson::os::seastore {
 
 class BackrefManager;
 class AsyncCleaner;
+class SegmentProvider;
 
 struct backref_entry_t {
   backref_entry_t(
@@ -680,6 +681,18 @@ public:
   );
 
   /**
+   * set_segment_provider
+   *
+   * Set to provide segment information to help identify out-dated delta.
+   *
+   * FIXME: This is specific to the segmented implementation
+   */
+  void set_segment_provider(SegmentProvider &sp) {
+    assert(segment_provider == nullptr);
+    segment_provider = &sp;
+  }
+
+  /**
    * prepare_record
    *
    * Construct the record for Journal from transaction.
@@ -967,6 +980,9 @@ private:
   ExtentIndex extents;             ///< set of live extents
 
   journal_seq_t last_commit = JOURNAL_SEQ_MIN;
+
+  // FIXME: This is specific to the segmented implementation
+  SegmentProvider *segment_provider = nullptr;
 
   /**
    * dirty
