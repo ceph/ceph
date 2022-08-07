@@ -680,28 +680,50 @@ int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
 
   if (std::string_view::npos == sep_loc) {
     /* Wrongly formatted header? Just skip it. */
+    // Also!  Normal case!  Always call for crlf at end of headers.
     return 0;
   }
 
   header_name_t name(header_line.substr(0, sep_loc));
-  if (0 == relevant_headers.count(name)) {
+  bool interesting = relevant_headers.find(name) != relevant_headers.end();
+
+  if (!interesting) {
     /* Not interested in this particular header. */
-    return 0;
-  }
 
-  const auto value_part = header_line.substr(sep_loc + 1);
-
-  /* Skip spaces and tabs after the separator. */
-  const size_t val_loc_s = value_part.find_first_not_of(' ');
-  const size_t val_loc_e = value_part.find_first_of("\r\n");
-
-  if (std::string_view::npos == val_loc_s ||
-      std::string_view::npos == val_loc_e) {
-    /* Empty value case. */
-    found_headers.emplace(name, header_value_t());
+    auto hdl { header_line.length() };
+    if (hdl <= 0 || header_line[hdl-1] != '\n') {
+    } else if (--hdl > 0 && header_line[hdl-1] != '\r') {
+    } else {
+      --hdl;
+    }
+    ldout(cct, 20) << ": Uninteresting header: " << name <<
+      " not in " << relevant_headers <<
+      " sep=" << header_line.substr(sep_loc, 1) <<
+      " rest of it: " << header_line.substr(sep_loc+1, hdl-(sep_loc+1)) << dendl;
   } else {
-    found_headers.emplace(name, header_value_t(
-        value_part.substr(val_loc_s, val_loc_e - val_loc_s)));
+    const auto value_part = header_line.substr(sep_loc + 1);
+
+    /* Skip spaces and tabs after the separator. */
+    const size_t val_loc_s = value_part.find_first_not_of(' ');
+    const size_t val_loc_e = value_part.find_first_of("\r\n");
+
+    if ((cct->_conf->subsys.get_log_level(ceph_subsys_rgw) < 20)) {
+    } else if (value_part.npos == val_loc_s ||
+	value_part.npos == val_loc_e) {
+      /* Empty value case. */
+      ldout(cct, 20) << ": Got header: " << name << dendl;
+    } else {
+      ldout(cct, 20) << ": Got header: " << name
+	       << ": " << value_part.substr(val_loc_s, val_loc_e - val_loc_s) << dendl;
+    }
+    if (std::string_view::npos == val_loc_s ||
+	std::string_view::npos == val_loc_e) {
+      /* Empty value case. */
+      found_headers.emplace(name, header_value_t());
+    } else {
+      found_headers.emplace(name, header_value_t(
+	  value_part.substr(val_loc_s, val_loc_e - val_loc_s)));
+    }
   }
 
   return 0;

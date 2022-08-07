@@ -223,6 +223,17 @@ private:
   std::map<header_name_t, header_value_t, ltstr_nocase> found_headers;
 };
 
+static inline std::ostream& operator<<(std::ostream& out,
+    const RGWHTTPHeadersCollector::header_spec_t &o) {
+  bool first = true;
+  for (auto &x: o) {
+    if (!first) out << "|";
+    out << x;
+    first = false;
+  }
+  return out;
+}
+
 
 class RGWHTTPTransceiver : public RGWHTTPHeadersCollector {
   bufferlist * const read_bl;
