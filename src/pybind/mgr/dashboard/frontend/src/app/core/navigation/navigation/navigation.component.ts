@@ -87,7 +87,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
   blockHealthColor() {
     if (this.summaryData && this.summaryData.rbd_mirroring) {
       if (this.summaryData.rbd_mirroring.errors > 0) {
-        return { color: '#d9534f' };
+        return { color: '#f4926c' };
       } else if (this.summaryData.rbd_mirroring.warnings > 0) {
         return { color: '#f0ad4e' };
       }
