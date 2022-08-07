@@ -4,6 +4,7 @@ declare global {
       login(): void;
       logToConsole(message: string, optional?: any): void;
       text(): Chainable<string>;
+      checkAccessibility(subject: any, axeOptions?: any, skip?: boolean): void;
     }
   }
 }
@@ -15,6 +16,7 @@ declare global {
 /* tslint:disable*/
 import { CdHelperClass } from '../../src/app/shared/classes/cd-helper.class';
 import { Permissions } from '../../src/app/shared/models/permissions';
+import { table } from 'table';
 /* tslint:enable*/
 let auth: any;
 
@@ -56,4 +58,33 @@ Cypress.Commands.add('text', { prevSubject: true }, (subject: any) => {
 
 Cypress.Commands.add('logToConsole', (message: string, optional?: any) => {
   cy.task('log', { message: `(${new Date().toISOString()}) ${message}`, optional });
+});
+
+// Print cypress-axe violations to the terminal
+function a11yErrorLogger(violations: any) {
+  const violationData = violations.flatMap(({ id, impact, description, nodes }: any) => {
+    return nodes.flatMap(({ html }: any) => {
+      return [
+        ['Test', Cypress.currentTest.title],
+        ['Error', id],
+        ['Impact', impact],
+        ['Description', description],
+        ['Element', html],
+        ['', '']
+      ];
+    });
+  });
+
+  cy.task('log', {
+    message: table(violationData, {
+      header: {
+        alignment: 'left',
+        content: Cypress.spec.relative
+      }
+    })
+  });
+}
+
+Cypress.Commands.add('checkAccessibility', (subject: any, axeOptions?: any, skip?: boolean) => {
+  cy.checkA11y(subject, axeOptions, a11yErrorLogger, skip);
 });
