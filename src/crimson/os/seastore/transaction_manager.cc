@@ -335,7 +335,10 @@ TransactionManager::submit_transaction_direct(
       cache->trim_backref_bufs(*trim_alloc_to);
     }
 
-    auto record = cache->prepare_record(tref, async_cleaner.get());
+    auto record = cache->prepare_record(
+      tref,
+      async_cleaner->get_journal_head(),
+      async_cleaner->get_dirty_tail());
 
     tref.get_handle().maybe_release_collection_lock();
 

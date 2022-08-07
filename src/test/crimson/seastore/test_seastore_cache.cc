@@ -30,7 +30,7 @@ struct cache_test_t : public seastar_test_suite_t {
 
   seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
-    auto record = cache->prepare_record(*t, nullptr);
+    auto record = cache->prepare_record(*t, JOURNAL_SEQ_NULL, JOURNAL_SEQ_NULL);
 
     bufferlist bl;
     for (auto &&block : record.extents) {
