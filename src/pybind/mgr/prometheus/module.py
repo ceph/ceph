@@ -929,7 +929,8 @@ class Module(MgrModule):
         for stat in DF_CLUSTER:
             self.metrics['cluster_{}'.format(stat)].set(df['stats'][stat])
             for device_class in df['stats_by_class']:
-                self.metrics['cluster_by_class_{}'.format(stat)].set(df['stats_by_class'][device_class][stat], (device_class,))
+                self.metrics['cluster_by_class_{}'.format(stat)].set(
+                    df['stats_by_class'][device_class][stat], (device_class,))
 
         for pool in df['pools']:
             for stat in DF_POOL:
@@ -1562,6 +1563,20 @@ class Module(MgrModule):
                 cast(MetricCounter, sum_metric).add(duration, (method_name,))
                 cast(MetricCounter, count_metric).add(1, (method_name,))
 
+    def get_pg_repaired_objects(self) -> None:
+        dump = self.get('pg_dump')
+        for stats in dump['pool_stats']:
+            path = f'pg_objects_repaired{stats["poolid"]}'
+            self.metrics[path] = Metric(
+                'counter',
+                'pg_objects_repaired',
+                'Number of objects repaired in a pool Count',
+                ('poolid',)
+            )
+
+            self.metrics[path].set(stats['stat_sum']['num_objects_repaired'],
+                                   labelvalues=(stats['poolid'],))
+
     @profile_method(True)
     def collect(self) -> str:
         # Clear the metrics before scraping
@@ -1577,6 +1592,7 @@ class Module(MgrModule):
         self.get_mgr_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
+        self.get_pg_repaired_objects()
         self.get_num_objects()
 
         for daemon, counters in self.get_all_perf_counters().items():
