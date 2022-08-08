@@ -1736,28 +1736,25 @@ public:
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 
-      yield {
-        /* update marker to reflect we're done with full sync */
-        sync_marker.state = rgw_data_sync_marker::IncrementalSync;
-        sync_marker.marker = sync_marker.next_step_marker;
-        sync_marker.next_step_marker.clear();
-        call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(
-	       sc->env->dpp,sc->env->async_rados, sc->env->svc->sysobj,
-	       rgw_raw_obj(pool, status_oid), sync_marker));
-      }
+      /* update marker to reflect we're done with full sync */
+      sync_marker.state = rgw_data_sync_marker::IncrementalSync;
+      sync_marker.marker = sync_marker.next_step_marker;
+      sync_marker.next_step_marker.clear();
+      yield call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(
+             sc->env->dpp,sc->env->async_rados, sc->env->svc->sysobj,
+             rgw_raw_obj(pool, status_oid), sync_marker));
       if (retcode < 0) {
         tn->log(0, SSTR("ERROR: failed to set sync marker: retcode=" << retcode));
         lease_cr->go_down();
         drain_all();
         return set_cr_error(retcode);
       }
-      // clean up full sync index
-      yield {
-        const auto& pool = sc->env->svc->zone->get_zone_params().log_pool;
-        auto oid = full_data_sync_index_shard_oid(sc->source_zone.id, shard_id);
-        call(new RGWRadosRemoveCR(sc->env->store, {pool, oid}));
-      }
-      // keep lease and transition to incremental_sync()
+
+      // clean up full sync index, ignoring errors
+      yield call(new RGWRadosRemoveCR(sc->env->store, {pool, oid}));
+
+      // transition to incremental sync
+      return set_cr_done();
     }
     return 0;
   }
