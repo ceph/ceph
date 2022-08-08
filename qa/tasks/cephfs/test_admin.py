@@ -1003,6 +1003,28 @@ class TestFsAuthorize(CapsHelper):
             cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath]
             self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
 
+    def test_single_path_rootsquash_issue_56067(self):
+        """
+        That a FS client using root squash MDS caps allows non-root user to write data
+        to a file. And after client remount, the non-root user can read the data that
+        was previously written by it. https://tracker.ceph.com/issues/56067
+        """
+        keyring = self.fs.authorize(self.client_id, ('/', 'rw', 'root_squash'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/')
+        filedata, filename = 'some data on fs 1', 'file_on_fs1'
+        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
+        self.mount_a.write_file(filepath, filedata)
+
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/')
+        if filepath.find(self.mount_a.hostfs_mntpt) != -1:
+            contents = self.mount_a.read_file(filepath)
+            self.assertEqual(filedata, contents)
+
     def test_single_path_authorize_on_nonalphanumeric_fsname(self):
         """
         That fs authorize command works on filesystems with names having [_.-] characters
