@@ -8,3 +8,4 @@ Routes
 -e ../../../python-common
 prettytable
 pyyaml
+setuptools
