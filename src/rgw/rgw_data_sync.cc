@@ -1971,7 +1971,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   rgw_data_sync_marker& sync_marker;
   rgw_data_sync_status sync_status;
   const RGWSyncTraceNodeRef tn;
-  bool *reset_backoff; // TODO We do nothing with this pointer.
+  bool *reset_backoff;
 
   ceph::mutex inc_lock = ceph::make_mutex("RGWDataSyncShardCR::inc_lock");
   ceph::condition_variable inc_cond;
@@ -2028,6 +2028,7 @@ public:
         set_sleeping(true);
         yield;
       }
+      *reset_backoff = true;
       tn->log(10, "took lease");
 
       while (true) {
