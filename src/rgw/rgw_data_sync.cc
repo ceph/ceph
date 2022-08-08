@@ -1684,7 +1684,6 @@ public:
       entry_timestamp = sync_marker.timestamp; // time when full sync started
       do {
         if (!lease_cr->is_locked()) {
-          lease_cr->go_down();
           drain_all();
           return set_cr_error(-ECANCELED);
         }
@@ -1694,7 +1693,6 @@ public:
                                              sync_marker.marker,
 					     OMAP_GET_MAX_ENTRIES, omapvals));
         if (retcode < 0) {
-          lease_cr->go_down();
           drain_all();
           return set_cr_error(retcode);
         }
@@ -1745,8 +1743,6 @@ public:
              rgw_raw_obj(pool, status_oid), sync_marker));
       if (retcode < 0) {
         tn->log(0, SSTR("ERROR: failed to set sync marker: retcode=" << retcode));
-        lease_cr->go_down();
-        drain_all();
         return set_cr_error(retcode);
       }
 
@@ -1820,7 +1816,6 @@ public:
       marker_tracker.emplace(sc, status_oid, sync_marker, tn);
       do {
         if (!lease_cr->is_locked()) {
-          lease_cr->go_down();
           drain_all();
           return set_cr_error(-ECANCELED);
         }
@@ -1910,7 +1905,6 @@ public:
         if (retcode < 0 && retcode != -ENOENT) {
           tn->log(0, SSTR("ERROR: failed to read remote data log info: ret="
 			  << retcode));
-          lease_cr->go_down();
           drain_all();
           return set_cr_error(retcode);
         }
@@ -2047,6 +2041,8 @@ public:
 	    if (retcode != -EBUSY) {
 	      tn->log(10, SSTR("full sync failed (retcode=" << retcode << ")"));
 	    }
+	    lease_cr->go_down();
+	    drain_all();
 	    return set_cr_error(retcode);
 	  }
 	} else if (sync_marker.state == rgw_data_sync_marker::IncrementalSync) {
@@ -2061,9 +2057,13 @@ public:
 	      tn->log(10, SSTR("incremental sync failed (retcode=" << retcode
 			       << ")"));
 	    }
+	    lease_cr->go_down();
+	    drain_all();
 	    return set_cr_error(retcode);
 	  }
 	} else {
+	  lease_cr->go_down();
+	  drain_all();
 	  return set_cr_error(-EIO);
 	}
       }
