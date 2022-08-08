@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cassert>
+#include <compare>
 #include <optional>
 #include <ostream>
 #include <sstream>
@@ -30,10 +31,10 @@ search_result_bs_t binary_search(
     auto mid = total >> 1;
     // do not copy if return value is reference
     decltype(f_get_key(mid)) target = f_get_key(mid);
-    auto match = compare_to<KeyT::HOBJ>(key, target);
-    if (match == MatchKindCMP::LT) {
+    auto match = key <=> target;
+    if (match == std::strong_ordering::less) {
       end = mid;
-    } else if (match == MatchKindCMP::GT) {
+    } else if (match == std::strong_ordering::greater) {
       begin = mid + 1;
     } else {
       return {mid, MatchKindBS::EQ};
@@ -93,17 +94,17 @@ inline void assert_mstat(
    case MSTAT_EQ:
     break;
    case MSTAT_LT0:
-    assert(compare_to<KeyT::HOBJ>(key, index.snap_gen_packed()) == MatchKindCMP::LT);
+    assert(key < index.snap_gen_packed());
     break;
    case MSTAT_LT1:
-    assert(compare_to<KeyT::HOBJ>(key, index.ns_oid_view()) == MatchKindCMP::LT);
+    assert(key < index.ns_oid_view());
     break;
    case MSTAT_LT2:
     if (index.has_shard_pool()) {
-      assert(compare_to<KeyT::HOBJ>(key, shard_pool_crush_t{
-               index.shard_pool_packed(), index.crush_packed()}) == MatchKindCMP::LT);
+      assert((key < shard_pool_crush_t{
+               index.shard_pool_packed(), index.crush_packed()}));
     } else {
-      assert(compare_to<KeyT::HOBJ>(key, index.crush_packed()) == MatchKindCMP::LT);
+      assert(key < index.crush_packed());
     }
     break;
    default:
@@ -112,19 +113,19 @@ inline void assert_mstat(
   // key == index ...
   switch (mstat) {
    case MSTAT_EQ:
-    assert(compare_to<KeyT::HOBJ>(key, index.snap_gen_packed()) == MatchKindCMP::EQ);
+    assert(key == index.snap_gen_packed());
    case MSTAT_LT0:
     if (!index.has_ns_oid())
       break;
     assert(index.ns_oid_view().type() == ns_oid_view_t::Type::MAX ||
-           compare_to<KeyT::HOBJ>(key, index.ns_oid_view()) == MatchKindCMP::EQ);
+           key == index.ns_oid_view());
    case MSTAT_LT1:
     if (!index.has_crush())
       break;
-    assert(compare_to<KeyT::HOBJ>(key, index.crush_packed()) == MatchKindCMP::EQ);
+    assert(key == index.crush_packed());
     if (!index.has_shard_pool())
       break;
-    assert(compare_to<KeyT::HOBJ>(key, index.shard_pool_packed()) == MatchKindCMP::EQ);
+    assert(key == index.shard_pool_packed());
    default:
     break;
   }
@@ -307,7 +308,7 @@ struct staged {
       if (exclude_last) {
         assert(end_index);
         --end_index;
-        assert(compare_to<KeyT::HOBJ>(key, container[end_index]) == MatchKindCMP::LT);
+        assert(key < container[end_index]);
       }
       auto ret = binary_search(key, _index, end_index,
           [this] (index_t index) { return container[index]; });
@@ -624,13 +625,13 @@ struct staged {
       assert(index() == 0);
       do {
         if (exclude_last && is_last()) {
-          assert(compare_to<KeyT::HOBJ>(key, get_key()) == MatchKindCMP::LT);
+          assert(key < get_key());
           return MatchKindBS::NE;
         }
-        auto match = compare_to<KeyT::HOBJ>(key, get_key());
-        if (match == MatchKindCMP::LT) {
+        auto match = key <=> get_key();
+        if (match == std::strong_ordering::less) {
           return MatchKindBS::NE;
-        } else if (match == MatchKindCMP::EQ) {
+        } else if (match == std::strong_ordering::equal) {
           return MatchKindBS::EQ;
         } else {
           if (container.has_next()) {
@@ -1058,16 +1059,16 @@ struct staged {
             if constexpr (STAGE == STAGE_STRING) {
               // TODO(cross-node string dedup)
               // test_key_equal = (iter.get_key().type() == ns_oid_view_t::Type::MIN);
-              auto cmp = compare_to<KeyT::HOBJ>(key, iter.get_key());
-              assert(cmp != MatchKindCMP::GT);
-              test_key_equal = (cmp == MatchKindCMP::EQ);
+              auto cmp = key <=> iter.get_key();
+              assert(cmp != std::strong_ordering::greater);
+              test_key_equal = (cmp == 0);
             } else {
-              auto cmp = compare_to<KeyT::HOBJ>(key, iter.get_key());
+              auto cmp = key <=> iter.get_key();
               // From history, key[stage] == parent[stage][index - 1]
               // which should be the smallest possible value for all
               // index[stage][*]
-              assert(cmp != MatchKindCMP::GT);
-              test_key_equal = (cmp == MatchKindCMP::EQ);
+              assert(cmp != std::strong_ordering::greater);
+              test_key_equal = (cmp == 0);
             }
             if (test_key_equal) {
               return nxt_lower_bound<GET_KEY>(key, iter, history, index_key);
@@ -1083,9 +1084,9 @@ struct staged {
         if constexpr (STAGE == STAGE_STRING) {
           // TODO(cross-node string dedup)
           // assert(iter.get_key().type() == ns_oid_view_t::Type::MAX);
-          assert(compare_to<KeyT::HOBJ>(key, iter.get_key()) == MatchKindCMP::EQ);
+          assert(key == iter.get_key());
         } else {
-          assert(compare_to<KeyT::HOBJ>(key, iter.get_key()) == MatchKindCMP::EQ);
+          assert(key == iter.get_key());
         }
         if constexpr (GET_KEY) {
           index_key->set(iter.get_key());
@@ -1170,8 +1171,8 @@ struct staged {
       assert(is_valid_index(index));
       // evaluate the current index
       iter.seek_at(index);
-      auto match = compare_to<KeyT::VIEW>(key, iter.get_key());
-      if (match == MatchKindCMP::EQ) {
+      auto match = key <=> iter.get_key();
+      if (match == 0) {
         if constexpr (IS_BOTTOM) {
           ceph_abort("insert conflict at current index!");
         } else {
@@ -1181,7 +1182,7 @@ struct staged {
               nxt_container, key, value, position.nxt, false);
         }
       } else {
-        assert(match == MatchKindCMP::LT);
+        assert(match == std::strong_ordering::less);
         if (index == 0) {
           // already the first index, so insert at the current index
           return {STAGE, insert_size<KeyT::VIEW>(key, value)};
@@ -1194,13 +1195,13 @@ struct staged {
     }
 
     // XXX(multi-type): when key is from a different type of node
-    auto match = compare_to<KeyT::VIEW>(key, iter.get_key());
-    if (match == MatchKindCMP::GT) {
+    auto match = key <=> iter.get_key();
+    if (match == std::strong_ordering::greater) {
       // key doesn't match both indexes, so insert at the current index
       ++index;
       return {STAGE, insert_size<KeyT::VIEW>(key, value)};
     } else {
-      assert(match == MatchKindCMP::EQ);
+      assert(match == std::strong_ordering::equal);
       if constexpr (IS_BOTTOM) {
         // ceph_abort?
         ceph_abort("insert conflict at the previous index!");
@@ -1470,7 +1471,7 @@ struct staged {
         break;
       } else {
         ++iter;
-        assert(compare_to(key, iter.get_key()) == MatchKindCMP::LT);
+        assert(key < iter.get_key());
         key = iter.get_key();
       }
     } while (true);
@@ -2348,8 +2349,8 @@ struct staged {
     auto r_iter = iterator_t(right_container);
     r_iter.seek_at(0);
     node_offset_t compensate = r_iter.header_size();
-    auto cmp = compare_to<KeyT::VIEW>(left_pivot_index, r_iter.get_key());
-    if (cmp == MatchKindCMP::EQ) {
+    auto cmp = left_pivot_index <=> r_iter.get_key();
+    if (cmp == std::strong_ordering::equal) {
       if constexpr (!IS_BOTTOM) {
         // the index is equal, compensate and look at the lower stage
         compensate += r_iter.size_to_nxt();
@@ -2361,7 +2362,7 @@ struct staged {
       } else {
         ceph_abort("impossible path: left_pivot_key == right_first_key");
       }
-    } else if (cmp == MatchKindCMP::LT) {
+    } else if (cmp == std::strong_ordering::less) {
       // ok, do merge here
       return {STAGE, compensate};
     } else {
