@@ -988,7 +988,7 @@ class MotrStore : public Store {
     MotrMetaCache* bucket_inst_cache;
 
     std::unique_ptr<MotrGC> motr_gc;
-    bool use_gc_thread;
+    bool use_gc_threads;
     bool use_cache;
 
   public:
@@ -1110,6 +1110,8 @@ class MotrStore : public Store {
     virtual void finalize(void) override;
     int create_gc();
     void stop_gc();
+    bool gc_enabled() { return use_gc_threads; }
+    std::unique_ptr<MotrGC>& get_gc() { return motr_gc; }
     MotrStore& set_run_gc_thread(bool _use_gc_thread);
     MotrStore& set_use_cache(bool _use_cache);
 

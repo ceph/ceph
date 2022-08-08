@@ -25,17 +25,21 @@
 const uint32_t GC_DEFAULT_QUEUES = 64;
 const uint32_t GC_DEFAULT_COUNT = 256;
 const uint32_t GC_MAX_QUEUES = 4096;
-static std::string gc_index_prefix = "motr.rgw.gc";
-static std::string gc_thread_prefix = "motr_gc_";
+static const std::string gc_index_prefix = "motr.rgw.gc";
+static const std::string gc_thread_prefix = "motr_gc_";
+static const std::string obj_tag_prefix = "0_";
+static const std::string obj_exp_time_prefix = "1_";
 
-struct Meta
-{
+namespace rgw::sal {
+  class MotrStore;
+}
+
+struct Meta {
   struct m0_uint128 oid = {};
   struct m0_fid pver = {};
   uint64_t layout_id = 0;
 
-  void encode(bufferlist &bl) const
-  {
+  void encode(bufferlist &bl) const {
     ENCODE_START(5, 5, bl);
     encode(oid.u_hi, bl);
     encode(oid.u_lo, bl);
@@ -45,8 +49,7 @@ struct Meta
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator &bl)
-  {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(5, bl);
     decode(oid.u_hi, bl);
     decode(oid.u_lo, bl);
@@ -57,8 +60,7 @@ struct Meta
   }
 };
 
-struct motr_gc_obj_info
-{
+struct motr_gc_obj_info {
   std::string tag;             // gc obj unique identifier
   std::string name;            // fully qualified object name
   Meta mobj;                   // motr obj
@@ -76,8 +78,7 @@ struct motr_gc_obj_info
         time(std::move(_time)), size(std::move(_size)), size_actual(std::move(_size_actual)),
         is_multipart(std::move(_is_multipart)), multipart_iname(std::move(_multipart_iname)) {}
 
-  void encode(bufferlist &bl) const
-  {
+  void encode(bufferlist &bl) const {
     ENCODE_START(12, 2, bl);
     encode(tag, bl);
     encode(name, bl);
@@ -94,8 +95,7 @@ struct motr_gc_obj_info
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator &bl)
-  {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(12, 2, 2, bl);
     decode(tag, bl);
     decode(name, bl);
@@ -117,9 +117,10 @@ WRITE_CLASS_ENCODER(motr_gc_obj_info);
 class MotrGC : public DoutPrefixProvider {
  private:
   CephContext *cct;
-  rgw::sal::Store *store;
+  rgw::sal::MotrStore *store;
   uint32_t max_indices = 0;
   uint32_t max_count = 0;
+  std::atomic<uint32_t> enqueue_index;
   std::vector<std::string> index_names;
   std::atomic<bool> down_flag = false;
 
@@ -143,11 +144,12 @@ class MotrGC : public DoutPrefixProvider {
 
     void *entry() override;
     void stop();
+    int get_id() { return worker_id; }
   };
 
   std::vector<std::unique_ptr<MotrGC::GCWorker>> workers;
 
-  MotrGC(CephContext *_cct, rgw::sal::Store* _store)
+  MotrGC(CephContext *_cct, rgw::sal::MotrStore* _store)
     : cct(_cct), store(_store) {}
 
   ~MotrGC() {
@@ -160,7 +162,10 @@ class MotrGC : public DoutPrefixProvider {
 
   void start_processor();
   void stop_processor();
-  int dequeue(const DoutPrefixProvider* dpp, std::string iname, motr_gc_obj_info obj);
+
+  int enqueue(motr_gc_obj_info obj);
+  int dequeue(std::string iname, motr_gc_obj_info obj);
+  int list(std::vector<motr_gc_obj_info>& gc_entries);
   int get_locked_gc_index(uint32_t& rand_ind);
   bool going_down();
 

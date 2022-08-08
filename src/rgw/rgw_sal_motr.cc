@@ -1515,8 +1515,8 @@ void MotrStore::finalize(void) {
   m0_client_fini(this->instance, true);
 }
 
-MotrStore& MotrStore::set_run_gc_thread(bool _use_gc_thread) {
-  use_gc_thread = _use_gc_thread;
+MotrStore& MotrStore::set_run_gc_thread(bool _use_gc_threads) {
+  use_gc_threads = _use_gc_threads;
   return *this;
 }
 
@@ -1534,7 +1534,7 @@ int MotrStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp) {
     return rc;
   }
 
-  if (use_gc_thread) {
+  if (use_gc_threads) {
     // Create MotrGC object and start GCWorker threads
     int rc = create_gc();
     if (rc != 0)
@@ -2205,6 +2205,7 @@ int MotrObject::remove_mobj_and_index_entry(
   int rc;
   bufferlist bl;
   uint64_t size_rounded = 0;
+  bool pushed_to_gc = false;
 
   // handling empty size object case
   if (ent.meta.size != 0) {
@@ -2224,7 +2225,22 @@ int MotrObject::remove_mobj_and_index_entry(
         }
       }
       size_rounded = roundup(ent.meta.size, get_unit_sz());
-      rc = this->delete_mobj(dpp);
+      if (store->gc_enabled()) {
+        std::string tag = PRIx64 + std::to_string(this->meta.oid.u_hi) + ":" +
+                          PRIx64 + std::to_string(this->meta.oid.u_lo);
+        std::string obj_fqdn = bucket_name + "/" + delete_key;
+        ::Meta *mobj = reinterpret_cast<::Meta*>(&this->meta);
+        motr_gc_obj_info gc_obj(tag, obj_fqdn, *mobj, std::time(nullptr),
+                                ent.meta.size, size_rounded, false, "");
+        rc = store->get_gc()->enqueue(gc_obj);
+        if (rc == 0) {
+          pushed_to_gc = true;
+          ldpp_dout(dpp, 20) <<__func__<< ": Pushed the delete req for OID="
+            << tag << " to the motr garbage collector." << dendl;
+        }
+      }
+      if (! pushed_to_gc)
+        rc = this->delete_mobj(dpp);
     }
     if (rc < 0) {
       ldpp_dout(dpp, 0) << "Failed to delete the object " << delete_key  <<" from Motr." << dendl;
