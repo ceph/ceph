@@ -49,8 +49,8 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   ).safe_then([this] {
     return journal->open_for_mkfs();
   }).safe_then([this](auto start_seq) {
-    async_cleaner->update_journal_tails(start_seq, start_seq);
-    async_cleaner->set_journal_head(start_seq);
+    journal->get_trimmer().update_journal_tails(start_seq, start_seq);
+    journal->get_trimmer().set_journal_head(start_seq);
     return epm->open();
   }).safe_then([this, FNAME]() {
     return with_transaction_intr(
@@ -109,7 +109,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this] {
     return journal->open_for_mount();
   }).safe_then([this](auto start_seq) {
-    async_cleaner->set_journal_head(start_seq);
+    journal->get_trimmer().set_journal_head(start_seq);
     return with_transaction_weak(
       "mount",
       [this](auto &t)
@@ -337,8 +337,8 @@ TransactionManager::submit_transaction_direct(
 
     auto record = cache->prepare_record(
       tref,
-      async_cleaner->get_journal_head(),
-      async_cleaner->get_dirty_tail());
+      journal->get_trimmer().get_journal_head(),
+      journal->get_trimmer().get_dirty_tail());
 
     tref.get_handle().maybe_release_collection_lock();
 
@@ -347,7 +347,7 @@ TransactionManager::submit_transaction_direct(
     ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
-      async_cleaner->set_journal_head(start_seq);
+      journal->get_trimmer().set_journal_head(start_seq);
       cache->complete_commit(
           tref,
           submit_result.record_block_base,
@@ -389,7 +389,7 @@ TransactionManager::submit_transaction_direct(
       lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
       backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
 
-      async_cleaner->update_journal_tails(
+      journal->get_trimmer().update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
       return tref.get_handle().complete();
@@ -664,10 +664,11 @@ TransactionManagerRef make_transaction_manager(
   auto p_device_type = primary_device->get_device_type();
   JournalRef journal;
   if (p_device_type == device_type_t::SEGMENTED) {
-    journal = journal::make_segmented(*async_cleaner);
+    journal = journal::make_segmented(*async_cleaner, *async_cleaner);
   } else {
     ceph_assert(p_device_type == device_type_t::RANDOM_BLOCK);
     journal = journal::make_circularbounded(
+      *async_cleaner,
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
     async_cleaner->set_disable_trim(true);

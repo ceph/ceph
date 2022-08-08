@@ -63,7 +63,7 @@ struct record_validator_t {
   }
 };
 
-struct journal_test_t : seastar_test_suite_t, SegmentProvider {
+struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   WritePipeline pipeline;
   JournalRef journal;
@@ -88,7 +88,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   journal_test_t() = default;
 
   /*
-   * SegmentProvider interfaces
+   * JournalTrimmer interfaces
    */
   journal_seq_t get_journal_head() const final { return dummy_tail; }
 
@@ -100,6 +100,9 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   void update_journal_tails(journal_seq_t, journal_seq_t) final {}
 
+  /*
+   * SegmentProvider interfaces
+   */
   const segment_info_t& get_seg_info(segment_id_t id) const final {
     tmp_info = {};
     tmp_info.seq = segment_seqs.at(id);
@@ -140,7 +143,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       block_size = segment_manager->get_block_size();
       sms.reset(new SegmentManagerGroup());
       next = segment_id_t(segment_manager->get_device_id(), 0);
-      journal = journal::make_segmented(*this);
+      journal = journal::make_segmented(*this, *this);
       journal->set_write_pipeline(&pipeline);
       sms->add_segment_manager(segment_manager.get());
       return journal->open_for_mkfs();
@@ -169,7 +172,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   auto replay(T &&f) {
     return journal->close(
     ).safe_then([this, f=std::move(f)]() mutable {
-      journal = journal::make_segmented(*this);
+      journal = journal::make_segmented(*this, *this);
       journal->set_write_pipeline(&pipeline);
       return journal->replay(std::forward<T>(std::move(f)));
     }).safe_then([this] {

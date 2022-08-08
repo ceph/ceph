@@ -25,7 +25,7 @@ using namespace crimson::os::seastore::lba_manager;
 using namespace crimson::os::seastore::lba_manager::btree;
 
 struct btree_test_base :
-  public seastar_test_suite_t, SegmentProvider {
+  public seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   SegmentManagerGroupRef sms;
@@ -49,7 +49,7 @@ struct btree_test_base :
   btree_test_base() = default;
 
   /*
-   * SegmentProvider interfaces
+   * JournalTrimmer interfaces
    */
   journal_seq_t get_journal_head() const final { return dummy_tail; }
 
@@ -61,6 +61,9 @@ struct btree_test_base :
 
   void update_journal_tails(journal_seq_t, journal_seq_t) final {}
 
+  /*
+   * SegmentProvider interfaces
+   */
   const segment_info_t& get_seg_info(segment_id_t id) const final {
     tmp_info = {};
     tmp_info.seq = segment_seqs.at(id);
@@ -114,7 +117,7 @@ struct btree_test_base :
         segment_manager::get_ephemeral_device_config(0, 1));
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
-      journal = journal::make_segmented(*this);
+      journal = journal::make_segmented(*this, *this);
       epm.reset(new ExtentPlacementManager());
       cache.reset(new Cache(*epm));
 

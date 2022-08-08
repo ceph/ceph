@@ -27,11 +27,11 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentedJournal::SegmentedJournal(
-  SegmentProvider &segment_provider)
-  : segment_provider(segment_provider),
-    segment_seq_allocator(
+  SegmentProvider &segment_provider,
+  JournalTrimmer &trimmer)
+  : segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::JOURNAL)),
-    journal_segment_allocator(segment_type_t::JOURNAL,
+    journal_segment_allocator(&trimmer,
                               data_category_t::METADATA,
                               0, // generation
                               segment_provider,
@@ -45,7 +45,8 @@ SegmentedJournal::SegmentedJournal(
                      crimson::common::get_conf<double>(
                        "seastore_journal_batch_preferred_fullness"),
                      journal_segment_allocator),
-    sm_group(*segment_provider.get_segment_manager_group())
+    sm_group(*segment_provider.get_segment_manager_group()),
+    trimmer{trimmer}
 {
 }
 
@@ -105,9 +106,9 @@ SegmentedJournal::prep_replay_segments(
   return scan_last_segment(last_segment_id, last_header
   ).safe_then([this, FNAME, segments=std::move(segments)] {
     INFO("dirty_tail={}, alloc_tail={}",
-         segment_provider.get_dirty_tail(),
-         segment_provider.get_alloc_tail());
-    auto journal_tail = segment_provider.get_journal_tail();
+         trimmer.get_dirty_tail(),
+         trimmer.get_alloc_tail());
+    auto journal_tail = trimmer.get_journal_tail();
     auto journal_tail_paddr = journal_tail.offset;
     ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
     ceph_assert(journal_tail_paddr != P_ADDR_NULL);
@@ -152,7 +153,7 @@ SegmentedJournal::scan_last_segment(
 {
   LOG_PREFIX(SegmentedJournal::scan_last_segment);
   assert(segment_id == segment_header.physical_segment_id);
-  segment_provider.update_journal_tails(
+  trimmer.update_journal_tails(
       segment_header.dirty_tail, segment_header.alloc_tail);
   auto seq = journal_seq_t{
     segment_header.segment_seq,
@@ -203,7 +204,7 @@ SegmentedJournal::scan_last_segment(
               DEBUG("got {}, at {}", tail_delta, start_seq);
               ceph_assert(tail_delta.dirty_tail != JOURNAL_SEQ_NULL);
               ceph_assert(tail_delta.alloc_tail != JOURNAL_SEQ_NULL);
-              segment_provider.update_journal_tails(
+              trimmer.update_journal_tails(
                   tail_delta.dirty_tail, tail_delta.alloc_tail);
             }
           }
@@ -287,8 +288,8 @@ SegmentedJournal::replay_segment(
 	    return handler(
 	      locator,
 	      delta,
-	      segment_provider.get_dirty_tail(),
-	      segment_provider.get_alloc_tail(),
+	      trimmer.get_dirty_tail(),
+	      trimmer.get_alloc_tail(),
               modify_time
             ).safe_then([&stats, delta_type=delta.type](bool is_applied) {
               if (is_applied) {
