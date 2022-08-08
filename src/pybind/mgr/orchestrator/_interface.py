@@ -418,6 +418,17 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def rescan_host(self, hostname: str) -> OrchResult:
+        """Use cephadm to issue a disk rescan on each HBA
+
+        Some HBAs and external enclosures don't automatically register
+        device insertion with the kernel, so for these scenarios we need
+        to manually rescan
+
+        :param hostname: (str) host name
+        """
+        raise NotImplementedError()
+
     def get_inventory(self, host_filter: Optional['InventoryFilter'] = None, refresh: bool = False) -> OrchResult[List['InventoryHost']]:
         """
         Returns something that was created by `ceph-volume inventory`.
