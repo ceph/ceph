@@ -589,7 +589,7 @@ if(WITH_RBD)
   endif(WITH_RBD_MIRROR)
 endif(WITH_RBD)
 if(WITH_RADOSGW)
-  add_dependencies(tests radosgwd radosgw-admin)
+  add_dependencies(tests radosgw radosgw-admin)
 endif()
 #add dependency from fio just to ensure the plugin build isn't failing
 if(WITH_FIO)

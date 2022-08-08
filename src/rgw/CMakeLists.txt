@@ -343,20 +343,19 @@ set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
   rgw_dmclock_sync_scheduler.cc
   rgw_dmclock_async_scheduler.cc)
-set(radosgw_srcs
-  rgw_loadgen_process.cc
-  rgw_asio_client.cc
-  rgw_asio_frontend.cc)
 
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock spawn)
 
-add_library(radosgw SHARED
-  ${radosgw_srcs}
-  ${rgw_a_srcs}
+set(radosgw_srcs
   rgw_main.cc
+  rgw_loadgen_process.cc
+  rgw_asio_client.cc
+  rgw_asio_frontend.cc
   rgw_kmip_client_impl.cc)
+
+add_executable(radosgw ${radosgw_srcs})
 
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
@@ -367,29 +366,12 @@ target_include_directories(radosgw
 
 target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 
-target_link_libraries(radosgw
-  PRIVATE ${rgw_libs} rgw_schedulers kmip
-  PUBLIC dmclock::dmclock
-)
+target_link_libraries(radosgw PRIVATE ${rgw_libs} rgw_schedulers kmip)
 if(WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
 endif()
-set_target_properties(radosgw PROPERTIES OUTPUT_NAME radosgw VERSION 2.0.0
-  SOVERSION 2)
-install(TARGETS radosgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
-add_executable(radosgwd radosgw.cc)
-target_link_libraries(radosgwd radosgw librados
-  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
-  cls_log_client cls_timeindex_client neorados_cls_fifo
-  cls_version_client cls_user_client
-  global
-  ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
-  ${ALLOC_LIBS})
-set_target_properties(radosgwd PROPERTIES OUTPUT_NAME radosgw)
-install(TARGETS radosgwd DESTINATION bin)
+install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
   rgw_admin.cc

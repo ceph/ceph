@@ -208,7 +208,7 @@ public:
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
-int radosgw_Main(int argc, const char **argv)
+int main(int argc, const char **argv)
 {
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.
@@ -790,13 +790,3 @@ int radosgw_Main(int argc, const char **argv)
 
   return 0;
 }
-
-extern "C" {
-
-int radosgw_main(int argc, const char** argv)
-{
-  return radosgw_Main(argc, argv);
-}
-
-} /* extern "C" */
-
