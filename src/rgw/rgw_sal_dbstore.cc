@@ -2019,20 +2019,23 @@ extern "C" {
   {
     rgw::sal::DBStore* store = new rgw::sal::DBStore(cct, cfg);
     if (store) {
-      DBStoreManager *dbsm = new DBStoreManager(cct, cfg);
+      DBStoreManager *dbsm = new DBStoreManager(cct, store, cfg);
 
       if (!dbsm ) {
         delete store; store = nullptr;
       }
 
-      DB *db = dbsm->getDB();
+      DB* db = dbsm->getDB();
       if (!db) {
         delete dbsm;
         delete store; store = nullptr;
       }
 
+      /* ok */
       store->setDBStoreManager(dbsm);
+      /* XXXX unification for multiple handles makes this a problem */
       store->setDB(db);
+      /* XXXX these should be set by DB's ctor (or at least by now) */
       db->set_store((rgw::sal::Store*)store);
       db->set_context(cct);
     }

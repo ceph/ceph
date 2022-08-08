@@ -4,6 +4,7 @@
 #include <string.h>
 #include <pthread.h>
 
+#include "rgw_sal_dbstore.h"
 #include "dbstore_mgr.h"
 #include <dbstore.h>
 #include <dbstore_log.h>
@@ -121,14 +122,15 @@ void* process(void *arg)
   return 0;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
   string tenant = "Redhat";
   string logfile = "rgw_dbstore_bin.log";
   int loglevel = 20;
 
-  DBStoreManager *dbsm;
-  DB *dbs;
+  rgw::sal::DBStore* store;
+  DBStoreManager* dbsm;
+  DB* dbs; // XXX why "dbs" and not "db"?
   int rc = 0, tnum = 0;
   void *res;
 
@@ -150,8 +152,11 @@ int main(int argc, char *argv[])
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                 CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1);
 
+  /* XXX I'm making the semi-informed assumption that we have been
+   * testing DBStoreManager by itself, just because you could */
   StoreManager::Config cfg = StoreManager::get_config(false, g_ceph_context);
-  dbsm = new DBStoreManager(cct.get(), cfg, logfile, loglevel);
+  store  = new rgw::sal::DBStore(cct.get(), cfg);
+  dbsm = new DBStoreManager(cct.get(), store, cfg, logfile, loglevel);
   dbs = dbsm->getDB(tenant, true);
 
   cout<<"No. of threads being created = "<<num_thr<<"\n";

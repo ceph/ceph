@@ -21,22 +21,29 @@ using DB = rgw::store::DB;
 /* XXX: Should be a dbstore config option */
 const static std::string default_tenant = "default_ns";
 
+namespace rgw::sal {
+  class DBStore;
+} /* rgw::sal */
+
+
 class DBStoreManager {
 private:
   std::map<std::string, DB*> DBStoreHandles;
-  DB *default_db = nullptr;
+  rgw::sal::DBStore* store = nullptr;
+  DB* default_db = nullptr;
   CephContext *cct;
 
 public:
-  DBStoreManager(CephContext *_cct, const StoreManager::Config& cfg)
-    : DBStoreHandles() {
-    cct = _cct;
+  DBStoreManager(CephContext *_cct, rgw::sal::DBStore* store,
+		 const StoreManager::Config& cfg)
+    : DBStoreHandles(), store(store), cct(_cct) {
     default_db = createDB(default_tenant);
   };
-  DBStoreManager(CephContext *_cct, const StoreManager::Config& cfg,
-		 std::string logfile, int loglevel): DBStoreHandles() {
+  DBStoreManager(CephContext* _cct, rgw::sal::DBStore* store,
+		 const StoreManager::Config& cfg,
+		 std::string logfile, int loglevel)
+    : DBStoreHandles(), store(store), cct(_cct) {
     /* No ceph context. Create one with log args provided */
-    cct = _cct;
     cct->_log->set_log_file(logfile);
     cct->_log->reopen_log_file();
     cct->_conf->subsys.set_log_level(ceph_subsys_rgw, loglevel);
