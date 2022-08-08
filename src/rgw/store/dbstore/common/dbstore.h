@@ -388,226 +388,231 @@ class ObjectOp {
 class DBOp {
   private:
     static constexpr std::string_view CreateUserTableQ =
-      /* Corresponds to rgw::sal::User
-       *
-       * For now only UserID is made Primary key.
-       * If multiple tenants are stored in single .db handle, should
-       * make both (UserID, Tenant) as Primary Key.
-       *
-       * XXX:
-       * - AccessKeys, SwiftKeys, Subusers (map<>) are stored as blob.
-       *   To enable easy query, first accesskey is stored in separate fields
-       *   AccessKeysID, AccessKeysSecret.
-       *   In future, may be have separate table to store these keys and
-       *   query on that table.
-       * - Quota stored as blob .. should be linked to quota table.
-       */
-      "CREATE TABLE IF NOT EXISTS '{}' (	\
-      UserID TEXT NOT NULL UNIQUE,		\
-      Tenant TEXT ,		\
-      NS TEXT ,		\
-      DisplayName TEXT , \
-      UserEmail TEXT ,	\
-      AccessKeysID TEXT ,	\
-      AccessKeysSecret TEXT ,	\
-      AccessKeys BLOB ,	\
-      SwiftKeys BLOB ,	\
-      SubUsers BLOB ,		\
-      Suspended INTEGER ,	\
-      MaxBuckets INTEGER ,	\
-      OpMask	INTEGER ,	\
-      UserCaps BLOB ,		\
-      Admin	INTEGER ,	\
-      System INTEGER , 	\
-      PlacementName TEXT , 	\
-      PlacementStorageClass TEXT , 	\
-      PlacementTags BLOB ,	\
-      BucketQuota BLOB ,	\
-      TempURLKeys BLOB ,	\
-      UserQuota BLOB ,	\
-      TYPE INTEGER ,		\
-      MfaIDs BLOB ,	\
-      AssumedRoleARN TEXT , \
-      UserAttrs   BLOB,   \
-      UserVersion   INTEGER,    \
-      UserVersionTag TEXT,      \
-      PRIMARY KEY (UserID) \n);";
+        /* Corresponds to rgw::sal::User
+         *
+         * For now only UserID is made Primary key.
+         * If multiple tenants are stored in single .db handle, should
+         * make both (UserID, Tenant) as Primary Key.
+         *
+         * XXX:
+         * - AccessKeys, SwiftKeys, Subusers (map<>) are stored as blob.
+         *   To enable easy query, first accesskey is stored in separate fields
+         *   AccessKeysID, AccessKeysSecret.
+         *   In future, may be have separate table to store these keys and
+         *   query on that table.
+         * - Quota stored as blob .. should be linked to quota table.
+         */
+      R"(CREATE TABLE IF NOT EXISTS '{}' (
+      UserID TEXT NOT NULL UNIQUE,
+      Tenant TEXT,
+      NS TEXT,
+      DisplayName TEXT,
+      UserEmail TEXT,
+      AccessKeysID TEXT,
+      AccessKeysSecret TEXT,
+      AccessKeys BLOB,
+      SwiftKeys BLOB,
+      SubUsers BLOB,
+      Suspended INTEGER,
+      MaxBuckets INTEGER,
+      OpMask INTEGER,
+      UserCaps BLOB,
+      Admin INTEGER,
+      System INTEGER,
+      PlacementName TEXT,
+      PlacementStorageClass TEXT,
+      PlacementTags BLOB,
+      BucketQuota BLOB,
+      TempURLKeys BLOB,
+      UserQuota BLOB,
+      TYPE INTEGER,
+      MfaIDs BLOB,
+      AssumedRoleARN TEXT,
+      UserAttrs BLOB,
+      UserVersion INTEGER,
+      UserVersionTag TEXT,
+      PRIMARY KEY (UserID)
+      );)";
 
     static constexpr std::string_view CreateBucketTableQ =
-      /* Corresponds to rgw::sal::Bucket
-       *  
-       *  For now only BucketName is made Primary key. Since buckets should
-       *  be unique across users in rgw, OwnerID is not made part of primary key.
-       *  However it is still referenced as foreign key
-       *
-       *  If multiple tenants are stored in single .db handle, should
-       *  make both (BucketName, Tenant) as Primary Key. Also should
-       *  reference (UserID, Tenant) as Foreign key.
-       *
-       * leaving below RADOS specific fields
-       *   - rgw_data_placement_target explicit_placement (struct rgw_bucket)
-       *   - rgw::BucketLayout layout (struct RGWBucketInfo)
-       *   - const static uint32_t NUM_SHARDS_BLIND_BUCKET (struct RGWBucketInfo),
-       *     should be '0' indicating no sharding.
-       *   - cls_rgw_reshard_status reshard_status (struct RGWBucketInfo)
-       *
-       * XXX:
-       *   - Quota stored as blob .. should be linked to quota table.
-       *   - WebsiteConf stored as BLOB..if required, should be split
-       *   - Storing bucket_version (struct RGWBucket), objv_tracker
-       *     (struct RGWBucketInfo) separately. Are they same?
-       *
-       */
-      "CREATE TABLE IF NOT EXISTS '{}' ( \
-      BucketName TEXT NOT NULL UNIQUE , \
-      Tenant TEXT,        \
-      Marker TEXT,        \
-      BucketID TEXT,      \
-      Size   INTEGER,     \
-      SizeRounded INTEGER,\
-      CreationTime BLOB,  \
-      Count  INTEGER,     \
-      PlacementName TEXT , 	\
-      PlacementStorageClass TEXT , 	\
-      OwnerID TEXT NOT NULL, \
-      Flags   INTEGER,       \
-      Zonegroup TEXT,         \
-      HasInstanceObj BOOLEAN, \
-      Quota   BLOB,       \
-      RequesterPays BOOLEAN,  \
-      HasWebsite  BOOLEAN,    \
-      WebsiteConf BLOB,   \
-      SwiftVersioning BOOLEAN, \
-      SwiftVerLocation TEXT,  \
-      MdsearchConfig  BLOB,   \
-      NewBucketInstanceID TEXT,\
-      ObjectLock BLOB, \
-      SyncPolicyInfoGroups BLOB, \
-      BucketAttrs   BLOB,   \
-      BucketVersion   INTEGER,    \
-      BucketVersionTag TEXT,      \
-      Mtime   BLOB,   \
-      PRIMARY KEY (BucketName) \
-      FOREIGN KEY (OwnerID) \
-      REFERENCES '{}' (UserID) ON DELETE CASCADE ON UPDATE CASCADE \n);";
+        /* Corresponds to rgw::sal::Bucket
+         *
+         *  For now only BucketName is made Primary key. Since buckets should
+         *  be unique across users in rgw, OwnerID is not made part of primary
+         * key. However it is still referenced as foreign key
+         *
+         *  If multiple tenants are stored in single .db handle, should
+         *  make both (BucketName, Tenant) as Primary Key. Also should
+         *  reference (UserID, Tenant) as Foreign key.
+         *
+         * leaving below RADOS specific fields
+         *   - rgw_data_placement_target explicit_placement (struct rgw_bucket)
+         *   - rgw::BucketLayout layout (struct RGWBucketInfo)
+         *   - const static uint32_t NUM_SHARDS_BLIND_BUCKET (struct
+         * RGWBucketInfo), should be '0' indicating no sharding.
+         *   - cls_rgw_reshard_status reshard_status (struct RGWBucketInfo)
+         *
+         * XXX:
+         *   - Quota stored as blob .. should be linked to quota table.
+         *   - WebsiteConf stored as BLOB..if required, should be split
+         *   - Storing bucket_version (struct RGWBucket), objv_tracker
+         *     (struct RGWBucketInfo) separately. Are they same?
+         *
+         */
+      R"(CREATE TABLE IF NOT EXISTS '{}' (
+      BucketName TEXT NOT NULL UNIQUE ,
+      Tenant TEXT,
+      Marker TEXT,
+      BucketID TEXT,
+      Size INTEGER,
+      SizeRounded INTEGER,
+      CreationTime BLOB,
+      Count INTEGER,
+      PlacementName TEXT ,
+      PlacementStorageClass TEXT ,
+      OwnerID TEXT NOT NULL,
+      Flags INTEGER,
+      Zonegroup TEXT,
+      HasInstanceObj BOOLEAN,
+      Quota BLOB,
+      RequesterPays BOOLEAN,
+      HasWebsite BOOLEAN,
+      WebsiteConf BLOB,
+      SwiftVersioning BOOLEAN,
+      SwiftVerLocation TEXT,
+      MdsearchConfig BLOB,
+      NewBucketInstanceID TEXT,
+      ObjectLock BLOB,
+      SyncPolicyInfoGroups BLOB,
+      BucketAttrs BLOB,
+      BucketVersion INTEGER,
+      BucketVersionTag TEXT,
+      Mtime BLOB,
+      PRIMARY KEY (BucketName)
+      FOREIGN KEY (OwnerID)
+      REFERENCES '{}' (UserID) ON DELETE CASCADE ON UPDATE CASCADE
+      );)";
 
     static constexpr std::string_view CreateObjectTableTriggerQ =
-      "CREATE TRIGGER IF NOT EXISTS '{}' \
-          AFTER INSERT ON '{}' \
-       BEGIN \
-          UPDATE '{}' \
-          SET VersionNum = (SELECT COALESCE(max(VersionNum), 0) from '{}' where ObjName = new.ObjName) + 1 \
-          where ObjName = new.ObjName and ObjInstance = new.ObjInstance; \
-       END;";
+      R"(CREATE TRIGGER IF NOT EXISTS '{}'
+          AFTER INSERT ON '{}'
+       BEGIN
+          UPDATE '{}'
+          SET VersionNum = (SELECT COALESCE(max(VersionNum), 0) FROM '{}' WHERE ObjName = new.ObjName) + 1
+          WHERE ObjName = new.ObjName and ObjInstance = new.ObjInstance;
+       END;)";
 
     static constexpr std::string_view CreateObjectTableQ =
-      /* Corresponds to rgw::sal::Object
-       *
-       *  For now only BucketName, ObjName is made Primary key.
-       *  If multiple tenants are stored in single .db handle, should
-       *  include Tenant too in the Primary Key. Also should
-       *  reference (BucketID, Tenant) as Foreign key.
-       * 
-       * referring to 
-       * - rgw_bucket_dir_entry - following are added for now
-       *   flags,
-       *   versioned_epoch
-       *   tag
-       *   index_ver
-       *   meta.category
-       *   meta.etag
-       *   meta.storageclass
-       *   meta.appendable
-       *   meta.content_type
-       *   meta.owner
-       *   meta.owner_display_name
-       *
-       * - RGWObjState. Below are omitted from that struct
-       *    as they seem in-memory variables
-       *    * is_atomic, has_atts, exists, prefetch_data, keep_tail, 
-       * - RGWObjManifest
-       *
-       * Extra field added "IsMultipart" to flag multipart uploads,
-       * HeadData to store first chunk data.
-       */
-      "CREATE TABLE IF NOT EXISTS '{}' ( \
-      ObjName TEXT NOT NULL , \
-      ObjInstance TEXT, \
-      ObjNS TEXT, \
-      BucketName TEXT NOT NULL , \
-      ACLs    BLOB,   \
-      IndexVer    INTEGER,    \
-      Tag TEXT,   \
-      Flags INTEGER, \
-      VersionedEpoch INTEGER, \
-      ObjCategory INTEGER,    \
-      Etag   TEXT,    \
-      Owner TEXT, \
-      OwnerDisplayName TEXT,  \
-      StorageClass    TEXT,   \
-      Appendable  BOOL,   \
-      ContentType TEXT,   \
-      IndexHashSource TEXT, \
-      ObjSize  INTEGER,   \
-      AccountedSize INTEGER,  \
-      Mtime   BLOB,   \
-      Epoch  INTEGER, \
-      ObjTag  BLOB,   \
-      TailTag BLOB,   \
-      WriteTag    TEXT,   \
-      FakeTag BOOL,   \
-      ShadowObj   TEXT,   \
-      HasData  BOOL,  \
-      IsVersioned BOOL,  \
-      VersionNum  INTEGER, \
-      PGVer   INTEGER, \
-      ZoneShortID  INTEGER,  \
-      ObjVersion   INTEGER,    \
-      ObjVersionTag TEXT,      \
-      ObjAttrs    BLOB,   \
-      HeadSize    INTEGER,    \
-      MaxHeadSize    INTEGER,    \
-      ObjID      TEXT NOT NULL, \
-      TailInstance  TEXT, \
-      HeadPlacementRuleName   TEXT, \
-      HeadPlacementRuleStorageClass TEXT, \
-      TailPlacementRuleName   TEXT, \
-      TailPlacementStorageClass TEXT, \
-      ManifestPartObjs    BLOB,   \
-      ManifestPartRules   BLOB,   \
-      Omap    BLOB,   \
-      IsMultipart     BOOL,   \
-      MPPartsList    BLOB,   \
-      HeadData  BLOB,   \
-      PRIMARY KEY (ObjName, ObjInstance, BucketName), \
-      FOREIGN KEY (BucketName) \
-      REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
+        /* Corresponds to rgw::sal::Object
+         *
+         *  For now only BucketName, ObjName is made Primary key.
+         *  If multiple tenants are stored in single .db handle, should
+         *  include Tenant too in the Primary Key. Also should
+         *  reference (BucketID, Tenant) as Foreign key.
+         *
+         * referring to
+         * - rgw_bucket_dir_entry - following are added for now
+         *   flags,
+         *   versioned_epoch
+         *   tag
+         *   index_ver
+         *   meta.category
+         *   meta.etag
+         *   meta.storageclass
+         *   meta.appendable
+         *   meta.content_type
+         *   meta.owner
+         *   meta.owner_display_name
+         *
+         * - RGWObjState. Below are omitted from that struct
+         *    as they seem in-memory variables
+         *    * is_atomic, has_atts, exists, prefetch_data, keep_tail,
+         * - RGWObjManifest
+         *
+         * Extra field added "IsMultipart" to flag multipart uploads,
+         * HeadData to store first chunk data.
+         */
+      R"(CREATE TABLE IF NOT EXISTS '{}' (
+      ObjName TEXT NOT NULL,
+      ObjInstance TEXT,
+      ObjNS TEXT,
+      BucketName TEXT NOT NULL,
+      ACLs BLOB,
+      IndexVer INTEGER,
+      Tag TEXT,
+      Flags INTEGER,
+      VersionedEpoch INTEGER,
+      ObjCategory INTEGER,
+      Etag TEXT,
+      Owner TEXT,
+      OwnerDisplayName TEXT,
+      StorageClass TEXT,
+      Appendable BOOL,
+      ContentType TEXT,
+      IndexHashSource TEXT,
+      ObjSize INTEGER,
+      AccountedSize INTEGER,
+      Mtime BLOB,
+      Epoch INTEGER,
+      ObjTag BLOB,
+      TailTag BLOB,
+      WriteTag TEXT,
+      FakeTag BOOL,
+      ShadowObj TEXT,
+      HasData BOOL,
+      IsVersioned BOOL,
+      VersionNum INTEGER,
+      PGVer INTEGER,
+      ZoneShortID INTEGER,
+      ObjVersion INTEGER,
+      ObjVersionTag TEXT,
+      ObjAttrs BLOB,
+      HeadSize INTEGER,
+      MaxHeadSize INTEGER,
+      ObjID TEXT NOT NULL,
+      TailInstance TEXT,
+      HeadPlacementRuleName TEXT,
+      HeadPlacementRuleStorageClass TEXT,
+      TailPlacementRuleName TEXT,
+      TailPlacementStorageClass TEXT,
+      ManifestPartObjs BLOB,
+      ManifestPartRules BLOB,
+      Omap BLOB,
+      IsMultipart BOOL,
+      MPPartsList BLOB,
+      HeadData BLOB,
+      PRIMARY KEY (ObjName, ObjInstance, BucketName),
+      FOREIGN KEY (BucketName)
+      REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE
+      );)";
 
     static constexpr std::string_view CreateObjectDataTableQ =
-      /* Extra field 'MultipartPartStr' added which signifies multipart
-       * <uploadid + partnum>. For regular object, it is '0.0'
-       *
-       *  - part: a collection of stripes that make a contiguous part of an
-       object. A regular object will only have one part (although might have
-       many stripes), a multipart object might have many parts. Each part
-       has a fixed stripe size (ObjChunkSize), although the last stripe of a
-       part might be smaller than that.
-       */
-      "CREATE TABLE IF NOT EXISTS '{}' ( \
-      ObjName TEXT NOT NULL , \
-      ObjInstance TEXT, \
-      ObjNS TEXT, \
-      BucketName TEXT NOT NULL , \
-      ObjID      TEXT NOT NULL , \
-      MultipartPartStr TEXT, \
-      PartNum  INTEGER NOT NULL, \
-      Offset   INTEGER, \
-      Size 	 INTEGER, \
-      Mtime  BLOB,       \
-      Data     BLOB,             \
-      PRIMARY KEY (ObjName, BucketName, ObjInstance, ObjID, MultipartPartStr, PartNum), \
-      FOREIGN KEY (BucketName) \
-      REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
+        /* Extra field 'MultipartPartStr' added which signifies multipart
+         * <uploadid + partnum>. For regular object, it is '0.0'
+         *
+         *  - part: a collection of stripes that make a contiguous part of an
+         object. A regular object will only have one part (although might have
+         many stripes), a multipart object might have many parts. Each part
+         has a fixed stripe size (ObjChunkSize), although the last stripe of a
+         part might be smaller than that.
+         */
+      R"(CREATE TABLE IF NOT EXISTS '{}' (
+      ObjName TEXT NOT NULL,
+      ObjInstance TEXT,
+      ObjNS TEXT,
+      BucketName TEXT NOT NULL,
+      ObjID TEXT NOT NULL,
+      MultipartPartStr TEXT,
+      PartNum INTEGER NOT NULL,
+      Offset INTEGER,
+      Size INTEGER,
+      Mtime BLOB,
+      Data BLOB,
+      PRIMARY KEY (ObjName, BucketName, ObjInstance, ObjID, MultipartPartStr,
+        PartNum),
+      FOREIGN KEY (BucketName)
+      REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE
+      );)";
 
     static constexpr std::string_view CreateObjectViewQ =
       /* This query creats temporary view with entries from ObjectData table which have
@@ -620,38 +625,41 @@ class DBOp {
        * XXX: This view is throwing ForeignKey mismatch error, mostly may be because all the keys
        * of objectdata table are not referenced here. So this view is not used atm.
        */
-      "CREATE TEMP VIEW IF NOT EXISTS '{}' AS \
-      SELECT s.ObjName, s.ObjInstance, s.ObjID from '{}' as s INNER JOIN '{}' USING \
-      (ObjName, BucketName, ObjInstance, ObjID);";
-
+      R"(CREATE TEMP VIEW IF NOT EXISTS '{}' AS
+      SELECT s.ObjName, s.ObjInstance, s.ObjID FROM '{}' as s
+        INNER JOIN '{}' USING
+      (ObjName, BucketName, ObjInstance, ObjID);)";
 
     static constexpr std::string_view CreateQuotaTableQ =
-      "CREATE TABLE IF NOT EXISTS '{}' ( \
-      QuotaID INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE , \
-      MaxSizeSoftThreshold INTEGER ,	\
-      MaxObjsSoftThreshold INTEGER ,	\
-      MaxSize	INTEGER ,		\
-      MaxObjects INTEGER ,		\
-      Enabled Boolean ,		\
-      CheckOnRaw Boolean \n);";
+      R"(CREATE TABLE IF NOT EXISTS '{}' (
+      QuotaID INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE ,
+      MaxSizeSoftThreshold INTEGER,
+      MaxObjsSoftThreshold INTEGER,
+      MaxSize INTEGER,
+      MaxObjects INTEGER,
+      Enabled Boolean,
+      CheckOnRaw Boolean
+      );)";
 
     static constexpr std::string_view CreateLCEntryTableQ =
-      "CREATE TABLE IF NOT EXISTS '{}' ( \
-      LCIndex  TEXT NOT NULL , \
-      BucketName TEXT NOT NULL , \
-      StartTime  INTEGER , \
-      Status     INTEGER , \
-      PRIMARY KEY (LCIndex, BucketName) \n);";
+      R"(CREATE TABLE IF NOT EXISTS '{}' (
+      LCIndex TEXT NOT NULL,
+      BucketName TEXT NOT NULL,
+      StartTime INTEGER,
+      Status INTEGER,
+      PRIMARY KEY (LCIndex, BucketName)
+      );)";
 
     static constexpr std::string_view CreateLCHeadTableQ =
-      "CREATE TABLE IF NOT EXISTS '{}' ( \
-      LCIndex  TEXT NOT NULL , \
-      Marker TEXT , \
-      StartDate  INTEGER , \
-      PRIMARY KEY (LCIndex) \n);";
+      R"(CREATE TABLE IF NOT EXISTS '{}' (
+      LCIndex TEXT NOT NULL,
+      Marker TEXT,
+      StartDate INTEGER,
+      PRIMARY KEY (LCIndex)
+      );)";
 
     static constexpr std::string_view DropQ = "DROP TABLE IF EXISTS '{}'";
-    static constexpr std::string_view ListAllQ = "SELECT  * from '{}'";
+    static constexpr std::string_view ListAllQ = "SELECT * from '{}'";
 
   public:
     DBOp() {}
@@ -707,9 +715,12 @@ class DBOp {
       return fmt::format(ListAllQ, table);
     }
 
-    virtual int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
-    virtual int Bind(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
-    virtual int Execute(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
+    virtual int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params) {
+      return 0; }
+    virtual int Bind(const DoutPrefixProvider *dpp, DBOpParams *params) {
+      return 0; }
+    virtual int Execute(const DoutPrefixProvider *dpp, DBOpParams *params) {
+      return 0; }
 };
 
 class InsertUserOp : virtual public DBOp {
@@ -725,15 +736,16 @@ class InsertUserOp : virtual public DBOp {
      * For now using INSERT or REPLACE. If required of updating existing
      * record, will use another query.
      */
-    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
-                          (UserID, Tenant, NS, DisplayName, UserEmail, \
-                           AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
-                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
-                           System, PlacementName, PlacementStorageClass, PlacementTags, \
-                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                           UserAttrs, UserVersion, UserVersionTag) \
-                          VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+    static constexpr std::string_view Query =
+      R"(INSERT OR REPLACE INTO '{}'
+           (UserID, Tenant, NS, DisplayName, UserEmail,
+           AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,
+           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin,
+           System, PlacementName, PlacementStorageClass, PlacementTags,
+           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN,
+           UserAttrs, UserVersion, UserVersionTag)
+           VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+             {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});)";
 
   public:
     virtual ~InsertUserOp() {}
@@ -760,7 +772,7 @@ class InsertUserOp : virtual public DBOp {
 class RemoveUserOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "DELETE from '{}' where UserID = {}";
+      "DELETE from '{}' WHERE UserID = {}";
 
   public:
     virtual ~RemoveUserOp() {}
@@ -775,38 +787,41 @@ class GetUserOp: virtual public DBOp {
   private:
     /* If below query columns are updated, make sure to update the indexes
      * in list_user() cbk in sqliteDB.cc */
-    static constexpr std::string_view Query = "SELECT \
-                          UserID, Tenant, NS, DisplayName, UserEmail, \
-                          AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
-                          SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
-                          System, PlacementName, PlacementStorageClass, PlacementTags, \
-                          BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                          UserAttrs, UserVersion, UserVersionTag from '{}' where UserID = {}";
+    static constexpr std::string_view Query =
+      R"(SELECT UserID, Tenant, NS, DisplayName, UserEmail,
+         AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,
+         SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin,
+         System, PlacementName, PlacementStorageClass, PlacementTags,
+         BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN,
+         UserAttrs, UserVersion, UserVersionTag
+         FROM '{}' WHERE UserID = {})";
 
-    static constexpr std::string_view QueryByEmail = "SELECT \
-                                 UserID, Tenant, NS, DisplayName, UserEmail, \
-                                 AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
-                                 SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
-                                 System, PlacementName, PlacementStorageClass, PlacementTags, \
-                                 BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                 UserAttrs, UserVersion, UserVersionTag from '{}' where UserEmail = {}";
+    static constexpr std::string_view QueryByEmail =
+      R"(SELECT UserID, Tenant, NS, DisplayName, UserEmail,
+         AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,
+         SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin,
+         System, PlacementName, PlacementStorageClass, PlacementTags,
+         BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN,
+         UserAttrs, UserVersion, UserVersionTag FROM '{}'
+         WHERE UserEmail = {})";
 
-    static constexpr std::string_view QueryByAccessKeys = "SELECT \
-                                      UserID, Tenant, NS, DisplayName, UserEmail, \
-                                      AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
-                                      SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
-                                      System, PlacementName, PlacementStorageClass, PlacementTags, \
-                                      BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                      UserAttrs, UserVersion, UserVersionTag from '{}' where AccessKeysID = {}";
+    static constexpr std::string_view QueryByAccessKeys =
+      R"(SELECT UserID, Tenant, NS, DisplayName, UserEmail,
+         AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,
+         SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin,
+         System, PlacementName, PlacementStorageClass, PlacementTags,
+         BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN,
+         UserAttrs, UserVersion, UserVersionTag FROM '{}'
+         WHERE AccessKeysID = {})";
 
-    static constexpr std::string_view QueryByUserID = "SELECT \
-                                  UserID, Tenant, NS, DisplayName, UserEmail, \
-                                  AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
-                                  SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
-                                  System, PlacementName, PlacementStorageClass, PlacementTags, \
-                                  BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                                  UserAttrs, UserVersion, UserVersionTag \
-                                  from '{}' where UserID = {}";
+    static constexpr std::string_view QueryByUserID =
+      R"(SELECT UserID, Tenant, NS, DisplayName, UserEmail,
+         AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,
+         SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin,
+         System, PlacementName, PlacementStorageClass, PlacementTags,
+         BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN,
+         UserAttrs, UserVersion, UserVersionTag
+         FROM '{}' WHERE UserID = {})";
 
   public:
     virtual ~GetUserOp() {}
@@ -833,16 +848,17 @@ class GetUserOp: virtual public DBOp {
 class InsertBucketOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "INSERT OR REPLACE INTO '{}' \
-      (BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
-       Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
-       HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
-       SwiftVersioning, SwiftVerLocation, \
-       MdsearchConfig, NewBucketInstanceID, ObjectLock, \
-       SyncPolicyInfoGroups, BucketAttrs, BucketVersion, BucketVersionTag, Mtime) \
-      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, \
-          {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-          {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
+      R"(INSERT OR REPLACE INTO '{}'
+      (BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime,
+       Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup,
+       HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf,
+       SwiftVersioning, SwiftVerLocation,
+       MdsearchConfig, NewBucketInstanceID, ObjectLock,
+       SyncPolicyInfoGroups, BucketAttrs, BucketVersion, BucketVersionTag,
+       Mtime)
+      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {},
+          {}, {}, {}, {}, {}, {}, {}, {}, {},
+          {}, {}, {}, {}, {}, {}, {}, {}, {}, {}))";
 
   public:
     virtual ~InsertBucketOp() {}
@@ -870,19 +886,24 @@ class UpdateBucketOp: virtual public DBOp {
   private:
     // Updates Info, Mtime, Version
     static constexpr std::string_view InfoQuery =
-      "UPDATE '{}' SET Tenant = {}, Marker = {}, BucketID = {}, CreationTime = {}, \
-      Count = {}, PlacementName = {}, PlacementStorageClass = {}, OwnerID = {}, Flags = {}, \
-      Zonegroup = {}, HasInstanceObj = {}, Quota = {}, RequesterPays = {}, HasWebsite = {}, \
-      WebsiteConf = {}, SwiftVersioning = {}, SwiftVerLocation = {}, MdsearchConfig = {}, \
-      NewBucketInstanceID = {}, ObjectLock = {}, SyncPolicyInfoGroups = {}, \
-      BucketVersion = {}, Mtime = {} WHERE BucketName = {}";
+      R"(UPDATE '{}' SET Tenant = {}, Marker = {}, BucketID = {},
+         CreationTime = {}, Count = {}, PlacementName = {},
+         PlacementStorageClass = {}, OwnerID = {}, Flags = {},
+         Zonegroup = {}, HasInstanceObj = {}, Quota = {}, RequesterPays = {},
+         HasWebsite = {}, WebsiteConf = {}, SwiftVersioning = {},
+         SwiftVerLocation = {}, MdsearchConfig = {},
+         NewBucketInstanceID = {}, ObjectLock = {}, SyncPolicyInfoGroups = {},
+         BucketVersion = {}, Mtime = {} WHERE BucketName = {})";
+
     // Updates Attrs, OwnerID, Mtime, Version
     static constexpr std::string_view AttrsQuery =
-      "UPDATE '{}' SET OwnerID = {}, BucketAttrs = {}, Mtime = {}, BucketVersion = {} \
-      WHERE BucketName = {}";
+      R"(UPDATE '{}' SET OwnerID = {}, BucketAttrs = {}, Mtime = {},
+         BucketVersion = {} WHERE BucketName = {})";
+
     // Updates OwnerID, CreationTime, Mtime, Version
     static constexpr std::string_view OwnerQuery =
-      "UPDATE '{}' SET OwnerID = {}, CreationTime = {}, Mtime = {}, BucketVersion = {} WHERE BucketName = {}";
+      R"(UPDATE '{}' SET OwnerID = {}, CreationTime = {}, Mtime = {},
+         BucketVersion = {} WHERE BucketName = {})";
 
   public:
     virtual ~UpdateBucketOp() {}
@@ -922,7 +943,7 @@ class UpdateBucketOp: virtual public DBOp {
 class RemoveBucketOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "DELETE from '{}' where BucketName = {}";
+      "DELETE FROM '{}' WHERE BucketName = {}";
 
   public:
     virtual ~RemoveBucketOp() {}
@@ -935,14 +956,16 @@ class RemoveBucketOp: virtual public DBOp {
 
 class GetBucketOp: virtual public DBOp {
   private:
-    static constexpr std::string_view Query = "SELECT  \
-                          BucketName, BucketTable.Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
-                          Count, BucketTable.PlacementName, BucketTable.PlacementStorageClass, OwnerID, Flags, Zonegroup, \
-                          HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
-                          SwiftVersioning, SwiftVerLocation, \
-                          MdsearchConfig, NewBucketInstanceID, ObjectLock, \
-                          SyncPolicyInfoGroups, BucketAttrs, BucketVersion, BucketVersionTag, Mtime, NS \
-                          from '{}' as BucketTable INNER JOIN '{}' ON OwnerID = UserID where BucketName = {}";
+    static constexpr std::string_view Query =
+      R"(SELECT BucketName, BucketTable.Tenant, Marker, BucketID, Size,
+         SizeRounded, CreationTime, Count, BucketTable.PlacementName,
+         BucketTable.PlacementStorageClass, OwnerID, Flags, Zonegroup,
+         HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf,
+         SwiftVersioning, SwiftVerLocation, MdsearchConfig,
+         NewBucketInstanceID, ObjectLock, SyncPolicyInfoGroups, BucketAttrs,
+         BucketVersion, BucketVersionTag, Mtime, NS
+         FROM '{}' as BucketTable INNER JOIN '{}' ON OwnerID = UserID
+           WHERE BucketName = {})";
 
   public:
     virtual ~GetBucketOp() {}
@@ -960,26 +983,27 @@ class ListUserBucketsOp: virtual public DBOp {
   private:
     // once we have stats also stored, may have to update this query to join
     // these two tables.
-    static constexpr std::string_view Query = "SELECT  \
-                          BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
-                          Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
-                          HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
-                          SwiftVersioning, SwiftVerLocation, \
-                          MdsearchConfig, NewBucketInstanceID, ObjectLock, \
-                          SyncPolicyInfoGroups, BucketAttrs, BucketVersion, BucketVersionTag, Mtime \
-                          FROM '{}' WHERE OwnerID = {} AND BucketName > {} ORDER BY BucketName ASC LIMIT {}";
+    static constexpr std::string_view Query =
+      R"(SELECT BucketName, Tenant, Marker, BucketID, Size, SizeRounded,
+         CreationTime, Count, PlacementName, PlacementStorageClass, OwnerID,
+         Flags, Zonegroup, HasInstanceObj, Quota, RequesterPays, HasWebsite,
+         WebsiteConf, SwiftVersioning, SwiftVerLocation,
+         MdsearchConfig, NewBucketInstanceID, ObjectLock, SyncPolicyInfoGroups,
+         BucketAttrs, BucketVersion, BucketVersionTag, Mtime
+         FROM '{}' WHERE OwnerID = {} AND BucketName > {}
+         ORDER BY BucketName ASC LIMIT {})";
 
     /* BucketNames are unique across users. Hence userid/OwnerID is not used as
      * marker or for ordering here in the below query 
      */
-    static constexpr std::string_view AllQuery = "SELECT  \
-                          BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
-                          Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
-                          HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
-                          SwiftVersioning, SwiftVerLocation, \
-                          MdsearchConfig, NewBucketInstanceID, ObjectLock, \
-                          SyncPolicyInfoGroups, BucketAttrs, BucketVersion, BucketVersionTag, Mtime \
-                          FROM '{}' WHERE BucketName > {} ORDER BY BucketName ASC LIMIT {}";
+    static constexpr std::string_view AllQuery =
+      R"(SELECT BucketName, Tenant, Marker, BucketID, Size, SizeRounded,
+         CreationTime, Count, PlacementName, PlacementStorageClass, OwnerID,
+         Flags, Zonegroup, HasInstanceObj, Quota, RequesterPays, HasWebsite,
+         WebsiteConf, SwiftVersioning, SwiftVerLocation, MdsearchConfig,
+         NewBucketInstanceID, ObjectLock, SyncPolicyInfoGroups, BucketAttrs,
+         BucketVersion, BucketVersionTag, Mtime
+         FROM '{}' WHERE BucketName > {} ORDER BY BucketName ASC LIMIT {})";
 
   public:
     virtual ~ListUserBucketsOp() {}
@@ -1000,21 +1024,21 @@ class ListUserBucketsOp: virtual public DBOp {
 class PutObjectOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "INSERT OR REPLACE INTO '{}' \
-      (ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
-       Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
-       StorageClass, Appendable, ContentType, IndexHashSource, ObjSize, \
-       AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag, \
-       ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID, \
-       ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize, \
-       ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
-       TailPlacementRuleName, TailPlacementStorageClass, \
-       ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, \
-       HeadData)     \
-      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-          {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-          {}, {}, {}, \
-          {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
+      R"(INSERT OR REPLACE INTO '{}'
+      (ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag,
+       Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName,
+       StorageClass, Appendable, ContentType, IndexHashSource, ObjSize,
+       AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag,
+       ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID,
+       ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize,
+       ObjID, TailInstance, HeadPlacementRuleName,
+       HeadPlacementRuleStorageClass, TailPlacementRuleName,
+       TailPlacementStorageClass, ManifestPartObjs, ManifestPartRules, Omap,
+       IsMultipart, MPPartsList, HeadData)
+      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+          {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+          {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+          {}, {}, {}))";
 
   public:
     virtual ~PutObjectOp() {}
@@ -1053,7 +1077,8 @@ class PutObjectOp: virtual public DBOp {
 class DeleteObjectOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "DELETE from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {}";
+      R"(DELETE FROM '{}' WHERE BucketName = {} and ObjName = {} and
+         ObjInstance = {})";
 
   public:
     virtual ~DeleteObjectOp() {}
@@ -1069,18 +1094,17 @@ class DeleteObjectOp: virtual public DBOp {
 class GetObjectOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "SELECT  \
-      ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
-      Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
-      StorageClass, Appendable, ContentType, IndexHashSource, ObjSize, \
-      AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag, \
-      ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID, \
-      ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize, \
-      ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
-      TailPlacementRuleName, TailPlacementStorageClass, \
-      ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, \
-      HeadData from '{}' \
-      where BucketName = {} and ObjName = {} and ObjInstance = {}";
+      R"(SELECT ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag,
+      Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName,
+      StorageClass, Appendable, ContentType, IndexHashSource, ObjSize,
+      AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag,
+      ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID,
+      ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize,
+      ObjID, TailInstance, HeadPlacementRuleName,
+      HeadPlacementRuleStorageClass, TailPlacementRuleName,
+      TailPlacementStorageClass, ManifestPartObjs, ManifestPartRules, Omap,
+      IsMultipart, MPPartsList, HeadData FROM '{}'
+      WHERE BucketName = {} and ObjName = {} and ObjInstance = {})";
 
   public:
     virtual ~GetObjectOp() {}
@@ -1099,17 +1123,18 @@ class ListBucketObjectsOp: virtual public DBOp {
     // once we have stats also stored, may have to update this query to join
     // these two tables.
     static constexpr std::string_view Query =
-      "SELECT  \
-      ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
-      Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
-      StorageClass, Appendable, ContentType, IndexHashSource, ObjSize, \
-      AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag, \
-      ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID, \
-      ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize, \
-      ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
-      TailPlacementRuleName, TailPlacementStorageClass, \
-      ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, HeadData from '{}' \
-      where BucketName = {} and ObjName >= {} and ObjName LIKE {} ORDER BY ObjName ASC, VersionNum DESC LIMIT {}";
+      R"(SELECT ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag,
+      Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName,
+      StorageClass, Appendable, ContentType, IndexHashSource, ObjSize,
+      AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag,
+      ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID,
+      ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize,
+      ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass,
+      TailPlacementRuleName, TailPlacementStorageClass,
+      ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList,
+      HeadData FROM '{}'
+      WHERE BucketName = {} and ObjName >= {} and ObjName LIKE {}
+      ORDER BY ObjName ASC, VersionNum DESC LIMIT {})";
   public:
     virtual ~ListBucketObjectsOp() {}
 
@@ -1130,18 +1155,19 @@ class ListVersionedObjectsOp: virtual public DBOp {
     // once we have stats also stored, may have to update this query to join
     // these two tables.
     static constexpr std::string_view Query =
-      "SELECT  \
-      ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
-      Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
-      StorageClass, Appendable, ContentType, IndexHashSource, ObjSize, \
-      AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag, \
-      ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID, \
-      ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize, \
-      ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
-      TailPlacementRuleName, TailPlacementStorageClass, \
-      ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, \
-      HeadData from '{}' \
-      where BucketName = {} and ObjName = {} ORDER BY VersionNum DESC LIMIT {}";
+      R"(SELECT ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag,
+      Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName,
+      StorageClass, Appendable, ContentType, IndexHashSource, ObjSize,
+      AccountedSize, Mtime, Epoch, ObjTag, TailTag, WriteTag, FakeTag,
+      ShadowObj, HasData, IsVersioned, VersionNum, PGVer, ZoneShortID,
+      ObjVersion, ObjVersionTag, ObjAttrs, HeadSize, MaxHeadSize,
+      ObjID, TailInstance, HeadPlacementRuleName,
+      HeadPlacementRuleStorageClass, TailPlacementRuleName,
+      TailPlacementStorageClass,
+      ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList,
+      HeadData FROM '{}'
+      WHERE BucketName = {} and ObjName = {}
+      ORDER BY VersionNum DESC LIMIT {})";
   public:
     virtual ~ListVersionedObjectsOp() {}
 
@@ -1159,29 +1185,33 @@ class UpdateObjectOp: virtual public DBOp {
   private:
     // Updates Omap
     static constexpr std::string_view OmapQuery =
-      "UPDATE '{}' SET Omap = {}, Mtime = {} \
-      where BucketName = {} and ObjName = {} and ObjInstance = {}";
+      R"(UPDATE '{}' SET Omap = {}, Mtime = {}
+      WHERE BucketName = {} and ObjName = {} and ObjInstance = {})";
+
     static constexpr std::string_view AttrsQuery =
-      "UPDATE '{}' SET ObjAttrs = {}, Mtime = {}  \
-      where BucketName = {} and ObjName = {} and ObjInstance = {}";
+      R"(UPDATE '{}' SET ObjAttrs = {}, Mtime = {}
+      WHERE BucketName = {} and ObjName = {} and ObjInstance = {})";
+
     static constexpr std::string_view MPQuery =
-      "UPDATE '{}' SET MPPartsList = {}, Mtime = {}  \
-      where BucketName = {} and ObjName = {} and ObjInstance = {}";
+      R"(UPDATE '{}' SET MPPartsList = {}, Mtime = {}
+      WHERE BucketName = {} and ObjName = {} and ObjInstance = {})";
+
     static constexpr std::string_view MetaQuery =
-      "UPDATE '{}' SET \
-       ObjNS = {}, ACLs = {}, IndexVer = {}, Tag = {}, Flags = {}, VersionedEpoch = {}, \
-       ObjCategory = {}, Etag = {}, Owner = {}, OwnerDisplayName = {}, \
-       StorageClass = {}, Appendable = {}, ContentType = {}, \
-       IndexHashSource = {}, ObjSize = {}, AccountedSize = {}, Mtime = {}, \
-       Epoch = {}, ObjTag = {}, TailTag = {}, WriteTag = {}, FakeTag = {}, \
-       ShadowObj = {}, HasData = {}, IsVersioned = {}, VersionNum = {}, PGVer = {}, \
-       ZoneShortID = {}, ObjVersion = {}, ObjVersionTag = {}, ObjAttrs = {}, \
-       HeadSize = {}, MaxHeadSize = {}, ObjID = {}, TailInstance = {}, \
-       HeadPlacementRuleName = {}, HeadPlacementRuleStorageClass = {}, \
-       TailPlacementRuleName = {}, TailPlacementStorageClass = {}, \
-       ManifestPartObjs = {}, ManifestPartRules = {}, Omap = {}, \
-       IsMultipart = {}, MPPartsList = {}, HeadData = {} \
-       WHERE ObjName = {} and ObjInstance = {} and BucketName = {}";
+      R"(UPDATE '{}' SET ObjNS = {}, ACLs = {}, IndexVer = {}, Tag = {},
+       Flags = {}, VersionedEpoch = {},
+       ObjCategory = {}, Etag = {}, Owner = {}, OwnerDisplayName = {},
+       StorageClass = {}, Appendable = {}, ContentType = {},
+       IndexHashSource = {}, ObjSize = {}, AccountedSize = {}, Mtime = {},
+       Epoch = {}, ObjTag = {}, TailTag = {}, WriteTag = {}, FakeTag = {},
+       ShadowObj = {}, HasData = {}, IsVersioned = {}, VersionNum = {},
+       PGVer = {}, ZoneShortID = {}, ObjVersion = {}, ObjVersionTag = {},
+       ObjAttrs = {}, HeadSize = {}, MaxHeadSize = {}, ObjID = {},
+       TailInstance = {}, HeadPlacementRuleName = {},
+       HeadPlacementRuleStorageClass = {},
+       TailPlacementRuleName = {}, TailPlacementStorageClass = {},
+       ManifestPartObjs = {}, ManifestPartRules = {}, Omap = {},
+       IsMultipart = {}, MPPartsList = {}, HeadData = {}
+       WHERE ObjName = {} and ObjInstance = {} and BucketName = {})";
 
   public:
     virtual ~UpdateObjectOp() {}
@@ -1247,9 +1277,10 @@ class UpdateObjectOp: virtual public DBOp {
 class PutObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "INSERT OR REPLACE INTO '{}' \
-      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data) \
-      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
+      R"(INSERT OR REPLACE INTO '{}'
+      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr,
+       PartNum, Offset, Size, Mtime, Data)
+      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}))";
 
   public:
     virtual ~PutObjectDataOp() {}
@@ -1274,9 +1305,9 @@ class PutObjectDataOp: virtual public DBOp {
 class UpdateObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "UPDATE '{}' \
-      SET Mtime = {} WHERE ObjName = {} and ObjInstance = {} and \
-      BucketName = {} and ObjID = {}";
+      R"(UPDATE '{}'
+      SET Mtime = {} WHERE ObjName = {} and ObjInstance = {} and
+      BucketName = {} and ObjID = {})";
 
   public:
     virtual ~UpdateObjectDataOp() {}
@@ -1294,9 +1325,10 @@ class UpdateObjectDataOp: virtual public DBOp {
 class GetObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "SELECT  \
-      ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data \
-      from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {} ORDER BY MultipartPartStr, PartNum";
+      R"(SELECT ObjName, ObjInstance, ObjNS, BucketName, ObjID,
+         MultipartPartStr, PartNum, Offset, Size, Mtime, Data
+      FROM '{}' WHERE BucketName = {} and ObjName = {} and ObjInstance = {}
+      and ObjID = {} ORDER BY MultipartPartStr, PartNum)";
 
   public:
     virtual ~GetObjectDataOp() {}
@@ -1314,7 +1346,8 @@ class GetObjectDataOp: virtual public DBOp {
 class DeleteObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "DELETE from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {}";
+      R"(DELETE FROM '{}' WHERE BucketName = {} and ObjName = {}
+         and ObjInstance = {} and ObjID = {})";
 
   public:
     virtual ~DeleteObjectDataOp() {}
@@ -1332,7 +1365,10 @@ class DeleteObjectDataOp: virtual public DBOp {
 class DeleteStaleObjectDataOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "DELETE from '{}' WHERE (ObjName, ObjInstance, ObjID) NOT IN (SELECT s.ObjName, s.ObjInstance, s.ObjID from '{}' as s INNER JOIN '{}' USING (ObjName, BucketName, ObjInstance, ObjID)) and Mtime < {}";
+      R"(DELETE FROM '{}' WHERE (ObjName, ObjInstance, ObjID) NOT IN
+         (SELECT s.ObjName, s.ObjInstance, s.ObjID FROM '{}' as s
+           INNER JOIN '{}' USING (ObjName, BucketName, ObjInstance, ObjID))
+          and Mtime < {})";
 
   public:
     virtual ~DeleteStaleObjectDataOp() {}
@@ -1349,9 +1385,9 @@ class DeleteStaleObjectDataOp: virtual public DBOp {
 class InsertLCEntryOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "INSERT OR REPLACE INTO '{}' \
-      (LCIndex, BucketName, StartTime, Status) \
-      VALUES ({}, {}, {}, {})";
+      R"(INSERT OR REPLACE INTO '{}'
+      (LCIndex, BucketName, StartTime, Status)
+      VALUES ({}, {}, {}, {}))";
 
   public:
     virtual ~InsertLCEntryOp() {}
@@ -1366,7 +1402,7 @@ class InsertLCEntryOp: virtual public DBOp {
 class RemoveLCEntryOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "DELETE from '{}' where LCIndex = {} and BucketName = {}";
+      "DELETE FROM '{}' WHERE LCIndex = {} and BucketName = {}";
 
   public:
     virtual ~RemoveLCEntryOp() {}
@@ -1379,12 +1415,14 @@ class RemoveLCEntryOp: virtual public DBOp {
 
 class GetLCEntryOp: virtual public DBOp {
   private:
-    static constexpr std::string_view Query = "SELECT  \
-                          LCIndex, BucketName, StartTime, Status \
-                          from '{}' where LCIndex = {} and BucketName = {}";
-    static constexpr std::string_view NextQuery = "SELECT  \
-                          LCIndex, BucketName, StartTime, Status \
-                          from '{}' where LCIndex = {} and BucketName > {} ORDER BY BucketName ASC";
+    static constexpr std::string_view Query =
+      R"(SELECT LCIndex, BucketName, StartTime, Status
+        FROM '{}' WHERE LCIndex = {} and BucketName = {})";
+
+  static constexpr std::string_view NextQuery =
+    R"(SELECT LCIndex, BucketName, StartTime, Status
+      FROM '{}' WHERE LCIndex = {} and BucketName > {}
+      ORDER BY BucketName ASC)";
 
   public:
     virtual ~GetLCEntryOp() {}
@@ -1402,9 +1440,10 @@ class GetLCEntryOp: virtual public DBOp {
 
 class ListLCEntriesOp: virtual public DBOp {
   private:
-    static constexpr std::string_view Query = "SELECT  \
-                          LCIndex, BucketName, StartTime, Status \
-                          FROM '{}' WHERE LCIndex = {} AND BucketName > {} ORDER BY BucketName ASC LIMIT {}";
+    static constexpr std::string_view Query =
+      R"(SELECT LCIndex, BucketName, StartTime, Status
+        FROM '{}' WHERE LCIndex = {} AND BucketName > {}
+        ORDER BY BucketName ASC LIMIT {})";
 
   public:
     virtual ~ListLCEntriesOp() {}
@@ -1419,9 +1458,9 @@ class ListLCEntriesOp: virtual public DBOp {
 class InsertLCHeadOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "INSERT OR REPLACE INTO '{}' \
-      (LCIndex, Marker, StartDate) \
-      VALUES ({}, {}, {})";
+      R"(INSERT OR REPLACE INTO '{}'
+      (LCIndex, Marker, StartDate)
+      VALUES ({}, {}, {}))";
 
   public:
     virtual ~InsertLCHeadOp() {}
@@ -1436,7 +1475,7 @@ class InsertLCHeadOp: virtual public DBOp {
 class RemoveLCHeadOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query =
-      "DELETE from '{}' where LCIndex = {}";
+      "DELETE FROM '{}' WHERE LCIndex = {}";
 
   public:
     virtual ~RemoveLCHeadOp() {}
@@ -1449,9 +1488,9 @@ class RemoveLCHeadOp: virtual public DBOp {
 
 class GetLCHeadOp: virtual public DBOp {
   private:
-    static constexpr std::string_view Query = "SELECT  \
-                          LCIndex, Marker, StartDate \
-                          from '{}' where LCIndex = {}";
+    static constexpr std::string_view Query =
+      R"(SELECT LCIndex, Marker, StartDate
+         FROM '{}' WHERE LCIndex = {})";
 
   public:
     virtual ~GetLCHeadOp() {}
