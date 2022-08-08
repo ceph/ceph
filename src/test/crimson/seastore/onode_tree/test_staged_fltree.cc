@@ -368,7 +368,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
       {make_ghobj(4, 4, 4, "ns4", "oid4", 4, 4), values.pick()}};
     auto [smallest_key, smallest_value] = kvs[0];
     auto [largest_key, largest_value] = kvs[kvs.size() - 1];
-    std::random_shuffle(kvs.begin(), kvs.end());
+    std::shuffle(kvs.begin(), kvs.end(), std::default_random_engine{});
     std::for_each(kvs.begin(), kvs.end(), [&f_insert_erase_insert] (auto& kv) {
       f_insert_erase_insert(kv.first, kv.second);
     });
@@ -424,7 +424,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
     logger().info("\n{}\n", oss.str());
 
     // randomized erase until empty
-    std::random_shuffle(kvs.begin(), kvs.end());
+    std::shuffle(kvs.begin(), kvs.end(), std::default_random_engine{});
     for (auto& [k, v] : kvs) {
       auto e_size = with_trans_intr(*ref_t, [this, &k=k](auto& tr) {
         return tree->erase(tr, k);
@@ -1193,7 +1193,7 @@ class DummyChildPool {
       // erase and merge
       [[maybe_unused]] auto pivot_key = node_to_split->get_pivot_key();
       logger().info("\n\nERASE-MERGE {}:", node_to_split->get_name());
-      assert(pivot_key.compare_to(key_hobj_t(key)) == MatchKindCMP::EQ);
+      assert(pivot_key == key_hobj_t(key));
       with_trans_intr(pool_clone.get_context().t, [&] (auto &t) {
         return node_to_split->merge(
           pool_clone.get_context(), std::move(node_to_split));

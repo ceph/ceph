@@ -523,7 +523,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         full_key_t<KeyT::VIEW> index;
         stage_t::template get_slot<true, false>(
             node_stage, result_raw.position, &index, nullptr);
-        assert(index.compare_to(*index_key) == MatchKindCMP::EQ);
+        assert(index == *index_key);
       }
 #endif
     } else {
@@ -545,10 +545,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       // currently only internal node checks mstat
       if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
         if (result_raw.mstat == MSTAT_LT2) {
-          auto cmp = compare_to<KeyT::HOBJ>(
-              key, node_stage[result_raw.position.index].shard_pool);
-          assert(cmp != MatchKindCMP::GT);
-          if (cmp != MatchKindCMP::EQ) {
+          auto cmp =
+              key <=> node_stage[result_raw.position.index].shard_pool;
+          assert(cmp != std::strong_ordering::greater);
+          if (cmp != 0) {
             result_raw.mstat = MSTAT_LT3;
           }
         }
@@ -595,7 +595,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 #ifndef NDEBUG
     full_key_t<KeyT::VIEW> index;
     get_slot(insert_pos, &index, nullptr);
-    assert(index.compare_to(key) == MatchKindCMP::EQ);
+    assert(index == key);
 #endif
     return ret;
   }
@@ -775,14 +775,14 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 #ifndef NDEBUG
       full_key_t<KeyT::VIEW> index;
       get_slot(_insert_pos, &index, nullptr);
-      assert(index.compare_to(key) == MatchKindCMP::EQ);
+      assert(index == key);
 #endif
     } else {
       SUBDEBUG(seastore_onode, "-- left trim ...");
 #ifndef NDEBUG
       full_key_t<KeyT::VIEW> index;
       right_impl.get_slot(_insert_pos, &index, nullptr);
-      assert(index.compare_to(key) == MatchKindCMP::EQ);
+      assert(index == key);
 #endif
       extent.split_replayable(split_at);
     }
