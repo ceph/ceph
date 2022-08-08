@@ -2597,6 +2597,7 @@ exit 0
 %config %{_sysconfdir}/prometheus/ceph/ceph_default_alerts.yml
 
 %files mib
+%attr(0755,root,root) %dir %{_datadir}/snmp
 %{_datadir}/snmp/mibs
 
 %changelog
