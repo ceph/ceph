@@ -2067,29 +2067,67 @@ public:
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
-    int r;
-    while (true) {
-      switch (sync_marker.state) {
-      case rgw_data_sync_marker::FullSync:
-        r = full_sync();
-        if (r < 0) {
-          if (r != -EBUSY) {
-            tn->log(10, SSTR("full sync failed (r=" << r << ")"));
-          }
-          return set_cr_error(r);
-        }
-        return 0;
-      case rgw_data_sync_marker::IncrementalSync:
-        r  = incremental_sync();
-        if (r < 0) {
-          if (r != -EBUSY) {
-            tn->log(10, SSTR("incremental sync failed (r=" << r << ")"));
-          }
-          return set_cr_error(r);
-        }
-        return 0;
-      default:
-        return set_cr_error(-EIO);
+    reenter(this) {
+      while (true) {
+	if (sync_marker.state == rgw_data_sync_marker::FullSync) {
+	  yield init_lease_cr();
+	  while (!lease_cr->is_locked()) {
+	    if (lease_cr->is_done()) {
+	      tn->log(5, "failed to take lease");
+	      set_status("lease lock failed, early abort");
+	      drain_all();
+	      return set_cr_error(lease_cr->get_ret_status());
+	    }
+	    set_sleeping(true);
+	    yield;
+	  }
+	  tn->log(10, "took lease");
+
+	  yield call(new RGWDataFullSyncShardCR(sc, pool, shard_id,
+						sync_marker, tn,
+						status_oid, error_repo,
+						lease_cr, sync_status,
+						bucket_shard_cache));
+	  if (retcode < 0) {
+	    if (retcode != -EBUSY) {
+	      tn->log(10, SSTR("full sync failed (retcode=" << retcode << ")"));
+	    }
+	    return set_cr_error(retcode);
+	  }
+	} else if (sync_marker.state == rgw_data_sync_marker::IncrementalSync) {
+	  if (lease_cr) {
+	    tn->log(10, "lease already held from full sync");
+	  } else {
+	    yield init_lease_cr();
+	    while (!lease_cr->is_locked()) {
+	      if (lease_cr->is_done()) {
+		tn->log(5, "failed to take lease");
+		set_status("lease lock failed, early abort");
+		drain_all();
+		return set_cr_error(lease_cr->get_ret_status());
+	      }
+	      set_sleeping(true);
+	      yield;
+	    }
+	    set_status("lease acquired");
+	    tn->log(10, "took lease");
+	  }
+	  yield call(new RGWDataIncSyncShardCR(sc, pool, shard_id,
+					       sync_marker, tn,
+					       status_oid, error_repo,
+					       lease_cr, sync_status,
+					       bucket_shard_cache,
+					       inc_lock, modified_shards));
+	  if (retcode < 0) {
+	    if (retcode != -EBUSY) {
+	      tn->log(10, SSTR("incremental sync failed (retcode=" << retcode
+			       << ")"));
+	    }
+	    return set_cr_error(retcode);
+	  }
+	} else {
+	  return set_cr_error(-EIO);
+	}
       }
     }
     return 0;
