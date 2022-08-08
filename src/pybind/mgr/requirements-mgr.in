@@ -1,0 +1,16 @@
+wheel~=0.31
+cherrypy~=18.8
+pyjwt~=2.4
+routes~=2.5
+werkzeug~=2.0
+saml~=0.7
+setuptools~=59.6
+setuptools_scm>=1.15
+importlib-metadata==4.8.0
+importlib-resources==5.4.0
+pkgconfig>=1.5
+zipp~=3.6
+typing-extensions~=4.1
+pecan~=1.4
+asyncssh~=2.9
+pyOpenSSL>22.1.0

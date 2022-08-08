@@ -61,3 +61,4 @@ install(DIRECTORY ${mgr_modules}
   ${mgr_module_install_excludes})
 install(FILES mgr_module.py mgr_util.py object_format.py
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr)
+install(DIRECTORY __pypackages__ DESTINATION ${CEPH_INSTALL_DATADIR}/mgr)

@@ -147,6 +147,14 @@ build_dashboard_frontend() {
   tar cf dashboard_frontend.tar $outfile/src/pybind/mgr/dashboard/frontend/dist
 }
 
+build_mgr_pip_pkgs() {
+  CURR_DIR=`pwd`
+
+  source src/script/pypackages.sh
+  install-pip-packages
+  tar cf mgr_pip_pkgs.tar $outfile/$PYPACKAGES_FOLDER
+}
+
 generate_rook_ceph_client() {
   $outfile/src/pybind/mgr/rook/generate_rook_ceph_client.sh
   tar cf rook_ceph_client.tar $outfile/src/pybind/mgr/rook/rook_client/*.py
@@ -202,12 +210,14 @@ pmdk_version=1.10
 download_pmdk $pmdk_version 08dafcf94db5ac13fac9139c92225d9aa5f3724ea74beee4e6ca19a01a2eb20c \
                https://github.com/pmem/pmdk/releases/download/$pmdk_version
 build_dashboard_frontend
+build_mgr_pip_pkgs
 generate_rook_ceph_client
 for tarball in $outfile.version   \
                $outfile.boost     \
                $outfile.liburing  \
                $outfile.pmdk  \
                dashboard_frontend \
+               mgr_pip_pkgs \
                rook_ceph_client   \
                $outfile; do
     tar --concatenate -f $outfile.all.tar $tarball.tar

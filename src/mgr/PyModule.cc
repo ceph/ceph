@@ -362,7 +362,10 @@ int PyModule::load(PyThreadState *pMainThreadState)
       const wchar_t *argv[] = {L"ceph-mgr"};
       PySys_SetArgv(1, (wchar_t**)argv);
       // Configure sys.path to include mgr_module_path
-      string paths = (g_conf().get_val<std::string>("mgr_module_path") + ':' +
+      std::filesystem::path mgr_module_path = g_conf().get_val<std::string>("mgr_module_path");
+      std::filesystem::path pypackages_path_absolute = mgr_module_path;
+      pypackages_path_absolute /= pypackages_path;
+      string paths = (mgr_module_path.string() + ":" + pypackages_path_absolute.string() + ':' +
                       get_site_packages() + ':');
       wstring sys_path(wstring(begin(paths), end(paths)) + Py_GetPath());
       PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));

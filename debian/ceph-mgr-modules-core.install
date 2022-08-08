@@ -1,3 +1,4 @@
+usr/share/ceph/mgr/__pypackages__
 usr/share/ceph/mgr/alerts
 usr/share/ceph/mgr/balancer
 usr/share/ceph/mgr/crash

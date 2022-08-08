@@ -102,6 +102,7 @@
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
 %else
+%bcond_without embedded_pip_pkgs
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
@@ -287,13 +288,15 @@ BuildRequires:  hostname
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
 BuildRequires:	python%{python3_pkgversion}-bcrypt
-BuildRequires:	python%{python3_pkgversion}-pecan
 BuildRequires:	python%{python3_pkgversion}-requests
 BuildRequires:	python%{python3_pkgversion}-dateutil
 BuildRequires:	python%{python3_pkgversion}-coverage
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
+%if 0%{?without embedded_pip_pkgs}
 BuildRequires:	python%{python3_pkgversion}-asyncssh
+BuildRequires:	python%{python3_pkgversion}-pecan
+%endif
 BuildRequires:	python%{python3_pkgversion}-natsort
 %endif
 %if 0%{with zbd}
@@ -614,6 +617,7 @@ Group:          System/Filesystems
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?without embedded_pip_pkgs}
 Requires:       python%{python3_pkgversion}-setuptools
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{python3_pkgversion}-cherrypy
@@ -630,6 +634,7 @@ Requires:       python%{python3_pkgversion}-PyJWT
 Requires:       python%{python3_pkgversion}-Routes
 Requires:       python%{python3_pkgversion}-Werkzeug
 Recommends:     python%{python3_pkgversion}-python3-saml
+%endif
 %endif
 %description mgr-dashboard
 ceph-mgr-dashboard is a manager module, providing a web-based application
@@ -660,7 +665,9 @@ BuildArch:      noarch
 Group:          System/Filesystems
 %endif
 Requires:       python%{python3_pkgversion}-bcrypt
+%if 0%{?without embedded_pip_pkgs}
 Requires:       python%{python3_pkgversion}-pecan
+%endif
 Requires:       python%{python3_pkgversion}-pyOpenSSL
 Requires:       python%{python3_pkgversion}-requests
 Requires:       python%{python3_pkgversion}-dateutil
@@ -714,7 +721,9 @@ BuildArch:	noarch
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?without embedded_pip_pkgs}
 Requires:       python%{python3_pkgversion}-asyncssh
+%endif
 Requires:       python%{python3_pkgversion}-natsort
 Requires:       cephadm = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
@@ -1870,6 +1879,7 @@ fi
 
 %files mgr-modules-core
 %dir %{_datadir}/ceph/mgr
+%{_datadir}/ceph/mgr/__pypackages__
 %{_datadir}/ceph/mgr/alerts
 %{_datadir}/ceph/mgr/balancer
 %{_datadir}/ceph/mgr/crash

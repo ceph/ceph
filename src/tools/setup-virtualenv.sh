@@ -88,7 +88,7 @@ fi
 
 pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX $FIND_LINKS_OPT 'tox >=2.9.1'
 
-require_files=$(ls *requirements*.txt 2>/dev/null) || true
+require_files=$(ls *requirements*.txt | grep -v requirements-mgr.txt 2>/dev/null) || true
 constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
 require=$(echo -n "$require_files" | sed -e 's/^/-r /')
 constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')

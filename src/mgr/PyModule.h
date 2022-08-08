@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <string>
@@ -45,6 +46,9 @@ public:
   // Call the ActivePyModule of this name to handle the command
   std::string module_name;
 };
+
+// relative path from the mgr_module_path where python dependencies might be embeded
+static const std::filesystem::path pypackages_path = "__pypackages__/lib/python3/site-packages";
 
 class PyModule
 {

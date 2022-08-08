@@ -299,7 +299,7 @@ function preload_wheels_for_tox() {
     shift
     pushd . > /dev/null
     cd $(dirname $ini)
-    local require_files=$(ls *requirements*.txt 2>/dev/null) || true
+    local require_files=$(ls *requirements*.txt | grep -v requirements-mgr.txt 2>/dev/null) || true
     local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
     local require=$(echo -n "$require_files" | sed -e 's/^/-r /')
     local constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
@@ -571,4 +571,8 @@ if $for_make_check; then
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
 
+source src/script/pypackages.sh
+install-pip-packages
+
 ci_debug "End install-deps.sh" || true
+in_jenkins && echo "CI_DEBUG: End install-deps.sh" || true
