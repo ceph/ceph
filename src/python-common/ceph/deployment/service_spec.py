@@ -1007,6 +1007,7 @@ class IngressSpec(ServiceSpec):
                  enable_stats: Optional[bool] = None,
                  keepalived_password: Optional[str] = None,
                  virtual_ip: Optional[str] = None,
+                 virtual_ips_list: Optional[List[str]] = None,
                  virtual_interface_networks: Optional[List[str]] = [],
                  unmanaged: bool = False,
                  ssl: bool = False,
@@ -1014,6 +1015,7 @@ class IngressSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'ingress'
+
         super(IngressSpec, self).__init__(
             'ingress', service_id=service_id,
             placement=placement, config=config,
@@ -1033,6 +1035,7 @@ class IngressSpec(ServiceSpec):
         self.monitor_password = monitor_password
         self.keepalived_password = keepalived_password
         self.virtual_ip = virtual_ip
+        self.virtual_ips_list = virtual_ips_list
         self.virtual_interface_networks = virtual_interface_networks or []
         self.unmanaged = unmanaged
         self.ssl = ssl
@@ -1056,9 +1059,12 @@ class IngressSpec(ServiceSpec):
         if not self.monitor_port:
             raise SpecValidationError(
                 'Cannot add ingress: No monitor_port specified')
-        if not self.virtual_ip:
+        if not self.virtual_ip and not self.virtual_ips_list:
             raise SpecValidationError(
                 'Cannot add ingress: No virtual_ip provided')
+        if self.virtual_ip is not None and self.virtual_ips_list is not None:
+            raise SpecValidationError(
+                'Cannot add ingress: Single and multiple virtual IPs specified')
 
 
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
