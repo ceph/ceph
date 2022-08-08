@@ -196,7 +196,10 @@ class IngressService(CephService):
         hosts = sorted(list(set([host] + [str(d.hostname) for d in daemons])))
 
         # interface
-        bare_ip = str(spec.virtual_ip).split('/')[0]
+        if spec.virtual_ip:
+            bare_ip = str(spec.virtual_ip).split('/')[0]
+        elif spec.virtual_ips_list:
+            bare_ip = str(spec.virtual_ips_list[0]).split('/')[0]
         interface = None
         for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
             if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
@@ -230,10 +233,33 @@ class IngressService(CephService):
                     script = f'/usr/bin/curl {build_url(scheme="http", host=d.ip or "localhost", port=port)}/health'
         assert script
 
-        # set state. first host in placement is master all others backups
-        state = 'BACKUP'
-        if hosts[0] == host:
-            state = 'MASTER'
+        states = []
+        priorities = []
+        virtual_ips = []
+
+        # Set state and priority. Have one master for each VIP. Or at least the first one as master if only one VIP.
+        if spec.virtual_ip:
+            virtual_ips.append(spec.virtual_ip)
+            if hosts[0] == host:
+                states.append('MASTER')
+                priorities.append(100)
+            else:
+                states.append('BACKUP')
+                priorities.append(90)
+
+        elif spec.virtual_ips_list:
+            virtual_ips = spec.virtual_ips_list
+            if len(virtual_ips) > len(hosts):
+                raise OrchestratorError(
+                    "Number of virtual IPs for ingress is greater than number of available hosts"
+                )
+            for x in range(len(virtual_ips)):
+                if hosts[x] == host:
+                    states.append('MASTER')
+                    priorities.append(100)
+                else:
+                    states.append('BACKUP')
+                    priorities.append(90)
 
         # remove host, daemon is being deployed on from hosts list for
         # other_ips in conf file and converter to ips
@@ -248,7 +274,9 @@ class IngressService(CephService):
                 'script': script,
                 'password': password,
                 'interface': interface,
-                'state': state,
+                'virtual_ips': virtual_ips,
+                'states': states,
+                'priorities': priorities,
                 'other_ips': other_ips,
                 'host_ip': resolve_ip(self.mgr.inventory.get_addr(host)),
             }
