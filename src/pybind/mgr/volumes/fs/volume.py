@@ -864,7 +864,7 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 volume_exists = True
-                groups = listdir(fs_handle, self.volspec.base_dir, filter_entries=[Trash.GROUP_NAME.encode('utf-8')])
+                groups = listdir(fs_handle, self.volspec.base_dir, filter_entries=[dir.encode('utf-8') for dir in self.volspec.INTERNAL_DIRS])
                 ret = 0, name_to_json(groups), ""
         except VolumeException as ve:
             if not ve.errno == -errno.ENOENT or not volume_exists:
