@@ -11,6 +11,7 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
 import { CardComponent } from './card/card.component';
 import { DashboardPieComponent } from './dashboard-pie/dashboard-pie.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
+import { DashboardBarComponent } from './dashboard-bar/dashboard-bar.component';
 
 @NgModule({
   imports: [
@@ -25,6 +26,6 @@ import { DashboardComponent } from './dashboard/dashboard.component';
     ReactiveFormsModule
   ],
 
-  declarations: [DashboardComponent, CardComponent, DashboardPieComponent]
+  declarations: [DashboardComponent, CardComponent, DashboardPieComponent, DashboardBarComponent]
 })
 export class NewDashboardModule {}
