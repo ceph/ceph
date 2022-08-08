@@ -6,11 +6,12 @@
 #include <random>
 
 #include "crimson/common/log.h"
-#include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/random_block_manager.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
+#include "crimson/os/seastore/seastore_types.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
 using namespace crimson;
@@ -119,7 +120,7 @@ struct entry_validator_t {
   }
 };
 
-struct cbjournal_test_t : public seastar_test_suite_t
+struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 {
   std::vector<entry_validator_t> entries;
   std::unique_ptr<CircularBoundedJournal> cbj;
@@ -132,7 +133,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
 
   cbjournal_test_t() {
     device = new random_block_device::TestMemory(CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE);
-    cbj.reset(new CircularBoundedJournal(device, std::string()));
+    cbj.reset(new CircularBoundedJournal(*this, device, std::string()));
     device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
     config.block_size = CBTEST_DEFAULT_BLOCK_SIZE;
     config.total_size = CBTEST_DEFAULT_TEST_SIZE;
@@ -140,6 +141,27 @@ struct cbjournal_test_t : public seastar_test_suite_t
     block_size = CBTEST_DEFAULT_BLOCK_SIZE;
     cbj->set_write_pipeline(&pipeline);
   }
+
+  /*
+   * JournalTrimmer interfaces
+   */
+  journal_seq_t get_journal_head() const {
+    return JOURNAL_SEQ_NULL;
+  }
+
+  journal_seq_t get_dirty_tail() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
+  journal_seq_t get_alloc_tail() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
+  void set_journal_head(journal_seq_t head) final {}
+
+  void update_journal_tails(
+    journal_seq_t dirty_tail,
+    journal_seq_t alloc_tail) final {}
 
   seastar::future<> set_up_fut() final {
     return seastar::now();

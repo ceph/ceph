@@ -14,7 +14,7 @@ SegmentedOolWriter::SegmentedOolWriter(
   reclaim_gen_t gen,
   SegmentProvider& sp,
   SegmentSeqAllocator &ssa)
-  : segment_allocator(segment_type_t::OOL, category, gen, sp, ssa),
+  : segment_allocator(nullptr, category, gen, sp, ssa),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(

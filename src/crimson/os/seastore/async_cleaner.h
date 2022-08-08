@@ -267,9 +267,9 @@ private:
 std::ostream &operator<<(std::ostream &, const segments_info_t &);
 
 /**
- * Callback interface for managing available segments
+ * Callback interface for journal trimming
  */
-class SegmentProvider {
+class JournalTrimmer {
 public:
   // get the committed journal head
   virtual journal_seq_t get_journal_head() const = 0;
@@ -292,6 +292,14 @@ public:
   virtual void update_journal_tails(
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) = 0;
 
+  virtual ~JournalTrimmer() {}
+};
+
+/**
+ * Callback interface for managing available segments
+ */
+class SegmentProvider {
+public:
   virtual const segment_info_t& get_seg_info(segment_id_t id) const = 0;
 
   virtual segment_id_t allocate_segment(
@@ -519,7 +527,7 @@ public:
 };
 
 
-class AsyncCleaner : public SegmentProvider {
+class AsyncCleaner : public SegmentProvider, public JournalTrimmer {
 public:
   /// Config
   struct config_t {

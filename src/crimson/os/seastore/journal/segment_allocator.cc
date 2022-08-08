@@ -13,20 +13,22 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentAllocator::SegmentAllocator(
-  segment_type_t type,
+  JournalTrimmer *trimmer,
   data_category_t category,
   reclaim_gen_t gen,
   SegmentProvider &sp,
   SegmentSeqAllocator &ssa)
   : print_name{fmt::format("{}_G{}", category, gen)},
-    type{type},
+    type{trimmer == nullptr ?
+         segment_type_t::OOL :
+         segment_type_t::JOURNAL},
     category{category},
     gen{gen},
     segment_provider{sp},
     sm_group{*sp.get_segment_manager_group()},
-    segment_seq_allocator(ssa)
+    segment_seq_allocator(ssa),
+    trimmer{trimmer}
 {
-  ceph_assert(type != segment_type_t::NULL_SEG);
   reset();
 }
 
@@ -57,8 +59,8 @@ SegmentAllocator::do_open(bool is_mkfs)
     journal_seq_t dirty_tail;
     journal_seq_t alloc_tail;
     if (type == segment_type_t::JOURNAL) {
-      dirty_tail = segment_provider.get_dirty_tail();
-      alloc_tail = segment_provider.get_alloc_tail();
+      dirty_tail = trimmer->get_dirty_tail();
+      alloc_tail = trimmer->get_alloc_tail();
       if (is_mkfs) {
         ceph_assert(dirty_tail == JOURNAL_SEQ_NULL);
         ceph_assert(alloc_tail == JOURNAL_SEQ_NULL);
