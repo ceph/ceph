@@ -12,6 +12,7 @@ types-PyYAML==5.4.0
 
 # src/pybind
 types-backports==0.1.2
+types-pkg_resources==0.1.3
 
 # qa/
 types-boto==0.1.0
