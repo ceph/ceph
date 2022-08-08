@@ -78,6 +78,10 @@
   of POOL_APP_NOT_ENABLED health warning for that pool.
   The user might temporarily mute this warning using
   ``ceph health mute POOL_APP_NOT_ENABLED``.
+* The `mon_cluster_log_file_level` and `mon_cluster_log_to_syslog_level` options
+  have been removed. Henceforth, users should use the new generic option
+  `mon_cluster_log_level` to control the cluster log level verbosity for the cluster
+  log file as well as for all external entities.
 CephFS: Disallow delegating preallocated inode ranges to clients. Config
   `mds_client_delegate_inos_pct` defaults to 0 which disables async dirops
   in the kclient.

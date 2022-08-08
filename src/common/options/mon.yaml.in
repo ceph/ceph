@@ -112,18 +112,6 @@ options:
   flags:
   - runtime
   with_legacy: true
-- name: mon_cluster_log_to_syslog_level
-  type: str
-  level: advanced
-  desc: Syslog level for cluster log messages
-  default: info
-  services:
-  - mon
-  see_also:
-  - mon_cluster_log_to_syslog
-  flags:
-  - runtime
-  with_legacy: true
 - name: mon_cluster_log_to_syslog_facility
   type: str
   level: advanced
@@ -172,10 +160,12 @@ options:
   flags:
   - runtime
   with_legacy: true
-- name: mon_cluster_log_file_level
+- name: mon_cluster_log_level
   type: str
   level: advanced
-  desc: Lowest level to include is cluster log file
+  desc: Lowest level to include in cluster log file and/or in external log server
+  long_desc: Log level to control the cluster log message verbosity for the cluster
+    log file as well as for all external entities.
   default: debug
   services:
   - mon
