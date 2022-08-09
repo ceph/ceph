@@ -212,6 +212,9 @@ BuildRequires:	gcc-toolset-11-build
 BuildRequires:	gcc-toolset-11-libatomic-devel
 %endif
 %endif
+%if 0%{?fedora}
+BuildRequires:  libatomic
+%endif
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
 %if 0%{?fedora} || 0%{?rhel} >= 8
@@ -330,7 +333,6 @@ BuildRequires:  systemtap-sdt-devel
 %if 0%{?fedora}
 BuildRequires:  libubsan
 BuildRequires:  libasan
-BuildRequires:  libatomic
 %endif
 %if 0%{?rhel}
 BuildRequires:  gcc-toolset-11-annobin
