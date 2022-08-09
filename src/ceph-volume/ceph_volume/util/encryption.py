@@ -235,7 +235,7 @@ def legacy_encrypted(device):
     This function assumes that ``device`` will be a partition.
     """
     if os.path.isdir(device):
-        mounts = system.get_mounts(paths=True)
+        mounts = system.Mounts(paths=True).get_mounts()
         # yes, rebind the device variable here because a directory isn't going
         # to help with parsing
         device = mounts.get(device, [None])[0]
