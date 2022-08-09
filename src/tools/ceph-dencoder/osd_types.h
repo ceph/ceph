@@ -73,7 +73,7 @@ TYPE_NONDETERMINISTIC(HitSet)   // because some subclasses are
 TYPE(HitSet::Params)
 
 #include "os/ObjectStore.h"
-TYPE(ObjectStore::Transaction)
+TYPE_NOCOPY(ObjectStore::Transaction)
 
 #include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
