@@ -44,29 +44,6 @@ TEST(Transaction, MoveAssign)
   ASSERT_FALSE(b.empty());
 }
 
-TEST(Transaction, CopyConstruct)
-{
-  auto a = ObjectStore::Transaction{};
-  a.nop();
-  ASSERT_FALSE(a.empty());
-
-  auto b = a; // copy-construct in b
-  ASSERT_FALSE(a.empty());
-  ASSERT_FALSE(b.empty());
-}
-
-TEST(Transaction, CopyAssign)
-{
-  auto a = ObjectStore::Transaction{};
-  a.nop();
-  ASSERT_FALSE(a.empty());
-
-  auto b = ObjectStore::Transaction{};
-  b = a; // copy-assign to b
-  ASSERT_FALSE(a.empty());
-  ASSERT_FALSE(b.empty());
-}
-
 TEST(Transaction, Swap)
 {
   auto a = ObjectStore::Transaction{};

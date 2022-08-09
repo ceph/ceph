@@ -288,8 +288,8 @@ public:
     return *this;
   }
 
-  Transaction(const Transaction& other) = default;
-  Transaction& operator=(const Transaction& other) = default;
+  Transaction(const Transaction& other) = delete;
+  Transaction& operator=(const Transaction& other) = delete;
 
   ~Transaction() {
     ceph_assert(on_applied.empty());
