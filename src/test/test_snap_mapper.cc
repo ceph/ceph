@@ -506,9 +506,19 @@ public:
     return mapper->to_legacy_raw_key(to_map);
   }
 
+  template <typename... Args>
+  std::string to_object_key(Args&&... args) {
+    return mapper->to_object_key(std::forward<Args>(args)...);
+  }
+
   std::string to_raw_key(
     const std::pair<snapid_t, hobject_t> &to_map) {
     return mapper->to_raw_key(to_map);
+  }
+
+  template <typename... Args>
+  std::string make_purged_snap_key(Args&&... args) {
+    return mapper->make_purged_snap_key(std::forward<Args>(args)...);
   }
 
   void trim_snap() {
@@ -668,6 +678,88 @@ TEST_F(SnapMapperTest, MultiPG) {
   run();
 }
 
+// Check to_object_key against current format to detect accidental changes in encoding
+TEST_F(SnapMapperTest, CheckObjectKeyFormat) {
+  init(1);
+  // <object, test_raw_key>
+  std::vector<std::tuple<hobject_t, std::string>> object_to_object_key({
+      {hobject_t{"test_object", "", 20, 0x01234567, 20, ""},
+	  "OBJ_.1_0000000000000014.76543210.14.test%uobject.."},
+      {hobject_t{"test._ob.ject", "k.ey", 20, 0x01234567, 20, ""},
+	  "OBJ_.1_0000000000000014.76543210.14.test%e%uob%eject.k%eey."},
+      {hobject_t{"test_object", "", 20, 0x01234567, 20, "namespace"},
+	  "OBJ_.1_0000000000000014.76543210.14.test%uobject..namespace"},
+      {hobject_t{
+	  "test_object", "", std::numeric_limits<snapid_t>::max() - 20, 0x01234567,
+	    std::numeric_limits<int64_t>::max() - 20, "namespace"},
+	  "OBJ_.1_7FFFFFFFFFFFFFEB.76543210.ffffffffffffffec.test%uobject..namespace"}
+    });
+
+  for (auto &[object, test_object_key]: object_to_object_key) {
+    auto object_key = get_tester().to_object_key(object);
+    if (object_key != test_object_key) {
+      std::cout << object << " should be "
+	        << test_object_key << " is "
+	        << get_tester().to_object_key(object)
+	        << std::endl;
+    }
+    ASSERT_EQ(object_key, test_object_key);
+  }
+}
+
+
+// Check to_raw_key against current format to detect accidental changes in encoding
+TEST_F(SnapMapperTest, CheckRawKeyFormat) {
+  init(1);
+  // <object, snapid, test_raw_key>
+  std::vector<std::tuple<hobject_t, snapid_t, std::string>> object_to_raw_key({
+      {hobject_t{"test_object", "", 20, 0x01234567, 20, ""}, 25,
+	  "SNA_20_0000000000000019_.1_0000000000000014.76543210.14.test%uobject.."},
+      {hobject_t{"test._ob.ject", "k.ey", 20, 0x01234567, 20, ""}, 25,
+	  "SNA_20_0000000000000019_.1_0000000000000014.76543210.14.test%e%uob%eject.k%eey."},
+      {hobject_t{"test_object", "", 20, 0x01234567, 20, "namespace"}, 25,
+	  "SNA_20_0000000000000019_.1_0000000000000014.76543210.14.test%uobject..namespace"},
+      {hobject_t{
+	  "test_object", "", std::numeric_limits<snapid_t>::max() - 20, 0x01234567,
+	    std::numeric_limits<int64_t>::max() - 20, "namespace"}, std::numeric_limits<snapid_t>::max() - 20,
+	  "SNA_9223372036854775787_FFFFFFFFFFFFFFEC_.1_7FFFFFFFFFFFFFEB.76543210.ffffffffffffffec.test%uobject..namespace"}
+    });
+
+  for (auto &[object, snap, test_raw_key]: object_to_raw_key) {
+    auto raw_key = get_tester().to_raw_key(std::make_pair(snap, object));
+    if (raw_key != test_raw_key) {
+      std::cout << object << " " << snap << " should be "
+	        << test_raw_key << " is "
+	        << get_tester().to_raw_key(std::make_pair(snap, object))
+	        << std::endl;
+    }
+    ASSERT_EQ(raw_key, test_raw_key);
+  }
+}
+
+// Check make_purged_snap_key against current format to detect accidental changes
+// in encoding
+TEST_F(SnapMapperTest, CheckMakePurgedSnapKeyFormat) {
+  init(1);
+  // <pool, snap, test_key>
+  std::vector<std::tuple<int64_t, snapid_t, std::string>> purged_snap_to_key({
+      {20, 30, "PSN__20_000000000000001e"},
+      {std::numeric_limits<int64_t>::max() - 20,
+       std::numeric_limits<snapid_t>::max() - 20,
+       "PSN__9223372036854775787_ffffffffffffffec"}
+  });
+
+  for (auto &[pool, snap, test_key]: purged_snap_to_key) {
+    auto raw_purged_snap_key = get_tester().make_purged_snap_key(pool, snap);
+    if (raw_purged_snap_key != test_key) {
+      std::cout << "<" << pool << ", " << snap << "> should be " << test_key
+                << " is " << raw_purged_snap_key << std::endl;
+    }
+    // retesting (mostly for test numbers accounting)
+    ASSERT_EQ(raw_purged_snap_key, test_key);
+  }
+}
+
 TEST_F(SnapMapperTest, LegacyKeyConvertion) {
     init(1);
     auto obj = get_tester().random_hobject();
@@ -678,8 +770,10 @@ TEST_F(SnapMapperTest, LegacyKeyConvertion) {
     std::string converted_key =
       SnapMapper::convert_legacy_key(old_key, raw.second);
     std::string new_key = get_tester().to_raw_key(snap_obj);
-    std::cout << "Converted: " << old_key << "\nTo:        " << converted_key
-	      << "\nNew key:   " << new_key << std::endl;
+    if (converted_key != new_key) {
+      std::cout << "Converted: " << old_key << "\nTo:        " << converted_key
+	        << "\nNew key:   " << new_key << std::endl;
+    }
     ASSERT_EQ(converted_key, new_key);
 }
 

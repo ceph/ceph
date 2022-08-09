@@ -13,6 +13,7 @@
  */
 
 #include "SnapMapper.h"
+#include <fmt/printf.h>
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -99,13 +100,11 @@ int OSDriver::get_next(
 
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
-  char buf[100];
-  int len = snprintf(
-    buf, sizeof(buf),
-    "%lld_%.*X_",
-    (long long)pool,
-    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
-  return MAPPING_PREFIX + string(buf, len);
+  static_assert(sizeof(pool) == 8, "assumed by the formatting code");
+  return fmt::sprintf("%s%lld_%.16X_",
+		      MAPPING_PREFIX,
+		      pool,
+		      snap);
 }
 
 string SnapMapper::to_raw_key(
@@ -420,10 +419,10 @@ int SnapMapper::get_snaps(
 
 string SnapMapper::make_purged_snap_key(int64_t pool, snapid_t last)
 {
-  char k[80];
-  snprintf(k, sizeof(k), "%s_%llu_%016llx", PURGED_SNAP_PREFIX,
-	   (unsigned long long)pool, (unsigned long long)last);
-  return k;
+  return fmt::sprintf("%s_%lld_%016llx",
+		      PURGED_SNAP_PREFIX,
+		      pool,
+		      last);
 }
 
 void SnapMapper::make_purged_snap_key_value(
@@ -640,12 +639,9 @@ void SnapMapper::Scrubber::run()
 
 string SnapMapper::get_legacy_prefix(snapid_t snap)
 {
-  char buf[100];
-  int len = snprintf(
-    buf, sizeof(buf),
-    "%.*X_",
-    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
-  return LEGACY_MAPPING_PREFIX + string(buf, len);
+  return fmt::sprintf("%s%.16X_",
+		      LEGACY_MAPPING_PREFIX,
+		      snap);
 }
 
 string SnapMapper::to_legacy_raw_key(
