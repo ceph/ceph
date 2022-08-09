@@ -552,7 +552,7 @@ AdminSocket::find_matched_hook(std::string& prefix,
   // make sure one of the registered commands with this prefix validates.
   stringstream errss;
   for (auto hook = hooks_begin; hook != hooks_end; ++hook) {
-    if (validate_cmd(m_cct, hook->second.desc, cmdmap, errss)) {
+    if (validate_cmd(hook->second.desc, cmdmap, errss)) {
       in_hook = true;
       return {0, hook->second.hook};
     }

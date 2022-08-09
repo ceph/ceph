@@ -33,9 +33,9 @@ using std::vector;
 
 using ceph::bufferlist;
 using ceph::fixed_u_to_string;
-
-using TOPNSPC::common::cmd_getval;
-using TOPNSPC::common::cmd_getval_or;
+using ceph::common::cmd_getval;
+using ceph::common::cmd_getval_or;
+using ceph::common::cmd_putval;
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMapDigest, pgmap_digest, pgmap);
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap, pgmap, pgmap);
