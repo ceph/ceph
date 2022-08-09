@@ -1005,6 +1005,17 @@ class TestIngressService:
 
                 assert haproxy_generated_conf[0] == haproxy_expected_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_ingress_config_multi_vips(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.cache.update_host_networks('test', {
+                '1.2.3.0/24': {
+                    'if0': ['1.2.3.4/32']
+                }
+            })
+
             # Check the ingress with multiple VIPs
             s = RGWSpec(service_id="foo", placement=PlacementSpec(count=1),
                         rgw_frontend_type='beast')
