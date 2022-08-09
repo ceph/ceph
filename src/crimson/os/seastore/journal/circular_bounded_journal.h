@@ -43,7 +43,7 @@ using RBMDevice = random_block_device::RBMDevice;
  *
  * - Replay time
  * At replay time, CBJournal begins to replay records in CBjournal by reading
- * records from journal_tail. Then, CBJournal examines whether the records is valid
+ * records from dirty_tail. Then, CBJournal examines whether the records is valid
  * one by one, at which point written_to is recovered
  * if the valid record is founded. Note that applied_to is stored
  * permanently when the apply work---applying the records in CBJournal to RBM---
@@ -200,7 +200,7 @@ public:
     uint64_t size = 0;   // max length of journal
 
     // start offset of CircularBoundedJournal in the device
-    journal_seq_t journal_tail;
+    journal_seq_t dirty_tail;
     journal_seq_t alloc_tail;
 
     device_id_t device_id;
@@ -212,7 +212,7 @@ public:
       denc(v.block_size, p);
       denc(v.size, p);
 
-      denc(v.journal_tail, p);
+      denc(v.dirty_tail, p);
       denc(v.alloc_tail, p);
 
       denc(v.device_id, p);
@@ -234,7 +234,7 @@ public:
 
   size_t get_used_size() const {
     auto rbm_written_to = get_rbm_addr(get_written_to());
-    auto rbm_tail = get_rbm_addr(get_journal_tail());
+    auto rbm_tail = get_rbm_addr(get_dirty_tail());
     return rbm_written_to >= rbm_tail ?
       rbm_written_to - rbm_tail :
       rbm_written_to + header.size + get_block_size()
@@ -251,14 +251,14 @@ public:
   }
 
   write_ertr::future<> update_journal_tail(
-    journal_seq_t seq,
-    journal_seq_t alloc_info) {
-    header.journal_tail = seq;
-    header.alloc_tail = alloc_info;
+    journal_seq_t dirty,
+    journal_seq_t alloc) {
+    header.dirty_tail = dirty;
+    header.alloc_tail = alloc;
     return write_header();
   }
-  journal_seq_t get_journal_tail() const {
-    return header.journal_tail;
+  journal_seq_t get_dirty_tail() const {
+    return header.dirty_tail;
   }
   journal_seq_t get_alloc_tail() const {
     return header.alloc_tail;

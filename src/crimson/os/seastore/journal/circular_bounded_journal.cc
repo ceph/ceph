@@ -20,7 +20,7 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", uuid=" << header.uuid
 	     << ", block_size=" << header.block_size
 	     << ", size=" << header.size
-	     << ", journal_tail=" << header.journal_tail
+	     << ", dirty_tail=" << header.dirty_tail
 	     << ", "<< device_id_printer_t{header.device_id}
              << ")";
 }
@@ -42,16 +42,16 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
   CircularBoundedJournal::cbj_header_t head;
   head.block_size = config.block_size;
   head.size = config.total_size - device->get_block_size();
-  head.journal_tail =
+  head.dirty_tail =
     journal_seq_t{0,
       convert_abs_addr_to_paddr(
 	device->get_block_size(),
 	config.device_id)};
-  head.alloc_tail = head.journal_tail;
+  head.alloc_tail = head.dirty_tail;
   head.device_id = config.device_id;
   encode(head, bl);
   header = head;
-  set_written_to(head.journal_tail);
+  set_written_to(head.dirty_tail);
   initialized = true;
   DEBUG(
     "initialize header block in CircularBoundedJournal, length {}",
@@ -273,8 +273,8 @@ Journal::replay_ret CircularBoundedJournal::replay(
     DEBUG("header : {}", header);
     initialized = true;
     written_to.segment_seq = NULL_SEG_SEQ;
-    auto tail = get_journal_tail() <= get_alloc_tail() ?
-      get_journal_tail() : get_alloc_tail();
+    auto tail = get_dirty_tail() <= get_alloc_tail() ?
+      get_dirty_tail() : get_alloc_tail();
     set_written_to(tail);
     return seastar::do_with(
       bool(false),
@@ -367,7 +367,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 		return d_handler(
 		  locator,
 		  delta,
-		  header.journal_tail,
+		  header.dirty_tail,
 		  header.alloc_tail,
 		  modify_time).discard_result();
 	      });

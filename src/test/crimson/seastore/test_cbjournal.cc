@@ -278,7 +278,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     return cbj->get_written_to();
   }
   auto get_journal_tail() {
-    return cbj->get_journal_tail();
+    return cbj->get_dirty_tail();
   }
   auto get_used_size() {
     return cbj->get_used_size();
@@ -437,7 +437,7 @@ TEST_F(cbjournal_test_t, update_header)
     cbj->close().unsafe_get0();
     replay();
 
-    ASSERT_EQ(update_header.journal_tail.offset, update_header.journal_tail.offset);
+    ASSERT_EQ(update_header.dirty_tail.offset, update_header.dirty_tail.offset);
     ASSERT_EQ(header.block_size, update_header.block_size);
     ASSERT_EQ(header.size, update_header.size);
   });
