@@ -21,7 +21,7 @@ The list of features that can be enabled/disabled is:
    - iSCSI: ``iscsi``
 - **Filesystem (Cephfs)**: ``cephfs``
 - **Objects (RGW)**: ``rgw`` (including daemon, user and bucket management).
-- **NFS**: ``nfs-ganesha`` exports.
+- **NFS (NFS-Ganesha)**: ``nfs`` exports.
 
 By default all features come enabled.
 
