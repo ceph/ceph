@@ -10,3 +10,4 @@ prettytable
 pytest
 pyyaml
 natsort
+setuptools
