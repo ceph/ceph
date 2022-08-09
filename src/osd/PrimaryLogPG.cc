@@ -7396,13 +7396,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EOPNOTSUPP;
 	  break;
 	}
-	if (!obs.oi.has_manifest()) {
-	  result = 0;
-	  break;
-	}
 
-	if (oi.is_dirty()) {
-	  result = start_flush(ctx->op, ctx->obc, true, NULL, std::nullopt);
+	if (oi.is_dirty() || !obs.oi.has_manifest()) {
+	  result = start_flush(ctx->op, ctx->obc, true, NULL, std::nullopt, true);
 	  if (result == -EINPROGRESS)
 	    result = -EAGAIN;
 	} else {
@@ -7442,6 +7438,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	oi.clear_data_digest();
 	ctx->delta_stats.num_wr++;
 	ctx->cache_operation = true;
+	ctx->undirty = true;
 	osd->logger->inc(l_osd_tier_evict);
       }
 
@@ -10689,6 +10686,11 @@ int PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_
     ctx->new_obs = obc->obs;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
     --ctx->delta_stats.num_objects_dirty;
+    if (!ctx->obs->oi.has_manifest()) {
+      ctx->delta_stats.num_objects_manifest++;
+      ctx->new_obs.oi.set_flag(object_info_t::FLAG_MANIFEST);
+      ctx->new_obs.oi.manifest.type = object_manifest_t::TYPE_CHUNKED;
+    }
 
     /* 
     * Let's assume that there is a manifest snapshotted object, and we issue tier_flush() to head.
@@ -10770,7 +10772,8 @@ int PrimaryLogPG::finish_set_manifest_refcount(hobject_t oid, int r, ceph_tid_t 
 int PrimaryLogPG::start_flush(
   OpRequestRef op, ObjectContextRef obc,
   bool blocking, hobject_t *pmissing,
-  std::optional<std::function<void()>> &&on_flush)
+  std::optional<std::function<void()>> &&on_flush,
+  bool force_dedup)
 {
   const object_info_t& oi = obc->obs.oi;
   const hobject_t& soid = oi.soid;
@@ -10792,7 +10795,8 @@ int PrimaryLogPG::start_flush(
     snapset = obc->ssc->snapset;
   }
 
-  if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked()) {
+  if ((obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked())
+      || force_dedup) {
     // current dedup tier only supports blocking operation
     if (!blocking) {
       return -EOPNOTSUPP;
@@ -10868,7 +10872,8 @@ int PrimaryLogPG::start_flush(
     osd->objecter->op_cancel(tids, -ECANCELED);
   }
 
-  if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked()) {
+  if ((obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked())
+      || force_dedup) {
     int r = start_dedup(op, obc);
     if (r != -EINPROGRESS) {
       if (blocking)

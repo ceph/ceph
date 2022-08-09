@@ -758,8 +758,11 @@ inline namespace v14_2_0 {
     void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     /**
-     * flush a manifest tier object to backing tier; will block racing
-     * updates.
+     * flush a manifest tier object to backing tier, performing deduplication;
+     * will block racing updates.
+     *
+     * Invoking tier_flush() implicitly makes a manifest object even if
+     * the target object is not manifest. 
      */
     void tier_flush();
     /**
