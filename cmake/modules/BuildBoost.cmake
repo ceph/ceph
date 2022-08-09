@@ -80,18 +80,6 @@ function(do_build_boost root_dir version)
   endforeach()
   list_replace(boost_with_libs "unit_test_framework" "test")
   string(REPLACE ";" "," boost_with_libs "${boost_with_libs}")
-  # build b2 and prepare the project-config.jam for boost
-  set(configure_command
-    ./bootstrap.sh --prefix=<INSTALL_DIR>
-    --with-libraries=${boost_with_libs})
-
-  set(b2 ./b2)
-  if(BOOST_J)
-    message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
-    list(APPEND b2 -j${BOOST_J})
-  endif()
-  # suppress all debugging levels for b2
-  list(APPEND b2 -d0)
 
   if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(toolset gcc)
@@ -100,6 +88,20 @@ function(do_build_boost root_dir version)
   else()
     message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
   endif()
+
+  # build b2 and prepare the project-config.jam for boost
+  set(configure_command
+    ./bootstrap.sh --prefix=<INSTALL_DIR>
+    --with-libraries=${boost_with_libs}
+    --with-toolset=${toolset})
+
+  set(b2 ./b2)
+  if(BOOST_J)
+    message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
+    list(APPEND b2 -j${BOOST_J})
+  endif()
+  # suppress all debugging levels for b2
+  list(APPEND b2 -d0)
 
   set(user_config ${CMAKE_BINARY_DIR}/user-config.jam)
   # edit the user-config.jam so b2 will be able to use the specified
