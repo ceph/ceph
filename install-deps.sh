@@ -195,6 +195,29 @@ function install_libzbd_on_ubuntu {
         libzbd-dev
 }
 
+motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
+
+function install_cortx_motr_on_ubuntu {
+    if dpkg -l cortx-motr-dev &> /dev/null; then
+        return
+    fi
+    local deb_arch=$(dpkg --print-architecture)
+    local motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
+    local motr_dev_pkg="cortx-motr-dev_2.0.0.git3252d623_$deb_arch.deb"
+    $SUDO curl -sL -o/var/cache/apt/archives/$motr_pkg $motr_pkgs_url/$motr_pkg
+    $SUDO curl -sL -o/var/cache/apt/archives/$motr_dev_pkg $motr_pkgs_url/$motr_dev_pkg
+    # For some reason libfabric pkg is not available in arm64 version
+    # of Ubuntu 20.04 (Focal Fossa), so we borrow it from more recent
+    # versions for now.
+    if [[ "$deb_arch" == 'arm64' ]]; then
+        local lf_pkg='libfabric1_1.11.0-2_arm64.deb'
+        $SUDO curl -sL -o/var/cache/apt/archives/$lf_pkg http://ports.ubuntu.com/pool/universe/libf/libfabric/$lf_pkg
+        $SUDO apt-get install -y /var/cache/apt/archives/$lf_pkg
+    fi
+    $SUDO apt-get install -y /var/cache/apt/archives/{$motr_pkg,$motr_dev_pkg}
+    $SUDO apt-get install -y libisal-dev
+}
+
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -296,7 +319,6 @@ else
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
-    motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
@@ -365,23 +387,8 @@ EOF
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
 
         # for rgw motr backend build checks
-        if ! dpkg -l cortx-motr-dev &> /dev/null &&
-            { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
-            deb_arch=$(dpkg --print-architecture)
-            motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
-            motr_dev_pkg="cortx-motr-dev_2.0.0.git3252d623_$deb_arch.deb"
-            $SUDO curl -sL -o/var/cache/apt/archives/$motr_pkg $motr_pkgs_url/$motr_pkg
-            $SUDO curl -sL -o/var/cache/apt/archives/$motr_dev_pkg $motr_pkgs_url/$motr_dev_pkg
-            # For some reason libfabric pkg is not available in arm64 version
-            # of Ubuntu 20.04 (Focal Fossa), so we borrow it from more recent
-            # versions for now.
-            if [[ "$deb_arch" == 'arm64' ]]; then
-                lf_pkg='libfabric1_1.11.0-2_arm64.deb'
-                $SUDO curl -sL -o/var/cache/apt/archives/$lf_pkg http://ports.ubuntu.com/pool/universe/libf/libfabric/$lf_pkg
-                $SUDO apt-get install -y /var/cache/apt/archives/$lf_pkg
-            fi
-            $SUDO apt-get install -y /var/cache/apt/archives/{$motr_pkg,$motr_dev_pkg}
-            $SUDO apt-get install -y libisal-dev
+        if $for_make_check || $with_rgw_motr; then
+            install_cortx_motr_on_ubuntu
         fi
         ;;
     rocky|centos|fedora|rhel|ol|virtuozzo)
