@@ -201,21 +201,31 @@ function install_cortx_motr_on_ubuntu {
     if dpkg -l cortx-motr-dev &> /dev/null; then
         return
     fi
-    local deb_arch=$(dpkg --print-architecture)
-    local motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
-    local motr_dev_pkg="cortx-motr-dev_2.0.0.git3252d623_$deb_arch.deb"
-    $SUDO curl -sL -o/var/cache/apt/archives/$motr_pkg $motr_pkgs_url/$motr_pkg
-    $SUDO curl -sL -o/var/cache/apt/archives/$motr_dev_pkg $motr_pkgs_url/$motr_dev_pkg
-    # For some reason libfabric pkg is not available in arm64 version
-    # of Ubuntu 20.04 (Focal Fossa), so we borrow it from more recent
-    # versions for now.
-    if [[ "$deb_arch" == 'arm64' ]]; then
-        local lf_pkg='libfabric1_1.11.0-2_arm64.deb'
-        $SUDO curl -sL -o/var/cache/apt/archives/$lf_pkg http://ports.ubuntu.com/pool/universe/libf/libfabric/$lf_pkg
-        $SUDO apt-get install -y /var/cache/apt/archives/$lf_pkg
+    if [ "$(lsb_release -sc)" = "jammy" ]; then
+      install_pkg_on_ubuntu \
+        cortx-motr \
+        39f89fa1c6945040433a913f2687c4b4e6cbeb3f \
+        jammy \
+        check \
+	cortx-motr \
+	cortx-motr-dev
+    else
+        local deb_arch=$(dpkg --print-architecture)
+        local motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
+        local motr_dev_pkg="cortx-motr-dev_2.0.0.git3252d623_$deb_arch.deb"
+        $SUDO curl -sL -o/var/cache/apt/archives/$motr_pkg $motr_pkgs_url/$motr_pkg
+        $SUDO curl -sL -o/var/cache/apt/archives/$motr_dev_pkg $motr_pkgs_url/$motr_dev_pkg
+        # For some reason libfabric pkg is not available in arm64 version
+        # of Ubuntu 20.04 (Focal Fossa), so we borrow it from more recent
+        # versions for now.
+        if [[ "$deb_arch" == 'arm64' ]]; then
+            local lf_pkg='libfabric1_1.11.0-2_arm64.deb'
+            $SUDO curl -sL -o/var/cache/apt/archives/$lf_pkg http://ports.ubuntu.com/pool/universe/libf/libfabric/$lf_pkg
+            $SUDO apt-get install -y /var/cache/apt/archives/$lf_pkg
+        fi
+        $SUDO apt-get install -y /var/cache/apt/archives/{$motr_pkg,$motr_dev_pkg}
+        $SUDO apt-get install -y libisal-dev
     fi
-    $SUDO apt-get install -y /var/cache/apt/archives/{$motr_pkg,$motr_dev_pkg}
-    $SUDO apt-get install -y libisal-dev
 }
 
 function version_lt {
