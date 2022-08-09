@@ -2068,7 +2068,6 @@ bool ECBackend::try_reads_to_commit()
   op->remote_read.clear();
   op->remote_read_result.clear();
 
-  ObjectStore::Transaction empty;
   bool should_write_local = false;
   ECSubWrite local_write_op;
   std::vector<std::pair<int, Message*>> messages;
@@ -2095,7 +2094,7 @@ bool ECBackend::try_reads_to_commit()
       op->reqid,
       op->hoid,
       stats,
-      should_send ? iter->second : empty,
+      should_send ? std::move(iter->second) : ceph::os::Transaction{},
       op->version,
       op->trim_to,
       op->roll_forward_to,

@@ -42,7 +42,7 @@ struct ECSubWrite {
     osd_reqid_t reqid,
     hobject_t soid,
     const pg_stat_t &stats,
-    const ObjectStore::Transaction &t,
+    ObjectStore::Transaction &&t,
     eversion_t at_version,
     eversion_t trim_to,
     eversion_t roll_forward_to,
@@ -52,7 +52,7 @@ struct ECSubWrite {
     const std::set<hobject_t> &temp_removed,
     bool backfill_or_async_recovery)
     : from(from), tid(tid), reqid(reqid),
-      soid(soid), stats(stats), t(t),
+      soid(soid), stats(stats), t(std::move(t)),
       at_version(at_version),
       trim_to(trim_to), roll_forward_to(roll_forward_to),
       log_entries(log_entries),
