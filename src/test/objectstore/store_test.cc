@@ -2393,7 +2393,11 @@ TEST_P(StoreTest, MultiSmallWriteSameBlock) {
     u.write(cid, a, 10, 5, bl, 0);
     u.write(cid, a, 7000, 5, bl, 0);
     t.register_on_commit(&c);
-    vector<ObjectStore::Transaction> v = {t, u};
+    vector<ObjectStore::Transaction> v;
+    // sorry, Transaction is move ctible only so forget about elegant
+    // list-initialization. See: https://stackoverflow.com/q/8468774.
+    v.emplace_back(std::move(t));
+    v.emplace_back(std::move(u));
     store->queue_transactions(ch, v);
   }
   {
@@ -2405,7 +2409,9 @@ TEST_P(StoreTest, MultiSmallWriteSameBlock) {
     u.write(cid, a, 610, 5, bl, 0);
     u.write(cid, a, 11000, 5, bl, 0);
     t.register_on_commit(&d);
-    vector<ObjectStore::Transaction> v = {t, u};
+    vector<ObjectStore::Transaction> v;
+    v.emplace_back(std::move(t));
+    v.emplace_back(std::move(u));
     store->queue_transactions(ch, v);
   }
   c.wait();
