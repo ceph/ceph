@@ -30,6 +30,8 @@ using std::unique_ptr;
 using crimson::osd::OSD;
 using crimson::common::local_conf;
 using namespace crimson::common;
+using ceph::common::cmd_getval;
+using ceph::common::cmd_getval_or;
 
 namespace crimson::admin {
 
