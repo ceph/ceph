@@ -2739,8 +2739,8 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
   EXPECT_EQ(eversion_t(19, 160), write_from_dups2);
   EXPECT_EQ(2u, log.log.size());
   EXPECT_EQ(1u, trimmed2.size());
-  EXPECT_EQ(2u, log.dups.size());
-  EXPECT_EQ(1u, trimmed_dups2.size());
+  EXPECT_EQ(3u, log.dups.size());
+  EXPECT_EQ(0u, trimmed_dups2.size());
 }
 
 
@@ -3023,7 +3023,7 @@ TEST_F(PGLogTrimTest, TestTrimDups) {
 
   EXPECT_EQ(eversion_t(20, 103), write_from_dups) << log;
   EXPECT_EQ(2u, log.log.size()) << log;
-  EXPECT_EQ(3u, log.dups.size()) << log;
+  EXPECT_EQ(4u, log.dups.size()) << log;
 }
 
 // This tests trim() to make copies of
@@ -3067,7 +3067,7 @@ TEST_F(PGLogTrimTest, TestTrimDups2) {
 
   EXPECT_EQ(eversion_t(10, 100), write_from_dups) << log;
   EXPECT_EQ(4u, log.log.size()) << log;
-  EXPECT_EQ(5u, log.dups.size()) << log;
+  EXPECT_EQ(6u, log.dups.size()) << log;
 }
 
 // This tests copy_up_to() to make copies of
