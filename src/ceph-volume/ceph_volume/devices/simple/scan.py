@@ -137,8 +137,8 @@ class Scan(object):
                     osd_metadata[file_json_key] = content
 
         # we must scan the paths again because this might be a temporary mount
-        path_mounts = system.get_mounts(paths=True)
-        device = path_mounts.get(path)
+        path_mounts = system.Mounts(paths=True)
+        device = path_mounts.get_mounts().get(path)
 
         # it is possible to have more than one device, pick the first one, and
         # warn that it is possible that more than one device is 'data'
@@ -360,8 +360,8 @@ class Scan(object):
                 ))
 
         # Capture some environment status, so that it can be reused all over
-        self.device_mounts = system.get_mounts(devices=True)
-        self.path_mounts = system.get_mounts(paths=True)
+        self.device_mounts = system.Mounts(devices=True).get_mounts()
+        self.path_mounts = system.Mounts(paths=True).get_mounts()
 
         for path in paths:
             args.osd_path = path

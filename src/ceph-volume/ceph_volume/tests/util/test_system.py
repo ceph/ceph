@@ -145,27 +145,28 @@ class TestGetMounts(object):
         with open(proc_path, 'w') as f:
             f.write('')
         monkeypatch.setattr(system, 'PROCDIR', PROCDIR)
-        assert system.get_mounts() == {}
+        m = system.Mounts()
+        assert m.get_mounts() == {}
 
     def test_is_mounted_(self, fake_proc):
-        result = system.get_mounts()
-        assert result['/dev/sdc2'] == ['/boot']
+        m = system.Mounts()
+        assert m.get_mounts()['/dev/sdc2'] == ['/boot']
 
     def test_ignores_two_fields(self, fake_proc):
-        result = system.get_mounts()
-        assert result.get('/dev/sde4') is None
+        m = system.Mounts()
+        assert m.get_mounts().get('/dev/sde4') is None
 
     def test_tmpfs_is_reported(self, fake_proc):
-        result = system.get_mounts()
-        assert result['tmpfs'][0] == '/dev/shm'
+        m = system.Mounts()
+        assert m.get_mounts()['tmpfs'][0] == '/dev/shm'
 
     def test_non_skip_devs_arent_reported(self, fake_proc):
-        result = system.get_mounts()
-        assert result.get('cgroup') is None
+        m = system.Mounts()
+        assert m.get_mounts().get('cgroup') is None
 
     def test_multiple_mounts_are_appended(self, fake_proc):
-        result = system.get_mounts()
-        assert len(result['tmpfs']) == 7
+        m = system.Mounts()
+        assert len(m.get_mounts()['tmpfs']) == 7
 
     def test_nonexistent_devices_are_skipped(self, tmpdir, monkeypatch):
         PROCDIR = str(tmpdir)
@@ -176,8 +177,8 @@ class TestGetMounts(object):
                     /dev/sda2 /far/lib/ceph/osd/ceph-1 xfs rw,attr2,inode64,noquota 0 0"""))
         monkeypatch.setattr(system, 'PROCDIR', PROCDIR)
         monkeypatch.setattr(os.path, 'exists', lambda x: False if x == '/dev/sda1' else True)
-        result = system.get_mounts()
-        assert result.get('/dev/sda1') is None
+        m = system.Mounts()
+        assert m.get_mounts().get('/dev/sda1') is None
 
 
 class TestIsBinary(object):
