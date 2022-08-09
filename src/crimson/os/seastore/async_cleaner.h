@@ -1097,6 +1097,7 @@ private:
 	  return blocking->get_future();
 	});
     }
+    bool is_running_until_halt = false;
   public:
     GCProcess(AsyncCleaner &cleaner) : cleaner(cleaner) {}
 
@@ -1120,14 +1121,25 @@ private:
 
     gc_cycle_ret run_until_halt() {
       ceph_assert(is_stopping());
+      if (is_running_until_halt) {
+	return seastar::now();
+      }
+      is_running_until_halt = true;
       return seastar::do_until(
 	[this] {
 	  cleaner.log_gc_state("GCProcess::run_until_halt");
-	  return !cleaner.gc_should_run();
+	  assert(is_running_until_halt);
+	  if (cleaner.gc_should_run()) {
+	    return false;
+	  } else {
+	    is_running_until_halt = false;
+	    return true;
+	  }
 	},
 	[this] {
 	  return cleaner.do_gc_cycle();
-	});
+	}
+      );
     }
 
     void maybe_wake_on_space_used() {
