@@ -87,7 +87,8 @@ class FuseMount(CephFSMount):
             stdin=self._mount_cmd_stdin,
             stdout=mountcmd_stdout,
             stderr=mountcmd_stderr,
-            wait=False
+            wait=False,
+            omit_sudo=False
         )
 
         return self._wait_and_record_our_fuse_conn(
