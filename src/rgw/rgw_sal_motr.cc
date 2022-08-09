@@ -1651,7 +1651,15 @@ int MotrObject::fetch_obj_entry_and_key(const DoutPrefixProvider* dpp, rgw_bucke
     bname = get_bucket_name(this->get_bucket()->get_tenant(), this->get_bucket()->get_name());
 
   rgw_obj_key objkey(ent.key);
-  key = objkey.name + '\a' + objkey.instance;
+
+  // Remove the "null" from instance to avoid "VersionId" field in the response
+  // and overwrite the existing null object entry.
+  if (ent.key.instance == "null") {
+    ent.key.instance = "";
+    key = objkey.name + '\a';
+  }
+  else
+    key = objkey.name + '\a' + objkey.instance;
 
   ldpp_dout(dpp, 20) <<__func__<< ": bucket=" << bname << " key=" << key << dendl;
 
@@ -1691,7 +1699,6 @@ int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx,
   bufferlist update_bl;
   string bucket_index_iname = "motr.rgw.bucket.index." + bname;
 
-  ent.meta.mtime = ceph::real_clock::now();
   ent.encode(update_bl);
   encode(attrs, update_bl);
   meta.encode(update_bl);
