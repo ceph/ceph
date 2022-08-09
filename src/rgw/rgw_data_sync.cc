@@ -53,6 +53,16 @@ static const string bucket_full_status_oid_prefix = "bucket.full-sync-status";
 static const string bucket_status_oid_prefix = "bucket.sync-status";
 static const string object_status_oid_prefix = "bucket.sync-status";
 
+// returns a lambda that captures negative error codes into the given int&
+static auto capture_error(int& retcode) {
+  return [&retcode] (uint64_t stack_id, int ret) {
+    if (ret < 0) {
+      retcode = ret;
+    }
+    return ret;
+  };
+}
+
 void rgw_datalog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_objects", num_shards, obj);
 }
@@ -1460,20 +1470,16 @@ public:
           yield_spawn_window(rgw::error_repo::write_cr(sync_env->store->svc()->rados, error_repo,
                             rgw::error_repo::encode_key(bs, each->gen),
                             timestamp), cct->_conf->rgw_data_sync_spawn_window,
-                            [&](uint64_t stack_id, int ret) {
-                              if (ret < 0) {
-                                retcode = ret;
-                              }
-                              return 0;
-                            });
+                            capture_error(retcode));
+          if (retcode < 0) {
+            return set_cr_error(retcode);
+          }
         }
       }
-      drain_all_cb([&](uint64_t stack_id, int ret) {
-                   if (ret < 0) {
-                     tn->log(10, SSTR("writing to error repo returned error: " << ret));
-                   }
-                   return ret;
-                 });
+      drain_all_cb(capture_error(retcode));
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
 
       return set_cr_done();
     }
@@ -1592,21 +1598,11 @@ public:
             first_shard = false;
           } else {
             yield_spawn_window(shard_cr, cct->_conf->rgw_data_sync_spawn_window,
-                              [&](uint64_t stack_id, int ret) {
-                                if (ret < 0) {
-                                  retcode = ret;
-                                }
-                                return retcode;
-                                });
+                               capture_error(retcode));
             }
           }
         }
-        drain_all_cb([&](uint64_t stack_id, int ret) {
-                if (ret < 0) {
-                  retcode = ret;
-                }
-                return retcode;
-              });
+        drain_all_cb(capture_error(retcode));
       }
 
       yield call(marker_tracker->finish(key));
@@ -4349,25 +4345,14 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
                       false);
         }
         drain_with_cb(cct->_conf->rgw_bucket_sync_spawn_window,
-                      [&](uint64_t stack_id, int ret) {
-                if (ret < 0) {
-                  tn->log(10, "a sync operation returned error");
-                  sync_result = ret;
-                }
-                return 0;
-              });
+                      capture_error(sync_result));
       }
     } while (list_result.is_truncated && sync_result == 0);
     set_status("done iterating over all objects");
 
     /* wait for all operations to complete */
-    drain_all_cb([&](uint64_t stack_id, int ret) {
-      if (ret < 0) {
-        tn->log(10, "a sync operation returned error");
-        sync_result = ret;
-      }
-      return 0;
-    });
+    drain_all_cb(capture_error(sync_result));
+
     tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
     if (lease_cr && !lease_cr->is_locked()) {
       return set_cr_error(-ECANCELED);
@@ -4741,24 +4726,12 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
           }
         // }
         drain_with_cb(cct->_conf->rgw_bucket_sync_spawn_window,
-                      [&](uint64_t stack_id, int ret) {
-                if (ret < 0) {
-                  tn->log(10, "a sync operation returned error");
-                  sync_status = ret;
-                }
-                return 0;
-              });
+                      capture_error(sync_status));
       }
 
     } while (!list_result.empty() && sync_status == 0 && !syncstopped);
 
-    drain_all_cb([&](uint64_t stack_id, int ret) {
-      if (ret < 0) {
-        tn->log(10, "a sync operation returned error");
-        sync_status = ret;
-      }
-      return 0;
-    });
+    drain_all_cb(capture_error(sync_status));
     tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 
     if (syncstopped) {
