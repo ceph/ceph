@@ -6619,7 +6619,11 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume,"--mode=777", "--size", str(osize))
 
         # do IO, write 50 files of 1MB each to exceed quota. This mostly succeeds as quota enforcement takes time.
-        self._do_subvolume_io(subvolume, number_of_files=50)
+        try:
+            self._do_subvolume_io(subvolume, number_of_files=50)
+        except CommandFailedError:
+            # ignore quota enforcement error.
+            pass
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
