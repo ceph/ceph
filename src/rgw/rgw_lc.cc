@@ -1798,7 +1798,7 @@ static inline vector<int> random_sequence(uint32_t n)
     });
   std::random_device rd;
   std::default_random_engine rng{rd()};
-  std::shuffle(v.begin(), v.end(), rd);
+  std::shuffle(v.begin(), v.end(), rng);
   return v;
 }
 
