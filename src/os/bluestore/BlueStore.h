@@ -2637,6 +2637,7 @@ private:
   void _validate_bdev();
   void _close_bdev();
 
+  int _create_bluefs_vselector(BlueFSVolumeSelector* &vselector);
   int _minimal_open_bluefs(bool create);
   void _minimal_close_bluefs();
   int _open_bluefs(bool create, bool read_only);

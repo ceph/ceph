@@ -6209,14 +6209,9 @@ free_bluefs:
   return r;
 }
 
-int BlueStore::_open_bluefs(bool create, bool read_only)
+int BlueStore::_create_bluefs_vselector(BlueFSVolumeSelector* &vselector)
 {
-  ceph_assert(!(create && read_only)); // can't have create and read_only at the same time
-  int r = _minimal_open_bluefs(create);
-  if (r < 0) {
-    return r;
-  }
-  BlueFSVolumeSelector* vselector = nullptr;
+  int r = 0;
   if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ||
       cct->_conf->bluestore_volume_selection_policy == "use_some_extra_enforced" ||
       cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
@@ -6261,8 +6256,24 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
              == 0);
     }    
   }
+  return r;
+}
+
+int BlueStore::_open_bluefs(bool create, bool read_only)
+{
+  ceph_assert(!(create && read_only)); // can't have create and read_only at the same time
+  int r = _minimal_open_bluefs(create);
+  if (r < 0) {
+    return r;
+  }
   if (create) {
     bluefs->mkfs(fsid, bluefs_layout);
+  }
+  BlueFSVolumeSelector* vselector = nullptr;
+  r = _create_bluefs_vselector(vselector);
+  if (r < 0) {
+    derr << __func__ << " failed to create vselector: " << cpp_strerror(r) << dendl;
+    return r;
   }
   bluefs->set_volume_selector(vselector);
   r = bluefs->mount(!read_only);
