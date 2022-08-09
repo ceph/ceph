@@ -29,7 +29,7 @@ function(build_pmem)
       # build system tests statically linking to librbd (which uses
       # libpmemobj) will not link (because we don't build the ndctl
       # static library here).
-      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} NDCTL_ENABLE=n BUILD_EXAMPLES=n BUILD_BENCHMARKS=n DOC=n
+      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} EXTRA_CFLAGS=-Wno-error NDCTL_ENABLE=n BUILD_EXAMPLES=n BUILD_BENCHMARKS=n DOC=n
       BUILD_IN_SOURCE 1
       BUILD_BYPRODUCTS "<SOURCE_DIR>/src/${PMDK_LIB_DIR}/libpmem.a" "<SOURCE_DIR>/src/${PMDK_LIB_DIR}/libpmemobj.a"
       INSTALL_COMMAND "")
