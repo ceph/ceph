@@ -215,65 +215,69 @@ BtreeBackrefManager::merge_cached_backrefs(
     limit,
     JOURNAL_SEQ_NULL,
     [this, &t, max](auto &limit, auto &inserted_to) {
-    auto &backref_buffer = cache.get_backref_buffer();
-    if (backref_buffer) {
-      return seastar::do_with(
-	backref_buffer->backrefs_by_seq.begin(),
-	JOURNAL_SEQ_NULL,
-	[this, &t, &limit, &backref_buffer, max](auto &iter, auto &inserted_to) {
-	return trans_intr::repeat(
-	  [&iter, this, &t, &limit, &backref_buffer, max, &inserted_to]()
-	  -> merge_cached_backrefs_iertr::future<seastar::stop_iteration> {
-	  if (iter == backref_buffer->backrefs_by_seq.end())
-	    return seastar::make_ready_future<seastar::stop_iteration>(
-	      seastar::stop_iteration::yes);
-	  auto &seq = iter->first;
-	  auto &backref_list = iter->second.br_list;
-	  LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
-	  DEBUGT("seq {}, limit {}, num_fresh_backref {}"
-	    , t, seq, limit, t.get_num_fresh_backref());
-	  if (seq <= limit && t.get_num_fresh_backref() * BACKREF_NODE_SIZE < max) {
-	    inserted_to = seq;
-	    return trans_intr::do_for_each(
-	      backref_list,
-	      [this, &t](auto &backref) {
-	      LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
-	      if (backref.laddr != L_ADDR_NULL) {
-		DEBUGT("new mapping: {}~{} -> {}",
-		  t, backref.paddr, backref.len, backref.laddr);
-		return new_mapping(
-		  t,
-		  backref.paddr,
-		  backref.len,
-		  backref.laddr,
-		  backref.type).si_then([](auto &&pin) {
-		  return seastar::now();
-		});
-	      } else {
-		DEBUGT("remove mapping: {}", t, backref.paddr);
-		return remove_mapping(
-		  t,
-		  backref.paddr).si_then([](auto&&) {
-		  return seastar::now();
-		}).handle_error_interruptible(
-		  crimson::ct_error::input_output_error::pass_further(),
-		  crimson::ct_error::assert_all("no enoent possible")
-		);
-	      }
-	    }).si_then([&iter] {
-	      iter++;
-	      return seastar::make_ready_future<seastar::stop_iteration>(
-		seastar::stop_iteration::no);
-	    });
-	  }
-	  return seastar::make_ready_future<seastar::stop_iteration>(
-	    seastar::stop_iteration::yes);
-	}).si_then([&inserted_to] {
-	  return seastar::make_ready_future<journal_seq_t>(
-	    std::move(inserted_to));
-	});
+    auto &backref_entryrefs_by_seq = cache.get_backref_entryrefs_by_seq();
+    return seastar::do_with(
+      backref_entryrefs_by_seq.begin(),
+      JOURNAL_SEQ_NULL,
+      [this, &t, &limit, &backref_entryrefs_by_seq, max](auto &iter, auto &inserted_to) {
+      return trans_intr::repeat(
+        [&iter, this, &t, &limit, &backref_entryrefs_by_seq, max, &inserted_to]()
+        -> merge_cached_backrefs_iertr::future<seastar::stop_iteration> {
+        if (iter == backref_entryrefs_by_seq.end()) {
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
+        }
+        auto &seq = iter->first;
+        auto &backref_entry_refs = iter->second;
+        LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
+        DEBUGT("seq {}, limit {}, num_fresh_backref {}"
+          , t, seq, limit, t.get_num_fresh_backref());
+        if (seq <= limit && t.get_num_fresh_backref() * BACKREF_NODE_SIZE < max) {
+          inserted_to = seq;
+          return trans_intr::do_for_each(
+            backref_entry_refs,
+            [this, &t](auto &backref_entry_ref) {
+            LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
+            auto &backref_entry = *backref_entry_ref;
+            if (backref_entry.laddr != L_ADDR_NULL) {
+              DEBUGT("new mapping: {}~{} -> {}",
+                t,
+                backref_entry.paddr,
+                backref_entry.len,
+                backref_entry.laddr);
+              return new_mapping(
+                t,
+                backref_entry.paddr,
+                backref_entry.len,
+                backref_entry.laddr,
+                backref_entry.type).si_then([](auto &&pin) {
+                return seastar::now();
+              });
+            } else {
+              DEBUGT("remove mapping: {}", t, backref_entry.paddr);
+              return remove_mapping(
+                t,
+                backref_entry.paddr
+              ).si_then([](auto&&) {
+                return seastar::now();
+              }).handle_error_interruptible(
+                crimson::ct_error::input_output_error::pass_further(),
+                crimson::ct_error::assert_all("no enoent possible")
+              );
+            }
+          }).si_then([&iter] {
+            iter++;
+            return seastar::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::no);
+          });
+        }
+        return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
+      }).si_then([&inserted_to] {
+        return seastar::make_ready_future<journal_seq_t>(
+          std::move(inserted_to));
       });
-    }
+    });
     return merge_cached_backrefs_iertr::make_ready_future<journal_seq_t>(
       std::move(inserted_to));
   });
@@ -285,36 +289,100 @@ BtreeBackrefManager::scan_mapped_space(
   BtreeBackrefManager::scan_mapped_space_func_t &&f)
 {
   LOG_PREFIX(BtreeBackrefManager::scan_mapped_space);
-  DEBUGT("start", t);
+  DEBUGT("scan backref tree", t);
   auto c = get_context(t);
   return seastar::do_with(
     std::move(f),
-    [this, c](auto &visitor) {
+    [this, c, FNAME](auto &scan_visitor)
+  {
+    auto block_size = cache.get_block_size();
+    BackrefBtree::mapped_space_visitor_t f =
+      [&scan_visitor, block_size, FNAME, c](
+        paddr_t paddr, extent_len_t len,
+        depth_t depth, extent_types_t type) {
+      TRACET("tree node {}~{} {}, depth={} used",
+             c.trans, paddr, len, type, depth);
+      ceph_assert(paddr.is_absolute());
+      ceph_assert(len > 0 && len % block_size == 0);
+      ceph_assert(depth >= 1);
+      ceph_assert(is_backref_node(type));
+      return scan_visitor(paddr, len, type, L_ADDR_NULL);
+    };
+    return seastar::do_with(
+      std::move(f),
+      [this, c, &scan_visitor, block_size, FNAME](auto &tree_visitor)
+    {
       return with_btree<BackrefBtree>(
-	cache,
-	c,
-	[c, &visitor](auto &btree) {
-	  return BackrefBtree::iterate_repeat(
-	    c,
-	    btree.lower_bound(
-	      c,
-	      paddr_t::make_seg_paddr(
-		segment_id_t{0, 0}, 0),
-	      &visitor),
-	    [&visitor](auto &pos) {
-	      if (pos.is_end()) {
-		return BackrefBtree::iterate_repeat_ret_inner(
-		  interruptible::ready_future_marker{},
-		  seastar::stop_iteration::yes);
-	      }
-	      visitor(pos.get_key(), pos.get_val().len, 0, pos.get_val().type);
-	      return BackrefBtree::iterate_repeat_ret_inner(
-		interruptible::ready_future_marker{},
-		seastar::stop_iteration::no);
-	    },
-	    &visitor);
-	});
+        cache, c,
+        [c, &scan_visitor, &tree_visitor, block_size, FNAME](auto &btree)
+      {
+        return BackrefBtree::iterate_repeat(
+          c,
+          btree.lower_bound(
+            c,
+            paddr_t::make_seg_paddr(segment_id_t{0, 0}, 0),
+            &tree_visitor),
+          [c, &scan_visitor, block_size, FNAME](auto &pos) {
+            if (pos.is_end()) {
+              return BackrefBtree::iterate_repeat_ret_inner(
+                interruptible::ready_future_marker{},
+                seastar::stop_iteration::yes);
+            }
+            TRACET("tree value {}~{} {}~{} {} used",
+                   c.trans,
+                   pos.get_key(),
+                   pos.get_val().len,
+                   pos.get_val().laddr,
+                   pos.get_val().len,
+                   pos.get_val().type);
+            ceph_assert(pos.get_key().is_absolute());
+            ceph_assert(pos.get_val().len > 0 &&
+                        pos.get_val().len % block_size == 0);
+            ceph_assert(!is_backref_node(pos.get_val().type));
+            ceph_assert(pos.get_val().laddr != L_ADDR_NULL);
+            scan_visitor(
+                pos.get_key(),
+                pos.get_val().len,
+                pos.get_val().type,
+                pos.get_val().laddr);
+            return BackrefBtree::iterate_repeat_ret_inner(
+              interruptible::ready_future_marker{},
+              seastar::stop_iteration::no);
+          },
+          &tree_visitor
+        );
+      });
+    }).si_then([this, &scan_visitor, c, FNAME, block_size] {
+      auto &backref_entry_mset = cache.get_backref_entry_mset();
+      DEBUGT("scan {} backref entries", c.trans, backref_entry_mset.size());
+      for (auto &backref_entry : backref_entry_mset) {
+        if (backref_entry.laddr == L_ADDR_NULL) {
+          TRACET("backref entry {}~{} {} free",
+                 c.trans,
+                 backref_entry.paddr,
+                 backref_entry.len,
+                 backref_entry.type);
+        } else {
+          TRACET("backref entry {}~{} {}~{} {} used",
+                 c.trans,
+                 backref_entry.paddr,
+                 backref_entry.len,
+                 backref_entry.laddr,
+                 backref_entry.len,
+                 backref_entry.type);
+        }
+        ceph_assert(backref_entry.paddr.is_absolute());
+        ceph_assert(backref_entry.len > 0 &&
+                    backref_entry.len % block_size == 0);
+        ceph_assert(!is_backref_node(backref_entry.type));
+        scan_visitor(
+            backref_entry.paddr,
+            backref_entry.len,
+            backref_entry.type,
+            backref_entry.laddr);
+      }
     });
+  });
 }
 
 BtreeBackrefManager::base_iertr::future<> _init_cached_extent(
@@ -429,7 +497,7 @@ void BtreeBackrefManager::complete_transaction(
   }
 }
 
-Cache::backref_buf_entry_query_set_t
+Cache::backref_entry_query_mset_t
 BtreeBackrefManager::get_cached_backref_entries_in_range(
   paddr_t start,
   paddr_t end)
@@ -437,13 +505,7 @@ BtreeBackrefManager::get_cached_backref_entries_in_range(
   return cache.get_backref_entries_in_range(start, end);
 }
 
-const backref_set_t&
-BtreeBackrefManager::get_cached_backrefs()
-{
-  return cache.get_backrefs();
-}
-
-Cache::backref_extent_buf_entry_query_set_t
+Cache::backref_extent_entry_query_set_t
 BtreeBackrefManager::get_cached_backref_extents_in_range(
   paddr_t start,
   paddr_t end)
@@ -461,7 +523,7 @@ void BtreeBackrefManager::cache_new_backref_extent(
 BtreeBackrefManager::retrieve_backref_extents_ret
 BtreeBackrefManager::retrieve_backref_extents(
   Transaction &t,
-  Cache::backref_extent_buf_entry_query_set_t &&backref_extents,
+  Cache::backref_extent_entry_query_set_t &&backref_extents,
   std::vector<CachedExtentRef> &extents)
 {
   return trans_intr::parallel_for_each(

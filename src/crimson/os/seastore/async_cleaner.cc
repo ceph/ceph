@@ -867,8 +867,8 @@ AsyncCleaner::retrieve_live_extents_ret
 AsyncCleaner::_retrieve_live_extents(
   Transaction &t,
   std::set<
-    backref_buf_entry_t,
-    backref_buf_entry_t::cmp_t> &&backrefs,
+    backref_entry_t,
+    backref_entry_t::cmp_t> &&backrefs,
   std::vector<CachedExtentRef> &extents)
 {
   return seastar::do_with(
@@ -984,8 +984,8 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
 		  backref_manager.get_cached_backref_entries_in_range(
 		    reclaim_state->start_pos, reclaim_state->end_pos);
 		std::set<
-		  backref_buf_entry_t,
-		  backref_buf_entry_t::cmp_t> backrefs;
+		  backref_entry_t,
+		  backref_entry_t::cmp_t> backrefs;
 		for (auto &pin : pin_list) {
 		  backrefs.emplace(pin->get_key(), pin->get_val(),
 		    pin->get_length(), pin->get_type(), journal_seq_t());
