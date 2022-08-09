@@ -1356,7 +1356,8 @@ protected:
   int start_flush(
     OpRequestRef op, ObjectContextRef obc,
     bool blocking, hobject_t *pmissing,
-    std::optional<std::function<void()>> &&on_flush);
+    std::optional<std::function<void()>> &&on_flush,
+    bool force_dedup = false);
   void finish_flush(hobject_t oid, ceph_tid_t tid, int r);
   int try_flush_mark_clean(FlushOpRef fop);
   void cancel_flush(FlushOpRef fop, bool requeue, std::vector<ceph_tid_t> *tids);
