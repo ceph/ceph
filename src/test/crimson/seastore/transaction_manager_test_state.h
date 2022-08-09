@@ -246,8 +246,8 @@ protected:
   }
 
   auto create_weak_transaction() {
-    return tm->create_weak_transaction(
-        Transaction::src_t::READ, "test_read_weak");
+    return tm->create_transaction(
+        Transaction::src_t::READ, "test_read_weak", true);
   }
 
   auto submit_transaction_fut2(Transaction& t) {

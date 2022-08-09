@@ -130,17 +130,12 @@ public:
   close_ertr::future<> close();
 
   /// Creates empty transaction
+  /// weak transaction should be type READ
   TransactionRef create_transaction(
       Transaction::src_t src,
-      const char* name) final {
-    return cache->create_transaction(src, name, false);
-  }
-
-  /// Creates empty weak transaction
-  TransactionRef create_weak_transaction(
-      Transaction::src_t src,
-      const char* name) {
-    return cache->create_transaction(src, name, true);
+      const char* name,
+      bool is_weak=false) final {
+    return cache->create_transaction(src, name, is_weak);
   }
 
   /// Resets transaction

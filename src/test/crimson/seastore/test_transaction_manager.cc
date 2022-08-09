@@ -400,37 +400,34 @@ struct transaction_manager_test_t :
     with_trans_intr(
       *t.t,
       [this, &tracker](auto &t) {
-	return backref_manager->scan_mapped_space(
-	  t,
-	  [&tracker](auto offset, auto len, depth_t, extent_types_t) {
-	    if (offset.get_addr_type() == paddr_types_t::SEGMENT) {
-	      logger().debug("check_usage: tracker alloc {}~{}",
-		offset, len);
-	      tracker->allocate(
-		offset.as_seg_paddr().get_segment_id(),
-		offset.as_seg_paddr().get_segment_off(),
-		len);
-	    }
-	  }).si_then([&tracker, this] {
-	    auto &backrefs = backref_manager->get_cached_backrefs();
-	    for (auto &backref : backrefs) {
-	      if (backref.paddr.get_addr_type() == paddr_types_t::SEGMENT) {
-		if (backref.laddr == L_ADDR_NULL) {
-		  tracker->release(
-		    backref.paddr.as_seg_paddr().get_segment_id(),
-		    backref.paddr.as_seg_paddr().get_segment_off(),
-		    backref.len);
-		} else {
-		  tracker->allocate(
-		    backref.paddr.as_seg_paddr().get_segment_id(),
-		    backref.paddr.as_seg_paddr().get_segment_off(),
-		    backref.len);
-		}
-	      }
-	    }
-	    return seastar::now();
-	  });
-      }).unsafe_get0();
+      return backref_manager->scan_mapped_space(
+        t,
+        [&tracker](
+          paddr_t paddr,
+          extent_len_t len,
+          extent_types_t type,
+          laddr_t laddr) {
+        if (paddr.get_addr_type() == paddr_types_t::SEGMENT) {
+          if (is_backref_node(type)) {
+            assert(laddr == L_ADDR_NULL);
+            tracker->allocate(
+              paddr.as_seg_paddr().get_segment_id(),
+              paddr.as_seg_paddr().get_segment_off(),
+              len);
+          } else if (laddr == L_ADDR_NULL) {
+            tracker->release(
+              paddr.as_seg_paddr().get_segment_id(),
+              paddr.as_seg_paddr().get_segment_off(),
+              len);
+          } else {
+            tracker->allocate(
+              paddr.as_seg_paddr().get_segment_id(),
+              paddr.as_seg_paddr().get_segment_off(),
+              len);
+          }
+        }
+      });
+    }).unsafe_get0();
     return async_cleaner->debug_check_space(*tracker);
   }
 

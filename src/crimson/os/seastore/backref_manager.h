@@ -5,7 +5,6 @@
 
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
@@ -83,13 +82,12 @@ public:
     Transaction &t,
     CachedExtentRef e) = 0;
 
-  virtual Cache::backref_buf_entry_query_set_t
+  virtual Cache::backref_entry_query_mset_t
   get_cached_backref_entries_in_range(
     paddr_t start,
     paddr_t end) = 0;
-  virtual const backref_set_t& get_cached_backrefs() = 0;
 
-  virtual Cache::backref_extent_buf_entry_query_set_t
+  virtual Cache::backref_extent_entry_query_set_t
   get_cached_backref_extents_in_range(
     paddr_t start,
     paddr_t end) = 0;
@@ -102,7 +100,7 @@ public:
     retrieve_backref_extents_iertr::future<>;
   virtual retrieve_backref_extents_ret retrieve_backref_extents(
     Transaction &t,
-    Cache::backref_extent_buf_entry_query_set_t &&backref_extents,
+    Cache::backref_extent_entry_query_set_t &&backref_extents,
     std::vector<CachedExtentRef> &extents) = 0;
 
   virtual void cache_new_backref_extent(paddr_t paddr, extent_types_t type) = 0;
@@ -134,14 +132,14 @@ public:
     paddr_t offset) = 0;
 
   /**
-   * scan all extents, including backref extents, logical extents and lba extents,
+   * scan all extents in both tree and cache,
+   * including backref extents, logical extents and lba extents,
    * visit them with scan_mapped_space_func_t
    */
-  using scan_mapped_space_iertr = base_iertr::extend_ertr<
-    SegmentManager::read_ertr>;
+  using scan_mapped_space_iertr = base_iertr;
   using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
   using scan_mapped_space_func_t = std::function<
-    void(paddr_t, extent_len_t, depth_t, extent_types_t)>;
+    void(paddr_t, extent_len_t, extent_types_t, laddr_t)>;
   virtual scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) = 0;
