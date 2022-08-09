@@ -329,7 +329,7 @@ void Beacon::notify_health(MDSRank const *mds)
   // Detect clients failing to respond to modifications to capabilities in
   // CLIENT_CAPS messages.
   {
-    auto&& late_clients = mds->locker->get_late_revoking_clients(mds->mdsmap->get_session_timeout());
+    auto&& late_clients = mds->locker->get_late_revoking_clients(g_conf().get_val<double>("mds_cap_revoke_eviction_timeout"));
     std::vector<MDSHealthMetric> late_cap_metrics;
 
     for (const auto& client : late_clients) {
