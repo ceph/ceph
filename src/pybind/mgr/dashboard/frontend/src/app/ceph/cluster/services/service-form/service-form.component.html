@@ -66,10 +66,12 @@
         <!-- Service id -->
         <div class="form-group row"
              *ngIf="serviceForm.controls.service_type.value !== 'snmp-gateway'">
-          <label i18n
-                 class="cd-col-form-label"
+          <label class="cd-col-form-label"
                  [ngClass]="{'required': ['mds', 'rgw', 'nfs', 'iscsi', 'ingress'].includes(serviceForm.controls.service_type.value)}"
-                 for="service_id">Id</label>
+                 for="service_id">
+            <span i18n>Id</span>
+            <cd-helper i18n>Used in the service name which is &lt;service_type.service_id&gt;</cd-helper>
+          </label>
           <div class="cd-col-form-input">
             <input id="service_id"
                    class="form-control"
@@ -84,6 +86,9 @@
             <span class="invalid-feedback"
                   *ngIf="serviceForm.showError('service_id', frm, 'rgwPattern')"
                   i18n>The value does not match the pattern <strong>&lt;service_id&gt;[.&lt;realm_name&gt;.&lt;zone_name&gt;]</strong>.</span>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('service_id', frm, 'mdsPattern')"
+                  i18n>MDS service id must start with a letter and contain alphanumeric characters or '.', '-', and '_'</span>
           </div>
         </div>
 

@@ -530,6 +530,28 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       });
     });
 
+    describe('should test service mds', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'mds');
+      });
+
+      it('should test mds valid service id', () => {
+        formHelper.setValue('service_id', 'svc123');
+        formHelper.expectValid('service_id');
+        formHelper.setValue('service_id', 'svc_id-1');
+        formHelper.expectValid('service_id');
+      });
+
+      it('should test mds invalid service id', () => {
+        formHelper.setValue('service_id', '123');
+        formHelper.expectError('service_id', 'mdsPattern');
+        formHelper.setValue('service_id', '123svc');
+        formHelper.expectError('service_id', 'mdsPattern');
+        formHelper.setValue('service_id', 'svc#1');
+        formHelper.expectError('service_id', 'mdsPattern');
+      });
+    });
+
     describe('check edit fields', () => {
       beforeEach(() => {
         component.editing = true;
