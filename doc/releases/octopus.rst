@@ -30,6 +30,24 @@ Notable Changes
   or positional arguments is resurrected.  Such invocations accidentally became
   limited to just the default pool (``rbd_default_pool``) in v15.2.14.
 
+* Users who were running OpenStack Manila to export native CephFS, who
+  upgraded their Ceph cluster from Nautilus (or earlier) to a later
+  major version, were vulnerable to an attack by malicious users
+  (:ref:`CVE-2022-0670`). The vulnerability allowed users to obtain
+  access to arbitrary portions of the CephFS filesystem hierarchy,
+  instead of being properly restricted to their own subvolumes. The
+  vulnerability is due to a bug in the "volumes" plugin in Ceph Manager.
+  This plugin is responsible for managing Ceph File System subvolumes
+  which are used by OpenStack Manila services as a way to provide shares
+  to Manila users.
+
+  With this release, the vulnerability is fixed. Administrators who are
+  concerned they may have been impacted should audit the CephX keys in
+  their cluster for proper path restrictions.
+
+  Again, this vulnerability only impacts OpenStack Manila clusters which
+  provided native CephFS access to their users.
+
 Changelog
 ---------------
 
