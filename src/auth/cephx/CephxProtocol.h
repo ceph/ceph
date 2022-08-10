@@ -296,7 +296,7 @@ struct CephXTicketHandler {
   bool need_key() const;
 
   void invalidate_ticket() {
-    have_key_flag = 0;
+    have_key_flag = false;
   }
 private:
   CephContext *cct;
