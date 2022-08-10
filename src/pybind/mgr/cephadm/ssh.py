@@ -104,7 +104,7 @@ class SSHManager:
         except OSError as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}"
+            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there or you are missing NOPASSWD in sudoers. {str(e)}"
             logger.exception(msg)
             raise OrchestratorError(msg)
         except asyncssh.Error as e:
