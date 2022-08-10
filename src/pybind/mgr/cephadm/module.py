@@ -2848,9 +2848,9 @@ Then run the following:
 
         # trigger the serve loop to initiate the removal
         self._kick_serve_loop()
-        warning_zap = "" if not zap else ("\nVG/LV for the OSDs won't be zapped (--zap wasn't passed).\n"
-                                          "Run the `ceph-volume lvm zap` command with `--destroy`"
-                                          " against the VG/LV if you want them to be destroyed.")
+        warning_zap = "" if zap else ("\nVG/LV for the OSDs won't be zapped (--zap wasn't passed).\n"
+                                      "Run the `ceph-volume lvm zap` command with `--destroy`"
+                                      " against the VG/LV if you want them to be destroyed.")
         return f"Scheduled OSD(s) for removal.{warning_zap}"
 
     @handle_orch_error
