@@ -687,7 +687,7 @@ int CyanStore::_omap_rmkeyrange(
 
   ObjectRef o = c->get_or_create_object(oid);
   for (auto i = o->omap.lower_bound(first);
-       i != o->omap.end() && i->first <= last;
+       i != o->omap.end() && i->first < last;
        o->omap.erase(i++));
   return 0;
 }
