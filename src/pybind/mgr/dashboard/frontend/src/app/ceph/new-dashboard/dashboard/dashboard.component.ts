@@ -1,4 +1,4 @@
-import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
@@ -19,6 +19,7 @@ import {
   FeatureTogglesMap$,
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
+import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 
 @Component({
@@ -100,7 +101,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    window.clearInterval(this.interval);
+    this.interval.unsubscribe();
+  }
+
+  getHealth() {
+    this.healthService.getMinimalHealth().subscribe((data: any) => {
+      this.healthData = data;
+    });
   }
 
   toggleAlertsWindow(type: string, isToggleButton: boolean = false) {
