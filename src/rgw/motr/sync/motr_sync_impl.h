@@ -78,6 +78,8 @@ public:
                    utime_t lock_duration, const std::string& locker_id) override;
   virtual int unlock(const std::string& lock_name, MotrLockType lock_type,
                      const std::string& locker_id) override;
+  virtual int check_lock(const std::string& lock_name, 
+                         const std::string& locker_id) override;
 };
 
 class MotrKVLockProvider : public MotrLockProvider {

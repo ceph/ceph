@@ -84,6 +84,8 @@ public:
                    utime_t lock_duration, const std::string& locker_id) = 0;
   virtual int unlock(const std::string& lock_name, MotrLockType lock_type,
                      const std::string& locker_id) = 0;
+  virtual int check_lock(const std::string& lock_name,
+                         const std::string& locker_id) = 0;                     
 };
 
 // Abstract interface for entity that implements backend for lock objects

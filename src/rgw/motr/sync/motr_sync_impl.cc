@@ -15,60 +15,70 @@
 
 #include "motr/sync/motr_sync_impl.h"
 
+std::string random_string(size_t length)
+{
+    auto randchar = []() -> char
+    {
+        const char charset[] =
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz";
+        const size_t max_index = (sizeof(charset) - 1);
+        return charset[ rand() % max_index ];
+    };
+    std::string str(length,0);
+    std::generate_n( str.begin(), length, randchar );
+    return str;
+}
+
 void MotrLock::initialize(std::shared_ptr<MotrLockProvider> lock_provider) {
   _lock_provider = lock_provider;
 }
 
-int MotrLock::lock(const std::string& lock_name, 
+int MotrLock::lock(const std::string& lock_name,
                    MotrLockType lock_type,
                    utime_t lock_duration,
                    const std::string& locker_id = "") {
-  if (!_lock_provider || (MotrLockType::EXCLUSIVE != lock_type && 
-                          locker_id.empty())) {
+  if (!_lock_provider || locker_id.empty()) {
     return -EINVAL;
   }
   int rc = 0;
   motr_lock_info_t lock_obj;
-  rc = _lock_provider->read_lock(lock_name, &lock_obj);
-  if (rc != 0 && rc != -ENOENT)
-    return rc;
+  // First, try to write lock object
+  struct motr_locker_info_t locker;
+  locker.cookie = locker_id;
+  locker.expiration = ceph_clock_now() + lock_duration;
+  locker.description = "";
+  // Insert lock entry
+  lock_obj.lockers.insert(
+      std::pair<std::string, struct motr_locker_info_t>(locker_id,
+                                                        locker));
+  rc = _lock_provider->write_lock(lock_name, &lock_obj, false);
   if (rc == 0) {
-    // lock entry is present. Check if this is a stale/expired lock
-    utime_t now = ceph_clock_now();
-    auto iter = lock_obj.lockers.begin();
-    while (iter != lock_obj.lockers.end()) {
-      struct motr_locker_info_t &info = iter->second;
-      if (!info.expiration.is_zero() && info.expiration < now) {
-        // locker has expired; delete it
-        iter = lock_obj.lockers.erase(iter);
-      } else {
-        ++iter;
+    // lock entry created successfully
+    return rc;
+  } else if (rc == -EEXIST) {
+    // Failed to acquire lock object; possibly, already acquired by someone
+    // Lock entry is present. Check if this is a stale/expired lock
+    rc = _lock_provider->read_lock(lock_name, &lock_obj);
+    if (rc == 0) {
+      utime_t now = ceph_clock_now();
+      auto iter = lock_obj.lockers.begin();
+      while (iter != lock_obj.lockers.end()) {
+        struct motr_locker_info_t &info = iter->second;
+        if (!info.expiration.is_zero() && info.expiration < now) {
+          // locker has expired; delete it
+          iter = lock_obj.lockers.erase(iter);
+        } else {
+          ++iter;
+        }
       }
-    }
-    // remove the lock if no locker is left
-    if (lock_obj.lockers.empty())
-      _lock_provider->remove_lock(lock_name, locker_id);
-  }
-
-  if (!lock_obj.lockers.empty() && MotrLockType::EXCLUSIVE == lock_type) {
-    // lock is not available
-    return -EBUSY;
-  } else {
-    // Try to acquire lock object
-    struct motr_locker_info_t locker;
-    locker.cookie = locker_id;
-    locker.expiration = ceph_clock_now() + lock_duration;
-    locker.description = "";
-    // Update lock entry with current locker and lock the resource
-    lock_obj.lockers.insert(
-        std::pair<std::string, struct motr_locker_info_t>(locker_id, locker));
-    rc = _lock_provider->write_lock(lock_name, &lock_obj, false);
-    if (rc < 0) {
-      // Failed to acquire lock object; possibly, already acquired
-      return -EBUSY;
+      // remove the lock if no locker is left
+      if (lock_obj.lockers.empty())
+        _lock_provider->remove_lock(lock_name, locker_id);
     }
   }
-  return rc;
+  return -EBUSY;
 }
 
 int MotrLock::unlock(const std::string& lock_name,
@@ -86,6 +96,30 @@ int MotrKVLockProvider::initialize(const DoutPrefixProvider* dpp,
     return -EINVAL;
   }
   return _store->create_motr_idx_by_name(lock_index_name);
+}
+
+int MotrLock::check_lock(const std::string& lock_name,
+                         const std::string& locker_id = "") {
+  if (!_lock_provider || locker_id.empty()) {
+    return -EINVAL;
+  }
+  motr_lock_info_t cnfm_lock_obj;
+  int rc = _lock_provider->read_lock(lock_name, &cnfm_lock_obj);
+  if (rc == 0) {
+    auto iter = cnfm_lock_obj.lockers.begin();
+    while (iter != cnfm_lock_obj.lockers.end()) {
+      struct motr_locker_info_t &info = iter->second;
+      if (info.cookie == locker_id) {
+        // Same lock exists; this confirms lock object
+        return rc;
+      }
+    }
+  } else if (rc == -ENOENT) {
+    // Looks like lock object is deleted by another caller
+    // as part of the race condition 
+    return -EBUSY;
+  }
+  return -EBUSY;
 }
 
 int MotrKVLockProvider::read_lock(const std::string& lock_name,
