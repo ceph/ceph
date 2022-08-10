@@ -579,7 +579,7 @@ class TestIoctx(object):
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [])
 
-    def test_remove_omap_ramge2(self):
+    def test_remove_omap_range2(self):
         keys = ("1", "2", "3", "4")
         values = (b"a", b"bb", b"ccc", b"dddd")
         with WriteOpCtx() as write_op:
