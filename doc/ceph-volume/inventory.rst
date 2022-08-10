@@ -165,5 +165,6 @@ ceph-volume inventory  /dev/vdc --format json-pretty --with-lsm
     }
 }
 
+
 A device path can be specified to report extensive information on a device in
 both plain and json format.
