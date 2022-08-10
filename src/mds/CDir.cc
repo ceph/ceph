@@ -828,7 +828,9 @@ void CDir::try_remove_dentries_for_stray()
 
 bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
 {
-  ceph_assert(dn->last != CEPH_NOSNAP);
+  if (dn->last == CEPH_NOSNAP) {
+    return false;
+  }
   set<snapid_t>::const_iterator p = snaps.lower_bound(dn->first);
   CDentry::linkage_t *dnl= dn->get_linkage();
   CInode *in = 0;
@@ -2553,8 +2555,7 @@ void CDir::_omap_commit(int op_prio)
     string key;
     dn->key().encode(key);
 
-    if (dn->last != CEPH_NOSNAP &&
-	snaps && try_trim_snap_dentry(dn, *snaps)) {
+    if (snaps && try_trim_snap_dentry(dn, *snaps)) {
       dout(10) << " rm " << key << dendl;
       to_remove.emplace_back(std::move(key));
       return;
