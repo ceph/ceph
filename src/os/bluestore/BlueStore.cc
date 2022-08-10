@@ -6109,6 +6109,42 @@ bool BlueStore::test_mount_in_use()
   return ret;
 }
 
+/**
+   Layers of initalization
+
+   1. open bluefs RO
+   - export bluefs content
+   - show sharding
+   - print bluefs replay log
+   or 1a. open posix filesystem
+
+   2. prepare db env (BlueRockEnv gluer, merge operator)
+   - RocksDB repair procedure ready to work
+
+   3. open db RO
+   - ceph-kv-tool RO operations enabled
+   - recover allocations from db
+
+   4. open BlueStore RO
+   - ceph-objectstore-tool export PG (mount RO)
+
+   1. open bluefs RW
+   - compact bluefs log
+   - import file to bluefs
+   - write allocation file
+
+   2. open db RW
+   - all ops for ceph-kvstore-tool
+
+   3. open BlueStore RW
+   - bluestore full mount
+
+   1. create bluefs
+   1a. setup posix filesystem
+   2. create db
+   3. create BlueStore
+
+ */
 int BlueStore::_minimal_open_bluefs(bool create)
 {
   int r;
