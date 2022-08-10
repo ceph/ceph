@@ -209,9 +209,7 @@ BuildRequires:	gcc-c++ >= 11
 %if 0%{?rhel} == 8
 BuildRequires:	%{gts_prefix}-gcc-c++
 BuildRequires:	%{gts_prefix}-build
-%ifarch aarch64
 BuildRequires:	%{gts_prefix}-libatomic-devel
-%endif
 %endif
 %if 0%{?fedora} || 0%{?rhel} == 9
 BuildRequires:  libatomic
