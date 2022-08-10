@@ -535,7 +535,8 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     return 0;
   }
 
-  uint64_t ImageCtx::get_effective_image_size(snap_t in_snap_id) const {
+  uint64_t ImageCtx::get_effective_image_size(snap_t in_snap_id,
+                                              bool skip_crypto) const {
     auto raw_size = get_image_size(in_snap_id);
     if (raw_size == 0) {
       return 0;
@@ -543,7 +544,8 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
 
     io::Extents extents = {{raw_size, 0}};
     io_image_dispatcher->remap_extents(
-            extents, io::IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL);
+            extents, io::IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL,
+            skip_crypto);
     return extents.front().first;
   }
 

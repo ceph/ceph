@@ -177,12 +177,13 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ondisk.snap_names_len = 0;
   }
 
-  void image_info(ImageCtx *ictx, image_info_t& info, size_t infosize)
+  void image_info(ImageCtx *ictx, image_info_t& info, size_t infosize,
+                  bool skip_crypto)
   {
     int obj_order = ictx->order;
     {
       std::shared_lock locker{ictx->image_lock};
-      info.size = ictx->get_effective_image_size(ictx->snap_id);
+      info.size = ictx->get_effective_image_size(ictx->snap_id, skip_crypto);
     }
     info.obj_size = 1ULL << obj_order;
     info.num_objs = Striper::get_num_objects(ictx->layout, info.size);
@@ -832,7 +833,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return ictx->operations->rename(dstname);
   }
 
-  int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
+  int info(ImageCtx *ictx, image_info_t& info, size_t infosize,
+           bool skip_crypto)
   {
     ldout(ictx->cct, 20) << "info " << ictx << dendl;
 
@@ -840,7 +842,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0)
       return r;
 
-    image_info(ictx, info, infosize);
+    image_info(ictx, info, infosize, skip_crypto);
     return 0;
   }
 
@@ -853,13 +855,13 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  int get_size(ImageCtx *ictx, uint64_t *size)
+  int get_size(ImageCtx *ictx, uint64_t *size, bool skip_crypto)
   {
     int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
     std::shared_lock l2{ictx->image_lock};
-    *size = ictx->get_effective_image_size(ictx->snap_id);
+    *size = ictx->get_effective_image_size(ictx->snap_id, skip_crypto);
     return 0;
   }
 
@@ -1519,6 +1521,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   }
 
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
+		       bool skip_crypto,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg)
   {
@@ -1534,7 +1537,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     uint64_t mylen = len;
     ictx->image_lock.lock_shared();
-    r = clip_io(ictx, off, &mylen);
+    r = clip_io(ictx, off, &mylen, skip_crypto);
     ictx->image_lock.unlock_shared();
     if (r < 0)
       return r;
@@ -1588,7 +1591,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   }
 
   // validate extent against image size; clip to image size if necessary
-  int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len)
+  int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len, bool skip_crypto)
   {
     ceph_assert(ceph_mutex_is_locked(ictx->image_lock));
 
@@ -1596,7 +1599,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
         ictx->get_snap_info(ictx->snap_id) == nullptr) {
       return -ENOENT;
     }
-    uint64_t image_size = ictx->get_effective_image_size(ictx->snap_id);
+    uint64_t image_size = ictx->get_effective_image_size(
+            ictx->snap_id, skip_crypto);
 
     // special-case "len == 0" requests: always valid
     if (*len == 0)

@@ -96,7 +96,7 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
   Extents parent_extents;
   for (auto& extent: *extents) {
     extent_to_file(image_ctx, object_no, extent.offset, extent.length,
-                   parent_extents);
+                   false, parent_extents);
   }
 
   uint64_t parent_overlap = 0;
@@ -138,12 +138,12 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
 }
 
 template <typename I>
-int clip_request(I *image_ctx, Extents *image_extents) {
+int clip_request(I *image_ctx, Extents *image_extents, bool skip_crypto) {
   std::shared_lock image_locker{image_ctx->image_lock};
   for (auto &image_extent : *image_extents) {
     auto clip_len = image_extent.second;
     int r = clip_io(librbd::util::get_image_ctx(image_ctx),
-                    image_extent.first, &clip_len);
+                    image_extent.first, &clip_len, skip_crypto);
     if (r < 0) {
       return r;
     }
@@ -183,11 +183,11 @@ bool trigger_copyup(I* image_ctx, uint64_t object_no, IOContext io_context,
 
 template <typename I>
 void file_to_extents(I* image_ctx, uint64_t offset, uint64_t length,
-                     uint64_t buffer_offset,
+                     uint64_t buffer_offset, bool skip_crypto,
                      striper::LightweightObjectExtents* object_extents) {
   Extents extents = {{offset, length}};
   image_ctx->io_image_dispatcher->remap_extents(
-          extents, IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL);
+          extents, IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL, skip_crypto);
   for (auto [off, len] : extents) {
     Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, off, len, 0,
                              buffer_offset, object_extents);
@@ -196,21 +196,22 @@ void file_to_extents(I* image_ctx, uint64_t offset, uint64_t length,
 
 template <typename I>
 void extent_to_file(I* image_ctx, uint64_t object_no, uint64_t offset,
-                    uint64_t length,
+                    uint64_t length, bool skip_crypto,
                     std::vector<std::pair<uint64_t, uint64_t> >& extents) {
   Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
                           offset, length, extents);
   image_ctx->io_image_dispatcher->remap_extents(
-          extents, IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL);
+          extents, IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL, skip_crypto);
 }
 
 template <typename I>
-uint64_t get_file_offset(I* image_ctx, uint64_t object_no, uint64_t offset) {
+uint64_t get_file_offset(I* image_ctx, uint64_t object_no, uint64_t offset,
+                         bool skip_crypto) {
   auto off = Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
                                       object_no, offset);
   Extents extents = {{off, 0}};
   image_ctx->io_image_dispatcher->remap_extents(
-          extents, IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL);
+          extents, IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL, skip_crypto);
   return extents[0].first;
 }
 
@@ -222,18 +223,19 @@ template void librbd::io::util::read_parent(
     librbd::ImageCtx *image_ctx, uint64_t object_no, ReadExtents* extents,
     librados::snap_t snap_id, const ZTracer::Trace &trace, Context* on_finish);
 template int librbd::io::util::clip_request(
-    librbd::ImageCtx *image_ctx, Extents *image_extents);
+    librbd::ImageCtx *image_ctx, Extents *image_extents, bool skip_crypto);
 template bool librbd::io::util::trigger_copyup(
         librbd::ImageCtx *image_ctx, uint64_t object_no, IOContext io_context,
         Context* on_finish);
 template void librbd::io::util::file_to_extents(
         librbd::ImageCtx *image_ctx, uint64_t offset, uint64_t length,
-        uint64_t buffer_offset,
+        uint64_t buffer_offset, bool skip_crypto,
         striper::LightweightObjectExtents* object_extents);
 template void librbd::io::util::extent_to_file(
         librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t offset,
-        uint64_t length,
+        uint64_t length, bool skip_crypto,
         std::vector<std::pair<uint64_t, uint64_t> >& extents);
 template uint64_t librbd::io::util::get_file_offset(
-        librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t offset);
+        librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t offset,
+        bool skip_crypto);
  

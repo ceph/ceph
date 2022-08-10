@@ -74,7 +74,7 @@ void ObjectCopyRequest<I>::send_list_snaps() {
   // image extents are consistent across src and dst so compute once
   io::util::extent_to_file(
           m_dst_image_ctx, m_dst_object_number, 0,
-          m_dst_image_ctx->layout.object_size, m_image_extents);
+          m_dst_image_ctx->layout.object_size, false, m_image_extents);
   ldout(m_cct, 20) << "image_extents=" << m_image_extents << dendl;
 
   auto ctx = create_async_context_callback(
@@ -603,7 +603,8 @@ void ObjectCopyRequest<I>::merge_write_ops() {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
       io::util::file_to_extents(m_dst_image_ctx, image_offset,
-                                image_length, buffer_offset, &object_extents);
+                                image_length, buffer_offset, false,
+                                &object_extents);
       for (auto& object_extent : object_extents) {
         ldout(m_cct, 20) << "src_snap_seq=" << src_snap_seq << ", "
                          << "object_offset=" << object_extent.offset << ", "
@@ -759,7 +760,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
       io::util::file_to_extents(m_dst_image_ctx, z.get_start(), z.get_len(), 0,
-                                &object_extents);
+                                false, &object_extents);
       for (auto& object_extent : object_extents) {
         ceph_assert(object_extent.offset + object_extent.length <=
                       m_dst_image_ctx->layout.object_size);

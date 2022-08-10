@@ -133,9 +133,10 @@ struct ImageDispatcher<I>::PreprocessVisitor
       image_dispatch_spec(image_dispatch_spec) {
   }
 
-  bool clip_request() const {
+  bool clip_request(bool skip_crypto) const {
     int r = util::clip_request(image_dispatcher->m_image_ctx,
-                               &image_dispatch_spec->image_extents);
+                               &image_dispatch_spec->image_extents,
+                               skip_crypto);
     if (r < 0) {
       image_dispatch_spec->fail(r);
       return true;
@@ -147,11 +148,11 @@ struct ImageDispatcher<I>::PreprocessVisitor
     if ((read.read_flags & READ_FLAG_DISABLE_CLIPPING) != 0) {
       return false;
     }
-    return clip_request();
+    return clip_request(false);
   }
 
   bool operator()(ImageDispatchSpec::Flush&) const {
-    return clip_request();
+    return clip_request(false);
   }
 
   bool operator()(ImageDispatchSpec::ListSnaps&) const {
@@ -160,7 +161,7 @@ struct ImageDispatcher<I>::PreprocessVisitor
 
   template <typename T>
   bool operator()(T&) const {
-    if (clip_request()) {
+    if (clip_request(false)) {
       return true;
     }
 
@@ -267,9 +268,13 @@ void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
 
 template <typename I>
 void ImageDispatcher<I>::remap_extents(Extents& image_extents,
-                                       ImageExtentsMapType type) {
-  auto loop = [&image_extents, type](auto begin, auto end) {
+                                       ImageExtentsMapType type,
+                                       bool skip_crypto) {
+  auto loop = [&image_extents, type, skip_crypto](auto begin, auto end) {
       for (auto it = begin; it != end; ++it) {
+        if (skip_crypto && it->first == IMAGE_DISPATCH_LAYER_CRYPTO) {
+          continue;
+        }
         auto& image_dispatch_meta = it->second;
         auto image_dispatch = image_dispatch_meta.dispatch;
         image_dispatch->remap_extents(image_extents, type);

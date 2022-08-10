@@ -79,9 +79,10 @@ namespace librbd {
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
-  int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
+  int info(ImageCtx *ictx, image_info_t& info, size_t image_size,
+           bool skip_crypto);
   int get_old_format(ImageCtx *ictx, uint8_t *old);
-  int get_size(ImageCtx *ictx, uint64_t *size);
+  int get_size(ImageCtx *ictx, uint64_t *size, bool skip_crypto);
   int get_features(ImageCtx *ictx, uint64_t *features);
   int get_overlap(ImageCtx *ictx, uint64_t *overlap);
   int get_flags(ImageCtx *ictx, uint64_t *flags);
@@ -119,14 +120,16 @@ namespace librbd {
 		  struct rbd_obj_header_ondisk *header, uint64_t *ver);
   int tmap_set(librados::IoCtx& io_ctx, const std::string& imgname);
   int tmap_rm(librados::IoCtx& io_ctx, const std::string& imgname);
-  void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
+  void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size,
+                  bool skip_crypto);
   uint64_t oid_to_object_no(const std::string& oid,
 			    const std::string& object_prefix);
-  int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len);
+  int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len, bool skip_crypto);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 		       uint64_t size, int order, uint64_t bid);
 
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
+		       bool skip_crypto,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg);
 

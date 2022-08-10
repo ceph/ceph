@@ -63,7 +63,7 @@ ssize_t Io<I>::write(
                  << "len = " << len << dendl;
 
   image_ctx.image_lock.lock_shared();
-  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len);
+  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len, false);
   image_ctx.image_lock.unlock_shared();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
@@ -90,7 +90,7 @@ ssize_t Io<I>::discard(
                  << "len = " << len << dendl;
 
   image_ctx.image_lock.lock_shared();
-  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len);
+  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len, false);
   image_ctx.image_lock.unlock_shared();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
@@ -116,7 +116,7 @@ ssize_t Io<I>::write_same(
                  << "len = " << len << ", data_len " << bl.length() << dendl;
 
   image_ctx.image_lock.lock_shared();
-  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len);
+  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len, false);
   image_ctx.image_lock.unlock_shared();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
@@ -142,7 +142,7 @@ ssize_t Io<I>::write_zeroes(I& image_ctx, uint64_t off, uint64_t len,
                  << "len = " << len << dendl;
 
   image_ctx.image_lock.lock_shared();
-  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len);
+  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len, false);
   image_ctx.image_lock.unlock_shared();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
@@ -169,7 +169,7 @@ ssize_t Io<I>::compare_and_write(
                  << off << ", " << "len = " << len << dendl;
 
   image_ctx.image_lock.lock_shared();
-  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len);
+  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len, false);
   image_ctx.image_lock.unlock_shared();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;

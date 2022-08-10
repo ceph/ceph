@@ -659,7 +659,7 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
       }
       std::vector<std::pair<uint64_t, uint64_t>> extents;
       util::extent_to_file(m_image_ctx, m_object_no, 0,
-                               m_image_ctx->layout.object_size, extents);
+                               m_image_ctx->layout.object_size, false, extents);
       auto overlap = m_image_ctx->prune_parent_extents(
           extents, parent_overlap);
       return overlap > 0;
@@ -678,7 +678,7 @@ void CopyupRequest<I>::convert_copyup_extent_map() {
   for (auto [image_offset, image_length] : image_extent_map) {
     striper::LightweightObjectExtents object_extents;
     util::file_to_extents(
-      m_image_ctx, image_offset, image_length, 0, &object_extents);
+      m_image_ctx, image_offset, image_length, 0, false, &object_extents);
     for (auto& object_extent : object_extents) {
       m_copyup_extent_map.emplace_back(
         object_extent.offset, object_extent.length);

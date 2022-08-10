@@ -171,7 +171,7 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
   }
 
   io::util::extent_to_file(m_ictx, m_object_no, 0, m_ictx->layout.object_size,
-                           *parent_extents);
+                           false, *parent_extents);
   uint64_t object_overlap = m_ictx->prune_parent_extents(*parent_extents,
                                                          parent_overlap);
   if (object_overlap > 0) {
@@ -715,7 +715,7 @@ int ObjectCompareAndWriteRequest<I>::filter_write_result(int r) const {
     // object extent compare mismatch
     uint64_t offset = -MAX_ERRNO - r;
     io::util::extent_to_file(image_ctx, this->m_object_no, offset,
-                             this->m_object_len, image_extents);
+                             this->m_object_len, false, image_extents);
     ceph_assert(image_extents.size() == 1);
 
     if (m_mismatch_offset) {
@@ -958,7 +958,7 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
   Extents parent_image_extents;
   for (auto [object_off, object_len]: m_object_extents) {
     io::util::extent_to_file(image_ctx, this->m_object_no, object_off,
-                             object_len, parent_image_extents);
+                             object_len, false, parent_image_extents);
   }
 
   uint64_t parent_overlap = 0;
@@ -1020,7 +1020,8 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
       // map image-extents back to this object
       striper::LightweightObjectExtents object_extents;
       io::util::file_to_extents(image_ctx, image_extent.get_off(),
-                                image_extent.get_len(), 0, &object_extents);
+                                image_extent.get_len(), 0, false,
+                                &object_extents);
       for (auto& object_extent : object_extents) {
         ceph_assert(object_extent.object_no == this->m_object_no);
         intervals.insert(

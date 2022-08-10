@@ -40,7 +40,7 @@ public:
   MOCK_METHOD0(unblock_writes, void());
   MOCK_METHOD1(wait_on_writes_unblocked, void(Context*));
 
-  MOCK_METHOD2(remap_extents, void(Extents&, ImageExtentsMapType));
+  MOCK_METHOD3(remap_extents, void(Extents&, ImageExtentsMapType, bool));
 };
 
 } // namespace io

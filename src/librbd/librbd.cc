@@ -1667,7 +1667,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, stat_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-    int r = librbd::info(ictx, info, infosize);
+    int r = librbd::info(ictx, info, infosize, false);
     tracepoint(librbd, stat_exit, r, &info);
     return r;
   }
@@ -1685,7 +1685,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, get_size_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-    int r = librbd::get_size(ictx, size);
+    int r = librbd::get_size(ictx, size, false);
     tracepoint(librbd, get_size_exit, r, *size);
     return r;
   }
@@ -2537,7 +2537,7 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_iterate_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
 
-    int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg);
+    int64_t r = librbd::read_iterate(ictx, ofs, len, false, cb, arg);
     tracepoint(librbd, read_iterate_exit, r);
     return r;
   }
@@ -2549,7 +2549,7 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_iterate2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
 
-    int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg);
+    int64_t r = librbd::read_iterate(ictx, ofs, len, false, cb, arg);
     if (r > 0)
       r = 0;
     tracepoint(librbd, read_iterate2_exit, r);
@@ -4940,7 +4940,7 @@ extern "C" int rbd_stat(rbd_image_t image, rbd_image_info_t *info,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, stat_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-  int r = librbd::info(ictx, *info, infosize);
+  int r = librbd::info(ictx, *info, infosize, false);
   tracepoint(librbd, stat_exit, r, info);
   return r;
 }
@@ -4958,7 +4958,7 @@ extern "C" int rbd_get_size(rbd_image_t image, uint64_t *size)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, get_size_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-  int r = librbd::get_size(ictx, size);
+  int r = librbd::get_size(ictx, size, false);
   tracepoint(librbd, get_size_exit, r, *size);
   return r;
 }
@@ -5974,7 +5974,7 @@ extern "C" int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, read_iterate_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-  int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg);
+  int64_t r = librbd::read_iterate(ictx, ofs, len, false, cb, arg);
   tracepoint(librbd, read_iterate_exit, r);
   return r;
 }
@@ -5985,7 +5985,7 @@ extern "C" int rbd_read_iterate2(rbd_image_t image, uint64_t ofs, uint64_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, read_iterate2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-  int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg);
+  int64_t r = librbd::read_iterate(ictx, ofs, len, false, cb, arg);
   if (r > 0)
     r = 0;
   tracepoint(librbd, read_iterate2_exit, r);

@@ -443,7 +443,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
   }
 
   uint64_t size;
-  ASSERT_EQ(0, librbd::get_size(ictx, &size));
+  ASSERT_EQ(0, librbd::get_size(ictx, &size, false));
 
   uint32_t attempts = 0;
   while (attempts++ < 20 && size > 0) {
@@ -485,7 +485,7 @@ TEST_F(TestInternal, MultipleResize) {
   }
 
   uint64_t size;
-  ASSERT_EQ(0, librbd::get_size(ictx, &size));
+  ASSERT_EQ(0, librbd::get_size(ictx, &size, false));
   uint64_t original_size = size;
 
   std::vector<C_SaferCond*> contexts;
@@ -509,7 +509,7 @@ TEST_F(TestInternal, MultipleResize) {
     delete contexts[i];
   }
 
-  ASSERT_EQ(0, librbd::get_size(ictx, &size));
+  ASSERT_EQ(0, librbd::get_size(ictx, &size, false));
   ASSERT_EQ(0U, size);
 }
 
@@ -1748,7 +1748,7 @@ TEST_F(TestInternal, MissingDataPool) {
   ASSERT_EQ(pool_id, librbd::api::Image<>::get_data_pool_id(ictx));
 
   librbd::image_info_t info;
-  ASSERT_EQ(0, librbd::info(ictx, info, sizeof(info)));
+  ASSERT_EQ(0, librbd::info(ictx, info, sizeof(info), false));
 
   vector<librbd::snap_info_t> snaps;
   EXPECT_EQ(0, librbd::api::Snapshot<>::list(ictx, snaps));

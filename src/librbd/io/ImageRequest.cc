@@ -91,7 +91,7 @@ struct C_AssembleSnapshotDeltas : public C_AioRequest {
       for (auto& object_extent : object_extents) {
         Extents image_extents;
         io::util::extent_to_file(image_ctx, object_no, object_extent.get_off(),
-                                 object_extent.get_len(), image_extents);
+                                 object_extent.get_len(), false, image_extents);
 
         auto& intervals = (*image_snapshot_delta)[key];
         auto& assembled_intervals = (*assembled_image_snapshot_delta)[key];
@@ -129,7 +129,8 @@ struct C_RBD_Readahead : public Context {
 };
 
 template <typename I>
-void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
+void readahead(I *ictx, const Extents& image_extents, IOContext io_context,
+               bool skip_crypto) {
   uint64_t total_bytes = 0;
   for (auto& image_extent : image_extents) {
     total_bytes += image_extent.second;
@@ -145,7 +146,8 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
     return;
   }
 
-  uint64_t image_size = ictx->get_effective_image_size(ictx->snap_id);
+  uint64_t image_size = ictx->get_effective_image_size(
+          ictx->snap_id, skip_crypto);
   ictx->image_lock.unlock_shared();
 
   auto readahead_extent = ictx->readahead.update(image_extents, image_size);
@@ -157,7 +159,7 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
                          << readahead_length << dendl;
     LightweightObjectExtents readahead_object_extents;
     io::util::file_to_extents(ictx, readahead_offset, readahead_length, 0,
-                              &readahead_object_extents);
+                              false, &readahead_object_extents);
     for (auto& object_extent : readahead_object_extents) {
       ldout(ictx->cct, 20) << "(readahead) "
                            << data_object_name(ictx,
@@ -383,7 +385,8 @@ void ImageReadRequest<I>::send_request() {
   auto &image_extents = this->m_image_extents;
   if (image_ctx.cache && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-    readahead(get_image_ctx(&image_ctx), image_extents, this->m_io_context);
+    readahead(get_image_ctx(&image_ctx), image_extents, this->m_io_context,
+              false);
   }
 
   // map image extents to object extents
@@ -395,7 +398,7 @@ void ImageReadRequest<I>::send_request() {
     }
 
     util::file_to_extents(&image_ctx, extent.first, extent.second, buffer_ofs,
-                          &object_extents);
+                          false, &object_extents);
     buffer_ofs += extent.second;
   }
 
@@ -446,7 +449,7 @@ void AbstractImageWriteRequest<I>::send_request() {
 
     // map to object extents
     io::util::file_to_extents(&image_ctx, extent.first, extent.second, clip_len,
-                              &object_extents);
+                              false, &object_extents);
     clip_len += extent.second;
   }
 
@@ -838,7 +841,7 @@ void ImageListSnapsRequest<I>::send_request() {
 
     striper::LightweightObjectExtents object_extents;
     io::util::file_to_extents(&image_ctx, image_extent.first,
-                              image_extent.second, 0, &object_extents);
+                              image_extent.second, 0, false, &object_extents);
     for (auto& object_extent : object_extents) {
       object_number_extents[object_extent.object_no].emplace_back(
         object_extent.offset, object_extent.length);

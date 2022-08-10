@@ -36,7 +36,8 @@ void read_parent(ImageCtxT *image_ctx, uint64_t object_no,
                  const ZTracer::Trace &trace, Context* on_finish);
 
 template <typename ImageCtxT = librbd::ImageCtx>
-int clip_request(ImageCtxT *image_ctx, Extents *image_extents);
+int clip_request(ImageCtxT *image_ctx, Extents *image_extents,
+                 bool skip_crypto);
 
 inline uint64_t get_extents_length(const Extents &extents) {
   uint64_t total_bytes = 0;
@@ -56,17 +57,17 @@ bool trigger_copyup(ImageCtxT *image_ctx, uint64_t object_no,
                 
 template <typename ImageCtxT = librbd::ImageCtx>
 void file_to_extents(ImageCtxT *image_ctx, uint64_t offset, uint64_t length,
-                     uint64_t buffer_offset,
+                     uint64_t buffer_offset, bool skip_crypto,
                      striper::LightweightObjectExtents* object_extents);
 
 template <typename ImageCtxT = librbd::ImageCtx>
 void extent_to_file(ImageCtxT *image_ctx, uint64_t object_no, uint64_t offset,
-                    uint64_t length,
+                    uint64_t length, bool skip_crypto,
                     std::vector<std::pair<uint64_t, uint64_t> >& extents);
 
 template <typename ImageCtxT = librbd::ImageCtx>
 uint64_t get_file_offset(ImageCtxT *image_ctx, uint64_t object_no,
-                         uint64_t offset);
+                         uint64_t offset, bool skip_crypto);
 
 inline ObjectDispatchLayer get_previous_layer(ObjectDispatchLayer layer) {
   return (ObjectDispatchLayer)(((int)layer) - 1);

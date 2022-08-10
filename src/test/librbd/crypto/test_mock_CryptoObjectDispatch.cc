@@ -56,7 +56,8 @@ CopyupRequest<librbd::MockImageCtx>* CopyupRequest<
 namespace util {
 
 template <> uint64_t get_file_offset(
-        MockImageCtx *image_ctx, uint64_t object_no, uint64_t offset) {
+        MockImageCtx *image_ctx, uint64_t object_no, uint64_t offset,
+        bool skip_crypto) {
   return Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
                                   object_no, offset);
 }
@@ -228,7 +229,7 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
   void expect_remap_extents(uint64_t offset, uint64_t length) {
     EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, remap_extents(
             ElementsAre(Pair(offset, length)),
-            io::IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL));
+            io::IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL, false));
   }
 
   void expect_get_parent_overlap(uint64_t overlap) {

@@ -79,7 +79,7 @@ struct C_AlignedObjectReadRequest : public Context {
           auto crypto_ret = crypto->decrypt_aligned_extent(
                   extent,
                   io::util::get_file_offset(
-                          image_ctx, object_no, extent.offset));
+                          image_ctx, object_no, extent.offset, false));
           if (crypto_ret != 0) {
             ceph_assert(crypto_ret < 0);
             r = crypto_ret;
@@ -487,7 +487,8 @@ bool CryptoObjectDispatch<I>::write(
   if (m_crypto->is_aligned(object_off, data.length())) {
     auto r = m_crypto->encrypt(
             &data,
-            io::util::get_file_offset(m_image_ctx, object_no, object_off));
+            io::util::get_file_offset(m_image_ctx, object_no, object_off,
+                                      false));
     *dispatch_result = r == 0 ? io::DISPATCH_RESULT_CONTINUE
                               : io::DISPATCH_RESULT_COMPLETE;
     on_dispatched->complete(r);
@@ -624,7 +625,8 @@ int CryptoObjectDispatch<I>::prepare_copyup(
 
       io::Extents image_extents;
       io::util::extent_to_file(
-              m_image_ctx, object_no, aligned_off, aligned_len, image_extents);
+              m_image_ctx, object_no, aligned_off, aligned_len, false,
+              image_extents);
 
       ceph::bufferlist encrypted_bl;
       uint64_t position = 0;
