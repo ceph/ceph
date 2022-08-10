@@ -193,7 +193,7 @@ configuration files for monitoring services.
 
 Internally, cephadm already uses `Jinja2
 <https://jinja.palletsprojects.com/en/2.11.x/>`_ templates to generate the
-configuration files for all monitoring components. Starting from version x.x.x,
+configuration files for all monitoring components. Starting from version 17.2.3,
 cephadm uses Prometheus http service discovery support `http_sd_config
 <https://prometheus.io/docs/prometheus/2.28/configuration/configuration/#http_sd_config>`
 in order to get the currently configured targets from Ceph. Internally, `ceph-mgr`
