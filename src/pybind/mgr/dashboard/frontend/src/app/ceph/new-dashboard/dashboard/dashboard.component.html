@@ -1,4 +1,5 @@
-<div class="container-fluid">
+<div class="container-fluid"
+     *ngIf="healthData && enabledFeature$ | async as enabledFeature">
   <div class="row mx-0">
     <cd-card title="Details"
              i18n-title

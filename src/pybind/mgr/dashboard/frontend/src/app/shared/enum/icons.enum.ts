@@ -21,6 +21,7 @@ export enum Icons {
   analyse = 'fa fa-stethoscope', // Scrub
   deepCheck = 'fa fa-cog', // Deep Scrub, Setting, Configuration
   reweight = 'fa fa-balance-scale', // Reweight
+  up = 'fa fa-arrow-up', // Up
   left = 'fa fa-arrow-left', // Mark out
   right = 'fa fa-arrow-right', // Mark in
   down = 'fa fa-arrow-down', // Mark Down

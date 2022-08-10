@@ -12,6 +12,8 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
 import { CardComponent } from './card/card.component';
 import { DashboardPieComponent } from './dashboard-pie/dashboard-pie.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
+import { CardRowComponent } from './card-row/card-row.component';
+import { PgSummaryPipe } from './pg-summary.pipe';
 
 @NgModule({
   imports: [
@@ -27,6 +29,13 @@ import { DashboardComponent } from './dashboard/dashboard.component';
     SimplebarAngularModule
   ],
 
-  declarations: [DashboardComponent, CardComponent, DashboardPieComponent]
+  declarations: [
+    DashboardComponent,
+    CardComponent,
+    DashboardPieComponent,
+    DashboardPieComponent,
+    CardRowComponent,
+    PgSummaryPipe
+  ]
 })
 export class NewDashboardModule {}
