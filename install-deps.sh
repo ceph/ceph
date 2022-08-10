@@ -533,6 +533,7 @@ function preload_wheels_for_tox() {
     if test "$require" && ! test -d wheelhouse ; then
         type python3 > /dev/null 2>&1 || continue
         activate_virtualenv $top_srcdir || exit 1
+        python3 -m pip install --upgrade pip
         populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
         mv $wip_wheelhouse wheelhouse
         md5sum $require_files $constraint_files > $md5
