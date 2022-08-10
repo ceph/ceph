@@ -2604,10 +2604,8 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                 r += ['--cluster.peer={}'.format(peer)]
             # some alertmanager, by default, look elsewhere for a config
             r += ['--config.file=/etc/alertmanager/alertmanager.yml']
-        if daemon_type == 'loki':
-            r += ['--config.file=/etc/loki/loki.yml']
         if daemon_type == 'promtail':
-            r += ['--config.file=/etc/promtail/promtail.yml']
+            r += ['--config.expand-env']
         if daemon_type == 'node-exporter':
             r += ['--path.procfs=/host/proc',
                   '--path.sysfs=/host/sys',
