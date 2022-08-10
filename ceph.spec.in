@@ -154,7 +154,7 @@
 # do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
 # redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
 %undefine _annotated_build
-%if 0%{?rhel} >= 8 && 0%{?enable_devtoolset11:1}
+%if 0%{?rhel} == 8 && 0%{?enable_devtoolset11:1}
 %enable_devtoolset11
 %endif
 
@@ -203,17 +203,17 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
-%if 0%{?fedora} || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} == 9
 BuildRequires:	gcc-c++ >= 11
 %endif
-%if 0%{?rhel} >= 8
+%if 0%{?rhel} == 8
 BuildRequires:	%{gts_prefix}-gcc-c++
 BuildRequires:	%{gts_prefix}-build
 %ifarch aarch64
 BuildRequires:	%{gts_prefix}-libatomic-devel
 %endif
 %endif
-%if 0%{?fedora}
+%if 0%{?fedora} || 0%{?rhel} == 9
 BuildRequires:  libatomic
 %endif
 %if 0%{with tcmalloc}
@@ -335,7 +335,7 @@ BuildRequires:  systemtap-sdt-devel
 BuildRequires:  libubsan
 BuildRequires:  libasan
 %endif
-%if 0%{?rhel}
+%if 0%{?rhel} == 8
 BuildRequires:  %{gts_prefix}-annobin
 BuildRequires:  %{gts_prefix}-annobin-plugin-gcc
 BuildRequires:  %{gts_prefix}-libubsan-devel
