@@ -582,6 +582,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_cli_write_command('orch sd dump cert')
+    def _service_discovery_dump_cert(self) -> HandleCommandResult:
+        """
+        Returns service discovery server root certificate
+        """
+        completion = self.service_discovery_dump_cert()
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_read_command('orch ls')
     def _list_services(self,
                        service_type: Optional[str] = None,
