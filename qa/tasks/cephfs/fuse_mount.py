@@ -148,7 +148,7 @@ class FuseMount(CephFSMount):
         if not self.client_remote.is_mounted(conn_dir):
             self.client_remote.run(
                 args=["sudo", "mount", "-t", "fusectl", conn_dir, conn_dir],
-                timeout=30)
+                timeout=30, omit_sudo=False)
 
         try:
             ls_str = self.client_remote.sh("ls " + conn_dir,
