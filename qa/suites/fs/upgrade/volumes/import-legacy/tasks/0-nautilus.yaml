@@ -12,11 +12,12 @@ tasks:
       - ceph-mgr-cephadm
       - cephadm
       - ceph-immutable-object-cache
+    extra_packages:
+      - librados2
       - python3-rados
       - python3-rgw
       - python3-rbd
       - python3-cephfs
-    extra_packages: ['librados2']
 - print: "**** done installing nautilus"
 - ceph:
     log-ignorelist:
