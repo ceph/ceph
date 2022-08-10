@@ -2005,6 +2005,10 @@ Then run the following:
             if daemon_spec.daemon_type != 'osd':
                 daemon_spec = self.cephadm_services[daemon_type_to_service(
                     daemon_spec.daemon_type)].prepare_create(daemon_spec)
+            else:
+                # for OSDs, we still need to update config, just not carry out the full
+                # prepare_create function
+                daemon_spec.final_config, daemon_spec.deps = self.osd_service.generate_config(daemon_spec)
             return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig')))
 
         actions = {
