@@ -28,14 +28,15 @@ template <>
 struct ImageRequest<MockReplayImageCtx> {
   static ImageRequest *s_instance;
 
-  MOCK_METHOD4(aio_write, void(AioCompletion *c, const Extents &image_extents,
-                               const bufferlist &bl, int op_flags));
+  MOCK_METHOD5(aio_write, void(AioCompletion *c, const Extents &image_extents,
+                               const bufferlist &bl, int op_flags,
+                               int write_flags));
   static void aio_write(MockReplayImageCtx *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl,
-                        IOContext io_context, int op_flags,
+                        IOContext io_context, int op_flags, int write_flags,
                         const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
-    s_instance->aio_write(c, image_extents, bl, op_flags);
+    s_instance->aio_write(c, image_extents, bl, op_flags, write_flags);
   }
 
   MOCK_METHOD3(aio_discard, void(AioCompletion *c, const Extents& image_extents,
@@ -175,7 +176,8 @@ public:
                         io::AioCompletion **aio_comp, uint64_t off,
                         uint64_t len, const char *data) {
     EXPECT_CALL(mock_io_image_request,
-                aio_write(_, io::Extents{{off, len}}, BufferlistEqual(data), _))
+                aio_write(_, io::Extents{{off, len}}, BufferlistEqual(data), _,
+                          _))
                   .WillOnce(SaveArg<0>(aio_comp));
   }
 

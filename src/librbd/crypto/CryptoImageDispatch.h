@@ -36,7 +36,7 @@ public:
 
   bool write(
       io::AioCompletion* aio_comp, io::Extents &&image_extents,
-      bufferlist &&bl, IOContext io_context, int op_flags,
+      bufferlist &&bl, IOContext io_context, int op_flags, int write_flags,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,

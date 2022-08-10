@@ -39,7 +39,7 @@ public:
                        const ZTracer::Trace &parent_trace);
   static void aio_write(ImageCtxT *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl,
-                        IOContext io_context, int op_flags,
+                        IOContext io_context, int op_flags, int write_flags,
 			const ZTracer::Trace &parent_trace);
   static void aio_discard(ImageCtxT *ictx, AioCompletion *c,
                           Extents &&image_extents,
@@ -164,12 +164,12 @@ public:
 
   ImageWriteRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                     Extents &&image_extents, bufferlist &&bl,
-                    IOContext io_context, int op_flags,
+                    IOContext io_context, int op_flags, int write_flags,
 		    const ZTracer::Trace &parent_trace)
     : AbstractImageWriteRequest<ImageCtxT>(
 	image_ctx, aio_comp, std::move(image_extents), io_context, "write",
         parent_trace),
-      m_bl(std::move(bl)), m_op_flags(op_flags) {
+      m_bl(std::move(bl)), m_op_flags(op_flags), m_write_flags(write_flags) {
   }
 
 protected:
@@ -195,6 +195,7 @@ protected:
 private:
   bufferlist m_bl;
   int m_op_flags;
+  int m_write_flags;
 };
 
 template <typename ImageCtxT = ImageCtx>

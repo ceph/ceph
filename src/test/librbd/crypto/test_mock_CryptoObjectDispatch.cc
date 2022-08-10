@@ -454,7 +454,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteWithNoObject) {
   expect_get_parent_overlap(0);
   auto expected_data = (std::string(1, '\0') + std::string(8192, '1') +
                         std::string(4095, '\0'));
-  expect_object_write(0, expected_data, io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE,
+  expect_object_write(0, expected_data, io::WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE,
                       std::nullopt);
   dispatcher_ctx->complete(-ENOENT); // complete read
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
@@ -478,7 +478,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteFailCreate) {
   expect_get_parent_overlap(0);
   auto expected_data = (std::string(1, '\0') + std::string(8192, '1') +
                         std::string(4095, '\0'));
-  expect_object_write(0, expected_data, io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE,
+  expect_object_write(0, expected_data, io::WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE,
           std::nullopt);
   dispatcher_ctx->complete(-ENOENT); // complete read
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
@@ -580,7 +580,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteEmptyCopyup) {
   auto expected_data =
         std::string(1, '\0') + std::string(8192, '1') +
         std::string(4095, '\0');
-  expect_object_write(0, expected_data, io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE,
+  expect_object_write(0, expected_data, io::WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE,
                       std::nullopt);
   dispatcher_ctx->complete(-ENOENT); // complete second read
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
@@ -652,7 +652,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteWithExclusiveCreate) {
   expect_object_read(&extents);
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
           0, 1, std::move(write_data), mock_image_ctx->get_data_io_context(),
-          0, io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE, std::nullopt, {}, nullptr,
+          0, io::WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE, std::nullopt, {}, nullptr,
           nullptr, &dispatch_result, &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);

@@ -197,7 +197,7 @@ TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write_1(
     mock_image_ctx, aio_comp_1, {{0, 1}}, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx.get_data_io_context(), 0, 0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write_1.send();
@@ -210,7 +210,7 @@ TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write_2(
     mock_image_ctx, aio_comp_2, {{0, 1}}, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx.get_data_io_context(), 0, 0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write_2.send();
@@ -381,7 +381,7 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write(
     mock_image_ctx, aio_comp, {{0, 1}}, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx.get_data_io_context(), 0, 0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write.send();

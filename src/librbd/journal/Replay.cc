@@ -392,7 +392,7 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
     io::ImageRequest<I>::aio_write(&m_image_ctx, aio_comp,
                                    {{event.offset, event.length}},
                                    std::move(data),
-                                   m_image_ctx.get_data_io_context(), 0, {});
+                                   m_image_ctx.get_data_io_context(), 0, 0, {});
   }
 
   if (flush_required) {

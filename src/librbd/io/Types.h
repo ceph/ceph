@@ -134,7 +134,7 @@ enum {
 };
 
 enum {
-  OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE            = 1UL << 0
+  WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE            = 1UL << 0
 };
 
 enum {

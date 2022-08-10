@@ -55,8 +55,9 @@ bool ImageDispatch<I>::read(
 template <typename I>
 bool ImageDispatch<I>::write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    IOContext io_context, int op_flags, int write_flags,
+    const ZTracer::Trace &parent_trace, uint64_t tid,
+    std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -67,7 +68,7 @@ bool ImageDispatch<I>::write(
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_write(
     m_image_ctx, aio_comp, std::move(image_extents), std::move(bl),
-    io_context, op_flags, parent_trace);
+    io_context, op_flags, write_flags, parent_trace);
   return true;
 }
 

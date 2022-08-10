@@ -308,7 +308,7 @@ bool ObjectCacherObjectDispatch<I>::write(
 
   // cache layer does not handle version checking
   if (assert_version.has_value() ||
-      (write_flags & io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0) {
+      (write_flags & io::WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE) != 0) {
     ObjectExtents object_extents;
     object_extents.emplace_back(data_object_name(m_image_ctx, object_no),
                                 object_no, object_off, data.length(), 0);

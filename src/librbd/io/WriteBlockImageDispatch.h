@@ -57,8 +57,9 @@ public:
   }
   bool write(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-      uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+      IOContext io_context, int op_flags, int write_flags,
+      const ZTracer::Trace &parent_trace, uint64_t tid,
+      std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
   bool discard(

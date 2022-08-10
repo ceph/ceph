@@ -273,7 +273,7 @@ bool SimpleSchedulerObjectDispatch<I>::write(
 
   // don't try to batch assert version writes
   if (assert_version.has_value() ||
-      (write_flags & OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0) {
+      (write_flags & WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE) != 0) {
     dispatch_delayed_requests(object_no);
     return false;
   }

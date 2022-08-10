@@ -362,8 +362,7 @@ AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
     IOContext io_context, const char *trace_name,
     const ZTracer::Trace &parent_trace, Context *completion)
   : ObjectRequest<I>(ictx, object_no, io_context, trace_name, parent_trace,
-                     completion),
-    m_object_off(object_off), m_object_len(len)
+                     completion), m_object_off(object_off), m_object_len(len)
 {
   if (this->m_object_off == 0 &&
       this->m_object_len == ictx->get_object_size()) {
@@ -649,7 +648,7 @@ void AbstractObjectWriteRequest<I>::handle_post_write_object_map_update(int r) {
 
 template <typename I>
 void ObjectWriteRequest<I>::add_write_hint(neorados::WriteOp* wr) {
-  if ((m_write_flags & OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0) {
+  if ((m_write_flags & WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE) != 0) {
     wr->create(true);
   } else if (m_assert_version.has_value()) {
     wr->assert_version(m_assert_version.value());

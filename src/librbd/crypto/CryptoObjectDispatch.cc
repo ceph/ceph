@@ -289,7 +289,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
 
     bool check_create_exclusive() {
       bool exclusive =
-              ((write_flags & io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0);
+              ((write_flags & io::WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE) != 0);
       if (exclusive && object_exists) {
         complete(-EEXIST);
         return false;
@@ -375,7 +375,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
       auto new_write_flags = write_flags;
       auto new_assert_version = std::make_optional(version);
       if (!object_exists) {
-        new_write_flags |=  io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE;
+        new_write_flags |=  io::WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE;
         new_assert_version = std::nullopt;
       }
 
@@ -405,7 +405,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
 
     void handle_write(int r) {
       ldout(image_ctx->cct, 20) << "r=" << r << dendl;
-      bool exclusive = write_flags & io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE;
+      bool exclusive = write_flags & io::WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE;
       bool restart = false;
       if (r == -ERANGE && !assert_version.has_value()) {
         restart = true;

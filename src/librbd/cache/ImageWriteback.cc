@@ -57,7 +57,7 @@ void ImageWriteback<I>::aio_write(Extents &&image_extents,
   auto req = io::ImageDispatchSpec::create_write(
     *image_ctx, io::IMAGE_DISPATCH_LAYER_WRITEBACK_CACHE, aio_comp,
     std::move(image_extents), std::move(bl),
-    image_ctx->get_data_io_context(), fadvise_flags, trace);
+    image_ctx->get_data_io_context(), fadvise_flags, 0, trace);
   req->send();
 }
 

@@ -49,6 +49,9 @@ bool WriteLogImageDispatch<I>::read(
     return false;
   }
 
+  // WriteLogImageDispatch currently does not support read_flags
+  ceph_assert(read_flags == 0);
+
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   if (preprocess_length(aio_comp, image_extents)) {
     return true;
@@ -67,12 +70,16 @@ bool WriteLogImageDispatch<I>::read(
 template <typename I>
 bool WriteLogImageDispatch<I>::write(
     io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    IOContext io_context, int op_flags, int write_flags,
+    const ZTracer::Trace &parent_trace, uint64_t tid,
+    std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
+
+  // WriteLogImageDispatch currently does not support write_flags
+  ceph_assert(write_flags == 0);
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   if (preprocess_length(aio_comp, image_extents)) {

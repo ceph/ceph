@@ -56,8 +56,10 @@ public:
 
   struct Write {
     bufferlist bl;
+    int write_flags;
 
-    Write(bufferlist&& bl) : bl(std::move(bl)) {
+    Write(bufferlist&& bl, int write_flags)
+      : bl(std::move(bl)), write_flags(write_flags) {
     }
   };
 
@@ -151,11 +153,12 @@ public:
   static ImageDispatchSpec* create_write(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
-      bufferlist &&bl, IOContext io_context, int op_flags,
+      bufferlist &&bl, IOContext io_context, int op_flags, int write_flags,
       const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
-                                 std::move(image_extents), Write{std::move(bl)},
+                                 std::move(image_extents),
+                                 Write{std::move(bl), write_flags},
                                  io_context, op_flags, parent_trace);
   }
 

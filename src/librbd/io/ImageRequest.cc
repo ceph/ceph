@@ -241,9 +241,10 @@ template <typename I>
 void ImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                 Extents &&image_extents, bufferlist &&bl,
                                 IOContext io_context, int op_flags,
+                                int write_flags,
 				const ZTracer::Trace &parent_trace) {
   ImageWriteRequest<I> req(*ictx, c, std::move(image_extents), std::move(bl),
-                           io_context, op_flags, parent_trace);
+                           io_context, op_flags, write_flags, parent_trace);
   req.send();
 }
 
@@ -537,7 +538,7 @@ ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
 
   auto req = ObjectDispatchSpec::create_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-    object_extent.offset, std::move(bl), io_context, m_op_flags, 0,
+    object_extent.offset, std::move(bl), io_context, m_op_flags, m_write_flags,
     std::nullopt, journal_tid, this->m_trace, on_finish);
   return req;
 }

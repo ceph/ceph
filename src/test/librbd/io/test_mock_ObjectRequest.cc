@@ -768,7 +768,7 @@ TEST_F(TestMockIoObjectRequest, WriteWithCreateExclusiveFlag) {
     auto req = MockObjectWriteRequest::create_write(
             &mock_image_ctx, 0, 0, std::move(bl),
             mock_image_ctx.get_data_io_context(), 0,
-            OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE, std::nullopt, {}, &ctx);
+            WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE, std::nullopt, {}, &ctx);
     req->send();
     ASSERT_EQ(0, ctx.wait());
   }
@@ -788,7 +788,7 @@ TEST_F(TestMockIoObjectRequest, WriteWithCreateExclusiveFlag) {
     auto req = MockObjectWriteRequest::create_write(
             &mock_image_ctx, 0, 0, std::move(bl),
             mock_image_ctx.get_data_io_context(), 0,
-            OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE, std::nullopt, {}, &ctx);
+            WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE, std::nullopt, {}, &ctx);
     req->send();
     ASSERT_EQ(-EEXIST, ctx.wait());
   }
