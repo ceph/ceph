@@ -168,6 +168,26 @@ class CephFSMount(object):
                      get_file(self.client_remote, self.client_keyring_path,
                               sudo=True).decode())
 
+    def is_stuck(self):
+        """
+        Check if mount is stuck/in a hanged state.
+        """
+        if not self.is_mounted():
+            return False
+
+        retval = self.client_remote.run(args=f'sudo stat {self.hostfs_mntpt}',
+                                        omit_sudo=False, wait=False).returncode
+        if retval == 0:
+            return False
+
+        time.sleep(10)
+        proc = self.client_remote.run(args='ps -ef', stdout=StringIO())
+        # if proc was running even after 10 seconds, it has to be stuck.
+        if f'stat {self.hostfs_mntpt}' in proc.stdout.getvalue():
+            log.critical('client mounted at self.hostfs_mntpt is stuck!')
+            return True
+        return False
+
     def is_mounted(self):
         return self.hostfs_mntpt in \
             self.client_remote.read_file('/proc/self/mounts',stdout=StringIO())
