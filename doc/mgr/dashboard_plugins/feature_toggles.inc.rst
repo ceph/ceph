@@ -7,7 +7,7 @@ This plug-in allows to enable or disable some features from the Ceph Dashboard
 on-demand. When a feature becomes disabled:
 
 - Its front-end elements (web pages, menu entries, charts, etc.) will become hidden.
-- Its associated REST API endpoints will reject any further requests (404, Not Found Error).
+- Its associated REST API endpoints will reject any further requests (404, Not Found error).
 
 The main purpose of this plug-in is to allow ad-hoc customizations of the workflows exposed
 by the dashboard. Additionally, it could allow for dynamically enabling experimental
