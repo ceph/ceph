@@ -281,11 +281,12 @@ void usage()
   cout << "  role delete                remove a role\n";
   cout << "  role get                   get a role\n";
   cout << "  role list                  list roles with specified path prefix\n";
-  cout << "  role modify                modify the assume role policy of an existing role\n";
+  cout << "  role-trust-policy modify   modify the assume role policy of an existing role\n";
   cout << "  role-policy put            add/update permission policy to role\n";
   cout << "  role-policy list           list policies attached to a role\n";
   cout << "  role-policy get            get the specified inline policy document embedded with the given role\n";
   cout << "  role-policy delete         remove policy attached to a role\n";
+  cout << "  role update                update max_session_duration of a role\n";
   cout << "  reshard add                schedule a resharding of a bucket\n";
   cout << "  reshard list               list all bucket resharding or scheduled to be resharded\n";
   cout << "  reshard status             read bucket resharding status\n";
@@ -803,12 +804,13 @@ enum class OPT {
   ROLE_CREATE,
   ROLE_DELETE,
   ROLE_GET,
-  ROLE_MODIFY,
+  ROLE_TRUST_POLICY_MODIFY,
   ROLE_LIST,
   ROLE_POLICY_PUT,
   ROLE_POLICY_LIST,
   ROLE_POLICY_GET,
   ROLE_POLICY_DELETE,
+  ROLE_UPDATE,
   RESHARD_ADD,
   RESHARD_LIST,
   RESHARD_STATUS,
@@ -1030,7 +1032,7 @@ static SimpleCmd::Commands all_cmds = {
   { "role create", OPT::ROLE_CREATE },
   { "role delete", OPT::ROLE_DELETE },
   { "role get", OPT::ROLE_GET },
-  { "role modify", OPT::ROLE_MODIFY },
+  { "role-trust-policy modify", OPT::ROLE_TRUST_POLICY_MODIFY },
   { "role list", OPT::ROLE_LIST },
   { "role policy put", OPT::ROLE_POLICY_PUT },
   { "role-policy put", OPT::ROLE_POLICY_PUT },
@@ -1040,6 +1042,7 @@ static SimpleCmd::Commands all_cmds = {
   { "role-policy get", OPT::ROLE_POLICY_GET },
   { "role policy delete", OPT::ROLE_POLICY_DELETE },
   { "role-policy delete", OPT::ROLE_POLICY_DELETE },
+  { "role update", OPT::ROLE_UPDATE },
   { "reshard bucket", OPT::BUCKET_RESHARD },
   { "reshard add", OPT::RESHARD_ADD },
   { "reshard list", OPT::RESHARD_LIST },
@@ -3474,7 +3477,7 @@ int main(int argc, const char **argv)
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
   std::string api_name;
-  std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
+  std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix, max_session_duration;
   std::string redirect_zone;
   bool redirect_zone_set = false;
   list<string> endpoints;
@@ -4069,6 +4072,8 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-session-duration", (char*)NULL)) {
+      max_session_duration = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
       totp_serial = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-pin", (char*)NULL)) {
@@ -4413,12 +4418,13 @@ int main(int argc, const char **argv)
       if (rgw::sal::User::empty(user) && opt_cmd != OPT::ROLE_CREATE
                           && opt_cmd != OPT::ROLE_DELETE
                           && opt_cmd != OPT::ROLE_GET
-                          && opt_cmd != OPT::ROLE_MODIFY
+                          && opt_cmd != OPT::ROLE_TRUST_POLICY_MODIFY
                           && opt_cmd != OPT::ROLE_LIST
                           && opt_cmd != OPT::ROLE_POLICY_PUT
                           && opt_cmd != OPT::ROLE_POLICY_LIST
                           && opt_cmd != OPT::ROLE_POLICY_GET
                           && opt_cmd != OPT::ROLE_POLICY_DELETE
+                          && opt_cmd != OPT::ROLE_UPDATE
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
                           && opt_cmd != OPT::RESHARD_STATUS) {
@@ -6639,7 +6645,7 @@ int main(int argc, const char **argv)
       show_role_info(role.get(), formatter.get());
       return 0;
     }
-  case OPT::ROLE_MODIFY:
+  case OPT::ROLE_TRUST_POLICY_MODIFY:
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
@@ -6797,6 +6803,30 @@ int main(int argc, const char **argv)
            << role_name << std::endl;
       return 0;
   }
+  case OPT::ROLE_UPDATE:
+    {
+      if (role_name.empty()) {
+        cerr << "ERROR: role name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant);
+      ret = role->get(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      if (!role->validate_max_session_duration(dpp())) {
+        ret = -EINVAL;
+        return ret;
+      }
+      role->update_max_session_duration(max_session_duration);
+      ret = role->update(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "Max session duration updated successfully for role: " << role_name << std::endl;
+      return 0;
+    }
   default:
     output_user_info = false;
   }
