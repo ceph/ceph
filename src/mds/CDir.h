@@ -323,6 +323,11 @@ public:
    */
   bool scrub_local();
 
+  /**
+   * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
+   */
+  void go_bad_dentry(snapid_t last, std::string_view dname);
+
   const scrub_info_t *scrub_info() const {
     if (!scrub_infop)
       scrub_info_create();
@@ -657,11 +662,6 @@ protected:
       const std::set<snapid_t> *snaps,
       double rand_threshold,
       bool *force_dirty);
-
-  /**
-   * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
-   */
-  void go_bad_dentry(snapid_t last, std::string_view dname);
 
   /**
    * Go bad due to a damaged header (register with damagetable and go BADFRAG)

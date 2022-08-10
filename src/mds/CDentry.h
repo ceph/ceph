@@ -265,6 +265,8 @@ public:
   bool is_new() const { return state_test(STATE_NEW); }
   void clear_new() { state_clear(STATE_NEW); }
   
+  bool scrub(snapid_t next_seq);
+
   // -- exporting
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
