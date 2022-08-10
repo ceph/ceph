@@ -153,7 +153,7 @@
 # do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
 # redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
 %undefine _annotated_build
-%if 0%{?rhel} >= 8
+%if 0%{?rhel} >= 8 && 0%{?enable_devtoolset11:1}
 %enable_devtoolset11
 %endif
 
