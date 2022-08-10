@@ -101,7 +101,10 @@ class Device(object):
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         if not sys_info.devices:
-            sys_info.devices = disk.get_devices()
+            if self.path:
+                sys_info.devices = disk.get_devices(device=self.path)
+            else:
+                sys_info.devices = disk.get_devices()
         self.sys_api = sys_info.devices.get(self.abspath, {})
         self.partitions = self._get_partitions()
         self.lv_api = None
