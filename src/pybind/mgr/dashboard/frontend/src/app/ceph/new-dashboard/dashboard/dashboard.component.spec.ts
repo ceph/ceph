@@ -14,11 +14,15 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { AlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
-import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
+import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { PgCategoryService } from '../../shared/pg-category.service';
+import { CardRowComponent } from '../card-row/card-row.component';
 import { CardComponent } from '../card/card.component';
 import { DashboardPieComponent } from '../dashboard-pie/dashboard-pie.component';
+import { PgSummaryPipe } from '../pg-summary.pipe';
 import { DashboardComponent } from './dashboard.component';
 
 export class SummaryServiceMock {
@@ -41,6 +45,7 @@ describe('Dashbord Component', () => {
   let orchestratorService: MgrModuleService;
   let getHealthSpy: jasmine.Spy;
   let getAlertsSpy: jasmine.Spy;
+  let fakeFeatureTogglesService: jasmine.Spy;
 
   const healthPayload: Record<string, any> = {
     health: { status: 'HEALTH_OK' },
@@ -50,12 +55,12 @@ describe('Dashbord Component', () => {
     hosts: 0,
     rgw: 0,
     fs_map: { filesystems: [], standbys: [] },
-    iscsi_daemons: 0,
+    iscsi_daemons: 1,
     client_perf: {},
     scrub_status: 'Inactive',
     pools: [],
     df: { stats: {} },
-    pg_info: { object_stats: { num_objects: 0 } }
+    pg_info: { object_stats: { num_objects: 1 } }
   };
 
   const alertsPayload: AlertmanagerAlert[] = [
@@ -145,13 +150,32 @@ describe('Dashbord Component', () => {
   };
 
   configureTestBed({
-    imports: [RouterTestingModule, HttpClientTestingModule, ToastrModule.forRoot(), PipesModule],
-    declarations: [DashboardComponent, CardComponent, DashboardPieComponent],
+    imports: [RouterTestingModule, HttpClientTestingModule, ToastrModule.forRoot(), SharedModule],
+    declarations: [
+      DashboardComponent,
+      CardComponent,
+      DashboardPieComponent,
+      CardRowComponent,
+      PgSummaryPipe
+    ],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: [{ provide: SummaryService, useClass: SummaryServiceMock }, CssHelper]
+    providers: [
+      { provide: SummaryService, useClass: SummaryServiceMock },
+      CssHelper,
+      PgCategoryService
+    ]
   });
 
   beforeEach(() => {
+    fakeFeatureTogglesService = spyOn(TestBed.inject(FeatureTogglesService), 'get').and.returnValue(
+      of({
+        rbd: true,
+        mirroring: true,
+        iscsi: true,
+        cephfs: true,
+        rgw: true
+      })
+    );
     fixture = TestBed.createComponent(DashboardComponent);
     component = fixture.componentInstance;
     configurationService = TestBed.inject(ConfigurationService);
@@ -168,6 +192,7 @@ describe('Dashbord Component', () => {
   });
 
   it('should render all cards', () => {
+    fixture.detectChanges();
     const dashboardCards = fixture.debugElement.nativeElement.querySelectorAll('cd-card');
     expect(dashboardCards.length).toBe(5);
   });
@@ -259,5 +284,33 @@ describe('Dashbord Component', () => {
 
     expect(successNotification).toBe(null);
     expect(dangerNotification).toBe(null);
+  });
+
+  describe('features disabled', () => {
+    beforeEach(() => {
+      fakeFeatureTogglesService.and.returnValue(
+        of({
+          rbd: false,
+          mirroring: false,
+          iscsi: false,
+          cephfs: false,
+          rgw: false
+        })
+      );
+      fixture = TestBed.createComponent(DashboardComponent);
+      component = fixture.componentInstance;
+    });
+
+    it('should not render items related to disabled features', () => {
+      fixture.detectChanges();
+
+      const iscsiCard = fixture.debugElement.query(By.css('li[id=iscsi-item]'));
+      const rgwCard = fixture.debugElement.query(By.css('li[id=rgw-item]'));
+      const mds = fixture.debugElement.query(By.css('li[id=mds-item]'));
+
+      expect(iscsiCard).toBeFalsy();
+      expect(rgwCard).toBeFalsy();
+      expect(mds).toBeFalsy();
+    });
   });
 });
