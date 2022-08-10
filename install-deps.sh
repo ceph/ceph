@@ -234,25 +234,22 @@ function version_lt {
 
 function ensure_decent_gcc_on_rh {
     local old=$(gcc -dumpversion)
-    local expected=10.2
     local dts_ver=$1
-    if version_lt $old $expected; then
+    if version_lt $old $dts_ver; then
 	if test -t 1; then
 	    # interactive shell
 	    cat <<EOF
 Your GCC is too old. Please run following command to add DTS to your environment:
 
-scl enable devtoolset-8 bash
+scl enable gcc-toolset-$dts_ver bash
 
-Or add following line to the end of ~/.bashrc to add it permanently:
+Or add the following line to the end of ~/.bashrc and run "source ~/.bashrc" to add it permanently:
 
-source scl_source enable devtoolset-8
-
-see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
+source scl_source enable gcc-toolset-$dts_ver
 EOF
 	else
 	    # non-interactive shell
-	    source /opt/rh/devtoolset-$dts_ver/enable
+	    source /opt/rh/gcc-toolset-$dts_ver/enable
 	fi
     fi
 }
