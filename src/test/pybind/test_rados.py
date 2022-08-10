@@ -943,6 +943,7 @@ class TestIoctx(object):
         r, _, _ = self.rados.mon_command(json.dumps(cmd), b'')
         eq(r, 0)
 
+    @attr('wait')
     def test_aio_read_wait_for_complete(self):
         # use wait_for_complete() and wait for cb by
         # watching retval[0]
@@ -978,6 +979,7 @@ class TestIoctx(object):
         eq(retval[0], payload)
         eq(sys.getrefcount(comp), 2)
 
+    @attr('wait')
     def test_aio_read_wait_for_complete_and_cb(self):
         # use wait_for_complete_and_cb(), verify retval[0] is
         # set by the time we regain control
@@ -1005,6 +1007,7 @@ class TestIoctx(object):
         eq(retval[0], payload)
         eq(sys.getrefcount(comp), 2)
 
+    @attr('wait')
     def test_aio_read_wait_for_complete_and_cb_error(self):
         # error case, use wait_for_complete_and_cb(), verify retval[0] is
         # set by the time we regain control

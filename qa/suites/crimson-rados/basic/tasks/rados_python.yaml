@@ -12,4 +12,4 @@ tasks:
 - workunit:
     clients:
       client.0:
-        - rados/test_python.sh --eval-attr 'not (tier or snap or ec or bench or stats)'
+        - rados/test_python.sh --eval-attr 'not (wait or tier or snap or ec or bench or stats)'
