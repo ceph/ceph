@@ -95,6 +95,7 @@ class OSD final : public crimson::net::Dispatcher,
   osd_stat_t osd_stat;
   uint32_t osd_stat_seq = 0;
   void update_stats();
+  void osd_check_down();
   MessageURef get_stats() const final;
 
   // AuthHandler methods

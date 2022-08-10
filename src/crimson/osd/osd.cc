@@ -794,6 +794,27 @@ void OSD::update_stats()
   });
 }
 
+void OSD::osd_check_down()
+{
+  bool need_shutdown = false;
+  if (!pg_shard_manager.is_active())
+    return;
+
+  if (!osdmap->exists(whoami)) {
+    logger().warn("osd.{} is not in OSDMap, shutting down", whoami);
+    need_shutdown = true;
+  } else if (osdmap->is_stop(whoami)) {
+    logger().warn("osd.{} is stopped, shutting down", whoami);
+    need_shutdown = true;
+  } else if (osdmap->is_down(whoami)) {
+    logger().warn("osd.{} is down, shutting down", whoami);
+    need_shutdown = true;
+  }
+  if (need_shutdown) {
+    kill(getpid(), SIGINT);
+  }
+}
+
 MessageURef OSD::get_stats() const
 {
   // MPGStats::had_map_for is not used since PGMonitor was removed
@@ -904,6 +925,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     return pg_shard_manager.get_map(cur).then([this](OSDMapService::cached_map_t&& o) {
       osdmap = std::move(o);
       pg_shard_manager.update_map(osdmap);
+      osd_check_down();
       if (pg_shard_manager.get_up_epoch() == 0 &&
           osdmap->is_up(whoami) &&
           osdmap->get_addrs(whoami) == public_msgr->get_myaddrs()) {
