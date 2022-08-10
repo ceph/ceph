@@ -205,11 +205,18 @@ BuildRequires:	fuse-devel
 %if 0%{?fedora} || 0%{?suse_version}
 BuildRequires:	gcc-c++ >= 11
 %endif
-%if 0%{?rhel} >= 8
+%if 0%{?rhel} == 8
 BuildRequires:	gcc-toolset-11-gcc-c++
 BuildRequires:	gcc-toolset-11-build
 %ifarch aarch64
 BuildRequires:	gcc-toolset-11-libatomic-devel
+%endif
+%endif
+%if 0%{?rhel} == 9
+BuildRequires:	gcc-toolset-12-gcc-c++
+BuildRequires:	gcc-toolset-12-build
+%ifarch aarch64
+BuildRequires:	gcc-toolset-12-libatomic-devel
 %endif
 %endif
 %if 0%{?fedora}
