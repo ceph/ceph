@@ -9154,6 +9154,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
 
   string etag;
   string content_type;
+  string storage_class;
   ACLOwner owner;
 
   object.meta.size = astate->size;
@@ -9167,6 +9168,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   iter = astate->attrset.find(RGW_ATTR_CONTENT_TYPE);
   if (iter != astate->attrset.end()) {
     content_type = rgw_bl_str(iter->second);
+  }
+  iter = astate->attrset.find(RGW_ATTR_STORAGE_CLASS);
+  if (iter != astate->attrset.end()) {
+    storage_class = rgw_bl_str(iter->second);
   }
   iter = astate->attrset.find(RGW_ATTR_ACL);
   if (iter != astate->attrset.end()) {
@@ -9196,6 +9201,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
 
   object.meta.etag = etag;
   object.meta.content_type = content_type;
+  object.meta.storage_class = storage_class;
   object.meta.owner = owner.get_id().to_str();
   object.meta.owner_display_name = owner.get_display_name();
 
@@ -9207,6 +9213,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   list_state.meta.category = main_category;
   list_state.meta.etag = etag;
   list_state.meta.content_type = content_type;
+  list_state.meta.storage_class = storage_class;
 
   librados::IoCtx head_obj_ctx; // initialize to data pool so we can get pool id
   int ret = get_obj_head_ioctx(dpp, bucket_info, obj, &head_obj_ctx);
