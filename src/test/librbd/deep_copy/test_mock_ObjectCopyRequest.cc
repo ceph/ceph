@@ -332,7 +332,7 @@ public:
 
   void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx, int r = 0) {
     EXPECT_CALL(*mock_image_ctx.io_object_dispatcher,
-            prepare_copyup(_, _)).WillOnce(Return(r));
+            prepare_copyup(_, _, _)).WillOnce(Return(r));
   }
 
   int create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,

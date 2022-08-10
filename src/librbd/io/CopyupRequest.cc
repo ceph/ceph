@@ -748,7 +748,7 @@ int CopyupRequest<I>::prepare_copyup_data() {
 
   // Let dispatch layers have a chance to process the data
   auto r = m_image_ctx->io_object_dispatcher->prepare_copyup(
-    m_object_no, &snapshot_sparse_bufferlist);
+    m_object_no, &snapshot_sparse_bufferlist, false);
   if (r < 0) {
     return r;
   }

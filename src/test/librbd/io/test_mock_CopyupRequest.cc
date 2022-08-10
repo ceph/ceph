@@ -362,14 +362,14 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
 
   void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx, int r = 0) {
     EXPECT_CALL(*mock_image_ctx.io_object_dispatcher,
-            prepare_copyup(_, _)).WillOnce(Return(r));
+            prepare_copyup(_, _, _)).WillOnce(Return(r));
   }
 
   void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx,
                              const SparseBufferlist& in_sparse_bl,
                              const SparseBufferlist& out_sparse_bl) {
     EXPECT_CALL(*mock_image_ctx.io_object_dispatcher,
-                prepare_copyup(_, _))
+                prepare_copyup(_, _, _))
       .WillOnce(WithArg<1>(Invoke(
         [in_sparse_bl, out_sparse_bl]
         (SnapshotSparseBufferlist* snap_sparse_bl) {

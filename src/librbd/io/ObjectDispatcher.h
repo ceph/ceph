@@ -36,7 +36,8 @@ public:
 
   int prepare_copyup(
       uint64_t object_no,
-      SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override;
+      SnapshotSparseBufferlist* snapshot_sparse_bufferlist,
+      bool skip_crypto) override;
 
   using typename Dispatcher<ImageCtxT, ObjectDispatcherInterface>::C_LayerIterator;
 

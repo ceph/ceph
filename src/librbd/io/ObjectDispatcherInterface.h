@@ -25,7 +25,8 @@ public:
 
   virtual int prepare_copyup(
       uint64_t object_no,
-      SnapshotSparseBufferlist* snapshot_sparse_bufferlist) = 0;
+      SnapshotSparseBufferlist* snapshot_sparse_bufferlist,
+      bool skip_crypto) = 0;
 
 };
 

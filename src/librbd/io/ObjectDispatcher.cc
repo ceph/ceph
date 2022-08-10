@@ -175,12 +175,15 @@ void ObjectDispatcher<I>::extent_overwritten(
 template <typename I>
 int ObjectDispatcher<I>::prepare_copyup(
     uint64_t object_no,
-    SnapshotSparseBufferlist* snapshot_sparse_bufferlist) {
+    SnapshotSparseBufferlist* snapshot_sparse_bufferlist, bool skip_crypto) {
   auto cct = this->m_image_ctx->cct;
   ldout(cct, 20) << "object_no=" << object_no << dendl;
 
   std::shared_lock locker{this->m_lock};
   for (auto it : this->m_dispatches) {
+    if (skip_crypto && it.first == OBJECT_DISPATCH_LAYER_CRYPTO) {
+      continue;
+    }
     auto& object_dispatch_meta = it.second;
     auto object_dispatch = object_dispatch_meta.dispatch;
     auto r = object_dispatch->prepare_copyup(
