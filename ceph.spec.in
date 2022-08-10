@@ -39,7 +39,7 @@
 %if 0%{?rhel} < 9
 %bcond_with system_pmdk
 %else
-%ifarch s390x
+%ifarch s390x aarch64
 %bcond_with system_pmdk
 %else
 %bcond_without system_pmdk
