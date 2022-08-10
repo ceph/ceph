@@ -1,7 +1,7 @@
-import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 
 import { ClusterService } from '~/app/shared/api/cluster.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
@@ -18,6 +18,7 @@ import {
   FeatureTogglesMap$,
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
+import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 
 @Component({
@@ -28,12 +29,11 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 export class DashboardComponent implements OnInit, OnDestroy {
   detailsCardData: DashboardDetails = {};
   osdSettings$: Observable<any>;
-  interval: number;
+  interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
   color: string;
   capacity$: Observable<any>;
-  healthData$: Observable<Object>;
   prometheusAlerts$: Observable<AlertmanagerAlert[]>;
 
   isAlertmanagerConfigured = false;
@@ -48,6 +48,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   alerts: AlertmanagerAlert[];
   crticialActiveAlerts: number;
   warningActiveAlerts: number;
+  healthData: any;
+  categoryPgAmount: Record<string, number> = {};
+  totalPgs = 0;
 
   constructor(
     private summaryService: SummaryService,
@@ -59,30 +62,30 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private featureToggles: FeatureTogglesService,
     private healthService: HealthService,
     public prometheusService: PrometheusService,
-    private ngZone: NgZone
+    private refreshIntervalService: RefreshIntervalService
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {
+    this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
+      this.getHealth();
+      this.triggerPrometheusAlerts();
+    });
     this.getDetailsCardData();
     this.osdSettings$ = this.osdService.getOsdSettings();
     this.capacity$ = this.clusterService.getCapacity();
-    this.healthData$ = this.healthService.getMinimalHealth();
-    this.triggerPrometheusAlerts();
-
-    this.ngZone.runOutsideAngular(() => {
-      this.interval = window.setInterval(() => {
-        this.ngZone.run(() => {
-          this.triggerPrometheusAlerts();
-        });
-      }, 5000);
-    });
   }
 
   ngOnDestroy() {
-    window.clearInterval(this.interval);
+    this.interval.unsubscribe();
+  }
+
+  getHealth() {
+    this.healthService.getMinimalHealth().subscribe((data: any) => {
+      this.healthData = data;
+    });
   }
 
   toggleAlertsWindow(type: string) {

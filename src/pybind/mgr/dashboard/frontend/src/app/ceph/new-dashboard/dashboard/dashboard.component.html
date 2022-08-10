@@ -1,4 +1,5 @@
-<div class="container-fluid">
+<div class="container-fluid"
+     *ngIf="healthData && enabledFeature$ | async as enabledFeature">
   <div class="row mx-0">
     <cd-card title="Details"
              i18n-title
@@ -16,8 +17,7 @@
     <cd-card title="Status"
              i18n-title
              class="col-sm-6 px-3">
-      <div class="d-flex ms-4 me-4 mb-5"
-           *ngIf="healthData$ | async as healthData">
+      <div class="d-flex ms-4 me-4 mb-5">
         <i *ngIf="healthData.health?.status"
            [ngClass]="[healthData.health.status | healthIcon, icons.large]"
            [ngStyle]="healthData.health.status | healthColor"
@@ -88,14 +88,88 @@
       </ng-container>
     </cd-card>
   </div>
-
+  <!-- Inventory Card -->
   <div class="row mx-0">
     <cd-card title="Inventory"
              i18n-title
              class="col-sm-3 px-3">
-      <div class="ms-4 me-4">
-        Text
-      </div>
+      <!-- Hosts -->
+      <li class="border-top list-group-item">
+        <cd-card-row [data]="healthData.hosts"
+                     link="/hosts"
+                     title="Host"
+                     summaryType="simplified"
+                     *ngIf="healthData.hosts != null"></cd-card-row>
+      </li>
+      <!-- Monitors -->
+      <li class="border-top list-group-item">
+        <cd-card-row [data]="healthData.mon_status.monmap.mons.length"
+                     link="/monitor"
+                     title="Monitor"
+                     summaryType="simplified"
+                     *ngIf="healthData.mon_status"></cd-card-row>
+      </li>
+      <!-- Managers -->
+      <li *ngIf="healthData.mgr_map"
+          class="border-top list-group-item">
+        <cd-card-row [data]="healthData.mgr_map | mgrSummary"
+                     link="/manager"
+                     title="Manager"
+                     *ngIf="healthData.mgr_map"></cd-card-row>
+      </li>
+      <!-- OSDs -->
+      <li class="border-top list-group-item">
+        <cd-card-row [data]="healthData.osd_map | osdSummary"
+                     link="/osd"
+                     title="OSD"
+                     summaryType="osd"
+                     *ngIf="healthData.osd_map"></cd-card-row>
+      </li>
+      <!-- Pools -->
+      <li *ngIf="healthData.pools"
+          class="border-top list-group-item">
+        <cd-card-row [data]="healthData.pools.length"
+                     link="/pool"
+                     title="Pool"
+                     summaryType="simplified"
+                     *ngIf="healthData.pools"></cd-card-row>
+      </li>
+      <!-- PG Info -->
+      <li class="border-top list-group-item">
+        <cd-card-row [data]="healthData.pg_info | pgSummary"
+                     title="PG"
+                     *ngIf="healthData.pg_info"></cd-card-row>
+      </li>
+      <!-- Object gateways -->
+      <li *ngIf="enabledFeature.rgw && healthData.rgw != null"
+          class="border-top list-group-item"
+          id="rgw-item">
+        <cd-card-row [data]="healthData.rgw"
+                     link="/rgw/daemon"
+                     title="Object Gateway"
+                     summaryType="simplified"
+                     *ngIf="healthData.rgw"></cd-card-row>
+      </li>
+
+      <!-- Metadata Servers -->
+      <li *ngIf="enabledFeature.cephfs && healthData.fs_map"
+          class="border-top list-group-item"
+          id="mds-item">
+        <cd-card-row [data]="healthData.fs_map | mdsSummary"
+                     title="Metadata Server"
+                     *ngIf="healthData.fs_map"></cd-card-row>
+      </li>
+
+      <!-- iSCSI Gateways -->
+      <li *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons != null"
+          class="border-top list-group-item"
+          id="iscsi-item">
+        <cd-card-row [data]="healthData.iscsi_daemons"
+                     link="/iscsi/daemon"
+                     title="iSCSI Gateway"
+                     summaryType="iscsi"
+                     *ngIf="healthData.iscsi_daemons"></cd-card-row>
+      </li>
     </cd-card>
 
     <cd-card title="Capacity utilization"
