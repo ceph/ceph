@@ -4849,7 +4849,11 @@ void RGWDeleteObj::execute(optional_yield y)
         obj_size = astate->size;
         etag = astate->attrset[RGW_ATTR_ETAG].to_str();
       }
-
+      if(s->bucket->get_info().versioning_enabled()&&!s->object->have_instance()){
+        rgw_bucket_olh_entry olh;
+        op_ret = store->getRados()->bi_get_olh(this,s->bucket->get_info(),s->object->get_obj(),&olh);
+        if(op_ret < 0) return;
+      }
       // ignore return value from get_obj_attrs in all other cases
       op_ret = 0;
 
