@@ -328,7 +328,8 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   ret = validate.process(null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: token validation ERROR: "
-                  << token_body_bl.c_str() << dendl;
+                  << std::string(token_body_bl.c_str(),
+                                 token_body_bl.length()) << dendl;
     throw ret;
   }
 
