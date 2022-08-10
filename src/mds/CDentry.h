@@ -261,6 +261,8 @@ public:
   void mark_auth();
   void clear_auth();
   
+  bool scrub(snapid_t next_seq);
+
   // -- exporting
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
