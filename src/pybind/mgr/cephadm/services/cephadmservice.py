@@ -1049,7 +1049,7 @@ class CephadmAgent(CephService):
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
-        if not self.mgr.cherrypy_thread:
+        if not self.mgr.http_server.agent:
             raise OrchestratorError('Cannot deploy agent before creating cephadm endpoint')
 
         keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_id, host=host), [])
@@ -1061,31 +1061,31 @@ class CephadmAgent(CephService):
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        agent = self.mgr.http_server.agent
         try:
-            assert self.mgr.cherrypy_thread
-            assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
-            assert self.mgr.cherrypy_thread.server_port
+            assert agent
+            assert agent.ssl_certs.get_root_cert()
+            assert agent.server_port
         except Exception:
             raise OrchestratorError(
                 'Cannot deploy agent daemons until cephadm endpoint has finished generating certs')
 
         cfg = {'target_ip': self.mgr.get_mgr_ip(),
-               'target_port': self.mgr.cherrypy_thread.server_port,
+               'target_port': agent.server_port,
                'refresh_period': self.mgr.agent_refresh_rate,
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
 
-        listener_cert, listener_key = self.mgr.cherrypy_thread.ssl_certs.generate_cert(
-            self.mgr.inventory.get_addr(daemon_spec.host))
+        listener_cert, listener_key = agent.ssl_certs.generate_cert(self.mgr.inventory.get_addr(daemon_spec.host))
         config = {
             'agent.json': json.dumps(cfg),
             'keyring': daemon_spec.keyring,
-            'root_cert.pem': self.mgr.cherrypy_thread.ssl_certs.get_root_cert(),
+            'root_cert.pem': agent.ssl_certs.get_root_cert(),
             'listener.crt': listener_cert,
             'listener.key': listener_key,
         }
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), str(self.mgr.cherrypy_thread.server_port),
-                               self.mgr.cherrypy_thread.ssl_certs.get_root_cert(),
+        return config, sorted([str(self.mgr.get_mgr_ip()), str(agent.server_port),
+                               agent.ssl_certs.get_root_cert(),
                                str(self.mgr.get_module_option('device_enhanced_scan'))])

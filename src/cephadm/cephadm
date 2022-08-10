@@ -4403,7 +4403,7 @@ WantedBy=ceph-{fsid}.target
                                'port': self.listener_port})
             data = data.encode('ascii')
 
-            url = f'https://{self.target_ip}:{self.target_port}/data'
+            url = f'https://{self.target_ip}:{self.target_port}/data/'
             try:
                 req = Request(url, data, {'Content-Type': 'application/json'})
                 send_time = time.monotonic()
@@ -5177,7 +5177,7 @@ def create_mgr(
     # Note:the default port used by the Prometheus node exporter is opened in fw
     ctx.meta_json = json.dumps({'service_name': 'mgr'})
     deploy_daemon(ctx, fsid, 'mgr', mgr_id, mgr_c, uid, gid,
-                  config=config, keyring=mgr_keyring, ports=[9283])
+                  config=config, keyring=mgr_keyring, ports=[9283, 8765])
 
     # wait for the service to become available
     logger.info('Waiting for mgr to start...')

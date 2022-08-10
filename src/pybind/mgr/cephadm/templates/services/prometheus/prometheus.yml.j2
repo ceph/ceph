@@ -4,38 +4,37 @@ global:
   evaluation_interval: 10s
 rule_files:
   - /etc/prometheus/alerting/*
-{% if alertmgr_targets %}
+
+{% if alertmanager_sd_url %}
 alerting:
   alertmanagers:
     - scheme: http
-      static_configs:
-        - targets: [{{ alertmgr_targets|join(', ') }}]
+      http_sd_configs:
+        - url: {{ alertmanager_sd_url }}
+          tls_config:
+            ca_file: root_cert.pem
 {% endif %}
+
 scrape_configs:
   - job_name: 'ceph'
     honor_labels: true
-    static_configs:
-    - targets:
-{% for mgr in mgr_scrape_list %}
-      - '{{ mgr }}'
-{% endfor %}
+    http_sd_configs:
+    - url: {{ mgr_prometheus_sd_url }}
+      tls_config:
+        ca_file: root_cert.pem
 
-{% if nodes %}
+{% if node_exporter_sd_url %}
   - job_name: 'node'
-    static_configs:
-{% for node in nodes %}
-    - targets: ['{{ node.url }}']
-      labels:
-        instance: '{{ node.hostname }}'
-{% endfor %}
+    http_sd_configs:
+    - url: {{ node_exporter_sd_url }}
+      tls_config:
+        ca_file: root_cert.pem
 {% endif %}
 
-{% if haproxy_targets %}
+{% if haproxy_sd_url %}
   - job_name: 'haproxy'
-    static_configs:
-{% for haproxy in haproxy_targets %}
-      - targets: [{{ haproxy.url }}]
-        labels:
-          instance: '{{ haproxy.service }}'
-{% endfor %}
+    http_sd_configs:
+    - url: {{ haproxy_sd_url }}
+      tls_config:
+        ca_file: root_cert.pem
 {% endif %}
