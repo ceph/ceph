@@ -573,7 +573,7 @@ public:
   }
   void send_message_osd_cluster(
     MessageRef m, Connection *con) override {
-    osd->send_message_osd_cluster(m, con);
+    osd->send_message_osd_cluster(std::move(m), con);
   }
   void send_message_osd_cluster(
     Message *m, const ConnectionRef& con) override {
@@ -1356,7 +1356,8 @@ protected:
   int start_flush(
     OpRequestRef op, ObjectContextRef obc,
     bool blocking, hobject_t *pmissing,
-    std::optional<std::function<void()>> &&on_flush);
+    std::optional<std::function<void()>> &&on_flush,
+    bool force_dedup = false);
   void finish_flush(hobject_t oid, ceph_tid_t tid, int r);
   int try_flush_mark_clean(FlushOpRef fop);
   void cancel_flush(FlushOpRef fop, bool requeue, std::vector<ceph_tid_t> *tids);

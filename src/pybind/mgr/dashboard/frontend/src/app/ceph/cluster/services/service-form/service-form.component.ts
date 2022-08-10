@@ -28,6 +28,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 })
 export class ServiceFormComponent extends CdForm implements OnInit {
   readonly RGW_SVC_ID_PATTERN = /^([^.]+)(\.([^.]+)\.([^.]+))?$/;
+  readonly MDS_SVC_ID_PATTERN = /^[a-zA-Z_.-][a-zA-Z0-9_.-]*$/;
   readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
   readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
   readonly INGRESS_SUPPORTED_SERVICE_TYPES = ['rgw', 'nfs'];
@@ -86,9 +87,20 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       service_id: [
         null,
         [
-          CdValidators.requiredIf({
-            service_type: 'mds'
-          }),
+          CdValidators.composeIf(
+            {
+              service_type: 'mds'
+            },
+            [
+              Validators.required,
+              CdValidators.custom('mdsPattern', (value: string) => {
+                if (_.isEmpty(value)) {
+                  return false;
+                }
+                return !this.MDS_SVC_ID_PATTERN.test(value);
+              })
+            ]
+          ),
           CdValidators.requiredIf({
             service_type: 'nfs'
           }),

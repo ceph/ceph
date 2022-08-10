@@ -927,7 +927,7 @@ if (WITH_CEPHFS)
   add_dependencies(vstart ceph-mds cephfs cython_cephfs)
 endif()
 if(WITH_RADOSGW)
-  add_dependencies(vstart radosgwd radosgw-admin)
+  add_dependencies(vstart radosgw radosgw-admin)
 endif()
 
 if(WITH_LTTNG)
