@@ -773,7 +773,7 @@ public:
   int request_complete() override;
 
   static std::string gen_random_cookie(CephContext* cct) {
-#define COOKIE_LEN 16
+    static constexpr std::size_t COOKIE_LEN = 16;
     char buf[COOKIE_LEN + 1];
     gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
     return buf;
