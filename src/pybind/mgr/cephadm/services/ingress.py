@@ -196,18 +196,23 @@ class IngressService(CephService):
         hosts = sorted(list(set([host] + [str(d.hostname) for d in daemons])))
 
         # interface
+        bare_ips = []
         if spec.virtual_ip:
-            bare_ip = str(spec.virtual_ip).split('/')[0]
+            bare_ips.append(str(spec.virtual_ip).split('/')[0])
         elif spec.virtual_ips_list:
-            bare_ip = str(spec.virtual_ips_list[0]).split('/')[0]
+            bare_ips = [str(vip).split('/')[0] for vip in spec.virtual_ips_list]
         interface = None
-        for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-            if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
-                interface = list(ifaces.keys())[0]
-                logger.info(
-                    f'{bare_ip} is in {subnet} on {host} interface {interface}'
-                )
-                break
+        for bare_ip in bare_ips:
+            for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
+                    interface = list(ifaces.keys())[0]
+                    logger.info(
+                        f'{bare_ip} is in {subnet} on {host} interface {interface}'
+                    )
+                    break
+            else:  # nobreak
+                continue
+            break
         # try to find interface by matching spec.virtual_interface_networks
         if not interface and spec.virtual_interface_networks:
             for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
