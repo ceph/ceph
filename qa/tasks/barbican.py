@@ -368,7 +368,7 @@ def create_secrets(ctx, config):
             barbican_sec_resp = sec_req.getresponse()
             if not (barbican_sec_resp.status >= 200 and
                     barbican_sec_resp.status < 300):
-                raise Exception("Cannot create secret")
+                raise Exception("Cannot create secret, status={} reason={} headers={}".format(barbican_sec_resp.status, barbican_sec_resp.reason, barbican_sec_resp.headers))
             barbican_data = json.loads(barbican_sec_resp.read().decode())
             if 'secret_ref' not in barbican_data:
                 raise ValueError("Malformed secret creation response")
