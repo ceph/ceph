@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - is full \(reached quota
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/test_librbd.sh
+    env:
+      RBD_FEATURES: "1"
+- ceph-fuse:
