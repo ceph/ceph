@@ -900,22 +900,6 @@ AsyncCleaner::_retrieve_live_extents(
   });
 }
 
-AsyncCleaner::retrieve_backref_mappings_ret
-AsyncCleaner::retrieve_backref_mappings(
-  paddr_t start_paddr,
-  paddr_t end_paddr)
-{
-  // Backref-tree doesn't support tree-read during tree-updates with parallel
-  // transactions.  So, concurrent transactions between trim and reclaim are
-  // not allowed right now.
-  return ecb->with_transaction_weak(
-      "backref_get_mappings",
-      [this, start_paddr, end_paddr](auto &t) {
-    return backref_manager.get_mappings(
-      t, start_paddr, end_paddr);
-  });
-}
-
 AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
 {
   LOG_PREFIX(AsyncCleaner::gc_reclaim_space);
@@ -939,110 +923,114 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
   double pavail_ratio = get_projected_available_ratio();
   sea_time_point start = seastar::lowres_system_clock::now();
 
-  return seastar::do_with(
-    (size_t)0,
-    (size_t)0,
-    [this, pavail_ratio, start](
-      auto &reclaimed,
-      auto &runs) {
-    return retrieve_backref_mappings(
+  // Backref-tree doesn't support tree-read during tree-updates with parallel
+  // transactions.  So, concurrent transactions between trim and reclaim are
+  // not allowed right now.
+  return ecb->with_transaction_weak(
+      "backref_get_mappings",
+      [this](auto &t) {
+    return backref_manager.get_mappings(
+      t,
       reclaim_state->start_pos,
-      reclaim_state->end_pos
-    ).safe_then([this, &reclaimed, &runs](auto pin_list) {
-      return seastar::do_with(
-	std::move(pin_list),
-	[this, &reclaimed, &runs](auto &pin_list) {
-	return repeat_eagain(
-	  [this, &reclaimed, &runs, &pin_list]() mutable {
-	  reclaimed = 0;
-	  runs++;
-	  return ecb->with_transaction_intr(
-	    Transaction::src_t::CLEANER_RECLAIM,
-	    "reclaim_space",
-	    [this, &reclaimed, &pin_list](auto &t) {
-	    return seastar::do_with(
-	      std::vector<CachedExtentRef>(),
-	      [this, &reclaimed, &t, &pin_list]
-	      (auto &extents) {
-	      return backref_manager.retrieve_backref_extents(
-		t,
-		backref_manager.get_cached_backref_extents_in_range(
-		  reclaim_state->start_pos, reclaim_state->end_pos),
-		extents
-	      ).si_then([this, &extents, &t, &pin_list] {
-		// calculate live extents
-		auto cached_backrefs = 
-		  backref_manager.get_cached_backref_entries_in_range(
-		    reclaim_state->start_pos, reclaim_state->end_pos);
-		std::set<
-		  backref_entry_t,
-		  backref_entry_t::cmp_t> backrefs;
-		for (auto &pin : pin_list) {
-		  backrefs.emplace(pin->get_key(), pin->get_val(),
-		    pin->get_length(), pin->get_type(), journal_seq_t());
-		}
-		for (auto &backref : cached_backrefs) {
-		  if (backref.laddr == L_ADDR_NULL) {
-		    auto it = backrefs.find(backref.paddr);
-		    assert(it->len == backref.len);
-		    backrefs.erase(it);
-		  } else {
-		    backrefs.emplace(backref.paddr, backref.laddr,
-		      backref.len, backref.type, backref.seq);
-		  }
-		}
-		return _retrieve_live_extents(
-		  t, std::move(backrefs), extents);
-	      }).si_then([&extents, this, &t, &reclaimed] {
-		auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
-		return trans_intr::do_for_each(
-		  extents,
-		  [this, modify_time, &t, &reclaimed](auto &ext) {
-		  reclaimed += ext->get_length();
-		  return ecb->rewrite_extent(
-		      t, ext, reclaim_state->target_generation, modify_time);
-		});
-	      });
-	    }).si_then([this, &t] {
-	      return ecb->submit_transaction_direct(t);
-	    });
-	  });
-	});
-      });
-    }).safe_then(
-      [&reclaimed, this, pavail_ratio, start, &runs] {
-      LOG_PREFIX(AsyncCleaner::gc_reclaim_space);
-      stats.reclaiming_bytes += reclaimed;
-      auto d = seastar::lowres_system_clock::now() - start;
-      DEBUG("duration: {}, pavail_ratio before: {}, repeats: {}", d, pavail_ratio, runs);
-      if (reclaim_state->is_complete()) {
-        auto segment_to_release = reclaim_state->get_segment_id();
-        INFO("reclaim {} finish, reclaimed alive/total={}",
-             segment_to_release,
-             stats.reclaiming_bytes/(double)segments.get_segment_size());
-	stats.reclaimed_bytes += stats.reclaiming_bytes;
-	stats.reclaimed_segment_bytes += segments.get_segment_size();
-	stats.reclaiming_bytes = 0;
-	reclaim_state.reset();
-        return sm_group->release_segment(segment_to_release
-        ).safe_then([this, FNAME, segment_to_release] {
-          auto old_usage = calc_utilization(segment_to_release);
-          if(unlikely(old_usage != 0)) {
-            space_tracker->dump_usage(segment_to_release);
-            ERRORT("segment {} old_usage {} != 0",
-                   segment_to_release, old_usage);
-            ceph_abort();
-          }
-          segments.mark_empty(segment_to_release);
-          auto new_usage = calc_utilization(segment_to_release);
-          adjust_segment_util(old_usage, new_usage);
-          INFO("released {}, {}",
-               segment_to_release, gc_stat_printer_t{this, false});
-          maybe_wake_gc_blocked_io();
+      reclaim_state->end_pos);
+  }).safe_then([this, FNAME, pavail_ratio, start](auto pin_list) {
+    return seastar::do_with(
+      std::move(pin_list),
+      (size_t)0,
+      (size_t)0,
+      [this, FNAME, pavail_ratio, start](
+        auto &pin_list, auto &reclaimed, auto &runs)
+    {
+      return repeat_eagain([this, &reclaimed, &runs, &pin_list]() mutable {
+        reclaimed = 0;
+        runs++;
+        return ecb->with_transaction_intr(
+          Transaction::src_t::CLEANER_RECLAIM,
+          "reclaim_space",
+          [this, &reclaimed, &pin_list](auto &t)
+        {
+          return seastar::do_with(
+            std::vector<CachedExtentRef>(),
+            [this, &reclaimed, &t, &pin_list](auto &extents)
+          {
+            return backref_manager.retrieve_backref_extents_in_range(
+              t,
+              reclaim_state->start_pos,
+              reclaim_state->end_pos
+            ).si_then([this, &extents, &t, &pin_list](auto backref_extents) {
+              extents.insert(extents.end(),
+                             std::make_move_iterator(backref_extents.begin()),
+                             std::make_move_iterator(backref_extents.end()));
+              // calculate live extents
+              auto cached_backrefs =
+                backref_manager.get_cached_backref_entries_in_range(
+                  reclaim_state->start_pos, reclaim_state->end_pos);
+              std::set<
+                backref_entry_t,
+                backref_entry_t::cmp_t> backrefs;
+              for (auto &pin : pin_list) {
+                backrefs.emplace(pin->get_key(), pin->get_val(),
+                  pin->get_length(), pin->get_type(), journal_seq_t());
+              }
+              for (auto &backref : cached_backrefs) {
+                if (backref.laddr == L_ADDR_NULL) {
+                  auto it = backrefs.find(backref.paddr);
+                  assert(it->len == backref.len);
+                  backrefs.erase(it);
+                } else {
+                  backrefs.emplace(backref.paddr, backref.laddr,
+                    backref.len, backref.type, backref.seq);
+                }
+              }
+              return _retrieve_live_extents(t, std::move(backrefs), extents);
+            }).si_then([&extents, this, &t, &reclaimed] {
+              auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
+              return trans_intr::do_for_each(
+                extents,
+                [this, modify_time, &t, &reclaimed](auto &ext)
+              {
+                reclaimed += ext->get_length();
+                return ecb->rewrite_extent(
+                    t, ext, reclaim_state->target_generation, modify_time);
+              });
+            });
+          }).si_then([this, &t] {
+            return ecb->submit_transaction_direct(t);
+          });
         });
-      } else {
-        return SegmentManager::release_ertr::now();
-      }
+      }).safe_then([this, FNAME, pavail_ratio, start, &reclaimed, &runs] {
+        stats.reclaiming_bytes += reclaimed;
+        auto d = seastar::lowres_system_clock::now() - start;
+        DEBUG("duration: {}, pavail_ratio before: {}, repeats: {}", d, pavail_ratio, runs);
+        if (reclaim_state->is_complete()) {
+          auto segment_to_release = reclaim_state->get_segment_id();
+          INFO("reclaim {} finish, reclaimed alive/total={}",
+               segment_to_release,
+               stats.reclaiming_bytes/(double)segments.get_segment_size());
+          stats.reclaimed_bytes += stats.reclaiming_bytes;
+          stats.reclaimed_segment_bytes += segments.get_segment_size();
+          stats.reclaiming_bytes = 0;
+          reclaim_state.reset();
+          return sm_group->release_segment(segment_to_release
+          ).safe_then([this, FNAME, segment_to_release] {
+            auto old_usage = calc_utilization(segment_to_release);
+            if(unlikely(old_usage != 0)) {
+              space_tracker->dump_usage(segment_to_release);
+              ERRORT("segment {} old_usage {} != 0",
+                     segment_to_release, old_usage);
+              ceph_abort();
+            }
+            segments.mark_empty(segment_to_release);
+            auto new_usage = calc_utilization(segment_to_release);
+            adjust_segment_util(old_usage, new_usage);
+            INFO("released {}, {}",
+                 segment_to_release, gc_stat_printer_t{this, false});
+            maybe_wake_gc_blocked_io();
+          });
+        } else {
+          return SegmentManager::release_ertr::now();
+        }
+      });
     });
   });
 }
