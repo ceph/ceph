@@ -234,25 +234,22 @@ function version_lt {
 
 function ensure_decent_gcc_on_rh {
     local old=$(gcc -dumpversion)
-    local expected=10.2
     local dts_ver=$1
-    if version_lt $old $expected; then
+    if version_lt $old $dts_ver; then
 	if test -t 1; then
 	    # interactive shell
 	    cat <<EOF
 Your GCC is too old. Please run following command to add DTS to your environment:
 
-scl enable devtoolset-8 bash
+scl enable gcc-toolset-$dts_ver bash
 
-Or add following line to the end of ~/.bashrc to add it permanently:
+Or add the following line to the end of ~/.bashrc and run "source ~/.bashrc" to add it permanently:
 
-source scl_source enable devtoolset-8
-
-see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
+source scl_source enable gcc-toolset-$dts_ver
 EOF
 	else
 	    # non-interactive shell
-	    source /opt/rh/devtoolset-$dts_ver/enable
+	    source /opt/rh/gcc-toolset-$dts_ver/enable
 	fi
     fi
 }
@@ -418,18 +415,7 @@ EOF
 		if test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     # Enable 'powertools' or 'PowerTools' repo
                     $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
-		    case "$ARCH" in
-			x86_64)
-			    $SUDO dnf -y install centos-release-scl
-			    dts_ver=10
-			    ;;
-			aarch64)
-			    $SUDO dnf -y install centos-release-scl-rh
-			    $SUDO dnf config-manager --disable centos-sclo-rh
-			    $SUDO dnf config-manager --enable centos-sclo-rh-testing
-			    dts_ver=10
-			    ;;
-		    esac
+		    dts_ver=11
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
@@ -439,7 +425,7 @@ EOF
 			  --enable rhel-server-rhscl-8-rpms \
 			  --enable rhel-8-server-optional-rpms \
 			  --enable rhel-8-server-devtools-rpms
-                    dts_ver=10
+                    dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
@@ -533,6 +519,7 @@ function preload_wheels_for_tox() {
     if test "$require" && ! test -d wheelhouse ; then
         type python3 > /dev/null 2>&1 || continue
         activate_virtualenv $top_srcdir || exit 1
+        python3 -m pip install --upgrade pip
         populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
         mv $wip_wheelhouse wheelhouse
         md5sum $require_files $constraint_files > $md5
