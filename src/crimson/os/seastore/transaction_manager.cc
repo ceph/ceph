@@ -532,6 +532,10 @@ TransactionManager::get_extents_if_live(
   LOG_PREFIX(TransactionManager::get_extent_if_live);
   TRACET("{} {}~{} {}", t, type, laddr, len, paddr);
 
+  // This only works with segments to check if alive,
+  // as parallel transactions may split the extent at the same time.
+  ceph_assert(paddr.get_addr_type() == paddr_types_t::SEGMENT);
+
   return cache->get_extent_if_cached(t, paddr, type
   ).si_then([=, this, &t](auto extent)
 	    -> get_extents_if_live_ret {
@@ -566,11 +570,12 @@ TransactionManager::get_extents_if_live(
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
             auto pin_paddr_seg_id = pin_seg_paddr.get_segment_id();
             auto pin_len = pin->get_length();
-            if (pin_paddr_seg_id != paddr_seg_id ||
-                pin_seg_paddr < paddr ||
-                pin_seg_paddr.add_offset(pin_len) > paddr.add_offset(len)) {
+            if (pin_paddr_seg_id != paddr_seg_id) {
               return seastar::now();
             }
+            // Only extent split can happen during the lookup
+            ceph_assert(pin_seg_paddr >= paddr &&
+                        pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
             return pin_to_extent_by_type(t, std::move(pin), type
             ).si_then([&list](auto ret) {
               list.emplace_back(std::move(ret));
