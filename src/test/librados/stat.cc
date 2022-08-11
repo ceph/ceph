@@ -15,8 +15,8 @@ TEST_F(LibRadosStat, Stat) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-  uint64_t size;
-  time_t mtime;
+  uint64_t size = 0;
+  time_t mtime = 0;
   ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
   ASSERT_EQ(sizeof(buf), size);
   ASSERT_EQ(-ENOENT, rados_stat(ioctx, "nonexistent", &size, &mtime));
@@ -33,13 +33,13 @@ TEST_F(LibRadosStat, Stat2) {
   ASSERT_EQ(0, rados_write_op_operate2(op, ioctx, "foo", &ts, 0));
   rados_release_write_op(op);
 
-  uint64_t size;
-  time_t mtime;
+  uint64_t size = 0;
+  time_t mtime = 0;
   ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
   ASSERT_EQ(sizeof(buf), size);
   ASSERT_EQ(mtime, ts.tv_sec);
 
-  struct timespec ts2;
+  struct timespec ts2 = {};
   ASSERT_EQ(0, rados_stat2(ioctx, "foo", &size, &ts2));
   ASSERT_EQ(sizeof(buf), size);
   ASSERT_EQ(ts2.tv_sec, ts.tv_sec);
@@ -60,8 +60,8 @@ TEST_F(LibRadosStat, StatNS) {
   rados_ioctx_set_namespace(ioctx, "nspace");
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
 
-  uint64_t size;
-  time_t mtime;
+  uint64_t size = 0;
+  time_t mtime = 0;
   rados_ioctx_set_namespace(ioctx, "");
   ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
   ASSERT_EQ(sizeof(buf), size);
@@ -96,8 +96,8 @@ TEST_F(LibRadosStatEC, Stat) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-  uint64_t size;
-  time_t mtime;
+  uint64_t size = 0;
+  time_t mtime = 0;
   ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
   ASSERT_EQ(sizeof(buf), size);
   ASSERT_EQ(-ENOENT, rados_stat(ioctx, "nonexistent", &size, &mtime));
@@ -115,8 +115,8 @@ TEST_F(LibRadosStatEC, StatNS) {
   rados_ioctx_set_namespace(ioctx, "nspace");
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
 
-  uint64_t size;
-  time_t mtime;
+  uint64_t size = 0;
+  time_t mtime = 0;
   rados_ioctx_set_namespace(ioctx, "");
   ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
   ASSERT_EQ(sizeof(buf), size);
