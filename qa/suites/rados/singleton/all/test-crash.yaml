@@ -10,6 +10,7 @@ tasks:
         - Reduced data availability
         - OSD_.*DOWN
         - \(RECENT_CRASH\)
+        - \(POOL_APP_NOT_ENABLED\)
   - workunit:
       clients:
          client.0:

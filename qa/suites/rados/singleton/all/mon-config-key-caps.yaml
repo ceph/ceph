@@ -13,6 +13,7 @@ tasks:
     log-ignorelist:
     - overall HEALTH_
     - \(AUTH_BAD_CAPS\)
+    - \(POOL_APP_NOT_ENABLED\)
 - workunit:
     clients:
       all:

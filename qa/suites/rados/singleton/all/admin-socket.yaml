@@ -11,6 +11,8 @@ openstack:
 tasks:
 - install:
 - ceph:
+    log-ignorelist:
+    - \(POOL_APP_NOT_ENABLED\)
 - admin_socket:
     osd.0:
       version:
