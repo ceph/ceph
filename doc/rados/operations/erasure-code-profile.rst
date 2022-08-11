@@ -36,6 +36,8 @@ same time.
 	erasure-code-shec
 	erasure-code-clay
 
+.. _osd-ec-profile-set:
+
 osd erasure-code-profile set
 ============================
 

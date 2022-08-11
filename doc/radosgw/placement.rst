@@ -149,6 +149,15 @@ Then provide the zone placement info for that storage class:
         --data-pool default.rgw.glacier.data \
         --compression lz4
 
+
+.. note::
+
+   **Adding Additional Object Data Pools**
+
+   RGW supports adding a storage class as a way to add additional object data pools. 
+
+   To add an additional object data pool, create it as explained in :ref:`create-ec-pool` and pass the erasure-coded object data pool's name as the argument of the "--data-pool" option as described in :ref:`adding_a_storage_class`.
+
 Customizing Placement
 =====================
 
