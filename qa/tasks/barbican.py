@@ -16,6 +16,8 @@ from teuthology import contextutil
 from teuthology.orchestra import run
 from teuthology.exceptions import ConfigError
 
+from tasks.util.http import wait_for_http_endpoint
+
 log = logging.getLogger(__name__)
 
 
@@ -231,8 +233,11 @@ def run_barbican(ctx, config):
             check_status=False,
         )
 
-        # sleep driven synchronization
-        run_in_barbican_venv(ctx, client, ['sleep', '15'])
+        # wait for the endpoint to come up
+        barbican_host, barbican_port = ctx.barbican.endpoints[client]
+        barbican_url = 'http://{host}:{port}'.format(host=barbican_host,
+                                                     port=barbican_port)
+        wait_for_http_endpoint(barbican_url, remote)
     try:
         yield
     finally:
