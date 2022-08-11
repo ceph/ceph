@@ -13,7 +13,7 @@ def assert_valid_host(name: str) -> None:
             assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
             assert p.match(part), 'name component must include only a-z, 0-9, and -'
     except AssertionError as e:
-        raise SpecValidationError(str(e))
+        raise SpecValidationError(str(e) + f'. Got "{name}"')
 
 
 class SpecValidationError(Exception):
