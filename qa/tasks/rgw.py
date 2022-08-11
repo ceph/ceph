@@ -11,7 +11,8 @@ from teuthology import contextutil
 from teuthology.exceptions import ConfigError
 from tasks.ceph_manager import get_valgrind_args
 from tasks.util import get_remote_for_role
-from tasks.util.rgw import rgwadmin, wait_for_radosgw
+from tasks.util.rgw import rgwadmin
+from tasks.util.http import wait_for_http_endpoint
 from tasks.util.rados import (create_ec_pool,
                               create_replicated_pool,
                               create_cache_pool)
@@ -220,7 +221,7 @@ def start_rgw(ctx, config, clients):
         url = endpoint.url()
         log.info('Polling {client} until it starts accepting connections on {url}'.format(client=client, url=url))
         (remote,) = ctx.cluster.only(client).remotes.keys()
-        wait_for_radosgw(url, remote)
+        wait_for_http_endpoint(url, remote)
 
     try:
         yield
