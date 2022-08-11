@@ -905,23 +905,14 @@ AsyncCleaner::retrieve_backref_mappings(
   paddr_t start_paddr,
   paddr_t end_paddr)
 {
-  return seastar::do_with(
-    backref_pin_list_t(),
-    [this, start_paddr, end_paddr](auto &pin_list) {
-    return repeat_eagain([this, start_paddr, end_paddr, &pin_list] {
-      return ecb->with_transaction_intr(
-	Transaction::src_t::READ,
-	"get_backref_mappings",
-	[this, start_paddr, end_paddr](auto &t) {
-	return backref_manager.get_mappings(
-	  t, start_paddr, end_paddr
-	);
-      }).safe_then([&pin_list](auto&& list) {
-	pin_list = std::move(list);
-      });
-    }).safe_then([&pin_list] {
-      return seastar::make_ready_future<backref_pin_list_t>(std::move(pin_list));
-    });
+  // Backref-tree doesn't support tree-read during tree-updates with parallel
+  // transactions.  So, concurrent transactions between trim and reclaim are
+  // not allowed right now.
+  return ecb->with_transaction_weak(
+      "backref_get_mappings",
+      [this, start_paddr, end_paddr](auto &t) {
+    return backref_manager.get_mappings(
+      t, start_paddr, end_paddr);
   });
 }
 
