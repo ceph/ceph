@@ -10,6 +10,7 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include "seastar/core/shared_future.hh"
+#include "seastar/core/weak_ptr.hh"
 
 #include "include/buffer.h"
 #include "crimson/common/errorator.h"
@@ -20,6 +21,7 @@ namespace crimson::os::seastore {
 class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
+using CachedExtentWeakRef = seastar::weak_ptr<CachedExtent>;
 class SegmentedAllocator;
 class TransactionManager;
 class ExtentPlacementManager;
@@ -124,7 +126,8 @@ class ExtentIndex;
 class CachedExtent
   : public boost::intrusive_ref_counter<
       CachedExtent, boost::thread_unsafe_counter>,
-    public trans_spec_view_t {
+    public trans_spec_view_t,
+    public seastar::weakly_referencable<CachedExtent> {
   enum class extent_state_t : uint8_t {
     INITIAL_WRITE_PENDING, // In Transaction::write_set and fresh_block_list
     MUTATION_PENDING,      // In Transaction::write_set and mutated_block_list
