@@ -24,4 +24,5 @@ tasks:
       - \(OBJECT_
       - \(SLOW_OPS\)
       - slow request
+      - \(POOL_APP_NOT_ENABLED\)
 - lost_unfound:
