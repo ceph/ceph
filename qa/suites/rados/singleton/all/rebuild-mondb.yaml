@@ -24,6 +24,7 @@ tasks:
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       mon:
         debug auth: 30

@@ -14,6 +14,7 @@ tasks:
         - \(RECENT_CRASH\)
         - replacing it with standby
         - No standby daemons available
+        - \(POOL_APP_NOT_ENABLED\)
   - cephfs_test_runner:
       modules:
         - tasks.mgr.test_insights
