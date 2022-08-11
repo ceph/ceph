@@ -20,7 +20,6 @@
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include <list>
 
-
 namespace crimson::os::seastore::journal {
 
 constexpr rbm_abs_addr CBJOURNAL_START_ADDRESS = 0;
@@ -77,8 +76,13 @@ public:
     }
   };
 
-  CircularBoundedJournal(RBMDevice* device, const std::string &path);
+  CircularBoundedJournal(
+      JournalTrimmer &trimmer, RBMDevice* device, const std::string &path);
   ~CircularBoundedJournal() {}
+
+  JournalTrimmer &get_trimmer() final {
+    return trimmer;
+  }
 
   open_for_mkfs_ret open_for_mkfs() final;
 
@@ -277,11 +281,10 @@ public:
   rbm_abs_addr get_journal_end() const {
     return get_start_addr() + header.size + get_block_size(); // journal size + header length
   }
-  void add_device(RBMDevice* dev) {
-    device = dev;
-  }
+
 private:
   cbj_header_t header;
+  JournalTrimmer &trimmer;
   RBMDevice* device;
   std::string path;
   WritePipeline *write_pipeline = nullptr;

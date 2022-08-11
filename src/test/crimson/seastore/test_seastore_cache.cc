@@ -30,7 +30,7 @@ struct cache_test_t : public seastar_test_suite_t {
 
   seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
-    auto record = cache->prepare_record(*t, nullptr);
+    auto record = cache->prepare_record(*t, JOURNAL_SEQ_NULL, JOURNAL_SEQ_NULL);
 
     bufferlist bl;
     for (auto &&block : record.extents) {
@@ -88,7 +88,7 @@ struct cache_test_t : public seastar_test_suite_t {
       return segment_manager->mkfs(
         segment_manager::get_ephemeral_device_config(0, 1));
     }).safe_then([this] {
-      epm.reset(new ExtentPlacementManager(false));
+      epm.reset(new ExtentPlacementManager());
       cache.reset(new Cache(*epm));
       current = paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0);
       epm->add_device(segment_manager.get(), true);

@@ -27,11 +27,11 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentedJournal::SegmentedJournal(
-  SegmentProvider &segment_provider)
-  : segment_provider(segment_provider),
-    segment_seq_allocator(
+  SegmentProvider &segment_provider,
+  JournalTrimmer &trimmer)
+  : segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::JOURNAL)),
-    journal_segment_allocator(segment_type_t::JOURNAL,
+    journal_segment_allocator(&trimmer,
                               data_category_t::METADATA,
                               0, // generation
                               segment_provider,
@@ -45,7 +45,8 @@ SegmentedJournal::SegmentedJournal(
                      crimson::common::get_conf<double>(
                        "seastore_journal_batch_preferred_fullness"),
                      journal_segment_allocator),
-    sm_group(*segment_provider.get_segment_manager_group())
+    sm_group(*segment_provider.get_segment_manager_group()),
+    trimmer{trimmer}
 {
 }
 
@@ -105,9 +106,9 @@ SegmentedJournal::prep_replay_segments(
   return scan_last_segment(last_segment_id, last_header
   ).safe_then([this, FNAME, segments=std::move(segments)] {
     INFO("dirty_tail={}, alloc_tail={}",
-         segment_provider.get_dirty_tail(),
-         segment_provider.get_alloc_tail());
-    auto journal_tail = segment_provider.get_journal_tail();
+         trimmer.get_dirty_tail(),
+         trimmer.get_alloc_tail());
+    auto journal_tail = trimmer.get_journal_tail();
     auto journal_tail_paddr = journal_tail.offset;
     ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
     ceph_assert(journal_tail_paddr != P_ADDR_NULL);
@@ -152,7 +153,7 @@ SegmentedJournal::scan_last_segment(
 {
   LOG_PREFIX(SegmentedJournal::scan_last_segment);
   assert(segment_id == segment_header.physical_segment_id);
-  segment_provider.update_journal_tails(
+  trimmer.update_journal_tails(
       segment_header.dirty_tail, segment_header.alloc_tail);
   auto seq = journal_seq_t{
     segment_header.segment_seq,
@@ -203,7 +204,7 @@ SegmentedJournal::scan_last_segment(
               DEBUG("got {}, at {}", tail_delta, start_seq);
               ceph_assert(tail_delta.dirty_tail != JOURNAL_SEQ_NULL);
               ceph_assert(tail_delta.alloc_tail != JOURNAL_SEQ_NULL);
-              segment_provider.update_journal_tails(
+              trimmer.update_journal_tails(
                   tail_delta.dirty_tail, tail_delta.alloc_tail);
             }
           }
@@ -234,7 +235,7 @@ SegmentedJournal::replay_segment(
   return seastar::do_with(
     scan_valid_records_cursor(seq),
     SegmentManagerGroup::found_record_handler_t(
-      [s_type=header.type, &handler, this, &stats](
+      [&handler, this, &stats](
       record_locator_t locator,
       const record_group_header_t& header,
       const bufferlist& mdbuf)
@@ -254,7 +255,6 @@ SegmentedJournal::replay_segment(
       return seastar::do_with(
         std::move(*maybe_record_deltas_list),
         [write_result=locator.write_result,
-	 s_type,
          this,
          FNAME,
          &handler,
@@ -263,7 +263,6 @@ SegmentedJournal::replay_segment(
         return crimson::do_for_each(
           record_deltas_list,
           [write_result,
-	   s_type,
            this,
            FNAME,
            &handler,
@@ -280,43 +279,17 @@ SegmentedJournal::replay_segment(
           return crimson::do_for_each(
             record_deltas.deltas,
             [locator,
-	     s_type,
              this,
-             FNAME,
              &handler,
              &stats](auto &p)
           {
 	    auto& modify_time = p.first;
 	    auto& delta = p.second;
-            /* The journal may validly contain deltas for extents in
-             * since released segments.  We can detect those cases by
-             * checking whether the segment in question currently has a
-             * sequence number > the current journal segment seq. We can
-             * safetly skip these deltas because the extent must already
-             * have been rewritten.
-             */
-            if (delta.paddr != P_ADDR_NULL) {
-              auto& seg_addr = delta.paddr.as_seg_paddr();
-              auto& seg_info = segment_provider.get_seg_info(seg_addr.get_segment_id());
-              auto delta_paddr_segment_seq = seg_info.seq;
-	      auto delta_paddr_segment_type = seg_info.type;
-              if (s_type == segment_type_t::NULL_SEG ||
-                  (delta_paddr_segment_seq != delta.ext_seq ||
-		   delta_paddr_segment_type != delta.seg_type)) {
-                SUBDEBUG(seastore_cache,
-                         "delta is obsolete, delta_paddr_segment_seq={},"
-			 " delta_paddr_segment_type={} -- {}",
-                         segment_seq_printer_t{delta_paddr_segment_seq},
-			 delta_paddr_segment_type,
-                         delta);
-                return replay_ertr::now();
-              }
-            }
 	    return handler(
 	      locator,
 	      delta,
-	      segment_provider.get_dirty_tail(),
-	      segment_provider.get_alloc_tail(),
+	      trimmer.get_dirty_tail(),
+	      trimmer.get_alloc_tail(),
               modify_time
             ).safe_then([&stats, delta_type=delta.type](bool is_applied) {
               if (is_applied) {

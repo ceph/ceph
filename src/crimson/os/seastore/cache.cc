@@ -1018,7 +1018,8 @@ CachedExtentRef Cache::duplicate_for_write(
 
 record_t Cache::prepare_record(
   Transaction &t,
-  SegmentProvider *cleaner)
+  const journal_seq_t &journal_head,
+  const journal_seq_t &journal_dirty_tail)
 {
   LOG_PREFIX(Cache::prepare_record);
   SUBTRACET(seastore_t, "enter", t);
@@ -1102,13 +1103,16 @@ record_t Cache::prepare_record(
     } else {
       auto sseq = NULL_SEG_SEQ;
       auto stype = segment_type_t::NULL_SEG;
-      if (cleaner != nullptr && i->get_paddr().get_addr_type() ==
-	  paddr_types_t::SEGMENT) {
+
+      // FIXME: This is specific to the segmented implementation
+      if (segment_provider != nullptr &&
+          i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
         auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
-        auto &sinfo = cleaner->get_seg_info(sid);
+        auto &sinfo = segment_provider->get_seg_info(sid);
         sseq = sinfo.seq;
         stype = sinfo.type;
       }
+
       record.push_back(
 	delta_info_t{
 	  i->get_type(),
@@ -1248,15 +1252,16 @@ record_t Cache::prepare_record(
   }
 
   if (is_cleaner_transaction(trans_src)) {
-    assert(cleaner != nullptr);
+    assert(journal_head != JOURNAL_SEQ_NULL);
+    assert(journal_dirty_tail != JOURNAL_SEQ_NULL);
     journal_seq_t dirty_tail;
     auto maybe_dirty_tail = get_oldest_dirty_from();
     if (!maybe_dirty_tail.has_value()) {
-      dirty_tail = cleaner->get_journal_head();
+      dirty_tail = journal_head;
       SUBINFOT(seastore_t, "dirty_tail all trimmed, set to head {}, src={}",
                t, dirty_tail, trans_src);
     } else if (*maybe_dirty_tail == JOURNAL_SEQ_NULL) {
-      dirty_tail = cleaner->get_dirty_tail();
+      dirty_tail = journal_dirty_tail;
       SUBINFOT(seastore_t, "dirty_tail is pending, set to {}, src={}",
                t, dirty_tail, trans_src);
     } else {
@@ -1269,7 +1274,7 @@ record_t Cache::prepare_record(
       // FIXME: the replay point of the allocations requires to be accurate.
       // Setting the alloc_tail to get_journal_head() cannot skip replaying the
       // last unnecessary record.
-      alloc_tail = cleaner->get_journal_head();
+      alloc_tail = journal_head;
       SUBINFOT(seastore_t, "alloc_tail all trimmed, set to head {}, src={}",
                t, alloc_tail, trans_src);
     } else if (*maybe_alloc_tail == JOURNAL_SEQ_NULL) {
@@ -1635,6 +1640,32 @@ Cache::replay_delta(
   assert(dirty_tail != JOURNAL_SEQ_NULL);
   assert(alloc_tail != JOURNAL_SEQ_NULL);
   ceph_assert(modify_time != NULL_TIME);
+
+  // FIXME: This is specific to the segmented implementation
+  /* The journal may validly contain deltas for extents in
+   * since released segments.  We can detect those cases by
+   * checking whether the segment in question currently has a
+   * sequence number > the current journal segment seq. We can
+   * safetly skip these deltas because the extent must already
+   * have been rewritten.
+   */
+  if (segment_provider != nullptr &&
+      delta.paddr != P_ADDR_NULL &&
+      delta.paddr.get_addr_type() == paddr_types_t::SEGMENT) {
+    auto& seg_addr = delta.paddr.as_seg_paddr();
+    auto& seg_info = segment_provider->get_seg_info(seg_addr.get_segment_id());
+    auto delta_paddr_segment_seq = seg_info.seq;
+    auto delta_paddr_segment_type = seg_info.type;
+    if (delta_paddr_segment_seq != delta.ext_seq ||
+        delta_paddr_segment_type != delta.seg_type) {
+      DEBUG("delta is obsolete, delta_paddr_segment_seq={},"
+            " delta_paddr_segment_type={} -- {}",
+            segment_seq_printer_t{delta_paddr_segment_seq},
+            delta_paddr_segment_type,
+            delta);
+      return replay_delta_ertr::make_ready_future<bool>(false);
+    }
+  }
 
   if (delta.type == extent_types_t::JOURNAL_TAIL) {
     // this delta should have been dealt with during segment cleaner mounting
