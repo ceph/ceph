@@ -684,7 +684,12 @@ class ServiceSpec(object):
     @classmethod
     def _from_json_impl(cls: Type[ServiceSpecT], json_spec: dict) -> ServiceSpecT:
         args = {}  # type: Dict[str, Any]
-        for k, v in json_spec.items():
+        valid_params = cls.__init__.__code__.co_varnames
+        params = {k: v for k, v in json_spec.items() if k in valid_params or k == 'spec'}
+        if 'spec' in params:
+            spec_params = params['spec']
+            params['spec'] = {k: v for k, v in spec_params.items() if k in valid_params}
+        for k, v in params.items():
             if k == 'placement':
                 v = PlacementSpec.from_json(v)
             if k == 'custom_configs':
@@ -1417,6 +1422,7 @@ class MDSSpec(ServiceSpec):
                  preview_only: bool = False,
                  extra_container_args: Optional[List[str]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 max_mds: Optional[int] = None,
                  ):
         assert service_type == 'mds'
         super(MDSSpec, self).__init__('mds', service_id=service_id,
@@ -1426,6 +1432,9 @@ class MDSSpec(ServiceSpec):
                                       preview_only=preview_only,
                                       extra_container_args=extra_container_args,
                                       custom_configs=custom_configs)
+
+        self.max_mds = max_mds
+        self.has_set_max_mds = False
 
     def validate(self) -> None:
         super(MDSSpec, self).validate()

@@ -94,10 +94,10 @@ class VolumeClient(CephfsClient["Module"]):
 
     ### volume operations -- create, rm, ls
 
-    def create_fs_volume(self, volname, placement):
+    def create_fs_volume(self, volname, placement, max_mds=None):
         if self.is_stopping():
             return -errno.ESHUTDOWN, "", "shutdown in progress"
-        return create_volume(self.mgr, volname, placement)
+        return create_volume(self.mgr, volname, placement, max_mds)
 
     def delete_fs_volume(self, volname, confirm):
         if self.is_stopping():

@@ -2,7 +2,7 @@ import os
 import errno
 import logging
 
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import PlacementSpec, MDSSpec
 
 import cephfs
 import orchestrator
@@ -45,10 +45,11 @@ def rename_filesystem(mgr, fs_name, new_fs_name):
                'yes_i_really_mean_it': True}
     return mgr.mon_command(command)
 
-def create_mds(mgr, fs_name, placement):
-    spec = ServiceSpec(service_type='mds',
+def create_mds(mgr, fs_name, placement, max_mds=None):
+    spec = MDSSpec(service_type='mds',
                                     service_id=fs_name,
-                                    placement=PlacementSpec.from_string(placement))
+                                    placement=PlacementSpec.from_string(placement),
+                                    max_mds=max_mds)
     try:
         completion = mgr.apply([spec], no_overwrite=True)
         orchestrator.raise_if_exception(completion)

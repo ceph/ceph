@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple,
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec, \
+    MDSSpec
 from ceph.utils import datetime_now
 
 import orchestrator
@@ -561,6 +562,9 @@ class CephadmServe:
                 self.mgr.set_health_warning('CEPHADM_FAILED_SET_OPTION', f'Failed to set {len(options_failed_to_set)} option(s)', len(
                     options_failed_to_set), options_failed_to_set)
 
+        if spec.service_type == 'mds':
+            self._set_max_mds(cast(MDSSpec, spec))
+
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
         Schedule a service.  Deploy new daemons or remove old ones, depending
@@ -1079,6 +1083,21 @@ class CephadmServe:
             self.mgr.cache.removed_client_file(host, path)
         if updated_files:
             self.mgr.cache.save_host(host)
+
+    def _set_max_mds(self, spec: MDSSpec) -> None:
+        if spec.max_mds and not spec.has_set_max_mds:
+            try:
+                self.mgr.check_mon_command({
+                    'prefix': 'fs set',
+                    'fs_name': spec.service_id,
+                    'var': 'max_mds',
+                    'val': str(spec.max_mds),
+                })
+            except Exception as e:
+                self.log.info(f'Failed to set max_mds for fs {spec.service_id}: {e}')
+                return
+            spec.has_set_max_mds = True
+            self.mgr.spec_store.save(spec)
 
     async def _create_daemon(self,
                              daemon_spec: CephadmDaemonDeploySpec,

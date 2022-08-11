@@ -55,7 +55,7 @@ def get_pool_names(mgr, volname):
     data_pools = [pools[id] for id in data_pool_ids]
     return metadata_pool, data_pools
 
-def create_volume(mgr, volname, placement):
+def create_volume(mgr, volname, placement, max_mds):
     """
     create volume  (pool, filesystem and mds)
     """
@@ -77,7 +77,7 @@ def create_volume(mgr, volname, placement):
         remove_pool(mgr, data_pool)
         remove_pool(mgr, metadata_pool)
         return r, outb, outs
-    return create_mds(mgr, volname, placement)
+    return create_mds(mgr, volname, placement, max_mds)
 
 
 def delete_volume(mgr, volname, metadata_pool, data_pools):
