@@ -62,6 +62,10 @@ bool WriteAroundObjectDispatch<I>::read(
     uint64_t* version, int* object_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
+  if ((read_flags & io::READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
+
   bool handled = false;
   for (auto& extent: *extents) {
     handled |= dispatch_unoptimized_io(object_no, extent.offset, extent.length,
@@ -96,6 +100,10 @@ bool WriteAroundObjectDispatch<I>::write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << data.length() << dendl;
+
+  if ((write_flags & io::WRITE_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
 
   return dispatch_io(object_no, object_off, data.length(), op_flags,
                      dispatch_result, on_finish, on_dispatched);

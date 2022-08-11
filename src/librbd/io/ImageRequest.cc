@@ -38,6 +38,7 @@ namespace {
 template <typename I>
 struct C_AssembleSnapshotDeltas : public C_AioRequest {
   I* image_ctx;
+  int list_snaps_flags;
   SnapshotDelta* snapshot_delta;
 
   ceph::mutex lock = ceph::make_mutex(
@@ -45,9 +46,11 @@ struct C_AssembleSnapshotDeltas : public C_AioRequest {
   std::map<uint64_t, SnapshotDelta> object_snapshot_delta;
 
   C_AssembleSnapshotDeltas(I* image_ctx, AioCompletion* aio_comp,
+                           int list_snaps_flags,
                            SnapshotDelta* snapshot_delta)
     : C_AioRequest(aio_comp),
-      image_ctx(image_ctx), snapshot_delta(snapshot_delta) {
+      image_ctx(image_ctx), list_snaps_flags(list_snaps_flags),
+      snapshot_delta(snapshot_delta) {
   }
 
   SnapshotDelta* get_snapshot_delta(uint64_t object_no) {
@@ -90,8 +93,11 @@ struct C_AssembleSnapshotDeltas : public C_AioRequest {
     for (auto& [key, object_extents] : object_snapshot_delta) {
       for (auto& object_extent : object_extents) {
         Extents image_extents;
-        io::util::extent_to_file(image_ctx, object_no, object_extent.get_off(),
-                                 object_extent.get_len(), false, image_extents);
+        io::util::extent_to_file(
+                image_ctx, object_no, object_extent.get_off(),
+                object_extent.get_len(),
+                (list_snaps_flags & LIST_SNAPS_FLAG_SKIP_CRYPTO) != 0,
+                image_extents);
 
         auto& intervals = (*image_snapshot_delta)[key];
         auto& assembled_intervals = (*assembled_image_snapshot_delta)[key];
@@ -130,7 +136,7 @@ struct C_RBD_Readahead : public Context {
 
 template <typename I>
 void readahead(I *ictx, const Extents& image_extents, IOContext io_context,
-               bool skip_crypto) {
+               int read_flags) {
   uint64_t total_bytes = 0;
   for (auto& image_extent : image_extents) {
     total_bytes += image_extent.second;
@@ -146,6 +152,8 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context,
     return;
   }
 
+  bool skip_crypto = (read_flags & READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0;
+
   uint64_t image_size = ictx->get_effective_image_size(
           ictx->snap_id, skip_crypto);
   ictx->image_lock.unlock_shared();
@@ -159,7 +167,8 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context,
                          << readahead_length << dendl;
     LightweightObjectExtents readahead_object_extents;
     io::util::file_to_extents(ictx, readahead_offset, readahead_length, 0,
-                              false, &readahead_object_extents);
+                              skip_crypto, &readahead_object_extents);
+
     for (auto& object_extent : readahead_object_extents) {
       ldout(ictx->cct, 20) << "(readahead) "
                            << data_object_name(ictx,
@@ -172,7 +181,7 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context,
                                              object_extent.length);
       auto req = io::ObjectDispatchSpec::create_read(
         ictx, io::OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-        &req_comp->extents, io_context, 0, 0, {}, nullptr, req_comp);
+        &req_comp->extents, io_context, 0, read_flags, {}, nullptr, req_comp);
       req->send();
     }
 
@@ -386,7 +395,7 @@ void ImageReadRequest<I>::send_request() {
   if (image_ctx.cache && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
     readahead(get_image_ctx(&image_ctx), image_extents, this->m_io_context,
-              false);
+              m_read_flags);
   }
 
   // map image extents to object extents
@@ -398,7 +407,8 @@ void ImageReadRequest<I>::send_request() {
     }
 
     util::file_to_extents(&image_ctx, extent.first, extent.second, buffer_ofs,
-                          false, &object_extents);
+                          (m_read_flags & READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0,
+                          &object_extents);
     buffer_ofs += extent.second;
   }
 
@@ -449,7 +459,8 @@ void AbstractImageWriteRequest<I>::send_request() {
 
     // map to object extents
     io::util::file_to_extents(&image_ctx, extent.first, extent.second, clip_len,
-                              false, &object_extents);
+                              this->should_skip_crypto_and_cache(),
+                              &object_extents);
     clip_len += extent.second;
   }
 
@@ -840,8 +851,10 @@ void ImageListSnapsRequest<I>::send_request() {
     }
 
     striper::LightweightObjectExtents object_extents;
-    io::util::file_to_extents(&image_ctx, image_extent.first,
-                              image_extent.second, 0, false, &object_extents);
+    io::util::file_to_extents(
+            &image_ctx, image_extent.first, image_extent.second, 0,
+            (m_list_snaps_flags & LIST_SNAPS_FLAG_SKIP_CRYPTO) != 0,
+            &object_extents);
     for (auto& object_extent : object_extents) {
       object_number_extents[object_extent.object_no].emplace_back(
         object_extent.offset, object_extent.length);
@@ -852,7 +865,7 @@ void ImageListSnapsRequest<I>::send_request() {
   auto aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);
   auto assemble_ctx = new C_AssembleSnapshotDeltas<I>(
-    &image_ctx, aio_comp, m_snapshot_delta);
+    &image_ctx, aio_comp, m_list_snaps_flags, m_snapshot_delta);
   auto sub_aio_comp = AioCompletion::create_and_start<
     Context, &Context::complete>(assemble_ctx, get_image_ctx(&image_ctx),
                                  AIO_TYPE_GENERIC);

@@ -74,7 +74,9 @@ void ObjectCopyRequest<I>::send_list_snaps() {
   // image extents are consistent across src and dst so compute once
   io::util::extent_to_file(
           m_dst_image_ctx, m_dst_object_number, 0,
-          m_dst_image_ctx->layout.object_size, false, m_image_extents);
+          m_dst_image_ctx->layout.object_size,
+          (m_flags & OBJECT_COPY_REQUEST_FLAG_SKIP_CRYPTO_AND_CACHE) != 0,
+          m_image_extents);
   ldout(m_cct, 20) << "image_extents=" << m_image_extents << dendl;
 
   auto ctx = create_async_context_callback(
@@ -96,7 +98,10 @@ void ObjectCopyRequest<I>::send_list_snaps() {
     }
   }
 
-  auto list_snaps_flags = io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT;
+  int list_snaps_flags = io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT;
+  if ((m_flags & OBJECT_COPY_REQUEST_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    list_snaps_flags |= io::LIST_SNAPS_FLAG_SKIP_CRYPTO;
+  }
 
   m_snapshot_delta.clear();
 
@@ -163,6 +168,9 @@ void ObjectCopyRequest<I>::send_read() {
   int read_flags = 0;
   if (index.second != m_src_image_ctx->snap_id) {
     read_flags |= io::READ_FLAG_DISABLE_CLIPPING;
+  }
+  if ((m_flags & OBJECT_COPY_REQUEST_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    read_flags |= io::READ_FLAG_SKIP_CRYPTO_AND_CACHE;
   }
 
   auto ctx = create_context_callback<
@@ -292,7 +300,8 @@ void ObjectCopyRequest<I>::process_copyup() {
   // let dispatch layers have a chance to process the data but
   // assume that the dispatch layer will only touch the sparse bufferlist
   auto r = m_dst_image_ctx->io_object_dispatcher->prepare_copyup(
-    m_dst_object_number, &m_snapshot_sparse_bufferlist, false);
+    m_dst_object_number, &m_snapshot_sparse_bufferlist,
+    (m_flags & OBJECT_COPY_REQUEST_FLAG_SKIP_CRYPTO_AND_CACHE) != 0);
   if (r < 0) {
     lderr(m_cct) << "failed to prepare copyup data: " << cpp_strerror(r)
                  << dendl;
@@ -602,9 +611,10 @@ void ObjectCopyRequest<I>::merge_write_ops() {
     for (auto [image_offset, image_length] : read_op.image_extent_map) {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
-      io::util::file_to_extents(m_dst_image_ctx, image_offset,
-                                image_length, buffer_offset, false,
-                                &object_extents);
+      io::util::file_to_extents(
+              m_dst_image_ctx, image_offset, image_length, buffer_offset,
+              (m_flags & OBJECT_COPY_REQUEST_FLAG_SKIP_CRYPTO_AND_CACHE) != 0,
+              &object_extents);
       for (auto& object_extent : object_extents) {
         ldout(m_cct, 20) << "src_snap_seq=" << src_snap_seq << ", "
                          << "object_offset=" << object_extent.offset << ", "
@@ -759,8 +769,10 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     for (auto z = zero_interval.begin(); z != zero_interval.end(); ++z) {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
-      io::util::file_to_extents(m_dst_image_ctx, z.get_start(), z.get_len(), 0,
-                                false, &object_extents);
+      io::util::file_to_extents(
+              m_dst_image_ctx, z.get_start(), z.get_len(), 0,
+              (m_flags & OBJECT_COPY_REQUEST_FLAG_SKIP_CRYPTO_AND_CACHE) != 0,
+              &object_extents);
       for (auto& object_extent : object_extents) {
         ceph_assert(object_extent.offset + object_extent.length <=
                       m_dst_image_ctx->layout.object_size);

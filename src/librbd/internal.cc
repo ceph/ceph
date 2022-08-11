@@ -1521,7 +1521,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   }
 
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
-		       bool skip_crypto,
+		       bool skip_crypto_and_cache,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg)
   {
@@ -1537,7 +1537,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     uint64_t mylen = len;
     ictx->image_lock.lock_shared();
-    r = clip_io(ictx, off, &mylen, skip_crypto);
+    r = clip_io(ictx, off, &mylen, skip_crypto_and_cache);
     ictx->image_lock.unlock_shared();
     if (r < 0)
       return r;
@@ -1559,13 +1559,16 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
       bufferlist bl;
 
+      int read_flags =
+              skip_crypto_and_cache ? io::READ_FLAG_SKIP_CRYPTO_AND_CACHE : 0;
+
       C_SaferCond ctx;
       auto c = io::AioCompletion::create_and_start(&ctx, ictx,
                                                    io::AIO_TYPE_READ);
       auto req = io::ImageDispatchSpec::create_read(
         *ictx, io::IMAGE_DISPATCH_LAYER_NONE, c,
         {{off, read_len}}, io::ReadResult{&bl},
-        ictx->get_data_io_context(), 0, 0, trace);
+        ictx->get_data_io_context(), 0, read_flags, trace);
       req->send();
 
       int ret = ctx.wait();

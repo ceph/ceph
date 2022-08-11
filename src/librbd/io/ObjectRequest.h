@@ -75,6 +75,9 @@ public:
 
 protected:
   bool compute_parent_extents(Extents *parent_extents, bool read_request);
+  virtual bool should_skip_crypto_and_cache() const {
+    return false;
+  }
 
   ImageCtxT *m_ictx;
   uint64_t m_object_no;
@@ -111,6 +114,11 @@ public:
 
   const char *get_op_type() const override {
     return "read";
+  }
+
+protected:
+  bool should_skip_crypto_and_cache() const override {
+    return (m_read_flags & READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0;
   }
 
 private:
@@ -154,7 +162,7 @@ class AbstractObjectWriteRequest : public ObjectRequest<ImageCtxT> {
 public:
   AbstractObjectWriteRequest(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off, uint64_t len,
-      IOContext io_context, const char *trace_name,
+      IOContext io_context, int write_flags, const char *trace_name,
       const ZTracer::Trace &parent_trace, Context *completion);
 
   virtual bool is_empty_write_op() const {
@@ -176,6 +184,7 @@ public:
 protected:
   uint64_t m_object_off;
   uint64_t m_object_len;
+  int m_write_flags;
   bool m_full_object = false;
   bool m_copyup_enabled = true;
 
@@ -201,6 +210,10 @@ protected:
 
   virtual Extents get_copyup_overwrite_extents() const {
     return {{m_object_off, m_object_len}};
+  }
+
+  bool should_skip_crypto_and_cache() const override {
+    return (m_write_flags & WRITE_FLAG_SKIP_CRYPTO_AND_CACHE) != 0;
   }
 
 private:
@@ -264,10 +277,11 @@ public:
       int write_flags, std::optional<uint64_t> assert_version,
       const ZTracer::Trace &parent_trace, Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
-                                            data.length(), io_context, "write",
-                                            parent_trace, completion),
+                                            data.length(), io_context,
+                                            write_flags, "write", parent_trace,
+                                            completion),
       m_write_data(std::move(data)), m_op_flags(op_flags),
-      m_write_flags(write_flags), m_assert_version(assert_version) {
+      m_assert_version(assert_version) {
   }
 
   bool is_empty_write_op() const override {
@@ -285,7 +299,6 @@ protected:
 private:
   ceph::bufferlist m_write_data;
   int m_op_flags;
-  int m_write_flags;
   std::optional<uint64_t> m_assert_version;
 };
 
@@ -297,8 +310,9 @@ public:
       uint64_t object_len, IOContext io_context, int discard_flags,
       const ZTracer::Trace &parent_trace, Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
-                                            object_len, io_context, "discard",
-                                            parent_trace, completion),
+                                            object_len, io_context, 0,
+                                            "discard", parent_trace,
+                                            completion),
       m_discard_flags(discard_flags) {
     if (this->m_full_object) {
       if ((m_discard_flags & OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE) != 0 &&
@@ -380,8 +394,9 @@ public:
       uint64_t object_len, ceph::bufferlist&& data, IOContext io_context,
       int op_flags, const ZTracer::Trace &parent_trace, Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
-                                            object_len, io_context, "writesame",
-                                            parent_trace, completion),
+                                            object_len, io_context, 0,
+                                            "writesame", parent_trace,
+                                            completion),
       m_write_data(std::move(data)), m_op_flags(op_flags) {
   }
 
@@ -406,7 +421,7 @@ public:
       IOContext io_context, uint64_t *mismatch_offset, int op_flags,
       const ZTracer::Trace &parent_trace, Context *completion)
    : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
-                                           cmp_bl.length(), io_context,
+                                           cmp_bl.length(), io_context, 0,
                                            "compare_and_write", parent_trace,
                                            completion),
     m_cmp_bl(std::move(cmp_bl)), m_write_bl(std::move(write_bl)),
@@ -465,6 +480,11 @@ public:
 
   const char *get_op_type() const override {
     return "snap_list";
+  }
+
+protected:
+  bool should_skip_crypto_and_cache() const override {
+    return (m_list_snaps_flags & LIST_SNAPS_FLAG_SKIP_CRYPTO) != 0;
   }
 
 private:

@@ -56,7 +56,7 @@ public:
     }
 
     if (!io::util::trigger_copyup(
-            &image_ctx, m_object_no, m_io_context, this)) {
+            &image_ctx, m_object_no, m_io_context, false, this)) {
       // stop early if the parent went away - it just means
       // another flatten finished first or the image was resized
       return 1;

@@ -141,6 +141,12 @@ TEST_F(TestMockCacheWriteAroundObjectDispatch, DispatchIO) {
   expect_context_complete(dispatch_ctx, 0);
   expect_context_complete(finish_ctx, 0);
 
+  ASSERT_FALSE(object_dispatch.write(0, 0, std::move(data), {}, 0,
+                                     io::WRITE_FLAG_SKIP_CRYPTO_AND_CACHE,
+                                     std::nullopt, {}, nullptr, nullptr,
+                                     &dispatch_result, &finish_ctx_ptr,
+                                     &dispatch_ctx));
+
   ASSERT_TRUE(object_dispatch.write(0, 0, std::move(data), {}, 0, 0,
                                     std::nullopt, {}, nullptr, nullptr,
                                     &dispatch_result, &finish_ctx_ptr,

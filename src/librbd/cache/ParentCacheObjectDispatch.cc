@@ -74,6 +74,10 @@ bool ParentCacheObjectDispatch<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "object_no=" << object_no << " " << *extents << dendl;
 
+  if ((read_flags & io::READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
+
   if (version != nullptr) {
     // we currently don't cache read versions
     return false;

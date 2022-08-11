@@ -131,10 +131,12 @@ enum ObjectDispatchLayer {
 enum {
   READ_FLAG_DISABLE_READ_FROM_PARENT            = 1UL << 0,
   READ_FLAG_DISABLE_CLIPPING                    = 1UL << 1,
+  READ_FLAG_SKIP_CRYPTO_AND_CACHE               = 1UL << 2,
 };
 
 enum {
-  WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE            = 1UL << 0
+  WRITE_FLAG_OBJECT_CREATE_EXCLUSIVE            = 1UL << 0,
+  WRITE_FLAG_SKIP_CRYPTO_AND_CACHE              = 1UL << 1
 };
 
 enum {
@@ -151,6 +153,7 @@ enum {
   LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT      = 1UL << 0,
   LIST_SNAPS_FLAG_WHOLE_OBJECT                  = 1UL << 1,
   LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS         = 1UL << 2,
+  LIST_SNAPS_FLAG_SKIP_CRYPTO                   = 1UL << 3,
 };
 
 enum SparseExtentState {

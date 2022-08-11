@@ -228,6 +228,10 @@ bool SimpleSchedulerObjectDispatch<I>::read(
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " " << extents
                  << dendl;
 
+  if ((read_flags & READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
+
   std::lock_guard locker{m_lock};
   for (auto& extent : *extents) {
     if (intersects(object_no, extent.offset, extent.length)) {
@@ -268,6 +272,10 @@ bool SimpleSchedulerObjectDispatch<I>::write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << data.length() << dendl;
+
+  if ((write_flags & WRITE_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
 
   std::lock_guard locker{m_lock};
 

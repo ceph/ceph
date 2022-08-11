@@ -56,11 +56,33 @@ namespace io {
 
 namespace util {
 
-template<>
-void file_to_extents(
-        MockTestImageCtx *image_ctx, uint64_t offset, uint64_t length,
+namespace {
+
+struct Mock {
+    static Mock* s_instance;
+
+    Mock() {
+      s_instance = this;
+    }
+
+    MOCK_METHOD6(file_to_extents,
+            void(MockImageCtx*, uint64_t, uint64_t, uint64_t, bool,
+                 striper::LightweightObjectExtents*));
+    MOCK_METHOD6(extent_to_file,
+            void(MockTestImageCtx*, uint64_t, uint64_t, uint64_t, bool,
+                 std::vector<std::pair<uint64_t, uint64_t> >&));
+};
+
+Mock *Mock::s_instance = nullptr;
+
+} // anonymous namespace
+
+template <> void file_to_extents(
+        MockTestImageCtx* image_ctx, uint64_t offset, uint64_t length,
         uint64_t buffer_offset, bool skip_crypto,
-        striper::LightweightObjectExtents *object_extents) {
+        striper::LightweightObjectExtents* object_extents) {
+  Mock::s_instance->file_to_extents(image_ctx, offset, length, buffer_offset,
+                                    skip_crypto, object_extents);
   Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
                            0, buffer_offset, object_extents);
 }
@@ -69,6 +91,8 @@ template <> void extent_to_file(
         MockTestImageCtx* image_ctx, uint64_t object_no, uint64_t offset,
         uint64_t length, bool skip_crypto,
         std::vector<std::pair<uint64_t, uint64_t> >& extents) {
+  Mock::s_instance->extent_to_file(image_ctx, object_no, offset, length,
+                                   skip_crypto, extents);
   Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
                           offset, length, extents);
 }
@@ -76,6 +100,7 @@ template <> void extent_to_file(
 } // namespace util
 
 using ::testing::_;
+using ::testing::AnyNumber;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
@@ -92,6 +117,9 @@ struct TestMockIoImageRequest : public TestMockFixture {
   typedef ImageWriteSameRequest<librbd::MockTestImageCtx> MockImageWriteSameRequest;
   typedef ImageCompareAndWriteRequest<librbd::MockTestImageCtx> MockImageCompareAndWriteRequest;
   typedef ImageListSnapsRequest<librbd::MockTestImageCtx> MockImageListSnapsRequest;
+  typedef util::Mock MockUtils;
+
+  MockUtils mock_utils;
 
   void expect_is_journal_appending(MockTestJournal &mock_journal, bool appending) {
     EXPECT_CALL(mock_journal, is_journal_appending())
@@ -156,6 +184,16 @@ struct TestMockIoImageRequest : public TestMockFixture {
                   mock_image_ctx.image_ctx->op_work_queue->queue(&spec->dispatcher_ctx, r);
                 }));
   }
+
+  void expect_file_to_extents(MockUtils &mock_utils, bool skip_crypto = false) {
+    EXPECT_CALL(mock_utils, file_to_extents(_, _, _, _, skip_crypto, _)).Times(
+            AnyNumber());
+  }
+
+  void expect_extent_to_file(MockUtils &mock_utils, bool skip_crypto = false) {
+    EXPECT_CALL(mock_utils, extent_to_file(_, _, _, _, skip_crypto, _)).Times(
+            AnyNumber());
+  }
 };
 
 TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
@@ -181,6 +219,8 @@ TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
 
   EXPECT_CALL(mock_image_ctx, set_modify_timestamp(_))
       .Times(Exactly(1));
+
+  expect_file_to_extents(mock_utils);
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
@@ -218,6 +258,39 @@ TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
   ASSERT_EQ(0, aio_comp_ctx_2.wait());
 }
 
+TEST_F(TestMockIoImageRequest, AioWriteSkipCrypto) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  mock_image_ctx.journal = nullptr;
+  mock_image_ctx.mtime_update_interval = 0;
+
+  expect_file_to_extents(mock_utils, true);
+
+  InSequence seq;
+  expect_object_request_send(mock_image_ctx, 0);
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_WRITE);
+
+  bufferlist bl;
+  bl.append("1");
+  MockImageWriteRequest mock_aio_image_write(
+    mock_image_ctx, aio_comp, {{0, 1}}, std::move(bl),
+    mock_image_ctx.get_data_io_context(), 0, WRITE_FLAG_SKIP_CRYPTO_AND_CACHE,
+    {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_write.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx.wait());
+}
+
 TEST_F(TestMockIoImageRequest, AioReadAccessTimestamp) {
   REQUIRE_FORMAT_V2();
 
@@ -241,6 +314,8 @@ TEST_F(TestMockIoImageRequest, AioReadAccessTimestamp) {
 
   EXPECT_CALL(mock_image_ctx, set_access_timestamp(_))
       .Times(Exactly(1));
+
+  expect_file_to_extents(mock_utils);
 
   InSequence seq;
   expect_object_request_send(mock_image_ctx, 0);
@@ -274,6 +349,39 @@ TEST_F(TestMockIoImageRequest, AioReadAccessTimestamp) {
   ASSERT_EQ(1, aio_comp_ctx_2.wait());
 }
 
+TEST_F(TestMockIoImageRequest, AioReadSkipCrypto) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  mock_image_ctx.atime_update_interval = 0;
+  mock_image_ctx.journal = nullptr;
+
+  expect_file_to_extents(mock_utils, true);
+
+  InSequence seq;
+  expect_object_request_send(mock_image_ctx, 0);
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_READ);
+
+
+  ReadResult rr;
+  MockImageReadRequest mock_aio_image_read(
+    mock_image_ctx, aio_comp, {{0, 1}}, std::move(rr),
+    mock_image_ctx.get_data_io_context(), 0, READ_FLAG_SKIP_CRYPTO_AND_CACHE,
+    {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_read.send();
+  }
+  ASSERT_EQ(1, aio_comp_ctx.wait());
+}
+
 TEST_F(TestMockIoImageRequest, PartialDiscard) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
@@ -281,6 +389,8 @@ TEST_F(TestMockIoImageRequest, PartialDiscard) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.journal = nullptr;
+
+  expect_file_to_extents(mock_utils);
 
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
@@ -309,6 +419,8 @@ TEST_F(TestMockIoImageRequest, TailDiscard) {
   MockTestImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.journal = nullptr;
 
+  expect_file_to_extents(mock_utils);
+
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
   expect_object_discard_request(
@@ -336,6 +448,8 @@ TEST_F(TestMockIoImageRequest, DiscardGranularity) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.journal = nullptr;
+
+  expect_file_to_extents(mock_utils);
 
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
@@ -368,6 +482,8 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
   MockTestJournal mock_journal;
   mock_image_ctx.journal = &mock_journal;
 
+  expect_file_to_extents(mock_utils);
+
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
   expect_is_journal_appending(mock_journal, false);
@@ -399,6 +515,8 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
   MockTestImageCtx mock_image_ctx(*ictx);
   MockTestJournal mock_journal;
   mock_image_ctx.journal = &mock_journal;
+
+  expect_file_to_extents(mock_utils);
 
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
@@ -456,6 +574,8 @@ TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
   MockTestJournal mock_journal;
   mock_image_ctx.journal = &mock_journal;
 
+  expect_file_to_extents(mock_utils);
+
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
   expect_is_journal_appending(mock_journal, false);
@@ -486,6 +606,8 @@ TEST_F(TestMockIoImageRequest, AioCompareAndWriteJournalAppendDisabled) {
   MockTestImageCtx mock_image_ctx(*ictx);
   MockTestJournal mock_journal;
   mock_image_ctx.journal = &mock_journal;
+
+  expect_file_to_extents(mock_utils);
 
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
@@ -520,6 +642,9 @@ TEST_F(TestMockIoImageRequest, ListSnaps) {
   mock_image_ctx.layout.stripe_unit = 4096;
   mock_image_ctx.layout.stripe_count = 2;
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   InSequence seq;
 
   SnapshotDelta object_snapshot_delta;
@@ -542,6 +667,56 @@ TEST_F(TestMockIoImageRequest, ListSnaps) {
   MockImageListSnapsRequest mock_image_list_snaps_request(
     mock_image_ctx, aio_comp, {{0, 16384}, {16384, 16384}}, {0, CEPH_NOSNAP},
     0, &snapshot_delta, {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_image_list_snaps_request.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx.wait());
+
+  SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{5,6}].insert(
+    0, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
+  expected_snapshot_delta[{5,6}].insert(
+    5120, 3072, {SPARSE_EXTENT_STATE_DATA, 3072});
+  expected_snapshot_delta[{5,5}].insert(
+    6144, 6144, {SPARSE_EXTENT_STATE_ZEROED, 6144});
+  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
+}
+
+TEST_F(TestMockIoImageRequest, ListSnapsSkipCrypto) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.layout.object_size = 16384;
+  mock_image_ctx.layout.stripe_unit = 4096;
+  mock_image_ctx.layout.stripe_count = 2;
+
+  expect_file_to_extents(mock_utils, true);
+  expect_extent_to_file(mock_utils, true);
+
+  InSequence seq;
+
+  SnapshotDelta object_snapshot_delta;
+  object_snapshot_delta[{5,6}].insert(
+    0, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
+  object_snapshot_delta[{5,5}].insert(
+    4096, 4096, {SPARSE_EXTENT_STATE_ZEROED, 4096});
+  expect_object_list_snaps_request(mock_image_ctx, 0, object_snapshot_delta, 0);
+  object_snapshot_delta = {};
+  object_snapshot_delta[{5,6}].insert(
+    1024, 3072, {SPARSE_EXTENT_STATE_DATA, 3072});
+  object_snapshot_delta[{5,5}].insert(
+    2048, 2048, {SPARSE_EXTENT_STATE_ZEROED, 2048});
+  expect_object_list_snaps_request(mock_image_ctx, 1, object_snapshot_delta, 0);
+
+  SnapshotDelta snapshot_delta;
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_GENERIC);
+  MockImageListSnapsRequest mock_image_list_snaps_request(
+    mock_image_ctx, aio_comp, {{0, 16384}, {16384, 16384}}, {0, CEPH_NOSNAP},
+    LIST_SNAPS_FLAG_SKIP_CRYPTO, &snapshot_delta, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_image_list_snaps_request.send();

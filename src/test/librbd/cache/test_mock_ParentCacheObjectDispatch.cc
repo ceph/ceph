@@ -360,6 +360,12 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read) {
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;
   io::ReadExtents extents = {{0, 4096}, {8192, 4096}};
+
+  ASSERT_FALSE(mock_parent_image_cache->read(
+    0, &extents, mock_image_ctx.get_data_io_context(), 0,
+    io::READ_FLAG_SKIP_CRYPTO_AND_CACHE, {}, nullptr, nullptr, &dispatch_result,
+    nullptr, &on_dispatched));
+
   mock_parent_image_cache->read(
     0, &extents, mock_image_ctx.get_data_io_context(), 0, 0, {}, nullptr, 
     nullptr, &dispatch_result, nullptr, &on_dispatched);

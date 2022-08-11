@@ -92,7 +92,7 @@ struct C_AlignedObjectReadRequest : public Context {
       if (r == -ENOENT && !disable_read_from_parent) {
         io::util::read_parent<I>(
                 image_ctx, object_no, extents,
-                io_context->read_snap().value_or(CEPH_NOSNAP),
+                io_context->read_snap().value_or(CEPH_NOSNAP), false,
                 parent_trace, this);
       } else {
         complete(r);
@@ -352,7 +352,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
                   C_UnalignedObjectWriteRequest<I>,
                   &C_UnalignedObjectWriteRequest<I>::handle_copyup>(this);
           if (io::util::trigger_copyup(
-                  image_ctx, object_no, io_context, ctx)) {
+                  image_ctx, object_no, io_context, false, ctx)) {
             return;
           }
           delete ctx;
@@ -453,6 +453,10 @@ bool CryptoObjectDispatch<I>::read(
                  << *extents << dendl;
   ceph_assert(m_crypto != nullptr);
 
+  if ((read_flags & io::READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
+
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   if (m_crypto->is_aligned(*extents)) {
     auto req = new C_AlignedObjectReadRequest<I>(
@@ -483,6 +487,10 @@ bool CryptoObjectDispatch<I>::write(
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << data.length() << dendl;
   ceph_assert(m_crypto != nullptr);
+
+  if ((write_flags & io::WRITE_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
 
   if (m_crypto->is_aligned(object_off, data.length())) {
     auto r = m_crypto->encrypt(

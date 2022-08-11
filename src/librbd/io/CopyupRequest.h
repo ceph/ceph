@@ -31,13 +31,14 @@ class CopyupRequest {
 public:
   static CopyupRequest* create(ImageCtxT *ictx, uint64_t objectno,
                                Extents &&image_extents,
+                               bool skip_crypto_and_cache,
                                const ZTracer::Trace &parent_trace) {
     return new CopyupRequest(ictx, objectno, std::move(image_extents),
-                             parent_trace);
+                             skip_crypto_and_cache, parent_trace);
   }
 
   CopyupRequest(ImageCtxT *ictx, uint64_t objectno, Extents &&image_extents,
-                const ZTracer::Trace &parent_trace);
+                bool skip_crypto_and_cache, const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
   void append_request(AbstractObjectWriteRequest<ImageCtxT> *req,
@@ -83,6 +84,7 @@ private:
   ImageCtxT *m_image_ctx;
   uint64_t m_object_no;
   Extents m_image_extents;
+  bool m_skip_crypto_and_cache;
   ZTracer::Trace m_trace;
 
   bool m_flatten = false;

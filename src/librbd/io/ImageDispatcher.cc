@@ -148,7 +148,23 @@ struct ImageDispatcher<I>::PreprocessVisitor
     if ((read.read_flags & READ_FLAG_DISABLE_CLIPPING) != 0) {
       return false;
     }
-    return clip_request(false);
+    return clip_request(
+            (read.read_flags & READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0);
+  }
+
+  bool operator()(ImageDispatchSpec::Write& write) const {
+    if (clip_request(
+            (write.write_flags & WRITE_FLAG_SKIP_CRYPTO_AND_CACHE) != 0)) {
+      return true;
+    }
+
+    std::shared_lock image_locker{image_dispatcher->m_image_ctx->image_lock};
+    if (image_dispatcher->m_image_ctx->snap_id != CEPH_NOSNAP ||
+        image_dispatcher->m_image_ctx->read_only) {
+      image_dispatch_spec->fail(-EROFS);
+      return true;
+    }
+    return false;
   }
 
   bool operator()(ImageDispatchSpec::Flush&) const {

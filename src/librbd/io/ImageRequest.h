@@ -144,6 +144,10 @@ protected:
     return 0;
   }
 
+  virtual bool should_skip_crypto_and_cache() const {
+    return false;
+  }
+
   void send_object_requests(const LightweightObjectExtents &object_extents,
                             IOContext io_context, uint64_t journal_tid);
   virtual ObjectDispatchSpec *create_object_request(
@@ -180,6 +184,10 @@ protected:
   }
   const char *get_request_type() const override {
     return "aio_write";
+  }
+
+   bool should_skip_crypto_and_cache() const override {
+    return (m_write_flags & WRITE_FLAG_SKIP_CRYPTO_AND_CACHE) != 0;
   }
 
   void assemble_extent(const LightweightObjectExtent &object_extent,

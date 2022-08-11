@@ -33,6 +33,7 @@ bool assemble_write_same_extent(const LightweightObjectExtent &object_extent,
 template <typename ImageCtxT = librbd::ImageCtx>
 void read_parent(ImageCtxT *image_ctx, uint64_t object_no,
                  ReadExtents* extents, librados::snap_t snap_id,
+                 bool skip_crypto_and_cache,
                  const ZTracer::Trace &trace, Context* on_finish);
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -53,7 +54,8 @@ void unsparsify(CephContext* cct, ceph::bufferlist* bl,
 
 template <typename ImageCtxT = librbd::ImageCtx>
 bool trigger_copyup(ImageCtxT *image_ctx, uint64_t object_no,
-                    IOContext io_context, Context* on_finish);
+                    IOContext io_context, bool skip_crypto_and_cache,
+                    Context* on_finish);
                 
 template <typename ImageCtxT = librbd::ImageCtx>
 void file_to_extents(ImageCtxT *image_ctx, uint64_t offset, uint64_t length,

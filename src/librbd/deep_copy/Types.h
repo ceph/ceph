@@ -12,9 +12,10 @@ namespace librbd {
 namespace deep_copy {
 
 enum {
-  OBJECT_COPY_REQUEST_FLAG_FLATTEN      = 1U << 0,
-  OBJECT_COPY_REQUEST_FLAG_MIGRATION    = 1U << 1,
-  OBJECT_COPY_REQUEST_FLAG_EXISTS_CLEAN = 1U << 2,
+  OBJECT_COPY_REQUEST_FLAG_FLATTEN               = 1U << 0,
+  OBJECT_COPY_REQUEST_FLAG_MIGRATION             = 1U << 1,
+  OBJECT_COPY_REQUEST_FLAG_EXISTS_CLEAN          = 1U << 2,
+  OBJECT_COPY_REQUEST_FLAG_SKIP_CRYPTO_AND_CACHE = 1U << 3,
 };
 
 typedef std::vector<librados::snap_t> SnapIds;

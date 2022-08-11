@@ -129,7 +129,7 @@ namespace librbd {
 		       uint64_t size, int order, uint64_t bid);
 
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
-		       bool skip_crypto,
+		       bool skip_crypto_and_cache,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg);
 

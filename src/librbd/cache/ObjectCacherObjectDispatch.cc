@@ -192,6 +192,10 @@ bool ObjectCacherObjectDispatch<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "object_no=" << object_no << " " << *extents << dendl;
 
+  if ((read_flags & io::READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
+
   if (extents->size() == 0) {
     ldout(cct, 20) << "no extents to read" << dendl;
     return false;
@@ -301,6 +305,10 @@ bool ObjectCacherObjectDispatch<I>::write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << data.length() << dendl;
+
+  if ((write_flags & io::WRITE_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
 
   // ensure we aren't holding the cache lock post-write
   on_dispatched = util::create_async_context_callback(*m_image_ctx,

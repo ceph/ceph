@@ -45,10 +45,33 @@ inline ImageCtx* get_image_ctx(MockTestImageCtx* image_ctx) {
 namespace io {
 namespace util {
 
+namespace {
+
+struct Mock {
+    static Mock* s_instance;
+
+    Mock() {
+      s_instance = this;
+    }
+
+    MOCK_METHOD6(file_to_extents,
+            void(MockImageCtx*, uint64_t, uint64_t, uint64_t, bool,
+                 striper::LightweightObjectExtents*));
+    MOCK_METHOD6(extent_to_file,
+            void(MockTestImageCtx*, uint64_t, uint64_t, uint64_t, bool,
+                 std::vector<std::pair<uint64_t, uint64_t> >&));
+};
+
+Mock *Mock::s_instance = nullptr;
+
+} // anonymous namespace
+
 template <> void file_to_extents(
         MockTestImageCtx* image_ctx, uint64_t offset, uint64_t length,
         uint64_t buffer_offset, bool skip_crypto,
         striper::LightweightObjectExtents* object_extents) {
+  Mock::s_instance->file_to_extents(image_ctx, offset, length, buffer_offset,
+                                    skip_crypto, object_extents);
   Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
                            0, buffer_offset, object_extents);
 }
@@ -57,6 +80,8 @@ template <> void extent_to_file(
         MockTestImageCtx* image_ctx, uint64_t object_no, uint64_t offset,
         uint64_t length, bool skip_crypto,
         std::vector<std::pair<uint64_t, uint64_t> >& extents) {
+  Mock::s_instance->extent_to_file(image_ctx, object_no, offset, length,
+                                   skip_crypto, extents);
   Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
                           offset, length, extents);
 }
@@ -78,6 +103,7 @@ namespace librbd {
 namespace deep_copy {
 
 using ::testing::_;
+using ::testing::AnyNumber;
 using ::testing::DoAll;
 using ::testing::DoDefault;
 using ::testing::InSequence;
@@ -141,6 +167,7 @@ MATCHER_P2(IsRead, snap_id, image_interval, "") {
 class TestMockDeepCopyObjectCopyRequest : public TestMockFixture {
 public:
   typedef ObjectCopyRequest<librbd::MockTestImageCtx> MockObjectCopyRequest;
+  typedef io::util::Mock MockUtils;
 
   librbd::ImageCtx *m_src_image_ctx;
   librbd::ImageCtx *m_dst_image_ctx;
@@ -152,6 +179,8 @@ public:
   SnapSeqs m_snap_seqs;
   std::vector<librados::snap_t> m_src_snap_ids;
   std::vector<librados::snap_t> m_dst_snap_ids;
+
+  MockUtils mock_utils;
 
   void SetUp() override {
     TestMockFixture::SetUp();
@@ -205,10 +234,16 @@ public:
     EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(Return(new LambdaContext([](int){})));
   }
 
-  void expect_list_snaps(librbd::MockTestImageCtx &mock_image_ctx, int r) {
+  void expect_list_snaps(librbd::MockTestImageCtx &mock_image_ctx, int flags,
+                         int r) {
     EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, send(IsListSnaps()))
       .WillOnce(Invoke(
-        [&mock_image_ctx, r](io::ImageDispatchSpec* spec) {
+        [&mock_image_ctx, flags, r](io::ImageDispatchSpec* spec) {
+          auto req = boost::get<librbd::io::ImageDispatchSpec::ListSnaps>(
+                  &spec->request);
+
+          ASSERT_EQ(flags, req->list_snaps_flags);
+
           if (r < 0) {
             spec->fail(r);
             return;
@@ -223,6 +258,16 @@ public:
   void expect_get_object_name(librbd::MockTestImageCtx &mock_image_ctx) {
     EXPECT_CALL(mock_image_ctx, get_object_name(0))
                   .WillOnce(Return(mock_image_ctx.image_ctx->get_object_name(0)));
+  }
+
+  void expect_file_to_extents(MockUtils &mock_utils, bool skip_crypto = false) {
+    EXPECT_CALL(mock_utils, file_to_extents(_, _, _, _, skip_crypto, _)).Times(
+            AnyNumber());
+  }
+
+  void expect_extent_to_file(MockUtils &mock_utils, bool skip_crypto = false) {
+    EXPECT_CALL(mock_utils, extent_to_file(_, _, _, _, skip_crypto, _)).Times(
+            AnyNumber());
   }
 
   MockObjectCopyRequest *create_request(
@@ -244,18 +289,25 @@ public:
   }
 
   void expect_read(librbd::MockTestImageCtx& mock_image_ctx,
-                   uint64_t snap_id, uint64_t offset, uint64_t length, int r) {
+                   uint64_t snap_id, uint64_t offset, uint64_t length,
+                   int read_flags, int r) {
     interval_set<uint64_t> extents;
     extents.insert(offset, length);
-    expect_read(mock_image_ctx, snap_id, extents, r);
+    expect_read(mock_image_ctx, snap_id, extents, read_flags, r);
   }
 
   void expect_read(librbd::MockTestImageCtx& mock_image_ctx, uint64_t snap_id,
-                   const interval_set<uint64_t> &extents, int r) {
+                   const interval_set<uint64_t> &extents, int read_flags,
+                   int r) {
     EXPECT_CALL(*mock_image_ctx.io_image_dispatcher,
                 send(IsRead(snap_id, extents)))
       .WillOnce(Invoke(
-        [&mock_image_ctx, r](io::ImageDispatchSpec* spec) {
+        [&mock_image_ctx, read_flags, r](io::ImageDispatchSpec* spec) {
+          auto req = boost::get<librbd::io::ImageDispatchSpec::Read>(
+                  &spec->request);
+
+          ASSERT_EQ(read_flags, req->read_flags);
+
           if (r < 0) {
             spec->fail(r);
             return;
@@ -330,9 +382,10 @@ public:
     }
   }
 
-  void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx, int r = 0) {
+  void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx,
+                             bool skip_crypto = false, int r = 0) {
     EXPECT_CALL(*mock_image_ctx.io_object_dispatcher,
-            prepare_copyup(_, _, _)).WillOnce(Return(r));
+            prepare_copyup(_, _, skip_crypto)).WillOnce(Return(r));
   }
 
   int create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
@@ -513,13 +566,16 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, DNE) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx, 0,
                                                   CEPH_NOSNAP, 0, 0, &ctx);
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, -ENOENT);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, -ENOENT);
 
   request->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
@@ -544,6 +600,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx, 0,
@@ -553,12 +612,64 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
   expect_prepare_copyup(mock_dst_image_ctx);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
+
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_EQ(0, compare_objects());
+}
+
+TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSkipCrypto) {
+  // scribble some data
+  interval_set<uint64_t> one;
+  scribble(m_src_image_ctx, 10, 102400, &one);
+
+  ASSERT_EQ(0, create_snap("copy"));
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+
+  librbd::MockObjectMap mock_object_map;
+  mock_dst_image_ctx.object_map = &mock_object_map;
+
+  expect_op_work_queue(mock_src_image_ctx);
+  expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
+
+  expect_file_to_extents(mock_utils, true);
+  expect_extent_to_file(mock_utils, true);
+
+  C_SaferCond ctx;
+  MockObjectCopyRequest *request = create_request(
+          mock_src_image_ctx, mock_dst_image_ctx, 0, CEPH_NOSNAP, 0,
+          OBJECT_COPY_REQUEST_FLAG_SKIP_CRYPTO_AND_CACHE, &ctx);
+
+  librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
+    request->get_dst_io_ctx()));
+
+  InSequence seq;
+  int list_snaps_flags = (io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT |
+                          io::LIST_SNAPS_FLAG_SKIP_CRYPTO);
+  int read_flags = (io::READ_FLAG_SKIP_CRYPTO_AND_CACHE |
+                    io::READ_FLAG_DISABLE_CLIPPING);
+  expect_list_snaps(mock_src_image_ctx, list_snaps_flags, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
+              read_flags, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[0], OBJECT_EXISTS, 0);
+  expect_prepare_copyup(mock_dst_image_ctx, true);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
 
@@ -586,15 +697,18 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ReadError) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx, 0,
                                                   CEPH_NOSNAP, 0, 0, &ctx);
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
   expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
-              -EINVAL);
+              io::READ_FLAG_DISABLE_CLIPPING, -EINVAL);
 
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -619,6 +733,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteError) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx, 0,
@@ -628,8 +745,10 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteError) {
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
 
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
@@ -673,6 +792,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx, 0,
@@ -682,9 +804,12 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[2], two, 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[2], two,
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
@@ -737,6 +862,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx, 0,
@@ -746,8 +874,10 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
@@ -791,6 +921,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx, 0,
@@ -800,8 +933,10 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[1], 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[1], 0, one.range_end(),
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
 
   expect_start_op(mock_exclusive_lock);
   uint8_t state = OBJECT_EXISTS;
@@ -844,14 +979,19 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ObjectMapUpdateError) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx, 0,
                                                   CEPH_NOSNAP, 0, 0, &ctx);
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, -EBLOCKLISTED);
@@ -879,20 +1019,25 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, PrepareCopyupError) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx, 0,
                                                   CEPH_NOSNAP, 0, 0, &ctx);
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
 
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
           m_dst_snap_ids[0], OBJECT_EXISTS, 0);
 
-  expect_prepare_copyup(mock_dst_image_ctx, -EIO);
+  expect_prepare_copyup(mock_dst_image_ctx, false, -EIO);
 
   request->send();
   ASSERT_EQ(-EIO, ctx.wait());
@@ -951,6 +1096,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
                                                   mock_dst_image_ctx,
@@ -963,10 +1111,13 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
 
-  expect_read(mock_src_image_ctx, m_src_snap_ids[1], two, 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[2], three, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[1], two,
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[2], three,
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
 
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
@@ -1004,6 +1155,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Incremental) {
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
+  expect_file_to_extents(mock_utils);
+  expect_extent_to_file(mock_utils);
+
   // scribble some data
   interval_set<uint64_t> one;
   scribble(m_src_image_ctx, 10, 102400, &one);
@@ -1016,9 +1170,11 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Incremental) {
   auto request1 = create_request(mock_src_image_ctx, mock_dst_image_ctx,
                                  0, m_src_snap_ids[0], 0, 0, &ctx1);
 
-  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
 
-  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
+              io::READ_FLAG_DISABLE_CLIPPING, 0);
 
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
@@ -1043,7 +1199,8 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Incremental) {
                                  m_src_snap_ids[0], m_src_snap_ids[2],
                                  m_dst_snap_ids[0], 0, &ctx2);
 
-  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_list_snaps(mock_src_image_ctx,
+                    io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT, 0);
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[1],
@@ -1073,6 +1230,8 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, SkipSnapList) {
   expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
+
+  expect_extent_to_file(mock_utils);
 
   ASSERT_EQ(0, create_snap("snap1"));
   mock_dst_image_ctx.snaps = m_dst_image_ctx->snaps;

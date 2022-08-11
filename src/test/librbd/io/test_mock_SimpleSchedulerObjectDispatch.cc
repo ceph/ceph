@@ -271,6 +271,13 @@ TEST_F(TestMockIoSimpleSchedulerObjectDispatch, WriteDelayed) {
   C_SaferCond cond2;
   Context *on_finish2 = &cond2;
   C_SaferCond on_dispatched;
+
+  ASSERT_FALSE(mock_simple_scheduler_object_dispatch.write(
+      0, 0, std::move(data), mock_image_ctx.get_data_io_context(), 0,
+      WRITE_FLAG_SKIP_CRYPTO_AND_CACHE, std::nullopt, {},
+      &object_dispatch_flags, nullptr, &dispatch_result, &on_finish2,
+      &on_dispatched));
+
   ASSERT_TRUE(mock_simple_scheduler_object_dispatch.write(
       0, 0, std::move(data), mock_image_ctx.get_data_io_context(), 0, 0,
       std::nullopt, {}, &object_dispatch_flags, nullptr, &dispatch_result,

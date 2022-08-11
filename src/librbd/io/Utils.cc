@@ -85,8 +85,8 @@ bool assemble_write_same_extent(
 
 template <typename I>
 void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
-                 librados::snap_t snap_id, const ZTracer::Trace &trace,
-                 Context* on_finish) {
+                 librados::snap_t snap_id, bool skip_crypto_and_cache,
+                 const ZTracer::Trace &trace, Context* on_finish) {
 
   auto cct = image_ctx->cct;
 
@@ -96,7 +96,7 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
   Extents parent_extents;
   for (auto& extent: *extents) {
     extent_to_file(image_ctx, object_no, extent.offset, extent.length,
-                   false, parent_extents);
+                   skip_crypto_and_cache, parent_extents);
   }
 
   uint64_t parent_overlap = 0;
@@ -126,6 +126,8 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
     parent_read_bl = &extents->front().bl;
   }
 
+  int read_flags = skip_crypto_and_cache ? READ_FLAG_SKIP_CRYPTO_AND_CACHE : 0;
+
   auto comp = AioCompletion::create_and_start(on_finish, image_ctx->parent,
                                               AIO_TYPE_READ);
   ldout(cct, 20) << "completion " << comp << ", extents " << parent_extents
@@ -133,7 +135,7 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
   auto req = io::ImageDispatchSpec::create_read(
     *image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
     std::move(parent_extents), ReadResult{parent_read_bl},
-    image_ctx->parent->get_data_io_context(), 0, 0, trace);
+    image_ctx->parent->get_data_io_context(), 0, read_flags, trace);
   req->send();
 }
 
@@ -167,10 +169,12 @@ void unsparsify(CephContext* cct, ceph::bufferlist* bl,
 
 template <typename I>
 bool trigger_copyup(I* image_ctx, uint64_t object_no, IOContext io_context,
-                    Context* on_finish) {
+                    bool skip_crypto_and_cache, Context* on_finish) {
   bufferlist bl;
+  int write_flags =
+          skip_crypto_and_cache ? WRITE_FLAG_SKIP_CRYPTO_AND_CACHE : 0;
   auto req = new ObjectWriteRequest<I>(
-          image_ctx, object_no, 0, std::move(bl), io_context, 0, 0,
+          image_ctx, object_no, 0, std::move(bl), io_context, 0, write_flags,
           std::nullopt, {}, on_finish);
   if (!req->has_parent()) {
     delete req;
@@ -221,12 +225,13 @@ uint64_t get_file_offset(I* image_ctx, uint64_t object_no, uint64_t offset,
 
 template void librbd::io::util::read_parent(
     librbd::ImageCtx *image_ctx, uint64_t object_no, ReadExtents* extents,
-    librados::snap_t snap_id, const ZTracer::Trace &trace, Context* on_finish);
+    librados::snap_t snap_id, bool skip_crypto_and_cache,
+    const ZTracer::Trace &trace, Context* on_finish);
 template int librbd::io::util::clip_request(
     librbd::ImageCtx *image_ctx, Extents *image_extents, bool skip_crypto);
 template bool librbd::io::util::trigger_copyup(
         librbd::ImageCtx *image_ctx, uint64_t object_no, IOContext io_context,
-        Context* on_finish);
+        bool skip_crypto_and_cache, Context* on_finish);
 template void librbd::io::util::file_to_extents(
         librbd::ImageCtx *image_ctx, uint64_t offset, uint64_t length,
         uint64_t buffer_offset, bool skip_crypto,

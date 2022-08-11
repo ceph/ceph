@@ -44,9 +44,14 @@ struct CopyupRequest<librbd::MockImageCtx> {
 template <>
 struct CopyupRequest<librbd::MockTestImageCtx> : public CopyupRequest<librbd::MockImageCtx> {
   static CopyupRequest* s_instance;
+
+  bool skip_crypto_and_cache;
+
   static CopyupRequest* create(librbd::MockTestImageCtx *ictx,
                                uint64_t objectno, Extents &&image_extents,
+                               bool skip_crypto_and_cache,
                                const ZTracer::Trace &parent_trace) {
+    s_instance->skip_crypto_and_cache = skip_crypto_and_cache;
     return s_instance;
   }
 
@@ -63,6 +68,7 @@ struct ImageListSnapsRequest<librbd::MockTestImageCtx> {
 
   AioCompletion* aio_comp;
   Extents image_extents;
+  int list_snaps_flags;
   SnapshotDelta* snapshot_delta;
 
   ImageListSnapsRequest() {
@@ -75,6 +81,7 @@ struct ImageListSnapsRequest<librbd::MockTestImageCtx> {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     s_instance->image_extents = image_extents;
+    s_instance->list_snaps_flags = list_snaps_flags;
     s_instance->snapshot_delta = snapshot_delta;
   }
 
@@ -90,10 +97,36 @@ ImageListSnapsRequest<librbd::MockTestImageCtx>* ImageListSnapsRequest<librbd::M
 
 namespace util {
 
+namespace {
+
+struct Mock {
+    static Mock* s_instance;
+
+    Mock() {
+      s_instance = this;
+    }
+
+    MOCK_METHOD6(file_to_extents,
+            void(MockImageCtx*, uint64_t, uint64_t, uint64_t, bool,
+                 striper::LightweightObjectExtents*));
+    MOCK_METHOD6(extent_to_file,
+            void(MockTestImageCtx*, uint64_t, uint64_t, uint64_t, bool,
+                 std::vector<std::pair<uint64_t, uint64_t> >&));
+    MOCK_METHOD7(read_parent,
+               void(librbd::MockTestImageCtx *, uint64_t, ReadExtents*,
+                    librados::snap_t, bool, const ZTracer::Trace &, Context*));
+};
+
+Mock *Mock::s_instance = nullptr;
+
+} // anonymous namespace
+
 template <> void file_to_extents(
         MockTestImageCtx* image_ctx, uint64_t offset, uint64_t length,
         uint64_t buffer_offset, bool skip_crypto,
         striper::LightweightObjectExtents* object_extents) {
+  Mock::s_instance->file_to_extents(image_ctx, offset, length, buffer_offset,
+                                    skip_crypto, object_extents);
   Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
                            0, buffer_offset, object_extents);
 }
@@ -102,34 +135,18 @@ template <> void extent_to_file(
         MockTestImageCtx* image_ctx, uint64_t object_no, uint64_t offset,
         uint64_t length, bool skip_crypto,
         std::vector<std::pair<uint64_t, uint64_t> >& extents) {
+  Mock::s_instance->extent_to_file(image_ctx, object_no, offset, length,
+                                   skip_crypto, extents);
   Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
                           offset, length, extents);
 }
 
-namespace {
-
-struct Mock {
-  static Mock* s_instance;
-
-  Mock() {
-    s_instance = this;
-  }
-
-  MOCK_METHOD6(read_parent,
-               void(librbd::MockTestImageCtx *, uint64_t, ReadExtents*,
-                    librados::snap_t, const ZTracer::Trace &, Context*));
-};
-
-Mock *Mock::s_instance = nullptr;
-
-} // anonymous namespace
-
 template<> void read_parent(
     librbd::MockTestImageCtx *image_ctx, uint64_t object_no,
-    ReadExtents* extents, librados::snap_t snap_id,
+    ReadExtents* extents, librados::snap_t snap_id, bool skip_crypto_and_cache,
     const ZTracer::Trace &trace, Context* on_finish) {
-  Mock::s_instance->read_parent(image_ctx, object_no, extents, snap_id, trace,
-                                on_finish);
+  Mock::s_instance->read_parent(image_ctx, object_no, extents, snap_id,
+                                skip_crypto_and_cache, trace, on_finish);
 }
 
 } // namespace util
@@ -143,6 +160,7 @@ namespace librbd {
 namespace io {
 
 using ::testing::_;
+using ::testing::AnyNumber;
 using ::testing::DoDefault;
 using ::testing::InSequence;
 using ::testing::Invoke;
@@ -162,6 +180,8 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   typedef CopyupRequest<librbd::MockTestImageCtx> MockCopyupRequest;
   typedef ImageListSnapsRequest<librbd::MockTestImageCtx> MockImageListSnapsRequest;
   typedef util::Mock MockUtils;
+
+  MockUtils mock_utils;
 
   void expect_object_may_exist(MockTestImageCtx &mock_image_ctx,
                                uint64_t object_no, bool exists) {
@@ -248,10 +268,11 @@ struct TestMockIoObjectRequest : public TestMockFixture {
 
   void expect_read_parent(MockUtils &mock_utils, uint64_t object_no,
                           ReadExtents* extents, librados::snap_t snap_id,
-                          int r) {
+                          bool skip_crypto_and_cache, int r) {
     EXPECT_CALL(mock_utils,
-                read_parent(_, object_no, extents, snap_id, _, _))
-      .WillOnce(WithArg<5>(CompleteContext(r, static_cast<asio::ContextWQ*>(nullptr))));
+                read_parent(_, object_no, extents, snap_id,
+                            skip_crypto_and_cache, _, _))
+      .WillOnce(WithArg<6>(CompleteContext(r, static_cast<asio::ContextWQ*>(nullptr))));
   }
 
   void expect_copyup(MockCopyupRequest& mock_copyup_request, int r) {
@@ -402,11 +423,13 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   void expect_image_list_snaps(MockImageListSnapsRequest& req,
                                const Extents& image_extents,
                                const SnapshotDelta& image_snapshot_delta,
+                               int list_snaps_flags,
                                int r) {
     EXPECT_CALL(req, execute_send())
       .WillOnce(Invoke(
-        [&req, image_extents, image_snapshot_delta, r]() {
+        [&req, image_extents, image_snapshot_delta, list_snaps_flags, r]() {
           ASSERT_EQ(image_extents, req.image_extents);
+          ASSERT_EQ(list_snaps_flags, req.list_snaps_flags);
           *req.snapshot_delta = image_snapshot_delta;
 
           auto aio_comp = req.aio_comp;
@@ -414,6 +437,16 @@ struct TestMockIoObjectRequest : public TestMockFixture {
           aio_comp->add_request();
           aio_comp->complete_request(r);
         }));
+  }
+
+  void expect_file_to_extents(MockUtils &mock_utils, bool skip_crypto = false) {
+    EXPECT_CALL(mock_utils, file_to_extents(_, _, _, _, skip_crypto, _)).Times(
+            AnyNumber());
+  }
+
+  void expect_extent_to_file(MockUtils &mock_utils, bool skip_crypto = false) {
+    EXPECT_CALL(mock_utils, extent_to_file(_, _, _, _, skip_crypto, _)).Times(
+            AnyNumber());
   }
 };
 
@@ -547,9 +580,8 @@ TEST_F(TestMockIoObjectRequest, ParentRead) {
   expect_get_read_flags(mock_image_ctx, CEPH_NOSNAP, 0);
   expect_read(mock_image_ctx, ictx->get_object_name(0), 0, 4096, "", -ENOENT);
 
-  MockUtils mock_utils;
   ReadExtents extents = {{0, 4096}};
-  expect_read_parent(mock_utils, 0, &extents, CEPH_NOSNAP, 0);
+  expect_read_parent(mock_utils, 0, &extents, CEPH_NOSNAP, false, 0);
 
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
@@ -593,9 +625,8 @@ TEST_F(TestMockIoObjectRequest, ParentReadError) {
   expect_get_read_flags(mock_image_ctx, CEPH_NOSNAP, 0);
   expect_read(mock_image_ctx, ictx->get_object_name(0), 0, 4096, "", -ENOENT);
 
-  MockUtils mock_utils;
   ReadExtents extents = {{0, 4096}};
-  expect_read_parent(mock_utils, 0, &extents, CEPH_NOSNAP, -EPERM);
+  expect_read_parent(mock_utils, 0, &extents, CEPH_NOSNAP, false, -EPERM);
 
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
@@ -676,14 +707,15 @@ TEST_F(TestMockIoObjectRequest, CopyOnRead) {
     mock_image_ctx.object_map = &mock_object_map;
   }
 
+  expect_extent_to_file(mock_utils);
+
   InSequence seq;
   expect_object_may_exist(mock_image_ctx, 0, true);
   expect_get_read_flags(mock_image_ctx, CEPH_NOSNAP, 0);
   expect_read(mock_image_ctx, ictx->get_object_name(0), 0, 4096, "", -ENOENT);
 
-  MockUtils mock_utils;
   ReadExtents extents = {{0, 4096}};
-  expect_read_parent(mock_utils, 0, &extents, CEPH_NOSNAP, 0);
+  expect_read_parent(mock_utils, 0, &extents, CEPH_NOSNAP, false, 0);
 
   MockCopyupRequest mock_copyup_request;
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
@@ -697,6 +729,60 @@ TEST_F(TestMockIoObjectRequest, CopyOnRead) {
     nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
+  ASSERT_FALSE(mock_copyup_request.skip_crypto_and_cache);
+}
+
+TEST_F(TestMockIoObjectRequest, CopyOnReadSkipCrypto) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::Image image;
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.open(m_ioctx, image, m_image_name.c_str(), NULL));
+  ASSERT_EQ(0, image.snap_create("one"));
+  ASSERT_EQ(0, image.snap_protect("one"));
+  image.close();
+
+  std::string clone_name = get_temp_image_name();
+  int order = 0;
+  ASSERT_EQ(0, rbd.clone(m_ioctx, m_image_name.c_str(), "one", m_ioctx,
+                         clone_name.c_str(), RBD_FEATURE_LAYERING, &order));
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(clone_name, &ictx));
+  ictx->sparse_read_threshold_bytes = 8096;
+  ictx->clone_copy_on_read = true;
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.parent = &mock_image_ctx;
+
+  MockObjectMap mock_object_map;
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    mock_image_ctx.object_map = &mock_object_map;
+  }
+
+  expect_extent_to_file(mock_utils, true);
+
+  InSequence seq;
+  expect_object_may_exist(mock_image_ctx, 0, true);
+  expect_get_read_flags(mock_image_ctx, CEPH_NOSNAP, 0);
+  expect_read(mock_image_ctx, ictx->get_object_name(0), 0, 4096, "", -ENOENT);
+
+  ReadExtents extents = {{0, 4096}};
+  expect_read_parent(mock_utils, 0, &extents, CEPH_NOSNAP, true, 0);
+
+  MockCopyupRequest mock_copyup_request;
+  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
+  expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
+  expect_copyup(mock_copyup_request, 0);
+
+  C_SaferCond ctx;
+  auto req = MockObjectReadRequest::create(
+    &mock_image_ctx, 0, &extents,
+    mock_image_ctx.get_data_io_context(), 0, READ_FLAG_SKIP_CRYPTO_AND_CACHE,
+    {}, nullptr, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_TRUE(mock_copyup_request.skip_crypto_and_cache);
 }
 
 TEST_F(TestMockIoObjectRequest, Write) {
@@ -1018,6 +1104,8 @@ TEST_F(TestMockIoObjectRequest, Copyup) {
     mock_image_ctx.object_map = &mock_object_map;
   }
 
+  expect_extent_to_file(mock_utils);
+
   bufferlist bl;
   bl.append(std::string(4096, '1'));
 
@@ -1038,6 +1126,64 @@ TEST_F(TestMockIoObjectRequest, Copyup) {
     0, 0, std::nullopt, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
+  ASSERT_FALSE(mock_copyup_request.skip_crypto_and_cache);
+}
+
+TEST_F(TestMockIoObjectRequest, CopyupSkipCrypto) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::Image image;
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.open(m_ioctx, image, m_image_name.c_str(), NULL));
+  ASSERT_EQ(0, image.snap_create("one"));
+  ASSERT_EQ(0, image.snap_protect("one"));
+  image.close();
+
+  std::string clone_name = get_temp_image_name();
+  int order = 0;
+  ASSERT_EQ(0, rbd.clone(m_ioctx, m_image_name.c_str(), "one", m_ioctx,
+                         clone_name.c_str(), RBD_FEATURE_LAYERING, &order));
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(clone_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_get_object_size(mock_image_ctx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+    expect_is_lock_owner(mock_exclusive_lock);
+  }
+
+  MockObjectMap mock_object_map;
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    mock_image_ctx.object_map = &mock_object_map;
+  }
+
+  expect_extent_to_file(mock_utils, true);
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+
+  InSequence seq;
+  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
+  expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
+  expect_object_may_exist(mock_image_ctx, 0, true);
+  expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, false, 0);
+  expect_assert_exists(mock_image_ctx, -ENOENT);
+
+  MockAbstractObjectWriteRequest *write_request = nullptr;
+  MockCopyupRequest mock_copyup_request;
+  expect_copyup(mock_copyup_request, &write_request, 0);
+
+  C_SaferCond ctx;
+  auto req = MockObjectWriteRequest::create_write(
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.get_data_io_context(),
+    0, WRITE_FLAG_SKIP_CRYPTO_AND_CACHE, std::nullopt, {}, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_TRUE(mock_copyup_request.skip_crypto_and_cache);
 }
 
 TEST_F(TestMockIoObjectRequest, CopyupRestart) {
@@ -1071,6 +1217,8 @@ TEST_F(TestMockIoObjectRequest, CopyupRestart) {
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
     mock_image_ctx.object_map = &mock_object_map;
   }
+
+  expect_extent_to_file(mock_utils);
 
   bufferlist bl;
   bl.append(std::string(4096, '1'));
@@ -1124,6 +1272,8 @@ TEST_F(TestMockIoObjectRequest, CopyupOptimization) {
   MockObjectMap mock_object_map;
   mock_image_ctx.object_map = &mock_object_map;
 
+  expect_extent_to_file(mock_utils);
+
   bufferlist bl;
   bl.append(std::string(4096, '1'));
 
@@ -1164,6 +1314,8 @@ TEST_F(TestMockIoObjectRequest, CopyupError) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
   expect_get_object_size(mock_image_ctx);
+
+  expect_extent_to_file(mock_utils);
 
   bufferlist bl;
   bl.append(std::string(4096, '1'));
@@ -1253,6 +1405,8 @@ TEST_F(TestMockIoObjectRequest, DiscardRemoveTruncate) {
     mock_image_ctx.object_map = &mock_object_map;
   }
 
+  expect_extent_to_file(mock_utils);
+
   InSequence seq;
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
   expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
@@ -1306,6 +1460,8 @@ TEST_F(TestMockIoObjectRequest, DiscardTruncateAssertExists) {
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
     mock_image_ctx.object_map = &mock_object_map;
   }
+
+  expect_extent_to_file(mock_utils);
 
   InSequence seq;
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
@@ -1604,6 +1760,8 @@ TEST_F(TestMockIoObjectRequest, CompareAndWriteCopyup) {
     mock_image_ctx.object_map = &mock_object_map;
   }
 
+  expect_extent_to_file(mock_utils);
+
   bufferlist cmp_bl;
   cmp_bl.append_zero(4096);
 
@@ -1651,6 +1809,8 @@ TEST_F(TestMockIoObjectRequest, CompareAndWriteMismatch) {
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
     mock_image_ctx.object_map = &mock_object_map;
   }
+
+  expect_extent_to_file(mock_utils);
 
   bufferlist cmp_bl;
   cmp_bl.append_zero(4096);
@@ -1885,6 +2045,9 @@ TEST_F(TestMockIoObjectRequest, ListSnapsParent) {
   MockTestImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.parent = &mock_image_ctx;
 
+  expect_extent_to_file(mock_utils);
+  expect_file_to_extents(mock_utils);
+
   InSequence seq;
 
   expect_list_snaps(mock_image_ctx, {}, -ENOENT);
@@ -1897,7 +2060,8 @@ TEST_F(TestMockIoObjectRequest, ListSnapsParent) {
   image_snapshot_delta[{1,6}].insert(
     0, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
   expect_image_list_snaps(mock_image_list_snaps_request,
-                          {{0, 4096}}, image_snapshot_delta, 0);
+                          {{0, 4096}}, image_snapshot_delta,
+                          LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS, 0);
 
   SnapshotDelta snapshot_delta;
   C_SaferCond ctx;
@@ -1905,6 +2069,48 @@ TEST_F(TestMockIoObjectRequest, ListSnapsParent) {
     &mock_image_ctx, 0,
     {{440320, 1024}, {2122728, 1024}, {2220032, 2048}, {3072000, 4096}},
     {0, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{0,0}].insert(
+    0, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
+  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
+}
+
+TEST_F(TestMockIoObjectRequest, ListSnapsParentSkipCrypto) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.parent = &mock_image_ctx;
+
+  expect_extent_to_file(mock_utils, true);
+  expect_file_to_extents(mock_utils, true);
+
+  InSequence seq;
+
+  expect_list_snaps(mock_image_ctx, {}, -ENOENT);
+
+  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
+  expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
+
+  MockImageListSnapsRequest mock_image_list_snaps_request;
+  SnapshotDelta image_snapshot_delta;
+  image_snapshot_delta[{1,6}].insert(
+    0, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
+  int list_snaps_flags = (LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS |
+                          LIST_SNAPS_FLAG_SKIP_CRYPTO);
+  expect_image_list_snaps(mock_image_list_snaps_request,
+                          {{0, 4096}}, image_snapshot_delta, list_snaps_flags,
+                          0);
+
+  SnapshotDelta snapshot_delta;
+  C_SaferCond ctx;
+  auto req = MockObjectListSnapsRequest::create(
+    &mock_image_ctx, 0,
+    {{440320, 1024}, {2122728, 1024}, {2220032, 2048}, {3072000, 4096}},
+    {0, CEPH_NOSNAP}, LIST_SNAPS_FLAG_SKIP_CRYPTO, {}, &snapshot_delta, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 

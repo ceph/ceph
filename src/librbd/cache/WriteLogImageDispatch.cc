@@ -49,6 +49,10 @@ bool WriteLogImageDispatch<I>::read(
     return false;
   }
 
+  if ((read_flags & io::READ_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
+
   // WriteLogImageDispatch currently does not support read_flags
   ceph_assert(read_flags == 0);
 
@@ -77,6 +81,10 @@ bool WriteLogImageDispatch<I>::write(
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
+
+  if ((write_flags & io::WRITE_FLAG_SKIP_CRYPTO_AND_CACHE) != 0) {
+    return false;
+  }
 
   // WriteLogImageDispatch currently does not support write_flags
   ceph_assert(write_flags == 0);
