@@ -22,6 +22,7 @@ overrides:
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         filestore debug inject read err: true

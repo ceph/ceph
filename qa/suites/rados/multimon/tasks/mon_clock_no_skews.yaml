@@ -7,5 +7,6 @@ tasks:
     - clocks not synchronized
     - overall HEALTH_
     - \(MON_CLOCK_SKEW\)
+    - \(POOL_APP_NOT_ENABLED\)
 - mon_clock_skew_check:
     expect-skew: false
