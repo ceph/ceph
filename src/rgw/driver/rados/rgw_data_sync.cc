@@ -2290,6 +2290,13 @@ public:
 	  yield set_sleeping(true);
 	}
 	tn->log(5, "acquired data sync status lease");
+
+	// Reread sync status now that we've acquired the lock!
+	yield call(new RGWReadDataSyncStatusCoroutine(sc, &sync_status, objvs));
+	if (retcode < 0) {
+	  tn->log(0, SSTR("ERROR: failed to fetch sync status, retcode=" << retcode));
+	  return set_cr_error(retcode);
+	}
       }
 
       /* state: init status */
