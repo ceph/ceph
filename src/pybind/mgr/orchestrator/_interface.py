@@ -437,6 +437,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def service_discovery_dump_cert(self) -> OrchResult:
+        """
+        Returns service discovery server root certificate
+
+        :return: service discovery root certificate
+        """
+        raise NotImplementedError()
+
     def describe_service(self, service_type: Optional[str] = None, service_name: Optional[str] = None, refresh: bool = False) -> OrchResult[List['ServiceDescription']]:
         """
         Describe a service (of any kind) that is already configured in

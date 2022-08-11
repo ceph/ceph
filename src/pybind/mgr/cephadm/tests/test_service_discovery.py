@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock
-from cephadm.agent import Root
+from cephadm.service_discovery import Root
 
 
 class FakeDaemonDescription:
@@ -88,7 +88,7 @@ class FakeMgr:
         return "9283"
 
 
-class TestCephadmService:
+class TestServiceDiscovery:
 
     def test_get_sd_config_prometheus(self):
         mgr = FakeMgr()

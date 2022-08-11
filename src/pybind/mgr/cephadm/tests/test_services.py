@@ -401,18 +401,21 @@ class TestMonitoring:
                   evaluation_interval: 10s
                 rule_files:
                   - /etc/prometheus/alerting/*
+
+
                 scrape_configs:
                   - job_name: 'ceph'
                     honor_labels: true
-                    static_configs:
-                    - targets:
-                      - '[::1]:9283'
+                    http_sd_configs:
+                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=mgr-prometheus
+                      tls_config:
+                        ca_file: root_cert.pem
 
                   - job_name: 'node'
-                    static_configs:
-                    - targets: ['[1::4]:9100']
-                      labels:
-                        instance: 'test'
+                    http_sd_configs:
+                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=node-exporter
+                      tls_config:
+                        ca_file: root_cert.pem
 
                 """).lstrip()
 
@@ -427,7 +430,7 @@ class TestMonitoring:
                         '--config-json', '-',
                         '--tcp-ports', '9095'
                     ],
-                    stdin=json.dumps({"files": {"prometheus.yml": y}}),
+                    stdin=json.dumps({"files": {"prometheus.yml": y, "root_cert.pem": ''}}),
                     image='')
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
