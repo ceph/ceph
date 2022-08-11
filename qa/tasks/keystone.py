@@ -16,6 +16,8 @@ from teuthology.packaging import install_package
 from teuthology.packaging import remove_package
 from teuthology.exceptions import ConfigError
 
+from tasks.util.http import wait_for_http_endpoint
+
 log = logging.getLogger(__name__)
 
 
@@ -271,8 +273,16 @@ def run_keystone(ctx, config):
             check_status=False,
         )
 
-        # sleep driven synchronization
-        run_in_keystone_venv(ctx, client, [ 'sleep', '15' ])
+        # wait for both endpoints to come up
+        public_host, public_port = ctx.keystone.public_endpoints[client]
+        public_url = 'http://{host}:{port}/v3'.format(host=public_host,
+                                                      port=public_port)
+        wait_for_http_endpoint(public_url, remote)
+
+        admin_host, admin_port = ctx.keystone.admin_endpoints[client]
+        admin_url = 'http://{host}:{port}/v3'.format(host=admin_host,
+                                                     port=admin_port)
+        wait_for_http_endpoint(admin_url, remote)
     try:
         yield
     finally:
