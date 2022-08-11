@@ -1600,3 +1600,72 @@ def test_remove_from_offline(service_type, placement, hosts, maintenance_hosts, 
     ).place()
     assert sorted([h.hostname for h in to_add]) in expected_add
     assert sorted([h.name() for h in to_remove]) in expected_remove
+
+
+class DrainExplicitPlacementTest(NamedTuple):
+    service_type: str
+    placement: PlacementSpec
+    hosts: List[str]
+    maintenance_hosts: List[str]
+    offline_hosts: List[str]
+    draining_hosts: List[str]
+    daemons: List[DaemonDescription]
+    expected_add: List[List[str]]
+    expected_remove: List[List[str]]
+
+
+@pytest.mark.parametrize("service_type,placement,hosts,maintenance_hosts,offline_hosts,draining_hosts,daemons,expected_add,expected_remove",
+                         [
+                             DrainExplicitPlacementTest(
+                                 'crash',
+                                 PlacementSpec(hosts='host1 host2 host3'.split()),
+                                 'host1 host2 host3 host4'.split(),
+                                 [],
+                                 [],
+                                 ['host3'],
+                                 [
+                                     DaemonDescription('crash', 'host1', 'host1'),
+                                     DaemonDescription('crash', 'host2', 'host2'),
+                                     DaemonDescription('crash', 'host3', 'host3'),
+                                 ],
+                                 [[]],
+                                 [['crash.host3']],
+                             ),
+                             DrainExplicitPlacementTest(
+                                 'crash',
+                                 PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+                                 'host1 host2 host3 host4'.split(),
+                                 [],
+                                 [],
+                                 ['host1', 'host4'],
+                                 [
+                                     DaemonDescription('crash', 'host1', 'host1'),
+                                     DaemonDescription('crash', 'host3', 'host3'),
+                                 ],
+                                 [['host2']],
+                                 [['crash.host1']],
+                             ),
+                         ])
+def test_drain_from_explict_placement(service_type, placement, hosts, maintenance_hosts, offline_hosts, draining_hosts, daemons, expected_add, expected_remove):
+
+    spec = ServiceSpec(service_type=service_type,
+                       service_id='test',
+                       placement=placement)
+
+    host_specs = [HostSpec(h) for h in hosts]
+    draining_host_specs = [HostSpec(h) for h in draining_hosts]
+    for h in host_specs:
+        if h.hostname in offline_hosts:
+            h.status = 'offline'
+        if h.hostname in maintenance_hosts:
+            h.status = 'maintenance'
+
+    hosts, to_add, to_remove = HostAssignment(
+        spec=spec,
+        hosts=host_specs,
+        unreachable_hosts=[h for h in host_specs if h.status],
+        draining_hosts=draining_host_specs,
+        daemons=daemons,
+    ).place()
+    assert sorted([h.hostname for h in to_add]) in expected_add
+    assert sorted([h.name() for h in to_remove]) in expected_remove
