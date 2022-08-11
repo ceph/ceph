@@ -82,15 +82,7 @@ public:
     const std::string& root,
     MDStoreRef mdstore,
     DeviceRef device,
-    TransactionManagerRef tm,
-    CollectionManagerRef cm,
-    OnodeManagerRef om);
-  SeaStore(
-    const std::string& root,
-    DeviceRef device,
-    TransactionManagerRef tm,
-    CollectionManagerRef cm,
-    OnodeManagerRef om);
+    bool is_test);
   ~SeaStore();
     
   seastar::future<> stop() final;
@@ -331,14 +323,18 @@ private:
     const std::optional<std::string> &_start,
     OMapManager::omap_list_config_t config);
 
+  void init_managers();
+
   std::string root;
   MDStoreRef mdstore;
   DeviceRef device;
+  const uint32_t max_object_size = 0;
+  bool is_test;
+
   std::vector<DeviceRef> secondaries;
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
-  const uint32_t max_object_size = 0;
 
   using tm_iertr = TransactionManager::base_iertr;
   using tm_ret = tm_iertr::future<>;
@@ -447,4 +443,8 @@ private:
 seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   const std::string &device,
   const ConfigValues &config);
+
+std::unique_ptr<SeaStore> make_test_seastore(
+  DeviceRef device,
+  SeaStore::MDStoreRef mdstore);
 }

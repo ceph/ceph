@@ -5,6 +5,7 @@
 
 #include "crimson/common/errorator-loop.h"
 #include "include/intarith.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/logging.h"
 
@@ -24,9 +25,11 @@ std::ostream &operator<<(std::ostream &out,
              << ")";
 }
 
-CircularBoundedJournal::CircularBoundedJournal(RBMDevice* device,
+CircularBoundedJournal::CircularBoundedJournal(
+    JournalTrimmer &trimmer,
+    RBMDevice* device,
     const std::string &path)
-  : device(device), path(path) {}
+  : trimmer(trimmer), device(device), path(path) {}
 
 CircularBoundedJournal::mkfs_ret
 CircularBoundedJournal::mkfs(const mkfs_config_t& config)
@@ -236,6 +239,7 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
       paddr,
       write_result
     };
+    trimmer.set_journal_head(write_result.start_seq);
     return submit_result;
   });
 }

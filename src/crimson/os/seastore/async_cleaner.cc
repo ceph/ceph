@@ -1013,9 +1013,6 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
 		});
 	      });
 	    }).si_then([this, &t] {
-	      if (reclaim_state->is_complete()) {
-		t.mark_segment_to_release(reclaim_state->get_segment_id());
-	      }
 	      return ecb->submit_transaction_direct(t);
 	    });
 	  });
@@ -1028,14 +1025,32 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
       auto d = seastar::lowres_system_clock::now() - start;
       DEBUG("duration: {}, pavail_ratio before: {}, repeats: {}", d, pavail_ratio, runs);
       if (reclaim_state->is_complete()) {
-	INFO("reclaim {} finish, reclaimed alive/total={}, usage={}",
-             reclaim_state->get_segment_id(),
-             stats.reclaiming_bytes/(double)segments.get_segment_size(),
-             space_tracker->calc_utilization(reclaim_state->get_segment_id()));
+        auto segment_to_release = reclaim_state->get_segment_id();
+        INFO("reclaim {} finish, reclaimed alive/total={}",
+             segment_to_release,
+             stats.reclaiming_bytes/(double)segments.get_segment_size());
 	stats.reclaimed_bytes += stats.reclaiming_bytes;
 	stats.reclaimed_segment_bytes += segments.get_segment_size();
 	stats.reclaiming_bytes = 0;
 	reclaim_state.reset();
+        return sm_group->release_segment(segment_to_release
+        ).safe_then([this, FNAME, segment_to_release] {
+          auto old_usage = calc_utilization(segment_to_release);
+          if(unlikely(old_usage != 0)) {
+            space_tracker->dump_usage(segment_to_release);
+            ERRORT("segment {} old_usage {} != 0",
+                   segment_to_release, old_usage);
+            ceph_abort();
+          }
+          segments.mark_empty(segment_to_release);
+          auto new_usage = calc_utilization(segment_to_release);
+          adjust_segment_util(old_usage, new_usage);
+          INFO("released {}, {}",
+               segment_to_release, gc_stat_printer_t{this, false});
+          maybe_wake_gc_blocked_io();
+        });
+      } else {
+        return SegmentManager::release_ertr::now();
       }
     });
   });
@@ -1187,36 +1202,6 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
       segment_header.category,
       segment_header.generation);
   });
-}
-
-AsyncCleaner::release_ertr::future<>
-AsyncCleaner::maybe_release_segment(Transaction &t)
-{
-  auto to_release = t.get_segment_to_release();
-  if (to_release != NULL_SEG_ID) {
-    LOG_PREFIX(AsyncCleaner::maybe_release_segment);
-    INFOT("releasing segment {}", t, to_release);
-    return sm_group->release_segment(to_release
-    ).safe_then([this, FNAME, &t, to_release] {
-      auto old_usage = calc_utilization(to_release);
-      if(unlikely(old_usage != 0)) {
-	space_tracker->dump_usage(to_release);
-	ERRORT("segment {} old_usage {} != 0", t, to_release, old_usage);
-	ceph_abort();
-      }
-      segments.mark_empty(to_release);
-      auto new_usage = calc_utilization(to_release);
-      adjust_segment_util(old_usage, new_usage);
-      INFOT("released, {}", t, gc_stat_printer_t{this, false});
-      if (space_tracker->get_usage(to_release) != 0) {
-        space_tracker->dump_usage(to_release);
-        ceph_abort();
-      }
-      maybe_wake_gc_blocked_io();
-    });
-  } else {
-    return SegmentManager::release_ertr::now();
-  }
 }
 
 void AsyncCleaner::complete_init()
