@@ -14,12 +14,12 @@ tasks:
      - fs/upgrade/volume_client
    env:
      ACTION: verify
-   cleanup: false
+   cleanup: true
 - workunit:
    clients:
      client.1:
      - fs/upgrade/volume_client
    env:
      ACTION: verify
-   cleanup: false
+   cleanup: true
 - print: "**** fs/volume_client verify"
