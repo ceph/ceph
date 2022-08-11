@@ -1085,6 +1085,11 @@ constexpr bool is_backref_node(extent_types_t type)
     type == extent_types_t::BACKREF_LEAF;
 }
 
+constexpr bool is_fixed_kv_node(extent_types_t type)
+{
+  return is_lba_node(type) || is_backref_node(type);
+}
+
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
 using reclaim_gen_t = uint8_t;

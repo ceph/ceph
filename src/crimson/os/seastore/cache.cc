@@ -807,6 +807,7 @@ void Cache::invalidate_extent(
   if (!extent.may_conflict()) {
     assert(extent.transactions.empty());
     extent.state = CachedExtent::extent_state_t::INVALID;
+    extent.on_invalidated(t);
     return;
   }
 
@@ -1028,6 +1029,7 @@ record_t Cache::prepare_record(
 {
   LOG_PREFIX(Cache::prepare_record);
   SUBTRACET(seastore_t, "enter", t);
+  t.committed = true;
 
   auto trans_src = t.get_src();
   assert(!t.is_weak());
@@ -1391,6 +1393,13 @@ record_t Cache::prepare_record(
     assert(rewrite_version_stats.is_clear());
   }
 
+  for (auto tracker : t.trackers_to_rm) {
+      SUBTRACET(seastore_t,
+	"delete tracker: {}", t, (void*)tracker);
+      delete tracker;
+  }
+  t.trackers_to_rm.clear();
+
   return record;
 }
 
@@ -1541,6 +1550,7 @@ void Cache::complete_commit(
   for (auto &i: t.existing_block_list) {
     if (i->is_valid()) {
       if (i->is_exist_clean()) {
+	i->pending_for_transaction = 0;
 	i->state = CachedExtent::extent_state_t::CLEAN;
       } else {
 	assert(i->state == CachedExtent::extent_state_t::DIRTY);

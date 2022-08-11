@@ -13,6 +13,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/root_block.h"
+#include "crimson/os/seastore/btree/btree_child_tracker.h"
 
 namespace crimson::os::seastore {
 
@@ -325,12 +326,20 @@ public:
   void invalidate_clear_write_set() {
     for (auto &&i: write_set) {
       i.state = CachedExtent::extent_state_t::INVALID;
-      i.on_invalidated(*this);
+      i.on_invalidated(*this, true);
     }
     write_set.clear();
   }
 
   ~Transaction() {
+    LOG_PREFIX(Transaction::~Transaction);
+    if (!committed) {
+      for (auto tracker : new_pending_trackers) {
+	SUBTRACET(seastore_t,
+	  "delete tracker: {}", *this, (void*)tracker);
+	delete tracker;
+      }
+    }
     on_destruct(*this);
     invalidate_clear_write_set();
   }
@@ -339,6 +348,14 @@ public:
   friend class TransactionConflictCondition;
 
   void reset_preserve_handle(journal_seq_t initiated_after) {
+    LOG_PREFIX(Transaction::reset_preserve_handle);
+    for (auto tracker : new_pending_trackers) {
+      SUBTRACET(seastore_t,
+	"delete tracker: {}", *this, (void*)tracker);
+      delete tracker;
+    }
+    new_pending_trackers.clear();
+    trackers_to_rm.clear();
     root.reset();
     offset = 0;
     delayed_temp_offset = 0;
@@ -448,6 +465,25 @@ public:
   transaction_id_t get_trans_id() const {
     return trans_id;
   }
+
+  // pointers in trackers_to_rm get deleted when transactions commit
+  //
+  // NOTE THAT: there may exist duplicated trackers in both trackers_to_rm
+  // and new_pending_trackers, this happens when a newly created child gets
+  // removed by the same transaction that created it. This is acceptable
+  // because trackers in these two sets get deleted in different situations.
+  // For those duplicated trackers, if the transaction is committed, the
+  // trackers are deleted through trackers_to_rm; if the transaction is reset
+  // or destroyed without committing, the trackers are deleted through
+  // new_pending_trackers
+  //
+  // pointers in new_pending_trackers get deleted when transactions get reset
+  //
+  // NOTE THAT: trackers_to_rm and new_pending_trackers have to be copied
+  // accordingly when splitting/merging/balancing nodes.
+  std::vector<child_tracker_t*> trackers_to_rm;
+  std::vector<child_tracker_t*> new_pending_trackers;
+  bool committed = false;
 
 private:
   friend class Cache;

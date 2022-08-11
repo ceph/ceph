@@ -14,6 +14,7 @@ set(crimson_seastore_srcs
   backref/btree_backref_manager.cc
   lba_manager/btree/btree_lba_manager.cc
   lba_manager/btree/lba_btree_node.cc
+  btree/btree_child_tracker.cc
   omap_manager.cc
   omap_manager/btree/btree_omap_manager.cc
   omap_manager/btree/omap_btree_node_impl.cc

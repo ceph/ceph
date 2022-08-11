@@ -524,12 +524,13 @@ public:
             ++(get_tree_stats<self_type>(c.trans).num_inserts);
             return handle_split(
               c, ret
-            ).si_then([c, laddr, val, &ret] {
+            ).si_then([c, laddr, val, &ret, this] {
               if (!ret.leaf.node->is_pending()) {
                 CachedExtentRef mut = c.cache.duplicate_for_write(
                   c.trans, ret.leaf.node
                 );
                 ret.leaf.node = mut->cast<leaf_node_t>();
+                may_link_parent_child(ret, 1, c.trans);
               }
               auto iter = typename leaf_node_t::const_iterator(
                   ret.leaf.node.get(), ret.leaf.pos);
@@ -586,6 +587,7 @@ public:
         c.trans, iter.leaf.node
       );
       iter.leaf.node = mut->cast<leaf_node_t>();
+      may_link_parent_child(iter, 1, c.trans);
     }
     ++(get_tree_stats<self_type>(c.trans).num_updates);
     iter.leaf.node->update(
@@ -627,6 +629,7 @@ public:
             c.trans, ret.leaf.node
           );
           ret.leaf.node = mut->cast<leaf_node_t>();
+          may_link_parent_child(ret, 1, c.trans);
         }
         ret.leaf.node->remove(
           ret.leaf.node->iter_idx(ret.leaf.pos));
@@ -825,6 +828,12 @@ public:
         n_fixed_kv_extent->get_bptr().c_str());
       n_fixed_kv_extent->set_modify_time(fixed_kv_extent.get_modify_time());
       n_fixed_kv_extent->pin.set_range(n_fixed_kv_extent->get_node_meta());
+
+      if constexpr (
+        std::is_same_v<internal_node_t,
+          std::remove_reference_t<decltype(fixed_kv_extent)>>) {
+        fixed_kv_extent.copy_child_trackers_out(c.trans, *n_fixed_kv_extent);
+      }
       
       /* This is a bit underhanded.  Any relative addrs here must necessarily
        * be record relative as we are rewriting a dirty extent.  Thus, we
@@ -851,7 +860,8 @@ public:
         n_fixed_kv_extent->get_node_meta().depth,
         n_fixed_kv_extent->get_node_meta().begin,
         e->get_paddr(),
-        n_fixed_kv_extent->get_paddr()
+        n_fixed_kv_extent->get_paddr(),
+        n_fixed_kv_extent
       ).si_then([c, e] {
         c.cache.retire_extent(c.trans, e);
       });
@@ -875,7 +885,8 @@ public:
     depth_t depth,
     node_key_t laddr,
     paddr_t old_addr,
-    paddr_t new_addr)
+    paddr_t new_addr,
+    typename internal_node_t::base_ref new_node)
   {
     LOG_PREFIX(FixedKVBtree::update_internal_mapping);
     SUBTRACET(
@@ -963,12 +974,15 @@ public:
           ceph_assert(0 == "impossible");
         }
 
-        CachedExtentRef mut = c.cache.duplicate_for_write(
-          c.trans,
-          parent.node
-        );
-        typename internal_node_t::Ref mparent = mut->cast<internal_node_t>();
-        mparent->update(piter, new_addr);
+        if (!parent.node->is_pending()) {
+          CachedExtentRef mut = c.cache.duplicate_for_write(
+            c.trans,
+            parent.node
+          );
+          parent.node = mut->cast<internal_node_t>();
+          may_link_parent_child(iter, depth + 1, c.trans);
+        }
+        parent.node->update(c.trans, piter, new_addr, new_node);
 
         /* Note, iter is now invalid as we didn't udpate either the parent
          * node reference to the new mutable instance nor did we update the
@@ -985,6 +999,32 @@ private:
   phy_tree_root_t root;
   bool root_dirty = false;
 
+  void may_link_parent_child(iterator &ret, depth_t d, Transaction &t) {
+    LOG_PREFIX(FixedKVBtree::may_link_parent_child);
+    if (d == root.get_depth())
+      return;
+    auto &parent_entry = ret.get_internal(d + 1);
+    auto &parent = parent_entry.node;
+    auto child =
+      (d == 1
+        ? (typename leaf_node_t::base_ref)ret.leaf.node
+        : (typename internal_node_t::base_ref)ret.get_internal(d).node);
+    ceph_assert(child->is_mutation_pending());
+    if (parent->is_pending()) {
+      SUBTRACET(seastore_fixedkv_tree,
+        "linking to pending parent {}, child {}, at pos {}",
+        t, *parent, *child, parent_entry.pos);
+      parent->new_child(t, *child, parent_entry.pos);
+      ceph_assert(!child->parent_tracker);
+    } else {
+      SUBTRACET(seastore_fixedkv_tree,
+        "add child trans view to parent {}, child {}, at pos {}",
+        t, *parent, *child, parent_entry.pos);
+      parent->add_child_trans_view(*child, parent_entry.pos);
+    }
+  }
+
+
   using get_internal_node_iertr = base_iertr;
   using get_internal_node_ret = get_internal_node_iertr::future<InternalNodeRef>;
   static get_internal_node_ret get_internal_node(
@@ -992,7 +1032,8 @@ private:
     depth_t depth,
     paddr_t offset,
     node_key_t begin,
-    node_key_t end)
+    node_key_t end,
+    std::optional<typename iterator::template node_position_t<internal_node_t>> parent_pos)
   {
     LOG_PREFIX(FixedKVBtree::get_internal_node);
     SUBTRACET(
@@ -1004,10 +1045,16 @@ private:
       begin,
       end);
     assert(depth > 1);
-    auto init_internal = [c, depth, begin, end](internal_node_t &node) {
+    auto init_internal = [c, depth, begin, end,
+                          parent_pos=std::move(parent_pos)]
+                          (internal_node_t &node) {
       assert(!node.is_pending());
       assert(!node.pin.is_linked());
       node.pin.set_range(fixed_kv_node_meta_t<node_key_t>{begin, end, depth});
+      if (parent_pos) {
+        auto &parent = parent_pos->node;
+        parent->link_child(node, parent_pos->pos);
+      }
       if (c.pins) {
         c.pins->add_pin(node.pin);
       }
@@ -1054,20 +1101,28 @@ private:
     op_context_t<node_key_t> c,
     paddr_t offset,
     node_key_t begin,
-    node_key_t end)
+    node_key_t end,
+    std::optional<typename iterator::template node_position_t<internal_node_t>> parent_pos)
   {
     LOG_PREFIX(FixedKVBtree::get_leaf_node);
     SUBTRACET(
       seastore_fixedkv_tree,
-      "reading leaf at offset {}, begin {}, end {}",
+      "reading leaf at offset {}, begin {}, end {}, pos {}",
       c.trans,
       offset,
       begin,
-      end);
-    auto init_leaf = [c, begin, end](leaf_node_t &node) {
+      end,
+      parent_pos ? parent_pos->pos : std::numeric_limits<uint16_t>::max());
+    auto init_leaf = [c, begin, end, 
+                      parent_pos=std::move(parent_pos)]
+                      (leaf_node_t &node) {
       assert(!node.is_pending());
       assert(!node.pin.is_linked());
       node.pin.set_range(fixed_kv_node_meta_t<node_key_t>{begin, end, 1});
+      if (parent_pos) {
+        auto &parent = parent_pos->node;
+        parent->link_child(node, parent_pos->pos);
+      }
       if (c.pins) {
         c.pins->add_pin(node.pin);
       }
@@ -1119,7 +1174,8 @@ private:
 	root.get_depth(),
 	root.get_location(),
 	min_max_t<node_key_t>::min,
-	min_max_t<node_key_t>::max
+	min_max_t<node_key_t>::max,
+        std::nullopt
       ).si_then([this, visitor, &iter](InternalNodeRef root_node) {
 	iter.get_internal(root.get_depth()).node = root_node;
 	if (visitor) (*visitor)(
@@ -1134,7 +1190,8 @@ private:
 	c,
 	root.get_location(),
 	min_max_t<node_key_t>::min,
-	min_max_t<node_key_t>::max
+	min_max_t<node_key_t>::max,
+        std::nullopt
       ).si_then([visitor, &iter, this](LeafNodeRef root_node) {
 	iter.leaf.node = root_node;
 	if (visitor) (*visitor)(
@@ -1171,7 +1228,8 @@ private:
       depth,
       node_iter->get_val().maybe_relative_to(parent->get_paddr()),
       begin,
-      end
+      end,
+      std::make_optional<node_position_t<internal_node_t>>(parent_entry)
     ).si_then([depth, visitor, &iter, &f](InternalNodeRef node) {
       auto &entry = iter.get_internal(depth);
       entry.node = node;
@@ -1211,7 +1269,8 @@ private:
       c,
       node_iter->get_val().maybe_relative_to(parent->get_paddr()),
       begin,
-      end
+      end,
+      std::make_optional<node_position_t<internal_node_t>>(parent_entry)
     ).si_then([visitor, &iter, &f](LeafNodeRef node) {
       iter.leaf.node = node;
       auto node_iter = f(*node);
@@ -1416,6 +1475,13 @@ private:
         min_max_t<node_key_t>::min,
         root.get_location(),
         nullptr);
+      CachedExtentRef old_root;
+      if (iter.get_depth() == 1) {
+        old_root = iter.leaf.node;
+      } else {
+        old_root = iter.get_internal(iter.get_depth()).node;
+      }
+      nroot->new_root(c.trans, old_root);
       iter.internal.push_back({nroot, 0});
 
       root.set_location(nroot->get_paddr());
@@ -1436,12 +1502,16 @@ private:
       auto parent_iter = parent_pos.get_iter();
 
       parent_node->update(
+        c.trans,
         parent_iter,
-        left->get_paddr());
+        left->get_paddr(),
+        left);
       parent_node->insert(
+        c.trans,
         parent_iter + 1,
         pivot,
-        right->get_paddr());
+        right->get_paddr(),
+        right);
 
       SUBTRACET(
         seastore_fixedkv_tree,
@@ -1462,6 +1532,7 @@ private:
         parent_pos.node = c.cache.duplicate_for_write(
           c.trans, parent_pos.node
         )->template cast<internal_node_t>();
+        may_link_parent_child(iter, split_from + 1, c.trans);
       }
 
       if (split_from > 1) {
@@ -1548,10 +1619,10 @@ private:
             auto merge_fut = handle_merge_iertr::now();
             if (to_merge > 1) {
               auto &pos = iter.get_internal(to_merge);
-              merge_fut = merge_level(c, to_merge, parent_pos, pos);
+              merge_fut = merge_level(c, to_merge, parent_pos, pos, iter);
             } else {
               auto &pos = iter.leaf;
-              merge_fut = merge_level(c, to_merge, parent_pos, pos);
+              merge_fut = merge_level(c, to_merge, parent_pos, pos, iter);
             }
 
             return merge_fut.si_then([FNAME, this, c, &iter, &to_merge] {
@@ -1560,6 +1631,10 @@ private:
               if (to_merge == iter.get_depth()) {
                 if (pos.node->get_size() == 1) {
                   SUBTRACET(seastore_fixedkv_tree, "collapsing root", c.trans);
+                  assert(pos.node->is_pending());
+                  SUBTRACET(seastore_fixedkv_tree, "delete tracker: {}",
+                    c.trans, (void*)pos.node->child_trackers[0]);
+                  delete pos.node->child_trackers[0];
                   c.cache.retire_extent(c.trans, pos.node);
                   assert(pos.pos == 0);
                   auto node_iter = pos.get_iter();
@@ -1606,9 +1681,11 @@ private:
     depth_t depth,
     paddr_t addr,
     node_key_t begin,
-    node_key_t end) {
+    node_key_t end,
+    std::optional<typename iterator::template node_position_t<internal_node_t>> parent_pos)
+  {
     assert(depth == 1);
-    return get_leaf_node(c, addr, begin, end);
+    return get_leaf_node(c, addr, begin, end, std::move(parent_pos));
   }
 
   template <typename NodeType,
@@ -1618,8 +1695,10 @@ private:
     depth_t depth,
     paddr_t addr,
     node_key_t begin,
-    node_key_t end) {
-    return get_internal_node(c, depth, addr, begin, end);
+    node_key_t end,
+    std::optional<typename iterator::template node_position_t<internal_node_t>> parent_pos)
+  {
+    return get_internal_node(c, depth, addr, begin, end, std::move(parent_pos));
   }
 
   template <typename NodeType>
@@ -1627,13 +1706,15 @@ private:
     op_context_t<node_key_t> c,
     depth_t depth,
     node_position_t<internal_node_t> &parent_pos,
-    node_position_t<NodeType> &pos)
+    node_position_t<NodeType> &pos,
+    iterator &tree_iter)
   {
     LOG_PREFIX(FixedKVBtree::merge_level);
     if (!parent_pos.node->is_pending()) {
       parent_pos.node = c.cache.duplicate_for_write(
         c.trans, parent_pos.node
       )->template cast<internal_node_t>();
+      may_link_parent_child(tree_iter, depth + 1, c.trans);
     }
 
     auto iter = parent_pos.get_iter();
@@ -1647,12 +1728,18 @@ private:
       : next_iter->get_key();
     
     SUBTRACET(seastore_fixedkv_tree, "parent: {}, node: {}", c.trans, *parent_pos.node, *pos.node);
+    auto donor_parent_pos = parent_pos;
+    if (donor_is_left)
+      donor_parent_pos.pos--;
+    else
+      donor_parent_pos.pos++;
     return get_node<NodeType>(
       c,
       depth,
       donor_iter.get_val().maybe_relative_to(parent_pos.node->get_paddr()),
       begin,
-      end
+      end,
+      std::make_optional<node_position_t<internal_node_t>>(donor_parent_pos)
     ).si_then([c, iter, donor_iter, donor_is_left, &parent_pos, &pos](
                 typename NodeType::Ref donor) {
       LOG_PREFIX(FixedKVBtree::merge_level);
@@ -1666,9 +1753,11 @@ private:
         auto replacement = l->make_full_merge(c, r);
 
         parent_pos.node->update(
+          c.trans,
           liter,
-          replacement->get_paddr());
-        parent_pos.node->remove(riter);
+          replacement->get_paddr(),
+          replacement);
+        parent_pos.node->remove(c.trans, riter);
 
         pos.node = replacement;
         if (donor_is_left) {
@@ -1689,12 +1778,16 @@ private:
             !donor_is_left);
 
         parent_pos.node->update(
+          c.trans,
           liter,
-          replacement_l->get_paddr());
+          replacement_l->get_paddr(),
+          replacement_l);
         parent_pos.node->replace(
+          c.trans,
           riter,
           pivot,
-          replacement_r->get_paddr());
+          replacement_r->get_paddr(),
+          replacement_r);
 
         if (donor_is_left) {
           assert(parent_pos.pos > 0);
