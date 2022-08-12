@@ -927,63 +927,65 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
   // transactions.  So, concurrent transactions between trim and reclaim are
   // not allowed right now.
   return ecb->with_transaction_weak(
-      "backref_get_mappings",
+      "retrieve_from_backref_tree",
       [this](auto &t) {
     return backref_manager.get_mappings(
       t,
       reclaim_state->start_pos,
-      reclaim_state->end_pos);
-  }).safe_then([this, FNAME, pavail_ratio, start](auto pin_list) {
+      reclaim_state->end_pos
+    ).si_then([this, &t](auto pin_list) {
+      return backref_manager.retrieve_backref_extents_in_range(
+        t,
+        reclaim_state->start_pos,
+        reclaim_state->end_pos
+      ).si_then([pin_list=std::move(pin_list)](auto extents) mutable {
+        return std::make_pair(std::move(extents), std::move(pin_list));
+      });
+    });
+  }).safe_then([this, FNAME, pavail_ratio, start](auto weak_read_ret) {
     return seastar::do_with(
-      std::move(pin_list),
+      std::move(weak_read_ret.first),
+      std::move(weak_read_ret.second),
       (size_t)0,
       (size_t)0,
       [this, FNAME, pavail_ratio, start](
-        auto &pin_list, auto &reclaimed, auto &runs)
+        auto &backref_extents, auto &pin_list, auto &reclaimed, auto &runs)
     {
-      return repeat_eagain([this, &reclaimed, &runs, &pin_list]() mutable {
+      return repeat_eagain([this, &backref_extents, &pin_list, &reclaimed, &runs] {
         reclaimed = 0;
         runs++;
         return ecb->with_transaction_intr(
           Transaction::src_t::CLEANER_RECLAIM,
           "reclaim_space",
-          [this, &reclaimed, &pin_list](auto &t)
+          [this, &backref_extents, &pin_list, &reclaimed](auto &t)
         {
           return seastar::do_with(
-            std::vector<CachedExtentRef>(),
-            [this, &reclaimed, &t, &pin_list](auto &extents)
+            std::vector<CachedExtentRef>(backref_extents),
+            [this, &t, &pin_list, &reclaimed](auto &extents)
           {
-            return backref_manager.retrieve_backref_extents_in_range(
-              t,
-              reclaim_state->start_pos,
-              reclaim_state->end_pos
-            ).si_then([this, &extents, &t, &pin_list](auto backref_extents) {
-              extents.insert(extents.end(),
-                             std::make_move_iterator(backref_extents.begin()),
-                             std::make_move_iterator(backref_extents.end()));
-              // calculate live extents
-              auto cached_backrefs =
-                backref_manager.get_cached_backref_entries_in_range(
-                  reclaim_state->start_pos, reclaim_state->end_pos);
-              std::set<
-                backref_entry_t,
-                backref_entry_t::cmp_t> backrefs;
-              for (auto &pin : pin_list) {
-                backrefs.emplace(pin->get_key(), pin->get_val(),
-                  pin->get_length(), pin->get_type(), journal_seq_t());
+            // calculate live extents
+            auto cached_backrefs =
+              backref_manager.get_cached_backref_entries_in_range(
+                reclaim_state->start_pos, reclaim_state->end_pos);
+            std::set<
+              backref_entry_t,
+              backref_entry_t::cmp_t> backrefs;
+            for (auto &pin : pin_list) {
+              backrefs.emplace(pin->get_key(), pin->get_val(),
+                pin->get_length(), pin->get_type(), journal_seq_t());
+            }
+            for (auto &backref : cached_backrefs) {
+              if (backref.laddr == L_ADDR_NULL) {
+                auto it = backrefs.find(backref.paddr);
+                assert(it->len == backref.len);
+                backrefs.erase(it);
+              } else {
+                backrefs.emplace(backref.paddr, backref.laddr,
+                  backref.len, backref.type, backref.seq);
               }
-              for (auto &backref : cached_backrefs) {
-                if (backref.laddr == L_ADDR_NULL) {
-                  auto it = backrefs.find(backref.paddr);
-                  assert(it->len == backref.len);
-                  backrefs.erase(it);
-                } else {
-                  backrefs.emplace(backref.paddr, backref.laddr,
-                    backref.len, backref.type, backref.seq);
-                }
-              }
-              return _retrieve_live_extents(t, std::move(backrefs), extents);
-            }).si_then([&extents, this, &t, &reclaimed] {
+            }
+            return _retrieve_live_extents(t, std::move(backrefs), extents
+            ).si_then([this, &t, &reclaimed, &extents] {
               auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
               return trans_intr::do_for_each(
                 extents,
