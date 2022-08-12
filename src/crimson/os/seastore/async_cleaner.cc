@@ -700,17 +700,6 @@ void AsyncCleaner::close_segment(segment_id_t segment)
   INFO("closed, {} -- {}", gc_stat_printer_t{this, false}, seg_info);
 }
 
-AsyncCleaner::trim_alloc_ret AsyncCleaner::trim_alloc(
-  Transaction &t,
-  journal_seq_t limit)
-{
-  return backref_manager.merge_cached_backrefs(
-    t,
-    limit,
-    config.rewrite_backref_bytes_per_cycle
-  );
-}
-
 double AsyncCleaner::calc_gc_benefit_cost(
   segment_id_t id,
   const sea_time_point &now_time,
@@ -751,30 +740,6 @@ double AsyncCleaner::calc_gc_benefit_cost(
   }
   return ((1 - 2 * age_factor) * util * util +
           (2 * age_factor - 2) * util + 1);
-}
-
-AsyncCleaner::rewrite_dirty_ret AsyncCleaner::rewrite_dirty(
-  Transaction &t,
-  journal_seq_t limit)
-{
-  return ecb->get_next_dirty_extents(
-    t,
-    limit,
-    config.rewrite_dirty_bytes_per_cycle
-  ).si_then([=, &t, this](auto dirty_list) {
-    LOG_PREFIX(AsyncCleaner::rewrite_dirty);
-    DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
-    return seastar::do_with(
-      std::move(dirty_list),
-      [this, FNAME, &t](auto &dirty_list) {
-	return trans_intr::do_for_each(
-	  dirty_list,
-	  [this, FNAME, &t](auto &e) {
-	  DEBUGT("cleaning {}", t, *e);
-	  return ecb->rewrite_extent(t, e, DIRTY_GENERATION, NULL_TIME);
-	});
-      });
-  });
 }
 
 AsyncCleaner::gc_cycle_ret AsyncCleaner::GCProcess::run()
@@ -824,19 +789,26 @@ AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
 }
 
 AsyncCleaner::gc_trim_alloc_ret
-AsyncCleaner::gc_trim_alloc() {
-  return repeat_eagain([this] {
+AsyncCleaner::gc_trim_alloc()
+{
+  LOG_PREFIX(AsyncCleaner::gc_trim_alloc);
+  return repeat_eagain([this, FNAME] {
     return ecb->with_transaction_intr(
       Transaction::src_t::CLEANER_TRIM_ALLOC,
       "trim_alloc",
-      [this](auto &t)
+      [this, FNAME](auto &t)
     {
-      LOG_PREFIX(AsyncCleaner::gc_trim_alloc);
-      DEBUGT("target {}", t, get_alloc_tail_target());
-      return trim_alloc(t, get_alloc_tail_target()
-      ).si_then([this, &t](auto trim_alloc_to)
+      auto target = get_alloc_tail_target();
+      DEBUGT("start, alloc_tail={}, target={}",
+             t, journal_alloc_tail, target);
+      return backref_manager.merge_cached_backrefs(
+        t,
+        target,
+        config.rewrite_backref_bytes_per_cycle
+      ).si_then([this, FNAME, &t](auto trim_alloc_to)
         -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<>
       {
+        DEBUGT("trim_alloc_to={}", t, trim_alloc_to);
         if (trim_alloc_to != JOURNAL_SEQ_NULL) {
           return ecb->submit_transaction_direct(
             t, std::make_optional<journal_seq_t>(trim_alloc_to));
@@ -844,22 +816,46 @@ AsyncCleaner::gc_trim_alloc() {
         return seastar::now();
       });
     });
+  }).safe_then([this, FNAME] {
+    DEBUGT("finish, alloc_tail={}", journal_alloc_tail);
   });
 }
 
-AsyncCleaner::gc_trim_dirty_ret AsyncCleaner::gc_trim_dirty()
+AsyncCleaner::gc_trim_dirty_ret
+AsyncCleaner::gc_trim_dirty()
 {
-  return repeat_eagain([this] {
+  LOG_PREFIX(AsyncCleaner::gc_trim_dirty);
+  return repeat_eagain([this, FNAME] {
     return ecb->with_transaction_intr(
       Transaction::src_t::CLEANER_TRIM_DIRTY,
       "trim_dirty",
-      [this](auto &t)
+      [this, FNAME](auto &t)
     {
-      return rewrite_dirty(t, get_dirty_tail_target()
-      ).si_then([this, &t] {
+      auto target = get_dirty_tail_target();
+      DEBUGT("start, dirty_tail={}, target={}",
+             t, journal_dirty_tail, target);
+      return ecb->get_next_dirty_extents(
+        t,
+        target,
+        config.rewrite_dirty_bytes_per_cycle
+      ).si_then([this, FNAME, &t](auto dirty_list) {
+        DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
+        return seastar::do_with(
+          std::move(dirty_list),
+          [this, &t](auto &dirty_list)
+        {
+          return trans_intr::do_for_each(
+            dirty_list,
+            [this, &t](auto &e) {
+            return ecb->rewrite_extent(t, e, DIRTY_GENERATION, NULL_TIME);
+          });
+        });
+      }).si_then([this, &t] {
         return ecb->submit_transaction_direct(t);
       });
     });
+  }).safe_then([this, FNAME] {
+    DEBUGT("finish, dirty_tail={}", journal_dirty_tail);
   });
 }
 
