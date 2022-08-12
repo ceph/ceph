@@ -310,10 +310,9 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
 
   for (Action *action : actions) {
     if (action->command_spec.size() <= command_spec.size()) {
-      if (std::includes(action->command_spec.begin(),
-                        action->command_spec.end(),
-                        command_spec.begin(),
-                        command_spec.begin() + action->command_spec.size())) {
+      if (std::equal(action->command_spec.begin(),
+                     action->command_spec.end(),
+                     command_spec.begin())) {
         if (matching_spec != NULL) {
           *matching_spec = &action->command_spec;
         }
@@ -323,11 +322,9 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
     }
     if (!action->alias_command_spec.empty() &&
         action->alias_command_spec.size() <= command_spec.size()) {
-      if (std::includes(action->alias_command_spec.begin(),
-                        action->alias_command_spec.end(),
-                        command_spec.begin(),
-                        command_spec.begin() +
-                          action->alias_command_spec.size())) {
+      if (std::equal(action->alias_command_spec.begin(),
+                     action->alias_command_spec.end(),
+                     command_spec.begin())) {
         if (matching_spec != NULL) {
           *matching_spec = &action->alias_command_spec;
         }
