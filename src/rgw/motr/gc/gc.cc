@@ -15,6 +15,7 @@
 
 #include "gc.h"
 #include <ctime>
+#include "motr/sync/motr_sync_impl.h"
 
 void *MotrGC::GCWorker::entry() {
   std::unique_lock<std::mutex> lk(lock);
@@ -25,6 +26,7 @@ void *MotrGC::GCWorker::entry() {
   uint32_t my_index = \
     ceph::util::generate_random_number(0, motr_gc->max_indices - 1);
   uint32_t rgw_gc_processor_period = cct->_conf->rgw_gc_processor_period;
+  uint32_t rgw_gc_processing_time = cct->_conf->rgw_gc_processor_max_time;
   // This is going to be endless loop
   do {
     std::string gc_log_prefix = "[" + gc_thread_prefix
@@ -33,12 +35,13 @@ void *MotrGC::GCWorker::entry() {
 
     std::string iname = "";
     // Get lock on an GC index
-    int rc = motr_gc->get_locked_gc_index(my_index);
+    int rc = motr_gc->get_locked_gc_index(my_index,
+      rgw_gc_processing_time);
 
     // Lock has been aquired, start the timer
     std::time_t start_time = std::time(nullptr);
     std::time_t end_time = start_time + \
-			   cct->_conf->rgw_gc_processor_max_time - 10;
+			   rgw_gc_processing_time - 10;
     std::time_t current_time = std::time(nullptr);
 
     if (rc == 0) {
@@ -101,6 +104,11 @@ void *MotrGC::GCWorker::entry() {
           break;
       }
       // unlock the GC queue
+      motr_gc->un_lock_gc_index(my_index);
+    } else {
+      ldpp_dout(dpp, 0) << gc_log_prefix
+          << __func__ << "ERROR: No GC index is available for locking."
+          << " Skipping GC processing" << " rc = " << rc << dendl;
     }
     my_index = (my_index + 1) % motr_gc->max_indices;
 
@@ -116,13 +124,14 @@ void *MotrGC::GCWorker::entry() {
   return nullptr;
 }
 
-void MotrGC::initialize() {
+int MotrGC::initialize() {
+  int rc = -1;
   max_indices = get_max_indices();
   index_names.reserve(max_indices);
   ldpp_dout(this, 50) << __func__ << ": max_indices = " << max_indices << dendl;
   for (uint32_t ind_suf = 0; ind_suf < max_indices; ind_suf++) {
     std::string iname = gc_index_prefix + "." + std::to_string(ind_suf);
-    int rc = store->create_motr_idx_by_name(iname);
+    rc = store->create_motr_idx_by_name(iname);
     if (rc < 0 && rc != -EEXIST){
       ldout(cct, 0) << "ERROR: GC index creation failed with rc: " << rc << dendl;
       break;
@@ -136,6 +145,24 @@ void MotrGC::initialize() {
   // set random starting index for enqueue of delete requests
   enqueue_index = \
     ceph::util::generate_random_number(0, max_indices - 1);
+  // Init KV lock provider
+  std::unique_ptr<MotrLockProvider> kv_lock_provider =
+      std::make_unique<MotrKVLockProvider>();
+  if (rc == 0) {
+    // If everything above is success, initilaize KV lock provider
+    rc = kv_lock_provider->initialize(
+        this, store, global_lock_table);
+    if (rc < 0) {
+      ldout(cct, 0) << "ERROR: Failed to initialize lock provider: "
+        << rc << dendl;
+      return rc;
+    }
+    // Create lock object
+    get_lock_instance(kv_lock_provider);
+    // Initilaize caller id
+    caller_id = random_string(GC_CALLER_ID_STR_LEN);
+  }
+  return rc;
 }
 
 void MotrGC::finalize() {
@@ -325,20 +352,38 @@ int MotrGC::dequeue(std::string iname, motr_gc_obj_info obj) {
   return rc;
 }
 
-int MotrGC::get_locked_gc_index(uint32_t& rand_ind) {
+int MotrGC::get_locked_gc_index(uint32_t& rand_ind,
+                                uint32_t& lease_duration) {
   int rc = -1;
   uint32_t new_index = 0;
   // attempt to lock GC starting with passed in index
-  for (uint32_t ind = 1; ind < max_indices; ind++) {
+  for (uint32_t ind = 0; ind < max_indices; ind++) {
     new_index = (ind + rand_ind) % max_indices;
     // try locking index
-    // on sucess mark rc as 0
-    rc = 0; // will be set by MotrLock.lock(gc_queue, exp_time);
+    std::shared_ptr<MotrSync>& gc_lock = get_lock_instance();
+    if (gc_lock) {
+      std::chrono::milliseconds lease_timeout{lease_duration * 1000};
+      auto tv = ceph::to_timeval(lease_timeout);
+      utime_t gc_lease_duration;
+      gc_lease_duration.set_from_timeval(&tv);
+      std::string iname = index_names[new_index];
+      rc = gc_lock->lock(iname, MotrLockType::EXCLUSIVE,
+                         gc_lease_duration, caller_id);
+    }
     if (rc == 0)
       break;
   }
-  rc = 0; // remove this line after lock implementation
   rand_ind = new_index;
+  return rc;
+}
+
+int MotrGC::un_lock_gc_index(uint32_t& index) {
+  int rc = 0;
+  std::shared_ptr<MotrSync>& gc_lock = get_lock_instance();
+  if (gc_lock) {
+    std::string iname = index_names[index];
+    rc = gc_lock->unlock(iname, MotrLockType::EXCLUSIVE, caller_id);
+  }
   return rc;
 }
 

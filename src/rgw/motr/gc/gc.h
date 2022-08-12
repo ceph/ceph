@@ -25,11 +25,12 @@
 const uint32_t GC_DEFAULT_QUEUES = 64;
 const uint32_t GC_DEFAULT_COUNT = 256;
 const uint32_t GC_MAX_QUEUES = 4096;
-
+const uint32_t GC_CALLER_ID_STR_LEN = 32;
 static const std::string gc_index_prefix = "motr.rgw.gc";
 static const std::string gc_thread_prefix = "motr_gc_";
 static const std::string obj_tag_prefix = "0_";
 static const std::string obj_exp_time_prefix = "1_";
+const std::string global_lock_table = "motr.rgw.lock";
 
 namespace rgw::sal {
   class MotrStore;
@@ -126,6 +127,7 @@ class MotrGC : public DoutPrefixProvider {
   std::atomic<uint32_t> enqueue_index;
   std::vector<std::string> index_names;
   std::atomic<bool> down_flag = false;
+  std::string caller_id = "";
 
  public:
   class GCWorker : public Thread {
@@ -158,8 +160,7 @@ class MotrGC : public DoutPrefixProvider {
     stop_processor();
     finalize();
   }
-
-  void initialize();
+  int initialize();
   void finalize();
 
   void start_processor();
@@ -169,9 +170,11 @@ class MotrGC : public DoutPrefixProvider {
   uint32_t get_max_indices();
   int enqueue(motr_gc_obj_info obj);
   int dequeue(std::string iname, motr_gc_obj_info obj);
+
   int list(std::vector<std::unordered_map<std::string, std::string>> &gc_entries);
   int delete_motr_obj_from_gc(motr_gc_obj_info ginfo);
-  int get_locked_gc_index(uint32_t& rand_ind);
+  int get_locked_gc_index(uint32_t& rand_ind, uint32_t& lease_duration);
+  int un_lock_gc_index(uint32_t& index);
 
   // Set Up logging prefix for GC
   CephContext *get_cct() const override { return cct; }

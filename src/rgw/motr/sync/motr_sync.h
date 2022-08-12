@@ -20,7 +20,6 @@
 
 #include "include/types.h"
 #include "include/utime.h"
-#include "rgw_sal_motr.h"
 
 // Define MOTR_EXCLUSIVE_RW_LOCK only when system needs exclusive read/write lock
 #define MOTR_EXCLUSIVE_RW_LOCK 1
@@ -79,7 +78,8 @@ enum class MotrLockType {
 // Abstract interface for Motr named synchronization
 class MotrSync {
 public:
-  virtual void initialize(std::shared_ptr<MotrLockProvider> lock_provider) = 0;
+  virtual void initialize(
+      std::unique_ptr<MotrLockProvider>& lock_provider) = 0;
   virtual int lock(const std::string& lock_name, MotrLockType lock_type,
                    utime_t lock_duration, const std::string& locker_id) = 0;
   virtual int unlock(const std::string& lock_name, MotrLockType lock_type,
@@ -91,6 +91,9 @@ public:
 // Abstract interface for entity that implements backend for lock objects
 class MotrLockProvider {
 public:
+  virtual int initialize(const DoutPrefixProvider* dpp,
+                         rgw::sal::MotrStore* _s,
+                         const std::string& lock_index_name) = 0;
   virtual int read_lock(const std::string& lock_name,
                         motr_lock_info_t* lock_info) = 0;
   virtual int write_lock(const std::string& lock_name,

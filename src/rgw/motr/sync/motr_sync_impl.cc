@@ -31,8 +31,8 @@ std::string random_string(size_t length)
     return str;
 }
 
-void MotrLock::initialize(std::shared_ptr<MotrLockProvider> lock_provider) {
-  _lock_provider = lock_provider;
+void MotrLock::initialize(std::unique_ptr<MotrLockProvider>& lock_provider) {
+  _lock_provider = std::move(lock_provider);
 }
 
 int MotrLock::lock(const std::string& lock_name,
@@ -87,8 +87,8 @@ int MotrLock::unlock(const std::string& lock_name,
 }
 
 int MotrKVLockProvider::initialize(const DoutPrefixProvider* dpp,
-                                    rgw::sal::MotrStore* _s,
-                                    std::string& lock_index_name) {
+                                   rgw::sal::MotrStore* _s,
+                                   const std::string& lock_index_name) {
   _dpp = dpp;
   _store = _s;
   _lock_index = lock_index_name;
@@ -184,4 +184,20 @@ int MotrKVLockProvider::remove_lock(const std::string& lock_name,
     rc = _store->do_idx_op_by_name(_lock_index, M0_IC_PUT, lock_name, bl);
   }
   return rc;
+}
+
+// Create a global instance of MotrLock that can be used by caller
+// This needs to be called by a single main thread of the caller.
+std::unique_ptr<MotrLockProvider> g_lock_provider = nullptr;
+std::shared_ptr<MotrSync> g_motr_lock;
+std::shared_ptr<MotrSync>& get_lock_instance(
+    std::unique_ptr<MotrLockProvider>& lock_provider) {
+  static bool initialize = false;
+  if (!initialize && !lock_provider) {
+    g_motr_lock = std::make_shared<MotrLock>();
+    g_motr_lock->initialize(lock_provider);
+    initialize = true;
+    return g_motr_lock;
+  }
+  return g_motr_lock;
 }
