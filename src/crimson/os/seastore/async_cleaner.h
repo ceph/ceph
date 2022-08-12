@@ -961,23 +961,6 @@ private:
 
   segment_id_t get_next_reclaim_segment() const;
 
-  /**
-   * rewrite_dirty
-   *
-   * Writes out dirty blocks dirtied earlier than limit.
-   */
-  using rewrite_dirty_iertr = work_iertr;
-  using rewrite_dirty_ret = rewrite_dirty_iertr::future<>;
-  rewrite_dirty_ret rewrite_dirty(
-    Transaction &t,
-    journal_seq_t limit);
-
-  using trim_alloc_iertr = work_iertr;
-  using trim_alloc_ret = trim_alloc_iertr::future<journal_seq_t>;
-  trim_alloc_ret trim_alloc(
-    Transaction &t,
-    journal_seq_t limit);
-
   journal_seq_t get_dirty_tail_target() const {
     assert(init_complete);
     auto ret = journal_head;
