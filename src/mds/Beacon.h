@@ -44,6 +44,8 @@ class Beacon : public Dispatcher
 public:
   using clock = ceph::coarse_mono_clock;
   using time = ceph::coarse_mono_time;
+  bool missed_beacon_ack_dump = false;
+  bool missed_internal_heartbeat_dump = false;
 
   Beacon(CephContext *cct, MonClient *monc, std::string_view name);
   ~Beacon() override;

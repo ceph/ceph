@@ -1464,3 +1464,17 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_extraordinary_events_dump_interval
+  type: secs
+  level: advanced
+  desc: Interval in seconds for dumping the recent in-memory logs when there is an extra-ordinary event.
+  long_desc: Interval in seconds for dumping the recent in-memory logs when there is an extra-ordinary
+    event. The default is ``0`` (disabled). The log level should be ``< 10`` and the gather level
+    should be ``>=10`` in debug_mds for enabling this option.
+  default: 0
+  min: 0
+  max: 60
+  services:
+  - mds
+  flags:
+  - runtime

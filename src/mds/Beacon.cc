@@ -74,20 +74,30 @@ void Beacon::init(const MDSMap &mdsmap)
 
   sender = std::thread([this]() {
     std::unique_lock<std::mutex> lock(mutex);
-    std::condition_variable c; // no one wakes us
+    bool sent;
     while (!finished) {
       auto now = clock::now();
       auto since = std::chrono::duration<double>(now-last_send).count();
       auto interval = beacon_interval;
+      sent = false;
       if (since >= interval*.90) {
         if (!_send()) {
           interval = 0.5; /* 500ms */
+        }
+        else {
+          sent = true;
         }
       } else {
         interval -= since;
       }
       dout(20) << "sender thread waiting interval " << interval << "s" << dendl;
-      c.wait_for(lock, interval*1s);
+      if (cvar.wait_for(lock, interval*1s) == std::cv_status::timeout) {
+        if (sent) {
+          //missed beacon ack because we timedout after a beacon send
+          dout(0) << "missed beacon ack from the monitors" << dendl;
+          missed_beacon_ack_dump = true;
+        }
+      }
     }
   });
 }
@@ -174,7 +184,11 @@ void Beacon::send_and_wait(const double duration)
   while (!seq_stamp.empty() && seq_stamp.begin()->first <= awaiting_seq) {
     auto now = clock::now();
     auto s = duration*.95-std::chrono::duration<double>(now-start).count();
-    if (s < 0) break;
+    if (s < 0) {
+      //missed beacon ACKs
+      missed_beacon_ack_dump = true;
+      break;
+    }
     cvar.wait_for(lock, s*1s);
   }
 }
@@ -192,6 +206,8 @@ bool Beacon::_send()
     /* If anything isn't progressing, let avoid sending a beacon so that
      * the MDS will consider us laggy */
     dout(0) << "Skipping beacon heartbeat to monitors (last acked " << since << "s ago); MDS internal heartbeat is not healthy!" << dendl;
+    //missed internal heartbeat
+    missed_internal_heartbeat_dump = true;
     return false;
   }
 
