@@ -97,7 +97,7 @@ class RGWCORSConfiguration
     std::list<RGWCORSRule> rules;
   public:
     RGWCORSConfiguration() {}
-    ~RGWCORSConfiguration() {}
+    virtual ~RGWCORSConfiguration() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

@@ -607,3 +607,50 @@ void RGWObjTier::dump(Formatter *f) const
   encode_json("tier_placement", tier_placement, f);
   encode_json("is_multipart_upload", is_multipart_upload, f);
 }
+
+// returns true on success, false on failure
+static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
+                                  const rgw_placement_rule& head_placement_rule,
+                                  const rgw_obj& obj, rgw_pool *pool)
+{
+  if (!zone_params.get_head_data_pool(head_placement_rule, obj, pool)) {
+    RGWZonePlacementInfo placement;
+    if (!zone_params.get_placement(zonegroup.default_placement.name, &placement)) {
+      return false;
+    }
+
+    if (!obj.in_extra_data) {
+      *pool = placement.get_data_pool(zonegroup.default_placement.storage_class);
+    } else {
+      *pool = placement.get_data_extra_pool();
+    }
+  }
+
+  return true;
+}
+
+static bool rgw_obj_to_raw(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
+                           const rgw_placement_rule& head_placement_rule,
+                           const rgw_obj& obj, rgw_raw_obj *raw_obj)
+{
+  get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
+
+  return rgw_get_obj_data_pool(zonegroup, zone_params, head_placement_rule, obj, &raw_obj->pool);
+}
+
+rgw_raw_obj rgw_obj_select::get_raw_obj(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params) const
+{
+  if (!is_raw) {
+    rgw_raw_obj r;
+    rgw_obj_to_raw(zonegroup, zone_params, placement_rule, obj, &r);
+    return r;
+  }
+  return raw_obj;
+}
+
+// returns true on success, false on failure
+bool RGWRados::get_obj_data_pool(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_pool *pool)
+{
+  return rgw_get_obj_data_pool(svc.zone->get_zonegroup(), svc.zone->get_zone_params(), placement_rule, obj, pool);
+}
+

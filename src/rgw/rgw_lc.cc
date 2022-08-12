@@ -561,8 +561,7 @@ static int remove_expired_obj(
   del_op->params.unmod_since = meta.mtime;
   del_op->params.marker_version_id = version_id;
 
-  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(oc.store);
-  if (rados) {
+  if (oc.store->get_name() == "rados") {
     // notification supported only for RADOS store for now
     notify
       = store->get_notification(dpp, obj.get(), nullptr, event_type,
@@ -586,7 +585,7 @@ static int remove_expired_obj(
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
       "ERROR: publishing notification failed, with error: " << ret << dendl;
-  } else if (rados) {
+  } else if (oc.store->get_name() == "rados") {
     // send request to notification manager
     auto notify_res = static_cast<rgw::sal::RadosNotification*>(notify.get())->get_reservation();
     (void) rgw::notify::publish_commit(
@@ -631,7 +630,7 @@ public:
 
 class LCOpFilter {
 public:
-virtual ~LCOpFilter() {}
+  virtual ~LCOpFilter() {}
   virtual bool check(const DoutPrefixProvider *dpp, lc_op_ctx& oc) {
     return false;
   }
@@ -1332,9 +1331,7 @@ public:
       }
 
       /* Allow transition for only RadosStore */
-      rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(oc.store);
-
-      if (!rados) {
+      if (oc.store->get_name() != "rados") {
         ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is not on RadosStore. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
         return -1;
       }

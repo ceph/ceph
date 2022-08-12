@@ -155,7 +155,7 @@ protected:
 public:
   RGWStatRemoteObjCBCR(RGWDataSyncCtx *_sc,
                        rgw_bucket& _src_bucket, rgw_obj_key& _key);
-  ~RGWStatRemoteObjCBCR() override {}
+  virtual ~RGWStatRemoteObjCBCR() override {}
 
   void set_result(ceph::real_time& _mtime,
                   uint64_t _size,
@@ -188,7 +188,7 @@ public:
   RGWCallStatRemoteObjCR(RGWDataSyncCtx *_sc,
                      rgw_bucket& _src_bucket, rgw_obj_key& _key);
 
-  ~RGWCallStatRemoteObjCR() override {}
+  virtual ~RGWCallStatRemoteObjCR() override {}
 
   int operate(const DoutPrefixProvider *dpp) override;
 

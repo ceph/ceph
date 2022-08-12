@@ -65,7 +65,7 @@ public:
     {}
 
 
-  ~RGWReadRawRESTResourceCR() override {
+  virtual ~RGWReadRawRESTResourceCR() override {
     request_cleanup();
   }
 
@@ -182,7 +182,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
     method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result),
     err_result(_err_result) {}
 
-  ~RGWSendRawRESTResourceCR() override {
+  virtual ~RGWSendRawRESTResourceCR() override {
     request_cleanup();
   }
 
@@ -337,7 +337,7 @@ public:
       path(_path), params(make_param_list(_params))
   {}
 
-  ~RGWDeleteRESTResourceCR() override {
+  virtual ~RGWDeleteRESTResourceCR() override {
     request_cleanup();
   }
 
@@ -484,7 +484,7 @@ public:
                                                                 http_manager(_http_manager) {
     rest_obj.init(_src_key);
   }
-  ~RGWStreamReadHTTPResourceCRF();
+  virtual ~RGWStreamReadHTTPResourceCRF();
 
   int init(const DoutPrefixProvider *dpp) override;
   int read(const DoutPrefixProvider *dpp, bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
@@ -584,7 +584,7 @@ public:
   RGWStreamSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
                     std::shared_ptr<RGWStreamReadHTTPResourceCRF>& _in_crf,
                     std::shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf);
-  ~RGWStreamSpliceCR();
+  virtual ~RGWStreamSpliceCR();
 
   int operate(const DoutPrefixProvider *dpp) override;
 };

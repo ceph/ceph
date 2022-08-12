@@ -152,6 +152,8 @@ public:
 
   RGWSI_Cls(CephContext *cct): RGWServiceInstance(cct), mfa(cct), timelog(cct), lock(cct) {}
 
+  ~RGWSI_Cls() {}
+
   void init(RGWSI_Zone *_zone_svc, RGWSI_RADOS *_rados_svc) {
     rados_svc = _rados_svc;
     zone_svc = _zone_svc;

@@ -60,7 +60,7 @@ protected:
 
 public:
   RGWMetadataHandler() {}
-  virtual ~RGWMetadataHandler() {}
+  virtual ~RGWMetadataHandler();
   virtual std::string get_type() = 0;
 
   void base_init(CephContext *_cct) {
@@ -121,6 +121,8 @@ protected:
 
 public:
   RGWMetadataHandler_GenericMetaBE() {}
+
+  virtual ~RGWMetadataHandler_GenericMetaBE() {}
 
   void base_init(CephContext *_cct,
             RGWSI_MetaBackend_Handler *_be_handler) {
@@ -234,7 +236,7 @@ class RGWMetadataManager {
 
 public:
   RGWMetadataManager(RGWSI_Meta *_meta_svc);
-  ~RGWMetadataManager();
+  virtual ~RGWMetadataManager();
 
   RGWMetadataHandler *get_handler(const std::string& type);
 
@@ -282,7 +284,7 @@ public:
                              std::string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
 			     optional_yield y,
                              RGWMDLogSyncType type, bool from_remote_zone);
-  ~RGWMetadataHandlerPut_SObj();
+  virtual ~RGWMetadataHandlerPut_SObj();
 
   int put_pre(const DoutPrefixProvider *dpp) override;
   int put(const DoutPrefixProvider *dpp) override;

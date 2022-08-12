@@ -712,7 +712,7 @@ public:
     }
   }
 
-  virtual ~KvSecretEngine(){}
+  ~KvSecretEngine(){}
 
   int get_key(const DoutPrefixProvider *dpp, std::string_view key_id, std::string& actual_key){
     ZeroPoolDocument d;

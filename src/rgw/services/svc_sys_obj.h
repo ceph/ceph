@@ -258,6 +258,8 @@ protected:
 public:
   RGWSI_SysObj(CephContext *cct): RGWServiceInstance(cct) {}
 
+  ~RGWSI_SysObj() {}
+
   Obj get_obj(const rgw_raw_obj& obj);
 
   Pool get_pool(const rgw_pool& pool) {

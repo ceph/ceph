@@ -157,7 +157,7 @@ protected:
   }
 public:
   explicit RGWHandler_REST_PSTopic(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
-  virtual ~RGWHandler_REST_PSTopic() = default;
+  ~RGWHandler_REST_PSTopic() = default;
 };
 
 // command: PUT /subscriptions/<sub-name>?topic=<topic-name>[&push-endpoint=<endpoint>[&<arg1>=<value1>]]...
@@ -314,7 +314,7 @@ protected:
   }
 public:
   explicit RGWHandler_REST_PSSub(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
-  virtual ~RGWHandler_REST_PSSub() = default;
+  ~RGWHandler_REST_PSSub() = default;
 };
 
 namespace {
@@ -495,7 +495,7 @@ protected:
   }
 public:
   explicit RGWHandler_REST_PSNotifs(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
-  virtual ~RGWHandler_REST_PSNotifs() = default;
+  ~RGWHandler_REST_PSNotifs() = default;
 };
 
 // factory for ceph specific PubSub REST handlers 
