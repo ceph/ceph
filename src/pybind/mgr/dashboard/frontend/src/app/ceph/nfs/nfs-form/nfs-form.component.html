@@ -278,9 +278,6 @@
               <option *ngIf="nfsAccessType !== null && nfsAccessType.length === 0"
                       value=""
                       i18n>-- No access type available --</option>
-              <option *ngIf="nfsAccessType !== null && nfsAccessType.length > 0"
-                      value=""
-                      i18n>-- Select the access type --</option>
               <option *ngFor="let accessType of nfsAccessType"
                       [value]="accessType.value">{{ accessType.value }}</option>
             </select>
@@ -304,8 +301,7 @@
         <div class="form-group row">
           <label class="cd-col-form-label"
                  for="squash">
-            <span class="required"
-                  i18n>Squash</span>
+            <span i18n>Squash</span>
             <ng-container *ngTemplateOutlet="squashHelper"></ng-container>
           </label>
           <div class="cd-col-form-input">
@@ -319,9 +315,6 @@
               <option *ngIf="nfsSquash !== null && nfsSquash.length === 0"
                       value=""
                       i18n>-- No squash available --</option>
-              <option *ngIf="nfsSquash !== null && nfsSquash.length > 0"
-                      value=""
-                      i18n>--Select what kind of user id squashing is performed --</option>
               <option *ngFor="let squash of nfsSquash"
                       [value]="squash">{{ squash }}</option>
 

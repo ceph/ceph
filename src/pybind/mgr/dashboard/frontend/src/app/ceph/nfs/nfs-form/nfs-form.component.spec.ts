@@ -36,12 +36,33 @@ describe('NfsFormComponent', () => {
       providers: [
         {
           provide: ActivatedRoute,
-          useValue: new ActivatedRouteStub({ cluster_id: undefined, export_id: undefined })
+          useValue: new ActivatedRouteStub({ cluster_id: 'mynfs', export_id: '1' })
         }
       ]
     },
     [LoadingPanelComponent]
   );
+
+  const matchSquash = (backendSquashValue: string, uiSquashValue: string) => {
+    component.ngOnInit();
+    httpTesting.expectOne('ui-api/nfs-ganesha/fsals').flush(['CEPH', 'RGW']);
+    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
+    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
+    httpTesting.expectOne('api/nfs-ganesha/export/mynfs/1').flush({
+      fsal: {
+        name: 'RGW'
+      },
+      export_id: 1,
+      transports: ['TCP', 'UDP'],
+      protocols: [4],
+      clients: [],
+      squash: backendSquashValue
+    });
+    httpTesting.verify();
+    expect(component.nfsForm.value).toMatchObject({
+      squash: uiSquashValue
+    });
+  };
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsFormComponent);
@@ -102,6 +123,14 @@ describe('NfsFormComponent', () => {
 
   it('should mark NFSv4 protocol as enabled always', () => {
     expect(component.nfsForm.get('protocolNfsv4')).toBeTruthy();
+  });
+
+  it('should match backend squash values with ui values', () => {
+    component.isEdit = true;
+    matchSquash('none', 'no_root_squash');
+    matchSquash('all', 'all_squash');
+    matchSquash('rootid', 'root_id_squash');
+    matchSquash('root', 'root_squash');
   });
 
   describe('should submit request', () => {

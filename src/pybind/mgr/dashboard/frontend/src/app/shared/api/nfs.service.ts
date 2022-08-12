@@ -45,7 +45,12 @@ export class NfsService extends ApiClient {
     }
   ];
 
-  nfsSquash = ['no_root_squash', 'root_id_squash', 'root_squash', 'all_squash'];
+  nfsSquash = {
+    no_root_squash: ['no_root_squash', 'noidsquash', 'none'],
+    root_id_squash: ['root_id_squash', 'rootidsquash', 'rootid'],
+    root_squash: ['root_squash', 'rootsquash', 'root'],
+    all_squash: ['all_squash', 'allsquash', 'all', 'allanonymous', 'all_anonymous']
+  };
 
   constructor(private http: HttpClient) {
     super();
