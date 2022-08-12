@@ -41,6 +41,7 @@ extern "C" {
 #include "rgw_bucket.h"
 #include "rgw_quota.h"
 #include "motr/addb/rgw_addb.h"
+#include "rgw_rest.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -2230,11 +2231,9 @@ int MotrObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astat
 
 int MotrCopyObj_CB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
-  progress_cb progress_CB = this->get_progress_cb();
   int rc = 0;
   ldpp_dout(m_dpp, 20) << "Offset=" << bl_ofs << " Length = "
                        << " Write Offset=" << write_offset << bl_len << dendl;
-
 
   //offset is zero and bufferlength is equal to bl_len
   if (!bl_ofs && bl_len == bl.length()) {
@@ -2248,9 +2247,7 @@ int MotrCopyObj_CB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
                           write_offset << "failed rc=" << rc << dendl;
     }
     write_offset += bl_len;
-    if(progress_CB){
-      progress_CB(write_offset, this->get_progress_data());
-    }
+    dump_continue(s);
     return rc;
   }
 
@@ -2264,6 +2261,7 @@ int MotrCopyObj_CB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
                          << " Write Offset=" << write_offset << dendl;
     return rc;
   }
+  dump_continue(s);
   write_offset += bl_len;
 
   ldpp_dout(m_dpp, 20) << "MotrCopyObj_CB handle_data called rc=" << rc << dendl;
@@ -2346,7 +2344,7 @@ int MotrObject::copy_object_same_zone(RGWObjectCtx& obj_ctx,
   }
 
   // Create filter object.
-  MotrCopyObj_CB cb(dpp, dst_writer);
+  MotrCopyObj_CB cb(dpp, dst_writer, obj_ctx);
   MotrCopyObj_Filter* filter = &cb;
 
   // Get offsets.
@@ -2356,9 +2354,6 @@ int MotrObject::copy_object_same_zone(RGWObjectCtx& obj_ctx,
     ldpp_dout(dpp, 20) << "ERROR: read op range_to_ofs failed rc=" << rc << dendl;
     return rc;
   }
-
-  //setting the values of progress_cb and progress_data in MotrCopyObj_Filter class 
-  filter->set_progress_callback(progress_cb, progress_data);
 
   // read::iterate -> handle_data() -> write::process
   rc = read_op->iterate(dpp, cur_ofs, cur_end, filter, y);

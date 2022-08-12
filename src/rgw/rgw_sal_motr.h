@@ -528,13 +528,15 @@ class MotrCopyObj_CB : public MotrCopyObj_Filter
   const DoutPrefixProvider* m_dpp;
   std::shared_ptr<rgw::sal::Writer> m_dst_writer;
   off_t write_offset;
-
+  struct req_state *s;
 public:
   explicit MotrCopyObj_CB(const DoutPrefixProvider* dpp, 
-                         std::shared_ptr<rgw::sal::Writer> dst_writer) : 
+                         std::shared_ptr<rgw::sal::Writer> dst_writer, RGWObjectCtx& obj_ctx) :
                          m_dpp(dpp),
                          m_dst_writer(dst_writer),
-                         write_offset(0) {}
+                         write_offset(0) {
+                          s = static_cast<req_state*>(obj_ctx.get_private());
+                         }
   virtual ~MotrCopyObj_CB() override {}
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
 };
