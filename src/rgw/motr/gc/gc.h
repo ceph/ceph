@@ -25,6 +25,7 @@
 const uint32_t GC_DEFAULT_QUEUES = 64;
 const uint32_t GC_DEFAULT_COUNT = 256;
 const uint32_t GC_MAX_QUEUES = 4096;
+
 static const std::string gc_index_prefix = "motr.rgw.gc";
 static const std::string gc_thread_prefix = "motr_gc_";
 static const std::string obj_tag_prefix = "0_";
@@ -64,19 +65,21 @@ struct motr_gc_obj_info {
   std::string tag;             // gc obj unique identifier
   std::string name;            // fully qualified object name
   Meta mobj;                   // motr obj
-  std::time_t time;            // deletion time
+  std::time_t deletion_time;   // time when Motr object was requested for deletion
   std::uint64_t size;          // size of obj
   std::uint64_t size_actual;   // size of disk
   bool is_multipart;           // flag to indicate if object is multipart
   std::string multipart_iname; // part index name
 
   motr_gc_obj_info() {}
-  motr_gc_obj_info(std::string _tag, std::string _name, Meta _mobj,
-                   std::time_t _time, std::uint64_t _size, std::uint64_t _size_actual,
-                   bool _is_multipart, std::string _multipart_iname)
-      : tag(std::move(_tag)), name(std::move(_name)), mobj(std::move(_mobj)),
-        time(std::move(_time)), size(std::move(_size)), size_actual(std::move(_size_actual)),
-        is_multipart(std::move(_is_multipart)), multipart_iname(std::move(_multipart_iname)) {}
+  motr_gc_obj_info(const std::string& _tag, const std::string& _name, Meta& _mobj,
+                   const std::time_t& _deletion_time, const std::uint64_t& _size,
+                   const std::uint64_t& _size_actual, bool _is_multipart,
+                   const std::string& _multipart_iname)
+      : tag(_tag), name(_name), mobj(_mobj),
+        deletion_time(_deletion_time), size(_size),
+        size_actual(_size_actual), is_multipart(_is_multipart),
+        multipart_iname(_multipart_iname) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(12, 2, bl);
@@ -87,7 +90,7 @@ struct motr_gc_obj_info {
     encode(mobj.pver.f_container, bl);
     encode(mobj.pver.f_key, bl);
     encode(mobj.layout_id, bl);
-    encode(time, bl);
+    encode(deletion_time, bl);
     encode(size, bl);
     encode(size_actual, bl);
     encode(is_multipart, bl);
@@ -104,7 +107,7 @@ struct motr_gc_obj_info {
     decode(mobj.pver.f_container, bl);
     decode(mobj.pver.f_key, bl);
     decode(mobj.layout_id, bl);
-    decode(time, bl);
+    decode(deletion_time, bl);
     decode(size, bl);
     decode(size_actual, bl);
     decode(is_multipart, bl);
@@ -131,7 +134,6 @@ class MotrGC : public DoutPrefixProvider {
     CephContext *cct;
     MotrGC *motr_gc;
     int worker_id;
-    uint32_t gc_interval = 60*60;  // default: 24*60*60 sec
     std::mutex lock;
     std::condition_variable cv;
    public:
@@ -162,12 +164,14 @@ class MotrGC : public DoutPrefixProvider {
 
   void start_processor();
   void stop_processor();
+  bool going_down();
 
+  uint32_t get_max_indices();
   int enqueue(motr_gc_obj_info obj);
   int dequeue(std::string iname, motr_gc_obj_info obj);
-  int list(std::vector<motr_gc_obj_info>& gc_entries);
+  int list(std::vector<std::unordered_map<std::string, std::string>> &gc_entries);
+  int delete_motr_obj_from_gc(motr_gc_obj_info ginfo);
   int get_locked_gc_index(uint32_t& rand_ind);
-  bool going_down();
 
   // Set Up logging prefix for GC
   CephContext *get_cct() const override { return cct; }

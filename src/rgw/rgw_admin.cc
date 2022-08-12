@@ -61,6 +61,10 @@ extern "C" {
 #include "rgw_sync_checkpoint.h"
 #include "rgw_lua.h"
 
+#ifdef WITH_RADOSGW_MOTR
+#include "rgw_sal_motr.h"
+#endif
+
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -7807,6 +7811,31 @@ next:
     int index = 0;
     bool truncated;
     bool processing_queue = false;
+
+    #ifdef WITH_RADOSGW_MOTR
+    ldpp_dout(dpp(), 20) << "Listing GC objects from Motr" << dendl;
+    std::vector<std::unordered_map<std::string, std::string>> gc_entries;
+    formatter->open_array_section("entries");
+    int ret = static_cast<rgw::sal::MotrStore*>(store)->list_gc_objs(gc_entries);
+    if (ret < 0) {
+      cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
+    for (auto iter = gc_entries.begin(); iter != gc_entries.end(); ++iter) {
+      std::unordered_map<std::string, std::string> &ginfo = *iter;
+      formatter->open_object_section("");
+      formatter->dump_string("tag", ginfo["tag"]);
+      formatter->dump_string("name", ginfo["name"]);
+      formatter->dump_string("deletion_time", ginfo["deletion_time"]);
+      formatter->dump_string("size", ginfo["size"]);
+      formatter->dump_string("size_actual", ginfo["size_actual"]);
+      formatter->close_section();
+    }
+    formatter->close_section();
+    formatter->flush(cout);
+    exit(0);
+    #endif
+
     formatter->open_array_section("entries");
 
     do {
