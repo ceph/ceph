@@ -6413,6 +6413,10 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   if (r < 0)
     goto out_fsid;
 
+  r = _open_superblock_meta();
+  if (r < 0)
+    goto out_bdev;
+
   // GBH: can probably skip open_db step in REad-Only mode when operating in NULL-FM mode
   // (might need to open if failed to restore from file)
 
@@ -6421,11 +6425,6 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   r = _open_db(false, false, true);
   if (r < 0)
     goto out_bdev;
-
-  r = _open_super_meta();
-  if (r < 0) {
-    goto out_db;
-  }
 
   r = _open_fm(nullptr, true, false);
   if (r < 0)
@@ -6442,10 +6441,14 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   // And now it's time to do that
   //
   _close_db();
+
   r = _open_db(false, to_repair, read_only);
   if (r < 0) {
     goto out_alloc;
   }
+  //nid / blob needs DB
+  _read_db_dynamic_values();
+  _setup_settings();
 
   if (!read_only) {
     _post_init_alloc(zone_adjustments);
@@ -6894,13 +6897,16 @@ void BlueStore::_fsck_collections(int64_t* errors)
   }
 }
 
+/**
+   Reads setting super.meta.per_pool_omap,
+   sets per_pool_omap accordingly.
+ */
 void BlueStore::_set_per_pool_omap()
 {
   per_pool_omap = OMAP_BULK;
-  bufferlist bl;
-  db->get(PREFIX_SUPER, "per_pool_omap", &bl);
-  if (bl.length()) {
-    auto s = bl.to_str();
+  string s;
+  int r = read_meta("per_pool_omap", &s);
+  if (r == 0) {
     if (s == stringify(OMAP_PER_POOL)) {
       per_pool_omap = OMAP_PER_POOL;
     } else if (s == stringify(OMAP_PER_PG)) {
@@ -7226,7 +7232,8 @@ int BlueStore::mkfs()
   r = _open_db(true);
   if (r < 0)
     goto out_close_alloc;
-
+  // we set ondisk_format to both DB and super.meta
+  ondisk_format = latest_ondisk_format;
   {
     KeyValueDB::Transaction t = db->get_transaction();
     r = _open_fm(t, false, true);
@@ -7238,41 +7245,14 @@ int BlueStore::mkfs()
       t->set(PREFIX_SUPER, "nid_max", bl);
       t->set(PREFIX_SUPER, "blobid_max", bl);
     }
-
-    {
-      bufferlist bl;
-      encode((uint64_t)min_alloc_size, bl);
-      t->set(PREFIX_SUPER, "min_alloc_size", bl);
-    }
-    {
-      bufferlist bl;
-      if (cct->_conf.get_val<bool>("bluestore_debug_legacy_omap")) {
-	bl.append(stringify(OMAP_BULK));
-      } else {
-	bl.append(stringify(OMAP_PER_PG));
-      }
-      t->set(PREFIX_SUPER, "per_pool_omap", bl);
-    }
-
-#ifdef HAVE_LIBZBD
-    if (bdev->is_smr()) {
-      {
-	bufferlist bl;
-	encode((uint64_t)zone_size, bl);
-	t->set(PREFIX_SUPER, "zone_size", bl);
-      }
-      {
-	bufferlist bl;
-	encode((uint64_t)first_sequential_zone, bl);
-	t->set(PREFIX_SUPER, "first_sequential_zone", bl);
-      }
-    }
-#endif
-    
-    ondisk_format = latest_ondisk_format;
-    _prepare_ondisk_format_super(t);
+    _prepare_ondisk_format_db(t);
     db->submit_transaction_sync(t);
   }
+
+  // this is so late because we also write freelist type
+  r = _init_superblock_meta();
+  if (r < 0)
+    goto out_close_fm;
 
   r = write_meta("kv_backend", cct->_conf->bluestore_kvbackend);
   if (r < 0)
@@ -7742,7 +7722,7 @@ int BlueStore::_mount()
     }
   });
 
-  r = _upgrade_super();
+  r = _upgrade_super_db();
   if (r < 0) {
     return r;
   }
@@ -9173,7 +9153,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   });
 
   if (!read_only) {
-    r = _upgrade_super();
+    r = _upgrade_super_db();
     if (r < 0) {
       return r;
     }
@@ -10188,10 +10168,7 @@ void BlueStore::inject_legacy_omap()
 {
   dout(1) << __func__ << dendl;
   per_pool_omap = OMAP_BULK;
-  KeyValueDB::Transaction txn;
-  txn = db->get_transaction();
-  txn->rmkey(PREFIX_SUPER, "per_pool_omap");
-  db->submit_transaction_sync(txn);
+  write_meta("per_pool_omap", stringify(OMAP_BULK));
 }
 
 void BlueStore::inject_legacy_omap(coll_t cid, ghobject_t oid)
@@ -12254,7 +12231,11 @@ uint64_t BlueStore::_get_ondisk_reserved() const {
     std::max<uint64_t>(SUPER_RESERVED, min_alloc_size), min_alloc_size);
 }
 
-void BlueStore::_prepare_ondisk_format_super(KeyValueDB::Transaction& t)
+/**
+   There are 2 ondisk_format values; in super.meta and in DB.
+   It is used to independently upgrade DB should need arise.
+ */
+void BlueStore::_prepare_ondisk_format_db(KeyValueDB::Transaction& t)
 {
   dout(10) << __func__ << " ondisk_format " << ondisk_format
 	   << " min_compat_ondisk_format " << min_compat_ondisk_format
@@ -12265,14 +12246,154 @@ void BlueStore::_prepare_ondisk_format_super(KeyValueDB::Transaction& t)
     encode(ondisk_format, bl);
     t->set(PREFIX_SUPER, "ondisk_format", bl);
   }
-  {
-    bufferlist bl;
-    encode(min_compat_ondisk_format, bl);
-    t->set(PREFIX_SUPER, "min_compat_ondisk_format", bl);
-  }
 }
+/**
+  With ondisk_format = 5, all settings are moved from DB to super.meta.
+  When super.meta "ondisk_format" does not exist, upgrade process is triggered.
+ */
+int BlueStore::_open_superblock_meta()
+{
+  uint64_t val;
+  int r = _read_meta("ondisk_format", &val);
+  if (r == 0) {
+    ondisk_format = val;
+  } else if (r == -ENOENT) {
+    // not defined, must relocate settings from DB to super
+    r = _relocate_db_settings_to_super_meta();
+    if (r != 0) {
+      derr << __func__ << " failed to upgrade to ondisk_format = 5" << dendl;
+      return r;
+    } else {
+      dout(1) << __func__ << " successful upgrade to ondisk_format = 5" << dendl;
+    }
+    // relocate successful, open using super.meta
+  } else {
+    derr << __func__ << " problem reading ondisk_format" << dendl;
+    return r;
+  }
+  r = _upgrade_superblock_meta();
+  if (r != 0) {
+    return r;
+  }
+  r = _read_superblock_meta();
+  if (r != 0) {
+    return r;
+  }
+  return 0;
+}
+/**
+  When super.meta "ondisk_format" does not exist, upgrade process is triggered.
+  Upgrade copies all settings from DB to super.meta.
+  DB is opened in read-only mode; settings in DB are not deleted.
+  The last modified super.meta is "ondisk_format = 5".
 
-int BlueStore::_open_super_meta()
+  Just after upgrade super.meta.ondisk_format == 5, DB's ondisk_format is still 4.
+  To fix that, each time DB is opened in read-write mode, ondisk_format is set to 5.
+ */
+int BlueStore::_relocate_db_settings_to_super_meta()
+{
+  // require db not open yet
+  int r = _open_db(false, false, true); // = opening in read-only mode
+  ceph_assert(r == 0);
+  bufferlist bl;
+  r = db->get(PREFIX_SUPER, "ondisk_format", &bl);
+  ceph_assert(r == 0);
+  try {
+    auto p = bl.cbegin();
+    decode(ondisk_format, p);
+  } catch (ceph::buffer::error& e) {
+    derr << __func__ << " unable to read ondisk_format" << dendl;
+    ceph_assert(false);
+  }
+  ceph_assert(ondisk_format == 4);
+  // we will upgrade to ondisk_format = 5 and have all settings in meta
+  // we just need to wait for DB opened in R/W
+  struct {
+    bool is_optional;         // missing optional setting is ok
+    bool is_string;           // true = string, copy as-is
+                              // false = uint64_t, convert from encoded int to string int
+                              // note - it happened all values are uint64_t
+    const std::string prefix; // prefix of the key in DB
+    const std::string name;   // name of the key
+  } keys_to_move[5] = {
+    {false, true, PREFIX_SUPER, "freelist_type"},
+    {false, false, PREFIX_SUPER, "min_alloc_size"},
+    {true, false, PREFIX_SUPER, "zone_size"},
+    {true, false, PREFIX_SUPER, "first_sequential_zone"},
+    {false, true, PREFIX_SUPER, "per_pool_omap"}
+    /* bitmap and zoned params already moved to .meta
+       when upgrading from version 3 to version 4
+    {true, false, PREFIX_SUPER, "bfm_blocks"},
+    {true, false, PREFIX_SUPER, "bfm_size"},
+    {true, false, PREFIX_SUPER, "bfm_bytes_per_block"},
+    {true, false, PREFIX_SUPER, "bfm_blocks_per_key"},
+    {true, false, PREFIX_SUPER, "zfm_size"},
+    {true, false, PREFIX_SUPER, "zfm_bytes_per_block"},
+    {true, false, PREFIX_SUPER, "zfm_zone_size"},
+    {true, false, PREFIX_SUPER, "zfm_num_zones"},
+    {true, false, PREFIX_SUPER, "zfm_starting_zone_num"},
+    */
+  };
+  int result = 0;
+  for (auto& k : keys_to_move) {
+    bufferlist bl;
+    int r = db->get(k.prefix, k.name, &bl);
+    if (r == 0) {
+      if (k.is_string) {
+	r = write_meta(k.name, bl.to_str());
+	if (r != 0) {
+	  derr << __func__ << " error writing super.meta " << k.name << "=" << bl.to_str() << dendl;
+	  result = -EIO;
+	  break;
+	}
+      } else {
+	auto p = bl.cbegin();
+	uint64_t v;
+	try {
+	  decode(v, p);
+	} catch (ceph::buffer::error& e) {
+	  derr << __func__ << " unable to decode " << k.prefix << "/" << k.name << dendl;
+	  result = -EIO;
+	  break;
+	}
+	r = write_meta(k.name, std::to_string(v));
+	if (r != 0) {
+	  derr << __func__ << " error writing super.meta " << k.name << "=" << std::to_string(v) << dendl;
+	  result = -EIO;
+	  break;
+	}
+      }
+    } else {
+      if (!k.is_optional) {
+	derr << __func__ << " DB missing mandatory setting " << k.prefix << "/" << k.name << dendl;
+	result = -ENOENT;
+	break;
+      }
+    }
+  }
+  _close_db();
+  if (result == 0) {
+    result = write_meta("min_compat_ondisk_format", "5");
+  }
+  if (result == 0) {
+    result = write_meta("ondisk_format", "5");
+  }
+  if (result == 0) {
+    ondisk_format = 5;
+  }
+  return result;
+}
+/**
+   Read dynamic values from DB.
+   DB used to contain most of the BlueStore configuration / dynamic values.
+   Starting with ondisk_format = 5 only dynamic values are left in DB.
+   It currently means only:
+   - nid_max
+   - blobid_max
+
+   Requires DB to be open.
+ */
+int BlueStore::_read_db_dynamic_values()
 {
   // nid
   {
@@ -12309,7 +12430,13 @@ int BlueStore::_open_super_meta()
     dout(1) << __func__ << " old blobid_max " << blobid_max << dendl;
     blobid_last = blobid_max.load();
   }
+  return 0;
+}
 
+// Used solely for upgrade case when we were at version 4
+// and need to import settings.
+int BlueStore::_read_meta_from_db()
+{
   // freelist
   {
     bufferlist bl;
@@ -12412,7 +12539,97 @@ int BlueStore::_open_super_meta()
       ceph_assert(!bdev->is_smr());
     }
   }
+  return 0;
+}
 
+int BlueStore::_read_meta(const std::string& name, uint64_t* val)
+{
+  string s;
+  int r = read_meta(name, &s);
+  if (r < 0) {
+    derr << __func__ << " unable to read " << name << " meta" << dendl;
+    return -ENOENT;
+  }
+  std::string err;
+  uint64_t temp = strict_iecstrtoll(s, &err);
+  if (err.length() != 0) {
+    derr << __func__ << " meta " << name << ":" << err << dendl;
+    return -EINVAL;
+  }
+  *val = temp;
+  return 0;
+}
+
+/**
+ * Reads meta values from super block.
+ * Returns -EAGAIN if some required values are missing or cannot be parsed.
+ */
+int BlueStore::_read_superblock_meta()
+{
+  string s;
+  int r = read_meta("freelist_type", &freelist_type);
+  if (r < 0) {
+    derr << __func__ << " unable to read freelist_type meta" << dendl;
+    return -EIO;
+  }
+  int32_t compat_ondisk_format = 0;
+  uint64_t v;
+  r = _read_meta("ondisk_format", &v);
+  if (r != 0) return -EIO;
+  ondisk_format = v;
+  r = _read_meta("min_compat_ondisk_format", &v);
+  if (r != 0) return -EIO;
+  compat_ondisk_format = v;
+  r = _read_meta("min_alloc_size", &min_alloc_size);
+  if (r != 0) return -EIO;
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    r = _read_meta("zone_size", &zone_size);
+    if (r != 0) return -EIO;
+    r = _read_meta("first_sequential_zone", &first_sequential_zone);
+    if (r != 0) return -EIO;
+  }
+#endif
+
+  if (latest_ondisk_format < compat_ondisk_format) {
+    derr << __func__ << " compat_ondisk_format is "
+	 << compat_ondisk_format << " but we only understand version "
+	 << latest_ondisk_format << dendl;
+    return -EPERM;
+  }
+
+  if (freelist_type != "bitmap" &&
+      freelist_type != "zoned" &&
+      freelist_type != "null") {
+    derr << __func__ << " invalid freelist_type=" << freelist_type << dendl;
+    return -EIO;
+  }
+
+  min_alloc_size_order = std::countr_zero(min_alloc_size);
+  min_alloc_size_mask  = min_alloc_size - 1;
+  ceph_assert(min_alloc_size == 1u << min_alloc_size_order);
+  logger->set(l_bluestore_alloc_unit, min_alloc_size);
+
+  dout(1) << __func__ << " ondisk_format " << ondisk_format
+	  << " compat_ondisk_format " << compat_ondisk_format
+	  << dendl;
+  dout(1) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
+	  << std::dec << dendl;
+
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    dout(1) << __func__ << " zone_size 0x" << std::hex << zone_size << std::dec << dendl;
+    dout(1) << __func__ << " first_sequential_zone 0x" << std::hex << zone_size << std::dec << dendl;
+  }
+#endif
+  return 0;
+}
+
+/**
+ * Sets up various control variables.
+ */
+int BlueStore::_setup_settings()
+{
   _set_per_pool_omap();
 
   _open_statfs();
@@ -12427,63 +12644,85 @@ int BlueStore::_open_super_meta()
   return 0;
 }
 
-int BlueStore::_upgrade_super()
+// Starting from ondisk_format=5 configuration keys are split.
+// Settings related to BlueStore environment are moved to superblock.meta:
+// ondisk_format, min_compat_ondisk_format, min_alloc_size, freelist_type,
+// bfm_*, zfm_*
+//
+// This upgrades SUPER keys in DB.
+// Requires DB already opened, in R-W mode.
+// DB has a copy of ondisk_format, that should be in sync.
+// In DB are currently two settings:
+// - nid_max
+// - blobid_max
+
+int BlueStore::_upgrade_super_db()
 {
   dout(1) << __func__ << " from " << ondisk_format << ", latest "
 	  << latest_ondisk_format << dendl;
-  if (ondisk_format < latest_ondisk_format) {
-    ceph_assert(ondisk_format > 0);
-    ceph_assert(ondisk_format < latest_ondisk_format);
+  int32_t db_ondisk_format = -1;
+  bufferlist bl;
+  db->get(PREFIX_SUPER, "ondisk_format", &bl);
+  try {
+    auto p = bl.cbegin();
+    decode(db_ondisk_format, p);
+  } catch (ceph::buffer::error& e) {
+    derr << __func__ << " failed to read DB.ondisk_format" << dendl;
+    return -EIO;
+  }
+  bool changed = false;
+  KeyValueDB::Transaction t = db->get_transaction();
+  if (db_ondisk_format == 4) {
+    // no action
+    db_ondisk_format = 5;
+    changed = true;
+  }
 
-    KeyValueDB::Transaction t = db->get_transaction();
-    if (ondisk_format == 1) {
-      // changes:
-      // - super: added ondisk_format
-      // - super: added min_readable_ondisk_format
-      // - super: added min_compat_ondisk_format
-      // - super: added min_alloc_size
-      // - super: removed min_min_alloc_size
-      {
-	bufferlist bl;
-	db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
-	auto p = bl.cbegin();
-	try {
-	  uint64_t val;
-	  decode(val, p);
-	  min_alloc_size = val;
-	} catch (ceph::buffer::error& e) {
-	  derr << __func__ << " failed to read min_min_alloc_size" << dendl;
-	  return -EIO;
-	}
-	t->set(PREFIX_SUPER, "min_alloc_size", bl);
-	t->rmkey(PREFIX_SUPER, "min_min_alloc_size");
-      }
-      ondisk_format = 2;
-    }
-    if (ondisk_format == 2) {
-      // changes:
-      // - onode has FLAG_PERPOOL_OMAP.  Note that we do not know that *all*
-      //   oondes are using the per-pool prefix until a repair is run; at that
-      //   point the per_pool_omap=1 key will be set.
-      // - super: added per_pool_omap key, which indicates that *all* objects
-      //   are using the new prefix and key format
-      ondisk_format = 3;
-    }
-    if (ondisk_format == 3) {
-      // changes:
-      // - FreelistManager keeps meta within bdev label
-      int r = _write_out_fm_meta(0);
-      ceph_assert(r == 0);
-      ondisk_format = 4;
-    }
-    // This to be the last operation
-    _prepare_ondisk_format_super(t);
+  if (changed) {
+    bufferlist bl;
+    encode(db_ondisk_format, bl);
+    t->set(PREFIX_SUPER, "ondisk_format", bl);
     int r = db->submit_transaction_sync(t);
     ceph_assert(r == 0);
   }
   // done
   dout(1) << __func__ << " done" << dendl;
   return 0;
+}
+
+// upgrades values stored in superblock.meta
+int BlueStore::_upgrade_superblock_meta()
+{
+  ceph_assert_always(ondisk_format >= 5);
+  if (ondisk_format == 5) {
+    // future code to upgrade to ondisk_format = 6
+  }
+  return 0;
+}
+
+int BlueStore::_init_superblock_meta()
+{
+  dout(10) << __func__ << " ondisk_format " << ondisk_format
+	   << " min_compat_ondisk_format " << min_compat_ondisk_format
+	   << dendl;
+  ceph_assert(ondisk_format == latest_ondisk_format);
+  int r = 0;
+  if (r == 0) write_meta("ondisk_format", std::to_string(ondisk_format));
+  if (r == 0) write_meta("min_compat_ondisk_format", std::to_string(min_compat_ondisk_format));
+  if (r == 0) write_meta("min_alloc_size", std::to_string(min_alloc_size));
+  if (r == 0) write_meta("freelist_type", freelist_type);
+  if (cct->_conf.get_val<bool>("bluestore_debug_legacy_omap")) {
+    if (r == 0) write_meta("per_pool_omap", stringify(OMAP_PER_POOL)); // aka "1"
+  } else {
+    if (r == 0) write_meta("per_pool_omap", stringify(OMAP_PER_PG)); // aka "2"
+  }
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    if (r == 0) write_meta("zone_size", std::to_string(zone_size));
+    if (r == 0) write_meta("first_sequential_zone", std::to_string(first_sequential_zone));
+  }
+#endif
+  return r;
 }
 
 void BlueStore::_assign_nid(TransContext *txc, OnodeRef& o)

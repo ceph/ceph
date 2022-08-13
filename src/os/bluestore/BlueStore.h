@@ -2688,8 +2688,13 @@ private:
 			       bool create);
   int _set_bdev_label_size(const std::string& path, uint64_t size);
 
-  int _open_super_meta();
-
+  int _open_superblock_meta();
+  int _relocate_db_settings_to_super_meta();
+  int _read_superblock_meta();
+  int _read_meta(const std::string& name, uint64_t* val);
+  int _read_meta_from_db();
+  int _read_db_dynamic_values();
+  int _setup_settings();
   void _open_statfs();
   void _get_statfs_overall(struct store_statfs_t *buf);
 
@@ -2838,16 +2843,18 @@ private:
 
   // -- ondisk version ---
 public:
-  const int32_t latest_ondisk_format = 4;        ///< our version
+  const int32_t latest_ondisk_format = 5;        ///< our version
   const int32_t min_readable_ondisk_format = 1;  ///< what we can read
-  const int32_t min_compat_ondisk_format = 3;    ///< who can read us
+  const int32_t min_compat_ondisk_format = 5;    ///< who can read us
 
 private:
   int32_t ondisk_format = 0;  ///< value detected on mount
   bool    m_fast_shutdown = false;
-  int _upgrade_super();  ///< upgrade (called during open_super)
+  int _upgrade_super_db();  ///< upgrade (called during open_super)
+  int _upgrade_superblock_meta();
+  int _init_superblock_meta();
   uint64_t _get_ondisk_reserved() const;
-  void _prepare_ondisk_format_super(KeyValueDB::Transaction& t);
+  void _prepare_ondisk_format_db(KeyValueDB::Transaction& t);
 
   // --- public interface ---
 public:
