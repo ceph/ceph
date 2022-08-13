@@ -10,87 +10,107 @@ Running Ceph with systemd
 
 For all distributions that support systemd (CentOS 7, Fedora, Debian
 Jessie 8 and later, SUSE), ceph daemons are now managed using native
-systemd files instead of the legacy sysvinit scripts.  For example::
+systemd files instead of the legacy sysvinit scripts.  For example:
 
-        sudo systemctl start ceph.target       # start all daemons
-        sudo systemctl status ceph-osd@12      # check status of osd.12
+.. prompt:: bash $
 
-To list the Ceph systemd units on a node, execute::
+   sudo systemctl start ceph.target       # start all daemons
+   sudo systemctl status ceph-osd@12      # check status of osd.12
 
-        sudo systemctl status ceph\*.service ceph\*.target
+To list the Ceph systemd units on a node, execute:
+
+.. prompt:: bash $
+
+   sudo systemctl status ceph\*.service ceph\*.target
 
 Starting all Daemons
 --------------------
 
 To start all daemons on a Ceph Node (irrespective of type), execute the
-following::
+following:
 
-	sudo systemctl start ceph.target
+.. prompt:: bash $
+
+   sudo systemctl start ceph.target
 
 
 Stopping all Daemons
 --------------------
 
 To stop all daemons on a Ceph Node (irrespective of type), execute the
-following::
+following:
 
-        sudo systemctl stop ceph\*.service ceph\*.target
+.. prompt:: bash $
+
+   sudo systemctl stop ceph\*.service ceph\*.target
 
 
 Starting all Daemons by Type
 ----------------------------
 
 To start all daemons of a particular type on a Ceph Node, execute one of the
-following::
+following:
 
-        sudo systemctl start ceph-osd.target
-        sudo systemctl start ceph-mon.target
-        sudo systemctl start ceph-mds.target
+.. prompt:: bash $
+
+   sudo systemctl start ceph-osd.target
+   sudo systemctl start ceph-mon.target
+   sudo systemctl start ceph-mds.target
 
 
 Stopping all Daemons by Type
 ----------------------------
 
 To stop all daemons of a particular type on a Ceph Node, execute one of the
-following::
+following:
 
-        sudo systemctl stop ceph-mon\*.service ceph-mon.target
-        sudo systemctl stop ceph-osd\*.service ceph-osd.target
-        sudo systemctl stop ceph-mds\*.service ceph-mds.target
+.. prompt:: bash $
+
+   sudo systemctl stop ceph-mon\*.service ceph-mon.target
+   sudo systemctl stop ceph-osd\*.service ceph-osd.target
+   sudo systemctl stop ceph-mds\*.service ceph-mds.target
 
 
 Starting a Daemon
 -----------------
 
 To start a specific daemon instance on a Ceph Node, execute one of the
-following::
+following:
 
-	sudo systemctl start ceph-osd@{id}
-	sudo systemctl start ceph-mon@{hostname}
-	sudo systemctl start ceph-mds@{hostname}
+.. prompt:: bash $
 
-For example::
+   sudo systemctl start ceph-osd@{id}
+   sudo systemctl start ceph-mon@{hostname}
+   sudo systemctl start ceph-mds@{hostname}
 
-	sudo systemctl start ceph-osd@1
-	sudo systemctl start ceph-mon@ceph-server
-	sudo systemctl start ceph-mds@ceph-server
+For example:
+
+.. prompt:: bash $
+
+   sudo systemctl start ceph-osd@1
+   sudo systemctl start ceph-mon@ceph-server
+   sudo systemctl start ceph-mds@ceph-server
 
 
 Stopping a Daemon
 -----------------
 
 To stop a specific daemon instance on a Ceph Node, execute one of the
-following::
+following:
 
-	sudo systemctl stop ceph-osd@{id}
-	sudo systemctl stop ceph-mon@{hostname}
-	sudo systemctl stop ceph-mds@{hostname}
+.. prompt:: bash $
 
-For example::
+   sudo systemctl stop ceph-osd@{id}
+   sudo systemctl stop ceph-mon@{hostname}
+   sudo systemctl stop ceph-mds@{hostname}
 
-	sudo systemctl stop ceph-osd@1
-	sudo systemctl stop ceph-mon@ceph-server
-	sudo systemctl stop ceph-mds@ceph-server
+For example:
+
+.. prompt:: bash $
+
+   sudo systemctl stop ceph-osd@1
+   sudo systemctl stop ceph-mon@ceph-server
+   sudo systemctl stop ceph-mds@ceph-server
 
 
 .. index:: sysvinit; operating a cluster
