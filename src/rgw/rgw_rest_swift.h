@@ -541,7 +541,7 @@ public:
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
     state->formatter = new JSONFormatter;
-    state->format = RGW_FORMAT_JSON;
+    state->format = RGWFormat::JSON;
 
     return RGWHandler::init(store, state, cio);
   }
@@ -598,7 +598,7 @@ public:
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
     state->formatter = new JSONFormatter;
-    state->format = RGW_FORMAT_JSON;
+    state->format = RGWFormat::JSON;
 
     return RGWHandler::init(store, state, cio);
   }
@@ -655,7 +655,7 @@ public:
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
     state->formatter = new JSONFormatter;
-    state->format = RGW_FORMAT_JSON;
+    state->format = RGWFormat::JSON;
 
     return RGWHandler::init(store, state, cio);
   }

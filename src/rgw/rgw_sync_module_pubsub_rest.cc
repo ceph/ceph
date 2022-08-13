@@ -504,7 +504,7 @@ RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::Store* store,
 						const rgw::auth::StrategyRegistry& auth_registry,
 						const std::string& frontend_prefix)
 {
-  if (RGWHandler_REST_S3::init_from_header(store, s, RGW_FORMAT_JSON, true) < 0) {
+  if (RGWHandler_REST_S3::init_from_header(store, s, RGWFormat::JSON, true) < 0) {
     return nullptr;
   }
  
@@ -519,7 +519,7 @@ RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::Store* store,
   } else if (s->init_state.url_bucket == "notifications") {
     handler = new RGWHandler_REST_PSNotifs(auth_registry);
   } else if (s->info.args.exists("notification")) {
-    const int ret = RGWHandler_REST::allocate_formatter(s, RGW_FORMAT_XML, true);
+    const int ret = RGWHandler_REST::allocate_formatter(s, RGWFormat::XML, true);
     if (ret == 0) {
         handler = new RGWHandler_REST_PSNotifs_S3(auth_registry);
     }

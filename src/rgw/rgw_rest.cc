@@ -592,13 +592,13 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
   if (force_content_type ||
       (!content_type &&  s->formatter->get_len()  != 0) || s->is_err()){
     switch (s->format) {
-    case RGW_FORMAT_XML:
+    case RGWFormat::XML:
       ctype = "application/xml";
       break;
-    case RGW_FORMAT_JSON:
+    case RGWFormat::JSON:
       ctype = "application/json";
       break;
-    case RGW_FORMAT_HTML:
+    case RGWFormat::HTML:
       ctype = "text/html";
       break;
     default:
@@ -660,7 +660,7 @@ void abort_early(req_state *s, RGWOp* op, int err_no,
   string error_content("");
   if (!s->formatter) {
     s->formatter = new JSONFormatter;
-    s->format = RGW_FORMAT_JSON;
+    s->format = RGWFormat::JSON;
   }
 
   // op->error_handler is responsible for calling it's handler error_handler
@@ -1725,19 +1725,19 @@ void RGWHandler_REST::put_op(RGWOp* op)
 } /* put_op */
 
 int RGWHandler_REST::allocate_formatter(req_state *s,
-					int default_type,
+					RGWFormat default_type,
 					bool configurable)
 {
-  s->format = -1; // set to invalid value to allocation happens anyway 
+  s->format = RGWFormat::BAD_FORMAT; // set to invalid value to allocation happens anyway
   auto type = default_type;
   if (configurable) {
     string format_str = s->info.args.get("format");
     if (format_str.compare("xml") == 0) {
-      type = RGW_FORMAT_XML;
+      type = RGWFormat::XML;
     } else if (format_str.compare("json") == 0) {
-      type = RGW_FORMAT_JSON;
+      type = RGWFormat::JSON;
     } else if (format_str.compare("html") == 0) {
-      type = RGW_FORMAT_HTML;
+      type = RGWFormat::HTML;
     } else {
       const char *accept = s->info.env->get("HTTP_ACCEPT");
       if (accept) {
@@ -1748,11 +1748,11 @@ int RGWHandler_REST::allocate_formatter(req_state *s,
         }
         format_buf[i] = 0;
         if ((strcmp(format_buf, "text/xml") == 0) || (strcmp(format_buf, "application/xml") == 0)) {
-          type = RGW_FORMAT_XML;
+          type = RGWFormat::XML;
         } else if (strcmp(format_buf, "application/json") == 0) {
-          type = RGW_FORMAT_JSON;
+          type = RGWFormat::JSON;
         } else if (strcmp(format_buf, "text/html") == 0) {
-          type = RGW_FORMAT_HTML;
+          type = RGWFormat::HTML;
         }
       }
     }
@@ -1760,7 +1760,7 @@ int RGWHandler_REST::allocate_formatter(req_state *s,
   return RGWHandler_REST::reallocate_formatter(s, type);
 }
 
-int RGWHandler_REST::reallocate_formatter(req_state *s, int type)
+int RGWHandler_REST::reallocate_formatter(req_state *s, const RGWFormat type)
 {
   if (s->format == type) {
     // do nothing, just reset
@@ -1778,14 +1778,14 @@ int RGWHandler_REST::reallocate_formatter(req_state *s, int type)
   const bool swift_bulkupload = s->prot_flags & RGW_REST_SWIFT &&
                                 s->info.args.exists("extract-archive");
   switch (s->format) {
-    case RGW_FORMAT_PLAIN:
+    case RGWFormat::PLAIN:
       {
         const bool use_kv_syntax = s->info.args.exists("bulk-delete") ||
                                    multipart_delete || swift_bulkupload;
         s->formatter = new RGWFormatter_Plain(use_kv_syntax);
         break;
       }
-    case RGW_FORMAT_XML:
+    case RGWFormat::XML:
       {
         const bool lowercase_underscore = s->info.args.exists("bulk-delete") ||
                                           multipart_delete || swift_bulkupload;
@@ -1793,10 +1793,10 @@ int RGWHandler_REST::reallocate_formatter(req_state *s, int type)
         s->formatter = new XMLFormatter(false, lowercase_underscore);
         break;
       }
-    case RGW_FORMAT_JSON:
+    case RGWFormat::JSON:
       s->formatter = new JSONFormatter(false);
       break;
-    case RGW_FORMAT_HTML:
+    case RGWFormat::HTML:
       s->formatter = new HTMLFormatter(s->prot_flags & RGW_REST_WEBSITE);
       break;
     default:

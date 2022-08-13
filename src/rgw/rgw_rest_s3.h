@@ -649,7 +649,8 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
-  static int init_from_header(rgw::sal::Store* store, req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(rgw::sal::Store* store, req_state *s, RGWFormat default_formatter,
+			      bool configurable_format);
 
   explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
