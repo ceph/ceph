@@ -591,20 +591,7 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
      and the content type was not set by the user */
   if (force_content_type ||
       (!content_type &&  s->formatter->get_len()  != 0) || s->is_err()){
-    switch (s->format) {
-    case RGWFormat::XML:
-      ctype = "application/xml";
-      break;
-    case RGWFormat::JSON:
-      ctype = "application/json";
-      break;
-    case RGWFormat::HTML:
-      ctype = "text/html";
-      break;
-    default:
-      ctype = "text/plain";
-      break;
-    }
+    ctype = to_mime_type(s->format);
     if (s->prot_flags & RGW_REST_SWIFT)
       ctype.append("; charset=utf-8");
     content_type = ctype.c_str();
