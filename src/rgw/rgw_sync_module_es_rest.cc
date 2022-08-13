@@ -331,7 +331,7 @@ public:
     if (is_truncated) {
       s->formatter->dump_string("NextMarker", next_marker);
     }
-    if (s->format == RGW_FORMAT_JSON) {
+    if (s->format == RGWFormat::JSON) {
       s->formatter->open_array_section("Objects");
     }
     for (auto& i : response.hits.hits) {
@@ -371,7 +371,7 @@ public:
       rgw_flush_formatter(s, s->formatter);
       s->formatter->close_section();
     };
-    if (s->format == RGW_FORMAT_JSON) {
+    if (s->format == RGWFormat::JSON) {
       s->formatter->close_section();
     }
     s->formatter->close_section();
@@ -410,7 +410,7 @@ RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Store* store,
 {
   int ret =
     RGWHandler_REST_S3::init_from_header(store, s,
-					RGW_FORMAT_XML, true);
+					RGWFormat::XML, true);
   if (ret < 0) {
     return nullptr;
   }

@@ -4751,7 +4751,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_options()
 
 int RGWHandler_REST_S3::init_from_header(rgw::sal::Store* store,
 					 req_state* s,
-					 int default_formatter,
+					 RGWFormat default_formatter,
 					 bool configurable_format)
 {
   string req;
@@ -5039,7 +5039,7 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
 int RGWHandler_Auth_S3::init(rgw::sal::Store* store, req_state *state,
                              rgw::io::BasicClient *cio)
 {
-  int ret = RGWHandler_REST_S3::init_from_header(store, state, RGW_FORMAT_JSON, true);
+  int ret = RGWHandler_REST_S3::init_from_header(store, state, RGWFormat::JSON, true);
   if (ret < 0)
     return ret;
 
@@ -5054,8 +5054,8 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Store* store,
   bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
   int ret =
     RGWHandler_REST_S3::init_from_header(store, s,
-					is_s3website ? RGW_FORMAT_HTML :
-					RGW_FORMAT_XML, true);
+					is_s3website ? RGWFormat::HTML :
+					RGWFormat::XML, true);
   if (ret < 0)
     return NULL;
 

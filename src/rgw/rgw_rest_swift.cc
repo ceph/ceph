@@ -167,7 +167,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
-  } else if (!has_buckets && s->format == RGW_FORMAT_PLAIN) {
+  } else if (!has_buckets && s->format == RGWFormat::PLAIN) {
     op_ret = STATUS_NO_CONTENT;
     set_req_state_err(s, op_ret);
   }
@@ -414,7 +414,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
 
       /* swift is a bit inconsistent here */
       switch (s->format) {
-        case RGW_FORMAT_XML:
+        case RGWFormat::XML:
           s->formatter->dump_string("name", name);
           break;
         default:
@@ -2983,7 +2983,7 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Store* store,
     return -ENOENT;
   }
 
-  int ret = allocate_formatter(s, RGW_FORMAT_PLAIN, true);
+  int ret = allocate_formatter(s, RGWFormat::PLAIN, true);
   if (ret < 0)
     return ret;
 

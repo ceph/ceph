@@ -360,7 +360,7 @@ void set_req_state_err(req_state* s, int err_no)
 
 void dump(req_state* s)
 {
-  if (s->format != RGW_FORMAT_HTML)
+  if (s->format != RGWFormat::HTML)
     s->formatter->open_object_section("Error");
   if (!s->err.err_code.empty())
     s->formatter->dump_string("Code", s->err.err_code);
@@ -371,7 +371,7 @@ void dump(req_state* s)
   if (!s->trans_id.empty())	// TODO: connect to expose_bucket or another toggle
     s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->dump_string("HostId", s->host_id);
-  if (s->format != RGW_FORMAT_HTML)
+  if (s->format != RGWFormat::HTML)
     s->formatter->close_section();
 }
 
