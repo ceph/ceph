@@ -86,10 +86,10 @@ void ZonedFreelistManager::setup_merge_operator(KeyValueDB *db, string prefix)
 }
 
 ZonedFreelistManager::ZonedFreelistManager(
-  CephContext* cct,
+  ObjectStore* store,
   string meta_prefix,
   string info_prefix)
-  : FreelistManager(cct),
+  : FreelistManager(store),
     meta_prefix(meta_prefix),
     info_prefix(info_prefix),
     enumerate_zone_num(~0UL)
@@ -118,32 +118,12 @@ int ZonedFreelistManager::create(
 	  << " zone size 0x " << zone_size
 	  << " num_zones 0x" << num_zones
 	  << " starting_zone 0x" << starting_zone_num << dendl;
-  {
-    bufferlist bl;
-    encode(size, bl);
-    txn->set(meta_prefix, "size", bl);
-  }
-  {
-    bufferlist bl;
-    encode(bytes_per_block, bl);
-    txn->set(meta_prefix, "bytes_per_block", bl);
-  }
-  {
-    bufferlist bl;
-    encode(zone_size, bl);
-    txn->set(meta_prefix, "zone_size", bl);
-  }
-  {
-    bufferlist bl;
-    encode(num_zones, bl);
-    txn->set(meta_prefix, "num_zones", bl);
-  }
-  {
-    bufferlist bl;
-    encode(starting_zone_num, bl);
-    txn->set(meta_prefix, "starting_zone_num", bl);
-  }
 
+  store->write_meta("zfm_size", stringify(size));
+  store->write_meta("zfm_bytes_per_block", stringify(bytes_per_block));
+  store->write_meta("zfm_zone_size", stringify(zone_size));
+  store->write_meta("zfm_num_zones", stringify(num_zones));
+  store->write_meta("zfm_starting_zone_num", stringify(starting_zone_num));
   init_zone_states(txn);
 
   return 0;

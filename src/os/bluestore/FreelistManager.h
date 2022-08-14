@@ -10,16 +10,20 @@
 #include <ostream>
 #include "kv/KeyValueDB.h"
 #include "bluestore_types.h"
+#include "os/ObjectStore.h"
 
 class FreelistManager {
   bool         null_manager = false;
-public:
+protected:
+  ObjectStore* store; //this is always BlueStore
   CephContext* cct;
-  explicit FreelistManager(CephContext* cct) : cct(cct) {}
+public:
+  explicit FreelistManager(ObjectStore* store)
+    : store(store), cct(store->cct) {}
   virtual ~FreelistManager() {}
 
   static FreelistManager *create(
-    CephContext* cct,
+    ObjectStore* store,
     std::string type,
     std::string prefix);
 

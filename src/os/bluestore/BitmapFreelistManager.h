@@ -47,17 +47,10 @@ class BitmapFreelistManager : public FreelistManager {
   int _read_cfg(
     std::function<int(const std::string&, std::string*)> cfg_reader);
 
-  int _expand(uint64_t new_size, KeyValueDB* db);
-
   uint64_t size_2_block_count(uint64_t target_size) const;
 
-  int read_size_meta_from_db(KeyValueDB* kvdb, uint64_t* res);
-  void _sync(KeyValueDB* kvdb, bool read_only);
-
-  void _load_from_db(KeyValueDB* kvdb);
-
 public:
-  BitmapFreelistManager(CephContext* cct, std::string meta_prefix,
+  BitmapFreelistManager(ObjectStore* store, std::string meta_prefix,
 			std::string bitmap_prefix);
 
   static void setup_merge_operator(KeyValueDB *db, std::string prefix);

@@ -56,7 +56,7 @@ class ZonedFreelistManager : public FreelistManager {
   int _read_cfg(cfg_reader_t cfg_reader);
 
 public:
-  ZonedFreelistManager(CephContext* cct,
+  ZonedFreelistManager(ObjectStore* store,
 		       std::string meta_prefix,
 		       std::string info_prefix);
 

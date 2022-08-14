@@ -5628,7 +5628,7 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
     freelist_type = "null";
     need_to_destage_allocation_file = true;
   }
-  fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
+  fm = FreelistManager::create(this, freelist_type, PREFIX_ALLOC);
   ceph_assert(fm);
   if (t) {
     // create mode. initialize freespace

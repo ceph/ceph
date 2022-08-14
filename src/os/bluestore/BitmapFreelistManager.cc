@@ -56,10 +56,10 @@ void BitmapFreelistManager::setup_merge_operator(KeyValueDB *db, string prefix)
   db->set_merge_operator(prefix, merge_op);
 }
 
-BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
+BitmapFreelistManager::BitmapFreelistManager(ObjectStore* store,
 					     string meta_prefix,
 					     string bitmap_prefix)
-  : FreelistManager(cct),
+  : FreelistManager(store),
     meta_prefix(meta_prefix),
     bitmap_prefix(bitmap_prefix),
     enumerate_bl_pos(0)
@@ -83,7 +83,8 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 	     << " to 0x" << (blocks * bytes_per_block)
 	     << " (0x" << blocks << " blocks)" << std::dec << dendl;
     // set past-eof blocks as allocated
-    _xor(size, blocks * bytes_per_block - size, txn);
+    // enumerate_next no longer needs sentinels in last block
+    //_xor(size, blocks * bytes_per_block - size, txn);
   }
   dout(1) << __func__
 	   << " size 0x" << std::hex << size
@@ -91,133 +92,13 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 	   << " blocks 0x" << blocks
 	   << " blocks_per_key 0x" << blocks_per_key
 	   << std::dec << dendl;
-  {
-    bufferlist bl;
-    encode(bytes_per_block, bl);
-    txn->set(meta_prefix, "bytes_per_block", bl);
-  }
-  {
-    bufferlist bl;
-    encode(blocks_per_key, bl);
-    txn->set(meta_prefix, "blocks_per_key", bl);
-  }
-  {
-    bufferlist bl;
-    encode(blocks, bl);
-    txn->set(meta_prefix, "blocks", bl);
-  }
-  {
-    bufferlist bl;
-    encode(size, bl);
-    txn->set(meta_prefix, "size", bl);
-  }
+
+  store->write_meta("bfm_blocks", stringify(blocks));
+  store->write_meta("bfm_size", stringify(size));
+  store->write_meta("bfm_bytes_per_block", stringify(bytes_per_block));
+  store->write_meta("bfm_blocks_per_key", stringify(blocks_per_key));
   return 0;
 }
-
-int BitmapFreelistManager::_expand(uint64_t old_size, KeyValueDB* db)
-{
-  assert(old_size < size);
-  ceph_assert(std::has_single_bit(bytes_per_block));
-
-  KeyValueDB::Transaction txn;
-  txn = db->get_transaction();
-
-  auto blocks0 = size_2_block_count(old_size);
-  if (blocks0 * bytes_per_block > old_size) {
-    dout(10) << __func__ << " rounding1 blocks up from 0x" << std::hex
-             << old_size << " to 0x" << (blocks0 * bytes_per_block)
-	     << " (0x" << blocks0 << " blocks)" << std::dec << dendl;
-    // reset past-eof blocks to unallocated
-    _xor(old_size, blocks0 * bytes_per_block - old_size, txn);
-  }
-
-  size = p2align(size, bytes_per_block);
-  blocks = size_2_block_count(size);
-
-  if (blocks * bytes_per_block > size) {
-    dout(10) << __func__ << " rounding2 blocks up from 0x" << std::hex
-             << size << " to 0x" << (blocks * bytes_per_block)
-	     << " (0x" << blocks << " blocks)" << std::dec << dendl;
-    // set past-eof blocks as allocated
-    _xor(size, blocks * bytes_per_block - size, txn);
-  }
-
-  dout(10) << __func__
-	   << " size 0x" << std::hex << size
-	   << " bytes_per_block 0x" << bytes_per_block
-	   << " blocks 0x" << blocks
-	   << " blocks_per_key 0x" << blocks_per_key
-	   << std::dec << dendl;
-  {
-    bufferlist bl;
-    encode(blocks, bl);
-    txn->set(meta_prefix, "blocks", bl);
-  }
-  {
-    bufferlist bl;
-    encode(size, bl);
-    txn->set(meta_prefix, "size", bl);
-  }
-  db->submit_transaction_sync(txn);
-
-  return 0;
-}
-
-int BitmapFreelistManager::read_size_meta_from_db(KeyValueDB* kvdb,
-  uint64_t* res)
-{
-  bufferlist v;
-  int r = kvdb->get(meta_prefix, "size", &v);
-  if (r < 0) {
-    derr << __func__ << " missing size meta in DB" << dendl;
-    return -ENOENT;
-  } else {
-    auto p = v.cbegin();
-    decode(*res, p);
-    r = 0;
-  }
-  return r;
-}
-
-void BitmapFreelistManager::_load_from_db(KeyValueDB* kvdb)
-{
-  KeyValueDB::Iterator it = kvdb->get_iterator(meta_prefix);
-  it->lower_bound(string());
-
-  // load meta
-  while (it->valid()) {
-    string k = it->key();
-    if (k == "bytes_per_block") {
-      bufferlist bl = it->value();
-      auto p = bl.cbegin();
-      decode(bytes_per_block, p);
-      dout(10) << __func__ << " bytes_per_block 0x" << std::hex
-        << bytes_per_block << std::dec << dendl;
-    } else if (k == "blocks") {
-      bufferlist bl = it->value();
-      auto p = bl.cbegin();
-      decode(blocks, p);
-      dout(10) << __func__ << " blocks 0x" << std::hex << blocks << std::dec
-        << dendl;
-    } else if (k == "size") {
-      bufferlist bl = it->value();
-      auto p = bl.cbegin();
-      decode(size, p);
-      dout(10) << __func__ << " size 0x" << std::hex << size << std::dec
-        << dendl;
-    } else if (k == "blocks_per_key") {
-      bufferlist bl = it->value();
-      auto p = bl.cbegin();
-      decode(blocks_per_key, p);
-      dout(10) << __func__ << " blocks_per_key 0x" << std::hex << blocks_per_key
-        << std::dec << dendl;
-    } else {
-      derr << __func__ << " unrecognized meta " << k << dendl;
-    }
-    it->next();
-  }
-}
-
 
 int BitmapFreelistManager::init(KeyValueDB *kvdb, bool db_in_read_only,
   std::function<int(const std::string&, std::string*)> cfg_reader)
@@ -225,10 +106,9 @@ int BitmapFreelistManager::init(KeyValueDB *kvdb, bool db_in_read_only,
   dout(1) << __func__ << dendl;
   int r = _read_cfg(cfg_reader);
   if (r != 0) {
-    dout(1) << __func__ << " fall back to legacy meta repo" << dendl;
-    _load_from_db(kvdb);
+    derr << __func__ << " failed to read cfg" << dendl;
+    return r;
   }
-  _sync(kvdb, db_in_read_only);
 
   dout(10) << __func__ << std::hex
 	   << " size 0x" << size
@@ -298,27 +178,6 @@ void BitmapFreelistManager::_init_misc()
 
 void BitmapFreelistManager::sync(KeyValueDB* kvdb)
 {
-  _sync(kvdb, true);
-}
-
-void BitmapFreelistManager::_sync(KeyValueDB* kvdb, bool read_only)
-{
-  dout(10) << __func__ << " checks if size sync is needed" << dendl;
-  uint64_t size_db = 0;
-  int r = read_size_meta_from_db(kvdb, &size_db);
-  ceph_assert(r >= 0);
-  if (!read_only && size_db < size) {
-    dout(1) << __func__ << " committing new size 0x" << std::hex << size
-      << std::dec << dendl;
-    r = _expand(size_db, kvdb);
-    ceph_assert(r == 0);
-  } else if (size_db > size) {
-    // this might hapen when OSD passed the following sequence:
-    // upgrade -> downgrade -> expand -> upgrade
-    // One needs to run expand once again to syncup
-    dout(1) << __func__ << " fall back to legacy meta repo" << dendl;
-    _load_from_db(kvdb);
-  }
 }
 
 void BitmapFreelistManager::shutdown()
@@ -405,23 +264,30 @@ bool BitmapFreelistManager::enumerate_next(KeyValueDB *kvdb, uint64_t *offset, u
     }
     dout(30) << " no more clear bits in 0x" << std::hex << enumerate_offset
 	     << std::dec << dendl;
+    // fetching next entry
+    enumerate_offset += bytes_per_key;
     enumerate_p->next();
     enumerate_bl.clear();
     if (!enumerate_p->valid()) {
-      enumerate_offset += bytes_per_key;
-      enumerate_bl_pos = 0;
+      // there is no more entries, so everything from here to the end
+      // is the last free region
       *offset = _get_offset(enumerate_offset, enumerate_bl_pos);
-      break;
+      *length = size - *offset;
+      // set the condition to end in next func call
+      enumerate_offset = size;
+      return true;
     }
     string k = enumerate_p->key();
     const char *p = k.c_str();
-    uint64_t next = enumerate_offset + bytes_per_key;
+    uint64_t next = enumerate_offset;
     _key_decode_u64(p, &enumerate_offset);
     enumerate_bl = enumerate_p->value();
     enumerate_bl_pos = 0;
     if (enumerate_offset > next) {
       dout(30) << " no key at 0x" << std::hex << next << ", got 0x"
 	       << enumerate_offset << std::dec << dendl;
+      // this is a hole, and holes are implicitly "0"
+      // it means that we found first "0"
       *offset = next;
       break;
     }
@@ -429,7 +295,8 @@ bool BitmapFreelistManager::enumerate_next(KeyValueDB *kvdb, uint64_t *offset, u
 
   // skip clear bits to find the end
   uint64_t end = 0;
-  if (enumerate_p->valid()) {
+  ceph_assert(enumerate_p->valid());
+  {
     while (true) {
       enumerate_bl_pos = get_next_set_bit(enumerate_bl, enumerate_bl_pos);
       if (enumerate_bl_pos >= 0) {
@@ -438,7 +305,12 @@ bool BitmapFreelistManager::enumerate_next(KeyValueDB *kvdb, uint64_t *offset, u
 		 << enumerate_offset << " bit 0x" << enumerate_bl_pos
 		 << " offset 0x" << end << std::dec
 		 << dendl;
-	end = std::min(get_alloc_units() * bytes_per_block, end);
+	if (end > size) {
+	  // last entry has some bits that stick outside last alloc unit
+	  end = size;
+	  // signal end in next call
+	  enumerate_offset = size;
+	}
 	*length = end - *offset;
         dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
 		 << std::dec << dendl;
@@ -447,29 +319,29 @@ bool BitmapFreelistManager::enumerate_next(KeyValueDB *kvdb, uint64_t *offset, u
       dout(30) << " no more set bits in 0x" << std::hex << enumerate_offset
 	       << std::dec << dendl;
       enumerate_p->next();
+      if (!enumerate_p->valid()) {
+	// there is no more entries, so everything from here to the end
+	// is the last free region
+	end = size;
+	*length = end - *offset;
+	dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
+		 << std::dec << dendl;
+	// signal end in next call
+	enumerate_offset = size;
+	return true;
+      }
       enumerate_bl.clear();
       enumerate_bl_pos = 0;
-      if (!enumerate_p->valid()) {
-	break;
-      }
       string k = enumerate_p->key();
       const char *p = k.c_str();
       _key_decode_u64(p, &enumerate_offset);
+      // skipping "0"s, so it is perfectly ok to skip any missing entries
       enumerate_bl = enumerate_p->value();
     }
   }
 
-  if (enumerate_offset < size) {
-    end = get_alloc_units() * bytes_per_block;
-    *length = end - *offset;
-    dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
-	     << std::dec << dendl;
-    enumerate_offset = size;
-    enumerate_bl_pos = blocks_per_key;
-    return true;
-  }
-
-  dout(10) << __func__ << " end" << dendl;
+  // should never reach here
+  ceph_assert(false);
   return false;
 }
 
