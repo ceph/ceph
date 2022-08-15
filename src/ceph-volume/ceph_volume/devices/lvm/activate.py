@@ -268,7 +268,10 @@ class Activate(object):
         elif not osd_id and osd_fsid:
             tags = {'ceph.osd_fsid': osd_fsid}
         elif osd_id and not osd_fsid:
-            raise RuntimeError('could not activate osd.{}, please provide the '
+            if not osd_id.isdigit():
+                tags = {'ceph.osd_fsid': osd_id}
+            else:
+                raise RuntimeError('could not activate osd.{}, please provide the '
                                'osd_fsid too'.format(osd_id))
         else:
             raise RuntimeError('Please provide both osd_id and osd_fsid')
