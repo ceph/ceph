@@ -394,7 +394,7 @@ EOF
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
 
         # for rgw motr backend build checks
-        if $for_make_check || $with_rgw_motr; then
+        if $with_rgw_motr; then
             install_cortx_motr_on_ubuntu
         fi
         ;;
