@@ -521,11 +521,11 @@ class User {
     /** Set the cached attributes fro this User */
     virtual void set_attrs(Attrs& _attrs) = 0;
     /** Check if a User is empty */
-    virtual bool empty() = 0;
+    virtual bool empty() const = 0;
     /** Check if a User pointer is empty */
-    static bool empty(User* u) { return (!u || u->empty()); }
+    static bool empty(const User* u) { return (!u || u->empty()); }
     /** Check if a User unique_pointer is empty */
-    static bool empty(std::unique_ptr<User>& u) { return (!u || u->empty()); }
+    static bool empty(const std::unique_ptr<User>& u) { return (!u || u->empty()); }
     /** Read the User attributes from the backing Store */
     virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Set the attributes in attrs, leaving any other existing attrs set, and
@@ -1080,9 +1080,9 @@ class Object {
 				    bool must_exist, optional_yield y) = 0;
 
     /** Check to see if the given object pointer is uninitialized */
-    static bool empty(Object* o) { return (!o || o->empty()); }
+    static bool empty(const Object* o) { return (!o || o->empty()); }
     /** Check to see if the given object unique pointer is uninitialized */
-    static bool empty(std::unique_ptr<Object> o) { return (!o || o->empty()); }
+    static bool empty(const std::unique_ptr<Object>& o) { return (!o || o->empty()); }
     /** Get a unique copy of this object */
     virtual std::unique_ptr<Object> clone() = 0;
 
