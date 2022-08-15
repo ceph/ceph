@@ -226,5 +226,5 @@ public:
     void resume(rgw::sal::Store* _store) override;
 };
 
-} //namepsace rgw::lua
+} //namepsace lua
 

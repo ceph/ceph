@@ -839,19 +839,14 @@ struct RequestMetaTable : public EmptyMetaTable {
   }
 };
 
-void create_top_metatable(lua_State* L, req_state* s, const char* op_name) {
-  create_metatable<RequestMetaTable>(L, true, s, const_cast<char*>(op_name));
-  lua_getglobal(L, RequestMetaTable::TableName().c_str());
-  ceph_assert(lua_istable(L, -1));
-}
-
 int execute(
     rgw::sal::Store* store,
     RGWREST* rest,
     OpsLogSink* olog,
     req_state* s, 
     const char* op_name,
-    const std::string& script)
+    const std::string& script,
+    rgw::lua::Background* background)
 
 {
   auto L = luaL_newstate();
@@ -878,8 +873,8 @@ int execute(
   lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
   lua_rawset(L, -3);
   
-  if (s->lua_background) {
-    s->lua_background->create_background_metatable(L);
+  if (background) {
+    background->create_background_metatable(L);
     lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
     ceph_assert(lua_istable(L, -1));
   }
@@ -903,5 +898,4 @@ int execute(
   return rc;
 }
 
-} // namespace rgw::lua::request
-
+}

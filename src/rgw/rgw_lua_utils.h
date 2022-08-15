@@ -310,6 +310,5 @@ struct StringMapMetaTable : public EmptyMetaTable {
     return ONE_RETURNVAL;
   }
 };
-
-} // namespace rgw::lua
+}
 

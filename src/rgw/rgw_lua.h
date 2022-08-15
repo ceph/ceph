@@ -7,7 +7,6 @@
 #include "common/dout.h"
 #include "rgw_sal_fwd.h"
 
-class DoutPrefixProvider;
 class lua_State;
 class rgw_user;
 class DoutPrefixProvider;
@@ -22,8 +21,6 @@ enum class context {
   preRequest,
   postRequest,
   background,
-  getData,
-  putData,
   none
 };
 
