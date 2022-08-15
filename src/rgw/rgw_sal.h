@@ -1543,26 +1543,59 @@ public:
  */
 class StoreManager {
 public:
+  struct Config {
+    /** Name of store to create */
+    std::string store_name;
+    /** Name of filter to create or "none" */
+    std::string filter_name;
+  };
+
   StoreManager() {}
   /** Get a full store by service name */
-  static rgw::sal::Store* get_storage(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, const std::string filter, bool use_gc_thread, bool use_lc_thread, bool quota_threads,
-                               bool run_sync_thread, bool run_reshard_thread, bool use_cache = true, bool use_gc = true) {
-    rgw::sal::Store* store = init_storage_provider(dpp, cct, svc, filter, use_gc_thread, use_lc_thread,
-        quota_threads, run_sync_thread, run_reshard_thread, use_cache, use_gc);
+  static rgw::sal::Store* get_storage(const DoutPrefixProvider* dpp,
+				      CephContext* cct,
+				      const Config& cfg,
+				      bool use_gc_thread,
+				      bool use_lc_thread,
+				      bool quota_threads,
+				      bool run_sync_thread,
+				      bool run_reshard_thread,
+				      bool use_cache = true,
+				      bool use_gc = true) {
+    rgw::sal::Store* store = init_storage_provider(dpp, cct, cfg, use_gc_thread,
+						   use_lc_thread,
+						   quota_threads,
+						   run_sync_thread,
+						   run_reshard_thread,
+						   use_cache, use_gc);
     return store;
   }
   /** Get a stripped down store by service name */
-  static rgw::sal::Store* get_raw_storage(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, const std::string filter) {
-    rgw::sal::Store* store = init_raw_storage_provider(dpp, cct, svc, filter);
+  static rgw::sal::Store* get_raw_storage(const DoutPrefixProvider* dpp,
+					  CephContext* cct, const Config& cfg) {
+    rgw::sal::Store* store = init_raw_storage_provider(dpp, cct, cfg);
     return store;
   }
   /** Initialize a new full Store */
-  static rgw::sal::Store* init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, const std::string filter, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache, bool use_gc);
+  static rgw::sal::Store* init_storage_provider(const DoutPrefixProvider* dpp,
+						CephContext* cct,
+						const Config& cfg,
+						bool use_gc_thread,
+						bool use_lc_thread,
+						bool quota_threads,
+						bool run_sync_thread,
+						bool run_reshard_thread,
+						bool use_metadata_cache,
+						bool use_gc);
   /** Initialize a new raw Store */
-  static rgw::sal::Store* init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, const std::string filter);
+  static rgw::sal::Store* init_raw_storage_provider(const DoutPrefixProvider* dpp,
+						    CephContext* cct,
+						    const Config& cfg);
   /** Close a Store when it's no longer needed */
   static void close_storage(rgw::sal::Store* store);
 
+  /** Get the config for stores/filters */
+  static Config get_config(bool admin, CephContext* cct);
 };
 
 /** @} */
