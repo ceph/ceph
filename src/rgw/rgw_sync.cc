@@ -1322,13 +1322,12 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
       sync_status = retcode;
 
       if (sync_status == -ENOENT) {
-        /* FIXME: do we need to remove the entry from the local zone? */
         break;
       }
 
       if (sync_status < 0) {
         if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
-          ldpp_dout(dpp, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
+          ldpp_dout(dpp, 20) << *this << ": failed to fetch remote metadata entry: " << section << ":" << key << ", will retry" << dendl;
           continue;
         }
 
@@ -1345,14 +1344,18 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
     retcode = 0;
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       if (sync_status != -ENOENT) {
-        tn->log(10, SSTR("storing local metadata entry"));
+        tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
         yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
       } else {
-        tn->log(10, SSTR("removing local metadata entry"));
+        tn->log(10, SSTR("removing local metadata entry:" << section << ":" << key));
         yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
+        if (retcode == -ENOENT) {
+          retcode = 0;
+          break;
+        }
       }
       if ((retcode < 0) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
-        ldpp_dout(dpp, 20) << *this << ": failed to store metadata: " << section << ":" << key << ", got retcode=" << retcode << dendl;
+        ldpp_dout(dpp, 20) << *this << ": failed to store metadata entry: " << section << ":" << key << ", got retcode=" << retcode << ", will retry" << dendl;
         continue;
       }
       break;
