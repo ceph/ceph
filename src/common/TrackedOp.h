@@ -51,8 +51,14 @@ public:
   void *entry() override;
 };
 
+enum {
+  l_osd_slow_op_first = 1000,
+  l_osd_slow_op_count,
+  l_osd_slow_op_last,
+};
 
 class OpHistory {
+  CephContext* cct = nullptr;
   std::set<std::pair<utime_t, TrackedOpRef> > arrived;
   std::set<std::pair<double, TrackedOpRef> > duration;
   std::set<std::pair<utime_t, TrackedOpRef> > slow_op;
@@ -65,15 +71,28 @@ class OpHistory {
   std::atomic_bool shutdown{false};
   OpHistoryServiceThread opsvc;
   friend class OpHistoryServiceThread;
+  std::unique_ptr<PerfCounters> logger;
 
 public:
-  OpHistory() : opsvc(this) {
+  OpHistory(CephContext *c) : cct(c), opsvc(this) {
+    PerfCountersBuilder b(cct, "osd-slow-ops",
+                         l_osd_slow_op_first, l_osd_slow_op_last);
+    b.add_u64_counter(l_osd_slow_op_count, "slow_ops_count",
+                      "Number of operations taking over ten second");
+
+    logger.reset(b.create_perf_counters());
+    cct->get_perfcounters_collection()->add(logger.get());
+
     opsvc.create("OpHistorySvc");
   }
   ~OpHistory() {
     ceph_assert(arrived.empty());
     ceph_assert(duration.empty());
     ceph_assert(slow_op.empty());
+    if(logger) {
+      cct->get_perfcounters_collection()->remove(logger.get());
+      logger.reset();
+    }
   }
   void insert(const utime_t& now, TrackedOpRef op)
   {
