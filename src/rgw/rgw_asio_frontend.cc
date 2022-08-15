@@ -183,6 +183,7 @@ void handle_connection(boost::asio::io_context& context,
                        parse_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
+                       std::unique_ptr<rgw::sal::LuaManager>& lua_manager,
                        boost::system::error_code& ec,
                        yield_context yield)
 {
@@ -269,7 +270,9 @@ void handle_connection(boost::asio::io_context& context,
                       *env.auth_registry, &client, env.olog, y,
                       scheduler, &user, &latency,
                       env.ratelimiting->get_active(),
-                      &http_ret, env.lua_background);
+                      env.lua_background,
+                      lua_manager,
+                      &http_ret);
 
       if (cct->_conf->subsys.should_gather(ceph_subsys_rgw_access, 1)) {
         // access log line elements begin per Apache Combined Log Format with additions following
@@ -383,6 +386,7 @@ class AsioFrontend {
 #endif
   SharedMutex pause_mutex;
   std::unique_ptr<rgw::dmclock::Scheduler> scheduler;
+  std::unique_ptr<rgw::sal::LuaManager> lua_manager;
 
   struct Listener {
     tcp::endpoint endpoint;
@@ -413,7 +417,8 @@ class AsioFrontend {
  public:
   AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
 	       dmc::SchedulerCtx& sched_ctx)
-    : env(env), conf(conf), pause_mutex(context.get_executor())
+    : env(env), conf(conf), pause_mutex(context.get_executor()),
+    lua_manager(env.store->get_lua_manager())
   {
     auto sched_t = dmc::get_scheduler_t(ctx());
     switch(sched_t){
@@ -1004,6 +1009,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         conn->buffer.consume(bytes);
         handle_connection(context, env, stream, timeout, header_limit,
                           conn->buffer, true, pause_mutex, scheduler.get(),
+                          lua_manager,
                           ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
@@ -1023,6 +1029,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         boost::system::error_code ec;
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
+                          lua_manager,
                           ec, yield);
         conn->socket.shutdown(tcp_socket::shutdown_both, ec);
       }, make_stack_allocator());
@@ -1108,6 +1115,7 @@ void AsioFrontend::unpause(rgw::sal::Store* const store,
 {
   env.store = store;
   env.auth_registry = std::move(auth_registry);
+  lua_manager = store->get_lua_manager();
 
   // unpause to unblock connections
   pause_mutex.unlock();

@@ -9,8 +9,10 @@
 
 class lua_State;
 class rgw_user;
+class DoutPrefixProvider;
 namespace rgw::sal {
   class RadosStore;
+  class LuaManager;
 }
 
 namespace rgw::lua {
@@ -31,13 +33,13 @@ context to_context(const std::string& s);
 bool verify(const std::string& script, std::string& err_msg);
 
 // store a lua script in a context
-int write_script(const DoutPrefixProvider *dpp, rgw::sal::Store* store, const std::string& tenant, optional_yield y, context ctx, const std::string& script);
+int write_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script);
 
 // read the stored lua script from a context
-int read_script(const DoutPrefixProvider *dpp, rgw::sal::Store* store, const std::string& tenant, optional_yield y, context ctx, std::string& script);
+int read_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::string& script);
 
 // delete the stored lua script from a context
-int delete_script(const DoutPrefixProvider *dpp, rgw::sal::Store* store, const std::string& tenant, optional_yield y, context ctx);
+int delete_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx);
 
 using packages_t = std::set<std::string>;
 
