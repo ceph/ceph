@@ -59,6 +59,7 @@ Compatsets
 - [x] mon/Monitor.cc (include in `get_supported_features()`)
 - [x] mon/Monitor.cc (`apply_monmap_to_compatset_features()`)
 - [x] mon/Monitor.cc (`calc_quorum_requirements()`)
+- [x] test/cli/monmaptool/feature-set-unset-list.t (`supported`, `persistent`)
 
 Mon
 ---
