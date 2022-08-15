@@ -367,17 +367,14 @@ class TestIoctx(object):
     def test_get_pool_name(self):
         eq(self.ioctx.get_pool_name(), 'test_pool')
 
-    @attr('snap')
     def test_create_snap(self):
         assert_raises(ObjectNotFound, self.ioctx.remove_snap, 'foo')
         self.ioctx.create_snap('foo')
         self.ioctx.remove_snap('foo')
 
-    @attr('snap')
     def test_list_snaps_empty(self):
         eq(list(self.ioctx.list_snaps()), [])
 
-    @attr('snap')
     def test_list_snaps(self):
         snaps = ['snap1', 'snap2', 'snap3']
         for snap in snaps:
@@ -385,19 +382,16 @@ class TestIoctx(object):
         listed_snaps = [snap.name for snap in self.ioctx.list_snaps()]
         eq(snaps, listed_snaps)
 
-    @attr('snap')
     def test_lookup_snap(self):
         self.ioctx.create_snap('foo')
         snap = self.ioctx.lookup_snap('foo')
         eq(snap.name, 'foo')
 
-    @attr('snap')
     def test_snap_timestamp(self):
         self.ioctx.create_snap('foo')
         snap = self.ioctx.lookup_snap('foo')
         snap.get_timestamp()
 
-    @attr('snap')
     def test_remove_snap(self):
         self.ioctx.create_snap('foo')
         (snap,) = self.ioctx.list_snaps()
@@ -405,7 +399,7 @@ class TestIoctx(object):
         self.ioctx.remove_snap('foo')
         eq(list(self.ioctx.list_snaps()), [])
 
-    @attr('snap')
+    @attr('rollback')
     def test_snap_rollback(self):
         self.ioctx.write("insnap", b"contents1")
         self.ioctx.create_snap("snap1")
@@ -415,7 +409,6 @@ class TestIoctx(object):
         self.ioctx.remove_snap("snap1")
         self.ioctx.remove_object("insnap")
 
-    @attr('snap')
     def test_snap_read(self):
         self.ioctx.write("insnap", b"contents1")
         self.ioctx.create_snap("snap1")
@@ -1262,7 +1255,6 @@ class TestObject(object):
         eq(self.object.read(3), b'bar')
         eq(self.object.read(3), b'baz')
 
-@attr('snap')
 class TestIoCtxSelfManagedSnaps(object):
     def setUp(self):
         self.rados = Rados(conffile='')
@@ -1278,6 +1270,7 @@ class TestIoCtxSelfManagedSnaps(object):
         self.rados.delete_pool('test_pool')
         self.rados.shutdown()
 
+    @attr('rollback')
     def test(self):
         # cannot mix-and-match pool and self-managed snapshot mode
         self.ioctx.set_self_managed_snap_write([])
