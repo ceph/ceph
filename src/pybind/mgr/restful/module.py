@@ -197,6 +197,7 @@ class Module(MgrModule):
         {'name': 'server_port'},
         {'name': 'key_file'},
         {'name': 'enable_auth', 'type': 'bool', 'default': True},
+        {'name': 'https_mode', 'type': 'bool', 'default': True},
     ]
 
     COMMANDS = [
@@ -304,6 +305,7 @@ class Module(MgrModule):
             pkey_fname = self.get_localized_module_option('key_file')
 
         self.enable_auth = self.get_localized_module_option('enable_auth', True)
+        self.https_mode = self.get_localized_module_option('https_mode', True)
         
         if not cert_fname or not pkey_fname:
             raise CannotServe('no certificate configured')
@@ -314,8 +316,12 @@ class Module(MgrModule):
 
         # Publish the URI that others may use to access the service we're
         # about to start serving
-        addr = self.get_mgr_ip() if server_addr == "::" else server_addr
-        self.set_uri(build_url(scheme='https', host=addr, port=server_port, path='/'))
+        if self.https_mode:
+            addr = self.get_mgr_ip() if server_addr == "::" else server_addr
+            self.set_uri(build_url(scheme='https', host=addr, port=server_port, path='/'))
+        else:
+            addr = self.get_mgr_ip() if server_addr == "::" else server_addr
+            self.set_uri(build_url(scheme='http', host=addr, port=server_port, path='/'))
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
