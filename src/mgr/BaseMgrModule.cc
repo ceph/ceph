@@ -18,6 +18,7 @@
  * available as methods on that object.
  */
 
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 
 #include "Mgr.h"
