@@ -207,7 +207,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   if (!open_files.empty()) {
     ceph_assert(!mds->mdlog->is_capped()); // hmm FIXME
     EOpen *le = 0;
-    LogSegment *ls = mds->mdlog->get_current_segment();
+    LogSegmentRef ls = mds->mdlog->get_current_segment(); //chage to & ?
     ceph_assert(ls != this);
     elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
     while (!p.end()) {
@@ -260,7 +260,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
 
-  // idalloc
+  // LogSegment
   if (inotablev > mds->inotable->get_committed_version()) {
     dout(10) << "try_to_expire saving inotable table, need " << inotablev
 	      << ", committed is " << mds->inotable->get_committed_version()
@@ -428,7 +428,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
   }
 }
 
-void EMetaBlob::update_segment(LogSegment *ls)
+void EMetaBlob::update_segment(LogSegmentRef& ls)
 {
   // dirty inode mtimes
   // -> handled directly by Server.cc, replay()
@@ -1163,7 +1163,7 @@ void EMetaBlob::generate_test_instances(std::list<EMetaBlob*>& ls)
   ls.push_back(new EMetaBlob());
 }
 
-void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
+void EMetaBlob::replay(MDSRank *mds, LogSegmentRef& logseg, MDPeerUpdate *peerup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
 
@@ -1638,7 +1638,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       mds->heartbeat_reset();
   }
   for (const auto& p : truncate_finish) {
-    LogSegment *ls = mds->mdlog->get_segment(p.second);
+    LogSegmentRef& ls = mds->mdlog->get_segment(p.second);
     if (ls) {
       CInode *in = mds->mdcache->get_inode(p.first);
       ceph_assert(in);
@@ -1727,7 +1727,7 @@ void EPurged::update_segment()
 void EPurged::replay(MDSRank *mds)
 {
   if (inos.size()) {
-    LogSegment *ls = mds->mdlog->get_segment(seq);
+    auto& ls = mds->mdlog->get_segment(seq);
     if (ls)
       ls->purging_inodes.subtract(inos);
 
@@ -2208,7 +2208,7 @@ void EUpdate::generate_test_instances(std::list<EUpdate*>& ls)
 
 void EUpdate::update_segment()
 {
-  auto&& segment = get_segment();
+  auto& segment = get_segment();
   metablob.update_segment(segment);
 
   if (client_map.length())
@@ -2220,7 +2220,7 @@ void EUpdate::update_segment()
 
 void EUpdate::replay(MDSRank *mds)
 {
-  auto&& segment = get_segment();
+  auto& segment = get_segment();
   metablob.replay(mds, segment);
   
   if (had_peers) {
@@ -2303,7 +2303,7 @@ void EOpen::update_segment()
 void EOpen::replay(MDSRank *mds)
 {
   dout(10) << "EOpen.replay " << dendl;
-  auto&& segment = get_segment();
+  auto& segment = get_segment();
   metablob.replay(mds, segment);
 
   // note which segments inodes belong to, so we don't have to start rejournaling them
@@ -2614,7 +2614,7 @@ void EPeerUpdate::generate_test_instances(std::list<EPeerUpdate*>& ls)
 void EPeerUpdate::replay(MDSRank *mds)
 {
   MDPeerUpdate *su;
-  auto&& segment = get_segment();
+  auto& segment = get_segment();
   switch (op) {
   case EPeerUpdate::OP_PREPARE:
     dout(10) << "EPeerUpdate.replay prepare " << reqid << " for mds." << leader
@@ -2852,7 +2852,7 @@ void EFragment::replay(MDSRank *mds)
   // refragment anything we already have in the cache.
   CInode *in = mds->mdcache->get_inode(ino);
 
-  auto&& segment = get_segment();
+  auto& segment = get_segment();
   switch (op) {
   case OP_PREPARE:
     mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, orig_frags, segment, &rollback);
@@ -2969,7 +2969,7 @@ void dirfrag_rollback::decode(bufferlist::const_iterator &bl)
 void EExport::replay(MDSRank *mds)
 {
   dout(10) << "EExport.replay " << base << dendl;
-  auto&& segment = get_segment();
+  auto& segment = get_segment();
   metablob.replay(mds, segment);
   
   CDir *dir = mds->mdcache->get_dirfrag(base);
@@ -3048,7 +3048,7 @@ void EImportStart::replay(MDSRank *mds)
 {
   dout(10) << "EImportStart.replay " << base << " bounds " << bounds << dendl;
   //metablob.print(*_dout);
-  auto&& segment = get_segment();
+  auto& segment = get_segment();
   metablob.replay(mds, segment);
 
   // put in ambiguous import list

@@ -597,8 +597,8 @@ private:
     out << "]";
   }
 
-  void update_segment(LogSegment *ls);
-  void replay(MDSRank *mds, LogSegment *ls, MDPeerUpdate *su=NULL);
+  void update_segment(LogSegmentRef& ls);
+  void replay(MDSRank *mds, LogSegmentRef& ls, MDPeerUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)

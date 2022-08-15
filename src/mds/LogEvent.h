@@ -110,8 +110,8 @@ public:
   virtual EMetaBlob *get_metablob() { return NULL; }
 
 protected:
-  LogSegment* get_segment() { return _segment; }
-  LogSegment const* get_segment() const { return _segment; }
+  std::shared_ptr<LogSegment>& get_segment() { return _segment; }
+  std::shared_ptr<const LogSegment>& const get_segment() const { return _segment; }
 
   utime_t stamp;
 
@@ -122,7 +122,7 @@ private:
 
   EventType _type = 0;
   uint64_t _start_off = 0;
-  LogSegment *_segment = nullptr;
+  std::shared_ptr<LogSegment> _segment = nullptr;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const LogEvent &le) {

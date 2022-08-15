@@ -106,4 +106,6 @@ class LogSegment {
   MDSContext::vec expiry_waiters;
 };
 
+using LogSegmentRef = std::shared_ptr<LogSegment>;
+
 #endif

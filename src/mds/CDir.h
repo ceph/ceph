@@ -275,21 +275,21 @@ public:
 
   fnode_ptr project_fnode(const MutationRef& mut);
 
-  void pop_and_dirty_projected_fnode(LogSegment *ls, const MutationRef& mut);
+  void pop_and_dirty_projected_fnode(LogSegmentRef& ls, const MutationRef& mut);
   bool is_projected() const { return !projected_fnode.empty(); }
   version_t pre_dirty(version_t min=0);
-  void _mark_dirty(LogSegment *ls);
+  void _mark_dirty(LogSegmentRef& ls);
   void _set_dirty_flag() {
     if (!state_test(STATE_DIRTY)) {
       state_set(STATE_DIRTY);
       get(PIN_DIRTY);
     }
   }
-  void mark_dirty(LogSegment *ls, version_t pv=0);
+  void mark_dirty(LogSegmentRef& ls, version_t pv=0);
   void mark_clean();
 
   bool is_new() { return item_new.is_on_list(); }
-  void mark_new(LogSegment *ls);
+  void mark_new(LogSegmentRef& ls);
 
   bool is_bad() { return state_test(STATE_BADFRAG); }
 
@@ -517,7 +517,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls);
+  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegmentRef& ls);
   void abort_import();
 
   // -- auth pins --

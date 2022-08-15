@@ -225,7 +225,7 @@ public:
 
   metareqid_t reqid;
   __u32 attempt = 0;      // which attempt for this request
-  LogSegment *ls = nullptr;  // the log segment i'm committing to
+  std::shared_ptr<LogSegment> ls = nullptr;  // the log segment i'm committing to
 
   // flag mutation as peer
   mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.
