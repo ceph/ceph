@@ -130,7 +130,7 @@ class IngressService(CephService):
                 'servers': servers,
                 'user': spec.monitor_user or 'admin',
                 'password': password,
-                'ip': str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '*',
+                'ip': "*" if spec.virtual_ips_list else str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '*',
                 'frontend_port': daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port,
                 'monitor_port': daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
             }
@@ -197,15 +197,23 @@ class IngressService(CephService):
         hosts = sorted(list(set([host] + [str(d.hostname) for d in daemons])))
 
         # interface
-        bare_ip = str(spec.virtual_ip).split('/')[0]
+        bare_ips = []
+        if spec.virtual_ip:
+            bare_ips.append(str(spec.virtual_ip).split('/')[0])
+        elif spec.virtual_ips_list:
+            bare_ips = [str(vip).split('/')[0] for vip in spec.virtual_ips_list]
         interface = None
-        for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-            if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
-                interface = list(ifaces.keys())[0]
-                logger.info(
-                    f'{bare_ip} is in {subnet} on {host} interface {interface}'
-                )
-                break
+        for bare_ip in bare_ips:
+            for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
+                    interface = list(ifaces.keys())[0]
+                    logger.info(
+                        f'{bare_ip} is in {subnet} on {host} interface {interface}'
+                    )
+                    break
+            else:  # nobreak
+                continue
+            break
         # try to find interface by matching spec.virtual_interface_networks
         if not interface and spec.virtual_interface_networks:
             for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
@@ -231,10 +239,33 @@ class IngressService(CephService):
                     script = f'/usr/bin/curl {build_url(scheme="http", host=d.ip or "localhost", port=port)}/health'
         assert script
 
-        # set state. first host in placement is master all others backups
-        state = 'BACKUP'
-        if hosts[0] == host:
-            state = 'MASTER'
+        states = []
+        priorities = []
+        virtual_ips = []
+
+        # Set state and priority. Have one master for each VIP. Or at least the first one as master if only one VIP.
+        if spec.virtual_ip:
+            virtual_ips.append(spec.virtual_ip)
+            if hosts[0] == host:
+                states.append('MASTER')
+                priorities.append(100)
+            else:
+                states.append('BACKUP')
+                priorities.append(90)
+
+        elif spec.virtual_ips_list:
+            virtual_ips = spec.virtual_ips_list
+            if len(virtual_ips) > len(hosts):
+                raise OrchestratorError(
+                    "Number of virtual IPs for ingress is greater than number of available hosts"
+                )
+            for x in range(len(virtual_ips)):
+                if hosts[x] == host:
+                    states.append('MASTER')
+                    priorities.append(100)
+                else:
+                    states.append('BACKUP')
+                    priorities.append(90)
 
         # remove host, daemon is being deployed on from hosts list for
         # other_ips in conf file and converter to ips
@@ -249,7 +280,9 @@ class IngressService(CephService):
                 'script': script,
                 'password': password,
                 'interface': interface,
-                'state': state,
+                'virtual_ips': virtual_ips,
+                'states': states,
+                'priorities': priorities,
                 'other_ips': other_ips,
                 'host_ip': resolve_ip(self.mgr.inventory.get_addr(host)),
             }

@@ -224,6 +224,33 @@ It is a yaml format file with the following properties:
         ...
         -----END PRIVATE KEY-----
 
+.. code-block:: yaml
+
+    service_type: ingress
+    service_id: rgw.something    # adjust to match your existing RGW service
+    placement:
+      hosts:
+        - host1
+        - host2
+        - host3
+    spec:
+      backend_service: rgw.something      # adjust to match your existing RGW service
+      virtual_ips_list:
+      - <string>/<string>                 # ex: 192.168.20.1/24
+      - <string>/<string>                 # ex: 192.168.20.2/24
+      - <string>/<string>                 # ex: 192.168.20.3/24
+      frontend_port: <integer>            # ex: 8080
+      monitor_port: <integer>             # ex: 1967, used by haproxy for load balancer status
+      virtual_interface_networks: [ ... ] # optional: list of CIDR networks
+      ssl_cert: |                         # optional: SSL certificate and key
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----
+        -----BEGIN PRIVATE KEY-----
+        ...
+        -----END PRIVATE KEY-----
+
+
 where the properties of this service specification are:
 
 * ``service_type``
@@ -237,6 +264,10 @@ where the properties of this service specification are:
     to match the nodes where RGW is deployed.
 * ``virtual_ip``
     The virtual IP (and network) in CIDR format where the ingress service will be available.
+* ``virtual_ips_list``
+    The virtual IP address in CIDR format where the ingress service will be available.
+    Each virtual IP address will be primary on one node running the ingress service. The number
+    of virtual IP addresses must be less than or equal to the number of ingress nodes.
 * ``virtual_interface_networks``
     A list of networks to identify which ethernet interface to use for the virtual IP.
 * ``frontend_port``
