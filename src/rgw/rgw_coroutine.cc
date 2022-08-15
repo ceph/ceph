@@ -1019,7 +1019,9 @@ bool RGWCoroutine::drain_children(int num_cr_left,
 
 void RGWCoroutine::wakeup()
 {
-  stack->wakeup();
+  if (stack) {
+    stack->wakeup();
+  }
 }
 
 RGWCoroutinesEnv *RGWCoroutine::get_env() const
