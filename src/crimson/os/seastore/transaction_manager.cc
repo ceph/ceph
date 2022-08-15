@@ -598,15 +598,15 @@ TransactionManager::get_extents_if_live(
 	laddr,
 	len
       ).si_then([=, &t](auto ret) {
+        std::list<CachedExtentRef> res;
         if (ret) {
           DEBUGT("{} {}~{} {} is live as physical extent -- {}",
                  t, type, laddr, len, paddr, *ret);
+          res.emplace_back(std::move(ret));
         } else {
           DEBUGT("{} {}~{} {} is not live as physical extent",
                  t, type, laddr, len, paddr);
         }
-	std::list<CachedExtentRef> res;
-	res.emplace_back(std::move(ret));
         return get_extents_if_live_ret(
 	  interruptible::ready_future_marker{},
 	  std::move(res));
