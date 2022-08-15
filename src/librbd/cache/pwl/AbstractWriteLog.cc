@@ -1065,12 +1065,11 @@ void AbstractWriteLog<I>::compare_and_write(Extents &&image_extents,
                                      << "cw_req=" << cw_req << dendl;
 
           /* Compare read_bl to cmp_bl to determine if this will produce a write */
-          buffer::list aligned_read_bl;
-          if (cw_req->cmp_bl.length() < cw_req->read_bl.length()) {
-            aligned_read_bl.substr_of(cw_req->read_bl, 0, cw_req->cmp_bl.length());
-          }
-          if (cw_req->cmp_bl.contents_equal(cw_req->read_bl) ||
-              cw_req->cmp_bl.contents_equal(aligned_read_bl)) {
+          ceph_assert(cw_req->read_bl.length() <= cw_req->cmp_bl.length());
+          ceph_assert(cw_req->read_bl.length() == cw_req->image_extents_summary.total_bytes);
+          bufferlist sub_cmp_bl;
+          sub_cmp_bl.substr_of(cw_req->cmp_bl, 0, cw_req->read_bl.length());
+          if (sub_cmp_bl.contents_equal(cw_req->read_bl)) {
             /* Compare phase succeeds. Begin write */
             ldout(m_image_ctx.cct, 5) << " cw_req=" << cw_req << " compare matched" << dendl;
             cw_req->compare_succeeded = true;
@@ -1084,8 +1083,8 @@ void AbstractWriteLog<I>::compare_and_write(Extents &&image_extents,
             ldout(m_image_ctx.cct, 15) << " cw_req=" << cw_req << " compare failed" << dendl;
             /* Bufferlist doesn't tell us where they differed, so we'll have to determine that here */
             uint64_t bl_index = 0;
-            for (bl_index = 0; bl_index < cw_req->cmp_bl.length(); bl_index++) {
-              if (cw_req->cmp_bl[bl_index] != cw_req->read_bl[bl_index]) {
+            for (bl_index = 0; bl_index < sub_cmp_bl.length(); bl_index++) {
+              if (sub_cmp_bl[bl_index] != cw_req->read_bl[bl_index]) {
                 ldout(m_image_ctx.cct, 15) << " cw_req=" << cw_req << " mismatch at " << bl_index << dendl;
                 break;
               }
