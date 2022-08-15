@@ -404,7 +404,7 @@ class CLICommand(object):
                 continue
             arg_spec[argname] = argtype
             args.append(CephArgtype.to_argdesc(
-                argtype, dict(name=arg), has_default=True, positional=False
+                argtype, dict(name=argname), has_default=True, positional=False
             ))
         return desc, arg_spec, first_default, ' '.join(args)
 

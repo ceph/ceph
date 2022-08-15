@@ -287,10 +287,11 @@ class DecoDemo:
 
 
 @pytest.mark.parametrize(
-    "prefix, args, response",
+    "prefix, can_format, args, response",
     [
         (
             "alpha one",
+            True,
             {"name": "moonbase"},
             (
                 0,
@@ -301,6 +302,7 @@ class DecoDemo:
         # ---
         (
             "alpha one",
+            True,
             {"name": "moonbase2", "format": "yaml"},
             (
                 0,
@@ -311,6 +313,7 @@ class DecoDemo:
         # ---
         (
             "alpha one",
+            True,
             {"name": "moonbase2", "format": "chocolate"},
             (
                 -22,
@@ -321,6 +324,7 @@ class DecoDemo:
         # ---
         (
             "beta two",
+            True,
             {"name": "blocker"},
             (
                 0,
@@ -331,6 +335,7 @@ class DecoDemo:
         # ---
         (
             "beta two",
+            True,
             {"name": "test", "format": "yaml"},
             (
                 0,
@@ -341,6 +346,7 @@ class DecoDemo:
         # ---
         (
             "beta two",
+            True,
             {"name": "test", "format": "plain"},
             (
                 -22,
@@ -351,6 +357,7 @@ class DecoDemo:
         # ---
         (
             "gamma three",
+            True,
             {},
             (
                 0,
@@ -361,6 +368,7 @@ class DecoDemo:
         # ---
         (
             "gamma three",
+            True,
             {"size": 1, "format": "json"},
             (
                 0,
@@ -371,6 +379,7 @@ class DecoDemo:
         # ---
         (
             "gamma three",
+            True,
             {"size": 1, "format": "plain"},
             (
                 0,
@@ -381,6 +390,7 @@ class DecoDemo:
         # ---
         (
             "gamma three",
+            True,
             {"size": 2, "format": "plain"},
             (
                 0,
@@ -391,6 +401,7 @@ class DecoDemo:
         # ---
         (
             "gamma three",
+            True,
             {"size": 2, "format": "xml"},
             (
                 0,
@@ -401,6 +412,7 @@ class DecoDemo:
         # ---
         (
             "gamma three",
+            True,
             {"size": 2, "format": "toml"},
             (
                 -22,
@@ -411,6 +423,7 @@ class DecoDemo:
         # ---
         (
             "z_err",
+            False,
             {"name": "foobar"},
             (
                 0,
@@ -421,6 +434,7 @@ class DecoDemo:
         # ---
         (
             "z_err",
+            False,
             {"name": "zamboni"},
             (
                 -22,
@@ -431,6 +445,7 @@ class DecoDemo:
         # ---
         (
             "empty one",
+            False,
             {"name": "zucchini"},
             (
                 0,
@@ -441,6 +456,7 @@ class DecoDemo:
         # ---
         (
             "empty one",
+            False,
             {"name": "pow"},
             (
                 -5,
@@ -450,9 +466,14 @@ class DecoDemo:
         ),
     ],
 )
-def test_cli_with_decorators(prefix, args, response):
+def test_cli_with_decorators(prefix, can_format, args, response):
     dd = DecoDemo()
-    assert CLICommand.COMMANDS[prefix].call(dd, args, None) == response
+    cmd = CLICommand.COMMANDS[prefix]
+    assert cmd.call(dd, args, None) == response
+    # slighly hacky way to check that the CLI "knows" about a --format option
+    # checking the extra_args feature of the Decorators that provide them (Responder)
+    if can_format:
+        assert 'name=format,' in cmd.args
 
 
 def test_error_response():
