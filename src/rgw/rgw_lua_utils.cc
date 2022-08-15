@@ -73,4 +73,5 @@ void open_standard_libs(lua_State* L) {
   lua_settable(L, -3);
 }
 
-}
+} // namespace rgw::lua
+
