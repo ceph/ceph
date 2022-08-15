@@ -804,6 +804,7 @@ void Cache::invalidate_extent(
 {
   if (!extent.may_conflict()) {
     assert(extent.transactions.empty());
+    extent.state = CachedExtent::extent_state_t::INVALID;
     return;
   }
 
