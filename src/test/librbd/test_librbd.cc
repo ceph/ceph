@@ -712,13 +712,16 @@ public:
 
     ASSERT_PASSED(write_test_data, image, zero_data, 0, TEST_IO_SIZE,
                   LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+    mismatch_offset = 123;
     ASSERT_EQ(-EILSEQ, rbd_compare_and_write(image, 0, TEST_IO_SIZE,
               mismatch_data, mismatch_data, &mismatch_offset, 0));
     ASSERT_EQ(0U, mismatch_offset);
     rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+    mismatch_offset = 123;
     ASSERT_EQ(0, rbd_aio_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data,
               mismatch_data, comp, &mismatch_offset, 0));
     ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+    ASSERT_EQ(-EILSEQ, rbd_aio_get_return_value(comp));
     ASSERT_EQ(0U, mismatch_offset);
     rbd_aio_release(comp);
 
@@ -2458,13 +2461,16 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
   rbd_aio_release(comp);
 
   ASSERT_PASSED(write_test_data, image, zero_data, 0, TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+  mismatch_offset = 123;
   ASSERT_EQ(-EILSEQ, rbd_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data, mismatch_data,
                                            &mismatch_offset, LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
   ASSERT_EQ(0U, mismatch_offset);
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  mismatch_offset = 123;
   ASSERT_EQ(0, rbd_aio_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data, mismatch_data,
                                          comp, &mismatch_offset, LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
   ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EILSEQ, rbd_aio_get_return_value(comp));
   ASSERT_EQ(0U, mismatch_offset);
   rbd_aio_release(comp);
 
@@ -2762,6 +2768,8 @@ TEST_F(TestLibRBD, TestAioCompareAndWriteSuccess)
 
 TEST_F(TestLibRBD, TestCompareAndWriteStripeUnitUnaligned)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
@@ -2813,6 +2821,8 @@ TEST_F(TestLibRBD, TestCompareAndWriteStripeUnitUnaligned)
 
 TEST_F(TestLibRBD, TestAioCompareAndWriteStripeUnitUnaligned)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
@@ -2869,6 +2879,8 @@ TEST_F(TestLibRBD, TestAioCompareAndWriteStripeUnitUnaligned)
 
 TEST_F(TestLibRBD, TestCompareAndWriteTooLarge)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
@@ -2920,6 +2932,8 @@ TEST_F(TestLibRBD, TestCompareAndWriteTooLarge)
 
 TEST_F(TestLibRBD, TestAioCompareAndWriteTooLarge)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
@@ -3668,6 +3682,7 @@ TEST_F(TestLibRBD, TestAioCompareAndWriteCompareTooSmallPP)
                                           comp, &mismatch_off, 0);
     ASSERT_EQ(-EINVAL, ret);
     ASSERT_EQ(0U, mismatch_off);
+    comp->release();
 
     ASSERT_PASSED(validate_object_map, image);
   }
@@ -3762,6 +3777,7 @@ TEST_F(TestLibRBD, TestAioCompareAndWriteWriteTooSmallPP)
                                           comp, &mismatch_off, 0);
     ASSERT_EQ(-EINVAL, ret);
     ASSERT_EQ(0U, mismatch_off);
+    comp->release();
 
     ASSERT_PASSED(validate_object_map, image);
   }
@@ -4258,6 +4274,8 @@ TEST_F(TestLibRBD, TestAioCompareAndWriteSuccessBufferlistGreaterLenPP)
 
 TEST_F(TestLibRBD, TestCompareAndWriteStripeUnitUnalignedPP)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
@@ -4310,6 +4328,8 @@ TEST_F(TestLibRBD, TestCompareAndWriteStripeUnitUnalignedPP)
 
 TEST_F(TestLibRBD, TestAioCompareAndWriteStripeUnitUnalignedPP)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
@@ -4368,6 +4388,8 @@ TEST_F(TestLibRBD, TestAioCompareAndWriteStripeUnitUnalignedPP)
 
 TEST_F(TestLibRBD, TestCompareAndWriteTooLargePP)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
@@ -4420,6 +4442,8 @@ TEST_F(TestLibRBD, TestCompareAndWriteTooLargePP)
 
 TEST_F(TestLibRBD, TestAioCompareAndWriteTooLargePP)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
