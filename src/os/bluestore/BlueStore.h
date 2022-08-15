@@ -1352,14 +1352,14 @@ public:
 
     // cache onodes on a per-collection basis to avoid lock
     // contention.
-    OnodeSpace onode_map;
+    OnodeSpace onode_space;
 
     //pool options
     pool_opts_t pool_opts;
     ContextQueue *commit_queue;
 
     OnodeCacheShard* get_onode_cache() const {
-      return onode_map.cache;
+      return onode_space.cache;
     }
     OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false);
 
