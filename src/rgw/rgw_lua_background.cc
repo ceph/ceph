@@ -177,5 +177,5 @@ void Background::create_background_metatable(lua_State* L) {
   create_metatable<rgw::lua::RGWTable>(L, true, &rgw_map, &table_mutex);
 }
 
-} //namespace rgw::lua
+} //namespace lua
 

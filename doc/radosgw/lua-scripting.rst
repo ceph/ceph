@@ -6,26 +6,18 @@ Lua Scripting
 
 .. contents::
 
-This feature allows users to assign execution context to Lua scripts. The supported contexts are:
+This feature allows users to assign execution context to Lua scripts. The three supported contexts are ``preRequest``" which will execute a script before each
+operation is performed, ``postRequest`` which will execute after each operation is performed, and ``background`` which will execute within a specified time interval.
+A request context script may be constrained to operations belonging to a specific tenant's users.
+The request context script can also access fields in the request and modify some fields. All Lua language features can be used.
 
- - ``prerequest`` which will execute a script before each operation is performed
- - ``postrequest`` which will execute after each operation is performed
- - ``background`` which will execute within a specified time interval
- - ``getdata`` which will execute on objects' data when objects are downloaded
- - ``putdata`` which will execute on objects' data when objects are uploaded
-
-A request (pre or post) or data (get or put) context script may be constrained to operations belonging to a specific tenant's users.
-The request context script can also access fields in the request and modify certain fields, as well as the `Global RGW Table`_.
-The data context script can access the content of the object as well as the request fields and the `Global RGW Table`_. 
-All Lua language features can be used in all contexts.
-
-By default, all Lua standard libraries are available in the script, however, in order to allow for other Lua modules to be used in the script, we support adding packages to an allowlist:
+By default, all lua standard libraries are available in the script, however, in order to allow for other lua modules to be used in the script, we support adding packages to an allowlist:
 
   - All packages in the allowlist are being re-installed using the luarocks package manager on radosgw restart. Therefore a restart is needed for adding or removing of packages to take effect 
-  - To add a package that contains C source code that needs to be compiled, use the ``--allow-compilation`` flag. In this case a C compiler needs to be available on the host
-  - Lua packages are installed in, and used from, a directory local to the radosgw. Meaning that Lua packages in the allowlist are separated from any Lua packages available on the host.
-    By default, this directory would be ``/tmp/luarocks/<entity name>``. Its prefix part (``/tmp/luarocks/``) could be set to a different location via the ``rgw_luarocks_location`` configuration parameter. 
-    Note that this parameter should not be set to one of the default locations where luarocks install packages (e.g. ``$HOME/.luarocks``, ``/usr/lib64/lua``, ``/usr/share/lua``).
+  - To add a package that contains C source code that needs to be compiled, use the `--allow-compilation` flag. In this case a C compiler needs to be available on the host
+  - Lua packages are installed in, and used from, a directory local to the radosgw. Meaning that lua packages in the allowlist are separated from any lua packages available on the host.
+    By default, this directory would be `/tmp/luarocks/<entity name>`. Its prefix part (`/tmp/luarocks/`) could be set to a different location via the `rgw_luarocks_location` configuration parameter. 
+    Note that this parameter should not be set to one of the default locations where luarocks install packages (e.g. `$HOME/.luarocks`, `/usr/lib64/lua`, `/usr/share/lua`)
 	
 
 .. toctree::
@@ -40,7 +32,7 @@ To upload a script:
 
 ::
    
-   # radosgw-admin script put --infile={lua-file} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script put --infile={lua-file} --context={preRequest|postRequest|background} [--tenant={tenant-name}]
 
 
 * When uploading a script with the ``background`` context, a tenant name may not be specified.
@@ -50,14 +42,14 @@ To print the content of the script to standard output:
 
 ::
    
-   # radosgw-admin script get --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script get --context={preRequest|postRequest|background} [--tenant={tenant-name}]
 
 
 To remove the script:
 
 ::
    
-   # radosgw-admin script rm --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script rm --context={preRequest|postRequest|background} [--tenant={tenant-name}]
 
 
 Package Management via CLI
@@ -157,7 +149,7 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Tenant``                          | string   | tenant of the bucket                                         | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Name``                            | string   | bucket name (writeable only in ``prerequest`` context)       | no       | yes       | no       |
+| ``Request.Bucket.Name``                            | string   | bucket name (writeable only in `preRequest` context)         | no       | yes       | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Marker``                          | string   | bucket marker (initial id)                                   | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -314,32 +306,12 @@ Operations Log
 ~~~~~~~~~~~~~~
 The ``Request.Log()`` function prints the requests into the operations log. This function has no parameters. It returns 0 for success and an error code if it fails.
 
-Tracing
-~~~~~~~
-Tracing functions can be used only in the ``postrequest`` context.
-
-- ``Request.Trace.SetAttribute(<key>, <value>)`` - sets the attribute for the request's trace.
-  The function takes two arguments: the first is the ``key``, which should be a string, and the second is the ``value``, which can either be a string or a number (integer or double).
-  You may then locate specific traces by using this attribute.
-
-- ``Request.Trace.AddEvent(<name>, <attributes>)`` - adds an event to the first span of the request's trace
-  An event is defined by event name, event time, and zero or more event attributes.
-  The function accepts one or two arguments: A string containing the event ``name`` should be the first argument, followed by the event ``attributes``, which is optional for events without attributes.
-  An event's attributes must be a table of strings.
-
 Background Context
 --------------------
 The ``background`` context may be used for purposes that include analytics, monitoring, caching data for other context executions.
 - Background script execution default interval is 5 seconds.
 
-Data Context
---------------------
-Both ``getdata`` and ``putdata`` contexts have the following fields:
-- ``Data`` which is read-only and iterable (byte by byte). In case that an object is uploaded or retrieved in multiple chunks, the ``Data`` field will hold data of one chunk at a time.
-- ``Offset`` which is holding the offset of the chunk within the entire object.
-- The ``Request`` fields and the background ``RGW`` table are also available in these contexts.
-
-Global RGW Table
+Global ``RGW`` Table
 --------------------
 The ``RGW`` Lua table is accessible from all contexts and saves data written to it
 during execution so that it may be read and used later during other executions, from the same context of a different one.
@@ -357,6 +329,19 @@ to atomically increment and decrement numeric values in it. For that the followi
 - if the value of ``key`` is not numeric, the execution of the script would fail
 - if we try to increment or decrement by non-numeric values, the execution of the script would fail
 
+
+Tracing
+~~~~~~~
+Tracing functions can be used only in `postRequest` context.
+
+- ``Request.Trace.SetAttribute()`` - sets the attribute for the request's trace.
+  Takes two arguments. The first is the `key`, which should be a string. The second is the value, which can either be a string or a number.
+  Using the attribute, you can locate specific traces.
+
+- ``Request.Trace.AddEvent()`` - adds an event to the first span of the request's trace
+  An event is defined by event name, event time, and zero or more event attributes.
+  Therefore, the function accepts one or two arguments. A string containing the event name should be the first argument, followed by the event attributes, which is optional for events without attributes.
+  An event's attributes must be a table of strings.
 
 Lua Code Samples
 ----------------
@@ -434,7 +419,7 @@ Lua Code Samples
 
 - Add metadata to objects that was not originally sent by the client:
 
-In the ``prerequest`` context we should add:
+In the `preRequest` context we should add:
 
 .. code-block:: lua
 
@@ -442,7 +427,7 @@ In the ``prerequest`` context we should add:
     Request.HTTP.Metadata["x-amz-meta-mydata"] = "my value"
   end
 
-In the ``postrequest`` context we look at the metadata:
+In the `postRequest` context we look at the metadata:
 
 .. code-block:: lua
 
@@ -461,7 +446,7 @@ First we should add the following packages to the allowlist:
   # radosgw-admin script-package add --package=luasocket --allow-compilation
 
 
-Then, do a restart for the radosgw and upload the following script to the ``postrequest`` context:
+Then, do a restart for the radosgw and upload the following script to the `postRequest` context:
 
 .. code-block:: lua
 
@@ -498,7 +483,7 @@ Tracing is disabled by default, so we should enable tracing for this specific bu
 
 
 If `tracing is enabled <https://docs.ceph.com/en/latest/jaegertracing/#how-to-enable-tracing-in-ceph/>`_ on the RGW, the value of Request.Trace.Enable is true, so we should disable tracing for all other requests that do not match the bucket name.
-In the ``prerequest`` context:
+In the `preRequest` context:
 
 .. code-block:: lua
 
@@ -506,12 +491,12 @@ In the ``prerequest`` context:
       Request.Trace.Enable = false
   end
 
-Note that changing ``Request.Trace.Enable`` does not change the tracer's state, but disables or enables the tracing for the request only.
+Note that changing `Request.Trace.Enable` does not change the tracer's state, but disables or enables the tracing for the request only.
 
 
 - Add Information for requests traces
 
-in ``postrequest`` context, we can add attributes and events to the request's trace.
+in `postRequest` context, we can add attributes and events to the request's trace.
 
 .. code-block:: lua
 
@@ -525,41 +510,4 @@ in ``postrequest`` context, we can add attributes and events to the request's tr
   end
 
   Request.Trace.AddEvent("second event", event_attrs)
-
-- The entropy value of an object could be used to detect whether the object is encrypted. 
-  The following script calculates the entropy and size of uploaded objects and print to debug log
-
-in the ``putdata`` context, add the following script
-
-.. code-block:: lua
-
-	function object_entropy()
-		local byte_hist = {}
-		local byte_hist_size = 256 
-		for i = 1,byte_hist_size do
-			byte_hist[i] = 0 
-		end 
-		local total = 0 
-
-		for i, c in pairs(Data)  do
-			local byte = c:byte() + 1 
-			byte_hist[byte] = byte_hist[byte] + 1 
-			total = total + 1 
-		end 
-
-		entropy = 0 
-
-		for _, count in ipairs(byte_hist) do
-			if count ~= 0 then
-				local p = 1.0 * count / total
-				entropy = entropy - (p * math.log(p)/math.log(byte_hist_size))
-			end 
-		end 
-
-		return entropy
-	end
-
-	local full_name = Request.Bucket.Name.."\\"..Request.Object.Name
-	RGWDebugLog("entropy of chunk of: " .. full_name .. " at offset:" .. tostring(Offset)  ..  " is: " .. tostring(object_entropy()))
-	RGWDebugLog("payload size of chunk of: " .. full_name .. " is: " .. #Data)
 

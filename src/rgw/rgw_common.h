@@ -51,10 +51,6 @@ namespace rgw::sal {
   using Attrs = std::map<std::string, ceph::buffer::list>;
 }
 
-namespace rgw::lua {
-  class Background;
-}
-
 using ceph::crypto::MD5;
 
 #define RGW_ATTR_PREFIX  "user.rgw."
@@ -1699,8 +1695,6 @@ struct req_state : DoutPrefixProvider {
 
   //Principal tags that come in as part of AssumeRoleWithWebIdentity
   std::vector<std::pair<std::string, std::string>> principal_tags;
-
-  rgw::lua::Background* lua_background = nullptr;
 
   req_state(CephContext* _cct, RGWEnv* e, uint64_t id);
   ~req_state();
