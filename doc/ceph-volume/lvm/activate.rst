@@ -18,11 +18,87 @@ instead.
 
 New OSDs
 --------
-To activate newly prepared OSDs both the :term:`OSD id` and :term:`OSD uuid`
-need to be supplied. For example::
+To activate newly prepared OSDs with ceph-volume, one must provide the :term:OSD uuid and optionally the :term:OSD id.
 
     ceph-volume lvm activate --bluestore 0 0263644D-0BF1-4D6D-BC34-28BD98AE3BC8
+    
+    [root@node1 ~]# ceph-volume lvm list
+    
+    ====== osd.8 =======
 
+     [block]       /dev/ceph-39a5214f-bdc4-4869-a07e-448f6d21cd31/osd-block-00d4e8cb-282e-41c6-a64c-2590dad3e8be
+
+      block device              /dev/ceph-39a5214f-bdc4-4869-a07e-448f6d21cd31/osd-block-00d4e8cb-282e-41c6-a64c-2590dad3e8be
+      block uuid                GuYMbR-bJCH-n3Rm-4BKs-rfyL-VdTd-DyKVMM
+      cephx lockbox secret      
+      cluster fsid              ba757a9a-01d9-11ed-b2f7-fa163e4c5d9d
+      cluster name              ceph
+      crush device class        
+      encrypted                 0
+      osd fsid                  00d4e8cb-282e-41c6-a64c-2590dad3e8be
+      osd id                    8
+      osdspec affinity          
+      type                      block
+      vdo                       0
+      devices                   /dev/vdb6
+      
+    [root@node1 ~]# ceph-volume lvm activate 8 00d4e8cb-282e-41c6-a64c-2590dad3e8be
+    Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-8
+    Running command: /usr/bin/ceph-bluestore-tool --cluster=ceph prime-osd-dir --dev /dev/ceph-39a5214f-bdc4-4869-a07e-448f6d21cd31/osd-block-00d4e8cb-282e-41c6-a64c-2590dad3e8be --path /var/lib/ceph/osd/ceph-8 --no-mon-config
+    Running command: /usr/bin/ln -snf /dev/ceph-39a5214f-bdc4-4869-a07e-448f6d21cd31/osd-block-00d4e8cb-282e-41c6-a64c-2590dad3e8be /var/lib/ceph/osd/ceph-8/block
+    Running command: /usr/bin/chown -h ceph:ceph /var/lib/ceph/osd/ceph-8/block
+    Running command: /usr/bin/chown -R ceph:ceph /dev/dm-7
+    Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-8
+    Running command: /usr/bin/systemctl enable ceph-volume@lvm-8-00d4e8cb-282e-41c6-a64c-2590dad3e8be
+    Running command: /usr/bin/systemctl enable --runtime ceph-osd@8
+    Running command: /usr/bin/systemctl start ceph-osd@8
+    --> ceph-volume lvm activate successful for osd ID: 8
+
+For example use `OSD uuid` only::
+
+    ceph-volume lvm activate --bluestore "" 0263644D-0BF1-4D6D-BC34-28BD98AE3BC8
+    
+    [root@node1 ~]# ceph-volume lvm list
+    
+    ====== osd.8 =======
+
+     [block]       /dev/ceph-39a5214f-bdc4-4869-a07e-448f6d21cd31/osd-block-00d4e8cb-282e-41c6-a64c-2590dad3e8be
+
+      block device              /dev/ceph-39a5214f-bdc4-4869-a07e-448f6d21cd31/osd-block-00d4e8cb-282e-41c6-a64c-2590dad3e8be
+      block uuid                GuYMbR-bJCH-n3Rm-4BKs-rfyL-VdTd-DyKVMM
+      cephx lockbox secret
+      cluster fsid              ba757a9a-01d9-11ed-b2f7-fa163e4c5d9d
+      cluster name              ceph
+      crush device class
+      encrypted                 0
+      osd fsid                  00d4e8cb-282e-41c6-a64c-2590dad3e8be
+      osd id                    8
+      osdspec affinity
+      type                      block
+      vdo                       0
+      devices                   /dev/vdb6
+      
+    [root@node1 ~]# ceph-volume lvm activate "" 00d4e8cb-282e-41c6-a64c-2590dad3e8be
+    Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-8
+    Running command: /usr/bin/ceph-bluestore-tool --cluster=ceph prime-osd-dir --dev /dev/ceph-39a5214f-bdc4-4869-a07e-448f6d21cd31/osd-block-00d4e8cb-282e-41c6-a64c-2590dad3e8be --path /var/lib/ceph/osd/ceph-8 --no-mon-config
+    Running command: /usr/bin/ln -snf /dev/ceph-39a5214f-bdc4-4869-a07e-448f6d21cd31/osd-block-00d4e8cb-282e-41c6-a64c-2590dad3e8be /var/lib/ceph/osd/ceph-8/block
+    Running command: /usr/bin/chown -h ceph:ceph /var/lib/ceph/osd/ceph-8/block
+    Running command: /usr/bin/chown -R ceph:ceph /dev/dm-7
+    Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-8
+    Running command: /usr/bin/systemctl enable ceph-volume@lvm-8-00d4e8cb-282e-41c6-a64c-2590dad3e8be
+     stderr: Created symlink /etc/systemd/system/multi-user.target.wants/ceph-volume@lvm-8-00d4e8cb-282e-41c6-a64c-2590dad3e8be.service → /usr/lib/systemd/system/ceph-volume@.service.
+    Running command: /usr/bin/systemctl enable --runtime ceph-osd@8
+    Running command: /usr/bin/systemctl start ceph-osd@8
+    --> ceph-volume lvm activate successful for osd ID: 8
+    
+    [root@node1 ~]# ceph osd tree
+    ID   CLASS  WEIGHT   TYPE NAME         STATUS  REWEIGHT  PRI-AFF
+     -1         0.14635  root default
+     -3         0.04099      host node1
+      0    hdd  0.03119          osd.0         up   1.00000  1.00000
+      7    hdd  0.00490          osd.7         up   1.00000  1.00000
+      8    hdd  0.00490          osd.8         up   1.00000  1.00000
+       
 .. note:: The UUID is stored in the ``fsid`` file in the OSD path, which is
           generated when :ref:`ceph-volume-lvm-prepare` is used.
 
