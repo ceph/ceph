@@ -91,6 +91,7 @@ class RGWReadDataSyncStatusMarkersCR : public RGWShardCollectCR {
   int shard_id{0};;
 
   map<uint32_t, rgw_data_sync_marker>& markers;
+  RGWObjVersionTracker objv_tracker;
 
   int handle_result(int r) override {
     if (r == -ENOENT) { // ENOENT is not a fatal error
@@ -119,7 +120,7 @@ bool RGWReadDataSyncStatusMarkersCR::spawn_next()
   using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
   spawn(new CR(env->dpp, env->async_rados, env->svc->sysobj,
                rgw_raw_obj(env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, shard_id)),
-               &markers[shard_id]),
+               &markers[shard_id], &objv_tracker),
         false);
   shard_id++;
   return true;
@@ -532,6 +533,7 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   map<int, RGWDataChangesLogInfo> shards_info;
 
   RGWSyncTraceNodeRef tn;
+  RGWObjVersionTracker objv_tracker;
 public:
   RGWInitDataSyncStatusCoroutine(RGWDataSyncCtx *_sc, uint32_t num_shards,
                                  uint64_t instance_id,
@@ -611,9 +613,10 @@ public:
           marker.next_step_marker = info.marker;
           marker.timestamp = info.last_update;
           const auto& oid = RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, i);
+          objv_tracker.generate_new_write_ver(cct);
           using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_data_sync_marker>;
           spawn(new WriteMarkerCR(dpp, sync_env->async_rados, sync_env->svc->sysobj,
-                                  rgw_raw_obj{pool, oid}, marker), true);
+                                  rgw_raw_obj{pool, oid}, marker, &objv_tracker), true);
         }
       }
       while (collect(&ret, NULL)) {
@@ -892,6 +895,7 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
   bool failed = false;
   bool truncated = false;
   read_metadata_list result;
+  RGWObjVersionTracker objv_tracker;
 
 public:
   RGWListBucketIndexesCR(RGWDataSyncCtx* sc,
@@ -971,12 +975,21 @@ public:
           int shard_id = (int)iter->first;
           rgw_data_sync_marker& marker = iter->second;
           marker.total_entries = entries_index->get_total_entries(shard_id);
+          objv_tracker.clear();
+          call(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
+                    rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, shard_id)),
+                    &marker, &objv_tracker));
+          if (retcode < 0) {
+            ldpp_dout(dpp, 0) << "ERROR: failed to read sync status object. error: " << retcode << dendl;
+            return set_cr_error(retcode);
+          }
+
           spawn(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(
 		  dpp, sync_env->async_rados, sync_env->svc->sysobj,
 		  rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool,
 			      RGWDataSyncStatusManager::shard_obj_name(
 				sc->source_zone, shard_id)),
-		  marker),
+		  marker, &objv_tracker),
 		true);
 	}
       } else {
@@ -1012,6 +1025,7 @@ class RGWDataSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, strin
   string marker_oid;
   rgw_data_sync_marker sync_marker;
   RGWSyncTraceNodeRef tn;
+  RGWObjVersionTracker objv_tracker;
 
 public:
   RGWDataSyncShardMarkerTrack(RGWDataSyncCtx *_sc,
@@ -1032,7 +1046,7 @@ public:
 
     return new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                            rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, marker_oid),
-                                                           sync_marker);
+                                                           sync_marker, &objv_tracker);
   }
 
   RGWOrderCallCR *allocate_order_control_cr() override {
@@ -1466,6 +1480,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   static constexpr uint32_t retry_backoff_secs = 60;
 
   RGWSyncTraceNodeRef tn;
+  RGWObjVersionTracker objv_tracker;
 
   rgw_bucket_shard source_bs;
 
@@ -1620,6 +1635,14 @@ public:
       drain_all_but_stack(lease_stack.get());
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
+      objv_tracker.clear();
+      yield call(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
+                        rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, status_oid),
+                        &sync_marker, &objv_tracker));
+      if (retcode < 0) {
+        tn->log(0, SSTR("ERROR: failed to read sync status marker: retcode=" << retcode));
+        return set_cr_error(retcode);
+      }
 
       yield {
         /* update marker to reflect we're done with full sync */
@@ -1628,7 +1651,7 @@ public:
         sync_marker.next_step_marker.clear();
         call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                              rgw_raw_obj(pool, status_oid),
-                                                             sync_marker));
+                                                             sync_marker, &objv_tracker));
       }
       if (retcode < 0) {
         tn->log(0, SSTR("ERROR: failed to set sync marker: retcode=" << retcode));
@@ -1801,6 +1824,7 @@ class RGWDataSyncShardControlCR : public RGWBackoffControlCR {
   rgw_data_sync_marker sync_marker;
 
   RGWSyncTraceNodeRef tn;
+  RGWObjVersionTracker objv_tracker;
 public:
   RGWDataSyncShardControlCR(RGWDataSyncCtx *_sc, const rgw_pool& _pool,
 		     uint32_t _shard_id, rgw_data_sync_marker& _marker,
@@ -1819,7 +1843,7 @@ public:
   RGWCoroutine *alloc_finisher_cr() override {
     return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                           rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, shard_id)),
-                                                          &sync_marker);
+                                                          &sync_marker, &objv_tracker);
   }
 
   void append_modified_shards(bc::flat_set<rgw_data_notify_entry>& keys) {
@@ -1850,6 +1874,7 @@ class RGWDataSyncCR : public RGWCoroutine {
   RGWSyncTraceNodeRef tn;
 
   RGWDataSyncModule *data_sync_module{nullptr};
+  RGWObjVersionTracker objv_tracker;
 public:
   RGWDataSyncCR(RGWDataSyncCtx *_sc, uint32_t _num_shards, RGWSyncTraceNodeRef& _tn, bool *_reset_backoff) : RGWCoroutine(_sc->cct),
                                                       sc(_sc), sync_env(_sc->env),
@@ -3272,6 +3297,7 @@ class RGWReadPendingBucketShardsCoroutine : public RGWCoroutine {
   std::string next_marker;
   vector<rgw_data_change_log_entry> log_entries;
   bool truncated;
+  RGWObjVersionTracker objv_tracker;
 
 public:
   RGWReadPendingBucketShardsCoroutine(RGWDataSyncCtx *_sc, const int _shard_id,
@@ -3294,7 +3320,7 @@ int RGWReadPendingBucketShardsCoroutine::operate(const DoutPrefixProvider *dpp)
     using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
     yield call(new CR(dpp, sync_env->async_rados, sync_env->svc->sysobj,
                       rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, status_oid),
-                      sync_marker));
+                      sync_marker, &objv_tracker));
     if (retcode < 0) {
       ldpp_dout(dpp, 0) << "failed to read sync status marker with " 
         << cpp_strerror(retcode) << dendl;
