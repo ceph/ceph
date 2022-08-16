@@ -164,6 +164,24 @@ PG::PG(
 
 PG::~PG() {}
 
+void PG::check_blocklisted_watchers()
+{
+  logger().debug("{}", __func__);
+  obc_registry.for_each([this](ObjectContextRef obc) {
+    assert(obc);
+    for (const auto& [key, watch] : obc->watchers) {
+      assert(watch->get_pg() == this);
+      const auto& ea = watch->get_peer_addr();
+      logger().debug("watch: Found {} cookie {}. Checking entity_add_t {}",
+                     watch->get_entity(), watch->get_cookie(), ea);
+      if (get_osdmap()->is_blocklisted(ea)) {
+        logger().info("watch: Found blocklisted watcher for {}", ea);
+        watch->do_watch_timeout();
+      }
+    }
+  });
+}
+
 bool PG::try_flush_or_schedule_async() {
   logger().debug("PG::try_flush_or_schedule_async: flush ...");
   (void)shard_services.get_store().flush(
