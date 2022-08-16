@@ -22,6 +22,12 @@
 
 #include "include/ceph_assert.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 extern "C" {
   const EVP_MD *EVP_md5(void);
   const EVP_MD *EVP_sha1(void);
@@ -201,5 +207,8 @@ auto digest(const ceph::buffer::list& bl)
   return sha_digest_t<Digest::digest_size>{fingerprint};
 }
 }
+
+#pragma clang diagnostic pop
+#pragma GCC diagnostic pop
 
 #endif

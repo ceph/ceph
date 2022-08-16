@@ -8,8 +8,16 @@
 #include "rgw_rest.h"
 #include "rgw_sts.h"
 #include "rgw_web_idp.h"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #include "jwt-cpp/jwt.h"
+#pragma clang diagnostic pop
+#pragma GCC diagnostic pop
 #include "rgw_oidc_provider.h"
+
 
 namespace rgw::auth::sts {
 
@@ -227,3 +235,4 @@ public:
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;
 };
+
