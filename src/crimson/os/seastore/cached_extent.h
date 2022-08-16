@@ -233,6 +233,16 @@ public:
   virtual void on_delta_write(paddr_t record_block_offset) {}
 
   /**
+   * on_replace_prior
+   *
+   * Called after the extent has replaced a previous one. State
+   * of the extent must be MUTATION_PENDING. Implementation
+   * may use this call to synchronize states that must be synchronized
+   * with the states of Cache and can't wait till transaction
+   * completes.
+   */
+  virtual void on_replace_prior(Transaction &t) {}
+  /**
    * get_type
    *
    * Returns concrete type.
