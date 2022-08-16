@@ -18,6 +18,10 @@ struct MockTestImageCtx;
 struct MockTestJournal : public MockJournal {
   MOCK_METHOD4(append_write_event, uint64_t(uint64_t, size_t,
                                             const bufferlist &, bool));
+  MOCK_METHOD5(append_compare_and_write_event, uint64_t(uint64_t, size_t,
+                                                        const bufferlist &,
+                                                        const bufferlist &,
+                                                        bool));
   MOCK_METHOD5(append_io_event_mock, uint64_t(const journal::EventEntry&,
                                               uint64_t, size_t, bool, int));
   uint64_t append_io_event(journal::EventEntry &&event_entry,

@@ -317,7 +317,7 @@ public:
 
 protected:
   void assemble_extent(const LightweightObjectExtent &object_extent,
-                       bufferlist *bl);
+                       bufferlist *bl, bufferlist *cmp_bl);
 
   ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, IOContext io_context,
