@@ -3,7 +3,7 @@
 TEMPDIR=$(mktemp -d)
 BASEDIR=$(dirname "$0")
 
-jsonnet -J vendor -m ${TEMPDIR} $BASEDIR/dashboards.jsonnet
+$JSONNET_DIR/jsonnet -J vendor -m ${TEMPDIR} $BASEDIR/dashboards.jsonnet
 
 truncate -s 0 ${TEMPDIR}/json_difference.log
 for file in ${BASEDIR}/dashboards_out/*.json
@@ -13,7 +13,7 @@ do
     do
         generated_file_name="$(basename $generated_file)"
         if [ "$file_name" == "$generated_file_name" ]; then
-            jsondiff --indent 2 "${generated_file}" "${file}" \
+            $JSONNET_DIR/jsondiff --indent 2 "${generated_file}" "${file}" \
                 | tee -a ${TEMPDIR}/json_difference.log
         fi
     done
