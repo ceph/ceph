@@ -200,21 +200,30 @@ public:
     KINT key;
     VINT val;
 
-    void replay(FixedKVNodeLayout &l) {
+    template <typename OnInsert, typename OnRemove, typename OnUpdate>
+    void replay(
+      FixedKVNodeLayout &l,
+      OnInsert &&on_insert,
+      OnRemove &&on_remove,
+      OnUpdate &&on_update) {
       switch (op) {
       case op_t::INSERT: {
-	l.insert(l.lower_bound(key), key, val);
+	auto it = l.lower_bound(key);
+	on_insert(it);
+	l.insert(it, key, val);
 	break;
       }
       case op_t::REMOVE: {
 	auto iter = l.find(key);
 	assert(iter != l.end());
+	on_remove(iter);
 	l.remove(iter);
 	break;
       }
       case op_t::UPDATE: {
 	auto iter = l.find(key);
 	assert(iter != l.end());
+	on_update(iter);
 	l.update(iter, val);
 	break;
       }
@@ -271,9 +280,18 @@ public:
 	  VINT()
 	});
     }
-    void replay(FixedKVNodeLayout &node) {
+    template <typename OnInsert, typename OnRemove, typename OnUpdate>
+    void replay(
+      FixedKVNodeLayout &node,
+      OnInsert &&on_insert,
+      OnRemove &&on_remove,
+      OnUpdate &&on_update) {
       for (auto &i: buffer) {
-	i.replay(node);
+	i.replay(
+	  node,
+	  std::forward<OnInsert>(on_insert),
+	  std::forward<OnRemove>(on_remove),
+	  std::forward<OnUpdate>(on_update));
       }
     }
     size_t get_bytes() const {

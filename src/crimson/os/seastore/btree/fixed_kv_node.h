@@ -811,7 +811,39 @@ struct FixedKVInternalNode
     bl.rebuild();
     typename node_layout_t::delta_buffer_t buffer;
     buffer.copy_in(bl.front().c_str(), bl.front().length());
-    buffer.replay(*this);
+    buffer.replay(
+      *this,
+      [this](auto &iter) {
+	LOG_PREFIX(FixedKVInternalNode::apply_delta_and_adjust_crc);
+	size_t count = sizeof(child_tracker_t*) * (
+	  this->get_size() - iter.get_offset());
+	void* src = this->child_trackers.data() + iter.get_offset();
+	void* dest = this->child_trackers.data() + iter.get_offset() + 1;
+	std::memmove(dest, src, count);
+	this->child_trackers[iter.get_offset()] = new child_tracker_t();
+	SUBTRACE(seastore_fixedkv_tree, "insert pos {}, tracker: {}",
+	  iter.get_offset(), (void*)this->child_trackers[iter.get_offset()]);
+      },
+      [this](auto &iter) {
+	LOG_PREFIX(FixedKVInternalNode::apply_delta_and_adjust_crc);
+	SUBTRACE(seastore_fixedkv_tree, "remove pos {}, tracker: {}",
+	  iter.get_offset(), (void*)this->child_trackers[iter.get_offset()]);
+	size_t count = sizeof(child_tracker_t*) * (
+	  this->get_size() - iter.get_offset() - 1);
+	void* src = this->child_trackers.data() + iter.get_offset() + 1;
+	void* dest = this->child_trackers.data() + iter.get_offset();
+	delete this->child_trackers[iter.get_offset()];
+	std::memmove(dest, src, count);
+      },
+      [this](auto &iter) {
+	LOG_PREFIX(FixedKVInternalNode::apply_delta_and_adjust_crc);
+	auto tracker = this->child_trackers[iter.get_offset()];
+	delete tracker;
+	this->child_trackers[iter.get_offset()] = new child_tracker_t();
+	SUBTRACE(seastore_fixedkv_tree, "update pos {}, old tracker: {}, new: {}",
+	  iter.get_offset(), (void*)tracker,
+	  (void*)this->child_trackers[iter.get_offset()]);
+      });
     this->set_last_committed_crc(this->get_crc32c());
     resolve_relative_addrs(base);
   }

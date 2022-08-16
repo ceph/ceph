@@ -347,7 +347,7 @@ void run_replay_test(
     TestNode::delta_buffer_t buf;
     TestNode replayed = node;
     f[i](node, buf);
-    buf.replay(replayed);
+    buf.replay(replayed, [](auto&) {}, [](auto&) {}, [](auto&) {});
     ASSERT_EQ(node.get_size(), replayed.get_size());
     ASSERT_EQ(node, replayed);
   }
