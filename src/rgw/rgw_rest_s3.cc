@@ -1809,43 +1809,61 @@ void RGWListBucket_ObjStore_S3::send_response()
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
+  
   RGWListBucket_ObjStore_S3::send_common_response();
-    if (op_ret >= 0) {
-      vector<rgw_bucket_dir_entry>::iterator iter;
-      for (iter = objs.begin(); iter != objs.end(); ++iter) {
-        rgw_obj_key key(iter->key);
-        s->formatter->open_array_section("Contents");
-        if (encode_key) {
-          string key_name;
-          url_encode(key.name, key_name);
-          s->formatter->dump_string("Key", key_name);
+  
+  if (op_ret >= 0) {
+    if (s->format == RGWFormat::JSON) {
+      s->formatter->open_array_section("Contents");
+    }
+    vector<rgw_bucket_dir_entry>::iterator iter;
+    for (iter = objs.begin(); iter != objs.end(); ++iter) {
+
+      rgw_obj_key key(iter->key);
+      std::string key_name;
+
+      if (encode_key) {
+	url_encode(key.name, key_name);
       } else {
-          s->formatter->dump_string("Key", key.name);
+	key_name = key.name;
       }
-        dump_time(s, "LastModified", iter->meta.mtime);
-        s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
-        s->formatter->dump_int("Size", iter->meta.accounted_size);
-        auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
-        s->formatter->dump_string("StorageClass", storage_class.c_str());
-        dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
-        if (s->system_request) {
-          s->formatter->dump_string("RgwxTag", iter->tag);
-      }
-        if (iter->meta.appendable) {
-          s->formatter->dump_string("Type", "Appendable");
+      /* conditionally format JSON in the obvious way--I'm unsure if
+       * AWS actually does this */
+      if (s->format == RGWFormat::XML) {
+	s->formatter->open_array_section("Contents");
       } else {
-          s->formatter->dump_string("Type", "Normal");
+	// json
+	s->formatter->open_object_section("dummy");
       }
-        s->formatter->close_section();
+      s->formatter->dump_string("Key", key_name);
+      dump_time(s, "LastModified", iter->meta.mtime);
+      s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
+      s->formatter->dump_int("Size", iter->meta.accounted_size);
+      auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
+      s->formatter->dump_string("StorageClass", storage_class.c_str());
+      dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
+      if (s->system_request) {
+	s->formatter->dump_string("RgwxTag", iter->tag);
+      }
+      if (iter->meta.appendable) {
+	s->formatter->dump_string("Type", "Appendable");
+	} else {
+	s->formatter->dump_string("Type", "Normal");
+      }
+      // JSON has one extra section per element
+      s->formatter->close_section();
+    } // foreach obj
+    if (s->format == RGWFormat::JSON) {
+      s->formatter->close_section();
     }
   }
-    s->formatter->dump_string("Marker", marker.name);
-    if (is_truncated && !next_marker.empty()) {
-      s->formatter->dump_string("NextMarker", next_marker.name);
-    }
-    s->formatter->close_section();
-    rgw_flush_formatter_and_reset(s, s->formatter);
-}
+  s->formatter->dump_string("Marker", marker.name);
+  if (is_truncated && !next_marker.empty()) {
+    s->formatter->dump_string("NextMarker", next_marker.name);
+  }
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+} /* RGWListBucket_ObjStore_S3::send_response() */
 
 void RGWListBucket_ObjStore_S3v2::send_versioned_response()
 {
