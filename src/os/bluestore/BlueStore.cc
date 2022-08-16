@@ -1837,15 +1837,15 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::add_onode(const ghobject_t& oid,
   OnodeRef& o)
 {
   std::lock_guard l(cache->lock);
-  auto p = onode_map.find(oid);
-  if (p != onode_map.end()) {
+  // add entry or return existing one
+  auto p = onode_map.emplace(oid, o);
+  if (!p.second) {
     ldout(cache->cct, 30) << __func__ << " " << oid << " " << o
-			  << " raced, returning existing " << p->second
+			  << " raced, returning existing " << p.first->second
 			  << dendl;
-    return p->second;
+    return p.first->second;
   }
   ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
-  onode_map[oid] = o;
   cache->_add(o.get(), 1);
   cache->_trim();
   return o;
