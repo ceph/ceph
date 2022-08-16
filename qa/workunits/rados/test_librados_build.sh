@@ -25,7 +25,7 @@ BINARIES="${BINARIES_TO_RUN}hello_radosstriper_cpp
 # parse output like "octopus (dev)"
 case $(librados-config --release | grep -Po ' \(\K[^\)]+') in
     dev)
-        BRANCH=master;;
+        BRANCH=main;;
     rc|stable)
         BRANCH=$(librados-config --release | cut -d' ' -f1);;
     *)
