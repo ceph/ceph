@@ -340,11 +340,20 @@ public:
     LOG_PREFIX(FixedKVBtree::lower_bound);
     return lookup(
       c,
-      [addr](const internal_node_t &internal) {
+      [addr, c](const internal_node_t &internal) {
+        LOG_PREFIX(FixedKVBtree::lower_bound);
         assert(internal.get_size() > 0);
         auto iter = internal.upper_bound(addr);
         assert(iter != internal.begin());
         --iter;
+        SUBTRACET(
+          seastore_fixedkv_tree,
+          "internal addr {}, got ret offset {}, size {}, end {}",
+          c.trans,
+          addr,
+          iter.get_offset(),
+          internal.get_size(),
+          iter == internal.end());
         return iter;
       },
       [FNAME, c, addr](const leaf_node_t &leaf) {
