@@ -78,6 +78,10 @@ class GrafanaService(CephadmService):
                 'http_addr': daemon_spec.ip if daemon_spec.ip else ''
             })
 
+        if 'dashboard' in self.mgr.get('mgr_map')['modules'] and spec.initial_admin_password:
+            self.mgr.check_mon_command(
+                {'prefix': 'dashboard set-grafana-api-password'}, inbuf=spec.initial_admin_password)
+
         config_file = {
             'files': {
                 "grafana.ini": grafana_ini,
