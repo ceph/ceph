@@ -1833,7 +1833,7 @@ void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStor
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.OnodeSpace(" << this << " in " << cache << ") "
 
-BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid,
+BlueStore::OnodeRef BlueStore::OnodeSpace::add_onode(const ghobject_t& oid,
   OnodeRef& o)
 {
   std::lock_guard l(cache->lock);
@@ -1868,6 +1868,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
     ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
     if (p == onode_map.end()) {
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
+      cache->logger->inc(l_bluestore_onode_misses);
     } else {
       ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
                             << " " << p->second->nref
@@ -3556,13 +3557,19 @@ void BlueStore::Onode::put() {
   }
 }
 
-BlueStore::Onode* BlueStore::Onode::decode(
+
+BlueStore::Onode* BlueStore::Onode::create_decode(
   CollectionRef c,
   const ghobject_t& oid,
   const string& key,
-  const bufferlist& v)
+  const bufferlist& v,
+  bool allow_empty)
 {
+  ceph_assert(v.length() || allow_empty);
   Onode* on = new Onode(c.get(), oid, key);
+  if (v.length() == 0) {
+    return on;
+  }
   on->exists = true;
   auto p = v.front().begin_deep();
   on->onode.decode(p);
@@ -3986,16 +3993,14 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     ceph_assert(r == -ENOENT);
     if (!create)
       return OnodeRef();
-
-    // new object, new onode
-    on = new Onode(this, oid, key);
   } else {
-    // loaded
     ceph_assert(r >= 0);
-    on = Onode::decode(this, oid, key, v);
   }
+
+  // new object, load onode if available
+  on = Onode::create_decode(this, oid, key, v, true);
   o.reset(on);
-  return onode_space.add(oid, o);
+  return onode_space.add_onode(oid, o);
 }
 
 void BlueStore::Collection::split_cache(
@@ -7355,7 +7360,7 @@ void BlueStore::_fsck_repair_shared_blobs(
 	           << dendl;
 
           OnodeRef o;
-          o.reset(Onode::decode(c, oid, it->key(), it->value()));
+          o.reset(Onode::create_decode(c, oid, it->key(), it->value()));
           o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
 
           _dump_onode<30>(cct, *o);
@@ -7492,7 +7497,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
 
   dout(10) << __func__ << "  " << oid << dendl;
   OnodeRef o;
-  o.reset(Onode::decode(c, oid, key, value));
+  o.reset(Onode::create_decode(c, oid, key, value));
   ++num_objects;
 
   num_spanning_blobs += o->extent_map.spanning_blob_map.size();
@@ -8763,7 +8768,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 		  << " obj:" << oid << dendl;
 
         OnodeRef o;
-        o.reset(Onode::decode(c, oid, it->key(), it->value()));
+        o.reset(Onode::create_decode(c, oid, it->key(), it->value()));
 	o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
 	mempool::bluestore_fsck::set<BlobRef> blobs;
 
