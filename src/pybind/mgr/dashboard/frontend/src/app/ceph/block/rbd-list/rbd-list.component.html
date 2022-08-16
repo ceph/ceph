@@ -12,6 +12,7 @@
           selectionType="single"
           [hasDetails]="true"
           [status]="tableStatus"
+          [maxLimit]="25"
           [autoReload]="-1"
           (fetchData)="taskListService.fetch($event)"
           (setExpandedRow)="setExpandedRow($event)"
