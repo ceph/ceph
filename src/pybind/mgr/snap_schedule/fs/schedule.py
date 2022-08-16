@@ -327,7 +327,7 @@ class Schedule(object):
     def add_retention(cls, db, path, retention_spec):
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
-            if not row:
+            if row is None:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
             if not retention:
@@ -346,7 +346,7 @@ class Schedule(object):
     def rm_retention(cls, db, path, retention_spec):
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
-            if not row:
+            if row is None:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
             current = row['retention']
