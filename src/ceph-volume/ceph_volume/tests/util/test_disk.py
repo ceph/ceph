@@ -286,6 +286,16 @@ class TestGetDevices(object):
         result = disk.get_devices()
         assert rbd_path not in result
 
+    @patch('ceph_volume.util.disk.is_locked_raw_device', lambda x: False)
+    def test_actuator_device(self, patched_get_block_devs_sysfs, fake_filesystem):
+        sda_path = '/dev/sda'
+        fake_actuator_nb = 2
+        patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
+        for actuator in range(0, fake_actuator_nb):
+            fake_filesystem.create_dir(f'/sys/block/sda/queue/independent_access_ranges/{actuator}')
+        result = disk.get_devices()
+        assert result[sda_path]['actuators'] == fake_actuator_nb
+
 
 class TestSizeCalculations(object):
 
