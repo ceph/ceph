@@ -345,7 +345,7 @@ class Schedule(object):
                       retention_spec: str) -> None:
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
-            if not row:
+            if row is None:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
             if not retention:
@@ -369,7 +369,7 @@ class Schedule(object):
                      retention_spec: str) -> None:
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
-            if not row:
+            if row is None:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
             current = row['retention']
