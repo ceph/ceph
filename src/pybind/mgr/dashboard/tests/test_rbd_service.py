@@ -129,8 +129,8 @@ class RbdServiceTest(unittest.TestCase):
             'namespace': ''
         }
 
-        rbd_pool_list = RbdService.rbd_pool_list('test_pool')
-        self.assertEqual(rbd_pool_list, (0, [{
+        rbd_pool_list = RbdService.rbd_pool_list(['test_pool'], offset=0, limit=5)
+        self.assertEqual(rbd_pool_list, ([{
             'id': '3c1a5ee60a88',
             'unique_id': 'test_pool/3c1a5ee60a88',
             'name': 'test_rbd',
@@ -139,7 +139,7 @@ class RbdServiceTest(unittest.TestCase):
             'deferment_end_time': '{}Z'.format(time.isoformat()),
             'pool_name': 'test_pool',
             'namespace': ''
-        }]))
+        }], 1))
 
     def test_valid_interval(self):
         test_cases = [
