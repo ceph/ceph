@@ -802,6 +802,7 @@ void Cache::commit_replace_extent(
     add_to_dirty(next);
   }
 
+  next->on_replace_prior(t);
   invalidate_extent(t, *prev);
 }
 
