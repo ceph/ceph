@@ -97,14 +97,16 @@ class MetadataManager(object):
             if len(self.config.items(section)) == 0:
                 self.config.remove_section(section)
 
-
         try:
             with _lock:
-                fd = self.fs.open(self.config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, self.mode)
+                tmp_config_path = self.config_path + b'.tmp'
+                fd = self.fs.open(tmp_config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, self.mode)
                 with _ConfigWriter(self.fs, fd) as cfg_writer:
                     self.config.write(cfg_writer)
                     cfg_writer.fsync()
-            log.info("wrote {0} bytes to config {1}".format(cfg_writer.wrote, self.config_path))
+                self.fs.rename(tmp_config_path, self.config_path)
+            log.info(f"wrote {cfg_writer.wrote} bytes to config {tmp_config_path}")
+            log.info(f"Renamed {tmp_config_path} to config {self.config_path}")
         except cephfs.Error as e:
             raise MetadataMgrException(-e.args[0], e.args[1])
 
