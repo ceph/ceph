@@ -121,8 +121,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
           return lba_manager->init_cached_extent(t, e);
         }
       }).si_then([this, &t] {
-        assert(async_cleaner->debug_check_space(
-                 *async_cleaner->get_empty_space_tracker()));
+        async_cleaner->start_scan_space();
         return backref_manager->scan_mapped_space(
           t,
           [this](
@@ -134,13 +133,13 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
             assert(laddr == L_ADDR_NULL);
             backref_manager->cache_new_backref_extent(paddr, type);
             cache->update_tree_extents_num(type, 1);
-            async_cleaner->mark_space_used(paddr, len, true);
+            async_cleaner->mark_space_used(paddr, len);
           } else if (laddr == L_ADDR_NULL) {
             cache->update_tree_extents_num(type, -1);
-            async_cleaner->mark_space_free(paddr, len, true);
+            async_cleaner->mark_space_free(paddr, len);
           } else {
             cache->update_tree_extents_num(type, 1);
-            async_cleaner->mark_space_used(paddr, len, true);
+            async_cleaner->mark_space_used(paddr, len);
           }
         });
       });
@@ -148,7 +147,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this] {
     return epm->open();
   }).safe_then([FNAME, this] {
-    async_cleaner->complete_init();
+    async_cleaner->start_gc();
     INFO("completed");
   }).handle_error(
     mount_ertr::pass_further{},
