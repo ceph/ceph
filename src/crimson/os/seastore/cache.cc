@@ -826,6 +826,7 @@ void Cache::invalidate_extent(
     }
   }
   extent.state = CachedExtent::extent_state_t::INVALID;
+  extent.on_invalidated(t);
 }
 
 void Cache::mark_transaction_conflicted(
