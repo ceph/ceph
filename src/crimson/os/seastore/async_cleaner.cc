@@ -1044,7 +1044,8 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   LOG_PREFIX(AsyncCleaner::mount);
   const auto& sms = sm_group->get_segment_managers();
   INFO("{} segment managers", sms.size());
-  init_complete = false;
+  ceph_assert(state == cleaner_state_t::STOP);
+  state = cleaner_state_t::MOUNT;
   stats = {};
   journal_head = JOURNAL_SEQ_NULL;
   journal_alloc_tail = JOURNAL_SEQ_NULL;
@@ -1187,14 +1188,14 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
   });
 }
 
-void AsyncCleaner::complete_init()
+void AsyncCleaner::start_gc()
 {
-  LOG_PREFIX(AsyncCleaner::complete_init);
+  LOG_PREFIX(AsyncCleaner::start_gc);
+  ceph_assert(state == cleaner_state_t::SCAN_SPACE);
+  state = cleaner_state_t::READY;
   if (disable_trim) {
-    init_complete = true;
     return;
   }
-  init_complete = true;
   INFO("done, start GC, {}", gc_stat_printer_t{this, true});
   ceph_assert(journal_head != JOURNAL_SEQ_NULL);
   ceph_assert(journal_alloc_tail != JOURNAL_SEQ_NULL);
@@ -1204,17 +1205,22 @@ void AsyncCleaner::complete_init()
 
 seastar::future<> AsyncCleaner::stop()
 {
+  if (is_ready()) {
+    state = cleaner_state_t::HALT;
+  } else {
+    state = cleaner_state_t::STOP;
+  }
   return gc_process.stop(
   ).then([this] {
     LOG_PREFIX(AsyncCleaner::stop);
     INFO("done, {}", gc_stat_printer_t{this, true});
+    // run_until_halt() can be called at HALT
   });
 }
 
 void AsyncCleaner::mark_space_used(
   paddr_t addr,
-  extent_len_t len,
-  bool init_scan)
+  extent_len_t len)
 {
   LOG_PREFIX(AsyncCleaner::mark_space_used);
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
@@ -1222,7 +1228,7 @@ void AsyncCleaner::mark_space_used(
   }
   auto& seg_addr = addr.as_seg_paddr();
 
-  if (!init_scan && !init_complete) {
+  if (state < cleaner_state_t::SCAN_SPACE) {
     return;
   }
 
@@ -1246,11 +1252,10 @@ void AsyncCleaner::mark_space_used(
 
 void AsyncCleaner::mark_space_free(
   paddr_t addr,
-  extent_len_t len,
-  bool init_scan)
+  extent_len_t len)
 {
   LOG_PREFIX(AsyncCleaner::mark_space_free);
-  if (!init_complete && !init_scan) {
+  if (state < cleaner_state_t::SCAN_SPACE) {
     return;
   }
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
@@ -1336,7 +1341,7 @@ AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
   if (disable_trim) {
     return seastar::now();
   }
-  ceph_assert(init_complete);
+  ceph_assert(is_ready());
   // The pipeline configuration prevents another IO from entering
   // prepare until the prior one exits and clears this.
   ceph_assert(!blocked_io_wake);
@@ -1379,7 +1384,7 @@ AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
 void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
 {
   if (disable_trim) return;
-  ceph_assert(init_complete);
+  ceph_assert(is_ready());
   ceph_assert(stats.projected_used_bytes >= projected_usage);
   stats.projected_used_bytes -= projected_usage;
   return maybe_wake_gc_blocked_io();
@@ -1388,14 +1393,14 @@ void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
 std::ostream &operator<<(std::ostream &os, AsyncCleaner::gc_stat_printer_t stats)
 {
   os << "gc_stats(";
-  if (stats.cleaner->init_complete) {
+  if (stats.cleaner->is_ready()) {
     os << "should_block_on_(trim=" << stats.cleaner->should_block_on_trim()
        << ", reclaim=" << stats.cleaner->should_block_on_reclaim() << ")"
        << ", should_(trim_dirty=" << stats.cleaner->gc_should_trim_dirty()
        << ", trim_alloc=" << stats.cleaner->gc_should_trim_alloc()
        << ", reclaim=" << stats.cleaner->gc_should_reclaim_space() << ")";
   } else {
-    os << "init";
+    os << "not-ready";
   }
   os << ", projected_avail_ratio=" << stats.cleaner->get_projected_available_ratio()
      << ", reclaim_ratio=" << stats.cleaner->get_reclaim_ratio()
@@ -1404,7 +1409,7 @@ std::ostream &operator<<(std::ostream &os, AsyncCleaner::gc_stat_printer_t stats
     os << ", journal_head=" << stats.cleaner->journal_head
        << ", alloc_tail=" << stats.cleaner->journal_alloc_tail
        << ", dirty_tail=" << stats.cleaner->journal_dirty_tail;
-    if (stats.cleaner->init_complete) {
+    if (stats.cleaner->is_ready()) {
       os << ", alloc_tail_target=" << stats.cleaner->get_alloc_tail_target()
          << ", dirty_tail_target=" << stats.cleaner->get_dirty_tail_target()
          << ", tail_limit=" << stats.cleaner->get_tail_limit();
