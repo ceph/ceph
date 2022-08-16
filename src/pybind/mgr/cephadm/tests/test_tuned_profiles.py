@@ -34,6 +34,9 @@ class FakeCache:
     def get_unreachable_hosts(self):
         return self.unreachable_hosts
 
+    def get_draining_hosts(self):
+        return []
+
     @property
     def networks(self):
         return {h: {'a': {'b': ['c']}} for h in self.hosts}
