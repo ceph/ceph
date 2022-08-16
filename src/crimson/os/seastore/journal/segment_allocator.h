@@ -99,7 +99,7 @@ class SegmentAllocator {
   // If rolling/opening, no write is allowed.
   using write_ertr = base_ertr;
   using write_ret = write_ertr::future<write_result_t>;
-  write_ret write(ceph::bufferlist to_write);
+  write_ret write(ceph::bufferlist&& to_write);
 
   using close_ertr = base_ertr;
   close_ertr::future<> close();

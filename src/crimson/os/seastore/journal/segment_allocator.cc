@@ -108,7 +108,7 @@ SegmentAllocator::do_open(bool is_mkfs)
       paddr_t::make_seg_paddr(segment_id, written_to)};
     segment_provider.update_segment_avail_bytes(
         type, new_journal_seq.offset);
-    return sref->write(0, bl
+    return sref->write(0, std::move(bl)
     ).handle_error(
       open_ertr::pass_further{},
       crimson::ct_error::assert_all{
@@ -156,7 +156,7 @@ SegmentAllocator::roll()
 }
 
 SegmentAllocator::write_ret
-SegmentAllocator::write(ceph::bufferlist to_write)
+SegmentAllocator::write(ceph::bufferlist&& to_write)
 {
   LOG_PREFIX(SegmentAllocator::write);
   assert(can_write());
@@ -183,7 +183,7 @@ SegmentAllocator::write(ceph::bufferlist to_write)
       current_segment->get_segment_id(), written_to)
   );
   return current_segment->write(
-    write_start_offset, to_write
+    write_start_offset, std::move(to_write)
   ).handle_error(
     write_ertr::pass_further{},
     crimson::ct_error::assert_all{
@@ -367,7 +367,7 @@ RecordBatch::submit_pending_fast(
   assert(size == new_size);
   auto bl = encode_records(group, committed_to, segment_nonce);
   assert(bl.length() == size.get_encoded_length());
-  return std::make_pair(bl, size);
+  return std::make_pair(std::move(bl), size);
 }
 
 RecordSubmitter::RecordSubmitter(
@@ -544,7 +544,7 @@ RecordSubmitter::submit(record_t&& record)
     DEBUG("{} fast submit {}, committed_to={}, outstanding_io={} ...",
           get_name(), sizes, committed_to, num_outstanding_io);
     account_submission(1, sizes);
-    return segment_allocator.write(to_write
+    return segment_allocator.write(std::move(to_write)
     ).safe_then([mdlength = sizes.get_mdlength()](auto write_result) {
       return record_locator_t{
         write_result.start_seq.offset.add_offset(mdlength),
@@ -751,7 +751,7 @@ void RecordSubmitter::flush_current_batch()
   DEBUG("{} {} records, {}, committed_to={}, outstanding_io={} ...",
         get_name(), num, sizes, committed_to, num_outstanding_io);
   account_submission(num, sizes);
-  std::ignore = segment_allocator.write(to_write
+  std::ignore = segment_allocator.write(std::move(to_write)
   ).safe_then([this, p_batch, FNAME, num, sizes=sizes](auto write_result) {
     TRACE("{} {} records, {}, write done with {}",
           get_name(), num, sizes, write_result);
