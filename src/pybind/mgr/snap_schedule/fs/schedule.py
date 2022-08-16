@@ -296,7 +296,7 @@ class Schedule(object):
                              (path,))
             row = cur.fetchone()
 
-            if len(row) == 0:
+            if row is None:
                 log.info(f'no schedule for {path} found')
                 raise ValueError('SnapSchedule for {} not found'.format(path))
 
