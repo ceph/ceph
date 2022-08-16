@@ -136,6 +136,10 @@ class SubvolumeBase(object):
         """ Boolean declaring if subvolume can be purged """
         raise NotImplementedError
 
+    def clean_stale_snapshot_metadata(self):
+        """ Clean up stale snapshot metadata """
+        raise NotImplementedError
+
     def load_config(self):
         try:
             self.fs.stat(self.legacy_config_path)

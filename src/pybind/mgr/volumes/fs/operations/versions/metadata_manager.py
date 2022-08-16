@@ -4,6 +4,7 @@ import logging
 import sys
 import threading
 import configparser
+import re
 
 import cephfs
 
@@ -184,3 +185,16 @@ class MetadataManager(object):
         if not self.config.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
         return item in [v[1] for v in self.config.items(section)]
+
+    def has_snap_metadata_section(self):
+        sections = self.config.sections()
+        r = re.compile('SNAP_METADATA_.*')
+        for section in sections:
+            if r.match(section):
+                return True
+        return False
+
+    def list_snaps_with_metadata(self):
+        sections = self.config.sections()
+        r = re.compile('SNAP_METADATA_.*')
+        return [section[len("SNAP_METADATA_"):] for section in sections if r.match(section)]

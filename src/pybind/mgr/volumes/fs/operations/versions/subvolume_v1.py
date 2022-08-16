@@ -857,6 +857,22 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 return []
             raise
 
+    def clean_stale_snapshot_metadata(self):
+        """ Clean up stale snapshot metadata """
+        if self.metadata_mgr.has_snap_metadata_section():
+            snap_list = self.list_snapshots()
+            snaps_with_metadata_list = self.metadata_mgr.list_snaps_with_metadata()
+            for snap_with_metadata in snaps_with_metadata_list:
+                if snap_with_metadata.encode('utf-8') not in snap_list:
+                    try:
+                        self.metadata_mgr.remove_section(self.get_snap_section_name(snap_with_metadata))
+                        self.metadata_mgr.flush()
+                    except MetadataMgrException as me:
+                        log.error(f"Failed to remove stale snap metadata on snap={snap_with_metadata} "
+                                  f"subvol={self.subvol_name} group={self.group_name} reason={me.args[1]}, "
+                                  f"errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
+                        pass
+
     def _add_snap_clone(self, track_id, snapname):
         self.metadata_mgr.add_section("clone snaps")
         self.metadata_mgr.update_section("clone snaps", track_id, snapname)
