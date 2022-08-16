@@ -242,6 +242,16 @@ public:
    * completes.
    */
   virtual void on_replace_prior(Transaction &t) {}
+
+  /**
+   * on_invalidated
+   *
+   * Called after the extent is invalidated, either by Cache::invalidate_extent
+   * or Transaction::add_to_retired_set. Implementation may use this
+   * call to adjust states that must be changed immediately once
+   * invalidated.
+   */
+  virtual void on_invalidated(Transaction &t) {}
   /**
    * get_type
    *
@@ -488,6 +498,8 @@ public:
     prior_poffset.reset();
     return ret;
   }
+
+  void set_invalid(Transaction &t);
 
 private:
   template <typename T>
