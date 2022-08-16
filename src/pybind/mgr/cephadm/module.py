@@ -429,6 +429,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=8765,
             desc='cephadm service discovery port'
         ),
+        Option(
+            'cgroups_split',
+            type='bool',
+            default=True,
+            desc='Pass --cgroups=split when cephadm creates containers (currently podman only)'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -504,6 +510,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.device_enhanced_scan = False
+            self.cgroups_split = True
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
