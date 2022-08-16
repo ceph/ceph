@@ -14,7 +14,7 @@ using namespace ::std::literals;
 #define dout_context (cct)
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix *_dout << "osd." << whoami << "  "
+#define dout_prefix *_dout << "osd." << whoami << " "
 
 ScrubQueue::ScrubJob::ScrubJob(CephContext* cct, const spg_t& pg, int node_id)
     : RefCountedObject{cct}
@@ -45,9 +45,8 @@ void ScrubQueue::ScrubJob::update_schedule(
   // the (atomic) flag will only be cleared by select_pg_and_scrub() after
   // scan_penalized() is called and the job was moved to the to_scrub queue.
   updated = true;
-
-  dout(10) << " pg[" << pgid << "] adjusted: " << schedule.scheduled_at << "  "
-	   << registration_state() << dendl;
+  dout(10) << fmt::format("{}: pg[{}] adjusted: {:s} ({})", __func__, pgid,
+                          schedule.scheduled_at, registration_state()) << dendl;
 }
 
 std::string ScrubQueue::ScrubJob::scheduling_state(utime_t now_is,
@@ -65,7 +64,7 @@ std::string ScrubQueue::ScrubJob::scheduling_state(utime_t now_is,
     return fmt::format("queued for {}scrub", (is_deep_expected ? "deep " : ""));
   }
 
-  return fmt::format("{}scrub scheduled @ {}",
+  return fmt::format("{}scrub scheduled @ {:s}",
 		     (is_deep_expected ? "deep " : ""),
 		     schedule.scheduled_at);
 }
@@ -151,13 +150,15 @@ void ScrubQueue::remove_from_osd_queue(ScrubJobRef scrub_job)
   }
 }
 
-void ScrubQueue::register_with_osd(ScrubJobRef scrub_job,
-				   const ScrubQueue::sched_params_t& suggested)
+void ScrubQueue::register_with_osd(
+  ScrubJobRef scrub_job,
+  const ScrubQueue::sched_params_t& suggested)
 {
   qu_state_t state_at_entry = scrub_job->state.load();
-
-  dout(15) << "pg[" << scrub_job->pgid << "] was "
-	   << qu_state_text(state_at_entry) << dendl;
+  dout(20) << fmt::format(
+		"pg[{}] state at entry: <{:.14}>", scrub_job->pgid,
+		state_at_entry)
+	   << dendl;
 
   switch (state_at_entry) {
     case qu_state_t::registered:
@@ -172,7 +173,7 @@ void ScrubQueue::register_with_osd(ScrubJobRef scrub_job,
 
 	if (state_at_entry != scrub_job->state) {
 	  lck.unlock();
-	  dout(5) << " scrub job state changed" << dendl;
+	  dout(5) << " scrub job state changed. Retrying." << dendl;
 	  // retry
 	  register_with_osd(scrub_job, suggested);
 	  break;
@@ -183,7 +184,6 @@ void ScrubQueue::register_with_osd(ScrubJobRef scrub_job,
 	scrub_job->in_queues = true;
 	scrub_job->state = qu_state_t::registered;
       }
-
       break;
 
     case qu_state_t::unregistering:
@@ -204,10 +204,11 @@ void ScrubQueue::register_with_osd(ScrubJobRef scrub_job,
       break;
   }
 
-  dout(10) << "pg(" << scrub_job->pgid << ") sched-state changed from "
-	   << qu_state_text(state_at_entry) << " to "
-	   << qu_state_text(scrub_job->state)
-	   << " at: " << scrub_job->schedule.scheduled_at << dendl;
+  dout(10) << fmt::format(
+		"pg[{}] sched-state changed from <{:.14}> to <{:.14}> (@{:s})",
+		scrub_job->pgid, state_at_entry, scrub_job->state.load(),
+		scrub_job->schedule.scheduled_at)
+	   << dendl;
 }
 
 // look mommy - no locks!
@@ -222,10 +223,9 @@ void ScrubQueue::update_job(ScrubJobRef scrub_job,
 ScrubQueue::sched_params_t ScrubQueue::determine_scrub_time(
   const requested_scrub_t& request_flags,
   const pg_info_t& pg_info,
-  const pool_opts_t pool_conf) const
+  const pool_opts_t& pool_conf) const
 {
   ScrubQueue::sched_params_t res;
-  dout(15) << ": requested_scrub_t: {}" <<  request_flags << dendl; 
 
   if (request_flags.must_scrub || request_flags.need_auto) {
 
@@ -234,8 +234,7 @@ ScrubQueue::sched_params_t ScrubQueue::determine_scrub_time(
     res.is_must = ScrubQueue::must_scrub_t::mandatory;
     // we do not need the interval data in this case
 
-  } else if (pg_info.stats.stats_invalid &&
-	     conf()->osd_scrub_invalid_stats) {
+  } else if (pg_info.stats.stats_invalid && conf()->osd_scrub_invalid_stats) {
     res.proposed_time = time_now();
     res.is_must = ScrubQueue::must_scrub_t::mandatory;
 
@@ -246,13 +245,12 @@ ScrubQueue::sched_params_t ScrubQueue::determine_scrub_time(
   }
 
   dout(15) << fmt::format(
-		": suggested: {} hist: {} v: {}/{} must: {} pool-min: {}",
-		res.proposed_time,
-		pg_info.history.last_scrub_stamp,
+		"suggested: {:s} hist: {:s} v:{}/{} must:{} pool-min:{} {}",
+		res.proposed_time, pg_info.history.last_scrub_stamp,
 		(bool)pg_info.stats.stats_invalid,
 		conf()->osd_scrub_invalid_stats,
 		(res.is_must == must_scrub_t::mandatory ? "y" : "n"),
-		res.min_interval)
+		res.min_interval, request_flags)
 	   << dendl;
   return res;
 }
@@ -522,21 +520,10 @@ Scrub::schedule_result_t ScrubQueue::select_from_group(
 ScrubQueue::scrub_schedule_t ScrubQueue::adjust_target_time(
   const sched_params_t& times) const
 {
-  ScrubQueue::scrub_schedule_t sched_n_dead{times.proposed_time,
-					    times.proposed_time};
-
-  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
-    dout(20) << "min t: " << times.min_interval
-	     << " osd: " << conf()->osd_scrub_min_interval
-	     << " max t: " << times.max_interval
-	     << " osd: " << conf()->osd_scrub_max_interval << dendl;
-
-    dout(20) << "at " << sched_n_dead.scheduled_at << " ratio "
-	     << conf()->osd_scrub_interval_randomize_ratio << dendl;
-  }
+  ScrubQueue::scrub_schedule_t sched_n_dead{
+    times.proposed_time, times.proposed_time};
 
   if (times.is_must == ScrubQueue::must_scrub_t::not_mandatory) {
-
     // unless explicitly requested, postpone the scrub with a random delay
     double scrub_min_interval = times.min_interval > 0
 				  ? times.min_interval
@@ -555,10 +542,19 @@ ScrubQueue::scrub_schedule_t ScrubQueue::adjust_target_time(
     } else {
       sched_n_dead.deadline += scrub_max_interval;
     }
+    // note: no specific job can be named in the log message
+    dout(20) << fmt::format(
+		  "not-must. Was:{:s} {{min:{}/{} max:{}/{} ratio:{}}} "
+		  "Adjusted:{:s} ({:s})",
+		  times.proposed_time, fmt::group_digits(times.min_interval),
+		  fmt::group_digits(conf()->osd_scrub_min_interval),
+		  fmt::group_digits(times.max_interval),
+		  fmt::group_digits(conf()->osd_scrub_max_interval),
+		  conf()->osd_scrub_interval_randomize_ratio,
+		  sched_n_dead.scheduled_at, sched_n_dead.deadline)
+	     << dendl;
   }
-
-  dout(17) << "at (final) " << sched_n_dead.scheduled_at << " - "
-	   << sched_n_dead.deadline << dendl;
+  // else - no log needed. All relevant data will be logged by the caller
   return sched_n_dead;
 }
 
