@@ -11,6 +11,7 @@ import time
 import json
 import logging
 import os
+import re
 
 log = logging.getLogger(__name__)
 
@@ -360,6 +361,127 @@ class TestMisc(CephFSTestCase):
         td3.join()
         self.mount_a.run_shell(["rm", "-rf", dir_path])
 
+    def test_dump_inmemory_log_on_client_eviction(self):
+        """
+        That the in-memory logs are dumped during a client eviction event.
+        """
+        self.fs.mds_asok(['config', 'set', 'debug_mds', '1/10'])
+        self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
+        mount_a_client_id = self.mount_a.get_global_id()
+        infos = self.fs.status().get_ranks(self.fs.id)
+
+        #evict the client
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+        time.sleep(10) #wait for 10 seconds for the logs dumping to complete.
+
+        #The client is evicted, so unmount it.
+        try:
+            self.mount_a.umount_wait(require_clean=True, timeout=30)
+        except:
+            pass #continue with grepping the log
+
+        eviction_log = f"Evicting (\(and blocklisting\) )?client session {mount_a_client_id} \(.+:.+/.+\)"
+        search_range = "/^--- begin dump of recent events ---$/,/^--- end dump of recent events ---$/p"
+        for info in infos:
+            mds_id = info['name']
+            try:
+                remote = self.fs.mon_manager.find_remote('mds', mds_id)
+                out = remote.run(args=["sed",
+                                       "-n",
+                                       "{0}".format(search_range),
+                                       f"/var/log/ceph/{self.mount_a.cluster_name}-mds.{mds_id}.log"],
+                                 stdout=StringIO(), timeout=30)
+            except:
+                continue #continue with the next info
+            if out.stdout and re.search(eviction_log, out.stdout.getvalue().strip()):
+                return
+        self.assertTrue(False, "Failed to dump in-memory logs during client eviction")
+
+    def test_dump_inmemory_log_on_missed_beacon_ack_from_monitors(self):
+        """
+        That the in-memory logs are dumped when the mds misses beacon ACKs from monitors.
+        """
+        self.fs.mds_asok(['config', 'set', 'debug_mds', '1/10'])
+        self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
+        try:
+            mons = json.loads(self.fs.mon_manager.raw_cluster_cmd('mon', 'dump', '-f', 'json'))['mons']
+        except:
+            self.assertTrue(False, "Error fetching monitors")
+
+        #Freeze all monitors
+        for mon in mons:
+            mon_name = mon['name']
+            log.info(f'Sending STOP to mon {mon_name}')
+            self.fs.mon_manager.signal_mon(mon_name, 19)
+
+        time.sleep(10) #wait for 10 seconds to get the in-memory logs dumped
+
+        #Unfreeze all monitors
+        for mon in mons:
+            mon_name = mon['name']
+            log.info(f'Sending CONT to mon {mon_name}')
+            self.fs.mon_manager.signal_mon(mon_name, 18)
+
+        missed_beacon_ack_log = "missed beacon ack from the monitors"
+        search_range = "/^--- begin dump of recent events ---$/,/^--- end dump of recent events ---$/p"
+        for info in self.fs.status().get_ranks(self.fs.id):
+            mds_id = info['name']
+            try:
+                remote = self.fs.mon_manager.find_remote('mds', mds_id)
+                out = remote.run(args=["sed",
+                                       "-n",
+                                       "{0}".format(search_range),
+                                       f"/var/log/ceph/{self.mount_a.cluster_name}-mds.{mds_id}.log"],
+                                 stdout=StringIO(), timeout=30)
+            except:
+                continue #continue with the next info
+            if out.stdout and (missed_beacon_ack_log in out.stdout.getvalue().strip()):
+                return
+        self.assertTrue(False, "Failed to dump in-memory logs during missed beacon ack")
+
+    def test_dump_inmemory_log_on_missed_internal_heartbeats(self):
+        """
+        That the in-memory logs are dumped when the mds misses internal heartbeats.
+        """
+        self.fs.mds_asok(['config', 'set', 'debug_mds', '1/10'])
+        self.fs.mds_asok(['config', 'set', 'mds_heartbeat_grace', '1'])
+        self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
+        try:
+            mons = json.loads(self.fs.mon_manager.raw_cluster_cmd('mon', 'dump', '-f', 'json'))['mons']
+        except:
+            self.assertTrue(False, "Error fetching monitors")
+
+        #Freeze all monitors
+        for mon in mons:
+            mon_name = mon['name']
+            log.info(f'Sending STOP to mon {mon_name}')
+            self.fs.mon_manager.signal_mon(mon_name, 19)
+
+        time.sleep(10) #wait for 10 seconds to get the in-memory logs dumped
+
+        #Unfreeze all monitors
+        for mon in mons:
+            mon_name = mon['name']
+            log.info(f'Sending CONT to mon {mon_name}')
+            self.fs.mon_manager.signal_mon(mon_name, 18)
+
+        missed_internal_heartbeat_log = \
+        "Skipping beacon heartbeat to monitors \(last acked .+s ago\); MDS internal heartbeat is not healthy!"
+        search_range = "/^--- begin dump of recent events ---$/,/^--- end dump of recent events ---$/p"
+        for info in self.fs.status().get_ranks(self.fs.id):
+            mds_id = info['name']
+            try:
+                remote = self.fs.mon_manager.find_remote('mds', mds_id)
+                out = remote.run(args=["sed",
+                                       "-n",
+                                       "{0}".format(search_range),
+                                       f"/var/log/ceph/{self.mount_a.cluster_name}-mds.{mds_id}.log"],
+                                 stdout=StringIO(), timeout=30)
+            except:
+                continue #continue with the next info
+            if out.stdout and re.search(missed_internal_heartbeat_log, out.stdout.getvalue().strip()):
+                return
+        self.assertTrue(False, "Failed to dump in-memory logs during missed internal heartbeat")
 
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1

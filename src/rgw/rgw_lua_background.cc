@@ -1,3 +1,4 @@
+#include "rgw_sal_rados.h"
 #include "rgw_lua_background.h"
 #include "rgw_lua.h"
 #include "rgw_lua_utils.h"
@@ -61,7 +62,7 @@ Background::Background(rgw::sal::Store* store,
       int execute_interval) :
     execute_interval(execute_interval),
     dp(cct, dout_subsys, "lua background: "),
-    store(store),
+    lua_manager(store->get_lua_manager()),
     cct(cct),
     luarocks_path(luarocks_path) {}
 
@@ -95,8 +96,8 @@ void Background::pause() {
   cond.notify_all();
 }
 
-void Background::resume(rgw::sal::Store* _store) {
-  store = _store;
+void Background::resume(rgw::sal::Store* store) {
+  lua_manager = store->get_lua_manager();
   paused = false;
   cond.notify_all();
 }
@@ -107,7 +108,7 @@ int Background::read_script() {
     return -EAGAIN;
   }
   std::string tenant;
-  return rgw::lua::read_script(&dp, store, tenant, null_yield, rgw::lua::context::background, rgw_script);
+  return rgw::lua::read_script(&dp, lua_manager.get(), tenant, null_yield, rgw::lua::context::background, rgw_script);
 }
 
 const BackgroundMapValue Background::empty_table_value;

@@ -205,12 +205,21 @@
           <span *ngIf="selectionType">
             {{ selectedCount }} <ng-container i18n="X selected">selected</ng-container> /
           </span>
-          <span *ngIf="rowCount != data?.length">
-            {{ rowCount }} <ng-container i18n="X found">found</ng-container> /
-          </span>
-          <span>
+
+          <!-- rowCount might have different semantics with or without serverSide.
+            We treat serverSide (backend-driven tables) as a specific case.
+          -->
+          <span *ngIf="!serverSide else serverSideTpl">
+            <span *ngIf="rowCount != data?.length">
+              {{ rowCount }} <ng-container i18n="X found">found</ng-container> /
+            </span>
             {{ data?.length || 0 }} <ng-container i18n="X total">total</ng-container>
           </span>
+
+          <ng-template #serverSideTpl>
+            {{ data?.length || 0 }} <ng-container i18n="X found">found</ng-container> /
+            {{ rowCount }} <ng-container i18n="X total">total</ng-container>
+          </ng-template>
         </div>
         <datatable-pager [pagerLeftArrowIcon]="paginationClasses.pagerPrevious"
                          [pagerRightArrowIcon]="paginationClasses.pagerNext"

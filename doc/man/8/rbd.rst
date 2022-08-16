@@ -830,7 +830,8 @@ Per mapping (block device) `rbd device map` options:
 * alloc_size - Minimum allocation unit of the underlying OSD object store
   backend (since 5.1, default is 64K bytes).  This is used to round off and
   drop discards that are too small.  For bluestore, the recommended setting is
-  bluestore_min_alloc_size (typically 64K for hard disk drives and 16K for
+  bluestore_min_alloc_size (currently set to 4K for all types of drives,
+  previously used to be set to 64K for hard disk drives and 16K for
   solid-state drives).  For filestore with filestore_punch_hole = false, the
   recommended setting is image object size (typically 4M).
 

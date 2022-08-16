@@ -4357,38 +4357,16 @@ int main(int argc, const char **argv)
     bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
     bool need_gc = (gc_ops_list.find(opt_cmd) != gc_ops_list.end()) && !bypass_gc;
 
-    std::string rgw_store = "rados";
-    // Get the store backend
-    const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
-#ifdef WITH_RADOSGW_DBSTORE
-    if (config_store == "dbstore") {
-      rgw_store = "dbstore";
-    }
-#endif
-
-#ifdef WITH_RADOSGW_MOTR
-    if (config_store == "motr") {
-      rgw_store = "motr";
-    }
-#endif
-
-    // Get the filter
-    std::string rgw_filter = "none";
-    const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
-    if (config_filter == "base") {
-      rgw_filter = "base";
-    }
+    StoreManager::Config cfg = StoreManager::get_config(true, g_ceph_context);
 
     if (raw_storage_op) {
       store = StoreManager::get_raw_storage(dpp(),
 					    g_ceph_context,
-					    rgw_store,
-					    rgw_filter);
+					    cfg);
     } else {
       store = StoreManager::get_storage(dpp(),
 					g_ceph_context,
-					rgw_store,
-					rgw_filter,
+					cfg,
 					false,
 					false,
 					false,
@@ -10424,7 +10402,8 @@ next:
       cerr << "ERROR: cannot specify tenant in background context" << std::endl;
       return EINVAL;
     }
-    rc = rgw::lua::write_script(dpp(), store, tenant, null_yield, script_ctx, script);
+    auto lua_manager = store->get_lua_manager();
+    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
       return -rc;
@@ -10441,8 +10420,9 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest, background" << std::endl;
       return EINVAL;
     }
+    auto lua_manager = store->get_lua_manager();
     std::string script;
-    const auto rc = rgw::lua::read_script(dpp(), store, tenant, null_yield, script_ctx, script);
+    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
     if (rc == -ENOENT) {
       std::cout << "no script exists for context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
@@ -10464,7 +10444,8 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest, background" << std::endl;
       return EINVAL;
     }
-    const auto rc = rgw::lua::delete_script(dpp(), store, tenant, null_yield, script_ctx);
+    auto lua_manager = store->get_lua_manager();
+    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
       return -rc;

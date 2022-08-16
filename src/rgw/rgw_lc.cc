@@ -2480,20 +2480,23 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
 }
 
 int RGWLC::remove_bucket_config(rgw::sal::Bucket* bucket,
-                                const rgw::sal::Attrs& bucket_attrs)
+                                const rgw::sal::Attrs& bucket_attrs,
+				bool merge_attrs)
 {
   rgw::sal::Attrs attrs = bucket_attrs;
-  attrs.erase(RGW_ATTR_LC);
-  int ret = bucket->merge_and_store_attrs(this, attrs, null_yield);
-
   rgw_bucket& b = bucket->get_key();
+  int ret{0};
 
-  if (ret < 0) {
-    ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
-        << b.name << " returned err=" << ret << dendl;
-    return ret;
+  if (merge_attrs) {
+    attrs.erase(RGW_ATTR_LC);
+    ret = bucket->merge_and_store_attrs(this, attrs, null_yield);
+
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
+			 << b.name << " returned err=" << ret << dendl;
+      return ret;
+    }
   }
-
 
   ret = guard_lc_modify(this, store, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,

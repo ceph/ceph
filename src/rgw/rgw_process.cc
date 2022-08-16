@@ -273,8 +273,9 @@ int process_request(rgw::sal::Store* const store,
                     string* user,
                     ceph::coarse_real_clock::duration* latency,
                     std::shared_ptr<RateLimiter> ratelimit,
-                    int* http_ret,
-                    rgw::lua::Background* lua_background)
+                    rgw::lua::Background* lua_background,
+                    std::unique_ptr<rgw::sal::LuaManager>& lua_manager,
+                    int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
   dout(1) << "====== starting new request req=" << hex << req << dec
@@ -330,7 +331,7 @@ int process_request(rgw::sal::Store* const store,
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     std::string script;
-    auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
+    auto rc = rgw::lua::read_script(s, lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
@@ -401,19 +402,21 @@ int process_request(rgw::sal::Store* const store,
   }
 
 done:
-  if (op && s->trace) {
-    s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
-    if (s->user) {
-      s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
-    }
-    if (s->bucket) {
-      s->trace->SetAttribute(tracing::rgw::BUCKET_NAME, s->bucket->get_name());
-    }
-    if (s->object) {
-      s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
+  if (op) {
+    if (s->trace) {
+      s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
+      if (!rgw::sal::User::empty(s->user)) {
+        s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
+      }
+      if (!rgw::sal::Bucket::empty(s->bucket)) {
+        s->trace->SetAttribute(tracing::rgw::BUCKET_NAME, s->bucket->get_name());
+      }
+      if (!rgw::sal::Object::empty(s->object)) {
+        s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
+      }
     }
     std::string script;
-    auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
+    auto rc = rgw::lua::read_script(s, lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
