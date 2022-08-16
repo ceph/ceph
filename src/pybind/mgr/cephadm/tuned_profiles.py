@@ -34,6 +34,7 @@ class TunedProfileUtils():
                     'crash', placement=profile.placement),
                 hosts=self.mgr.cache.get_schedulable_hosts(),
                 unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
+                draining_hosts=self.mgr.cache.get_draining_hosts(),
                 daemons=[],
                 networks=self.mgr.cache.networks,
             )
