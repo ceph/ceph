@@ -34,10 +34,12 @@ if(WITH_GRAFANA)
       add_tox_test(grafana-lint TOX_ENVS lint)
       add_tox_test(jsonnet-lint TOX_ENVS jsonnet-lint)
       set_property(TEST run-tox-jsonnet-lint PROPERTY
-          FIXTURES_REQUIRED venv-for-jsonnet-lint jsonnet)
+          FIXTURES_REQUIRED venv-for-jsonnet-lint jsonnet
+          ENVIRONMENT "PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{PATH}")
       add_tox_test(jsonnet-check TOX_ENVS jsonnet-check)
       set_property(TEST run-tox-jsonnet-check PROPERTY
-          FIXTURES_REQUIRED venv-for-jsonnet-check jsonnet jsonnet-bundler)
+          FIXTURES_REQUIRED venv-for-jsonnet-check jsonnet jsonnet-bundler
+          ENVIRONMENT "PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{PATH}")
 
       add_tox_test(alerts-check TOX_ENVS alerts-check)
       add_tox_test(alerts-lint TOX_ENVS alerts-lint)
