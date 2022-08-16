@@ -812,7 +812,7 @@ void Cache::invalidate_extent(
 {
   if (!extent.may_conflict()) {
     assert(extent.transactions.empty());
-    extent.state = CachedExtent::extent_state_t::INVALID;
+    extent.set_invalid(t);
     return;
   }
 
@@ -829,7 +829,7 @@ void Cache::invalidate_extent(
       mark_transaction_conflicted(*i.t, extent);
     }
   }
-  extent.state = CachedExtent::extent_state_t::INVALID;
+  extent.set_invalid(t);
 }
 
 void Cache::mark_transaction_conflicted(

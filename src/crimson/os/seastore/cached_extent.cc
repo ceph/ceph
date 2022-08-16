@@ -90,6 +90,14 @@ std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
   return print_detail_l(out);
 }
 
+void CachedExtent::set_invalid(Transaction &t) {
+  state = extent_state_t::INVALID;
+  if (trans_view_hook.is_linked()) {
+    trans_view_hook.unlink();
+  }
+  on_invalidated(t);
+}
+
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs)
 {
   return out << "LBAPin(" << rhs.get_key() << "~" << rhs.get_length()

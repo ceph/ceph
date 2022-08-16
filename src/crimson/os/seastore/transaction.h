@@ -117,13 +117,13 @@ public:
     if (ref->is_exist_clean() ||
 	ref->is_exist_mutation_pending()) {
       existing_block_stats.dec(ref);
-      ref->state = CachedExtent::extent_state_t::INVALID;
+      ref->set_invalid(*this);
       write_set.erase(*ref);
     } else if (ref->is_initial_pending()) {
-      ref->state = CachedExtent::extent_state_t::INVALID;
+      ref->set_invalid(*this);
       write_set.erase(*ref);
     } else if (ref->is_mutation_pending()) {
-      ref->state = CachedExtent::extent_state_t::INVALID;
+      ref->set_invalid(*this);
       write_set.erase(*ref);
       assert(ref->prior_instance);
       retired_set.insert(ref->prior_instance);
@@ -348,7 +348,7 @@ public:
 
   void invalidate_clear_write_set() {
     for (auto &&i: write_set) {
-      i.state = CachedExtent::extent_state_t::INVALID;
+      i.set_invalid(*this);
     }
     write_set.clear();
   }
