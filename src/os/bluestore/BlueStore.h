@@ -1261,11 +1261,13 @@ public:
       BlueStore::Onode* on,
       const bufferlist& v,
       ExtentMap::ExtentDecoder& dencoder);
-    static Onode* decode(
+
+    static Onode* create_decode(
       CollectionRef c,
       const ghobject_t& oid,
       const std::string& key,
-      const ceph::buffer::list& v);
+      const ceph::buffer::list& v,
+      bool allow_empty = false);
 
     void dump(ceph::Formatter* f) const;
 
@@ -1319,7 +1321,8 @@ public:
 	  get_blob().calc_offset(0, nullptr);
     }
 #endif
-    
+private:
+    void _decode(const ceph::buffer::list& v);
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
@@ -1487,7 +1490,7 @@ public:
       clear();
     }
 
-    OnodeRef add(const ghobject_t& oid, OnodeRef& o);
+    OnodeRef add_onode(const ghobject_t& oid, OnodeRef& o);
     OnodeRef lookup(const ghobject_t& o);
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
