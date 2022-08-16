@@ -198,7 +198,7 @@ class SubvolumeV2(SubvolumeV1):
 
             if isinstance(e, MetadataMgrException):
                 log.error("metadata manager exception: {0}".format(e))
-                e = VolumeException(-errno.EINVAL, "exception in subvolume metadata")
+                e = VolumeException(-errno.EINVAL, f"exception in subvolume metadata: {os.strerror(-e.args[0])}")
             elif isinstance(e, cephfs.Error):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
@@ -252,7 +252,7 @@ class SubvolumeV2(SubvolumeV1):
 
             if isinstance(e, MetadataMgrException):
                 log.error("metadata manager exception: {0}".format(e))
-                e = VolumeException(-errno.EINVAL, "exception in subvolume metadata")
+                e = VolumeException(-errno.EINVAL, f"exception in subvolume metadata: {os.strerror(-e.args[0])}")
             elif isinstance(e, cephfs.Error):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
