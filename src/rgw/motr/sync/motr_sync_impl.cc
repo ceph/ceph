@@ -89,13 +89,16 @@ int MotrLock::unlock(const std::string& lock_name,
 int MotrKVLockProvider::initialize(const DoutPrefixProvider* dpp,
                                    rgw::sal::MotrStore* _s,
                                    const std::string& lock_index_name) {
+  int rc = 0;
   _dpp = dpp;
   _store = _s;
   _lock_index = lock_index_name;
   if (!_store || lock_index_name.empty()) {
     return -EINVAL;
   }
-  return _store->create_motr_idx_by_name(lock_index_name);
+  rc = _store->create_motr_idx_by_name(lock_index_name);
+  if (rc == -EEXIST) rc = 0;
+  return rc;  
 }
 
 int MotrLock::check_lock(const std::string& lock_name,
@@ -193,7 +196,9 @@ std::shared_ptr<MotrSync> g_motr_lock;
 std::shared_ptr<MotrSync>& get_lock_instance(
     std::unique_ptr<MotrLockProvider>& lock_provider) {
   static bool initialize = false;
-  if (!initialize && !lock_provider) {
+  std::mutex lock;
+  std::lock_guard l(lock);
+  if (!initialize && lock_provider) {
     g_motr_lock = std::make_shared<MotrLock>();
     g_motr_lock->initialize(lock_provider);
     initialize = true;

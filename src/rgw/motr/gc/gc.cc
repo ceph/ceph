@@ -136,6 +136,7 @@ int MotrGC::initialize() {
       ldout(cct, 0) << "ERROR: GC index creation failed with rc: " << rc << dendl;
       break;
     }
+    if (rc == -EEXIST) rc = 0;
     index_names.push_back(iname);
   }
   // Get the max count of objects to be deleted in 1 processing cycle
@@ -356,19 +357,26 @@ int MotrGC::get_locked_gc_index(uint32_t& rand_ind,
                                 uint32_t& lease_duration) {
   int rc = -1;
   uint32_t new_index = 0;
+  std::shared_ptr<MotrSync>& gc_lock = get_lock_instance();
+
   // attempt to lock GC starting with passed in index
   for (uint32_t ind = 0; ind < max_indices; ind++) {
     new_index = (ind + rand_ind) % max_indices;
-    // try locking index
-    std::shared_ptr<MotrSync>& gc_lock = get_lock_instance();
     if (gc_lock) {
       std::chrono::milliseconds lease_timeout{lease_duration * 1000};
       auto tv = ceph::to_timeval(lease_timeout);
       utime_t gc_lease_duration;
       gc_lease_duration.set_from_timeval(&tv);
       std::string iname = index_names[new_index];
+      // try locking index
       rc = gc_lock->lock(iname, MotrLockType::EXCLUSIVE,
                          gc_lease_duration, caller_id);
+      if (rc < 0) {
+        ldout(cct, 10) << "Failed to acquire lock: GC Queue =["<< iname << "]" 
+          << "caller_id =[" << caller_id << "]" << "rc = " << rc << dendl;
+      } else {
+        ldout(cct, 10) << "Acquired lock for GC Queue =["<<  iname << "]" << dendl;
+      }
     }
     if (rc == 0)
       break;
