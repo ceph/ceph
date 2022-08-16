@@ -310,9 +310,7 @@ public:
   void check_recovery_sources(const OSDMapRef& newmap) final {
     // Not needed yet
   }
-  void check_blocklisted_watchers() final {
-    // Not needed yet
-  }
+  void check_blocklisted_watchers() final;
   void clear_primary_state() final {
     // Not needed yet
   }
