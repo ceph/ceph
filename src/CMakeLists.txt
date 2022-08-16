@@ -115,8 +115,15 @@ if(COMPILER_SUPPORTS_REDUNDANT_MOVE)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wredundant-move>)
 endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 11) # require >= gcc-11
-    message(FATAL_ERROR "C++20 support requires a minimum GCC version of 11.")
+  if(WIN32)
+    # require >= gcc-10 for compiling the windows port
+    set(minimum_gcc_version 10)
+  else()
+    # require >= gcc-11 for compiling the whole tree
+    set(minimum_gcc_version 11)
+  endif()
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS minimum_gcc_version)
+    message(FATAL_ERROR "C++20 support requires a minimum GCC version of ${minimum_gcc_version}.")
   endif()
   if(MINGW)
     # The MINGW headers are missing some "const" qualifiers.
