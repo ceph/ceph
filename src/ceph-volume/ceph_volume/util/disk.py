@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import stat
+import time
 from ceph_volume import process
 from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
@@ -134,8 +135,16 @@ def remove_partition(device):
 
     :param device: A ``Device()`` object
     """
-    udev_info = udevadm_property(device.path)
-    partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
+    # Sometimes there's a race condition that makes 'ID_PART_ENTRY_NUMBER' be not present
+    # in the output of `udevadm info --query=property`.
+    # Probably not ideal and not the best fix but this allows to get around that issue.
+    # The idea is to make it retry multiple times before actually failing.
+    for i in range(10):
+        udev_info = udevadm_property(device.path)
+        partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
+        if partition_number:
+            break
+        time.sleep(0.2)
     if not partition_number:
         raise RuntimeError('Unable to detect the partition number for device: %s' % device.path)
 
