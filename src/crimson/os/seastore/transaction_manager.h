@@ -209,8 +209,7 @@ public:
    *
    * Read extent of type T at offset~length
    */
-  using read_extent_iertr = get_pin_iertr::extend_ertr<
-    SegmentManager::read_ertr>;
+  using read_extent_iertr = get_pin_iertr;
   template <typename T>
   using read_extent_ret = read_extent_iertr::future<
     TCachedExtentRef<T>>;
