@@ -78,7 +78,8 @@ class IngressService(CephService):
         password = self.mgr.get_store(pw_key)
         if password is None:
             if not spec.monitor_password:
-                password = ''.join(random.choice(string.ascii_lowercase) for _ in range(self.MAX_KEEPALIVED_PASS_LEN))
+                password = ''.join(random.choice(string.ascii_lowercase)
+                                   for _ in range(self.MAX_KEEPALIVED_PASS_LEN))
                 self.mgr.set_store(pw_key, password)
         else:
             if spec.monitor_password:
@@ -177,7 +178,8 @@ class IngressService(CephService):
         password = self.mgr.get_store(pw_key)
         if password is None:
             if not spec.keepalived_password:
-                password = ''.join(random.choice(string.ascii_lowercase) for _ in range(self.MAX_KEEPALIVED_PASS_LEN))
+                password = ''.join(random.choice(string.ascii_lowercase)
+                                   for _ in range(self.MAX_KEEPALIVED_PASS_LEN))
                 self.mgr.set_store(pw_key, password)
         else:
             if spec.keepalived_password:
