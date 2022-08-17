@@ -84,6 +84,7 @@ set(common_srcs
   page.cc
   perf_counters.cc
   perf_counters_collection.cc
+  perf_counters_key.cc
   perf_histogram.cc
   pick_address.cc
   random_string.cc
