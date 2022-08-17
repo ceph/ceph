@@ -1061,9 +1061,11 @@ public:
   struct backref_extent_entry_t {
     backref_extent_entry_t(
       paddr_t paddr,
+      paddr_t key,
       extent_types_t type)
-      : paddr(paddr), type(type) {}
+      : paddr(paddr), key(key), type(type) {}
     paddr_t paddr = P_ADDR_NULL;
+    paddr_t key = P_ADDR_NULL;
     extent_types_t type = extent_types_t::ROOT;
     struct cmp_t {
       using is_transparent = paddr_t;
@@ -1155,9 +1157,12 @@ private:
       backref_extent_entry_t::cmp_t>;
   backref_extent_entry_query_set_t backref_extents;
 
-  void add_backref_extent(paddr_t paddr, extent_types_t type) {
+  void add_backref_extent(
+    paddr_t paddr,
+    paddr_t key,
+    extent_types_t type) {
     assert(!paddr.is_relative());
-    auto [iter, inserted] = backref_extents.emplace(paddr, type);
+    auto [iter, inserted] = backref_extents.emplace(paddr, key, type);
     boost::ignore_unused(inserted);
     assert(inserted);
   }
