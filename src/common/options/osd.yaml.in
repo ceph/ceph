@@ -457,6 +457,23 @@ options:
   long_desc: Waiting too long for an object in the scrubbed chunk to be unlocked.
   default: 120
   with_legacy: true
+# timely updates to the 'pg dump' output, esp. re scrub scheduling
+- name: osd_stats_update_period_scrubbing
+  type: int
+  level: advanced
+  desc: Stats update period (seconds) when scrubbing
+  long_desc: A PG actively scrubbing (or blocked while scrubbing) publishes its
+    stats (inc. scrub/block duration) every this many seconds.
+  default: 15
+  with_legacy: false
+- name: osd_stats_update_period_not_scrubbing
+  type: int
+  level: advanced
+  desc: Stats update period (seconds) when not scrubbing
+  long_desc: A PG we are a primary of, publishes its
+    stats (inc. scrub/block duration) every this many seconds.
+  default: 120
+  with_legacy: false
 # where rados plugins are stored
 - name: osd_class_dir
   type: str

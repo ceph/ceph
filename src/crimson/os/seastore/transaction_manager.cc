@@ -521,22 +521,27 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   }
 }
 
-TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_live(
+TransactionManager::get_extents_if_live_ret
+TransactionManager::get_extents_if_live(
   Transaction &t,
   extent_types_t type,
-  paddr_t addr,
+  paddr_t paddr,
   laddr_t laddr,
   seastore_off_t len)
 {
   LOG_PREFIX(TransactionManager::get_extent_if_live);
-  TRACET("{} {}~{} {}", t, type, laddr, len, addr);
+  TRACET("{} {}~{} {}", t, type, laddr, len, paddr);
 
-  return cache->get_extent_if_cached(t, addr, type
-  ).si_then([this, FNAME, &t, type, addr, laddr, len](auto extent)
+  // This only works with segments to check if alive,
+  // as parallel transactions may split the extent at the same time.
+  ceph_assert(paddr.get_addr_type() == paddr_types_t::SEGMENT);
+
+  return cache->get_extent_if_cached(t, paddr, type
+  ).si_then([=, this, &t](auto extent)
 	    -> get_extents_if_live_ret {
     if (extent && extent->get_length() == (extent_len_t)len) {
       DEBUGT("{} {}~{} {} is live in cache -- {}",
-             t, type, laddr, len, addr, *extent);
+             t, type, laddr, len, paddr, *extent);
       std::list<CachedExtentRef> res;
       res.emplace_back(std::move(extent));
       return get_extents_if_live_ret(
@@ -552,64 +557,58 @@ TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_l
       ).si_then([=, this, &t](lba_pin_list_t pin_list) {
 	return seastar::do_with(
 	  std::list<CachedExtentRef>(),
-	  std::move(pin_list),
-	  [=, this, &t](std::list<CachedExtentRef> &list, lba_pin_list_t &pin_list) {
-	    auto &seg_addr = addr.as_seg_paddr();
-	    auto seg_addr_id = seg_addr.get_segment_id();
-	    return trans_intr::parallel_for_each(pin_list, [=, this, &seg_addr, &list, &t](LBAPinRef &pin) ->
-						 Cache::get_extent_iertr::future<> {
-	      auto pin_laddr = pin->get_key();
-	      auto pin_paddr = pin->get_val();
-	      auto pin_len = pin->get_length();
-
-	      auto &pin_seg_addr = pin_paddr.as_seg_paddr();
-	      auto pin_seg_addr_id = pin_seg_addr.get_segment_id();
-
-	      if (pin_seg_addr_id != seg_addr_id ||
-		  pin_paddr < seg_addr ||
-		  pin_paddr.add_offset(pin_len) > seg_addr.add_offset(len)) {
-		return seastar::now();
-	      }
-	      return cache->get_extent_by_type(
-	        t, type, pin_paddr, pin_laddr, pin_len,
-		[this, pin=std::move(pin)](CachedExtent &extent) mutable {
-		  auto lref = extent.cast<LogicalCachedExtent>();
-		  assert(!lref->has_pin());
-		  assert(!lref->has_been_invalidated());
-		  assert(!pin->has_been_invalidated());
-		  lref->set_pin(std::move(pin));
-		  lba_manager->add_pin(lref->get_pin());
-		}
-	      ).si_then([=, &list](auto ret) {
-		list.emplace_back(std::move(ret));
-		return seastar::now();
-	      });
-	    }).si_then([&list] {
-	      return get_extents_if_live_ret(
-	        interruptible::ready_future_marker{},
-		std::move(list));
-	    });
-	  });
+	  [=, this, &t, pin_list=std::move(pin_list)](
+            std::list<CachedExtentRef> &list) mutable
+        {
+          auto paddr_seg_id = paddr.as_seg_paddr().get_segment_id();
+          return trans_intr::parallel_for_each(
+            std::move(pin_list),
+            [=, this, &list, &t](
+              LBAPinRef &pin) -> Cache::get_extent_iertr::future<>
+          {
+            auto pin_paddr = pin->get_val();
+            auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
+            auto pin_paddr_seg_id = pin_seg_paddr.get_segment_id();
+            auto pin_len = pin->get_length();
+            if (pin_paddr_seg_id != paddr_seg_id) {
+              return seastar::now();
+            }
+            // Only extent split can happen during the lookup
+            ceph_assert(pin_seg_paddr >= paddr &&
+                        pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
+            return pin_to_extent_by_type(t, std::move(pin), type
+            ).si_then([&list](auto ret) {
+              list.emplace_back(std::move(ret));
+              return seastar::now();
+            });
+          }).si_then([&list] {
+            return get_extents_if_live_ret(
+              interruptible::ready_future_marker{},
+              std::move(list));
+          });
+        });
       }).handle_error_interruptible(crimson::ct_error::enoent::handle([] {
-	return std::list<CachedExtentRef>();
+        return get_extents_if_live_ret(
+            interruptible::ready_future_marker{},
+            std::list<CachedExtentRef>());
       }), crimson::ct_error::pass_further_all{});
     } else {
       return lba_manager->get_physical_extent_if_live(
 	t,
 	type,
-	addr,
+	paddr,
 	laddr,
 	len
       ).si_then([=, &t](auto ret) {
+        std::list<CachedExtentRef> res;
         if (ret) {
           DEBUGT("{} {}~{} {} is live as physical extent -- {}",
-                 t, type, laddr, len, addr, *ret);
+                 t, type, laddr, len, paddr, *ret);
+          res.emplace_back(std::move(ret));
         } else {
           DEBUGT("{} {}~{} {} is not live as physical extent",
-                 t, type, laddr, len, addr);
+                 t, type, laddr, len, paddr);
         }
-	std::list<CachedExtentRef> res;
-	res.emplace_back(std::move(ret));
         return get_extents_if_live_ret(
 	  interruptible::ready_future_marker{},
 	  std::move(res));
