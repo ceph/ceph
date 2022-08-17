@@ -588,7 +588,9 @@ TransactionManager::get_extents_if_live(
           });
         });
       }).handle_error_interruptible(crimson::ct_error::enoent::handle([] {
-	return std::list<CachedExtentRef>();
+        return get_extents_if_live_ret(
+            interruptible::ready_future_marker{},
+            std::list<CachedExtentRef>());
       }), crimson::ct_error::pass_further_all{});
     } else {
       return lba_manager->get_physical_extent_if_live(
