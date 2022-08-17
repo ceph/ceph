@@ -135,8 +135,7 @@ public:
    *
    * Get extent mapped at pin.
    */
-  using pin_to_extent_iertr = get_pin_iertr::extend_ertr<
-    SegmentManager::read_ertr>;
+  using pin_to_extent_iertr = base_iertr;
   template <typename T>
   using pin_to_extent_ret = pin_to_extent_iertr::future<
     TCachedExtentRef<T>>;
@@ -146,6 +145,7 @@ public:
     LBAPinRef pin) {
     LOG_PREFIX(TransactionManager::pin_to_extent);
     SUBTRACET(seastore_tm, "getting extent {}", t, *pin);
+    static_assert(is_logical_type(T::TYPE));
     using ret = pin_to_extent_ret<T>;
     auto &pref = *pin;
     return cache->get_extent<T>(
@@ -164,6 +164,43 @@ public:
       return pin_to_extent_ret<T>(
 	interruptible::ready_future_marker{},
 	std::move(ref));
+    });
+  }
+
+  /**
+   * pin_to_extent_by_type
+   *
+   * Get extent mapped at pin.
+   */
+  using pin_to_extent_by_type_ret = pin_to_extent_iertr::future<
+    LogicalCachedExtentRef>;
+  pin_to_extent_by_type_ret pin_to_extent_by_type(
+      Transaction &t,
+      LBAPinRef pin,
+      extent_types_t type) {
+    LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
+    SUBTRACET(seastore_tm, "getting extent {} type {}", t, *pin, type);
+    assert(is_logical_type(type));
+    auto &pref = *pin;
+    return cache->get_extent_by_type(
+      t,
+      type,
+      pref.get_val(),
+      pref.get_key(),
+      pref.get_length(),
+      [this, pin=std::move(pin)](CachedExtent &extent) mutable {
+        auto &lextent = static_cast<LogicalCachedExtent&>(extent);
+        assert(!lextent.has_pin());
+        assert(!lextent.has_been_invalidated());
+        assert(!pin->has_been_invalidated());
+        lextent.set_pin(std::move(pin));
+        lba_manager->add_pin(lextent.get_pin());
+      }
+    ).si_then([FNAME, &t](auto ref) {
+      SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
+      return pin_to_extent_by_type_ret(
+	interruptible::ready_future_marker{},
+	std::move(ref->template cast<LogicalCachedExtent>()));
     });
   }
 
@@ -460,7 +497,7 @@ public:
   get_extents_if_live_ret get_extents_if_live(
     Transaction &t,
     extent_types_t type,
-    paddr_t addr,
+    paddr_t paddr,
     laddr_t laddr,
     seastore_off_t len) final;
 

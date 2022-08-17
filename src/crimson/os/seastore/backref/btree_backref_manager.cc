@@ -505,14 +505,6 @@ BtreeBackrefManager::get_cached_backref_entries_in_range(
   return cache.get_backref_entries_in_range(start, end);
 }
 
-Cache::backref_extent_entry_query_set_t
-BtreeBackrefManager::get_cached_backref_extents_in_range(
-  paddr_t start,
-  paddr_t end)
-{
-  return cache.get_backref_extents_in_range(start, end);
-}
-
 void BtreeBackrefManager::cache_new_backref_extent(
   paddr_t paddr,
   extent_types_t type)
@@ -520,27 +512,34 @@ void BtreeBackrefManager::cache_new_backref_extent(
   return cache.add_backref_extent(paddr, type);
 }
 
-BtreeBackrefManager::retrieve_backref_extents_ret
-BtreeBackrefManager::retrieve_backref_extents(
+BtreeBackrefManager::retrieve_backref_extents_in_range_ret
+BtreeBackrefManager::retrieve_backref_extents_in_range(
   Transaction &t,
-  Cache::backref_extent_entry_query_set_t &&backref_extents,
-  std::vector<CachedExtentRef> &extents)
+  paddr_t start,
+  paddr_t end)
 {
-  return trans_intr::parallel_for_each(
-    backref_extents,
-    [this, &extents, &t](auto &ent) {
-    // only the gc fiber which is single can rewrite backref extents,
-    // so it must be alive
-    assert(is_backref_node(ent.type));
-    LOG_PREFIX(BtreeBackrefManager::retrieve_backref_extents);
-    DEBUGT("getting backref extent of type {} at {}",
-      t,
-      ent.type,
-      ent.paddr);
-    return cache.get_extent_by_type(
-      t, ent.type, ent.paddr, L_ADDR_NULL, BACKREF_NODE_SIZE
-    ).si_then([&extents](auto ext) {
-      extents.emplace_back(std::move(ext));
+  return seastar::do_with(
+      std::vector<CachedExtentRef>(),
+      [this, &t, start, end](auto &extents) {
+    auto backref_extents = cache.get_backref_extents_in_range(start, end);
+    return trans_intr::parallel_for_each(
+      backref_extents,
+      [this, &extents, &t](auto &ent) {
+      // only the gc fiber which is single can rewrite backref extents,
+      // so it must be alive
+      assert(is_backref_node(ent.type));
+      LOG_PREFIX(BtreeBackrefManager::retrieve_backref_extents_in_range);
+      DEBUGT("getting backref extent of type {} at {}",
+        t,
+        ent.type,
+        ent.paddr);
+      return cache.get_extent_by_type(
+        t, ent.type, ent.paddr, L_ADDR_NULL, BACKREF_NODE_SIZE
+      ).si_then([&extents](auto ext) {
+        extents.emplace_back(std::move(ext));
+      });
+    }).si_then([&extents] {
+      return std::move(extents);
     });
   });
 }

@@ -102,15 +102,11 @@ public:
     paddr_t start,
     paddr_t end) final;
 
-  Cache::backref_extent_entry_query_set_t
-  get_cached_backref_extents_in_range(
+  retrieve_backref_extents_in_range_ret
+  retrieve_backref_extents_in_range(
+    Transaction &t,
     paddr_t start,
     paddr_t end) final;
-
-  retrieve_backref_extents_ret retrieve_backref_extents(
-    Transaction &t,
-    Cache::backref_extent_entry_query_set_t &&backref_extents,
-    std::vector<CachedExtentRef> &extents) final;
 
   void cache_new_backref_extent(paddr_t paddr, extent_types_t type) final;
 
