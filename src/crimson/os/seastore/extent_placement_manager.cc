@@ -173,4 +173,47 @@ SegmentedOolWriter::alloc_write_ool_extents(
   });
 }
 
+void ExtentPlacementManager::set_async_cleaner(AsyncCleanerRef &&_cleaner)
+{
+  cleaner = std::move(_cleaner);
+  writer_refs.clear();
+
+  ceph_assert(RECLAIM_GENERATIONS > 0);
+  data_writers_by_gen.resize(RECLAIM_GENERATIONS, {});
+  for (reclaim_gen_t gen = 0; gen < RECLAIM_GENERATIONS; ++gen) {
+    writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+          data_category_t::DATA, gen, *cleaner,
+          cleaner->get_ool_segment_seq_allocator()));
+    data_writers_by_gen[gen] = writer_refs.back().get();
+  }
+
+  md_writers_by_gen.resize(RECLAIM_GENERATIONS - 1, {});
+  for (reclaim_gen_t gen = 1; gen < RECLAIM_GENERATIONS; ++gen) {
+    writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+          data_category_t::METADATA, gen, *cleaner,
+          cleaner->get_ool_segment_seq_allocator()));
+    md_writers_by_gen[gen - 1] = writer_refs.back().get();
+  }
+
+  for (auto *device : cleaner->get_segment_manager_group()
+                             ->get_segment_managers()) {
+    add_device(device);
+  }
+}
+
+void ExtentPlacementManager::set_primary_device(Device *device)
+{
+  ceph_assert(primary_device == nullptr);
+  primary_device = device;
+  if (device->get_device_type() == device_type_t::SEGMENTED) {
+    prefer_ool = false;
+    ceph_assert(devices_by_id[device->get_device_id()] == device);
+  } else {
+    // RBM device is not in the cleaner.
+    ceph_assert(device->get_device_type() == device_type_t::RANDOM_BLOCK);
+    prefer_ool = true;
+    add_device(primary_device);
+  }
+}
+
 }

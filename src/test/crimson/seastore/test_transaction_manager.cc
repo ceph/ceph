@@ -8,7 +8,6 @@
 #include "test/crimson/gtest_seastar.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
-#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
@@ -400,7 +399,7 @@ struct transaction_manager_test_t :
   }
 
   bool check_usage() {
-    return async_cleaner->check_usage();
+    return epm->check_usage();
   }
 
   void replay() {
@@ -576,7 +575,8 @@ struct transaction_manager_test_t :
 	"try_submit_transaction hit invalid error"
       }
     ).then([this](auto ret) {
-      return async_cleaner->run_until_halt().then([ret] { return ret; });
+      return epm->run_background_work_until_halt(
+      ).then([ret] { return ret; });
     }).get0();
 
     if (success) {
@@ -626,7 +626,7 @@ struct transaction_manager_test_t :
 	    });
 	});
     }).safe_then([this]() {
-      return async_cleaner->run_until_halt();
+      return epm->run_background_work_until_halt();
     }).handle_error(
       crimson::ct_error::assert_all{
 	"Invalid error in SeaStore::list_collections"

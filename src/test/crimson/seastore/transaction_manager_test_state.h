@@ -6,8 +6,8 @@
 #include <random>
 #include <boost/iterator/counting_iterator.hpp>
 
-#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
@@ -163,9 +163,8 @@ class TMTestState : public EphemeralTestState {
 protected:
   TransactionManagerRef tm;
   LBAManager *lba_manager;
-  BackrefManager *backref_manager;
   Cache* cache;
-  AsyncCleaner *async_cleaner;
+  ExtentPlacementManager *epm;
   uint64_t seq = 0;
 
   TMTestState() : EphemeralTestState(1) {}
@@ -185,14 +184,13 @@ protected:
     } else {
       tm = make_transaction_manager(segment_manager.get(), sec_devices, true);
     }
-    async_cleaner = tm->get_async_cleaner();
+    epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
-    backref_manager = tm->get_backref_manager();
     cache = tm->get_cache();
   }
 
   virtual void _destroy() override {
-    async_cleaner = nullptr;
+    epm = nullptr;
     lba_manager = nullptr;
     tm.reset();
   }
@@ -211,9 +209,9 @@ protected:
     ).handle_error(
       crimson::ct_error::assert_all{"Error in mount"}
     ).then([this] {
-      return async_cleaner->stop();
+      return epm->stop_gc();
     }).then([this] {
-      return async_cleaner->run_until_halt();
+      return epm->run_background_work_until_halt();
     });
   }
 
@@ -278,7 +276,7 @@ protected:
 
   void submit_transaction(TransactionRef t) {
     submit_transaction_fut(*t).unsafe_get0();
-    async_cleaner->run_until_halt().get0();
+    epm->run_background_work_until_halt().get0();
   }
 };
 

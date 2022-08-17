@@ -21,7 +21,6 @@
 #include "crimson/osd/exceptions.h"
 
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/lba_manager.h"
@@ -65,7 +64,6 @@ public:
   using base_iertr = Cache::base_iertr;
 
   TransactionManager(
-    AsyncCleanerRef async_cleaner,
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
@@ -620,7 +618,7 @@ public:
   }
 
   store_statfs_t store_stat() const {
-    return async_cleaner->stat();
+    return epm->get_stat();
   }
 
   ~TransactionManager();
@@ -628,7 +626,6 @@ public:
 private:
   friend class Transaction;
 
-  AsyncCleanerRef async_cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
@@ -643,8 +640,8 @@ private:
 
 public:
   // Testing interfaces
-  auto get_async_cleaner() {
-    return async_cleaner.get();
+  auto get_epm() {
+    return epm.get();
   }
 
   auto get_lba_manager() {
