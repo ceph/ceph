@@ -5602,10 +5602,7 @@ void BlueStore::_close_bdev()
   bdev = NULL;
 }
 
-int BlueStore::_open_fm(KeyValueDB::Transaction t,
-                        bool read_only,
-                        bool db_avail,
-                        bool fm_restore)
+int BlueStore::_create_fm(KeyValueDB::Transaction t, bool fm_restore)
 {
   int r;
 
@@ -5618,8 +5615,6 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
   bool can_have_null_fm = !is_db_rotational() &&
-                          !read_only &&
-                          db_avail &&
                           cct->_conf->bluestore_allocation_from_file &&
                           !bdev->is_smr();
 
@@ -5678,6 +5673,20 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
     if (can_have_null_fm) {
       commit_to_null_manager();
     }
+  }
+  return 0;
+}
+
+int BlueStore::_open_fm(bool read_only)
+{
+  int r;
+
+  dout(5) << __func__ << "::NCB::freelist_type=" << freelist_type << dendl;
+  ceph_assert(fm == NULL);
+
+  fm = FreelistManager::create(this, freelist_type, PREFIX_ALLOC);
+  ceph_assert(fm);
+  {
     r = fm->init(db, read_only,
       [&](const std::string& key, std::string* result) {
         return read_meta(key, result);
@@ -6384,7 +6393,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   if (r < 0)
     goto out_bdev;
 
-  r = _open_fm(nullptr, true, false);
+  r = _open_fm(true);
   if (r < 0)
     goto out_db;
 
@@ -7194,7 +7203,7 @@ int BlueStore::mkfs()
   ondisk_format = latest_ondisk_format;
   {
     KeyValueDB::Transaction t = db->get_transaction();
-    r = _open_fm(t, false, true);
+    r = _create_fm(t);
     if (r < 0)
       goto out_close_db;
     {
@@ -19646,9 +19655,9 @@ int BlueStore::reset_fm_for_restore()
   KeyValueDB::Transaction t = db->get_transaction();
   // call _open_fm() with fm_restore set to TRUE
   // this will mark the full device space as allocated (and not just the reserved space)
-  _open_fm(t, true, true, true);
+  _create_fm(t, true);
   if (fm == nullptr) {
-    derr << "Failed _open_fm()" << dendl;
+    derr << "Failed _create_fm()" << dendl;
     return -1;
   }
   db->submit_transaction_sync(t);
