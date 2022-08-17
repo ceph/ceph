@@ -391,7 +391,7 @@ public:
   explicit RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
     : auth_strategy(auth_strategy) {
   }
-  ~RGWHandler_REST_SWIFT() override = default;
+  virtual ~RGWHandler_REST_SWIFT() override = default;
 
   int validate_bucket_name(const std::string& bucket);
 

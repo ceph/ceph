@@ -20,13 +20,13 @@
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
+#include "rgw_rest_bucket.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
 #include "rgw_rest_admin.h"
 #include "rgw_rest_info.h"
 #include "rgw_rest_usage.h"
 #include "rgw_rest_user.h"
-#include "rgw_rest_bucket.h"
 #include "rgw_rest_metadata.h"
 #include "rgw_rest_log.h"
 #include "rgw_rest_config.h"
@@ -208,7 +208,7 @@ public:
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
-int main(int argc, const char **argv)
+int radosgw_Main(int argc, const char **argv)
 {
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.
@@ -749,3 +749,13 @@ int main(int argc, const char **argv)
 
   return 0;
 }
+
+extern "C" {
+
+int radosgw_main(int argc, const char** argv)
+{
+  return radosgw_Main(argc, argv);
+}
+
+} /* extern "C" */
+

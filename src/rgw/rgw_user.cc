@@ -2588,6 +2588,8 @@ public:
     svc.user = user_svc;
   }
 
+  ~RGWUserMetadataHandler() {}
+
   string get_type() override { return "user"; }
 
   int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {

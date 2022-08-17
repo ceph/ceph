@@ -41,6 +41,7 @@ public:
       from_meta(_oid);
     }
   }
+  ~RGWMPObj() {}
   void init(const std::string& _oid, const std::string& _upload_id) {
     init(_oid, _upload_id, _upload_id);
   }
@@ -114,7 +115,7 @@ class MultipartMetaFilter : public RGWAccessListFilter {
 public:
   MultipartMetaFilter() {}
 
-  virtual ~MultipartMetaFilter() override;
+  ~MultipartMetaFilter() override {}
 
   /**
    * @param name [in] The object name as it appears in the bucket index.
@@ -132,6 +133,8 @@ class RGWSI_Tier_RADOS : public RGWServiceInstance
 
 public:
   RGWSI_Tier_RADOS(CephContext *cct): RGWServiceInstance(cct) {}
+
+  ~RGWSI_Tier_RADOS() {}
 
   void init(RGWSI_Zone *_zone_svc) {
     zone_svc = _zone_svc;

@@ -12,7 +12,7 @@
 #include "rgw_metadata.h"
 
 
-class RGWObjVersionTracker;
+struct RGWObjVersionTracker;
 class RGWMetadataHandler;
 class RGWOTPMetadataHandler;
 class RGWSI_Zone;
@@ -21,7 +21,7 @@ class RGWSI_MetaBackend;
 
 class RGWOTPMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
 public:
-  virtual ~RGWOTPMetadataHandlerBase() {}
+  ~RGWOTPMetadataHandlerBase() {}
   virtual int init(RGWSI_Zone *zone,
 		   RGWSI_MetaBackend *_meta_be,
 		   RGWSI_OTP *_otp) = 0;

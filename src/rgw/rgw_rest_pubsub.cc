@@ -805,7 +805,7 @@ RGWOp* RGWHandler_REST_PSNotifs_S3::op_delete() {
 }
 
 RGWOp* RGWHandler_REST_PSNotifs_S3::create_get_op() {
-    return new RGWPSListNotifs_ObjStore_S3();
+  return new RGWPSListNotifs_ObjStore_S3();
 }
 
 RGWOp* RGWHandler_REST_PSNotifs_S3::create_put_op() {

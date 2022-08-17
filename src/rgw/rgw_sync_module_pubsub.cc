@@ -697,7 +697,7 @@ public:
                                       data_access(std::make_shared<RGWDataAccess>(sync_env->store)) {
     sub_conf->from_user_conf(sync_env->cct, user_sub_conf, sync_env->dpp);
   }
-  virtual ~PSSubscription() {
+  ~PSSubscription() {
     if (init_cr) {
       init_cr->put();
     }

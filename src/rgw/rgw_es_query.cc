@@ -149,7 +149,7 @@ public:
     *pnode = this;
     return true;
   }
-  virtual ~ESQueryNode_Bool() {
+  ~ESQueryNode_Bool() {
     delete first;
     delete second;
   }
@@ -261,7 +261,7 @@ protected:
 
 public:
   ESQueryNode_Op(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
-  ~ESQueryNode_Op() {
+  virtual ~ESQueryNode_Op() {
     delete val;
   }
   virtual bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
@@ -361,7 +361,7 @@ class ESQueryNode_Op_Nested : public ESQueryNode_Op_Nested_Parent {
 public:
   ESQueryNode_Op_Nested(ESQueryCompiler *compiler, const string& _name, ESQueryNode *_next) : ESQueryNode_Op_Nested_Parent(compiler),
                                                                                               name(_name), next(_next) {}
-  ~ESQueryNode_Op_Nested() {
+  virtual ~ESQueryNode_Op_Nested() {
     delete next;
   }
 

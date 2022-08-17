@@ -226,6 +226,12 @@ namespace rgw::sal {
     return ret;
   }
 
+  int DBUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider *dpp, optional_yield y)
+  {
+    *verified = false;
+    return 0;
+  }
+
   int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y)
   {
     int ret;
@@ -540,25 +546,14 @@ namespace rgw::sal {
     return *zonegroup;
   }
 
-  int DBZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
-  {
-    /* XXX: for now only one zonegroup supported */
-    ZoneGroup* group = new DBZoneGroup(store, std::make_unique<RGWZoneGroup>());
-    if (!group)
-      return -ENOMEM;
-
-    zg->reset(group);
-    return 0;
-  }
-
   const RGWZoneParams& DBZone::get_rgw_params()
   {
     return *zone_params;
   }
 
-  const rgw_zone_id& DBZone::get_id()
+  const std::string& DBZone::get_id()
   {
-    return cur_zone_id;
+    return zone_params->get_id();
   }
 
 
@@ -738,18 +733,6 @@ namespace rgw::sal {
     DB::Object op_target(store->getDB(),
         get_bucket()->get_info(), get_obj());
     return op_target.transition(dpp, placement_rule, mtime, olh_epoch);
-  }
-
-  int DBObject::transition_to_cloud(Bucket* bucket,
-			   rgw::sal::PlacementTier* tier,
-			   rgw_bucket_dir_entry& o,
-			   std::set<std::string>& cloud_targets,
-			   CephContext* cct,
-			   bool update_object,
-			   const DoutPrefixProvider* dpp,
-			   optional_yield y)
-  {
-    return 0;
   }
 
   bool DBObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)
@@ -1755,6 +1738,17 @@ namespace rgw::sal {
   std::string DBStore::zone_unique_trans_id(const uint64_t unique_num)
   {
     return "";
+  }
+
+  int DBStore::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
+  {
+    /* XXX: for now only one zonegroup supported */
+    ZoneGroup* group = new DBZoneGroup(this, std::make_unique<RGWZoneGroup>());
+    if (!group)
+      return -ENOMEM;
+
+    zg->reset(group);
+    return 0;
   }
 
   int DBStore::cluster_stat(RGWClusterStat& stats)

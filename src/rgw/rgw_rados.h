@@ -169,6 +169,8 @@ protected:
 public:
   RGWFetchObjFilter_Default() {}
 
+  virtual ~RGWFetchObjFilter_Default() {}
+
   int filter(CephContext *cct,
              const rgw_obj_key& source_key,
              const RGWBucketInfo& dest_bucket_info,

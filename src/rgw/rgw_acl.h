@@ -52,7 +52,7 @@ protected:
   int flags;
 public:
   ACLPermission() : flags(0) {}
-  ~ACLPermission() {}
+  virtual ~ACLPermission() {}
   uint32_t get_permissions() const { return flags; }
   void set_permissions(uint32_t perm) { flags = perm; }
 
@@ -107,7 +107,7 @@ class ACLGrantee
 {
 public:
   ACLGrantee() {}
-  ~ACLGrantee() {}
+  virtual ~ACLGrantee() {}
 };
 
 
@@ -402,7 +402,7 @@ protected:
 public:
   ACLOwner() {}
   ACLOwner(const rgw_user& _id) : id(_id) {}
-  ~ACLOwner() {}
+  virtual ~ACLOwner() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 2, bl);

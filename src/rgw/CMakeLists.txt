@@ -20,35 +20,7 @@ endfunction()
 
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
-set(librgw_common_srcs
-  services/svc_finisher.cc
-  services/svc_bi_rados.cc
-  services/svc_bilog_rados.cc
-  services/svc_bucket.cc
-  services/svc_bucket_sobj.cc
-  services/svc_bucket_sync_sobj.cc
-  services/svc_cls.cc
-  services/svc_config_key_rados.cc
-  services/svc_mdlog.cc
-  services/svc_meta.cc
-  services/svc_meta_be.cc
-  services/svc_meta_be_otp.cc
-  services/svc_meta_be_sobj.cc
-  services/svc_notify.cc
-  services/svc_otp.cc
-  services/svc_quota.cc
-  services/svc_sync_modules.cc
-  services/svc_rados.cc
-  services/svc_role_rados.cc
-  services/svc_sys_obj.cc
-  services/svc_sys_obj_cache.cc
-  services/svc_sys_obj_core.cc
-  services/svc_tier_rados.cc
-  services/svc_user.cc
-  services/svc_user_rados.cc
-  services/svc_zone.cc
-  services/svc_zone_utils.cc
-  rgw_service.cc
+set(rgw_common_srcs
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
@@ -58,134 +30,95 @@ set(librgw_common_srcs
   rgw_auth_s3.cc
   rgw_arn.cc
   rgw_basic_types.cc
-  rgw_bucket.cc
+  rgw_bucket_encryption.cc
   rgw_bucket_layout.cc
-  rgw_bucket_sync.cc
+  rgw_bucket_utils.cc
   rgw_cache.cc
-  rgw_d3n_datacache.cc
   rgw_common.cc
   rgw_compression.cc
-  rgw_etag_verifier.cc
+  rgw_coroutine.cc
   rgw_cors.cc
   rgw_cors_s3.cc
+  rgw_cr_rest.cc
+  rgw_crypt.cc
+  rgw_crypt_sanitize.cc
+  rgw_dencoder.cc
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
-  rgw_gc.cc
-  rgw_gc_log.cc
   rgw_http_client.cc
+  rgw_iam_policy.cc
   rgw_keystone.cc
+  rgw_kmip_client.cc
+  rgw_kms.cc
   rgw_ldap.cc
   rgw_lc.cc
   rgw_lc_s3.cc
-  rgw_lc_tier.cc
-  rgw_metadata.cc
+  rgw_lua.cc
+  rgw_lua_background.cc
+  rgw_lua_request.cc
+  rgw_lua_utils.cc
+  rgw_metadata_utils.cc
   rgw_multi.cc
   rgw_multi_del.cc
-  rgw_obj_manifest.cc
-  rgw_pubsub.cc
-  rgw_sync.cc
-  rgw_data_sync.cc
-  rgw_sync_counters.cc
-  rgw_sync_error_repo.cc
-  rgw_sync_module.cc
-  rgw_sync_module_aws.cc
-  rgw_sync_module_es.cc
-  rgw_sync_module_es_rest.cc
-  rgw_sync_module_log.cc
-  rgw_sync_module_pubsub.cc
-  rgw_sync_policy.cc
-  rgw_pubsub_push.cc
-  rgw_notify.cc
+  rgw_multipart_meta_filter.cc
   rgw_notify_event_type.cc
-  rgw_sync_module_pubsub_rest.cc
-  rgw_sync_trace.cc
-  rgw_trim_bilog.cc
-  rgw_trim_datalog.cc
-  rgw_trim_mdlog.cc
-  rgw_period_history.cc
-  rgw_period_puller.cc
-  rgw_reshard.cc
-  rgw_coroutine.cc
-  rgw_cr_rados.cc
-  rgw_cr_rest.cc
-  rgw_cr_tools.cc
-  rgw_object_expirer_core.cc
+  rgw_obj_manifest_utils.cc
+  rgw_object_lock.cc
+  rgw_oidc_provider.cc
   rgw_op.cc
   rgw_otp.cc
+  rgw_perf_counters.cc
+  rgw_period.cc
+  rgw_period_history.cc
   rgw_policy_s3.cc
+  rgw_process.cc
   rgw_public_access.cc
   rgw_putobj.cc
-  rgw_putobj_processor.cc
   rgw_quota.cc
-  rgw_rados.cc
+  rgw_realm_reloader.cc
+  rgw_realm_watcher.cc
   rgw_resolve.cc
   rgw_rest.cc
   rgw_rest_client.cc
   rgw_rest_conn.cc
-  rgw_rest_log.cc
-  rgw_rest_metadata.cc
-  rgw_rest_pubsub.cc
-  rgw_rest_pubsub_common.cc
+  rgw_rest_iam.cc
+  rgw_rest_oidc_provider.cc
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
-  rgw_s3select.cc
+  rgw_rest_user_policy.cc
   rgw_role.cc
+  rgw_s3select.cc
   rgw_sal.cc
   rgw_sal_filter.cc
-  rgw_sal_rados.cc
   rgw_string.cc
+  rgw_sts.cc
+  rgw_sync_policy.cc
+  rgw_sync_utils.cc
   rgw_tag.cc
   rgw_tag_s3.cc
-  rgw_tools.cc
-  rgw_log_backing.cc
+  rgw_tools_utils.cc
+  rgw_torrent.cc
+  rgw_tracer.cc
   rgw_user.cc
+  rgw_url.cc
   rgw_website.cc
   rgw_xml.cc
-  rgw_torrent.cc
-  rgw_crypt.cc
-  rgw_crypt_sanitize.cc
-  rgw_iam_policy.cc
-  rgw_rest_user_policy.cc
-  rgw_zone.cc
-  rgw_sts.cc
-  rgw_rest_sts.cc
-  rgw_perf_counters.cc
-  rgw_rest_oidc_provider.cc
-  rgw_rest_iam.cc
-  rgw_object_lock.cc
-  rgw_kms.cc
-  rgw_kmip_client.cc
-  rgw_url.cc
-  rgw_oidc_provider.cc
-  rgw_datalog.cc
-  rgw_datalog_notify.cc
-  cls_fifo_legacy.cc
-  rgw_lua_utils.cc
-  rgw_lua.cc
-  rgw_bucket_encryption.cc
-  rgw_tracer.cc
-  rgw_lua_background.cc)
+  rgw_xml_enc.cc
+  rgw_zone.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
-  list(APPEND librgw_common_srcs rgw_amqp.cc)
+  list(APPEND rgw_common_srcs rgw_amqp.cc)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  list(APPEND librgw_common_srcs rgw_kafka.cc)
-endif()
-if(WITH_RADOSGW_DBSTORE)
-  add_subdirectory(store/dbstore)
-  list(APPEND librgw_common_srcs rgw_sal_dbstore.cc)
-endif()
-if(WITH_RADOSGW_MOTR)
-  list(APPEND librgw_common_srcs rgw_sal_motr.cc)
+  list(APPEND rgw_common_srcs rgw_kafka.cc)
 endif()
 if(WITH_JAEGER)
-  list(APPEND librgw_common_srcs rgw_tracer.cc)
+  list(APPEND rgw_common_srcs rgw_tracer.cc)
 endif()
 
-add_library(rgw_common STATIC ${librgw_common_srcs})
+add_library(rgw_common SHARED ${rgw_common_srcs})
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
@@ -247,6 +180,10 @@ if(WITH_RADOSGW_LUA_PACKAGES)
   target_link_libraries(rgw_common
     PRIVATE Boost::filesystem StdFilesystem::filesystem)
 endif()
+#if(WITH_RADOSGW_MOTR)
+#  target_include_directories(rgw_common
+#    PUBLIC "/usr/include/motr")
+#endif()
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -259,15 +196,6 @@ if(WITH_JAEGER)
   target_link_libraries(rgw_common PUBLIC jaeger_base)
 endif()
 
-if(WITH_RADOSGW_DBSTORE)
-  target_link_libraries(rgw_common PRIVATE global dbstore)
-endif()
-
-if(WITH_RADOSGW_MOTR)
-  find_package(motr REQUIRED)
-  target_link_libraries(rgw_common PRIVATE motr::motr)
-endif()
-
 set(rgw_a_srcs
   rgw_auth_keystone.cc
   rgw_client_io.cc
@@ -275,27 +203,21 @@ set(rgw_a_srcs
   rgw_http_client_curl.cc
   rgw_loadgen.cc
   rgw_log.cc
-  rgw_lua_request.cc
-  rgw_period_pusher.cc
-  rgw_realm_reloader.cc
-  rgw_realm_watcher.cc
+  rgw_opa.cc
   rgw_os_lib.cc
-  rgw_process.cc
-  rgw_rest_bucket.cc
+  rgw_period_pusher.cc
   rgw_rest_config.cc
-  rgw_rest_log.cc
+  rgw_rest_info.cc
   rgw_rest_metadata.cc
-  rgw_rest_realm.cc
+  rgw_rest_sts.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
-  rgw_rest_info.cc
   rgw_rest_user.cc
   rgw_rest_ratelimit.cc
   rgw_swift_auth.cc
   rgw_usage.cc
-  rgw_opa.cc
-  rgw_sts.cc
-  rgw_rest_sts.cc)
+  rgw_rest_sts.cc
+  rgw_sts.cc)
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)
@@ -303,9 +225,7 @@ set_source_files_properties(rgw_iam_policy.cc PROPERTIES
   OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/rgw/rgw_iam_policy_keywords.frag.cc
   COMPILE_FLAGS -I${CMAKE_BINARY_DIR}/src/rgw)
 
-
-add_library(rgw_a STATIC
-    ${rgw_a_srcs})
+add_library(rgw_a OBJECT ${rgw_a_srcs})
 
 target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
@@ -321,7 +241,7 @@ endif()
 
 target_link_libraries(rgw_a
   PRIVATE
-    common_utf8 global
+    common_utf8
     ${CRYPTO_LIBS}
     ${ARROW_LIBRARIES}
     OATH::OATH
@@ -346,13 +266,13 @@ target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock spawn)
 
 set(radosgw_srcs
-  rgw_main.cc
-  rgw_loadgen_process.cc
   rgw_asio_client.cc
   rgw_asio_frontend.cc
-  rgw_kmip_client_impl.cc)
+  rgw_kmip_client_impl.cc
+  rgw_main.cc
+  rgw_loadgen_process.cc)
 
-add_executable(radosgw ${radosgw_srcs})
+add_library(radosgw SHARED $<TARGET_OBJECTS:rgw_a> ${radosgw_srcs})
 
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
@@ -363,23 +283,271 @@ target_include_directories(radosgw
 
 target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 
-target_link_libraries(radosgw PRIVATE ${rgw_libs} rgw_schedulers kmip)
+target_link_libraries(radosgw
+  PRIVATE ${rgw_libs} rgw_schedulers kmip
+  PUBLIC dmclock::dmclock
+  global
+)
 if(WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
 endif()
-install(TARGETS radosgw DESTINATION bin)
+set_target_properties(radosgw PROPERTIES OUTPUT_NAME radosgw VERSION 2.0.0
+  SOVERSION 2)
+install(TARGETS radosgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-set(radosgw_admin_srcs
-  rgw_admin.cc
-  rgw_sync_checkpoint.cc
-  rgw_orphan.cc)
-add_executable(radosgw-admin ${radosgw_admin_srcs})
-target_link_libraries(radosgw-admin ${rgw_libs} librados
+set(rados_sal_srcs
+  services/svc_finisher.cc
+  services/svc_bi_rados.cc
+  services/svc_bilog_rados.cc
+  services/svc_bucket.cc
+  services/svc_bucket_sobj.cc
+  services/svc_bucket_sync_sobj.cc
+  services/svc_cls.cc
+  services/svc_config_key_rados.cc
+  services/svc_mdlog.cc
+  services/svc_meta.cc
+  services/svc_meta_be.cc
+  services/svc_meta_be_otp.cc
+  services/svc_meta_be_sobj.cc
+  services/svc_notify.cc
+  services/svc_otp.cc
+  services/svc_quota.cc
+  services/svc_sync_modules.cc
+  services/svc_rados.cc
+  services/svc_role_rados.cc
+  services/svc_sys_obj.cc
+  services/svc_sys_obj_cache.cc
+  services/svc_sys_obj_core.cc
+  services/svc_tier_rados.cc
+  services/svc_user.cc
+  services/svc_user_rados.cc
+  services/svc_zone.cc
+  services/svc_zone_utils.cc
+  cls_fifo_legacy.cc
+  rgw_bucket.cc
+  rgw_bucket_sync.cc
+  rgw_cr_rados.cc
+  rgw_cr_tools.cc
+  rgw_d3n_datacache.cc
+  rgw_data_sync.cc
+  rgw_datalog.cc
+  rgw_datalog_notify.cc
+  rgw_etag_verifier.cc
+  rgw_gc.cc
+  rgw_gc_log.cc
+  rgw_lc_tier.cc
+  rgw_log_backing.cc
+  rgw_metadata.cc
+  rgw_notify.cc
+  rgw_obj_manifest.cc
+  rgw_object_expirer_core.cc
+  rgw_period_puller.cc
+  rgw_pubsub.cc
+  rgw_pubsub_push.cc
+  rgw_putobj_processor.cc
+  rgw_rados.cc
+  rgw_reshard.cc
+  rgw_rest_bucket.cc
+  rgw_rest_log.cc
+  rgw_rest_pubsub.cc
+  rgw_rest_pubsub_common.cc
+  rgw_sal_rados.cc
+  rgw_service.cc
+  rgw_sync.cc
+  rgw_sync_counters.cc
+  rgw_sync_error_repo.cc
+  rgw_sync_module.cc
+  rgw_sync_module_aws.cc
+  rgw_sync_module_es.cc
+  rgw_sync_module_es_rest.cc
+  rgw_sync_module_log.cc
+  rgw_sync_module_pubsub.cc
+  rgw_sync_module_pubsub_rest.cc
+  rgw_sync_trace.cc
+  rgw_tools.cc
+  rgw_trim_bilog.cc
+  rgw_trim_datalog.cc
+  rgw_trim_mdlog.cc)
+
+add_library(rados_sal OBJECT ${rados_sal_srcs})
+
+target_include_directories(rados_sal
+  PUBLIC "services"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
+  PRIVATE $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>
+  PRIVATE $<TARGET_PROPERTY:spawn,INTERFACE_COMPILE_DEFINITIONS>)
+
+if(WITH_RADOSGW_KAFKA_ENDPOINT)
+  # used by rgw_kafka.cc
+  target_link_libraries(rados_sal
+    PRIVATE
+      RDKafka::RDKafka)
+endif()
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  # used by rgw_amqp.cc
+  target_link_libraries(rados_sal
+    PRIVATE
+      RabbitMQ::RabbitMQ
+      OpenSSL::SSL)
+endif()
+if(WITH_OPENLDAP)
+  target_link_libraries(rados_sal
+    PRIVATE
+      OpenLDAP::OpenLDAP)
+endif()
+if(WITH_RADOSGW_LUA_PACKAGES)
+  target_link_libraries(rados_sal
+    PRIVATE Boost::filesystem StdFilesystem::filesystem)
+endif()
+
+if(WITH_LTTNG)
+  # rgw/rgw_op.cc includes "tracing/rgw_op.h"
+  # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
+  add_dependencies(rados_sal rgw_op-tp rgw_rados-tp)
+endif()
+
+if(WITH_JAEGER)
+  add_dependencies(rados_sal jaeger_base)
+  target_link_libraries(rados_sal PUBLIC jaeger_base)
+endif()
+
+set_target_properties(rados_sal PROPERTIES COMPILE_FLAGS "-fPIC")
+
+set(rgw_sal_rados_srcs rgw_sal_rados_plugin.cc)
+
+add_library(rgw_sal_rados SHARED $<TARGET_OBJECTS:rados_sal> ${rgw_sal_rados_srcs})
+
+target_include_directories(rgw_sal_rados
+  PUBLIC "services"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  PRIVATE $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>
+  PRIVATE $<TARGET_PROPERTY:spawn,INTERFACE_COMPILE_DEFINITIONS>)
+
+if(WITH_LTTNG)
+  # rgw/rgw_op.cc includes "tracing/rgw_op.h"
+  # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
+  add_dependencies(rgw_sal_rados rgw_op-tp rgw_rados-tp)
+endif()
+
+if(WITH_JAEGER)
+  add_dependencies(rgw_sal_rados jaeger_base)
+  target_link_libraries(rgw_sal_rados PUBLIC jaeger_base)
+endif()
+
+target_link_libraries(rgw_sal_rados PUBLIC radosgw)
+
+install(TARGETS rgw_sal_rados DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+set(rgw_sal_d3n_srcs rgw_sal_d3n_plugin.cc)
+
+add_library(rgw_sal_d3n SHARED $<TARGET_OBJECTS:rados_sal> ${rgw_sal_d3n_srcs})
+
+target_include_directories(rgw_sal_d3n
+  PUBLIC "services"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  PRIVATE $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>
+  PRIVATE $<TARGET_PROPERTY:spawn,INTERFACE_COMPILE_DEFINITIONS>)
+
+if(WITH_LTTNG)
+  # rgw/rgw_op.cc includes "tracing/rgw_op.h"
+  # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
+  add_dependencies(rgw_sal_d3n rgw_op-tp rgw_rados-tp)
+endif()
+
+if(WITH_JAEGER)
+  add_dependencies(rgw_sal_d3n jaeger_base)
+  target_link_libraries(rgw_sal_d3n PUBLIC jaeger_base)
+endif()
+
+target_link_libraries(rgw_sal_d3n PUBLIC rados_sal radosgw)
+
+install(TARGETS rgw_sal_d3n DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+if(WITH_RADOSGW_MOTR)
+  set(rgw_sal_motr_srcs rgw_sal_motr_plugin.cc)
+
+  add_library(rgw_sal_motr SHARED ${rgw_sal_motr_srcs})
+
+  target_include_directories(rgw_sal_motr
+    PUBLIC "services"
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+    PUBLIC "${LUA_INCLUDE_DIR}"
+    PRIVATE $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>
+    PRIVATE $<TARGET_PROPERTY:spawn,INTERFACE_COMPILE_DEFINITIONS>
+    PUBLIC "/usr/include/motr")
+  target_compile_options(rgw_sal_motr PRIVATE "-Wno-attributes")
+  target_compile_definitions(rgw_sal_motr
+      PRIVATE "M0_EXTERN=extern" "M0_INTERNAL=")
+  target_link_libraries(rgw_sal_motr PRIVATE motr motr-helpers)
+
+if(WITH_LTTNG)
+    # rgw/rgw_op.cc includes "tracing/rgw_op.h"
+    # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
+    add_dependencies(rgw_sal_motr rgw_op-tp rgw_rados-tp)
+endif()
+
+if(WITH_JAEGER)
+    add_dependencies(rgw_sal_motr jaeger_base)
+    target_link_libraries(rgw_sal_motr PUBLIC jaeger_base)
+endif()
+
+  install(TARGETS rgw_sal_motr DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+if(WITH_RADOSGW_DBSTORE)
+  add_subdirectory(store/dbstore)
+
+  set(rgw_sal_dbstore_srcs rgw_sal_dbstore_plugin.cc)
+
+  add_library(rgw_sal_dbstore SHARED ${rgw_sal_dbstore_srcs})
+
+  target_include_directories(rgw_sal_dbstore
+    PUBLIC "services"
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+    PUBLIC "${LUA_INCLUDE_DIR}")
+
+if(WITH_LTTNG)
+    # rgw/rgw_op.cc includes "tracing/rgw_op.h"
+    # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
+    add_dependencies(rgw_sal_dbstore rgw_op-tp rgw_rados-tp)
+endif()
+
+if(WITH_JAEGER)
+    add_dependencies(rgw_sal_dbstore jaeger_base)
+    target_link_libraries(rgw_sal_dbstore PUBLIC jaeger_base)
+endif()
+
+  target_link_libraries(rgw_sal_dbstore PUBLIC dbstore)
+
+  install(TARGETS rgw_sal_dbstore DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+add_executable(radosgwd radosgw.cc)
+target_link_libraries(radosgwd radosgw librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
-  global ${LIB_RESOLV}
+  ${LIB_RESOLV}
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
+  ${ALLOC_LIBS})
+set_target_properties(radosgwd PROPERTIES OUTPUT_NAME radosgw)
+install(TARGETS radosgwd DESTINATION bin)
+
+set(radosgw_admin_srcs
+  rgw_admin.cc
+  rgw_orphan.cc
+  rgw_sync_checkpoint.cc)
+add_executable(radosgw-admin ${radosgw_admin_srcs})
+target_link_libraries(radosgw-admin ${rgw_libs} librados ceph-common
+  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+  cls_log_client cls_timeindex_client neorados_cls_fifo
+  cls_version_client cls_user_client
+  ${LIB_RESOLV}
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
@@ -387,39 +555,38 @@ install(TARGETS radosgw-admin DESTINATION bin)
 set(radosgw_es_srcs
   rgw_es_main.cc)
 add_executable(radosgw-es ${radosgw_es_srcs})
-target_link_libraries(radosgw-es ${rgw_libs} librados
+target_link_libraries(radosgw-es ${rgw_libs} rados_sal librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
-  global ${LIB_RESOLV}
+  ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-es DESTINATION bin)
 
 set(radosgw_token_srcs
   rgw_token.cc)
 add_executable(radosgw-token ${radosgw_token_srcs})
-target_link_libraries(radosgw-token librados
-  global ${ALLOC_LIBS})
+target_link_libraries(radosgw-token librados ceph-common
+  ${ALLOC_LIBS})
 install(TARGETS radosgw-token DESTINATION bin)
 
 set(radosgw_object_expirer_srcs
   rgw_object_expirer.cc)
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
-target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
+target_link_libraries(radosgw-object-expirer ${rgw_libs} rados_sal librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
-  global ${LIB_RESOLV}
+  ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
 set(librgw_srcs
   librgw.cc
   rgw_file.cc)
-add_library(rgw SHARED ${librgw_srcs})
+add_library(rgw SHARED $<TARGET_OBJECTS:rgw_a> ${librgw_srcs})
 target_link_libraries(rgw
   PRIVATE
-  ${rgw_libs}
   librados
   cls_rgw_client
   cls_otp_client
@@ -430,7 +597,6 @@ target_link_libraries(rgw
   neorados_cls_fifo
   cls_version_client
   cls_user_client
-  global
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
@@ -455,13 +621,12 @@ if(WITH_TESTS)
     rgw_jsonparser.cc)
   target_link_libraries(ceph_rgw_jsonparser
     ${rgw_libs}
-    global)
+    rados_sal)
 
   add_executable(ceph_rgw_multiparser
     rgw_multiparser.cc)
   target_link_libraries(ceph_rgw_multiparser
-    ${rgw_libs}
-    global)
+    ${rgw_libs})
 
   install(TARGETS
     ceph_rgw_jsonparser

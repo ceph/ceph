@@ -14,6 +14,7 @@ protected:
   bool validate_input();
 
 public:
+  virtual ~RGWRestUserPolicy() {}
   int verify_permission(optional_yield y) override;
   virtual uint64_t get_op() = 0;
   void send_response() override;
@@ -23,18 +24,21 @@ public:
 class RGWUserPolicyRead : public RGWRestUserPolicy {
 public:
   RGWUserPolicyRead() = default;
+  virtual ~RGWUserPolicyRead() {}
   int check_caps(const RGWUserCaps& caps) override;
 };
 
 class RGWUserPolicyWrite : public RGWRestUserPolicy {
 public:
   RGWUserPolicyWrite() = default;
+  virtual ~RGWUserPolicyWrite() {}
   int check_caps(const RGWUserCaps& caps) override;
 };
 
 class RGWPutUserPolicy : public RGWUserPolicyWrite {
 public:
   RGWPutUserPolicy() = default;
+  ~RGWPutUserPolicy() {}
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "put_user-policy"; }
@@ -45,6 +49,7 @@ public:
 class RGWGetUserPolicy : public RGWUserPolicyRead {
 public:
   RGWGetUserPolicy() = default;
+  ~RGWGetUserPolicy() {}
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "get_user_policy"; }
@@ -55,6 +60,7 @@ public:
 class RGWListUserPolicies : public RGWUserPolicyRead {
 public:
   RGWListUserPolicies() = default;
+  ~RGWListUserPolicies() {}
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "list_user_policies"; }
@@ -65,6 +71,7 @@ public:
 class RGWDeleteUserPolicy : public RGWUserPolicyWrite {
 public:
   RGWDeleteUserPolicy() = default;
+  ~RGWDeleteUserPolicy() {}
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "delete_user_policy"; }
