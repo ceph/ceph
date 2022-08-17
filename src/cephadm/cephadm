@@ -4651,6 +4651,8 @@ def _distribute_ssh_keys(ctx: CephadmContext, host_spec: Dict[str, str], bootstr
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
 
+    ctx.error_code = 0
+
     if not ctx.output_config:
         ctx.output_config = os.path.join(ctx.output_dir, 'ceph.conf')
     if not ctx.output_keyring:
@@ -4880,6 +4882,7 @@ def command_bootstrap(ctx):
             out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
             logger.info(out)
         except Exception:
+            ctx.error_code = -errno.EINVAL
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
 
     # enable autotune for osd_memory_target
@@ -4903,7 +4906,7 @@ def command_bootstrap(ctx):
                 'For more information see:\n\n'
                 '\thttps://docs.ceph.com/en/pacific/mgr/telemetry/\n')
     logger.info('Bootstrap complete.')
-    return 0
+    return ctx.error_code
 
 ##################################
 
