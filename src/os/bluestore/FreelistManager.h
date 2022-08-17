@@ -13,7 +13,6 @@
 #include "os/ObjectStore.h"
 
 class FreelistManager {
-  bool         null_manager = false;
 protected:
   ObjectStore* store; //this is always BlueStore
   CephContext* cct;
@@ -57,12 +56,7 @@ public:
   virtual void get_meta(uint64_t target_size,
   std::vector<std::pair<std::string, std::string>>*) const = 0;
 
-  void set_null_manager() {
-    null_manager = true;
-  }
-  bool is_null_manager() const {
-    return null_manager;
-  }
+  virtual bool is_null_manager() const = 0;
 };
 
 

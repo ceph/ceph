@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_OS_BLUESTORE_BITMAPFREELISTMANAGER_H
-#define CEPH_OS_BLUESTORE_BITMAPFREELISTMANAGER_H
+#ifndef CEPH_OS_BLUESTORE_FILEFREELISTMANAGER_H
+#define CEPH_OS_BLUESTORE_FILEFREELISTMANAGER_H
 
 #include "FreelistManager.h"
 
@@ -13,10 +13,10 @@
 #include "include/buffer.h"
 #include "kv/KeyValueDB.h"
 
-class BitmapFreelistManager : public FreelistManager {
-  std::string meta_prefix, bitmap_prefix;
-  std::shared_ptr<KeyValueDB::MergeOperator> merge_op;
-  ceph::mutex lock = ceph::make_mutex("BitmapFreelistManager::lock");
+class FileFreelistManager : public FreelistManager {
+  //std::string meta_prefix, bitmap_prefix;
+  //std::shared_ptr<KeyValueDB::MergeOperator> merge_op;
+  //ceph::mutex lock = ceph::make_mutex("FileFreelistManager::lock");
 
   uint64_t size;            ///< size of device (bytes)
   uint64_t bytes_per_block; ///< bytes per block (bdev_block_size)
@@ -24,34 +24,27 @@ class BitmapFreelistManager : public FreelistManager {
   uint64_t bytes_per_key;   ///< bytes per key/value pair
   uint64_t blocks;          ///< size of device (blocks, size rounded up)
 
-  uint64_t block_mask;  ///< mask to convert byte offset to block offset
-  uint64_t key_mask;    ///< mask to convert offset to key offset
+  //  uint64_t block_mask;  ///< mask to convert byte offset to block offset
+  //uint64_t key_mask;    ///< mask to convert offset to key offset
 
-  ceph::buffer::list all_set_bl;
+  //ceph::buffer::list all_set_bl;
 
-  KeyValueDB::Iterator enumerate_p;
-  uint64_t enumerate_offset; ///< logical offset; position
-  ceph::buffer::list enumerate_bl;   ///< current key at enumerate_offset
-  int enumerate_bl_pos;      ///< bit position in enumerate_bl
-
-  uint64_t _get_offset(uint64_t key_off, int bit) {
-    return key_off + bit * bytes_per_block;
-  }
-
-  void _init_misc();
-
-  void _xor(
-    uint64_t offset, uint64_t length,
-    KeyValueDB::Transaction txn);
+  //KeyValueDB::Iterator enumerate_p;
+  //uint64_t enumerate_offset; ///< logical offset; position
+  //ceph::buffer::list enumerate_bl;   ///< current key at enumerate_offset
+  //int enumerate_bl_pos;      ///< bit position in enumerate_bl
 
   int _read_cfg(
     std::function<int(const std::string&, std::string*)> cfg_reader);
 
+  int _expand(uint64_t new_size, KeyValueDB* db);
+
+  void _sync(KeyValueDB* kvdb, bool read_only);
+
   uint64_t size_2_block_count(uint64_t target_size) const;
 
 public:
-  BitmapFreelistManager(ObjectStore* store, std::string meta_prefix,
-			std::string bitmap_prefix);
+  FileFreelistManager(ObjectStore* store);
 
   static void setup_merge_operator(KeyValueDB *db, std::string prefix);
 
@@ -89,7 +82,7 @@ public:
   void get_meta(uint64_t target_size,
     std::vector<std::pair<std::string, std::string>>*) const override;
   bool is_null_manager() const override {
-    return false;
+    return true;
   }
 };
 

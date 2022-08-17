@@ -103,7 +103,9 @@ public:
 
   void get_meta(uint64_t target_size,
 		std::vector<std::pair<std::string, std::string>>*) const override;
-
+  bool is_null_manager() const override {
+    return true;
+  }
   std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const;
 
   void mark_zone_to_clean_free(uint64_t zone,
