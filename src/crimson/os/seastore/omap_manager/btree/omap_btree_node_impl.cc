@@ -367,7 +367,7 @@ OMapInnerNode::merge_entry(
       std::make_pair(donor, entry) : std::make_pair(entry, donor);
     auto [liter, riter] = is_left ?
       std::make_pair(donor_iter, iter) : std::make_pair(iter, donor_iter);
-    if (donor->extent_is_below_min()) {
+    if (l->can_merge(r)) {
       DEBUGT("make_full_merge l {} r {}", oc.t, *l, *r);
       assert(entry->extent_is_below_min());
       return l->make_full_merge(oc, r

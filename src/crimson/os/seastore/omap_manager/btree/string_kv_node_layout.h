@@ -660,6 +660,11 @@ public:
   bool is_overflow(size_t ksize) const {
     return free_space() < (sizeof(omap_inner_key_le_t) + ksize);
   }
+
+  bool is_overflow(const StringKVInnerNodeLayout &rhs) const {
+    return free_space() < rhs.used_space();
+  }
+
   bool below_min() const {
     return free_space() > (capacity() / 2);
   }
@@ -1267,6 +1272,11 @@ public:
   bool is_overflow(size_t ksize, size_t vsize) const {
     return free_space() < (sizeof(omap_leaf_key_le_t) + ksize + vsize);
   }
+
+  bool is_overflow(const StringKVLeafNodeLayout &rhs) const {
+    return free_space() < rhs.used_space();
+  }
+
   bool below_min() const {
     return free_space() > (capacity() / 2);
   }
