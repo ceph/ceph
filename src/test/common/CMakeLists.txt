@@ -294,6 +294,11 @@ add_executable(unittest_perf_histogram
 add_ceph_unittest(unittest_perf_histogram)
 target_link_libraries(unittest_perf_histogram ceph-common)
 
+# unittest_perf_cache_key
+add_executable(unittest_perf_cache_key test_perf_cache_key.cc)
+add_ceph_unittest(unittest_perf_cache_key)
+target_link_libraries(unittest_perf_cache_key ceph-common)
+
 # unittest_global_doublefree
 if(WITH_CEPHFS)
   add_executable(unittest_global_doublefree
