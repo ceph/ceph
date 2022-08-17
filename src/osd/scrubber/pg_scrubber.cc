@@ -11,6 +11,7 @@
 
 #include "debug.h"
 
+#include "common/ceph_time.h"
 #include "common/errno.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"
@@ -18,6 +19,7 @@
 #include "messages/MOSDScrubReserve.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
+#include "include/utime_fmt.h"
 #include "osd/osd_types_fmt.h"
 
 #include "ScrubStore.h"
@@ -537,6 +539,7 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
   }
 
   if (is_primary() && m_scrub_job) {
+    ceph_assert(m_pg->is_locked());
     auto suggested = m_osds->get_scrub_services().determine_scrub_time(
       request_flags,
       m_pg->info,
@@ -782,14 +785,16 @@ Scrub::BlockedRangeWarning PgScrubber::acquire_blocked_alarm()
   int grace = get_pg_cct()->_conf->osd_blocked_scrub_grace_period;
   if (grace == 0) {
     // we will not be sending any alarms re the blocked object
-    dout(20)
+    dout(10)
       << __func__
       << ": blocked-alarm disabled ('osd_blocked_scrub_grace_period' set to 0)"
       << dendl;
     return nullptr;
   }
   ceph::timespan grace_period{m_debug_blockrange ? 4s : seconds{grace}};
-  dout(30) << __func__ << ": timeout:" << grace_period.count() << dendl;
+  dout(20) << fmt::format(": timeout:{}",
+			  std::chrono::duration_cast<seconds>(grace_period))
+	   << dendl;
   return std::make_unique<blocked_range_t>(m_osds,
 					   grace_period,
 					   *this,
@@ -1771,6 +1776,7 @@ void PgScrubber::set_scrub_blocked(utime_t since)
   // we are called from a time-triggered lambda,
   // thus - not under PG-lock
   PGRef pg = m_osds->osd->lookup_lock_pg(m_pg_id);
+  ceph_assert(pg); // 'this' here should not exist if the PG was removed
   m_osds->get_scrub_services().mark_pg_scrub_blocked(m_pg_id);
   m_scrub_job->blocked_since = since;
   m_scrub_job->blocked = true;
@@ -2410,9 +2416,9 @@ int PgScrubber::asok_debug(std::string_view cmd,
   dout(10) << __func__ << " cmd: " << cmd << " param: " << param << dendl;
 
   if (cmd == "block") {
-    // set a flag that will cause the next 'select_range' to report a blocked
+    // 'm_debug_blockrange' causes the next 'select_range' to report a blocked
     // object
-    m_debug_blockrange = 1;
+    m_debug_blockrange = 10;  // >1, so that will trigger fast state reports
 
   } else if (cmd == "unblock") {
     // send an 'unblock' event, as if a blocked range was freed
@@ -2429,7 +2435,7 @@ int PgScrubber::asok_debug(std::string_view cmd,
       if (cmd == "set") {
 	// set a flag that will cause the next 'select_range' to report a
 	// blocked object
-	m_debug_blockrange = 1;
+	m_debug_blockrange = 10;  // >1, so that will trigger fast state reports
       } else {
 	// send an 'unblock' event, as if a blocked range was freed
 	m_debug_blockrange = 0;
@@ -2440,6 +2446,56 @@ int PgScrubber::asok_debug(std::string_view cmd,
 
   return 0;
 }
+
+/*
+ * Note: under PG lock
+ */
+void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
+{
+  using clock = ceph::coarse_real_clock;
+  using namespace std::chrono;
+
+  const seconds period_active = seconds(m_pg->get_cct()->_conf.get_val<int64_t>(
+    "osd_stats_update_period_scrubbing"));
+  if (!period_active.count()) {
+    // a way for the operator to disable these stats updates
+    return;
+  }
+  const seconds period_inactive =
+    seconds(m_pg->get_cct()->_conf.get_val<int64_t>(
+	      "osd_stats_update_period_not_scrubbing") +
+	    m_pg_id.pgid.m_seed % 30);
+
+  // determine the required update period, based on our current state
+  auto period{period_inactive};
+  if (m_active) {
+    period = m_debug_blockrange ? 2s : period_active;
+  }
+
+  /// \todo use the date library (either the one included in Arrow or directly)
+  /// to get the formatting of the time_points.
+
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
+    // will only create the debug strings if required
+    char buf[50];
+    auto printable_last = fmt::localtime(clock::to_time_t(m_last_stat_upd));
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%T", &printable_last);
+    dout(20) << fmt::format("{}: period: {}/{}-> {} last:{}",
+			    __func__,
+			    period_active,
+			    period_inactive,
+			    period,
+			    buf)
+	     << dendl;
+  }
+
+  if (now_is - m_last_stat_upd > period) {
+    m_pg->publish_stats_to_osd();
+    m_last_stat_upd = now_is;
+  }
+}
+
+
 // ///////////////////// preemption_data_t //////////////////////////////////
 
 PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg}
