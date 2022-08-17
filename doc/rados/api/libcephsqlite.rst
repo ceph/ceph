@@ -426,6 +426,22 @@ the asynchronous writes as well as an asynchronous update to the size of the
 striped file.
 
 
+Debugging
+^^^^^^^^^
+
+Debugging libcephsqlite can be turned on via::
+
+    debug_cephsqlite
+
+If running the ``sqlite3`` command-line tool, use:
+
+.. code:: sh
+
+   env CEPH_ARGS='--log_to_file true --log-file sqlite3.log --debug_cephsqlite 20 --debug_ms 1' sqlite3 ...
+
+This will save all the usual Ceph debugging to a file ``sqlite3.log`` for inspection.
+
+
 .. _SQLite: https://sqlite.org/index.html
 .. _SQLite VFS: https://www.sqlite.org/vfs.html
 .. _SQLite Backup: https://www.sqlite.org/backup.html
