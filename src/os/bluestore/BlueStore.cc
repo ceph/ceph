@@ -5862,6 +5862,11 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
 
   uint64_t num = 0, bytes = 0;
   utime_t start_time = ceph_clock_now();
+  auto next_extent = [&](uint64_t offset, uint64_t length) -> bool {
+    alloc->init_add_free(offset, length);
+    return true;
+  };
+  fm->enumerate(db, next_extent);
   if (!fm->is_null_manager()) {
     // This is the original path - loading allocation map from RocksDB and feeding into the allocator
     dout(5) << __func__ << "::NCB::loading allocation from FM -> alloc" << dendl;

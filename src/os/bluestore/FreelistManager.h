@@ -42,6 +42,11 @@ public:
   virtual void enumerate_reset() = 0;
   virtual bool enumerate_next(KeyValueDB *kvdb, uint64_t *offset, uint64_t *length) = 0;
 
+  // next_extent return value:
+  // true - continue
+  // false - do not iterate more
+  virtual bool enumerate(KeyValueDB *kvdb,
+			 std::function<bool(uint64_t offset, uint64_t length)> next_extent);
   virtual void allocate(
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn) = 0;

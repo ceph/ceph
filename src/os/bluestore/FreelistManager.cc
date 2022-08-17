@@ -47,3 +47,20 @@ void FreelistManager::setup_merge_operators(KeyValueDB *db,
 #endif
     BitmapFreelistManager::setup_merge_operator(db, "b");
 }
+
+bool FreelistManager::enumerate(KeyValueDB *kvdb,
+				std::function<bool(uint64_t offset, uint64_t length)> next_extent)
+{
+  bool result = true;
+  enumerate_reset();
+  uint64_t offset;
+  uint64_t length;
+  while (enumerate_next(kvdb, &offset, &length) == true) {
+    if (next_extent(offset, length) == false) {
+      result = false;
+      break;
+    }
+  }
+  enumerate_reset();
+  return result;
+}
