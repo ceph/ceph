@@ -1232,6 +1232,11 @@ int RadosStore::get_zonegroup(const std::string& id,
   return 0;
 }
 
+int RadosStore::list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids)
+{
+  return svc()->zone->list_zones(dpp, zone_ids);
+}
+
 int RadosStore::cluster_stat(RGWClusterStat& stats)
 {
   rados_cluster_stat_t rados_stats;
@@ -3019,6 +3024,15 @@ int RadosZoneGroup::get_zone_by_name(const std::string& name, std::unique_ptr<Zo
   return 0;
 }
 
+int RadosZoneGroup::list_zones(std::list<std::string>& zone_ids)
+{
+  for (const auto& entry : group.zones)
+    {
+      zone_ids.push_back(entry.second.id);
+    }
+  return 0;
+}
+
 std::unique_ptr<Zone> RadosZone::clone()
 {
   if (local_zone)
@@ -3091,6 +3105,11 @@ const std::string_view RadosZone::get_tier_type()
     return store->svc()->zone->get_zone().tier_type;
 
   return rgw_zone.id;
+}
+
+RGWBucketSyncPolicyHandlerRef RadosZone::get_sync_policy_handler()
+{
+  return store->svc()->zone->get_sync_policy_handler(get_id());
 }
 
 RadosLuaManager::RadosLuaManager(RadosStore* _s) : 

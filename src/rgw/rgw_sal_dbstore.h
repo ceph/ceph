@@ -296,6 +296,10 @@ protected:
     virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override {
       return -1;
     }
+    virtual int list_zones(std::list<std::string>& zone_ids) override {
+      zone_ids.clear();
+      return 0;
+    }
     virtual std::unique_ptr<ZoneGroup> clone() override {
       std::unique_ptr<RGWZoneGroup>zg = std::make_unique<RGWZoneGroup>(*group.get());
       return std::make_unique<DBZoneGroup>(store, std::move(zg));
@@ -349,6 +353,7 @@ protected:
       virtual const std::string& get_realm_name() override;
       virtual const std::string& get_realm_id() override;
       virtual const std::string_view get_tier_type() override { return "rgw"; }
+      virtual RGWBucketSyncPolicyHandlerRef get_sync_policy_handler() override;
   };
 
   class DBLuaManager : public StoreLuaManager {
@@ -791,6 +796,7 @@ public:
       virtual std::string zone_unique_id(uint64_t unique_num) override;
       virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
       virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
+      virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
       virtual int cluster_stat(RGWClusterStat& stats) override;
       virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
       virtual std::unique_ptr<Completions> get_completions(void) override;

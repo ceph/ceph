@@ -81,6 +81,8 @@ public:
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier) override;
   virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) override;
   virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override;
+  virtual int list_zones(std::list<std::string>& zone_ids) override
+    { return next->list_zones(zone_ids); }
   virtual std::unique_ptr<ZoneGroup> clone() override {
     std::unique_ptr<ZoneGroup> nzg = next->clone();
     return std::make_unique<FilterZoneGroup>(std::move(nzg));
@@ -137,6 +139,9 @@ public:
   virtual const std::string_view get_tier_type() override {
       return next->get_tier_type();
   }
+  virtual RGWBucketSyncPolicyHandlerRef get_sync_policy_handler() override {
+    return next->get_sync_policy_handler();
+  }
 };
 
 class FilterStore : public Store {
@@ -188,6 +193,9 @@ public:
   virtual std::string zone_unique_id(uint64_t unique_num) override;
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
   virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
+  virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override {
+    return next->list_all_zones(dpp, zone_ids);
+  }
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
   virtual std::unique_ptr<Completions> get_completions(void) override;
