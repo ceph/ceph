@@ -106,6 +106,8 @@ using backref_entry_ref = std::unique_ptr<backref_entry_t>;
 using backref_entry_mset_t = backref_entry_t::multiset_t;
 using backref_entry_refs_t = std::vector<backref_entry_ref>;
 using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_entry_refs_t>;
+using backref_entry_query_set_t = std::set<
+    backref_entry_t, backref_entry_t::cmp_t>;
 
 /**
  * Cache
@@ -538,11 +540,8 @@ private:
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
 
-  using backref_entry_query_mset_t =
-    std::multiset<
-      backref_entry_t,
-      backref_entry_t::cmp_t>;
-
+  using backref_entry_query_mset_t = std::multiset<
+      backref_entry_t, backref_entry_t::cmp_t>;
   backref_entry_query_mset_t get_backref_entries_in_range(
     paddr_t start,
     paddr_t end) {
