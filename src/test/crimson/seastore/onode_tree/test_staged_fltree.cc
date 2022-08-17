@@ -1693,7 +1693,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	  });
 	});
     }).unsafe_get0();
-    async_cleaner->run_until_halt().get0();
+    epm->run_background_work_until_halt().get0();
 
     // insert
     logger().warn("start inserting {} kvs ...", kvs.size());
@@ -1713,7 +1713,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	      });
 	    });
         }).unsafe_get0();
-        async_cleaner->run_until_halt().get0();
+        epm->run_background_work_until_halt().get0();
         ++iter;
       }
     }
@@ -1759,7 +1759,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	      });
 	    });
         }).unsafe_get0();
-        async_cleaner->run_until_halt().get0();
+        epm->run_background_work_until_halt().get0();
         ++iter;
       }
       kvs.erase_from_random(kvs.random_begin(), kvs.random_end());

@@ -124,14 +124,14 @@ struct btree_test_base :
       block_size = segment_manager->get_block_size();
       next = segment_id_t{segment_manager->get_device_id(), 0};
       sms->add_segment_manager(segment_manager.get());
-      epm->add_device(segment_manager.get(), true);
+      epm->test_init_no_background(segment_manager.get());
       journal->set_write_pipeline(&pipeline);
 
       return journal->open_for_mkfs().discard_result();
     }).safe_then([this] {
       dummy_tail = journal_seq_t{0,
         paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0)};
-      return epm->open();
+      return epm->open_for_write();
     }).safe_then([this] {
       return seastar::do_with(
 	cache->create_transaction(

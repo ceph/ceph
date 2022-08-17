@@ -5,6 +5,7 @@
 
 #include "seastar/core/gate.hh"
 
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/logging.h"
@@ -37,8 +38,6 @@ public:
   virtual close_ertr::future<> close() = 0;
 };
 using ExtentOolWriterRef = std::unique_ptr<ExtentOolWriter>;
-
-class SegmentProvider;
 
 /**
  * SegmentedOolWriter
@@ -90,41 +89,13 @@ public:
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
-  void init_ool_writers(SegmentProvider &sp, SegmentSeqAllocator &ssa) {
-    // Currently only one SegmentProvider is supported
-    writer_refs.clear();
+  // TODO: device tiering
+  void set_async_cleaner(AsyncCleanerRef &&_cleaner);
 
-    ceph_assert(RECLAIM_GENERATIONS > 0);
-    data_writers_by_gen.resize(RECLAIM_GENERATIONS, {});
-    for (reclaim_gen_t gen = 0; gen < RECLAIM_GENERATIONS; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-            data_category_t::DATA, gen, sp, ssa));
-      data_writers_by_gen[gen] = writer_refs.back().get();
-    }
+  void set_primary_device(Device *device);
 
-    md_writers_by_gen.resize(RECLAIM_GENERATIONS - 1, {});
-    for (reclaim_gen_t gen = 1; gen < RECLAIM_GENERATIONS; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-            data_category_t::METADATA, gen, sp, ssa));
-      md_writers_by_gen[gen - 1] = writer_refs.back().get();
-    }
-  }
-
-  void add_device(Device* device, bool is_primary) {
-    auto device_id = device->get_device_id();
-    ceph_assert(devices_by_id[device_id] == nullptr);
-    devices_by_id[device_id] = device;
-    ++num_devices;
-    if (is_primary) {
-      ceph_assert(primary_device == nullptr);
-      primary_device = device;
-      if (device->get_device_type() == device_type_t::SEGMENTED) {
-        prefer_ool = false;
-      } else {
-        ceph_assert(device->get_device_type() == device_type_t::RANDOM_BLOCK);
-        prefer_ool = true;
-      }
-    }
+  void set_extent_callback(AsyncCleaner::ExtentCallbackInterface *cb) {
+    cleaner->set_extent_callback(cb);
   }
 
   seastore_off_t get_block_size() const {
@@ -138,8 +109,17 @@ public:
     return *primary_device;
   }
 
+  store_statfs_t get_stat() const {
+    return cleaner->stat();
+  }
+
+  using mount_ret = AsyncCleaner::mount_ret;
+  mount_ret mount() {
+    return cleaner->mount();
+  }
+
   using open_ertr = ExtentOolWriter::open_ertr;
-  open_ertr::future<> open() {
+  open_ertr::future<> open_for_write() {
     LOG_PREFIX(ExtentPlacementManager::open);
     SUBINFO(seastore_journal, "started with {} devices", num_devices);
     ceph_assert(primary_device != nullptr);
@@ -150,6 +130,14 @@ public:
         return writer->open();
       });
     });
+  }
+
+  void start_scan_space() {
+    return cleaner->start_scan_space();
+  }
+
+  void start_gc() {
+    return cleaner->start_gc();
   }
 
   struct alloc_result_t {
@@ -221,6 +209,7 @@ public:
     LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
     SUBDEBUGT(seastore_journal, "start with {} delayed extents",
               t, delayed_extents.size());
+    assert(writer_refs.size());
     return seastar::do_with(
         std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>(),
         [this, &t, &delayed_extents](auto& alloc_map) {
@@ -238,6 +227,10 @@ public:
         return writer->alloc_write_ool_extents(t, extents);
       });
     });
+  }
+
+  seastar::future<> stop_gc() {
+    return cleaner->stop();
   }
 
   using close_ertr = ExtentOolWriter::close_ertr;
@@ -263,7 +256,52 @@ public:
     return devices_by_id[addr.get_device_id()]->read(addr, len, out);
   }
 
+  void mark_space_used(paddr_t addr, extent_len_t len) {
+    // TODO: improve tests to drop the cleaner check
+    if (cleaner) {
+      cleaner->mark_space_used(addr, len);
+    }
+  }
+
+  void mark_space_free(paddr_t addr, extent_len_t len) {
+    // TODO: improve tests to drop the cleaner check
+    if (cleaner) {
+      cleaner->mark_space_free(addr, len);
+    }
+  }
+
+  seastar::future<> reserve_projected_usage(std::size_t projected_usage) {
+    return cleaner->reserve_projected_usage(projected_usage);
+  }
+
+  void release_projected_usage(std::size_t projected_usage) {
+    return cleaner->release_projected_usage(projected_usage);
+  }
+
+  // Testing interfaces
+
+  void test_init_no_background(Device *test_device) {
+    assert(test_device->get_device_type() == device_type_t::SEGMENTED);
+    add_device(test_device);
+    set_primary_device(test_device);
+  }
+
+  bool check_usage() {
+    return cleaner->check_usage();
+  }
+
+  seastar::future<> run_background_work_until_halt() {
+    return cleaner->run_until_halt();
+  }
+
 private:
+  void add_device(Device *device) {
+    auto device_id = device->get_device_id();
+    ceph_assert(devices_by_id[device_id] == nullptr);
+    devices_by_id[device_id] = device;
+    ++num_devices;
+  }
+
   ExtentOolWriter* get_writer(placement_hint_t hint,
                               data_category_t category,
                               reclaim_gen_t gen) {
@@ -288,7 +326,11 @@ private:
   std::vector<Device*> devices_by_id;
   Device* primary_device = nullptr;
   std::size_t num_devices = 0;
+
+  // TODO: device tiering
+  AsyncCleanerRef cleaner;
 };
+
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
 
 }
