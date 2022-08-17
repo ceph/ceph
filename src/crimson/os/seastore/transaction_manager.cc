@@ -125,18 +125,22 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
           t,
           [this](
             paddr_t paddr,
+	    paddr_t backref_key,
             extent_len_t len,
             extent_types_t type,
             laddr_t laddr) {
           if (is_backref_node(type)) {
             assert(laddr == L_ADDR_NULL);
-            backref_manager->cache_new_backref_extent(paddr, type);
+	    assert(backref_key != P_ADDR_NULL);
+            backref_manager->cache_new_backref_extent(paddr, backref_key, type);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           } else if (laddr == L_ADDR_NULL) {
+	    assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, -1);
             epm->mark_space_free(paddr, len);
           } else {
+	    assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           }
