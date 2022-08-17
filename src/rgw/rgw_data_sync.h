@@ -667,6 +667,21 @@ struct bilog_status_v2 {
   void decode_json(JSONObj *obj);
 };
 
+struct store_gen_shards {
+  uint64_t gen = 0;
+  uint32_t num_shards = 0;
+
+  void dump(Formatter *f) const {
+    encode_json("gen", gen, f);
+    encode_json("num_shards", num_shards, f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("gen", gen, obj);
+    JSONDecoder::decode_json("num_shards", num_shards, obj);
+  }
+};
+
 struct rgw_bucket_index_marker_info {
   std::string bucket_ver;
   std::string master_ver;
@@ -674,6 +689,7 @@ struct rgw_bucket_index_marker_info {
   bool syncstopped{false};
   uint64_t oldest_gen = 0;
   uint64_t latest_gen = 0;
+  std::vector<store_gen_shards> generations;
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);
@@ -682,6 +698,7 @@ struct rgw_bucket_index_marker_info {
     JSONDecoder::decode_json("syncstopped", syncstopped, obj);
     JSONDecoder::decode_json("oldest_gen", oldest_gen, obj);
     JSONDecoder::decode_json("latest_gen", latest_gen, obj);
+    JSONDecoder::decode_json("generations", generations, obj);
   }
 };
 
