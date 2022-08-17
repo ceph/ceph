@@ -434,7 +434,7 @@ class MDCache {
 				snapid_t follows=CEPH_NOSNAP);
 
   // peers
-  void add_uncommitted_leader(metareqid_t reqid, LogSegment *ls, std::set<mds_rank_t> &peers, bool safe=false) {
+  void add_uncommitted_leader(metareqid_t reqid, const LogSegmentRef& ls, std::set<mds_rank_t> &peers, bool safe=false) {
     uncommitted_leaders[reqid].ls = ls;
     uncommitted_leaders[reqid].peers = peers;
     uncommitted_leaders[reqid].safe = safe;
@@ -452,7 +452,7 @@ class MDCache {
   void committed_leader_peer(metareqid_t r, mds_rank_t from);
   void finish_committed_leaders();
 
-  void add_uncommitted_peer(metareqid_t reqid, LogSegment*, mds_rank_t, MDPeerUpdate *su=nullptr);
+  void add_uncommitted_peer(metareqid_t reqid, const LogSegmentRef&, mds_rank_t, MDPeerUpdate *su=nullptr);
   void wait_for_uncommitted_peer(metareqid_t reqid, MDSContext *c) {
     uncommitted_peers.at(reqid).waiters.push_back(c);
   }
@@ -624,7 +624,7 @@ class MDCache {
   std::pair<bool, uint64_t> trim(uint64_t count=0);
 
   bool trim_non_auth_subtree(CDir *directory);
-  void standby_trim_segment(LogSegment *ls);
+  void standby_trim_segment(const LogSegmentRef& ls);
   void try_trim_non_auth_subtree(CDir *dir);
   bool can_trim_non_auth_dirfrag(CDir *dir) {
     return my_ambiguous_imports.count((dir)->dirfrag()) == 0 &&
@@ -739,20 +739,20 @@ class MDCache {
   }
 
   // truncate
-  void truncate_inode(CInode *in, LogSegment *ls);
-  void _truncate_inode(CInode *in, LogSegment *ls);
-  void truncate_inode_finish(CInode *in, LogSegment *ls);
-  void truncate_inode_write_finish(CInode *in, LogSegment *ls,
+  void truncate_inode(CInode *in, const LogSegmentRef& ls);
+  void _truncate_inode(CInode *in, const LogSegmentRef& ls);
+  void truncate_inode_finish(CInode *in, const LogSegmentRef& ls);
+  void truncate_inode_write_finish(CInode *in, const LogSegmentRef& ls,
                                    uint32_t block_size);
   void truncate_inode_logged(CInode *in, MutationRef& mut);
 
-  void add_recovered_truncate(CInode *in, LogSegment *ls);
-  void remove_recovered_truncate(CInode *in, LogSegment *ls);
+  void add_recovered_truncate(CInode *in, const LogSegmentRef& ls);
+  void remove_recovered_truncate(CInode *in, const LogSegmentRef& ls);
   void start_recovered_truncates();
 
   // purge unsafe inodes
   void start_purge_inodes();
-  void purge_inodes(const interval_set<inodeno_t>& i, LogSegment *ls);
+  void purge_inodes(const interval_set<inodeno_t>& i, const LogSegmentRef& ls);
 
   CDir *get_auth_container(CDir *in);
   CDir *get_export_container(CDir *dir);
@@ -1022,7 +1022,7 @@ class MDCache {
   struct uleader {
     uleader() {}
     std::set<mds_rank_t> peers;
-    LogSegment *ls = nullptr;
+    LogSegmentRef ls;
     MDSContext::vec waiters;
     bool safe = false;
     bool committing = false;
@@ -1032,7 +1032,7 @@ class MDCache {
   struct upeer {
     upeer() {}
     mds_rank_t leader;
-    LogSegment *ls = nullptr;
+    LogSegmentRef ls;
     MDPeerUpdate *su = nullptr;
     MDSContext::vec waiters;
   };
@@ -1240,7 +1240,7 @@ class MDCache {
     ufragment() {}
     int bits = 0;
     bool committed = false;
-    LogSegment *ls = nullptr;
+    LogSegmentRef ls;
     MDSContext::vec waiters;
     frag_vec_t old_frags;
     bufferlist rollback;
@@ -1320,7 +1320,7 @@ class MDCache {
   void handle_fragment_notify_ack(const cref_t<MMDSFragmentNotifyAck> &m);
 
   void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, const frag_vec_t& old_frag,
-				LogSegment *ls, bufferlist *rollback=NULL);
+				const LogSegmentRef& ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 

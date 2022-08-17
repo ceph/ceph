@@ -32,6 +32,7 @@
 #include "messages/MClientReply.h"
 
 class LogSegment;
+using LogSegmentRef = std::shared_ptr<LogSegment>;
 class CInode;
 class CDir;
 class CDentry;
@@ -225,7 +226,7 @@ public:
 
   metareqid_t reqid;
   __u32 attempt = 0;      // which attempt for this request
-  std::shared_ptr<LogSegment> ls = nullptr;  // the log segment i'm committing to
+  LogSegmentRef ls;  	  // the log segment i'm committing to
 
   // flag mutation as peer
   mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.

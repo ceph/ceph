@@ -91,19 +91,19 @@ public:
       flush();
   }
 
-  LogSegmentRef peek_current_segment() {
-    return segments.empty() ? NULL : segments.rbegin()->second;
+  const LogSegmentRef& peek_current_segment() {
+    return segments.empty() ? null_lsr : segments.rbegin()->second;
   }
-
-  LogSegmentRef get_current_segment() {   //return by value as it being passes by threads..
+  
+  const LogSegmentRef& get_current_segment() {
     ceph_assert(!segments.empty());
     return segments.rbegin()->second;
   }
 
-  LogSegmentRef get_segment(LogSegment::seq_t seq) { //return by & ?
-    if (segments.count(seq))
-      return segments[seq];
-    return NULL;
+  const LogSegmentRef& get_segment(LogSegment::seq_t seq) {
+    if (auto it = segments.find(seq); it != segments.end())
+      return it->second;
+    return null_lsr;
   }
 
   bool have_any_segments() const {
@@ -247,11 +247,11 @@ protected:
     ceph_assert(!segments.empty());
     return segments.rbegin()->first;
   }
-  LogSegmentRef& get_oldest_segment() {
+  const LogSegmentRef& get_oldest_segment() {
     return segments.begin()->second;
   }
   void remove_oldest_segment() {
-    std::map<uint64_t, LogSegmentRef>::iterator p = segments.begin();
+    auto p = segments.begin();
     segments.erase(p);
   }
 
@@ -282,7 +282,6 @@ protected:
   std::set<LogSegmentRef> expiring_segments;
   std::set<LogSegmentRef> expired_segments;  
 
-  
   std::size_t pre_segments_size = 0;            // the num of segments when the mds finished replay-journal, to calc the num of segments growing
   uint64_t event_seq = 0;
   int expiring_events = 0;
@@ -305,13 +304,15 @@ private:
 
   void try_to_commit_open_file_table(uint64_t last_seq);
 
-  void try_expire(LogSegmentRef &ls, int op_prio);
-  void _maybe_expired(LogSegmentRef &ls, int op_prio);
-  void _expired(LogSegmentRef &ls);
+  void try_expire(const LogSegmentRef &ls, int op_prio);
+  void _maybe_expired(const LogSegmentRef &ls, int op_prio);
+  void _expired(const LogSegmentRef &ls);
   void _trim_expired_segments();
   void write_head(MDSContext *onfinish);
 
   // -- events --
   LogEvent *cur_event = nullptr;
+
+  LogSegmentRef null_lsr;
 };
 #endif

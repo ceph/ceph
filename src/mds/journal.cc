@@ -207,8 +207,8 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   if (!open_files.empty()) {
     ceph_assert(!mds->mdlog->is_capped()); // hmm FIXME
     EOpen *le = 0;
-    LogSegmentRef ls = mds->mdlog->get_current_segment(); //chage to & ?
-    ceph_assert(ls != this);
+    const auto& ls = mds->mdlog->get_current_segment();
+    ceph_assert((ls.get()) != this);
     elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
     while (!p.end()) {
       CInode *in = *p;
@@ -428,7 +428,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
   }
 }
 
-void EMetaBlob::update_segment(LogSegmentRef& ls)
+void EMetaBlob::update_segment(const LogSegmentRef& ls)
 {
   // dirty inode mtimes
   // -> handled directly by Server.cc, replay()
@@ -1163,7 +1163,7 @@ void EMetaBlob::generate_test_instances(std::list<EMetaBlob*>& ls)
   ls.push_back(new EMetaBlob());
 }
 
-void EMetaBlob::replay(MDSRank *mds, LogSegmentRef& logseg, MDPeerUpdate *peerup)
+void EMetaBlob::replay(MDSRank *mds, const LogSegmentRef& logseg, MDPeerUpdate *peerup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
 
@@ -1638,7 +1638,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef& logseg, MDPeerUpdate *peerup
       mds->heartbeat_reset();
   }
   for (const auto& p : truncate_finish) {
-    LogSegmentRef& ls = mds->mdlog->get_segment(p.second);
+    const LogSegmentRef& ls = mds->mdlog->get_segment(p.second);
     if (ls) {
       CInode *in = mds->mdcache->get_inode(p.first);
       ceph_assert(in);
@@ -2208,7 +2208,7 @@ void EUpdate::generate_test_instances(std::list<EUpdate*>& ls)
 
 void EUpdate::update_segment()
 {
-  auto& segment = get_segment();
+  auto&& segment = get_segment();
   metablob.update_segment(segment);
 
   if (client_map.length())

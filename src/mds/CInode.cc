@@ -477,7 +477,7 @@ CInode::projected_inode CInode::project_inode(const MutationRef& mut,
   return projected_inode(std::move(pi), std::move(px), ps);
 }
 
-void CInode::pop_and_dirty_projected_inode(LogSegment *ls, const MutationRef& mut)
+void CInode::pop_and_dirty_projected_inode(const LogSegmentRef& ls, const MutationRef& mut)
 {
   ceph_assert(!projected_nodes.empty());
   auto front = std::move(projected_nodes.front());
@@ -1062,7 +1062,7 @@ version_t CInode::pre_dirty()
   return pv;
 }
 
-void CInode::_mark_dirty(LogSegment *ls)
+void CInode::_mark_dirty(const LogSegmentRef& ls)
 {
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
@@ -1075,7 +1075,7 @@ void CInode::_mark_dirty(LogSegment *ls)
     ls->dirty_inodes.push_back(&item_dirty);
 }
 
-void CInode::mark_dirty(LogSegment *ls) {
+void CInode::mark_dirty(const LogSegmentRef& ls) {
   
   dout(10) << __func__ << " " << *this << dendl;
 
@@ -1452,7 +1452,7 @@ void CInode::fetch_backtrace(Context *fin, bufferlist *backtrace)
   mdcache->fetch_backtrace(ino(), get_backtrace_pool(), *backtrace, fin);
 }
 
-void CInode::mark_dirty_parent(LogSegment *ls, bool dirty_pool)
+void CInode::mark_dirty_parent(const LogSegmentRef& ls, bool dirty_pool)
 {
   if (!state_test(STATE_DIRTYPARENT)) {
     dout(10) << __func__ << dendl;
@@ -4405,7 +4405,7 @@ void CInode::finish_export()
 }
 
 void CInode::decode_import(bufferlist::const_iterator& p,
-			   LogSegment *ls)
+			   const LogSegmentRef& ls)
 {
   DECODE_START(5, p);
 

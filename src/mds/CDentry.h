@@ -38,7 +38,7 @@ class CDir;
 class Locker;
 class CDentry;
 class LogSegment;
-
+using LogSegmentRef = std::shared_ptr<LogSegment>;
 class Session;
 
 // define an ordering
@@ -250,8 +250,8 @@ public:
   mds_authority_t authority() const override;
 
   version_t pre_dirty(version_t min=0);
-  void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t pv, LogSegment *ls);
+  void _mark_dirty(const LogSegmentRef& ls);
+  void mark_dirty(version_t pv, const LogSegmentRef& ls);
   void mark_clean();
 
   void mark_new();
@@ -287,7 +287,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls) {
+  void decode_import(ceph::buffer::list::const_iterator& blp, const LogSegmentRef& ls) {
     DECODE_START(1, blp);
     decode(first, blp);
     __u32 nstate;
