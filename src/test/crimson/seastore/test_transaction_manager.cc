@@ -400,40 +400,7 @@ struct transaction_manager_test_t :
   }
 
   bool check_usage() {
-    auto t = create_weak_test_transaction();
-    SpaceTrackerIRef tracker(async_cleaner->get_empty_space_tracker());
-    with_trans_intr(
-      *t.t,
-      [this, &tracker](auto &t) {
-      return backref_manager->scan_mapped_space(
-        t,
-        [&tracker](
-          paddr_t paddr,
-          extent_len_t len,
-          extent_types_t type,
-          laddr_t laddr) {
-        if (paddr.get_addr_type() == paddr_types_t::SEGMENT) {
-          if (is_backref_node(type)) {
-            assert(laddr == L_ADDR_NULL);
-            tracker->allocate(
-              paddr.as_seg_paddr().get_segment_id(),
-              paddr.as_seg_paddr().get_segment_off(),
-              len);
-          } else if (laddr == L_ADDR_NULL) {
-            tracker->release(
-              paddr.as_seg_paddr().get_segment_id(),
-              paddr.as_seg_paddr().get_segment_off(),
-              len);
-          } else {
-            tracker->allocate(
-              paddr.as_seg_paddr().get_segment_id(),
-              paddr.as_seg_paddr().get_segment_off(),
-              len);
-          }
-        }
-      });
-    }).unsafe_get0();
-    return async_cleaner->debug_check_space(*tracker);
+    return async_cleaner->check_usage();
   }
 
   void replay() {

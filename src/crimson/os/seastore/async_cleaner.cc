@@ -6,6 +6,7 @@
 #include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/async_cleaner.h"
+#include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/transaction_manager.h"
 
 SET_SUBSYS(seastore_cleaner);
@@ -1216,6 +1217,44 @@ seastar::future<> AsyncCleaner::stop()
     INFO("done, {}", gc_stat_printer_t{this, true});
     // run_until_halt() can be called at HALT
   });
+}
+
+bool AsyncCleaner::check_usage()
+{
+  SpaceTrackerIRef tracker(space_tracker->make_empty());
+  ecb->with_transaction_weak(
+      "check_usage",
+      [this, &tracker](auto &t) {
+    return backref_manager.scan_mapped_space(
+      t,
+      [&tracker](
+        paddr_t paddr,
+        extent_len_t len,
+        extent_types_t type,
+        laddr_t laddr)
+    {
+      if (paddr.get_addr_type() == paddr_types_t::SEGMENT) {
+        if (is_backref_node(type)) {
+          assert(laddr == L_ADDR_NULL);
+          tracker->allocate(
+            paddr.as_seg_paddr().get_segment_id(),
+            paddr.as_seg_paddr().get_segment_off(),
+            len);
+        } else if (laddr == L_ADDR_NULL) {
+          tracker->release(
+            paddr.as_seg_paddr().get_segment_id(),
+            paddr.as_seg_paddr().get_segment_off(),
+            len);
+        } else {
+          tracker->allocate(
+            paddr.as_seg_paddr().get_segment_id(),
+            paddr.as_seg_paddr().get_segment_off(),
+            len);
+        }
+      }
+    });
+  }).unsafe_get0();
+  return space_tracker->equals(*tracker);
 }
 
 void AsyncCleaner::mark_space_used(
