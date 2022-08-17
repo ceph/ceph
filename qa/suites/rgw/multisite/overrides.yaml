@@ -6,6 +6,7 @@ overrides:
         setuser: ceph
         setgroup: ceph
         debug rgw: 20
+        debug rgw sync: 20
         rgw crypt s3 kms backend: testing
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
         rgw crypt require ssl: false
@@ -15,5 +16,6 @@ overrides:
         rgw data log num shards: 4
         rgw sync obj etag verify: true
         rgw sync meta inject err probability: 0.1
+        rgw sync data inject err probability: 0.1
   rgw:
     compression type: random

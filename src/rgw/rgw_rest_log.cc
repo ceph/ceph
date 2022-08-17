@@ -565,6 +565,11 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
 
   oldest_gen = logs.front().gen;
   latest_gen = logs.back().gen;
+
+  for (auto& log : logs) {
+      uint32_t num_shards = log.layout.in_index.layout.num_shards;
+      generations.push_back({log.gen, num_shards});
+  }
 }
 
 void RGWOp_BILog_Info::send_response() {
@@ -582,6 +587,7 @@ void RGWOp_BILog_Info::send_response() {
   encode_json("syncstopped", syncstopped, s->formatter);
   encode_json("oldest_gen", oldest_gen, s->formatter);
   encode_json("latest_gen", latest_gen, s->formatter);
+  encode_json("generations", generations, s->formatter);
   s->formatter->close_section();
 
   flusher.flush();
