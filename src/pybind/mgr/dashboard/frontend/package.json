@@ -118,7 +118,7 @@
     "@types/brace-expansion": "1.1.0",
     "@types/cypress-cucumber-preprocessor": "4.0.1",
     "@types/jest": "26.0.14",
-    "@types/lodash": "4.14.161",
+    "@types/lodash": "4.14.183",
     "@types/node": "12.12.62",
     "@types/simplebar": "5.1.1",
     "@types/swagger-ui": "3.52.0",
