@@ -5528,6 +5528,8 @@ def save_cluster_config(ctx: CephadmContext, uid: int, gid: int, fsid: str) -> N
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
 
+    ctx.error_code = 0
+
     if not ctx.output_config:
         ctx.output_config = os.path.join(ctx.output_dir, CEPH_CONF)
     if not ctx.output_keyring:
@@ -5746,6 +5748,7 @@ def command_bootstrap(ctx):
             out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
             logger.info(out)
         except Exception:
+            ctx.error_code = -errno.EINVAL
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
 
     save_cluster_config(ctx, uid, gid, fsid)
@@ -5771,7 +5774,7 @@ def command_bootstrap(ctx):
                 'For more information see:\n\n'
                 '\thttps://docs.ceph.com/en/latest/mgr/telemetry/\n')
     logger.info('Bootstrap complete.')
-    return 0
+    return ctx.error_code
 
 ##################################
 
