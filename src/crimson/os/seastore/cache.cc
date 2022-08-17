@@ -1480,7 +1480,10 @@ void Cache::complete_commit(
 	  i->get_type(),
 	  start_seq));
     } else if (is_backref_node(i->get_type())) {
-      add_backref_extent(i->get_paddr(), i->get_type());
+	add_backref_extent(
+	  i->get_paddr(),
+	  i->cast<backref::BackrefNode>()->get_node_meta().begin,
+	  i->get_type());
     } else {
       ERRORT("{}", t, *i);
       ceph_abort("not possible");

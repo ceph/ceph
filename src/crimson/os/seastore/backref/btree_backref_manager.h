@@ -108,7 +108,10 @@ public:
     paddr_t start,
     paddr_t end) final;
 
-  void cache_new_backref_extent(paddr_t paddr, extent_types_t type) final;
+  void cache_new_backref_extent(
+    paddr_t paddr,
+    paddr_t key,
+    extent_types_t type) final;
 
 private:
   Cache &cache;
