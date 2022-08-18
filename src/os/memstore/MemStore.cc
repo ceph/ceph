@@ -29,7 +29,7 @@
 #include "include/compat.h"
 
 #define dout_context cct
-#define dout_subsys ceph_subsys_filestore
+#define dout_subsys ceph_subsys_memstore
 #undef dout_prefix
 #define dout_prefix *_dout << "memstore(" << path << ") "
 
