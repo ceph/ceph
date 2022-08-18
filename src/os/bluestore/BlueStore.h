@@ -3821,12 +3821,16 @@ private:
   int  allocator_add_restored_entries(Allocator *allocator, const void *buff, unsigned extent_count, uint64_t *p_read_alloc_size,
 				      uint64_t  *p_extent_count, const void *v_header, BlueFS::FileReader *p_handle, uint64_t offset);
 
-  int  copy_allocator(Allocator* src_alloc, Allocator *dest_alloc, uint64_t* p_num_entries);
+  int  copy_allocator(
+    Allocator* src_alloc, std::function<bool(uint64_t offset, uint64_t length)> next_extent, uint64_t* p_num_entries);
   int  store_allocator(Allocator* allocator);
   int  invalidate_allocation_file_on_bluefs();
   int  __restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
-  int  restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
+public:
+  int  restore_allocator(
+    std::function<bool(uint64_t offset, uint64_t length)> next_extent, uint64_t *num, uint64_t *bytes);
   int  read_allocation_from_drive_on_startup();
+private:
   int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
   int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
   int  commit_freelist_type();

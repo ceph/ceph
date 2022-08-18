@@ -5864,47 +5864,15 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
   utime_t start_time = ceph_clock_now();
   auto next_extent = [&](uint64_t offset, uint64_t length) -> bool {
     alloc->init_add_free(offset, length);
+    ++num;
+    bytes += length;
     return true;
   };
   fm->enumerate(db, next_extent);
-  if (!fm->is_null_manager()) {
-    // This is the original path - loading allocation map from RocksDB and feeding into the allocator
-    dout(5) << __func__ << "::NCB::loading allocation from FM -> alloc" << dendl;
-    // initialize from freelist
-    fm->enumerate_reset();
-    uint64_t offset, length;
-    while (fm->enumerate_next(db, &offset, &length)) {
-      alloc->init_add_free(offset, length);
-      ++num;
-      bytes += length;
-    }
-    fm->enumerate_reset();
+  utime_t duration = ceph_clock_now() - start_time;
+  dout(5) << __func__ << "::num_entries=" << num << " free_size=" << bytes << " alloc_size="
+	  << alloc->get_capacity() - bytes << " time=" << duration << " seconds" << dendl;
 
-    utime_t duration = ceph_clock_now() - start_time;
-    dout(5) << __func__ << "::num_entries=" << num << " free_size=" << bytes << " alloc_size=" <<
-      alloc->get_capacity() - bytes << " time=" << duration << " seconds" << dendl;
-  } else {
-    // This is the new path reading the allocation map from a flat bluefs file and feeding them into the allocator
-
-    if (!cct->_conf->bluestore_allocation_from_file) {
-      derr << __func__ << "::NCB::cct->_conf->bluestore_allocation_from_file is set to FALSE with an active NULL-FM" << dendl;
-      derr << __func__ << "::NCB::Please change the value of bluestore_allocation_from_file to TRUE in your ceph.conf file" << dendl;
-      return -ENOTSUP; // Operation not supported
-    }
-    if (restore_allocator(alloc, &num, &bytes) == 0) {
-      dout(5) << __func__ << "::NCB::restore_allocator() completed successfully alloc=" << alloc << dendl;
-    } else {
-      // This must mean that we had an unplanned shutdown and didn't manage to destage the allocator
-      dout(0) << __func__ << "::NCB::restore_allocator() failed! Run Full Recovery from ONodes (might take a while) ..." << dendl;
-      // if failed must recover from on-disk ONode internal state
-      if (read_allocation_from_drive_on_startup() != 0) {
-	derr << __func__ << "::NCB::Failed Recovery" << dendl;
-	derr << __func__ << "::NCB::Ceph-OSD won't start, make sure your drives are connected and readable" << dendl;
-	derr << __func__ << "::NCB::If no HW fault is found, please report failure and consider redeploying OSD" << dendl;
-	return -ENOTRECOVERABLE;
-      }
-    }
-  }
   dout(1) << __func__
           << " loaded " << byte_u_t(bytes) << " in " << num << " extents"
           << std::hex

@@ -303,7 +303,10 @@ int BlueStore::invalidate_allocation_file_on_bluefs()
 }
 
 //-----------------------------------------------------------------------------------
-int BlueStore::copy_allocator(Allocator* src_alloc, Allocator* dest_alloc, uint64_t* p_num_entries)
+int BlueStore::copy_allocator(
+  Allocator* src_alloc,
+  std::function<bool(uint64_t offset, uint64_t length)> next_extent,
+  uint64_t* p_num_entries)
 {
   *p_num_entries = 0;
   auto count_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
@@ -347,7 +350,7 @@ int BlueStore::copy_allocator(Allocator* src_alloc, Allocator* dest_alloc, uint6
 
   for (idx = 0; idx < *p_num_entries; idx++) {
     const extent_t *p_extent = &arr[idx];
-    dest_alloc->init_add_free(p_extent->offset, p_extent->length);
+    next_extent(p_extent->offset, p_extent->length);
   }
 
   return 0;
@@ -683,7 +686,9 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
 }
 
 //-----------------------------------------------------------------------------------
-int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint64_t *bytes)
+int BlueStore::restore_allocator(
+  std::function<bool(uint64_t offset, uint64_t length)> next_extent,
+  uint64_t *num, uint64_t *bytes)
 {
   utime_t    start = ceph_clock_now();
   auto temp_allocator = unique_ptr<Allocator>(create_bitmap_allocator(bdev->get_size()));
@@ -694,7 +699,7 @@ int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint6
 
   uint64_t num_entries = 0;
   dout(5) << " calling copy_allocator(bitmap_allocator -> shared_alloc.a)" << dendl;
-  copy_allocator(temp_allocator.get(), dest_allocator, &num_entries);
+  copy_allocator(temp_allocator.get(), next_extent, &num_entries);
   utime_t duration = ceph_clock_now() - start;
   dout(5) << "restored in " << duration << " seconds, num_entries=" << num_entries << dendl;
   return ret;
@@ -949,7 +954,11 @@ Allocator* BlueStore::clone_allocator_without_bluefs(Allocator *src_allocator)
   }
 
   uint64_t num_entries = 0;
-  copy_allocator(src_allocator, allocator, &num_entries);
+  auto next_extent = [&](uint64_t offset, uint64_t length) -> bool {
+    allocator->init_add_free(offset, length);
+    return true;
+  };
+  copy_allocator(src_allocator, next_extent, &num_entries);
 
   // BlueFS stores its internal allocation outside RocksDB (FM) so we should not destage them to the allcoator-file
   // we are going to hide bluefs allocation during allocator-destage as they are stored elsewhere
@@ -1218,6 +1227,7 @@ int BlueStore::commit_to_real_manager()
 
 FileFreelistManager::FileFreelistManager(ObjectStore* store)
   : FreelistManager(store)
+  , cct(store->cct)
 {
 }
 
@@ -1394,11 +1404,43 @@ void FileFreelistManager::shutdown()
 
 void FileFreelistManager::enumerate_reset()
 {
+  ceph_assert(false);
 }
-
 
 bool FileFreelistManager::enumerate_next(KeyValueDB *kvdb, uint64_t *offset, uint64_t *length)
 {
+  ceph_assert(false);
+  return true;
+}
+
+bool FileFreelistManager::enumerate(
+  KeyValueDB *kvdb,
+  std::function<bool(uint64_t offset, uint64_t length)> next_extent)
+{
+  BlueStore* store = dynamic_cast<BlueStore*>(this->store);
+  ceph_assert(store);
+  // This is the new path reading the allocation map from a flat bluefs file and feeding them into the allocator
+
+  if (!cct->_conf->bluestore_allocation_from_file) {
+    derr << __func__ << "::NCB::cct->_conf->bluestore_allocation_from_file is set to FALSE with an active NULL-FM" << dendl;
+    derr << __func__ << "::NCB::Please change the value of bluestore_allocation_from_file to TRUE in your ceph.conf file" << dendl;
+    return false; // Operation not supported
+  }
+
+  uint64_t num = 0, bytes = 0;
+  if (store->restore_allocator(next_extent, &num, &bytes) == 0) {
+    dout(5) << __func__ << "::NCB::restore_allocator() completed successfully" << dendl;
+  } else {
+    // This must mean that we had an unplanned shutdown and didn't manage to destage the allocator
+    dout(0) << __func__ << "::NCB::restore_allocator() failed! Run Full Recovery from ONodes (might take a while) ..." << dendl;
+    // if failed must recover from on-disk ONode internal state
+    if (store->read_allocation_from_drive_on_startup() != 0) {
+      derr << __func__ << "::NCB::Failed Recovery" << dendl;
+      derr << __func__ << "::NCB::Ceph-OSD won't start, make sure your drives are connected and readable" << dendl;
+      derr << __func__ << "::NCB::If no HW fault is found, please report failure and consider redeploying OSD" << dendl;
+      return false;
+    }
+  }
   return true;
 }
 

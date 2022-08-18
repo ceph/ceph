@@ -13,7 +13,10 @@
 #include "include/buffer.h"
 #include "kv/KeyValueDB.h"
 
+#include "Allocator.h"
+
 class FileFreelistManager : public FreelistManager {
+  CephContext* cct;
   //std::string meta_prefix, bitmap_prefix;
   //std::shared_ptr<KeyValueDB::MergeOperator> merge_op;
   //ceph::mutex lock = ceph::make_mutex("FileFreelistManager::lock");
@@ -62,6 +65,8 @@ public:
 
   void enumerate_reset() override;
   bool enumerate_next(KeyValueDB *kvdb, uint64_t *offset, uint64_t *length) override;
+  bool enumerate(KeyValueDB *kvdb,
+		 std::function<bool(uint64_t offset, uint64_t length)> next_extent) override;
 
   void allocate(
     uint64_t offset, uint64_t length,
