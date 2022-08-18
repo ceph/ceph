@@ -533,14 +533,12 @@ class AsyncCleaner : public SegmentProvider, public JournalTrimmer {
 public:
   /// Config
   struct config_t {
-    /// Number of minimum journal segments to stop trimming dirty.
-    size_t target_journal_dirty_segments = 0;
-    /// Number of maximum journal segments to block user transactions.
-    size_t max_journal_segments = 0;
-
-    /// Number of minimum journal segments to stop trimming allocation
-    /// (having the corresponding backrefs unmerged)
-    size_t target_journal_alloc_segments = 0;
+    /// Number of minimum bytes to stop trimming dirty.
+    size_t target_journal_dirty_bytes = 0;
+    /// Number of maximum bytes to block user transactions.
+    size_t max_journal_bytes = 0;
+    /// Number of minimum bytes to stop trimming allocation.
+    size_t target_journal_alloc_bytes = 0;
 
     /// Ratio of maximum available space to disable reclaiming.
     double available_ratio_gc_max = 0;
@@ -560,8 +558,8 @@ public:
     size_t rewrite_backref_bytes_per_cycle = 0;
 
     void validate() const {
-      ceph_assert(max_journal_segments > target_journal_dirty_segments);
-      ceph_assert(max_journal_segments > target_journal_alloc_segments);
+      ceph_assert(max_journal_bytes > target_journal_dirty_bytes);
+      ceph_assert(max_journal_bytes > target_journal_alloc_bytes);
       ceph_assert(available_ratio_gc_max > available_ratio_hard_limit);
       ceph_assert(reclaim_bytes_per_cycle > 0);
       ceph_assert(rewrite_dirty_bytes_per_cycle > 0);
@@ -570,9 +568,9 @@ public:
 
     static config_t get_default() {
       return config_t{
-	  12,   // target_journal_dirty_segments
-	  16,   // max_journal_segments
-	  2,	// target_journal_alloc_segments
+	  (8 << 20) * 12,// target_journal_dirty_bytes
+	  (8 << 20) * 16,// max_journal_bytes
+	  (8 << 20) * 2, // target_journal_alloc_bytes
 	  .15,  // available_ratio_gc_max
 	  .1,   // available_ratio_hard_limit
 	  .1,   // reclaim_ratio_gc_threshold
@@ -584,9 +582,9 @@ public:
 
     static config_t get_test() {
       return config_t{
-	  2,    // target_journal_dirty_segments
-	  4,    // max_journal_segments
-	  2,	// target_journal_alloc_segments
+	  (8 << 20) * 2,// target_journal_dirty_bytes
+	  (8 << 20) * 4,// max_journal_bytes
+	  (8 << 20) * 2,// target_journal_alloc_bytes
 	  .99,  // available_ratio_gc_max
 	  .2,   // available_ratio_hard_limit
 	  .6,   // reclaim_ratio_gc_threshold
@@ -984,8 +982,10 @@ private:
     assert(init_complete);
     auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
-    if (ret.segment_seq >= config.target_journal_dirty_segments) {
-      ret.segment_seq -= config.target_journal_dirty_segments;
+    if (get_dirty_journal_size() > config.target_journal_dirty_bytes) {
+      return get_tail_target_behind_head(
+	ret,
+	config.target_journal_dirty_bytes);
     } else {
       ret.segment_seq = 0;
       ret.offset = P_ADDR_MIN;
@@ -997,8 +997,12 @@ private:
     assert(init_complete);
     auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
-    if (ret.segment_seq >= config.max_journal_segments) {
-      ret.segment_seq -= config.max_journal_segments;
+    auto len  = get_dirty_journal_size() > get_alloc_journal_size() ?
+      get_alloc_journal_size() : get_dirty_journal_size();
+    if (len > config.max_journal_bytes) {
+      return get_tail_target_behind_head(
+	ret,
+	config.max_journal_bytes);
     } else {
       ret.segment_seq = 0;
       ret.offset = P_ADDR_MIN;
@@ -1010,8 +1014,10 @@ private:
     assert(init_complete);
     auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
-    if (ret.segment_seq >= config.target_journal_alloc_segments) {
-      ret.segment_seq -= config.target_journal_alloc_segments;
+    if (get_alloc_journal_size() > config.target_journal_alloc_bytes) {
+      return get_tail_target_behind_head(
+	ret,
+	config.target_journal_alloc_bytes);
     } else {
       ret.segment_seq = 0;
       ret.offset = P_ADDR_MIN;
@@ -1266,11 +1272,17 @@ private:
         journal_dirty_tail == JOURNAL_SEQ_NULL) {
       return 0;
     }
-    return (journal_head.segment_seq - journal_dirty_tail.segment_seq) *
-           segments.get_segment_size() +
-           journal_head.offset.as_seg_paddr().get_segment_off() -
-           segments.get_segment_size() -
-           journal_dirty_tail.offset.as_seg_paddr().get_segment_off();
+    if (get_journal_type() == journal_type_t::SEGMENT_JOURNAL) {
+      return (journal_head.segment_seq - journal_dirty_tail.segment_seq) *
+	     segments.get_segment_size() +
+	     journal_head.offset.as_seg_paddr().get_segment_off() -
+	     segments.get_segment_size() -
+	     journal_dirty_tail.offset.as_seg_paddr().get_segment_off();
+    } else {
+      ceph_assert(get_journal_type() ==
+	journal_type_t::CIRCULARBOUNDED_JOURNAL);
+      return get_len_to_head(get_dirty_tail());
+    }
   }
 
   std::size_t get_alloc_journal_size() const {
@@ -1278,11 +1290,17 @@ private:
         journal_alloc_tail == JOURNAL_SEQ_NULL) {
       return 0;
     }
-    return (journal_head.segment_seq - journal_alloc_tail.segment_seq) *
-           segments.get_segment_size() +
-           journal_head.offset.as_seg_paddr().get_segment_off() -
-           segments.get_segment_size() -
-           journal_alloc_tail.offset.as_seg_paddr().get_segment_off();
+    if (get_journal_type() == journal_type_t::SEGMENT_JOURNAL) {
+      return (journal_head.segment_seq - journal_alloc_tail.segment_seq) *
+	     segments.get_segment_size() +
+	     journal_head.offset.as_seg_paddr().get_segment_off() -
+	     segments.get_segment_size() -
+	     journal_alloc_tail.offset.as_seg_paddr().get_segment_off();
+    } else {
+      ceph_assert(get_journal_type() ==
+	journal_type_t::CIRCULARBOUNDED_JOURNAL);
+      return get_len_to_head(get_alloc_tail());
+    }
   }
 
   /**
@@ -1318,7 +1336,14 @@ public:
 
   void release_projected_usage(size_t projected_usage);
 
+  journal_type_t get_journal_type() const {
+    return journal_type;
+  }
+  void set_journal_type(journal_type_t type) {
+    journal_type = type;
+  }
 private:
+  journal_type_t journal_type;
   void maybe_wake_gc_blocked_io() {
     if (!init_complete) {
       return;
@@ -1397,6 +1422,52 @@ private:
     const AsyncCleaner *cleaner;
     bool detailed = false;
   };
+  uint64_t get_len_to_head(journal_seq_t tail_seq) const {
+    ceph_assert(get_journal_type() ==
+      journal_type_t::CIRCULARBOUNDED_JOURNAL);
+    if (tail_seq == JOURNAL_SEQ_NULL) {
+      return 0;
+    }
+    auto head_seq = journal_head;
+    auto &head = head_seq.offset.as_blk_paddr();
+    auto &tail = tail_seq.offset.as_blk_paddr();
+    ceph_assert(head_seq >= tail_seq);
+    auto gap = head.get_block_off() > tail.get_block_off() ?
+      head.get_block_off() - tail.get_block_off() :
+      tail.get_block_off() - head.get_block_off();
+    return gap;
+  }
+  journal_seq_t get_tail_target_behind_head(journal_seq_t head,
+    uint64_t len) const {
+    if (get_journal_type() == journal_type_t::SEGMENT_JOURNAL) {
+      journal_seq_t seq = head;
+      if (head.segment_seq >= (len / segments.get_segment_size())) {
+	seq.segment_seq -= (len / segments.get_segment_size());
+      } else {
+	seq.segment_seq = 0;
+	seq.offset = P_ADDR_MIN;
+      }
+      return seq;
+    } else {
+      ceph_assert(get_journal_type() ==
+	journal_type_t::CIRCULARBOUNDED_JOURNAL);
+      auto &blk_addr = head.offset.as_blk_paddr();
+      if (blk_addr.get_block_off() < len && head.segment_seq > 0) {
+	return journal_seq_t {
+	  head.segment_seq - 1,
+	  paddr_t::make_blk_paddr(
+	    head.offset.get_device_id(),
+	    len - blk_addr.get_block_off())};
+      } else if (blk_addr.get_block_off() >= len) {
+	return journal_seq_t {
+	  head.segment_seq,
+	  paddr_t::make_blk_paddr(
+	    head.offset.get_device_id(),
+	    blk_addr.get_block_off() - len)};
+      }
+      ceph_assert(0 == "impossible");
+    }
+  }
   friend std::ostream &operator<<(std::ostream &, gc_stat_printer_t);
 };
 using AsyncCleanerRef = std::unique_ptr<AsyncCleaner>;

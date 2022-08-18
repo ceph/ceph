@@ -644,9 +644,14 @@ TransactionManagerRef make_transaction_manager(
 
   bool cleaner_is_detailed;
   AsyncCleaner::config_t cleaner_config;
+  auto p_device_type = primary_device->get_device_type();
   if (is_test) {
     cleaner_is_detailed = true;
     cleaner_config = AsyncCleaner::config_t::get_test();
+    if (p_device_type == device_type_t::RANDOM_BLOCK) {
+      cleaner_config.max_journal_bytes = journal::CircularBoundedJournal::
+	mkfs_config_t::get_default().total_size / 2;
+    }
   } else {
     cleaner_is_detailed = false;
     cleaner_config = AsyncCleaner::config_t::get_default();
@@ -661,16 +666,17 @@ TransactionManagerRef make_transaction_manager(
     cache->set_segment_provider(*async_cleaner);
   }
 
-  auto p_device_type = primary_device->get_device_type();
   JournalRef journal;
   if (p_device_type == device_type_t::SEGMENTED) {
     journal = journal::make_segmented(*async_cleaner, *async_cleaner);
+    async_cleaner->set_journal_type(journal_type_t::SEGMENT_JOURNAL);
   } else {
     ceph_assert(p_device_type == device_type_t::RANDOM_BLOCK);
     journal = journal::make_circularbounded(
       *async_cleaner,
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
+    async_cleaner->set_journal_type(journal_type_t::CIRCULARBOUNDED_JOURNAL);
     async_cleaner->set_disable_trim(true);
     ERROR("disabling journal trimming since support for CircularBoundedJournal "
           "hasn't been added yet");
