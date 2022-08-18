@@ -827,13 +827,20 @@ class RgwService(CephService):
     def config(self, spec: RGWSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
 
-        # set rgw_realm and rgw_zone, if present
+        # set rgw_realm rgw_zonegroup and rgw_zone, if present
         if spec.rgw_realm:
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config set',
                 'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
                 'name': 'rgw_realm',
                 'value': spec.rgw_realm,
+            })
+        if spec.rgw_zonegroup:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
+                'name': 'rgw_zonegroup',
+                'value': spec.rgw_zonegroup,
             })
         if spec.rgw_zone:
             ret, out, err = self.mgr.check_mon_command({

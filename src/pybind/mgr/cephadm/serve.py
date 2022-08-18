@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple,
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec, RGWSpec
 from ceph.utils import datetime_now
 
 import orchestrator
@@ -820,6 +820,28 @@ class CephadmServe:
                     # Need to fail over later so it can be removed on next pass.
                     # This can be accomplished by scheduling a restart of the active mgr.
                     self.mgr._schedule_daemon_action(active_mgr.name(), 'restart')
+
+            if service_type == 'rgw':
+                rgw_spec = cast(RGWSpec, spec)
+                if rgw_spec.update_endpoints and rgw_spec.rgw_realm_token is not None:
+                    ep = []
+                    for s in self.mgr.cache.get_daemons_by_service(rgw_spec.service_name()):
+                        if s.ports:
+                            for p in s.ports:
+                                ep.append(f'http://{s.hostname}:{p}')
+                    zone_update_cmd = {
+                        'prefix': 'rgw zone update',
+                        'realm_name': rgw_spec.rgw_realm,
+                        'zonegroup_name': rgw_spec.rgw_zonegroup,
+                        'zone_name': rgw_spec.rgw_zone,
+                        'realm_token': rgw_spec.rgw_realm_token,
+                        'endpoints': ep,
+                    }
+                    self.log.debug(f'rgw cmd: {zone_update_cmd}')
+                    rc, out, err = self.mgr.mon_command(zone_update_cmd)
+                    rgw_spec.update_endpoints = (rc != 0)  # keep trying on failure
+                    if rc != 0:
+                        self.log.error(f'Error when trying to update rgw zone {err}.. keep trying')
 
             # remove any?
             def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
