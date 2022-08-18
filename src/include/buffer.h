@@ -594,13 +594,13 @@ struct error_code;
 	}
       }
       void clear_and_dispose() {
-	for (auto it = begin(); it != end(); /* nop */) {
-	  auto& node = *it;
-	  it = it->next;
-	  ptr_node::disposer()(&node);
-	}
-	_root.next = &_root;
-	_tail = &_root;
+        for (auto it = begin(); it != end(); /* nop */) {
+          auto& node = *it;
+          it = it->next;
+          ptr_node::disposer()(&node);
+        }
+        _root.next = &_root;
+        _tail = &_root;
       }
       iterator erase_after_and_dispose(iterator it) {
 	auto* to_dispose = &*std::next(it);
