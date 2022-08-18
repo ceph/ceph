@@ -1,5 +1,6 @@
-(import 'config.libsonnet')
 {
+  _config:: error 'must provide _config',
+
   MultiClusterQuery()::
     if $._config.showMultiCluster
     then 'cluster,'
