@@ -231,6 +231,8 @@ Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ceph-mgr-modules-core (= ${binary:Version}),
+         libsqlite3-mod-ceph (= ${binary:Version}),
+         librados2 (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
@@ -742,7 +744,8 @@ Description: RADOS distributed object store client C++ library (development file
 Package: libsqlite3-mod-ceph
 Architecture: any
 Section: libs
-Depends: ${misc:Depends},
+Depends: librados2 (= ${binary:Version}),
+         ${misc:Depends},
          ${shlibs:Depends},
 Description: SQLite3 VFS for Ceph
  A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
