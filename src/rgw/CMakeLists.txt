@@ -346,6 +346,8 @@ target_link_libraries(rgw_schedulers
 
 set(radosgw_srcs
   rgw_main.cc
+  rgw_file.cc
+  librgw.cc
   rgw_loadgen_process.cc
   rgw_asio_client.cc
   rgw_asio_frontend.cc
@@ -413,12 +415,23 @@ target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
 set(librgw_srcs
-  librgw.cc
-  rgw_file.cc)
+  ${radosgw_srcs})
 add_library(rgw SHARED ${librgw_srcs})
+
+target_compile_definitions(rgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
+target_include_directories(rgw
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
+  PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PRIVATE "${LUA_INCLUDE_DIR}")
+
+target_include_directories(rgw SYSTEM PUBLIC "../rapidjson/include")
+
 target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
+  rgw_schedulers
+  kmip
   librados
   cls_rgw_client
   cls_otp_client
@@ -429,7 +442,6 @@ target_link_libraries(rgw
   neorados_cls_fifo
   cls_version_client
   cls_user_client
-  global
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}

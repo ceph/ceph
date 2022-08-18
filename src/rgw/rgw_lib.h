@@ -14,9 +14,12 @@
 #include "rgw_frontend.h"
 #include "rgw_process.h"
 #include "rgw_rest_s3.h" // RGW_Auth_S3
+#include "rgw_period_pusher.h"
+#include "rgw_realm_reloader.h"
 #include "rgw_ldap.h"
 #include "services/svc_zone_utils.h"
 #include "include/ceph_assert.h"
+#include "rgw_main.h"
 
 class OpsLogSink;
 
@@ -25,16 +28,27 @@ namespace rgw {
   class RGWLibFrontend;
 
   class RGWLib : public DoutPrefixProvider {
-    RGWFrontendConfig* fec;
     RGWLibFrontend* fe;
+    std::vector<RGWFrontend*> fes;
+    std::vector<RGWFrontendConfig*> fe_configs;
+    std::multimap<std::string, RGWFrontendConfig*> fe_map;
+    std::unique_ptr<RGWRealmReloader> reloader;
+    std::unique_ptr<RGWPeriodPusher> pusher;
+    std::unique_ptr<RGWFrontendPauser> fe_pauser;
+    std::unique_ptr<RGWRealmWatcher> realm_watcher;
+    std::unique_ptr<RGWPauser> rgw_pauser;
+    std::unique_ptr<rgw::lua::Background> lua_background;
     OpsLogSink* olog;
-    rgw::LDAPHelper* ldh{nullptr};
-    RGWREST rest; // XXX needed for RGWProcessEnv
+    std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
+    std::unique_ptr<rgw::dmclock::SchedulerCtx> sched_ctx;
+    std::unique_ptr<ActiveRateLimiter> ratelimiter;
+    std::unique_ptr<rgw::LDAPHelper> ldh;
+    RGWREST rest;
     rgw::sal::Store* store;
     boost::intrusive_ptr<CephContext> cct;
 
   public:
-    RGWLib() : fec(nullptr), fe(nullptr), olog(nullptr), store(nullptr)
+    RGWLib() : fe(nullptr), olog(nullptr), store(nullptr)
       {}
     ~RGWLib() {}
 
@@ -42,11 +56,12 @@ namespace rgw {
 
     RGWLibFrontend* get_fe() { return fe; }
 
-    rgw::LDAPHelper* get_ldh() { return ldh; }
-
+    rgw::LDAPHelper* get_ldh() { return ldh.get(); }
     CephContext *get_cct() const override { return cct.get(); }
     unsigned get_subsys() const { return ceph_subsys_rgw; }
     std::ostream& gen_prefix(std::ostream& out) const { return out << "lib rgw: "; }
+
+    void set_fe(RGWLibFrontend* fe);
 
     int init();
     int init(std::vector<const char *>& args);
@@ -109,14 +124,12 @@ namespace rgw {
 
   }; /* RGWLibIO */
 
-/* XXX */
   class RGWRESTMgr_Lib : public RGWRESTMgr {
   public:
     RGWRESTMgr_Lib() {}
     ~RGWRESTMgr_Lib() override {}
   }; /* RGWRESTMgr_Lib */
 
-/* XXX */
   class RGWHandler_Lib : public RGWHandler {
     friend class RGWRESTMgr_Lib;
   public:
