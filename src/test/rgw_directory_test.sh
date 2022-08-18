@@ -1,7 +1,7 @@
 #!/bin/bash
 redis-server --daemonize yes
 echo "-----------Redis Server Started-----------"
-timeout 5s ../../build/bin/ceph_test_rgw_directory || echo "Failed from timeout"
+../../build/bin/ceph_test_rgw_directory
 printf "\n-----------Directory Test Executed-----------\n"
 redis-cli FLUSHALL
 echo "-----------Redis Server Flushed-----------"
