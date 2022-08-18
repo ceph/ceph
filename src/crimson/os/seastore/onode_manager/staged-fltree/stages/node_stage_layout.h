@@ -182,9 +182,9 @@ struct _node_fields_013_t {
   }
 
   static node_offset_t estimate_insert_one() { return sizeof(SlotType); }
-  template <KeyT KT>
+  template <IsFullKey Key>
   static void insert_at(
-      NodeExtentMutable&, const full_key_t<KT>& key,
+      NodeExtentMutable&, const Key& key,
       const me_t& node, index_t index, node_offset_t size_right);
   static node_offset_t erase_at(NodeExtentMutable&, const me_t&, index_t, const char*);
   static void update_size_at(
