@@ -247,12 +247,6 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  ret = convert_regionmap(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "failed converting regionmap: " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
   auto zone_iter = zonegroup->zones.find(zone_params->get_id());
   if (zone_iter == zonegroup->zones.end()) {
     /* shouldn't happen if relying on period config */
@@ -872,69 +866,6 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield
     }
     const auto& endpoints = master->second.endpoints;
     rest_master_conn = new RGWRESTConn(cct, zonegroup->get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zonegroup->api_name);
-  }
-
-  return 0;
-}
-
-int RGWSI_Zone::convert_regionmap(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  RGWZoneGroupMap zonegroupmap;
-
-  string pool_name = cct->_conf->rgw_zone_root_pool;
-  if (pool_name.empty()) {
-    pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
-  }
-  string oid = region_map_oid; 
-
-  rgw_pool pool(pool_name);
-  bufferlist bl;
-
-  RGWSysObj sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0 && ret != -ENOENT) {
-    return ret;
-  } else if (ret == -ENOENT) {
-    return 0;
-  }
-
-  try {
-    auto iter = bl.cbegin();
-    decode(zonegroupmap, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "error decoding regionmap from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-  
-  for (map<string, RGWZoneGroup>::iterator iter = zonegroupmap.zonegroups.begin();
-       iter != zonegroupmap.zonegroups.end(); ++iter) {
-    RGWZoneGroup& zonegroup = iter->second;
-    ret = zonegroup.init(dpp, cct, sysobj_svc, y, false);
-    ret = zonegroup.update(dpp, y);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 0) << "Error could not update zonegroup " << zonegroup.get_name() << ": " <<
-	cpp_strerror(-ret) << dendl;
-      return ret;
-    } else if (ret == -ENOENT) {
-      ret = zonegroup.create(dpp, y);
-      if (ret < 0) {
-	ldpp_dout(dpp, 0) << "Error could not create " << zonegroup.get_name() << ": " <<
-	  cpp_strerror(-ret) << dendl;
-	return ret;
-      }
-    }
-  }
-
-  current_period->set_user_quota(zonegroupmap.quota.user_quota);
-  current_period->set_bucket_quota(zonegroupmap.quota.bucket_quota);
-
-  // remove the region_map so we don't try to convert again
-  ret = sysobj.wop().remove(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Error could not remove " << sysobj.get_obj()
-        << " after upgrading to zonegroup map: " << cpp_strerror(ret) << dendl;
-    return ret;
   }
 
   return 0;
