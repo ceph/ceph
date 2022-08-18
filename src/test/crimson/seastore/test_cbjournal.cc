@@ -292,7 +292,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     cbj->update_journal_tail(
       seq,
       seq
-    ).unsafe_get0();
+    ).get0();
   }
   void set_written_to(journal_seq_t seq) {
     cbj->set_written_to(seq);
