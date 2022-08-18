@@ -64,6 +64,7 @@ set(librgw_common_srcs
   rgw_cache.cc
   rgw_directory.cc
   rgw_d3n_datacache.cc
+  rgw_d4n_datacache.cc
   rgw_common.cc
   rgw_compression.cc
   rgw_etag_verifier.cc
