@@ -95,7 +95,7 @@ class Prepare(object):
             rollback_osd(self.args, self.osd_id)
             raise
         dmcrypt_log = 'dmcrypt' if args.dmcrypt else 'clear'
-        terminal.success("ceph-volume raw {} prepare successful for: {}".format(dmcrypt_log, self.args.data))
+        terminal.success("jinhaohu changed the log. ceph-volume raw {} prepare successful for: {}".format(dmcrypt_log, self.args.data))
 
 
     @decorators.needs_root
@@ -105,7 +105,8 @@ class Prepare(object):
         cephx_lockbox_secret = '' if not encrypted else prepare_utils.create_key()
 
         if encrypted:
-            secrets['dmcrypt_key'] = os.getenv('CEPH_VOLUME_DMCRYPT_SECRET')
+            secrets['dmcrypt_key'] = prepare_utils.create_key() # dummy value because we don't want to store actual dmcrypt_key in monitor
+            logger.info('jinhao dummy key is: {}'.format(secrets['dmcrypt_key']))
             secrets['cephx_lockbox_secret'] = cephx_lockbox_secret # dummy value to make `ceph osd new` not complaining
 
         osd_fsid = system.generate_uuid()
@@ -123,6 +124,11 @@ class Prepare(object):
         # reuse a given ID if it exists, otherwise create a new ID
         self.osd_id = prepare_utils.create_id(
             osd_fsid, json.dumps(secrets))
+
+        # set actual dmcrypt key for encryption
+        if encrypted:
+            secrets['dmcrypt_key'] = os.getenv('CEPH_VOLUME_DMCRYPT_SECRET')
+            logger.info('jinhao actual key is: {}'.format(secrets['dmcrypt_key']))
 
         prepare_bluestore(
             self.args.data,
