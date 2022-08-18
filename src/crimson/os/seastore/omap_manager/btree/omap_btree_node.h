@@ -101,6 +101,7 @@ struct OMapNode : LogicalCachedExtent {
   virtual bool extent_will_overflow(
     size_t ksize,
     std::optional<size_t> vsize) const = 0;
+  virtual bool can_merge(OMapNodeRef right) const = 0;
   virtual bool extent_is_below_min() const = 0;
   virtual uint32_t get_node_size() = 0;
 
