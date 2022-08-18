@@ -106,6 +106,8 @@ struct child_trans_views_t {
 // nodes to turn its transactional view into a global view when it has replaced
 // the old one.
 struct parent_tracker_t {
+  parent_tracker_t(CachedExtent* parent, uint64_t pos)
+    : parent(parent), pos(pos) {}
   CachedExtent* parent;
   uint64_t pos;
 };

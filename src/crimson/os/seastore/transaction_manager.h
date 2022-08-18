@@ -134,7 +134,7 @@ public:
     static_assert(is_logical_type(T::TYPE));
     using ret = pin_to_extent_ret<T>;
     auto &pref = *pin;
-    return cache->get_extent<T>(
+    return cache->get_extent<true, T>(
       t,
       pref.get_val(),
       pref.get_length(),

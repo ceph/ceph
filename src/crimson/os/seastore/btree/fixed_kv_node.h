@@ -543,7 +543,25 @@ struct FixedKVInternalNode
 	*ext, *child);
     }
     return ext;
-  };
+  }
+
+  template <typename T>
+  TCachedExtentRef<T> get_child(Transaction &t, uint16_t pos) {
+    static_assert(std::is_base_of_v<FixedKVNode<NODE_KEY>, T>);
+    ceph_assert(pos < this->get_size());
+    if (!this->is_pending()) {
+      auto child_trans_view =
+	this->child_trans_views.get_child_trans_view(t, pos);
+      if (child_trans_view) {
+	ceph_assert(child_trans_view->get_type() == T::TYPE);
+	return (T*)child_trans_view;
+      }
+    }
+
+    auto tracker = this->child_trackers[pos];
+    assert(tracker);
+    return (T*)tracker->child.get();
+  }
 
   void update(
     Transaction &t,
