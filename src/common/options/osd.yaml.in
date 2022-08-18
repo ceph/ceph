@@ -478,7 +478,7 @@ options:
 - name: osd_class_dir
   type: str
   level: advanced
-  default: @CMAKE_INSTALL_LIBDIR@/rados-classes
+  default: @CMAKE_INSTALL_FULL_LIBDIR@/rados-classes
   fmt_desc: The class path for RADOS class plug-ins.
   with_legacy: true
 - name: osd_open_classes_on_start
