@@ -105,7 +105,7 @@ class Prepare(object):
         cephx_lockbox_secret = '' if not encrypted else prepare_utils.create_key()
 
         if encrypted:
-            secrets['dmcrypt_key'] = os.getenv('CEPH_VOLUME_DMCRYPT_SECRET')
+            secrets['dmcrypt_key'] = prepare_utils.create_key() # dummy value because we don't want to store actual dmcrypt_key in monitor
             secrets['cephx_lockbox_secret'] = cephx_lockbox_secret # dummy value to make `ceph osd new` not complaining
 
         osd_fsid = system.generate_uuid()
@@ -123,6 +123,10 @@ class Prepare(object):
         # reuse a given ID if it exists, otherwise create a new ID
         self.osd_id = prepare_utils.create_id(
             osd_fsid, json.dumps(secrets))
+
+        # set actual dmcrypt key for encryption
+        if encrypted:
+            secrets['dmcrypt_key'] = os.getenv('CEPH_VOLUME_DMCRYPT_SECRET')
 
         prepare_bluestore(
             self.args.data,
