@@ -20,8 +20,8 @@
 #include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 #include "rgw_directory.h"
+#include "rgw_d4n_datacache.h"
 #include "common/dout.h" 
-#include "rgw_sal_d4n.h"
 
 namespace rgw { namespace sal {
 
@@ -29,16 +29,19 @@ class D4NFilterStore : public FilterStore {
   private:
     RGWBlockDirectory* blk_dir;
     cache_block* c_blk;
+    RGWD4NCache* d4n_cache;
 
   public:
     D4NFilterStore(Store* _next) : FilterStore(_next) 
     {
       blk_dir = new RGWBlockDirectory(); // Uses cct to initialize directory address 
       c_blk = new cache_block();
+      d4n_cache = new RGWD4NCache();
     }
     virtual ~D4NFilterStore() {
       delete blk_dir; 
       delete c_blk;
+      delete d4n_cache;
     }
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
@@ -54,6 +57,7 @@ class D4NFilterStore : public FilterStore {
 				  const std::string& unique_tag) override;
     RGWBlockDirectory* get_block_dir() { return blk_dir; }
     cache_block* get_cache_block() { return c_blk; }
+    RGWD4NCache* get_d4n_cache() { return d4n_cache; }
 };
 
 class D4NFilterObject : public FilterObject {
@@ -61,7 +65,6 @@ class D4NFilterObject : public FilterObject {
     D4NFilterStore* filter;
 
   public:
-
     struct D4NFilterReadOp : FilterReadOp {
       D4NFilterObject* source;
 
@@ -91,6 +94,14 @@ class D4NFilterObject : public FilterObject {
     virtual ~D4NFilterObject() = default;
 
     virtual const std::string &get_name() const override { return next->get_name(); }
+    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
+                            Attrs* delattrs, optional_yield y) override;
+    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
+                            rgw_obj* target_obj = NULL) override;
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
+                               optional_yield y, const DoutPrefixProvider* dpp) override;
+    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
+                               optional_yield y) override;
 
     virtual std::unique_ptr<ReadOp> get_read_op() override;
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
