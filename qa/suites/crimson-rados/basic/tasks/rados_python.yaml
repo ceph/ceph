@@ -10,6 +10,7 @@ overrides:
     - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - workunit:
+    timeout: 1h
     clients:
       client.0:
-        - rados/test_python.sh --eval-attr 'not (tier or snap or ec or bench or stats)'
+        - rados/test_python.sh --eval-attr 'not (wait or tier or snap or ec or bench or stats)'
