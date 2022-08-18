@@ -29,6 +29,8 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/Timer.h"
+#include "common/TracepointProvider.h"
+#include "common/openssl_opts_handler.h"
 #include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "common/ceph_argparse.h"
@@ -38,7 +40,25 @@
 
 #include "rgw_resolve.h"
 #include "rgw_op.h"
+#include "rgw_period_pusher.h"
+#include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
+#include "rgw_rest_s3.h"
+#include "rgw_rest_swift.h"
+#include "rgw_rest_admin.h"
+#include "rgw_rest_info.h"
+#include "rgw_rest_usage.h"
+#include "rgw_rest_user.h"
+#include "rgw_rest_bucket.h"
+#include "rgw_rest_metadata.h"
+#include "rgw_rest_log.h"
+#include "rgw_rest_config.h"
+#include "rgw_rest_realm.h"
+#include "rgw_rest_sts.h"
+#include "rgw_rest_ratelimit.h"
+#include "rgw_swift_auth.h"
+#include "rgw_log.h"
+#include "rgw_tools.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
 #include "rgw_process.h"
@@ -51,6 +71,8 @@
 #include "rgw_lib_frontend.h"
 #include "rgw_http_client.h"
 #include "rgw_http_client_curl.h"
+#include "rgw_kmip_client.h"
+#include "rgw_kmip_client_impl.h"
 #include "rgw_perf_counters.h"
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
@@ -58,8 +80,16 @@
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
+#include "rgw_asio_frontend.h"
+#include "rgw_dmclock_scheduler_ctx.h"
+#include "rgw_lua.h"
+#ifdef WITH_RADOSGW_DBSTORE
+#include "rgw_sal_dbstore.h"
+#endif
+#include "rgw_lua_background.h"
 
 #include "services/svc_zone.h"
+#include "rgw_main.h"
 
 #include <errno.h>
 #include <thread>
@@ -69,6 +99,13 @@
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+
+namespace {
+  TracepointProvider::Traits rgw_op_tracepoint_traits(
+    "librgw_op_tp.so", "rgw_op_tracing");
+  TracepointProvider::Traits rgw_rados_tracepoint_traits(
+    "librgw_rados_tp.so", "rgw_rados_tracing");
+}
 
 bool global_stop = false;
 
@@ -484,6 +521,11 @@ namespace rgw {
     return 0;
   }
 
+  void RGWLib::set_fe(rgw::RGWLibFrontend* fe)
+  {
+    this->fe = fe;
+  }
+
   int RGWLib::init()
   {
     vector<const char*> args;
@@ -492,13 +534,15 @@ namespace rgw {
 
   int RGWLib::init(vector<const char*>& args)
   {
-    int r = 0;
-
     /* alternative default for module */
     map<string,string> defaults = {
       { "debug_rgw", "1/5" },
       { "keyring", "$rgw_data/keyring" },
-      { "log_file", "/var/log/radosgw/$cluster-$name.log" }
+      { "log_file", "/var/log/radosgw/$cluster-$name.log" },
+      { "objecter_inflight_ops", "24576" },
+      // require a secure mon connection by default
+      { "ms_mon_client_mode", "secure" },
+      { "auth_client_required", "cephx" },
     };
 
     cct = rgw_global_init(&defaults, args,
@@ -513,39 +557,18 @@ namespace rgw {
     init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
     mutex.unlock();
 
+    /* stage all front-ends (before common-init-finish) */
+
+    rgw::InitHelper init_helper(
+      fes, fe_configs, fe_map, ldh, olog, rest, lua_background,
+      implicit_tenant_context, sched_ctx, ratelimiter, reloader,
+      pusher, fe_pauser, realm_watcher, rgw_pauser, store, this);
+
+    init_helper.init_frontends1(true /* nfs */);
+
     common_init_finish(g_ceph_context);
 
-    rgw_tools_init(this, g_ceph_context);
-
-    rgw_init_resolver();
-    rgw::curl::setup_curl(boost::none);
-    rgw_http_client_init(g_ceph_context);
-
-    auto run_gc =
-      g_conf()->rgw_enable_gc_threads &&
-      g_conf()->rgw_nfs_run_gc_threads;
-
-    auto run_lc =
-      g_conf()->rgw_enable_lc_threads &&
-      g_conf()->rgw_nfs_run_lc_threads;
-
-    auto run_quota =
-      g_conf()->rgw_enable_quota_threads &&
-      g_conf()->rgw_nfs_run_quota_threads;
-
-    auto run_sync =
-      g_conf()->rgw_run_sync_thread &&
-      g_conf()->rgw_nfs_run_sync_thread;
-
-    StoreManager::Config cfg = StoreManager::get_config(false, g_ceph_context);
-    store = StoreManager::get_storage(this, g_ceph_context,
-					 cfg,
-					 run_gc,
-					 run_lc,
-					 run_quota,
-					 run_sync,
-					 g_conf().get_val<bool>("rgw_dynamic_resharding"));
-
+    init_helper.init_storage();
     if (!store) {
       mutex.lock();
       init_timer.cancel_all_events();
@@ -556,89 +579,25 @@ namespace rgw {
       return -EIO;
     }
 
-    r = rgw_perf_start(g_ceph_context);
-
-    rgw_rest_init(g_ceph_context, store->get_zone()->get_zonegroup());
+    init_helper.init_perfcounters();
+    init_helper.init_http_clients();
+    init_helper.cond_init_apis();
 
     mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
     mutex.unlock();
 
-    if (r)
-      return -EIO;
-
-    const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
-    const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
-    const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
-    const string& ldap_searchfilter = store->ctx()->_conf->rgw_ldap_searchfilter;
-    const string& ldap_dnattr =
-      store->ctx()->_conf->rgw_ldap_dnattr;
-    std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
-
-    ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw.c_str(),
-			      ldap_searchdn, ldap_searchfilter, ldap_dnattr);
-    ldh->init();
-    ldh->bind();
-
-    rgw_log_usage_init(g_ceph_context, store);
-
-    // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
-
-    OpsLogManifold* olog_manifold = new OpsLogManifold();
-    if (!g_conf()->rgw_ops_log_socket_path.empty()) {
-      OpsLogSocket* olog_socket = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
-      olog_socket->init(g_conf()->rgw_ops_log_socket_path);
-      olog_manifold->add_sink(olog_socket);
-    }
-    OpsLogFile* ops_log_file;
-    if (!g_conf()->rgw_ops_log_file_path.empty()) {
-      ops_log_file = new OpsLogFile(g_ceph_context, g_conf()->rgw_ops_log_file_path, g_conf()->rgw_ops_log_data_backlog);
-      ops_log_file->start();
-      olog_manifold->add_sink(ops_log_file);
-    }
-    olog_manifold->add_sink(new OpsLogRados(store));
-    olog = olog_manifold;
-
-    int port = 80;
-    RGWProcessEnv env = { store, &rest, olog, port };
-
-    string fe_count{"0"};
-    fec = new RGWFrontendConfig("rgwlib");
-    fe = new RGWLibFrontend(env, fec);
+    init_helper.init_ldap();
+    init_helper.init_opslog();
 
     init_async_signal_handler();
     register_async_signal_handler(SIGUSR1, handle_sigterm);
 
-    map<string, string> service_map_meta;
-    service_map_meta["pid"] = stringify(getpid());
-    service_map_meta["frontend_type#" + fe_count] = "rgw-nfs";
-    service_map_meta["frontend_config#" + fe_count] = fec->get_config();
-
-    fe->init();
-    if (r < 0) {
-      derr << "ERROR: failed initializing frontend" << dendl;
-      return r;
-    }
-
-    fe->run();
-
-    r = store->register_to_service_map(this, "rgw-nfs", service_map_meta);
-    if (r < 0) {
-      derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
-      /* ignore error */
-    }
-
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-    if (!rgw::amqp::init(cct.get())) {
-      derr << "ERROR: failed to initialize AMQP manager" << dendl;
-    }
-#endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
-    if (!rgw::kafka::init(cct.get())) {
-      derr << "ERROR: failed to initialize Kafka manager" << dendl;
-    }
-#endif
+    init_helper.init_tracepoints();
+    init_helper.init_frontends2(this /* rgwlib */);
+    init_helper.init_notification_endpoints();
+    init_helper.init_lua();
 
     return 0;
   } /* RGWLib::init() */
@@ -647,13 +606,24 @@ namespace rgw {
   {
     derr << "shutting down" << dendl;
 
-    fe->stop();
+    if (store->get_name() == "rados") {
+      reloader.reset(); // stop the realm reloader
+    }
 
-    fe->join();
+    for (auto& fe : fes) {
+      fe->stop();
+    }
 
-    delete fe;
-    delete fec;
-    delete ldh;
+    for (auto& fe : fes) {
+      fe->join();
+      delete fe;
+    }
+
+    for (auto& fec : fe_configs) {
+      delete fec;
+    }
+  
+    ldh.reset(nullptr); // deletes
 
     unregister_async_signal_handler(SIGUSR1, handle_sigterm);
     shutdown_async_signal_handler();
@@ -662,12 +632,19 @@ namespace rgw {
     
     delete olog;
 
+    if (lua_background) {
+      lua_background->shutdown();
+    }
+
     StoreManager::close_storage(store);
 
     rgw_tools_cleanup();
     rgw_shutdown_resolver();
     rgw_http_client_cleanup();
+    rgw_kmip_client_cleanup();
     rgw::curl::cleanup_curl();
+    g_conf().remove_observer(implicit_tenant_context.get());
+    implicit_tenant_context.reset(); // deletes
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
     rgw::amqp::shutdown();
 #endif

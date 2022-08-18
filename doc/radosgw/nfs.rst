@@ -122,12 +122,16 @@ Required ceph.conf configuration for RGW NFS includes:
 * valid [client.rgw.{instance-name}] section
 * valid values for minimal instance configuration, in particular, an installed and correct ``keyring``
 
-Other config variables are optional, front-end-specific and front-end
-selection variables (e.g., ``rgw data`` and ``rgw frontends``) are
-optional and in some cases ignored.
+Other config variables (e.g., ``rgw data`` and ``rgw backend store``) are
+optional.
 
 A small number of config variables (e.g., ``rgw_nfs_namespace_expire_secs``)
 are unique to RGW NFS.
+
+In particular, front-end selection is handled specially by the librgw.so runtime.  By default, only the
+``rgw-nfs`` frontend is started. Additional frontends (e.g., ``beast``) are enabled via the
+``rgw nfs frontends`` config option.  It's syntax is identical to the ordinary ``rgw frontends`` option.
+Default options for non-default frontends are specified via ``rgw frontend defaults`` as normal.
 
 ganesha.conf
 ------------

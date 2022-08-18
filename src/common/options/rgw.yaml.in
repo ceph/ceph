@@ -1148,6 +1148,22 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_nfs_frontends
+  type: str
+  level: basic
+  desc: RGW frontends configuration when running as librgw/nfs
+  long_desc: A comma delimited list of frontends configuration. Each configuration
+    contains the type of the frontend followed by an optional space delimited set
+    of key=value config parameters.
+  fmt_desc: Configures the HTTP frontend(s). The configuration for multiple
+    frontends can be provided in a comma-delimited list. Each frontend
+    configuration may include a list of options separated by spaces,
+    where each option is in the form "key=value" or "key". See
+    `HTTP Frontends`_ for more on supported options.
+  default: rgw-nfs
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_rados_pool_autoscale_bias
   type: float
   level: advanced
