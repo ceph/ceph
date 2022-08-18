@@ -45,7 +45,7 @@ static open_device_ret open_device(
 }
 
 static zns_sm_metadata_t make_metadata(
-  uint64_t size,
+  uint64_t total_size,
   seastore_meta_t meta,
   const seastar::stat_data &data,
   size_t zone_size_sectors,
@@ -61,13 +61,17 @@ static zns_sm_metadata_t make_metadata(
   size_t segment_size = zone_size;
   size_t zones_per_segment = segment_size / zone_size;
   size_t segments = (num_zones - RESERVED_ZONES) / zones_per_segment;
+  size_t available_size = zone_capacity * segments;
+
+  assert(total_size == num_zones * zone_size);
 
   WARN("Ignoring configuration values for device and segment size");
   INFO(
-    "device size {}, block_size {}, allocated_size {},"
+    "device size {}, available_size {}, block_size {}, allocated_size {},"
     " total zones {}, zone_size {}, zone_capacity {},"
     " total segments {}, zones per segment {}, segment size {}",
-    size,
+    total_size,
+    available_size,
     data.block_size,
     data.allocated_size,
     num_zones,
@@ -78,7 +82,7 @@ static zns_sm_metadata_t make_metadata(
     zone_capacity * zones_per_segment);
 
   zns_sm_metadata_t ret = zns_sm_metadata_t{
-    size,
+    available_size,
     segment_size,
     zone_capacity * zones_per_segment,
     zones_per_segment,
@@ -549,12 +553,12 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
   auto& seg_addr = addr.as_seg_paddr();
   if (seg_addr.get_segment_id().device_segment_id() >= get_num_segments()) {
     ERROR("invalid segment {}",
-      addr);
+      seg_addr.get_segment_id().device_segment_id());
     return crimson::ct_error::invarg::make();
   }
   
-  if (seg_addr.get_segment_off() + len > metadata.segment_size) {
-    ERROR("invalid offset {}, len {}",
+  if (seg_addr.get_segment_off() + len > metadata.segment_capacity) {
+    ERROR("invalid read offset {}, len {}",
       addr,
       len);
     return crimson::ct_error::invarg::make();
@@ -653,8 +657,9 @@ Segment::write_ertr::future<> ZNSSegment::write(
           id, offset, write_pointer);
     return crimson::ct_error::invarg::make();
   }
-  if (offset + bl.length() > manager.metadata.segment_size)
+  if (offset + bl.length() > manager.metadata.segment_capacity) {
     return crimson::ct_error::enospc::make();
+  }
   
   write_pointer = offset + bl.length();
   return manager.segment_write(paddr_t::make_seg_paddr(id, offset), bl);

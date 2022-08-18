@@ -108,7 +108,7 @@ namespace crimson::os::seastore::segment_manager::zns {
     };
 
     seastore_off_t get_segment_size() const final {
-      return metadata.segment_size;
+      return metadata.segment_capacity;
     };
 
     const seastore_meta_t &get_meta() const {
