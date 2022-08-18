@@ -733,8 +733,11 @@ class key_view_t {
   const snap_gen_t* p_snap_gen = nullptr;
 };
 
-template <KeyT KT>
-void encode_key(const full_key_t<KT>& key, ceph::bufferlist& bl) {
+template<typename T>
+concept IsFullKey = std::same_as<T, key_hobj_t> || std::same_as<T, key_view_t>;
+
+template <IsFullKey Key>
+void encode_key(const Key& key, ceph::bufferlist& bl) {
   ceph::encode(key.shard(), bl);
   ceph::encode(key.pool(), bl);
   ceph::encode(key.crush(), bl);
@@ -743,9 +746,6 @@ void encode_key(const full_key_t<KT>& key, ceph::bufferlist& bl) {
   ceph::encode(key.snap(), bl);
   ceph::encode(key.gen(), bl);
 }
-
-template<typename T>
-concept IsFullKey = std::same_as<T, key_hobj_t> || std::same_as<T, key_view_t>;
 
 template<IsFullKey LHS, IsFullKey RHS>
 std::strong_ordering operator<=>(const LHS& lhs, const RHS& rhs) noexcept {

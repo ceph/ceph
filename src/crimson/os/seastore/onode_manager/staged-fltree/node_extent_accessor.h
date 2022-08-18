@@ -42,7 +42,7 @@ class DeltaRecorderT final: public DeltaRecorder {
       const match_stage_t& insert_stage,
       const node_offset_t& insert_size) {
     ceph::encode(node_delta_op_t::INSERT, encoded);
-    encode_key<KT>(key, encoded);
+    encode_key(key, encoded);
     encode_value(value, encoded);
     insert_pos.encode(encoded);
     ceph::encode(insert_stage, encoded);
@@ -67,7 +67,7 @@ class DeltaRecorderT final: public DeltaRecorder {
       const char* p_node_start) {
     ceph::encode(node_delta_op_t::SPLIT_INSERT, encoded);
     split_at.encode(p_node_start, encoded);
-    encode_key<KT>(key, encoded);
+    encode_key(key, encoded);
     encode_value(value, encoded);
     insert_pos.encode(encoded);
     ceph::encode(insert_stage, encoded);
