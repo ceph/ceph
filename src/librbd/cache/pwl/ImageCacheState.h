@@ -63,7 +63,8 @@ public:
   void init_from_config();
   bool init_from_metadata(json_spirit::mValue& json_root);
 
-  void write_image_cache_state(Context *on_finish);
+  void write_image_cache_state(std::unique_lock<ceph::mutex>& locker,
+                               Context *on_finish);
 
   void clear_image_cache_state(Context *on_finish);
 

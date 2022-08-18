@@ -60,9 +60,10 @@ bool ImageCacheState<I>::init_from_metadata(json_spirit::mValue& json_root) {
 }
 
 template <typename I>
-void ImageCacheState<I>::write_image_cache_state(Context *on_finish) {
+void ImageCacheState<I>::write_image_cache_state(std::unique_lock<ceph::mutex>& locker,
+                                                 Context *on_finish) {
+  ceph_assert(ceph_mutex_is_locked_by_me(*locker.mutex()));
   stats_timestamp = ceph_clock_now();
-  std::shared_lock owner_lock{m_image_ctx->owner_lock};
   json_spirit::mObject o;
   o["present"] = present;
   o["empty"] = empty;
@@ -82,7 +83,9 @@ void ImageCacheState<I>::write_image_cache_state(Context *on_finish) {
   o["hit_bytes"] = hit_bytes;
   o["miss_bytes"] = miss_bytes;
   std::string image_state_json = json_spirit::write(o);
+  locker.unlock();
 
+  std::shared_lock owner_lock{m_image_ctx->owner_lock};
   ldout(m_image_ctx->cct, 20) << __func__ << " Store state: "
                               << image_state_json << dendl;
   m_plugin_api.execute_image_metadata_set(m_image_ctx, PERSISTENT_CACHE_STATE,

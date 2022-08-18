@@ -397,7 +397,7 @@ protected:
     return 0;
   }
   void update_image_cache_state(void);
-  void write_image_cache_state(void);
+  void write_image_cache_state(std::unique_lock<ceph::mutex>& locker);
   void handle_write_image_cache_state(int r);
 };
 
