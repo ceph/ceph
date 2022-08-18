@@ -1,0 +1,87 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - \(MGR_DOWN\)
+      - \(OSD_DOWN\)
+      - \(FS_DEGRADED\)
+      - \(MON_MSGR2_NOT_ENABLED\)
+      - \(OSD_
+      - slow request
+      - Not found or unloadable
+      - evicting unresponsive client
+    conf:
+    global:
+      enable experimental unrecoverable data corrupting features: "*"
+      mon warn on msgr2 not enabled: false
+    mon:
+      mon warn on osd down out interval zero: false
+
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+  - osd.4
+- - client.0
+
+meta:
+- desc: install ceph/nautilus latest
+
+tasks:
+- install:
+    branch: nautilus
+    exclude_packages:
+      - ceph-mgr-cephadm
+      - cephadm
+      - libcephfs-dev
+- print: "**** done install nautilus"
+- ceph:
+    conf:
+      global:
+        bluestore_warn_on_legacy_statfs: false
+        bluestore warn on no per pool omap: false
+        mon pg warn min per osd: 0
+- exec:
+    osd.0:
+      - ceph mgr module enable pg_autoscaler
+      - ceph osd require-osd-release nautilus
+      - ceph osd set-require-min-compat-client nautilus
+    client.0:
+      - ceph osd pool create test1 32 32
+      - ceph osd pool create test2 32 32
+      - ceph osd pool create test3 32 32
+      - ceph osd pool set test1 pg_autoscale_mode warn
+      - ceph osd pool set test2 pg_autoscale_mode warn
+      - ceph osd pool set test3 pg_autoscale_mode off
+- print: "**** done ceph execute nautilus"
+- workunit:
+    clients:
+      client.0:
+        - mgr/test_autoscale_mode_upgrade.sh
+- install.upgrade:
+    mon.a:
+    client.0:
+- ceph.restart:
+    daemons: [mon.a, mon.b, mon.c, mgr.x, osd.0, osd.1, osd.2, osd.3, osd.4]
+    wait-for-healthy: false
+    wait-for-osds-up: false
+- print: "**** done ceph.restart of all mons and osds"
+- exec:
+    mon.a:
+      - ceph mon enable-msgr2
+      - ceph config rm global mon_warn_on_msgr2_not_enabled
+    osd.0:
+      - ceph config set global mon_warn_on_msgr2_not_enabled false
+      - ceph osd require-osd-release pacific
+      - ceph osd set-require-min-compat-client pacific
+- workunit:
+    clients:
+      client.0:
+        - mgr/test_autoscale_mode_upgrade.sh
+- print: "**** done everything"
