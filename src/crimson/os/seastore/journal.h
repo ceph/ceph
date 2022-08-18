@@ -101,6 +101,8 @@ public:
       sea_time_point modify_time)>;
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;
+  virtual seastar::future<> finish_commit(
+    transaction_type_t type) = 0;
 
   virtual ~Journal() {}
 

@@ -1657,6 +1657,11 @@ constexpr bool is_cleaner_transaction(transaction_type_t type) {
           type < transaction_type_t::MAX);
 }
 
+constexpr bool is_trim_transaction(transaction_type_t type) {
+  return (type == transaction_type_t::CLEANER_TRIM_DIRTY ||
+      type == transaction_type_t::CLEANER_TRIM_ALLOC);
+}
+
 struct record_size_t {
   extent_len_t plain_mdlength = 0; // mdlength without the record header
   extent_len_t dlength = 0;

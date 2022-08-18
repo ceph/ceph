@@ -474,5 +474,14 @@ CircularBoundedJournal::write_header()
     bl.length());
   return device_write_bl(CBJOURNAL_START_ADDRESS, bl);
 }
+seastar::future<> CircularBoundedJournal::finish_commit(transaction_type_t type) {
+  if (is_trim_transaction(type)) {
+    return update_journal_tail(
+      trimmer.get_dirty_tail(),
+      trimmer.get_alloc_tail());
+  }
+  return seastar::now();
+}
+
 
 }
