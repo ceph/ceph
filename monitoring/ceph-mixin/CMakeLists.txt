@@ -26,8 +26,7 @@ if(WITH_GRAFANA)
           FIXTURES_REQUIRED venv-for-jsonnet-lint)
       add_tox_test(jsonnet-check TOX_ENVS jsonnet-check)
       set_property(TEST run-tox-jsonnet-check PROPERTY
-          FIXTURES_REQUIRED venv-for-jsonnet-check jsonnet-bundler
-          ENVIRONMENT "PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{PATH}")
+          FIXTURES_REQUIRED venv-for-jsonnet-check jsonnet-bundler)
 
       add_tox_test(alerts-check TOX_ENVS alerts-check)
       add_tox_test(alerts-lint TOX_ENVS alerts-lint)
