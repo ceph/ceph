@@ -250,12 +250,16 @@ public:
     return get_total_size() - get_used_size();
   }
 
-  write_ertr::future<> update_journal_tail(
+  seastar::future<> update_journal_tail(
     journal_seq_t dirty,
     journal_seq_t alloc) {
     header.dirty_tail = dirty;
     header.alloc_tail = alloc;
-    return write_header();
+    return write_header(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+      "encountered invalid error in update_journal_tail"
+    });
   }
   journal_seq_t get_dirty_tail() const {
     return header.dirty_tail;
@@ -293,7 +297,7 @@ public:
   rbm_abs_addr get_journal_end() const {
     return get_start_addr() + header.size + get_block_size(); // journal size + header length
   }
-
+  seastar::future<> finish_commit(transaction_type_t type) final;
 private:
   cbj_header_t header;
   JournalTrimmer &trimmer;

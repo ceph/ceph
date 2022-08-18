@@ -54,6 +54,9 @@ public:
   journal_type_t get_type() final {
     return journal_type_t::SEGMENT_JOURNAL;
   }
+  seastar::future<> finish_commit(transaction_type_t type) {
+    return seastar::now();
+  }
 
 private:
   submit_record_ret do_submit_record(
