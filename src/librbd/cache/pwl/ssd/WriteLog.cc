@@ -531,23 +531,18 @@ void WriteLog<I>::release_ram(std::shared_ptr<GenericLogEntry> log_entry) {
 
 template <typename I>
 void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops) {
-  bool need_update_state = false;
-  {
-    std::lock_guard locker(m_lock);
-    for (auto &operation : ops) {
-      auto &log_entry = operation->get_log_entry();
-      log_entry->ram_entry.set_entry_valid(true);
-      m_log_entries.push_back(log_entry);
-      ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
-    }
-    if (m_cache_state->empty && !m_log_entries.empty()) {
-      m_cache_state->empty = false;
-      this->update_image_cache_state();
-      need_update_state = true;
-    }
+  std::unique_lock locker(m_lock);
+
+  for (auto &operation : ops) {
+    auto &log_entry = operation->get_log_entry();
+    log_entry->ram_entry.set_entry_valid(true);
+    m_log_entries.push_back(log_entry);
+    ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
   }
-  if (need_update_state) {
-    this->write_image_cache_state();
+  if (m_cache_state->empty && !m_log_entries.empty()) {
+    m_cache_state->empty = false;
+    this->update_image_cache_state();
+    this->write_image_cache_state(locker);
   }
 }
 
@@ -841,7 +836,8 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           this->wake_up();
         }
         if (need_update_state) {
-          this->write_image_cache_state();
+          std::unique_lock locker(m_lock);
+          this->write_image_cache_state(locker);
         }
 
         this->dispatch_deferred_writes();
