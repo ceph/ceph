@@ -84,26 +84,24 @@ struct fltree_onode_manager_test_t
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() final {
     return TMTestState::_mkfs(
     ).safe_then([this] {
-      return tm->mount(
-      ).safe_then([this] {
-	return repeat_eagain([this] {
-	  return seastar::do_with(
-	    create_mutate_transaction(),
-	    [this](auto &ref_t) {
-	      return with_trans_intr(*ref_t, [&](auto &t) {
-		return manager->mkfs(t
-		).si_then([this, &t] {
-		  return submit_transaction_fut2(t);
-		});
-	      });
-	  });
-	});
-      }).safe_then([this] {
-	return tm->close();
-      }).handle_error(
-	crimson::ct_error::assert_all{"Invalid error in _mkfs"}
-      );
-    });
+      return restart_fut();
+    }).safe_then([this] {
+      return repeat_eagain([this] {
+        return seastar::do_with(
+          create_mutate_transaction(),
+          [this](auto &ref_t)
+        {
+          return with_trans_intr(*ref_t, [&](auto &t) {
+            return manager->mkfs(t
+            ).si_then([this, &t] {
+              return submit_transaction_fut2(t);
+            });
+          });
+        });
+      });
+    }).handle_error(
+      crimson::ct_error::assert_all{"Invalid error in _mkfs"}
+    );
   }
 
   template <typename F>
