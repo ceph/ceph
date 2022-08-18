@@ -194,7 +194,7 @@ struct _node_fields_013_t {
   template <KeyT KT>
   static void append_key(
       NodeExtentMutable& mut, const full_key_t<KT>& key, char*& p_append) {
-    append_key(mut, key_t::template from_key<KT>(key), p_append);
+    append_key(mut, key_t::from_key(key), p_append);
   }
   static void append_offset(
       NodeExtentMutable& mut, node_offset_t offset_to_right, char*& p_append);
