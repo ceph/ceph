@@ -1,17 +1,16 @@
-import logging
+import json
 import threading
-import os
-import subprocess
+import yaml
+import errno
+import base64
 
-from mgr_module import MgrModule, CLICommand, HandleCommandResult, Option
+from mgr_module import MgrModule, CLICommand, HandleCommandResult
 import orchestrator
 
-from ceph.deployment.service_spec import RGWSpec
+from ceph.deployment.service_spec import RGWSpec, PlacementSpec
+from typing import Any, Optional, Sequence, Iterator, List
 
-from typing import cast, Any, Optional, Sequence
-
-from . import *
-from ceph.rgw.types import RGWAMException, RGWAMEnvMgr
+from ceph.rgw.types import RGWAMException, RGWAMEnvMgr, RealmToken
 from ceph.rgw.rgwam_core import EnvArgs, RGWAM
 
 
@@ -20,19 +19,15 @@ class RGWAMOrchMgr(RGWAMEnvMgr):
         self.mgr = mgr
 
     def tool_exec(self, prog, args):
-        cmd = [ prog ] + args
-        rc, stdout, stderr = self.mgr.tool_exec(args = cmd)
+        cmd = [prog] + args
+        rc, stdout, stderr = self.mgr.tool_exec(args=cmd)
         return cmd, rc, stdout, stderr
 
-    def apply_rgw(self, svc_id, realm_name, zone_name, port = None):
-        spec = RGWSpec(service_id = svc_id,
-                       rgw_realm = realm_name,
-                       rgw_zone = zone_name,
-                       rgw_frontend_port = port)
+    def apply_rgw(self, spec):
         completion = self.mgr.apply_rgw(spec)
         orchestrator.raise_if_exception(completion)
 
-    def list_daemons(self, service_name, daemon_type = None, daemon_id = None, host = None, refresh = True):
+    def list_daemons(self, service_name, daemon_type=None, daemon_id=None, host=None, refresh=True):
         completion = self.mgr.list_daemons(service_name,
                                            daemon_type,
                                            daemon_id=daemon_id,
@@ -63,8 +58,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.run = True
         self.event = threading.Event()
 
-
-
     def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
@@ -85,7 +78,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
-
     @CLICommand('rgw admin', perm='rw')
     def _cmd_rgw_admin(self, params: Sequence[str]):
         """rgw admin"""
@@ -99,30 +91,55 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @CLICommand('rgw realm bootstrap', perm='rw')
     def _cmd_rgw_realm_bootstrap(self,
-                                 realm_name : Optional[str] = None,
+                                 realm_name: Optional[str] = None,
                                  zonegroup_name: Optional[str] = None,
                                  zone_name: Optional[str] = None,
-                                 endpoints: Optional[str] = None,
-                                 sys_uid: Optional[str] = None,
-                                 uid: Optional[str] = None,
-                                 start_radosgw: Optional[bool] = True):
+                                 port: Optional[int] = None,
+                                 placement: Optional[str] = None,
+                                 start_radosgw: Optional[bool] = True,
+                                 inbuf: Optional[str] = None):
         """Bootstrap new rgw realm, zonegroup, and zone"""
-
-
         try:
-            retval, out, err = RGWAM(self.env).realm_bootstrap(realm_name, zonegroup_name,
-                    zone_name, endpoints, sys_uid, uid, start_radosgw)
+            if inbuf:
+                rgw_specs = self._parse_rgw_specs(inbuf)
+            elif (realm_name and zonegroup_name and zone_name):
+                placement_spec = PlacementSpec.from_string(placement) if placement else None
+                rgw_specs = [RGWSpec(rgw_realm=realm_name,
+                                     rgw_zonegroup=zonegroup_name,
+                                     rgw_zone=zone_name,
+                                     rgw_frontend_port=port,
+                                     placement=placement_spec)]
+            else:
+                return HandleCommandResult(retval=-errno.EINVAL, stdout='', stderr='Invalid arguments: -h or --help for usage')
+
+            for spec in rgw_specs:
+                RGWAM(self.env).realm_bootstrap(spec, start_radosgw)
+
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return (e.retcode, e.message, e.stderr)
 
-        return HandleCommandResult(retval=retval, stdout=out, stderr=err)
+        return HandleCommandResult(retval=0, stdout="Realm(s) created correctly. Please, use 'ceph rgw realm tokens' to get the token.", stderr='')
+
+    def _parse_rgw_specs(self, inbuf: Optional[str] = None):
+        """Parse RGW specs from a YAML file."""
+        # YAML '---' document separator with no content generates
+        # None entries in the output. Let's skip them silently.
+        yaml_objs: Iterator = yaml.safe_load_all(inbuf)
+        specs = [o for o in yaml_objs if o is not None]
+        rgw_specs = []
+        for spec in specs:
+            # TODO(rkachach): should we use a new spec instead of RGWSpec here!
+            rgw_spec = RGWSpec.from_json(spec)
+            rgw_spec.validate()
+            rgw_specs.append(rgw_spec)
+        return rgw_specs
 
     @CLICommand('rgw realm zone-creds create', perm='rw')
     def _cmd_rgw_realm_new_zone_creds(self,
-                                 realm_name: Optional[str] = None,
-                                 endpoints: Optional[str] = None,
-                                 sys_uid: Optional[str] = None):
+                                      realm_name: Optional[str] = None,
+                                      endpoints: Optional[str] = None,
+                                      sys_uid: Optional[str] = None):
         """Create credentials for new zone creation"""
 
         try:
@@ -134,8 +151,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
     @CLICommand('rgw realm zone-creds remove', perm='rw')
-    def _cmd_rgw_realm_rm_zone_creds(self,
-                                 realm_token : Optional[str] = None):
+    def _cmd_rgw_realm_rm_zone_creds(self, realm_token: Optional[str] = None):
         """Create credentials for new zone creation"""
 
         try:
@@ -146,18 +162,83 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
+    @CLICommand('rgw realm tokens', perm='r')
+    def list_realm_tokens(self):
+        realms_info = []
+        for realm_info in RGWAM(self.env).get_realms_info():
+            if not realm_info['master_zone_id']:
+                realms_info.append({'realm': realm_info['realm_name'], 'token': 'realm has no master zone'})
+            elif not realm_info['endpoint']:
+                realms_info.append({'realm': realm_info['realm_name'], 'token': 'master zone has no endpoint'})
+            elif not (realm_info['access_key'] and realm_info['secret']):
+                realms_info.append({'realm': realm_info['realm_name'], 'token': 'master zone has no access/secret keys'})
+            else:
+                keys = ['realm_name', 'realm_id', 'is_primary', 'endpoint', 'access_key', 'secret']
+                realm_token = RealmToken(**{k: realm_info[k] for k in keys})
+                realm_token_b = realm_token.to_json().encode('utf-8')
+                realm_token_s = base64.b64encode(realm_token_b).decode('utf-8')
+                realms_info.append({'realm': realm_info['realm_name'], 'token': realm_token_s})
+
+        return HandleCommandResult(retval=0, stdout=json.dumps(realms_info), stderr='')
+
+    @CLICommand('rgw zone update', perm='rw')
+    def update_zone_info(self, realm_name: str, zonegroup_name: str, zone_name: str, realm_token: str, endpoints: List[str]):
+        try:
+            retval, out, err = RGWAM(self.env).zone_modify(realm_name,
+                                                           zonegroup_name,
+                                                           zone_name,
+                                                           endpoints,
+                                                           realm_token)
+            return (retval, 'Zone updated successfully', '')
+        except RGWAMException as e:
+            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
+            return (e.retcode, e.message, e.stderr)
+
     @CLICommand('rgw zone create', perm='rw')
     def _cmd_rgw_zone_create(self,
-                             realm_token : Optional[str] = None,
-                             zonegroup_name: Optional[str] = None,
                              zone_name: Optional[str] = None,
-                             endpoints: Optional[str] = None,
-                             start_radosgw: Optional[bool] = True):
+                             realm_token: Optional[str] = None,
+                             port: Optional[int] = None,
+                             placement: Optional[str] = None,
+                             start_radosgw: Optional[bool] = True,
+                             inbuf: Optional[str] = None):
         """Bootstrap new rgw zone that syncs with existing zone"""
+        try:
+            if inbuf:
+                rgw_specs = self._parse_rgw_specs(inbuf)
+            elif (zone_name and realm_token):
+                placement_spec = PlacementSpec.from_string(placement) if placement else None
+                rgw_specs = [RGWSpec(rgw_realm_token=realm_token,
+                                     rgw_zone=zone_name,
+                                     rgw_frontend_port=port,
+                                     placement=placement_spec)]
+            else:
+                return HandleCommandResult(retval=-errno.EINVAL, stdout='', stderr='Invalid arguments: -h or --help for usage')
+
+            for rgw_spec in rgw_specs:
+                retval, out, err = RGWAM(self.env).zone_create(rgw_spec, start_radosgw)
+                if retval != 0:
+                    break
+
+        except RGWAMException as e:
+            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
+            return (e.retcode, e.message, e.stderr)
+
+        return HandleCommandResult(retval=retval, stdout=out, stderr=err)
+
+    @CLICommand('rgw zonegroup create', perm='rw')
+    def _cmd_rgw_zonegroup_create(self,
+                                  realm_token: Optional[str] = None,
+                                  zonegroup_name: Optional[str] = None,
+                                  endpoints: Optional[str] = None,
+                                  zonegroup_is_master: Optional[bool] = True):
+        """Bootstrap new rgw zonegroup"""
 
         try:
-            retval, out, err = RGWAM(self.env).zone_create(realm_token, zonegroup_name,
-                    zone_name, endpoints, start_radosgw)
+            retval, out, err = RGWAM(self.env).zonegroup_create(realm_token,
+                                                                zonegroup_name,
+                                                                endpoints,
+                                                                zonegroup_is_master)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return (e.retcode, e.message, e.stderr)
@@ -166,10 +247,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @CLICommand('rgw realm reconcile', perm='rw')
     def _cmd_rgw_realm_reconcile(self,
-                             realm_name : Optional[str] = None,
-                             zonegroup_name: Optional[str] = None,
-                             zone_name: Optional[str] = None,
-                             update: Optional[bool] = False):
+                                 realm_name: Optional[str] = None,
+                                 zonegroup_name: Optional[str] = None,
+                                 zone_name: Optional[str] = None,
+                                 update: Optional[bool] = False):
         """Bootstrap new rgw zone that syncs with existing zone"""
 
         try:

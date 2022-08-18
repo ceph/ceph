@@ -1,4 +1,5 @@
 import json
+import base64
 
 from abc import abstractmethod
 
@@ -47,12 +48,20 @@ class JSONObj:
 
 
 class RealmToken(JSONObj):
-    def __init__(self, realm_id, endpoint, uid, access_key, secret):
+    def __init__(self, realm_name, realm_id, is_primary, endpoint, access_key, secret):
+        self.realm_name = realm_name
         self.realm_id = realm_id
+        self.is_primary = is_primary
         self.endpoint = endpoint
-        self.uid = uid
         self.access_key = access_key
         self.secret = secret
+
+    @classmethod
+    def from_base64_str(cls, realm_token_b64):
+        realm_token_b = base64.b64decode(realm_token_b64)
+        realm_token_s = realm_token_b.decode('utf-8')
+        realm_token = json.loads(realm_token_s)
+        return cls(**realm_token)
 
 
 class RGWZone(JSONObj):
@@ -160,3 +169,8 @@ class RGWUser(JSONObj):
 
         is_system = d.get('system') or 'false'
         self.system = (is_system == 'true')
+
+    def add_key(self, access_key, secret):
+        self.keys.append(RGWAccessKey({'user': self.uid,
+                                       'access_key': access_key,
+                                       'secret_key': secret}))
