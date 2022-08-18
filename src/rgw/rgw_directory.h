@@ -1,21 +1,16 @@
 #ifndef CEPH_RGWDIRECTORY_H
 #define CEPH_RGWDIRECTORY_H
 
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sstream>
 #include "rgw_common.h"
 #include "cpp_redis/cpp_redis"
 #include <string>
 #include <iostream>
-#include <vector>
-#include <list>
-#include <cstdint>
+
 #define dout_subsys ceph_subsys_rgw
 
 struct cache_obj {
   std::string bucket_name; // s3 bucket name
-  std::string obj_name; //s3 obj name
+  std::string obj_name; // s3 obj name
 };
 
 struct cache_block {
@@ -46,6 +41,7 @@ class RGWBlockDirectory: RGWDirectory {
     int setValue(cache_block *ptr);
     int getValue(cache_block *ptr);
     int delValue(cache_block *ptr);
+
     std::string get_host() { return host; }
     int get_port() { return port; }
 
