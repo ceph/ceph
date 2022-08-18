@@ -167,9 +167,9 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(rgw::sal::RadosStore* store) const
   return raw_obj;
 }
 
-void RGWObjVersionTracker::prepare_op_for_read(ObjectReadOperation *op)
+void RGWObjVersionTracker::prepare_op_for_read(ObjectReadOperation* op)
 {
-  obj_version *check_objv = version_for_check();
+  obj_version* check_objv = version_for_check();
 
   if (check_objv) {
     cls_version_check(*op, *check_objv, VER_COND_EQ);
@@ -180,8 +180,8 @@ void RGWObjVersionTracker::prepare_op_for_read(ObjectReadOperation *op)
 
 void RGWObjVersionTracker::prepare_op_for_write(ObjectWriteOperation *op)
 {
-  obj_version *check_objv = version_for_check();
-  obj_version *modify_version = version_for_write();
+  obj_version* check_objv = version_for_check();
+  obj_version* modify_version = version_for_write();
 
   if (check_objv) {
     cls_version_check(*op, *check_objv, VER_COND_EQ);
@@ -263,10 +263,10 @@ void RGWObjectCtx::invalidate(const rgw_obj& obj) {
   }
 }
 
-void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
+void RGWObjVersionTracker::generate_new_write_ver(CephContext* cct)
 {
+  static constexpr auto TAG_LEN = 24;
   write_version.ver = 1;
-#define TAG_LEN 24
 
   write_version.tag.clear();
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
