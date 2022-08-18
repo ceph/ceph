@@ -64,7 +64,6 @@ class RGWSI_Zone : public RGWServiceInstance
   int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
-  int replace_region_with_zonegroup(const DoutPrefixProvider *dpp, optional_yield y);
   int init_zg_from_period(const DoutPrefixProvider *dpp, optional_yield y);
   int init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield y);
 
