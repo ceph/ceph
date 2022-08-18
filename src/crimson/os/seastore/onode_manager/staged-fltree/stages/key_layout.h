@@ -678,8 +678,14 @@ struct shard_pool_t {
 
   pool_t pool() const { return _pool; }
 
-  template <KeyT KT>
-  static shard_pool_t from_key(const full_key_t<KT>& key);
+  template <IsFullKey Key>
+  static shard_pool_t from_key(const Key& key) {
+    if constexpr (std::same_as<Key, key_view_t>) {
+      return key.shard_pool_packed();
+    } else {
+      return {key.shard(), key.pool()};
+    }
+  }
 
   shard_t shard;
   pool_t _pool;
@@ -692,8 +698,14 @@ inline std::ostream& operator<<(std::ostream& os, const shard_pool_t& sp) {
 struct crush_t {
   auto operator<=>(const crush_t&) const = default;
 
-  template <KeyT KT>
-  static crush_t from_key(const full_key_t<KT>& key);
+  template <IsFullKey Key>
+  static crush_t from_key(const Key& key) {
+    if constexpr (std::same_as<Key, key_view_t>) {
+      return key.crush_packed();
+    } else {
+      return {key.crush()};
+    }
+  }
 
   crush_hash_t crush;
 } __attribute__((packed));
@@ -704,8 +716,10 @@ inline std::ostream& operator<<(std::ostream& os, const crush_t& c) {
 struct shard_pool_crush_t {
   auto operator<=>(const shard_pool_crush_t&) const = default;
 
-  template <KeyT KT>
-  static shard_pool_crush_t from_key(const full_key_t<KT>& key);
+  template <IsFullKey Key>
+  static shard_pool_crush_t from_key(const Key& key) {
+    return {shard_pool_t::from_key(key), crush_t::from_key(key)};
+  }
 
   shard_pool_t shard_pool;
   crush_t crush;
@@ -717,8 +731,14 @@ inline std::ostream& operator<<(std::ostream& os, const shard_pool_crush_t& spc)
 struct snap_gen_t {
   auto operator<=>(const snap_gen_t&) const = default;
 
-  template <KeyT KT>
-  static snap_gen_t from_key(const full_key_t<KT>& key);
+  template <IsFullKey Key>
+  static snap_gen_t from_key(const Key& key) {
+    if constexpr (std::same_as<Key, key_view_t>) {
+      return key.snap_gen_packed();
+    } else {
+      return {key.snap(), key.gen()};
+    }
+  }
 
   snap_t snap;
   gen_t gen;
@@ -841,38 +861,6 @@ auto operator<=>(const T& key, const snap_gen_t& target) {
 template <IsFullKey LHS, typename RHS>
 bool operator==(LHS lhs, RHS rhs) {
   return lhs <=> rhs == 0;
-}
-
-template <KeyT KT>
-shard_pool_t shard_pool_t::from_key(const full_key_t<KT>& key) {
-  if constexpr (KT == KeyT::VIEW) {
-    return key.shard_pool_packed();
-  } else {
-    return {key.shard(), key.pool()};
-  }
-}
-
-template <KeyT KT>
-crush_t crush_t::from_key(const full_key_t<KT>& key) {
-  if constexpr (KT == KeyT::VIEW) {
-    return key.crush_packed();
-  } else {
-    return {key.crush()};
-  }
-}
-
-template <KeyT KT>
-shard_pool_crush_t shard_pool_crush_t::from_key(const full_key_t<KT>& key) {
-  return {shard_pool_t::from_key<KT>(key), crush_t::from_key<KT>(key)};
-}
-
-template <KeyT KT>
-snap_gen_t snap_gen_t::from_key(const full_key_t<KT>& key) {
-  if constexpr (KT == KeyT::VIEW) {
-    return key.snap_gen_packed();
-  } else {
-    return {key.snap(), key.gen()};
-  }
 }
 
 template <KeyT KT>

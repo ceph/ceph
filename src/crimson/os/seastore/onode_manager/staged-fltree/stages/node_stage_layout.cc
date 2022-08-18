@@ -96,7 +96,7 @@ void F013_T::insert_at(
                      node.get_key_start_offset(node.num_keys, node_size);
   mut.shift_absolute(p_insert, p_shift_end - p_insert, estimate_insert_one());
   mut.copy_in_absolute((void*)&node.num_keys, num_keys_t(node.num_keys + 1));
-  append_key(mut, key_t::template from_key<KT>(key), p_insert);
+  append_key(mut, key_t::from_key(key), p_insert);
   int new_offset = node.get_item_end_offset(index, node_size) - size_right;
   assert(new_offset > 0);
   assert(new_offset < (int)node_size);
