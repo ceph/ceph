@@ -360,48 +360,58 @@ OMapInnerNode::merge_entry(
   }
   auto is_left = (iter + 1) == iter_cend();
   auto donor_iter = is_left ? iter - 1 : iter + 1;
-  return omap_load_extent(oc, donor_iter->get_val(), get_meta().depth - 1)
-    .si_then([=, this] (auto &&donor) mutable {
+  return omap_load_extent(oc, donor_iter->get_val(), get_meta().depth - 1
+  ).si_then([=, this](auto &&donor) mutable {
     LOG_PREFIX(OMapInnerNode::merge_entry);
     auto [l, r] = is_left ?
       std::make_pair(donor, entry) : std::make_pair(entry, donor);
     auto [liter, riter] = is_left ?
       std::make_pair(donor_iter, iter) : std::make_pair(iter, donor_iter);
-    if (donor->extent_is_below_min()) {
+    if (l->can_merge(r)) {
       DEBUGT("make_full_merge l {} r {}", oc.t, *l, *r);
       assert(entry->extent_is_below_min());
-      return l->make_full_merge(oc, r).si_then([liter=liter, riter=riter,
-                                                  l=l, r=r, oc, this] (auto &&replacement){
+      return l->make_full_merge(oc, r
+      ).si_then([liter=liter, riter=riter, l=l, r=r, oc, this]
+		(auto &&replacement) {
 	LOG_PREFIX(OMapInnerNode::merge_entry);
 	DEBUGT("to update parent: {}", oc.t, *this);
-        journal_inner_update(liter, replacement->get_laddr(), maybe_get_delta_buffer());
+        journal_inner_update(
+	  liter,
+	  replacement->get_laddr(),
+	  maybe_get_delta_buffer());
         journal_inner_remove(riter, maybe_get_delta_buffer());
         //retire extent
         std::vector<laddr_t> dec_laddrs {l->get_laddr(), r->get_laddr()};
-        return dec_ref(oc, dec_laddrs).si_then([this, oc] {
+        return dec_ref(oc, dec_laddrs
+	).si_then([this, oc] {
 	  --(oc.t.get_omap_tree_stats().extents_num_delta);
           if (extent_is_below_min()) {
             return merge_entry_ret(
                    interruptible::ready_future_marker{},
-                   mutation_result_t(mutation_status_t::NEED_MERGE, std::nullopt,
-                                    this));
+                   mutation_result_t(mutation_status_t::NEED_MERGE,
+		     std::nullopt, this));
           } else {
             return merge_entry_ret(
                    interruptible::ready_future_marker{},
-                   mutation_result_t(mutation_status_t::SUCCESS, std::nullopt, std::nullopt));
+                   mutation_result_t(mutation_status_t::SUCCESS,
+		     std::nullopt, std::nullopt));
           }
         });
       });
     } else {
       DEBUGT("balanced l {} r {}", oc.t, *l, *r);
-      return l->make_balanced(oc, r).si_then([liter=liter, riter=riter,
-                                                l=l, r=r, oc, this] (auto tuple) {
+      return l->make_balanced(oc, r
+      ).si_then([liter=liter, riter=riter, l=l, r=r, oc, this](auto tuple) {
 	LOG_PREFIX(OMapInnerNode::merge_entry);
 	DEBUGT("to update parent: {}", oc.t, *this);
         auto [replacement_l, replacement_r, replacement_pivot] = tuple;
         //update operation will not cuase node overflow, so we can do it first
-        journal_inner_update(liter, replacement_l->get_laddr(), maybe_get_delta_buffer());
-        bool overflow = extent_will_overflow(replacement_pivot.size(), std::nullopt);
+        journal_inner_update(
+	  liter,
+	  replacement_l->get_laddr(),
+	  maybe_get_delta_buffer());
+        bool overflow = extent_will_overflow(replacement_pivot.size(),
+	  std::nullopt);
         if (!overflow) {
           journal_inner_remove(riter, maybe_get_delta_buffer());
           journal_inner_insert(
@@ -410,27 +420,32 @@ OMapInnerNode::merge_entry(
 	    replacement_pivot,
 	    maybe_get_delta_buffer());
           std::vector<laddr_t> dec_laddrs{l->get_laddr(), r->get_laddr()};
-          return dec_ref(oc, dec_laddrs).si_then([] {
+          return dec_ref(oc, dec_laddrs
+	  ).si_then([] {
             return merge_entry_ret(
                    interruptible::ready_future_marker{},
-                   mutation_result_t(mutation_status_t::SUCCESS, std::nullopt, std::nullopt));
+                   mutation_result_t(mutation_status_t::SUCCESS,
+		     std::nullopt, std::nullopt));
           });
         } else {
           DEBUGT("balanced and split {} r {}", oc.t, *l, *r);
           //use remove and insert to instead of replace,
           //remove operation will not cause node split, so we can do it first
           journal_inner_remove(riter, maybe_get_delta_buffer());
-          return make_split_insert(oc, riter, replacement_pivot, replacement_r->get_laddr())
-            .si_then([this, oc, l = l, r = r] (auto mresult) {
-            std::vector<laddr_t> dec_laddrs{l->get_laddr(), r->get_laddr(), get_laddr()};
-            return dec_ref(oc, dec_laddrs)
-              .si_then([mresult = std::move(mresult)] {
-              return merge_entry_ret(
-                     interruptible::ready_future_marker{},
-                     mresult);
-            });
-          });
-        }
+          return make_split_insert(oc, riter, replacement_pivot,
+	    replacement_r->get_laddr()
+	  ).si_then([this, oc, l = l, r = r](auto mresult) {
+	    std::vector<laddr_t> dec_laddrs{
+	      l->get_laddr(),
+	      r->get_laddr(),
+	      get_laddr()};
+	    return dec_ref(oc, dec_laddrs
+	    ).si_then([mresult = std::move(mresult)] {
+	      return merge_entry_ret(
+		     interruptible::ready_future_marker{}, mresult);
+	    });
+	  });
+	}
       });
     }
   });

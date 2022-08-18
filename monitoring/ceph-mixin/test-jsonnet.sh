@@ -19,6 +19,10 @@ do
     done
 done
 
+jsonnet -J vendor -S alerts.jsonnet -o ${TEMPDIR}/prometheus_alerts.yml
+jsondiff --indent 2 "prometheus_alerts.yml" "${TEMPDIR}/prometheus_alerts.yml" \
+    | tee -a ${TEMPDIR}/json_difference.log
+
 err=0
 if [ $(wc -l < ${TEMPDIR}/json_difference.log) -eq 0 ]
 then
