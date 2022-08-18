@@ -100,33 +100,27 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
   TOID(struct WriteLogPoolRoot) pool_root;
   pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
   struct WriteLogCacheEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
-  bool need_update_state = false;
 
   ceph_assert(ceph_mutex_is_locked_by_me(this->m_log_append_lock));
 
-  {
-    /* Allocate the (already reserved) log entries */
-    std::lock_guard locker(m_lock);
+  /* Allocate the (already reserved) log entries */
+  std::unique_lock locker(m_lock);
 
-    for (auto &operation : ops) {
-      uint32_t entry_index = this->m_first_free_entry;
-      this->m_first_free_entry = (this->m_first_free_entry + 1) % this->m_total_log_entries;
-      auto &log_entry = operation->get_log_entry();
-      log_entry->log_entry_index = entry_index;
-      log_entry->ram_entry.entry_index = entry_index;
-      log_entry->cache_entry = &pmem_log_entries[entry_index];
-      log_entry->ram_entry.set_entry_valid(true);
-      m_log_entries.push_back(log_entry);
-      ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
-    }
-    if (m_cache_state->empty && !m_log_entries.empty()) {
-      m_cache_state->empty = false;
-      this->update_image_cache_state();
-      need_update_state = true;
-    }
+  for (auto &operation : ops) {
+    uint32_t entry_index = this->m_first_free_entry;
+    this->m_first_free_entry = (this->m_first_free_entry + 1) % this->m_total_log_entries;
+    auto &log_entry = operation->get_log_entry();
+    log_entry->log_entry_index = entry_index;
+    log_entry->ram_entry.entry_index = entry_index;
+    log_entry->cache_entry = &pmem_log_entries[entry_index];
+    log_entry->ram_entry.set_entry_valid(true);
+    m_log_entries.push_back(log_entry);
+    ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
   }
-  if (need_update_state) {
-    this->write_image_cache_state();
+  if (m_cache_state->empty && !m_log_entries.empty()) {
+    m_cache_state->empty = false;
+    this->update_image_cache_state();
+    this->write_image_cache_state(locker);
   }
 }
 
@@ -583,7 +577,8 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
       this->wake_up();
     }
     if (need_update_state) {
-      this->write_image_cache_state();
+      std::unique_lock locker(m_lock);
+      this->write_image_cache_state(locker);
     }
   } else {
     ldout(cct, 20) << "Nothing to retire" << dendl;
