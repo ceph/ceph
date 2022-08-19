@@ -218,6 +218,7 @@ target_link_libraries(rgw_common
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
     ${ARROW_LIBRARIES}
+    ${ALLOC_LIBS}
   PUBLIC
     ${LUA_LIBRARIES}
     spawn)
