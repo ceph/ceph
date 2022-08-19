@@ -426,10 +426,14 @@ class ErrorResponse(ErrorResponseBase):
     @classmethod
     def wrap(
         cls: Type[E], exc: Exception, return_value: Optional[int] = None
-    ) -> E:
+    ) -> ErrorResponseBase:
+        if isinstance(exc, ErrorResponseBase):
+            return exc
         if return_value is None:
             try:
-                return_value = -int(getattr(exc, "errno"))
+                return_value = int(getattr(exc, "errno"))
+                if return_value > 0:
+                    return_value = -return_value
             except (AttributeError, ValueError):
                 pass
         err = cls(str(exc), return_value=return_value)
