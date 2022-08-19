@@ -392,7 +392,10 @@ TransactionManager::submit_transaction_direct(
       journal->get_trimmer().update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
-      return tref.get_handle().complete();
+      return journal->finish_commit(tref.get_src()
+      ).then([&tref] {
+	return tref.get_handle().complete();
+      });
     }).handle_error(
       submit_transaction_iertr::pass_further{},
       crimson::ct_error::all_same_way([](auto e) {

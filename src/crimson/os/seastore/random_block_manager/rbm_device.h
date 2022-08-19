@@ -167,7 +167,15 @@ public:
   }
 
   mount_ret mount() final {
-    return mount_ertr::now();
+    return open("", seastar::open_flags::rw
+    ).safe_then([]() {
+      return mount_ertr::now();
+    }).handle_error(
+      mount_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"Invalid error mount"
+      }
+    );
   }
 
   open_ertr::future<> open(

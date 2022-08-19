@@ -102,6 +102,9 @@ public:
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;
 
+  virtual seastar::future<> finish_commit(
+    transaction_type_t type) = 0;
+
   virtual ~Journal() {}
 
   virtual journal_type_t get_type() = 0;
