@@ -272,11 +272,13 @@ class DecoDemo:
 
     @CLICommand("empty one", perm="rw")
     @object_format.EmptyResponder()
-    def empty_one(self, name: str = "default") -> None:
+    def empty_one(self, name: str = "default", retval: Optional[int] = None) -> None:
         # in real code, this would be making some sort of state change
         # but we need to handle erors still
+        if retval is None:
+            retval = -5
         if name in ["pow"]:
-            raise object_format.ErrorResponse(name, return_value=-5)
+            raise object_format.ErrorResponse(name, return_value=retval)
         return
 
     @CLICommand("empty bad", perm="rw")
@@ -464,6 +466,17 @@ class DecoDemo:
                 "pow",
             ),
         ),
+        # Ensure setting return_value to zero even on an exception is honored
+        (
+            "empty one",
+            False,
+            {"name": "pow", "retval": 0},
+            (
+                0,
+                "",
+                "pow",
+            ),
+        ),
     ],
 )
 def test_cli_with_decorators(prefix, can_format, args, response):
@@ -503,6 +516,64 @@ def test_error_response():
     assert r[1] == ""
     assert "blat" in r[2]
     assert r[0] == e3.mgr_return_value()
+
+    # A custom exception type with an errno property
+
+    class MyCoolException(Exception):
+        def __init__(self, err_msg: str, errno: int = 0) -> None:
+            super().__init__(errno, err_msg)
+            self.errno = errno
+            self.err_msg = err_msg
+
+        def __str__(self) -> str:
+            return self.err_msg
+
+    e4 = object_format.ErrorResponse.wrap(MyCoolException("beep", -17))
+    r = e4.format_response()
+    assert r[0] == -17
+    assert r[1] == ""
+    assert r[2] == "beep"
+    assert e4.mgr_return_value() == -17
+
+    e5 = object_format.ErrorResponse.wrap(MyCoolException("ok, fine", 0))
+    r = e5.format_response()
+    assert r[0] == 0
+    assert r[1] == ""
+    assert r[2] == "ok, fine"
+
+    e5 = object_format.ErrorResponse.wrap(MyCoolException("no can do", 8))
+    r = e5.format_response()
+    assert r[0] == -8
+    assert r[1] == ""
+    assert r[2] == "no can do"
+
+    # A custom exception type that inherits from ErrorResponseBase
+
+    class MyErrorResponse(object_format.ErrorResponseBase):
+        def __init__(self, err_msg: str, return_value: int):
+            super().__init__(self, err_msg)
+            self.msg = err_msg
+            self.return_value = return_value
+
+        def format_response(self):
+            return self.return_value, "", self.msg
+
+
+    e6 = object_format.ErrorResponse.wrap(MyErrorResponse("yeah, sure", 0))
+    r = e6.format_response()
+    assert r[0] == 0
+    assert r[1] == ""
+    assert r[2] == "yeah, sure"
+    assert isinstance(e5, object_format.ErrorResponseBase)
+    assert isinstance(e6, MyErrorResponse)
+
+    e7 = object_format.ErrorResponse.wrap(MyErrorResponse("no can do", -8))
+    r = e7.format_response()
+    assert r[0] == -8
+    assert r[1] == ""
+    assert r[2] == "no can do"
+    assert isinstance(e7, object_format.ErrorResponseBase)
+    assert isinstance(e7, MyErrorResponse)
 
 
 def test_empty_responder_return_check():
