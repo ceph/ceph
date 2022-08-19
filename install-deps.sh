@@ -254,6 +254,20 @@ EOF
     fi
 }
 
+read -r -d '' usage <<EOF || true
+usage: $0 [option]...
+options:
+	--crimson: install dependencies for crimson (env. alt. WITH_SEASTAR)
+	--zbd: install dependencies for zbd (env. alt. WITH_ZBD)
+	--pmem: install dependencies for PMEM (env. alt. WITH_PMEM)
+	--rgw_motr: install dependencies for CORTX Motr (env. alt. WITH_RADOSGW_MOTR)
+\n
+EOF
+function usage_exit() {
+    printf "$usage"
+    exit
+}
+
 for_make_check=false
 if tty -s; then
     # interactive
@@ -326,6 +340,25 @@ else
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
+    while [ $# -ge 1 ]; do
+    case $1 in
+        --crimson)
+            with_seastar=true
+            ;;
+        --zbd)
+            with_zbd=true
+            ;;
+        --pmem)
+            with_pmem=true
+            ;;
+        --rgw_motr)
+            with_rgw_motr=true
+            ;;
+        *)
+            usage_exit
+    esac
+    shift
+    done
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
