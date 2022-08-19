@@ -2420,11 +2420,14 @@ int MotrObject::copy_object_same_zone(RGWObjectCtx& obj_ctx,
     return rc;
   }
 
-  // read::iterate -> handle_data() -> write::process
-  rc = read_op->iterate(dpp, cur_ofs, cur_end, filter, y);
-  if (rc < 0){
-    ldpp_dout(dpp, 20) << "ERROR: read op iterate failed rc=" << rc << dendl;
-    return rc;
+  // read from/write to motr, if source object is non empty object.
+  if (obj_size > 0) {
+    // read::iterate -> handle_data() -> write::process
+    rc = read_op->iterate(dpp, cur_ofs, cur_end, filter, y);
+    if (rc < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: read op iterate failed rc=" << rc << dendl;
+      return rc;
+    }
   }
 
   real_time time = ceph::real_clock::now();
