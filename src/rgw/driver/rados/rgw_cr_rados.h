@@ -402,86 +402,88 @@ public:
 
 template <class T>
 class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
-  const DoutPrefixProvider *dpp;
-  RGWAsyncRadosProcessor *async_rados;
-  RGWSI_SysObj *svc;
-
+  const DoutPrefixProvider* dpp;
+  rgw::sal::RadosStore* store;
   rgw_raw_obj obj;
-  T *result;
+  T* result;
   /// on ENOENT, call handle_data() with an empty object instead of failing
   const bool empty_on_enoent;
-  RGWObjVersionTracker *objv_tracker;
-  RGWAsyncGetSystemObj *req{nullptr};
+  RGWObjVersionTracker* objv_tracker;
+
+  T val;
+  rgw_rados_ref ref;
+  ceph::buffer::list bl;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
-  RGWSimpleRadosReadCR(const DoutPrefixProvider *_dpp, 
-                      RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
-		      const rgw_raw_obj& _obj,
-		      T *_result, bool empty_on_enoent = true,
-		      RGWObjVersionTracker *objv_tracker = nullptr)
-    : RGWSimpleCoroutine(_svc->ctx()), dpp(_dpp), async_rados(_async_rados), svc(_svc),
-      obj(_obj), result(_result),
-      empty_on_enoent(empty_on_enoent), objv_tracker(objv_tracker) {}
-  ~RGWSimpleRadosReadCR() override {
-    request_cleanup();
-  }
-
-  void request_cleanup() override {
-    if (req) {
-      req->finish();
-      req = NULL;
+  RGWSimpleRadosReadCR(const DoutPrefixProvider* dpp,
+		       rgw::sal::RadosStore* store,
+		       const rgw_raw_obj& obj,
+		       T* result, bool empty_on_enoent = true,
+		       RGWObjVersionTracker* objv_tracker = nullptr)
+    : RGWSimpleCoroutine(store->ctx()), dpp(dpp), store(store),
+      obj(obj), result(result), empty_on_enoent(empty_on_enoent),
+      objv_tracker(objv_tracker) {
+    if (!result) {
+      result = &val;
     }
   }
 
-  int send_request(const DoutPrefixProvider *dpp) override;
-  int request_complete() override;
+  int send_request(const DoutPrefixProvider *dpp) {
+    int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
+    if (r < 0) {
+      ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret="
+			 << r << dendl;
+      return r;
+    }
+
+    set_status() << "sending request";
+
+    librados::ObjectReadOperation op;
+    if (objv_tracker) {
+      objv_tracker->prepare_op_for_read(&op);
+    }
+
+    op.read(0, -1, &bl, nullptr);
+
+    cn = stack->create_completion_notifier();
+    return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op,
+					nullptr);
+  }
+
+  int request_complete() {
+    int ret = cn->completion()->get_return_value();
+    set_status() << "request complete; ret=" << ret;
+
+    if (ret == -ENOENT && empty_on_enoent) {
+      *result = T();
+    } else {
+      if (ret < 0) {
+	return ret;
+      }
+      try {
+	auto iter = bl.cbegin();
+	if (iter.end()) {
+	  // allow successful reads with empty buffers. ReadSyncStatus coroutines
+	  // depend on this to be able to read without locking, because the
+	  // cls lock from InitSyncStatus will create an empty object if it didn't
+	  // exist
+	  *result = T();
+	} else {
+	  decode(*result, iter);
+	}
+      } catch (buffer::error& err) {
+	return -EIO;
+      }
+    }
+
+    return handle_data(*result);
+  }
 
   virtual int handle_data(T& data) {
     return 0;
   }
 };
-
-template <class T>
-int RGWSimpleRadosReadCR<T>::send_request(const DoutPrefixProvider *dpp)
-{
-  req = new RGWAsyncGetSystemObj(dpp, this, stack->create_completion_notifier(), svc,
-			         objv_tracker, obj, false, false);
-  async_rados->queue(req);
-  return 0;
-}
-
-template <class T>
-int RGWSimpleRadosReadCR<T>::request_complete()
-{
-  int ret = req->get_ret_status();
-  retcode = ret;
-  if (ret == -ENOENT && empty_on_enoent) {
-    *result = T();
-  } else {
-    if (ret < 0) {
-      return ret;
-    }
-    if (objv_tracker) { // copy the updated version
-      *objv_tracker = req->objv_tracker;
-    }
-    try {
-      auto iter = req->bl.cbegin();
-      if (iter.end()) {
-        // allow successful reads with empty buffers. ReadSyncStatus coroutines
-        // depend on this to be able to read without locking, because the
-        // cls lock from InitSyncStatus will create an empty object if it didn't
-        // exist
-        *result = T();
-      } else {
-        decode(*result, iter);
-      }
-    } catch (buffer::error& err) {
-      return -EIO;
-    }
-  }
-
-  return handle_data(*result);
-}
 
 class RGWSimpleRadosReadAttrsCR : public RGWSimpleCoroutine {
   const DoutPrefixProvider* dpp;
