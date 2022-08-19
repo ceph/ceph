@@ -1096,8 +1096,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
       // read BucketTrimStatus for marker position
       set_status("reading trim status");
       using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
-      yield call(new ReadStatus(dpp, store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
-                                &status, true, &objv));
+      yield call(new ReadStatus(dpp, store, obj, &status, true, &objv));
       if (retcode < 0) {
         ldpp_dout(dpp, 10) << "failed to read bilog trim status: "
             << cpp_strerror(retcode) << dendl;

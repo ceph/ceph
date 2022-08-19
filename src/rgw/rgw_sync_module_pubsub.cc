@@ -779,7 +779,8 @@ class PSManager
             rgw_raw_obj obj;
             ps.get_sub_meta_obj(sub_name, &obj);
             bool empty_on_enoent = false;
-            call(new ReadInfoCR(dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
+            call(new ReadInfoCR(dpp,
+				sync_env->store,
                                 obj,
                                 &user_sub_conf, empty_on_enoent));
           }
@@ -970,7 +971,7 @@ public:
       using ReadInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_bucket_topics>;
       yield {
         bool empty_on_enoent = true;
-        call(new ReadInfoCR(dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
+        call(new ReadInfoCR(dpp, sync_env->store,
                             bucket_obj,
                             &bucket_topics, empty_on_enoent));
       }
@@ -984,8 +985,7 @@ public:
 	using ReadUserTopicsInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_topics>;
 	yield {
 	  bool empty_on_enoent = true;
-	  call(new ReadUserTopicsInfoCR(dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
-					user_obj,
+	  call(new ReadUserTopicsInfoCR(dpp, sync_env->store, user_obj,
 					&user_topics, empty_on_enoent));
 	}
 	if (retcode < 0 && retcode != -ENOENT) {

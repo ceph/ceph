@@ -140,6 +140,82 @@ TEST(ReadAttrs, Filtered) {
   ASSERT_EQ(ref_attrs, attrs);
 }
 
+TEST(Read, Dne) {
+  TempPool pool;
+  std::string result;
+  auto r = run(new RGWSimpleRadosReadCR(dpp(), store, {pool, "doesnotexist"},
+					&result, false));
+  ASSERT_EQ(-ENOENT, r);
+}
+
+TEST(Read, Read) {
+  TempPool pool;
+  auto data = "I am test data!"sv;
+  auto oid = "object"s;
+  {
+    bufferlist bl;
+    encode(data, bl);
+    librados::IoCtx ioctx(pool);
+    auto r = ioctx.write_full(oid, bl);
+    ASSERT_EQ(0, r);
+  }
+  std::string result;
+  auto r = run(new RGWSimpleRadosReadCR(dpp(), store, {pool, oid}, &result,
+					false));
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(result, data);
+}
+
+TEST(Read, ReadVersion) {
+  TempPool pool;
+  auto data = "I am test data!"sv;
+  auto oid = "object"s;
+  RGWObjVersionTracker wobjv;
+  {
+    bufferlist bl;
+    encode(data, bl);
+    librados::IoCtx ioctx(pool);
+    librados::ObjectWriteOperation op;
+    wobjv.generate_new_write_ver(store->ctx());
+    wobjv.prepare_op_for_write(&op);
+    op.write_full(bl);
+    auto r = ioctx.operate(oid, &op);
+    EXPECT_EQ(0, r);
+    wobjv.apply_write();
+  }
+  RGWObjVersionTracker robjv;
+  std::string result;
+  auto r = run(new RGWSimpleRadosReadCR(dpp(), store, {pool, oid}, &result,
+					false, &robjv));
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(result, data);
+  data = "I am NEW test data!";
+  {
+    bufferlist bl;
+    encode(data, bl);
+    librados::IoCtx ioctx(pool);
+    librados::ObjectWriteOperation op;
+    wobjv.generate_new_write_ver(store->ctx());
+    wobjv.prepare_op_for_write(&op);
+    op.write_full(bl);
+    r = ioctx.operate(oid, &op);
+    EXPECT_EQ(0, r);
+    wobjv.apply_write();
+  }
+  result.clear();
+  r = run(new RGWSimpleRadosReadCR(dpp(), store, {pool, oid}, &result, false,
+				   &robjv));
+  ASSERT_EQ(-ECANCELED, r);
+  ASSERT_TRUE(result.empty());
+
+  robjv.clear();
+  r = run(new RGWSimpleRadosReadCR(dpp(), store, {pool, oid}, &result, false,
+				   &robjv));
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(result, data);
+  ASSERT_EQ(wobjv.read_version, robjv.read_version);
+}
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);

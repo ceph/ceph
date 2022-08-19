@@ -127,7 +127,7 @@ bool RGWReadDataSyncStatusMarkersCR::spawn_next()
     return false;
   }
   using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
-  spawn(new CR(env->dpp, env->async_rados, env->svc->sysobj,
+  spawn(new CR(env->dpp, env->store,
                rgw_raw_obj(env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, shard_id)),
                &markers[shard_id]),
         false);
@@ -202,7 +202,7 @@ int RGWReadDataSyncStatusCoroutine::operate(const DoutPrefixProvider *dpp)
     using ReadInfoCR = RGWSimpleRadosReadCR<rgw_data_sync_info>;
     yield {
       bool empty_on_enoent = false; // fail on ENOENT
-      call(new ReadInfoCR(dpp, sync_env->async_rados, sync_env->svc->sysobj,
+      call(new ReadInfoCR(dpp, sync_env->store,
                           rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::sync_status_oid(sc->source_zone)),
                           &sync_status->sync_info, empty_on_enoent));
     }
@@ -2114,7 +2114,7 @@ public:
   }
 
   RGWCoroutine *alloc_finisher_cr() override {
-    return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
+    return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->store,
                                                           rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, shard_id)),
                                                           &sync_marker);
   }
@@ -3589,7 +3589,7 @@ int RGWReadPendingBucketShardsCoroutine::operate(const DoutPrefixProvider *dpp)
   reenter(this){
     //read sync status marker
     using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
-    yield call(new CR(dpp, sync_env->async_rados, sync_env->svc->sysobj,
+    yield call(new CR(dpp, sync_env->store,
                       rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, status_oid),
                       sync_marker));
     if (retcode < 0) {
@@ -4418,7 +4418,7 @@ public:
         // read bucket sync status
         objv_tracker.clear();
         using ReadCR = RGWSimpleRadosReadCR<rgw_bucket_sync_status>;
-        yield call(new ReadCR(dpp, sync_env->async_rados, sync_env->svc->sysobj,
+        yield call(new ReadCR(dpp, sync_env->store,
                               bucket_status_obj, &bucket_status, false, &objv_tracker));
         if (retcode < 0) {
           ldpp_dout(dpp, 20) << "failed to read bucket shard status: "
@@ -5433,7 +5433,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
     using ReadCR = RGWSimpleRadosReadCR<rgw_bucket_sync_status>;
     using WriteCR = RGWSimpleRadosWriteCR<rgw_bucket_sync_status>;
 
-    yield call(new ReadCR(dpp, env->async_rados, env->svc->sysobj,
+    yield call(new ReadCR(dpp, env->store,
                           status_obj, &bucket_status, false, &objv));
     if (retcode == -ENOENT) {
       // use exclusive create to set state=Init
@@ -5444,7 +5444,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       if (retcode == -EEXIST) {
         // raced with another create, read its status
         tn->log(20, "raced with another create, read its status");
-        yield call(new ReadCR(dpp, env->async_rados, env->svc->sysobj,
+        yield call(new ReadCR(dpp, env->store,
                               status_obj, &bucket_status, false, &objv));
       }
     }
@@ -5493,8 +5493,8 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
           }
 
           // check if local state is "stopped"
-          yield call(new ReadCR(dpp, env->async_rados, env->svc->sysobj,
-                status_obj, &bucket_status, false, &objv));
+          yield call(new ReadCR(dpp, env->store,
+				status_obj, &bucket_status, false, &objv));
           if (retcode < 0) {
             tn->log(20, SSTR("ERROR: failed to read status before writing 'stopped'. error: " << retcode));
             RELEASE_LOCK(bucket_lease_cr);
@@ -5541,8 +5541,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
         }
 
         // reread the status after acquiring the lock
-        yield call(new ReadCR(dpp, env->async_rados, env->svc->sysobj,
-                            status_obj, &bucket_status, false, &objv));
+        yield call(new ReadCR(dpp, env->store, status_obj, &bucket_status, false, &objv));
         if (retcode < 0) {
           RELEASE_LOCK(bucket_lease_cr);
           tn->log(20, SSTR("ERROR: reading the status after acquiring the lock failed. error: " << retcode));
@@ -5965,8 +5964,7 @@ public:
       // Get the source's status. In incremental sync, this gives us
       // the generation and shard count that is next needed to be run.
       yield call(new RGWSimpleRadosReadCR<rgw_bucket_sync_status>(
-		   dpp, sc.env->async_rados, sc.env->svc->sysobj,
-		   status_obj, &status));
+		   dpp, sc.env->store, status_obj, &status));
       if (retcode < 0) {
 	ldpp_dout(dpp, -1) << "ERROR: Unable to fetch status for zone="
 			   << sc.source_zone << " retcode="
@@ -6029,8 +6027,7 @@ public:
 	pretty_print(sc.env, "Completed.\n");
 
 	yield call(new RGWSimpleRadosReadCR<rgw_bucket_sync_status>(
-		     dpp, sc.env->async_rados, sc.env->svc->sysobj,
-		     status_obj, &status));
+		     dpp, sc.env->store, status_obj, &status));
 	if (retcode < 0) {
 	  ldpp_dout(dpp, -1) << "ERROR: Unable to fetch status for zone="
 			     << sc.source_zone << " retcode="

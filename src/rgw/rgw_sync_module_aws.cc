@@ -1452,8 +1452,8 @@ public:
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(dpp, sync_env->async_rados, sync_env->svc->sysobj,
-                                                                 status_obj, &status, false));
+      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(
+		   dpp, sync_env->store, status_obj, &status, false));
 
       if (retcode < 0 && retcode != -ENOENT) {
         ldpp_dout(dpp, 0) << "ERROR: failed to read sync status of object " << src_obj << " retcode=" << retcode << dendl;
