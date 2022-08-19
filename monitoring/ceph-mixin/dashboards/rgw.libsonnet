@@ -257,16 +257,19 @@ local u = import 'utils.libsonnet';
         gridPos: { x: 0, y: 0, w: 24, h: 1 },
       },
       RgwOverviewPanel(
-        'Average GET/PUT Latencies',
+        'Average GET/PUT Latencies by RGW Instance',
         '',
         's',
         'short',
         |||
-          rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
-            rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval]) *
-            on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s}
+          label_replace(
+            rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
+              rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
+            "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
+          )
         ||| % $.matchers(),
-        'GET AVG',
+        'GET {{rgw_host}}',
         0,
         1,
         8,
@@ -275,11 +278,14 @@ local u = import 'utils.libsonnet';
         [
           $.addTargetSchema(
             |||
-              rate(ceph_rgw_put_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
-                rate(ceph_rgw_put_initial_lat_count{%(matchers)s}[$__rate_interval]) *
-                on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s}
+              label_replace(
+                rate(ceph_rgw_put_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
+                  rate(ceph_rgw_put_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+                  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
+                "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
+              )
             ||| % $.matchers(),
-            'PUT AVG'
+            'PUT {{rgw_host}}'
           ),
         ]
       ),
