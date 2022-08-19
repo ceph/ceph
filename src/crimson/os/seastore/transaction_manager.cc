@@ -7,6 +7,7 @@
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 
@@ -630,7 +631,11 @@ TransactionManagerRef make_transaction_manager(
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto backref_manager = create_backref_manager(*cache);
 
-  if (primary_device->get_device_type() == device_type_t::SEGMENTED) {
+  auto p_device_type = primary_device->get_device_type();
+  ceph_assert(p_device_type == device_type_t::SEGMENTED ||
+              p_device_type == device_type_t::RANDOM_BLOCK);
+
+  if (p_device_type == device_type_t::SEGMENTED) {
     sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
   }
   for (auto &p_dev : secondary_devices) {
@@ -638,31 +643,52 @@ TransactionManagerRef make_transaction_manager(
     sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
   }
 
+  auto journal_type = (p_device_type == device_type_t::SEGMENTED ?
+                       journal_type_t::SEGMENTED : journal_type_t::CIRCULAR);
+  seastore_off_t roll_size;
+  seastore_off_t roll_start;
+  if (journal_type == journal_type_t::SEGMENTED) {
+    roll_size = static_cast<SegmentManager*>(primary_device)->get_segment_size();
+    roll_start = 0;
+  } else {
+    // FIXME: get from runtime configration instead of static defaults
+    roll_size = journal::CircularBoundedJournal::mkfs_config_t
+                       ::get_default().total_size;
+    // see CircularBoundedJournal::get_start_addr()
+    roll_start = journal::CBJOURNAL_START_ADDRESS +
+                 primary_device->get_block_size();
+  }
+  ceph_assert(roll_size % primary_device->get_block_size() == 0);
+  ceph_assert(roll_start % primary_device->get_block_size() == 0);
+
   bool cleaner_is_detailed;
   AsyncCleaner::config_t cleaner_config;
   if (is_test) {
     cleaner_is_detailed = true;
-    cleaner_config = AsyncCleaner::config_t::get_test();
+    cleaner_config = AsyncCleaner::config_t::get_test(
+        roll_size, journal_type);
   } else {
     cleaner_is_detailed = false;
-    cleaner_config = AsyncCleaner::config_t::get_default();
+    cleaner_config = AsyncCleaner::config_t::get_default(
+        roll_size, journal_type);
   }
   auto async_cleaner = std::make_unique<AsyncCleaner>(
     cleaner_config,
     std::move(sms),
     *backref_manager,
-    cleaner_is_detailed);
+    cleaner_is_detailed,
+    journal_type,
+    roll_start,
+    roll_size);
 
-  if (primary_device->get_device_type() == device_type_t::SEGMENTED) {
+  if (journal_type == journal_type_t::SEGMENTED) {
     cache->set_segment_provider(*async_cleaner);
   }
 
-  auto p_device_type = primary_device->get_device_type();
   JournalRef journal;
-  if (p_device_type == device_type_t::SEGMENTED) {
+  if (journal_type == journal_type_t::SEGMENTED) {
     journal = journal::make_segmented(*async_cleaner, *async_cleaner);
   } else {
-    ceph_assert(p_device_type == device_type_t::RANDOM_BLOCK);
     journal = journal::make_circularbounded(
       *async_cleaner,
       static_cast<random_block_device::RBMDevice*>(primary_device),
