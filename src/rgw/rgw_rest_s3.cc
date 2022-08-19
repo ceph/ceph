@@ -635,7 +635,7 @@ void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   if (!op_ret){
@@ -706,7 +706,7 @@ void RGWPutObjTags_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
 }
@@ -719,7 +719,7 @@ void RGWDeleteObjTags_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 }
 
@@ -728,7 +728,7 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   if (!op_ret) {
@@ -804,7 +804,7 @@ void RGWPutBucketTags_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 }
 
@@ -817,7 +817,7 @@ void RGWDeleteBucketTags_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 }
 
@@ -1298,7 +1298,7 @@ void RGWGetBucketReplication_ObjStore_S3::send_response_data()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   ReplicationConfiguration conf;
@@ -1373,7 +1373,7 @@ void RGWPutBucketReplication_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 }
 
@@ -1388,7 +1388,7 @@ void RGWDeleteBucketReplication_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 }
 
@@ -1400,7 +1400,7 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
   dump_start(s);
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
-  end_header(s, NULL, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  end_header(s, NULL, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
 
   if (! op_ret) {
     list_all_buckets_start(s);
@@ -1476,7 +1476,7 @@ void RGWGetUsage_ObjStore_S3::send_response()
 
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
-  end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
   dump_start(s);
   if (op_ret < 0)
     return;
@@ -1794,7 +1794,7 @@ void RGWListBucket_ObjStore_S3::send_response()
 
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
-  end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
   dump_start(s);
   if (op_ret < 0) {
     return;
@@ -1809,43 +1809,61 @@ void RGWListBucket_ObjStore_S3::send_response()
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
+  
   RGWListBucket_ObjStore_S3::send_common_response();
-    if (op_ret >= 0) {
-      vector<rgw_bucket_dir_entry>::iterator iter;
-      for (iter = objs.begin(); iter != objs.end(); ++iter) {
-        rgw_obj_key key(iter->key);
-        s->formatter->open_array_section("Contents");
-        if (encode_key) {
-          string key_name;
-          url_encode(key.name, key_name);
-          s->formatter->dump_string("Key", key_name);
+  
+  if (op_ret >= 0) {
+    if (s->format == RGWFormat::JSON) {
+      s->formatter->open_array_section("Contents");
+    }
+    vector<rgw_bucket_dir_entry>::iterator iter;
+    for (iter = objs.begin(); iter != objs.end(); ++iter) {
+
+      rgw_obj_key key(iter->key);
+      std::string key_name;
+
+      if (encode_key) {
+	url_encode(key.name, key_name);
       } else {
-          s->formatter->dump_string("Key", key.name);
+	key_name = key.name;
       }
-        dump_time(s, "LastModified", iter->meta.mtime);
-        s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
-        s->formatter->dump_int("Size", iter->meta.accounted_size);
-        auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
-        s->formatter->dump_string("StorageClass", storage_class.c_str());
-        dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
-        if (s->system_request) {
-          s->formatter->dump_string("RgwxTag", iter->tag);
-      }
-        if (iter->meta.appendable) {
-          s->formatter->dump_string("Type", "Appendable");
+      /* conditionally format JSON in the obvious way--I'm unsure if
+       * AWS actually does this */
+      if (s->format == RGWFormat::XML) {
+	s->formatter->open_array_section("Contents");
       } else {
-          s->formatter->dump_string("Type", "Normal");
+	// json
+	s->formatter->open_object_section("dummy");
       }
-        s->formatter->close_section();
+      s->formatter->dump_string("Key", key_name);
+      dump_time(s, "LastModified", iter->meta.mtime);
+      s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
+      s->formatter->dump_int("Size", iter->meta.accounted_size);
+      auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
+      s->formatter->dump_string("StorageClass", storage_class.c_str());
+      dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
+      if (s->system_request) {
+	s->formatter->dump_string("RgwxTag", iter->tag);
+      }
+      if (iter->meta.appendable) {
+	s->formatter->dump_string("Type", "Appendable");
+	} else {
+	s->formatter->dump_string("Type", "Normal");
+      }
+      // JSON has one extra section per element
+      s->formatter->close_section();
+    } // foreach obj
+    if (s->format == RGWFormat::JSON) {
+      s->formatter->close_section();
     }
   }
-    s->formatter->dump_string("Marker", marker.name);
-    if (is_truncated && !next_marker.empty()) {
-      s->formatter->dump_string("NextMarker", next_marker.name);
-    }
-    s->formatter->close_section();
-    rgw_flush_formatter_and_reset(s, s->formatter);
-}
+  s->formatter->dump_string("Marker", marker.name);
+  if (is_truncated && !next_marker.empty()) {
+    s->formatter->dump_string("NextMarker", next_marker.name);
+  }
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+} /* RGWListBucket_ObjStore_S3::send_response() */
 
 void RGWListBucket_ObjStore_S3v2::send_versioned_response()
 {
@@ -1950,7 +1968,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
 
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
-  end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
   dump_start(s);
   if (op_ret < 0) {
     return;
@@ -2016,7 +2034,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
 void RGWGetBucketLogging_ObjStore_S3::send_response()
 {
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   s->formatter->open_object_section_in_ns("BucketLoggingStatus", XMLNS_AWS_S3);
@@ -2052,7 +2070,7 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   s->formatter->open_object_section_in_ns("VersioningConfiguration", XMLNS_AWS_S3);
@@ -2163,7 +2181,7 @@ void RGWSetBucketVersioning_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
 }
 
 int RGWSetBucketWebsite_ObjStore_S3::get_params(optional_yield y)
@@ -2240,7 +2258,7 @@ void RGWSetBucketWebsite_ObjStore_S3::send_response()
   if (op_ret < 0)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
 }
 
 void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
@@ -2250,7 +2268,7 @@ void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
   }
   set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
 }
 
 void RGWGetBucketWebsite_ObjStore_S3::send_response()
@@ -2258,7 +2276,7 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   if (op_ret < 0) {
@@ -2642,7 +2660,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_errno(s);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
-      end_header(s, this, "application/xml");
+      end_header(s, this, to_mime_type(s->format));
       dump_start(s);
       struct tm tmp;
       utime_t ut(mtime);
@@ -3452,7 +3470,7 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
 
     // Explicitly use chunked transfer encoding so that we can stream the result
     // to the user without having to wait for the full length of it.
-    end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+    end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
     dump_start(s);
     if (op_ret == 0) {
       s->formatter->open_object_section_in_ns("CopyObjectResult", XMLNS_AWS_S3);
@@ -3487,7 +3505,7 @@ void RGWGetACLs_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
   rgw_flush_formatter(s, s->formatter);
   dump_body(s, acls);
@@ -3540,7 +3558,7 @@ void RGWPutACLs_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 }
 
@@ -3574,7 +3592,7 @@ void RGWGetLC_ObjStore_S3::send_response()
     }
   }
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   if (op_ret < 0)
@@ -3589,7 +3607,7 @@ void RGWPutLC_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 }
 
@@ -3601,7 +3619,7 @@ void RGWDeleteLC_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 }
 
@@ -3614,7 +3632,7 @@ void RGWGetCORS_ObjStore_S3::send_response()
       set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s, NULL, "application/xml");
+  end_header(s, NULL, to_mime_type(s->format));
   dump_start(s);
   if (! op_ret) {
     string cors;
@@ -3696,7 +3714,7 @@ void RGWPutCORS_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, NULL, "application/xml");
+  end_header(s, NULL, to_mime_type(s->format));
   dump_start(s);
 }
 
@@ -3753,7 +3771,7 @@ void RGWGetBucketEncryption_ObjStore_S3::send_response()
   }
 
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   if (!op_ret) {
@@ -3777,7 +3795,7 @@ void RGWDeleteBucketEncryption_ObjStore_S3::send_response()
 void RGWGetRequestPayment_ObjStore_S3::send_response()
 {
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   s->formatter->open_object_section_in_ns("RequestPaymentConfiguration", XMLNS_AWS_S3);
@@ -3882,7 +3900,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
     dump_time_header(s, "x-amz-abort-date", abort_date);
     dump_header_if_nonempty(s, "x-amz-abort-rule-id", rule_id);
   }
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
     dump_start(s);
     s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult", XMLNS_AWS_S3);
@@ -3921,7 +3939,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   dump_errno(s);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
     dump_start(s);
     s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult", XMLNS_AWS_S3);
@@ -3967,7 +3985,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
   dump_errno(s);
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
-  end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
 
   if (op_ret == 0) {
     dump_start(s);
@@ -4020,7 +4038,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
 
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
-  end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
   dump_start(s);
   if (op_ret < 0)
     return;
@@ -4114,7 +4132,7 @@ void RGWDeleteMultiObj_ObjStore_S3::begin_response()
   dump_start(s);
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
-  end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
   s->formatter->open_object_section_in_ns("DeleteResult", XMLNS_AWS_S3);
 
   rgw_flush_formatter(s, s->formatter);
@@ -4256,7 +4274,7 @@ void RGWGetBucketMetaSearch_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, NULL, "application/xml");
+  end_header(s, NULL, to_mime_type(s->format));
 
   Formatter *f = s->formatter;
   f->open_array_section("GetBucketMetaSearchResult");
@@ -4305,7 +4323,7 @@ void RGWGetBucketObjectLock_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   if (op_ret) {
@@ -4344,7 +4362,7 @@ void RGWGetObjRetention_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   if (op_ret) {
@@ -4369,7 +4387,7 @@ void RGWGetObjLegalHold_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   if (op_ret) {
@@ -4385,7 +4403,7 @@ void RGWGetBucketPolicyStatus_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   s->formatter->open_object_section_in_ns("PolicyStatus", XMLNS_AWS_S3);
@@ -4414,7 +4432,7 @@ void RGWGetBucketPublicAccessBlock_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s, this, "application/xml");
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   access_conf.dump_xml(s->formatter);
@@ -4751,7 +4769,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_options()
 
 int RGWHandler_REST_S3::init_from_header(rgw::sal::Store* store,
 					 req_state* s,
-					 int default_formatter,
+					 RGWFormat default_formatter,
 					 bool configurable_format)
 {
   string req;
@@ -5039,7 +5057,7 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
 int RGWHandler_Auth_S3::init(rgw::sal::Store* store, req_state *state,
                              rgw::io::BasicClient *cio)
 {
-  int ret = RGWHandler_REST_S3::init_from_header(store, state, RGW_FORMAT_JSON, true);
+  int ret = RGWHandler_REST_S3::init_from_header(store, state, RGWFormat::JSON, true);
   if (ret < 0)
     return ret;
 
@@ -5054,8 +5072,8 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Store* store,
   bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
   int ret =
     RGWHandler_REST_S3::init_from_header(store, s,
-					is_s3website ? RGW_FORMAT_HTML :
-					RGW_FORMAT_XML, true);
+					is_s3website ? RGWFormat::HTML :
+					RGWFormat::XML, true);
   if (ret < 0)
     return NULL;
 

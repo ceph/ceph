@@ -151,10 +151,33 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_TRACE RGW_ATTR_PREFIX "trace"
 
-#define RGW_FORMAT_PLAIN        0
-#define RGW_FORMAT_XML          1
-#define RGW_FORMAT_JSON         2
-#define RGW_FORMAT_HTML         3
+enum class RGWFormat : int8_t {
+  BAD_FORMAT = -1,
+  PLAIN = 0,
+  XML,
+  JSON,
+  HTML,
+};
+
+static inline const char* to_mime_type(const RGWFormat f)
+{
+  switch (f) {
+  case RGWFormat::XML:
+    return "application/xml";
+    break;
+  case RGWFormat::JSON:
+    return "application/json";
+    break;
+  case RGWFormat::HTML:
+    return "text/html";
+    break;
+  case RGWFormat::PLAIN:
+    return "text/plain";
+    break;
+  default:
+    return "invalid format";
+  }
+}
 
 #define RGW_CAP_READ            0x1
 #define RGW_CAP_WRITE           0x2
@@ -1649,7 +1672,7 @@ struct req_state : DoutPrefixProvider {
   std::string ratelimit_bucket_marker;
   std::string ratelimit_user_name;
   bool content_started{false};
-  int format{0};
+  RGWFormat format{RGWFormat::PLAIN};
   ceph::Formatter *formatter{nullptr};
   std::string decoded_uri;
   std::string relative_uri;
@@ -2271,7 +2294,8 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
-rgw::IAM::Effect eval_identity_or_session_policies(const std::vector<rgw::IAM::Policy>& user_policies,
+rgw::IAM::Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
+			  const std::vector<rgw::IAM::Policy>& user_policies,
                           const rgw::IAM::Environment& env,
                           const uint64_t op,
                           const rgw::ARN& arn);

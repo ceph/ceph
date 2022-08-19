@@ -99,7 +99,7 @@ int RGWHandler_REST_IAM::init(rgw::sal::Store* store,
 {
   s->dialect = "iam";
 
-  if (int ret = RGWHandler_REST_IAM::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
+  if (int ret = RGWHandler_REST_IAM::init_from_header(s, RGWFormat::XML, true); ret < 0) {
     ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
@@ -113,7 +113,7 @@ int RGWHandler_REST_IAM::authorize(const DoutPrefixProvider* dpp, optional_yield
 }
 
 int RGWHandler_REST_IAM::init_from_header(req_state* s,
-                                          int default_formatter,
+                                          RGWFormat default_formatter,
                                           bool configurable_format)
 {
   string req;

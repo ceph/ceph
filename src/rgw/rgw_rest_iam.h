@@ -14,7 +14,7 @@ class RGWHandler_REST_IAM : public RGWHandler_REST {
   void rgw_iam_parse_input();
 public:
 
-  static int init_from_header(req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(req_state *s, RGWFormat default_formatter, bool configurable_format);
 
   RGWHandler_REST_IAM(const rgw::auth::StrategyRegistry& auth_registry,
 		      bufferlist& bl_post_body)
