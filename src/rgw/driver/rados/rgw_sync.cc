@@ -747,7 +747,7 @@ bool RGWReadSyncStatusMarkersCR::spawn_next()
   using CR = RGWSimpleRadosReadCR<rgw_meta_sync_marker>;
   rgw_raw_obj obj{env->store->svc()->zone->get_zone_params().log_pool,
                   env->shard_obj_name(shard_id)};
-  spawn(new CR(env->dpp, env->async_rados, env->store->svc()->sysobj, obj, &markers[shard_id]), false);
+  spawn(new CR(env->dpp, env->store, obj, &markers[shard_id]), false);
   shard_id++;
   return true;
 }
@@ -773,7 +773,7 @@ int RGWReadSyncStatusCoroutine::operate(const DoutPrefixProvider *dpp)
       bool empty_on_enoent = false; // fail on ENOENT
       rgw_raw_obj obj{sync_env->store->svc()->zone->get_zone_params().log_pool,
                       sync_env->status_oid()};
-      call(new ReadInfoCR(dpp, sync_env->async_rados, sync_env->store->svc()->sysobj, obj,
+      call(new ReadInfoCR(dpp, sync_env->store, obj,
                           &sync_status->sync_info, empty_on_enoent));
     }
     if (retcode < 0) {
@@ -1903,7 +1903,7 @@ public:
 
   RGWCoroutine *alloc_finisher_cr() override {
     rgw::sal::RadosStore* store = sync_env->store;
-    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->dpp, sync_env->async_rados, store->svc()->sysobj,
+    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->dpp, store,
                                                           rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
                                                           &sync_marker);
   }
