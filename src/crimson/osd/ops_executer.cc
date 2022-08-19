@@ -378,8 +378,8 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_list_watchers(
     assert(key.second.is_client());
     response.entries.emplace_back(watch_item_t{
       key.second, info.cookie, info.timeout_seconds, info.addr});
-    response.encode(osd_op.outdata, get_message().get_features());
   }
+  response.encode(osd_op.outdata, get_message().get_features());
   return watch_ierrorator::now();
 }
 

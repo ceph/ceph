@@ -55,61 +55,6 @@ struct node_offset_packed_t {
   node_offset_t value;
 } __attribute__((packed));
 
-// TODO: consider alignments
-struct shard_pool_t {
-  auto operator<=>(const shard_pool_t&) const = default;
-
-  pool_t pool() const { return _pool; }
-
-  template <KeyT KT>
-  static shard_pool_t from_key(const full_key_t<KT>& key);
-
-  shard_t shard;
-  pool_t _pool;
-} __attribute__((packed));
-inline std::ostream& operator<<(std::ostream& os, const shard_pool_t& sp) {
-  return os << (int)sp.shard << "," << sp.pool();
-}
-
-// Note: this is the reversed version of the object hash
-struct crush_t {
-  auto operator<=>(const crush_t&) const = default;
-
-  template <KeyT KT>
-  static crush_t from_key(const full_key_t<KT>& key);
-
-  crush_hash_t crush;
-} __attribute__((packed));
-inline std::ostream& operator<<(std::ostream& os, const crush_t& c) {
-  return os << "0x" << std::hex << c.crush << std::dec;
-}
-
-struct shard_pool_crush_t {
-  auto operator<=>(const shard_pool_crush_t&) const = default;
-
-  template <KeyT KT>
-  static shard_pool_crush_t from_key(const full_key_t<KT>& key);
-
-  shard_pool_t shard_pool;
-  crush_t crush;
-} __attribute__((packed));
-inline std::ostream& operator<<(std::ostream& os, const shard_pool_crush_t& spc) {
-  return os << spc.shard_pool << ",0x" << std::hex << spc.crush << std::dec;
-}
-
-struct snap_gen_t {
-  auto operator<=>(const snap_gen_t&) const = default;
-
-  template <KeyT KT>
-  static snap_gen_t from_key(const full_key_t<KT>& key);
-
-  snap_t snap;
-  gen_t gen;
-} __attribute__((packed));
-inline std::ostream& operator<<(std::ostream& os, const snap_gen_t& sg) {
-  return os << sg.snap << "," << sg.gen;
-}
-
 /**
  * string_key_view_t
  *
@@ -568,6 +513,11 @@ inline std::ostream& operator<<(std::ostream& os, const key_hobj_t& key) {
   return key.dump(os);
 }
 
+struct shard_pool_t;
+struct crush_t;
+struct shard_pool_crush_t;
+struct snap_gen_t;
+
 /**
  * key_view_t
  *
@@ -579,15 +529,9 @@ class key_view_t {
   /**
    * common interfaces as a full_key_t
    */
-  shard_t shard() const {
-    return shard_pool_packed().shard;
-  }
-  pool_t pool() const {
-    return shard_pool_packed().pool();
-  }
-  crush_hash_t crush() const {
-    return crush_packed().crush;
-  }
+  inline shard_t shard() const;
+  inline pool_t pool() const;
+  inline crush_hash_t crush() const;
   laddr_t get_hint() const {
     return get_lba_hint(shard(), pool(), crush());
   }
@@ -610,12 +554,8 @@ class key_view_t {
   ns_oid_view_t::Type dedup_type() const {
     return ns_oid_view().type();
   }
-  snap_t snap() const {
-    return snap_gen_packed().snap;
-  }
-  gen_t gen() const {
-    return snap_gen_packed().gen;
-  }
+  inline snap_t snap() const;
+  inline gen_t gen() const;
 
   /**
    * key_view_t specific interfaces
@@ -667,12 +607,8 @@ class key_view_t {
     assert(!has_crush());
     replace(key);
   }
-  void replace(const shard_pool_crush_t& key) { p_shard_pool = &key.shard_pool; }
-  void set(const shard_pool_crush_t& key) {
-    set(key.crush);
-    assert(!has_shard_pool());
-    replace(key);
-  }
+  inline void replace(const shard_pool_crush_t& key);
+  inline void set(const shard_pool_crush_t& key);
   void replace(const ns_oid_view_t& key) { p_ns_oid = key; }
   void set(const ns_oid_view_t& key) {
     assert(!has_ns_oid());
@@ -733,8 +669,116 @@ class key_view_t {
   const snap_gen_t* p_snap_gen = nullptr;
 };
 
-template <KeyT KT>
-void encode_key(const full_key_t<KT>& key, ceph::bufferlist& bl) {
+template<typename T>
+concept IsFullKey = std::same_as<T, key_hobj_t> || std::same_as<T, key_view_t>;
+
+// TODO: consider alignments
+struct shard_pool_t {
+  auto operator<=>(const shard_pool_t&) const = default;
+
+  pool_t pool() const { return _pool; }
+
+  template <IsFullKey Key>
+  static shard_pool_t from_key(const Key& key) {
+    if constexpr (std::same_as<Key, key_view_t>) {
+      return key.shard_pool_packed();
+    } else {
+      return {key.shard(), key.pool()};
+    }
+  }
+
+  shard_t shard;
+  pool_t _pool;
+} __attribute__((packed));
+inline std::ostream& operator<<(std::ostream& os, const shard_pool_t& sp) {
+  return os << (int)sp.shard << "," << sp.pool();
+}
+
+// Note: this is the reversed version of the object hash
+struct crush_t {
+  auto operator<=>(const crush_t&) const = default;
+
+  template <IsFullKey Key>
+  static crush_t from_key(const Key& key) {
+    if constexpr (std::same_as<Key, key_view_t>) {
+      return key.crush_packed();
+    } else {
+      return {key.crush()};
+    }
+  }
+
+  crush_hash_t crush;
+} __attribute__((packed));
+inline std::ostream& operator<<(std::ostream& os, const crush_t& c) {
+  return os << "0x" << std::hex << c.crush << std::dec;
+}
+
+struct shard_pool_crush_t {
+  auto operator<=>(const shard_pool_crush_t&) const = default;
+
+  template <IsFullKey Key>
+  static shard_pool_crush_t from_key(const Key& key) {
+    return {shard_pool_t::from_key(key), crush_t::from_key(key)};
+  }
+
+  shard_pool_t shard_pool;
+  crush_t crush;
+} __attribute__((packed));
+inline std::ostream& operator<<(std::ostream& os, const shard_pool_crush_t& spc) {
+  return os << spc.shard_pool << ",0x" << std::hex << spc.crush << std::dec;
+}
+
+struct snap_gen_t {
+  auto operator<=>(const snap_gen_t&) const = default;
+
+  template <IsFullKey Key>
+  static snap_gen_t from_key(const Key& key) {
+    if constexpr (std::same_as<Key, key_view_t>) {
+      return key.snap_gen_packed();
+    } else {
+      return {key.snap(), key.gen()};
+    }
+  }
+
+  snap_t snap;
+  gen_t gen;
+} __attribute__((packed));
+inline std::ostream& operator<<(std::ostream& os, const snap_gen_t& sg) {
+  return os << sg.snap << "," << sg.gen;
+}
+
+shard_t key_view_t::shard() const {
+  return shard_pool_packed().shard;
+}
+
+pool_t key_view_t::pool() const {
+  return shard_pool_packed().pool();
+}
+
+crush_hash_t key_view_t::crush() const {
+  return crush_packed().crush;
+}
+
+snap_t key_view_t::snap() const {
+  return snap_gen_packed().snap;
+}
+
+gen_t key_view_t::gen() const {
+  return snap_gen_packed().gen;
+}
+
+void key_view_t::replace(const shard_pool_crush_t& key) {
+  p_shard_pool = &key.shard_pool;
+}
+
+void key_view_t::set(const shard_pool_crush_t& key) {
+  set(key.crush);
+  assert(!has_shard_pool());
+  replace(key);
+}
+
+template <IsFullKey Key>
+void encode_key(const Key& key, ceph::bufferlist& bl) {
   ceph::encode(key.shard(), bl);
   ceph::encode(key.pool(), bl);
   ceph::encode(key.crush(), bl);
@@ -743,9 +787,6 @@ void encode_key(const full_key_t<KT>& key, ceph::bufferlist& bl) {
   ceph::encode(key.snap(), bl);
   ceph::encode(key.gen(), bl);
 }
-
-template<typename T>
-concept IsFullKey = std::same_as<T, key_hobj_t> || std::same_as<T, key_view_t>;
 
 template<IsFullKey LHS, IsFullKey RHS>
 std::strong_ordering operator<=>(const LHS& lhs, const RHS& rhs) noexcept {
@@ -820,38 +861,6 @@ auto operator<=>(const T& key, const snap_gen_t& target) {
 template <IsFullKey LHS, typename RHS>
 bool operator==(LHS lhs, RHS rhs) {
   return lhs <=> rhs == 0;
-}
-
-template <KeyT KT>
-shard_pool_t shard_pool_t::from_key(const full_key_t<KT>& key) {
-  if constexpr (KT == KeyT::VIEW) {
-    return key.shard_pool_packed();
-  } else {
-    return {key.shard(), key.pool()};
-  }
-}
-
-template <KeyT KT>
-crush_t crush_t::from_key(const full_key_t<KT>& key) {
-  if constexpr (KT == KeyT::VIEW) {
-    return key.crush_packed();
-  } else {
-    return {key.crush()};
-  }
-}
-
-template <KeyT KT>
-shard_pool_crush_t shard_pool_crush_t::from_key(const full_key_t<KT>& key) {
-  return {shard_pool_t::from_key<KT>(key), crush_t::from_key<KT>(key)};
-}
-
-template <KeyT KT>
-snap_gen_t snap_gen_t::from_key(const full_key_t<KT>& key) {
-  if constexpr (KT == KeyT::VIEW) {
-    return key.snap_gen_packed();
-  } else {
-    return {key.snap(), key.gen()};
-  }
 }
 
 template <KeyT KT>

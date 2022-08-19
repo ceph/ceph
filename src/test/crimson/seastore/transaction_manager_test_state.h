@@ -65,23 +65,12 @@ protected:
     _mount().handle_error(crimson::ct_error::assert_all{}).get0();
     SUBINFO(test, "finish");
   }
-
-  seastar::future<> tm_setup(
-      journal_type_t type = journal_type_t::SEGMENT_JOURNAL) {
-    LOG_PREFIX(EphemeralTestState::tm_setup);
-    SUBINFO(test, "begin with {} devices ...", get_num_devices());
-    journal_type = type;
-    // FIXME: should not initialize segment_manager with circularbounded-journal
+  seastar::future<> segment_setup()
+  {
+    LOG_PREFIX(EphemeralTestState::segment_setup);
     segment_manager = segment_manager::create_test_ephemeral();
     for (auto &sec_sm : secondary_segment_managers) {
       sec_sm = segment_manager::create_test_ephemeral();
-    }
-    if (journal_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
-      auto config =
-	journal::CircularBoundedJournal::mkfs_config_t::get_default();
-      rb_device.reset(new random_block_device::TestMemory(config.total_size));
-      rb_device->set_device_id(
-	1 << (std::numeric_limits<device_id_t>::digits - 1));
     }
     return segment_manager->init(
     ).safe_then([this] {
@@ -107,24 +96,53 @@ protected:
             segment_manager::get_ephemeral_device_config(cnt, get_num_devices()));
         });
       });
-    }).safe_then([this] {
+    }).safe_then([this, FNAME] {
       init();
-      return _mkfs();
-    }).safe_then([this] {
-      return _teardown();
-    }).safe_then([this] {
-      destroy();
-      segment_manager->remount();
-      for (auto &sec_sm : secondary_segment_managers) {
-        sec_sm->remount();
-      }
-      init();
-      return _mount();
+      return _mkfs(
+      ).safe_then([this] {
+	return _teardown();
+      }).safe_then([this] {
+	destroy();
+	segment_manager->remount();
+	for (auto &sec_sm : secondary_segment_managers) {
+	  sec_sm->remount();
+	}
+	init();
+	return _mount();
+      }).handle_error(
+	crimson::ct_error::assert_all{}
+      ).then([FNAME] {
+	SUBINFO(test, "finish");
+      });
     }).handle_error(
       crimson::ct_error::assert_all{}
-    ).then([FNAME] {
-      SUBINFO(test, "finish");
+    );
+  }
+  seastar::future<> randomblock_setup()
+  {
+    auto config =
+      journal::CircularBoundedJournal::mkfs_config_t::get_default();
+    rb_device.reset(new random_block_device::TestMemory(config.total_size));
+    rb_device->set_device_id(
+      1 << (std::numeric_limits<device_id_t>::digits - 1));
+    return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
+    ).then([this]() {
+      return segment_setup();
     });
+  }
+
+  seastar::future<> tm_setup(
+    journal_type_t type = journal_type_t::SEGMENT_JOURNAL) {
+    LOG_PREFIX(EphemeralTestState::tm_setup);
+    SUBINFO(test, "begin with {} devices ...", get_num_devices());
+    journal_type = type;
+    // FIXME: should not initialize segment_manager with circularbounded-journal
+    if (journal_type == journal_type_t::SEGMENT_JOURNAL) {
+      return segment_setup();
+    } else {
+      assert(journal_type == journal_type_t::CIRCULARBOUNDED_JOURNAL);
+      return randomblock_setup();
+    }
   }
 
   seastar::future<> tm_teardown() {
@@ -210,14 +228,10 @@ protected:
       return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->mkfs(
 	config
       ).safe_then([this]() {
-	return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->
-	  open_device_read_header(
-	).safe_then([this](auto) {
-	  return tm->mkfs(
-	  ).handle_error(
-	    crimson::ct_error::assert_all{"Error in mkfs"}
-	  );
-	});
+	return tm->mkfs(
+	).handle_error(
+	  crimson::ct_error::assert_all{"Error in mkfs"}
+	);
       }).handle_error(
 	crimson::ct_error::assert_all{"Error in mkfs"}
       );

@@ -107,7 +107,7 @@ memory_range_t NODE_T::insert_prefix_at(
     const char* p_insert = node.p_start() +
                            node.fields().get_item_end_offset(index, mut.get_length());
     const char* p_insert_front = p_insert - size_right;
-    FieldType::template insert_at<KT>(mut, key, node.fields(), index, size_right);
+    FieldType::insert_at(mut, key, node.fields(), index, size_right);
     mut.shift_absolute(p_left_bound,
                        p_insert - p_left_bound,
                        -(int)size_right);
