@@ -7,9 +7,9 @@ Scenario: "Test Average GET Latencies"
     | ceph_rgw_get_initial_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 20 60 80 |
     | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1 1 1 |
   When interval is `30s`
-  Then Grafana panel `Average GET/PUT Latencies` with legend `GET AVG` shows:
+  Then Grafana panel `Average GET/PUT Latencies by RGW Instance` with legend `GET {{rgw_host}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo",instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1.5 |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo"} | 1.5 |
 
 Scenario: "Test Average PUT Latencies"
   Given the following series:
@@ -18,9 +18,9 @@ Scenario: "Test Average PUT Latencies"
     | ceph_rgw_put_initial_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 10 30 50 |
     | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1 1 1 |
   When interval is `30s`
-  Then Grafana panel `Average GET/PUT Latencies` with legend `PUT AVG` shows:
+  Then Grafana panel `Average GET/PUT Latencies by RGW Instance` with legend `PUT {{rgw_host}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo",instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1 |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo"} | 1 |
 
 Scenario: "Test Total Requests/sec by RGW Instance"
   Given the following series:
