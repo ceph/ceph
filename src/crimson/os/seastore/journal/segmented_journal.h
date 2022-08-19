@@ -52,7 +52,7 @@ public:
   }
 
   journal_type_t get_type() final {
-    return journal_type_t::SEGMENT_JOURNAL;
+    return journal_type_t::SEGMENTED;
   }
   seastar::future<> finish_commit(transaction_type_t type) {
     return seastar::now();
