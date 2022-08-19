@@ -19,11 +19,6 @@ class SegmentManagerGroup;
 class SegmentProvider;
 class JournalTrimmer;
 
-enum class journal_type_t {
-  SEGMENT_JOURNAL = 0,
-  CIRCULARBOUNDED_JOURNAL
-};
-
 class Journal {
 public:
   virtual JournalTrimmer &get_trimmer() = 0;

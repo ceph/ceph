@@ -863,7 +863,13 @@ std::ostream& operator<<(std::ostream& out, device_type_t t);
 bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
-/* Monotonically increasing identifier for the location of a
+enum class journal_type_t {
+  SEGMENTED,
+  CIRCULAR
+};
+
+/**
+ * Monotonically increasing identifier for the location of a
  * journal_record.
  */
 // JOURNAL_SEQ_NULL == JOURNAL_SEQ_MAX == journal_seq_t{}

@@ -91,7 +91,7 @@ public:
   close_ertr::future<> close() final;
 
   journal_type_t get_type() final {
-    return journal_type_t::CIRCULARBOUNDED_JOURNAL;
+    return journal_type_t::CIRCULAR;
   }
 
   submit_record_ret submit_record(
