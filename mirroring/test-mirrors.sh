@@ -6,7 +6,7 @@
 # Requires IPv4, IPv6, rsync and curl
 #
 # Example usage:
-# - ./test-mirrors.sh eu.ceph.com,de.ceph.com,hk.ceph.com
+# - ./test-mirrors.sh eu.ceph.com,de.ceph.com,au.ceph.com
 # - cat MIRRORS |cut -d ':' -f 1|xargs -n 1 ./test-mirrors.sh
 #
 
