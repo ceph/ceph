@@ -32,6 +32,7 @@ class KernelMount(CephFSMount):
         self.client_config = client_config
         self.dynamic_debug = client_config.get('dynamic_debug', False)
         self.rbytes = client_config.get('rbytes', False)
+        self.snapdirname = client_config.get('snapdirname', '.snap')
         self.syntax_style = client_config.get('syntax', 'v2')
         self.inst = None
         self.addr = None
@@ -109,6 +110,8 @@ class KernelMount(CephFSMount):
             opts += ",rbytes"
         else:
             opts += ",norbytes"
+        if self.snapdirname != '.snap':
+            opts += f',snapdirname={self.snapdirname}'
 
         mount_cmd = ['sudo'] + self._nsenter_args
         stx_opt = self._make_mount_cmd_old_or_new_style()
