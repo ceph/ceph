@@ -467,16 +467,24 @@ AsyncCleaner::AsyncCleaner(
   config_t config,
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
-  bool detailed)
+  bool detailed,
+  journal_type_t type,
+  seastore_off_t roll_start,
+  seastore_off_t roll_size)
   : detailed(detailed),
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
+    journal_type(type),
+    roll_start(roll_start),
+    roll_size(roll_size),
     ool_segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::OOL)),
     gc_process(*this)
 {
   config.validate();
+  ceph_assert(roll_start >= 0);
+  ceph_assert(roll_size > 0);
 }
 
 void AsyncCleaner::register_metrics()

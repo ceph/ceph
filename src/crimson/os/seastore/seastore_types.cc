@@ -129,6 +129,81 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
   return out << ">";
 }
 
+journal_seq_t journal_seq_t::add_offset(
+      journal_type_t type,
+      seastore_off_t off,
+      seastore_off_t roll_start,
+      seastore_off_t roll_size) const
+{
+  assert(offset.is_absolute());
+  assert(off != MIN_SEG_OFF);
+  assert(roll_start >= 0);
+  assert(roll_size > 0);
+
+  segment_seq_t jseq = segment_seq;
+  seastore_off_t joff;
+  if (type == journal_type_t::SEGMENTED) {
+    joff = offset.as_seg_paddr().get_segment_off();
+  } else {
+    assert(type == journal_type_t::CIRCULAR);
+    auto boff = offset.as_blk_paddr().get_block_off();
+    assert(boff <= MAX_SEG_OFF);
+    joff = boff;
+  }
+  auto roll_end = roll_start + roll_size;
+  assert(joff >= roll_start);
+  assert(joff <= roll_end);
+
+  if (off >= 0) {
+    jseq += (off / roll_size);
+    joff += (off % roll_size);
+    if (joff >= roll_end) {
+      ++jseq;
+      joff -= roll_size;
+    }
+  } else {
+    auto mod = static_cast<segment_seq_t>((-off) / roll_size);
+    joff -= ((-off) % roll_size);
+    if (joff < roll_start) {
+      ++mod;
+      joff += roll_size;
+    }
+    if (jseq >= mod) {
+      jseq -= mod;
+    } else {
+      return JOURNAL_SEQ_MIN;
+    }
+  }
+  assert(joff >= roll_start);
+  assert(joff < roll_end);
+  return journal_seq_t{jseq, make_block_relative_paddr(joff)};
+}
+
+seastore_off_t journal_seq_t::relative_to(
+      journal_type_t type,
+      const journal_seq_t& r,
+      seastore_off_t roll_start,
+      seastore_off_t roll_size) const
+{
+  assert(offset.is_absolute());
+  assert(r.offset.is_absolute());
+  assert(roll_start >= 0);
+  assert(roll_size > 0);
+
+  int64_t ret = static_cast<int64_t>(segment_seq) - r.segment_seq;
+  ret *= roll_size;
+  if (type == journal_type_t::SEGMENTED) {
+    ret += (static_cast<int64_t>(offset.as_seg_paddr().get_segment_off()) -
+            static_cast<int64_t>(r.offset.as_seg_paddr().get_segment_off()));
+  } else {
+    assert(type == journal_type_t::CIRCULAR);
+    ret += (static_cast<int64_t>(offset.as_blk_paddr().get_block_off()) -
+            static_cast<int64_t>(r.offset.as_blk_paddr().get_block_off()));
+  }
+  assert(ret <= MAX_SEG_OFF && ret > MIN_SEG_OFF);
+  return static_cast<seastore_off_t>(ret);
+}
+
 std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq)
 {
   if (seq == JOURNAL_SEQ_NULL) {
