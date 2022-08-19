@@ -691,6 +691,9 @@ flushjournal_out:
 		   journal_path,
 		   poolctx);
 
+  // set cpu numa
+  osdptr->set_numa_affinity();
+
   int err = osdptr->pre_init();
   if (err < 0) {
     derr << TEXT_RED << " ** ERROR: osd pre_init failed: " << cpp_strerror(-err)

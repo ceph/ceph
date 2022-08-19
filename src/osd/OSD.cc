@@ -6678,11 +6678,6 @@ void OSD::_send_boot()
     hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);
   }
 
-  // we now know what our front and back addrs will be, and we are
-  // about to tell the mon what our metadata (including numa bindings)
-  // are, so now is a good time!
-  set_numa_affinity();
-
   MOSDBoot *mboot = new MOSDBoot(
     superblock, get_osdmap_epoch(), service.get_boot_epoch(),
     hb_back_addrs, hb_front_addrs, cluster_addrs,
