@@ -2890,7 +2890,7 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
     available_data = io_ctxt.total_bufer_sz;
   }
 
-  bs = this->get_optimal_bs(left);
+  bs = this->get_optimal_bs(expected_obj_size);
   ldpp_dout(dpp, 20) <<__func__<< ": left=" << left << " bs=" << bs << dendl;
   if ((left + available_data) < bs) {
     // Determine if there are any further chunks/bytes from socket to be processed
