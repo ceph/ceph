@@ -16,8 +16,7 @@ class TestReadahead(CephFSTestCase):
         initial_op_read = self.mount_a.get_op_read_count()
         self.mount_a.run_shell(["dd", "if=foo", "of=/dev/null", "bs=128k", "count=32"])
         op_read = self.mount_a.get_op_read_count()
-
-        assert op_read >= initial_op_read
+        self.assertGreaterEqual(op_read, initial_op_read)
         op_read -= initial_op_read
         log.info("read operations: {0}".format(op_read))
 
