@@ -382,14 +382,19 @@ void AdminSocket::do_accept()
   // Unfortunately, the asok wire protocol does not let us pass an error code,
   // and many asok command implementations return helpful error strings.  So,
   // let's prepend an error string to the output if there is an error code.
-  if (rval < 0) {
+  if (auto errstr = err.str(); rval < 0) {
     ostringstream ss;
     ss << "ERROR: " << cpp_strerror(rval) << "\n";
-    ss << err.str() << "\n";
+    ss << errstr << "\n";
     bufferlist o;
-    o.append(ss.str());
+    o.append(std::move(errstr));
     o.claim_append(out);
     out.claim_append(o);
+  } else {
+    // if a cmd says "everything's fine" but into crays to an error stream,
+    // then likely it had confused it with our `stdout` counterparts (outbl
+    // or formatter) and should be reworked.
+    ceph_assert(errstr.empty());
   }
   uint32_t len = htonl(out.length());
   int ret = safe_send(connection_fd, &len, sizeof(len));
