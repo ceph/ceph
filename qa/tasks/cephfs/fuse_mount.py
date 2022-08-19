@@ -71,8 +71,6 @@ class FuseMount(CephFSMount):
 
         self.gather_mount_info()
 
-        self.mounted = True
-
     def _run_mount_cmd(self, mntopts, check_status):
         mount_cmd = self._get_mount_cmd(mntopts)
         mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
@@ -281,8 +279,6 @@ class FuseMount(CephFSMount):
 
             time.sleep(5)
 
-        self.mounted = True
-
         # Now that we're mounted, set permissions so that the rest of the test
         # will have unrestricted access to the filesystem mount.
         for retry in range(10):
@@ -358,7 +354,6 @@ class FuseMount(CephFSMount):
                     if self.is_mounted():
                         raise
 
-        self.mounted = False
         self._fuse_conn = None
         self.id = None
         self.inst = None
@@ -407,7 +402,6 @@ class FuseMount(CephFSMount):
             if require_clean:
                 raise
 
-        self.mounted = False
         self.cleanup()
 
     def teardown(self):
@@ -424,8 +418,6 @@ class FuseMount(CephFSMount):
                 self.fuse_daemon.wait()
             except CommandFailedError:
                 pass
-
-        self.mounted = False
 
     def _asok_path(self):
         return "/var/run/ceph/ceph-client.{0}.*.asok".format(self.client_id)

@@ -22,7 +22,7 @@ const laddr_packed_t* internal_sub_items_t::insert_at(
 
   auto p_insert = const_cast<char*>(p_shift_end) - size;
   auto item = internal_sub_item_t{
-    snap_gen_t::from_key<KT>(key), laddr_packed_t{value}};
+    snap_gen_t::from_key(key), laddr_packed_t{value}};
   mut.copy_in_absolute(p_insert, item);
   return &reinterpret_cast<internal_sub_item_t*>(p_insert)->value;
 }
@@ -79,7 +79,7 @@ void internal_sub_items_t::Appender<KT>::append(
 {
   p_append -= sizeof(internal_sub_item_t);
   auto item = internal_sub_item_t{
-    snap_gen_t::from_key<KT>(key), laddr_packed_t{value}};
+    snap_gen_t::from_key(key), laddr_packed_t{value}};
   p_mut->copy_in_absolute(p_append, item);
   p_value = &reinterpret_cast<internal_sub_item_t*>(p_append)->value;
 }
@@ -102,7 +102,7 @@ const value_header_t* leaf_sub_items_t::insert_at(
   auto p_value = reinterpret_cast<value_header_t*>(p_insert);
   p_value->initiate(mut, value);
   p_insert += value.allocation_size();
-  mut.copy_in_absolute(p_insert, snap_gen_t::template from_key<KT>(key));
+  mut.copy_in_absolute(p_insert, snap_gen_t::from_key(key));
   assert(p_insert + sizeof(snap_gen_t) + sizeof(node_offset_t) == p_shift_end);
 
   // c. compensate affected offsets
@@ -312,7 +312,7 @@ char* leaf_sub_items_t::Appender<KT>::wrap()
       [&] (const kv_item_t& arg) {
         assert(pp_value);
         p_cur -= sizeof(snap_gen_t);
-        p_mut->copy_in_absolute(p_cur, snap_gen_t::template from_key<KT>(*arg.p_key));
+        p_mut->copy_in_absolute(p_cur, snap_gen_t::from_key(*arg.p_key));
         p_cur -= arg.value_config.allocation_size();
         auto p_value = reinterpret_cast<value_header_t*>(p_cur);
         p_value->initiate(*p_mut, arg.value_config);

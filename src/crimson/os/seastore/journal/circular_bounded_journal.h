@@ -43,7 +43,7 @@ using RBMDevice = random_block_device::RBMDevice;
  *
  * - Replay time
  * At replay time, CBJournal begins to replay records in CBjournal by reading
- * records from journal_tail. Then, CBJournal examines whether the records is valid
+ * records from dirty_tail. Then, CBJournal examines whether the records is valid
  * one by one, at which point written_to is recovered
  * if the valid record is founded. Note that applied_to is stored
  * permanently when the apply work---applying the records in CBJournal to RBM---
@@ -88,7 +88,6 @@ public:
 
   open_for_mount_ret open_for_mount() final;
 
-  open_for_mount_ret open_device_read_header();
   close_ertr::future<> close() final;
 
   journal_type_t get_type() final {
@@ -108,8 +107,6 @@ public:
   }
 
   replay_ret replay(delta_handler_t &&delta_handler) final;
-
-  open_for_mount_ertr::future<> _open_device(const std::string &path);
 
   struct cbj_header_t;
   using write_ertr = submit_record_ertr;
@@ -203,7 +200,8 @@ public:
     uint64_t size = 0;   // max length of journal
 
     // start offset of CircularBoundedJournal in the device
-    rbm_abs_addr journal_tail = 0;
+    journal_seq_t dirty_tail;
+    journal_seq_t alloc_tail;
 
     device_id_t device_id;
 
@@ -214,7 +212,8 @@ public:
       denc(v.block_size, p);
       denc(v.size, p);
 
-      denc(v.journal_tail, p);
+      denc(v.dirty_tail, p);
+      denc(v.alloc_tail, p);
 
       denc(v.device_id, p);
 
@@ -234,9 +233,12 @@ public:
    */
 
   size_t get_used_size() const {
-    return get_written_to() >= get_journal_tail() ?
-      get_written_to() - get_journal_tail() :
-      get_written_to() + header.size + get_block_size() - get_journal_tail();
+    auto rbm_written_to = get_rbm_addr(get_written_to());
+    auto rbm_tail = get_rbm_addr(get_dirty_tail());
+    return rbm_written_to >= rbm_tail ?
+      rbm_written_to - rbm_tail :
+      rbm_written_to + header.size + get_block_size()
+      - rbm_tail;
   }
   size_t get_total_size() const {
     return header.size;
@@ -248,12 +250,22 @@ public:
     return get_total_size() - get_used_size();
   }
 
-  write_ertr::future<> update_journal_tail(rbm_abs_addr addr) {
-    header.journal_tail = addr;
-    return write_header();
+  seastar::future<> update_journal_tail(
+    journal_seq_t dirty,
+    journal_seq_t alloc) {
+    header.dirty_tail = dirty;
+    header.alloc_tail = alloc;
+    return write_header(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+      "encountered invalid error in update_journal_tail"
+    });
   }
-  rbm_abs_addr get_journal_tail() const {
-    return header.journal_tail;
+  journal_seq_t get_dirty_tail() const {
+    return header.dirty_tail;
+  }
+  journal_seq_t get_alloc_tail() const {
+    return header.alloc_tail;
   }
 
   write_ertr::future<> write_header();
@@ -264,13 +276,17 @@ public:
     write_pipeline = _write_pipeline;
   }
 
-  rbm_abs_addr get_written_to() const {
+  journal_seq_t get_written_to() const {
     return written_to;
   }
-  void set_written_to(rbm_abs_addr addr) {
+  rbm_abs_addr get_rbm_addr(journal_seq_t seq) const {
+    return convert_paddr_to_abs_addr(seq.offset);
+  }
+  void set_written_to(journal_seq_t seq) {
+    rbm_abs_addr addr = convert_paddr_to_abs_addr(seq.offset);
     assert(addr >= get_start_addr());
     assert(addr < get_journal_end());
-    written_to = addr;
+    written_to = seq;
   }
   device_id_t get_device_id() const {
     return header.device_id;
@@ -281,7 +297,7 @@ public:
   rbm_abs_addr get_journal_end() const {
     return get_start_addr() + header.size + get_block_size(); // journal size + header length
   }
-
+  seastar::future<> finish_commit(transaction_type_t type) final;
 private:
   cbj_header_t header;
   JournalTrimmer &trimmer;
@@ -296,12 +312,11 @@ private:
    */
   bool initialized = false;
 
-  // circulation seq to track the sequence to written records
-  segment_seq_t circulation_seq = NULL_SEG_SEQ;
-
   // start address where the newest record will be written
   // should be in range [get_start_addr(), get_journal_end())
-  rbm_abs_addr written_to = 0;
+  // written_to.segment_seq is circulation seq to track 
+  // the sequence to written records
+  journal_seq_t written_to;
 };
 
 std::ostream &operator<<(std::ostream &out, const CircularBoundedJournal::cbj_header_t &header);
