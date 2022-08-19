@@ -73,7 +73,7 @@ namespace {
     key_view_t key_view;
     char* p_fill = (char*)p_mem + key_size;
 
-    auto spc = shard_pool_crush_t::from_key<KeyT::HOBJ>(key_hobj);
+    auto spc = shard_pool_crush_t::from_key(key_hobj);
     p_fill -= sizeof(shard_pool_crush_t);
     std::memcpy(p_fill, &spc, sizeof(shard_pool_crush_t));
     key_view.set(*reinterpret_cast<const shard_pool_crush_t*>(p_fill));
@@ -83,7 +83,7 @@ namespace {
     ns_oid_view_t ns_oid_view(p_ns_oid);
     key_view.set(ns_oid_view);
 
-    auto sg = snap_gen_t::from_key<KeyT::HOBJ>(key_hobj);
+    auto sg = snap_gen_t::from_key(key_hobj);
     p_fill -= sizeof(snap_gen_t);
     ceph_assert(p_fill == (char*)p_mem);
     std::memcpy(p_fill, &sg, sizeof(snap_gen_t));
