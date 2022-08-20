@@ -126,9 +126,9 @@ class item_iterator_t {
 
   static node_offset_t header_size() { return 0u; }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static node_offset_t estimate_insert(
-      const full_key_t<KT>& key, const value_input_t&) {
+      const Key& key, const value_input_t&) {
     return ns_oid_view_t::estimate_size(key) + sizeof(node_offset_t);
   }
 
