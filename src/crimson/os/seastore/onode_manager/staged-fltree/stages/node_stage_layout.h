@@ -278,9 +278,9 @@ struct node_fields_2_t {
   }
 
   static node_offset_t estimate_insert_one() { return sizeof(node_offset_t); }
-  template <KeyT KT>
+  template <IsFullKey Key>
   static void insert_at(
-      NodeExtentMutable& mut, const full_key_t<KT>& key,
+      NodeExtentMutable& mut, const Key& key,
       const node_fields_2_t& node, index_t index, node_offset_t size_right) {
     ceph_abort("not implemented");
   }
@@ -374,9 +374,9 @@ struct internal_fields_3_t {
 
   static node_offset_t estimate_insert_one() { return ITEM_SIZE; }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static void insert_at(
-      NodeExtentMutable& mut, const full_key_t<KT>& key,
+      NodeExtentMutable& mut, const Key& key,
       const internal_fields_3_t& node,
       index_t index, node_offset_t size_right) {
     ceph_abort("not implemented");
