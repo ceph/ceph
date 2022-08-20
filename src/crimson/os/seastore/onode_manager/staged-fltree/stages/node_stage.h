@@ -138,7 +138,7 @@ class node_extent_t {
       const full_key_t<KT>& key, const value_input_t& value) {
     auto size = FieldType::estimate_insert_one();
     if constexpr (FIELD_TYPE == field_type_t::N2) {
-      size += ns_oid_view_t::estimate_size<KT>(key);
+      size += ns_oid_view_t::estimate_size(key);
     } else if constexpr (FIELD_TYPE == field_type_t::N3 &&
                          NODE_TYPE == node_type_t::LEAF) {
       size += value.allocation_size();

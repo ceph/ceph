@@ -295,7 +295,7 @@ struct node_fields_2_t {
   template <KeyT KT>
   static void append_key(
       NodeExtentMutable& mut, const full_key_t<KT>& key, char*& p_append) {
-    ns_oid_view_t::append<KT>(mut, key, p_append);
+    ns_oid_view_t::append(mut, key, p_append);
   }
   static void append_offset(
       NodeExtentMutable& mut, node_offset_t offset_to_right, char*& p_append);

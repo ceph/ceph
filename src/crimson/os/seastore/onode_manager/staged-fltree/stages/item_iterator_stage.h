@@ -129,7 +129,7 @@ class item_iterator_t {
   template <KeyT KT>
   static node_offset_t estimate_insert(
       const full_key_t<KT>& key, const value_input_t&) {
-    return ns_oid_view_t::estimate_size<KT>(key) + sizeof(node_offset_t);
+    return ns_oid_view_t::estimate_size(key) + sizeof(node_offset_t);
   }
 
   template <KeyT KT>
