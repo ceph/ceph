@@ -372,9 +372,9 @@ APPEND_T::open_nxt(const full_key_t<KT>& key)
 {
   if constexpr (FIELD_TYPE == field_type_t::N0 ||
                 FIELD_TYPE == field_type_t::N1) {
-    FieldType::template append_key<KT>(*p_mut, key, p_append_left);
+    FieldType::append_key(*p_mut, key, p_append_left);
   } else if constexpr (FIELD_TYPE == field_type_t::N2) {
-    FieldType::template append_key<KT>(*p_mut, key, p_append_right);
+    FieldType::append_key(*p_mut, key, p_append_right);
   } else {
     ceph_abort("impossible path");
   }
