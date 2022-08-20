@@ -906,27 +906,32 @@ AsyncCleaner::do_reclaim_space(
         // retrieve live extents
         DEBUGT("start, backref_entries={}, backref_extents={}",
                t, backref_entries.size(), extents.size());
-        return trans_intr::parallel_for_each(
-          backref_entries,
-          [this, FNAME, &extents, &t](auto &ent)
-        {
-          TRACET("getting extent of type {} at {}~{}",
-            t,
-            ent.type,
-            ent.paddr,
-            ent.len);
-          return ecb->get_extents_if_live(
-            t, ent.type, ent.paddr, ent.laddr, ent.len
-          ).si_then([FNAME, &extents, &ent, &t](auto list) {
-            if (list.empty()) {
-              TRACET("addr {} dead, skipping", t, ent.paddr);
-            } else {
-              for (auto &e : list) {
-                extents.emplace_back(std::move(e));
-              }
-            }
-          });
-        }).si_then([FNAME, &extents, this, &reclaimed, &t] {
+	return seastar::do_with(
+	  std::move(backref_entries),
+	  [this, &extents, &t](auto &backref_entries) {
+	  return trans_intr::parallel_for_each(
+	    backref_entries,
+	    [this, &extents, &t](auto &ent)
+	  {
+	    LOG_PREFIX(AsyncCleaner::do_reclaim_space);
+	    TRACET("getting extent of type {} at {}~{}",
+	      t,
+	      ent.type,
+	      ent.paddr,
+	      ent.len);
+	    return ecb->get_extents_if_live(
+	      t, ent.type, ent.paddr, ent.laddr, ent.len
+	    ).si_then([FNAME, &extents, &ent, &t](auto list) {
+	      if (list.empty()) {
+		TRACET("addr {} dead, skipping", t, ent.paddr);
+	      } else {
+		for (auto &e : list) {
+		  extents.emplace_back(std::move(e));
+		}
+	      }
+	    });
+	  });
+	}).si_then([FNAME, &extents, this, &reclaimed, &t] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
           auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;

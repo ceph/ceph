@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab expandtab
 
 #include "include/denc.h"
 #include "include/intarith.h"
@@ -561,7 +561,7 @@ TransactionManager::get_extents_if_live(
         {
           auto paddr_seg_id = paddr.as_seg_paddr().get_segment_id();
           return trans_intr::parallel_for_each(
-            std::move(pin_list),
+            pin_list,
             [=, this, &list, &t](
               LBAPinRef &pin) -> Cache::get_extent_iertr::future<>
           {

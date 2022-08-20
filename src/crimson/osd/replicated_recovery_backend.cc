@@ -54,23 +54,28 @@ ReplicatedRecoveryBackend::maybe_push_shards(
   const hobject_t& soid,
   eversion_t need)
 {
-  return interruptor::parallel_for_each(get_shards_to_push(soid),
-    [this, need, soid](auto shard) {
-    return prep_push(soid, need, shard).then_interruptible([this, soid, shard](auto push) {
-      auto msg = crimson::make_message<MOSDPGPush>();
-      msg->from = pg.get_pg_whoami();
-      msg->pgid = pg.get_pgid();
-      msg->map_epoch = pg.get_osdmap_epoch();
-      msg->min_epoch = pg.get_last_peering_reset();
-      msg->pushes.push_back(std::move(push));
-      msg->set_priority(pg.get_recovery_op_priority());
-      return interruptor::make_interruptible(
-	  shard_services.send_to_osd(shard.osd,
-				     std::move(msg),
-				     pg.get_osdmap_epoch()))
-      .then_interruptible(
-        [this, soid, shard] {
-	return get_recovering(soid).wait_for_pushes(shard);
+  return seastar::do_with(
+    get_shards_to_push(soid),
+    [this, need, soid](auto &shards) {
+    return interruptor::parallel_for_each(
+      shards,
+      [this, need, soid](auto shard) {
+      return prep_push(soid, need, shard).then_interruptible([this, soid, shard](auto push) {
+        auto msg = crimson::make_message<MOSDPGPush>();
+        msg->from = pg.get_pg_whoami();
+        msg->pgid = pg.get_pgid();
+        msg->map_epoch = pg.get_osdmap_epoch();
+        msg->min_epoch = pg.get_last_peering_reset();
+        msg->pushes.push_back(std::move(push));
+        msg->set_priority(pg.get_recovery_op_priority());
+        return interruptor::make_interruptible(
+            shard_services.send_to_osd(shard.osd,
+                                       std::move(msg),
+                                       pg.get_osdmap_epoch()))
+        .then_interruptible(
+          [this, soid, shard] {
+          return get_recovering(soid).wait_for_pushes(shard);
+        });
       });
     });
   }).then_interruptible([this, soid] {
