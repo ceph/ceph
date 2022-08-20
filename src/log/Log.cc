@@ -26,6 +26,7 @@
 #include <set>
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #define MAX_LOG_BUF 65536
 
@@ -312,12 +313,12 @@ void Log::_flush(EntryVector& t, bool crash)
         syslog(LOG_USER|LOG_INFO, "%s", pos);
       }
 
-      if (do_stderr) {
-        std::cerr << m_log_stderr_prefix << std::string_view(pos, used) << std::endl;
-      }
-
       /* now add newline */
       pos[used++] = '\n';
+
+      if (do_stderr) {
+        fmt::print(std::cerr, "{}{}", m_log_stderr_prefix, std::string_view(pos, used));
+      }
 
       if (do_fd) {
         m_log_buf.resize(cur + used);

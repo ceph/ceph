@@ -488,9 +488,17 @@ void global_init_daemonize(CephContext *cct)
 #endif
 }
 
+/* Make file descriptors 0, 1, and possibly 2 point to /dev/null.
+ *
+ * Instead of just closing fd, we redirect it to /dev/null with dup2().
+ * We have to do this because otherwise some arbitrary call to open() later
+ * in the program might get back one of these file descriptors. It's hard to
+ * guarantee that nobody ever writes to stdout, even though they're not
+ * supposed to.
+ */
 int reopen_as_null(CephContext *cct, int fd)
 {
-  int newfd = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
+  int newfd = open(DEV_NULL, O_RDWR | O_CLOEXEC);
   if (newfd < 0) {
     int err = errno;
     lderr(cct) << __func__ << " failed to open /dev/null: " << cpp_strerror(err)
@@ -521,14 +529,6 @@ void global_init_postfork_start(CephContext *cct)
   cct->_log->start();
   cct->notify_post_fork();
 
-  /* This is the old trick where we make file descriptors 0, 1, and possibly 2
-   * point to /dev/null.
-   *
-   * We have to do this because otherwise some arbitrary call to open() later
-   * in the program might get back one of these file descriptors. It's hard to
-   * guarantee that nobody ever writes to stdout, even though they're not
-   * supposed to.
-   */
   reopen_as_null(cct, STDIN_FILENO);
 
   const auto& conf = cct->_conf;
@@ -575,15 +575,10 @@ void global_init_chdir(const CephContext *cct)
   }
 }
 
-/* Map stderr to /dev/null. This isn't really re-entrant; we rely on the old unix
- * behavior that the file descriptor that gets assigned is the lowest
- * available one.
- */
 int global_init_shutdown_stderr(CephContext *cct)
 {
   reopen_as_null(cct, STDERR_FILENO);
-  int l = cct->_conf->err_to_stderr ? -1 : -2;
-  cct->_log->set_stderr_level(l, l);
+  cct->_log->set_stderr_level(-2, -2);
   return 0;
 }
 
