@@ -59,7 +59,7 @@ PGRecovery::start_recovery_ops(
   }
   using interruptor =
     crimson::interruptible::interruptor<crimson::osd::IOInterruptCondition>;
-  return interruptor::parallel_for_each(std::move(started),
+  return interruptor::parallel_for_each(started,
 					[] (auto&& ifut) {
     return std::move(ifut);
   }).then_interruptible([this] {

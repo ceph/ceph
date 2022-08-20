@@ -1321,7 +1321,7 @@ public:
   }
 
   template <typename Container, typename Func>
-  static inline auto parallel_for_each(Container&& container, Func&& func) noexcept {
+  static inline auto parallel_for_each(Container& container, Func&& func) noexcept {
     return parallel_for_each(
 	    std::begin(container),
 	    std::end(container),
