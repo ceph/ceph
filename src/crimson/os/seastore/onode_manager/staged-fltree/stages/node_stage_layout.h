@@ -191,9 +191,9 @@ struct _node_fields_013_t {
       NodeExtentMutable&, const me_t& node, index_t index, int change);
   static void append_key(
       NodeExtentMutable&, const key_t& key, char*& p_append);
-  template <KeyT KT>
+  template <IsFullKey Key>
   static void append_key(
-      NodeExtentMutable& mut, const full_key_t<KT>& key, char*& p_append) {
+      NodeExtentMutable& mut, const Key& key, char*& p_append) {
     append_key(mut, key_t::from_key(key), p_append);
   }
   static void append_offset(
@@ -292,9 +292,9 @@ struct node_fields_2_t {
       NodeExtentMutable& mut, const key_t& key, char*& p_append) {
     ns_oid_view_t::append(mut, key, p_append);
   }
-  template <KeyT KT>
+  template <IsFullKey Key>
   static void append_key(
-      NodeExtentMutable& mut, const full_key_t<KT>& key, char*& p_append) {
+      NodeExtentMutable& mut, const Key& key, char*& p_append) {
     ns_oid_view_t::append(mut, key, p_append);
   }
   static void append_offset(
