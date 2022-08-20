@@ -349,12 +349,12 @@ struct ns_oid_view_t {
     oid.reset_to(origin_base, new_base, node_size);
   }
 
-  template <KeyT KT>
-  static node_offset_t estimate_size(const full_key_t<KT>& key);
+  template <typename Key>
+  static node_offset_t estimate_size(const Key& key);
 
-  template <KeyT KT>
+  template <typename Key>
   static void append(NodeExtentMutable&,
-                     const full_key_t<KT>& key,
+                     const Key& key,
                      char*& p_append);
 
   static void append(NodeExtentMutable& mut,
@@ -368,8 +368,8 @@ struct ns_oid_view_t {
     }
   }
 
-  template <KeyT KT>
-  static void test_append(const full_key_t<KT>& key, char*& p_append);
+  template <typename Key>
+  static void test_append(const Key& key, char*& p_append);
 
   string_key_view_t nspace;
   string_key_view_t oid;
@@ -863,9 +863,10 @@ bool operator==(LHS lhs, RHS rhs) {
   return lhs <=> rhs == 0;
 }
 
-template <KeyT KT>
-node_offset_t ns_oid_view_t::estimate_size(const full_key_t<KT>& key) {
-  if constexpr (KT == KeyT::VIEW) {
+template <typename Key>
+node_offset_t ns_oid_view_t::estimate_size(const Key& key) {
+  static_assert(IsFullKey<Key>);
+  if constexpr (std::same_as<Key, key_view_t>) {
     return key.ns_oid_view().size();
   } else {
     if (key.dedup_type() != Type::STR) {
@@ -877,9 +878,10 @@ node_offset_t ns_oid_view_t::estimate_size(const full_key_t<KT>& key) {
   }
 }
 
-template <KeyT KT>
+template <typename Key>
 void ns_oid_view_t::append(
-    NodeExtentMutable& mut, const full_key_t<KT>& key, char*& p_append) {
+    NodeExtentMutable& mut, const Key& key, char*& p_append) {
+  static_assert(IsFullKey<Key>);
   if (key.dedup_type() == Type::STR) {
     string_key_view_t::append_str(mut, key.nspace(), p_append);
     string_key_view_t::append_str(mut, key.oid(), p_append);
@@ -888,8 +890,9 @@ void ns_oid_view_t::append(
   }
 }
 
-template <KeyT KT>
-void ns_oid_view_t::test_append(const full_key_t<KT>& key, char*& p_append) {
+template <typename Key>
+void ns_oid_view_t::test_append(const Key& key, char*& p_append) {
+  static_assert(IsFullKey<Key>);
   if (key.dedup_type() == Type::STR) {
     string_key_view_t::test_append_str(key.nspace(), p_append);
     string_key_view_t::test_append_str(key.oid(), p_append);
