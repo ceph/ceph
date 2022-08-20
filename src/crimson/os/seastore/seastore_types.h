@@ -2005,16 +2005,15 @@ struct denc_traits<crimson::os::seastore::device_type_t> {
     p += sizeof(crimson::os::seastore::device_type_t);
   }
   template<class It>
-  static std::enable_if_t<!is_const_iterator_v<It>>
-  encode(
+  requires (!is_const_iterator<It>)
+  static void encode(
     const crimson::os::seastore::device_type_t &o,
     It& p,
     uint64_t f=0) {
     get_pos_add<crimson::os::seastore::device_type_t>(p) = o;
   }
-  template<class It>
-  static std::enable_if_t<is_const_iterator_v<It>>
-  decode(
+  template<is_const_iterator It>
+  static void decode(
     crimson::os::seastore::device_type_t& o,
     It& p,
     uint64_t f=0) {
@@ -2042,16 +2041,15 @@ struct denc_traits<crimson::os::seastore::segment_type_t> {
     p += sizeof(crimson::os::seastore::segment_type_t);
   }
   template<class It>
-  static std::enable_if_t<!is_const_iterator_v<It>>
-  encode(
+  requires (!is_const_iterator<It>)
+  static void encode(
     const crimson::os::seastore::segment_type_t &o,
     It& p,
     uint64_t f=0) {
     get_pos_add<crimson::os::seastore::segment_type_t>(p) = o;
   }
-  template<class It>
-  static std::enable_if_t<is_const_iterator_v<It>>
-  decode(
+  template<is_const_iterator It>
+  static void decode(
     crimson::os::seastore::segment_type_t& o,
     It& p,
     uint64_t f=0) {

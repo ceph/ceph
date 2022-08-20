@@ -283,29 +283,17 @@ using underlying_type_t = typename underlying_type<T>::type;
 }
 
 template<class It>
-struct is_const_iterator
-  : std::conditional_t<std::is_const_v<std::remove_pointer_t<typename It::pointer>>,
-		       std::true_type,
-		       std::false_type>
-{};
-template<>
-struct is_const_iterator<size_t> : std::false_type {};
-template<>
-struct is_const_iterator<ceph::buffer::list::contiguous_appender> : std::false_type {
-  // appender is used for *changing* the buffer
-};
-template<class It>
-inline constexpr bool is_const_iterator_v = is_const_iterator<It>::value;
+concept is_const_iterator =
+std::is_const_v<std::remove_pointer_t<typename It::pointer>>;
 
-template<typename T, class It>
-std::enable_if_t<is_const_iterator_v<It>, const T&>
-get_pos_add(It& i) {
+template<typename T, is_const_iterator It>
+const T& get_pos_add(It& i) {
   return *reinterpret_cast<const T*>(i.get_pos_add(sizeof(T)));
 }
 
 template<typename T, class It>
-std::enable_if_t<!is_const_iterator_v<It>, T&>
-get_pos_add(It& i) {
+requires (!is_const_iterator<It>)
+T& get_pos_add(It& i) {
   return *reinterpret_cast<T*>(i.get_pos_add(sizeof(T)));
 }
 
@@ -327,13 +315,12 @@ struct denc_traits<
     p += sizeof(T);
   }
   template<class It>
-  static std::enable_if_t<!is_const_iterator_v<It>>
-  encode(const T &o, It& p, uint64_t f=0) {
+  requires (!is_const_iterator<It>)
+  static void encode(const T &o, It& p, uint64_t f=0) {
     get_pos_add<T>(p) = o;
   }
-  template<class It>
-  static std::enable_if_t<is_const_iterator_v<It>>
-  decode(T& o, It& p, uint64_t f=0) {
+  template<is_const_iterator It>
+  static void decode(T& o, It& p, uint64_t f=0) {
     o = get_pos_add<T>(p);
   }
   static void decode(T& o, ceph::buffer::list::const_iterator &p) {
@@ -397,13 +384,12 @@ struct denc_traits<T, std::enable_if_t<!std::is_void_v<_denc::ExtType_t<T>>>>
     p += sizeof(etype);
   }
   template<class It>
-  static std::enable_if_t<!is_const_iterator_v<It>>
-  encode(const T &o, It& p, uint64_t f=0) {
+  requires (!is_const_iterator<It>)
+  static void encode(const T &o, It& p, uint64_t f=0) {
     get_pos_add<etype>(p) = o;
   }
-  template<class It>
-  static std::enable_if_t<is_const_iterator_v<It>>
-  decode(T& o, It &p, uint64_t f=0) {
+  template<is_const_iterator It>
+  static void decode(T& o, It &p, uint64_t f=0) {
     o = get_pos_add<etype>(p);
   }
   static void decode(T& o, ceph::buffer::list::const_iterator &p) {
@@ -455,8 +441,8 @@ inline void denc_signed_varint(int64_t v, size_t& p) {
   p += sizeof(v) + 2;
 }
 template<class It>
-inline std::enable_if_t<!is_const_iterator_v<It>>
-denc_signed_varint(int64_t v, It& p) {
+requires (!is_const_iterator<It>)
+void denc_signed_varint(int64_t v, It& p) {
   if (v < 0) {
     v = (-v << 1) | 1;
   } else {
@@ -465,9 +451,8 @@ denc_signed_varint(int64_t v, It& p) {
   denc_varint(v, p);
 }
 
-template<typename T, class It>
-inline std::enable_if_t<is_const_iterator_v<It>>
-denc_signed_varint(T& v, It& p)
+template<typename T, is_const_iterator It>
+inline void denc_signed_varint(T& v, It& p)
 {
   int64_t i = 0;
   denc_varint(i, p);
@@ -518,8 +503,8 @@ inline void denc_signed_varint_lowz(int64_t v, size_t& p) {
   p += sizeof(v) + 2;
 }
 template<class It>
-inline std::enable_if_t<!is_const_iterator_v<It>>
-denc_signed_varint_lowz(int64_t v, It& p) {
+requires (!is_const_iterator<It>)
+inline void denc_signed_varint_lowz(int64_t v, It& p) {
   bool negative = false;
   if (v < 0) {
     v = -v;
@@ -535,9 +520,8 @@ denc_signed_varint_lowz(int64_t v, It& p) {
   denc_varint(v, p);
 }
 
-template<typename T, class It>
-inline std::enable_if_t<is_const_iterator_v<It>>
-denc_signed_varint_lowz(T& v, It& p)
+template<typename T, is_const_iterator It>
+inline void denc_signed_varint_lowz(T& v, It& p)
 {
   int64_t i = 0;
   denc_varint(i, p);
@@ -569,8 +553,8 @@ inline void denc_lba(uint64_t v, size_t& p) {
 }
 
 template<class It>
-inline std::enable_if_t<!is_const_iterator_v<It>>
-denc_lba(uint64_t v, It& p) {
+requires (!is_const_iterator<It>)
+inline void denc_lba(uint64_t v, It& p) {
   int low_zero_nibbles = v ? (int)(ctz(v) / 4) : 0;
   int pos;
   uint32_t word;
@@ -606,9 +590,8 @@ denc_lba(uint64_t v, It& p) {
   *(__u8*)p.get_pos_add(1) = byte;
 }
 
-template<class It>
-inline std::enable_if_t<is_const_iterator_v<It>>
-denc_lba(uint64_t& v, It& p) {
+template<is_const_iterator It>
+inline void denc_lba(uint64_t& v, It& p) {
   uint32_t word = *(ceph_le32*)p.get_pos_add(sizeof(uint32_t));
   int shift = 0;
   switch (word & 7) {
@@ -658,7 +641,8 @@ inline std::enable_if_t<traits::supported> denc(
 }
 
 template<typename T, class It, typename traits=denc_traits<T>>
-inline std::enable_if_t<traits::supported && !is_const_iterator_v<It>>
+requires traits::supported && (!is_const_iterator<It>)
+inline void
 denc(const T& o,
      It& p,
      uint64_t features=0)
@@ -670,8 +654,9 @@ denc(const T& o,
   }
 }
 
-template<typename T, class It, typename traits=denc_traits<T>>
-inline std::enable_if_t<traits::supported && is_const_iterator_v<It>>
+template<typename T, is_const_iterator It, typename traits=denc_traits<T>>
+requires traits::supported
+inline void
 denc(T& o,
      It& p,
      uint64_t features=0)
@@ -779,7 +764,8 @@ public:
     }
   }
   template<class It>
-  static std::enable_if_t<!is_const_iterator_v<It>>
+  requires (!is_const_iterator<It>)
+  static void
   encode_nohead(const value_type& s, It& p) {
     auto len = s.length();
     maybe_inline_memcpy(p.get_pos_add(len), s.data(), len, 16);
@@ -799,13 +785,14 @@ struct denc_traits<ceph::buffer::ptr> {
     p += sizeof(uint32_t) + v.length();
   }
   template <class It>
-  static std::enable_if_t<!is_const_iterator_v<It>>
+  requires (!is_const_iterator<It>)
+  static void
   encode(const ceph::buffer::ptr& v, It& p, uint64_t f=0) {
     denc((uint32_t)v.length(), p);
     p.append(v);
   }
-  template <class It>
-  static std::enable_if_t<is_const_iterator_v<It>>
+  template <is_const_iterator It>
+  static void
   decode(ceph::buffer::ptr& v, It& p, uint64_t f=0) {
     uint32_t len;
     denc(len, p);
