@@ -843,7 +843,7 @@ struct denc_traits<ceph::buffer::list> {
     p.append(v);
   }
   static void decode(ceph::buffer::list& v, ceph::buffer::ptr::const_iterator& p, uint64_t f=0) {
-    uint32_t len;
+    uint32_t len = 0;
     denc(len, p);
     v.clear();
     v.push_back(p.get_ptr(len));
