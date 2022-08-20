@@ -104,7 +104,7 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
   ceph_assert(ceph_mutex_is_locked_by_me(this->m_log_append_lock));
 
   /* Allocate the (already reserved) log entries */
-  std::lock_guard locker(m_lock);
+  std::unique_lock locker(m_lock);
 
   for (auto &operation : ops) {
     uint32_t entry_index = this->m_first_free_entry;
@@ -120,6 +120,7 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
   if (m_cache_state->empty && !m_log_entries.empty()) {
     m_cache_state->empty = false;
     this->update_image_cache_state();
+    this->write_image_cache_state(locker);
   }
 }
 
@@ -547,6 +548,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     m_perfcounter->hinc(l_librbd_pwl_retire_tx_t_hist, utime_t(tx_end - tx_start).to_nsec(),
         retiring_entries.size());
 
+    bool need_update_state = false;
     /* Update runtime copy of first_valid, and free entries counts */
     {
       std::lock_guard locker(m_lock);
@@ -557,6 +559,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
       if (!m_cache_state->empty && m_log_entries.empty()) {
         m_cache_state->empty = true;
         this->update_image_cache_state();
+        need_update_state = true;
       }
       for (auto &entry: retiring_entries) {
         if (entry->write_bytes()) {
@@ -572,6 +575,10 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
       }
       this->m_alloc_failed_since_retire = false;
       this->wake_up();
+    }
+    if (need_update_state) {
+      std::unique_lock locker(m_lock);
+      this->write_image_cache_state(locker);
     }
   } else {
     ldout(cct, 20) << "Nothing to retire" << dendl;
