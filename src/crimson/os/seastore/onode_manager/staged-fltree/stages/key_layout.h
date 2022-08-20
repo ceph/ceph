@@ -404,8 +404,8 @@ inline const ghobject_t _MAX_OID() {
 }
 
 // the valid key stored in tree should be in the range of (_MIN_OID, _MAX_OID)
-template <KeyT KT>
-bool is_valid_key(const full_key_t<KT>& key);
+template <typename Key>
+bool is_valid_key(const Key& key);
 
 /**
  * key_hobj_t
@@ -478,7 +478,7 @@ class key_hobj_t {
   }
 
   bool is_valid() const {
-    return is_valid_key<KeyT::HOBJ>(*this);
+    return is_valid_key(*this);
   }
 
   static key_hobj_t decode(ceph::bufferlist::const_iterator& delta) {
@@ -596,7 +596,7 @@ class key_view_t {
   }
 
   ghobject_t to_ghobj() const {
-    assert(is_valid_key<KeyT::VIEW>(*this));
+    assert(is_valid_key(*this));
     return ghobject_t(
         shard_id_t(shard()), pool(), crush(),
         std::string(nspace()), std::string(oid()), snap(), gen());
@@ -811,8 +811,9 @@ std::strong_ordering operator<=>(const LHS& lhs, const RHS& rhs) noexcept {
   return lhs.gen() <=> rhs.gen();
 }
 
-template <KeyT KT>
-bool is_valid_key(const full_key_t<KT>& key) {
+template <typename Key>
+bool is_valid_key(const Key& key) {
+  static_assert(IsFullKey<Key>);
   return (key > key_hobj_t(ghobject_t()) &&
           key < key_hobj_t(ghobject_t::get_max()));
 }
