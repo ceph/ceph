@@ -133,9 +133,9 @@ class node_extent_t {
 
   static node_offset_t header_size() { return FieldType::HEADER_SIZE; }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static node_offset_t estimate_insert(
-      const full_key_t<KT>& key, const value_input_t& value) {
+      const Key& key, const value_input_t& value) {
     auto size = FieldType::estimate_insert_one();
     if constexpr (FIELD_TYPE == field_type_t::N2) {
       size += ns_oid_view_t::estimate_size(key);
