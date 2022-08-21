@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "librbd/Utils.h"
 #include "librbd/crypto/Utils.h"
+#include "librbd/crypto/LoadRequest.h"
 #include "librbd/crypto/luks/Magic.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -27,10 +28,12 @@ template <typename I>
 LoadRequest<I>::LoadRequest(
         I* image_ctx, std::string_view passphrase,
         std::unique_ptr<CryptoInterface>* result_crypto,
+        std::string* detected_format_name,
         Context* on_finish) : m_image_ctx(image_ctx),
                               m_passphrase(passphrase),
                               m_on_finish(on_finish),
                               m_result_crypto(result_crypto),
+                              m_detected_format_name(detected_format_name),
                               m_initial_read_size(DEFAULT_INITIAL_READ_SIZE),
                               m_header(image_ctx->cct), m_offset(0) {
 }
@@ -72,29 +75,39 @@ bool LoadRequest<I>::handle_read(int r) {
     return false;
   }
 
-  m_offset += m_bl.length();
+  // first, check LUKS magic at the beginning of the image
+  // If no magic is detected, caller may assume image is actually plaintext
+  if (m_offset == 0) {
+    if (Magic::is_luks(m_bl) > 0 || Magic::is_rbd_clone(m_bl) > 0) {
+      *m_detected_format_name = "LUKS";
+    } else {
+      *m_detected_format_name = crypto::LoadRequest<I>::UNKNOWN_FORMAT;
+      finish(-EINVAL);
+      return false;
+    }
 
-  if (m_last_read_bl.length() > 0) {
-    m_last_read_bl.claim_append(m_bl);
-    m_bl = std::move(m_last_read_bl);
-  }
+    if (m_image_ctx->parent != nullptr && Magic::is_rbd_clone(m_bl) > 0) {
+      r = Magic::replace_magic(m_image_ctx->cct, m_bl);
+      if (r < 0) {
+        m_image_ctx->image_lock.lock_shared();
+        auto image_size = m_image_ctx->get_image_size(m_image_ctx->snap_id);
+        m_image_ctx->image_lock.unlock_shared();
 
-  if (m_image_ctx->parent != nullptr && m_bl.length() == m_offset &&
-      Magic::is_rbd_clone(m_bl) > 0) {
-    r = Magic::replace_magic(m_image_ctx->cct, m_bl);
-    if (r < 0) {
-      if (r == -EINVAL && m_offset < MAXIMUM_HEADER_SIZE) {
-        m_last_read_bl = std::move(m_bl);
-        auto ctx = create_context_callback<
-              LoadRequest<I>, &LoadRequest<I>::handle_read_header>(this);
-        read(MAXIMUM_HEADER_SIZE, ctx);
+        auto max_header_size = std::min(MAXIMUM_HEADER_SIZE, image_size);
+
+        if (r == -EINVAL && m_bl.length() < max_header_size) {
+          m_bl.clear();
+          auto ctx = create_context_callback<
+                LoadRequest<I>, &LoadRequest<I>::handle_read_header>(this);
+          read(max_header_size, ctx);
+          return false;
+        }
+
+        lderr(m_image_ctx->cct) << "error replacing rbd clone magic: "
+                                << cpp_strerror(r) << dendl;
+        finish(r);
         return false;
       }
-
-      lderr(m_image_ctx->cct) << "error replacing rbd clone magic: "
-                              << cpp_strerror(r) << dendl;
-      finish(r);
-      return false;
     }
   }
   
@@ -104,6 +117,8 @@ bool LoadRequest<I>::handle_read(int r) {
     finish(r);
     return false;
   }
+
+  m_offset += m_bl.length();
 
   // write header to libcryptsetup interface
   r = m_header.write(m_bl);
@@ -128,17 +143,26 @@ void LoadRequest<I>::handle_read_header(int r) {
   // parse header via libcryptsetup
   r = m_header.load(CRYPT_LUKS);
   if (r != 0) {
-    if (m_offset < MAXIMUM_HEADER_SIZE) {
+    m_image_ctx->image_lock.lock_shared();
+    auto image_size = m_image_ctx->get_image_size(m_image_ctx->snap_id);
+    m_image_ctx->image_lock.unlock_shared();
+
+    auto max_header_size = std::min(MAXIMUM_HEADER_SIZE, image_size);
+    if (m_offset < max_header_size) {
       // perhaps we did not feed the entire header to libcryptsetup, retry
       auto ctx = create_context_callback<
               LoadRequest<I>, &LoadRequest<I>::handle_read_header>(this);
-      read(MAXIMUM_HEADER_SIZE, ctx);
+      read(max_header_size, ctx);
       return;
     }
 
     finish(r);
     return;
   }
+
+  // gets actual LUKS version (only used for logging)
+  ceph_assert(*m_detected_format_name == "LUKS");
+  *m_detected_format_name = m_header.get_format_name();
 
   auto cipher = m_header.get_cipher();
   if (strcmp(cipher, "aes") != 0) {

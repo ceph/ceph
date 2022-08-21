@@ -94,10 +94,15 @@ struct TestMockCryptoLoadRequest : public TestMockFixture {
   }
 
   void expect_encryption_load(MockEncryptionFormat* encryption_format,
-                              MockTestImageCtx* ictx) {
+                              MockTestImageCtx* ictx,
+                              std::string detected_format = "SOMEFORMAT") {
     EXPECT_CALL(*encryption_format, load(
-            ictx, _)).WillOnce(
-                    WithArgs<1>(Invoke([this](Context* ctx) {
+            ictx, _, _)).WillOnce(
+                    WithArgs<1, 2>(Invoke([this, detected_format](
+                            std::string* detected_format_name, Context* ctx) {
+                      if (!detected_format.empty()) {
+                        *detected_format_name = detected_format;
+                      }
                       load_context = ctx;
     })));
   }
@@ -254,6 +259,45 @@ TEST_F(TestMockCryptoLoadRequest, LoadClonedParentFail) {
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   load_context->complete(-EIO);
   ASSERT_EQ(-EIO, finished_cond.wait());
+  ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
+  ASSERT_EQ(nullptr, mock_parent_image_ctx->encryption_format.get());
+}
+
+
+TEST_F(TestMockCryptoLoadRequest, LoadClonedPlaintextParent) {
+  expect_test_journal_feature(mock_image_ctx);
+  expect_test_journal_feature(mock_parent_image_ctx);
+  expect_image_flush();
+  expect_encryption_load(mock_encryption_format, mock_image_ctx);
+  mock_load_request->send();
+  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
+  expect_encryption_format_clone(mock_encryption_format);
+  expect_encryption_load(
+          cloned_encryption_format, mock_parent_image_ctx,
+          LoadRequest<MockImageCtx>::UNKNOWN_FORMAT);
+  load_context->complete(0);
+  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
+  expect_invalidate_cache();
+  load_context->complete(-EINVAL);
+  ASSERT_EQ(0, finished_cond.wait());
+  ASSERT_EQ(mock_encryption_format, mock_image_ctx->encryption_format.get());
+  ASSERT_EQ(nullptr, mock_parent_image_ctx->encryption_format.get());
+}
+
+TEST_F(TestMockCryptoLoadRequest, LoadClonedParentDetectionError) {
+  expect_test_journal_feature(mock_image_ctx);
+  expect_test_journal_feature(mock_parent_image_ctx);
+  expect_image_flush();
+  expect_encryption_load(mock_encryption_format, mock_image_ctx);
+  mock_load_request->send();
+  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
+  expect_encryption_format_clone(mock_encryption_format);
+  expect_encryption_load(
+          cloned_encryption_format, mock_parent_image_ctx, "");
+  load_context->complete(0);
+  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
+  load_context->complete(-EINVAL);
+  ASSERT_EQ(-EINVAL, finished_cond.wait());
   ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
   ASSERT_EQ(nullptr, mock_parent_image_ctx->encryption_format.get());
 }

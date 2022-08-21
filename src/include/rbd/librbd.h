@@ -827,6 +827,8 @@ CEPH_RBD_API int rbd_encryption_format(rbd_image_t image,
                                        rbd_encryption_format_t format,
                                        rbd_encryption_options_t opts,
                                        size_t opts_size);
+/* encryption will be loaded on all ancestor images,
+ * until reaching an ancestor image which does not match any known format */
 CEPH_RBD_API int rbd_encryption_load(rbd_image_t image,
                                      rbd_encryption_format_t format,
                                      rbd_encryption_options_t opts,
