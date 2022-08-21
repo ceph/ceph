@@ -123,16 +123,4 @@ unsigned cbits(T v) {
   return (sizeof(v) * 8) - std::countl_zero(std::make_unsigned_t<T>(v));
 }
 
-// count the bits set to 1, a.k.a. population count
-template<class T>
-unsigned popcount(T v) {
-  static_assert(sizeof(T) <= sizeof(unsigned long long), "type too large");
-  if constexpr (sizeof(T) <= sizeof(unsigned int)) {
-    return __builtin_popcount(v);
-  } else if constexpr (sizeof(T) <= sizeof(unsigned long)) {
-    return __builtin_popcountl(v);
-  } else {
-    return __builtin_popcountll(v);
-  }
-}
 #endif

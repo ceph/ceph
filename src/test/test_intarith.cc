@@ -58,22 +58,3 @@ TEST(intarith, p2family) {
   ASSERT_EQ(0x1300, p2roundup(0x1234, 0x100));
   ASSERT_EQ(0x5600, p2roundup(0x5600, 0x100));
 }
-
-TEST(intarith, popcount) {
-  // char, unsigned char
-  EXPECT_EQ(0, popcount((char)(0)));
-  EXPECT_EQ(1, popcount((unsigned char)(1)));
-  // short, unsigned short
-  EXPECT_EQ(1, popcount((short)0b10));
-  EXPECT_EQ(2, popcount((unsigned char)(0b11U)));
-  // int, unsigned int
-  EXPECT_EQ(sizeof(int) * CHAR_BIT, popcount(-1));
-  EXPECT_EQ(0, popcount(0));
-  EXPECT_EQ(1, popcount(0b10U));
-  // long, unsigned long
-  EXPECT_EQ(1, popcount(0b1000'0000'0000'0000L));
-  EXPECT_EQ(3, popcount(0b1100'1000'0000'0000UL));
-  // long long, unsigned long long
-  EXPECT_EQ(4, popcount(0x1111'0000LL));
-  EXPECT_EQ(1, popcount(0x1000'0000ULL));
-}
