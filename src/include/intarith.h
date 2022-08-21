@@ -34,14 +34,6 @@ constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> shift_round_up(T
 }
 
 /*
- * Wrapper to determine if value is a power of 2
- */
-template<typename T>
-constexpr inline bool isp2(T x) {
-  return (x & (x - 1)) == 0;
-}
-
-/*
  * Wrappers for various sorts of alignment and rounding.  The "align" must
  * be a power of 2.  Often times it is a block, sector, or page.
  */

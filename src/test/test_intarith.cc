@@ -62,9 +62,6 @@ TEST(intarith, ctz) {
 }
 
 TEST(intarith, p2family) {
-  ASSERT_TRUE(isp2(0x100));
-  ASSERT_FALSE(isp2(0x1234));
-
   ASSERT_EQ(1024, p2align(1200, 1024));
   ASSERT_EQ(1024, p2align(1024, 1024));
   ASSERT_EQ(0x1200, p2align(0x1234, 0x100));
