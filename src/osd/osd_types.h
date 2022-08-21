@@ -6070,6 +6070,8 @@ std::ostream& operator<<(std::ostream& out, const PushOp &op);
 
 /*
  * summarize pg contents for purposes of a scrub
+ *
+ * If members are added to ScrubMap, make sure to modify swap().
  */
 struct ScrubMap {
   struct object {
@@ -6107,8 +6109,8 @@ struct ScrubMap {
   std::map<hobject_t,object> objects;
   eversion_t valid_through;
   eversion_t incr_since;
-  bool has_large_omap_object_errors:1;
-  bool has_omap_keys:1;
+  bool has_large_omap_object_errors{false};
+  bool has_omap_keys{false};
 
   void merge_incr(const ScrubMap &l);
   void clear_from(const hobject_t& start) {
@@ -6122,6 +6124,8 @@ struct ScrubMap {
     swap(objects, r.objects);
     swap(valid_through, r.valid_through);
     swap(incr_since, r.incr_since);
+    swap(has_large_omap_object_errors, r.has_large_omap_object_errors);
+    swap(has_omap_keys, r.has_omap_keys);
   }
 
   void encode(ceph::buffer::list& bl) const;

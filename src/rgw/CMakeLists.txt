@@ -197,7 +197,7 @@ endif()
 
 target_link_libraries(rgw_common
   PRIVATE
-    ceph-common
+    global
     cls_2pc_queue_client
     cls_cmpomap_client
     cls_lock_client
@@ -218,6 +218,7 @@ target_link_libraries(rgw_common
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
     ${ARROW_LIBRARIES}
+    ${ALLOC_LIBS}
   PUBLIC
     ${LUA_LIBRARIES}
     spawn)

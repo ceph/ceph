@@ -1387,7 +1387,7 @@ int rgw_s3_prepare_decrypt(req_state* s,
       ldpp_dout(s, 0) << "ERROR: key obtained from key_id:" <<
           key_id << " is not 256 bit size" << dendl;
       s->err.message = "KMS provided an invalid key for the given kms-keyid.";
-      return -ERR_INVALID_ACCESS_KEY;
+      return -EINVAL;
     }
 
     auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
@@ -1457,7 +1457,7 @@ int rgw_s3_prepare_decrypt(req_state* s,
       ldpp_dout(s, 0) << "ERROR: key obtained " <<
           "is not 256 bit size" << dendl;
       s->err.message = "SSE-S3 provided an invalid key for the given keyid.";
-      return -ERR_INVALID_ACCESS_KEY;
+      return -EINVAL;
     }
 
     auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
