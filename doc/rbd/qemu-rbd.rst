@@ -165,8 +165,7 @@ for the block device. To do this, you must specify a
     qemu -m 1024 -drive format=raw,file=rbd:data/squeeze,id=drive1,if=none \
          -device driver=ide-hd,drive=drive1,discard_granularity=512
 
-Note that this uses the IDE driver. The virtio driver does not
-support discard.
+Note that this uses the IDE driver. The virtio driver supports discard since Linux kernel version 5.0.
 
 If using libvirt, edit your libvirt domain's configuration file using ``virsh
 edit`` to include the ``xmlns:qemu`` value. Then, add a ``qemu:commandline``
