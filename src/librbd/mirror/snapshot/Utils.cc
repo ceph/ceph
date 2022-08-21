@@ -98,8 +98,17 @@ bool can_create_primary_snapshot(I *image_ctx, bool demoted, bool force,
       }
 
       if (requires_orphan != nullptr) {
-        *requires_orphan = !mirror_ns->is_demoted();
+        if (!mirror_ns->is_orphan()) {
+          *requires_orphan = true;
+        } else {
+          // for latest snap rollback during promotion
+           ++it;
+        mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(&it->second.snap_namespace);
+        ldout(cct, 20) << "last snapshot in sync before orphan " << it->first << " "
+                       << *mirror_ns << dendl;
+        }
       }
+
       if (!mirror_ns->complete) {
         ldout(cct, 20) << "needs rollback" << dendl;
         if (!rollback_snap_id) {

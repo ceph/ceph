@@ -54,13 +54,14 @@ template <typename I>
 void PromoteRequest<I>::create_orphan_snapshot() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << dendl;
+  bool requires_orphan = false;
 
   auto ctx = create_context_callback<
     PromoteRequest<I>,
     &PromoteRequest<I>::handle_create_orphan_snapshot>(this);
 
   auto req = CreateNonPrimaryRequest<I>::create(
-    m_image_ctx, false, "", CEPH_NOSNAP, {}, {}, nullptr, ctx);
+    m_image_ctx, false, "", CEPH_NOSNAP, {}, {}, requires_orphan, ctx);
   req->send();
 }
 
@@ -246,6 +247,15 @@ void PromoteRequest<I>::handle_acquire_exclusive_lock(int r) {
 
 template <typename I>
 void PromoteRequest<I>::rollback() {
+  uint64_t rollback_snap_id = CEPH_NOSNAP;
+  CephContext *cct = m_image_ctx->cct;
+  bool requires_orphan = false;
+
+  if (util::can_create_primary_snapshot(m_image_ctx, false, true, &requires_orphan,
+                                        &rollback_snap_id)) {
+    ldout(cct, 15) << "latest rollback_snap_id=" << rollback_snap_id << dendl;
+  }
+
   if (m_rollback_snap_id == CEPH_NOSNAP) {
     create_promote_snapshot();
     return;
