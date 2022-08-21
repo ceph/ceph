@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Allocator.h"
+#include <bit>
 #include "StupidAllocator.h"
 #include "BitmapAllocator.h"
 #include "AvlAllocator.h"
@@ -194,7 +195,7 @@ double Allocator::get_fragmentation_score()
   size_t sum = 0;
 
   auto get_score = [&](size_t v) -> double {
-    size_t sc = sizeof(v) * 8 - clz(v) - 1; //assign to grade depending on log2(len)
+    size_t sc = sizeof(v) * 8 - std::countl_zero(v) - 1; //assign to grade depending on log2(len)
     while (scales.size() <= sc + 1) {
       //unlikely expand scales vector
       scales.push_back(scales[scales.size() - 1] * double_size_worth);
