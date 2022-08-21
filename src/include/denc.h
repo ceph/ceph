@@ -269,8 +269,8 @@ template<typename T> int DencDumper<T>::i = 0;
 // ---------------------------------------------------------------------
 // raw types
 namespace _denc {
-template<typename T, typename... Us>
-inline constexpr bool is_any_of = (... || std::is_same_v<T, Us>);
+template<typename T, typename... U>
+concept is_any_of = (std::same_as<T, U> || ...);
 
 template<typename T, typename=void> struct underlying_type {
   using type = T;
