@@ -83,40 +83,6 @@ constexpr inline T p2roundup(T x, T align) {
   return -(-x & -align);
 }
 
-// count trailing zeros.
-// NOTE: the builtin is nondeterministic on 0 input
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) <= sizeof(unsigned)),
-  unsigned>::type ctz(T v) {
-  if (v == 0)
-    return sizeof(v) * 8;
-  return __builtin_ctz(v);
-}
-
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned int) &&
-   sizeof(T) <= sizeof(unsigned long)),
-  unsigned>::type ctz(T v) {
-  if (v == 0)
-    return sizeof(v) * 8;
-  return __builtin_ctzl(v);
-}
-
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned long) &&
-   sizeof(T) <= sizeof(unsigned long long)),
-  unsigned>::type ctz(T v) {
-  if (v == 0)
-    return sizeof(v) * 8;
-  return __builtin_ctzll(v);
-}
-
 // count bits (set + any 0's that follow)
 template<std::integral T>
 unsigned cbits(T v) {
