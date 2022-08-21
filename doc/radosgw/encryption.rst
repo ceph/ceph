@@ -48,7 +48,7 @@ SSE-S3
 ======
 
 This makes key management invisible to the user.  They are still stored
-in a vault, but they are automatically created and deleted by Ceph and
+in Vault, but they are automatically created and deleted by Ceph and
 retrieved as required to serve requests to encrypt
 or decrypt data.
 
