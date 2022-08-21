@@ -376,7 +376,8 @@ using ExtType_t = typename ExtType<T>::type;
 } // namespace _denc
 
 template<typename T>
-struct denc_traits<T, std::enable_if_t<!std::is_void_v<_denc::ExtType_t<T>>>>
+requires (!std::is_void_v<_denc::ExtType_t<T>>)
+struct denc_traits<T>
 {
   static constexpr bool supported = true;
   static constexpr bool featured = false;
