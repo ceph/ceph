@@ -1,4 +1,7 @@
-<div>
+<main aria-label="Dashboard" >
+  <a href="#main"
+     class="sr-only">skip to content</a>
+
   <cd-refresh-selector></cd-refresh-selector>
 
   <ng-container *ngIf="hasGrafana">
@@ -24,5 +27,6 @@
     <div [ngbNavOutlet]="nav"></div>
   </ng-container>
 
-  <cd-health *ngIf="!hasGrafana"></cd-health>
-</div>
+  <cd-health id="main"
+             *ngIf="!hasGrafana"></cd-health>
+</main>
