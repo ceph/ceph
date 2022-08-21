@@ -16,6 +16,7 @@
  */
 
 #include <algorithm>
+#include <bit>
 #include <optional>
 #include <random>
 
@@ -6421,7 +6422,7 @@ void OSDMap::check_health(CephContext *cct,
   if (cct->_conf.get_val<bool>("mon_warn_on_pool_pg_num_not_power_of_two")) {
     list<string> detail;
     for (auto it : get_pools()) {
-      if (!isp2(it.second.get_pg_num_target())) {
+      if (!std::has_single_bit(it.second.get_pg_num_target())) {
 	ostringstream ss;
 	ss << "pool '" << get_pool_name(it.first)
 	   << "' pg_num " << it.second.get_pg_num_target()

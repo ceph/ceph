@@ -2,6 +2,7 @@
 ---
 
 headers: |
+  #include <bit>
   #include <regex>
   // rbd feature and io operation validation
   #include "include/stringify.h"
@@ -321,7 +322,7 @@ options:
       uint64_t f = strict_si_cast<uint64_t>(*value, error_message);
       if (!error_message->empty()) {
         return -EINVAL;
-      } else if (!isp2(f)) {
+      } else if (!std::has_single_bit(f)) {
         *error_message = "value must be a power of two";
         return -EINVAL;
       }

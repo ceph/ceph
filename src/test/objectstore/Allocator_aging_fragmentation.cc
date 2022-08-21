@@ -4,6 +4,7 @@
  * Bitmap allocator fragmentation benchmarks.
  * Author: Adam Kupczyk, akupczyk@redhat.com
  */
+#include <bit>
 #include <iostream>
 #include <boost/scoped_ptr.hpp>
 #include <gtest/gtest.h>
@@ -234,7 +235,7 @@ void AllocTest::doAgingTest(
     uint64_t capacity, uint32_t alloc_unit,
     uint64_t high_mark, uint64_t low_mark, uint32_t iterations, double leak_factor)
 {
-  assert(isp2(alloc_unit));
+  assert(std::has_single_bit(alloc_unit));
   cct->_conf->bdev_block_size = alloc_unit;
   PExtentVector allocated, tmp;
   init_alloc(allocator_name, capacity, alloc_unit);

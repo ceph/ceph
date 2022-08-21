@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <ratio>
 #include <mutex>
@@ -3836,7 +3837,7 @@ public:
 	      uint64_t min_alloc_size,
 	      uint64_t mem_cap = DEF_MEM_CAP) {
       ceph_assert(!granularity); // not initialized yet
-      ceph_assert(min_alloc_size && isp2(min_alloc_size));
+      ceph_assert(std::has_single_bit(min_alloc_size));
       ceph_assert(mem_cap);
       
       total = round_up_to(total, min_alloc_size);
