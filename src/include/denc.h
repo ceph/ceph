@@ -300,15 +300,13 @@ T& get_pos_add(It& i) {
 }
 
 template<typename T>
-struct denc_traits<
-  T,
-  std::enable_if_t<
-    _denc::is_any_of<_denc::underlying_type_t<T>,
-		     ceph_le64, ceph_le32, ceph_le16, uint8_t
+requires _denc::is_any_of<_denc::underlying_type_t<T>,
+		          ceph_le64, ceph_le32, ceph_le16, uint8_t
 #ifndef _CHAR_IS_SIGNED
-		       , int8_t
+		          , int8_t
 #endif
-		     >>> {
+			  >
+struct denc_traits<T> {
   static constexpr bool supported = true;
   static constexpr bool featured = false;
   static constexpr bool bounded = true;
