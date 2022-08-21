@@ -851,20 +851,25 @@
   
   rbd help flatten
   usage: rbd flatten [--pool <pool>] [--namespace <namespace>] [--image <image>] 
-                     [--no-progress] 
+                     [--no-progress] [--encryption-format <encryption-format>] 
+                     [--encryption-passphrase-file <encryption-passphrase-file>] 
                      <image-spec> 
   
   Fill clone with parent data (make it independent).
   
   Positional arguments
-    <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <image-spec>                     image specification
+                                     (example:
+                                     [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --namespace arg      namespace name
-    --image arg          image name
-    --no-progress        disable progress output
+    -p [ --pool ] arg                pool name
+    --namespace arg                  namespace name
+    --image arg                      image name
+    --no-progress                    disable progress output
+    --encryption-format arg          encryption formats [possible values: luks]
+    --encryption-passphrase-file arg path to file containing passphrase for
+                                     unlocking the image
   
   rbd help group create
   usage: rbd group create [--pool <pool>] [--namespace <namespace>] 
@@ -2640,3 +2645,4 @@
     --namespace arg      namespace name
     --image arg          image name
   
+
