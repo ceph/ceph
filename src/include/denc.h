@@ -342,25 +342,28 @@ struct denc_traits<T> {
 // up a contiguous_appender etc is likely to be slower.
 namespace _denc {
 
-template<typename T, typename=void> struct ExtType {
+template<typename T> struct ExtType {
   using type = void;
 };
 
 template<typename T>
-struct ExtType<T, std::enable_if_t<std::is_same_v<T, int16_t> ||
-				   std::is_same_v<T, uint16_t>>> {
+requires _denc::is_any_of<T,
+			  int16_t, uint16_t>
+struct ExtType<T> {
   using type = ceph_le16;
 };
 
 template<typename T>
-struct ExtType<T, std::enable_if_t<std::is_same_v<T, int32_t> ||
-				   std::is_same_v<T, uint32_t>>> {
+requires _denc::is_any_of<T,
+			  int32_t, uint32_t>
+struct ExtType<T> {
   using type = ceph_le32;
 };
 
 template<typename T>
-struct ExtType<T, std::enable_if_t<std::is_same_v<T, int64_t> ||
-				   std::is_same_v<T, uint64_t>>> {
+requires _denc::is_any_of<T,
+			  int64_t, uint64_t>
+struct ExtType<T> {
   using type = ceph_le64;
 };
 
