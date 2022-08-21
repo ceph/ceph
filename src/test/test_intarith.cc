@@ -23,24 +23,6 @@ TEST(intarith, cbits) {
   ASSERT_EQ(64u, cbits(0xffffffffffffffff));
 }
 
-TEST(intarith, clz) {
-  ASSERT_EQ(32u, clz(UINT32_C(0)));
-  ASSERT_EQ(31u, clz(UINT32_C(1)));
-  ASSERT_EQ(30u, clz(UINT32_C(2)));
-  ASSERT_EQ(30u, clz(UINT32_C(3)));
-  ASSERT_EQ(29u, clz(UINT32_C(4)));
-  ASSERT_EQ(64u, clz(UINT64_C(0)));
-  ASSERT_EQ(63u, clz(UINT64_C(1)));
-  ASSERT_EQ(62u, clz(UINT64_C(2)));
-  ASSERT_EQ(62u, clz(UINT64_C(3)));
-  ASSERT_EQ(61u, clz(UINT64_C(4)));
-  ASSERT_EQ(23u, clz(UINT32_C(0x100)));
-  ASSERT_EQ(55u, clz(UINT64_C(0x100)));
-  ASSERT_EQ(0u, clz(0xffffffff));
-  ASSERT_EQ(32u, clz(UINT64_C(0xffffffff)));
-  ASSERT_EQ(0u, clz(UINT64_C(0xffffffffffffffff)));
-}
-
 TEST(intarith, ctz) {
   ASSERT_EQ(32u, ctz(0));
   ASSERT_EQ(0u, ctz(1));
