@@ -20,6 +20,8 @@ class LoadRequest {
 public:
     using EncryptionFormat = decltype(I::encryption_format);
 
+    static constexpr char UNKNOWN_FORMAT[] = "<unknown>";
+
     static LoadRequest* create(
             I* image_ctx, std::vector<EncryptionFormat>&& formats,
             Context* on_finish) {
@@ -45,6 +47,7 @@ private:
     bool m_is_current_format_cloned;
     std::vector<EncryptionFormat> m_formats;
     I* m_current_image_ctx;
+    std::string m_detected_format_name;
 };
 
 } // namespace crypto

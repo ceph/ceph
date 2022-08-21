@@ -251,6 +251,11 @@ const char* Header::get_cipher_mode() {
   return crypt_get_cipher_mode(m_cd);
 }
 
+const char* Header::get_format_name() {
+  ceph_assert(m_cd != nullptr);
+  return crypt_get_type(m_cd);
+}
+
 } // namespace luks
 } // namespace crypto
 } // namespace librbd

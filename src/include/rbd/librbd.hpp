@@ -597,6 +597,8 @@ public:
   /* encryption */
   int encryption_format(encryption_format_t format, encryption_options_t opts,
                         size_t opts_size);
+  /* encryption will be loaded on all ancestor images,
+   * until reaching an ancestor image which does not match any known format */
   int encryption_load(encryption_format_t format, encryption_options_t opts,
                       size_t opts_size);
 

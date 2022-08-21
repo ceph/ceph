@@ -40,6 +40,7 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
   Context* image_read_request;
   ceph::bufferlist header_bl;
   uint64_t data_offset;
+  std::string detected_format_name;
 
   void SetUp() override {
     TestMockFixture::SetUp();
@@ -48,7 +49,9 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
     ASSERT_EQ(0, open_image(m_image_name, &ictx));
     mock_image_ctx = new MockImageCtx(*ictx);
     mock_load_request = MockLoadRequest::create(
-            mock_image_ctx, std::move(passphrase), &crypto, on_finish);
+            mock_image_ctx, std::move(passphrase), &crypto,
+            &detected_format_name, on_finish);
+    detected_format_name = "";
   }
 
   void TearDown() override {
@@ -100,6 +103,11 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
                 image_read_request = ctx;
             }));
   }
+
+  void expect_get_image_size() {
+    EXPECT_CALL(*mock_image_ctx, get_image_size(_)).WillOnce(
+            Return(100 * 1024 * 1024));
+  }
 };
 
 TEST_F(TestMockCryptoLuksLoadRequest, AES128) {
@@ -109,6 +117,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, AES128) {
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_NE(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS2", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, AES256) {
@@ -118,18 +127,21 @@ TEST_F(TestMockCryptoLuksLoadRequest, AES256) {
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_NE(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS2", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, LUKS1) {
   delete mock_load_request;
   mock_load_request = MockLoadRequest::create(
-          mock_image_ctx, {passphrase_cstr}, &crypto, on_finish);
+          mock_image_ctx, {passphrase_cstr}, &crypto, &detected_format_name,
+          on_finish);
   generate_header(CRYPT_LUKS1, "aes", 32, "xts-plain64", 512, false);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_NE(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS1", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, WrongFormat) {
@@ -137,14 +149,11 @@ TEST_F(TestMockCryptoLuksLoadRequest, WrongFormat) {
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
 
-  expect_image_read(DEFAULT_INITIAL_READ_SIZE,
-                    MAXIMUM_HEADER_SIZE - DEFAULT_INITIAL_READ_SIZE);
-  image_read_request->complete(DEFAULT_INITIAL_READ_SIZE); // complete 1st read
+  image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
 
-  image_read_request->complete(
-          MAXIMUM_HEADER_SIZE - DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(-EINVAL, finished_cond.wait());
   ASSERT_EQ(crypto.get(), nullptr);
+  ASSERT_EQ("<unknown>", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedAlgorithm) {
@@ -154,6 +163,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedAlgorithm) {
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(-ENOTSUP, finished_cond.wait());
   ASSERT_EQ(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS2", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedCipherMode) {
@@ -163,6 +173,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedCipherMode) {
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(-ENOTSUP, finished_cond.wait());
   ASSERT_EQ(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS2", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, HeaderBiggerThanInitialRead) {
@@ -171,25 +182,29 @@ TEST_F(TestMockCryptoLuksLoadRequest, HeaderBiggerThanInitialRead) {
   expect_image_read(0, 4096);
   mock_load_request->send();
 
+  expect_get_image_size();
   expect_image_read(4096, MAXIMUM_HEADER_SIZE - 4096);
   image_read_request->complete(4096); // complete initial read
 
   image_read_request->complete(MAXIMUM_HEADER_SIZE - 4096);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_NE(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS2", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, LUKS1FormattedClone) {
   mock_image_ctx->parent = mock_image_ctx;
   delete mock_load_request;
   mock_load_request = MockLoadRequest::create(
-          mock_image_ctx, {passphrase_cstr}, &crypto, on_finish);
+          mock_image_ctx, {passphrase_cstr}, &crypto, &detected_format_name,
+          on_finish);
   generate_header(CRYPT_LUKS1, "aes", 64, "xts-plain64", 512, true);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_NE(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS1", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, LUKS2FormattedClone) {
@@ -200,6 +215,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, LUKS2FormattedClone) {
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_NE(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS2", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, KeyslotsBiggerThanInitialRead) {
@@ -214,12 +230,13 @@ TEST_F(TestMockCryptoLuksLoadRequest, KeyslotsBiggerThanInitialRead) {
   image_read_request->complete(data_offset - 16384);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_NE(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS2", detected_format_name);
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, WrongPassphrase) {
   delete mock_load_request;
   mock_load_request = MockLoadRequest::create(
-        mock_image_ctx, "wrong", &crypto, on_finish);
+        mock_image_ctx, "wrong", &crypto, &detected_format_name, on_finish);
 
   generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096, false);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
@@ -233,6 +250,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, WrongPassphrase) {
   image_read_request->complete(data_offset - DEFAULT_INITIAL_READ_SIZE);
   ASSERT_EQ(-EPERM, finished_cond.wait());
   ASSERT_EQ(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS2", detected_format_name);
 }
 
 } // namespace luks

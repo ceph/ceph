@@ -36,7 +36,8 @@ public:
     }
 
     void format(ImageCtxT* ictx, Context* on_finish) override;
-    void load(ImageCtxT* ictx, Context* on_finish) override;
+    void load(ImageCtxT* ictx, std::string* detected_format_name,
+              Context* on_finish) override;
     void flatten(ImageCtxT* ictx, Context* on_finish) override;
 
     CryptoInterface* get_crypto() override {
