@@ -15,6 +15,8 @@
 #ifndef CEPH_INTARITH_H
 #define CEPH_INTARITH_H
 
+#include <bit>
+#include <concepts>
 #include <type_traits>
 
 template<typename T, typename U>
@@ -150,36 +152,9 @@ template<class T>
 }
 
 // count bits (set + any 0's that follow)
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) <= sizeof(unsigned)),
-  unsigned>::type cbits(T v) {
-  if (v == 0)
-    return 0;
-  return (sizeof(v) * 8) - __builtin_clz(v);
-}
-
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned int) &&
-   sizeof(T) <= sizeof(unsigned long)),
-  unsigned>::type cbits(T v) {
-  if (v == 0)
-    return 0;
-  return (sizeof(v) * 8) - __builtin_clzl(v);
-}
-
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned long) &&
-   sizeof(T) <= sizeof(unsigned long long)),
-  unsigned>::type cbits(T v) {
-  if (v == 0)
-    return 0;
-  return (sizeof(v) * 8) - __builtin_clzll(v);
+template<std::integral T>
+unsigned cbits(T v) {
+  return (sizeof(v) * 8) - std::countl_zero(std::make_unsigned_t<T>(v));
 }
 
 // count the bits set to 1, a.k.a. population count
