@@ -1222,7 +1222,7 @@ public:
     : ref_counter_2hash_tracker_t(mem_cap) {
     ceph_assert(alloc_unit);
     ceph_assert(std::has_single_bit(alloc_unit));
-    au_void_bits = ctz(alloc_unit);
+    au_void_bits = std::countr_zero(alloc_unit);
   }
   void inc(uint64_t sbid, uint64_t offset, int n);
   void inc_range(uint64_t sbid, uint64_t offset, uint32_t len, int n);
