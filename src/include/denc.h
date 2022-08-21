@@ -26,6 +26,7 @@
 
 #include <array>
 #include <cstring>
+#include <concepts>
 #include <map>
 #include <optional>
 #include <set>
@@ -283,8 +284,9 @@ using underlying_type_t = typename underlying_type<T>::type;
 }
 
 template<class It>
-concept is_const_iterator =
-std::is_const_v<std::remove_pointer_t<typename It::pointer>>;
+concept is_const_iterator = requires(It& it, size_t n) {
+  { it.get_pos_add(n) } -> std::same_as<const char*>;
+};
 
 template<typename T, is_const_iterator It>
 const T& get_pos_add(It& i) {
