@@ -428,6 +428,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   } else {
     dump_header(s, "x-rgw-object-type", "Normal");
   }
+  // replication status
+  if (auto i = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
+      i != attrs.end()) {
+    dump_header(s, "x-amz-replication-status", i->second);
+  }
 
   if (! op_ret) {
     if (! lo_etag.empty()) {
