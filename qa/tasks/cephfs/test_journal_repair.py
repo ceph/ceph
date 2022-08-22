@@ -266,7 +266,9 @@ class TestJournalRepair(CephFSTestCase):
                              "len": 1099511626775}],
                         "free": [
                             {"start": 1099511628777,
-                             "len": 1099511626775}]}},
+                             "len": 1099511626775}],
+                        "projected_recycle": [],
+                        "recycle": []}},
                 "result": 0}}
 
         )
@@ -315,7 +317,9 @@ class TestJournalRepair(CephFSTestCase):
                                  "len": 1099511627776}],
                                  "free": [
                                     {"start": 1099511627776,
-                                    "len": 1099511627776}]}},
+                                    "len": 1099511627776}],
+                                 "projected_recycle": [],
+                                 "recycle": []}},
                    "result": 0}}
         )
 
@@ -346,7 +350,9 @@ class TestJournalRepair(CephFSTestCase):
                                  "len": initial_range_len}],
                                 "free": [
                                     {"start": initial_range_start,
-                                     "len": initial_range_len}]}},
+                                     "len": initial_range_len}],
+                                "projected_recycle": [],
+                                "recycle": []}},
                    "result": 0}}
         )
 
@@ -359,7 +365,9 @@ class TestJournalRepair(CephFSTestCase):
                                  "len": initial_range_len - 101}],
                                 "free": [
                                     {"start": initial_range_start + 101,
-                                     "len": initial_range_len - 101}]}},
+                                     "len": initial_range_len - 101}],
+                                "projected_recycle": [],
+                                "recycle": []}},
                    "result": 0}}
         )
 
