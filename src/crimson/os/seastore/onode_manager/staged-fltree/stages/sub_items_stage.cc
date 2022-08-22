@@ -14,7 +14,7 @@ const laddr_packed_t* internal_sub_items_t::insert_at(
     index_t index, node_offset_t size, const char* p_left_bound)
 {
   assert(index <= sub_items.keys());
-  assert(size == estimate_insert<KT>(key, value));
+  assert(size == estimate_insert(key, value));
   const char* p_shift_start = p_left_bound;
   const char* p_shift_end = reinterpret_cast<const char*>(
       sub_items.p_first_item + 1 - index);
@@ -91,7 +91,7 @@ const value_header_t* leaf_sub_items_t::insert_at(
     index_t index, node_offset_t size, const char* p_left_bound)
 {
   assert(index <= sub_items.keys());
-  assert(size == estimate_insert<KT>(key, value));
+  assert(size == estimate_insert(key, value));
   // a. [... item(index)] << size
   const char* p_shift_start = p_left_bound;
   const char* p_shift_end = sub_items.get_item_end(index);
