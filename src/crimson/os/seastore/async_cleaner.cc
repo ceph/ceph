@@ -985,6 +985,16 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
       reclaim_state->start_pos,
       reclaim_state->end_pos
     ).si_then([this, &t](auto pin_list) {
+      if (!pin_list.empty()) {
+	auto it = pin_list.begin();
+	auto &first_pin = *it;
+	if (first_pin->get_key() < reclaim_state->start_pos) {
+	  // BackrefManager::get_mappings may include a entry before
+	  // reclaim_state->start_pos, which is semantically inconsistent
+	  // with the requirements of the cleaner
+	  pin_list.erase(it);
+	}
+      }
       return backref_manager.retrieve_backref_extents_in_range(
         t,
         reclaim_state->start_pos,
