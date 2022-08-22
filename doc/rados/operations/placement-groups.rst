@@ -143,15 +143,20 @@ example, a pool that maps to OSDs of class `ssd` and a pool that maps
 to OSDs of class `hdd` will each have optimal PG counts that depend on
 the number of those respective device types.
 
+In the case where a pool uses OSDs under two or more CRUSH roots, e.g., (shadow
+trees with both `ssd` and `hdd` devices), the autoscaler will
+issue a warning to the user in the manager log stating the name of the pool
+and the set of roots that overlap each other. The autoscaler will not
+scale any pools with overlapping roots because this can cause problems
+with the scaling process. We recommend making each pool belong to only
+one root (one OSD class) to get rid of the warning and ensure a successful
+scaling process.
+
 The autoscaler uses the `bulk` flag to determine which pool
 should start out with a full complement of PGs and only
 scales down when the usage ratio across the pool is not even.
 However, if the pool doesn't have the `bulk` flag, the pool will
 start out with minimal PGs and only when there is more usage in the pool.
-
-The autoscaler identifies any overlapping roots and prevents the pools
-with such roots from scaling because overlapping roots can cause problems
-with the scaling process.
 
 To create pool with `bulk` flag::
 
