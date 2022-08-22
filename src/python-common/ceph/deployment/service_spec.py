@@ -466,7 +466,7 @@ class ServiceSpec(object):
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
-            'prometheus': MonitoringSpec,
+            'prometheus': PrometheusSpec,
             'snmp-gateway': SNMPGatewaySpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
@@ -1178,6 +1178,32 @@ class GrafanaSpec(MonitoringSpec):
 
 
 yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)
+
+
+class PrometheusSpec(MonitoringSpec):
+    def __init__(self,
+                 service_type: str = 'prometheus',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 port: Optional[int] = None,
+                 retention_time: Optional[str] = None,
+                 extra_container_args: Optional[List[str]] = None,
+                 ):
+        assert service_type == 'prometheus'
+        super(PrometheusSpec, self).__init__(
+            'prometheus', service_id=service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only, config=config, networks=networks, port=port,
+            extra_container_args=extra_container_args)
+
+        self.retention_time = retention_time
+
+
+yaml.add_representer(PrometheusSpec, ServiceSpec.yaml_representer)
 
 
 class SNMPGatewaySpec(ServiceSpec):

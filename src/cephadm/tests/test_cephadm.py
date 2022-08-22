@@ -1095,6 +1095,7 @@ class TestMonitoring(object):
 
     def test_prometheus_external_url(self):
         ctx = cd.CephadmContext()
+        ctx.config_json = json.dumps({'files': {}, 'retention_time': '15d'})
         daemon_type = 'prometheus'
         daemon_id = 'home'
         fsid = 'aaf5a720-13fe-4a3b-82b9-2d99b7fd9704'
