@@ -277,10 +277,11 @@ class DashboardTestCase(MgrTestCase):
     # pylint: disable=inconsistent-return-statements, too-many-arguments, too-many-branches
     @classmethod
     def _request(cls, url, method, data=None, params=None, version=DEFAULT_API_VERSION,
-                 set_cookies=False):
+                 set_cookies=False, headers=None):
         url = "{}{}".format(cls._base_uri, url)
         log.debug("Request %s to %s", method, url)
-        headers = {}
+        if headers is None:
+            headers = {}
         cookies = {}
         if cls._token:
             if set_cookies:
@@ -336,8 +337,9 @@ class DashboardTestCase(MgrTestCase):
             raise ex
 
     @classmethod
-    def _get(cls, url, params=None, version=DEFAULT_API_VERSION, set_cookies=False):
-        return cls._request(url, 'GET', params=params, version=version, set_cookies=set_cookies)
+    def _get(cls, url, params=None, version=DEFAULT_API_VERSION, set_cookies=False, headers=None):
+        return cls._request(url, 'GET', params=params, version=version,
+                            set_cookies=set_cookies, headers=headers)
 
     @classmethod
     def _view_cache_get(cls, url, retries=5):
