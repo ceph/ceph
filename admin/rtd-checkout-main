@@ -1,6 +1,10 @@
 # See .readthedocs.yml
 set -ex
-if git symbolic-ref HEAD; then
+re='^[0-9]+$'
+if [[ $READTHEDOCS_VERSION =~ $re ]]; then
+  echo "Building docs for PR $READTHEDOCS_VERSION.  Will not check out doc/releases from main branch."
+else
+  echo "Building docs for $READTHEDOCS_VERSION branch.  Will check out doc/releases from main branch."
   git checkout origin/main -- doc/releases
 fi
 git status
