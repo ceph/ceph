@@ -165,12 +165,13 @@ class TestNFS(MgrTestCase):
         it checks for expected cluster id. Otherwise checks nothing is listed.
         :param empty: If true it denotes no cluster is deployed.
         '''
+        nfs_output = self._nfs_cmd('cluster', 'ls')
+        jdata = json.loads(nfs_output)
         if empty:
-            cluster_id = ''
+            self.assertEqual(len(jdata), 0)
         else:
             cluster_id = self.cluster_id
-        nfs_output = self._nfs_cmd('cluster', 'ls')
-        self.assertEqual(cluster_id, nfs_output.strip())
+            self.assertEqual([cluster_id], jdata)
 
     def _create_export(self, export_id, create_fs=False, extra_cmd=None):
         '''
