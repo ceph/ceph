@@ -21,6 +21,7 @@ start_ceph() {
     cd $FULL_PATH_BUILD_DIR
 
     for cluster in ${CLUSTERS[@]}; do
+        export CEPH_OUT_CLIENT_DIR=${FULL_PATH_BUILD_DIR}/run/${cluster}/out/client
         MGR=2 RGW=1 ../src/mstart.sh $cluster -n -d
     done
 
