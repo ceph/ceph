@@ -9,7 +9,8 @@ from urllib.parse import urlparse
 from mgr_module import HandleCommandResult
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, SNMPGatewaySpec
+from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, \
+    SNMPGatewaySpec, PrometheusSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from cephadm.services.ingress import IngressSpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url
@@ -289,6 +290,14 @@ class PrometheusService(CephadmService):
             daemon_spec: CephadmDaemonDeploySpec,
     ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
+
+        prom_spec = cast(PrometheusSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+
+        try:
+            retention_time = prom_spec.retention_time if prom_spec.retention_time else '15d'
+        except AttributeError:
+            retention_time = '15d'
+
         deps = []  # type: List[str]
 
         # scrape mgrs
@@ -363,12 +372,13 @@ class PrometheusService(CephadmService):
             'haproxy_targets': haproxy_targets,
             'nodes': nodes,
         }
-        r = {
+        r: Dict[str, Any] = {
             'files': {
                 'prometheus.yml':
                     self.mgr.template.render(
                         'services/prometheus/prometheus.yml.j2', context)
-            }
+            },
+            'retention_time': retention_time
         }
 
         # include alerts, if present in the container
