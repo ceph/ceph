@@ -23,10 +23,10 @@ int64_t HybridAllocator::allocate(
   PExtentVector* extents)
 {
   ldout(cct, 10) << __func__ << std::hex
-                 << " want 0x" << want
-                 << " unit 0x" << unit
-                 << " max_alloc_size 0x" << max_alloc_size
-                 << " hint 0x" << hint
+                 << " 0x" << want
+                 << "/" << unit
+                 << "," << max_alloc_size
+                 << "," << hint
                  << std::dec << dendl;
   ceph_assert(std::has_single_bit(unit));
   ceph_assert(want % unit == 0);
