@@ -278,7 +278,7 @@ Finally, add the system user to the master zone.
 
 ::
 
-    # radosgw-admin zone modify --rgw-zone=us-east --access-key={access-key} --secret={secret}
+    # radosgw-admin zone modify --rgw-zone={zone-name} --access-key={access-key} --secret={secret}
     # radosgw-admin period update --commit
 
 Update the Period
