@@ -7829,6 +7829,7 @@ next:
       formatter->dump_string("deletion_time", ginfo["deletion_time"]);
       formatter->dump_string("size", ginfo["size"]);
       formatter->dump_string("size_actual", ginfo["size_actual"]);
+      formatter->dump_string("is_multipart", ginfo["is_multipart"]);
       formatter->close_section();
     }
     formatter->close_section();

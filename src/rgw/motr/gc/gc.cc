@@ -427,11 +427,20 @@ int MotrGC::list(std::vector<std::unordered_map<std::string, std::string>> &gc_e
         motr_gc_obj_info ginfo;
         ginfo.decode(blitr);
         std::unordered_map<std::string, std::string> mp;
+        char t_str[100];
+        std::string deletion_time;
+        if (std::strftime(t_str, sizeof(t_str), "%Y-%m-%dT%H:%M:%S%z%Z", std::localtime(&ginfo.deletion_time))) {
+          deletion_time = t_str;
+        }
+        else {
+          deletion_time = std::to_string(ginfo.deletion_time);
+        }
         mp["tag"] = ginfo.tag;
         mp["name"] = ginfo.name;
-        mp["deletion_time"] = std::to_string(ginfo.deletion_time);
+        mp["deletion_time"] = deletion_time;
         mp["size"] = std::to_string(ginfo.size);
         mp["size_actual"] = std::to_string(ginfo.size_actual);
+        mp["is_multipart"] = ginfo.is_multipart ? "true" : "false";
         gc_entries.push_back(mp);
         ldout(cct, 70) << ginfo.tag << ", "
                        << ginfo.name << ", "
