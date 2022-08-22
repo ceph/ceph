@@ -201,7 +201,7 @@ EOL
 ./b2 install --user-config=user-config.jam toolset=gcc-mingw32 \
     target-os=windows release \
     link=static,shared \
-    threadapi=pthread --prefix=$boostDir \
+    threadapi=win32 --prefix=$boostDir \
     address-model=64 architecture=x86 \
     binary-format=pe abi=ms -j $NUM_WORKERS \
     -sZLIB_INCLUDE=$zlibDir/include -sZLIB_LIBRARY_PATH=$zlibDir/lib \
