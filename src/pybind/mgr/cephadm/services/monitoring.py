@@ -9,7 +9,8 @@ from urllib.parse import urlparse
 from mgr_module import HandleCommandResult
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, SNMPGatewaySpec
+from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, \
+    SNMPGatewaySpec, PrometheusSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url
 
@@ -290,6 +291,13 @@ class PrometheusService(CephadmService):
 
         assert self.TYPE == daemon_spec.daemon_type
 
+        spec = cast(PrometheusSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+
+        try:
+            retention_time = spec.retention_time if spec.retention_time else '15d'
+        except AttributeError:
+            retention_time = '15d'
+
         t = self.mgr.get('mgr_map').get('services', {}).get('prometheus', None)
         sd_port = self.mgr.service_discovery_port
         srv_end_point = ''
@@ -319,11 +327,12 @@ class PrometheusService(CephadmService):
             'haproxy_sd_url': haproxy_sd_url,
         }
 
-        r = {
+        r: Dict[str, Any] = {
             'files': {
                 'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context),
                 'root_cert.pem': self.mgr.http_server.service_discovery.ssl_certs.get_root_cert()
-            }
+            },
+            'retention_time': retention_time
         }
 
         # include alerts, if present in the container
