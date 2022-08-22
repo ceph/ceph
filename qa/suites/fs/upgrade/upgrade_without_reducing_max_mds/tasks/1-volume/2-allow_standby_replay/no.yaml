@@ -1,4 +1,0 @@
-tasks:
-- cephadm.shell:
-    host.a:
-      - ceph fs set cephfs allow_standby_replay false
