@@ -917,8 +917,16 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
     return set_cr_done();
   }
   reenter(this) {
+    last_renew_try_time = ceph::coarse_mono_clock::now();
     while (!going_down) {
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, interval));
+      current_time = ceph::coarse_mono_clock::now();
+      if (current_time - last_renew_try_time > interval_tolerance) {
+        // renewal should happen between 50%-90% of interval
+        ldout(store->ctx(), 1) << *this << ": WARNING: did not renew lock " << obj << ":" << lock_name << ": within 90\% of interval. " << 
+          (current_time - last_renew_try_time) << " > " << interval_tolerance << dendl;
+      }
+      last_renew_try_time = current_time;
 
       caller->set_sleeping(false); /* will only be relevant when we return, that's why we can do it early */
       if (retcode < 0) {
@@ -926,6 +934,7 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
         ldout(store->ctx(), 20) << *this << ": couldn't lock " << obj << ":" << lock_name << ": retcode=" << retcode << dendl;
         return set_state(RGWCoroutine_Error, retcode);
       }
+      ldout(store->ctx(), 20) << *this << ": successfully locked " << obj << ":" << lock_name << dendl;
       set_locked(true);
       yield wait(utime_t(interval / 2, 0));
     }
