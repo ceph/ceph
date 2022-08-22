@@ -109,10 +109,10 @@ class internal_sub_items_t {
     return sizeof(internal_sub_item_t);
   }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static const laddr_packed_t* insert_at(
       NodeExtentMutable&, const internal_sub_items_t&,
-      const full_key_t<KT>&, const laddr_t&,
+      const Key&, const laddr_t&,
       index_t index, node_offset_t size, const char* p_left_bound);
 
   static node_offset_t trim_until(NodeExtentMutable&, internal_sub_items_t&, index_t);
@@ -289,10 +289,10 @@ class leaf_sub_items_t {
     return value.allocation_size() + sizeof(snap_gen_t) + sizeof(node_offset_t);
   }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static const value_header_t* insert_at(
       NodeExtentMutable&, const leaf_sub_items_t&,
-      const full_key_t<KT>&, const value_config_t&,
+      const Key&, const value_config_t&,
       index_t index, node_offset_t size, const char* p_left_bound);
 
   static node_offset_t trim_until(NodeExtentMutable&, leaf_sub_items_t&, index_t index);
