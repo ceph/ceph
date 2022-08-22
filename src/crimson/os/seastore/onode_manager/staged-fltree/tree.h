@@ -183,7 +183,7 @@ class Btree {
 
   eagain_ifuture<bool> contains(Transaction& t, const ghobject_t& obj) {
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      key_hobj_t{obj},
       [this, &t](auto& key) -> eagain_ifuture<bool> {
         return get_root(t).si_then([this, &t, &key](auto root) {
           // TODO: improve lower_bound()
@@ -197,7 +197,7 @@ class Btree {
 
   eagain_ifuture<Cursor> find(Transaction& t, const ghobject_t& obj) {
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      key_hobj_t{obj},
       [this, &t](auto& key) -> eagain_ifuture<Cursor> {
         return get_root(t).si_then([this, &t, &key](auto root) {
           // TODO: improve lower_bound()
@@ -222,7 +222,7 @@ class Btree {
    */
   eagain_ifuture<Cursor> lower_bound(Transaction& t, const ghobject_t& obj) {
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      key_hobj_t{obj},
       [this, &t](auto& key) -> eagain_ifuture<Cursor> {
         return get_root(t).si_then([this, &t, &key](auto root) {
           return root->lower_bound(get_context(t), key);
@@ -266,7 +266,7 @@ class Btree {
     }
     value_config_t vconf{value_builder.get_header_magic(), _vconf.payload_size};
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      key_hobj_t{obj},
       [this, &t, vconf](auto& key) -> eagain_ifuture<std::pair<Cursor, bool>> {
         ceph_assert(key.is_valid());
         return get_root(t).si_then([this, &t, &key, vconf](auto root) {
@@ -281,7 +281,7 @@ class Btree {
 
   eagain_ifuture<std::size_t> erase(Transaction& t, const ghobject_t& obj) {
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      key_hobj_t{obj},
       [this, &t](auto& key) -> eagain_ifuture<std::size_t> {
         return get_root(t).si_then([this, &t, &key](auto root) {
           return root->erase(get_context(t), key, std::move(root));
