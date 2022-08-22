@@ -62,10 +62,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   hiddenColumns: string[] = [];
 
   @Input()
-  hideTitle = false;
-
-  @Input()
-  hideSubmitBtn = false;
+  hideMaintenance = false;
 
   @Input()
   hasTableDetails = true;
@@ -130,7 +127,9 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         click: () =>
           this.router.url.includes('/hosts')
             ? this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }])
-            : (this.bsModalRef = this.modalService.show(HostFormComponent)),
+            : (this.bsModalRef = this.modalService.show(HostFormComponent, {
+                hideMaintenance: this.hideMaintenance
+              })),
         disable: (selection: CdTableSelection) => this.getDisable('add', selection)
       },
       {
