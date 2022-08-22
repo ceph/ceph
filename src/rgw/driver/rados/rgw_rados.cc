@@ -4112,6 +4112,21 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     bl.clear(); // overwrite source's status
     bl.append("REPLICA");
   }
+  { // update replication trace
+    std::vector<rgw_zone_set_entry> trace;
+    if (auto i = cb.get_attrs().find(RGW_ATTR_OBJ_REPLICATION_TRACE);
+        i != cb.get_attrs().end()) {
+      try {
+        decode(trace, i->second);
+      } catch (const buffer::error&) {}
+    }
+    // add the source entry to the end
+    trace.push_back(source_trace_entry);
+
+    bufferlist bl;
+    encode(trace, bl);
+    cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_TRACE] = std::move(bl);
+  }
 
   if (source_zone.empty()) {
     set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
