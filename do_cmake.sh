@@ -36,6 +36,13 @@ if [ -r /etc/os-release ]; then
           ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
           ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
           ;;
+      ubuntu)
+          MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
+          if [ "$MAJOR_VER" -ge "22" ] ; then
+              PYBUILD="3.10"
+          fi
+          ;;
+
   esac
 elif [ "$(uname)" == FreeBSD ] ; then
   PYBUILD="3"
