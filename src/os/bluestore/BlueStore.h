@@ -220,8 +220,10 @@ enum {
 #define META_POOL_ID ((uint64_t)-1ull)
 using bptr_c_it_t = buffer::ptr::const_iterator;
 
+class FileFreelistManager;
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
+  friend class FileFreelistManager;
   // -----------------------------------------------------
   // types
 public:

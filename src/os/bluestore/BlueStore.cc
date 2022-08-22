@@ -6381,7 +6381,9 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   // And now it's time to do that
   //
   _close_db();
-
+  if (bluefs) {
+    _close_bluefs();
+  }
   r = _open_db(false, to_repair, read_only);
   if (r < 0) {
     goto out_alloc;
@@ -6425,9 +6427,19 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 out_alloc:
   _close_alloc();
 out_fm:
-  _close_fm();
  out_db:
-  _close_db();
+  if (db)
+    _close_db();
+  if (fm) {
+    // inverted db/fm destruction order
+    // we are using implementation quirks of null vs zoned/bitmap
+    // null requires db to be closed for shutdown()
+    // zoned/bitmap have shutdown() a no-op
+    _close_fm();
+  }
+  if (bluefs) {
+    _close_bluefs();
+  }
  out_bdev:
   _close_bdev();
  out_fsid:
@@ -6447,10 +6459,10 @@ void BlueStore::_close_db_and_around()
 
 void BlueStore::_close_around_db()
 {
+  _close_fm();
   if (bluefs) {
     _close_bluefs();
   }
-  _close_fm();
   _close_alloc();
   _close_bdev();
   _close_fsid();
@@ -6747,17 +6759,6 @@ void BlueStore::_close_db()
   ceph_assert(db);
   delete db;
   db = nullptr;
-
-  if (do_destage && fm && fm->is_null_manager()) {
-    int ret = store_allocator(alloc);
-    if (ret != 0) {
-      derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
-    }
-  }
-
-  if (bluefs) {
-    _close_bluefs();
-  }
 }
 
 void BlueStore::_dump_alloc_on_failure()
@@ -7215,9 +7216,20 @@ int BlueStore::mkfs()
   }
 
  out_close_fm:
-  _close_fm();
  out_close_db:
-  _close_db();
+  if (db)
+    _close_db();
+  if (fm) {
+    // inverted db/fm destruction order
+    // we are using implementation quirks of null vs zoned/bitmap
+    // null requires db to be closed for shutdown()
+    // zoned/bitmap have shutdown() a no-op
+    _close_fm();
+  }
+  if (bluefs) {
+    _close_bluefs();
+  }
+
  out_close_alloc:
   _close_alloc();
  out_close_bdev:

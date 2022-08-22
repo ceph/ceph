@@ -1246,11 +1246,11 @@ int FileFreelistManager::create(uint64_t new_size, uint64_t granularity,
 {
   size = new_size;
   bytes_per_block = granularity;
+  blocks_per_key = 1;
   dout(1) << __func__
 	   << " size 0x" << std::hex << size
 	   << std::dec << dendl;
   blocks = size_2_block_count(size);
-  blocks_per_key = 0;
   store->write_meta("bfm_blocks", stringify(blocks));
   store->write_meta("bfm_size", stringify(size));
   store->write_meta("bfm_bytes_per_block", stringify(bytes_per_block));
@@ -1400,6 +1400,11 @@ void FileFreelistManager::_sync(KeyValueDB* kvdb, bool read_only)
 void FileFreelistManager::shutdown()
 {
   dout(1) << __func__ << dendl;
+  BlueStore* store = dynamic_cast<BlueStore*>(this->store);
+  ceph_assert(store);
+  if (store->need_to_destage_allocation_file) {
+    store->store_allocator(store->alloc);
+  }
 }
 
 void FileFreelistManager::enumerate_reset()
