@@ -437,6 +437,17 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       i != attrs.end()) {
     dump_header(s, "x-amz-replication-status", i->second);
   }
+  if (auto i = attrs.find(RGW_ATTR_OBJ_REPLICATION_TRACE);
+      i != attrs.end()) {
+    try {
+      std::vector<rgw_zone_set_entry> zones;
+      auto p = i->second.cbegin();
+      decode(zones, p);
+      for (const auto& zone : zones) {
+        dump_header(s, "x-rgw-replicated-from", zone.to_str());
+      }
+    } catch (const buffer::error&) {} // omit x-rgw-replicated-from headers
+  }
 
   if (! op_ret) {
     if (! lo_etag.empty()) {
