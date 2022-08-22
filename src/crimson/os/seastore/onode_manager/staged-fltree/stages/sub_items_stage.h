@@ -103,9 +103,9 @@ class internal_sub_items_t {
 
   static node_offset_t header_size() { return 0u; }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static node_offset_t estimate_insert(
-      const full_key_t<KT>&, const laddr_t&) {
+      const Key&, const laddr_t&) {
     return sizeof(internal_sub_item_t);
   }
 
@@ -283,9 +283,9 @@ class leaf_sub_items_t {
 
   static node_offset_t header_size() { return sizeof(num_keys_t); }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static node_offset_t estimate_insert(
-      const full_key_t<KT>&, const value_config_t& value) {
+      const Key&, const value_config_t& value) {
     return value.allocation_size() + sizeof(snap_gen_t) + sizeof(node_offset_t);
   }
 

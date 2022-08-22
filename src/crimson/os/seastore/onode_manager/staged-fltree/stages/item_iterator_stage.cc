@@ -37,7 +37,7 @@ memory_range_t ITER_T::insert_prefix(
   p_insert -= sizeof(node_offset_t);
   node_offset_t back_offset = (p_insert - p_insert_front);
   mut.copy_in_absolute(p_insert, back_offset);
-  ns_oid_view_t::append<KT>(mut, key, p_insert);
+  ns_oid_view_t::append(mut, key, p_insert);
 
   return {p_insert_front, p_insert};
 }
@@ -179,7 +179,7 @@ APPEND_T::open_nxt(const full_key_t<KT>& key)
 {
   p_append -= sizeof(node_offset_t);
   p_offset_while_open = p_append;
-  ns_oid_view_t::append<KT>(*p_mut, key, p_append);
+  ns_oid_view_t::append(*p_mut, key, p_append);
   return {p_mut, p_append};
 }
 
