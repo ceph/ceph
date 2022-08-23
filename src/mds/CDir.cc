@@ -1472,6 +1472,20 @@ void CDir::mark_new(LogSegment *ls)
   mdcache->mds->queue_waiters(waiters);
 }
 
+void CDir::set_fresh_fnode(fnode_const_ptr&& ptr) {
+  ceph_assert(inode->is_auth());
+  ceph_assert(!is_projected());
+  ceph_assert(!state_test(STATE_COMMITTING));
+  reset_fnode(std::move(ptr));
+  projected_version = committing_version = committed_version = get_version();
+
+  if (state_test(STATE_REJOINUNDEF)) {
+    ceph_assert(mdcache->mds->is_rejoin());
+    state_clear(STATE_REJOINUNDEF);
+    mdcache->opened_undef_dirfrag(this);
+  }
+}
+
 void CDir::mark_clean()
 {
   dout(10) << __func__ << " " << *this << " version " << get_version() << dendl;
@@ -1546,16 +1560,9 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
       !inode->snaprealm) {
     dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
     if (get_version() == 0) {
-      ceph_assert(inode->is_auth());
       auto _fnode = allocate_fnode();
       _fnode->version = 1;
-      reset_fnode(std::move(_fnode));
-
-      if (state_test(STATE_REJOINUNDEF)) {
-	ceph_assert(mdcache->mds->is_rejoin());
-	state_clear(STATE_REJOINUNDEF);
-	mdcache->opened_undef_dirfrag(this);
-      }
+      set_fresh_fnode(std::move(_fnode));
     }
     mark_complete();
 
@@ -2001,17 +2008,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   // take the loaded fnode?
   // only if we are a fresh CDir* with no prior state.
   if (get_version() == 0) {
-    ceph_assert(!is_projected());
-    ceph_assert(!state_test(STATE_COMMITTING));
-    auto _fnode = allocate_fnode(got_fnode);
-    reset_fnode(std::move(_fnode));
-    projected_version = committing_version = committed_version = get_version();
-
-    if (state_test(STATE_REJOINUNDEF)) {
-      ceph_assert(mdcache->mds->is_rejoin());
-      state_clear(STATE_REJOINUNDEF);
-      mdcache->opened_undef_dirfrag(this);
-    }
+    set_fresh_fnode(allocate_fnode(got_fnode));
   }
 
   list<CInode*> undef_inodes;
