@@ -27,6 +27,7 @@ export class NavigationPageHelper extends PageHelper {
         { menu: 'Configuration', component: 'cd-configuration' },
         { menu: 'CRUSH map', component: 'cd-crushmap' },
         { menu: 'Manager Modules', component: 'cd-mgr-module-list' },
+        { menu: 'Users', component: 'cd-crud-table' },
         { menu: 'Logs', component: 'cd-logs' },
         { menu: 'Monitoring', component: 'cd-prometheus-tabs' }
       ]
@@ -60,10 +61,18 @@ export class NavigationPageHelper extends PageHelper {
     navs.forEach((nav: any) => {
       cy.contains('.simplebar-content li.nav-item a', nav.menu).click();
       if (nav.submenus) {
-        this.checkNavigations(nav.submenus);
+        this.checkNavSubMenu(nav.menu, nav.submenus);
       } else {
         cy.get(nav.component).should('exist');
       }
+    });
+  }
+
+  checkNavSubMenu(menu: any, submenu: any) {
+    submenu.forEach((nav: any) => {
+      cy.contains('.simplebar-content li.nav-item', menu).within(() => {
+        cy.contains(`ul.list-unstyled li a`, nav.menu).click();
+      });
     });
   }
 }
