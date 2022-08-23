@@ -1,0 +1,16 @@
+<ng-container *ngIf="meta">
+  <cd-table
+    [data]="data$ | async"
+    [columns]="meta.table.columns"
+    [columnMode]="meta.table.columnMode"
+    [toolHeader]="meta.table.toolHeader"
+  ></cd-table>
+</ng-container>
+
+<ng-template #badgeDictTpl
+             let-value="value">
+  <span *ngFor="let instance of value | keyvalue; last as isLast">
+    <span class="badge badge-background-primary" >{{ instance.key }}: {{ instance.value }}</span>
+    <ng-container *ngIf="!isLast">&nbsp;</ng-container>
+  </span>
+</ng-template>

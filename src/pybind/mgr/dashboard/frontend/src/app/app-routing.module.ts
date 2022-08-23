@@ -37,6 +37,7 @@ import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.c
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
 import { ApiDocsComponent } from './core/navigation/api-docs/api-docs.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
+import { CRUDTableComponent } from './shared/datatable/crud-table/crud-table.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
 import { ChangePasswordGuardService } from './shared/services/change-password-guard.service';
@@ -114,6 +115,14 @@ const routes: Routes = [
             outlet: 'modal'
           }
         ]
+      },
+      {
+        path: 'ceph-users',
+        component: CRUDTableComponent,
+        data: {
+          breadcrumbs: 'Cluster/Users',
+          resource: 'api.cluster.user@1.0'
+        }
       },
       {
         path: 'monitor',
