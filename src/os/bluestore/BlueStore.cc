@@ -6144,6 +6144,41 @@ bool BlueStore::test_mount_in_use()
    2. create db
    3. create BlueStore
 
+
+
+   Elements
+   1. BlueStore basics
+   No distinction between RO/RW.
+      - read / lock fsid
+      - read super meta
+      - open bdev
+   2. BlueFS RO/RW
+   BlueFS must be in RO mode until shared alloc is initialized.
+
+
+   init Base
+--> able to check BlueStore ID
+   open BlueFS RO
+--> able to do some bluefs stuff
+   open DB env
+   open DB RO
+--> able to list keys
+   init freelist
+   init shared alloc
+--> able to do fsck
+-->                                -->
+   upgrade BlueFS RO->RW              open BlueStore RO
+   upgrade DB RO->RW
+--> able to do DB ops
+
+
+BlueEnv:
+- base (0/1)
+- bluefs (0/RO/RW)
+- DB env (0/1)
+- freelist & shared_alloc (0/RO/RW)
+- DB (0/RO/RW)
+- BlueStore (0/RO/RW)
  */
 int BlueStore::_minimal_open_bluefs(bool create)
 {
