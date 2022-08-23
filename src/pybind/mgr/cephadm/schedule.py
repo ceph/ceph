@@ -146,6 +146,8 @@ class HostAssignment(object):
                  unreachable_hosts: List[orchestrator.HostSpec],
                  draining_hosts: List[orchestrator.HostSpec],
                  daemons: List[orchestrator.DaemonDescription],
+                 ports_in_use: Dict[str, List[int]] = {},
+                 required_ports: List[int] = [],
                  networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
                  allow_colo: bool = False,
@@ -162,6 +164,8 @@ class HostAssignment(object):
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
         self.daemons = daemons
+        self.required_ports = required_ports
+        self.ports_in_use = ports_in_use
         self.networks = networks
         self.allow_colo = allow_colo
         self.per_host_daemon_type = per_host_daemon_type
@@ -210,6 +214,11 @@ class HostAssignment(object):
                 raise OrchestratorValidationError(
                     f'Cannot place {self.spec.one_line_str()}: No matching '
                     f'hosts for label {self.spec.placement.label}')
+
+        for p in self.required_ports:
+            for host, ports_in_use in self.ports_in_use.items():
+                if p in ports_in_use:
+                    raise OrchestratorValidationError(f'Port {p} is already in use on host {host}')
 
     def place_per_host_daemons(
             self,

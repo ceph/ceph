@@ -28,7 +28,7 @@ from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     ServiceSpec, PlacementSpec, \
     HostPlacementSpec, IngressSpec, \
-    TunedProfileSpec
+    TunedProfileSpec, RGWSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -2535,6 +2535,22 @@ Then run the following:
 
         return self._apply_service_spec(cast(ServiceSpec, spec))
 
+    def _get_candidate_hosts(self, placement: PlacementSpec) -> List[str]:
+        """Return a list of candidate hosts according to the placement specification."""
+        """Return a list of candidate hosts according to the placement specification."""
+        all_hosts = self.cache.get_schedulable_hosts()
+        draining_hosts = [dh.hostname for dh in self.cache.get_draining_hosts()]
+        candidates = []
+        if placement.hosts:
+            candidates = [h.hostname for h in placement.hosts if h.hostname in placement.hosts]
+        elif placement.label:
+            candidates = [x.hostname for x in [h for h in all_hosts if placement.label in h.labels]]
+        elif placement.host_pattern:
+            candidates = [x for x in placement.filter_matching_hostspecs(all_hosts)]
+        elif (placement.count is not None or placement.count_per_host is not None):
+            candidates = [x.hostname for x in all_hosts]
+        return [h for h in candidates if h not in draining_hosts]
+
     @handle_orch_error
     def apply_tuned_profiles(self, specs: List[TunedProfileSpec], no_overwrite: bool = False) -> str:
         outs = []
@@ -2689,11 +2705,23 @@ Then run the following:
             raise OrchestratorError((f'The maximum count_per_host allowed is {max_count}.'
                                      + ' This limit can be adjusted by changing the mgr/cephadm/max_count_per_host config option'))
 
+        ports_in_use = {}
+        for h in self._get_candidate_hosts(spec.placement):
+            ports_in_use[h] = self.cache.get_facts(h).get('tcp_ports_used', [])
+
+        required_ports = []
+        if spec.service_type == 'rgw':
+            rgw_spec = cast(RGWSpec, spec)
+            if rgw_spec.rgw_frontend_port is not None:
+                required_ports.append(rgw_spec.rgw_frontend_port)
+
         HostAssignment(
             spec=spec,
             hosts=self.inventory.all_specs(),  # All hosts, even those without daemon refresh
             unreachable_hosts=self.cache.get_unreachable_hosts(),
             draining_hosts=self.cache.get_draining_hosts(),
+            ports_in_use=ports_in_use,
+            required_ports=required_ports,
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
             allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
