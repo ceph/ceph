@@ -3292,67 +3292,6 @@ public:
   }
 };
 
-static int search_entities_by_zone(rgw_zone_id zone_id,
-                                   RGWRealm *prealm,
-                                   RGWPeriod *pperiod,
-                                   RGWZoneGroup *pzonegroup,
-                                   bool *pfound)
-{
-  *pfound = false;
-
-  auto& found = *pfound;
-
-  list<string> realms;
-  int r = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->list_realms(dpp(), realms);
-  if (r < 0) {
-    cerr << "failed to list realms: " << cpp_strerror(-r) << std::endl;
-    return r;
-  }
-
-  for (auto& realm_name : realms) {
-    string realm_id;
-    string period_id;
-    RGWRealm realm(realm_id, realm_name);
-    r = realm.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
-    if (r < 0) {
-      cerr << "WARNING: can't open realm " << realm_name << ": " << cpp_strerror(-r) << " ... skipping" << std::endl;
-      continue;
-    }
-    RGWPeriod period;
-    r = realm.find_zone(dpp(), zone_id, pperiod,
-                        pzonegroup, &found, null_yield);
-
-    if (found) {
-      *prealm = realm;
-      break;
-    }
-  }
-
-  return 0;
-}
-
-static int try_to_resolve_local_zone(string& zone_id, string& zone_name)
-{
-  /* try to read zone info */
-  RGWZoneParams zone(zone_id, zone_name);
-  int r = zone.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
-  if (r == -ENOENT) {
-    ldpp_dout(dpp(), 20) << __func__ << "(): local zone not found (id=" << zone_id << ", name= " << zone_name << ")" << dendl;
-    return r;
-  }
-
-  if (r < 0) {
-    ldpp_dout(dpp(), 0) << __func__ << "(): unable to read zone (id=" << zone_id << ", name= " << zone_name << "): " << cpp_strerror(-r) << dendl;
-
-    return r;
-  }
-
-  zone_id = zone.get_id();
-  zone_name = zone.get_name();
-
-  return 0;
-}
-
 static void check_set_consistent(const string& resolved_param,
                                  string& param,
                                  const string& param_name)
@@ -3380,31 +3319,52 @@ static int try_to_resolve_local_entities(string& realm_id, string& realm_name,
    */
 
   ldpp_dout(dpp(), 20) << __func__ << "(): before: realm_id=" << realm_id << " realm_name=" << realm_name << " zonegroup_id=" << zonegroup_id << " zonegroup_name=" << zonegroup_name << " zone_id=" << zone_id << " zone_name=" << zone_name << dendl;
-  int r = try_to_resolve_local_zone(zone_id, zone_name);
+
+  /* try to read zone info */
+  RGWZoneParams zone(zone_id, zone_name);
+  int r = zone.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
   if (r == -ENOENT) {
+    ldpp_dout(dpp(), 20) << __func__ << "(): local zone not found (id=" << zone_id << ", name= " << zone_name << ")" << dendl;
     /* this local zone doesn't exist, abort */
     return 0;
   }
   if (r < 0) {
+    ldpp_dout(dpp(), 0) << __func__ << "(): unable to read zone (id=" << zone_id << ", name= " << zone_name << "): " << cpp_strerror(-r) << dendl;
     return r;
   }
+
+  zone_id = zone.get_id();
+  zone_name = zone.get_name();
 
   if (zone_id.empty()) {
     /* not sure it's possible, but let's abort */
     return 0;
   }
-
-  bool found;
-  RGWRealm realm;
-  RGWPeriod period;
-  RGWZoneGroup zonegroup;
-  r = search_entities_by_zone(zone_id, &realm, &period, &zonegroup, &found);
-  if (r < 0) {
-    ldpp_dout(dpp(), 0) << "ERROR: error when searching for realm id (r=" << r << "), ignoring" << dendl;
-    return r;
+  if (zone.realm_id.empty()) {
+    return 0;
   }
 
+  // load the zone's realm_id and its current period
+  RGWRealm realm(zone.realm_id);
+  r = realm.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
+  if (r < 0) {
+    cerr << "WARNING: can't open zone's realm " << zone.realm_id
+        << ": " << cpp_strerror(-r) << std::endl;
+    return 0;
+  }
+  RGWPeriod period(realm.get_current_period());
+  r = period.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj,
+                  realm.get_id(), null_yield, realm.get_name());
+  if (r < 0) {
+    cerr << "WARNING: can't open period " << realm.get_current_period()
+        << ": " << cpp_strerror(-r) << std::endl;
+    return 0;
+  }
+  // search the period map for this zone/zonegroup
+  RGWZoneGroup zonegroup;
+  const bool found = period.find_zone(dpp(), zone_id, &zonegroup, null_yield);
   if (!found) {
+    cerr << "WARNING: error when searching for zone id (r=" << r << "), ignoring" << std::endl;
     return 0;
   }
 
