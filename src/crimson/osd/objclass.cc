@@ -547,12 +547,16 @@ uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
 int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
 		   const char *cls, const char *method, bufferlist& inbl)
 {
-  return 0;
+  // this and next methods are used to access the OSD's `Objecter`
+  // instance which is used also by the proxy tiering. Currently,
+  // these features are intentionally not supported in crimson.
+  return -EOPNOTSUPP;
 }
 
 int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
 {
-  return 0;
+  // see the comment above
+  return -EOPNOTSUPP;
 }
 
 // although at first glance the implementation looks the same as in
