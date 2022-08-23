@@ -95,7 +95,7 @@ class OSD final : public crimson::net::Dispatcher,
   osd_stat_t osd_stat;
   uint32_t osd_stat_seq = 0;
   void update_stats();
-  MessageURef get_stats() const final;
+  seastar::future<MessageURef> get_stats() const final;
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,
@@ -134,7 +134,7 @@ public:
   seastar::future<> stop();
 
   void dump_status(Formatter*) const;
-  void dump_pg_state_history(Formatter*) const;
+  seastar::future<> dump_pg_state_history(Formatter*) const;
   void print(std::ostream&) const;
 
   seastar::future<> send_incremental_map(crimson::net::ConnectionRef conn,
@@ -213,7 +213,7 @@ private:
   bool should_restart() const;
   seastar::future<> restart();
   seastar::future<> shutdown();
-  void update_heartbeat_peers();
+  seastar::future<> update_heartbeat_peers();
   friend class PGAdvanceMap;
 
 public:
