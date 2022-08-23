@@ -491,6 +491,10 @@ public:
   std::vector<child_tracker_t*> new_pending_trackers;
   bool committed = false;
 
+  RootBlockRef &get_root() {
+    return root;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();

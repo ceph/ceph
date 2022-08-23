@@ -19,6 +19,7 @@
 
 #include "crimson/os/seastore/btree/btree_range_pin.h"
 #include "crimson/os/seastore/btree/fixed_kv_btree.h"
+#include "crimson/os/seastore/root_block.h"
 
 namespace crimson::os::seastore {
 
@@ -83,32 +84,37 @@ struct FixedKVNode : CachedExtent {
   void on_delta_write(paddr_t record_block_offset) final {
     // All in-memory relative addrs are necessarily record-relative
     assert(get_prior_instance());
-    ceph_assert(touched_by);
+    ceph_assert(pending_for_transaction);
     pin.take_pin(get_prior_instance()->template cast<FixedKVNode>()->pin);
     resolve_relative_addrs(record_block_offset);
   }
 
   void on_replace_prior(Transaction &t) final {
-    ceph_assert(touched_by == t.get_trans_id());
+    ceph_assert(pending_for_transaction == t.get_trans_id());
     if (child_trans_view_hook.is_linked()) {
       // change my parent to point to me
       ceph_assert(parent_tracker);
+      child_trans_view_hook.unlink();
       auto parent = parent_tracker->parent;
       ceph_assert(parent);
-      auto tracker = ((FixedKVNode*)parent)->child_trackers[parent_tracker->pos];
-      child_trans_view_hook.unlink();
-      tracker->child = weak_from_this();
+      if (parent->get_type() == extent_types_t::ROOT) {
+	auto parent = parent_tracker->parent;
+	((RootBlock*)parent)->link_root_node<node_key_t>(*this);
+      } else {
+	auto tracker = ((FixedKVNode*)parent)->child_trackers[parent_tracker->pos];
+	tracker->child = weak_from_this();
 
-      auto &parent_child_tvs = ((FixedKVNode*)parent)->child_trans_views;
-      auto &tv_map = parent_child_tvs.views_by_transaction[parent_tracker->pos];
+	auto &parent_child_tvs = ((FixedKVNode*)parent)->child_trans_views;
+	auto &tv_map = parent_child_tvs.views_by_transaction[parent_tracker->pos];
 #ifndef NDEBUG
-      auto it = tv_map->find(touched_by);
-      ceph_assert(it != tv_map->end());
-      ceph_assert(it->second = this);
-      tv_map.reset();
+	auto it = tv_map->find(pending_for_transaction);
+	ceph_assert(it != tv_map->end());
+	ceph_assert(it->second == this);
+	tv_map.reset();
 #else
-      tv_map.reset();
+	tv_map.reset();
 #endif
+      }
 
       parent_tracker.reset();
     }
@@ -122,17 +128,19 @@ struct FixedKVNode : CachedExtent {
 
       auto parent = parent_tracker->parent;
       ceph_assert(parent);
-      auto &parent_child_tvs = ((FixedKVNode*)parent)->child_trans_views;
-      auto &tv_map = parent_child_tvs.views_by_transaction[parent_tracker->pos];
-      // if the invalidation is caused by this extent's prior instance being
-      // replace, tv_map would be empty
-      if (tv_map) {
-	auto it = tv_map->find(touched_by);
-	if (it != tv_map->end()) {
-	  ceph_assert(it->second = this);
-	  tv_map->erase(it);
-	  if (tv_map->empty()) {
-	    tv_map.reset();
+      if (parent->get_type() != extent_types_t::ROOT) {
+	auto &parent_child_tvs = ((FixedKVNode*)parent)->child_trans_views;
+	auto &tv_map = parent_child_tvs.views_by_transaction[parent_tracker->pos];
+	// if the invalidation is caused by this extent's prior instance being
+	// replace, tv_map would be empty
+	if (tv_map) {
+	  auto it = tv_map->find(pending_for_transaction);
+	  if (it != tv_map->end()) {
+	    ceph_assert(it->second = this);
+	    tv_map->erase(it);
+	    if (tv_map->empty()) {
+	      tv_map.reset();
+	    }
 	  }
 	}
       }
@@ -905,6 +913,7 @@ struct FixedKVLeafNode
   using base_t = FixedKVNode<NODE_KEY>;
   using base_ref = typename base_t::FixedKVNodeRef;
   using Ref = TCachedExtentRef<node_type_t>;
+  using act_type_t = node_type_t;
   using node_layout_t =
     common::FixedKVNodeLayout<
       CAPACITY,

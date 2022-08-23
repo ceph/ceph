@@ -76,7 +76,7 @@ struct child_trans_views_t {
   child_trans_views_t(size_t capacity)
     : views_by_transaction(capacity, std::nullopt) {}
 
-  CachedExtent::trans_view_set_t trans_views;
+  CachedExtent::trans_view_mset_t trans_views;
   std::vector<std::optional<std::map<transaction_id_t, CachedExtent*>>>
   views_by_transaction;
 

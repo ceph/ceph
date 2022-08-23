@@ -143,7 +143,12 @@ struct trans_spec_view_t {
       trans_spec_view_t,
       trans_view_hook_t,
       &trans_spec_view_t::child_trans_view_hook>;
-  using trans_view_set_t = boost::intrusive::multiset<
+  using trans_view_mset_t = boost::intrusive::multiset<
+    trans_spec_view_t,
+    trans_view_member_options,
+    boost::intrusive::constant_time_size<false>,
+    boost::intrusive::compare<cmp_t>>;
+  using trans_view_set_t = boost::intrusive::set<
     trans_spec_view_t,
     trans_view_member_options,
     boost::intrusive::constant_time_size<false>,
