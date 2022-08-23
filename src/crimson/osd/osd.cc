@@ -94,10 +94,14 @@ OSD::OSD(int id, uint32_t nonce,
       *public_msgr, *monc, *mgrc, store},
     shard_services{pg_shard_manager.get_shard_services()},
     heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
-    // do this in background
+    // do this in background -- continuation rearms timer when complete
     tick_timer{[this] {
-      update_heartbeat_peers();
-      update_stats();
+      std::ignore = update_heartbeat_peers(
+      ).then([this] {
+	update_stats();
+	tick_timer.arm(
+	  std::chrono::seconds(TICK_INTERVAL));
+      });
     }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
     log_client(cluster_msgr.get(), LogClient::NO_FLAGS),
@@ -656,18 +660,19 @@ void OSD::dump_status(Formatter* f) const
   f->dump_unsigned("num_pgs", pg_shard_manager.get_num_pgs());
 }
 
-void OSD::dump_pg_state_history(Formatter* f) const
+seastar::future<> OSD::dump_pg_state_history(Formatter* f) const
 {
   f->open_array_section("pgs");
-  pg_shard_manager.for_each_pg([f](auto &pgid, auto &pg) {
+  return pg_shard_manager.for_each_pg([f](auto &pgid, auto &pg) {
     f->open_object_section("pg");
     f->dump_stream("pg") << pgid;
     const auto& peering_state = pg->get_peering_state();
     f->dump_string("currently", peering_state.get_current_state());
     peering_state.dump_history(f);
     f->close_section();
+  }).then([f] {
+    f->close_section();
   });
-  f->close_section();
 }
 
 void OSD::print(std::ostream& out) const
@@ -809,13 +814,16 @@ void OSD::update_stats()
   });
 }
 
-MessageURef OSD::get_stats() const
+seastar::future<MessageURef> OSD::get_stats() const
 {
   // MPGStats::had_map_for is not used since PGMonitor was removed
   auto m = crimson::make_message<MPGStats>(monc->get_fsid(), osdmap->get_epoch());
   m->osd_stat = osd_stat;
-  m->pg_stat = pg_shard_manager.get_pg_stats();
-  return m;
+  return pg_shard_manager.get_pg_stats(
+  ).then([m=std::move(m)](auto &&stats) mutable {
+    m->pg_stat = std::move(stats);
+    return seastar::make_ready_future<MessageURef>(std::move(m));
+  });
 }
 
 uint64_t OSD::send_pg_stats()
@@ -949,7 +957,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
         pg_shard_manager.set_active();
         beacon_timer.arm_periodic(
           std::chrono::seconds(local_conf()->osd_beacon_report_interval));
-        tick_timer.arm_periodic(
+	// timer continuation rearms when complete
+        tick_timer.arm(
           std::chrono::seconds(TICK_INTERVAL));
       }
     } else {
@@ -1174,13 +1183,13 @@ seastar::future<> OSD::send_beacon()
   return monc->send_message(std::move(m));
 }
 
-void OSD::update_heartbeat_peers()
+seastar::future<> OSD::update_heartbeat_peers()
 {
   if (!pg_shard_manager.is_active()) {
-    return;
+    return seastar::now();;
   }
 
-  pg_shard_manager.for_each_pg([this](auto &pgid, auto &pg) {
+  return pg_shard_manager.for_each_pg([this](auto &pgid, auto &pg) {
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(pgid.pgid,
                                  &up, nullptr,
@@ -1192,8 +1201,9 @@ void OSD::update_heartbeat_peers()
         heartbeat->add_peer(osd, osdmap->get_epoch());
       }
     }
+  }).then([this] {
+    heartbeat->update_peers(whoami);
   });
-  heartbeat->update_peers(whoami);
 }
 
 seastar::future<> OSD::handle_peering_op(

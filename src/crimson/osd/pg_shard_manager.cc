@@ -69,9 +69,11 @@ seastar::future<> PGShardManager::stop_pgs()
   return local_state.stop_pgs();
 }
 
-std::map<pg_t, pg_stat_t> PGShardManager::get_pg_stats() const
+seastar::future<std::map<pg_t, pg_stat_t>>
+PGShardManager::get_pg_stats() const
 {
-  return local_state.get_pg_stats();
+  return seastar::make_ready_future<std::map<pg_t, pg_stat_t>>(
+    local_state.get_pg_stats());
 }
 
 seastar::future<> PGShardManager::broadcast_map_to_pgs(epoch_t epoch)

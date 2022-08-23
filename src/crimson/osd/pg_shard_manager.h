@@ -170,13 +170,20 @@ public:
   seastar::future<> load_pgs();
   seastar::future<> stop_pgs();
 
-  std::map<pg_t, pg_stat_t> get_pg_stats() const;
+  seastar::future<std::map<pg_t, pg_stat_t>> get_pg_stats() const;
 
+  /**
+   * for_each_pg
+   *
+   * Invokes f on each pg sequentially.  Caller may rely on f not being
+   * invoked concurrently on multiple cores.
+   */
   template <typename F>
-  void for_each_pg(F &&f) const {
+  seastar::future<> for_each_pg(F &&f) const {
     for (auto &&pg: local_state.pg_map.get_pgs()) {
       std::apply(f, pg);
     }
+    return seastar::now();
   }
 
   auto get_num_pgs() const {
