@@ -513,16 +513,38 @@
         },
         {
           alert: 'CephNodeNetworkPacketDrops',
-          expr: '(  increase(node_network_receive_drop_total{device!="lo"}[1m]) +  increase(node_network_transmit_drop_total{device!="lo"}[1m])) / (  increase(node_network_receive_packets_total{device!="lo"}[1m]) +  increase(node_network_transmit_packets_total{device!="lo"}[1m])) >= 0.0001 or (  increase(node_network_receive_drop_total{device!="lo"}[1m]) +  increase(node_network_transmit_drop_total{device!="lo"}[1m])) >= 10',
+          expr: |||
+            (
+              rate(node_network_receive_drop_total{device!="lo"}[1m]) +
+              rate(node_network_transmit_drop_total{device!="lo"}[1m])
+            ) / (
+              rate(node_network_receive_packets_total{device!="lo"}[1m]) +
+              rate(node_network_transmit_packets_total{device!="lo"}[1m])
+            ) >= %(CephNodeNetworkPacketDropsThreshold)s and (
+              rate(node_network_receive_drop_total{device!="lo"}[1m]) +
+              rate(node_network_transmit_drop_total{device!="lo"}[1m])
+            ) >= %(CephNodeNetworkPacketDropsPerSec)s
+          ||| % $._config,
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.8.2' },
           annotations: {
             summary: 'One or more NICs reports packet drops%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Node {{ $labels.instance }} experiences packet drop > 0.01% or > 10 packets/s on interface {{ $labels.device }}.',
+            description: 'Node {{ $labels.instance }} experiences packet drop > %(CephNodeNetworkPacketDropsThreshold)s%% or > %(CephNodeNetworkPacketDropsPerSec)s packets/s on interface {{ $labels.device }}.' % { CephNodeNetworkPacketDropsThreshold: $._config.CephNodeNetworkPacketDropsThreshold * 100, CephNodeNetworkPacketDropsPerSec: $._config.CephNodeNetworkPacketDropsPerSec },
           },
         },
         {
           alert: 'CephNodeNetworkPacketErrors',
-          expr: '(  increase(node_network_receive_errs_total{device!="lo"}[1m]) +  increase(node_network_transmit_errs_total{device!="lo"}[1m])) / (  increase(node_network_receive_packets_total{device!="lo"}[1m]) +  increase(node_network_transmit_packets_total{device!="lo"}[1m])) >= 0.0001 or (  increase(node_network_receive_errs_total{device!="lo"}[1m]) +  increase(node_network_transmit_errs_total{device!="lo"}[1m])) >= 10',
+          expr: |||
+            (
+              rate(node_network_receive_errs_total{device!="lo"}[1m]) +
+              rate(node_network_transmit_errs_total{device!="lo"}[1m])
+            ) / (
+              rate(node_network_receive_packets_total{device!="lo"}[1m]) +
+              rate(node_network_transmit_packets_total{device!="lo"}[1m])
+            ) >= 0.0001 or (
+              rate(node_network_receive_errs_total{device!="lo"}[1m]) +
+              rate(node_network_transmit_errs_total{device!="lo"}[1m])
+            ) >= 10
+          |||,
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.8.3' },
           annotations: {
             summary: 'One or more NICs reports packet errors%(cluster)s' % $.MultiClusterSummary(),
