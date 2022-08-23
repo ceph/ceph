@@ -147,7 +147,8 @@ public:
   remove_iertr::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn,
-    object_stat_sum_t& delta_stats);
+    object_stat_sum_t& delta_stats,
+    bool whiteout);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -260,6 +261,11 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
+  void clone(
+    object_info_t& snap_oi,
+    ObjectState& os,
+    ObjectState& d_os,
+    ceph::os::Transaction& trans);
   interruptible_future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
@@ -354,7 +360,7 @@ protected:
 public:
   struct loaded_object_md_t {
     ObjectState os;
-    std::optional<SnapSet> ss;
+    crimson::osd::SnapSetContextRef ssc;
     using ref = std::unique_ptr<loaded_object_md_t>;
   };
   load_metadata_iertr::future<loaded_object_md_t::ref>
