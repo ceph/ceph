@@ -2723,14 +2723,11 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
   exproto->pre_auth.enabled = false;
 
   if (!reconnecting) {
-    exproto->peer_supported_features = peer_supported_features;
-    exproto->tx_frame_asm.set_is_rev1(tx_frame_asm.get_is_rev1());
-    exproto->rx_frame_asm.set_is_rev1(rx_frame_asm.get_is_rev1());
-
     exproto->client_cookie = client_cookie;
     exproto->peer_name = peer_name;
     exproto->connection_features = connection_features;
     existing->set_features(connection_features);
+    exproto->peer_supported_features = peer_supported_features;
   }
   exproto->peer_global_seq = peer_global_seq;
 
@@ -2773,6 +2770,9 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
         new_worker,
         new_center,
         exproto,
+        reconnecting=reconnecting,
+        tx_is_rev1=tx_frame_asm.get_is_rev1(),
+        rx_is_rev1=rx_frame_asm.get_is_rev1(),
         temp_stream_handlers=std::move(temp_stream_handlers),
         temp_compression_handlers=std::move(temp_compression_handlers)
       ](ConnectedSocket &cs) mutable {
@@ -2790,6 +2790,10 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
           existing->open_write = false;
           exproto->session_stream_handlers = std::move(temp_stream_handlers);
           exproto->session_compression_handlers = std::move(temp_compression_handlers);
+          if (!reconnecting) {
+            exproto->tx_frame_asm.set_is_rev1(tx_is_rev1);
+            exproto->rx_frame_asm.set_is_rev1(rx_is_rev1);
+          }
           existing->write_lock.unlock();
           if (exproto->state == NONE) {
             existing->shutdown_socket();
