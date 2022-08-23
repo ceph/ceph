@@ -204,7 +204,7 @@ void RGWObjectCtx::set_prefetch_data(const rgw_obj& obj) {
   objs_state[obj].state.prefetch_data = true;
 }
 
-void RGWObjectCtx::invalidate(const rgw::sal::Object* obj) {
+void RGWObjectCtx::invalidate(const rgw_obj& obj) {
   std::unique_lock wl{lock};
   auto iter = objs_state.find(obj);
   if (iter == objs_state.end()) {
@@ -974,6 +974,14 @@ complete_op_data* RGWIndexCompletionManager::create_completion(
   std::lock_guard l{locks[shard_id]};
   const auto ok = completions[shard_id].insert(entry).second;
   ceph_assert(ok);
+}
+
+void RGWIndexCompletionManager::add_completion(complete_op_data *completion) {
+  {
+    std::lock_guard l{retry_completions_lock};
+    retry_completions.push_back(completion);
+  }
+  cond.notify_all();
 }
 
 bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_data *arg)
@@ -7481,7 +7489,7 @@ static int decode_olh_info(const DoutPrefixProvider *dpp, CephContext* cct, cons
 template <class BILogHandlerT>
 int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
                             RGWObjState& state,
-                            const RGWBucketInfo& bucket_info,
+                            RGWBucketInfo& bucket_info,
                             const rgw::sal::Object* obj,
                             bufferlist& olh_tag,
                             std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,

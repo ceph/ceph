@@ -206,7 +206,7 @@ public:
   void set_compressed(const rgw_obj& obj);
   void set_atomic(rgw_obj& obj);
   void set_prefetch_data(const rgw_obj& obj);
-  void invalidate(const rgw::sal::Object& obj);
+  void invalidate(const rgw_obj& obj);
 };
 
 
