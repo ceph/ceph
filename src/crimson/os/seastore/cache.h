@@ -26,7 +26,6 @@ class BtreeBackrefManager;
 namespace crimson::os::seastore {
 
 class BackrefManager;
-class AsyncCleaner;
 class SegmentProvider;
 
 struct backref_entry_t {
@@ -712,8 +711,7 @@ public:
   void complete_commit(
     Transaction &t,            ///< [in, out] current transaction
     paddr_t final_block_start, ///< [in] offset of initial block
-    journal_seq_t seq,         ///< [in] journal commit seq
-    AsyncCleaner *cleaner=nullptr ///< [out] optional segment stat listener
+    journal_seq_t seq          ///< [in] journal commit seq
   );
 
   /**

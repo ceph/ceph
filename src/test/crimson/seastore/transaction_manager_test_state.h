@@ -6,8 +6,8 @@
 #include <random>
 #include <boost/iterator/counting_iterator.hpp>
 
-#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
@@ -39,32 +39,38 @@ protected:
   }
 
   virtual void _init() = 0;
-  void init() {
-    _init();
-  }
 
   virtual void _destroy() = 0;
-  void destroy() {
-    _destroy();
+  virtual seastar::future<> _teardown() = 0;
+  seastar::future<> teardown() {
+    return _teardown().then([this] {
+      _destroy();
+    });
   }
 
-  virtual seastar::future<> _teardown() = 0;
+
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() = 0;
   virtual FuturizedStore::mount_ertr::future<> _mount() = 0;
 
-  void restart() {
-    LOG_PREFIX(EphemeralTestState::restart);
+  seastar::future<> restart_fut() {
+    LOG_PREFIX(EphemeralTestState::restart_fut);
     SUBINFO(test, "begin ...");
-    _teardown().get0();
-    destroy();
-    segment_manager->remount();
-    for (auto &sec_sm : secondary_segment_managers) {
-      sec_sm->remount();
-    }
-    init();
-    _mount().handle_error(crimson::ct_error::assert_all{}).get0();
-    SUBINFO(test, "finish");
+    return teardown().then([this] {
+      segment_manager->remount();
+      for (auto &sec_sm : secondary_segment_managers) {
+        sec_sm->remount();
+      }
+      _init();
+      return _mount().handle_error(crimson::ct_error::assert_all{});
+    }).then([FNAME] {
+      SUBINFO(test, "finish");
+    });
   }
+
+  void restart() {
+    restart_fut().get0();
+  }
+
   seastar::future<> segment_setup()
   {
     LOG_PREFIX(EphemeralTestState::segment_setup);
@@ -96,28 +102,18 @@ protected:
             segment_manager::get_ephemeral_device_config(cnt, get_num_devices()));
         });
       });
-    }).safe_then([this, FNAME] {
-      init();
-      return _mkfs(
-      ).safe_then([this] {
-	return _teardown();
-      }).safe_then([this] {
-	destroy();
-	segment_manager->remount();
-	for (auto &sec_sm : secondary_segment_managers) {
-	  sec_sm->remount();
-	}
-	init();
-	return _mount();
-      }).handle_error(
-	crimson::ct_error::assert_all{}
-      ).then([FNAME] {
-	SUBINFO(test, "finish");
-      });
+    }).safe_then([this] {
+      _init();
+      return _mkfs();
+    }).safe_then([this] {
+      return restart_fut();
     }).handle_error(
       crimson::ct_error::assert_all{}
-    );
+    ).then([FNAME] {
+      SUBINFO(test, "finish");
+    });
   }
+
   seastar::future<> randomblock_setup()
   {
     auto config =
@@ -148,7 +144,7 @@ protected:
   seastar::future<> tm_teardown() {
     LOG_PREFIX(EphemeralTestState::tm_teardown);
     SUBINFO(test, "begin");
-    return _teardown().then([this, FNAME] {
+    return teardown().then([this, FNAME] {
       segment_manager.reset();
       for (auto &sec_sm : secondary_segment_managers) {
         sec_sm.reset();
@@ -163,9 +159,8 @@ class TMTestState : public EphemeralTestState {
 protected:
   TransactionManagerRef tm;
   LBAManager *lba_manager;
-  BackrefManager *backref_manager;
   Cache* cache;
-  AsyncCleaner *async_cleaner;
+  ExtentPlacementManager *epm;
   uint64_t seq = 0;
 
   TMTestState() : EphemeralTestState(1) {}
@@ -185,15 +180,15 @@ protected:
     } else {
       tm = make_transaction_manager(segment_manager.get(), sec_devices, true);
     }
-    async_cleaner = tm->get_async_cleaner();
+    epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
-    backref_manager = tm->get_backref_manager();
     cache = tm->get_cache();
   }
 
   virtual void _destroy() override {
-    async_cleaner = nullptr;
+    epm = nullptr;
     lba_manager = nullptr;
+    cache = nullptr;
     tm.reset();
   }
 
@@ -211,9 +206,9 @@ protected:
     ).handle_error(
       crimson::ct_error::assert_all{"Error in mount"}
     ).then([this] {
-      return async_cleaner->stop();
+      return epm->stop_gc();
     }).then([this] {
-      return async_cleaner->run_until_halt();
+      return epm->run_background_work_until_halt();
     });
   }
 
@@ -278,7 +273,7 @@ protected:
 
   void submit_transaction(TransactionRef t) {
     submit_transaction_fut(*t).unsafe_get0();
-    async_cleaner->run_until_halt().get0();
+    epm->run_background_work_until_halt().get0();
   }
 };
 
@@ -389,9 +384,7 @@ protected:
   }
 
   virtual seastar::future<> _teardown() final {
-    return seastore->umount().then([this] {
-      seastore.reset();
-    });
+    return seastore->umount();
   }
 
   virtual FuturizedStore::mount_ertr::future<> _mount() final {
