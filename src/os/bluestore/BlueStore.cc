@@ -4009,7 +4009,12 @@ bool BlueStore::test_mount_in_use()
   return ret;
 }
 
-int BlueStore::_minimal_open_bluefs(bool create)
+/**
+ * Creates bluefs, adds relevant block devices:
+ * "block" "block.db" "block.wal"
+ * Configures bluefs_layout.
+ */
+int BlueStore::_prepare_bluefs_devices(bool create)
 {
   int r;
   bluefs = new BlueFS(cct);
@@ -4150,15 +4155,11 @@ int BlueStore::_create_bluefs_vselector(BlueFSVolumeSelector* &vselector)
   return r;
 }
 
-int BlueStore::_open_bluefs(bool create, bool read_only)
+int BlueStore::_open_bluefs(bool read_only)
 {
-  ceph_assert(!(create && read_only)); // can't have create and read_only at the same time
-  int r = _minimal_open_bluefs(create);
+  int r = _prepare_bluefs_devices(false);
   if (r < 0) {
     return r;
-  }
-  if (create) {
-    bluefs->mkfs(fsid, bluefs_layout);
   }
   BlueFSVolumeSelector* vselector = nullptr;
   r = _create_bluefs_vselector(vselector);
@@ -4168,6 +4169,27 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
   }
   bluefs->set_volume_selector(vselector);
   r = bluefs->mount(read_only);
+  if (r >= 0) {
+    ceph_assert_always(bluefs->maybe_verify_layout(bluefs_layout) == 0);
+  }
+  return r;
+}
+
+int BlueStore::_create_bluefs()
+{
+  int r = _prepare_bluefs_devices(true);
+  if (r < 0) {
+    return r;
+  }
+  bluefs->mkfs(fsid, bluefs_layout);
+  BlueFSVolumeSelector* vselector = nullptr;
+  r = _create_bluefs_vselector(vselector);
+  if (r < 0) {
+    derr << __func__ << " failed to create vselector: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  bluefs->set_volume_selector(vselector);
+  r = bluefs->mount(false);
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
   }
@@ -4398,8 +4420,10 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
       derr << " backend must be rocksdb to use bluefs" << dendl;
       return -EINVAL;
     }
-
-    r = _open_bluefs(create, read_only);
+    if (create)
+      r = _create_bluefs();
+    else
+      r = _open_bluefs(read_only);
     if (r < 0) {
       return r;
     }
@@ -4671,7 +4695,7 @@ KeyValueDB* BlueStore::get_db()
 int BlueStore::open_bluefs(bool read_only)
 {
   dout(5) << __func__ << " mode=" << (read_only ? "RO" : "RW") << dendl;
-  int r = _open_bluefs(false, read_only);
+  int r = _open_bluefs(read_only);
   return r;
 }
 
@@ -8742,7 +8766,7 @@ int BlueStore::get_devices(set<string> *ls)
   auto close_bdev = make_scope_guard([&] {
     _close_bdev();
   });
-  if (int r = _minimal_open_bluefs(false); r < 0) {
+  if (int r = _prepare_bluefs_devices(false); r < 0) {
     return r;
   }
   bdev->get_devices(ls);
