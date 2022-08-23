@@ -22,6 +22,8 @@ overrides:
         osd blocked scrub grace period: 3600
 tasks:
 - workunit:
+    env:
+      CRIMSON_COMPAT: "true"
     clients:
       client.0:
         - rados/test.sh
