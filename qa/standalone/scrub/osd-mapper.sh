@@ -49,7 +49,7 @@ function TEST_truncated_sna_record() {
         ['pool_name']="test"
     )
 
-    local extr_dbg=1
+    local extr_dbg=3
     (( extr_dbg > 1 )) && echo "Dir: $dir"
     standard_scrub_cluster $dir cluster_conf
     ceph tell osd.* config set osd_stats_update_period_not_scrubbing "1"
@@ -100,6 +100,8 @@ function TEST_truncated_sna_record() {
     (( extr_dbg >= 2 )) && ceph-kvstore-tool bluestore-kv $dir/2 dump "p" | grep -a SNA_
     (( extr_dbg >= 2 )) && grep -a SNA_ /tmp/oo2.dump
     (( extr_dbg >= 2 )) && ceph-kvstore-tool bluestore-kv $dir/2 dump p 2> /dev/null
+    local num_sna_b4=`ceph-kvstore-tool bluestore-kv $dir/$osd dump p 2> /dev/null | grep -a -e 'SNA_[0-9]_000000000000000[0-9]_000000000000000' \
+            | awk -e '{print $2;}' | wc -l`
 
     for sdn in $(seq 0 $(expr $osdn - 1))
     do
@@ -137,6 +139,7 @@ function TEST_truncated_sna_record() {
     do
       timeout 60 ceph tell osd.$sdn version
     done
+    rados --format json-pretty -p $poolname listsnaps $objname
 
     # when scrubbing now - we expect the scrub to emit a cluster log ERR message regarding SnapMapper internal inconsistency
     ceph osd unset nodeep-scrub || return 1
@@ -151,8 +154,29 @@ function TEST_truncated_sna_record() {
     ceph pg dump pgs
     (( extr_dbg >= 1 )) && grep -a "ERR" $dir/osd.$cur_prim.log
     grep -a -q "ERR" $dir/osd.$cur_prim.log || return 1
-}
 
+    # but did we fix the snap issue? let's try scrubbing again
+
+    local prev_err_cnt=`grep -a "ERR" $dir/osd.$cur_prim.log | wc -l`
+    echo "prev count: $prev_err_cnt"
+
+    # scrub again. No errors expected this time
+    ceph pg $pgid deep_scrub || return 1
+    sleep 5
+    ceph pg dump pgs
+    (( extr_dbg >= 1 )) && grep -a "ERR" $dir/osd.$cur_prim.log
+    local current_err_cnt=`grep -a "ERR" $dir/osd.$cur_prim.log | wc -l`
+    (( extr_dbg >= 1 )) && echo "current count: $current_err_cnt"
+    (( current_err_cnt == prev_err_cnt )) || return 1
+    kill_daemons $dir TERM osd || return 1
+    kvdir=$dir/$cur_prim
+    (( extr_dbg >= 2 )) && ceph-kvstore-tool bluestore-kv $kvdir dump p 2> /dev/null | grep -a -e 'SNA_[0-9]_' \
+            | awk -e '{print $2;}'
+    local num_sna_full=`ceph-kvstore-tool bluestore-kv $kvdir dump p 2> /dev/null | grep -a -e 'SNA_[0-9]_000000000000000[0-9]_000000000000000' \
+            | awk -e '{print $2;}' | wc -l`
+    (( num_sna_full == num_sna_b4 )) || return 1
+    return 0
+}
 
 
 main osd-mapper "$@"
