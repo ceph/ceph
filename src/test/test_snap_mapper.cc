@@ -496,6 +496,21 @@ public:
     }
   }
 
+  std::pair<std::string, ceph::buffer::list> to_raw(
+    const std::pair<snapid_t, hobject_t> &to_map) {
+    return mapper->to_raw(to_map);
+  }
+
+  std::string to_legacy_raw_key(
+    const std::pair<snapid_t, hobject_t> &to_map) {
+    return mapper->to_legacy_raw_key(to_map);
+  }
+
+  std::string to_raw_key(
+    const std::pair<snapid_t, hobject_t> &to_map) {
+    return mapper->to_raw_key(to_map);
+  }
+
   void trim_snap() {
     std::lock_guard l{lock};
     if (snap_to_hobject.empty())
@@ -652,3 +667,19 @@ TEST_F(SnapMapperTest, MultiPG) {
   init(50);
   run();
 }
+
+TEST_F(SnapMapperTest, LegacyKeyConvertion) {
+    init(1);
+    auto obj = get_tester().random_hobject();
+    snapid_t snapid = random() % 10;
+    auto snap_obj = make_pair(snapid, obj);
+    auto raw = get_tester().to_raw(snap_obj);
+    std::string old_key = get_tester().to_legacy_raw_key(snap_obj);
+    std::string converted_key =
+      SnapMapper::convert_legacy_key(old_key, raw.second);
+    std::string new_key = get_tester().to_raw_key(snap_obj);
+    std::cout << "Converted: " << old_key << "\nTo:        " << converted_key
+	      << "\nNew key:   " << new_key << std::endl;
+    ASSERT_EQ(converted_key, new_key);
+}
+
