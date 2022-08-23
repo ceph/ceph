@@ -119,6 +119,9 @@ public:
   virtual int merge_and_store_attrs(const DoutPrefixProvider *dpp, rgw::sal::Attrs& attrs, optional_yield y) override {
     return 0;
   }
+  virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) override {
+    return 0;
+  }
   virtual ~TestUser() = default;
 };
 

@@ -65,18 +65,27 @@ int FilterZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
   return 0;
 }
 
-int FilterZone::get_zonegroup(const std::string& id,
-			      std::unique_ptr<ZoneGroup>* zonegroup)
+int FilterZoneGroup::get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone)
 {
-  std::unique_ptr<ZoneGroup> ngz;
-  int ret;
-
-  ret = next->get_zonegroup(id, &ngz);
-  if (ret != 0)
+  std::unique_ptr<Zone> nz;
+  int ret = next->get_zone_by_id(id, &nz);
+  if (ret < 0)
     return ret;
+  Zone *z = new FilterZone(std::move(nz));
 
-  ZoneGroup* zg = new FilterZoneGroup(std::move(ngz));
-  zonegroup->reset(zg);
+  zone->reset(z);
+  return 0;
+}
+
+int FilterZoneGroup::get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone)
+{
+  std::unique_ptr<Zone> nz;
+  int ret = next->get_zone_by_name(name, &nz);
+  if (ret < 0)
+    return ret;
+  Zone *z = new FilterZone(std::move(nz));
+
+  zone->reset(z);
   return 0;
 }
 
@@ -230,6 +239,21 @@ std::string FilterStore::zone_unique_id(uint64_t unique_num)
 std::string FilterStore::zone_unique_trans_id(uint64_t unique_num)
 {
   return next->zone_unique_trans_id(unique_num);
+}
+
+int FilterStore::get_zonegroup(const std::string& id,
+			       std::unique_ptr<ZoneGroup>* zonegroup)
+{
+  std::unique_ptr<ZoneGroup> ngz;
+  int ret;
+
+  ret = next->get_zonegroup(id, &ngz);
+  if (ret != 0)
+    return ret;
+
+  ZoneGroup* zg = new FilterZoneGroup(std::move(ngz));
+  zonegroup->reset(zg);
+  return 0;
 }
 
 int FilterStore::cluster_stat(RGWClusterStat& stats)
@@ -634,6 +658,12 @@ int FilterUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool
 int FilterUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
   return next->remove_user(dpp, y);
+}
+
+int FilterUser::verify_mfa(const std::string& mfa_str, bool* verified,
+			   const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return next->verify_mfa(mfa_str, verified, dpp, y);
 }
 
 std::unique_ptr<Object> FilterBucket::get_object(const rgw_obj_key& k)

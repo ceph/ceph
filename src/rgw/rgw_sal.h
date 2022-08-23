@@ -25,15 +25,9 @@
 
 class RGWAccessListFilter;
 class RGWLC;
-class RGWObjManifest;
-struct RGWZoneGroup;
-struct RGWZoneParams;
-class RGWRealm;
-struct RGWCtl;
 struct rgw_user_bucket;
 class RGWUsageBatch;
 class RGWCoroutinesManagerRegistry;
-class RGWListRawObjsCtx;
 class RGWBucketSyncPolicyHandler;
 using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler>;
 class RGWDataSyncStatusManager;
@@ -320,6 +314,8 @@ class Store {
     virtual std::string zone_unique_id(uint64_t unique_num) = 0;
     /** Get a unique Swift transaction ID specific to this zone */
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) = 0;
+    /** Lookup a zonegroup by ID */
+    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) = 0;
     /** Get statistics about the cluster represented by this Store */
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
@@ -554,6 +550,8 @@ class User {
     virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) = 0;
     /** Remove this User from the backing store */
     virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    /** Verify multi-factor authentication for this user */
+    virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
     /* dang temporary; will be removed when User is complete */
     virtual RGWUserInfo& get_info() = 0;
@@ -1465,6 +1463,10 @@ public:
   virtual int get_zone_count() const = 0;
   /** Get the placement tier associated with the rule */
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier) = 0;
+  /** Get a zone by ID */
+  virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) = 0;
+  /** Get a zone by Name */
+  virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) = 0;
   /** Clone a copy of this zonegroup. */
   virtual std::unique_ptr<ZoneGroup> clone() = 0;
 };
@@ -1483,10 +1485,8 @@ class Zone {
     virtual std::unique_ptr<Zone> clone() = 0;
     /** Get info about the zonegroup containing this zone */
     virtual ZoneGroup& get_zonegroup() = 0;
-    /** Get info about a zonegroup by ID */
-    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) = 0;
     /** Get the ID of this zone */
-    virtual const rgw_zone_id& get_id() = 0;
+    virtual const std::string& get_id() = 0;
     /** Get the name of this zone */
     virtual const std::string& get_name() const = 0;
     /** True if this zone is writable */

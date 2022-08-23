@@ -449,6 +449,12 @@ int MotrUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
   return 0;
 }
 
+int MotrUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider *dpp, optional_yield y)
+{
+  *verified = false;
+  return 0;
+}
+
 int MotrBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y)
 {
   int ret;
@@ -899,19 +905,9 @@ ZoneGroup& MotrZone::get_zonegroup()
   return zonegroup;
 }
 
-int MotrZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* group)
+const std::string& MotrZone::get_id()
 {
-  /* XXX: for now only one zonegroup supported */
-  ZoneGroup* zg;
-  zg = new MotrZoneGroup(store, zonegroup.get_group());
-
-  group->reset(zg);
-  return 0;
-}
-
-const rgw_zone_id& MotrZone::get_id()
-{
-  return cur_zone_id;
+  return zone_params->get_id();
 }
 
 const std::string& MotrZone::get_name() const
@@ -1122,18 +1118,6 @@ int MotrObject::transition(Bucket* bucket,
     uint64_t olh_epoch,
     const DoutPrefixProvider* dpp,
     optional_yield y)
-{
-  return 0;
-}
-
-int MotrObject::transition_to_cloud(Bucket* bucket,
-			   rgw::sal::PlacementTier* tier,
-			   rgw_bucket_dir_entry& o,
-			   std::set<std::string>& cloud_targets,
-			   CephContext* cct,
-			   bool update_object,
-			   const DoutPrefixProvider* dpp,
-			   optional_yield y)
 {
   return 0;
 }
@@ -2953,6 +2937,16 @@ std::string MotrStore::zone_unique_id(uint64_t unique_num)
 std::string MotrStore::zone_unique_trans_id(const uint64_t unique_num)
 {
   return "";
+}
+
+int MotrStore::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* group)
+{
+  /* XXX: for now only one zonegroup supported */
+  ZoneGroup* zg;
+  zg = new MotrZoneGroup(this, zone.zonegroup.get_group());
+
+  group->reset(zg);
+  return 0;
 }
 
 int MotrStore::cluster_stat(RGWClusterStat& stats)

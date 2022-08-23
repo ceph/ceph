@@ -42,6 +42,7 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
+#include "services/svc_cls.h"
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
 #include "services/svc_quota.h"
@@ -354,6 +355,37 @@ int RadosUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
     return store->ctl()->user->remove_info(dpp, info, y,
 					  RGWUserCtl::RemoveParams().set_objv_tracker(&objv_tracker));
+}
+
+int RadosUser::verify_mfa(const std::string& mfa_str, bool* verified,
+			  const DoutPrefixProvider* dpp, optional_yield y)
+{
+  vector<string> params;
+  get_str_vec(mfa_str, " ", params);
+
+  if (params.size() != 2) {
+    ldpp_dout(dpp, 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;
+    return -EINVAL;
+  }
+
+  string& serial = params[0];
+  string& pin = params[1];
+
+  auto i = info.mfa_ids.find(serial);
+  if (i == info.mfa_ids.end()) {
+    ldpp_dout(dpp, 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
+    return -EACCES;
+  }
+
+  int ret = store->svc()->cls->mfa.check_mfa(dpp, info.user_id, serial, pin, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
+    return -EACCES;
+  }
+
+  *verified = true;
+
+  return 0;
 }
 
 RadosBucket::~RadosBucket() {}
@@ -1181,6 +1213,23 @@ std::string RadosStore::zone_unique_id(uint64_t unique_num)
 std::string RadosStore::zone_unique_trans_id(const uint64_t unique_num)
 {
   return svc()->zone_utils->unique_trans_id(unique_num);
+}
+
+int RadosStore::get_zonegroup(const std::string& id,
+			      std::unique_ptr<ZoneGroup>* zonegroup)
+{
+  ZoneGroup* zg;
+  RGWZoneGroup rzg;
+  int r = svc()->zone->get_zonegroup(id, rzg);
+  if (r < 0)
+    return r;
+
+  zg = new RadosZoneGroup(this, rzg);
+  if (!zg)
+    return -ENOMEM;
+
+  zonegroup->reset(zg);
+  return 0;
 }
 
 int RadosStore::cluster_stat(RGWClusterStat& stats)
@@ -2943,40 +2992,72 @@ int RadosZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
   return 0;
 }
 
-int RadosZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup)
+int RadosZoneGroup::get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone)
 {
-  ZoneGroup* zg;
-  RGWZoneGroup rzg;
-  int r = store->svc()->zone->get_zonegroup(id, rzg);
-  if (r < 0)
-    return r;
+  RGWZone* rz = store->svc()->zone->find_zone(id);
+  if (!rz)
+    return -ENOENT;
 
-  zg = new RadosZoneGroup(store, rzg);
-  if (!zg)
-    return -ENOMEM;
-
-  zonegroup->reset(zg);
+  Zone* z = new RadosZone(store, clone(), *rz);
+  zone->reset(z);
   return 0;
 }
 
-const rgw_zone_id& RadosZone::get_id()
+int RadosZoneGroup::get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone)
 {
-  return store->svc()->zone->zone_id();
+  rgw_zone_id id;
+  int ret = store->svc()->zone->find_zone_id_by_name(name, &id);
+  if (ret < 0)
+    return ret;
+
+  RGWZone* rz = store->svc()->zone->find_zone(id.id);
+  if (!rz)
+    return -ENOENT;
+
+  Zone* z = new RadosZone(store, clone(), *rz);
+  zone->reset(z);
+  return 0;
+}
+
+std::unique_ptr<Zone> RadosZone::clone()
+{
+  if (local_zone)
+    return std::make_unique<RadosZone>(store, group->clone());
+
+  return std::make_unique<RadosZone>(store, group->clone(), rgw_zone);
+}
+
+const std::string& RadosZone::get_id()
+{
+  if (local_zone)
+    return store->svc()->zone->zone_id().id;
+
+  return rgw_zone.id;
 }
 
 const std::string& RadosZone::get_name() const
 {
-  return store->svc()->zone->zone_name();
+  if (local_zone)
+    return store->svc()->zone->zone_name();
+
+  return rgw_zone.name;
 }
 
 bool RadosZone::is_writeable()
 {
-  return store->svc()->zone->zone_is_writeable();
+  if (local_zone)
+    return store->svc()->zone->zone_is_writeable();
+
+  return !rgw_zone.read_only;
 }
 
 bool RadosZone::get_redirect_endpoint(std::string* endpoint)
 {
-  return store->svc()->zone->get_redirect_zone_endpoint(endpoint);
+  if (local_zone)
+    return store->svc()->zone->get_redirect_zone_endpoint(endpoint);
+
+  endpoint = &rgw_zone.redirect_zone;
+  return true;
 }
 
 bool RadosZone::has_zonegroup_api(const std::string& api) const
@@ -3006,7 +3087,10 @@ const std::string& RadosZone::get_realm_id()
 
 const std::string_view RadosZone::get_tier_type()
 {
-  return store->svc()->zone->get_zone().tier_type;
+  if (local_zone)
+    return store->svc()->zone->get_zone().tier_type;
+
+  return rgw_zone.id;
 }
 
 RadosLuaManager::RadosLuaManager(RadosStore* _s) : 

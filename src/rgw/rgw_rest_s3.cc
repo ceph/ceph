@@ -60,9 +60,6 @@
 #include "rgw_zone.h"
 #include "rgw_bucket_sync.h"
 
-#include "services/svc_zone.h"
-#include "services/svc_cls.h"
-
 #include "include/ceph_assert.h"
 #include "rgw_role.h"
 #include "rgw_rest_sts.h"
@@ -1066,8 +1063,10 @@ struct ReplicationConfiguration {
       set<rgw_zone_id> ids;
 
       for (auto& name : zone_names) {
-	rgw_zone_id id;
-	if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(name, &id)) {
+	std::unique_ptr<rgw::sal::Zone> zone;
+	int ret = store->get_zone()->get_zonegroup().get_zone_by_name(name, &zone);
+	if (ret >= 0) {
+	  rgw_zone_id id = zone->get_id();
 	  ids.insert(std::move(id));
         }
       }
@@ -1080,9 +1079,10 @@ struct ReplicationConfiguration {
       vector<string> names;
 
       for (auto& id : zone_ids) {
-	RGWZone *zone;
-	if ((zone = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(id))) {
-	  names.emplace_back(zone->name);
+	std::unique_ptr<rgw::sal::Zone> zone;
+	int ret = store->get_zone()->get_zonegroup().get_zone_by_id(id.id, &zone);
+	if (ret >= 0) {
+	  names.emplace_back(zone->get_name());
 	}
       }
 
@@ -2051,7 +2051,7 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   std::unique_ptr<rgw::sal::ZoneGroup> zonegroup;
   string api_name;
 
-  int ret = store->get_zone()->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
+  int ret = store->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
   if (ret >= 0) {
     api_name = zonegroup->get_api_name();
   } else  {
@@ -4611,8 +4611,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
   } else if (is_notification_op()) {
     return RGWHandler_REST_PSNotifs_S3::create_put_op();
   } else if (is_replication_op()) {
-    auto sync_policy_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_sync_policy_handler(nullopt);
-    if (!sync_policy_handler ||
+    RGWBucketSyncPolicyHandlerRef sync_policy_handler;
+    int ret = store->get_sync_policy_handler(s, nullopt, nullopt,
+					     &sync_policy_handler, null_yield);
+    if (ret < 0 || !sync_policy_handler ||
         sync_policy_handler->is_legacy_config()) {
       return nullptr;
     }
@@ -4845,37 +4847,6 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Store* store,
   return 0;
 }
 
-static int verify_mfa(rgw::sal::Store* store, RGWUserInfo *user,
-		      const string& mfa_str, bool *verified, const DoutPrefixProvider *dpp, optional_yield y)
-{
-  vector<string> params;
-  get_str_vec(mfa_str, " ", params);
-
-  if (params.size() != 2) {
-    ldpp_dout(dpp, 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;
-    return -EINVAL;
-  }
-
-  string& serial = params[0];
-  string& pin = params[1];
-
-  auto i = user->mfa_ids.find(serial);
-  if (i == user->mfa_ids.end()) {
-    ldpp_dout(dpp, 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
-    return -EACCES;
-  }
-
-  int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->cls->mfa.check_mfa(dpp, user->user_id, serial, pin, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
-    return -EACCES;
-  }
-
-  *verified = true;
-
-  return 0;
-}
-
 int RGWHandler_REST_S3::postauth_init(optional_yield y)
 {
   struct req_init_state *t = &s->init_state;
@@ -4916,7 +4887,7 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
 
   const char *mfa = s->info.env->get("HTTP_X_AMZ_MFA");
   if (mfa) {
-    ret = verify_mfa(store, &s->user->get_info(), string(mfa), &s->mfa_verified, s, y);
+    ret = s->user->verify_mfa(string(mfa), &s->mfa_verified, s, y);
   }
 
   return 0;

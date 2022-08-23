@@ -681,7 +681,7 @@ public:
     meta_map["zonegroup"] = zone_svc->get_zonegroup().get_name();
     meta_map["zonegroup_id"] = zone_svc->get_zonegroup().get_id();
     meta_map["zone"] = zone_svc->get_name();
-    meta_map["zone_id"] = zone_svc->get_id().id;
+    meta_map["zone_id"] = zone_svc->get_id();
   }
 
   string process_str(const string& in);

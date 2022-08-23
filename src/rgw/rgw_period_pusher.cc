@@ -266,7 +266,7 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
   // update other zone endpoints
   for (auto& z : my_zonegroup.zones) {
     auto& zone = z.second;
-    if (zone.id == store->get_zone()->get_id().id)
+    if (zone.id == store->get_zone()->get_id())
       continue;
     if (zone.endpoints.empty())
       continue;
