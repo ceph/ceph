@@ -5615,7 +5615,14 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
    *
    * This means we have absolutely no business in spawning completer. Both
    * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
-   * by default. We don't need to change that. */
+   * by default. We don't need to change that.
+   *
+   * is_v4_payload_empty is strictly checking Content-Length is present and zero.
+   * It does not detect Transfer-Encoding:Chunked w/ no data, or HTTP/2 DATA
+   * frames of zero length before End-of-stream.  Those cases are handled by
+   * the single chunk case, with a sha256 checksum matching empty payload hash
+   * (AWS4_EMPTY_PAYLOAD_HASH).
+   * */
   if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s) || is_non_s3_op) {
     return {
       access_key_id,
@@ -5633,51 +5640,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
      *   Version 4 requests. It provides a hash of the request payload. If
      *   there is no payload, you must provide the hash of an empty string. */
     if (!is_v4_payload_streamed(exp_payload_hash)) {
-      ldpp_dout(s, 10) << "delaying v4 auth" << dendl;
-
-      /* payload in a single chunk */
-      switch (s->op_type)
-      {
-        case RGW_OP_CREATE_BUCKET:
-        case RGW_OP_PUT_OBJ:
-        case RGW_OP_PUT_ACLS:
-        case RGW_OP_PUT_CORS:
-        case RGW_OP_PUT_BUCKET_ENCRYPTION:
-        case RGW_OP_GET_BUCKET_ENCRYPTION:
-        case RGW_OP_DELETE_BUCKET_ENCRYPTION:
-        case RGW_OP_INIT_MULTIPART: // in case that Init Multipart uses CHUNK encoding
-        case RGW_OP_COMPLETE_MULTIPART:
-        case RGW_OP_SET_BUCKET_VERSIONING:
-        case RGW_OP_DELETE_MULTI_OBJ:
-        case RGW_OP_ADMIN_SET_METADATA:
-        case RGW_OP_SYNC_DATALOG_NOTIFY:
-        case RGW_OP_SYNC_DATALOG_NOTIFY2:
-        case RGW_OP_SYNC_MDLOG_NOTIFY:
-        case RGW_OP_PERIOD_POST:
-        case RGW_OP_SET_BUCKET_WEBSITE:
-        case RGW_OP_PUT_BUCKET_POLICY:
-        case RGW_OP_PUT_OBJ_TAGGING:
-	case RGW_OP_PUT_BUCKET_TAGGING:
-	case RGW_OP_PUT_BUCKET_REPLICATION:
-        case RGW_OP_PUT_LC:
-        case RGW_OP_SET_REQUEST_PAYMENT:
-        case RGW_OP_PUBSUB_NOTIF_CREATE:
-        case RGW_OP_PUBSUB_NOTIF_DELETE:
-        case RGW_OP_PUBSUB_NOTIF_LIST:
-        case RGW_OP_PUT_BUCKET_OBJ_LOCK:
-        case RGW_OP_PUT_OBJ_RETENTION:
-        case RGW_OP_PUT_OBJ_LEGAL_HOLD:
-        case RGW_STS_GET_SESSION_TOKEN:
-        case RGW_STS_ASSUME_ROLE:
-        case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
-        case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
-        case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
-	case RGW_OP_GET_OBJ://s3select its post-method(payload contain the query) , the request is get-object
-          break;
-        default:
-          ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;
-          throw -ERR_NOT_IMPLEMENTED;
-      }
+      ldpp_dout(s, 10) << "delaying v4 auth: non-chunked payload" << dendl;
 
       const auto cmpl_factory = std::bind(AWSv4ComplSingle::create,
                                           s,
@@ -5695,17 +5658,6 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
        * it "chunked" but let's be coherent with Amazon's terminology. */
 
       ldpp_dout(s, 10) << "body content detected in multiple chunks" << dendl;
-
-      /* payload in multiple chunks */
-
-      switch(s->op_type)
-      {
-        case RGW_OP_PUT_OBJ:
-          break;
-        default:
-          ldpp_dout(s, 10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED (streaming mode)" << dendl;
-          throw -ERR_NOT_IMPLEMENTED;
-      }
 
       ldpp_dout(s, 10) << "aws4 seed signature ok... delaying v4 auth" << dendl;
 
