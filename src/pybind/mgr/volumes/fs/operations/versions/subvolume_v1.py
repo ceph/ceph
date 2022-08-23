@@ -120,7 +120,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             if isinstance(e, MetadataMgrException):
                 log.error("metadata manager exception: {0}".format(e))
-                e = VolumeException(-errno.EINVAL, "exception in subvolume metadata")
+                e = VolumeException(-errno.EINVAL, f"exception in subvolume metadata: {os.strerror(-e.args[0])}")
             elif isinstance(e, cephfs.Error):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
@@ -141,12 +141,16 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             self.metadata_mgr.flush()
 
     def add_clone_failure(self, errno, error_msg):
-        self.metadata_mgr.add_section(MetadataManager.CLONE_FAILURE_SECTION)
-        self.metadata_mgr.update_section(MetadataManager.CLONE_FAILURE_SECTION,
-                                         MetadataManager.CLONE_FAILURE_META_KEY_ERRNO, errno)
-        self.metadata_mgr.update_section(MetadataManager.CLONE_FAILURE_SECTION,
-                                         MetadataManager.CLONE_FAILURE_META_KEY_ERROR_MSG, error_msg)
-        self.metadata_mgr.flush()
+        try:
+            self.metadata_mgr.add_section(MetadataManager.CLONE_FAILURE_SECTION)
+            self.metadata_mgr.update_section(MetadataManager.CLONE_FAILURE_SECTION,
+                                             MetadataManager.CLONE_FAILURE_META_KEY_ERRNO, errno)
+            self.metadata_mgr.update_section(MetadataManager.CLONE_FAILURE_SECTION,
+                                             MetadataManager.CLONE_FAILURE_META_KEY_ERROR_MSG, error_msg)
+            self.metadata_mgr.flush()
+        except MetadataMgrException as me:
+            log.error(f"Failed to add clone failure status clone={self.subvol_name} group={self.group_name} "
+                      f"reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
 
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
@@ -192,7 +196,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             if isinstance(e, MetadataMgrException):
                 log.error("metadata manager exception: {0}".format(e))
-                e = VolumeException(-errno.EINVAL, "exception in subvolume metadata")
+                e = VolumeException(-errno.EINVAL, f"exception in subvolume metadata: {os.strerror(-e.args[0])}")
             elif isinstance(e, cephfs.Error):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
@@ -802,13 +806,25 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         return pending_clones_info
 
-    def remove_snapshot(self, snapname):
+    def remove_snapshot(self, snapname, force=False):
         if self.has_pending_clones(snapname):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
         snappath = self.snapshot_path(snapname)
+        try:
+            self.metadata_mgr.remove_section(self.get_snap_section_name(snapname))
+            self.metadata_mgr.flush()
+        except MetadataMgrException as me:
+            if force:
+                log.info(f"Allowing snapshot removal on failure of it's metadata removal with force on "
+                         f"snap={snapname} subvol={self.subvol_name} group={self.group_name} reason={me.args[1]}, "
+                         f"errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
+                pass
+            else:
+                log.error(f"Failed to remove snapshot metadata on snap={snapname} subvol={self.subvol_name} "
+                          f"group={self.group_name} reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
+                raise VolumeException(-errno.EAGAIN,
+                                      f"failed to remove snapshot metadata on snap={snapname} reason={me.args[0]} {me.args[1]}")
         rmsnap(self.fs, snappath)
-        self.metadata_mgr.remove_section(self.get_snap_section_name(snapname))
-        self.metadata_mgr.flush()
 
     def snapshot_info(self, snapname):
         if is_inherited_snap(snapname):
@@ -840,6 +856,22 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             if ve.errno == -errno.ENOENT:
                 return []
             raise
+
+    def clean_stale_snapshot_metadata(self):
+        """ Clean up stale snapshot metadata """
+        if self.metadata_mgr.has_snap_metadata_section():
+            snap_list = self.list_snapshots()
+            snaps_with_metadata_list = self.metadata_mgr.list_snaps_with_metadata()
+            for snap_with_metadata in snaps_with_metadata_list:
+                if snap_with_metadata.encode('utf-8') not in snap_list:
+                    try:
+                        self.metadata_mgr.remove_section(self.get_snap_section_name(snap_with_metadata))
+                        self.metadata_mgr.flush()
+                    except MetadataMgrException as me:
+                        log.error(f"Failed to remove stale snap metadata on snap={snap_with_metadata} "
+                                  f"subvol={self.subvol_name} group={self.group_name} reason={me.args[1]}, "
+                                  f"errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
+                        pass
 
     def _add_snap_clone(self, track_id, snapname):
         self.metadata_mgr.add_section("clone snaps")
