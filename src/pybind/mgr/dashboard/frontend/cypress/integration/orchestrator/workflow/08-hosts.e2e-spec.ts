@@ -31,7 +31,7 @@ describe('Host Page', () => {
     }
   });
 
-  it('should force maintenance and exit', { retries: 2 }, () => {
+  it('should force maintenance and exit', () => {
     hosts.maintenance(hostnames[3], true, true);
   });
 
