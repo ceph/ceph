@@ -1415,8 +1415,7 @@ void Cache::backref_batch_update(
 void Cache::complete_commit(
   Transaction &t,
   paddr_t final_block_start,
-  journal_seq_t start_seq,
-  AsyncCleaner *cleaner)
+  journal_seq_t start_seq)
 {
   LOG_PREFIX(Cache::complete_commit);
   SUBTRACET(seastore_t, "final_block_start={}, start_seq={}",
@@ -1438,11 +1437,7 @@ void Cache::complete_commit(
              t, is_inline, *i);
       const auto t_src = t.get_src();
       add_extent(i, &t_src);
-      if (cleaner) {
-	cleaner->mark_space_used(
-	  i->get_paddr(),
-	  i->get_length());
-      }
+      epm.mark_space_used(i->get_paddr(), i->get_length());
       if (is_backref_mapped_extent_node(i)) {
 	DEBUGT("backref_list new {} len {}",
 	       t,
@@ -1487,18 +1482,12 @@ void Cache::complete_commit(
     }
   }
 
-  if (cleaner) {
-    for (auto &i: t.retired_set) {
-      cleaner->mark_space_free(
-	i->get_paddr(),
-	i->get_length());
-    }
-    for (auto &i: t.existing_block_list) {
-      if (i->is_valid()) {
-	cleaner->mark_space_used(
-	  i->get_paddr(),
-	  i->get_length());
-      }
+  for (auto &i: t.retired_set) {
+    epm.mark_space_free(i->get_paddr(), i->get_length());
+  }
+  for (auto &i: t.existing_block_list) {
+    if (i->is_valid()) {
+      epm.mark_space_used(i->get_paddr(), i->get_length());
     }
   }
 

@@ -10,7 +10,6 @@
 
 #include "osd/osd_types.h"
 
-#include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -526,8 +525,17 @@ public:
   bool equals(const SpaceTrackerI &other) const;
 };
 
+class BackrefManager;
 
 class AsyncCleaner : public SegmentProvider, public JournalTrimmer {
+  enum class cleaner_state_t {
+    STOP,
+    MOUNT,
+    SCAN_SPACE,
+    READY,
+    HALT,
+  } state = cleaner_state_t::STOP;
+
 public:
   /// Config
   struct config_t {
@@ -729,7 +737,6 @@ private:
 
   SpaceTrackerIRef space_tracker;
   segments_info_t segments;
-  bool init_complete = false;
 
   struct {
     /**
@@ -792,6 +799,7 @@ private:
    * Should be removed once proper support is added. TODO
    */
   bool disable_trim = false;
+
 public:
   AsyncCleaner(
     config_t config,
@@ -803,20 +811,33 @@ public:
     return *ool_segment_seq_allocator;
   }
 
+  void set_extent_callback(ExtentCallbackInterface *cb) {
+    ecb = cb;
+  }
+
   using mount_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   using mount_ret = mount_ertr::future<>;
   mount_ret mount();
 
-  /*
-   * SegmentProvider interfaces
-   */
-  journal_seq_t get_journal_head() const final {
-    return journal_head;
+  void start_scan_space() {
+    ceph_assert(state == cleaner_state_t::MOUNT);
+    state = cleaner_state_t::SCAN_SPACE;
+    assert(space_tracker->equals(*space_tracker->make_empty()));
   }
 
-  const segment_info_t& get_seg_info(segment_id_t id) const final {
-    return segments[id];
+  void start_gc();
+
+  bool is_ready() const {
+    return state >= cleaner_state_t::READY;
+  }
+
+  /*
+   * JournalTrimmer interfaces
+   */
+
+  journal_seq_t get_journal_head() const final {
+    return journal_head;
   }
 
   void set_journal_head(journal_seq_t head) final {
@@ -836,6 +857,25 @@ public:
 
     journal_head = head;
     gc_process.maybe_wake_on_space_used();
+  }
+
+  journal_seq_t get_dirty_tail() const final {
+    return journal_dirty_tail;
+  }
+
+  journal_seq_t get_alloc_tail() const final {
+    return journal_alloc_tail;
+  }
+
+  void update_journal_tails(
+      journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
+
+  /*
+   * SegmentProvider interfaces
+   */
+
+  const segment_info_t& get_seg_info(segment_id_t id) const final {
+    return segments[id];
   }
 
   segment_id_t allocate_segment(
@@ -858,40 +898,17 @@ public:
     return sm_group.get();
   }
 
-  journal_seq_t get_dirty_tail() const final {
-    return journal_dirty_tail;
-  }
-
-  journal_seq_t get_alloc_tail() const final {
-    return journal_alloc_tail;
-  }
-
-  void update_journal_tails(
-      journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
-
-  void adjust_segment_util(double old_usage, double new_usage) {
-    auto old_index = get_bucket_index(old_usage);
-    auto new_index = get_bucket_index(new_usage);
-    assert(stats.segment_util.buckets[old_index].count > 0);
-    stats.segment_util.buckets[old_index].count--;
-    stats.segment_util.buckets[new_index].count++;
-  }
-
   void mark_space_used(
     paddr_t addr,
-    extent_len_t len,
-    bool init_scan = false);
+    extent_len_t len);
 
   void mark_space_free(
     paddr_t addr,
-    extent_len_t len,
-    bool init_scan = false);
+    extent_len_t len);
 
-  SpaceTrackerIRef get_empty_space_tracker() const {
-    return space_tracker->make_empty();
-  }
+  seastar::future<> reserve_projected_usage(std::size_t projected_usage);
 
-  void complete_init();
+  void release_projected_usage(size_t projected_usage);
 
   store_statfs_t stat() const {
     store_statfs_t st;
@@ -907,17 +924,14 @@ public:
 
   seastar::future<> stop();
 
+  // Testing interfaces
+
   seastar::future<> run_until_halt() {
+    ceph_assert(state == cleaner_state_t::HALT);
     return gc_process.run_until_halt();
   }
 
-  void set_extent_callback(ExtentCallbackInterface *cb) {
-    ecb = cb;
-  }
-
-  bool debug_check_space(const SpaceTrackerI &tracker) {
-    return space_tracker->equals(tracker);
-  }
+  bool check_usage();
 
   void set_disable_trim(bool val) {
     disable_trim = val;
@@ -962,7 +976,7 @@ private:
   segment_id_t get_next_reclaim_segment() const;
 
   journal_seq_t get_dirty_tail_target() const {
-    assert(init_complete);
+    assert(is_ready());
     auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.target_journal_dirty_segments) {
@@ -975,7 +989,7 @@ private:
   }
 
   journal_seq_t get_tail_limit() const {
-    assert(init_complete);
+    assert(is_ready());
     auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.max_journal_segments) {
@@ -988,7 +1002,7 @@ private:
   }
 
   journal_seq_t get_alloc_tail_target() const {
-    assert(init_complete);
+    assert(is_ready());
     auto ret = journal_head;
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.target_journal_alloc_segments) {
@@ -1262,13 +1276,13 @@ private:
    * Encapsulates whether block pending gc.
    */
   bool should_block_on_trim() const {
-    assert(init_complete);
+    assert(is_ready());
     if (disable_trim) return false;
     return get_tail_limit() > get_journal_tail();
   }
 
   bool should_block_on_reclaim() const {
-    assert(init_complete);
+    assert(is_ready());
     if (disable_trim) return false;
     if (get_segments_reclaimable() == 0) {
       return false;
@@ -1278,20 +1292,14 @@ private:
   }
 
   bool should_block_on_gc() const {
-    assert(init_complete);
+    assert(is_ready());
     return should_block_on_trim() || should_block_on_reclaim();
   }
 
   void log_gc_state(const char *caller) const;
 
-public:
-  seastar::future<> reserve_projected_usage(std::size_t projected_usage);
-
-  void release_projected_usage(size_t projected_usage);
-
-private:
   void maybe_wake_gc_blocked_io() {
-    if (!init_complete) {
+    if (!is_ready()) {
       return;
     }
     if (!should_block_on_gc() && blocked_io_wake) {
@@ -1312,7 +1320,7 @@ private:
    * Encapsulates logic for whether gc should be reclaiming segment space.
    */
   bool gc_should_reclaim_space() const {
-    assert(init_complete);
+    assert(is_ready());
     if (disable_trim) return false;
     if (get_segments_reclaimable() == 0) {
       return false;
@@ -1327,12 +1335,12 @@ private:
   }
 
   bool gc_should_trim_dirty() const {
-    assert(init_complete);
+    assert(is_ready());
     return get_dirty_tail_target() > journal_dirty_tail;
   }
 
   bool gc_should_trim_alloc() const {
-    assert(init_complete);
+    assert(is_ready());
     return get_alloc_tail_target() > journal_alloc_tail;
   }
   /**
@@ -1342,10 +1350,18 @@ private:
    */
   bool gc_should_run() const {
     if (disable_trim) return false;
-    ceph_assert(init_complete);
+    ceph_assert(is_ready());
     return gc_should_reclaim_space()
       || gc_should_trim_dirty()
       || gc_should_trim_alloc();
+  }
+
+  void adjust_segment_util(double old_usage, double new_usage) {
+    auto old_index = get_bucket_index(old_usage);
+    auto new_index = get_bucket_index(new_usage);
+    assert(stats.segment_util.buckets[old_index].count > 0);
+    stats.segment_util.buckets[old_index].count--;
+    stats.segment_util.buckets[new_index].count++;
   }
 
   void init_mark_segment_closed(
@@ -1354,7 +1370,7 @@ private:
       segment_type_t s_type,
       data_category_t category,
       reclaim_gen_t generation) {
-    ceph_assert(!init_complete);
+    ceph_assert(state == cleaner_state_t::MOUNT);
     auto old_usage = calc_utilization(segment);
     segments.init_closed(segment, seq, s_type, category, generation);
     auto new_usage = calc_utilization(segment);
