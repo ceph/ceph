@@ -15,6 +15,7 @@
 #ifndef CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 #define CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 
+#include <bit>
 #include <ostream>
 #include <type_traits>
 #include <vector>
@@ -1220,7 +1221,7 @@ public:
   shared_blob_2hash_tracker_t(uint64_t mem_cap, size_t alloc_unit)
     : ref_counter_2hash_tracker_t(mem_cap) {
     ceph_assert(alloc_unit);
-    ceph_assert(isp2(alloc_unit));
+    ceph_assert(std::has_single_bit(alloc_unit));
     au_void_bits = ctz(alloc_unit);
   }
   void inc(uint64_t sbid, uint64_t offset, int n);

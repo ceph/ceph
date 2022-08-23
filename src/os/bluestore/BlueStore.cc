@@ -12,6 +12,7 @@
  *
  */
 
+#include <bit>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -7077,7 +7078,7 @@ int BlueStore::mkfs()
   _validate_bdev();
 
   // make sure min_alloc_size is power of 2 aligned.
-  if (!isp2(min_alloc_size)) {
+  if (!std::has_single_bit(min_alloc_size)) {
     derr << __func__ << " min_alloc_size 0x"
 	 << std::hex << min_alloc_size << std::dec
 	 << " is not power of 2 aligned!"
