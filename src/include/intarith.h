@@ -16,6 +16,7 @@
 #define CEPH_INTARITH_H
 
 #include <bit>
+#include <climits>
 #include <concepts>
 #include <type_traits>
 
@@ -86,7 +87,7 @@ constexpr inline T p2roundup(T x, T align) {
 // count bits (set + any 0's that follow)
 template<std::integral T>
 unsigned cbits(T v) {
-  return (sizeof(v) * 8) - std::countl_zero(std::make_unsigned_t<T>(v));
+  return (sizeof(v) * CHAR_BIT) - std::countl_zero(std::make_unsigned_t<T>(v));
 }
 
 #endif
