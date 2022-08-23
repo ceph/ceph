@@ -80,47 +80,68 @@ PGBackend::load_metadata(const hobject_t& oid)
     coll,
     ghobject_t{oid, ghobject_t::NO_GEN, shard})).safe_then_interruptible(
       [oid](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
-	loaded_object_md_t::ref ret(new loaded_object_md_t());
-	if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
-	  bufferlist bl = std::move(oiiter->second);
-	  ret->os = ObjectState(
-	    object_info_t(bl, oid),
-	    true);
-	} else {
-	  logger().error(
-	    "load_metadata: object {} present but missing object info",
-	    oid);
-	  return crimson::ct_error::object_corrupted::make();
-	}
-	
-	if (oid.is_head()) {
-	  if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
-	    bufferlist bl = std::move(ssiter->second);
-	    ret->ss = SnapSet(bl);
-	  } else {
-	    /* TODO: add support for writing out snapsets
-	    logger().error(
-	      "load_metadata: object {} present but missing snapset",
-	      oid);
-	    //return crimson::ct_error::object_corrupted::make();
-	    */
-	    ret->ss = SnapSet();
-	  }
-	}
+        loaded_object_md_t::ref ret(new loaded_object_md_t());
+        if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
+          bufferlist bl = std::move(oiiter->second);
+          try {
+            ret->os = ObjectState(
+              object_info_t(bl, oid),
+              true);
+          } catch (const buffer::error&) {
+            logger().warn("unable to decode ObjectState");
+            throw crimson::osd::invalid_argument();
+          }
+        } else {
+          logger().error(
+            "load_metadata: object {} present but missing object info",
+            oid);
+          return crimson::ct_error::object_corrupted::make();
+        }
 
-	return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
-	  std::move(ret));
+        if (oid.is_head()) {
+          // Returning object_corrupted when the object exsits and the
+          // Snapset is either not found or empty.
+          bool object_corrupted = true;
+          if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
+            object_corrupted = false;
+            logger().debug(
+              "load_metadata: object {} and snapset {} present",
+              oid, ssiter->second);
+            bufferlist bl = std::move(ssiter->second);
+            if (bl.length()) {
+              ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
+              try {
+                ret->ssc->snapset = SnapSet(bl);
+                ret->ssc->exists = true;
+              } catch (const buffer::error&) {
+                logger().warn("unable to decode SnapSet");
+                throw crimson::osd::invalid_argument();
+              }
+            } else {
+              object_corrupted = true;
+            }
+          }
+          if (object_corrupted) {
+            logger().error(
+              "load_metadata: object {} present but missing snapset",
+              oid);
+            return crimson::ct_error::object_corrupted::make();
+          }
+        }
+
+        return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
+          std::move(ret));
       }, crimson::ct_error::enoent::handle([oid] {
-	logger().debug(
-	  "load_metadata: object {} doesn't exist, returning empty metadata",
-	  oid);
-	return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
-	  new loaded_object_md_t{
-	    ObjectState(
-	      object_info_t(oid),
-	      false),
-	    oid.is_head() ? std::optional<SnapSet>(SnapSet()) : std::nullopt
-	  });
+        logger().debug(
+          "load_metadata: object {} doesn't exist, returning empty metadata",
+          oid);
+        return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
+          new loaded_object_md_t{
+            ObjectState(
+              object_info_t(oid),
+              false),
+            oid.is_head() ? (new crimson::osd::SnapSetContext(oid)) : nullptr
+          });
       }));
 }
 
@@ -155,6 +176,18 @@ PGBackend::mutate_object(
       obc->obs.oi.encode_no_oid(osv, CEPH_FEATURES_ALL);
       // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
       txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
+    }
+
+    // snapset
+    if (obc->obs.oi.soid.snap == CEPH_NOSNAP) {
+      logger().debug("final snapset {} in {}",
+        obc->ssc->snapset, obc->obs.oi.soid);
+      ceph::bufferlist bss;
+      encode(obc->ssc->snapset, bss);
+      txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, SS_ATTR, bss);
+      obc->ssc->exists = true;
+    } else {
+      logger().debug("no snapset (this is a clone)");
     }
   } else {
     // reset cached ObjectState without enforcing eviction
@@ -794,7 +827,8 @@ PGBackend::create_iertr::future<> PGBackend::create(
     }
   }
   maybe_create_new_object(os, txn, delta_stats);
-  txn.nop();
+  txn.create(coll->get_cid(),
+             ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   return seastar::now();
 }
 
@@ -816,24 +850,38 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn)
 
 PGBackend::remove_iertr::future<>
 PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
-  object_stat_sum_t& delta_stats)
+  object_stat_sum_t& delta_stats, bool whiteout)
 {
   if (!os.exists) {
     return crimson::ct_error::enoent::make();
   }
-  // todo: snapset
+
+  if (whiteout && os.oi.is_whiteout()) {
+    logger().debug("{} whiteout set on {} ",__func__, os.oi.soid);
+    return seastar::now();
+  }
   txn.remove(coll->get_cid(),
 	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   delta_stats.num_bytes -= os.oi.size;
   os.oi.size = 0;
   os.oi.new_object();
-  os.exists = false;
+
+  // todo: clone_overlap
+  if (whiteout) {
+    logger().debug("{} setting whiteout on {} ",__func__, os.oi.soid);
+    os.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    delta_stats.num_whiteouts++;
+    txn.create(coll->get_cid(),
+               ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+    return seastar::now();
+  }
   // todo: update watchers
   if (os.oi.is_whiteout()) {
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     delta_stats.num_whiteouts--;
   }
   delta_stats.num_objects--;
+  os.exists = false;
   return seastar::now();
 }
 
@@ -1103,6 +1151,26 @@ PGBackend::rm_xattr(
   bp.copy(osd_op.op.xattr.name_len, attr_name);
   txn.rmattr(coll->get_cid(), ghobject_t{os.oi.soid}, attr_name);
   return rm_xattr_iertr::now();
+}
+
+void PGBackend::clone(
+  object_info_t& snap_oi,
+  ObjectState& os,
+  ObjectState& d_os,
+  ceph::os::Transaction& txn)
+{
+  // Prepend the cloning operation to txn
+  ceph::os::Transaction c_txn;
+  c_txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
+  // Operations will be removed from txn while appending
+  c_txn.append(txn);
+  txn = std::move(c_txn);
+
+  ceph::bufferlist bv;
+  snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
+
+  txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
+  txn.rmattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, SS_ATTR);
 }
 
 using get_omap_ertr =

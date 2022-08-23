@@ -520,6 +520,14 @@ const object_info_t& cls_get_object_info(cls_method_context_t hctx)
 
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq)
 {
+  auto* ox = reinterpret_cast<crimson::osd::OpsExecuter*>(hctx);
+  auto obc = ox->get_obc();
+  if (!obc->obs.exists ||
+      (obc->obs.oi.is_whiteout() &&
+       obc->ssc->snapset.clones.empty())) {
+    return -ENOENT;
+  }
+  *snap_seq = obc->ssc->snapset.seq;
   return 0;
 }
 
