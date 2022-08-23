@@ -85,26 +85,28 @@ public:
     return group.zones.size();
   }
   virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier);
-  const RGWZoneGroup& get_group() const { return group; }
+  virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) override;
+  virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override;
   virtual std::unique_ptr<ZoneGroup> clone() override {
     return std::make_unique<RadosZoneGroup>(store, group);
   }
+  const RGWZoneGroup& get_group() const { return group; }
 };
 
 class RadosZone : public StoreZone {
   protected:
     RadosStore* store;
     std::unique_ptr<ZoneGroup> group;
+    RGWZone rgw_zone;
+    bool local_zone{false};
   public:
-    RadosZone(RadosStore* _store, std::unique_ptr<ZoneGroup> _zg) : store(_store), group(std::move(_zg)) {}
+    RadosZone(RadosStore* _store, std::unique_ptr<ZoneGroup> _zg) : store(_store), group(std::move(_zg)), local_zone(true) {}
+    RadosZone(RadosStore* _store, std::unique_ptr<ZoneGroup> _zg, RGWZone& z) : store(_store), group(std::move(_zg)), rgw_zone(z) {}
     ~RadosZone() = default;
 
-    virtual std::unique_ptr<Zone> clone() override {
-      return std::make_unique<RadosZone>(store, group->clone());
-    }
+    virtual std::unique_ptr<Zone> clone() override;
     virtual ZoneGroup& get_zonegroup() override { return *(group.get()); }
-    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
-    virtual const rgw_zone_id& get_id() override;
+    virtual const std::string& get_id() override;
     virtual const std::string& get_name() const override;
     virtual bool is_writeable() override;
     virtual bool get_redirect_endpoint(std::string* endpoint) override;
@@ -155,6 +157,7 @@ class RadosStore : public StoreStore {
     virtual Zone* get_zone() { return zone.get(); }
     virtual std::string zone_unique_id(uint64_t unique_num) override;
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
+    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Completions> get_completions(void) override;
@@ -311,6 +314,7 @@ class RadosUser : public StoreUser {
     virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) override;
     virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
+    virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) override;
 
     friend class RadosBucket;
 };

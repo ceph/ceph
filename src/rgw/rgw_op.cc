@@ -532,7 +532,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     s->bucket_owner = s->bucket_acl->get_owner();
 
     std::unique_ptr<rgw::sal::ZoneGroup> zonegroup;
-    int r = store->get_zone()->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
+    int r = store->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
     if (!r) {
       s->zonegroup_endpoint = zonegroup->get_endpoint();
       s->zonegroup_name = zonegroup->get_name();

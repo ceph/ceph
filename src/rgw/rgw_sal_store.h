@@ -233,6 +233,18 @@ class StoreObject : public Object {
     virtual const std::string &get_instance() const override { return state.obj.key.instance; }
     virtual bool have_instance(void) override { return state.obj.key.have_instance(); }
     virtual void clear_instance() override { state.obj.key.instance.clear(); }
+    virtual int transition_to_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_bucket_dir_entry& o,
+			   std::set<std::string>& cloud_targets,
+			   CephContext* cct,
+			   bool update_object,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y) override {
+      /* Return failure here, so stores which don't transition to cloud will
+       * work with lifecycle */
+      return -1;
+    }
 
     virtual void print(std::ostream& out) const override {
       if (bucket)
