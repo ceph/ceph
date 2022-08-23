@@ -61,11 +61,6 @@ public:
   };
 
   OSTransaction get_transaction(
-    ObjectStore::Transaction *t) {
-    return OSTransaction(ch->cid, hoid, t);
-  }
-
-  OSTransaction get_transaction(
     ObjectStore::Transaction *t) const {
     return OSTransaction(ch->cid, hoid, t);
   }
