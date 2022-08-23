@@ -18,6 +18,7 @@
 
 // SUMMARY: shec's gtest for each argument of minimum_to_decode()/decode()
 
+#include <bit>
 #include <errno.h>
 #include <stdlib.h>
 
@@ -56,10 +57,10 @@ void create_table_shec432() {
   set<set<int> > table_value;
 
   for (int want_count = 0; want_count < 7; ++want_count) {
-    for (int want = 1; want < (1<<7); ++want) {
+    for (unsigned want = 1; want < (1<<7); ++want) {
       table_key.clear();
       table_value.clear();
-      if (__builtin_popcount(want) != want_count) {
+      if (std::popcount(want) != want_count) {
         continue;
       }
       {
@@ -70,12 +71,12 @@ void create_table_shec432() {
         }
       }
       vector<int> vec;
-      for (int avails = 0; avails < (1<<7); ++avails) {
+      for (unsigned avails = 0; avails < (1<<7); ++avails) {
         if (want & avails) {
           continue;
         }
-        if (__builtin_popcount(avails) == 2 &&
-            __builtin_popcount(want) == 1) {
+        if (std::popcount(avails) == 2 &&
+            std::popcount(want) == 1) {
           if ((want | avails) == getint(0,1,5) ||
               (want | avails) == getint(2,3,6)) {
             vec.push_back(avails);
@@ -83,11 +84,11 @@ void create_table_shec432() {
         }
       }
       
-      for (int avails = 0; avails < (1<<7); ++avails) {
+      for (unsigned avails = 0; avails < (1<<7); ++avails) {
         if (want & avails) {
           continue;
         }
-        if (__builtin_popcount(avails) == 4) {
+        if (std::popcount(avails) == 4) {
           if ((avails) == getint(0,1,2,3) ||
               (avails) == getint(0,1,2,4) ||
               (avails) == getint(0,1,2,6) ||

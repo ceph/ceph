@@ -10,6 +10,7 @@
 #define __FAST_BITMAP_ALLOCATOR_IMPL_H
 #include "include/intarith.h"
 
+#include <bit>
 #include <vector>
 #include <algorithm>
 #include <mutex>
@@ -617,7 +618,7 @@ protected:
 
   void _init(uint64_t capacity, uint64_t _alloc_unit, bool mark_as_free = true)
   {
-    ceph_assert(isp2(_alloc_unit));
+    ceph_assert(std::has_single_bit(_alloc_unit));
     l1._init(capacity, _alloc_unit, mark_as_free);
 
     l2_granularity =
