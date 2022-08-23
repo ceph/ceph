@@ -293,12 +293,16 @@ int AvlAllocator::_allocate(
     ceph_assert(align != 0);
     uint64_t* cursor = &lbas[cbits(align) - 1];
     start = _pick_block_after(cursor, size, unit);
-    dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
+    dout(20) << __func__
+             << std::hex << " first fit params: 0x" << start << "~" << size
+             << std::dec << dendl;
   }
   if (start == -1ULL) {
     do {
       start = _pick_block_fits(size, unit);
-      dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
+      dout(20) << __func__
+               << std::hex << " best fit params: 0x" << start << "~" << size
+               << std::dec << dendl;
       if (start != uint64_t(-1ULL)) {
         break;
       }
