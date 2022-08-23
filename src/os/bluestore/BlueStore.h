@@ -2224,6 +2224,22 @@ private:
   bool init_to_db = false;
   bool init_to_bluefs = false;
 
+  struct
+  {
+    enum rwstate
+    {
+      off = 0,
+      ro = 1,
+      rw = 2
+    };
+    bool base = false;
+    bool bluefs_env = false;
+    rwstate bluefs = off;
+    bool db_env = false;
+    rwstate freelist_alloc = off;
+    rwstate db = off;
+    rwstate object = off;
+  } state;
   // store open_db options:
   bool db_was_opened_read_only = true;
   bool need_to_destage_allocation_file = false;
