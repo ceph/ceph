@@ -1198,7 +1198,7 @@ public:
 static int init_bucket(rgw::sal::User* user, const rgw_bucket& b,
                        std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
-  return store->get_bucket(dpp(), nullptr, b, bucket, null_yield);
+  return store->get_bucket(dpp(), user, b, bucket, null_yield);
 }
 
 static int init_bucket(rgw::sal::User* user,
