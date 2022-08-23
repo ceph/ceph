@@ -13,10 +13,12 @@
 #include "rgw_rados.h"
 #include "rgw_worker.h"
 
-
 #define dout_context g_ceph_context
 
+static constexpr auto dout_subsys = ceph_subsys_rgw;
+
 using namespace std;
+
 
 RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, uint64_t _handle,
                                    const RGWSyncTraceNodeRef& _parent,

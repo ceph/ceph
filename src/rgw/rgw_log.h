@@ -11,8 +11,6 @@
 #include <fstream>
 #include "rgw_sal_fwd.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 struct rgw_log_entry {
 
   using headers_map = boost::container::flat_map<std::string, std::string>;

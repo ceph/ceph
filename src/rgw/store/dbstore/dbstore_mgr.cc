@@ -6,7 +6,10 @@
 
 #include <filesystem>
 
+static constexpr auto dout_subsys = ceph_subsys_rgw;
+
 using namespace std;
+
 
 /* Given a tenant, find and return the DBStore handle.
  * If not found and 'create' set to true, create one

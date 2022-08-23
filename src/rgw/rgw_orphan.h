@@ -21,8 +21,6 @@
 
 #include "rgw_sal_rados.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 #define RGW_ORPHAN_INDEX_OID "orphan.index"
 #define RGW_ORPHAN_INDEX_PREFIX "orphan.scan"
 

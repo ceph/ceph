@@ -73,7 +73,6 @@ extern "C" {
 #include "services/svc_zone.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
 
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
@@ -81,6 +80,8 @@ extern "C" {
 using namespace std;
 
 static rgw::sal::Store* store = NULL;
+static constexpr auto dout_subsys = ceph_subsys_rgw;
+
 
 static const DoutPrefixProvider* dpp() {
   struct GlobalPrefix : public DoutPrefixProvider {
