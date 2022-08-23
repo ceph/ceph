@@ -1892,13 +1892,15 @@ std::optional<snap_mapper_fix_t> ScrubBackend::scan_object_snaps(
 }
 
 /*
- * Process:
  * Building a map of objects suitable for snapshot validation.
- * The data in m_cleaned_meta_map is the leftover partial items that need to
- * be completed before they can be processed.
  *
- * Snapshots in maps precede the head object, which is why we are scanning
- * backwards.
+ * We are moving all "full" clone sets, i.e. the head and (preceding it, as
+ * snapshots precede the head entry) the clone entries, into 'for_meta_scrub'.
+ * That collection, not containing partial items, will be scrubbed by
+ * scrub_snapshot_metadata().
+ *
+ * What's left in m_cleaned_meta_map is the leftover partial items that need to
+ * be completed before they can be processed.
  */
 ScrubMap ScrubBackend::clean_meta_map(ScrubMap& cleaned, bool max_reached)
 {
