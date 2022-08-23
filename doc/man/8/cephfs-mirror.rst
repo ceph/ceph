@@ -26,6 +26,23 @@ paths to find ceph.conf files, i.e. ``/etc/ceph/$cluster.conf`` where
 Options
 =======
 
+.. option:: --mon-host monaddress[:port]
+
+   Connect to specified monitor (instead of looking through
+   ``ceph.conf``).
+
+.. option:: --keyring=<path-to-keyring>
+
+   Provide path to keyring; useful when it's absent in standard locations.
+
+.. option:: --log-file=<logfile>
+
+   file to log debug output
+
+.. option:: --debug-cephfs-mirror=<log-level>/<memory-level>
+
+   set cephfs-mirror debug level
+
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use ``ceph.conf`` configuration file instead of the default

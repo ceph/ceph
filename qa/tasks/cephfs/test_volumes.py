@@ -207,6 +207,12 @@ class TestVolumesHelper(CephFSTestCase):
         else:
             self.volname = result[0]['name']
 
+    def  _get_volume_info(self, vol_name):
+        args = ["volume", "info", vol_name]
+        args = tuple(args)
+        vol_md = self._fs_cmd(*args)
+        return vol_md
+
     def  _get_subvolume_group_path(self, vol_name, group_name):
         args = ("subvolumegroup", "getpath", vol_name, group_name)
         path = self._fs_cmd(*args)
@@ -623,6 +629,38 @@ class TestVolumes(TestVolumesHelper):
         self.assertEqual(new_metadata_pool, self.fs.get_metadata_pool_name())
         # data pool names unchanged
         self.assertCountEqual(orig_data_pool_names, list(self.fs.data_pools.values()))
+
+    def test_volume_info(self):
+        """
+        Tests the 'fs volume info' command
+        """
+        vol_fields = ["pools", "used_size", "pending_subvolume_deletions", "mon_addrs"]
+        group = self._generate_random_group_name()
+        # create subvolumegroup
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        # get volume metadata
+        vol_info = json.loads(self._get_volume_info(self.volname))
+        for md in vol_fields:
+            self.assertIn(md, vol_info,
+                          f"'{md}' key not present in metadata of volume")
+        self.assertEqual(vol_info["used_size"], 0,
+                         "Size should be zero when volumes directory is empty")
+
+    def test_volume_info_without_subvolumegroup(self):
+        """
+        Tests the 'fs volume info' command without subvolume group
+        """
+        vol_fields = ["pools", "mon_addrs"]
+        # get volume metadata
+        vol_info = json.loads(self._get_volume_info(self.volname))
+        for md in vol_fields:
+            self.assertIn(md, vol_info,
+                          f"'{md}' key not present in metadata of volume")
+        self.assertNotIn("used_size", vol_info,
+                         "'used_size' should not be present in absence of subvolumegroup")
+        self.assertNotIn("pending_subvolume_deletions", vol_info,
+                         "'pending_subvolume_deletions' should not be present in absence"
+                         " of subvolumegroup")
 
 
 class TestSubvolumeGroups(TestVolumesHelper):
@@ -5434,6 +5472,69 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
 
         # verify trash dir is clean.
         self._wait_for_trash_empty()
+
+    def test_clean_stale_subvolume_snapshot_metadata(self):
+        """
+        Validate cleaning of stale subvolume snapshot metadata.
+        """
+        subvolname = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group.
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group.
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, group)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot, group)
+
+        # set metadata for snapshot.
+        key = "key"
+        value = "value"
+        try:
+            self._fs_cmd("subvolume", "snapshot", "metadata", "set", self.volname, subvolname, snapshot, key, value, group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume snapshot metadata set' command to succeed")
+
+        # save the subvolume config file.
+        meta_path = os.path.join(".", "volumes", group, subvolname, ".meta")
+        tmp_meta_path = os.path.join(".", "volumes", group, subvolname, ".meta.stale_snap_section")
+        self.mount_a.run_shell(['sudo', 'cp', '-p', meta_path, tmp_meta_path], omit_sudo=False)
+
+        # Delete snapshot, this would remove user snap metadata
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot, group)
+
+        # Copy back saved subvolume config file. This would have stale snapshot metadata
+        self.mount_a.run_shell(['sudo', 'cp', '-p', tmp_meta_path, meta_path], omit_sudo=False)
+
+        # Verify that it has stale snapshot metadata
+        section_name = "SNAP_METADATA_" + snapshot
+        try:
+            self.mount_a.run_shell(f"sudo grep {section_name} {meta_path}", omit_sudo=False)
+        except CommandFailedError:
+            self.fail("Expected grep cmd to succeed because stale snapshot metadata exist")
+
+        # Do any subvolume operation to clean the stale snapshot metadata
+        _ = json.loads(self._get_subvolume_info(self.volname, subvolname, group))
+
+        # Verify that the stale snapshot metadata is cleaned
+        try:
+            self.mount_a.run_shell(f"sudo grep {section_name} {meta_path}", omit_sudo=False)
+        except CommandFailedError as e:
+            self.assertNotEqual(e.exitstatus, 0)
+        else:
+            self.fail("Expected non-zero exist status because stale snapshot metadata should not exist")
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean.
+        self._wait_for_trash_empty()
+        # Clean tmp config file
+        self.mount_a.run_shell(['sudo', 'rm', '-f', tmp_meta_path], omit_sudo=False)
+
 
 class TestSubvolumeSnapshotClones(TestVolumesHelper):
     """ Tests for FS subvolume snapshot clone operations."""

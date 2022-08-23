@@ -139,6 +139,18 @@ class ControllerTestCase(helper.CPWebCase):
         cherrypy.tree.mount(None, config={
             base_url: {'request.dispatch': mapper}})
 
+    @classmethod
+    def setup_crud_controllers(cls, crud_ctrl_classes, base_url='',
+                               cp_config: Dict[str, Any] = None):
+        if crud_ctrl_classes and not isinstance(crud_ctrl_classes, list):
+            crud_ctrl_classes = [crud_ctrl_classes]
+        ctrl_classes = []
+        for ctrl in crud_ctrl_classes:
+            ctrl_classes.append(ctrl.CRUDClass)
+            ctrl_classes.append(ctrl.CRUDClassMetadata)
+
+        cls.setup_controllers(ctrl_classes, base_url=base_url, cp_config=cp_config)
+
     _request_logging = False
 
     @classmethod
@@ -290,7 +302,8 @@ class RgwStub(Stub):
                     'id': 'daemon1',
                     'realm_name': 'realm1',
                     'zonegroup_name': 'zonegroup1',
-                    'zone_name': 'zone1'
+                    'zone_name': 'zone1',
+                    'hostname': 'daemon1.server.lan'
                 }
             },
             '5398': {
@@ -300,7 +313,8 @@ class RgwStub(Stub):
                     'id': 'daemon2',
                     'realm_name': 'realm2',
                     'zonegroup_name': 'zonegroup2',
-                    'zone_name': 'zone2'
+                    'zone_name': 'zone2',
+                    'hostname': 'daemon2.server.lan'
                 }
             }
         }}}})

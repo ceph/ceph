@@ -349,12 +349,12 @@ struct ns_oid_view_t {
     oid.reset_to(origin_base, new_base, node_size);
   }
 
-  template <KeyT KT>
-  static node_offset_t estimate_size(const full_key_t<KT>& key);
+  template <typename Key>
+  static node_offset_t estimate_size(const Key& key);
 
-  template <KeyT KT>
+  template <typename Key>
   static void append(NodeExtentMutable&,
-                     const full_key_t<KT>& key,
+                     const Key& key,
                      char*& p_append);
 
   static void append(NodeExtentMutable& mut,
@@ -368,8 +368,8 @@ struct ns_oid_view_t {
     }
   }
 
-  template <KeyT KT>
-  static void test_append(const full_key_t<KT>& key, char*& p_append);
+  template <typename Key>
+  static void test_append(const Key& key, char*& p_append);
 
   string_key_view_t nspace;
   string_key_view_t oid;
@@ -404,8 +404,8 @@ inline const ghobject_t _MAX_OID() {
 }
 
 // the valid key stored in tree should be in the range of (_MIN_OID, _MAX_OID)
-template <KeyT KT>
-bool is_valid_key(const full_key_t<KT>& key);
+template <typename Key>
+bool is_valid_key(const Key& key);
 
 /**
  * key_hobj_t
@@ -478,7 +478,7 @@ class key_hobj_t {
   }
 
   bool is_valid() const {
-    return is_valid_key<KeyT::HOBJ>(*this);
+    return is_valid_key(*this);
   }
 
   static key_hobj_t decode(ceph::bufferlist::const_iterator& delta) {
@@ -596,7 +596,7 @@ class key_view_t {
   }
 
   ghobject_t to_ghobj() const {
-    assert(is_valid_key<KeyT::VIEW>(*this));
+    assert(is_valid_key(*this));
     return ghobject_t(
         shard_id_t(shard()), pool(), crush(),
         std::string(nspace()), std::string(oid()), snap(), gen());
@@ -811,8 +811,9 @@ std::strong_ordering operator<=>(const LHS& lhs, const RHS& rhs) noexcept {
   return lhs.gen() <=> rhs.gen();
 }
 
-template <KeyT KT>
-bool is_valid_key(const full_key_t<KT>& key) {
+template <typename Key>
+bool is_valid_key(const Key& key) {
+  static_assert(IsFullKey<Key>);
   return (key > key_hobj_t(ghobject_t()) &&
           key < key_hobj_t(ghobject_t::get_max()));
 }
@@ -863,9 +864,10 @@ bool operator==(LHS lhs, RHS rhs) {
   return lhs <=> rhs == 0;
 }
 
-template <KeyT KT>
-node_offset_t ns_oid_view_t::estimate_size(const full_key_t<KT>& key) {
-  if constexpr (KT == KeyT::VIEW) {
+template <typename Key>
+node_offset_t ns_oid_view_t::estimate_size(const Key& key) {
+  static_assert(IsFullKey<Key>);
+  if constexpr (std::same_as<Key, key_view_t>) {
     return key.ns_oid_view().size();
   } else {
     if (key.dedup_type() != Type::STR) {
@@ -877,9 +879,10 @@ node_offset_t ns_oid_view_t::estimate_size(const full_key_t<KT>& key) {
   }
 }
 
-template <KeyT KT>
+template <typename Key>
 void ns_oid_view_t::append(
-    NodeExtentMutable& mut, const full_key_t<KT>& key, char*& p_append) {
+    NodeExtentMutable& mut, const Key& key, char*& p_append) {
+  static_assert(IsFullKey<Key>);
   if (key.dedup_type() == Type::STR) {
     string_key_view_t::append_str(mut, key.nspace(), p_append);
     string_key_view_t::append_str(mut, key.oid(), p_append);
@@ -888,8 +891,9 @@ void ns_oid_view_t::append(
   }
 }
 
-template <KeyT KT>
-void ns_oid_view_t::test_append(const full_key_t<KT>& key, char*& p_append) {
+template <typename Key>
+void ns_oid_view_t::test_append(const Key& key, char*& p_append) {
+  static_assert(IsFullKey<Key>);
   if (key.dedup_type() == Type::STR) {
     string_key_view_t::test_append_str(key.nspace(), p_append);
     string_key_view_t::test_append_str(key.oid(), p_append);

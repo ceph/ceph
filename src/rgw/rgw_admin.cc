@@ -1198,7 +1198,7 @@ public:
 static int init_bucket(rgw::sal::User* user, const rgw_bucket& b,
                        std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
-  return store->get_bucket(dpp(), nullptr, b, bucket, null_yield);
+  return store->get_bucket(dpp(), user, b, bucket, null_yield);
 }
 
 static int init_bucket(rgw::sal::User* user,
@@ -1887,7 +1887,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
                          const string& access, const string& secret,
                          bool force)
 {
-  auto& master_zone = period.get_master_zone();
+  auto& master_zone = period.get_master_zone().id;
   if (master_zone.empty()) {
     cerr << "cannot commit period: period does not have a master zone of a master zonegroup" << std::endl;
     return -EINVAL;
@@ -1914,7 +1914,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
 
   if (remote.empty() && url.empty()) {
     // use the new master zone's connection
-    remote = master_zone.id;
+    remote = master_zone;
     cerr << "Sending period to new master zone " << remote << std::endl;
   }
   boost::optional<RGWRESTConn> conn;

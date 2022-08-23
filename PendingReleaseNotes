@@ -55,6 +55,8 @@
 * RBD: compare-and-write operation is no longer limited to 512-byte sectors.
   Assuming proper alignment, it now allows operating on stripe units (4M by
   default).
+* The 'AT_NO_ATTR_SYNC' macro is deprecated, please use the standard 'AT_STATX_DONT_SYNC'
+  macro. The 'AT_NO_ATTR_SYNC' macro will be removed in the future.
 
 >=17.2.1
 
@@ -99,3 +101,4 @@ of the feature, refer this link on how to perform it:
 https://docs.ceph.com/en/quincy/cephadm/upgrade/#staggered-upgrade
 Relevant tracker: https://tracker.ceph.com/issues/55715
 
+  Relevant tracker: https://tracker.ceph.com/issues/5614

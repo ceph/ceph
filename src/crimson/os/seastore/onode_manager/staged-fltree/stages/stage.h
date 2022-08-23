@@ -496,10 +496,10 @@ struct staged {
       return container_t::header_size();
     }
 
-    template <KeyT KT>
+    template <IsFullKey Key>
     static node_offset_t estimate_insert(
-        const full_key_t<KT>& key, const value_input_t& value) {
-      return container_t::template estimate_insert<KT>(key, value);
+        const Key& key, const value_input_t& value) {
+      return container_t::estimate_insert(key, value);
     }
 
    private:
@@ -837,10 +837,10 @@ struct staged {
       return container_t::header_size();
     }
 
-    template <KeyT KT>
-    static node_offset_t estimate_insert(const full_key_t<KT>& key,
+    template <IsFullKey Key>
+    static node_offset_t estimate_insert(const Key& key,
                                          const value_input_t& value) {
-      return container_t::template estimate_insert<KT>(key, value);
+      return container_t::estimate_insert(key, value);
     }
 
    private:
@@ -1137,9 +1137,9 @@ struct staged {
   static node_offset_t insert_size(const full_key_t<KT>& key,
                                    const value_input_t& value) {
     if constexpr (IS_BOTTOM) {
-      return iterator_t::template estimate_insert<KT>(key, value);
+      return iterator_t::estimate_insert(key, value);
     } else {
-      return iterator_t::template estimate_insert<KT>(key, value) +
+      return iterator_t::estimate_insert(key, value) +
              NXT_STAGE_T::iterator_t::header_size() +
              NXT_STAGE_T::template insert_size<KT>(key, value);
     }
