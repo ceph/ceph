@@ -55,6 +55,8 @@
 * RBD: compare-and-write operation is no longer limited to 512-byte sectors.
   Assuming proper alignment, it now allows operating on stripe units (4M by
   default).
+* The 'AT_NO_ATTR_SYNC' macro is deprecated, please use the standard 'AT_STATX_DONT_SYNC'
+  macro. The 'AT_NO_ATTR_SYNC' macro will be removed in the future.
 
 >=17.2.1
 
