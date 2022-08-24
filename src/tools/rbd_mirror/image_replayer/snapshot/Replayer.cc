@@ -1490,15 +1490,21 @@ void Replayer<I>::handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
                                          const std::string& description) {
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
-  if (m_error_code == 0) {
-    m_error_code = r;
-    m_error_description = description;
-  }
-
   if (m_sync_in_progress) {
     m_sync_in_progress = false;
     m_instance_watcher->notify_sync_complete(
       m_state_builder->local_image_ctx->id);
+  }
+
+  // don't set error code and description if resuming a pending
+  // shutdown
+  if (is_replay_interrupted(locker)) {
+    return;
+  }
+
+  if (m_error_code == 0) {
+    m_error_code = r;
+    m_error_description = description;
   }
 
   if (m_state != STATE_REPLAYING && m_state != STATE_IDLE) {
