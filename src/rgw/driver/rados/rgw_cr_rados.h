@@ -484,38 +484,28 @@ int RGWSimpleRadosReadCR<T>::request_complete()
 }
 
 class RGWSimpleRadosReadAttrsCR : public RGWSimpleCoroutine {
-  const DoutPrefixProvider *dpp;
-  RGWAsyncRadosProcessor *async_rados;
-  RGWSI_SysObj *svc;
+  const DoutPrefixProvider* dpp;
+  rgw::sal::RadosStore* const store;
 
-  rgw_raw_obj obj;
-  std::map<std::string, bufferlist> *pattrs;
-  bool raw_attrs;
-  RGWObjVersionTracker* objv_tracker;
-  RGWAsyncGetSystemObj *req = nullptr;
+  const rgw_raw_obj obj;
+  std::map<std::string, bufferlist>* const pattrs;
+  const bool raw_attrs;
+  RGWObjVersionTracker* const objv_tracker;
+
+  rgw_rados_ref ref;
+  std::map<std::string, bufferlist> unfiltered_attrs;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
-  RGWSimpleRadosReadAttrsCR(const DoutPrefixProvider *_dpp, RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
-                            const rgw_raw_obj& _obj, std::map<std::string, bufferlist> *_pattrs,
-                            bool _raw_attrs, RGWObjVersionTracker* objv_tracker = nullptr)
-    : RGWSimpleCoroutine(_svc->ctx()),
-      dpp(_dpp),
-      async_rados(_async_rados), svc(_svc),
-      obj(_obj),
-      pattrs(_pattrs),
-      raw_attrs(_raw_attrs),
-      objv_tracker(objv_tracker)
-  {}
-  ~RGWSimpleRadosReadAttrsCR() override {
-    request_cleanup();
-  }
-                                                         
-  void request_cleanup() override {
-    if (req) {
-      req->finish();
-      req = NULL;
-    }
-  }
+  RGWSimpleRadosReadAttrsCR(const DoutPrefixProvider* dpp,
+			    rgw::sal::RadosStore* store,
+                            rgw_raw_obj obj,
+			    std::map<std::string, bufferlist>* pattrs,
+                            bool raw_attrs,
+			    RGWObjVersionTracker* objv_tracker = nullptr)
+    : RGWSimpleCoroutine(store->ctx()), dpp(dpp), store(store),
+      obj(std::move(obj)), pattrs(pattrs), raw_attrs(raw_attrs),
+      objv_tracker(objv_tracker) {}
 
   int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
