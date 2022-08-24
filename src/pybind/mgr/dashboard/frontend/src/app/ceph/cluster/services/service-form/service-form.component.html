@@ -212,35 +212,37 @@
         </ng-container>
 
         <!-- iSCSI -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'iscsi'">
-          <!-- pool -->
-          <div class="form-group row">
-            <label i18n
-                   class="cd-col-form-label required"
-                   for="pool">Pool</label>
-            <div class="cd-col-form-input">
-              <select id="pool"
-                      name="pool"
-                      class="form-control"
-                      formControlName="pool">
-                <option *ngIf="pools === null"
-                        [ngValue]="null"
-                        i18n>Loading...</option>
-                <option *ngIf="pools && pools.length === 0"
-                        [ngValue]="null"
-                        i18n>-- No pools available --</option>
-                <option *ngIf="pools && pools.length > 0"
-                        [ngValue]="null"
-                        i18n>-- Select a pool --</option>
-                <option *ngFor="let pool of pools"
-                        [value]="pool.pool_name">{{ pool.pool_name }}</option>
-              </select>
-              <span class="invalid-feedback"
-                    *ngIf="serviceForm.showError('pool', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+        <!-- pool -->
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'iscsi'">
+          <label i18n
+                 class="cd-col-form-label required"
+                 for="pool">Pool</label>
+          <div class="cd-col-form-input">
+            <select id="pool"
+                    name="pool"
+                    class="form-control"
+                    formControlName="pool">
+              <option *ngIf="pools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="pools && pools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No pools available --</option>
+              <option *ngIf="pools && pools.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a pool --</option>
+              <option *ngFor="let pool of pools"
+                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('pool', frm, 'required')"
+                  i18n>This field is required.</span>
           </div>
+        </div>
 
+        <!-- fields in iSCSI which are hidden when unmanaged is true -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'iscsi'">
           <!-- trusted_ip_list -->
           <div class="form-group row">
             <label class="cd-col-form-label"
