@@ -1154,8 +1154,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
       status.marker = std::move(last_cold_marker);
       ldpp_dout(dpp, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
-      yield call(new WriteStatus(dpp, store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
-                                 status, &objv));
+      yield call(new WriteStatus(dpp, store, obj, status, &objv));
       if (retcode < 0) {
         ldpp_dout(dpp, 4) << "failed to write updated trim status: "
             << cpp_strerror(retcode) << dendl;
