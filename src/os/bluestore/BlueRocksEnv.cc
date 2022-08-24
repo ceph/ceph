@@ -597,3 +597,138 @@ rocksdb::Status BlueRocksEnv::GetTestDirectory(std::string* path)
   *path = "temp_" + stringify(++foo);
   return rocksdb::Status::OK();
 }
+
+
+
+rocksdb::Status NoRocksEnv::NewSequentialFile(
+  const std::string& fname,
+  std::unique_ptr<rocksdb::SequentialFile>* result,
+  const rocksdb::EnvOptions& options)
+{
+  return EnvWrapper::NewSequentialFile(base + fname, result, options);
+}
+rocksdb::Status NoRocksEnv::NewRandomAccessFile(
+  const std::string& fname,
+  std::unique_ptr<rocksdb::RandomAccessFile>* result,
+  const rocksdb::EnvOptions& options)
+{
+  return EnvWrapper::NewRandomAccessFile(base + fname, result, options);
+}
+
+rocksdb::Status NoRocksEnv::NewWritableFile(
+  const std::string& fname,
+  std::unique_ptr<rocksdb::WritableFile>* result,
+  const rocksdb::EnvOptions& options)
+{
+  return EnvWrapper::NewWritableFile(base + fname, result, options);
+}
+
+rocksdb::Status NoRocksEnv::ReuseWritableFile(
+  const std::string& fname,
+  const std::string& old_fname,
+  std::unique_ptr<rocksdb::WritableFile>* result,
+  const rocksdb::EnvOptions& options)
+{
+  return EnvWrapper::ReuseWritableFile(base + fname, base + old_fname, result, options);
+}
+
+rocksdb::Status NoRocksEnv::NewDirectory(
+  const std::string& name,
+  std::unique_ptr<rocksdb::Directory>* result)
+{
+  return EnvWrapper::NewDirectory(base + name, result);
+}
+
+rocksdb::Status NoRocksEnv::FileExists(const std::string& fname)
+{
+  return EnvWrapper::FileExists(base + fname);
+}
+
+rocksdb::Status NoRocksEnv::GetChildren(const std::string& dir,
+					std::vector<std::string>* result)
+{
+  return EnvWrapper::GetChildren(base + dir, result);
+}
+
+rocksdb::Status NoRocksEnv::DeleteFile(const std::string& fname)
+{
+  return EnvWrapper::DeleteFile(base + fname);
+}
+
+rocksdb::Status NoRocksEnv::CreateDir(const std::string& dirname)
+{
+  return EnvWrapper::CreateDir(base + dirname);
+}
+
+rocksdb::Status NoRocksEnv::CreateDirIfMissing(const std::string& dirname)
+{
+  return EnvWrapper::CreateDirIfMissing(base + dirname);
+}
+
+rocksdb::Status NoRocksEnv::DeleteDir(const std::string& dirname)
+{
+  return EnvWrapper::DeleteDir(base + dirname);
+}
+
+rocksdb::Status NoRocksEnv::GetFileSize(const std::string& fname, uint64_t* file_size)
+{
+  return EnvWrapper::GetFileSize(base + fname, file_size);
+}
+
+rocksdb::Status NoRocksEnv::GetFileModificationTime(const std::string& fname,
+					uint64_t* file_mtime)
+{
+  return EnvWrapper::GetFileModificationTime(base + fname, file_mtime);
+}
+
+rocksdb::Status NoRocksEnv::RenameFile(const std::string& src,
+			   const std::string& target)
+{
+  return EnvWrapper::RenameFile(base + src, base + target);
+}
+
+rocksdb::Status NoRocksEnv::LinkFile(const std::string& src, const std::string& target)
+{
+  return EnvWrapper::LinkFile(base + src, base + target);
+}
+
+rocksdb::Status NoRocksEnv::AreFilesSame(const std::string& first,
+			     const std::string& second, bool* res)
+{
+  return EnvWrapper::AreFilesSame(base + first, base + second, res);
+}
+
+rocksdb::Status NoRocksEnv::LockFile(const std::string& fname, rocksdb::FileLock** lock)
+{
+  return EnvWrapper::LockFile(base + fname, lock);
+}
+
+rocksdb::Status NoRocksEnv::GetTestDirectory(std::string* path)
+{
+  rocksdb::Status s = EnvWrapper::GetTestDirectory(path);
+  if (path->find(base) == 0) {
+    *path = path->substr(base.length());
+  }
+  return s;
+}
+
+rocksdb::Status NoRocksEnv::NewLogger(
+  const std::string& fname,
+  std::shared_ptr<rocksdb::Logger>* result)
+{
+  return EnvWrapper::NewLogger(base + fname, result);
+}
+
+rocksdb::Status NoRocksEnv::GetAbsolutePath(const std::string& db_path,
+				std::string* output_path)
+{
+  return EnvWrapper::GetAbsolutePath(db_path, output_path);
+}
+
+NoRocksEnv::NoRocksEnv(const std::string& base)
+  : EnvWrapper(Env::Default())
+  , base(base)
+{
+  if (base.length() == 0 || *base.rbegin() != '/')
+    this->base = base + "/";
+}
