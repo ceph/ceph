@@ -180,6 +180,14 @@ $CEPHADM shell --fsid $FSID -e FOO=BAR -- printenv | grep FOO=BAR
 # test stdin
 echo foo | $CEPHADM shell -- cat | grep -q foo
 
+# the shell commands a bit above this seems to cause the
+# /var/lib/ceph/<fsid> directory to be made. Since we now
+# check in bootstrap that there are no clusters with the same
+# fsid based on the directory existing, we need to make sure
+# this directory is gone before bootstrapping. We can
+# accomplish this with another rm-cluster
+$CEPHADM rm-cluster --fsid $FSID --force
+
 ## bootstrap
 ORIG_CONFIG=`mktemp -p $TMPDIR`
 CONFIG=`mktemp -p $TMPDIR`
