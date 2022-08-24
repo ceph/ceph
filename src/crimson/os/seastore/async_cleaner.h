@@ -1086,38 +1086,6 @@ private:
    */
   using gc_cycle_ret = seastar::future<>;
   class GCProcess {
-    std::optional<gc_cycle_ret> process_join;
-
-    AsyncCleaner &cleaner;
-
-    std::optional<seastar::promise<>> blocking;
-
-    bool is_stopping() const {
-      return !process_join;
-    }
-
-    gc_cycle_ret run();
-
-    void wake() {
-      if (blocking) {
-	blocking->set_value();
-	blocking = std::nullopt;
-      }
-    }
-
-    seastar::future<> maybe_wait_should_run() {
-      return seastar::do_until(
-	[this] {
-	  cleaner.log_gc_state("GCProcess::maybe_wait_should_run");
-	  return is_stopping() || cleaner.gc_should_run();
-	},
-	[this] {
-	  ceph_assert(!blocking);
-	  blocking = seastar::promise<>();
-	  return blocking->get_future();
-	});
-    }
-    bool is_running_until_halt = false;
   public:
     GCProcess(AsyncCleaner &cleaner) : cleaner(cleaner) {}
 
@@ -1126,6 +1094,15 @@ private:
       process_join = seastar::now(); // allow run()
       process_join = run();
       assert(!is_stopping());
+    }
+
+    void maybe_wake_on_space_used() {
+      if (is_stopping()) {
+        return;
+      }
+      if (cleaner.gc_should_run()) {
+	wake();
+      }
     }
 
     gc_cycle_ret stop() {
@@ -1162,14 +1139,37 @@ private:
       );
     }
 
-    void maybe_wake_on_space_used() {
-      if (is_stopping()) {
-        return;
-      }
-      if (cleaner.gc_should_run()) {
-	wake();
+  private:
+    bool is_stopping() const {
+      return !process_join;
+    }
+
+    gc_cycle_ret run();
+
+    void wake() {
+      if (blocking) {
+	blocking->set_value();
+	blocking = std::nullopt;
       }
     }
+
+    seastar::future<> maybe_wait_should_run() {
+      return seastar::do_until(
+	[this] {
+	  cleaner.log_gc_state("GCProcess::maybe_wait_should_run");
+	  return is_stopping() || cleaner.gc_should_run();
+	},
+	[this] {
+	  ceph_assert(!blocking);
+	  blocking = seastar::promise<>();
+	  return blocking->get_future();
+	});
+    }
+
+    AsyncCleaner &cleaner;
+    std::optional<gc_cycle_ret> process_join;
+    std::optional<seastar::promise<>> blocking;
+    bool is_running_until_halt = false;
   } gc_process;
 
   using gc_ertr = work_ertr::extend_ertr<
