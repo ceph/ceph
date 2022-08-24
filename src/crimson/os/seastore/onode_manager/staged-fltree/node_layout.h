@@ -871,7 +871,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       if (unlikely(is_keys_empty())) {
         assert(insert_pos.is_end());
         insert_stage = STAGE;
-        insert_size = stage_t::template insert_size<KeyT::VIEW>(key, value);
+        insert_size = stage_t::insert_size(key, value);
       } else {
         std::tie(insert_stage, insert_size) = stage_t::evaluate_insert(
             node_stage, key, value, cast_down<STAGE>(insert_pos), false);
@@ -893,7 +893,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       if (unlikely(is_keys_empty())) {
         assert(insert_pos.is_end());
         assert(is_level_tail());
-        return {STAGE, stage_t::template insert_size<KeyT::HOBJ>(key, value)};
+        return {STAGE, stage_t::insert_size(key, value)};
       } else {
         return stage_t::evaluate_insert(
             key, value, history, mstat, cast_down<STAGE>(insert_pos));

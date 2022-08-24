@@ -139,24 +139,24 @@ TEST_F(a_basic_test_t, 1_basic_sizes)
     "  LeafNode1: {} {} {}\n"
     "  LeafNode2: {} {}\n"
     "  LeafNode3: {}",
-    _STAGE_T(InternalNode0)::template insert_size<KeyT::VIEW>(key_view, i_value),
-    NXT_T(_STAGE_T(InternalNode0))::template insert_size<KeyT::VIEW>(key_view, i_value),
-    NXT_T(NXT_T(_STAGE_T(InternalNode0)))::template insert_size<KeyT::VIEW>(key_view, i_value),
-    _STAGE_T(InternalNode1)::template insert_size<KeyT::VIEW>(key_view, i_value),
-    NXT_T(_STAGE_T(InternalNode1))::template insert_size<KeyT::VIEW>(key_view, i_value),
-    NXT_T(NXT_T(_STAGE_T(InternalNode1)))::template insert_size<KeyT::VIEW>(key_view, i_value),
-    _STAGE_T(InternalNode2)::template insert_size<KeyT::VIEW>(key_view, i_value),
-    NXT_T(_STAGE_T(InternalNode2))::template insert_size<KeyT::VIEW>(key_view, i_value),
-    _STAGE_T(InternalNode3)::template insert_size<KeyT::VIEW>(key_view, i_value),
-    _STAGE_T(LeafNode0)::template insert_size<KeyT::HOBJ>(key, value),
-    NXT_T(_STAGE_T(LeafNode0))::template insert_size<KeyT::HOBJ>(key, value),
-    NXT_T(NXT_T(_STAGE_T(LeafNode0)))::template insert_size<KeyT::HOBJ>(key, value),
-    _STAGE_T(LeafNode1)::template insert_size<KeyT::HOBJ>(key, value),
-    NXT_T(_STAGE_T(LeafNode1))::template insert_size<KeyT::HOBJ>(key, value),
-    NXT_T(NXT_T(_STAGE_T(LeafNode1)))::template insert_size<KeyT::HOBJ>(key, value),
-    _STAGE_T(LeafNode2)::template insert_size<KeyT::HOBJ>(key, value),
-    NXT_T(_STAGE_T(LeafNode2))::template insert_size<KeyT::HOBJ>(key, value),
-    _STAGE_T(LeafNode3)::template insert_size<KeyT::HOBJ>(key, value)
+    _STAGE_T(InternalNode0)::insert_size(key_view, i_value),
+    NXT_T(_STAGE_T(InternalNode0))::insert_size(key_view, i_value),
+    NXT_T(NXT_T(_STAGE_T(InternalNode0)))::insert_size(key_view, i_value),
+    _STAGE_T(InternalNode1)::insert_size(key_view, i_value),
+    NXT_T(_STAGE_T(InternalNode1))::insert_size(key_view, i_value),
+    NXT_T(NXT_T(_STAGE_T(InternalNode1)))::insert_size(key_view, i_value),
+    _STAGE_T(InternalNode2)::insert_size(key_view, i_value),
+    NXT_T(_STAGE_T(InternalNode2))::insert_size(key_view, i_value),
+    _STAGE_T(InternalNode3)::insert_size(key_view, i_value),
+    _STAGE_T(LeafNode0)::insert_size(key, value),
+    NXT_T(_STAGE_T(LeafNode0))::insert_size(key, value),
+    NXT_T(NXT_T(_STAGE_T(LeafNode0)))::insert_size(key, value),
+    _STAGE_T(LeafNode1)::insert_size(key, value),
+    NXT_T(_STAGE_T(LeafNode1))::insert_size(key, value),
+    NXT_T(NXT_T(_STAGE_T(LeafNode1)))::insert_size(key, value),
+    _STAGE_T(LeafNode2)::insert_size(key, value),
+    NXT_T(_STAGE_T(LeafNode2))::insert_size(key, value),
+    _STAGE_T(LeafNode3)::insert_size(key, value)
   );
   std::free(p_mem);
 }
