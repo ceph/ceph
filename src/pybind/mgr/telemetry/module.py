@@ -521,8 +521,8 @@ class Module(MgrModule):
         if r != 0:
             self.log.error("Invalid command dictionary: {}".format(cmd_dict))
         else:
-            if 'tcmalloc heap stats' in outs:
-                values = [int(i) for i in outs.split() if i.isdigit()]
+            if 'tcmalloc heap stats' in outb:
+                values = [int(i) for i in outb.split() if i.isdigit()]
                 # `categories` must be ordered this way for the correct output to be parsed
                 categories = ['use_by_application',
                               'page_heap_freelist',
