@@ -427,7 +427,13 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
     }
   }
 
-  dir->scrub_local();
+  if (!dir->scrub_local()) {
+    std::string path;
+    dir->get_inode()->make_path_string(path, true);
+    clog->warn() << "Scrub error on dir " << dir->ino()
+                 << " (" << path << ") see " << g_conf()->name
+                 << " log and `damage ls` output for details";
+  }
 
   dir->scrub_finished();
   dir->auth_unpin(this);
