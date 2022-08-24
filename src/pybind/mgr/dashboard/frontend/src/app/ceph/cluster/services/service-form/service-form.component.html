@@ -326,7 +326,7 @@
         </ng-container>
 
         <!-- Ingress -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'ingress'">
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'ingress'">
           <!-- virtual_ip -->
           <div class="form-group row">
             <label class="cd-col-form-label"
@@ -412,7 +412,8 @@
             </div>
           </div>
           <!-- virtual_interface_networks -->
-          <div class="form-group row">
+          <div class="form-group row"
+               *ngIf="!serviceForm.controls.unmanaged.value">
             <label class="cd-col-form-label"
                    for="virtual_interface_networks">
               <span i18n>CIDR Networks</span>
