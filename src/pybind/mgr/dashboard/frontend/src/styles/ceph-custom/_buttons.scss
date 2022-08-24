@@ -80,6 +80,10 @@
   }
 }
 
+.btn-default {
+  @extend .btn-light;
+}
+
 .btn-primary .badge {
   background-color: vv.$gray-200;
   color: vv.$primary;

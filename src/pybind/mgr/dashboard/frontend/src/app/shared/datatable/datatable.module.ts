@@ -14,6 +14,8 @@ import { TableActionsComponent } from './table-actions/table-actions.component';
 import { TableKeyValueComponent } from './table-key-value/table-key-value.component';
 import { TablePaginationComponent } from './table-pagination/table-pagination.component';
 import { TableComponent } from './table/table.component';
+import { Bootstrap4FrameworkModule } from '@ajsf/bootstrap4';
+import { CrudFormComponent } from './crud-table/crud-form/crud-form.component';
 
 @NgModule({
   imports: [
@@ -25,14 +27,16 @@ import { TableComponent } from './table/table.component';
     NgbTooltipModule,
     PipesModule,
     ComponentsModule,
-    RouterModule
+    RouterModule,
+    Bootstrap4FrameworkModule
   ],
   declarations: [
     TableComponent,
     TableKeyValueComponent,
     TableActionsComponent,
     CRUDTableComponent,
-    TablePaginationComponent
+    TablePaginationComponent,
+    CrudFormComponent
   ],
   exports: [
     TableComponent,
