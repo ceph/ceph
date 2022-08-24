@@ -8305,6 +8305,7 @@ class HostFacts():
     def __init__(self, ctx: CephadmContext):
         self.ctx: CephadmContext = ctx
         self.cpu_model: str = 'Unknown'
+        self.sysctl_options: Dict[str, str] = self._populate_sysctl_options()
         self.cpu_count: int = 0
         self.cpu_cores: int = 0
         self.cpu_threads: int = 0
@@ -8318,6 +8319,15 @@ class HostFacts():
         self._enclosures = self._discover_enclosures()
         self._block_devices = self._get_block_devs()
         self._device_list = self._get_device_info()
+
+    def _populate_sysctl_options(self) -> Dict[str, str]:
+        sysctl_options = {}
+        out, _, _ = call_throws(self.ctx, ['sysctl', '-a'], verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+        if out:
+            for line in out.splitlines():
+                option, value = line.split('=')
+                sysctl_options[option.strip()] = value.strip()
+        return sysctl_options
 
     def _discover_enclosures(self) -> Dict[str, Enclosure]:
         """Build a dictionary of discovered scsi enclosures
