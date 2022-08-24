@@ -310,7 +310,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   eagain_ifuture<NodeExtentMutable>
   rebuild_extent(context_t c) override {
     assert(!is_keys_empty());
-    full_key_t<KeyT::VIEW> first_index;
+    key_view_t first_index;
     stage_t::template get_slot<true, false>(
         extent.read(), position_t::begin(), &first_index, nullptr);
     auto hint = first_index.get_hint();
@@ -520,7 +520,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
           node_stage, key, history, index_key);
 #ifndef NDEBUG
       if (!result_raw.is_end()) {
-        full_key_t<KeyT::VIEW> index;
+        key_view_t index;
         stage_t::template get_slot<true, false>(
             node_stage, result_raw.position, &index, nullptr);
         assert(index == *index_key);
@@ -533,7 +533,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     if (result_raw.is_end()) {
       assert(result_raw.mstat == MSTAT_END);
     } else {
-      full_key_t<KeyT::VIEW> index;
+      key_view_t index;
       stage_t::template get_slot<true, false>(
           node_stage, result_raw.position, &index, nullptr);
       assert_mstat(key, index, result_raw.mstat);
@@ -593,7 +593,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     }
     validate_layout();
 #ifndef NDEBUG
-    full_key_t<KeyT::VIEW> index;
+    key_view_t index;
     get_slot(insert_pos, &index, nullptr);
     assert(index == key);
 #endif
@@ -773,14 +773,14 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       p_value = extent.template split_insert_replayable<KEY_TYPE>(
           split_at, key, value, insert_pos, insert_stage, insert_size);
 #ifndef NDEBUG
-      full_key_t<KeyT::VIEW> index;
+      key_view_t index;
       get_slot(_insert_pos, &index, nullptr);
       assert(index == key);
 #endif
     } else {
       SUBDEBUG(seastore_onode, "-- left trim ...");
 #ifndef NDEBUG
-      full_key_t<KeyT::VIEW> index;
+      key_view_t index;
       right_impl.get_slot(_insert_pos, &index, nullptr);
       assert(index == key);
 #endif

@@ -23,7 +23,7 @@ struct search_result_bs_t {
 };
 template <typename FGetKey>
 search_result_bs_t binary_search(
-    const full_key_t<KeyT::HOBJ>& key,
+    const key_hobj_t& key,
     index_t begin, index_t end, FGetKey&& f_get_key) {
   assert(begin <= end);
   while (begin < end) {
@@ -85,8 +85,8 @@ inline bool matchable(field_type_t type, match_stat_t mstat) {
 }
 
 inline void assert_mstat(
-    const full_key_t<KeyT::HOBJ>& key,
-    const full_key_t<KeyT::VIEW>& index,
+    const key_hobj_t& key,
+    const key_view_t& index,
     match_stat_t mstat) {
   assert(mstat >= MSTAT_MIN && mstat <= MSTAT_LT2);
   // key < index ...
@@ -301,7 +301,7 @@ struct staged {
       ++_index;
     }
     // Note: possible to return an end iterator
-    MatchKindBS seek(const full_key_t<KeyT::HOBJ>& key, bool exclude_last) {
+    MatchKindBS seek(const key_hobj_t& key, bool exclude_last) {
       assert(!is_end());
       assert(index() == 0);
       index_t end_index = container.keys();
@@ -620,7 +620,7 @@ struct staged {
       _is_end = true;
     }
     // Note: possible to return an end iterator
-    MatchKindBS seek(const full_key_t<KeyT::HOBJ>& key, bool exclude_last) {
+    MatchKindBS seek(const key_hobj_t& key, bool exclude_last) {
       assert(!is_end());
       assert(index() == 0);
       do {
@@ -932,7 +932,7 @@ struct staged {
 
   template <bool GET_KEY>
   static result_t smallest_result(
-      const iterator_t& iter, full_key_t<KeyT::VIEW>* p_index_key) {
+      const iterator_t& iter, key_view_t* p_index_key) {
     static_assert(!IS_BOTTOM);
     assert(!iter.is_end());
     auto nxt_container = iter.get_nxt_container();
@@ -951,8 +951,8 @@ struct staged {
 
   template <bool GET_KEY>
   static result_t nxt_lower_bound(
-      const full_key_t<KeyT::HOBJ>& key, iterator_t& iter,
-      MatchHistory& history, full_key_t<KeyT::VIEW>* index_key) {
+      const key_hobj_t& key, iterator_t& iter,
+      MatchHistory& history, key_view_t* index_key) {
     static_assert(!IS_BOTTOM);
     assert(!iter.is_end());
     auto nxt_container = iter.get_nxt_container();
@@ -976,7 +976,7 @@ struct staged {
   static void get_largest_slot(
       const container_t& container,        // IN
       position_t* p_position,              // OUT
-      full_key_t<KeyT::VIEW>* p_index_key, // OUT
+      key_view_t* p_index_key,             // OUT
       const value_t** pp_value) {          // OUT
     auto iter = iterator_t(container);
     iter.seek_last();
@@ -1015,7 +1015,7 @@ struct staged {
   static void get_slot(
       const container_t& container,        // IN
       const position_t& pos,               // IN
-      full_key_t<KeyT::VIEW>* p_index_key, // OUT
+      key_view_t* p_index_key,             // OUT
       const value_t** pp_value) {          // OUT
     auto iter = iterator_t(container);
     iter.seek_at(pos.index);
@@ -1044,9 +1044,9 @@ struct staged {
   template <bool GET_KEY = false>
   static result_t lower_bound(
       const container_t& container,
-      const full_key_t<KeyT::HOBJ>& key,
+      const key_hobj_t& key,
       MatchHistory& history,
-      full_key_t<KeyT::VIEW>* index_key = nullptr) {
+      key_view_t* index_key = nullptr) {
     bool exclude_last = false;
     if (history.get<STAGE>().has_value()) {
       if (*history.get<STAGE>() == MatchKindCMP::EQ) {
@@ -1159,7 +1159,7 @@ struct staged {
 
   template <typename T = std::tuple<match_stage_t, node_offset_t>>
   static std::enable_if_t<NODE_TYPE == node_type_t::INTERNAL, T> evaluate_insert(
-      const container_t& container, const full_key_t<KeyT::VIEW>& key,
+      const container_t& container, const key_view_t& key,
       const value_input_t& value, position_t& position, bool evaluate_last) {
     auto iter = iterator_t(container);
     auto& index = position.index;
@@ -1259,7 +1259,7 @@ struct staged {
 
   template <typename T = std::tuple<match_stage_t, node_offset_t>>
   static std::enable_if_t<NODE_TYPE == node_type_t::LEAF, T> evaluate_insert(
-      const full_key_t<KeyT::HOBJ>& key, const value_config_t& value,
+      const key_hobj_t& key, const value_config_t& value,
       const MatchHistory& history, match_stat_t mstat, position_t& position) {
     match_stage_t insert_stage = STAGE_TOP;
     while (*history.get_by_stage(insert_stage) == MatchKindCMP::EQ) {
@@ -1478,7 +1478,7 @@ struct staged {
   }
 
   static void get_stats(const container_t& container, node_stats_t& stats,
-                        full_key_t<KeyT::VIEW>& index_key) {
+                        key_view_t& index_key) {
     auto iter = iterator_t(container);
     assert(!iter.is_end());
     stats.size_overhead += iterator_t::header_size();
@@ -1513,7 +1513,7 @@ struct staged {
   static bool get_next_slot(
       const container_t& container,         // IN
       position_t& pos,                      // IN&OUT
-      full_key_t<KeyT::VIEW>* p_index_key,  // OUT
+      key_view_t* p_index_key,              // OUT
       const value_t** pp_value) {           // OUT
     auto iter = iterator_t(container);
     assert(!iter.is_end());
@@ -1554,7 +1554,7 @@ struct staged {
   static void get_prev_slot(
       const container_t& container,         // IN
       position_t& pos,                      // IN&OUT
-      full_key_t<KeyT::VIEW>* p_index_key,  // OUT
+      key_view_t* p_index_key,              // OUT
       const value_t** pp_value) {           // OUT
     assert(pos != position_t::begin());
     assert(!pos.is_end());
@@ -2344,7 +2344,7 @@ struct staged {
   }
 
   static std::tuple<match_stage_t, node_offset_t> evaluate_merge(
-      const full_key_t<KeyT::VIEW>& left_pivot_index,
+      const key_view_t& left_pivot_index,
       const container_t& right_container) {
     auto r_iter = iterator_t(right_container);
     r_iter.seek_at(0);
