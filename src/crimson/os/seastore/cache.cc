@@ -1423,6 +1423,10 @@ void Cache::complete_commit(
 
   std::vector<backref_entry_ref> backref_list;
   t.for_each_fresh_block([&](const CachedExtentRef &i) {
+    if (!i->is_valid()) {
+      return;
+    }
+
     bool is_inline = false;
     if (i->is_inline()) {
       is_inline = true;
@@ -1431,35 +1435,33 @@ void Cache::complete_commit(
     i->last_committed_crc = i->get_crc32c();
     i->on_initial_write();
 
-    if (i->is_valid()) {
-      i->state = CachedExtent::extent_state_t::CLEAN;
-      DEBUGT("add extent as fresh, inline={} -- {}",
-             t, is_inline, *i);
-      const auto t_src = t.get_src();
-      add_extent(i, &t_src);
-      epm.mark_space_used(i->get_paddr(), i->get_length());
-      if (is_backref_mapped_extent_node(i)) {
-	DEBUGT("backref_list new {} len {}",
-	       t,
-	       i->get_paddr(),
-	       i->get_length());
-	backref_list.emplace_back(
-	  std::make_unique<backref_entry_t>(
-	    i->get_paddr(),
-	    i->is_logical()
-	    ? i->cast<LogicalCachedExtent>()->get_laddr()
-	    : (is_lba_node(i->get_type())
-	      ? i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin
-	      : L_ADDR_NULL),
-	    i->get_length(),
-	    i->get_type(),
-	    start_seq));
-      } else if (is_backref_node(i->get_type())) {
-	add_backref_extent(i->get_paddr(), i->get_type());
-      } else {
-	ERRORT("{}", t, *i);
-	ceph_abort("not possible");
-      }
+    i->state = CachedExtent::extent_state_t::CLEAN;
+    DEBUGT("add extent as fresh, inline={} -- {}",
+	   t, is_inline, *i);
+    const auto t_src = t.get_src();
+    add_extent(i, &t_src);
+    epm.mark_space_used(i->get_paddr(), i->get_length());
+    if (is_backref_mapped_extent_node(i)) {
+      DEBUGT("backref_list new {} len {}",
+	     t,
+	     i->get_paddr(),
+	     i->get_length());
+      backref_list.emplace_back(
+	std::make_unique<backref_entry_t>(
+	  i->get_paddr(),
+	  i->is_logical()
+	  ? i->cast<LogicalCachedExtent>()->get_laddr()
+	  : (is_lba_node(i->get_type())
+	    ? i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin
+	    : L_ADDR_NULL),
+	  i->get_length(),
+	  i->get_type(),
+	  start_seq));
+    } else if (is_backref_node(i->get_type())) {
+      add_backref_extent(i->get_paddr(), i->get_type());
+    } else {
+      ERRORT("{}", t, *i);
+      ceph_abort("not possible");
     }
   });
 
