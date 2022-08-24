@@ -132,10 +132,10 @@ class item_iterator_t {
     return ns_oid_view_t::estimate_size(key) + sizeof(node_offset_t);
   }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static memory_range_t insert_prefix(
       NodeExtentMutable& mut, const item_iterator_t<NODE_TYPE>& iter,
-      const full_key_t<KT>& key, bool is_end,
+      const Key& key, bool is_end,
       node_offset_t size, const char* p_left_bound);
 
   static void update_size(

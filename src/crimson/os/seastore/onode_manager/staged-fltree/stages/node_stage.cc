@@ -91,9 +91,9 @@ void NODE_T::update_is_level_tail(
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
-template <KeyT KT>
+template <IsFullKey Key>
 memory_range_t NODE_T::insert_prefix_at(
-    NodeExtentMutable& mut, const node_extent_t& node, const full_key_t<KT>& key,
+    NodeExtentMutable& mut, const node_extent_t& node, const Key& key,
     index_t index, node_offset_t size, const char* p_left_bound)
 {
   assert(mut.get_length() == node.node_size);
@@ -118,22 +118,22 @@ memory_range_t NODE_T::insert_prefix_at(
     ceph_abort("impossible");
   }
 }
-#define IPA_TEMPLATE(FT, NT, KT)                                         \
-  template memory_range_t NODE_INST(FT, NT)::insert_prefix_at<KT>(       \
-      NodeExtentMutable&, const node_extent_t&, const full_key_t<KT>&, \
+#define IPA_TEMPLATE(FT, NT, Key)                                         \
+  template memory_range_t NODE_INST(FT, NT)::insert_prefix_at<Key>(       \
+      NodeExtentMutable&, const node_extent_t&, const Key&, \
       index_t, node_offset_t, const char*)
-IPA_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_0_t, node_type_t::LEAF, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_1_t, node_type_t::LEAF, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_2_t, node_type_t::LEAF, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_0_t, node_type_t::LEAF, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_1_t, node_type_t::LEAF, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_2_t, node_type_t::LEAF, KeyT::HOBJ);
+IPA_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, key_view_t);
+IPA_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, key_view_t);
+IPA_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, key_view_t);
+IPA_TEMPLATE(node_fields_0_t, node_type_t::LEAF, key_view_t);
+IPA_TEMPLATE(node_fields_1_t, node_type_t::LEAF, key_view_t);
+IPA_TEMPLATE(node_fields_2_t, node_type_t::LEAF, key_view_t);
+IPA_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, key_hobj_t);
+IPA_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, key_hobj_t);
+IPA_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, key_hobj_t);
+IPA_TEMPLATE(node_fields_0_t, node_type_t::LEAF, key_hobj_t);
+IPA_TEMPLATE(node_fields_1_t, node_type_t::LEAF, key_hobj_t);
+IPA_TEMPLATE(node_fields_2_t, node_type_t::LEAF, key_hobj_t);
 
 template <typename FieldType, node_type_t NODE_TYPE>
 void NODE_T::update_size_at(

@@ -323,15 +323,15 @@ struct staged {
         const value_input_t& value,
         node_offset_t insert_size,
         const char* p_left_bound) {
-      return container_t::template insert_at<KT>(
+      return container_t::insert_at(
           mut, container, key, value, _index, insert_size, p_left_bound);
     }
 
-    template <KeyT KT, typename T = memory_range_t>
+    template <IsFullKey Key, typename T = memory_range_t>
     std::enable_if_t<!IS_BOTTOM, T> insert_prefix(
-        NodeExtentMutable& mut, const full_key_t<KT>& key,
+        NodeExtentMutable& mut, const Key& key,
         node_offset_t size, const char* p_left_bound) {
-      return container_t::template insert_prefix_at<KT>(
+      return container_t::insert_prefix_at(
           mut, container, key, _index, size, p_left_bound);
     }
 
@@ -647,11 +647,11 @@ struct staged {
       return MatchKindBS::NE;
     }
 
-    template <KeyT KT>
+    template <IsFullKey Key>
     memory_range_t insert_prefix(
-        NodeExtentMutable& mut, const full_key_t<KT>& key,
+        NodeExtentMutable& mut, const Key& key,
         node_offset_t size, const char* p_left_bound) {
-      return container_t::template insert_prefix<KT>(
+      return container_t::insert_prefix(
           mut, container, key, is_end(), size, p_left_bound);
     }
 
@@ -1366,7 +1366,7 @@ struct staged {
         return iter.template insert<KT>(
             mut, key, value, _insert_size, p_left_bound);
       } else {
-        auto range = iter.template insert_prefix<KT>(
+        auto range = iter.insert_prefix(
             mut, key, _insert_size, p_left_bound);
         return NXT_STAGE_T::template insert_new<KT>(mut, range, key, value);
       }
@@ -1403,10 +1403,10 @@ struct staged {
         ceph_abort("impossible path");
       }
       if constexpr (IS_BOTTOM) {
-        return container_t::template insert_at<KT>(
+        return container_t::insert_at(
             mut, container, key, value, 0, _insert_size, p_left_bound);
       } else {
-        auto range = container_t::template insert_prefix_at<KT>(
+        auto range = container_t::template insert_prefix_at(
             mut, container, key, 0, _insert_size, p_left_bound);
         return NXT_STAGE_T::template insert_new<KT>(mut, range, key, value);
       }
