@@ -1153,19 +1153,6 @@ private:
       }
     }
 
-    seastar::future<> maybe_wait_should_run() {
-      return seastar::do_until(
-	[this] {
-	  cleaner.log_gc_state("GCProcess::maybe_wait_should_run");
-	  return is_stopping() || cleaner.gc_should_run();
-	},
-	[this] {
-	  ceph_assert(!blocking);
-	  blocking = seastar::promise<>();
-	  return blocking->get_future();
-	});
-    }
-
     AsyncCleaner &cleaner;
     std::optional<gc_cycle_ret> process_join;
     std::optional<seastar::promise<>> blocking;

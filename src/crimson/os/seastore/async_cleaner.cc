@@ -750,20 +750,27 @@ double AsyncCleaner::calc_gc_benefit_cost(
 
 AsyncCleaner::gc_cycle_ret AsyncCleaner::GCProcess::run()
 {
-  return seastar::do_until(
-    [this] { return is_stopping(); },
-    [this] {
-      return maybe_wait_should_run(
-      ).then([this] {
-	cleaner.log_gc_state("GCProcess::run");
-
-	if (is_stopping()) {
-	  return seastar::now();
-	} else {
-	  return cleaner.do_gc_cycle();
-	}
-      });
+  ceph_assert(!is_stopping());
+  return seastar::repeat([this] {
+    if (is_stopping()) {
+      cleaner.log_gc_state("GCProcess::run(exit)");
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
+    }
+    return seastar::futurize_invoke([this] {
+      if (cleaner.gc_should_run()) {
+        cleaner.log_gc_state("GCProcess::run(gc)");
+        return cleaner.do_gc_cycle();
+      } else {
+        cleaner.log_gc_state("GCProcess::run(block)");
+        ceph_assert(!blocking);
+        blocking = seastar::promise<>();
+        return blocking->get_future();
+      }
+    }).then([] {
+      return seastar::stop_iteration::no;
     });
+  });
 }
 
 AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
