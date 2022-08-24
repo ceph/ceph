@@ -1394,11 +1394,17 @@ void MDBalancer::handle_mds_failure(mds_rank_t who)
   }
 }
 
-int MDBalancer::dump_loads(Formatter *f) const
+int MDBalancer::dump_loads(Formatter *f, int64_t depth) const
 {
-  std::deque<CDir*> dfs;
+  std::deque<pair<CDir*, int>> dfs;
+  std::deque<CDir*> dfs_root;
   if (mds->mdcache->get_root()) {
-    mds->mdcache->get_root()->get_dirfrags(dfs);
+    mds->mdcache->get_root()->get_dirfrags(dfs_root);
+    while (!dfs_root.empty()) {
+        CDir *dir = dfs_root.front();
+        dfs_root.pop_front();
+        dfs.push_back(make_pair(dir, 0));
+    }
   } else {
     dout(10) << "no root" << dendl;
   }
@@ -1407,12 +1413,17 @@ int MDBalancer::dump_loads(Formatter *f) const
 
   f->open_array_section("dirfrags");
   while (!dfs.empty()) {
-    CDir *dir = dfs.front();
+    auto [dir, cur_depth] = dfs.front();
     dfs.pop_front();
 
     f->open_object_section("dir");
     dir->dump_load(f);
     f->close_section();
+
+    //limit output dirfrags depth
+    if (depth >= 0 && (cur_depth + 1) > depth) {
+        continue;
+    }
 
     for (auto it = dir->begin(); it != dir->end(); ++it) {
       CInode *in = it->second->get_linkage()->get_inode();
@@ -1421,9 +1432,10 @@ int MDBalancer::dump_loads(Formatter *f) const
 
       auto&& ls = in->get_dirfrags();
       for (const auto& subdir : ls) {
+
 	if (subdir->pop_nested.meta_load() < .001)
 	  continue;
-	dfs.push_back(subdir);
+	dfs.push_back(make_pair(subdir, cur_depth+1));
       }
     }
   }
