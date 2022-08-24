@@ -140,9 +140,9 @@ void validate_tree_config(const tree_conf_t& conf)
 
     laddr_t i_value{0};
     auto insert_size_2 =
-      _STAGE_T(InternalNode0)::template insert_size<KeyT::HOBJ>(key, i_value);
+      _STAGE_T(InternalNode0)::insert_size(key, i_value);
     auto insert_size_0 =
-      NXT_T(NXT_T(_STAGE_T(InternalNode0)))::template insert_size<KeyT::HOBJ>(key, i_value);
+      NXT_T(NXT_T(_STAGE_T(InternalNode0)))::insert_size(key, i_value);
     unsigned internal_size_bound = sizeof(node_header_t) +
                                    (insert_size_2 + max_str_size) * 2 +
                                    (insert_size_2 - insert_size_0 + max_str_size);
@@ -151,9 +151,9 @@ void validate_tree_config(const tree_conf_t& conf)
     value_config_t l_value;
     l_value.payload_size = conf.max_value_payload_size;
     insert_size_2 =
-      _STAGE_T(LeafNode0)::template insert_size<KeyT::HOBJ>(key, l_value);
+      _STAGE_T(LeafNode0)::insert_size(key, l_value);
     insert_size_0 =
-      NXT_T(NXT_T(_STAGE_T(LeafNode0)))::template insert_size<KeyT::HOBJ>(key, l_value);
+      NXT_T(NXT_T(_STAGE_T(LeafNode0)))::insert_size(key, l_value);
     unsigned leaf_size_bound = sizeof(node_header_t) +
                                (insert_size_2 + max_str_size) * 2 +
                                (insert_size_2 - insert_size_0 + max_str_size);
