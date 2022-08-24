@@ -3148,7 +3148,7 @@ public:
 int RGWReadBucketPipeSyncStatusCoroutine::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
-    yield call(new RGWSimpleRadosReadAttrsCR(dpp, sync_env->async_rados, sync_env->svc->sysobj,
+    yield call(new RGWSimpleRadosReadAttrsCR(dpp, sync_env->store,
                                              rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, oid),
                                              &attrs, true, objv_tracker));
     if (retcode == -ENOENT) {
