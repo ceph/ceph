@@ -3239,6 +3239,10 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
     m->set_reqid(op->reqid);
   }
 
+  if (op->otel_trace && op->otel_trace->IsValid()) {
+     m->otel_trace = jspan_context(*op->otel_trace);
+  }
+
   logger->inc(l_osdc_op_send);
   ssize_t sum = 0;
   for (unsigned i = 0; i < m->ops.size(); i++) {
