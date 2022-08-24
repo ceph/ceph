@@ -73,14 +73,15 @@ class RadosWriter : public rgw::sal::DataProcessor {
   RawObjSet written; // set of written objects for deletion
   const DoutPrefixProvider *dpp;
   optional_yield y;
+  jspan_context& trace;
 
  public:
   RadosWriter(Aio *aio, RGWRados *store,
               const RGWBucketInfo& bucket_info,
               RGWObjectCtx& obj_ctx, const rgw_obj& _head_obj,
-              const DoutPrefixProvider *dpp, optional_yield y)
+              const DoutPrefixProvider *dpp, optional_yield y, jspan_context& _trace)
     : aio(aio), store(store), bucket_info(bucket_info),
-      obj_ctx(obj_ctx), head_obj(_head_obj), dpp(dpp), y(y)
+      obj_ctx(obj_ctx), head_obj(_head_obj), dpp(dpp), y(y), trace(_trace)
   {}
   ~RadosWriter();
 
@@ -105,6 +106,7 @@ class RadosWriter : public rgw::sal::DataProcessor {
   // so they aren't deleted on destruction
   void clear_written() { written.clear(); }
 
+  jspan_context& get_trace() { return trace; }
 };
 
 
@@ -135,12 +137,14 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& _obj_ctx,
                           const rgw_obj& _head_obj,
-                          const DoutPrefixProvider* dpp, optional_yield y)
+                          const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          jspan_context& trace)
     : HeadObjectProcessor(0),
       store(store), bucket_info(bucket_info),
       owner(owner),
       obj_ctx(_obj_ctx), head_obj(_head_obj),
-      writer(aio, store, bucket_info, obj_ctx, head_obj, dpp, y),
+      writer(aio, store, bucket_info, obj_ctx, head_obj, dpp, y, trace),
       chunk(&writer, 0), stripe(&chunk, this, 0), dpp(dpp) {
         if (ptail_placement_rule) {
           tail_placement_rule = *ptail_placement_rule;
@@ -177,9 +181,9 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                         RGWObjectCtx& obj_ctx, const rgw_obj& _head_obj,
                         std::optional<uint64_t> olh_epoch,
                         const std::string& unique_tag,
-                        const DoutPrefixProvider *dpp, optional_yield y)
+                        const DoutPrefixProvider *dpp, optional_yield y, jspan_context& trace)
     : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
-                              owner, obj_ctx, _head_obj, dpp, y),
+                              owner, obj_ctx, _head_obj, dpp, y, trace),
       olh_epoch(olh_epoch), unique_tag(unique_tag)
   {}
 
@@ -222,9 +226,9 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                            const rgw_obj& _head_obj,
                            const std::string& upload_id, uint64_t part_num,
                            const std::string& part_num_str,
-                           const DoutPrefixProvider *dpp, optional_yield y)
+                           const DoutPrefixProvider *dpp, optional_yield y, jspan_context& trace)
     : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
-                              owner, obj_ctx, _head_obj, dpp, y),
+                              owner, obj_ctx, _head_obj, dpp, y, trace),
       target_obj(head_obj), upload_id(upload_id),
       part_num(part_num), part_num_str(part_num_str),
       mp(head_obj.key.name, upload_id)
@@ -266,9 +270,9 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                           const rgw_obj& _head_obj,
                           const std::string& unique_tag, uint64_t position,
                           uint64_t *cur_accounted_size,
-                          const DoutPrefixProvider *dpp, optional_yield y)
+                          const DoutPrefixProvider *dpp, optional_yield y, jspan_context& trace)
             : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
-                                      owner, obj_ctx, _head_obj, dpp, y),
+                                      owner, obj_ctx, _head_obj, dpp, y, trace),
               position(position), cur_size(0), cur_accounted_size(cur_accounted_size),
               unique_tag(unique_tag), cur_manifest(nullptr)
     {}
