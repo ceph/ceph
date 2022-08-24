@@ -7,10 +7,10 @@
 
 namespace crimson::os::seastore::onode {
 
-template <KeyT KT>
+template <IsFullKey Key>
 const laddr_packed_t* internal_sub_items_t::insert_at(
     NodeExtentMutable& mut, const internal_sub_items_t& sub_items,
-    const full_key_t<KT>& key, const laddr_t& value,
+    const Key& key, const laddr_t& value,
     index_t index, node_offset_t size, const char* p_left_bound)
 {
   assert(index <= sub_items.keys());
@@ -26,12 +26,12 @@ const laddr_packed_t* internal_sub_items_t::insert_at(
   mut.copy_in_absolute(p_insert, item);
   return &reinterpret_cast<internal_sub_item_t*>(p_insert)->value;
 }
-#define IA_TEMPLATE(KT)                                                     \
-  template const laddr_packed_t* internal_sub_items_t::insert_at<KT>(       \
-    NodeExtentMutable&, const internal_sub_items_t&, const full_key_t<KT>&, \
+#define IA_TEMPLATE(Key)                                                    \
+  template const laddr_packed_t* internal_sub_items_t::insert_at<Key>(      \
+    NodeExtentMutable&, const internal_sub_items_t&, const Key&,            \
     const laddr_t&, index_t, node_offset_t, const char*)
-IA_TEMPLATE(KeyT::VIEW);
-IA_TEMPLATE(KeyT::HOBJ);
+IA_TEMPLATE(key_view_t);
+IA_TEMPLATE(key_hobj_t);
 
 node_offset_t internal_sub_items_t::trim_until(
     NodeExtentMutable& mut, internal_sub_items_t& items, index_t index)
@@ -84,10 +84,10 @@ void internal_sub_items_t::Appender<KT>::append(
   p_value = &reinterpret_cast<internal_sub_item_t*>(p_append)->value;
 }
 
-template <KeyT KT>
+template <IsFullKey Key>
 const value_header_t* leaf_sub_items_t::insert_at(
     NodeExtentMutable& mut, const leaf_sub_items_t& sub_items,
-    const full_key_t<KT>& key, const value_config_t& value,
+    const Key& key, const value_config_t& value,
     index_t index, node_offset_t size, const char* p_left_bound)
 {
   assert(index <= sub_items.keys());
@@ -130,8 +130,8 @@ const value_header_t* leaf_sub_items_t::insert_at(
 
   return p_value;
 }
-template const value_header_t* leaf_sub_items_t::insert_at<KeyT::HOBJ>(
-    NodeExtentMutable&, const leaf_sub_items_t&, const full_key_t<KeyT::HOBJ>&,
+template const value_header_t* leaf_sub_items_t::insert_at<key_hobj_t>(
+    NodeExtentMutable&, const leaf_sub_items_t&, const key_hobj_t&,
     const value_config_t&, index_t, node_offset_t, const char*);
 
 node_offset_t leaf_sub_items_t::trim_until(
