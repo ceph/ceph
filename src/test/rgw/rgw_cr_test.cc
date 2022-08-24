@@ -267,6 +267,42 @@ TEST(Write, ObjV) {
   ASSERT_EQ(-ECANCELED, r);
 }
 
+TEST(WriteAttrs, Attrs) {
+  TempPool pool;
+  auto oid = "object"s;
+  bufferlist bl;
+  bl.append("I'm some data.");
+  std::map<std::string, bufferlist> wrattrs {
+    { "foo", bl }, { "bar", bl }, { "baz", bl }
+  };
+  auto r = run(new RGWSimpleRadosWriteAttrsCR(dpp(), store, {pool, oid},
+					      wrattrs, nullptr, true));
+  ASSERT_EQ(0, r);
+  std::map<std::string, bufferlist> rdattrs;
+  librados::IoCtx ioctx(pool);
+  r = ioctx.getxattrs(oid, rdattrs);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(wrattrs, rdattrs);
+}
+
+TEST(WriteAttrs, Empty) {
+  TempPool pool;
+  auto oid = "object"s;
+  bufferlist bl;
+  std::map<std::string, bufferlist> wrattrs {
+    { "foo", bl }, { "bar", bl }, { "baz", bl }
+  };
+  // With an empty bufferlist all attributes should be skipped.
+  auto r = run(new RGWSimpleRadosWriteAttrsCR(dpp(), store, {pool, oid},
+					      wrattrs, nullptr, true));
+  ASSERT_EQ(0, r);
+  std::map<std::string, bufferlist> rdattrs;
+  librados::IoCtx ioctx(pool);
+  r = ioctx.getxattrs(oid, rdattrs);
+  ASSERT_EQ(0, r);
+  ASSERT_TRUE(rdattrs.empty());
+}
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);

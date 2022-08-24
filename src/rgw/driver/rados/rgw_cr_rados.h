@@ -572,51 +572,69 @@ public:
 };
 
 class RGWSimpleRadosWriteAttrsCR : public RGWSimpleCoroutine {
-  const DoutPrefixProvider *dpp;
-  RGWAsyncRadosProcessor *async_rados;
-  RGWSI_SysObj *svc;
-  RGWObjVersionTracker *objv_tracker;
-
+  const DoutPrefixProvider* dpp;
+  rgw::sal::RadosStore* const store;
+  RGWObjVersionTracker* objv_tracker;
   rgw_raw_obj obj;
   std::map<std::string, bufferlist> attrs;
   bool exclusive;
-  RGWAsyncPutSystemObjAttrs *req = nullptr;
+
+  rgw_rados_ref ref;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+
 
 public:
-  RGWSimpleRadosWriteAttrsCR(const DoutPrefixProvider *_dpp,
-                             RGWAsyncRadosProcessor *_async_rados,
-                             RGWSI_SysObj *_svc, const rgw_raw_obj& _obj,
-                             std::map<std::string, bufferlist> _attrs,
-                             RGWObjVersionTracker *objv_tracker = nullptr,
+  RGWSimpleRadosWriteAttrsCR(const DoutPrefixProvider* dpp,
+			     rgw::sal::RadosStore* const store,
+                             rgw_raw_obj obj,
+                             std::map<std::string, bufferlist> attrs,
+                             RGWObjVersionTracker* objv_tracker = nullptr,
                              bool exclusive = false)
-			     : RGWSimpleCoroutine(_svc->ctx()), dpp(_dpp), async_rados(_async_rados),
-      svc(_svc), objv_tracker(objv_tracker), obj(_obj),
-      attrs(std::move(_attrs)), exclusive(exclusive) {
-  }
-  ~RGWSimpleRadosWriteAttrsCR() override {
-    request_cleanup();
-  }
-
-  void request_cleanup() override {
-    if (req) {
-      req->finish();
-      req = NULL;
-    }
-  }
+			     : RGWSimpleCoroutine(store->ctx()), dpp(dpp),
+			       store(store), objv_tracker(objv_tracker),
+			       obj(std::move(obj)), attrs(std::move(attrs)),
+			       exclusive(exclusive) {}
 
   int send_request(const DoutPrefixProvider *dpp) override {
-    req = new RGWAsyncPutSystemObjAttrs(dpp, this, stack->create_completion_notifier(),
-			           svc, objv_tracker, obj, std::move(attrs),
-                                   exclusive);
-    async_rados->queue(req);
-    return 0;
+    int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
+    if (r < 0) {
+      ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret="
+			 << r << dendl;
+      return r;
+    }
+
+    set_status() << "sending request";
+
+    librados::ObjectWriteOperation op;
+    if (exclusive) {
+      op.create(true);
+    }
+    if (objv_tracker) {
+      objv_tracker->prepare_op_for_write(&op);
+    }
+
+    for (const auto& [name, bl] : attrs) {
+      if (!bl.length())
+	continue;
+      op.setxattr(name.c_str(), bl);
+    }
+
+    cn = stack->create_completion_notifier();
+    if (!op.size()) {
+      cn->cb();
+      return 0;
+    }
+
+    return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op);
   }
 
   int request_complete() override {
-    if (objv_tracker) { // copy the updated version
-      *objv_tracker = req->objv_tracker;
+    int ret = cn->completion()->get_return_value();
+    set_status() << "request complete; ret=" << ret;
+    if (ret >= 0 && objv_tracker) {
+      objv_tracker->apply_write();
     }
-    return req->get_ret_status();
+    return ret;
   }
 };
 
