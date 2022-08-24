@@ -840,6 +840,10 @@ public:
     return *ool_segment_seq_allocator;
   }
 
+  journal_type_t get_journal_type() const {
+    return journal_type;
+  }
+
   void set_extent_callback(ExtentCallbackInterface *cb) {
     ecb = cb;
   }

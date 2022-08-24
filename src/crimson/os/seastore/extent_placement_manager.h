@@ -98,6 +98,10 @@ public:
     cleaner->set_extent_callback(cb);
   }
 
+  journal_type_t get_journal_type() const {
+    return cleaner->get_journal_type();
+  }
+
   seastore_off_t get_block_size() const {
     assert(primary_device != nullptr);
     // assume all the devices have the same block size
