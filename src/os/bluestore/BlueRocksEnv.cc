@@ -363,7 +363,9 @@ rocksdb::Status BlueRocksEnv::NewSequentialFile(
   BlueFS::FileReader *h;
   int r = fs->open_for_read(dir, file, &h, false);
   if (r < 0)
-    return err_to_status(r);
+    // Degrade error handling to synchronize error with rocksdb posix env.
+    // Without it, we cannot use rocksdb::EnvMirror.
+    return err_to_status(-EIO);
   result->reset(new BlueRocksSequentialFile(fs, h));
   return rocksdb::Status::OK();
 }

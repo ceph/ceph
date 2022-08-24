@@ -6623,8 +6623,8 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   ceph_assert(!db);
   std::string& fn=*_fn;
   std::string& kv_backend=*_kv_backend;
-  fn = path + "/db";
-  std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
+  // simplify the dir names, too, as "seen" by rocksdb
+  fn = "db";
 
   if (create) {
     kv_backend = cct->_conf->bluestore_kvbackend;
@@ -6644,9 +6644,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   }
   dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
-  map<string,string> kv_options;
   // force separate wal dir for all new deployments.
-  kv_options["separate_wal_dir"] = 1;
   rocksdb::Env *env = NULL;
   if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
@@ -6664,24 +6662,31 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
 
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env* a = new BlueRocksEnv(bluefs);
-      rocksdb::Env* b = rocksdb::Env::Default();
+      rocksdb::Env* b = new NoRocksEnv(path + "/mirror");
       if (create) {
-        string cmd = "rm -rf " + path + "/db " +
-          path + "/db.slow " +
-          path + "/db.wal";
+        string cmd = "rm -rf " + path + "/mirror";
         int r = system(cmd.c_str());
         (void)r;
+	cmd = "mkdir -p " + path + "/mirror";
+        r = system(cmd.c_str());
+        (void)r;
       }
-      env = new rocksdb::EnvMirror(b, a, false, true);
+      env = new rocksdb::EnvMirror(b, a, true, true);
     } else {
       env = new BlueRocksEnv(bluefs);
-
-      // simplify the dir names, too, as "seen" by rocksdb
-      fn = "db";
     }
-    BlueFSVolumeSelector::paths paths;
-    bluefs->get_vselector_paths(fn, paths);
+  } else {
+    // In this case env is ersatz to unify file operations
+    // We need env that is contained to specific dir,
+    // i.e. "db/00038.sst" must be equally accessible for
+    // both BlueRocksEnv and our ersatz env
+    env = new NoRocksEnv(path);
+  }
 
+  map<string,string> kv_options;
+  BlueFSVolumeSelector::paths paths;
+  if (do_bluefs) {
+    bluefs->get_vselector_paths(fn, paths);
     {
       ostringstream db_paths;
       bool first = true;
@@ -6696,53 +6701,23 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
       kv_options["db_paths"] = db_paths.str();
       dout(1) << __func__ << " set db_paths to " << db_paths.str() << dendl;
     }
-
-    if (create) {
-      for (auto& p : paths) {
-        env->CreateDir(p.first);
-      }
-      // Selectors don't provide wal path so far hence create explicitly
-      env->CreateDir(fn + ".wal");
-    } else {
-      std::vector<std::string> res;
-      // check for dir presence
-      auto r = env->GetChildren(fn+".wal", &res);
-      if (r.IsNotFound()) {
-	kv_options.erase("separate_wal_dir");
-      }
-    }
   } else {
-    string walfn = path + "/db.wal";
-
-    if (create) {
-      int r = ::mkdir(fn.c_str(), 0755);
-      if (r < 0)
-	r = -errno;
-      if (r < 0 && r != -EEXIST) {
-	derr << __func__ << " failed to create " << fn << ": " << cpp_strerror(r)
-	     << dendl;
-	return r;
-      }
-
-      // wal_dir, too!
-      r = ::mkdir(walfn.c_str(), 0755);
-      if (r < 0)
-	r = -errno;
-      if (r < 0 && r != -EEXIST) {
-	derr << __func__ << " failed to create " << walfn
-	  << ": " << cpp_strerror(r)
-	  << dendl;
-	return r;
-      }
-    } else {
-      struct stat st;
-      r = ::stat(walfn.c_str(), &st);
-      if (r < 0 && errno == ENOENT) {
-	kv_options.erase("separate_wal_dir");
-      }
+    paths.emplace_back(fn, 0);
+  }
+  if (create) {
+    for (auto& p : paths) {
+      env->CreateDir(p.first);
     }
+    // Selectors don't provide wal path so far hence create explicitly
+    env->CreateDir(fn + ".wal");
   }
 
+  std::vector<std::string> res;
+  // check for dir presence
+  auto rr = env->GetChildren(fn+".wal", &res);
+  if (!rr.IsNotFound()) {
+    kv_options["separate_wal_dir"] = 1;
+  }
 
   db = KeyValueDB::create(cct,
 			  kv_backend,
@@ -6761,6 +6736,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
     return -EIO;
   }
 
+  std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
   FreelistManager::setup_merge_operators(db, freelist_type);
   db->set_merge_operator(PREFIX_STAT, merge_op);
   db->set_cache_size(cache_kv_ratio * cache_size);
