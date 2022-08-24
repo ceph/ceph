@@ -217,3 +217,17 @@ a.btn-light {
 .badge-dark {
   @extend .badge, .bg-dark;
 }
+
+json-schema-form {
+  .help-block {
+    @extend .invalid-feedback;
+  }
+
+  .ng-touched.ng-invalid {
+    @extend .is-invalid;
+  }
+
+  .ng-touched.ng-valid {
+    @extend .is-valid;
+  }
+}
