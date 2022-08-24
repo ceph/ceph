@@ -65,14 +65,14 @@ example spec file:
 .. code-block:: yaml
 
     service_type: rgw
-    service_name: foo
+    service_id: foo
     placement:
       label: rgw
-      count-per-host: 2
+      count_per_host: 2
     networks:
     - 192.169.142.0/24
     spec:
-      port: 8000
+      rgw_frontend_port: 8080
 
 
 Multisite zones
