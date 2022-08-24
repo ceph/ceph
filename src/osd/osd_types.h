@@ -1495,6 +1495,10 @@ public:
     grade_table.resize(0);
   }
 
+  bool has_snaps() const {
+    return snaps.size() > 0;
+  }
+
   bool is_stretch_pool() const {
     return peering_crush_bucket_count != 0;
   }
