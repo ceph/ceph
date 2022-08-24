@@ -339,6 +339,9 @@ export class TaskMessageService {
     ),
     'service/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.service(metadata)
+    ),
+    'ceph-users/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.cephUser(metadata)
     )
   };
 
@@ -382,6 +385,10 @@ export class TaskMessageService {
 
   service(metadata: any) {
     return $localize`Service '${metadata.service_name}'`;
+  }
+
+  cephUser(metadata: any) {
+    return $localize`Ceph User '${metadata.user_entity}'`;
   }
 
   _getTaskTitle(task: Task) {
