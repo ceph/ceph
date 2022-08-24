@@ -135,8 +135,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            service_type: 'iscsi',
-            unmanaged: false
+            service_type: 'iscsi'
           })
         ]
       ],
@@ -563,6 +562,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['monitor_port'] = values['monitor_port'];
         }
         break;
+
+      case 'iscsi':
+        serviceSpec['pool'] = values['pool'];
+        break;
     }
 
     if (!values['unmanaged']) {
@@ -590,7 +593,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           break;
         case 'iscsi':
-          serviceSpec['pool'] = values['pool'];
           if (_.isString(values['trusted_ip_list']) && !_.isEmpty(values['trusted_ip_list'])) {
             serviceSpec['trusted_ip_list'] = values['trusted_ip_list'].trim();
           }
