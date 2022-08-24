@@ -8116,6 +8116,7 @@ class HostFacts():
     def __init__(self, ctx: CephadmContext):
         self.ctx: CephadmContext = ctx
         self.cpu_model: str = 'Unknown'
+        self.sysctl_options: Dict[str, str] = self._populate_sysctl_options()
         self.cpu_count: int = 0
         self.cpu_cores: int = 0
         self.cpu_threads: int = 0
@@ -8126,6 +8127,15 @@ class HostFacts():
         self._process_nics()
         self.arch: str = platform.processor()
         self.kernel: str = platform.release()
+
+    def _populate_sysctl_options(self) -> Dict[str, str]:
+        sysctl_options = {}
+        out, _, _ = call_throws(self.ctx, ['sysctl', '-a'], verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+        if out:
+            for line in out.splitlines():
+                option, value = line.split('=')
+                sysctl_options[option.strip()] = value.strip()
+        return sysctl_options
 
     def _get_cpuinfo(self):
         # type: () -> None
