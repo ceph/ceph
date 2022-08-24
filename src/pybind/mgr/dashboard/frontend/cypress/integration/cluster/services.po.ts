@@ -41,17 +41,21 @@ export class ServicesPageHelper extends PageHelper {
     exist?: boolean,
     count = '1',
     snmpVersion?: string,
-    snmpPrivProtocol?: boolean
+    snmpPrivProtocol?: boolean,
+    unmanaged = false
   ) {
     cy.get(`${this.pages.create.id}`).within(() => {
       this.selectServiceType(serviceType);
       switch (serviceType) {
         case 'rgw':
           cy.get('#service_id').type('foo');
-          cy.get('#count').type(count);
+          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(count);
           break;
 
         case 'ingress':
+          if (unmanaged) {
+            cy.get('label[for=unmanaged]').click();
+          }
           this.selectOption('backend_service', 'rgw.foo');
           cy.get('#service_id').should('have.value', 'rgw.foo');
           cy.get('#virtual_ip').type('192.168.100.1/24');
@@ -61,7 +65,7 @@ export class ServicesPageHelper extends PageHelper {
 
         case 'nfs':
           cy.get('#service_id').type('testnfs');
-          cy.get('#count').type(count);
+          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(count);
           break;
 
         case 'snmp-gateway':
@@ -85,7 +89,7 @@ export class ServicesPageHelper extends PageHelper {
 
         default:
           cy.get('#service_id').type('test');
-          cy.get('#count').type(count);
+          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(count);
           break;
       }
       if (serviceType === 'snmp-gateway') {
@@ -157,6 +161,18 @@ export class ServicesPageHelper extends PageHelper {
         expect(services).to.not.include(serviceName);
       }
     });
+  }
+
+  isUnmanaged(serviceName: string, unmanaged: boolean) {
+    this.getTableCell(this.columnIndex.service_name, serviceName)
+      .parent()
+      .find(`datatable-body-cell:nth-child(${this.columnIndex.placement})`)
+      .should(($ele) => {
+        const placement = $ele.text().split(';');
+        unmanaged
+          ? expect(placement).to.include('unmanaged')
+          : expect(placement).to.not.include('unmanaged');
+      });
   }
 
   deleteService(serviceName: string) {

@@ -180,8 +180,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            service_type: 'ingress',
-            unmanaged: false
+            service_type: 'ingress'
           })
         ]
       ],
@@ -189,8 +188,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            service_type: 'ingress',
-            unmanaged: false
+            service_type: 'ingress'
           })
         ]
       ],
@@ -199,8 +197,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         [
           CdValidators.number(false),
           CdValidators.requiredIf({
-            service_type: 'ingress',
-            unmanaged: false
+            service_type: 'ingress'
           })
         ]
       ],
@@ -209,8 +206,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         [
           CdValidators.number(false),
           CdValidators.requiredIf({
-            service_type: 'ingress',
-            unmanaged: false
+            service_type: 'ingress'
           })
         ]
       ],
@@ -564,6 +560,23 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       serviceName = `${serviceType}.${serviceId}`;
       serviceSpec['service_id'] = serviceId;
     }
+
+    switch (serviceType) {
+      case 'ingress':
+        serviceSpec['backend_service'] = values['backend_service'];
+        serviceSpec['service_id'] = values['backend_service'];
+        if (_.isNumber(values['frontend_port']) && values['frontend_port'] > 0) {
+          serviceSpec['frontend_port'] = values['frontend_port'];
+        }
+        if (_.isString(values['virtual_ip']) && !_.isEmpty(values['virtual_ip'])) {
+          serviceSpec['virtual_ip'] = values['virtual_ip'].trim();
+        }
+        if (_.isNumber(values['monitor_port']) && values['monitor_port'] > 0) {
+          serviceSpec['monitor_port'] = values['monitor_port'];
+        }
+        break;
+    }
+
     if (!values['unmanaged']) {
       switch (values['placement']) {
         case 'hosts':
@@ -605,17 +618,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           break;
         case 'ingress':
-          serviceSpec['backend_service'] = values['backend_service'];
-          serviceSpec['service_id'] = values['backend_service'];
-          if (_.isString(values['virtual_ip']) && !_.isEmpty(values['virtual_ip'])) {
-            serviceSpec['virtual_ip'] = values['virtual_ip'].trim();
-          }
-          if (_.isNumber(values['frontend_port']) && values['frontend_port'] > 0) {
-            serviceSpec['frontend_port'] = values['frontend_port'];
-          }
-          if (_.isNumber(values['monitor_port']) && values['monitor_port'] > 0) {
-            serviceSpec['monitor_port'] = values['monitor_port'];
-          }
           serviceSpec['ssl'] = values['ssl'];
           if (values['ssl']) {
             serviceSpec['ssl_cert'] = values['ssl_cert']?.trim();
