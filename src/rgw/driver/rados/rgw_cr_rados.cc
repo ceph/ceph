@@ -131,21 +131,39 @@ RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(const DoutPrefixProvider *_dpp, RGWCo
 
 int RGWSimpleRadosReadAttrsCR::send_request(const DoutPrefixProvider *dpp)
 {
-  req = new RGWAsyncGetSystemObj(dpp, this, stack->create_completion_notifier(),
-			         svc, objv_tracker, obj, true, raw_attrs);
-  async_rados->queue(req);
-  return 0;
+  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret="
+			 << r << dendl;
+    return r;
+  }
+
+  set_status() << "sending request";
+
+  librados::ObjectReadOperation op;
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_read(&op);
+  }
+
+  if (raw_attrs && pattrs) {
+    op.getxattrs(pattrs, nullptr);
+  } else {
+    op.getxattrs(&unfiltered_attrs, nullptr);
+  }
+
+  cn = stack->create_completion_notifier();
+  return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op,
+				      nullptr);
 }
 
 int RGWSimpleRadosReadAttrsCR::request_complete()
 {
-  if (pattrs) {
-    *pattrs = std::move(req->attrs);
+  int ret = cn->completion()->get_return_value();
+  set_status() << "request complete; ret=" << ret;
+  if (!raw_attrs && pattrs) {
+    rgw_filter_attrset(unfiltered_attrs, RGW_ATTR_PREFIX, pattrs);
   }
-  if (objv_tracker) {
-    *objv_tracker = req->objv_tracker;
-  }
-  return req->get_ret_status();
+  return ret;
 }
 
 int RGWAsyncPutSystemObj::_send_request(const DoutPrefixProvider *dpp)
