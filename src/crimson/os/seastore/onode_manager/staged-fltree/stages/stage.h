@@ -1133,27 +1133,27 @@ struct staged {
     }
   }
 
-  template <KeyT KT>
-  static node_offset_t insert_size(const full_key_t<KT>& key,
+  template <IsFullKey Key>
+  static node_offset_t insert_size(const Key& key,
                                    const value_input_t& value) {
     if constexpr (IS_BOTTOM) {
       return iterator_t::estimate_insert(key, value);
     } else {
       return iterator_t::estimate_insert(key, value) +
              NXT_STAGE_T::iterator_t::header_size() +
-             NXT_STAGE_T::template insert_size<KT>(key, value);
+             NXT_STAGE_T::insert_size(key, value);
     }
   }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static node_offset_t insert_size_at(match_stage_t stage,
-                                      const full_key_t<KeyT::HOBJ>& key,
+                                      const Key& key,
                                       const value_input_t& value) {
     if (stage == STAGE) {
-      return insert_size<KT>(key, value);
+      return insert_size(key, value);
     } else {
       assert(stage < STAGE);
-      return NXT_STAGE_T::template insert_size_at<KT>(stage, key, value);
+      return NXT_STAGE_T::template insert_size_at(stage, key, value);
     }
   }
 
@@ -1185,7 +1185,7 @@ struct staged {
         assert(match == std::strong_ordering::less);
         if (index == 0) {
           // already the first index, so insert at the current index
-          return {STAGE, insert_size<KeyT::VIEW>(key, value)};
+          return {STAGE, insert_size(key, value)};
         }
         --index;
         iter = iterator_t(container);
@@ -1199,7 +1199,7 @@ struct staged {
     if (match == std::strong_ordering::greater) {
       // key doesn't match both indexes, so insert at the current index
       ++index;
-      return {STAGE, insert_size<KeyT::VIEW>(key, value)};
+      return {STAGE, insert_size(key, value)};
     } else {
       assert(match == std::strong_ordering::equal);
       if constexpr (IS_BOTTOM) {
@@ -1296,7 +1296,7 @@ struct staged {
       patch_insert_end(position, insert_stage);
     }
 
-    node_offset_t insert_size = insert_size_at<KeyT::HOBJ>(insert_stage, key, value);
+    node_offset_t insert_size = insert_size_at(insert_stage, key, value);
 
     return {insert_stage, insert_size};
   }
@@ -1349,7 +1349,7 @@ struct staged {
         if (iter.is_end()) {
           // insert at the higher stage due to split
           do_insert = true;
-          _insert_size = insert_size<KT>(key, value);
+          _insert_size = insert_size(key, value);
           stage = STAGE;
         }
       } else {
@@ -1361,7 +1361,7 @@ struct staged {
       if constexpr (!IS_BOTTOM) {
         position.nxt = position_t::nxt_t::begin();
       }
-      assert(_insert_size == insert_size<KT>(key, value));
+      assert(_insert_size == insert_size(key, value));
       if constexpr (IS_BOTTOM) {
         return iter.insert(
             mut, key, value, _insert_size, p_left_bound);
@@ -1394,11 +1394,11 @@ struct staged {
       if (position.is_end()) {
         position = position_t::begin();
         assert(stage == STAGE);
-        assert(_insert_size == insert_size<KT>(key, value));
+        assert(_insert_size == insert_size(key, value));
       } else if (position == position_t::begin()) {
         // when insert into a trimmed and empty left node
         stage = STAGE;
-        _insert_size = insert_size<KT>(key, value);
+        _insert_size = insert_size(key, value);
       } else {
         ceph_abort("impossible path");
       }
