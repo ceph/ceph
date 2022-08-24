@@ -34,8 +34,10 @@ using std::vector;
 namespace crimson::osd {
 
 PerShardState::PerShardState(
-  int whoami)
+  int whoami,
+  crimson::os::FuturizedStore &store)
   : whoami(whoami),
+    store(store),
     throttler(crimson::common::local_conf()),
     obc_registry(crimson::common::local_conf())
 {
@@ -94,15 +96,13 @@ OSDSingletonState::OSDSingletonState(
   crimson::net::Messenger &cluster_msgr,
   crimson::net::Messenger &public_msgr,
   crimson::mon::Client &monc,
-  crimson::mgr::Client &mgrc,
-  crimson::os::FuturizedStore &store)
+  crimson::mgr::Client &mgrc)
   : whoami(whoami),
     osdmap_gate("OSDSingletonState::osdmap_gate"),
     cluster_msgr(cluster_msgr),
     public_msgr(public_msgr),
     monc(monc),
     mgrc(mgrc),
-    store(store),
     local_reserver(
       &cct,
       &finisher,
