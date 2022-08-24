@@ -216,6 +216,57 @@ TEST(Read, ReadVersion) {
   ASSERT_EQ(wobjv.read_version, robjv.read_version);
 }
 
+TEST(Write, Exclusive) {
+  TempPool pool;
+  auto oid = "object"s;
+  {
+    bufferlist bl;
+    bl.append("I'm some data!"s);
+    librados::IoCtx ioctx(pool);
+    auto r = ioctx.write_full(oid, bl);
+    ASSERT_EQ(0, r);
+  }
+  auto r = run(new RGWSimpleRadosWriteCR(dpp(), store, {pool, oid},
+					 "I am some DIFFERENT data!"s, nullptr,
+					 true));
+  ASSERT_EQ(-EEXIST, r);
+}
+
+TEST(Write, Write) {
+  TempPool pool;
+  auto oid = "object"s;
+  auto data = "I'm some data!"s;
+  auto r = run(new RGWSimpleRadosWriteCR(dpp(), store, {pool, oid},
+					 data, nullptr, true));
+  ASSERT_EQ(0, r);
+  bufferlist bl;
+  librados::IoCtx ioctx(pool);
+  ioctx.read(oid, bl, 0, 0);
+  ASSERT_EQ(0, r);
+  std::string result;
+  decode(result, bl);
+  ASSERT_EQ(data, result);
+}
+
+TEST(Write, ObjV) {
+  TempPool pool;
+  auto oid = "object"s;
+  RGWObjVersionTracker objv;
+  objv.generate_new_write_ver(store->ctx());
+  auto r = run(new RGWSimpleRadosWriteCR(dpp(), store, {pool, oid},
+					 "I'm some data!"s, &objv,
+					 true));
+  RGWObjVersionTracker interfering_objv(objv);
+  r = run(new RGWSimpleRadosWriteCR(dpp(), store, {pool, oid},
+				    "I'm some newer, better data!"s,
+				    &interfering_objv, false));
+  ASSERT_EQ(0, r);
+  r = run(new RGWSimpleRadosWriteCR(dpp(), store, {pool, oid},
+				    "I'm some treacherous, obsolete data!"s,
+				    &objv, false));
+  ASSERT_EQ(-ECANCELED, r);
+}
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);
