@@ -637,7 +637,7 @@ int librados::IoCtxImpl::writesame(const object_t& oid, bufferlist& bl,
 }
 
 int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
-				 ceph::real_time *pmtime, int flags)
+				 ceph::real_time *pmtime, int flags, const jspan_context* otel_trace)
 {
   ceph::real_time ut = (pmtime ? *pmtime :
     ceph::real_clock::now());
@@ -664,7 +664,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
     oid, oloc,
     *o, snapc, ut,
     flags | extra_op_flags,
-    oncommit, &ver);
+    oncommit, &ver, osd_reqid_t(), nullptr, otel_trace);
   objecter->op_submit(objecter_op);
 
   {
@@ -753,7 +753,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
 				     const SnapContext& snap_context,
 				     const ceph::real_time *pmtime, int flags,
-                                     const blkin_trace_info *trace_info)
+                                     const blkin_trace_info *trace_info, const jspan_context *otel_trace)
 {
   FUNCTRACE(client->cct);
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
@@ -779,7 +779,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   trace.event("init root span");
   Objecter::Op *op = objecter->prepare_mutate_op(
     oid, oloc, *o, snap_context, ut, flags | extra_op_flags,
-    oncomplete, &c->objver, osd_reqid_t(), &trace);
+    oncomplete, &c->objver, osd_reqid_t(), &trace, otel_trace);
   objecter->op_submit(op, &c->tid);
   trace.event("rados operate op submitted");
 

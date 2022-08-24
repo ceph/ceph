@@ -1033,6 +1033,15 @@ void Message::decode_trace(ceph::bufferlist::const_iterator &p, bool create)
 #endif
 }
 
+void Message::encode_otel_trace(ceph::bufferlist &bl, uint64_t features) const
+{
+  tracing::encode(otel_trace, bl);
+}
+
+void Message::decode_otel_trace(ceph::bufferlist::const_iterator &p, bool create)
+{
+  tracing::decode(otel_trace, p);
+}
 
 // This routine is not used for ordinary messages, but only when encapsulating a message
 // for forwarding and routing.  It's also used in a backward compatibility test, which only

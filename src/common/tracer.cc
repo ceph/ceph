@@ -60,8 +60,7 @@ jspan_ptr Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool
 }
 
 jspan_ptr Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_ptr& parent_span) {
-  if (parent_span && parent_span->IsRecording()) {
-    ceph_assert(tracer);
+  if (is_enabled() && parent_span && parent_span->IsRecording()) {
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_span->GetContext();
     ldout(cct, 20) << "adding span " << span_name << " " << dendl;
@@ -85,41 +84,6 @@ bool Tracer::is_enabled() const {
   return cct->_conf->jaeger_tracing_enable;
 }
 
-void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f) {
-  ENCODE_START(1, 1, bl);
-  using namespace opentelemetry;
-  using namespace trace;
-  auto is_valid = span_ctx.IsValid();
-  encode(is_valid, bl);
-  if (is_valid) {
-    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.trace_id().Id().data()), TraceId::kSize), bl);
-    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.span_id().Id().data()), SpanId::kSize), bl);
-    encode(span_ctx.trace_flags().flags(), bl);
-  }
-  ENCODE_FINISH(bl);
-}
-
-void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
-  using namespace opentelemetry;
-  using namespace trace;
-  DECODE_START(1, bl);
-  bool is_valid;
-  decode(is_valid, bl);
-  if (is_valid) {
-    std::array<uint8_t, TraceId::kSize> trace_id;
-    std::array<uint8_t, SpanId::kSize> span_id;
-    uint8_t flags;
-    decode(trace_id, bl);
-    decode(span_id, bl);
-    decode(flags, bl);
-    span_ctx = SpanContext(
-      TraceId(nostd::span<uint8_t, TraceId::kSize>(trace_id)),
-      SpanId(nostd::span<uint8_t, SpanId::kSize>(span_id)),
-      TraceFlags(flags),
-      true);
-  }
-  DECODE_FINISH(bl);
-}
 } // namespace tracing
 
 #endif // HAVE_JAEGER

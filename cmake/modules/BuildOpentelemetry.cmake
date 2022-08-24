@@ -82,4 +82,5 @@ function(build_opentelemetry)
     PROPERTIES
       INTERFACE_LINK_LIBRARIES "${opentelemetry_deps}"
       INTERFACE_INCLUDE_DIRECTORIES "${opentelemetry_include_dir}")
+  include_directories(SYSTEM "${opentelemetry_include_dir}")
 endfunction()
