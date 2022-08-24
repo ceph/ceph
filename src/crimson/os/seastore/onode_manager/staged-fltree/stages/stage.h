@@ -316,10 +316,10 @@ struct staged {
       return ret.match;
     }
 
-    template <KeyT KT, typename T = value_t>
+    template <IsFullKey Key, typename T = value_t>
     std::enable_if_t<IS_BOTTOM, const T*> insert(
         NodeExtentMutable& mut,
-        const full_key_t<KT>& key,
+        const Key& key,
         const value_input_t& value,
         node_offset_t insert_size,
         const char* p_left_bound) {
@@ -1363,7 +1363,7 @@ struct staged {
       }
       assert(_insert_size == insert_size<KT>(key, value));
       if constexpr (IS_BOTTOM) {
-        return iter.template insert<KT>(
+        return iter.insert(
             mut, key, value, _insert_size, p_left_bound);
       } else {
         auto range = iter.insert_prefix(
