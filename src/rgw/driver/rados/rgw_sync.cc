@@ -652,7 +652,7 @@ public:
       yield {
         set_status("writing sync status");
 	rgw::sal::RadosStore* store = sync_env->store;
-        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(dpp, sync_env->async_rados, store->svc()->sysobj,
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(dpp, store,
                                                            rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
       }
@@ -683,8 +683,7 @@ public:
 	  marker.timestamp = info.last_update;
 	  rgw::sal::RadosStore* store = sync_env->store;
           spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(dpp,
-                                                                sync_env->async_rados,
-                                                                store->svc()->sysobj,
+                                                                store,
                                                                 rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->shard_obj_name(i)),
                                                                 marker), true);
         }
@@ -693,7 +692,7 @@ public:
         set_status("changing sync state: build full sync maps");
 	status.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
 	rgw::sal::RadosStore* store = sync_env->store;
-        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(dpp, sync_env->async_rados, store->svc()->sysobj,
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(dpp, store,
                                                            rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
       }
@@ -971,7 +970,7 @@ public:
           int shard_id = (int)iter->first;
           rgw_meta_sync_marker& marker = iter->second;
           marker.total_entries = entries_index->get_total_entries(shard_id);
-          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
+          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(dpp, sync_env->store,
                                                                 rgw_raw_obj(sync_env->store->svc()->zone->get_zone_params().log_pool, sync_env->shard_obj_name(shard_id)),
                                                                 marker), true);
         }
@@ -1232,8 +1231,7 @@ public:
     ldpp_dout(sync_env->dpp, 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << " realm_epoch=" << sync_marker.realm_epoch << dendl;
     tn->log(20, SSTR("new marker=" << new_marker));
     rgw::sal::RadosStore* store = sync_env->store;
-    return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->dpp, sync_env->async_rados,
-                                                           store->svc()->sysobj,
+    return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->dpp, store,
                                                            rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, marker_oid),
                                                            sync_marker);
   }
@@ -1649,7 +1647,7 @@ public:
 	  ldpp_dout(sync_env->dpp, 4) << *this << ": saving marker pos=" << temp_marker->marker << " realm_epoch=" << realm_epoch << dendl;
 
 	  using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
-	  yield call(new WriteMarkerCR(sync_env->dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
+	  yield call(new WriteMarkerCR(sync_env->dpp, sync_env->store,
 				       rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
 				       *temp_marker));
         }
@@ -2016,8 +2014,7 @@ public:
         // write the updated sync info
         sync_status.sync_info.period = cursor.get_period().get_id();
         sync_status.sync_info.realm_epoch = cursor.get_epoch();
-        yield call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(dpp, sync_env->async_rados,
-                                                                 sync_env->store->svc()->sysobj,
+        yield call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(dpp, sync_env->store,
                                                                  rgw_raw_obj(pool, sync_env->status_oid()),
                                                                  sync_status.sync_info));
       }
@@ -2094,7 +2091,7 @@ int RGWRemoteMetaLog::init_sync_status(const DoutPrefixProvider *dpp)
 int RGWRemoteMetaLog::store_sync_info(const DoutPrefixProvider *dpp, const rgw_meta_sync_info& sync_info)
 {
   tn->log(20, "store sync info");
-  return run(dpp, new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(dpp, async_rados, store->svc()->sysobj,
+  return run(dpp, new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(dpp, store,
                                                            rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env.status_oid()),
                                                            sync_info));
 }
