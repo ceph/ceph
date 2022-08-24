@@ -20,14 +20,14 @@ PGShardManager::PGShardManager(
   crimson::mgr::Client &mgrc,
   crimson::os::FuturizedStore &store)
   : osd_singleton_state(whoami, cluster_msgr, public_msgr,
-			monc, mgrc, store),
-    local_state(whoami),
+			monc, mgrc),
+    local_state(whoami, store),
     shard_services(osd_singleton_state, local_state)
 {}
 
 seastar::future<> PGShardManager::load_pgs()
 {
-  return osd_singleton_state.store.list_collections(
+  return local_state.store.list_collections(
   ).then([this](auto colls) {
     return seastar::parallel_for_each(
       colls,

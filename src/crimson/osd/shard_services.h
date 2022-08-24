@@ -59,6 +59,7 @@ class PerShardState {
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 
   const int whoami;
+  crimson::os::FuturizedStore &store;
   crimson::common::CephContext cct;
 
   PerfCounters *perf = nullptr;
@@ -122,7 +123,9 @@ class PerShardState {
     return std::make_pair(std::move(op), std::move(fut));
   }
 
-  PerShardState(int whoami);
+  PerShardState(
+    int whoami,
+    crimson::os::FuturizedStore &store);
 };
 
 /**
@@ -143,8 +146,7 @@ public:
     crimson::net::Messenger &cluster_msgr,
     crimson::net::Messenger &public_msgr,
     crimson::mon::Client &monc,
-    crimson::mgr::Client &mgrc,
-    crimson::os::FuturizedStore &store);
+    crimson::mgr::Client &mgrc);
 
   const int whoami;
 
@@ -171,8 +173,6 @@ public:
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
   crimson::mgr::Client &mgrc;
-
-  crimson::os::FuturizedStore &store;
 
   // tids for ops i issue
   unsigned int next_tid{0};
@@ -302,7 +302,7 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
   crimson::os::FuturizedStore &get_store() {
-    return osd_singleton_state.store;
+    return local_state.store;
   }
 
   crimson::common::CephContext *get_cct() {
