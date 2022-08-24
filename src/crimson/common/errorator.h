@@ -475,6 +475,10 @@ private:
       : base_t(std::move(base)) {
     }
 
+    base_t to_base() && {
+      return std::move(*this);
+    }
+
     template <class... A>
     [[gnu::always_inline]]
     _future(ready_future_marker, A&&... a)
@@ -1198,6 +1202,20 @@ namespace ct_error {
 using stateful_errc = stateful_error_t<std::errc>;
 using stateful_errint = stateful_error_t<int>;
 using stateful_ec = stateful_error_t<std::error_code>;
+
+template <typename F>
+struct is_errorated_future {
+  static constexpr bool value = false;
+};
+template <template <class...> class ErroratedFutureT,
+	  class ValueT>
+struct is_errorated_future<
+  ErroratedFutureT<::crimson::errorated_future_marker<ValueT>>
+  > {
+  static constexpr bool value = true;
+};
+template <typename T>
+constexpr bool is_errorated_future_v = is_errorated_future<T>::value;
 
 } // namespace crimson
 
