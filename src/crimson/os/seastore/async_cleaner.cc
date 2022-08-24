@@ -818,7 +818,7 @@ AsyncCleaner::gc_trim_alloc()
       });
     });
   }).safe_then([this, FNAME] {
-    DEBUGT("finish, alloc_tail={}", journal_alloc_tail);
+    DEBUG("finish, alloc_tail={}", journal_alloc_tail);
   });
 }
 
@@ -856,7 +856,7 @@ AsyncCleaner::gc_trim_dirty()
       });
     });
   }).safe_then([this, FNAME] {
-    DEBUGT("finish, dirty_tail={}", journal_dirty_tail);
+    DEBUG("finish, dirty_tail={}", journal_dirty_tail);
   });
 }
 
@@ -1021,7 +1021,7 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
             auto old_usage = calc_utilization(segment_to_release);
             if(unlikely(old_usage != 0)) {
               space_tracker->dump_usage(segment_to_release);
-              ERRORT("segment {} old_usage {} != 0",
+              ERROR("segment {} old_usage {} != 0",
                      segment_to_release, old_usage);
               ceph_abort();
             }
