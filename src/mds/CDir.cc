@@ -1812,6 +1812,11 @@ CDentry *CDir::_load_dentry(
            << " [" << first << "," << last << "]"
            << dendl;
 
+  if (first > last) {
+    go_bad_dentry(last, dname);
+    /* try to continue */
+  }
+
   bool stale = false;
   if (snaps && last != CEPH_NOSNAP) {
     set<snapid_t>::const_iterator p = snaps->lower_bound(first);
