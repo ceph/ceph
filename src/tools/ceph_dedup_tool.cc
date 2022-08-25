@@ -48,6 +48,7 @@
 #include "include/stringify.h"
 #include "global/signal_handler.h"
 #include "common/CDC.h"
+#include "common/Preforker.h"
 
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
@@ -1558,21 +1559,6 @@ int make_crawling_daemon(const po::variables_map &opts)
   string chunk_pool_name = get_opts_chunk_pool(opts);
   unsigned max_thread = get_opts_max_thread(opts);
 
-  if (opts.count("daemon")) {
-    pid_t pid = fork();
-    if (pid < 0) {
-      cerr << "daemon process creation failed\n";
-      return -EINVAL;
-    }
-
-    if (pid != 0) {
-      return 0;
-    }
-    signal(SIGHUP, SIG_IGN);
-    close(STDIN_FILENO);
-    close(STDOUT_FILENO);
-  }
-
   bool loop = false;
   if (opts.count("loop")) {
     loop = true;
@@ -1760,21 +1746,45 @@ int main(int argc, const char **argv)
   }
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			     CODE_ENVIRONMENT_UTILITY, 0);
+			CODE_ENVIRONMENT_DAEMON,
+			CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+
+  Preforker forker;
+  if (global_init_prefork(g_ceph_context) >= 0) {
+    std::string err;
+    int r = forker.prefork(err);
+    if (r < 0) {
+      cerr << err << std::endl;
+      return r;
+    }
+    if (forker.is_parent()) {
+      g_ceph_context->_log->start();
+      if (forker.parent_wait(err) != 0) {
+        return -ENXIO;
+      }
+      return 0;
+    }
+    global_init_postfork_start(g_ceph_context);
+  }
   common_init_finish(g_ceph_context);
+  if (opts.count("daemon")) {
+    global_init_postfork_finish(g_ceph_context);
+    forker.daemonize();
+  }
   init_async_signal_handler();
   register_async_signal_handler_oneshot(SIGINT, handle_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
   string op_name = get_opts_op_name(opts);
+  int ret = 0;
   if (op_name == "estimate") {
-    return estimate_dedup_ratio(opts);
+    ret = estimate_dedup_ratio(opts);
   } else if (op_name == "chunk-scrub" ||
 	     op_name == "chunk-get-ref" ||
 	     op_name == "chunk-put-ref" ||
 	     op_name == "chunk-repair" ||
 	     op_name == "dump-chunk-refs") {
-    return chunk_scrub_common(opts);
+    ret = chunk_scrub_common(opts);
   } else if (op_name == "chunk-dedup" ||
 	     op_name == "object-dedup") {
     /*
@@ -1787,9 +1797,9 @@ int main(int argc, const char **argv)
      * perform deduplication on the entire object, not a chunk.
      *
      */
-    return make_dedup_object(opts);
+    ret = make_dedup_object(opts);
   } else if (op_name == "sample-dedup") {
-    return make_crawling_daemon(opts);
+    ret = make_crawling_daemon(opts);
   } else {
     cerr << "unrecognized op " << op_name << std::endl;
     exit(1);
@@ -1799,5 +1809,5 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGTERM, handle_signal);
   shutdown_async_signal_handler();
   
-  return 0;
+  return forker.signal_exit(ret);
 }
