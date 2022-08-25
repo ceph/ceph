@@ -1403,11 +1403,8 @@ public:
 class RGWContinuousLeaseCR : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RadosStore* store;
-
+  rados::cls::lock::Lock lock;
   const rgw_raw_obj obj;
-
-  const std::string lock_name;
-  const std::string cookie;
 
   int interval;
   bool going_down{ false };
@@ -1426,13 +1423,16 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
 public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
                        const rgw_raw_obj& _obj,
-                       const std::string& _lock_name, int _interval, RGWCoroutine *_caller)
+                       const std::string& lock_name, int _interval, RGWCoroutine *_caller)
     : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-    obj(_obj), lock_name(_lock_name),
-    cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
+    lock(lock_name), obj(_obj),
     interval(_interval), interval_tolerance(ceph::make_timespan(9*interval/10)), ts_interval(ceph::make_timespan(interval)),
       caller(_caller)
-  {}
+  {
+    lock.set_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct));
+    lock.set_duration(ts_interval);
+    lock.set_may_renew(true);
+  }
 
   virtual ~RGWContinuousLeaseCR() override;
 
