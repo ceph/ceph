@@ -231,6 +231,7 @@ set``:
 - ``services/grafana/ceph-dashboard.yml``
 - ``services/grafana/grafana.ini``
 - ``services/prometheus/prometheus.yml``
+- ``services/prometheus/alerting/custom_alerts.yml``
 - ``services/loki.yml``
 - ``services/promtail.yml``
 
@@ -279,6 +280,15 @@ Example
 
   # reconfig the prometheus service
   ceph orch reconfig prometheus
+
+.. code-block:: bash
+
+  # set additional custom alerting rules for Prometheus
+  ceph config-key set mgr/cephadm/services/prometheus/alerting/custom_alerts.yml \
+    -i $PWD/custom_alerts.yml
+
+  # Note that custom alerting rules are not parsed by Jinja and hence escaping
+  # will not be an issue.
 
 Deploying monitoring without cephadm
 ------------------------------------
