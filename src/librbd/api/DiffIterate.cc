@@ -300,12 +300,15 @@ int DiffIterate<I>::execute() {
                                &m_image_ctx.layout, off, read_len, 0,
                                object_extents, 0);
 
-      // get snap info for each object
+      // get diff info for each object and merge adjacent stripe units
+      // into an aggregate (this also sorts them)
+      io::SparseExtents aggregate_sparse_extents;
       for (auto& [object, extents] : object_extents) {
-        ldout(cct, 20) << "object " << object << dendl;
-
         const uint64_t object_no = extents.front().objectno;
         uint8_t diff_state = object_diff_state[object_no];
+        ldout(cct, 20) << "object " << object << ": diff_state="
+                       << (int)diff_state << dendl;
+
         if (diff_state == object_map::DIFF_STATE_HOLE &&
             from_snap_id == 0 && !parent_diff.empty()) {
           // no data in child object -- report parent diff instead
@@ -316,29 +319,36 @@ int DiffIterate<I>::execute() {
               o.intersection_of(parent_diff);
               ldout(cct, 20) << " reporting parent overlap " << o << dendl;
               for (auto e = o.begin(); e != o.end(); ++e) {
-                r = m_callback(e.get_start(), e.get_len(), true,
-                               m_callback_arg);
-                if (r < 0) {
-                  return r;
-                }
+                aggregate_sparse_extents.insert(e.get_start(), e.get_len(),
+                                                {io::SPARSE_EXTENT_STATE_DATA,
+                                                 e.get_len()});
               }
             }
           }
         } else if (diff_state == object_map::DIFF_STATE_HOLE_UPDATED ||
                    diff_state == object_map::DIFF_STATE_DATA_UPDATED) {
-          bool updated = (diff_state == object_map::DIFF_STATE_DATA_UPDATED);
+          auto state = (diff_state == object_map::DIFF_STATE_HOLE_UPDATED ?
+              io::SPARSE_EXTENT_STATE_ZEROED : io::SPARSE_EXTENT_STATE_DATA);
           for (auto& oe : extents) {
             for (auto& be : oe.buffer_extents) {
-              r = m_callback(off + be.first, be.second, updated,
-                             m_callback_arg);
-              if (r < 0) {
-                return r;
-              }
+              aggregate_sparse_extents.insert(off + be.first, be.second,
+                                              {state, be.second});
             }
           }
         }
       }
-    }  else {
+
+      for (const auto& se : aggregate_sparse_extents) {
+        ldout(cct, 20) << "off=" << se.get_off() << ", len=" << se.get_len()
+                       << ", state=" << se.get_val().state << dendl;
+        r = m_callback(se.get_off(), se.get_len(),
+                       se.get_val().state == io::SPARSE_EXTENT_STATE_DATA,
+                       m_callback_arg);
+        if (r < 0) {
+          return r;
+        }
+      }
+    } else {
       auto diff_object = new C_DiffObject<I>(m_image_ctx, diff_context, off,
                                              read_len);
       diff_object->send();

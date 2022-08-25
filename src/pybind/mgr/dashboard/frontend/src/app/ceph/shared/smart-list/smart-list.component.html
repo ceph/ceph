@@ -79,11 +79,15 @@
                               [data]="device.value.smart.attributes.table"
                               updateSelectionOnRefresh="never"
                               [columns]="smartDataColumns"></cd-table>
+                    <cd-table-key-value *ngIf="device.value.smart?.scsi_error_counter_log"
+                                        [renderObjects]="true"
+                                        [data]="device.value.smart"
+                                        updateSelectionOnRefresh="never"></cd-table-key-value>
                     <cd-table-key-value *ngIf="device.value.smart?.nvmeData"
                                         [renderObjects]="true"
                                         [data]="device.value.smart.nvmeData"
                                         updateSelectionOnRefresh="never"></cd-table-key-value>
-                    <cd-alert-panel *ngIf="!device.value.smart?.attributes && !device.value.smart?.nvmeData"
+                    <cd-alert-panel *ngIf="!device.value.smart?.attributes && !device.value.smart?.nvmeData && !device.value.smart?.scsi_error_counter_log"
                                     id="alert-device-smart-data-unavailable"
                                     type="info"
                                     i18n>No SMART data available for this device.</cd-alert-panel>

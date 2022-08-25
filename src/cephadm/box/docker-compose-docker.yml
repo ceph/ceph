@@ -1,0 +1,39 @@
+version: "2.4"
+services:
+  cephadm-host-base:
+    build:
+      context: .
+    environment:
+      - CEPH_BRANCH=master
+    image: cephadm-box
+    privileged: true
+    stop_signal: RTMIN+3
+    volumes:
+      - ../../../:/ceph
+      - ..:/cephadm
+      - ./daemon.json:/etc/docker/daemon.json
+      # dangerous, maybe just map the loopback
+      # https://stackoverflow.com/questions/36880565/why-dont-my-udev-rules-work-inside-of-a-running-docker-container
+      - /dev:/dev
+    networks:
+      - public
+    mem_limit: "20g"
+    scale: -1
+  seed:
+    extends:
+      service: cephadm-host-base
+    ports:
+      - "3000:3000"
+      - "8443:8443"
+      - "9095:9095"
+    scale: 1
+  hosts:
+    extends:
+      service: cephadm-host-base
+    scale: 3
+
+
+volumes:
+  var-lib-docker:
+networks:
+  public:

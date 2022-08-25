@@ -3,8 +3,8 @@
 
 #include "common/bloom_filter.hpp"
 
+#include <bit>
 #include <numeric>
-#include "include/intarith.h"
 
 using ceph::bufferlist;
 using ceph::bufferptr;
@@ -17,7 +17,7 @@ double bloom_filter::density() const
     bit_table_.begin(),
     bit_table_.begin() + table_size_,
     0u, [](unsigned set, cell_type cell) {
-      return set + popcount(cell);
+      return set + std::popcount(cell);
     });
   return (double)set / (table_size_ * sizeof(cell_type) * CHAR_BIT);
 }

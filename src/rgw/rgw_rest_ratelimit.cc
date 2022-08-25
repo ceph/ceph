@@ -98,7 +98,7 @@ void RGWOp_Ratelimit_Info::execute(optional_yield y)
     flusher.flush();
   }
   if (global) {
-    std::string realm_id = store->get_zone()->get_realm().get_id();
+    std::string realm_id = store->get_zone()->get_realm_id();
     RGWPeriodConfig period_config;
     op_ret = period_config.read(this, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, realm_id, y);
     if (op_ret && op_ret != -ENOENT) {
@@ -301,7 +301,7 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
     return;
   }
   if (global) {
-    std::string realm_id = store->get_zone()->get_realm().get_id();
+    std::string realm_id = store->get_zone()->get_realm_id();
     RGWPeriodConfig period_config;
     op_ret = period_config.read(s, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, realm_id, y);
     if (op_ret && op_ret != -ENOENT) {

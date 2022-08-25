@@ -5,10 +5,10 @@ import os
 from textwrap import dedent
 from ceph_volume.util import system, disk, merge_dict
 from ceph_volume.util.device import Device
+from ceph_volume.util.arg_validators import valid_osd_id
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
 from ceph_volume.systemd import systemctl
-from ceph_volume.devices.lvm.common import valid_osd_id
 
 
 logger = logging.getLogger(__name__)

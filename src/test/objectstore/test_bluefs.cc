@@ -618,6 +618,9 @@ TEST(BlueFS, test_compaction_sync) {
   g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "true");
+  const char* canary_dir = "dir.after_compact_test";
+  const char* canary_file = "file.after_compact_test";
+  const char* canary_data = "some random data";
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 1048576));
@@ -642,6 +645,30 @@ TEST(BlueFS, test_compaction_sync) {
     writes_done = true;
     join_all(sync_threads);
     fs.compact_log();
+
+    {
+      ASSERT_EQ(0, fs.mkdir(canary_dir));
+      BlueFS::FileWriter *h;
+      ASSERT_EQ(0, fs.open_for_write(canary_dir, canary_file, &h, false));
+      ASSERT_NE(nullptr, h);
+      auto sg = make_scope_guard([&fs, h] { fs.close_writer(h); });
+      h->append(canary_data, strlen(canary_data));
+      int r = fs.fsync(h);
+      ASSERT_EQ(r, 0);
+    }
+  }
+  fs.umount();
+
+  fs.mount();
+  {
+    BlueFS::FileReader *h;
+    ASSERT_EQ(0, fs.open_for_read(canary_dir, canary_file, &h));
+    ASSERT_NE(nullptr, h);
+    bufferlist bl;
+    ASSERT_EQ(strlen(canary_data), fs.read(h, 0, 1024, &bl, NULL));
+    std::cout << bl.c_str() << std::endl;
+    ASSERT_EQ(0, strncmp(canary_data, bl.c_str(), strlen(canary_data)));
+    delete h;
   }
   fs.umount();
 }
@@ -655,6 +682,9 @@ TEST(BlueFS, test_compaction_async) {
   g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "false");
+  const char* canary_dir = "dir.after_compact_test";
+  const char* canary_file = "file.after_compact_test";
+  const char* canary_data = "some random data";
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 1048576));
@@ -679,6 +709,30 @@ TEST(BlueFS, test_compaction_async) {
     writes_done = true;
     join_all(sync_threads);
     fs.compact_log();
+
+    {
+      ASSERT_EQ(0, fs.mkdir(canary_dir));
+      BlueFS::FileWriter *h;
+      ASSERT_EQ(0, fs.open_for_write(canary_dir, canary_file, &h, false));
+      ASSERT_NE(nullptr, h);
+      auto sg = make_scope_guard([&fs, h] { fs.close_writer(h); });
+      h->append(canary_data, strlen(canary_data));
+      int r = fs.fsync(h);
+      ASSERT_EQ(r, 0);
+    }
+  }
+  fs.umount();
+
+  fs.mount();
+  {
+    BlueFS::FileReader *h;
+    ASSERT_EQ(0, fs.open_for_read(canary_dir, canary_file, &h));
+    ASSERT_NE(nullptr, h);
+    bufferlist bl;
+    ASSERT_EQ(strlen(canary_data), fs.read(h, 0, 1024, &bl, NULL));
+    std::cout << bl.c_str() << std::endl;
+    ASSERT_EQ(0, strncmp(canary_data, bl.c_str(), strlen(canary_data)));
+    delete h;
   }
   fs.umount();
 }
@@ -951,6 +1005,45 @@ TEST(BlueFS, test_update_ino1_delta_after_replay) {
     fs.fsync(h);
   }
   fs.close_writer(h);
+  fs.umount();
+
+  // remount and check log can replay safe?
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  fs.umount();
+}
+
+TEST(BlueFS, broken_unlink_fsync_seq) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 1048576));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  {
+    /*
+    * This reproduces a weird file op sequence (unlink+fsync) that Octopus
+    * RocksDB might issue to BlueFS when recycle_log_file_num setting is 0
+    * See https://tracker.ceph.com/issues/55636 for more details
+    *
+    */
+    char buf[1048571]; // this is biggish, but intentionally not evenly aligned
+    for (unsigned i = 0; i < sizeof(buf); ++i) {
+      buf[i] = i;
+    }
+    BlueFS::FileWriter *h;
+    ASSERT_EQ(0, fs.mkdir("dir"));
+    ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+
+    h->append(buf, sizeof(buf));
+    fs.flush(h);
+    h->append(buf, sizeof(buf));
+    fs.unlink("dir", "file");
+    fs.fsync(h);
+    fs.close_writer(h);
+  }
   fs.umount();
 
   // remount and check log can replay safe?

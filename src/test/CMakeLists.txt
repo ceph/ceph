@@ -134,7 +134,7 @@ endif(WITH_RADOSGW)
 if(WITH_LIBCEPHFS)
   # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
   add_executable(test_build_libcephfs buildtest_skeleton.cc)
-  target_link_libraries(test_build_libcephfs cephfs pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+  target_link_libraries(test_build_libcephfs cephfs pthread ceph-common ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(WITH_LIBCEPHFS)
 
 add_executable(test_build_librados buildtest_skeleton.cc)
@@ -316,13 +316,16 @@ install(TARGETS ceph_test_librgw_file_gp DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(ceph_test_librgw_file_nfsns
   librgw_file_nfsns.cc
   )
-target_include_directories(ceph_test_librgw_file_nfsns SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(ceph_test_librgw_file_nfsns
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_librgw_file_nfsns
   rgw
   librados
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${LUA_LIBRARIES}
   )
   target_link_libraries(ceph_test_librgw_file_nfsns spawn)
 install(TARGETS ceph_test_librgw_file_nfsns DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -344,13 +347,16 @@ install(TARGETS ceph_test_librgw_file_aw DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(ceph_test_librgw_file_marker
   librgw_file_marker.cc
   )
-target_include_directories(ceph_test_librgw_file_marker SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(ceph_test_librgw_file_marker
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_librgw_file_marker
   rgw
   librados
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${LUA_LIBRARIES}
   )
   target_link_libraries(ceph_test_librgw_file_marker spawn)
 install(TARGETS ceph_test_librgw_file_marker DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -359,13 +365,16 @@ install(TARGETS ceph_test_librgw_file_marker DESTINATION ${CMAKE_INSTALL_BINDIR}
 add_executable(ceph_test_librgw_file_xattr
   librgw_file_xattr.cc
   )
-target_include_directories(ceph_test_librgw_file_xattr SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(ceph_test_librgw_file_xattr
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_librgw_file_xattr
   rgw
   librados
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${LUA_LIBRARIES}
   )
 target_link_libraries(ceph_test_librgw_file_xattr spawn)
 
@@ -575,9 +584,12 @@ if(WITH_RBD)
   if(FREEBSD)
     add_dependencies(tests rbd-ggate)
   endif(FREEBSD)
+  if(WITH_RBD_MIRROR)
+    add_dependencies(tests unittest_librbd rbd-mirror)
+  endif(WITH_RBD_MIRROR)
 endif(WITH_RBD)
 if(WITH_RADOSGW)
-  add_dependencies(tests radosgwd radosgw-admin)
+  add_dependencies(tests radosgw radosgw-admin)
 endif()
 #add dependency from fio just to ensure the plugin build isn't failing
 if(WITH_FIO)
@@ -609,27 +621,6 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 #add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
-
-if(DEFINED PROMTOOL_EXECUTABLE)
-  set(promtool_executable_checked TRUE)
-endif()
-
-find_program(PROMTOOL_EXECUTABLE promtool)
-if(PROMTOOL_EXECUTABLE)
-  execute_process(
-    COMMAND ${PROMTOOL_EXECUTABLE} test rules /dev/null
-    RESULT_VARIABLE rc
-    OUTPUT_QUIET)
-  if(NOT rc)
-    add_ceph_test(run-promtool-unittests
-      ${PROMTOOL_EXECUTABLE} test rules ${CMAKE_SOURCE_DIR}/monitoring/prometheus/tests/test_alerts.yml)
-  elseif(NOT promtool_executable_checked)
-    message(WARNING "'${PROMTOOL_EXECUTABLE} test rules' does not work, "
-      "please use a newer prometheus")
-  endif()
-elseif(NOT promtool_executable_checked)
-  message(WARNING "run-promtool-unittests is skipped due to missing promtool")
-endif()
 
 set_property(
   TEST ${tox_tests}

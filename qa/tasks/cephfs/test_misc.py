@@ -3,10 +3,15 @@ from io import StringIO
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
+from textwrap import dedent
+from threading import Thread
 import errno
+import platform
 import time
 import json
 import logging
+import os
+import re
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +33,24 @@ class TestMisc(CephFSTestCase):
         # the process is stuck in uninterruptible sleep, just kill the mount
         self.mount_a.umount_wait(force=True)
         p.wait()
+
+    def test_fuse_mount_on_already_mounted_path(self):
+        if platform.system() != "Linux":
+            self.skipTest("Require Linux platform")
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require FUSE client")
+
+        # Try to mount already mounted path
+        # expecting EBUSY error
+        try:
+            mount_cmd = ['sudo'] + self.mount_a._mount_bin + [self.mount_a.hostfs_mntpt]
+            self.mount_a.client_remote.run(args=mount_cmd, stderr=StringIO(),
+                    stdout=StringIO(), timeout=60, omit_sudo=False)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EBUSY)
+        else:
+            self.fail("Expected EBUSY")
 
     def test_getattr_caps(self):
         """
@@ -122,7 +145,8 @@ class TestMisc(CephFSTestCase):
                                             '--pg_num_min', str(self.fs.pg_num_min))
         self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
                                             self.fs.metadata_pool_name,
-                                            data_pool_name)
+                                            data_pool_name,
+                                            '--allow_dangerous_metadata_overlay')
 
     def test_cap_revoke_nonresponder(self):
         """
@@ -215,6 +239,249 @@ class TestMisc(CephFSTestCase):
         self.assertEqual(lsflags["allow_snaps"], False)
         self.assertEqual(lsflags["allow_multimds_snaps"], True)
         self.assertEqual(lsflags["allow_standby_replay"], True)
+
+    def _test_sync_stuck_for_around_5s(self, dir_path, file_sync=False):
+        self.mount_a.run_shell(["mkdir", dir_path])
+
+        sync_dir_pyscript = dedent("""
+                import os
+
+                path = "{path}"
+                dfd = os.open(path, os.O_DIRECTORY)
+                os.fsync(dfd)
+                os.close(dfd)
+            """.format(path=dir_path))
+
+        # run create/delete directories and test the sync time duration
+        for i in range(300):
+            for j in range(5):
+                self.mount_a.run_shell(["mkdir", os.path.join(dir_path, f"{i}_{j}")])
+            start = time.time()
+            if file_sync:
+                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript])
+            else:
+                self.mount_a.run_shell(["sync"])
+            duration = time.time() - start
+            log.info(f"sync mkdir i = {i}, duration = {duration}")
+            self.assertLess(duration, 4)
+
+            for j in range(5):
+                self.mount_a.run_shell(["rm", "-rf", os.path.join(dir_path, f"{i}_{j}")])
+            start = time.time()
+            if file_sync:
+                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript])
+            else:
+                self.mount_a.run_shell(["sync"])
+            duration = time.time() - start
+            log.info(f"sync rmdir i = {i}, duration = {duration}")
+            self.assertLess(duration, 4)
+
+        self.mount_a.run_shell(["rm", "-rf", dir_path])
+
+    def test_filesystem_sync_stuck_for_around_5s(self):
+        """
+        To check whether the fsync will be stuck to wait for the mdlog to be
+        flushed for at most 5 seconds.
+        """
+
+        dir_path = "filesystem_sync_do_not_wait_mdlog_testdir"
+        self._test_sync_stuck_for_around_5s(dir_path)
+
+    def test_file_sync_stuck_for_around_5s(self):
+        """
+        To check whether the filesystem sync will be stuck to wait for the
+        mdlog to be flushed for at most 5 seconds.
+        """
+
+        dir_path = "file_sync_do_not_wait_mdlog_testdir"
+        self._test_sync_stuck_for_around_5s(dir_path, True)
+
+    def test_file_filesystem_sync_crash(self):
+        """
+        To check whether the kernel crashes when doing the file/filesystem sync.
+        """
+
+        stop_thread = False
+        dir_path = "file_filesystem_sync_crash_testdir"
+        self.mount_a.run_shell(["mkdir", dir_path])
+
+        def mkdir_rmdir_thread(mount, path):
+            #global stop_thread
+
+            log.info(" mkdir_rmdir_thread starting...")
+            num = 0
+            while not stop_thread:
+                n = num
+                m = num
+                for __ in range(10):
+                    mount.run_shell(["mkdir", os.path.join(path, f"{n}")])
+                    n += 1
+                for __ in range(10):
+                    mount.run_shell(["rm", "-rf", os.path.join(path, f"{m}")])
+                    m += 1
+                num += 10
+            log.info(" mkdir_rmdir_thread stopped")
+
+        def filesystem_sync_thread(mount, path):
+            #global stop_thread
+
+            log.info(" filesystem_sync_thread starting...")
+            while not stop_thread:
+                mount.run_shell(["sync"])
+            log.info(" filesystem_sync_thread stopped")
+
+        def file_sync_thread(mount, path):
+            #global stop_thread
+
+            log.info(" file_sync_thread starting...")
+            pyscript = dedent("""
+                    import os
+
+                    path = "{path}"
+                    dfd = os.open(path, os.O_DIRECTORY)
+                    os.fsync(dfd)
+                    os.close(dfd)
+                """.format(path=path))
+
+            while not stop_thread:
+                mount.run_shell(['python3', '-c', pyscript])
+            log.info(" file_sync_thread stopped")
+
+        td1 = Thread(target=mkdir_rmdir_thread, args=(self.mount_a, dir_path,))
+        td2 = Thread(target=filesystem_sync_thread, args=(self.mount_a, dir_path,))
+        td3 = Thread(target=file_sync_thread, args=(self.mount_a, dir_path,))
+
+        td1.start()
+        td2.start()
+        td3.start()
+        time.sleep(1200) # run 20 minutes
+        stop_thread = True
+        td1.join()
+        td2.join()
+        td3.join()
+        self.mount_a.run_shell(["rm", "-rf", dir_path])
+
+    def test_dump_inmemory_log_on_client_eviction(self):
+        """
+        That the in-memory logs are dumped during a client eviction event.
+        """
+        self.fs.mds_asok(['config', 'set', 'debug_mds', '1/10'])
+        self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
+        mount_a_client_id = self.mount_a.get_global_id()
+        infos = self.fs.status().get_ranks(self.fs.id)
+
+        #evict the client
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+        time.sleep(10) #wait for 10 seconds for the logs dumping to complete.
+
+        #The client is evicted, so unmount it.
+        try:
+            self.mount_a.umount_wait(require_clean=True, timeout=30)
+        except:
+            pass #continue with grepping the log
+
+        eviction_log = f"Evicting (\(and blocklisting\) )?client session {mount_a_client_id} \(.+:.+/.+\)"
+        search_range = "/^--- begin dump of recent events ---$/,/^--- end dump of recent events ---$/p"
+        for info in infos:
+            mds_id = info['name']
+            try:
+                remote = self.fs.mon_manager.find_remote('mds', mds_id)
+                out = remote.run(args=["sed",
+                                       "-n",
+                                       "{0}".format(search_range),
+                                       f"/var/log/ceph/{self.mount_a.cluster_name}-mds.{mds_id}.log"],
+                                 stdout=StringIO(), timeout=30)
+            except:
+                continue #continue with the next info
+            if out.stdout and re.search(eviction_log, out.stdout.getvalue().strip()):
+                return
+        self.assertTrue(False, "Failed to dump in-memory logs during client eviction")
+
+    def test_dump_inmemory_log_on_missed_beacon_ack_from_monitors(self):
+        """
+        That the in-memory logs are dumped when the mds misses beacon ACKs from monitors.
+        """
+        self.fs.mds_asok(['config', 'set', 'debug_mds', '1/10'])
+        self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
+        try:
+            mons = json.loads(self.fs.mon_manager.raw_cluster_cmd('mon', 'dump', '-f', 'json'))['mons']
+        except:
+            self.assertTrue(False, "Error fetching monitors")
+
+        #Freeze all monitors
+        for mon in mons:
+            mon_name = mon['name']
+            log.info(f'Sending STOP to mon {mon_name}')
+            self.fs.mon_manager.signal_mon(mon_name, 19)
+
+        time.sleep(10) #wait for 10 seconds to get the in-memory logs dumped
+
+        #Unfreeze all monitors
+        for mon in mons:
+            mon_name = mon['name']
+            log.info(f'Sending CONT to mon {mon_name}')
+            self.fs.mon_manager.signal_mon(mon_name, 18)
+
+        missed_beacon_ack_log = "missed beacon ack from the monitors"
+        search_range = "/^--- begin dump of recent events ---$/,/^--- end dump of recent events ---$/p"
+        for info in self.fs.status().get_ranks(self.fs.id):
+            mds_id = info['name']
+            try:
+                remote = self.fs.mon_manager.find_remote('mds', mds_id)
+                out = remote.run(args=["sed",
+                                       "-n",
+                                       "{0}".format(search_range),
+                                       f"/var/log/ceph/{self.mount_a.cluster_name}-mds.{mds_id}.log"],
+                                 stdout=StringIO(), timeout=30)
+            except:
+                continue #continue with the next info
+            if out.stdout and (missed_beacon_ack_log in out.stdout.getvalue().strip()):
+                return
+        self.assertTrue(False, "Failed to dump in-memory logs during missed beacon ack")
+
+    def test_dump_inmemory_log_on_missed_internal_heartbeats(self):
+        """
+        That the in-memory logs are dumped when the mds misses internal heartbeats.
+        """
+        self.fs.mds_asok(['config', 'set', 'debug_mds', '1/10'])
+        self.fs.mds_asok(['config', 'set', 'mds_heartbeat_grace', '1'])
+        self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
+        try:
+            mons = json.loads(self.fs.mon_manager.raw_cluster_cmd('mon', 'dump', '-f', 'json'))['mons']
+        except:
+            self.assertTrue(False, "Error fetching monitors")
+
+        #Freeze all monitors
+        for mon in mons:
+            mon_name = mon['name']
+            log.info(f'Sending STOP to mon {mon_name}')
+            self.fs.mon_manager.signal_mon(mon_name, 19)
+
+        time.sleep(10) #wait for 10 seconds to get the in-memory logs dumped
+
+        #Unfreeze all monitors
+        for mon in mons:
+            mon_name = mon['name']
+            log.info(f'Sending CONT to mon {mon_name}')
+            self.fs.mon_manager.signal_mon(mon_name, 18)
+
+        missed_internal_heartbeat_log = \
+        "Skipping beacon heartbeat to monitors \(last acked .+s ago\); MDS internal heartbeat is not healthy!"
+        search_range = "/^--- begin dump of recent events ---$/,/^--- end dump of recent events ---$/p"
+        for info in self.fs.status().get_ranks(self.fs.id):
+            mds_id = info['name']
+            try:
+                remote = self.fs.mon_manager.find_remote('mds', mds_id)
+                out = remote.run(args=["sed",
+                                       "-n",
+                                       "{0}".format(search_range),
+                                       f"/var/log/ceph/{self.mount_a.cluster_name}-mds.{mds_id}.log"],
+                                 stdout=StringIO(), timeout=30)
+            except:
+                continue #continue with the next info
+            if out.stdout and re.search(missed_internal_heartbeat_log, out.stdout.getvalue().strip()):
+                return
+        self.assertTrue(False, "Failed to dump in-memory logs during missed internal heartbeat")
 
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1

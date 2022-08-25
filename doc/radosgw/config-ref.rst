@@ -146,6 +146,11 @@ file under each ``[client.radosgw.{instance-name}]`` instance.
 .. confval:: rgw_data_log_obj_prefix
 .. confval:: rgw_data_log_num_shards
 .. confval:: rgw_md_log_max_shards
+.. confval:: rgw_data_sync_poll_interval
+.. confval:: rgw_meta_sync_poll_interval
+.. confval:: rgw_bucket_sync_spawn_window
+.. confval:: rgw_data_sync_spawn_window
+.. confval:: rgw_meta_sync_spawn_window
 
 .. important:: The values of :confval:`rgw_data_log_num_shards` and
    :confval:`rgw_md_log_max_shards` should not be changed after sync has
@@ -228,6 +233,22 @@ HashiCorp Vault Settings
 .. confval:: rgw_crypt_vault_prefix
 .. confval:: rgw_crypt_vault_secret_engine
 .. confval:: rgw_crypt_vault_namespace
+
+SSE-S3 Settings
+===============
+
+.. confval:: rgw_crypt_sse_s3_backend
+.. confval:: rgw_crypt_sse_s3_vault_secret_engine
+.. confval:: rgw_crypt_sse_s3_key_template
+.. confval:: rgw_crypt_sse_s3_vault_auth
+.. confval:: rgw_crypt_sse_s3_vault_token_file
+.. confval:: rgw_crypt_sse_s3_vault_addr
+.. confval:: rgw_crypt_sse_s3_vault_prefix
+.. confval:: rgw_crypt_sse_s3_vault_namespace
+.. confval:: rgw_crypt_sse_s3_vault_verify_ssl
+.. confval:: rgw_crypt_sse_s3_vault_ssl_cacert
+.. confval:: rgw_crypt_sse_s3_vault_ssl_clientcert
+.. confval:: rgw_crypt_sse_s3_vault_ssl_clientkey
 
 
 QoS settings

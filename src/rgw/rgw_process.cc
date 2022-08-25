@@ -273,25 +273,23 @@ int process_request(rgw::sal::Store* const store,
                     string* user,
                     ceph::coarse_real_clock::duration* latency,
                     std::shared_ptr<RateLimiter> ratelimit,
+                    rgw::lua::Background* lua_background,
+                    std::unique_ptr<rgw::sal::LuaManager>& lua_manager,
                     int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
-
   dout(1) << "====== starting new request req=" << hex << req << dec
 	  << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  struct req_state rstate(g_ceph_context, &rgw_env, req->id);
-  struct req_state *s = &rstate;
+  req_state rstate(g_ceph_context, &rgw_env, req->id);
+  req_state *s = &rstate;
 
   s->ratelimit_data = ratelimit;
   std::unique_ptr<rgw::sal::User> u = store->get_user(rgw_user());
   s->set_user(u);
-
-  RGWObjectCtx rados_ctx(store, s);
-  s->obj_ctx = &rados_ctx;
 
   if (ret < 0) {
     s->cio = client_io;
@@ -331,14 +329,15 @@ int process_request(rgw::sal::Store* const store,
     goto done;
   }
   {
+    s->trace_enabled = tracing::rgw::tracer.is_enabled();
     std::string script;
-    auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
+    auto rc = rgw::lua::read_script(s, lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_background);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
       }
@@ -386,8 +385,9 @@ int process_request(rgw::sal::Store* const store,
       goto done;
     }
 
+
     const auto trace_name = std::string(op->name()) + " " + s->trans_id;
-    s->trace = tracing::rgw::tracer.start_trace(trace_name);
+    s->trace = tracing::rgw::tracer.start_trace(trace_name, s->trace_enabled);
     s->trace->SetAttribute(tracing::rgw::OP, op->name());
     s->trace->SetAttribute(tracing::rgw::TYPE, tracing::rgw::REQUEST);
 
@@ -403,24 +403,26 @@ int process_request(rgw::sal::Store* const store,
 
 done:
   if (op) {
-    s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
-    if (s->user) {
-      s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
-    }
-    if (s->bucket) {
-      s->trace->SetAttribute(tracing::rgw::BUCKET_NAME, s->bucket->get_name());
-    }
-    if (s->object) {
-      s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
+    if (s->trace) {
+      s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
+      if (!rgw::sal::User::empty(s->user)) {
+        s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
+      }
+      if (!rgw::sal::Bucket::empty(s->bucket)) {
+        s->trace->SetAttribute(tracing::rgw::BUCKET_NAME, s->bucket->get_name());
+      }
+      if (!rgw::sal::Object::empty(s->object)) {
+        s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
+      }
     }
     std::string script;
-    auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
+    auto rc = rgw::lua::read_script(s, lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_background);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }

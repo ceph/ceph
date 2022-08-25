@@ -5,9 +5,12 @@
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
 
+#include "crimson_utils.h"
+
 using namespace librados;
 
 TEST(ClsTestRemoteReads, TestGather) {
+  SKIP_IF_CRIMSON();
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));

@@ -281,11 +281,12 @@ public:
     std::map<hobject_t, std::pair<uint64_t, uint64_t>> chunks;
     uint64_t num_chunks = 0;
     object_manifest_t new_manifest;
+    ObjectContextRef obc;
     
 
-    ManifestOp(RefCountCallback* cb)
-      : cb(cb) {}
-    ManifestOp() = default;
+    ManifestOp(ObjectContextRef obc, RefCountCallback* cb)
+      : cb(cb), obc(obc) {}
+    ManifestOp() = delete;
   };
   typedef std::shared_ptr<ManifestOp> ManifestOpRef;
   std::map<hobject_t, ManifestOpRef> manifest_ops;
@@ -572,7 +573,7 @@ public:
   }
   void send_message_osd_cluster(
     MessageRef m, Connection *con) override {
-    osd->send_message_osd_cluster(m, con);
+    osd->send_message_osd_cluster(std::move(m), con);
   }
   void send_message_osd_cluster(
     Message *m, const ConnectionRef& con) override {
@@ -1151,7 +1152,7 @@ protected:
   void _make_clone(
     OpContext *ctx,
     PGTransaction* t,
-    ObjectContextRef obc,
+    ObjectContextRef clone_obc,
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
   void execute_ctx(OpContext *ctx);
@@ -1355,7 +1356,8 @@ protected:
   int start_flush(
     OpRequestRef op, ObjectContextRef obc,
     bool blocking, hobject_t *pmissing,
-    std::optional<std::function<void()>> &&on_flush);
+    std::optional<std::function<void()>> &&on_flush,
+    bool force_dedup = false);
   void finish_flush(hobject_t oid, ceph_tid_t tid, int r);
   int try_flush_mark_clean(FlushOpRef fop);
   void cancel_flush(FlushOpRef fop, bool requeue, std::vector<ceph_tid_t> *tids);
@@ -1458,7 +1460,7 @@ protected:
   int do_cdc(const object_info_t& oi, std::map<uint64_t, chunk_info_t>& chunk_map,
 	     std::map<uint64_t, bufferlist>& chunks);
   int start_dedup(OpRequestRef op, ObjectContextRef obc);
-  hobject_t get_fpoid_from_chunk(const hobject_t soid, bufferlist& chunk);
+  std::pair<int, hobject_t> get_fpoid_from_chunk(const hobject_t soid, bufferlist& chunk);
   int finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
   int finish_set_manifest_refcount(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
 

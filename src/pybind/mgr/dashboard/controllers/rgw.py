@@ -13,7 +13,7 @@ from ..services.ceph_service import CephService
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, allow_empty_body
+    ReadPermission, RESTController, UIRouter, allow_empty_body
 from ._version import APIVersion
 
 try:
@@ -41,7 +41,7 @@ RGW_USER_SCHEMA = {
 }
 
 
-@APIRouter('/rgw', Scope.RGW)
+@UIRouter('/rgw', Scope.RGW)
 @APIDoc("RGW Management API", "Rgw")
 class Rgw(BaseController):
     @Endpoint()

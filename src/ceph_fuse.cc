@@ -204,7 +204,9 @@ int main(int argc, const char **argv, const char *envp[]) {
           "client_try_dentry_invalidate");
 	bool can_invalidate_dentries =
           client_try_dentry_invalidate && ver < KERNEL_VERSION(3, 18, 0);
-	int tr = client->test_dentry_handling(can_invalidate_dentries);
+	auto test_result = client->test_dentry_handling(can_invalidate_dentries);
+	int tr = test_result.first;
+	bool abort_on_failure = test_result.second;
         bool client_die_on_failed_dentry_invalidate = g_conf().get_val<bool>(
           "client_die_on_failed_dentry_invalidate");
 	if (tr != 0 && client_die_on_failed_dentry_invalidate) {
@@ -229,6 +231,9 @@ int main(int argc, const char **argv, const char *envp[]) {
 	      cerr << "system() invocation failed during remount test" << std::endl;
 	    }
 	  }
+	}
+	if(abort_on_failure) {
+	  ceph_abort();
 	}
 	return reinterpret_cast<void*>(tr);
 #else

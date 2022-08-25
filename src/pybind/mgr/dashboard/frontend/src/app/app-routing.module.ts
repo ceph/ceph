@@ -37,6 +37,7 @@ import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.c
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
 import { ApiDocsComponent } from './core/navigation/api-docs/api-docs.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
+import { CRUDTableComponent } from './shared/datatable/crud-table/crud-table.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
 import { ChangePasswordGuardService } from './shared/services/change-password-guard.service';
@@ -96,7 +97,7 @@ const routes: Routes = [
         canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'orchestrator',
+            uiApiPath: 'orchestrator',
             redirectTo: 'dashboard',
             backend: 'cephadm'
           },
@@ -116,6 +117,14 @@ const routes: Routes = [
         ]
       },
       {
+        path: 'ceph-users',
+        component: CRUDTableComponent,
+        data: {
+          breadcrumbs: 'Cluster/Users',
+          resource: 'api.cluster.user@1.0'
+        }
+      },
+      {
         path: 'monitor',
         component: MonitorComponent,
         data: { breadcrumbs: 'Cluster/Monitors' }
@@ -126,7 +135,7 @@ const routes: Routes = [
         canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'orchestrator',
+            uiApiPath: 'orchestrator',
             redirectTo: 'error',
             section: 'orch',
             section_info: 'Orchestrator',
@@ -153,7 +162,7 @@ const routes: Routes = [
         component: InventoryComponent,
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'orchestrator',
+            uiApiPath: 'orchestrator',
             redirectTo: 'error',
             section: 'orch',
             section_info: 'Orchestrator',
@@ -298,7 +307,7 @@ const routes: Routes = [
         canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'rgw',
+            uiApiPath: 'rgw',
             redirectTo: 'error',
             section: 'rgw',
             section_info: 'Object Gateway',
@@ -335,7 +344,7 @@ const routes: Routes = [
         canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
-            apiPath: 'nfs-ganesha',
+            uiApiPath: 'nfs-ganesha',
             redirectTo: 'error',
             section: 'nfs-ganesha',
             section_info: 'NFS GANESHA',

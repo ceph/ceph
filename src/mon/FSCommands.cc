@@ -222,19 +222,17 @@ class FsNewHandler : public FileSystemCommandHandler
       return -EINVAL;
     }
 
+    bool allow_overlay = false;
+    cmd_getval(cmdmap, "allow_dangerous_metadata_overlay", allow_overlay);
+
     for (auto& fs : fsmap.get_filesystems()) {
       const std::vector<int64_t> &data_pools = fs->mds_map.get_data_pools();
-
-      bool sure = false;
-      cmd_getval(cmdmap,
-                 "allow_dangerous_metadata_overlay", sure);
-
       if ((std::find(data_pools.begin(), data_pools.end(), data) != data_pools.end()
 	   || fs->mds_map.get_metadata_pool() == metadata)
-	  && !sure) {
+	  && !allow_overlay) {
 	ss << "Filesystem '" << fs_name
 	   << "' is already using one of the specified RADOS pools. This should ONLY be done in emergencies and after careful reading of the documentation. Pass --allow-dangerous-metadata-overlay to permit this.";
-	return -EEXIST;
+	return -EINVAL;
       }
     }
 
@@ -255,12 +253,12 @@ class FsNewHandler : public FileSystemCommandHandler
     pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
     ceph_assert(metadata_pool != NULL);  // Checked it existed above
 
-    int r = _check_pool(mon->osdmon()->osdmap, data, POOL_DATA_DEFAULT, force, &ss);
+    int r = _check_pool(mon->osdmon()->osdmap, data, POOL_DATA_DEFAULT, force, &ss, allow_overlay);
     if (r < 0) {
       return r;
     }
 
-    r = _check_pool(mon->osdmon()->osdmap, metadata, POOL_METADATA, force, &ss);
+    r = _check_pool(mon->osdmon()->osdmap, metadata, POOL_METADATA, force, &ss, allow_overlay);
     if (r < 0) {
       return r;
     }
@@ -1514,7 +1512,8 @@ int FileSystemCommandHandler::_check_pool(
     const int64_t pool_id,
     int type,
     bool force,
-    std::ostream *ss) const
+    std::ostream *ss,
+    bool allow_overlay) const
 {
   ceph_assert(ss != NULL);
 
@@ -1525,6 +1524,29 @@ int FileSystemCommandHandler::_check_pool(
   }
 
   const string& pool_name = osd_map.get_pool_name(pool_id);
+  auto app_map = pool->application_metadata;
+
+  if (!allow_overlay && !force && !app_map.empty()) {
+    auto app = app_map.find(pg_pool_t::APPLICATION_NAME_CEPHFS);
+    if (app != app_map.end()) {
+      auto& [app_name, app_metadata] = *app;
+      auto itr = app_metadata.find("data");
+      if (itr == app_metadata.end()) {
+	itr = app_metadata.find("metadata");
+      }
+      if (itr != app_metadata.end()) {
+        auto& [type, filesystem] = *itr;
+        *ss << "RADOS pool '" << pool_name << "' is already used by filesystem '"
+            << filesystem << "' as a '" << type << "' pool for application '"
+            << app_name << "'";
+        return -EINVAL;
+      }
+    } else {
+      *ss << "RADOS pool '" << pool_name
+          << "' has another non-CephFS application enabled.";
+      return -EINVAL;
+    }
+  }
 
   if (pool->is_erasure()) {
     if (type == POOL_METADATA) {

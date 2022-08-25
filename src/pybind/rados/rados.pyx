@@ -2994,7 +2994,7 @@ returned %d, but should return zero on success." % (self.name, ret))
 
             - ``num_object_copies`` (int) - number of object copies
 
-            - ``num_objects_missing_on_primary`` (int) - number of objets
+            - ``num_objects_missing_on_primary`` (int) - number of objects
                 missing on primary
 
             - ``num_objects_unfound`` (int) - number of unfound objects

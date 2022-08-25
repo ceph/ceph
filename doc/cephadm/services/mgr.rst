@@ -22,12 +22,18 @@ example spec file (leveraging a default placement):
     networks:
     - 192.169.142.0/24
 
+.. _cephadm_mgr_co_location:
+
 Allow co-location of MGR daemons
 ================================
 
 In deployment scenarios with just a single host, cephadm still needs
-to deploy at least two MGR daemons. See ``mgr_standby_modules`` in
+to deploy at least two MGR daemons in order to allow an automated
+upgrade of the cluster. See ``mgr_standby_modules`` in
 the :ref:`mgr-administrator-guide` for further details.
+
+See also: :ref:`cephadm_co_location`.
+
 
 Further Reading
 ===============

@@ -13,6 +13,7 @@
  */
 
 #include "SnapMapper.h"
+#include <fmt/printf.h>
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -99,13 +100,11 @@ int OSDriver::get_next(
 
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
-  char buf[100];
-  int len = snprintf(
-    buf, sizeof(buf),
-    "%lld_%.*X_",
-    (long long)pool,
-    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
-  return MAPPING_PREFIX + string(buf, len);
+  static_assert(sizeof(pool) == 8, "assumed by the formatting code");
+  return fmt::sprintf("%s%lld_%.16X_",
+		      MAPPING_PREFIX,
+		      pool,
+		      snap);
 }
 
 string SnapMapper::to_raw_key(
@@ -322,6 +321,10 @@ int SnapMapper::get_next_objects_to_trim(
 {
   ceph_assert(out);
   ceph_assert(out->empty());
+
+  // if max would be 0, we return ENOENT and the caller would mistakenly
+  // trim the snaptrim queue
+  ceph_assert(max > 0);
   int r = 0;
   for (set<string>::iterator i = prefixes.begin();
        i != prefixes.end() && out->size() < max && r == 0;
@@ -416,10 +419,10 @@ int SnapMapper::get_snaps(
 
 string SnapMapper::make_purged_snap_key(int64_t pool, snapid_t last)
 {
-  char k[80];
-  snprintf(k, sizeof(k), "%s_%llu_%016llx", PURGED_SNAP_PREFIX,
-	   (unsigned long long)pool, (unsigned long long)last);
-  return k;
+  return fmt::sprintf("%s_%lld_%016llx",
+		      PURGED_SNAP_PREFIX,
+		      pool,
+		      last);
 }
 
 void SnapMapper::make_purged_snap_key_value(
@@ -636,12 +639,9 @@ void SnapMapper::Scrubber::run()
 
 string SnapMapper::get_legacy_prefix(snapid_t snap)
 {
-  char buf[100];
-  int len = snprintf(
-    buf, sizeof(buf),
-    "%.*X_",
-    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
-  return LEGACY_MAPPING_PREFIX + string(buf, len);
+  return fmt::sprintf("%s%.16X_",
+		      LEGACY_MAPPING_PREFIX,
+		      snap);
 }
 
 string SnapMapper::to_legacy_raw_key(
@@ -654,6 +654,38 @@ bool SnapMapper::is_legacy_mapping(const string &to_test)
 {
   return to_test.substr(0, LEGACY_MAPPING_PREFIX.size()) ==
     LEGACY_MAPPING_PREFIX;
+}
+
+/* Octopus modified the SnapMapper key format from
+ *
+ *  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
+ *
+ * to
+ *
+ *  <MAPPING_PREFIX><pool>_<snapid>_<shardid>_<hobject_t::to_str()>
+ *
+ * We can't reconstruct the new key format just from the value since the
+ * Mapping object contains an hobject rather than a ghobject. Instead,
+ * we exploit the fact that the new format is identical starting at <snapid>.
+ *
+ * Note that the original version of this conversion introduced in 94ebe0ea
+ * had a crucial bug which essentially destroyed legacy keys by mapping
+ * them to
+ *
+ *  <MAPPING_PREFIX><poolid>_<snapid>_
+ *
+ * without the object-unique suffix.
+ * See https://tracker.ceph.com/issues/56147
+ */
+std::string SnapMapper::convert_legacy_key(
+  const std::string& old_key,
+  const bufferlist& value)
+{
+  auto old = from_raw(make_pair(old_key, value));
+  std::string object_suffix = old_key.substr(
+    SnapMapper::LEGACY_MAPPING_PREFIX.length());
+  return SnapMapper::MAPPING_PREFIX + std::to_string(old.second.pool)
+    + "_" + object_suffix;
 }
 
 int SnapMapper::convert_legacy(
@@ -677,13 +709,9 @@ int SnapMapper::convert_legacy(
   while (iter->valid()) {
     bool valid = SnapMapper::is_legacy_mapping(iter->key());
     if (valid) {
-      SnapMapper::Mapping m;
-      bufferlist bl(iter->value());
-      auto bp = bl.cbegin();
-      decode(m, bp);
       to_set.emplace(
-	SnapMapper::get_prefix(m.hoid.pool, m.snap),
-	bl);
+	convert_legacy_key(iter->key(), iter->value()),
+	iter->value());
       ++n;
       iter->next();
     }

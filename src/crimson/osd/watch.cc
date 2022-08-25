@@ -116,7 +116,7 @@ seastar::future<> Watch::notify_ack(
 {
   logger().info("{}", __func__);
   return seastar::do_for_each(in_progress_notifies,
-    [this_shared=shared_from_this(), &reply_bl] (auto notify) {
+    [this_shared=shared_from_this(), reply_bl] (auto notify) {
       return notify->complete_watcher(this_shared, reply_bl);
     }
   ).then([this] {

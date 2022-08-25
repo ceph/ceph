@@ -9,7 +9,7 @@ Test Run`_.
 Viewing Test Results
 --------------------
 
-When a teuthology run has been completed successfully, use `pulpito`_ dasboard
+When a teuthology run has been completed successfully, use `pulpito`_ dashboard
 to view the results::
 
    http://pulpito.front.sepia.ceph.com/<job-name>/<job-id>/

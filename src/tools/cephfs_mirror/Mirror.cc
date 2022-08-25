@@ -238,7 +238,7 @@ int Mirror::init_mon_client() {
     return r;
   }
 
-  r = m_monc->authenticate(m_cct->_conf->client_mount_timeout);
+  r = m_monc->authenticate(std::chrono::duration<double>(m_cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
   if (r < 0) {
     derr << ": failed to authenticate to monitor: " << cpp_strerror(r) << dendl;
     return r;

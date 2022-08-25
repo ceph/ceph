@@ -9,11 +9,10 @@ The Ceph open source community is guided by a few different groups.
 Project Leader
 --------------
 
-The Ceph project is currently led by Sage Weil <sage@redhat.com>.  The
-project leader is responsible for guiding the overall direction of the
-project and ensuring that the developer and user communities are
-healthy.
-
+The Ceph project was created by Sage Weil <sage@redhat.com> and is led by the
+Ceph Leadership Team (CLT). Each project leader is responsible for guiding the
+overall direction of the project and ensuring that the developer and user
+communities are healthy.
 
 Committers
 ----------
@@ -52,6 +51,7 @@ the CLT itself.
 
 Current CLT members are:
 
+ * Adam King <adking@redhat.com>
  * Casey Bodley <cbodley@redhat.com>
  * Dan van der Ster <daniel.vanderster@cern.ch>
  * David Galloway <dgallowa@redhat.com>
@@ -71,11 +71,10 @@ Current CLT members are:
  * Myoungwon Oh <myoungwon.oh@samsung.com>
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@redhat.com>
- * Sage Weil <sage@redhat.com>
  * Sam Just <sjust@redhat.com>
- * Sebastian Wagner <sewagner@redhat.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yehuda Sadeh <yehuda@redhat.com>
+ * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
  * Zac Dover <zac.dover@gmail.com>
 

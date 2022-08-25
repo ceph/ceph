@@ -157,18 +157,19 @@
     role delete                remove a role
     role get                   get a role
     role list                  list roles with specified path prefix
-    role modify                modify the assume role policy of an existing role
+    role-trust-policy modify   modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
     role-policy delete         remove policy attached to a role
+    role update                update max_session_duration of a role
     reshard add                schedule a resharding of a bucket
     reshard list               list all bucket resharding or scheduled to be resharded
     reshard status             read bucket resharding status
     reshard process            process of scheduled reshard jobs
     reshard cancel             cancel resharding a bucket
     reshard stale-instances list list stale-instances from bucket resharding
-    reshard stale-instances rm   cleanup stale-instances from bucket resharding
+    reshard stale-instances delete   cleanup stale-instances from bucket resharding
     sync error list            list sync error
     sync error trim            trim sync error
     mfa create                 create a new MFA TOTP token
@@ -226,6 +227,10 @@
                                  data sync status
                                required for: 
                                  mdlog trim
+     --gen=<gen-id>            optional for: 
+                                 bilog list
+                                 bilog trim
+                                 bilog status
      --max-entries=<entries>   max entries for listing operations
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         zone or zonegroup id of remote gateway
@@ -310,6 +315,8 @@
      --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,
                                the trimming process will sleep the specified msec for every 1000 entries trimmed
      --max-concurrent-ios      maximum concurrent ios for bucket operations (default: 32)
+     --enable-feature          enable a zone/zonegroup feature
+     --disable-feature         disable a zone/zonegroup feature
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
@@ -356,7 +363,7 @@
      --event-id                event id in a pubsub subscription
   
   Script options:
-     --context                 context in which the script runs. one of: preRequest, postRequest
+     --context                 context in which the script runs. one of: preRequest, postRequest, background
      --package                 name of the lua package that should be added/removed to/from the allowlist
      --allow-compilation       package is allowed to compile C code as part of its installation
   

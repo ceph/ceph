@@ -40,6 +40,9 @@ struct OMapInnerNode
   bool extent_will_overflow(size_t ksize, std::optional<size_t> vsize) const {
     return is_overflow(ksize);
   }
+  bool can_merge(OMapNodeRef right) const {
+    return !is_overflow(*right->cast<OMapInnerNode>());
+  }
   bool extent_is_below_min() const { return below_min(); }
   uint32_t get_node_size() { return get_size(); }
 
@@ -153,6 +156,9 @@ struct OMapLeafNode
   bool extent_will_overflow(
     size_t ksize, std::optional<size_t> vsize) const {
     return is_overflow(ksize, *vsize);
+  }
+  bool can_merge(OMapNodeRef right) const {
+    return !is_overflow(*right->cast<OMapLeafNode>());
   }
   bool extent_is_below_min() const { return below_min(); }
   uint32_t get_node_size() { return get_size(); }

@@ -151,7 +151,7 @@ You can identify which client(s) are using unpatched ceph client code with::
 
   ceph health detail
 
-Clients global_id reclaim rehavior can also seen in the
+Clients' global_id reclaim behavior can also seen in the
 ``global_id_status`` field in the dump of clients connected to an
 individual monitor (``reclaim_insecure`` means the client is
 unpatched and is contributing to this health alert)::

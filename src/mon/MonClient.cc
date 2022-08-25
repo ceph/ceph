@@ -154,7 +154,7 @@ int MonClient::get_monmap_and_config()
     if (r < 0) {
       return r;
     }
-    r = authenticate(cct->_conf->client_mount_timeout);
+    r = authenticate(std::chrono::duration<double>(cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
     if (r == -ETIMEDOUT) {
       shutdown();
       continue;
@@ -1025,6 +1025,7 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 
 int MonClient::_check_auth_tickets()
 {
+  ldout(cct, 10) << __func__ << dendl;
   ceph_assert(ceph_mutex_is_locked(monc_lock));
   if (active_con && auth) {
     if (auth->need_tickets()) {
@@ -1830,6 +1831,7 @@ int MonConnection::_negotiate(MAuthReply *m,
 			      uint32_t want_keys,
 			      RotatingKeyRing* keyring)
 {
+  ldout(cct, 10) << __func__ << dendl;
   int r = _init_auth(m->protocol, entity_name, want_keys, keyring, false);
   if (r == -ENOTSUP) {
     if (m->result == -ENOTSUP) {

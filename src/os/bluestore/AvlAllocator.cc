@@ -3,6 +3,7 @@
 
 #include "AvlAllocator.h"
 
+#include <bit>
 #include <limits>
 
 #include "common/config_proxy.h"
@@ -39,8 +40,8 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
   auto rs_start = range_tree.lower_bound(range_t{*cursor, size}, compare);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
+    *cursor = offset + size;
     if (offset + size <= rs->end) {
-      *cursor = offset + size;
       return offset;
     }
     if (max_search_count > 0 && ++search_count > max_search_count) {
@@ -51,6 +52,7 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
       return -1ULL;
     }
   }
+
   if (*cursor == 0) {
     // If we already started from beginning, don't bother with searching from beginning
     return -1ULL;
@@ -58,8 +60,8 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
   // If we reached end, start from beginning till cursor.
   for (auto rs = range_tree.begin(); rs != rs_start; ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
+    *cursor = offset + size;
     if (offset + size <= rs->end) {
-      *cursor = offset + size;
       return offset;
     }
     if (max_search_count > 0 && ++search_count > max_search_count) {
@@ -371,7 +373,7 @@ int64_t AvlAllocator::allocate(
                  << " max_alloc_size 0x" << max_alloc_size
                  << " hint 0x" << hint
                  << std::dec << dendl;
-  ceph_assert(isp2(unit));
+  ceph_assert(std::has_single_bit(unit));
   ceph_assert(want % unit == 0);
 
   if (max_alloc_size == 0) {
@@ -417,7 +419,6 @@ void AvlAllocator::_dump() const
       << std::dec
       << dendl;
   }
-
   ldout(cct, 0) << __func__ << " range_size_tree: " << dendl;
   for (auto& rs : range_size_tree) {
     ldout(cct, 0) << std::hex
@@ -427,7 +428,15 @@ void AvlAllocator::_dump() const
   }
 }
 
-void AvlAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
+void AvlAllocator::foreach(
+  std::function<void(uint64_t offset, uint64_t length)> notify)
+{
+  std::lock_guard l(lock);
+  _foreach(notify);
+}
+
+void AvlAllocator::_foreach(
+  std::function<void(uint64_t offset, uint64_t length)> notify) const
 {
   for (auto& rs : range_tree) {
     notify(rs.start, rs.end - rs.start);

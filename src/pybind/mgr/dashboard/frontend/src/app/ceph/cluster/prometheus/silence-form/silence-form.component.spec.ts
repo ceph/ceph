@@ -85,7 +85,7 @@ describe('SilenceFormComponent', () => {
   const changeAction = (action: string) => {
     const modes = {
       add: '/monitoring/silences/add',
-      alertAdd: '/monitoring/silences/add/someAlert',
+      alertAdd: '/monitoring/silences/add/alert0',
       recreate: '/monitoring/silences/recreate/someExpiredId',
       edit: '/monitoring/silences/edit/someNotExpiredId'
     };
@@ -99,9 +99,10 @@ describe('SilenceFormComponent', () => {
 
     prometheus = new PrometheusHelper();
     prometheusService = TestBed.inject(PrometheusService);
-    spyOn(prometheusService, 'getAlerts').and.callFake(() =>
-      of([prometheus.createAlert('alert0')])
-    );
+    spyOn(prometheusService, 'getAlerts').and.callFake(() => {
+      const name = _.split(router.url, '/').pop();
+      return of([prometheus.createAlert(name)]);
+    });
     ifPrometheusSpy = spyOn(prometheusService, 'ifPrometheusConfigured').and.callFake((fn) => fn());
     rulesSpy = spyOn(prometheusService, 'getRules').and.callFake(() =>
       of({
@@ -231,9 +232,10 @@ describe('SilenceFormComponent', () => {
     };
 
     beforeEach(() => {
-      spyOn(prometheusService, 'getSilences').and.callFake((p) =>
-        of([prometheus.createSilence(p.id)])
-      );
+      spyOn(prometheusService, 'getSilences').and.callFake(() => {
+        const id = _.split(router.url, '/').pop();
+        return of([prometheus.createSilence(id)]);
+      });
     });
 
     it('should have no special action activate by default', () => {
@@ -251,7 +253,7 @@ describe('SilenceFormComponent', () => {
     it('should be in edit action if route includes edit', () => {
       params = { id: 'someNotExpiredId' };
       expectMode('edit', true, false, 'Edit');
-      expect(prometheusService.getSilences).toHaveBeenCalledWith(params);
+      expect(prometheusService.getSilences).toHaveBeenCalled();
       expect(component.form.value).toEqual({
         comment: `A comment for ${params.id}`,
         createdBy: `Creator of ${params.id}`,
@@ -265,7 +267,7 @@ describe('SilenceFormComponent', () => {
     it('should be in recreation action if route includes recreate', () => {
       params = { id: 'someExpiredId' };
       expectMode('recreate', false, true, 'Recreate');
-      expect(prometheusService.getSilences).toHaveBeenCalledWith(params);
+      expect(prometheusService.getSilences).toHaveBeenCalled();
       expect(component.form.value).toEqual({
         comment: `A comment for ${params.id}`,
         createdBy: `Creator of ${params.id}`,
@@ -277,7 +279,7 @@ describe('SilenceFormComponent', () => {
     });
 
     it('adds matchers based on the label object of the alert with the given id', () => {
-      params = { id: 'someAlert' };
+      params = { id: 'alert0' };
       expectMode('alertAdd', false, false, 'Create');
       expect(prometheusService.getSilences).not.toHaveBeenCalled();
       expect(prometheusService.getAlerts).toHaveBeenCalled();
@@ -402,13 +404,7 @@ describe('SilenceFormComponent', () => {
     it('should show added matcher', () => {
       addMatcher('job', 'someJob', true);
       fixtureH.expectIdElementsVisible(
-        [
-          'matcher-name-0',
-          'matcher-value-0',
-          'matcher-isRegex-0',
-          'matcher-edit-0',
-          'matcher-delete-0'
-        ],
+        ['matcher-name-0', 'matcher-value-0', 'matcher-edit-0', 'matcher-delete-0'],
         true
       );
       expectMatch(null);
@@ -421,12 +417,10 @@ describe('SilenceFormComponent', () => {
         [
           'matcher-name-0',
           'matcher-value-0',
-          'matcher-isRegex-0',
           'matcher-edit-0',
           'matcher-delete-0',
           'matcher-name-1',
           'matcher-value-1',
-          'matcher-isRegex-1',
           'matcher-edit-1',
           'matcher-delete-1'
         ],
@@ -441,8 +435,6 @@ describe('SilenceFormComponent', () => {
       fixture.detectChanges();
       fixtureH.expectFormFieldToBe('#matcher-name-0', 'alertname');
       fixtureH.expectFormFieldToBe('#matcher-value-0', 'alert.*');
-      fixtureH.expectFormFieldToBe('#matcher-isRegex-0', 'true');
-      fixtureH.expectFormFieldToBe('#matcher-isRegex-1', 'false');
       expectMatch(null);
     });
 
@@ -465,7 +457,6 @@ describe('SilenceFormComponent', () => {
 
       fixtureH.expectFormFieldToBe('#matcher-name-0', 'alertname');
       fixtureH.expectFormFieldToBe('#matcher-value-0', 'alert0');
-      fixtureH.expectFormFieldToBe('#matcher-isRegex-0', 'false');
       expectMatch('Matches 1 rule with 1 active alert.');
     });
 

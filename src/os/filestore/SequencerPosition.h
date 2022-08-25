@@ -5,7 +5,6 @@
 #define __CEPH_OS_SEQUENCERPOSITION_H
 
 #include "include/types.h"
-#include "include/cmp.h"
 #include "include/encoding.h"
 #include "common/Formatter.h"
 
@@ -20,6 +19,8 @@ struct SequencerPosition {
   uint32_t op;    ///< op in that transaction (0-based)
 
   SequencerPosition(uint64_t s=0, int32_t t=0, int32_t o=0) : seq(s), trans(t), op(o) {}
+
+  auto operator<=>(const SequencerPosition&) const = default;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -51,9 +52,5 @@ WRITE_CLASS_ENCODER(SequencerPosition)
 inline std::ostream& operator<<(std::ostream& out, const SequencerPosition& t) {
   return out << t.seq << "." << t.trans << "." << t.op;
 }
-
-WRITE_EQ_OPERATORS_3(SequencerPosition, seq, trans, op)
-WRITE_CMP_OPERATORS_3(SequencerPosition, seq, trans, op)
-
 
 #endif

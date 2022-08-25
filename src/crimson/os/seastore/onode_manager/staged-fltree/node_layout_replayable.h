@@ -7,8 +7,6 @@
 #include "stages/node_stage.h"
 #include "stages/stage.h"
 
-#define STAGE_T node_to_stage_t<node_stage_t>
-
 namespace crimson::os::seastore::onode {
 
 /**
@@ -21,8 +19,9 @@ namespace crimson::os::seastore::onode {
 template <typename FieldType, node_type_t NODE_TYPE>
 struct NodeLayoutReplayableT {
   using node_stage_t = node_extent_t<FieldType, NODE_TYPE>;
-  using position_t = typename STAGE_T::position_t;
-  using StagedIterator = typename STAGE_T::StagedIterator;
+  using stage_t = node_to_stage_t<node_stage_t>;
+  using position_t = typename stage_t::position_t;
+  using StagedIterator = typename stage_t::StagedIterator;
   using value_input_t = value_input_type_t<NODE_TYPE>;
   using value_t = value_type_t<NODE_TYPE>;
   static constexpr auto FIELD_TYPE = FieldType::FIELD_TYPE;
@@ -36,7 +35,7 @@ struct NodeLayoutReplayableT {
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
-    auto p_value = STAGE_T::template proceed_insert<KT, false>(
+    auto p_value = stage_t::template proceed_insert<KT, false>(
         mut, node_stage, key, value, insert_pos, insert_stage, insert_size);
     return p_value;
   }
@@ -46,7 +45,7 @@ struct NodeLayoutReplayableT {
       const node_stage_t& node_stage,
       StagedIterator& split_at) {
     node_stage_t::update_is_level_tail(mut, node_stage, false);
-    STAGE_T::trim(mut, split_at);
+    stage_t::trim(mut, split_at);
   }
 
   template <KeyT KT>
@@ -60,8 +59,8 @@ struct NodeLayoutReplayableT {
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
     node_stage_t::update_is_level_tail(mut, node_stage, false);
-    STAGE_T::trim(mut, split_at);
-    auto p_value = STAGE_T::template proceed_insert<KT, true>(
+    stage_t::trim(mut, split_at);
+    auto p_value = stage_t::template proceed_insert<KT, true>(
         mut, node_stage, key, value, insert_pos, insert_stage, insert_size);
     return p_value;
   }
@@ -85,7 +84,7 @@ struct NodeLayoutReplayableT {
 
     assert(node_stage.keys() != 0);
     position_t erase_pos = _erase_pos;
-    auto erase_stage = STAGE_T::erase(mut, node_stage, erase_pos);
+    auto erase_stage = stage_t::erase(mut, node_stage, erase_pos);
     // return erase_stage, next_pos
     return {erase_stage, erase_pos};
   }
@@ -115,13 +114,13 @@ struct NodeLayoutReplayableT {
       laddr_t last_value;
       {
         const laddr_packed_t* p_last_value;
-        STAGE_T::template get_largest_slot<true, false, true>(
+        stage_t::template get_largest_slot<true, false, true>(
             node_stage, &last_pos, nullptr, &p_last_value);
         last_value = p_last_value->value;
       }
 
       auto erase_pos = last_pos;
-      auto erase_stage = STAGE_T::erase(mut, node_stage, erase_pos);
+      auto erase_stage = stage_t::erase(mut, node_stage, erase_pos);
       assert(erase_pos.is_end());
 
       node_stage_t::update_is_level_tail(mut, node_stage, true);

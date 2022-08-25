@@ -125,7 +125,8 @@ class LevelSpec:
                     raise ValueError("pool {} does not exist".format(pool_name))
                 if pool_id not in get_rbd_pools(module):
                     raise ValueError("{} is not an RBD pool".format(pool_name))
-                id += str(pool_id)
+                pool_id = str(pool_id)
+                id += pool_id
                 if match.group(2) is not None or match.group(3):
                     id += "/"
                     with module.rados.open_ioctx(pool_name) as ioctx:
@@ -512,10 +513,12 @@ class Schedules:
             if interval is None:
                 schedule = None
             else:
-                schedule.remove(Interval.from_string(interval),
-                                StartTime.from_string(start_time))
-                if schedule:
-                    self.schedules[level_spec.id] = schedule
+                try:
+                    schedule.remove(Interval.from_string(interval),
+                                    StartTime.from_string(start_time))
+                finally:
+                    if schedule:
+                        self.schedules[level_spec.id] = schedule
             if not schedule:
                 del self.level_specs[level_spec.id]
         self.save(level_spec, schedule)

@@ -104,8 +104,13 @@ inline namespace v14_2_0 {
   };
   CEPH_RADOS_API std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
 
-  class CEPH_RADOS_API NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
+  class CEPH_RADOS_API NObjectIterator {
   public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = ListObject;
+    using difference_type = std::ptrdiff_t;
+    using pointer = ListObject*;
+    using reference = ListObject&;
     static const NObjectIterator __EndObjectIterator;
     NObjectIterator(): impl(NULL) {}
     ~NObjectIterator();
@@ -551,7 +556,9 @@ inline namespace v14_2_0 {
      * see aio_sparse_read()
      */
     void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
-                    bufferlist *data_bl, int *prval);
+                     bufferlist *data_bl, int *prval,
+                     uint64_t truncate_size = 0,
+                     uint32_t truncate_seq = 0);
 
     /**
      * omap_get_vals: keys and values from the object omap
@@ -751,8 +758,11 @@ inline namespace v14_2_0 {
     void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     /**
-     * flush a manifest tier object to backing tier; will block racing
-     * updates.
+     * flush a manifest tier object to backing tier, performing deduplication;
+     * will block racing updates.
+     *
+     * Invoking tier_flush() implicitly makes a manifest object even if
+     * the target object is not manifest. 
      */
     void tier_flush();
     /**

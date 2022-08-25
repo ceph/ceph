@@ -128,9 +128,11 @@ class ServiceManager(ResourceManager):
             raise_if_exception(c)
 
     @wait_api_result
-    def apply(self, service_spec: Dict) -> OrchResult[List[str]]:
+    def apply(self,
+              service_spec: Dict,
+              no_overwrite: Optional[bool] = False) -> OrchResult[List[str]]:
         spec = ServiceSpec.from_json(service_spec)
-        return self.api.apply([spec])
+        return self.api.apply([spec], no_overwrite)
 
     @wait_api_result
     def remove(self, service_name: str) -> List[str]:
@@ -151,6 +153,12 @@ class OsdManager(ResourceManager):
         return self.api.remove_osds_status()
 
 
+class DaemonManager(ResourceManager):
+    @wait_api_result
+    def action(self, daemon_name='', action='', image=None):
+        return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image)
+
+
 class OrchClient(object):
 
     _instance = None
@@ -169,6 +177,7 @@ class OrchClient(object):
         self.inventory = InventoryManager(self.api)
         self.services = ServiceManager(self.api)
         self.osds = OsdManager(self.api)
+        self.daemons = DaemonManager(self.api)
 
     def available(self, features: Optional[List[str]] = None) -> bool:
         available = self.status()['available']
@@ -218,3 +227,5 @@ class OrchFeature(object):
 
     DEVICE_LIST = 'get_inventory'
     DEVICE_BLINK_LIGHT = 'blink_device_light'
+
+    DAEMON_ACTION = 'daemon_action'

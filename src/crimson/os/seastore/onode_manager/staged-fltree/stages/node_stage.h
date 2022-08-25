@@ -133,12 +133,12 @@ class node_extent_t {
 
   static node_offset_t header_size() { return FieldType::HEADER_SIZE; }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static node_offset_t estimate_insert(
-      const full_key_t<KT>& key, const value_input_t& value) {
+      const Key& key, const value_input_t& value) {
     auto size = FieldType::estimate_insert_one();
     if constexpr (FIELD_TYPE == field_type_t::N2) {
-      size += ns_oid_view_t::estimate_size<KT>(key);
+      size += ns_oid_view_t::estimate_size(key);
     } else if constexpr (FIELD_TYPE == field_type_t::N3 &&
                          NODE_TYPE == node_type_t::LEAF) {
       size += value.allocation_size();
@@ -146,10 +146,10 @@ class node_extent_t {
     return size;
   }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static const value_t* insert_at(
       NodeExtentMutable& mut, const node_extent_t&,
-      const full_key_t<KT>& key, const value_input_t& value,
+      const Key& key, const value_input_t& value,
       index_t index, node_offset_t size, const char* p_left_bound) {
     if constexpr (FIELD_TYPE == field_type_t::N3) {
       ceph_abort("not implemented");
@@ -158,10 +158,10 @@ class node_extent_t {
     }
   }
 
-  template <KeyT KT>
+  template <IsFullKey Key>
   static memory_range_t insert_prefix_at(
       NodeExtentMutable&, const node_extent_t&,
-      const full_key_t<KT>& key,
+      const Key& key,
       index_t index, node_offset_t size, const char* p_left_bound);
 
   static void update_size_at(

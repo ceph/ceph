@@ -17,11 +17,9 @@
 #include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
 #include "services/svc_meta_be.h"
+#include "rgw_sal_fwd.h"
 
 
-namespace rgw { namespace sal {
-class Store;
-} }
 class RGWCoroutine;
 class JSONObj;
 struct RGWObjVersionTracker;
@@ -37,6 +35,8 @@ protected:
   
 public:
   RGWMetadataObject() {}
+  RGWMetadataObject(const obj_version& v,
+		    real_time m) : objv(v), mtime(m) {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
   real_time& get_mtime() { return mtime; }
@@ -293,5 +293,8 @@ public:
   virtual void encode_obj(bufferlist *bl) {}
 };
 
+void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& key, std::string& name, int *shard_id);
+void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& section, const std::string& key, std::string& name);
+void rgw_shard_name(const std::string& prefix, unsigned shard_id, std::string& name);
 
 #endif

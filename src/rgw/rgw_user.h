@@ -17,6 +17,7 @@
 #include "common/Formatter.h"
 #include "rgw_formats.h"
 #include "rgw_metadata.h"
+#include "rgw_sal_fwd.h"
 
 #define RGW_USER_ANON_ID "anonymous"
 
@@ -31,9 +32,6 @@ class RGWBucketCtl;
 class RGWUserBuckets;
 
 class RGWGetUserStats_CB;
-namespace rgw { namespace sal {
-class Store;
-} }
 
 /**
  * A string wrapper that includes encode/decode functions
@@ -176,8 +174,7 @@ struct RGWUserAdminOpState {
   bool bucket_ratelimit_specified{false};
   bool user_ratelimit_specified{false};
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
   RGWRateLimitInfo user_ratelimit;
   RGWRateLimitInfo bucket_ratelimit;
 
@@ -300,6 +297,8 @@ struct RGWUserAdminOpState {
 
   void set_user_info(RGWUserInfo& user_info);
 
+  void set_user_version_tracker(RGWObjVersionTracker& objv_tracker);
+
   void set_max_buckets(int32_t mb) {
     max_buckets = mb;
     max_buckets_specified = true;
@@ -333,13 +332,13 @@ struct RGWUserAdminOpState {
     key_op = true;
   }
 
-  void set_bucket_quota(RGWQuotaInfo& quota) {
-    bucket_quota = quota;
+  void set_bucket_quota(RGWQuotaInfo& quotas) {
+    quota.bucket_quota = quotas;
     bucket_quota_specified = true;
   }
 
-  void set_user_quota(RGWQuotaInfo& quota) {
-    user_quota = quota;
+  void set_user_quota(RGWQuotaInfo& quotas) {
+    quota.user_quota = quotas;
     user_quota_specified = true;
   }
 
@@ -403,8 +402,8 @@ struct RGWUserAdminOpState {
   uint32_t get_subuser_perm() { return perm_mask; }
   int32_t get_max_buckets() { return max_buckets; }
   uint32_t get_op_mask() { return op_mask; }
-  RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
-  RGWQuotaInfo& get_user_quota() { return user_quota; }
+  RGWQuotaInfo& get_bucket_quota() { return quota.bucket_quota; }
+  RGWQuotaInfo& get_user_quota() { return quota.user_quota; }
   std::set<std::string>& get_mfa_ids() { return mfa_ids; }
 
   rgw::sal::User* get_user() { return user.get(); }
@@ -861,14 +860,6 @@ public:
                   const RGWUserInfo& info, optional_yield y,
                   const RemoveParams& params = {});
 
-  int add_bucket(const DoutPrefixProvider *dpp, 
-                 const rgw_user& user,
-                 const rgw_bucket& bucket,
-                 ceph::real_time creation_time,
-		 optional_yield y);
-  int remove_bucket(const DoutPrefixProvider *dpp, 
-                    const rgw_user& user,
-                    const rgw_bucket& bucket, optional_yield y);
   int list_buckets(const DoutPrefixProvider *dpp, 
                    const rgw_user& user,
                    const std::string& marker,
@@ -880,18 +871,11 @@ public:
 		   optional_yield y,
                    uint64_t default_max = 1000);
 
-  int flush_bucket_stats(const DoutPrefixProvider *dpp, 
-                         const rgw_user& user,
-                         const RGWBucketEnt& ent,
-			 optional_yield y);
-  int complete_flush_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y);
-  int reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y);
   int read_stats(const DoutPrefixProvider *dpp, 
                  const rgw_user& user, RGWStorageStats *stats,
 		 optional_yield y,
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
-  int read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& user, RGWGetUserStats_CB *ctx);
 };
 
 class RGWUserMetaHandlerAllocator {

@@ -323,7 +323,7 @@ To list all the configuration checks and their current states, run the following
     NAME             HEALTHCHECK                      STATUS   DESCRIPTION
   kernel_security  CEPHADM_CHECK_KERNEL_LSM         enabled  checks SELINUX/Apparmor profiles are consistent across cluster hosts
   os_subscription  CEPHADM_CHECK_SUBSCRIPTION       enabled  checks subscription states are consistent for all cluster hosts
-  public_network   CEPHADM_CHECK_PUBLIC_MEMBERSHIP  enabled  check that all hosts have a NIC on the Ceph public_netork
+  public_network   CEPHADM_CHECK_PUBLIC_MEMBERSHIP  enabled  check that all hosts have a NIC on the Ceph public_network
   osd_mtu_size     CEPHADM_CHECK_MTU                enabled  check that OSD hosts share a common MTU setting
   osd_linkspeed    CEPHADM_CHECK_LINKSPEED          enabled  check that OSD hosts share a common linkspeed
   network_missing  CEPHADM_CHECK_NETWORK_MISSING    enabled  checks that the cluster/public networks defined exist on the Ceph hosts
@@ -348,7 +348,7 @@ CEPHADM_CHECK_KERNEL_LSM
 Each host within the cluster is expected to operate within the same Linux
 Security Module (LSM) state. For example, if the majority of the hosts are
 running with SELINUX in enforcing mode, any host not running in this mode is
-flagged as an anomaly and a healtcheck (WARNING) state raised.
+flagged as an anomaly and a healthcheck (WARNING) state raised.
 
 CEPHADM_CHECK_SUBSCRIPTION
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -395,25 +395,34 @@ process is active within the cluster.*
 CEPHADM_CHECK_KERNEL_VERSION
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The OS kernel version (maj.min) is checked for consistency across the hosts.
-The kernel version of the majority of the hosts is used as the basis for 
+The kernel version of the majority of the hosts is used as the basis for
 identifying anomalies.
 
 .. _client_keyrings_and_configs:
 
 Client keyrings and configs
 ===========================
-
 Cephadm can distribute copies of the ``ceph.conf`` file and client keyring
-files to hosts. It is usually a good idea to store a copy of the config and
-``client.admin`` keyring on any host used to administer the cluster via the
-CLI.  By default, cephadm does this for any nodes that have the ``_admin``
-label (which normally includes the bootstrap host).
+files to hosts. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy),
+in addition to the default location ``/etc/ceph/`` cephadm also stores config
+and keyring files in the ``/var/lib/ceph/<fsid>/config`` directory. It is usually
+a good idea to store a copy of the config and ``client.admin`` keyring on any host
+used to administer the cluster via the CLI. By default, cephadm does this for any
+nodes that have the ``_admin`` label (which normally includes the bootstrap host).
+
+.. note:: Ceph daemons will still use files on ``/etc/ceph/``. The new configuration
+   location ``/var/lib/ceph/<fsid>/config`` is used by cephadm only. Having this config
+   directory under the fsid helps cephadm to load the configuration associated with
+   the cluster.
+
 
 When a client keyring is placed under management, cephadm will:
 
   - build a list of target hosts based on the specified placement spec (see
     :ref:`orchestrator-cli-placement-spec`)
   - store a copy of the ``/etc/ceph/ceph.conf`` file on the specified host(s)
+  - store a copy of the ``ceph.conf`` file at ``/var/lib/ceph/<fsid>/config/ceph.conf`` on the specified host(s)
+  - store a copy of the ``ceph.client.admin.keyring`` file at ``/var/lib/ceph/<fsid>/config/ceph.client.admin.keyring`` on the specified host(s)
   - store a copy of the keyring file on the specified host(s)
   - update the ``ceph.conf`` file as needed (e.g., due to a change in the cluster monitors)
   - update the keyring file if the entity's key is changed (e.g., via ``ceph
@@ -524,18 +533,18 @@ Purging a cluster
 
 .. danger:: THIS OPERATION WILL DESTROY ALL DATA STORED IN THIS CLUSTER
 
-In order to destroy a cluster and delete all data stored in this cluster, pause 
-cephadm to avoid deploying new daemons.
+In order to destroy a cluster and delete all data stored in this cluster, disable
+cephadm to stop all orchestration operations (so we avoid deploying new daemons).
 
 .. prompt:: bash #
 
-  ceph orch pause
+  ceph mgr module disable cephadm
 
 Then verify the FSID of the cluster:
 
 .. prompt:: bash #
 
-  ceph fsid 
+  ceph fsid
 
 Purge ceph daemons from all hosts in the cluster
 

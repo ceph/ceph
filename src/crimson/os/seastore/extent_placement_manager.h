@@ -5,402 +5,332 @@
 
 #include "seastar/core/gate.hh"
 
-#include "crimson/common/condition_variable.h"
-#include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/lba_manager.h"
+#include "crimson/os/seastore/journal/segment_allocator.h"
+#include "crimson/os/seastore/logging.h"
+#include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
 
 /**
- * ool_record_t
- *
- * Encapsulates logic for building and encoding an ool record destined for
- * an ool segment.
- *
- * Uses a metadata header to enable scanning the ool segment for gc purposes.
- * Introducing a seperate physical->logical mapping would enable removing the
- * metadata block overhead.
- */
-class ool_record_t {
-  class OolExtent {
-  public:
-    OolExtent(LogicalCachedExtentRef& lextent)
-      : lextent(lextent) {}
-    void set_ool_paddr(paddr_t addr) {
-      ool_offset = addr;
-    }
-    paddr_t get_ool_paddr() const {
-      return ool_offset;
-    }
-    bufferptr& get_bptr() {
-      return lextent->get_bptr();
-    }
-    LogicalCachedExtentRef& get_lextent() {
-      return lextent;
-    }
-  private:
-    paddr_t ool_offset;
-    LogicalCachedExtentRef lextent;
-  };
-
-public:
-  ool_record_t(size_t block_size) : block_size(block_size) {}
-  record_group_size_t get_encoded_record_length() {
-    assert(extents.size() == record.extents.size());
-    return record_group_size_t(record.size, block_size);
-  }
-  size_t get_wouldbe_encoded_record_length(LogicalCachedExtentRef& extent) {
-    record_size_t rsize = record.size;
-    rsize.account_extent(extent->get_bptr().length());
-    return record_group_size_t(rsize, block_size).get_encoded_length();
-  }
-  ceph::bufferlist encode(segment_id_t segment,
-                          segment_nonce_t nonce) {
-    assert(extents.size() == record.extents.size());
-    assert(!record.deltas.size());
-    auto record_group = record_group_t(std::move(record), block_size);
-    segment_off_t extent_offset = base + record_group.size.get_mdlength();
-    for (auto& extent : extents) {
-      extent.set_ool_paddr(
-        paddr_t::make_seg_paddr(segment, extent_offset));
-      extent_offset += extent.get_bptr().length();
-    }
-    assert(extent_offset ==
-           (segment_off_t)(base + record_group.size.get_encoded_length()));
-    return encode_records(record_group, journal_seq_t(), nonce);
-  }
-  void add_extent(LogicalCachedExtentRef& extent) {
-    extents.emplace_back(extent);
-    ceph::bufferlist bl;
-    bl.append(extent->get_bptr());
-    record.push_back(extent_t{
-      extent->get_type(),
-      extent->get_laddr(),
-      std::move(bl)});
-  }
-  std::vector<OolExtent>& get_extents() {
-    return extents;
-  }
-  void set_base(segment_off_t b) {
-    base = b;
-  }
-  segment_off_t get_base() const {
-    return base;
-  }
-  void clear() {
-    record = {};
-    extents.clear();
-    base = MAX_SEG_OFF;
-  }
-  uint64_t get_num_extents() const {
-    return extents.size();
-  }
-
-private:
-  std::vector<OolExtent> extents;
-  record_t record;
-  size_t block_size;
-  segment_off_t base = MAX_SEG_OFF;
-};
-
-/**
  * ExtentOolWriter
  *
- * Interface through which final write to ool segment is performed.
+ * Write the extents as out-of-line and allocate the physical addresses.
+ * Different writers write extents to different locations.
  */
 class ExtentOolWriter {
+  using base_ertr = crimson::errorator<
+      crimson::ct_error::input_output_error>;
 public:
-  using write_iertr = trans_iertr<crimson::errorator<
-    crimson::ct_error::input_output_error, // media error or corruption
-    crimson::ct_error::invarg,             // if offset is < write pointer or misaligned
-    crimson::ct_error::ebadf,              // segment closed
-    crimson::ct_error::enospc              // write exceeds segment size
-    >>;
-
-  using stop_ertr = Segment::close_ertr;
-  virtual stop_ertr::future<> stop() = 0;
-  virtual write_iertr::future<> write(
-    Transaction& t,
-    std::list<LogicalCachedExtentRef>& extent) = 0;
   virtual ~ExtentOolWriter() {}
+
+  using open_ertr = base_ertr;
+  virtual open_ertr::future<> open() = 0;
+
+  using alloc_write_ertr = base_ertr;
+  using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
+  virtual alloc_write_iertr::future<> alloc_write_ool_extents(
+    Transaction &t,
+    std::list<LogicalCachedExtentRef> &extents) = 0;
+
+  using close_ertr = base_ertr;
+  virtual close_ertr::future<> close() = 0;
 };
+using ExtentOolWriterRef = std::unique_ptr<ExtentOolWriter>;
 
 /**
- * ExtentAllocator
+ * SegmentedOolWriter
  *
- * Handles allocating ool extents from a specific family of targets.
+ * Different writers write extents to different out-of-line segments provided
+ * by the SegmentProvider.
  */
-class ExtentAllocator {
+class SegmentedOolWriter : public ExtentOolWriter {
 public:
-  using alloc_paddr_iertr = trans_iertr<crimson::errorator<
-    crimson::ct_error::input_output_error, // media error or corruption
-    crimson::ct_error::invarg,             // if offset is < write pointer or misaligned
-    crimson::ct_error::ebadf,              // segment closed
-    crimson::ct_error::enospc              // write exceeds segment size
-    >>;
+  SegmentedOolWriter(data_category_t category,
+                     reclaim_gen_t gen,
+                     SegmentProvider &sp,
+                     SegmentSeqAllocator &ssa);
 
-  virtual alloc_paddr_iertr::future<> alloc_ool_extents_paddr(
-    Transaction& t,
-    std::list<LogicalCachedExtentRef>&) = 0;
-
-  using stop_ertr = ExtentOolWriter::stop_ertr;
-  virtual stop_ertr::future<> stop() = 0;
-  virtual ~ExtentAllocator() {};
-};
-using ExtentAllocatorRef = std::unique_ptr<ExtentAllocator>;
-
-struct open_segment_wrapper_t : public boost::intrusive_ref_counter<
-  open_segment_wrapper_t,
-  boost::thread_unsafe_counter> {
-  SegmentRef segment;
-  std::list<seastar::future<>> inflight_writes;
-  bool outdated = false;
-};
-
-using open_segment_wrapper_ref =
-  boost::intrusive_ptr<open_segment_wrapper_t>;
-
-/**
- * SegmentedAllocator
- *
- * Handles out-of-line writes to a SegmentManager device (such as a ZNS device
- * or conventional flash device where sequential writes are heavily preferred).
- *
- * Creates <seastore_init_rewrite_segments_per_device> Writer instances
- * internally to round-robin writes.  Later work will partition allocations
- * based on hint (age, presumably) among the created Writers.
-
- * Each Writer makes use of SegmentProvider to obtain a new segment for writes
- * as needed.
- */
-class SegmentedAllocator : public ExtentAllocator {
-  class Writer : public ExtentOolWriter {
-  public:
-    Writer(
-      SegmentProvider& sp,
-      SegmentManager& sm,
-      LBAManager& lba_manager,
-      Journal& journal,
-      Cache& cache)
-      : segment_provider(sp),
-        segment_manager(sm),
-        lba_manager(lba_manager),
-        journal(journal),
-        cache(cache)
-    {}
-    Writer(Writer &&) = default;
-
-    write_iertr::future<> write(
-      Transaction& t,
-      std::list<LogicalCachedExtentRef>& extent) final;
-    stop_ertr::future<> stop() final {
-      return writer_guard.close().then([this] {
-        return crimson::do_for_each(open_segments, [](auto& seg_wrapper) {
-          return seg_wrapper->segment->close();
-        });
-      });
-    }
-  private:
-    using update_lba_mapping_iertr = LBAManager::update_le_mapping_iertr;
-    using finish_record_iertr = update_lba_mapping_iertr;
-    using finish_record_ret = finish_record_iertr::future<>;
-    finish_record_ret finish_write(
-      Transaction& t,
-      ool_record_t& record);
-    bool _needs_roll(segment_off_t length) const;
-
-    write_iertr::future<> _write(
-      Transaction& t,
-      ool_record_t& record);
-
-    using roll_segment_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
-    roll_segment_ertr::future<> roll_segment(bool);
-
-    using init_segment_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
-    init_segment_ertr::future<> init_segment(Segment& segment);
-
-    void add_extent_to_write(
-      ool_record_t&,
-      LogicalCachedExtentRef& extent);
-
-    SegmentProvider& segment_provider;
-    SegmentManager& segment_manager;
-    open_segment_wrapper_ref current_segment;
-    std::list<open_segment_wrapper_ref> open_segments;
-    segment_off_t allocated_to = 0;
-    LBAManager& lba_manager;
-    Journal& journal;
-    crimson::condition_variable segment_rotation_guard;
-    seastar::gate writer_guard;
-    bool rolling_segment = false;
-    Cache& cache;
-  };
-public:
-  SegmentedAllocator(
-    SegmentProvider& sp,
-    SegmentManager& sm,
-    LBAManager& lba_manager,
-    Journal& journal,
-    Cache& cache);
-
-  Writer &get_writer(placement_hint_t hint) {
-    return writers[std::rand() % writers.size()];
+  open_ertr::future<> open() final {
+    return record_submitter.open(false).discard_result();
   }
 
-  alloc_paddr_iertr::future<> alloc_ool_extents_paddr(
-    Transaction& t,
-    std::list<LogicalCachedExtentRef>& extents) final {
-    LOG_PREFIX(SegmentedAllocator::alloc_ool_extents_paddr);
-    SUBDEBUGT(seastore_tm, "start", t);
-    return seastar::do_with(
-      std::map<Writer*, std::list<LogicalCachedExtentRef>>(),
-      [this, extents=std::move(extents), &t](auto& alloc_map) {
-      for (auto& extent : extents) {
-        auto writer = &(get_writer(extent->hint));
-        alloc_map[writer].emplace_back(extent);
-      }
-      return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
-        auto writer = p.first;
-        auto& extents_to_pesist = p.second;
-        return writer->write(t, extents_to_pesist);
-      });
+  alloc_write_iertr::future<> alloc_write_ool_extents(
+    Transaction &t,
+    std::list<LogicalCachedExtentRef> &extents) final;
+
+  close_ertr::future<> close() final {
+    return write_guard.close().then([this] {
+      return record_submitter.close();
+    }).safe_then([this] {
+      write_guard = seastar::gate();
     });
   }
 
-  stop_ertr::future<> stop() {
-    return crimson::do_for_each(writers, [](auto& writer) {
-      return writer.stop();
-    });
-  }
 private:
-  SegmentProvider& segment_provider;
-  SegmentManager& segment_manager;
-  std::vector<Writer> writers;
-  LBAManager& lba_manager;
-  Journal& journal;
-  Cache& cache;
+  alloc_write_iertr::future<> do_write(
+    Transaction& t,
+    std::list<LogicalCachedExtentRef> &extent);
+
+  alloc_write_ertr::future<> write_record(
+    Transaction& t,
+    record_t&& record,
+    std::list<LogicalCachedExtentRef> &&extents);
+
+  journal::SegmentAllocator segment_allocator;
+  journal::RecordSubmitter record_submitter;
+  seastar::gate write_guard;
 };
 
 class ExtentPlacementManager {
 public:
-  ExtentPlacementManager(
-    Cache& cache,
-    LBAManager& lba_manager
-  ) : cache(cache), lba_manager(lba_manager) {}
-
-  /**
-   * alloc_new_extent_by_type
-   *
-   * Create a new extent, CachedExtent::poffset may not be set
-   * if a delayed allocation is needed.
-   */
-  CachedExtentRef alloc_new_extent_by_type(
-    Transaction& t,
-    extent_types_t type,
-    segment_off_t length,
-    placement_hint_t hint) {
-    // only logical extents should fall in this path
-    assert(is_logical_type(type));
-    assert(hint < placement_hint_t::NUM_HINTS);
-    auto dtype = get_allocator_type(hint);
-    // FIXME: set delay for COLD extent when the record overhead is low
-    bool delay = (hint > placement_hint_t::COLD &&
-                  can_delay_allocation(dtype));
-    CachedExtentRef extent = cache.alloc_new_extent_by_type(
-        t, type, length, delay);
-    extent->backend_type = dtype;
-    extent->hint = hint;
-    return extent;
+  ExtentPlacementManager() {
+    devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
-  template<
-    typename T,
-    std::enable_if_t<std::is_base_of_v<LogicalCachedExtent, T>, int> = 0>
-  TCachedExtentRef<T> alloc_new_extent(
+  // TODO: device tiering
+  void set_async_cleaner(AsyncCleanerRef &&_cleaner);
+
+  void set_primary_device(Device *device);
+
+  void set_extent_callback(AsyncCleaner::ExtentCallbackInterface *cb) {
+    cleaner->set_extent_callback(cb);
+  }
+
+  seastore_off_t get_block_size() const {
+    assert(primary_device != nullptr);
+    // assume all the devices have the same block size
+    return primary_device->get_block_size();
+  }
+
+  Device& get_primary_device() {
+    assert(primary_device != nullptr);
+    return *primary_device;
+  }
+
+  store_statfs_t get_stat() const {
+    return cleaner->stat();
+  }
+
+  using mount_ret = AsyncCleaner::mount_ret;
+  mount_ret mount() {
+    return cleaner->mount();
+  }
+
+  using open_ertr = ExtentOolWriter::open_ertr;
+  open_ertr::future<> open_for_write() {
+    LOG_PREFIX(ExtentPlacementManager::open);
+    SUBINFO(seastore_journal, "started with {} devices", num_devices);
+    ceph_assert(primary_device != nullptr);
+    return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
+      return writer->open();
+    }).safe_then([this] {
+      return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
+        return writer->open();
+      });
+    });
+  }
+
+  void start_scan_space() {
+    return cleaner->start_scan_space();
+  }
+
+  void start_gc() {
+    return cleaner->start_gc();
+  }
+
+  struct alloc_result_t {
+    paddr_t paddr;
+    bufferptr bp;
+    reclaim_gen_t gen;
+  };
+  alloc_result_t alloc_new_extent(
     Transaction& t,
-    segment_off_t length,
-    placement_hint_t hint) {
-    // only logical extents should fall in this path
-    static_assert(is_logical_type(T::TYPE));
+    extent_types_t type,
+    seastore_off_t length,
+    placement_hint_t hint,
+    reclaim_gen_t gen
+  ) {
     assert(hint < placement_hint_t::NUM_HINTS);
-    auto dtype = get_allocator_type(hint);
-    // FIXME: set delay for COLD extent when the record overhead is low
-    bool delay = (hint > placement_hint_t::COLD &&
-                  can_delay_allocation(dtype));
-    TCachedExtentRef<T> extent = cache.alloc_new_extent<T>(
-        t, length, delay);
-    extent->backend_type = dtype;
-    extent->hint = hint;
-    return extent;
+    assert(gen < RECLAIM_GENERATIONS);
+    assert(gen == 0 || hint == placement_hint_t::REWRITE);
+
+    // XXX: bp might be extended to point to differnt memory (e.g. PMem)
+    // according to the allocator.
+    auto bp = ceph::bufferptr(
+      buffer::create_page_aligned(length));
+    bp.zero();
+
+    if (!is_logical_type(type)) {
+      // TODO: implement out-of-line strategy for physical extent.
+      return {make_record_relative_paddr(0),
+              std::move(bp),
+              0};
+    }
+
+    if (hint == placement_hint_t::COLD) {
+      assert(gen == 0);
+      return {make_delayed_temp_paddr(0),
+              std::move(bp),
+              COLD_GENERATION};
+    }
+
+    if (get_extent_category(type) == data_category_t::METADATA &&
+        gen == 0) {
+      // gen 0 METADATA writer is the journal writer
+      if (prefer_ool) {
+        return {make_delayed_temp_paddr(0),
+                std::move(bp),
+                1};
+      } else {
+        return {make_record_relative_paddr(0),
+                std::move(bp),
+                0};
+      }
+    } else {
+      assert(get_extent_category(type) == data_category_t::DATA ||
+             gen > 0);
+      return {make_delayed_temp_paddr(0),
+              std::move(bp),
+              gen};
+    }
   }
 
   /**
    * delayed_alloc_or_ool_write
    *
-   * Performs any outstanding ool writes and updates pending lba updates
-   * accordingly
+   * Performs delayed allocation and do writes for out-of-line extents.
    */
-  using alloc_paddr_iertr = ExtentOolWriter::write_iertr;
+  using alloc_paddr_iertr = ExtentOolWriter::alloc_write_iertr;
   alloc_paddr_iertr::future<> delayed_alloc_or_ool_write(
-    Transaction& t) {
+    Transaction& t,
+    const std::list<LogicalCachedExtentRef>& delayed_extents) {
     LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
-    SUBDEBUGT(seastore_tm, "start", t);
+    SUBDEBUGT(seastore_journal, "start with {} delayed extents",
+              t, delayed_extents.size());
+    assert(writer_refs.size());
     return seastar::do_with(
-        std::map<ExtentAllocator*, std::list<LogicalCachedExtentRef>>(),
-        [this, &t](auto& alloc_map) {
-      LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
-      auto& alloc_list = t.get_delayed_alloc_list();
-      uint64_t num_ool_extents = 0;
-      for (auto& extent : alloc_list) {
-        // extents may be invalidated
-        if (!extent->is_valid()) {
-          t.increment_delayed_invalid_extents();
-          continue;
-        }
+        std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>(),
+        [this, &t, &delayed_extents](auto& alloc_map) {
+      for (auto& extent : delayed_extents) {
         // For now, just do ool allocation for any delayed extent
-        auto& allocator_ptr = get_allocator(
-          extent->backend_type, extent->hint
-        );
-        alloc_map[allocator_ptr.get()].emplace_back(extent);
-        num_ool_extents++;
+        auto writer_ptr = get_writer(
+            extent->get_user_hint(),
+            get_extent_category(extent->get_type()),
+            extent->get_reclaim_generation());
+        alloc_map[writer_ptr].emplace_back(extent);
       }
-      SUBDEBUGT(seastore_tm, "{} ool extents", t, num_ool_extents);
       return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
-        auto allocator = p.first;
+        auto writer = p.first;
         auto& extents = p.second;
-        return allocator->alloc_ool_extents_paddr(t, extents);
+        return writer->alloc_write_ool_extents(t, extents);
       });
     });
   }
 
-  void add_allocator(device_type_t type, ExtentAllocatorRef&& allocator) {
-    allocators[type].emplace_back(std::move(allocator));
-    LOG_PREFIX(ExtentPlacementManager::add_allocator);
-    SUBDEBUG(seastore_tm, "allocators for {}: {}",
-      type,
-      allocators[type].size());
+  seastar::future<> stop_gc() {
+    return cleaner->stop();
+  }
+
+  using close_ertr = ExtentOolWriter::close_ertr;
+  close_ertr::future<> close() {
+    LOG_PREFIX(ExtentPlacementManager::close);
+    SUBINFO(seastore_journal, "started");
+    return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
+      return writer->close();
+    }).safe_then([this] {
+      return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
+        return writer->close();
+      });
+    });
+  }
+
+  using read_ertr = Device::read_ertr;
+  read_ertr::future<> read(
+    paddr_t addr,
+    size_t len,
+    ceph::bufferptr &out
+  ) {
+    assert(devices_by_id[addr.get_device_id()] != nullptr);
+    return devices_by_id[addr.get_device_id()]->read(addr, len, out);
+  }
+
+  void mark_space_used(paddr_t addr, extent_len_t len) {
+    // TODO: improve tests to drop the cleaner check
+    if (cleaner) {
+      cleaner->mark_space_used(addr, len);
+    }
+  }
+
+  void mark_space_free(paddr_t addr, extent_len_t len) {
+    // TODO: improve tests to drop the cleaner check
+    if (cleaner) {
+      cleaner->mark_space_free(addr, len);
+    }
+  }
+
+  seastar::future<> reserve_projected_usage(std::size_t projected_usage) {
+    return cleaner->reserve_projected_usage(projected_usage);
+  }
+
+  void release_projected_usage(std::size_t projected_usage) {
+    return cleaner->release_projected_usage(projected_usage);
+  }
+
+  // Testing interfaces
+
+  void test_init_no_background(Device *test_device) {
+    assert(test_device->get_device_type() == device_type_t::SEGMENTED);
+    add_device(test_device);
+    set_primary_device(test_device);
+  }
+
+  bool check_usage() {
+    return cleaner->check_usage();
+  }
+
+  seastar::future<> run_background_work_until_halt() {
+    return cleaner->run_until_halt();
   }
 
 private:
-  device_type_t get_allocator_type(placement_hint_t hint) {
-    return device_type_t::SEGMENTED;
+  void add_device(Device *device) {
+    auto device_id = device->get_device_id();
+    ceph_assert(devices_by_id[device_id] == nullptr);
+    devices_by_id[device_id] = device;
+    ++num_devices;
   }
 
-  ExtentAllocatorRef& get_allocator(
-    device_type_t type,
-    placement_hint_t hint) {
-    auto& devices = allocators[type];
-    return devices[std::rand() % devices.size()];
+  ExtentOolWriter* get_writer(placement_hint_t hint,
+                              data_category_t category,
+                              reclaim_gen_t gen) {
+    assert(hint < placement_hint_t::NUM_HINTS);
+    assert(gen < RECLAIM_GENERATIONS);
+    if (category == data_category_t::DATA) {
+      return data_writers_by_gen[gen];
+    } else {
+      assert(category == data_category_t::METADATA);
+      // gen 0 METADATA writer is the journal writer
+      assert(gen > 0);
+      return md_writers_by_gen[gen - 1];
+    }
   }
 
-  Cache& cache;
-  LBAManager& lba_manager;
-  std::map<device_type_t, std::vector<ExtentAllocatorRef>> allocators;
+  bool prefer_ool;
+  std::vector<ExtentOolWriterRef> writer_refs;
+  std::vector<ExtentOolWriter*> data_writers_by_gen;
+  // gen 0 METADATA writer is the journal writer
+  std::vector<ExtentOolWriter*> md_writers_by_gen;
+
+  std::vector<Device*> devices_by_id;
+  Device* primary_device = nullptr;
+  std::size_t num_devices = 0;
+
+  // TODO: device tiering
+  AsyncCleanerRef cleaner;
 };
+
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
 
 }

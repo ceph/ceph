@@ -830,7 +830,8 @@ Per mapping (block device) `rbd device map` options:
 * alloc_size - Minimum allocation unit of the underlying OSD object store
   backend (since 5.1, default is 64K bytes).  This is used to round off and
   drop discards that are too small.  For bluestore, the recommended setting is
-  bluestore_min_alloc_size (typically 64K for hard disk drives and 16K for
+  bluestore_min_alloc_size (currently set to 4K for all types of drives,
+  previously used to be set to 64K for hard disk drives and 16K for
   solid-state drives).  For filestore with filestore_punch_hole = false, the
   recommended setting is image object size (typically 4M).
 
@@ -903,6 +904,15 @@ Per mapping (block device) `rbd device map` options:
 * ms_mode=prefer-secure - Use msgr2.1 on-the-wire protocol, select 'secure'
   mode (since 5.11).  If the daemon denies 'secure' mode in favor of 'crc'
   mode, agree to 'crc' mode.
+
+* rxbounce - Use a bounce buffer when receiving data (since 5.17).  The default
+  behaviour is to read directly into the destination buffer.  A bounce buffer
+  is needed if the destination buffer isn't guaranteed to be stable (i.e. remain
+  unchanged while it is being read to).  In particular this is the case for
+  Windows where a system-wide "dummy" (throwaway) page may be mapped into the
+  destination buffer in order to generate a single large I/O.  Otherwise,
+  "libceph: ... bad crc/signature" or "libceph: ... integrity error, bad crc"
+  errors and associated performance degradation are expected.
 
 * udev - Wait for udev device manager to finish executing all matching
   "add" rules and release the device before exiting (default).  This option

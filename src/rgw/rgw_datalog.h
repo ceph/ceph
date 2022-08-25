@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
@@ -52,23 +53,32 @@ struct rgw_data_change {
   DataLogEntityType entity_type;
   std::string key;
   ceph::real_time timestamp;
+  uint64_t gen = 0;
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    // require decoders to recognize v2 when gen>0
+    const uint8_t compat = (gen == 0) ? 1 : 2;
+    ENCODE_START(2, compat, bl);
     auto t = std::uint8_t(entity_type);
     encode(t, bl);
     encode(key, bl);
     encode(timestamp, bl);
+    encode(gen, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
      std::uint8_t t;
      decode(t, bl);
      entity_type = DataLogEntityType(t);
      decode(key, bl);
      decode(timestamp, bl);
+     if (struct_v < 2) {
+       gen = 0;
+     } else {
+       decode(gen, bl);
+     }
      DECODE_FINISH(bl);
   }
 
@@ -120,6 +130,30 @@ struct RGWDataChangesLogMarker {
 
 class RGWDataChangesLog;
 
+struct rgw_data_notify_entry {
+  std::string key;
+  uint64_t gen = 0;
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+
+  rgw_data_notify_entry& operator=(const rgw_data_notify_entry&) = default;
+
+  bool operator <(const rgw_data_notify_entry& d) const {
+    if (key < d.key) {
+      return true;
+    }
+    if (d.key < key) {
+      return false;
+    }
+    return gen < d.gen;
+  }
+  friend std::ostream& operator <<(std::ostream& m,
+				   const rgw_data_notify_entry& e) {
+    return m << "[key: " << e.key << ", gen: " << e.gen << "]";
+  }
+};
+
 class RGWDataChangesBE;
 
 class DataLogBackends final
@@ -164,6 +198,38 @@ public:
   int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
 };
 
+struct BucketGen {
+  rgw_bucket_shard shard;
+  uint64_t gen;
+
+  BucketGen(const rgw_bucket_shard& shard, uint64_t gen)
+    : shard(shard), gen(gen) {}
+
+  BucketGen(rgw_bucket_shard&& shard, uint64_t gen)
+    : shard(std::move(shard)), gen(gen) {}
+
+  BucketGen(const BucketGen&) = default;
+  BucketGen(BucketGen&&) = default;
+  BucketGen& operator =(const BucketGen&) = default;
+  BucketGen& operator =(BucketGen&&) = default;
+
+  ~BucketGen() = default;
+};
+
+inline bool operator ==(const BucketGen& l, const BucketGen& r) {
+  return (l.shard == r.shard) && (l.gen == r.gen);
+}
+
+inline bool operator <(const BucketGen& l, const BucketGen& r) {
+  if (l.shard < r.shard) {
+    return true;
+  } else if (l.shard == r.shard) {
+    return l.gen < r.gen;
+  } else {
+    return false;
+  }
+}
+
 class RGWDataChangesLog {
   friend DataLogBackends;
   CephContext *cct;
@@ -185,7 +251,7 @@ class RGWDataChangesLog {
   ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::lock");
   ceph::shared_mutex modified_lock =
     ceph::make_shared_mutex("RGWDataChangesLog::modified_lock");
-  bc::flat_map<int, bc::flat_set<std::string>> modified_shards;
+  bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>> modified_shards;
 
   std::atomic<bool> down_flag = { false };
 
@@ -200,13 +266,16 @@ class RGWDataChangesLog {
 
   using ChangeStatusPtr = std::shared_ptr<ChangeStatus>;
 
-  lru_map<rgw_bucket_shard, ChangeStatusPtr> changes;
+  lru_map<BucketGen, ChangeStatusPtr> changes;
 
-  bc::flat_set<rgw_bucket_shard> cur_cycle;
+  bc::flat_set<BucketGen> cur_cycle;
 
-  void _get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status);
-  void register_renew(const rgw_bucket_shard& bs);
-  void update_renewed(const rgw_bucket_shard& bs, ceph::real_time expiration);
+  ChangeStatusPtr _get_change(const rgw_bucket_shard& bs, uint64_t gen);
+  void register_renew(const rgw_bucket_shard& bs,
+		      const rgw::bucket_log_layout_generation& gen);
+  void update_renewed(const rgw_bucket_shard& bs,
+		      uint64_t gen,
+		      ceph::real_time expiration);
 
   ceph::mutex renew_lock = ceph::make_mutex("ChangesRenewThread::lock");
   ceph::condition_variable renew_cond;
@@ -215,7 +284,6 @@ class RGWDataChangesLog {
   std::thread renew_thread;
 
   std::function<bool(const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp)> bucket_filter;
-  int choose_oid(const rgw_bucket_shard& bs);
   bool going_down() const;
   bool filter_bucket(const DoutPrefixProvider *dpp, const rgw_bucket& bucket, optional_yield y) const;
   int renew_entries(const DoutPrefixProvider *dpp);
@@ -227,8 +295,9 @@ public:
 
   int start(const DoutPrefixProvider *dpp, const RGWZone* _zone, const RGWZoneParams& zoneparams,
 	    librados::Rados* lr);
-
-  int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id);
+  int choose_oid(const rgw_bucket_shard& bs);
+  int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+		const rgw::bucket_log_layout_generation& gen, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
@@ -245,7 +314,7 @@ public:
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   LogMarker& marker, bool* ptruncated);
 
-  void mark_modified(int shard_id, const rgw_bucket_shard& bs);
+  void mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen);
   auto read_clear_modified() {
     std::unique_lock wl{modified_lock};
     decltype(modified_shards) modified;

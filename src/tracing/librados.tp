@@ -1230,10 +1230,10 @@ TRACEPOINT_EVENT(librados, rados_ioctx_pool_requires_alignment_enter2,
 TRACEPOINT_EVENT(librados, rados_ioctx_pool_requires_alignment_exit2,
     TP_ARGS(
         int, retval,
-        int, requires),
+        int, req),
     TP_FIELDS(
         ctf_integer(int, retval, retval)
-        ctf_integer(int, requires, requires)
+        ctf_integer(int, requires, req)
     )
 )
 

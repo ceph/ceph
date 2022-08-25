@@ -26,6 +26,8 @@ class AZone(Zone):  # pylint: disable=too-many-ancestors
     def has_buckets(self):
         return False
 
+    def has_roles(self):
+        return True
 
 class AZoneConfig:
     """ archive zone configuration """

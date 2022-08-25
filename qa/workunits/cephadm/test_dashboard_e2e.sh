@@ -6,10 +6,21 @@ DASHBOARD_FRONTEND_DIR=${SCRIPT_DIR}/../../../src/pybind/mgr/dashboard/frontend
 [ -z "$SUDO" ] && SUDO=sudo
 
 install_common () {
+    NODEJS_VERSION="16"
     if grep -q  debian /etc/*-release; then
         $SUDO apt-get update
-        $SUDO apt-get install -y jq npm
+        # https://github.com/nodesource/distributions#manual-installation
+        $SUDO apt-get install curl gpg
+        KEYRING=/usr/share/keyrings/nodesource.gpg
+        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | gpg --dearmor | $SUDO tee "$KEYRING" >/dev/null
+        DISTRO="$(source /etc/lsb-release; echo $DISTRIB_CODENAME)"
+        VERSION="node_$NODEJS_VERSION.x"
+        echo "deb [signed-by=$KEYRING] https://deb.nodesource.com/$VERSION $DISTRO main" | $SUDO tee /etc/apt/sources.list.d/nodesource.list
+        echo "deb-src [signed-by=$KEYRING] https://deb.nodesource.com/$VERSION $DISTRO main" | $SUDO tee -a /etc/apt/sources.list.d/nodesource.list
+        $SUDO apt-get update
+        $SUDO apt-get install nodejs
     elif grep -q rhel /etc/*-release; then
+        $SUDO yum module -y enable nodejs:$NODEJS_VERSION
         $SUDO yum install -y jq npm
     else
         echo "Unsupported distribution."

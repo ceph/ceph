@@ -19,13 +19,13 @@ sslTag="OpenSSL_1_1_1c"
 sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
-curlTag="curl-7_66_0"
+curlTag="curl-7_84_0"
 curlSrcDir="${depsSrcDir}/curl"
 curlDir="${depsToolsetDir}/curl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.tar.gz"
-boostSrcDir="${depsSrcDir}/boost_1_75_0"
+boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.79.0/source/boost_1_79_0.tar.gz"
+boostSrcDir="${depsSrcDir}/boost_1_79_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
@@ -38,7 +38,7 @@ snappyTag="1.1.9"
 winLibDir="${depsToolsetDir}/windows/lib"
 
 wnbdUrl="https://github.com/cloudbase/wnbd"
-wnbdTag="master"
+wnbdTag="main"
 wnbdSrcDir="${depsSrcDir}/wnbd"
 wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 
@@ -201,7 +201,7 @@ EOL
 ./b2 install --user-config=user-config.jam toolset=gcc-mingw32 \
     target-os=windows release \
     link=static,shared \
-    threadapi=pthread --prefix=$boostDir \
+    threadapi=win32 --prefix=$boostDir \
     address-model=64 architecture=x86 \
     binary-format=pe abi=ms -j $NUM_WORKERS \
     -sZLIB_INCLUDE=$zlibDir/include -sZLIB_LIBRARY_PATH=$zlibDir/lib \

@@ -121,6 +121,32 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("status", status, obj);
 }
 
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
+{
+  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
+  char buf[16];
+  if (shard_id) {
+    *shard_id = val % max_shards;
+  }
+  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
+  name = prefix + buf;
+}
+
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name)
+{
+  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
+  val ^= ceph_str_hash_linux(section.c_str(), section.size());
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
+  name = prefix + buf;
+}
+
+void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
+{
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%u", shard_id);
+  name = prefix + buf;
+}
 
 int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl) {
   if (!svc.zone->need_to_log_metadata())

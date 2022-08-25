@@ -257,8 +257,8 @@ configuration option.  For example,
 .. code-block:: ini
 
 	[osd.0]
-		public addr = {host-public-ip-address}
-		cluster addr = {host-cluster-ip-address}
+		public_addr = {host-public-ip-address}
+		cluster_addr = {host-cluster-ip-address}
 
 .. topic:: One NIC OSD in a Two Network Cluster
 

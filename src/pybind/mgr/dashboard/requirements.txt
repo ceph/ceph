@@ -9,3 +9,5 @@ Routes
 prettytable
 pytest
 pyyaml
+natsort
+setuptools

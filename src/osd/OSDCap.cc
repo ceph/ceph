@@ -14,8 +14,8 @@
 
 #include <boost/config/warning_disable.hpp>
 #include <boost/spirit/include/qi.hpp>
-#include <boost/spirit/include/phoenix_operator.hpp>
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix/operator.hpp>
+#include <boost/phoenix.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "OSDCap.h"

@@ -32,7 +32,14 @@
 #include <liboath/oath.h>
 
 
+#pragma GCC diagnostic push
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated"
+#pragma clang diagnostic ignored "-Wdeprecated"
 #include <s3select/include/s3select.h>
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
+
 #include "rgw_rest_s3.h"
 #include "rgw_s3select.h"
 
@@ -41,7 +48,7 @@ class aws_response_handler
 
 private:
   std::string sql_result;
-  struct req_state* s;
+  req_state* s;
   uint32_t header_size;
   // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
   boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true> crc32;
@@ -82,7 +89,7 @@ private:
   int create_message(u_int32_t header_len);
 
 public:
-  aws_response_handler(struct req_state* ps, RGWOp* rgwop) : s(ps), m_rgwop(rgwop), total_bytes_returned{0}, processed_size{0}
+  aws_response_handler(req_state* ps, RGWOp* rgwop) : s(ps), m_rgwop(rgwop), total_bytes_returned{0}, processed_size{0}
   {}
 
   aws_response_handler() : s(nullptr), m_rgwop(nullptr), total_bytes_returned{0}, processed_size{0}
@@ -96,7 +103,7 @@ public:
     return true;
   }
 
-  void set(struct req_state* ps, RGWOp* rgwop)
+  void set(req_state* ps, RGWOp* rgwop)
   {
     s = ps;
     m_rgwop = rgwop;

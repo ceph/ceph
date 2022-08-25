@@ -2640,7 +2640,7 @@ Instructions
 
      # ceph-volume simple scan /dev/sdb1
 
-   The output will include the appopriate ``ceph-volume simple
+   The output will include the appropriate ``ceph-volume simple
    activate`` command to enable the OSD.
 
 #. Upgrade all CephFS MDS daemons.  For each CephFS file system,

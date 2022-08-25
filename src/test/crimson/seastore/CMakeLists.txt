@@ -103,4 +103,14 @@ target_link_libraries(
   crimson-seastore
   aio)
 
+add_executable(unittest-seastore-cbjournal
+  test_cbjournal.cc)
+add_ceph_test(unittest-seastore-cbjournal
+  unittest-seastore-cbjournal --memory 256M --smp 1)
+target_link_libraries(
+  unittest-seastore-cbjournal
+  crimson::gtest
+  crimson-seastore
+  aio)
+
 add_subdirectory(onode_tree)

@@ -16,11 +16,6 @@ void Operation::dump(ceph::Formatter* f) const
     dump_detail(f);
     f->close_section();
   }
-  f->open_array_section("blockers");
-  for (auto &blocker : blockers) {
-    blocker->dump(f);
-  }
-  f->close_section();
   f->close_section();
 }
 
@@ -51,23 +46,31 @@ void Blocker::dump(ceph::Formatter* f) const
   f->close_section();
 }
 
-void AggregateBlocker::dump_detail(ceph::Formatter *f) const
+namespace detail {
+void dump_time_event(const char* name,
+		     const utime_t& timestamp,
+		     ceph::Formatter* f)
 {
-  f->open_array_section("parent_blockers");
-  for (auto b : parent_blockers) {
-    f->open_object_section("parent_blocker");
-    b->dump(f);
-    f->close_section();
-  }
+  assert(f);
+  f->open_object_section("time_event");
+  f->dump_string("name", name);
+  f->dump_stream("initiated_at") << timestamp;
   f->close_section();
 }
 
-void OrderedExclusivePhase::dump_detail(ceph::Formatter* f) const
+void dump_blocking_event(const char* name,
+			 const utime_t& timestamp,
+			 const Blocker* const blocker,
+			 ceph::Formatter* f)
 {
+  assert(f);
+  f->open_object_section("blocking_event");
+  f->dump_string("name", name);
+  f->dump_stream("initiated_at") << timestamp;
+  if (blocker) {
+    blocker->dump(f);
+  }
+  f->close_section();
 }
-
-void OrderedConcurrentPhase::dump_detail(ceph::Formatter* f) const
-{
-}
-
-}
+} // namespace detail
+} // namespace crimson

@@ -24,10 +24,11 @@ class TempURLApplier : public rgw::auth::LocalApplier {
 public:
   TempURLApplier(CephContext* const cct,
                  const RGWUserInfo& user_info)
-    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, std::nullopt) {
+    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, std::nullopt, LocalApplier::NO_ACCESS_KEY) {
   };
 
   void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override; /* in/out */
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   struct Factory {
     virtual ~Factory() {}
@@ -153,7 +154,7 @@ class SwiftAnonymousApplier : public rgw::auth::LocalApplier {
   public:
     SwiftAnonymousApplier(CephContext* const cct,
                           const RGWUserInfo& user_info)
-      : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, std::nullopt) {
+      : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, std::nullopt, LocalApplier::NO_ACCESS_KEY) {
     }
     bool is_admin_of(const rgw_user& uid) const {return false;}
     bool is_owner_of(const rgw_user& uid) const {return uid.id.compare(RGW_USER_ANON_ID) == 0;}
@@ -225,11 +226,12 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const std::optional<uint32_t>& perm_mask) const override {
+                            const std::optional<uint32_t>& perm_mask,
+                            const std::string& access_key_id) const override {
     auto apl = \
       rgw::auth::add_3rdparty(store, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, store, s,
-          rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask)));
+          rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask, access_key_id)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -315,7 +317,7 @@ public:
   ~RGWHandler_SWIFT_Auth() override {}
   RGWOp *op_get() override;
 
-  int init(rgw::sal::Store* store, struct req_state *state, rgw::io::BasicClient *cio) override;
+  int init(rgw::sal::Store* store, req_state *state, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield) override { return 0; }
   int read_permissions(RGWOp *op, optional_yield) override { return 0; }
@@ -329,14 +331,14 @@ public:
   RGWRESTMgr_SWIFT_Auth() = default;
   ~RGWRESTMgr_SWIFT_Auth() override = default;
 
-  RGWRESTMgr *get_resource_mgr(struct req_state* const s,
+  RGWRESTMgr *get_resource_mgr(req_state* const s,
                                const std::string& uri,
                                std::string* const out_uri) override {
     return this;
   }
 
   RGWHandler_REST* get_handler(rgw::sal::Store* store,
-			       struct req_state*,
+			       req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     return new RGWHandler_SWIFT_Auth;

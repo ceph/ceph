@@ -88,15 +88,15 @@ class BlockSegment final : public Segment {
   friend class BlockSegmentManager;
   BlockSegmentManager &manager;
   const segment_id_t id;
-  segment_off_t write_pointer = 0;
+  seastore_off_t write_pointer = 0;
 public:
   BlockSegment(BlockSegmentManager &manager, segment_id_t id);
 
   segment_id_t get_segment_id() const final { return id; }
-  segment_off_t get_write_capacity() const final;
-  segment_off_t get_write_ptr() const final { return write_pointer; }
+  seastore_off_t get_write_capacity() const final;
+  seastore_off_t get_write_ptr() const final { return write_pointer; }
   close_ertr::future<> close() final;
-  write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) final;
+  write_ertr::future<> write(seastore_off_t offset, ceph::bufferlist bl) final;
 
   ~BlockSegment() {}
 };
@@ -112,7 +112,7 @@ class BlockSegmentManager final : public SegmentManager {
 public:
   mount_ret mount() final;
 
-  mkfs_ret mkfs(segment_manager_config_t) final;
+  mkfs_ret mkfs(device_config_t) final;
 
   close_ertr::future<> close();
 
@@ -134,10 +134,10 @@ public:
   size_t get_size() const final {
     return superblock.size;
   }
-  segment_off_t get_block_size() const {
+  seastore_off_t get_block_size() const {
     return superblock.block_size;
   }
-  segment_off_t get_segment_size() const {
+  seastore_off_t get_segment_size() const {
     return superblock.segment_size;
   }
 
@@ -146,7 +146,7 @@ public:
     return device_id;
   }
   secondary_device_set_t& get_secondary_devices() final {
-    return superblock.secondary_devices;
+    return superblock.config.secondary_devices;
   }
   // public so tests can bypass segment interface when simpler
   Segment::write_ertr::future<> segment_write(
@@ -154,14 +154,8 @@ public:
     ceph::bufferlist bl,
     bool ignore_check=false);
 
-  device_spec_t get_device_spec() const final {
-    return {superblock.magic,
-	    superblock.dtype,
-	    get_device_id()};
-  }
-
   magic_t get_magic() const final {
-    return superblock.magic;
+    return superblock.config.spec.magic;
   }
 
 private:
@@ -222,7 +216,7 @@ private:
   }
 
   const seastore_meta_t &get_meta() const {
-    return superblock.meta;
+    return superblock.config.meta;
   }
 
   std::vector<segment_state_t> segment_state;
@@ -230,7 +224,7 @@ private:
   char *buffer = nullptr;
 
   Segment::close_ertr::future<> segment_close(
-      segment_id_t id, segment_off_t write_pointer);
+      segment_id_t id, seastore_off_t write_pointer);
 };
 
 }

@@ -212,7 +212,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
-    if (!store->get_zone()->get_params().valid_placement(target_rule)) {
+    if (!store->valid_placement(target_rule)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
       return;
@@ -351,7 +351,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
-    if (!store->get_zone()->get_params().valid_placement(target_rule)) {
+    if (!store->valid_placement(target_rule)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
       return;
@@ -780,21 +780,22 @@ void RGWOp_Caps_Remove::execute(optional_yield y)
 }
 
 struct UserQuotas {
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
 
   UserQuotas() {}
 
-  explicit UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota),
-				  user_quota(info.user_quota) {}
+  explicit UserQuotas(RGWUserInfo& info){
+    quota.bucket_quota = info.quota.bucket_quota;
+    quota.user_quota = info.quota.user_quota;
+  }
 
   void dump(Formatter *f) const {
-    encode_json("bucket_quota", bucket_quota, f);
-    encode_json("user_quota", user_quota, f);
+    encode_json("bucket_quota", quota.bucket_quota, f);
+    encode_json("user_quota", quota.user_quota, f);
   }
   void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
-    JSONDecoder::decode_json("user_quota", user_quota, obj);
+    JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
+    JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
   }
 };
 
@@ -862,9 +863,9 @@ void RGWOp_Quota_Info::execute(optional_yield y)
     UserQuotas quotas(info);
     encode_json("quota", quotas, s->formatter);
   } else if (show_user) {
-    encode_json("user_quota", info.user_quota, s->formatter);
+    encode_json("user_quota", info.quota.user_quota, s->formatter);
   } else {
-    encode_json("bucket_quota", info.bucket_quota, s->formatter);
+    encode_json("bucket_quota", info.quota.bucket_quota, s->formatter);
   }
 
   flusher.flush();
@@ -997,8 +998,8 @@ void RGWOp_Quota_Set::execute(optional_yield y)
       return;
     }
 
-    op_state.set_user_quota(quotas.user_quota);
-    op_state.set_bucket_quota(quotas.bucket_quota);
+    op_state.set_user_quota(quotas.quota.user_quota);
+    op_state.set_bucket_quota(quotas.quota.bucket_quota);
   } else {
     RGWQuotaInfo quota;
 
@@ -1025,9 +1026,9 @@ void RGWOp_Quota_Set::execute(optional_yield y)
       }
       RGWQuotaInfo *old_quota;
       if (set_user) {
-        old_quota = &info.user_quota;
+        old_quota = &info.quota.user_quota;
       } else {
-        old_quota = &info.bucket_quota;
+        old_quota = &info.quota.bucket_quota;
       }
 
       RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);

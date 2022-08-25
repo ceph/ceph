@@ -1012,7 +1012,9 @@ int DataScan::scan_links()
 
 	    if (step == SCAN_INOS) {
 	      if (used_inos.contains(ino, 1)) {
-		dup_primaries[ino].size();
+		dup_primaries.emplace(std::piecewise_construct,
+				      std::forward_as_tuple(ino),
+				      std::forward_as_tuple());
 	      } else {
 		used_inos.insert(ino);
 	      }

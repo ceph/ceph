@@ -1703,8 +1703,8 @@ TEST_F(PGLogTest, proc_replica_log) {
             |        |       |         |
             +--------+-------+---------+
 
-      The log entry (1,3) deletes the object x9 but the olog entry
-      (2,3) modifies it : remove it from omissing.
+      The log entry (2,3) deletes the object x9 but the olog entry
+      (1,3) modifies it : remove it from omissing.
 
   */
   {
@@ -2075,7 +2075,7 @@ TEST_F(PGLogTest, filter_log_1) {
     int num_internal = 10;
 
     // Set up splitting map
-    OSDMap *osdmap = new OSDMap;
+    std::unique_ptr<OSDMap> osdmap(new OSDMap);
     uuid_d test_uuid;
     test_uuid.generate_random();
     osdmap->build_simple_with_pool(g_ceph_context, epoch, test_uuid, max_osd, bits, bits);

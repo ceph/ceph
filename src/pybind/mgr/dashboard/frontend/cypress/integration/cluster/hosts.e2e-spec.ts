@@ -31,9 +31,5 @@ describe('Hosts page', () => {
     it('should check at least one host is present', () => {
       hosts.check_for_host();
     });
-
-    it('should check services link(s) work for first host', () => {
-      hosts.check_services_links();
-    });
   });
 });

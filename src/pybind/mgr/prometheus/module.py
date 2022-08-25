@@ -14,7 +14,11 @@ from rbd import RBD
 from collections import namedtuple
 import yaml
 
-from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List
+from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable
+
+LabelValues = Tuple[str, ...]
+Number = Union[int, float]
+MetricValue = Dict[LabelValues, Number]
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
@@ -65,7 +69,7 @@ def health_status_to_number(status: str) -> int:
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 
-DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
+DF_POOL = ['max_avail', 'avail_raw', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes',
            'compress_bytes_used', 'compress_under_bytes', 'bytes_used', 'percent_used']
 
@@ -102,7 +106,7 @@ OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode')
 
-RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
+RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
@@ -302,18 +306,17 @@ class HealthHistory:
 
 
 class Metric(object):
-    def __init__(self, mtype: str, name: str, desc: str, labels: Optional[Tuple[str, ...]] = None) -> None:
+    def __init__(self, mtype: str, name: str, desc: str, labels: Optional[LabelValues] = None) -> None:
         self.mtype = mtype
         self.name = name
         self.desc = desc
-        self.labelnames = labels    # tuple if present
-        self.value: Dict[Tuple[str, ...], Union[float, int]
-                         ] = {}             # indexed by label values
+        self.labelnames = labels  # tuple if present
+        self.value: Dict[LabelValues, Number] = {}
 
     def clear(self) -> None:
         self.value = {}
 
-    def set(self, value: Union[float, int], labelvalues: Optional[Tuple[str, ...]] = None) -> None:
+    def set(self, value: Number, labelvalues: Optional[LabelValues] = None) -> None:
         # labelvalues must be a tuple
         labelvalues = labelvalues or ('',)
         self.value[labelvalues] = value
@@ -369,12 +372,104 @@ class Metric(object):
             )
         return expfmt
 
+    def group_by(
+        self,
+        keys: List[str],
+        joins: Dict[str, Callable[[List[str]], str]],
+        name: Optional[str] = None,
+    ) -> "Metric":
+        """
+        Groups data by label names.
+
+        Label names not passed are being removed from the resulting metric but
+        by providing a join function, labels of metrics can be grouped.
+
+        The purpose of this method is to provide a version of a metric that can
+        be used in matching where otherwise multiple results would be returned.
+
+        As grouping is possible in Prometheus, the only additional value of this
+        method is the possibility to join labels when grouping. For that reason,
+        passing joins is required. Please use PromQL expressions in all other
+        cases.
+
+        >>> m = Metric('type', 'name', '', labels=('label1', 'id'))
+        >>> m.value = {
+        ...     ('foo', 'x'): 1,
+        ...     ('foo', 'y'): 1,
+        ... }
+        >>> m.group_by(['label1'], {'id': lambda ids: ','.join(ids)}).value
+        {('foo', 'x,y'): 1}
+
+        The functionality of group by could roughly be compared with Prometheus'
+
+            group (ceph_disk_occupation) by (device, instance)
+
+        with the exception that not all labels which aren't used as a condition
+        to group a metric are discarded, but their values can are joined and the
+        label is thereby preserved.
+
+        This function takes the value of the first entry of a found group to be
+        used for the resulting value of the grouping operation.
+
+        >>> m = Metric('type', 'name', '', labels=('label1', 'id'))
+        >>> m.value = {
+        ...     ('foo', 'x'): 555,
+        ...     ('foo', 'y'): 10,
+        ... }
+        >>> m.group_by(['label1'], {'id': lambda ids: ','.join(ids)}).value
+        {('foo', 'x,y'): 555}
+        """
+        assert self.labelnames, "cannot match keys without label names"
+        for key in keys:
+            assert key in self.labelnames, "unknown key: {}".format(key)
+        assert joins, "joins must not be empty"
+        assert all(callable(c) for c in joins.values()), "joins must be callable"
+
+        # group
+        grouped: Dict[LabelValues, List[Tuple[Dict[str, str], Number]]] = defaultdict(list)
+        for label_values, metric_value in self.value.items():
+            labels = dict(zip(self.labelnames, label_values))
+            if not all(k in labels for k in keys):
+                continue
+            group_key = tuple(labels[k] for k in keys)
+            grouped[group_key].append((labels, metric_value))
+
+        # as there is nothing specified on how to join labels that are not equal
+        # and Prometheus `group` aggregation functions similarly, we simply drop
+        # those labels.
+        labelnames = tuple(
+            label for label in self.labelnames if label in keys or label in joins
+        )
+        superfluous_labelnames = [
+            label for label in self.labelnames if label not in labelnames
+        ]
+
+        # iterate and convert groups with more than one member into a single
+        # entry
+        values: MetricValue = {}
+        for group in grouped.values():
+            labels, metric_value = group[0]
+
+            for label in superfluous_labelnames:
+                del labels[label]
+
+            if len(group) > 1:
+                for key, fn in joins.items():
+                    labels[key] = fn(list(labels[key] for labels, _ in group))
+
+            values[tuple(labels.values())] = metric_value
+
+        new_metric = Metric(self.mtype, name if name else self.name, self.desc, labelnames)
+        new_metric.value = values
+
+        return new_metric
+
 
 class MetricCounter(Metric):
     def __init__(self,
                  name: str,
                  desc: str,
-                 labels: Optional[Tuple[str, ...]] = None) -> None:
+                 labels: Optional[LabelValues] = None) -> None:
         super(MetricCounter, self).__init__('counter', name, desc, labels)
         self.value = defaultdict(lambda: 0)
 
@@ -382,14 +477,14 @@ class MetricCounter(Metric):
         pass  # Skip calls to clear as we want to keep the counters here.
 
     def set(self,
-            value: Union[float, int],
-            labelvalues: Optional[Tuple[str, ...]] = None) -> None:
+            value: Number,
+            labelvalues: Optional[LabelValues] = None) -> None:
         msg = 'This method must not be used for instances of MetricCounter class'
         raise NotImplementedError(msg)
 
     def add(self,
-            value: Union[float, int],
-            labelvalues: Optional[Tuple[str, ...]] = None) -> None:
+            value: Number,
+            labelvalues: Optional[LabelValues] = None) -> None:
         # labelvalues must be a tuple
         labelvalues = labelvalues or ('',)
         self.value[labelvalues] += value
@@ -459,7 +554,8 @@ class Module(MgrModule):
             'server_port',
             type='int',
             default=DEFAULT_PORT,
-            desc='the port on which the module listens for HTTP requests'
+            desc='the port on which the module listens for HTTP requests',
+            runtime=True
         ),
         Option(
             'scrape_interval',
@@ -609,6 +705,14 @@ class Module(MgrModule):
             DISK_OCCUPATION
         )
 
+        metrics['disk_occupation_human'] = Metric(
+            'untyped',
+            'disk_occupation_human',
+            'Associate Ceph daemon with disk used for displaying to humans,'
+            ' not for joining tables (vector matching)',
+            DISK_OCCUPATION,  # label names are automatically decimated on grouping
+        )
+
         metrics['pool_metadata'] = Metric(
             'untyped',
             'pool_metadata',
@@ -690,6 +794,13 @@ class Module(MgrModule):
                 path,
                 'DF {}'.format(state),
             )
+            path = 'cluster_by_class_{}'.format(state)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'DF {}'.format(state),
+                ('device_class',)
+            )
         for state in DF_POOL:
             path = 'pool_{}'.format(state)
             metrics[path] = Metric(
@@ -715,6 +826,31 @@ class Module(MgrModule):
             )
 
         return metrics
+
+    def get_server_addr(self) -> str:
+        """
+        Return the current mgr server IP.
+        """
+        server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
+        if server_addr in ['::', '0.0.0.0']:
+            return self.get_mgr_ip()
+        return server_addr
+
+    def config_notify(self) -> None:
+        """
+        This method is called whenever one of our config options is changed.
+        """
+        # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
+        # if we omit the line: cherrypy.server.httpserver = None
+        # then the cherrypy server is not restarted correctly
+        self.log.info('Restarting engine...')
+        cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
+        server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
+        self.set_uri(build_url(scheme='http', host=self.get_server_addr(), port=server_port, path='/'))
+        cherrypy.config.update({'server.socket_port': server_port})
+        cherrypy.engine.start()
+        self.log.info('Engine started.')
 
     @profile_method()
     def get_health(self) -> None:
@@ -792,6 +928,8 @@ class Module(MgrModule):
         df = self.get('df')
         for stat in DF_CLUSTER:
             self.metrics['cluster_{}'.format(stat)].set(df['stats'][stat])
+            for device_class in df['stats_by_class']:
+                self.metrics['cluster_by_class_{}'.format(stat)].set(df['stats_by_class'][device_class][stat], (device_class,))
 
         for pool in df['pools']:
             for stat in DF_POOL:
@@ -808,7 +946,7 @@ class Module(MgrModule):
         # export standby mds metadata, default standby fs_id is '-1'
         for standby in fs_map['standbys']:
             id_ = standby['name']
-            host, version = servers.get((id_, 'mds'), ('', ''))
+            host, version, _ = servers.get((id_, 'mds'), ('', '', ''))
             addr, rank = standby['addr'], standby['rank']
             self.metrics['mds_metadata'].set(1, (
                 'mds.{}'.format(id_), '-1',
@@ -830,7 +968,7 @@ class Module(MgrModule):
             self.log.debug('mdsmap: {}'.format(fs['mdsmap']))
             for gid, daemon in fs['mdsmap']['info'].items():
                 id_ = daemon['name']
-                host, version = servers.get((id_, 'mds'), ('', ''))
+                host, version, _ = servers.get((id_, 'mds'), ('', '', ''))
                 self.metrics['mds_metadata'].set(1, (
                     'mds.{}'.format(id_), fs['id'],
                     host, daemon['addr'],
@@ -844,11 +982,11 @@ class Module(MgrModule):
         for mon in mon_status['monmap']['mons']:
             rank = mon['rank']
             id_ = mon['name']
-            host_version = servers.get((id_, 'mon'), ('', ''))
+            mon_version = servers.get((id_, 'mon'), ('', '', ''))
             self.metrics['mon_metadata'].set(1, (
-                'mon.{}'.format(id_), host_version[0],
+                'mon.{}'.format(id_), mon_version[0],
                 mon['public_addr'].rsplit(':', 1)[0], rank,
-                host_version[1]
+                mon_version[1]
             ))
             in_quorum = int(rank in mon_status['quorum'])
             self.metrics['mon_quorum_status'].set(in_quorum, (
@@ -870,7 +1008,7 @@ class Module(MgrModule):
                        for module in mgr_map['available_modules']}
 
         for mgr in all_mgrs:
-            host, version = servers.get((mgr, 'mgr'), ('', ''))
+            host, version, _ = servers.get((mgr, 'mgr'), ('', '', ''))
             if mgr == active:
                 _state = 1
             else:
@@ -928,13 +1066,13 @@ class Module(MgrModule):
                     'osd.{}'.format(id_),
                 ))
 
-    def get_service_list(self) -> Dict[Tuple[str, str], Tuple[str, str]]:
+    def get_service_list(self) -> Dict[Tuple[str, str], Tuple[str, str, str]]:
         ret = {}
         for server in self.list_servers():
-            version = cast(str, server.get('ceph_version', ''))
             host = cast(str, server.get('hostname', ''))
             for service in cast(List[ServiceInfoT], server.get('services', [])):
-                ret.update({(service['id'], service['type']): (host, version)})
+                ret.update({(service['id'], service['type']): (
+                    host, service['ceph_version'], service.get('name', ''))})
         return ret
 
     @profile_method()
@@ -972,7 +1110,7 @@ class Module(MgrModule):
                               "skipping output".format(id_))
                 continue
 
-            host_version = servers.get((str(id_), 'osd'), ('', ''))
+            osd_version = servers.get((str(id_), 'osd'), ('', '', ''))
 
             # collect disk occupation metadata
             osd_metadata = self.get_metadata("osd", str(id_))
@@ -989,10 +1127,10 @@ class Module(MgrModule):
                 c_addr,
                 dev_class,
                 f_iface,
-                host_version[0],
+                osd_version[0],
                 obj_store,
                 p_addr,
-                host_version[1]
+                osd_version[1]
             ))
 
             # collect osd status
@@ -1045,6 +1183,17 @@ class Module(MgrModule):
                 self.log.info("Missing dev node metadata for osd {0}, skipping "
                               "occupation record for this osd".format(id_))
 
+        if 'disk_occupation' in self.metrics:
+            try:
+                self.metrics['disk_occupation_human'] = \
+                    self.metrics['disk_occupation'].group_by(
+                        ['device', 'instance'],
+                        {'ceph_daemon': lambda daemons: ', '.join(daemons)},
+                        name='disk_occupation_human',
+                )
+            except Exception as e:
+                self.log.error(e)
+
         ec_profiles = osd_map.get('erasure_code_profiles', {})
 
         def _get_pool_info(pool: Dict[str, Any]) -> Tuple[str, str]:
@@ -1086,11 +1235,11 @@ class Module(MgrModule):
         for key, value in servers.items():
             service_id, service_type = key
             if service_type == 'rgw':
-                hostname, version = value
+                hostname, version, name = value
                 self.metrics['rgw_metadata'].set(
                     1,
-                    ('{}.{}'.format(service_type, service_id),
-                     hostname, version)
+                    ('{}.{}'.format(service_type, name),
+                     hostname, version, service_id)
                 )
             elif service_type == 'rbd-mirror':
                 mirror_metadata = self.get_metadata('rbd-mirror', service_id)
@@ -1098,7 +1247,7 @@ class Module(MgrModule):
                     continue
                 mirror_metadata['ceph_daemon'] = '{}.{}'.format(service_type,
                                                                 service_id)
-                rbd_mirror_metadata = cast(Tuple[str, ...],
+                rbd_mirror_metadata = cast(LabelValues,
                                            (mirror_metadata.get(k, '')
                                             for k in RBD_MIRROR_METADATA))
                 self.metrics['rbd_mirror_metadata'].set(
@@ -1379,7 +1528,7 @@ class Module(MgrModule):
                         metrics.mtype,
                         new_path,
                         metrics.desc,
-                        cast(Tuple[str, ...], metrics.labelnames) + ('source_zone',)
+                        cast(LabelValues, metrics.labelnames) + ('source_zone',)
                     )
                 for label_values, value in metrics.value.items():
                     new_metrics[new_path].set(value, label_values + (match.group(1),))
@@ -1618,9 +1767,7 @@ class Module(MgrModule):
         })
         # Publish the URI that others may use to access the service we're
         # about to start serving
-        if server_addr in ['::', '0.0.0.0']:
-            server_addr = self.get_mgr_ip()
-        self.set_uri(build_url(scheme='http', host=server_addr, port=server_port, path='/'))
+        self.set_uri(build_url(scheme='http', host=self.get_server_addr(), port=server_port, path='/'))
 
         cherrypy.tree.mount(Root(), "/")
         self.log.info('Starting engine...')
@@ -1632,6 +1779,7 @@ class Module(MgrModule):
         # tell metrics collection thread to stop collecting new metrics
         self.metrics_thread.stop()
         cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
         self.log.info('Engine stopped.')
         self.shutdown_rbd_stats()
         # wait for the metrics collection thread to stop
@@ -1728,6 +1876,7 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event.wait()
         self.shutdown_event.clear()
         cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
         self.log.info('Engine stopped.')
 
     def shutdown(self) -> None:

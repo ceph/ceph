@@ -271,13 +271,14 @@ public:
 
 void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSContext *fin)
 {
-  dout(10) << __func__ << " log_seq " << log_seq << dendl;
+  dout(10) << __func__ << " log_seq " << log_seq << " committed_log_seq " << committed_log_seq
+           << " committing_log_seq " << committing_log_seq << dendl;
   if (r < 0) {
     mds->handle_write_error(r);
     return;
   }
 
-  ceph_assert(log_seq <= committing_log_seq);
+  ceph_assert(log_seq == committing_log_seq);
   ceph_assert(log_seq >= committed_log_seq);
   committed_log_seq = log_seq;
   num_pending_commit--;
@@ -336,7 +337,8 @@ void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
 
 void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 {
-  dout(10) << __func__ << " log_seq " << log_seq << dendl;
+  dout(10) << __func__ << " log_seq " << log_seq << " committing_log_seq:"
+          << committing_log_seq << dendl;
 
   ceph_assert(num_pending_commit == 0);
   num_pending_commit++;
@@ -1059,6 +1061,12 @@ void OpenFileTable::_prefetch_dirfrags()
     CInode *diri = mdcache->get_inode(ino);
     if (!diri)
       continue;
+
+    if (!diri->is_dir()) {
+      dout(10) << " " << *diri << " is not dir" << dendl;
+      continue;
+    }
+
     if (diri->state_test(CInode::STATE_REJOINUNDEF))
       continue;
 
@@ -1090,7 +1098,7 @@ void OpenFileTable::_prefetch_dirfrags()
       ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
 
-    if (!(++num_opening_dirfrags % 1000))
+    if (!(++num_opening_dirfrags % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -1129,6 +1137,8 @@ void OpenFileTable::_prefetch_inodes()
       destroyed_inos_set.insert(it.second.begin(), it.second.end());
   }
 
+  mdcache->open_ino_batch_start();
+
   for (auto& [ino, anchor] : loaded_anchor_map) {
     if (destroyed_inos_set.count(ino))
 	continue;
@@ -1164,9 +1174,11 @@ void OpenFileTable::_prefetch_inodes()
       mdcache->open_ino(ino, pool, fin, false);
     }
 
-    if (!(num_opening_inodes % 1000))
+    if (!(num_opening_inodes % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
+
+  mdcache->open_ino_batch_submit();
 
   _open_ino_finish(inodeno_t(0), 0);
 }

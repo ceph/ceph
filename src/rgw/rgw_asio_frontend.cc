@@ -183,6 +183,7 @@ void handle_connection(boost::asio::io_context& context,
                        parse_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
+                       std::unique_ptr<rgw::sal::LuaManager>& lua_manager,
                        boost::system::error_code& ec,
                        yield_context yield)
 {
@@ -269,11 +270,13 @@ void handle_connection(boost::asio::io_context& context,
                       *env.auth_registry, &client, env.olog, y,
                       scheduler, &user, &latency,
                       env.ratelimiting->get_active(),
+                      env.lua_background,
+                      lua_manager,
                       &http_ret);
 
-      if (cct->_conf->subsys.should_gather(dout_subsys, 1)) {
+      if (cct->_conf->subsys.should_gather(ceph_subsys_rgw_access, 1)) {
         // access log line elements begin per Apache Combined Log Format with additions following
-        ldout(cct, 1) << "beast: " << std::hex << &req << std::dec << ": "
+        lsubdout(cct, rgw_access, 1) << "beast: " << std::hex << &req << std::dec << ": "
             << remote_endpoint.address() << " - " << user << " [" << log_apache_time{started} << "] \""
             << message.method_string() << ' ' << message.target() << ' '
             << http_version{message.version()} << "\" " << http_ret << ' '
@@ -383,6 +386,7 @@ class AsioFrontend {
 #endif
   SharedMutex pause_mutex;
   std::unique_ptr<rgw::dmclock::Scheduler> scheduler;
+  std::unique_ptr<rgw::sal::LuaManager> lua_manager;
 
   struct Listener {
     tcp::endpoint endpoint;
@@ -413,7 +417,8 @@ class AsioFrontend {
  public:
   AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
 	       dmc::SchedulerCtx& sched_ctx)
-    : env(env), conf(conf), pause_mutex(context.get_executor())
+    : env(env), conf(conf), pause_mutex(context.get_executor()),
+    lua_manager(env.store->get_lua_manager())
   {
     auto sched_t = dmc::get_scheduler_t(ctx());
     switch(sched_t){
@@ -671,12 +676,12 @@ class ExpandMetaVar {
 
 public:
   ExpandMetaVar(rgw::sal::Zone* zone_svc) {
-    meta_map["realm"] = zone_svc->get_realm().get_name();
-    meta_map["realm_id"] = zone_svc->get_realm().get_id();
+    meta_map["realm"] = zone_svc->get_realm_name();
+    meta_map["realm_id"] = zone_svc->get_realm_id();
     meta_map["zonegroup"] = zone_svc->get_zonegroup().get_name();
     meta_map["zonegroup_id"] = zone_svc->get_zonegroup().get_id();
     meta_map["zone"] = zone_svc->get_name();
-    meta_map["zone_id"] = zone_svc->get_id().id;
+    meta_map["zone_id"] = zone_svc->get_id();
   }
 
   string process_str(const string& in);
@@ -1004,6 +1009,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         conn->buffer.consume(bytes);
         handle_connection(context, env, stream, timeout, header_limit,
                           conn->buffer, true, pause_mutex, scheduler.get(),
+                          lua_manager,
                           ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
@@ -1023,6 +1029,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         boost::system::error_code ec;
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
+                          lua_manager,
                           ec, yield);
         conn->socket.shutdown(tcp_socket::shutdown_both, ec);
       }, make_stack_allocator());
@@ -1042,7 +1049,7 @@ int AsioFrontend::run()
   work.emplace(boost::asio::make_work_guard(context));
 
   for (int i = 0; i < thread_count; i++) {
-    threads.emplace_back([=]() noexcept {
+    threads.emplace_back([this]() noexcept {
       // request warnings on synchronous librados calls in this thread
       is_asio_thread = true;
       // Have uncaught exceptions kill the process and give a
@@ -1108,6 +1115,7 @@ void AsioFrontend::unpause(rgw::sal::Store* const store,
 {
   env.store = store;
   env.auth_registry = std::move(auth_registry);
+  lua_manager = store->get_lua_manager();
 
   // unpause to unblock connections
   pause_mutex.unlock();

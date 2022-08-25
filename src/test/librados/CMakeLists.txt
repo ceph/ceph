@@ -140,6 +140,14 @@ add_executable(ceph_test_rados_api_snapshots_pp
   snapshots_cxx.cc)
 target_link_libraries(ceph_test_rados_api_snapshots_pp
   librados ${UNITTEST_LIBS} radostest-cxx)
+add_executable(ceph_test_rados_api_snapshots_stats
+  snapshots_stats.cc)
+target_link_libraries(ceph_test_rados_api_snapshots_stats
+  librados ${UNITTEST_LIBS} radostest)
+add_executable(ceph_test_rados_api_snapshots_stats_pp
+  snapshots_stats_cxx.cc)
+target_link_libraries(ceph_test_rados_api_snapshots_stats_pp
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_cls_remote_reads
   cls_remote_reads.cc

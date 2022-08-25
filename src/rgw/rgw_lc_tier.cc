@@ -112,10 +112,10 @@ static int read_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Store *st
 
   auto& pool = status_obj->pool;
   const auto oid = status_obj->oid;
-  auto obj_ctx = rados->svc()->sysobj->init_obj_ctx();
+  auto sysobj = rados->svc()->sysobj;
   bufferlist bl;
 
-  ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, nullptr, nullptr,
+  ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr,
       null_yield, dpp);
 
   if (ret < 0) {
@@ -151,11 +151,11 @@ static int put_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Store *sto
 
   auto& pool = status_obj->pool;
   const auto oid = status_obj->oid;
-  auto obj_ctx = rados->svc()->sysobj->init_obj_ctx();
+  auto sysobj = rados->svc()->sysobj;
   bufferlist bl;
   status->encode(bl);
 
-  ret = rgw_put_system_obj(dpp, obj_ctx, pool, oid, bl, true, nullptr,
+  ret = rgw_put_system_obj(dpp, sysobj, pool, oid, bl, true, nullptr,
       real_time{}, null_yield);
 
   return ret;
@@ -340,10 +340,9 @@ class RGWLCStreamRead
 
   public:
   RGWLCStreamRead(CephContext *_cct, const DoutPrefixProvider *_dpp,
-      RGWObjectCtx& obj_ctx, rgw::sal::Object *_obj,
-      const real_time &_mtime) :
+      rgw::sal::Object *_obj, const real_time &_mtime) :
     cct(_cct), dpp(_dpp), obj(_obj), mtime(_mtime),
-    read_op(obj->get_read_op(&obj_ctx)) {}
+    read_op(obj->get_read_op()) {}
 
   ~RGWLCStreamRead() {};
   int set_range(off_t _ofs, off_t _end);
@@ -785,7 +784,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
     return -1;
   }
 
-  tier_ctx.obj->set_atomic(&tier_ctx.rctx);
+  tier_ctx.obj->set_atomic();
 
   /* Prepare Read from source */
   /* TODO: Define readf, writef as stack variables. For some reason,
@@ -794,7 +793,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
    */
   std::shared_ptr<RGWLCStreamRead> readf;
   readf.reset(new RGWLCStreamRead(tier_ctx.cct, tier_ctx.dpp,
-        tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
+        tier_ctx.obj, tier_ctx.o.meta.mtime));
 
   std::shared_ptr<RGWLCCloudStreamPut> writef;
   writef.reset(new RGWLCCloudStreamPut(tier_ctx.dpp, obj_properties, tier_ctx.conn,
@@ -840,14 +839,14 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
     return -1;
   }
 
-  tier_ctx.obj->set_atomic(&tier_ctx.rctx);
+  tier_ctx.obj->set_atomic();
 
   /* TODO: Define readf, writef as stack variables. For some reason,
    * when used as stack variables (esp., readf), the transition seems to
    * be taking lot of time eventually erroring out at times. */
   std::shared_ptr<RGWLCStreamRead> readf;
   readf.reset(new RGWLCStreamRead(tier_ctx.cct, tier_ctx.dpp,
-        tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
+        tier_ctx.obj, tier_ctx.o.meta.mtime));
 
   std::shared_ptr<RGWLCCloudStreamPut> writef;
   writef.reset(new RGWLCCloudStreamPut(tier_ctx.dpp, obj_properties, tier_ctx.conn,
@@ -1105,8 +1104,8 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   }
   dest_obj.init(target_bucket, target_obj_name);
 
-  status_obj = rgw_raw_obj(tier_ctx.store->get_zone()->get_params().log_pool,
-      "lc_multipart_" + tier_ctx.obj->get_oid());
+  rgw_pool pool = static_cast<rgw::sal::RadosStore*>(tier_ctx.store)->svc()->zone->get_zone_params().log_pool;
+  status_obj = rgw_raw_obj(pool, "lc_multipart_" + tier_ctx.obj->get_oid());
 
   ret = read_upload_status(tier_ctx.dpp, tier_ctx.store, &status_obj, &status);
 
@@ -1125,7 +1124,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   }
 
   if (ret == -ENOENT) { 
-    RGWLCStreamRead readf(tier_ctx.cct, tier_ctx.dpp, tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime);
+    RGWLCStreamRead readf(tier_ctx.cct, tier_ctx.dpp, tier_ctx.obj, tier_ctx.o.meta.mtime);
 
     readf.init();
 

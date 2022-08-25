@@ -28,6 +28,10 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 })
 export class ServiceFormComponent extends CdForm implements OnInit {
   readonly RGW_SVC_ID_PATTERN = /^([^.]+)(\.([^.]+)\.([^.]+))?$/;
+  readonly MDS_SVC_ID_PATTERN = /^[a-zA-Z_.-][a-zA-Z0-9_.-]*$/;
+  readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
+  readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
+  readonly INGRESS_SUPPORTED_SERVICE_TYPES = ['rgw', 'nfs'];
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
@@ -43,6 +47,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   serviceTypes: string[] = [];
+  serviceIds: string[] = [];
   hosts: any;
   labels: string[];
   labelClick = new Subject<string>();
@@ -50,6 +55,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   pools: Array<object>;
   services: Array<CephServiceSpec> = [];
   pageURL: string;
+  serviceList: CephServiceSpec[];
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -81,9 +87,20 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       service_id: [
         null,
         [
-          CdValidators.requiredIf({
-            service_type: 'mds'
-          }),
+          CdValidators.composeIf(
+            {
+              service_type: 'mds'
+            },
+            [
+              Validators.required,
+              CdValidators.custom('mdsPattern', (value: string) => {
+                if (_.isEmpty(value)) {
+                  return false;
+                }
+                return !this.MDS_SVC_ID_PATTERN.test(value);
+              })
+            ]
+          ),
           CdValidators.requiredIf({
             service_type: 'nfs'
           }),
@@ -106,7 +123,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 return !this.RGW_SVC_ID_PATTERN.test(value);
               })
             ]
-          )
+          ),
+          CdValidators.custom('uniqueName', (service_id: string) => {
+            return this.serviceIds && this.serviceIds.includes(service_id);
+          })
         ]
       ],
       placement: ['hosts'],
@@ -174,8 +194,26 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
-      frontend_port: [null, [CdValidators.number(false)]],
-      monitor_port: [null, [CdValidators.number(false)]],
+      frontend_port: [
+        null,
+        [
+          CdValidators.number(false),
+          CdValidators.requiredIf({
+            service_type: 'ingress',
+            unmanaged: false
+          })
+        ]
+      ],
+      monitor_port: [
+        null,
+        [
+          CdValidators.number(false),
+          CdValidators.requiredIf({
+            service_type: 'ingress',
+            unmanaged: false
+          })
+        ]
+      ],
       virtual_interface_networks: [null],
       // RGW, Ingress & iSCSI
       ssl: [false],
@@ -197,6 +235,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               ssl: true
             },
             [Validators.required, CdValidators.sslCert()]
+          ),
+          CdValidators.composeIf(
+            {
+              service_type: 'ingress',
+              unmanaged: false,
+              ssl: true
+            },
+            [Validators.required, CdValidators.pemCert()]
           )
         ]
       ],
@@ -211,6 +257,86 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             },
             [Validators.required, CdValidators.sslPrivKey()]
           )
+        ]
+      ],
+      // snmp-gateway
+      snmp_version: [
+        null,
+        [
+          CdValidators.requiredIf({
+            service_type: 'snmp-gateway'
+          })
+        ]
+      ],
+      snmp_destination: [
+        null,
+        {
+          validators: [
+            CdValidators.requiredIf({
+              service_type: 'snmp-gateway'
+            }),
+            CdValidators.custom('snmpDestinationPattern', (value: string) => {
+              if (_.isEmpty(value)) {
+                return false;
+              }
+              return !this.SNMP_DESTINATION_PATTERN.test(value);
+            })
+          ]
+        }
+      ],
+      engine_id: [
+        null,
+        [
+          CdValidators.requiredIf({
+            service_type: 'snmp-gateway'
+          }),
+          CdValidators.custom('snmpEngineIdPattern', (value: string) => {
+            if (_.isEmpty(value)) {
+              return false;
+            }
+            return !this.SNMP_ENGINE_ID_PATTERN.test(value);
+          })
+        ]
+      ],
+      auth_protocol: [
+        'SHA',
+        [
+          CdValidators.requiredIf({
+            service_type: 'snmp-gateway'
+          })
+        ]
+      ],
+      privacy_protocol: [null],
+      snmp_community: [
+        null,
+        [
+          CdValidators.requiredIf({
+            snmp_version: 'V2c'
+          })
+        ]
+      ],
+      snmp_v3_auth_username: [
+        null,
+        [
+          CdValidators.requiredIf({
+            service_type: 'snmp-gateway'
+          })
+        ]
+      ],
+      snmp_v3_auth_password: [
+        null,
+        [
+          CdValidators.requiredIf({
+            service_type: 'snmp-gateway'
+          })
+        ]
+      ],
+      snmp_v3_priv_password: [
+        null,
+        [
+          CdValidators.requiredIf({
+            privacy_protocol: { op: '!empty' }
+          })
         ]
       ]
     });
@@ -228,6 +354,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         this.serviceType = params.type;
       });
     }
+
+    this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
+      this.serviceList = services;
+      this.services = services.filter((service: any) =>
+        this.INGRESS_SUPPORTED_SERVICE_TYPES.includes(service.service_type)
+      );
+    });
+
     this.cephServiceService.getKnownTypes().subscribe((resp: Array<string>) => {
       // Remove service types:
       // osd       - This is deployed a different way.
@@ -251,9 +385,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     });
     this.poolService.getList().subscribe((resp: Array<object>) => {
       this.pools = resp;
-    });
-    this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
-      this.services = services.filter((service: any) => service.service_type === 'rgw');
     });
 
     if (this.editing) {
@@ -314,9 +445,48 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
             }
             break;
+          case 'snmp-gateway':
+            const snmpCommonSpecKeys = ['snmp_version', 'snmp_destination'];
+            snmpCommonSpecKeys.forEach((key) => {
+              this.serviceForm.get(key).setValue(response[0].spec[key]);
+            });
+            if (this.serviceForm.getValue('snmp_version') === 'V3') {
+              const snmpV3SpecKeys = [
+                'engine_id',
+                'auth_protocol',
+                'privacy_protocol',
+                'snmp_v3_auth_username',
+                'snmp_v3_auth_password',
+                'snmp_v3_priv_password'
+              ];
+              snmpV3SpecKeys.forEach((key) => {
+                if (key !== null) {
+                  if (
+                    key === 'snmp_v3_auth_username' ||
+                    key === 'snmp_v3_auth_password' ||
+                    key === 'snmp_v3_priv_password'
+                  ) {
+                    this.serviceForm.get(key).setValue(response[0].spec['credentials'][key]);
+                  } else {
+                    this.serviceForm.get(key).setValue(response[0].spec[key]);
+                  }
+                }
+              });
+            } else {
+              this.serviceForm
+                .get('snmp_community')
+                .setValue(response[0].spec['credentials']['snmp_community']);
+            }
+            break;
         }
       });
     }
+  }
+
+  getServiceIds(selectedServiceType: string) {
+    this.serviceIds = this.serviceList
+      .filter((service) => service['service_type'] === selectedServiceType)
+      .map((service) => service['service_id']);
   }
 
   disableForEditing(serviceType: string) {
@@ -453,6 +623,23 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           serviceSpec['virtual_interface_networks'] = values['virtual_interface_networks'];
           break;
+        case 'snmp-gateway':
+          serviceSpec['credentials'] = {};
+          serviceSpec['snmp_version'] = values['snmp_version'];
+          serviceSpec['snmp_destination'] = values['snmp_destination'];
+          if (values['snmp_version'] === 'V3') {
+            serviceSpec['engine_id'] = values['engine_id'];
+            serviceSpec['auth_protocol'] = values['auth_protocol'];
+            serviceSpec['credentials']['snmp_v3_auth_username'] = values['snmp_v3_auth_username'];
+            serviceSpec['credentials']['snmp_v3_auth_password'] = values['snmp_v3_auth_password'];
+            if (values['privacy_protocol'] !== null) {
+              serviceSpec['privacy_protocol'] = values['privacy_protocol'];
+              serviceSpec['credentials']['snmp_v3_priv_password'] = values['snmp_v3_priv_password'];
+            }
+          } else {
+            serviceSpec['credentials']['snmp_community'] = values['snmp_community'];
+          }
+          break;
       }
     }
 
@@ -461,7 +648,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         task: new FinishedTask(taskUrl, {
           service_name: serviceName
         }),
-        call: this.cephServiceService.create(serviceSpec)
+        call: this.editing
+          ? this.cephServiceService.update(serviceSpec)
+          : this.cephServiceService.create(serviceSpec)
       })
       .subscribe({
         error() {
@@ -473,5 +662,22 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             : this.activeModal.close();
         }
       });
+  }
+
+  clearValidations() {
+    const snmpVersion = this.serviceForm.getValue('snmp_version');
+    const privacyProtocol = this.serviceForm.getValue('privacy_protocol');
+    if (snmpVersion === 'V3') {
+      this.serviceForm.get('snmp_community').clearValidators();
+    } else {
+      this.serviceForm.get('engine_id').clearValidators();
+      this.serviceForm.get('auth_protocol').clearValidators();
+      this.serviceForm.get('privacy_protocol').clearValidators();
+      this.serviceForm.get('snmp_v3_auth_username').clearValidators();
+      this.serviceForm.get('snmp_v3_auth_password').clearValidators();
+    }
+    if (privacyProtocol === null) {
+      this.serviceForm.get('snmp_v3_priv_password').clearValidators();
+    }
   }
 }

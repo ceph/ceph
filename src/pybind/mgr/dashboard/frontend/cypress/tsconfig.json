@@ -9,6 +9,7 @@
     "sourceMap": false,
     "types": [
       "cypress",
+      "cypress-axe",
       "@applitools/eyes-cypress"
     ],
     "target": "es6"

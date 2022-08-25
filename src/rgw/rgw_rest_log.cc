@@ -25,6 +25,8 @@
 #include "rgw_common.h"
 #include "rgw_zone.h"
 #include "rgw_mdlog.h"
+#include "rgw_datalog_notify.h"
+#include "rgw_trim_bilog.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
@@ -362,19 +364,43 @@ void RGWOp_MDLog_Notify::execute(optional_yield y) {
 }
 
 void RGWOp_BILog_List::execute(optional_yield y) {
+  bool gen_specified = false;
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
          max_entries_str = s->info.args.get("max-entries"),
-         bucket_instance = s->info.args.get("bucket-instance");
+         bucket_instance = s->info.args.get("bucket-instance"),
+         gen_str = s->info.args.get("generation", &gen_specified),
+         format_version_str = s->info.args.get("format-ver");
   std::unique_ptr<rgw::sal::Bucket> bucket;
   rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
+
   unsigned max_entries;
 
   if (bucket_name.empty() && bucket_instance.empty()) {
     ldpp_dout(this, 5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
     op_ret = -EINVAL;
     return;
+  }
+
+  string err;
+  std::optional<uint64_t> gen;
+  if (gen_specified) {
+    gen = strict_strtoll(gen_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 5) << "Error parsing generation param " << gen_str << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+  }
+
+  if (!format_version_str.empty()) {
+    format_ver = strict_strtoll(format_version_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 5) << "Failed to parse format-ver param: " << format_ver << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
   }
 
   int shard_id;
@@ -394,9 +420,29 @@ void RGWOp_BILog_List::execute(optional_yield y) {
     return;
   }
 
-  bool truncated;
+  const auto& logs = bucket->get_info().layout.logs;
+  if (logs.empty()) {
+    ldpp_dout(s, 5) << "ERROR: bucket=" << bucket_name << " has no log layouts" << dendl;
+    op_ret = -ENOENT;
+    return;
+  }
+
+  auto log = std::prev(logs.end());
+  if (gen) {
+    log = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(*gen));
+    if (log == logs.end()) {
+      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << *gen << dendl;
+      op_ret = -ENOENT;
+      return;
+    }
+  }
+  if (auto next = std::next(log); next != logs.end()) {
+    next_log_layout = *next;   // get the next log after the current latest
+  }
+  auto& log_layout = *log; // current log layout for log listing
+
   unsigned count = 0;
-  string err;
+
 
   max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
   if (!err.empty())
@@ -405,8 +451,8 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(s, bucket->get_info(), shard_id,
-                                               marker, max_entries - count, 
+    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(s, bucket->get_info(), log_layout, shard_id,
+                                               marker, max_entries - count,
                                                entries, &truncated);
     if (ret < 0) {
       ldpp_dout(this, 5) << "ERROR: list_bi_log_entries()" << dendl;
@@ -434,6 +480,10 @@ void RGWOp_BILog_List::send_response() {
   if (op_ret < 0)
     return;
 
+  if (format_ver >= 2) {
+    s->formatter->open_object_section("result");
+  }
+
   s->formatter->open_array_section("entries");
 }
 
@@ -450,9 +500,23 @@ void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& ma
 
 void RGWOp_BILog_List::send_response_end() {
   s->formatter->close_section();
+
+  if (format_ver >= 2) {
+    encode_json("truncated", truncated, s->formatter);
+
+    if (next_log_layout) {
+      s->formatter->open_object_section("next_log");
+      encode_json("generation", next_log_layout->gen, s->formatter);
+      encode_json("num_shards", next_log_layout->layout.in_index.layout.num_shards, s->formatter);
+      s->formatter->close_section(); // next_log
+    }
+
+    s->formatter->close_section(); // result
+  }
+
   flusher.flush();
 }
-      
+
 void RGWOp_BILog_Info::execute(optional_yield y) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
@@ -483,11 +547,28 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
     return;
   }
 
+  const auto& logs = bucket->get_info().layout.logs;
+  if (logs.empty()) {
+    ldpp_dout(s, 5) << "ERROR: bucket=" << bucket_name << " has no log layouts" << dendl;
+    op_ret = -ENOENT;
+    return;
+  }
+
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  bucket->read_stats(s, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  const auto& index = log_to_index_layout(logs.back());
+
+  int ret =  bucket->read_stats(s, index, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     op_ret = ret;
     return;
+  }
+
+  oldest_gen = logs.front().gen;
+  latest_gen = logs.back().gen;
+
+  for (auto& log : logs) {
+      uint32_t num_shards = log.layout.in_index.layout.num_shards;
+      generations.push_back({log.gen, num_shards});
   }
 }
 
@@ -504,17 +585,22 @@ void RGWOp_BILog_Info::send_response() {
   encode_json("master_ver", master_ver, s->formatter);
   encode_json("max_marker", max_marker, s->formatter);
   encode_json("syncstopped", syncstopped, s->formatter);
+  encode_json("oldest_gen", oldest_gen, s->formatter);
+  encode_json("latest_gen", latest_gen, s->formatter);
+  encode_json("generations", generations, s->formatter);
   s->formatter->close_section();
 
   flusher.flush();
 }
 
 void RGWOp_BILog_Delete::execute(optional_yield y) {
+  bool gen_specified = false;
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          start_marker = s->info.args.get("start-marker"),
          end_marker = s->info.args.get("end-marker"),
-         bucket_instance = s->info.args.get("bucket-instance");
+         bucket_instance = s->info.args.get("bucket-instance"),
+	 gen_str = s->info.args.get("generation", &gen_specified);
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
   rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
@@ -522,9 +608,20 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
   op_ret = 0;
   if ((bucket_name.empty() && bucket_instance.empty()) ||
       end_marker.empty()) {
-    ldpp_dout(this, 5) << "ERROR: one of bucket and bucket instance, and also end-marker is mandatory" << dendl;
+    ldpp_dout(this, 5) << "ERROR: one of bucket or bucket instance, and also end-marker is mandatory" << dendl;
     op_ret = -EINVAL;
     return;
+  }
+
+  string err;
+  uint64_t gen = 0;
+  if (gen_specified) {
+    gen = strict_strtoll(gen_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 5) << "Error parsing generation param " << gen_str << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
   }
 
   int shard_id;
@@ -544,10 +641,13 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_trim(s, bucket->get_info(), shard_id, start_marker, end_marker);
+  op_ret = bilog_trim(this, static_cast<rgw::sal::RadosStore*>(store),
+		      bucket->get_info(), gen, shard_id,
+		      start_marker, end_marker);
   if (op_ret < 0) {
-    ldpp_dout(this, 5) << "ERROR: trim_bi_log_entries() " << dendl;
+    ldpp_dout(s, 5) << "bilog_trim failed with op_ret=" << op_ret << dendl;
   }
+
   return;
 }
 
@@ -684,7 +784,56 @@ void RGWOp_DATALog_Notify::execute(optional_yield y) {
     return;
   }
 
-  map<int, set<string> > updated_shards;
+  bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>> updated_shards;
+  try {
+    auto decoder = rgw_data_notify_v1_decoder{updated_shards};
+    decode_json_obj(decoder, &p);
+  } catch (JSONDecoder::err& err) {
+    ldpp_dout(this, 0) << "ERROR: failed to decode JSON" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
+    for (bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
+      ldpp_dout(this, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
+      bc::flat_set<rgw_data_notify_entry>& entries = iter->second;
+      for (const auto& [key, gen] : entries) {
+        ldpp_dout(this, 20) << __func__ << "(): modified key=" << key
+        << " of gen=" << gen << dendl;
+      }
+    }
+  }
+
+  store->wakeup_data_sync_shards(this, source_zone, updated_shards);
+
+  op_ret = 0;
+}
+
+void RGWOp_DATALog_Notify2::execute(optional_yield y) {
+  string  source_zone = s->info.args.get("source-zone");
+#define LARGE_ENOUGH_BUF (128 * 1024)
+
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, LARGE_ENOUGH_BUF);
+  if (r < 0) {
+    op_ret = r;
+    return;
+  }
+
+  char* buf = data.c_str();
+  ldout(s->cct, 20) << __func__ << "(): read data: " << buf << dendl;
+
+  JSONParser p;
+  r = p.parse(buf, data.length());
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
+    op_ret = r;
+    return;
+  }
+
+  bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> > updated_shards;
   try {
     decode_json_obj(updated_shards, &p);
   } catch (JSONDecoder::err& err) {
@@ -694,11 +843,13 @@ void RGWOp_DATALog_Notify::execute(optional_yield y) {
   }
 
   if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
-    for (map<int, set<string> >::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
+    for (bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >::iterator iter =
+        updated_shards.begin(); iter != updated_shards.end(); ++iter) {
       ldpp_dout(this, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
-      set<string>& keys = iter->second;
-      for (set<string>::iterator kiter = keys.begin(); kiter != keys.end(); ++kiter) {
-      ldpp_dout(this, 20) << __func__ << "(): modified key=" << *kiter << dendl;
+      bc::flat_set<rgw_data_notify_entry>& entries = iter->second;
+      for (const auto& [key, gen] : entries) {
+        ldpp_dout(this, 20) << __func__ << "(): modified key=" << key <<
+        " of generation=" << gen << dendl;
       }
     }
   }
@@ -790,7 +941,8 @@ void RGWOp_MDLog_Status::send_response()
 
 // not in header to avoid pulling in rgw_data_sync.h
 class RGWOp_BILog_Status : public RGWRESTOp {
-  std::vector<rgw_bucket_shard_sync_info> status;
+  bilog_status_v2 status;
+  int version = 1;
 public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("bilog", RGW_CAP_READ);
@@ -810,6 +962,8 @@ void RGWOp_BILog_Status::execute(optional_yield y)
   const auto source_zone = s->info.args.get("source-zone");
   const auto source_key = s->info.args.get("source-bucket");
   auto key = s->info.args.get("bucket");
+  op_ret = s->info.args.get_int("version", &version, 1);
+
   if (key.empty()) {
     key = source_key;
   }
@@ -860,10 +1014,26 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
     ldpp_dout(this, 20) << "RGWOp_BILog_Status::execute(optional_yield y): getting sync status for pipe=" << pipe << dendl;
 
-    op_ret = rgw_bucket_sync_status(this, static_cast<rgw::sal::RadosStore*>(store), pipe, bucket->get_info(), nullptr, &status);
-
+    op_ret = rgw_read_bucket_full_sync_status(
+      this,
+      static_cast<rgw::sal::RadosStore*>(store),
+      pipe,
+      &status.sync_status,
+      s->yield);
     if (op_ret < 0) {
-      ldpp_dout(this, -1) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
+      ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_full_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
+      return;
+    }
+    status.inc_status.resize(status.sync_status.shards_done_with_gen.size());
+
+    op_ret = rgw_read_bucket_inc_sync_status(
+      this,
+      static_cast<rgw::sal::RadosStore*>(store),
+      pipe,
+      status.sync_status.incremental_gen,
+      &status.inc_status);
+    if (op_ret < 0) {
+      ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_inc_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
     }
     return;
   }
@@ -909,23 +1079,39 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       pipe.dest.bucket = pinfo->bucket;
     }
 
-    int r = rgw_bucket_sync_status(this, static_cast<rgw::sal::RadosStore*>(store), pipe, *pinfo, &bucket->get_info(), &current_status);
+    op_ret = rgw_read_bucket_full_sync_status(
+      this,
+      static_cast<rgw::sal::RadosStore*>(store),
+      pipe,
+      &status.sync_status,
+      s->yield);
+    if (op_ret < 0) {
+      ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_full_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
+      return;
+    }
+
+    current_status.resize(status.sync_status.shards_done_with_gen.size());
+    int r = rgw_read_bucket_inc_sync_status(this, static_cast<rgw::sal::RadosStore*>(store),
+					    pipe, status.sync_status.incremental_gen, &current_status);
     if (r < 0) {
-      ldpp_dout(this, -1) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << r << dendl;
+      ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_inc_sync_status() on pipe=" << pipe << " returned ret=" << r << dendl;
       op_ret = r;
       return;
     }
 
-    if (status.empty()) {
-      status = std::move(current_status);
+    if (status.inc_status.empty()) {
+      status.inc_status = std::move(current_status);
     } else {
-      if (current_status.size() !=
-          status.size()) {
+      if (current_status.size() != status.inc_status.size()) {
         op_ret = -EINVAL;
-        ldpp_dout(this, -1) << "ERROR: different number of shards for sync status of buckets syncing from the same source: status.size()= " << status.size() << " current_status.size()=" << current_status.size() << dendl;
-        return;
+        ldpp_dout(this, -1) << "ERROR: different number of shards for sync status of buckets "
+	  "syncing from the same source: status.size()= "
+			    << status.inc_status.size()
+			    << " current_status.size()="
+			    << current_status.size() << dendl;
+	return;
       }
-      auto m = status.begin();
+      auto m = status.inc_status.begin();
       for (auto& cur_shard_status : current_status) {
         auto& result_shard_status = *m++;
         // always take the first marker, or any later marker that's smaller
@@ -944,7 +1130,11 @@ void RGWOp_BILog_Status::send_response()
   end_header(s);
 
   if (op_ret >= 0) {
-    encode_json("status", status, s->formatter);
+    if (version < 2) {
+      encode_json("status", status.inc_status, s->formatter);
+    } else {
+      encode_json("status", status, s->formatter);
+    }
   }
   flusher.flush();
 }
@@ -1064,10 +1254,13 @@ RGWOp *RGWHandler_Log::op_post() {
     else if (s->info.args.exists("unlock"))
       return new RGWOp_MDLog_Unlock;
     else if (s->info.args.exists("notify"))
-      return new RGWOp_MDLog_Notify;	    
+      return new RGWOp_MDLog_Notify;
   } else if (type.compare("data") == 0) {
-    if (s->info.args.exists("notify"))
-      return new RGWOp_DATALog_Notify;	    
+    if (s->info.args.exists("notify")) {
+      return new RGWOp_DATALog_Notify;
+    } else if (s->info.args.exists("notify2")) {
+      return new RGWOp_DATALog_Notify2;
+    }
   }
   return NULL;
 }

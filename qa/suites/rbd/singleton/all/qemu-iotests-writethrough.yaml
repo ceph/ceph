@@ -3,6 +3,11 @@ roles:
 - [mon.a, mgr.x, osd.0, osd.1, client.0]
 tasks:
 - install:
+    extra_system_packages:
+      rpm:
+      - qemu-kvm-block-rbd
+      deb:
+      - qemu-block-extra
 - ceph:
     fs: xfs
     conf:

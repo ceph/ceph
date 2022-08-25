@@ -24,7 +24,7 @@ Monitoring OSDs
 An OSD's status is either in the cluster (``in``) or out of the cluster
 (``out``); and, it is either up and running (``up``), or it is down and not
 running (``down``). If an OSD is ``up``, it may be either ``in`` the cluster
-(you can read and write data) or it is ``out`` of the cluster.  If it was
+(you can read and write data) or it is ``out`` of the cluster. If it was
 ``in`` the cluster and recently moved ``out`` of the cluster, Ceph will migrate
 placement groups to other OSDs. If an OSD is ``out`` of the cluster, CRUSH will
 not assign placement groups to the OSD. If an OSD is ``down``, it should also be
@@ -53,7 +53,7 @@ not assign placement groups to the OSD. If an OSD is ``down``, it should also be
 If you execute a command such as ``ceph health``, ``ceph -s`` or ``ceph -w``,
 you may notice that the cluster does not always echo back ``HEALTH OK``. Don't
 panic. With respect to OSDs, you should expect that the cluster will **NOT**
-echo   ``HEALTH OK`` in a few expected circumstances:
+echo ``HEALTH OK`` in a few expected circumstances:
 
 #. You haven't started the cluster yet (it won't respond).
 #. You have just started or restarted the cluster and it's not ready yet,
@@ -143,7 +143,7 @@ group, execute::
 	ceph pg map {pg-num}
 
 The result should tell you the osdmap epoch (eNNN), the placement group number
-({pg-num}),  the OSDs in the Up Set (up[]), and the OSDs in the acting set
+({pg-num}), the OSDs in the Up Set (up[]), and the OSDs in the acting set
 (acting[]). ::
 
 	osdmap eNNN pg {raw-pg-num} ({pg-num}) -> up [0,1,2] acting [0,1,2]
@@ -157,7 +157,7 @@ Peering
 =======
 
 Before you can write data to a placement group, it must be in an ``active``
-state, and it  **should** be in a ``clean`` state. For Ceph to determine the
+state, and it **should** be in a ``clean`` state. For Ceph to determine the
 current state of a placement group, the primary OSD of the placement group
 (i.e., the first OSD in the acting set), peers with the secondary and tertiary
 OSDs to establish agreement on the current state of the placement group
@@ -171,14 +171,14 @@ OSDs to establish agreement on the current state of the placement group
            +---------+     +---------+     +-------+
                 |               |              |
                 |  Request To   |              |
-                |     Peer      |              |             
+                |     Peer      |              |
                 |-------------->|              |
                 |<--------------|              |
                 |    Peering                   |
                 |                              |
                 |         Request To           |
                 |            Peer              | 
-                |----------------------------->|  
+                |----------------------------->|
                 |<-----------------------------|
                 |          Peering             |
 
@@ -267,7 +267,7 @@ Creating
 --------
 
 When you create a pool, it will create the number of placement groups you
-specified.  Ceph will echo ``creating`` when it is creating one or more
+specified. Ceph will echo ``creating`` when it is creating one or more
 placement groups. Once they are created, the OSDs that are part of a placement
 group's Acting Set will peer. Once peering is complete, the placement group
 status should be ``active+clean``, which means a Ceph client can begin writing
@@ -308,7 +308,7 @@ Active
 
 Once Ceph completes the peering process, a placement group may become
 ``active``. The ``active`` state means that the data in the placement group is
-generally  available in the primary placement group and the replicas for read
+generally available in the primary placement group and the replicas for read
 and write operations. 
 
 
@@ -339,7 +339,7 @@ still write a new object to a ``degraded`` placement group if it is ``active``.
 If an OSD is ``down`` and the ``degraded`` condition persists, Ceph may mark the
 ``down`` OSD as ``out`` of the cluster and remap the data from the ``down`` OSD
 to another OSD. The time between being marked ``down`` and being marked ``out``
-is controlled by ``mon osd down out interval``, which is set to ``600`` seconds
+is controlled by ``mon_osd_down_out_interval``, which is set to ``600`` seconds
 by default.
 
 A placement group can also be ``degraded``, because Ceph cannot find one or more
@@ -361,19 +361,19 @@ state.
 Recovery is not always trivial, because a hardware failure might cause a
 cascading failure of multiple OSDs. For example, a network switch for a rack or
 cabinet may fail, which can cause the OSDs of a number of host machines to fall
-behind the current state  of the cluster. Each one of the OSDs must recover once
+behind the current state of the cluster. Each one of the OSDs must recover once
 the fault is resolved.
 
 Ceph provides a number of settings to balance the resource contention between
 new service requests and the need to recover data objects and restore the
-placement groups to the current state. The ``osd recovery delay start`` setting
+placement groups to the current state. The ``osd_recovery_delay_start`` setting
 allows an OSD to restart, re-peer and even process some replay requests before
-starting the recovery process.  The ``osd
-recovery thread timeout`` sets a thread timeout, because multiple OSDs may fail,
-restart and re-peer at staggered rates. The ``osd recovery max active`` setting
-limits the  number of recovery requests an OSD will entertain simultaneously to
-prevent the OSD from failing to serve . The ``osd recovery max chunk`` setting
-limits the size of the recovered data chunks to prevent network congestion.
+starting the recovery process. The ``osd_recovery_thread_timeout`` sets a thread
+timeout, because multiple OSDs may fail, restart and re-peer at staggered rates.
+The ``osd_recovery_max_active`` setting limits the number of recovery requests
+an OSD will entertain simultaneously to prevent the OSD from failing to serve.
+The ``osd_recovery_max_chunk`` setting limits the size of the recovered data
+chunks to prevent network congestion.
 
 
 Back Filling
@@ -383,7 +383,7 @@ When a new OSD joins the cluster, CRUSH will reassign placement groups from OSDs
 in the cluster to the newly added OSD. Forcing the new OSD to accept the
 reassigned placement groups immediately can put excessive load on the new OSD.
 Back filling the OSD with the placement groups allows this process to begin in
-the background.  Once backfilling is complete, the new OSD will begin serving
+the background. Once backfilling is complete, the new OSD will begin serving
 requests when it is ready.
 
 During the backfill operations, you may see one of several states:
@@ -393,20 +393,20 @@ and, ``backfill_toofull`` indicates that a backfill operation was requested,
 but couldn't be completed due to insufficient storage capacity. When a 
 placement group cannot be backfilled, it may be considered ``incomplete``.
 
-The ``backfill_toofull`` state may be transient.  It is possible that as PGs
-are moved around, space may become available.  The ``backfill_toofull`` is
+The ``backfill_toofull`` state may be transient. It is possible that as PGs
+are moved around, space may become available. The ``backfill_toofull`` is
 similar to ``backfill_wait`` in that as soon as conditions change
 backfill can proceed.
 
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
 ``osd_max_backfills`` sets the maximum number of concurrent backfills to and from
-an OSD to 1. The ``backfill full ratio`` enables an OSD to refuse a
+an OSD to 1. The ``backfill_full_ratio`` enables an OSD to refuse a
 backfill request if the OSD is approaching its full ratio (90%, by default) and
 change with ``ceph osd set-backfillfull-ratio`` command.
-If an OSD refuses a backfill request, the ``osd backfill retry interval``
+If an OSD refuses a backfill request, the ``osd_backfill_retry_interval``
 enables an OSD to retry the request (after 30 seconds, by default). OSDs can
-also set ``osd backfill scan min`` and ``osd backfill scan max`` to manage scan
+also set ``osd_backfill_scan_min`` and ``osd_backfill_scan_max`` to manage scan
 intervals (64 and 512, by default).
 
 
@@ -416,7 +416,7 @@ Remapped
 When the Acting Set that services a placement group changes, the data migrates
 from the old acting set to the new acting set. It may take some time for a new
 primary OSD to service requests. So it may ask the old primary to continue to
-service requests until the placement group migration is complete. Once  data
+service requests until the placement group migration is complete. Once data
 migration completes, the mapping uses the primary OSD of the new acting set.
 
 
@@ -427,7 +427,7 @@ While Ceph uses heartbeats to ensure that hosts and daemons are running, the
 ``ceph-osd`` daemons may also get into a ``stuck`` state where they are not
 reporting statistics in a timely manner (e.g., a temporary network fault). By
 default, OSD daemons report their placement group, up through, boot and failure
-statistics every half second (i.e., ``0.5``),  which is more frequent than the
+statistics every half second (i.e., ``0.5``), which is more frequent than the
 heartbeat thresholds. If the **Primary OSD** of a placement group's acting set
 fails to report to the monitor or if other OSDs have reported the primary OSD
 ``down``, the monitors will mark the placement group ``stale``.
@@ -453,7 +453,7 @@ include:
   are waiting for an OSD with the most up-to-date data to come back ``up``.
 - **Stale**: Placement groups are in an unknown state, because the OSDs that 
   host them have not reported to the monitor cluster in a while (configured 
-  by ``mon osd report timeout``).
+  by ``mon_osd_report_timeout``).
 
 To identify stuck placement groups, execute the following:: 
 
@@ -484,7 +484,7 @@ location, all you need is the object name and the pool name. For example::
 	test file containing some object data and a pool name using the 
 	``rados put`` command on the command line. For example::
    
-		rados put {object-name} {file-path} --pool=data   	
+		rados put {object-name} {file-path} --pool=data
 		rados put test-object-1 testfile.txt --pool=data
    
 	To verify that the Ceph Object Store stored the object, execute the following::
@@ -508,7 +508,7 @@ location, all you need is the object name and the pool name. For example::
 
 As the cluster evolves, the object location may change dynamically. One benefit
 of Ceph's dynamic rebalancing is that Ceph relieves you from having to perform
-the migration manually. See the  `Architecture`_ section for details.
+the migration manually. See the `Architecture`_ section for details.
 
 .. _data placement: ../data-placement
 .. _pool: ../pools

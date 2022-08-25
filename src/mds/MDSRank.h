@@ -53,8 +53,10 @@ enum {
   l_mds_request,
   l_mds_reply,
   l_mds_reply_latency,
+  l_mds_slow_reply,
   l_mds_forward,
-  l_mds_dir_fetch,
+  l_mds_dir_fetch_complete,
+  l_mds_dir_fetch_keys,
   l_mds_dir_commit,
   l_mds_dir_split,
   l_mds_dir_merge,
@@ -266,6 +268,9 @@ class MDSRank {
      * of code while holding the mds_lock
      */
     void heartbeat_reset();
+    int heartbeat_reset_grace(int count=1) {
+      return count * _heartbeat_reset_grace;
+    }
 
     /**
      * Report state DAMAGED to the mon, and then pass on to respawn().  Call
@@ -368,6 +373,7 @@ class MDSRank {
     int config_client(int64_t session_id, bool remove,
 		      const std::string& option, const std::string& value,
 		      std::ostream& ss);
+    void schedule_inmemory_logger();
 
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
@@ -409,7 +415,7 @@ class MDSRank {
     // The last different state I held before current
     MDSMap::DaemonState last_state = MDSMap::STATE_BOOT;
     // The state assigned to me by the MDSMap
-    MDSMap::DaemonState state = MDSMap::STATE_BOOT;
+    MDSMap::DaemonState state = MDSMap::STATE_STANDBY;
 
     bool cluster_degraded = false;
 
@@ -553,6 +559,8 @@ class MDSRank {
     // with the provided epoch.
     void apply_blocklist(const std::set<entity_addr_t> &addrs, epoch_t epoch);
 
+    void reset_event_flags();
+
     // Incarnation as seen in MDSMap at the point where a rank is
     // assigned.
     int incarnation = 0;
@@ -575,6 +583,7 @@ class MDSRank {
 
     ceph::heartbeat_handle_d *hb = nullptr;  // Heartbeat for threads using mds_lock
     double heartbeat_grace;
+    int _heartbeat_reset_grace;
 
     std::map<mds_rank_t, version_t> peer_mdsmap_epoch;
 
@@ -608,6 +617,7 @@ class MDSRank {
     Context *suicide_hook;
 
     bool standby_replaying = false;  // true if current replay pass is in standby-replay mode
+    uint64_t extraordinary_events_dump_interval = 0;
 private:
     bool send_status = true;
 
@@ -618,10 +628,13 @@ private:
     // "task" string that gets displayed in ceph status
     inline static const std::string SCRUB_STATUS_KEY = "scrub status";
 
+    bool client_eviction_dump = false;
+
     void get_task_status(std::map<std::string, std::string> *status);
     void schedule_update_timer_task();
     void send_task_status();
 
+    void inmemory_logger();
     bool is_rank0() const {
       return whoami == (mds_rank_t)0;
     }
@@ -704,4 +717,3 @@ public:
 };
 
 #endif // MDS_RANK_H_
-

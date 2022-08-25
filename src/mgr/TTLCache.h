@@ -10,8 +10,6 @@
 
 #include "PyUtil.h"
 
-using namespace std;
-
 template <class Key, class Value> class Cache {
  private:
   std::atomic<uint64_t> hits, misses;
@@ -20,7 +18,7 @@ template <class Key, class Value> class Cache {
   unsigned int capacity;
   Cache(unsigned int size = UINT16_MAX) : hits{0}, misses{0}, capacity{size} {};
   std::map<Key, Value> content;
-  std::vector<string> allowed_keys = {"osd_map", "pg_dump", "pg_stats"};
+  std::vector<std::string> allowed_keys = {"osd_map", "pg_dump", "pg_stats"};
 
   void mark_miss() {
     misses++;

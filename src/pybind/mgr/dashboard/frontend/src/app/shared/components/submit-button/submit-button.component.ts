@@ -42,6 +42,9 @@ export class SubmitButtonComponent implements OnInit {
   @Input()
   btnClass: string;
 
+  @Input()
+  ariaLabel: string;
+
   @Output()
   submitAction = new EventEmitter();
 

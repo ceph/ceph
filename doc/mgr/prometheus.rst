@@ -104,7 +104,7 @@ to ``error``-mode::
 
     ceph config set mgr mgr/prometheus/standby_behaviour error
 
-If set, the prometheus module will repond with a HTTP error when requesting ``/``
+If set, the prometheus module will respond with a HTTP error when requesting ``/``
 from the standby instance. The default error code is 500, but you can configure
 the HTTP response code with::
 
@@ -168,6 +168,10 @@ statistics are collected for all namespaces in the pool.
 Example to activate the RBD-enabled pools ``pool1``, ``pool2`` and ``poolN``::
 
   ceph config set mgr mgr/prometheus/rbd_stats_pools "pool1,pool2,poolN"
+
+The wildcard can be used to indicate all pools or namespaces::
+
+  ceph config set mgr mgr/prometheus/rbd_stats_pools "*"
 
 The module makes the list of all available images scanning the specified
 pools and namespaces and refreshes it periodically. The period is
@@ -236,11 +240,11 @@ drive statistics, special series are output like this:
 
 ::
 
-    ceph_disk_occupation{ceph_daemon="osd.0",device="sdd", exported_instance="myhost"}
+    ceph_disk_occupation_human{ceph_daemon="osd.0", device="sdd", exported_instance="myhost"}
 
 To use this to get disk statistics by OSD ID, use either the ``and`` operator or
 the ``*`` operator in your prometheus query. All metadata metrics (like ``
-ceph_disk_occupation`` have the value 1 so they act neutral with ``*``. Using ``*``
+ceph_disk_occupation_human`` have the value 1 so they act neutral with ``*``. Using ``*``
 allows to use ``group_left`` and ``group_right`` grouping modifiers, so that
 the resulting metric has additional labels from one side of the query.
 
@@ -253,13 +257,24 @@ The goal is to run a query like
 
 ::
 
-    rate(node_disk_bytes_written[30s]) and on (device,instance) ceph_disk_occupation{ceph_daemon="osd.0"}
+    rate(node_disk_written_bytes_total[30s]) and
+    on (device,instance) ceph_disk_occupation_human{ceph_daemon="osd.0"}
 
 Out of the box the above query will not return any metrics since the ``instance`` labels of
-both metrics don't match. The ``instance`` label of ``ceph_disk_occupation``
+both metrics don't match. The ``instance`` label of ``ceph_disk_occupation_human``
 will be the currently active MGR node.
 
- The following two section outline two approaches to remedy this.
+The following two section outline two approaches to remedy this.
+
+.. note::
+
+    If you need to group on the `ceph_daemon` label instead of `device` and
+    `instance` labels, using `ceph_disk_occupation_human` may not work reliably.
+    It is advised that you use `ceph_disk_occupation` instead.
+
+    The difference is that `ceph_disk_occupation_human` may group several OSDs
+    into the value of a single `ceph_daemon` label in cases where multiple OSDs
+    share a disk.
 
 Use label_replace
 =================
@@ -272,7 +287,13 @@ To correlate an OSD and its disks write rate, the following query can be used:
 
 ::
 
-    label_replace(rate(node_disk_bytes_written[30s]), "exported_instance", "$1", "instance", "(.*):.*") and on (device,exported_instance) ceph_disk_occupation{ceph_daemon="osd.0"}
+    label_replace(
+        rate(node_disk_written_bytes_total[30s]),
+        "exported_instance",
+        "$1",
+        "instance",
+        "(.*):.*"
+    ) and on (device, exported_instance) ceph_disk_occupation_human{ceph_daemon="osd.0"}
 
 Configuring Prometheus server
 =============================

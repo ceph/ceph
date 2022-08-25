@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <ratio>
 #include <mutex>
@@ -59,6 +60,7 @@
 class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
+class SimpleBitmap;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
@@ -185,6 +187,13 @@ enum {
   l_bluestore_blob_split,
   l_bluestore_extent_compress,
   l_bluestore_gc_merged,
+  //****************************************
+
+  // misc
+  //****************************************
+  l_bluestore_omap_iterator_count,
+  l_bluestore_omap_rmkeys_count,
+  l_bluestore_omap_rmkey_ranges_count,
   //****************************************
 
   // other client ops latencies
@@ -1505,15 +1514,17 @@ public:
   };
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
+
+    PerfCounters* logger = nullptr;
     CollectionRef c;
     OnodeRef o;
     KeyValueDB::Iterator it;
     std::string head, tail;
 
     std::string _stringify() const;
-
   public:
-    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+    OmapIteratorImpl(PerfCounters* l, CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+    virtual ~OmapIteratorImpl();
     int seek_to_first() override;
     int upper_bound(const std::string &after) override;
     int lower_bound(const std::string &to) override;
@@ -2222,9 +2233,9 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
   uint64_t optimal_io_size = 0;///< best performance io size for block device
 
-  uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
-  ///< bits for min_alloc_size
-  uint8_t min_alloc_size_order = 0;
+  uint64_t min_alloc_size;     ///< minimum allocation unit (power of 2)
+  uint8_t  min_alloc_size_order = 0;///< bits to shift to get min_alloc_size
+  uint64_t min_alloc_size_mask;///< mask for fast checking of allocation alignment
   static_assert(std::numeric_limits<uint8_t>::max() >
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
@@ -2621,7 +2632,7 @@ private:
   CollectionRef _get_collection_by_oid(const ghobject_t& oid);
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();
-  void _update_cache_logger();
+  void _update_logger();
 
   void _assign_nid(TransContext *txc, OnodeRef o);
   uint64_t _assign_blobid(TransContext *txc);
@@ -2683,6 +2694,8 @@ private:
   void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
   int _deferred_replay();
+  bool _eliminate_outdated_deferred(bluestore_deferred_transaction_t* deferred_txn,
+				    interval_set<uint64_t>& bluefs_extents);
 
 public:
   using mempool_dynamic_bitset =
@@ -2702,8 +2715,7 @@ public:
 
 private:
   int _fsck_check_extents(
-    const coll_t& cid,
-    const ghobject_t& oid,
+    std::string_view ctx_descr,
     const PExtentVector& extents,
     bool compressed,
     mempool_dynamic_bitset &used_blocks,
@@ -2717,6 +2729,10 @@ private:
     int64_t& errors,
     int64_t &warnings,
     BlueStoreRepairer* repairer);
+  void _fsck_repair_shared_blobs(
+    BlueStoreRepairer& repairer,
+    shared_blob_2hash_tracker_t& sb_ref_counts,
+    sb_info_space_efficient_map_t& sb_info);
 
   int _fsck(FSCKDepth depth, bool repair);
   int _fsck_on_open(BlueStore::FSCKDepth depth, bool repair);
@@ -2739,7 +2755,7 @@ private:
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
     //NB: opt_name reserved for future use
-    boost::optional<T> val2 = f();
+    std::optional<T> val2 = f();
     if (val2) {
       return *val2;
     }
@@ -2760,7 +2776,7 @@ public:
 
 private:
   int32_t ondisk_format = 0;  ///< value detected on mount
-
+  bool    m_fast_shutdown = false;
   int _upgrade_super();  ///< upgrade (called during open_super)
   uint64_t _get_ondisk_reserved() const;
   void _prepare_ondisk_format_super(KeyValueDB::Transaction& t);
@@ -2779,6 +2795,9 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
+  void prepare_for_fast_shutdown() override;
+  virtual bool has_null_manager();
+
   uint64_t get_min_alloc_size() const override {
     return min_alloc_size;
   }
@@ -2787,6 +2806,7 @@ public:
 
   bool is_rotational() override;
   bool is_journal_rotational() override;
+  bool is_db_rotational() ;
 
   std::string get_default_device_class() override {
     std::string device_class;
@@ -3182,6 +3202,7 @@ public:
   void inject_broken_shared_blob_key(const std::string& key,
 			 const ceph::buffer::list& bl);
   void inject_no_shared_blob_key();
+  void inject_stray_shared_blob_key(uint64_t sbid);
 
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
@@ -3573,21 +3594,10 @@ private:
   inline bool _use_rotational_settings();
 
 public:
-  struct sb_info_t {
-    coll_t cid;
-    int64_t pool_id = INT64_MIN;
-    std::list<ghobject_t> oids;
-    BlueStore::SharedBlobRef sb;
-    bluestore_extent_ref_map_t ref_map;
-    bool compressed = false;
-    bool passed = false;
-    bool updated = false;
-  };
   typedef btree::btree_set<
     uint64_t, std::less<uint64_t>,
     mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
 
-  typedef mempool::bluestore_fsck::map<uint64_t, sb_info_t> sb_info_map_t;
   struct FSCK_ObjectCtx {
     int64_t& errors;
     int64_t& warnings;
@@ -3602,7 +3612,9 @@ public:
     std::vector<std::unordered_map<ghobject_t, uint64_t>> *zone_refs;
 
     ceph::mutex* sb_info_lock;
-    sb_info_map_t& sb_info;
+    sb_info_space_efficient_map_t& sb_info;
+    // approximate amount of references per <shared blob, chunk>
+    shared_blob_2hash_tracker_t& sb_ref_counts;
 
     store_statfs_t& expected_store_statfs;
     per_pool_statfs& expected_pool_statfs;
@@ -3618,8 +3630,10 @@ public:
                    mempool_dynamic_bitset* _ub,
                    uint64_t_btree_t* _used_omap_head,
 		   std::vector<std::unordered_map<ghobject_t, uint64_t>> *_zone_refs,
-		   ceph::mutex* _sb_info_lock,
-                   sb_info_map_t& _sb_info,
+
+                   ceph::mutex* _sb_info_lock,
+                   sb_info_space_efficient_map_t& _sb_info,
+		   shared_blob_2hash_tracker_t& _sb_ref_counts,
                    store_statfs_t& _store_statfs,
                    per_pool_statfs& _pool_statfs,
                    BlueStoreRepairer* _repairer) :
@@ -3635,6 +3649,7 @@ public:
       zone_refs(_zone_refs),
       sb_info_lock(_sb_info_lock),
       sb_info(_sb_info),
+      sb_ref_counts(_sb_ref_counts),
       expected_store_statfs(_store_statfs),
       expected_pool_statfs(_pool_statfs),
       repairer(_repairer) {
@@ -3653,8 +3668,7 @@ public:
     const BlueStore::FSCK_ObjectCtx& ctx);
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
   int  push_allocation_to_rocksdb();
-  int  read_allocation_from_drive_for_bluestore_tool(bool test_store_and_restore);
-  int  read_allocation_from_drive_for_fsck() { return read_allocation_from_drive_for_bluestore_tool(false); }
+  int  read_allocation_from_drive_for_bluestore_tool();
 #endif
 private:
 #define MAX_BLOBS_IN_ONODE 128
@@ -3732,8 +3746,10 @@ private:
   int  __restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  read_allocation_from_drive_on_startup();
-  int  reconstruct_allocations(Allocator* allocator, read_alloc_stats_t &stats);
-  int  read_allocation_from_onodes(Allocator* allocator, read_alloc_stats_t& stats);
+  int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
+  int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
+  void read_allocation_from_single_onode(SimpleBitmap *smbmp, BlueStore::OnodeRef& onode_ref, read_alloc_stats_t&  stats);
+  void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);
   int  commit_to_null_manager();
   int  commit_to_real_manager();
   int  db_cleanup(int ret);
@@ -3742,7 +3758,7 @@ private:
   Allocator* clone_allocator_without_bluefs(Allocator *src_allocator);
   Allocator* initialize_allocator_from_freelist(FreelistManager *real_fm);
   void copy_allocator_content_to_fm(Allocator *allocator, FreelistManager *real_fm);
-  void read_allocation_from_single_onode(Allocator* allocator, BlueStore::OnodeRef& onode_ref, read_alloc_stats_t&  stats);
+
 
   void _fsck_check_object_omap(FSCKDepth depth,
     OnodeRef& o,
@@ -3821,7 +3837,7 @@ public:
 	      uint64_t min_alloc_size,
 	      uint64_t mem_cap = DEF_MEM_CAP) {
       ceph_assert(!granularity); // not initialized yet
-      ceph_assert(min_alloc_size && isp2(min_alloc_size));
+      ceph_assert(std::has_single_bit(min_alloc_size));
       ceph_assert(mem_cap);
       
       total = round_up_to(total, min_alloc_size);
@@ -3914,9 +3930,10 @@ public:
 public:
   void fix_per_pool_omap(KeyValueDB *db, int);
   bool remove_key(KeyValueDB *db, const std::string& prefix, const std::string& key);
-  bool fix_shared_blob(KeyValueDB *db,
-		         uint64_t sbid,
-		       const ceph::buffer::list* bl);
+  bool fix_shared_blob(KeyValueDB::Transaction txn,
+			uint64_t sbid,
+			bluestore_extent_ref_map_t* ref_map,
+			size_t repaired = 1);
   bool fix_statfs(KeyValueDB *db, const std::string& key,
     const store_statfs_t& new_statfs);
 
@@ -3943,8 +3960,8 @@ public:
   }
   //////////////////////
   //In fact two methods below are the only ones in this class which are thread-safe!!
-  void inc_repaired() {
-    ++to_repair_cnt;
+  void inc_repaired(size_t n = 1) {
+    to_repair_cnt += n;
   }
   void request_compaction() {
     need_compact = true;
@@ -4037,11 +4054,11 @@ class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
   };
   // add +1 row for corresponding per-device totals
   // add +1 column for per-level actual (taken from file size) total
-  typedef matrix_2d<uint64_t, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_FIRST + 1> per_level_per_dev_usage_t;
+  typedef matrix_2d<std::atomic<uint64_t>, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_FIRST + 1> per_level_per_dev_usage_t;
 
   per_level_per_dev_usage_t per_level_per_dev_usage;
   // file count per level, add +1 to keep total file count
-  uint64_t per_level_files[LEVEL_MAX - LEVEL_FIRST + 1] = { 0 };
+  std::atomic<uint64_t> per_level_files[LEVEL_MAX - LEVEL_FIRST + 1] = { 0 };
 
   // Note: maximum per-device totals below might be smaller than corresponding
   // perf counters by up to a single alloc unit (1M) due to superblock extent.
@@ -4114,27 +4131,27 @@ public:
     for (auto& p : fnode.extents) {
       auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
       auto& max = per_level_per_dev_max.at(p.bdev, pos);
-      cur += p.length;
-      if (cur > max) {
-        max = cur;
+      uint64_t v = cur.fetch_add(p.length) + p.length;
+      while (v > max) {
+	max.exchange(v);
       }
       {
         //update per-device totals
         auto& cur = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
         auto& max = per_level_per_dev_max.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
-        cur += p.length;
-        if (cur > max) {
-          max = cur;
-        }
+        uint64_t v = cur.fetch_add(p.length) + p.length;
+	while (v > max) {
+	  max.exchange(v);
+	}
       }
     }
     {
       //update per-level actual totals
       auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
       auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
-      cur += fnode.size;
-      if (cur > max) {
-        max = cur;
+      uint64_t v = cur.fetch_add(fnode.size) + fnode.size;
+      while (v > max) {
+	max.exchange(v);
       }
     }
     ++per_level_files[pos];
@@ -4163,26 +4180,26 @@ public:
     ceph_assert(per_level_files[LEVEL_MAX - LEVEL_FIRST] > 0);
     --per_level_files[LEVEL_MAX - LEVEL_FIRST];
   }
-  void add_usage(void* hint, uint64_t fsize) override {
+  void add_usage(void* hint, uint64_t size_more) override {
     if (hint == nullptr)
       return;
     size_t pos = (size_t)hint - LEVEL_FIRST;
     //update per-level actual totals
     auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
     auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
-    cur += fsize;
-    if (cur > max) {
-      max = cur;
+    uint64_t v = cur.fetch_add(size_more) + size_more;
+    while (v > max) {
+      max.exchange(v);
     }
   }
-  void sub_usage(void* hint, uint64_t fsize) override {
+  void sub_usage(void* hint, uint64_t size_less) override {
     if (hint == nullptr)
       return;
     size_t pos = (size_t)hint - LEVEL_FIRST;
     //update per-level actual totals
     auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
-    ceph_assert(cur >= fsize);
-    per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos) -= fsize;
+    ceph_assert(cur >= size_less);
+    cur -= size_less;
   }
 
   uint8_t select_prefer_bdev(void* h) override;
@@ -4191,6 +4208,8 @@ public:
     BlueFSVolumeSelector::paths& res) const override;
 
   void dump(std::ostream& sout) override;
+  BlueFSVolumeSelector* clone_empty() const override;
+  bool compare(BlueFSVolumeSelector* other) override;
 };
 
 #endif
