@@ -129,8 +129,8 @@ static seastar::future<size_t> get_blk_dev_size(
 // zone_size should be in 512B sectors
 static seastar::future<> reset_device(
   seastar::file &device,
-  uint32_t zone_size_sects,
-  uint32_t nr_zones)
+  uint64_t zone_size_sects,
+  uint64_t nr_zones)
 {
   return seastar::do_with(
     blk_zone_range{},
