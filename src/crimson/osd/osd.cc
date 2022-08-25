@@ -86,14 +86,11 @@ OSD::OSD(int id, uint32_t nonce,
     beacon_timer{[this] { (void)send_beacon(); }},
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
+    hb_front_msgr{hb_front_msgr},
+    hb_back_msgr{hb_back_msgr},
     monc{new crimson::mon::Client{*public_msgr, *this}},
     mgrc{new crimson::mgr::Client{*public_msgr, *this}},
     store{store},
-    pg_shard_manager{
-      whoami, *cluster_msgr,
-      *public_msgr, *monc, *mgrc, store},
-    shard_services{pg_shard_manager.get_shard_services()},
-    heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background -- continuation rearms timer when complete
     tick_timer{[this] {
       std::ignore = update_heartbeat_peers(
@@ -354,7 +351,15 @@ seastar::future<> OSD::start()
 
   startup_time = ceph::mono_clock::now();
 
-  return store.start().then([this] {
+  return pg_shard_manager.start(
+    whoami, *cluster_msgr,
+    *public_msgr, *monc, *mgrc, store
+  ).then([this] {
+    heartbeat.reset(new Heartbeat{
+	whoami, get_shard_services(),
+	*monc, hb_front_msgr, hb_back_msgr});
+    return store.start();
+  }).then([this] {
     return store.mount().handle_error(
       crimson::stateful_ec::handle([] (const auto& ec) {
         logger().error("error mounting object store in {}: ({}) {}",
@@ -490,9 +495,9 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
   }
   // get all the latest maps
   if (osdmap->get_epoch() + 1 >= oldest) {
-    return shard_services.osdmap_subscribe(osdmap->get_epoch() + 1, false);
+    return get_shard_services().osdmap_subscribe(osdmap->get_epoch() + 1, false);
   } else {
-    return shard_services.osdmap_subscribe(oldest - 1, true);
+    return get_shard_services().osdmap_subscribe(oldest - 1, true);
   }
 }
 
@@ -637,6 +642,8 @@ seastar::future<> OSD::stop()
       return monc->stop();
     }).then([this] {
       return mgrc->stop();
+    }).then([this] {
+      return pg_shard_manager.stop();
     }).then([fut=std::move(gate_close_fut)]() mutable {
       return std::move(fut);
     }).then([this] {
@@ -701,7 +708,7 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
     case CEPH_MSG_OSD_OP:
       return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
     case MSG_OSD_PG_CREATE2:
-      shard_services.start_operation<CompoundPeeringRequest>(
+      get_shard_services().start_operation<CompoundPeeringRequest>(
 	pg_shard_manager,
 	conn,
 	m);
@@ -874,14 +881,14 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
     logger().info("handle_osd_map message skips epochs {}..{}",
                   start, first - 1);
     if (m->oldest_map <= start) {
-      return shard_services.osdmap_subscribe(start, false);
+      return get_shard_services().osdmap_subscribe(start, false);
     }
     // always try to get the full range of maps--as many as we can.  this
     //  1- is good to have
     //  2- is at present the only way to ensure that we get a *full* map as
     //     the first map!
     if (m->oldest_map < first) {
-      return shard_services.osdmap_subscribe(m->oldest_map - 1, true);
+      return get_shard_services().osdmap_subscribe(m->oldest_map - 1, true);
     }
     skip_maps = true;
     start = first;
