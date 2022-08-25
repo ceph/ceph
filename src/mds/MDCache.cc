@@ -7893,7 +7893,7 @@ bool MDCache::shutdown_pass()
 
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {
-    dout(7) << "capping the log" << dendl;
+    dout(7) << "capping the mdlog" << dendl;
     mds->mdlog->cap();
   }
   
