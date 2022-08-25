@@ -1044,6 +1044,11 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
           stats.reclaiming_bytes = 0;
           reclaim_state.reset();
           return sm_group->release_segment(segment_to_release
+          ).handle_error(
+            gc_reclaim_space_ertr::pass_further{},
+            crimson::ct_error::assert_all{
+              "AsyncCleaner::gc_reclaim_space encountered invalid error in release_segment"
+            }
           ).safe_then([this, FNAME, segment_to_release] {
             auto old_usage = calc_utilization(segment_to_release);
             if(unlikely(old_usage != 0)) {
@@ -1060,7 +1065,7 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
             maybe_wake_gc_blocked_io();
           });
         } else {
-          return SegmentManager::release_ertr::now();
+          return gc_reclaim_space_ertr::now();
         }
       });
     });

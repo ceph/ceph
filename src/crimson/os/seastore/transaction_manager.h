@@ -60,9 +60,6 @@ auto repeat_eagain(F &&f) {
  */
 class TransactionManager : public ExtentCallbackInterface {
 public:
-  using base_ertr = Cache::base_ertr;
-  using base_iertr = Cache::base_iertr;
-
   TransactionManager(
     JournalRef journal,
     CacheRef cache,

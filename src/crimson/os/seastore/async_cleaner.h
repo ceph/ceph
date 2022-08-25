@@ -270,6 +270,10 @@ std::ostream &operator<<(std::ostream &, const segments_info_t &);
  */
 class ExtentCallbackInterface {
 public:
+  using base_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using base_iertr = trans_iertr<base_ertr>;
+
   virtual ~ExtentCallbackInterface() = default;
 
   /// Creates empty transaction
@@ -302,10 +306,7 @@ public:
   }
 
   /// See Cache::get_next_dirty_extents
-  using get_next_dirty_extents_iertr = trans_iertr<
-    crimson::errorator<
-      crimson::ct_error::input_output_error>
-    >;
+  using get_next_dirty_extents_iertr = base_iertr;
   using get_next_dirty_extents_ret = get_next_dirty_extents_iertr::future<
     std::vector<CachedExtentRef>>;
   virtual get_next_dirty_extents_ret get_next_dirty_extents(
@@ -313,14 +314,6 @@ public:
     journal_seq_t bound,///< [in] return extents with dirty_from < bound
     size_t max_bytes    ///< [in] return up to max_bytes of extents
   ) = 0;
-
-  using extent_mapping_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::eagain>;
-  using extent_mapping_iertr = trans_iertr<
-    crimson::errorator<
-      crimson::ct_error::input_output_error>
-    >;
 
   /**
    * rewrite_extent
@@ -330,7 +323,7 @@ public:
    * handle finding the current instance if it is still alive and
    * otherwise ignore it.
    */
-  using rewrite_extent_iertr = extent_mapping_iertr;
+  using rewrite_extent_iertr = base_iertr;
   using rewrite_extent_ret = rewrite_extent_iertr::future<>;
   virtual rewrite_extent_ret rewrite_extent(
     Transaction &t,
@@ -347,7 +340,7 @@ public:
    * See TransactionManager::get_extent_if_live and
    * LBAManager::get_physical_extent_if_live.
    */
-  using get_extents_if_live_iertr = extent_mapping_iertr;
+  using get_extents_if_live_iertr = base_iertr;
   using get_extents_if_live_ret = get_extents_if_live_iertr::future<
     std::list<CachedExtentRef>>;
   virtual get_extents_if_live_ret get_extents_if_live(
@@ -362,10 +355,7 @@ public:
    *
    * Submits transaction without any space throttling.
    */
-  using submit_transaction_direct_iertr = trans_iertr<
-    crimson::errorator<
-      crimson::ct_error::input_output_error>
-    >;
+  using submit_transaction_direct_iertr = base_iertr;
   using submit_transaction_direct_ret =
     submit_transaction_direct_iertr::future<>;
   virtual submit_transaction_direct_ret submit_transaction_direct(
@@ -664,6 +654,9 @@ class AsyncCleaner : public SegmentProvider, public JournalTrimmer {
   } state = cleaner_state_t::STOP;
 
 public:
+  using base_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+
   /// Config
   struct config_t {
     /// Number of minimum bytes to stop trimming dirty.
@@ -850,8 +843,7 @@ public:
     ecb = cb;
   }
 
-  using mount_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
+  using mount_ertr = base_ertr;
   using mount_ret = mount_ertr::future<>;
   mount_ret mount();
 
@@ -967,9 +959,6 @@ public:
   }
 
   bool check_usage();
-
-  using work_ertr = ExtentCallbackInterface::extent_mapping_ertr;
-  using work_iertr = ExtentCallbackInterface::extent_mapping_iertr;
 
 private:
   /*
@@ -1161,21 +1150,17 @@ private:
     bool is_running_until_halt = false;
   } gc_process;
 
-  using gc_ertr = work_ertr::extend_ertr<
-    SegmentManagerGroup::scan_valid_records_ertr
-    >;
-
   gc_cycle_ret do_gc_cycle();
 
-  using gc_trim_dirty_ertr = gc_ertr;
+  using gc_trim_dirty_ertr = base_ertr;
   using gc_trim_dirty_ret = gc_trim_dirty_ertr::future<>;
   gc_trim_dirty_ret gc_trim_dirty();
 
-  using gc_trim_alloc_ertr = gc_ertr;
+  using gc_trim_alloc_ertr = base_ertr;
   using gc_trim_alloc_ret = gc_trim_alloc_ertr::future<>;
   gc_trim_alloc_ret gc_trim_alloc();
 
-  using do_reclaim_space_ertr = gc_ertr;
+  using do_reclaim_space_ertr = base_ertr;
   using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
   do_reclaim_space_ret do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
@@ -1183,7 +1168,7 @@ private:
     std::size_t &reclaimed,
     std::size_t &runs);
 
-  using gc_reclaim_space_ertr = gc_ertr;
+  using gc_reclaim_space_ertr = base_ertr;
   using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
   gc_reclaim_space_ret gc_reclaim_space();
 
