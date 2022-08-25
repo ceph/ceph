@@ -392,7 +392,7 @@ struct BackgroundListener {
 };
 
 /**
- * Callback interface for journal trimming
+ * Callback interface for Journal
  */
 class JournalTrimmer {
 public:
@@ -401,11 +401,6 @@ public:
 
   // set the committed journal head
   virtual void set_journal_head(journal_seq_t) = 0;
-
-  // get the committed journal tail
-  journal_seq_t get_journal_tail() const {
-    return std::min(get_alloc_tail(), get_dirty_tail());
-  }
 
   // get the committed journal dirty tail
   virtual journal_seq_t get_dirty_tail() const = 0;
@@ -418,6 +413,155 @@ public:
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) = 0;
 
   virtual ~JournalTrimmer() {}
+
+  journal_seq_t get_journal_tail() const {
+    return std::min(get_alloc_tail(), get_dirty_tail());
+  }
+
+  bool is_ready() const {
+    return (get_journal_head() != JOURNAL_SEQ_NULL &&
+            get_dirty_tail() != JOURNAL_SEQ_NULL &&
+            get_alloc_tail() != JOURNAL_SEQ_NULL);
+  }
+
+  std::size_t get_num_rolls() const {
+    if (!is_ready()) {
+      return 0;
+    }
+    assert(get_journal_head().segment_seq >=
+           get_journal_tail().segment_seq);
+    return get_journal_head().segment_seq + 1 -
+           get_journal_tail().segment_seq;
+  }
+};
+
+class BackrefManager;
+class JournalTrimmerImpl;
+using JournalTrimmerImplRef = std::unique_ptr<JournalTrimmerImpl>;
+
+/**
+ * Journal trimming implementation
+ */
+class JournalTrimmerImpl : public JournalTrimmer {
+public:
+  struct config_t {
+    /// Number of minimum bytes to stop trimming dirty.
+    std::size_t target_journal_dirty_bytes = 0;
+    /// Number of minimum bytes to stop trimming allocation
+    /// (having the corresponding backrefs unmerged)
+    std::size_t target_journal_alloc_bytes = 0;
+    /// Number of maximum bytes to block user transactions.
+    std::size_t max_journal_bytes = 0;
+    /// Number of bytes to rewrite dirty per cycle
+    std::size_t rewrite_dirty_bytes_per_cycle = 0;
+    /// Number of bytes to rewrite backref per cycle
+    std::size_t rewrite_backref_bytes_per_cycle = 0;
+
+    void validate() const;
+
+    static config_t get_default(
+        std::size_t roll_size, journal_type_t type);
+
+    static config_t get_test(
+        std::size_t roll_size, journal_type_t type);
+  };
+
+  JournalTrimmerImpl(
+    BackrefManager &backref_manager,
+    config_t config,
+    journal_type_t type,
+    seastore_off_t roll_start,
+    seastore_off_t roll_size);
+
+  ~JournalTrimmerImpl() = default;
+
+  /*
+   * JournalTrimmer interfaces
+   */
+
+  journal_seq_t get_journal_head() const final {
+    return journal_head;
+  }
+
+  void set_journal_head(journal_seq_t) final;
+
+  journal_seq_t get_dirty_tail() const final {
+    return journal_dirty_tail;
+  }
+
+  journal_seq_t get_alloc_tail() const final {
+    return journal_alloc_tail;
+  }
+
+  void update_journal_tails(
+      journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
+
+  journal_type_t get_journal_type() const {
+    return journal_type;
+  }
+
+  void set_extent_callback(ExtentCallbackInterface *cb) {
+    extent_callback = cb;
+  }
+
+  void set_background_callback(BackgroundListener *cb) {
+    background_callback = cb;
+  }
+
+  void reset() {
+    journal_head = JOURNAL_SEQ_NULL;
+    journal_dirty_tail = JOURNAL_SEQ_NULL;
+    journal_alloc_tail = JOURNAL_SEQ_NULL;
+  }
+
+  bool should_trim_dirty() const {
+    return get_dirty_tail_target() > journal_dirty_tail;
+  }
+
+  bool should_trim_alloc() const {
+    return get_alloc_tail_target() > journal_alloc_tail;
+  }
+
+  bool should_block_on_trim() const {
+    return get_tail_limit() > get_journal_tail();
+  }
+
+  using trim_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  trim_ertr::future<> trim_dirty();
+
+  trim_ertr::future<> trim_alloc();
+
+  static JournalTrimmerImplRef create(
+      BackrefManager &backref_manager,
+      config_t config,
+      journal_type_t type,
+      seastore_off_t roll_start,
+      seastore_off_t roll_size) {
+    return std::make_unique<JournalTrimmerImpl>(
+        backref_manager, config, type, roll_start, roll_size);
+  }
+
+  // TODO: move to private
+  journal_seq_t get_tail_limit() const;
+  journal_seq_t get_dirty_tail_target() const;
+  journal_seq_t get_alloc_tail_target() const;
+  std::size_t get_dirty_journal_size() const;
+  std::size_t get_alloc_journal_size() const;
+
+private:
+  ExtentCallbackInterface *extent_callback = nullptr;
+  BackgroundListener *background_callback = nullptr;
+  BackrefManager &backref_manager;
+
+  config_t config;
+  journal_type_t journal_type;
+  seastore_off_t roll_start;
+  seastore_off_t roll_size;
+
+  journal_seq_t journal_head;
+  journal_seq_t journal_dirty_tail;
+  journal_seq_t journal_alloc_tail;
 };
 
 /**
@@ -651,9 +795,7 @@ public:
   bool equals(const SpaceTrackerI &other) const;
 };
 
-class BackrefManager;
-
-class AsyncCleaner : public SegmentProvider, public JournalTrimmer {
+class AsyncCleaner : public SegmentProvider {
   enum class cleaner_state_t {
     STOP,
     MOUNT,
@@ -668,97 +810,36 @@ public:
 
   /// Config
   struct config_t {
-    /// Number of minimum bytes to stop trimming dirty.
-    std::size_t target_journal_dirty_bytes = 0;
-    /// Number of minimum bytes to stop trimming allocation
-    /// (having the corresponding backrefs unmerged)
-    std::size_t target_journal_alloc_bytes = 0;
-    /// Number of maximum bytes to block user transactions.
-    std::size_t max_journal_bytes = 0;
-
     /// Ratio of maximum available space to disable reclaiming.
     double available_ratio_gc_max = 0;
     /// Ratio of minimum available space to force reclaiming.
     double available_ratio_hard_limit = 0;
-
     /// Ratio of minimum reclaimable space to stop reclaiming.
     double reclaim_ratio_gc_threshold = 0;
-
     /// Number of bytes to reclaim per cycle
     std::size_t reclaim_bytes_per_cycle = 0;
 
-    /// Number of bytes to rewrite dirty per cycle
-    std::size_t rewrite_dirty_bytes_per_cycle = 0;
-
-    /// Number of bytes to rewrite backref per cycle
-    std::size_t rewrite_backref_bytes_per_cycle = 0;
-
     void validate() const {
-      ceph_assert(max_journal_bytes <= MAX_SEG_OFF);
-      ceph_assert(max_journal_bytes > target_journal_dirty_bytes);
-      ceph_assert(max_journal_bytes > target_journal_alloc_bytes);
       ceph_assert(available_ratio_gc_max > available_ratio_hard_limit);
       ceph_assert(reclaim_bytes_per_cycle > 0);
-      ceph_assert(rewrite_dirty_bytes_per_cycle > 0);
-      ceph_assert(rewrite_backref_bytes_per_cycle > 0);
     }
 
-    static config_t get_default(
-        std::size_t roll_size, journal_type_t type) {
-      assert(roll_size);
-      std::size_t target_dirty_bytes = 0;
-      std::size_t target_alloc_bytes = 0;
-      std::size_t max_journal_bytes = 0;
-      if (type == journal_type_t::SEGMENTED) {
-        target_dirty_bytes = 12 * roll_size;
-        target_alloc_bytes = 2 * roll_size;
-        max_journal_bytes = 16 * roll_size;
-      } else {
-        assert(type == journal_type_t::CIRCULAR);
-        target_dirty_bytes = roll_size / 4;
-        target_alloc_bytes = roll_size / 4;
-        max_journal_bytes = roll_size / 2;
-      }
+    static config_t get_default() {
       return config_t{
-	  target_dirty_bytes,
-	  target_alloc_bytes,
-	  max_journal_bytes,
-	  .15,  // available_ratio_gc_max
-	  .1,   // available_ratio_hard_limit
-	  .1,   // reclaim_ratio_gc_threshold
-	  1<<20,// reclaim_bytes_per_cycle
-	  1<<17,// rewrite_dirty_bytes_per_cycle
-	  1<<24 // rewrite_backref_bytes_per_cycle
-	};
+        .15,  // available_ratio_gc_max
+        .1,   // available_ratio_hard_limit
+        .1,   // reclaim_ratio_gc_threshold
+        1<<20 // reclaim_bytes_per_cycle
+      };
     }
 
-    static config_t get_test(
-        std::size_t roll_size, journal_type_t type) {
-      assert(roll_size);
-      std::size_t target_dirty_bytes = 0;
-      std::size_t target_alloc_bytes = 0;
-      std::size_t max_journal_bytes = 0;
-      if (type == journal_type_t::SEGMENTED) {
-        target_dirty_bytes = 2 * roll_size;
-        target_alloc_bytes = 2 * roll_size;
-        max_journal_bytes = 4 * roll_size;
-      } else {
-        assert(type == journal_type_t::CIRCULAR);
-        target_dirty_bytes = roll_size / 4;
-        target_alloc_bytes = roll_size / 4;
-        max_journal_bytes = roll_size / 2;
-      }
+    static config_t get_test() {
       return config_t{
-	  target_dirty_bytes,
-	  target_alloc_bytes,
-	  max_journal_bytes,
-	  .99,  // available_ratio_gc_max
-	  .2,   // available_ratio_hard_limit
-	  .6,   // reclaim_ratio_gc_threshold
-	  1<<20,// reclaim_bytes_per_cycle
-	  1<<17,// rewrite_dirty_bytes_per_cycle
-	  1<<24 // rewrite_backref_bytes_per_cycle
-	};
+        .99,  // available_ratio_gc_max
+        .2,   // available_ratio_hard_limit
+        .6,   // reclaim_ratio_gc_threshold
+        1<<20 // reclaim_bytes_per_cycle
+      };
     }
   };
 
@@ -811,17 +892,7 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
-  journal_type_t journal_type;
-
-  seastore_off_t roll_start;
-  seastore_off_t roll_size;
-
-  journal_seq_t journal_alloc_tail;
-
-  journal_seq_t journal_dirty_tail;
-
-  /// the committed journal head
-  journal_seq_t journal_head;
+  JournalTrimmerImplRef trimmer;
 
   ExtentCallbackInterface *ecb = nullptr;
 
@@ -833,20 +904,19 @@ public:
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
     bool detailed,
-    journal_type_t type,
-    seastore_off_t roll_start,
-    seastore_off_t roll_size);
+    JournalTrimmerImplRef &&trimmer);
 
   SegmentSeqAllocator& get_ool_segment_seq_allocator() {
     return *ool_segment_seq_allocator;
   }
 
   journal_type_t get_journal_type() const {
-    return journal_type;
+    return trimmer->get_journal_type();
   }
 
   void set_extent_callback(ExtentCallbackInterface *cb) {
     ecb = cb;
+    trimmer->set_extent_callback(cb);
   }
 
   using mount_ertr = base_ertr;
@@ -864,44 +934,6 @@ public:
   bool is_ready() const {
     return state >= cleaner_state_t::READY;
   }
-
-  /*
-   * JournalTrimmer interfaces
-   */
-
-  journal_seq_t get_journal_head() const final {
-    return journal_head;
-  }
-
-  void set_journal_head(journal_seq_t head) final {
-    ceph_assert(head != JOURNAL_SEQ_NULL);
-    ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
-                head >= journal_head);
-    ceph_assert(journal_alloc_tail == JOURNAL_SEQ_NULL ||
-                head >= journal_alloc_tail);
-    ceph_assert(journal_dirty_tail == JOURNAL_SEQ_NULL ||
-                head >= journal_dirty_tail);
-
-    if (head.offset.get_addr_type() == paddr_types_t::SEGMENT) {
-      auto submitted_journal_head = segments.get_submitted_journal_head();
-      ceph_assert(submitted_journal_head != JOURNAL_SEQ_NULL &&
-                  head <= submitted_journal_head);
-    }
-
-    journal_head = head;
-    gc_process.maybe_wake_background();
-  }
-
-  journal_seq_t get_dirty_tail() const final {
-    return journal_dirty_tail;
-  }
-
-  journal_seq_t get_alloc_tail() const final {
-    return journal_alloc_tail;
-  }
-
-  void update_journal_tails(
-      journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
 
   /*
    * SegmentProvider interfaces
@@ -1000,39 +1032,6 @@ private:
       const sea_time_point &bound_time) const;
 
   segment_id_t get_next_reclaim_segment() const;
-
-  journal_seq_t get_dirty_tail_target() const {
-    assert(is_ready());
-    ceph_assert(journal_head != JOURNAL_SEQ_NULL);
-    auto ret = journal_head.add_offset(
-        journal_type,
-        -static_cast<seastore_off_t>(config.target_journal_dirty_bytes),
-        roll_start,
-        roll_size);
-    return ret;
-  }
-
-  journal_seq_t get_alloc_tail_target() const {
-    assert(is_ready());
-    ceph_assert(journal_head != JOURNAL_SEQ_NULL);
-    auto ret = journal_head.add_offset(
-        journal_type,
-        -static_cast<seastore_off_t>(config.target_journal_alloc_bytes),
-        roll_start,
-        roll_size);
-    return ret;
-  }
-
-  journal_seq_t get_tail_limit() const {
-    assert(is_ready());
-    ceph_assert(journal_head != JOURNAL_SEQ_NULL);
-    auto ret = journal_head.add_offset(
-        journal_type,
-        -static_cast<seastore_off_t>(config.max_journal_bytes),
-        roll_start,
-        roll_size);
-    return ret;
-  }
 
   struct reclaim_state_t {
     reclaim_gen_t generation;
@@ -1185,14 +1184,6 @@ private:
 
   gc_cycle_ret do_gc_cycle();
 
-  using gc_trim_dirty_ertr = base_ertr;
-  using gc_trim_dirty_ret = gc_trim_dirty_ertr::future<>;
-  gc_trim_dirty_ret gc_trim_dirty();
-
-  using gc_trim_alloc_ertr = base_ertr;
-  using gc_trim_alloc_ret = gc_trim_alloc_ertr::future<>;
-  gc_trim_alloc_ret gc_trim_alloc();
-
   using do_reclaim_space_ertr = base_ertr;
   using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
   do_reclaim_space_ret do_reclaim_space(
@@ -1209,16 +1200,11 @@ private:
    * Segments calculations
    */
   std::size_t get_segments_in_journal() const {
-    if (journal_type == journal_type_t::CIRCULAR) {
+    if (trimmer->get_journal_type() == journal_type_t::CIRCULAR) {
       return 0;
+    } else {
+      return trimmer->get_num_rolls();
     }
-    auto journal_tail = get_journal_tail();
-    if (journal_tail == JOURNAL_SEQ_NULL ||
-        journal_head == JOURNAL_SEQ_NULL) {
-      return 0;
-    }
-    assert(journal_head.segment_seq >= journal_tail.segment_seq);
-    return journal_head.segment_seq + 1 - journal_tail.segment_seq;
   }
   std::size_t get_segments_in_journal_closed() const {
     auto in_journal = get_segments_in_journal();
@@ -1276,46 +1262,11 @@ private:
       (double)segments.get_total_bytes();
   }
 
-  /*
-   * Journal sizes
-   */
-  std::size_t get_dirty_journal_size() const {
-    if (journal_head == JOURNAL_SEQ_NULL ||
-        journal_dirty_tail == JOURNAL_SEQ_NULL) {
-      return 0;
-    }
-    auto ret = journal_head.relative_to(
-        journal_type,
-        journal_dirty_tail,
-        roll_start,
-        roll_size);
-    ceph_assert(ret >= 0);
-    return static_cast<std::size_t>(ret);
-  }
-
-  std::size_t get_alloc_journal_size() const {
-    if (journal_head == JOURNAL_SEQ_NULL ||
-        journal_alloc_tail == JOURNAL_SEQ_NULL) {
-      return 0;
-    }
-    auto ret = journal_head.relative_to(
-        journal_type,
-        journal_alloc_tail,
-        roll_start,
-        roll_size);
-    ceph_assert(ret >= 0);
-    return static_cast<std::size_t>(ret);
-  }
-
   /**
    * should_block_on_gc
    *
    * Encapsulates whether block pending gc.
    */
-  bool should_block_on_trim() const {
-    assert(is_ready());
-    return get_tail_limit() > get_journal_tail();
-  }
 
   bool should_block_on_reclaim() const {
     assert(is_ready());
@@ -1328,7 +1279,7 @@ private:
 
   bool should_block_on_gc() const {
     assert(is_ready());
-    return should_block_on_trim() || should_block_on_reclaim();
+    return trimmer->should_block_on_trim() || should_block_on_reclaim();
   }
 
   void log_gc_state(const char *caller) const;
@@ -1358,15 +1309,6 @@ private:
     );
   }
 
-  bool gc_should_trim_dirty() const {
-    assert(is_ready());
-    return get_dirty_tail_target() > journal_dirty_tail;
-  }
-
-  bool gc_should_trim_alloc() const {
-    assert(is_ready());
-    return get_alloc_tail_target() > journal_alloc_tail;
-  }
   /**
    * gc_should_run
    *
@@ -1375,8 +1317,8 @@ private:
   bool gc_should_run() const {
     ceph_assert(is_ready());
     return gc_should_reclaim_space()
-      || gc_should_trim_dirty()
-      || gc_should_trim_alloc();
+      || trimmer->should_trim_dirty()
+      || trimmer->should_trim_alloc();
   }
 
   void adjust_segment_util(double old_usage, double new_usage) {
