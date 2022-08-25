@@ -374,30 +374,25 @@ public:
 class RGWAsyncLockSystemObj : public RGWAsyncRadosRequest {
   rgw::sal::RadosStore* store;
   rgw_raw_obj obj;
-  std::string lock_name;
-  std::string cookie;
-  uint32_t duration_secs;
-
+  rados::cls::lock::Lock cls_lock;
 protected:
   int _send_request(const DoutPrefixProvider *dpp) override;
 public:
-  RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
-                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-		        const std::string& _name, const std::string& _cookie, uint32_t _duration_secs);
+  RGWAsyncLockSystemObj(RGWCoroutine* caller, RGWAioCompletionNotifier* cn,
+                        rgw::sal::RadosStore* store, const rgw_raw_obj& obj,
+                        const rados::cls::lock::Lock& lock);
 };
 
 class RGWAsyncUnlockSystemObj : public RGWAsyncRadosRequest {
   rgw::sal::RadosStore* store;
   rgw_raw_obj obj;
-  std::string lock_name;
-  std::string cookie;
-
+  rados::cls::lock::Lock cls_lock;
 protected:
   int _send_request(const DoutPrefixProvider *dpp) override;
 public:
-  RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
-                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-		        const std::string& _name, const std::string& _cookie);
+  RGWAsyncUnlockSystemObj(RGWCoroutine* caller, RGWAioCompletionNotifier* cn,
+                          rgw::sal::RadosStore* store, const rgw_raw_obj& obj,
+                          const rados::cls::lock::Lock& lock);
 };
 
 template <class T>
@@ -749,20 +744,21 @@ public:
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RadosStore* store;
-  std::string lock_name;
-  std::string cookie;
-  uint32_t duration;
-
   rgw_raw_obj obj;
-
-  RGWAsyncLockSystemObj *req;
+  rados::cls::lock::Lock lock;
+  RGWAsyncLockSystemObj* req = nullptr;
 
 public:
-  RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
-		      const rgw_raw_obj& _obj,
-                      const std::string& _lock_name,
-		      const std::string& _cookie,
-		      uint32_t _duration);
+  RGWSimpleRadosLockCR(RGWAsyncRadosProcessor* async_rados,
+                       rgw::sal::RadosStore* store,
+                       const rgw_raw_obj& obj,
+                       const rados::cls::lock::Lock& lock);
+  RGWSimpleRadosLockCR(RGWAsyncRadosProcessor* async_rados,
+                       rgw::sal::RadosStore* store,
+                       const rgw_raw_obj& obj,
+                       const std::string& lock_name,
+                       const std::string& cookie,
+                       uint32_t duration);
   ~RGWSimpleRadosLockCR() override {
     request_cleanup();
   }
@@ -780,20 +776,23 @@ public:
 };
 
 class RGWSimpleRadosUnlockCR : public RGWSimpleCoroutine {
-  RGWAsyncRadosProcessor *async_rados;
+  RGWAsyncRadosProcessor* async_rados;
   rgw::sal::RadosStore* store;
-  std::string lock_name;
-  std::string cookie;
-
   rgw_raw_obj obj;
+  rados::cls::lock::Lock lock;
 
-  RGWAsyncUnlockSystemObj *req;
+  RGWAsyncUnlockSystemObj* req = nullptr;
 
 public:
-  RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
-		      const rgw_raw_obj& _obj, 
-                      const std::string& _lock_name,
-		      const std::string& _cookie);
+  RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor* async_rados,
+                         rgw::sal::RadosStore* store,
+                         const rgw_raw_obj& obj,
+                         const rados::cls::lock::Lock& lock);
+  RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor* async_rados,
+                         rgw::sal::RadosStore* store,
+                         const rgw_raw_obj& obj,
+                         const std::string& lock_name,
+                         const std::string& cookie);
   ~RGWSimpleRadosUnlockCR() override {
     request_cleanup();
   }
