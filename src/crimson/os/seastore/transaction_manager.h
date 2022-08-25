@@ -58,7 +58,7 @@ auto repeat_eagain(F &&f) {
  * Abstraction hiding reading and writing to persistence.
  * Exposes transaction based interface with read isolation.
  */
-class TransactionManager : public AsyncCleaner::ExtentCallbackInterface {
+class TransactionManager : public ExtentCallbackInterface {
 public:
   using base_ertr = Cache::base_ertr;
   using base_iertr = Cache::base_iertr;
@@ -81,15 +81,6 @@ public:
   /// Closes transaction_manager
   using close_ertr = base_ertr;
   close_ertr::future<> close();
-
-  /// Creates empty transaction
-  /// weak transaction should be type READ
-  TransactionRef create_transaction(
-      Transaction::src_t src,
-      const char* name,
-      bool is_weak=false) final {
-    return cache->create_transaction(src, name, is_weak);
-  }
 
   /// Resets transaction
   void reset_transaction_preserve_handle(Transaction &t) {
@@ -462,12 +453,6 @@ public:
   using submit_transaction_iertr = base_iertr;
   submit_transaction_iertr::future<> submit_transaction(Transaction &);
 
-  /// AsyncCleaner::ExtentCallbackInterface
-  using AsyncCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
-  submit_transaction_direct_ret submit_transaction_direct(
-    Transaction &t,
-    std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
-
   /**
    * flush
    *
@@ -477,20 +462,37 @@ public:
    */
   seastar::future<> flush(OrderingHandle &handle);
 
-  using AsyncCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
+  /*
+   * ExtentCallbackInterface
+   */
+
+  /// weak transaction should be type READ
+  TransactionRef create_transaction(
+      Transaction::src_t src,
+      const char* name,
+      bool is_weak=false) final {
+    return cache->create_transaction(src, name, is_weak);
+  }
+
+  using ExtentCallbackInterface::submit_transaction_direct_ret;
+  submit_transaction_direct_ret submit_transaction_direct(
+    Transaction &t,
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
+
+  using ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes) final;
 
-  using AsyncCleaner::ExtentCallbackInterface::rewrite_extent_ret;
+  using ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
     reclaim_gen_t target_generation,
     sea_time_point modify_time) final;
 
-  using AsyncCleaner::ExtentCallbackInterface::get_extents_if_live_ret;
+  using ExtentCallbackInterface::get_extents_if_live_ret;
   get_extents_if_live_ret get_extents_if_live(
     Transaction &t,
     extent_types_t type,
