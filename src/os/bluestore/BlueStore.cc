@@ -6761,6 +6761,23 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   FreelistManager::setup_merge_operators(db, freelist_type);
   db->set_merge_operator(PREFIX_STAT, merge_op);
   db->set_cache_size(cache_kv_ratio * cache_size);
+
+  string options;
+  string options_annex;
+  // rocksdb is actually the only option
+  if (kv_backend == "rocksdb") {
+    options = cct->_conf->bluestore_rocksdb_options;
+    options_annex = cct->_conf->bluestore_rocksdb_options_annex;
+    if (!options_annex.empty()) {
+      if (!options.empty() &&
+	*options.rbegin() != ',') {
+        options += ',';
+      }
+      options += options_annex;
+    }
+  }
+  db->init(options);
+
   return 0;
 }
 
@@ -6782,26 +6799,14 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     derr << __func__ << " failed to prepare db environment: " << err.str() << dendl;
     return -EIO;
   }
-  // if reached here then BlueFS is already opened
-  if (kv_backend == "rocksdb") {
-    options = cct->_conf->bluestore_rocksdb_options;
-    options_annex = cct->_conf->bluestore_rocksdb_options_annex;
-    if (!options_annex.empty()) {
-      if (!options.empty() &&
-        *options.rbegin() != ',') {
-        options += ',';
-      }
-      options += options_annex;
-    }
 
+  if (to_repair_db)
+    return 0;
+  if (kv_backend == "rocksdb") {
     if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
       sharding_def = cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");
     }
   }
-
-  db->init(options);
-  if (to_repair_db)
-    return 0;
   if (create) {
     r = db->create_and_open(err, sharding_def);
   } else {
