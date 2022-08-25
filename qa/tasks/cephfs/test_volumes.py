@@ -1613,6 +1613,43 @@ class TestSubvolumeGroups(TestVolumesHelper):
         if "_deleting" in subvolgroupnames:
             self.fail("Listing subvolume groups listed '_deleting' directory")
 
+    def test_subvolume_group_ls_filter_internal_directories(self):
+        # tests the 'fs subvolumegroup ls' command filters internal directories
+        # eg: '_deleting', '_nogroup', '_index', "_legacy"
+
+        subvolumegroups = self._generate_random_group_name(3)
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        #create subvolumegroups
+        for groupname in subvolumegroups:
+            self._fs_cmd("subvolumegroup", "create", self.volname, groupname)
+
+        # create subvolume which will create '_nogroup' directory
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # create snapshot
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # clone snapshot which will create '_index' directory
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume which will create '_deleting' directory
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # list subvolumegroups
+        ret = json.loads(self._fs_cmd('subvolumegroup', 'ls', self.volname))
+        self.assertEqual(len(ret), len(subvolumegroups))
+
+        ret_list = [subvolumegroup['name'] for subvolumegroup in ret]
+        self.assertEqual(len(ret_list), len(subvolumegroups))
+
+        self.assertEqual(all(elem in subvolumegroups for elem in ret_list), True)
+
     def test_subvolume_group_ls_for_nonexistent_volume(self):
         # tests the 'fs subvolumegroup ls' command when /volume doesn't exist
         # prerequisite: we expect that the test volume is created and a subvolumegroup is NOT created
@@ -2227,6 +2264,44 @@ class TestSubvolumes(TestVolumesHelper):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+    def test_subvolume_ls_with_groupname_as_internal_directory(self):
+        # tests the 'fs subvolume ls' command when the default groupname as internal directories
+        # Eg: '_nogroup', '_legacy', '_deleting', '_index'.
+        # Expecting 'fs subvolume ls' will be fail with errno EINVAL for '_legacy', '_deleting', '_index'
+        # Expecting 'fs subvolume ls' will be fail with errno EPERM for '_nogroup'
+
+        # try to list subvolumes providing --group_name=_nogroup option
+        try:
+            self._fs_cmd("subvolume", "ls", self.volname, "--group_name", "_nogroup")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM)
+        else:
+            self.fail("expected the 'fs subvolume ls' command to fail with error 'EPERM' for _nogroup")
+
+        # try to list subvolumes providing --group_name=_legacy option
+        try:
+            self._fs_cmd("subvolume", "ls", self.volname, "--group_name", "_legacy")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL)
+        else:
+            self.fail("expected the 'fs subvolume ls' command to fail with error 'EINVAL' for _legacy")
+
+        # try to list subvolumes providing --group_name=_deleting option
+        try:
+            self._fs_cmd("subvolume", "ls", self.volname, "--group_name", "_deleting")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL)
+        else:
+            self.fail("expected the 'fs subvolume ls' command to fail with error 'EINVAL' for _deleting")
+
+        # try to list subvolumes providing --group_name=_index option
+        try:
+            self._fs_cmd("subvolume", "ls", self.volname, "--group_name", "_index")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL)
+        else:
+            self.fail("expected the 'fs subvolume ls' command to fail with error 'EINVAL' for _index")
 
     def test_subvolume_ls_for_notexistent_default_group(self):
         # tests the 'fs subvolume ls' command when the default group '_nogroup' doesn't exist
