@@ -630,7 +630,7 @@ segment_id_t AsyncCleaner::allocate_segment(
     if (segment_info.is_empty()) {
       auto old_usage = calc_utilization(seg_id);
       segments.mark_open(seg_id, seq, type, category, generation);
-      gc_process.maybe_wake_on_space_used();
+      gc_process.maybe_wake_background();
       auto new_usage = calc_utilization(seg_id);
       adjust_segment_util(old_usage, new_usage);
       INFO("opened, {}", gc_stat_printer_t{this, false});
@@ -684,8 +684,8 @@ void AsyncCleaner::update_journal_tails(
     journal_alloc_tail = alloc_tail;
   }
 
-  gc_process.maybe_wake_on_space_used();
-  maybe_wake_gc_blocked_io();
+  gc_process.maybe_wake_background();
+  gc_process.maybe_wake_blocked_io();
 }
 
 void AsyncCleaner::close_segment(segment_id_t segment)
@@ -1062,7 +1062,7 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
             adjust_segment_util(old_usage, new_usage);
             INFO("released {}, {}",
                  segment_to_release, gc_stat_printer_t{this, false});
-            maybe_wake_gc_blocked_io();
+            gc_process.maybe_wake_blocked_io();
           });
         } else {
           return gc_reclaim_space_ertr::now();
@@ -1309,7 +1309,7 @@ void AsyncCleaner::mark_space_used(
   auto new_usage = calc_utilization(seg_addr.get_segment_id());
   adjust_segment_util(old_usage, new_usage);
 
-  gc_process.maybe_wake_on_space_used();
+  gc_process.maybe_wake_background();
   assert(ret > 0);
   DEBUG("segment {} new len: {}~{}, live_bytes: {}",
         seg_addr.get_segment_id(),
@@ -1343,7 +1343,7 @@ void AsyncCleaner::mark_space_free(
     len);
   auto new_usage = calc_utilization(seg_addr.get_segment_id());
   adjust_segment_util(old_usage, new_usage);
-  maybe_wake_gc_blocked_io();
+  gc_process.maybe_wake_blocked_io();
   assert(ret >= 0);
   DEBUG("segment {} free len: {}~{}, live_bytes: {}",
         seg_addr.get_segment_id(),
@@ -1408,7 +1408,6 @@ AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
   ceph_assert(is_ready());
   // The pipeline configuration prevents another IO from entering
   // prepare until the prior one exits and clears this.
-  ceph_assert(!blocked_io_wake);
   ++stats.io_count;
   bool is_blocked = false;
   if (should_block_on_trim()) {
@@ -1424,17 +1423,8 @@ AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
     ++stats.io_blocked_count;
     stats.io_blocked_sum += stats.io_blocking_num;
   }
-  return seastar::do_until(
-    [this] {
-      log_gc_state("await_hard_limits");
-      return !should_block_on_gc();
-    },
-    [this] {
-      blocked_io_wake = seastar::promise<>();
-      return blocked_io_wake->get_future();
-    }
+  return gc_process.io_await_hard_limits(
   ).then([this, projected_usage, is_blocked] {
-    ceph_assert(!blocked_io_wake);
     stats.projected_used_bytes += projected_usage;
     ++stats.projected_count;
     stats.projected_used_bytes_sum += stats.projected_used_bytes;
@@ -1450,7 +1440,7 @@ void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
   ceph_assert(is_ready());
   ceph_assert(stats.projected_used_bytes >= projected_usage);
   stats.projected_used_bytes -= projected_usage;
-  return maybe_wake_gc_blocked_io();
+  gc_process.maybe_wake_blocked_io();
 }
 
 std::ostream &operator<<(std::ostream &os, AsyncCleaner::gc_stat_printer_t stats)
