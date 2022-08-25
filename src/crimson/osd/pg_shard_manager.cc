@@ -12,29 +12,40 @@ namespace {
 
 namespace crimson::osd {
 
-PGShardManager::PGShardManager(
+seastar::future<> PGShardManager::start(
   const int whoami,
   crimson::net::Messenger &cluster_msgr,
   crimson::net::Messenger &public_msgr,
   crimson::mon::Client &monc,
   crimson::mgr::Client &mgrc,
   crimson::os::FuturizedStore &store)
-  : osd_singleton_state(whoami, cluster_msgr, public_msgr,
-			monc, mgrc),
-    local_state(whoami, store),
-    shard_services(osd_singleton_state, local_state)
-{}
+{
+  osd_singleton_state.reset(
+    new OSDSingletonState(whoami, cluster_msgr, public_msgr,
+			  monc, mgrc));
+  shard_services.reset(
+    new ShardServices(*osd_singleton_state, whoami, store));
+  return seastar::now();
+}
+
+seastar::future<> PGShardManager::stop()
+{
+  shard_services.reset();
+  osd_singleton_state.reset();
+  return seastar::now();
+}
 
 seastar::future<> PGShardManager::load_pgs()
 {
-  return local_state.store.list_collections(
+  return get_local_state().store.list_collections(
   ).then([this](auto colls) {
     return seastar::parallel_for_each(
       colls,
       [this](auto coll) {
 	spg_t pgid;
 	if (coll.is_pg(&pgid)) {
-	  auto core = osd_singleton_state.pg_to_shard_mapping.maybe_create_pg(
+	  auto core = get_osd_singleton_state(
+	  ).pg_to_shard_mapping.maybe_create_pg(
 	    pgid);
 	  return with_remote_shard_state(
 	    core,
@@ -66,22 +77,22 @@ seastar::future<> PGShardManager::load_pgs()
 
 seastar::future<> PGShardManager::stop_pgs()
 {
-  return local_state.stop_pgs();
+  return get_local_state().stop_pgs();
 }
 
 seastar::future<std::map<pg_t, pg_stat_t>>
 PGShardManager::get_pg_stats() const
 {
   return seastar::make_ready_future<std::map<pg_t, pg_stat_t>>(
-    local_state.get_pg_stats());
+    get_local_state().get_pg_stats());
 }
 
 seastar::future<> PGShardManager::broadcast_map_to_pgs(epoch_t epoch)
 {
-  return local_state.broadcast_map_to_pgs(
-    shard_services, epoch
+  return get_local_state().broadcast_map_to_pgs(
+    get_shard_services(), epoch
   ).then([this, epoch] {
-    osd_singleton_state.osdmap_gate.got_map(epoch);
+    get_osd_singleton_state().osdmap_gate.got_map(epoch);
     return seastar::now();
   });
 }

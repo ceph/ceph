@@ -263,6 +263,17 @@ public:
                                epoch_t start, Ref<MOSDMap> m);
 };
 
+/**
+ * Represents services available to each PG
+ */
+class ShardServices : public OSDMapService {
+  friend class PGShardManager;
+  using cached_map_t = OSDMapService::cached_map_t;
+  using local_cached_map_t = OSDMapService::local_cached_map_t;
+
+  PerShardState local_state;
+  OSDSingletonState &osd_singleton_state;
+
 #define FORWARD_CONST(FROM_METHOD, TO_METHOD, TARGET)		\
   template <typename... Args>					\
   auto FROM_METHOD(Args&&... args) const {			\
@@ -279,25 +290,17 @@ public:
 #define FORWARD_TO_OSD_SINGLETON(METHOD) \
   FORWARD(METHOD, METHOD, osd_singleton_state)
 
-/**
- * Represents services available to each PG
- */
-class ShardServices : public OSDMapService {
-  using cached_map_t = OSDMapService::cached_map_t;
-  using local_cached_map_t = OSDMapService::local_cached_map_t;
-
-  OSDSingletonState &osd_singleton_state;
-  PerShardState &local_state;
-
   template <typename F, typename... Args>
   auto with_singleton(F &&f, Args&&... args) {
     return std::invoke(f, osd_singleton_state, std::forward<Args>(args)...);
   }
 public:
+  template <typename... PSSArgs>
   ShardServices(
     OSDSingletonState &osd_singleton_state,
-    PerShardState &local_state)
-    : osd_singleton_state(osd_singleton_state), local_state(local_state) {}
+    PSSArgs&&... args)
+    : local_state(std::forward<PSSArgs>(args)...),
+      osd_singleton_state(osd_singleton_state) {}
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
@@ -414,6 +417,11 @@ public:
   FORWARD(
     remote_cancel_reservation, cancel_reservation,
     osd_singleton_state.remote_reserver)
+
+#undef FORWARD_CONST
+#undef FORWARD
+#undef FORWARD_TO_OSD_SINGLETON
+#undef FORWARD_TO_LOCAL
 };
 
 }

@@ -67,6 +67,11 @@ class OSD final : public crimson::net::Dispatcher,
   crimson::net::MessengerRef cluster_msgr;
   // talk with client/mon/mgr
   crimson::net::MessengerRef public_msgr;
+
+  // HB Messengers
+  crimson::net::MessengerRef hb_front_msgr;
+  crimson::net::MessengerRef hb_back_msgr;
+
   std::unique_ptr<crimson::mon::Client> monc;
   std::unique_ptr<crimson::mgr::Client> mgrc;
 
@@ -102,7 +107,6 @@ class OSD final : public crimson::net::Dispatcher,
 			     const AuthCapsInfo& caps) final;
 
   crimson::osd::PGShardManager pg_shard_manager;
-  crimson::osd::ShardServices &shard_services;
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
