@@ -1090,43 +1090,6 @@ struct RGWPeriodConfig
 };
 WRITE_CLASS_ENCODER(RGWPeriodConfig)
 
-/* for backward comaptability */
-struct RGWRegionMap {
-
-  std::map<std::string, RGWZoneGroup> regions;
-
-  std::string master_region;
-
-  RGWQuota quota;
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(RGWRegionMap)
-
-struct RGWZoneGroupMap {
-
-  std::map<std::string, RGWZoneGroup> zonegroups;
-  std::map<std::string, RGWZoneGroup> zonegroups_by_api;
-
-  std::string master_zonegroup;
-
-  RGWQuota quota;
-
-  /* construct the map */
-  int read(const DoutPrefixProvider *dpp, CephContext *cct, RGWSI_SysObj *sysobj_svc, optional_yield y);
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(RGWZoneGroupMap)
-
 class RGWRealm;
 class RGWPeriod;
 
