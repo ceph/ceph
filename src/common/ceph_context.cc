@@ -502,6 +502,14 @@ int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
   }
 }
 
+#pragma GCC push_options
+#pragma GCC optimize ("O0")
+static void leak_some_memory() {
+  volatile char *foo = new char[1234];
+  (void)foo;
+}
+#pragma GCC pop_options
+
 int CephContext::_do_command(
   std::string_view command, const cmdmap_t& cmdmap,
   Formatter *f,
@@ -520,8 +528,7 @@ int CephContext::_do_command(
     }
   }
   if (command == "leak_some_memory") {
-    char *foo = new char[1234];
-    (void)foo;
+    leak_some_memory();
   }
   else if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
