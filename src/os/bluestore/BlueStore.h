@@ -2208,6 +2208,7 @@ private:
   utime_t next_dump_on_bluefs_alloc_failure;
 
   KeyValueDB *db = nullptr;
+  void *db_env = nullptr; //this is rocksdb::Env
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
   FreelistManager *fm = nullptr;
@@ -2671,6 +2672,9 @@ private:
   void _close_db_and_around();
   void _close_around_db();
 
+  int _create_rocksdb_fs();
+  int _open_rocksdb_fs(bool read_only);
+  int _open_rocksdb_env();
   int _prepare_db_environment(bool create, bool read_only,
 			      std::string* kv_dir, std::string* kv_backend);
 

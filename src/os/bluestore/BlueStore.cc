@@ -6616,61 +6616,69 @@ BlueFS* BlueStore::get_bluefs() {
   return bluefs;
 }
 
-int BlueStore::_prepare_db_environment(bool create, bool read_only,
-				       std::string* _fn, std::string* _kv_backend)
+/**
+ * Creates filesystem that is required by rocksdb.
+ * It is either BlueFS or regular posix filesystem.
+ * It produces rocksdb::Env as interface.
+ */
+int BlueStore::_create_rocksdb_fs()
 {
-  int r;
-  ceph_assert(!db);
-  std::string& fn=*_fn;
-  std::string& kv_backend=*_kv_backend;
-  // simplify the dir names, too, as "seen" by rocksdb
-  fn = "db";
-
-  if (create) {
-    kv_backend = cct->_conf->bluestore_kvbackend;
+  std::string fn = "db";
+  std::string kv_backend;
+  kv_backend = cct->_conf->bluestore_kvbackend;
+  if (kv_backend != "rocksdb") {
+    // always require rocksdb
+    derr << " backend must be rocksdb to use bluefs" << dendl;
+    return -EINVAL;
+  }
+  bool is_bluefs = cct->_conf->bluestore_bluefs;
+  BlueFSVolumeSelector::paths paths;
+  if (is_bluefs) {
+    int r = _create_bluefs();
+    if (cct->_conf->bluestore_bluefs_env_mirror) {
+      string cmd = "rm -rf " + path + "/mirror";
+      r = system(cmd.c_str());
+      (void)r;
+      cmd = "mkdir -p " + path + "/mirror";
+      r = system(cmd.c_str());
+      (void)r;
+    }
+    bluefs->get_vselector_paths(fn, paths);
   } else {
-    r = read_meta("kv_backend", &kv_backend);
-    if (r < 0) {
-      derr << __func__ << " unable to read 'kv_backend' meta" << dendl;
-      return -EIO;
-    }
+    paths.emplace_back(fn, 0);
   }
-  dout(10) << __func__ << " kv_backend = " << kv_backend << dendl;
 
+  _open_rocksdb_env();
+  rocksdb::Env *env = static_cast<rocksdb::Env*>(db_env);
+  // we need env to create dirs
+  for (auto& p : paths) {
+    env->CreateDir(p.first);
+  }
+  // Selectors don't provide wal path so far hence create explicitly
+  env->CreateDir(fn + ".wal");
+  return 0;
+}
+/**
+ * Opens already existing filesystem required by rocksdb.
+ */
+int BlueStore::_open_rocksdb_fs(bool read_only)
+{
   bool do_bluefs;
-  r = _is_bluefs(create, &do_bluefs);
-  if (r < 0) {
-    return r;
-  }
-  dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
-
-  // force separate wal dir for all new deployments.
-  rocksdb::Env *env = NULL;
+  int r = _is_bluefs(false, &do_bluefs);
   if (do_bluefs) {
-    dout(10) << __func__ << " initializing bluefs" << dendl;
-    if (kv_backend != "rocksdb") {
-      derr << " backend must be rocksdb to use bluefs" << dendl;
-      return -EINVAL;
-    }
-    if (create)
-      r = _create_bluefs();
-    else
-      r = _open_bluefs(read_only);
-    if (r < 0) {
-      return r;
-    }
+    r = _open_bluefs(read_only);
+  }
+  _open_rocksdb_env();
+  return r;
+}
 
+int BlueStore::_open_rocksdb_env()
+{
+  rocksdb::Env *env = nullptr;
+  if (bluefs) {
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env* a = new BlueRocksEnv(bluefs);
       rocksdb::Env* b = new NoRocksEnv(path + "/mirror");
-      if (create) {
-        string cmd = "rm -rf " + path + "/mirror";
-        int r = system(cmd.c_str());
-        (void)r;
-	cmd = "mkdir -p " + path + "/mirror";
-        r = system(cmd.c_str());
-        (void)r;
-      }
       env = new rocksdb::EnvMirror(b, a, true, true);
     } else {
       env = new BlueRocksEnv(bluefs);
@@ -6682,10 +6690,29 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
     // both BlueRocksEnv and our ersatz env
     env = new NoRocksEnv(path);
   }
+  db_env = env;
+  return 0;
+}
+
+int BlueStore::_prepare_db_environment(bool create, bool read_only,
+				       std::string* _fn, std::string* _kv_backend)
+{
+  ceph_assert(!db);
+  std::string& fn=*_fn;
+  std::string& kv_backend=*_kv_backend;
+  // simplify the dir names, too, as "seen" by rocksdb
+  fn = "db";
+  kv_backend = "rocksdb";
+  if (create) {
+    // create also opens
+    _create_rocksdb_fs();
+  } else {
+    _open_rocksdb_fs(read_only);
+  }
 
   map<string,string> kv_options;
   BlueFSVolumeSelector::paths paths;
-  if (do_bluefs) {
+  if (bluefs) {
     bluefs->get_vselector_paths(fn, paths);
     {
       ostringstream db_paths;
@@ -6704,14 +6731,8 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   } else {
     paths.emplace_back(fn, 0);
   }
-  if (create) {
-    for (auto& p : paths) {
-      env->CreateDir(p.first);
-    }
-    // Selectors don't provide wal path so far hence create explicitly
-    env->CreateDir(fn + ".wal");
-  }
 
+  rocksdb::Env *env = static_cast<rocksdb::Env*>(db_env);
   std::vector<std::string> res;
   // check for dir presence
   auto rr = env->GetChildren(fn+".wal", &res);
