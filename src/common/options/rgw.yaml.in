@@ -3575,3 +3575,18 @@ options:
   - rgw
   - osd
   with_legacy: true
+- name: rgw_allow_notification_secrets_in_cleartext
+  type: bool
+  level: advanced
+  desc: Allows sending secrets (e.g. passwords) over non encrypted HTTP messages.
+  long_desc: When bucket notification endpoint require secrets (e.g. passwords),
+    we allow the topic creation only over HTTPS messages. 
+    This parameter can be set to "true" to bypass this check.
+    Use this only if radosgw is on a trusted private network, and the message 
+    broker cannot be configured without password authentication. Otherwise, this will 
+    leak the credentials of your message broker and compromise its security.
+  default: false
+  services:
+  - rgw
+  see_also:
+  - rgw_trust_forwarded_https
