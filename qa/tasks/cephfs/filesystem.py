@@ -255,7 +255,14 @@ class CephCluster(object):
         proc = self.mon_manager.admin_socket(service_type, service_id, command, timeout=timeout)
         response_data = proc.stdout.getvalue().strip()
         if len(response_data) > 0:
-            j = json.loads(response_data)
+
+            def get_nonnumeric_values(value):
+                c = {"NaN": float("nan"), "Infinity": float("inf"),
+                     "-Infinity": -float("inf")}
+                return c[value]
+
+            j = json.loads(response_data.replace('inf', 'Infinity'),
+                           parse_constant=get_nonnumeric_values)
             pretty = json.dumps(j, sort_keys=True, indent=2)
             log.debug(f"_json_asok output\n{pretty}")
             return j
