@@ -763,6 +763,12 @@ public:
   void check_osdmap_sub(Subscription *sub);
   void check_pg_creates_sub(Subscription *sub);
 
+  // dissociate application from pools
+  // if pool_id == -1: then dissociate all pools
+  // if pool_id != -1: then dissociate specific pool
+  void do_application_disable(int64_t pool_id,
+                              const std::string &app_name,
+			      const std::string &app_value);
   void do_application_enable(int64_t pool_id, const std::string &app_name,
 			     const std::string &app_key="",
 			     const std::string &app_value="",

@@ -1035,6 +1035,10 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       mon->osdmon()->propose_pending(); /* maybe new blocklists */
     }
 
+    mon->osdmon()->do_application_disable(-1, // for all pools
+					  pg_pool_t::APPLICATION_NAME_CEPHFS,
+					  fs_name);
+
     fsmap.erase_filesystem(fs->fscid);
 
     return 0;
@@ -1235,6 +1239,9 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       // It was already removed, succeed in silence
       return 0;
     } else if (r == 0) {
+      mon->osdmon()->do_application_disable(poolid,
+					    pg_pool_t::APPLICATION_NAME_CEPHFS,
+					    fs_name);
       // We removed it, succeed
       ss << "removed data pool " << poolid << " from fsmap";
       return 0;

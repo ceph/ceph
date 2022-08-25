@@ -4892,6 +4892,27 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
   }
 }
 
+void OSDMonitor::do_application_disable(int64_t pool_id,
+                                        const std::string &app_name,
+				        const std::string &app_value)
+{
+  for (auto& [_pool_id, _pg_pool] : osdmap.get_pools()) {
+    if (pool_id == -1 || _pool_id == pool_id) {
+      auto it = _pg_pool.application_metadata[app_name].cbegin();
+      while (it != _pg_pool.application_metadata[app_name].cend()) {
+	auto value = it->second;
+	if (value == app_value) { // for this fs
+	  auto curr = it;
+	  ++it;
+	  _pg_pool.application_metadata[app_name].erase(curr);
+	} else {
+	  ++it;
+	}
+      }
+    }
+  }
+}
+
 void OSDMonitor::do_application_enable(int64_t pool_id,
                                        const std::string &app_name,
 				       const std::string &app_key,
