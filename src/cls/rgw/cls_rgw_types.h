@@ -806,17 +806,23 @@ struct cls_rgw_bucket_instance_entry {
   cls_rgw_reshard_status reshard_status{RESHARD_STATUS::NOT_RESHARDING};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode((uint8_t)reshard_status, bl);
+    { // fields removed in v2 but added back as empty in v3
+      std::string bucket_instance_id;
+      encode(bucket_instance_id, bl);
+      int32_t num_shards{-1};
+      encode(num_shards, bl);
+    }
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     uint8_t s;
     decode(s, bl);
     reshard_status = (cls_rgw_reshard_status)s;
-    if (struct_v < 2) { // fields removed from v2
+    if (struct_v != 2) { // fields removed from v2, added back in v3
       std::string bucket_instance_id;
       decode(bucket_instance_id, bl);
       int32_t num_shards{-1};
