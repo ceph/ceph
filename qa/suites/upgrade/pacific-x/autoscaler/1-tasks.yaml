@@ -1,0 +1,48 @@
+tasks:
+- install:
+    branch: pacific
+    exclude_packages:
+      - ceph-volume
+- print: "**** done install task..."
+- print: "**** done start installing pacific cephadm ..."
+- cephadm:
+    image: quay.io/ceph/daemon-base:latest-pacific
+    cephadm_branch: pacific
+    cephadm_git_url: https://github.com/ceph/ceph
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing pacific cephadm ..."
+
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+      - ceph mgr module enable pg_autoscaler
+      - ceph osd pool create test1 32 32
+      - ceph osd pool create test2 32 32
+      - ceph osd pool create test3 32 32
+      - ceph osd pool set test1 pg_autoscale_mode on
+      - ceph osd pool set test2 pg_autoscale_mode warn
+      - ceph osd pool set test3 pg_autoscale_mode off
+
+- print: "**** done start upgrade"
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - ceph config set global log_to_journald false --force
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+      - ceph orch ps
+      - ceph versions
+      - ceph versions | jq -e '.overall | length == 1'
+      - ceph versions | jq -e '.overall | keys' | grep $sha1
+- print: "**** done end upgrade"
+
+- print: "**** done start after_upgrade.sh"
+- exec:
+  client.0:
+    - after_upgrade.sh
+- print: "**** done end after_upgrade.sh"
+- print: "**** done everything!"
