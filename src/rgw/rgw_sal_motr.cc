@@ -2396,10 +2396,11 @@ int MotrObject::copy_object_same_zone(RGWObjectCtx& obj_ctx,
     req_id = *tag;
   }
 
+  struct req_state* s = static_cast<req_state*>(obj_ctx.get_private());
   // prepare write op
   std::shared_ptr<rgw::sal::Writer> dst_writer = store->get_atomic_writer(dpp, y,
         dest_object->clone(),
-        user->get_id(), obj_ctx,
+        s->bucket_owner.get_id(), obj_ctx,
         &dest_placement, olh_epoch, req_id);
 
   rc = dst_writer->prepare(y);
@@ -2450,7 +2451,6 @@ int MotrObject::copy_object_same_zone(RGWObjectCtx& obj_ctx,
   }
 
   //Set object tags based on tagging-directive
-  struct req_state* s = static_cast<req_state*>(obj_ctx.get_private());
   auto tagging_drctv = s->info.env->get("HTTP_X_AMZ_TAGGING_DIRECTIVE");
 
   bufferlist tags_bl;
