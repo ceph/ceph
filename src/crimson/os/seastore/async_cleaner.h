@@ -542,14 +542,20 @@ public:
         backref_manager, config, type, roll_start, roll_size);
   }
 
-  // TODO: move to private
+  struct stat_printer_t {
+    const JournalTrimmerImpl &trimmer;
+    bool detailed = false;
+  };
+  friend std::ostream &operator<<(std::ostream &, const stat_printer_t &);
+
+private:
   journal_seq_t get_tail_limit() const;
   journal_seq_t get_dirty_tail_target() const;
   journal_seq_t get_alloc_tail_target() const;
   std::size_t get_dirty_journal_size() const;
   std::size_t get_alloc_journal_size() const;
+  void register_metrics();
 
-private:
   ExtentCallbackInterface *extent_callback = nullptr;
   BackgroundListener *background_callback = nullptr;
   BackrefManager &backref_manager;
@@ -562,7 +568,12 @@ private:
   journal_seq_t journal_head;
   journal_seq_t journal_dirty_tail;
   journal_seq_t journal_alloc_tail;
+
+  seastar::metrics::metric_group metrics;
 };
+
+std::ostream &operator<<(
+    std::ostream &, const JournalTrimmerImpl::stat_printer_t &);
 
 /**
  * Callback interface for managing available segments
@@ -1345,14 +1356,15 @@ private:
     }
   }
 
-  struct gc_stat_printer_t {
-    const AsyncCleaner *cleaner;
+  struct stat_printer_t {
+    const AsyncCleaner &cleaner;
     bool detailed = false;
   };
-  friend std::ostream &operator<<(std::ostream &, gc_stat_printer_t);
+  friend std::ostream &operator<<(std::ostream &, const stat_printer_t &);
 };
 using AsyncCleanerRef = std::unique_ptr<AsyncCleaner>;
 
-std::ostream &operator<<(std::ostream &, AsyncCleaner::gc_stat_printer_t);
+std::ostream &operator<<(
+    std::ostream &, const AsyncCleaner::stat_printer_t &);
 
 }
