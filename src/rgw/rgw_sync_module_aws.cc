@@ -1580,6 +1580,13 @@ class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
     }
   } result;
 
+  rgw_bucket target_bucket;
+  std::unique_ptr<rgw::sal::RadosBucket> bucket;
+  std::unique_ptr<rgw::sal::RadosObject> src_obj;
+  std::unique_ptr<rgw::sal::RadosBucket> dest_bucket;
+  std::unique_ptr<rgw::sal::RadosObject> dest_obj;
+
+
 public:
   RGWAWSHandleRemoteObjCBCR(RGWDataSyncCtx *_sc,
                             rgw_bucket_sync_pipe& _sync_pipe,
@@ -1658,14 +1665,15 @@ public:
       }
 
       yield {
-        rgw_obj src_obj(src_bucket, key);
+        bucket.reset(new rgw::sal::RadosBucket(sync_env->store, src_bucket));
+        src_obj.reset(new rgw::sal::RadosObject(sync_env->store, key, bucket.get()));
 
         /* init output */
-        rgw_bucket target_bucket;
         target_bucket.name = target_bucket_name; /* this is only possible because we only use bucket name for
                                                     uri resolution */
-        rgw_obj dest_obj(target_bucket, target_obj_name);
 
+        dest_bucket.reset(new rgw::sal::RadosBucket(sync_env->store, target_bucket));
+        dest_obj.reset(new rgw::sal::RadosObject(sync_env->store, rgw_obj_key(target_obj_name), dest_bucket.get()));
 
         rgw_sync_aws_src_obj_properties src_properties;
         src_properties.mtime = mtime;
@@ -1675,10 +1683,10 @@ public:
         src_properties.versioned_epoch = versioned_epoch;
 
         if (size < instance.conf.s3.multipart_sync_threshold) {
-          call(new RGWAWSStreamObjToCloudPlainCR(sc, source_conn, src_obj,
+          call(new RGWAWSStreamObjToCloudPlainCR(sc, source_conn, src_obj.get(),
                                                  src_properties,
                                                  target,
-                                                 dest_obj));
+                                                 dest_obj.get()));
         } else {
           rgw_rest_obj rest_obj;
           rest_obj.init(key);
@@ -1686,8 +1694,8 @@ public:
             ldout(sc->cct, 0) << "ERROR: failed to decode rest obj out of headers=" << headers << ", attrs=" << attrs << dendl;
             return set_cr_error(-EINVAL);
           }
-          call(new RGWAWSStreamObjToCloudMultipartCR(sc, sync_pipe, instance.conf, source_conn, src_obj,
-                                                     target, dest_obj, size, src_properties, rest_obj));
+          call(new RGWAWSStreamObjToCloudMultipartCR(sc, sync_pipe, instance.conf, source_conn, src_obj.get(),
+                                                     target, dest_obj.get(), size, src_properties, rest_obj));
         }
       }
       if (retcode < 0) {
