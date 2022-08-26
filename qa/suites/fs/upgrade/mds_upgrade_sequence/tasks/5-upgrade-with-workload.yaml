@@ -1,0 +1,33 @@
+tasks:
+- parallel:
+  - upgrade-tasks
+  - workload-tasks
+
+upgrade-tasks:
+  sequential:
+    - cephadm.shell:
+        env: [sha1]
+        host.a:
+          - ceph config set mon mon_warn_on_insecure_global_id_reclaim false --force
+          - ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false --force
+          - ceph config set global log_to_journald false --force
+          - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+    - cephadm.shell:
+        env: [sha1]
+        host.a:
+          - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph fs dump; ceph orch upgrade status ; sleep 30 ; done
+          - ceph orch ps
+          - ceph versions
+          - echo "wait for servicemap items w/ changing names to refresh"
+          - sleep 60
+          - ceph orch ps
+          - ceph versions
+          - ceph versions | jq -e '.overall | length == 1'
+          - ceph versions | jq -e '.overall | keys' | grep $sha1
+
+workload-tasks:
+  sequential:
+    - workunit:
+        clients:
+          all:
+            - suites/fsstress.sh
