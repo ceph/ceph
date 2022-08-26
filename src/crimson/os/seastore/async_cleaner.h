@@ -539,14 +539,13 @@ class AsyncCleaner : public SegmentProvider, public JournalTrimmer {
 public:
   /// Config
   struct config_t {
-    /// Number of minimum journal segments to stop trimming dirty.
-    size_t target_journal_dirty_segments = 0;
-    /// Number of maximum journal segments to block user transactions.
-    size_t max_journal_segments = 0;
-
-    /// Number of minimum journal segments to stop trimming allocation
+    /// Number of minimum bytes to stop trimming dirty.
+    std::size_t target_journal_dirty_bytes = 0;
+    /// Number of minimum bytes to stop trimming allocation
     /// (having the corresponding backrefs unmerged)
-    size_t target_journal_alloc_segments = 0;
+    std::size_t target_journal_alloc_bytes = 0;
+    /// Number of maximum bytes to block user transactions.
+    std::size_t max_journal_bytes = 0;
 
     /// Ratio of maximum available space to disable reclaiming.
     double available_ratio_gc_max = 0;
@@ -557,28 +556,44 @@ public:
     double reclaim_ratio_gc_threshold = 0;
 
     /// Number of bytes to reclaim per cycle
-    size_t reclaim_bytes_per_cycle = 0;
+    std::size_t reclaim_bytes_per_cycle = 0;
 
     /// Number of bytes to rewrite dirty per cycle
-    size_t rewrite_dirty_bytes_per_cycle = 0;
+    std::size_t rewrite_dirty_bytes_per_cycle = 0;
 
     /// Number of bytes to rewrite backref per cycle
-    size_t rewrite_backref_bytes_per_cycle = 0;
+    std::size_t rewrite_backref_bytes_per_cycle = 0;
 
     void validate() const {
-      ceph_assert(max_journal_segments > target_journal_dirty_segments);
-      ceph_assert(max_journal_segments > target_journal_alloc_segments);
+      ceph_assert(max_journal_bytes <= MAX_SEG_OFF);
+      ceph_assert(max_journal_bytes > target_journal_dirty_bytes);
+      ceph_assert(max_journal_bytes > target_journal_alloc_bytes);
       ceph_assert(available_ratio_gc_max > available_ratio_hard_limit);
       ceph_assert(reclaim_bytes_per_cycle > 0);
       ceph_assert(rewrite_dirty_bytes_per_cycle > 0);
       ceph_assert(rewrite_backref_bytes_per_cycle > 0);
     }
 
-    static config_t get_default() {
+    static config_t get_default(
+        std::size_t roll_size, journal_type_t type) {
+      assert(roll_size);
+      std::size_t target_dirty_bytes = 0;
+      std::size_t target_alloc_bytes = 0;
+      std::size_t max_journal_bytes = 0;
+      if (type == journal_type_t::SEGMENTED) {
+        target_dirty_bytes = 12 * roll_size;
+        target_alloc_bytes = 2 * roll_size;
+        max_journal_bytes = 16 * roll_size;
+      } else {
+        assert(type == journal_type_t::CIRCULAR);
+        target_dirty_bytes = roll_size / 4;
+        target_alloc_bytes = roll_size / 4;
+        max_journal_bytes = roll_size / 2;
+      }
       return config_t{
-	  12,   // target_journal_dirty_segments
-	  16,   // max_journal_segments
-	  2,	// target_journal_alloc_segments
+	  target_dirty_bytes,
+	  target_alloc_bytes,
+	  max_journal_bytes,
 	  .15,  // available_ratio_gc_max
 	  .1,   // available_ratio_hard_limit
 	  .1,   // reclaim_ratio_gc_threshold
@@ -588,11 +603,26 @@ public:
 	};
     }
 
-    static config_t get_test() {
+    static config_t get_test(
+        std::size_t roll_size, journal_type_t type) {
+      assert(roll_size);
+      std::size_t target_dirty_bytes = 0;
+      std::size_t target_alloc_bytes = 0;
+      std::size_t max_journal_bytes = 0;
+      if (type == journal_type_t::SEGMENTED) {
+        target_dirty_bytes = 2 * roll_size;
+        target_alloc_bytes = 2 * roll_size;
+        max_journal_bytes = 4 * roll_size;
+      } else {
+        assert(type == journal_type_t::CIRCULAR);
+        target_dirty_bytes = roll_size / 4;
+        target_alloc_bytes = roll_size / 4;
+        max_journal_bytes = roll_size / 2;
+      }
       return config_t{
-	  2,    // target_journal_dirty_segments
-	  4,    // max_journal_segments
-	  2,	// target_journal_alloc_segments
+	  target_dirty_bytes,
+	  target_alloc_bytes,
+	  max_journal_bytes,
 	  .99,  // available_ratio_gc_max
 	  .2,   // available_ratio_hard_limit
 	  .6,   // reclaim_ratio_gc_threshold
@@ -777,6 +807,11 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
+  journal_type_t journal_type;
+
+  seastore_off_t roll_start;
+  seastore_off_t roll_size;
+
   journal_seq_t journal_alloc_tail;
 
   journal_seq_t journal_dirty_tail;
@@ -791,24 +826,22 @@ private:
 
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
 
-  /**
-   * disable_trim
-   *
-   * added to enable unit testing of CircularBoundedJournal before
-   * proper support is added to AsyncCleaner.
-   * Should be removed once proper support is added. TODO
-   */
-  bool disable_trim = false;
-
 public:
   AsyncCleaner(
     config_t config,
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
-    bool detailed = false);
+    bool detailed,
+    journal_type_t type,
+    seastore_off_t roll_start,
+    seastore_off_t roll_size);
 
   SegmentSeqAllocator& get_ool_segment_seq_allocator() {
     return *ool_segment_seq_allocator;
+  }
+
+  journal_type_t get_journal_type() const {
+    return journal_type;
   }
 
   void set_extent_callback(ExtentCallbackInterface *cb) {
@@ -933,10 +966,6 @@ public:
 
   bool check_usage();
 
-  void set_disable_trim(bool val) {
-    disable_trim = val;
-  }
-
   using work_ertr = ExtentCallbackInterface::extent_mapping_ertr;
   using work_iertr = ExtentCallbackInterface::extent_mapping_iertr;
 
@@ -977,40 +1006,34 @@ private:
 
   journal_seq_t get_dirty_tail_target() const {
     assert(is_ready());
-    auto ret = journal_head;
-    ceph_assert(ret != JOURNAL_SEQ_NULL);
-    if (ret.segment_seq >= config.target_journal_dirty_segments) {
-      ret.segment_seq -= config.target_journal_dirty_segments;
-    } else {
-      ret.segment_seq = 0;
-      ret.offset = P_ADDR_MIN;
-    }
-    return ret;
-  }
-
-  journal_seq_t get_tail_limit() const {
-    assert(is_ready());
-    auto ret = journal_head;
-    ceph_assert(ret != JOURNAL_SEQ_NULL);
-    if (ret.segment_seq >= config.max_journal_segments) {
-      ret.segment_seq -= config.max_journal_segments;
-    } else {
-      ret.segment_seq = 0;
-      ret.offset = P_ADDR_MIN;
-    }
+    ceph_assert(journal_head != JOURNAL_SEQ_NULL);
+    auto ret = journal_head.add_offset(
+        journal_type,
+        -static_cast<seastore_off_t>(config.target_journal_dirty_bytes),
+        roll_start,
+        roll_size);
     return ret;
   }
 
   journal_seq_t get_alloc_tail_target() const {
     assert(is_ready());
-    auto ret = journal_head;
-    ceph_assert(ret != JOURNAL_SEQ_NULL);
-    if (ret.segment_seq >= config.target_journal_alloc_segments) {
-      ret.segment_seq -= config.target_journal_alloc_segments;
-    } else {
-      ret.segment_seq = 0;
-      ret.offset = P_ADDR_MIN;
-    }
+    ceph_assert(journal_head != JOURNAL_SEQ_NULL);
+    auto ret = journal_head.add_offset(
+        journal_type,
+        -static_cast<seastore_off_t>(config.target_journal_alloc_bytes),
+        roll_start,
+        roll_size);
+    return ret;
+  }
+
+  journal_seq_t get_tail_limit() const {
+    assert(is_ready());
+    ceph_assert(journal_head != JOURNAL_SEQ_NULL);
+    auto ret = journal_head.add_offset(
+        journal_type,
+        -static_cast<seastore_off_t>(config.max_journal_bytes),
+        roll_start,
+        roll_size);
     return ret;
   }
 
@@ -1179,6 +1202,9 @@ private:
    * Segments calculations
    */
   std::size_t get_segments_in_journal() const {
+    if (journal_type == journal_type_t::CIRCULAR) {
+      return 0;
+    }
     auto journal_tail = get_journal_tail();
     if (journal_tail == JOURNAL_SEQ_NULL ||
         journal_head == JOURNAL_SEQ_NULL) {
@@ -1251,11 +1277,13 @@ private:
         journal_dirty_tail == JOURNAL_SEQ_NULL) {
       return 0;
     }
-    return (journal_head.segment_seq - journal_dirty_tail.segment_seq) *
-           segments.get_segment_size() +
-           journal_head.offset.as_seg_paddr().get_segment_off() -
-           segments.get_segment_size() -
-           journal_dirty_tail.offset.as_seg_paddr().get_segment_off();
+    auto ret = journal_head.relative_to(
+        journal_type,
+        journal_dirty_tail,
+        roll_start,
+        roll_size);
+    ceph_assert(ret >= 0);
+    return static_cast<std::size_t>(ret);
   }
 
   std::size_t get_alloc_journal_size() const {
@@ -1263,11 +1291,13 @@ private:
         journal_alloc_tail == JOURNAL_SEQ_NULL) {
       return 0;
     }
-    return (journal_head.segment_seq - journal_alloc_tail.segment_seq) *
-           segments.get_segment_size() +
-           journal_head.offset.as_seg_paddr().get_segment_off() -
-           segments.get_segment_size() -
-           journal_alloc_tail.offset.as_seg_paddr().get_segment_off();
+    auto ret = journal_head.relative_to(
+        journal_type,
+        journal_alloc_tail,
+        roll_start,
+        roll_size);
+    ceph_assert(ret >= 0);
+    return static_cast<std::size_t>(ret);
   }
 
   /**
@@ -1277,13 +1307,11 @@ private:
    */
   bool should_block_on_trim() const {
     assert(is_ready());
-    if (disable_trim) return false;
     return get_tail_limit() > get_journal_tail();
   }
 
   bool should_block_on_reclaim() const {
     assert(is_ready());
-    if (disable_trim) return false;
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1321,7 +1349,6 @@ private:
    */
   bool gc_should_reclaim_space() const {
     assert(is_ready());
-    if (disable_trim) return false;
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1349,7 +1376,6 @@ private:
    * True if gc should be running.
    */
   bool gc_should_run() const {
-    if (disable_trim) return false;
     ceph_assert(is_ready());
     return gc_should_reclaim_space()
       || gc_should_trim_dirty()

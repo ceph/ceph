@@ -1760,9 +1760,18 @@ Cache::replay_delta(
       DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
             journal_seq, record_base, delta, *extent);
 
-      assert(extent->version == delta.pversion);
+      if (extent->last_committed_crc != delta.prev_crc) {
+        // FIXME: we can't rely on crc to detect whether is delta is
+        // out-of-date.
+        ERROR("identified delta crc {} doesn't match the extent at {} {}, "
+              "probably is out-dated -- {}",
+              delta, journal_seq, record_base, *extent);
+        ceph_assert(epm.get_journal_type() == journal_type_t::CIRCULAR);
+        remove_extent(extent);
+        return replay_delta_ertr::make_ready_future<bool>(false);
+      }
 
-      assert(extent->last_committed_crc == delta.prev_crc);
+      assert(extent->version == delta.pversion);
       extent->apply_delta_and_adjust_crc(record_base, delta.bl);
       extent->set_modify_time(modify_time);
       assert(extent->last_committed_crc == delta.final_crc);
