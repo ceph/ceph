@@ -33,6 +33,9 @@ protected:
   }
   int get_rados_obj(const DoutPrefixProvider *dpp, RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
 
+  virtual int invalidate(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+			 optional_yield y);
+
   virtual int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
                        uint64_t *psize, real_time *pmtime,
                        std::map<std::string, bufferlist> *attrs,

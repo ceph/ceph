@@ -53,6 +53,13 @@ int RGWSI_SysObj_Core::get_rados_obj(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+int RGWSI_SysObj_Core::invalidate(const DoutPrefixProvider *dpp,
+				  const rgw_raw_obj& obj,
+				  optional_yield y)
+{
+  return 0;
+}
+
 int RGWSI_SysObj_Core::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
                                 uint64_t *psize, real_time *pmtime,
                                 map<string, bufferlist> *attrs,

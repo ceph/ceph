@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -354,6 +353,27 @@ int RGWSI_SysObj_Cache::write_data(const DoutPrefixProvider *dpp,
 
   return ret;
 }
+
+int RGWSI_SysObj_Cache::invalidate(const DoutPrefixProvider *dpp,
+                                   const rgw_raw_obj& obj,
+                                   optional_yield y)
+{
+  rgw_pool pool;
+  string oid;
+  normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
+
+  string name = normal_name(pool, oid);
+  cache.invalidate_remove(dpp, name);
+
+  ObjectCacheInfo info;
+  int r = distribute_cache(dpp, name, obj, info, INVALIDATE_OBJ, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to distribute cache: r=" << r << dendl;
+  }
+
+  return 0;
+}
+
 
 int RGWSI_SysObj_Cache::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
                                  uint64_t *psize, real_time *pmtime,

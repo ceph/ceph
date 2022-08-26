@@ -17,6 +17,12 @@ RGWSI_SysObj::Obj RGWSI_SysObj::get_obj(const rgw_raw_obj& obj)
   return Obj(core_svc, obj);
 }
 
+int RGWSI_SysObj::invalidate(const DoutPrefixProvider* dpp,
+			     const rgw_raw_obj& obj,
+			     optional_yield y) {
+  return core_svc->invalidate(dpp, obj, y);
+}
+
 RGWSI_SysObj::Obj::ROp::ROp(Obj& _source) : source(_source) {
   state.emplace<RGWSI_SysObj_Core::GetObjState>();
 }

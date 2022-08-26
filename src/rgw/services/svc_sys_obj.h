@@ -259,6 +259,9 @@ public:
   RGWSI_SysObj(CephContext *cct): RGWServiceInstance(cct) {}
 
   Obj get_obj(const rgw_raw_obj& obj);
+  int invalidate(const DoutPrefixProvider* dpp,
+		 const rgw_raw_obj& obj,
+		 optional_yield y);
 
   Pool get_pool(const rgw_pool& pool) {
     return Pool(core_svc, pool);
