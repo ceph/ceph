@@ -216,7 +216,9 @@ int RGWAsyncLockSystemObj::_send_request(const DoutPrefixProvider *dpp)
   l.set_cookie(cookie);
   l.set_may_renew(true);
 
-  return l.lock_exclusive(&ref.pool.ioctx(), ref.obj.oid);
+  auto ret = l.lock_exclusive(&ref.pool.ioctx(), ref.obj.oid);
+  store->svc()->sysobj->invalidate(dpp, ref.obj, null_yield);
+  return ret;
 }
 
 RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
@@ -242,7 +244,9 @@ int RGWAsyncUnlockSystemObj::_send_request(const DoutPrefixProvider *dpp)
 
   l.set_cookie(cookie);
 
-  return l.unlock(&ref.pool.ioctx(), ref.obj.oid);
+  auto ret = l.unlock(&ref.pool.ioctx(), ref.obj.oid);
+  store->svc()->sysobj->invalidate(dpp, ref.obj, null_yield);
+  return ret;
 }
 
 RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
