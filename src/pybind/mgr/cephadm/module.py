@@ -2536,11 +2536,14 @@ Then run the following:
         return self._apply_service_spec(cast(ServiceSpec, spec))
 
     @handle_orch_error
-    def apply_tuned_profiles(self, specs: List[TunedProfileSpec]) -> str:
+    def apply_tuned_profiles(self, specs: List[TunedProfileSpec], no_overwrite: bool = False) -> str:
         outs = []
         for spec in specs:
-            self.tuned_profiles.add_profile(spec)
-            outs.append(f'Saved tuned profile {spec.profile_name}')
+            if no_overwrite and self.tuned_profiles.exists(spec.profile_name):
+                outs.append(f"Tuned profile '{spec.profile_name}' already exists (--no-overwrite was passed)")
+            else:
+                self.tuned_profiles.add_profile(spec)
+                outs.append(f'Saved tuned profile {spec.profile_name}')
         self._kick_serve_loop()
         return '\n'.join(outs)
 
