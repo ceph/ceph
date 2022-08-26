@@ -128,15 +128,15 @@ protected:
   }
 
   seastar::future<> tm_setup(
-    journal_type_t type = journal_type_t::SEGMENT_JOURNAL) {
+    journal_type_t type = journal_type_t::SEGMENTED) {
     LOG_PREFIX(EphemeralTestState::tm_setup);
     SUBINFO(test, "begin with {} devices ...", get_num_devices());
     journal_type = type;
     // FIXME: should not initialize segment_manager with circularbounded-journal
-    if (journal_type == journal_type_t::SEGMENT_JOURNAL) {
+    if (journal_type == journal_type_t::SEGMENTED) {
       return segment_setup();
     } else {
-      assert(journal_type == journal_type_t::CIRCULARBOUNDED_JOURNAL);
+      assert(journal_type == journal_type_t::CIRCULAR);
       return randomblock_setup();
     }
   }
@@ -172,7 +172,7 @@ protected:
     for (auto &sec_sm : secondary_segment_managers) {
       sec_devices.emplace_back(sec_sm.get());
     }
-    if (journal_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
+    if (journal_type == journal_type_t::CIRCULAR) {
       // FIXME: should not initialize segment_manager with circularbounded-journal
       // FIXME: no secondary device in the single device test
       sec_devices.emplace_back(segment_manager.get());
@@ -213,7 +213,7 @@ protected:
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
-    if (journal_type == journal_type_t::SEGMENT_JOURNAL) {
+    if (journal_type == journal_type_t::SEGMENTED) {
       return tm->mkfs(
       ).handle_error(
 	crimson::ct_error::assert_all{"Error in mkfs"}
