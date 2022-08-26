@@ -238,16 +238,11 @@
             {{ rowCount }} <ng-container i18n="X total">total</ng-container>
           </ng-template>
         </div>
-        <datatable-pager [pagerLeftArrowIcon]="paginationClasses.pagerPrevious"
-                         [pagerRightArrowIcon]="paginationClasses.pagerNext"
-                         [pagerPreviousIcon]="paginationClasses.pagerLeftArrow"
-                         [pagerNextIcon]="paginationClasses.pagerRightArrow"
-                         [page]="curPage"
-                         [size]="pageSize"
-                         [count]="rowCount"
-                         [hidden]="!((rowCount / pageSize) > 1)"
-                         (change)="table.onFooterPage($event)">
-        </datatable-pager>
+        <cd-table-pagination [page]="curPage"
+                             [size]="pageSize"
+                             [count]="rowCount"
+                             [hidden]="!((rowCount / pageSize) > 1)"
+                             (pageChange)="table.onFooterPage($event)"></cd-table-pagination>
       </ng-template>
     </ngx-datatable-footer>
   </ngx-datatable>
