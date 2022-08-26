@@ -415,10 +415,13 @@ JournalTrimmerImpl::JournalTrimmerImpl(
   config.validate();
   ceph_assert(roll_start >= 0);
   ceph_assert(roll_size > 0);
+  register_metrics();
 }
 
 void JournalTrimmerImpl::set_journal_head(journal_seq_t head)
 {
+  LOG_PREFIX(JournalTrimmerImpl::set_journal_head);
+
   ceph_assert(head != JOURNAL_SEQ_NULL);
   ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
               head >= journal_head);
@@ -427,7 +430,14 @@ void JournalTrimmerImpl::set_journal_head(journal_seq_t head)
   ceph_assert(journal_dirty_tail == JOURNAL_SEQ_NULL ||
               head >= journal_dirty_tail);
 
-  journal_head = head;
+  std::swap(journal_head, head);
+  if (journal_head.segment_seq == head.segment_seq) {
+    DEBUG("journal_head {} => {}, {}",
+          head, journal_head, stat_printer_t{*this, false});
+  } else {
+    INFO("journal_head {} => {}, {}",
+          head, journal_head, stat_printer_t{*this, false});
+  }
   background_callback->maybe_wake_background();
 }
 
@@ -446,12 +456,14 @@ void JournalTrimmerImpl::update_journal_tails(
             journal_dirty_tail, dirty_tail);
       ceph_abort();
     }
+    std::swap(journal_dirty_tail, dirty_tail);
     if (journal_dirty_tail.segment_seq == dirty_tail.segment_seq) {
-      DEBUG("journal_dirty_tail {} => {}", journal_dirty_tail, dirty_tail);
+      DEBUG("journal_dirty_tail {} => {}, {}",
+            dirty_tail, journal_dirty_tail, stat_printer_t{*this, false});
     } else {
-      INFO("journal_dirty_tail {} => {}", journal_dirty_tail, dirty_tail);
+      INFO("journal_dirty_tail {} => {}, {}",
+            dirty_tail, journal_dirty_tail, stat_printer_t{*this, false});
     }
-    journal_dirty_tail = dirty_tail;
   }
 
   if (alloc_tail != JOURNAL_SEQ_NULL) {
@@ -463,12 +475,14 @@ void JournalTrimmerImpl::update_journal_tails(
             journal_alloc_tail, alloc_tail);
       ceph_abort();
     }
+    std::swap(journal_alloc_tail, alloc_tail);
     if (journal_alloc_tail.segment_seq == alloc_tail.segment_seq) {
-      DEBUG("journal_alloc_tail {} => {}", journal_alloc_tail, alloc_tail);
+      DEBUG("journal_alloc_tail {} => {}, {}",
+            alloc_tail, journal_alloc_tail, stat_printer_t{*this, false});
     } else {
-      INFO("journal_alloc_tail {} => {}", journal_alloc_tail, alloc_tail);
+      INFO("journal_alloc_tail {} => {}, {}",
+            alloc_tail, journal_alloc_tail, stat_printer_t{*this, false});
     }
-    journal_alloc_tail = alloc_tail;
   }
 
   background_callback->maybe_wake_background();
@@ -606,6 +620,44 @@ JournalTrimmerImpl::trim_dirty()
   }).safe_then([this, FNAME] {
     DEBUG("finish, dirty_tail={}", journal_dirty_tail);
   });
+}
+
+void JournalTrimmerImpl::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  metrics.add_group("journal_trimmer", {
+    sm::make_counter("dirty_journal_bytes",
+                     [this] { return get_dirty_journal_size(); },
+                     sm::description("the size of the journal for dirty extents")),
+    sm::make_counter("alloc_journal_bytes",
+                     [this] { return get_alloc_journal_size(); },
+                     sm::description("the size of the journal for alloc info"))
+  });
+}
+
+std::ostream &operator<<(
+    std::ostream &os, const JournalTrimmerImpl::stat_printer_t &stats)
+{
+  os << "JournalTrimmer(";
+  if (stats.trimmer.is_ready()) {
+    os << "should_block_on_trim=" << stats.trimmer.should_block_on_trim()
+       << ", should_(trim_dirty=" << stats.trimmer.should_trim_dirty()
+       << ", trim_alloc=" << stats.trimmer.should_trim_alloc() << ")";
+  } else {
+    os << "not-ready";
+  }
+  if (stats.detailed) {
+    os << ", journal_head=" << stats.trimmer.get_journal_head()
+       << ", alloc_tail=" << stats.trimmer.get_alloc_tail()
+       << ", dirty_tail=" << stats.trimmer.get_dirty_tail();
+    if (stats.trimmer.is_ready()) {
+      os << ", alloc_tail_target=" << stats.trimmer.get_alloc_tail_target()
+         << ", dirty_tail_target=" << stats.trimmer.get_dirty_tail_target()
+         << ", tail_limit=" << stats.trimmer.get_tail_limit();
+    }
+  }
+  os << ")";
+  return os;
 }
 
 bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
@@ -829,13 +881,6 @@ void AsyncCleaner::register_metrics()
 		     [this] { return get_unavailable_unused_bytes(); },
 		     sm::description("the size of the space is unavailable and not alive")),
 
-    sm::make_counter("dirty_journal_bytes",
-		     [this] { return trimmer->get_dirty_journal_size(); },
-		     sm::description("the size of the journal for dirty extents")),
-    sm::make_counter("alloc_journal_bytes",
-		     [this] { return trimmer->get_alloc_journal_size(); },
-		     sm::description("the size of the journal for alloc info")),
-
     sm::make_counter("projected_count", stats.projected_count,
 		    sm::description("the number of projected usage reservations")),
     sm::make_counter("projected_used_bytes_sum", stats.projected_used_bytes_sum,
@@ -899,7 +944,7 @@ segment_id_t AsyncCleaner::allocate_segment(
       gc_process.maybe_wake_background();
       auto new_usage = calc_utilization(seg_id);
       adjust_segment_util(old_usage, new_usage);
-      INFO("opened, {}", gc_stat_printer_t{this, false});
+      INFO("opened, {}", stat_printer_t{*this, false});
       return seg_id;
     }
   }
@@ -925,7 +970,7 @@ void AsyncCleaner::close_segment(segment_id_t segment)
   }
   auto new_usage = calc_utilization(segment);
   adjust_segment_util(old_usage, new_usage);
-  INFO("closed, {} -- {}", gc_stat_printer_t{this, false}, seg_info);
+  INFO("closed, {} -- {}", stat_printer_t{*this, false}, seg_info);
 }
 
 double AsyncCleaner::calc_gc_benefit_cost(
@@ -1212,7 +1257,7 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
             auto new_usage = calc_utilization(segment_to_release);
             adjust_segment_util(old_usage, new_usage);
             INFO("released {}, {}",
-                 segment_to_release, gc_stat_printer_t{this, false});
+                 segment_to_release, stat_printer_t{*this, false});
             gc_process.maybe_wake_blocked_io();
           });
         } else {
@@ -1376,7 +1421,9 @@ void AsyncCleaner::start_gc()
   LOG_PREFIX(AsyncCleaner::start_gc);
   ceph_assert(state == cleaner_state_t::SCAN_SPACE);
   state = cleaner_state_t::READY;
-  INFO("done, start GC, {}", gc_stat_printer_t{this, true});
+  INFO("done, start GC, {}, {}",
+       JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+       stat_printer_t{*this, true});
   ceph_assert(trimmer->is_ready());
   gc_process.start();
 }
@@ -1391,7 +1438,9 @@ seastar::future<> AsyncCleaner::stop()
   return gc_process.stop(
   ).then([this] {
     LOG_PREFIX(AsyncCleaner::stop);
-    INFO("done, {}", gc_stat_printer_t{this, true});
+    INFO("done, {}, {}",
+         JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+         stat_printer_t{*this, true});
     // run_until_halt() can be called at HALT
   });
 }
@@ -1545,9 +1594,10 @@ segment_id_t AsyncCleaner::get_next_reclaim_segment() const
 void AsyncCleaner::log_gc_state(const char *caller) const
 {
   LOG_PREFIX(AsyncCleaner::log_gc_state);
-  if (LOCAL_LOGGER.is_enabled(seastar::log_level::debug)) {
-    DEBUG("caller {}, {}", caller, gc_stat_printer_t{this, true});
-  }
+  DEBUG("caller {}, {}, {}",
+        caller,
+        JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+        stat_printer_t{*this, true});
 }
 
 seastar::future<>
@@ -1591,40 +1641,28 @@ void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
   gc_process.maybe_wake_blocked_io();
 }
 
-std::ostream &operator<<(std::ostream &os, AsyncCleaner::gc_stat_printer_t stats)
+std::ostream &operator<<(
+    std::ostream &os, const AsyncCleaner::stat_printer_t &stats)
 {
-  os << "gc_stats(";
-  if (stats.cleaner->is_ready()) {
-    os << "should_block_on_(trim=" << stats.cleaner->trimmer->should_block_on_trim()
-       << ", reclaim=" << stats.cleaner->should_block_on_reclaim() << ")"
-       << ", should_(trim_dirty=" << stats.cleaner->trimmer->should_trim_dirty()
-       << ", trim_alloc=" << stats.cleaner->trimmer->should_trim_alloc()
-       << ", reclaim=" << stats.cleaner->gc_should_reclaim_space() << ")";
+  os << "AsyncCleaner(";
+  if (stats.cleaner.is_ready()) {
+    os << "should_block_on_reclaim=" << stats.cleaner.should_block_on_reclaim()
+       << ", should_reclaim=" << stats.cleaner.gc_should_reclaim_space();
   } else {
     os << "not-ready";
   }
-  os << ", projected_avail_ratio=" << stats.cleaner->get_projected_available_ratio()
-     << ", reclaim_ratio=" << stats.cleaner->get_reclaim_ratio()
-     << ", alive_ratio=" << stats.cleaner->get_alive_ratio();
+  os << ", projected_avail_ratio=" << stats.cleaner.get_projected_available_ratio()
+     << ", reclaim_ratio=" << stats.cleaner.get_reclaim_ratio()
+     << ", alive_ratio=" << stats.cleaner.get_alive_ratio();
   if (stats.detailed) {
-    os << ", journal_head=" << stats.cleaner->trimmer->get_journal_head()
-       << ", alloc_tail=" << stats.cleaner->trimmer->get_alloc_tail()
-       << ", dirty_tail=" << stats.cleaner->trimmer->get_dirty_tail();
-    if (stats.cleaner->is_ready()) {
-      os << ", alloc_tail_target=" << stats.cleaner->trimmer->get_alloc_tail_target()
-         << ", dirty_tail_target=" << stats.cleaner->trimmer->get_dirty_tail_target()
-         << ", tail_limit=" << stats.cleaner->trimmer->get_tail_limit();
-    }
     os << ", unavailable_unreclaimable="
-       << stats.cleaner->get_unavailable_unreclaimable_bytes() << "B"
+       << stats.cleaner.get_unavailable_unreclaimable_bytes() << "B"
        << ", unavailable_reclaimble="
-       << stats.cleaner->get_unavailable_reclaimable_bytes() << "B"
-       << ", alive=" << stats.cleaner->stats.used_bytes << "B";
+       << stats.cleaner.get_unavailable_reclaimable_bytes() << "B"
+       << ", alive=" << stats.cleaner.stats.used_bytes << "B"
+       << ", " << stats.cleaner.segments;
   }
   os << ")";
-  if (stats.detailed) {
-    os << ", " << stats.cleaner->segments;
-  }
   return os;
 }
 
