@@ -166,6 +166,8 @@ public:
   /* finish streaming writes */
   void finish_write();
 
+  virtual int send(RGWHTTPManager *mgr);
+
   int complete_request(optional_yield y,
                        std::string *etag = nullptr,
                        real_time *mtime = nullptr,
@@ -195,7 +197,7 @@ public:
 
   int send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, std::map<std::string, std::string>& extra_headers, const std::string& resource, bufferlist *send_data = nullptr /* optional input data */);
   int send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey& key, std::map<std::string, std::string>& extra_headers, const rgw_obj& obj);
-  int send(RGWHTTPManager *mgr);
+  int send(RGWHTTPManager *mgr) override;
 
   int send_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, std::map<std::string, std::string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr);
   int send_request(const DoutPrefixProvider *dpp, RGWAccessKey *key, std::map<std::string, std::string>& extra_headers, const std::string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
