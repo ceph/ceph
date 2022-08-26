@@ -1401,7 +1401,7 @@ Usage:
             tuned_profile_spec = TunedProfileSpec(
                 profile_name=profile_name, placement=placement_spec, settings=settings_dict)
             specs = [tuned_profile_spec]
-        completion = self.apply_tuned_profiles(specs)
+        completion = self.apply_tuned_profiles(specs, no_overwrite)
         res = raise_if_exception(completion)
         return HandleCommandResult(stdout=res)
 
