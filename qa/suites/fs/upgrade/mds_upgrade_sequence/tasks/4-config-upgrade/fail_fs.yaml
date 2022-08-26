@@ -1,0 +1,9 @@
+teuthology:
+  premerge: |
+            if not yaml.teuthology.variables.fail_fs then reject() end
+upgrade-tasks:
+  sequential:
+    - cephadm.shell:
+        env: [sha1]
+        host.a:
+          - ceph config set mgr mgr/orchestrator/fail_fs true
