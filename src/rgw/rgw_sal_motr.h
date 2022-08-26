@@ -562,6 +562,7 @@ class MotrObject : public Object {
     uint64_t part_num;
     // Object size as available from Content-Length header
     uint64_t expected_obj_size = 0;
+    uint64_t chunk_io_sz = 0;
     // Total Number of bytes processed so far
     uint64_t processed_bytes = 0;
     struct AccumulateIOCtxt io_ctxt = {};
