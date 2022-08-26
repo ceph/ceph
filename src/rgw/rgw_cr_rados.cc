@@ -257,12 +257,34 @@ RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCom
 {
 }
 
-RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(rgw::sal::RadosStore* _store,
-                      const rgw_raw_obj& _obj,
-                      map<string, bufferlist>& _entries) : RGWSimpleCoroutine(_store->ctx()),
-                                                store(_store),
-                                                entries(_entries),
-                                                obj(_obj), cn(NULL)
+RGWAsyncSetOmapSystemObj::RGWAsyncSetOmapSystemObj(
+  RGWCoroutine* caller, RGWAioCompletionNotifier* cn,
+  rgw::sal::RadosStore* store, rgw_raw_obj obj,
+  std::map<std::string, bufferlist> entries)
+  : RGWAsyncRadosRequest(caller, cn), store(store), obj(std::move(obj)),
+    entries(std::move(entries)) {}
+
+
+int RGWAsyncSetOmapSystemObj::_send_request(const DoutPrefixProvider *dpp)
+{
+  rgw_rados_ref ref;
+  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
+    return r;
+  }
+
+  auto ret = ref.pool.ioctx().omap_set(ref.obj.oid, entries);
+  store->svc()->sysobj->invalidate(dpp, ref.obj, null_yield);
+  return ret;
+}
+
+RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(
+  rgw::sal::RadosStore* store,
+  rgw_raw_obj obj,
+  map<string, bufferlist> entries)
+  : RGWSimpleCoroutine(store->ctx()), store(store),
+    obj(std::move(obj)), entries(std::move(entries))
 {
   stringstream& s = set_description();
   s << "set omap keys dest=" << obj << " keys=[" << s.str() << "]";
@@ -275,30 +297,27 @@ RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(rgw::sal::RadosStore* _store,
   s << "]";
 }
 
+void RGWRadosSetOmapKeysCR::request_cleanup()
+{
+  if (req) {
+    req->finish();
+    req = NULL;
+  }
+}
+
 int RGWRadosSetOmapKeysCR::send_request(const DoutPrefixProvider *dpp)
 {
-  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
-    return r;
-  }
-
   set_status() << "sending request";
-
-  librados::ObjectWriteOperation op;
-  op.omap_set(entries);
-
-  cn = stack->create_completion_notifier();
-  return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op);
+  req = new RGWAsyncSetOmapSystemObj(this, stack->create_completion_notifier(),
+				     store, std::move(obj), std::move(entries));
+  async_rados->queue(req);
+  return 0;
 }
 
 int RGWRadosSetOmapKeysCR::request_complete()
 {
-  int r = cn->completion()->get_return_value();
-
-  set_status() << "request complete; ret=" << r;
-
-  return r;
+  set_status() << "request complete; ret=" << req->get_ret_status();
+  return req->get_ret_status();
 }
 
 RGWRadosGetOmapKeysCR::RGWRadosGetOmapKeysCR(rgw::sal::RadosStore* _store,
@@ -412,96 +431,64 @@ int RGWRadosRemoveOmapKeysCR::request_complete()
   return r;
 }
 
-RGWRadosRemoveCR::RGWRadosRemoveCR(rgw::sal::RadosStore* store, const rgw_raw_obj& obj,
+RGWAsyncRemoveSystemObj::RGWAsyncRemoveSystemObj(
+  RGWCoroutine* caller, RGWAioCompletionNotifier* cn,
+  rgw::sal::RadosStore* store, rgw_raw_obj obj,
+  RGWObjVersionTracker* objv_tracker)
+  : RGWAsyncRadosRequest(caller, cn), store(store), obj(std::move(obj)),
+    objv_tracker(objv_tracker) {}
+
+
+int RGWAsyncRemoveSystemObj::_send_request(const DoutPrefixProvider *dpp)
+{
+  rgw_rados_ref ref;
+  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
+  op.remove();
+
+  auto ret = ref.pool.ioctx().operate(ref.obj.oid, &op);
+  store->svc()->sysobj->invalidate(dpp, ref.obj, null_yield);
+  return ret;
+}
+
+RGWRadosRemoveCR::RGWRadosRemoveCR(rgw::sal::RadosStore* store,
+				   rgw_raw_obj obj,
                                    RGWObjVersionTracker* objv_tracker)
   : RGWSimpleCoroutine(store->ctx()),
-    store(store), obj(obj), objv_tracker(objv_tracker)
+    store(store), obj(std::move(obj)), objv_tracker(objv_tracker)
 {
   set_description() << "remove dest=" << obj;
 }
 
+void RGWRadosRemoveCR::request_cleanup()
+{
+  if (req) {
+    req->finish();
+    req = NULL;
+  }
+}
+
 int RGWRadosRemoveCR::send_request(const DoutPrefixProvider *dpp)
 {
-  auto rados = store->getRados()->get_rados_handle();
-  int r = rados->ioctx_create(obj.pool.name.c_str(), ioctx);
-  if (r < 0) {
-    lderr(cct) << "ERROR: failed to open pool (" << obj.pool.name << ") ret=" << r << dendl;
-    return r;
-  }
-  ioctx.locator_set_key(obj.loc);
-
-  set_status() << "send request";
-
-  librados::ObjectWriteOperation op;
-  if (objv_tracker) {
-    objv_tracker->prepare_op_for_write(&op);
-  }
-  op.remove();
-
-  cn = stack->create_completion_notifier();
-  return ioctx.aio_operate(obj.oid, cn->completion(), &op);
+  set_status() << "sending request";
+  req = new RGWAsyncRemoveSystemObj(this, stack->create_completion_notifier(),
+				    store, std::move(obj), objv_tracker);
+  async_rados->queue(req);
+  return 0;
 }
 
 int RGWRadosRemoveCR::request_complete()
 {
-  int r = cn->completion()->get_return_value();
-
-  set_status() << "request complete; ret=" << r;
-
-  return r;
-}
-
-RGWRadosRemoveOidCR::RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
-					 librados::IoCtx&& ioctx,
-					 std::string_view oid,
-					 RGWObjVersionTracker* objv_tracker)
-  : RGWSimpleCoroutine(store->ctx()), ioctx(std::move(ioctx)),
-    oid(std::string(oid)), objv_tracker(objv_tracker)
-{
-  set_description() << "remove dest=" << oid;
-}
-
-RGWRadosRemoveOidCR::RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
-					 RGWSI_RADOS::Obj& obj,
-					 RGWObjVersionTracker* objv_tracker)
-  : RGWSimpleCoroutine(store->ctx()),
-    ioctx(librados::IoCtx(obj.get_ref().pool.ioctx())),
-    oid(obj.get_ref().obj.oid),
-    objv_tracker(objv_tracker)
-{
-  set_description() << "remove dest=" << oid;
-}
-
-RGWRadosRemoveOidCR::RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
-					 RGWSI_RADOS::Obj&& obj,
-					 RGWObjVersionTracker* objv_tracker)
-  : RGWSimpleCoroutine(store->ctx()),
-    ioctx(std::move(obj.get_ref().pool.ioctx())),
-    oid(std::move(obj.get_ref().obj.oid)),
-    objv_tracker(objv_tracker)
-{
-  set_description() << "remove dest=" << oid;
-}
-
-int RGWRadosRemoveOidCR::send_request(const DoutPrefixProvider *dpp)
-{
-  librados::ObjectWriteOperation op;
-  if (objv_tracker) {
-    objv_tracker->prepare_op_for_write(&op);
-  }
-  op.remove();
-
-  cn = stack->create_completion_notifier();
-  return ioctx.aio_operate(oid, cn->completion(), &op);
-}
-
-int RGWRadosRemoveOidCR::request_complete()
-{
-  int r = cn->completion()->get_return_value();
-
-  set_status() << "request complete; ret=" << r;
-
-  return r;
+  set_status() << "request complete; ret=" << req->get_ret_status();
+  return req->get_ret_status();
 }
 
 RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,

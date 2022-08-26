@@ -4766,12 +4766,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
       }
       yield {
         // delete the shard status object
-        auto status_obj = sync_env->svc->rados->obj(marker_tracker.get_obj());
-        retcode = status_obj.open(dpp);
-        if (retcode < 0) {
-          return set_cr_error(retcode);
-        }
-        call(new RGWRadosRemoveOidCR(sync_env->store, std::move(status_obj)));
+        call(new RGWRadosRemoveCR(sync_env->store, marker_tracker.get_obj()));
         if (retcode < 0) {
           ldpp_dout(dpp, 20) << "failed to remove shard status object: " << cpp_strerror(retcode) << dendl;
           return set_cr_error(retcode);

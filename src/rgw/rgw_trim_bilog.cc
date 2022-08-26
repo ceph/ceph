@@ -437,7 +437,7 @@ class BucketCleanIndexCollectCR : public RGWShardCollectCR {
     if (shard < num_shards) {
       RGWRados::BucketShard bs(store->getRados());
       bs.init(dpp, bucket_info, index, shard);
-      spawn(new RGWRadosRemoveOidCR(store, std::move(bs.bucket_obj), nullptr),
+      spawn(new RGWRadosRemoveCR(store, std::move(bs.bucket_obj.get_raw_obj()), nullptr),
 	    false);
       ++shard;
       return true;

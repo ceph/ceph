@@ -619,20 +619,38 @@ public:
   }
 };
 
-class RGWRadosSetOmapKeysCR : public RGWSimpleCoroutine {
+class RGWAsyncSetOmapSystemObj : public RGWAsyncRadosRequest {
   rgw::sal::RadosStore* store;
-  std::map<std::string, bufferlist> entries;
-
-  rgw_rados_ref ref;
-
   rgw_raw_obj obj;
 
-  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+  std::map<std::string, bufferlist> entries;
+
+protected:
+  int _send_request(const DoutPrefixProvider *dpp) override;
+public:
+  RGWAsyncSetOmapSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
+			   rgw::sal::RadosStore* store,
+			   rgw_raw_obj obj,
+			   std::map<std::string, bufferlist> entries);
+};
+
+class RGWRadosSetOmapKeysCR : public RGWSimpleCoroutine {
+  rgw::sal::RadosStore* store;
+  RGWAsyncRadosProcessor* async_rados =
+    store->svc()->rados->get_async_processor();
+  rgw_raw_obj obj;
+  std::map<std::string, bufferlist> entries;
+
+  RGWAsyncSetOmapSystemObj* req = nullptr;
 
 public:
-  RGWRadosSetOmapKeysCR(rgw::sal::RadosStore* _store,
-		      const rgw_raw_obj& _obj,
-		      std::map<std::string, bufferlist>& _entries);
+  RGWRadosSetOmapKeysCR(rgw::sal::RadosStore* store,
+			rgw_raw_obj obj,
+			std::map<std::string, bufferlist> entries);
+  ~RGWRadosSetOmapKeysCR() override {
+    request_cleanup();
+  }
+  void request_cleanup() override;
 
   int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
@@ -709,39 +727,39 @@ public:
   int request_complete() override;
 };
 
-class RGWRadosRemoveCR : public RGWSimpleCoroutine {
+class RGWAsyncRemoveSystemObj : public RGWAsyncRadosRequest {
   rgw::sal::RadosStore* store;
-  librados::IoCtx ioctx;
-  const rgw_raw_obj obj;
+  rgw_raw_obj obj;
   RGWObjVersionTracker* objv_tracker;
-  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
+  std::map<std::string, bufferlist> entries;
+
+protected:
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
-  RGWRadosRemoveCR(rgw::sal::RadosStore* store, const rgw_raw_obj& obj,
-                   RGWObjVersionTracker* objv_tracker = nullptr);
+  RGWAsyncRemoveSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
+			  rgw::sal::RadosStore* store,
+			  rgw_raw_obj obj,
+			  RGWObjVersionTracker* objv_tracker);
 
-  int send_request(const DoutPrefixProvider *dpp) override;
-  int request_complete() override;
 };
 
-class RGWRadosRemoveOidCR : public RGWSimpleCoroutine {
-  librados::IoCtx ioctx;
-  const std::string oid;
+class RGWRadosRemoveCR : public RGWSimpleCoroutine {
+  rgw::sal::RadosStore* store;
+  RGWAsyncRadosProcessor* async_rados =
+    store->svc()->rados->get_async_processor();
+  const rgw_raw_obj obj;
   RGWObjVersionTracker* objv_tracker;
-  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+
+  RGWAsyncRemoveSystemObj* req = nullptr;
 
 public:
-  RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
-		      librados::IoCtx&& ioctx, std::string_view oid,
-		      RGWObjVersionTracker* objv_tracker = nullptr);
-
-  RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
-		      RGWSI_RADOS::Obj& obj,
-		      RGWObjVersionTracker* objv_tracker = nullptr);
-
-  RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
-		      RGWSI_RADOS::Obj&& obj,
-		      RGWObjVersionTracker* objv_tracker = nullptr);
+  RGWRadosRemoveCR(rgw::sal::RadosStore* store, rgw_raw_obj obj,
+                   RGWObjVersionTracker* objv_tracker = nullptr);
+  ~RGWRadosRemoveCR() override {
+    request_cleanup();
+  }
+  void request_cleanup() override;
 
   int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
@@ -804,9 +822,9 @@ public:
   int request_complete() override;
 };
 
-#define OMAP_APPEND_MAX_ENTRIES_DEFAULT 100
-
 class RGWOmapAppend : public RGWConsumerCR<std::string> {
+  static constexpr auto max_entries_default = 100;
+
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RadosStore* store;
 
@@ -824,7 +842,7 @@ class RGWOmapAppend : public RGWConsumerCR<std::string> {
 public:
   RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
                 const rgw_raw_obj& _obj,
-                uint64_t _window_size = OMAP_APPEND_MAX_ENTRIES_DEFAULT);
+                uint64_t _window_size = max_entries_default);
   int operate(const DoutPrefixProvider *dpp) override;
   void flush_pending();
   bool append(const std::string& s);
