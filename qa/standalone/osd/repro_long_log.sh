@@ -169,25 +169,25 @@ function TEST_trim_max_entries_with_dups()
     rados -p test rm foo
     test_log_size $PGID 18 2 || return 1
     rados -p test rm foo
-    test_log_size $PGID 15 5 || return 1
+    test_log_size $PGID 15 6 || return 1
     rados -p test rm foo
-    test_log_size $PGID 12 8 || return 1
+    test_log_size $PGID 12 10 || return 1
     rados -p test rm foo
-    test_log_size $PGID 9 11 || return 1
+    test_log_size $PGID 9 14 || return 1
     rados -p test rm foo
-    test_log_size $PGID 6 14 || return 1
+    test_log_size $PGID 6 18 || return 1
     rados -p test rm foo
-    test_log_size $PGID 3 17 || return 1
+    test_log_size $PGID 3 20 || return 1
 
     # below trim_min
     rados -p test rm foo
-    test_log_size $PGID 4 17 || return 1
+    test_log_size $PGID 4 20 || return 1
     rados -p test rm foo
-    test_log_size $PGID 3 17 || return 1
+    test_log_size $PGID 3 20 || return 1
     rados -p test rm foo
-    test_log_size $PGID 4 17 || return 1
+    test_log_size $PGID 4 20 || return 1
     rados -p test rm foo
-    test_log_size $PGID 3 17 || return 1
+    test_log_size $PGID 3 20 || return 1
 }
 
 main repro-long-log "$@"
