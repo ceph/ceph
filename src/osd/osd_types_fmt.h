@@ -14,7 +14,7 @@ struct fmt::formatter<osd_reqid_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const osd_reqid_t& req_id, FormatContext& ctx)
+  auto format(const osd_reqid_t& req_id, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(), "{}.{}:{}", req_id.name, req_id.inc,
 			  req_id.tid);
@@ -26,7 +26,7 @@ struct fmt::formatter<pg_shard_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const pg_shard_t& shrd, FormatContext& ctx)
+  auto format(const pg_shard_t& shrd, FormatContext& ctx) const
   {
     if (shrd.is_undefined()) {
       return fmt::format_to(ctx.out(), "?");
@@ -43,7 +43,7 @@ struct fmt::formatter<eversion_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const eversion_t& ev, FormatContext& ctx)
+  auto format(const eversion_t& ev, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(), "{}'{}", ev.epoch, ev.version);
   }
@@ -67,7 +67,7 @@ struct fmt::formatter<object_manifest_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const object_manifest_t& om, FormatContext& ctx)
+  auto format(const object_manifest_t& om, FormatContext& ctx) const
   {
     fmt::format_to(ctx.out(), "manifest({}", om.get_type_name());
     if (om.is_redirect()) {
@@ -84,7 +84,7 @@ struct fmt::formatter<object_info_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const object_info_t& oi, FormatContext& ctx)
+  auto format(const object_info_t& oi, FormatContext& ctx) const
   {
     fmt::format_to(ctx.out(), "{}({} {} {} s {} uv {}", oi.soid, oi.version,
 		   oi.last_reqid, (oi.flags ? oi.get_flag_string() : ""), oi.size,
@@ -111,7 +111,7 @@ struct fmt::formatter<pg_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const pg_t& pg, FormatContext& ctx)
+  auto format(const pg_t& pg, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(), "{}.{:x}", pg.pool(), pg.m_seed);
   }
@@ -123,7 +123,7 @@ struct fmt::formatter<spg_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const spg_t& spg, FormatContext& ctx)
+  auto format(const spg_t& spg, FormatContext& ctx) const
   {
     if (shard_id_t::NO_SHARD == spg.shard.id) {
       return fmt::format_to(ctx.out(), "{}", spg.pgid);
@@ -138,7 +138,7 @@ struct fmt::formatter<pg_history_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const pg_history_t& pgh, FormatContext& ctx)
+  auto format(const pg_history_t& pgh, FormatContext& ctx) const
   {
     fmt::format_to(ctx.out(),
 		   "ec={}/{} lis/c={}/{} les/c/f={}/{}/{} sis={}",
