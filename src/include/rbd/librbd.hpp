@@ -848,8 +848,8 @@ public:
 private:
   friend class RBD;
 
-  Image(const Image& rhs);
-  const Image& operator=(const Image& rhs);
+  Image(const Image& rhs) = delete;
+  const Image& operator=(const Image& rhs) = delete;
 
   image_ctx_t ctx;
 };
