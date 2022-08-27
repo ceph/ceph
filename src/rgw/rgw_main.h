@@ -53,57 +53,40 @@ namespace rgw {
 
   class RGWLib;
 
-  class InitHelper {
+  class AppMain {
     /* several components should be initalized only if librgw is
      * also serving HTTP */
     bool have_http_frontend{false};
     bool nfs{false};
 
-    std::vector<RGWFrontend*>& fes;
-    std::vector<RGWFrontendConfig*>& fe_configs;
-    std::multimap<string, RGWFrontendConfig*>& fe_map;
-    std::unique_ptr<rgw::LDAPHelper>& ldh;
-    OpsLogSink*& olog;
-    RGWREST& rest;
-    std::unique_ptr<rgw::lua::Background>& lua_background;
-    std::unique_ptr<rgw::auth::ImplicitTenants>& implicit_tenant_context;
-    std::unique_ptr<rgw::dmclock::SchedulerCtx>& sched_ctx;
-    std::unique_ptr<ActiveRateLimiter>& ratelimiter;
+    std::vector<RGWFrontend*> fes;
+    std::vector<RGWFrontendConfig*> fe_configs;
+    std::multimap<string, RGWFrontendConfig*> fe_map;
+    std::unique_ptr<rgw::LDAPHelper> ldh;
+    OpsLogSink* olog;
+    RGWREST rest;
+    std::unique_ptr<rgw::lua::Background> lua_background;
+    std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
+    std::unique_ptr<rgw::dmclock::SchedulerCtx> sched_ctx;
+    std::unique_ptr<ActiveRateLimiter> ratelimiter;
     // wow, realm reloader has a lot of parts
-    std::unique_ptr<RGWRealmReloader>& reloader;
-    std::unique_ptr<RGWPeriodPusher>& pusher;
-    std::unique_ptr<RGWFrontendPauser>& fe_pauser;
-    std::unique_ptr<RGWRealmWatcher>& realm_watcher;
-    std::unique_ptr<RGWPauser>& rgw_pauser;
-    rgw::sal::Store*& store;
+    std::unique_ptr<RGWRealmReloader> reloader;
+    std::unique_ptr<RGWPeriodPusher> pusher;
+    std::unique_ptr<RGWFrontendPauser> fe_pauser;
+    std::unique_ptr<RGWRealmWatcher> realm_watcher;
+    std::unique_ptr<RGWPauser> rgw_pauser;
+    rgw::sal::Store* store;
     DoutPrefixProvider* dpp;
 
+    friend class RGWLib;
+
   public:
-    InitHelper(std::vector<RGWFrontend*>& fes,
-	      std::vector<RGWFrontendConfig*>& fe_configs,
-	      std::multimap<string, RGWFrontendConfig*>& fe_map,
-	      std::unique_ptr<rgw::LDAPHelper>& ldh,
-	      OpsLogSink*& olog,
-	      RGWREST& rest,
-	      std::unique_ptr<rgw::lua::Background>& lua_background,
-        std::unique_ptr<rgw::auth::ImplicitTenants>& implicit_tenant_context,
-	      std::unique_ptr<rgw::dmclock::SchedulerCtx>& sched_ctx,
-	      std::unique_ptr<ActiveRateLimiter>& ratelimiter,
-        std::unique_ptr<RGWRealmReloader>& reloader,
-        std::unique_ptr<RGWPeriodPusher>& pusher,
-        std::unique_ptr<RGWFrontendPauser>& fe_pauser,
-        std::unique_ptr<RGWRealmWatcher>& realm_watcher,
-        std::unique_ptr<RGWPauser>& rgw_pauser,
-	      rgw::sal::Store*& store,
-	      DoutPrefixProvider* dpp)
-      : fes(fes), fe_configs(fe_configs), fe_map(fe_map), ldh(ldh), olog(olog),
-	      rest(rest), lua_background(lua_background),
-        implicit_tenant_context(implicit_tenant_context), sched_ctx(sched_ctx),
-	      ratelimiter(ratelimiter), reloader(reloader), pusher(pusher),
-        fe_pauser(fe_pauser), realm_watcher(realm_watcher), rgw_pauser(rgw_pauser),
-        store(store), dpp(dpp)
+    AppMain(DoutPrefixProvider* dpp)
+      : dpp(dpp)
       {}
-    
+
+    void shutdown();
+
     void init_frontends1(bool nfs = false);
     void init_storage();
     void init_perfcounters();
@@ -119,7 +102,7 @@ namespace rgw {
     bool have_http() {
       return have_http_frontend;
     }
-  }; /* InitHelper */
+  }; /* AppMain */
 
 } // namespace rgw
 
