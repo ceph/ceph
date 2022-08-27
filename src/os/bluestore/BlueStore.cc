@@ -6471,6 +6471,46 @@ int BlueStore::_close_base()
   return 0;
 }
 
+int BlueStore::_init_fm_and_alloc()
+{
+  // If already inited, exit.
+  // We require bluefs either closed or read-only.
+  // We require db either closed or read-only.
+
+  if (state.bluefs == rw) {
+    //error
+  }
+  if (state.rocksdb == rw) {
+    //error
+  }
+  if (state.bluefs == off) {
+    _open_bluefs(true); //read only
+  }
+  ceph_assert(state.bluefs == ro);
+  if (state.rocksdb == off) {
+    _open_db(true);
+  }
+  ceph_assert(state.db == ro);
+
+  r = _open_super_meta();
+  if (r < 0) {
+    goto out_db;
+  }
+
+  r = _open_fm(nullptr, true);
+  if (r < 0)
+    goto out_db;
+
+  r = _init_alloc(&zone_adjustments);
+  if (r < 0)
+    goto out_fm;
+
+  // when we switch rocksdb from ro to rw apply
+  // Just before we finally mount bluestore rw,
+  // call post_init_alloc.
+
+}
+
 /*
 * opens both DB and dependant super_meta, FreelistManager and allocator
 * in the proper order
