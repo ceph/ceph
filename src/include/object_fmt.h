@@ -16,7 +16,7 @@ struct fmt::formatter<snapid_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const snapid_t& snp, FormatContext& ctx)
+  auto format(const snapid_t& snp, FormatContext& ctx) const
   {
     if (snp == CEPH_NOSNAP) {
       return fmt::format_to(ctx.out(), "head");
