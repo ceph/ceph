@@ -558,18 +558,12 @@ namespace rgw {
     mutex.unlock();
 
     /* stage all front-ends (before common-init-finish) */
-
-    rgw::InitHelper init_helper(
-      fes, fe_configs, fe_map, ldh, olog, rest, lua_background,
-      implicit_tenant_context, sched_ctx, ratelimiter, reloader,
-      pusher, fe_pauser, realm_watcher, rgw_pauser, store, this);
-
-    init_helper.init_frontends1(true /* nfs */);
+    main.init_frontends1(true /* nfs */);
 
     common_init_finish(g_ceph_context);
 
-    init_helper.init_storage();
-    if (!store) {
+    main.init_storage();
+    if (! main.store) {
       mutex.lock();
       init_timer.cancel_all_events();
       init_timer.shutdown();
@@ -579,25 +573,25 @@ namespace rgw {
       return -EIO;
     }
 
-    init_helper.init_perfcounters();
-    init_helper.init_http_clients();
-    init_helper.cond_init_apis();
+    main.init_perfcounters();
+    main.init_http_clients();
+    main.cond_init_apis();
 
     mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
     mutex.unlock();
 
-    init_helper.init_ldap();
-    init_helper.init_opslog();
+    main.init_ldap();
+    main.init_opslog();
 
     init_async_signal_handler();
     register_async_signal_handler(SIGUSR1, handle_sigterm);
 
-    init_helper.init_tracepoints();
-    init_helper.init_frontends2(this /* rgwlib */);
-    init_helper.init_notification_endpoints();
-    init_helper.init_lua();
+    main.init_tracepoints();
+    main.init_frontends2(this /* rgwlib */);
+    main.init_notification_endpoints();
+    main.init_lua();
 
     return 0;
   } /* RGWLib::init() */
@@ -605,57 +599,7 @@ namespace rgw {
   int RGWLib::stop()
   {
     derr << "shutting down" << dendl;
-
-    if (store->get_name() == "rados") {
-      reloader.reset(); // stop the realm reloader
-    }
-
-    for (auto& fe : fes) {
-      fe->stop();
-    }
-
-    for (auto& fe : fes) {
-      fe->join();
-      delete fe;
-    }
-
-    for (auto& fec : fe_configs) {
-      delete fec;
-    }
-  
-    ldh.reset(nullptr); // deletes
-
-    unregister_async_signal_handler(SIGUSR1, handle_sigterm);
-    shutdown_async_signal_handler();
-
-    rgw_log_usage_finalize();
-    
-    delete olog;
-
-    if (lua_background) {
-      lua_background->shutdown();
-    }
-
-    StoreManager::close_storage(store);
-
-    rgw_tools_cleanup();
-    rgw_shutdown_resolver();
-    rgw_http_client_cleanup();
-    rgw_kmip_client_cleanup();
-    rgw::curl::cleanup_curl();
-    g_conf().remove_observer(implicit_tenant_context.get());
-    implicit_tenant_context.reset(); // deletes
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-    rgw::amqp::shutdown();
-#endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
-    rgw::kafka::shutdown();
-#endif
-
-    rgw_perf_stop(g_ceph_context);
-
-    dout(1) << "final shutdown" << dendl;
-    cct.reset();
+    main.shutdown();
 
     return 0;
   } /* RGWLib::stop() */
@@ -761,6 +705,9 @@ void librgw_shutdown(librgw_t rgw)
 
   CephContext* cct = static_cast<CephContext*>(rgw);
   rgwlib.stop();
+
+  dout(1) << "final shutdown" << dendl;
+
   cct->put();
 }
 

@@ -165,7 +165,7 @@ static int usage()
   return 0;
 }
 
-void rgw::InitHelper::init_frontends1(bool nfs) 
+void rgw::AppMain::init_frontends1(bool nfs) 
 {
   this->nfs = nfs;
   std::string fe_key = (nfs) ? "rgw_nfs_frontends" : "rgw_frontends";
@@ -230,7 +230,7 @@ void rgw::InitHelper::init_frontends1(bool nfs)
   ceph::crypto::init_openssl_engine_once();
 } /* init_frontends1 */
 
-void rgw::InitHelper::init_storage()
+void rgw::AppMain::init_storage()
 {
     auto run_gc =
     g_conf()->rgw_enable_gc_threads &&
@@ -259,12 +259,12 @@ void rgw::InitHelper::init_storage()
 
 } /* init_storage */
 
-void rgw::InitHelper::init_perfcounters()
+void rgw::AppMain::init_perfcounters()
 {
   (void) rgw_perf_start(dpp->get_cct());
 } /* init_perfcounters */
 
-void rgw::InitHelper::init_http_clients()
+void rgw::AppMain::init_http_clients()
 {
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
@@ -272,7 +272,7 @@ void rgw::InitHelper::init_http_clients()
   rgw_kmip_client_init(*new RGWKMIPManagerImpl(dpp->get_cct()));
 } /* init_http_clients */
 
-void rgw::InitHelper::cond_init_apis() 
+void rgw::AppMain::cond_init_apis() 
 {
    rgw_rest_init(g_ceph_context, store->get_zone()->get_zonegroup());
 
@@ -364,7 +364,7 @@ void rgw::InitHelper::cond_init_apis()
   } /* have_http_frontend */
 } /* init_apis */
 
-void rgw::InitHelper::init_ldap()
+void rgw::AppMain::init_ldap()
 {
   const string &ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
   const string &ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
@@ -379,7 +379,7 @@ void rgw::InitHelper::init_ldap()
   ldh->bind();
 } /* init_ldap */
 
-void rgw::InitHelper::init_opslog()
+void rgw::AppMain::init_opslog()
 {
   rgw_log_usage_init(dpp->get_cct(), store);
 
@@ -402,7 +402,7 @@ void rgw::InitHelper::init_opslog()
   olog = olog_manifold;
 } /* init_opslog */
 
-int rgw::InitHelper::init_frontends2(RGWLib* rgwlib)
+int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 {
   int r{0};
   vector<string> frontends_def;
@@ -533,14 +533,14 @@ int rgw::InitHelper::init_frontends2(RGWLib* rgwlib)
   return r;
 } /* init_frontends2 */
 
-void rgw::InitHelper::init_tracepoints()
+void rgw::AppMain::init_tracepoints()
 {
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(dpp->get_cct());
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(dpp->get_cct());
   tracing::rgw::tracer.init("rgw");
 } /* init_tracepoints() */
 
-void rgw::InitHelper::init_notification_endpoints()
+void rgw::AppMain::init_notification_endpoints()
 {
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
   if (!rgw::amqp::init(dpp->get_cct())) {
@@ -554,7 +554,7 @@ void rgw::InitHelper::init_notification_endpoints()
 #endif
 } /* init_notification_endpoints */
 
-void rgw::InitHelper::init_lua()
+void rgw::AppMain::init_lua()
 {
   int r{0};
   const auto &luarocks_path =
@@ -588,6 +588,57 @@ void rgw::InitHelper::init_lua()
     lua_background->start();
   }
 } /* init_lua */
+
+void rgw::AppMain::shutdown()
+{
+  if (store->get_name() == "rados") {
+    reloader.reset(); // stop the realm reloader
+  }
+
+  for (auto& fe : fes) {
+    fe->stop();
+  }
+
+  for (auto& fe : fes) {
+    fe->join();
+    delete fe;
+  }
+
+  for (auto& fec : fe_configs) {
+    delete fec;
+  }
+
+  ldh.reset(nullptr); // deletes
+
+  unregister_async_signal_handler(SIGUSR1, handle_sigterm);
+  shutdown_async_signal_handler();
+
+  rgw_log_usage_finalize();
+  
+  delete olog;
+
+  if (lua_background) {
+    lua_background->shutdown();
+  }
+
+  StoreManager::close_storage(store);
+
+  rgw_tools_cleanup();
+  rgw_shutdown_resolver();
+  rgw_http_client_cleanup();
+  rgw_kmip_client_cleanup();
+  rgw::curl::cleanup_curl();
+  g_conf().remove_observer(implicit_tenant_context.get());
+  implicit_tenant_context.reset(); // deletes
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+  rgw::amqp::shutdown();
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  rgw::kafka::shutdown();
+#endif
+
+  rgw_perf_stop(g_ceph_context);
+}
 
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
