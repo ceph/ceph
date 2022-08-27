@@ -78,6 +78,7 @@ namespace rgw {
     rgw::sal::Store* store;
     DoutPrefixProvider* dpp;
 
+    friend int main(int, char*[]); // doesnt work gcc-12.1
     friend class RGWLib;
 
   public:
@@ -87,7 +88,12 @@ namespace rgw {
 
     void shutdown();
 
+    rgw::sal::Store* get_store() {
+      return store;
+    }
+
     void init_frontends1(bool nfs = false);
+    void init_numa();
     void init_storage();
     void init_perfcounters();
     void init_http_clients();

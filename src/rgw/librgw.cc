@@ -13,82 +13,33 @@
  *
  */
 
-#include "include/compat.h"
 #include <sys/types.h>
 #include <string.h>
 #include <chrono>
 
-#include "include/types.h"
 #include "include/rados/librgw.h"
-#include "rgw/rgw_acl_s3.h"
 #include "rgw_acl.h"
 
 #include "include/str_list.h"
-#include "include/stringify.h"
 #include "global/signal_handler.h"
-#include "common/config.h"
-#include "common/errno.h"
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
-#include "common/openssl_opts_handler.h"
-#include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_context.h"
 #include "common/common_init.h"
 #include "common/dout.h"
 
-#include "rgw_resolve.h"
 #include "rgw_op.h"
-#include "rgw_period_pusher.h"
-#include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
-#include "rgw_rest_s3.h"
-#include "rgw_rest_swift.h"
-#include "rgw_rest_admin.h"
-#include "rgw_rest_info.h"
-#include "rgw_rest_usage.h"
-#include "rgw_rest_user.h"
-#include "rgw_rest_bucket.h"
-#include "rgw_rest_metadata.h"
-#include "rgw_rest_log.h"
-#include "rgw_rest_config.h"
-#include "rgw_rest_realm.h"
-#include "rgw_rest_sts.h"
-#include "rgw_rest_ratelimit.h"
-#include "rgw_swift_auth.h"
 #include "rgw_log.h"
-#include "rgw_tools.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
 #include "rgw_process.h"
-#include "rgw_rest_user.h"
-#include "rgw_rest_s3.h"
-#include "rgw_os_lib.h"
 #include "rgw_auth.h"
-#include "rgw_auth_s3.h"
 #include "rgw_lib.h"
 #include "rgw_lib_frontend.h"
-#include "rgw_http_client.h"
-#include "rgw_http_client_curl.h"
-#include "rgw_kmip_client.h"
-#include "rgw_kmip_client_impl.h"
 #include "rgw_perf_counters.h"
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-#include "rgw_amqp.h"
-#endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
-#include "rgw_kafka.h"
-#endif
-#include "rgw_asio_frontend.h"
-#include "rgw_dmclock_scheduler_ctx.h"
-#include "rgw_lua.h"
-#ifdef WITH_RADOSGW_DBSTORE
-#include "rgw_sal_dbstore.h"
-#endif
-#include "rgw_lua_background.h"
-
-#include "services/svc_zone.h"
 #include "rgw_main.h"
 
 #include <errno.h>
