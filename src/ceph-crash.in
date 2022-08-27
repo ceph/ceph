@@ -31,18 +31,22 @@ def parse_args():
         '--name', '-n',
         help='ceph name to authenticate as (default: try client.crash, client.admin)')
     parser.add_argument(
+        '--cluster', default='ceph',
+        help='cluster name',
+    )
+    parser.add_argument(
         '--log-level', '-l',
         help='log level output (default: INFO), support INFO or DEBUG')
 
     return parser.parse_args()
 
 
-def post_crash(path):
+def post_crash(path, cluster):
     rc = 0
     for n in auth_names:
         pr = subprocess.Popen(
             args=['timeout', '30', 'ceph',
-                  '-n', n,
+                  '-n', n, '--cluster', cluster,
                   'crash', 'post', '-i', '-'],
             stdin=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -58,7 +62,7 @@ def post_crash(path):
     return rc
 
 
-def scrape_path(path):
+def scrape_path(path, cluster):
     for p in os.listdir(path):
         crashpath = os.path.join(path, p)
         metapath = os.path.join(crashpath, 'meta')
@@ -71,7 +75,7 @@ def scrape_path(path):
                 if not os.path.isfile(donepath):
                     return
             # ok, we can process this one
-            rc = post_crash(crashpath)
+            rc = post_crash(crashpath, cluster)
             if rc == 0:
                 os.rename(crashpath, os.path.join(path, 'posted/', p))
                 log.debug(
@@ -103,7 +107,7 @@ def main():
 
     log.info("monitoring path %s, delay %ds" % (args.path, args.delay * 60.0))
     while True:
-        scrape_path(args.path)
+        scrape_path(args.path, args.cluster)
         if args.delay == 0:
             sys.exit(0)
         time.sleep(args.delay * 60)
