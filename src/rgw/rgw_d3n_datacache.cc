@@ -9,6 +9,9 @@
 #include "rgw_auth_s3.h"
 #include "rgw_op.h"
 #include "rgw_crypt_sanitize.h"
+#if defined(__linux__)
+#include <features.h>
+#endif
 
 #if __has_include(<filesystem>)
 #include <filesystem>
@@ -97,7 +100,7 @@ void D3nDataCache::init(CephContext *_cct) {
   if (conf_eviction_policy == "random")
     eviction_policy = _eviction_policy::RANDOM;
 
-#if defined(HAVE_LIBAIO)
+#if defined(HAVE_LIBAIO) && defined(__GLIBC__)
   // libaio setup
   struct aioinit ainit{0};
   ainit.aio_threads = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_threads");
