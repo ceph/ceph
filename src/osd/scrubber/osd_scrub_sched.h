@@ -271,8 +271,8 @@ class ScrubQueue {
      */
     std::string_view registration_state() const
     {
-      return in_queues.load(std::memory_order_relaxed) ? " in-queue"
-						       : " not-queued";
+      return in_queues.load(std::memory_order_relaxed) ? "in-queue"
+						       : "not-queued";
     }
 
     /**
@@ -363,7 +363,7 @@ class ScrubQueue {
 
   sched_params_t determine_scrub_time(const requested_scrub_t& request_flags,
 				      const pg_info_t& pg_info,
-				      const pool_opts_t pool_conf) const;
+				      const pool_opts_t& pool_conf) const;
 
  public:
   void dump_scrubs(ceph::Formatter* f) const;
@@ -421,7 +421,7 @@ class ScrubQueue {
    *  variables. Specifically, the following are guaranteed:
    *  - 'in_queues' is asserted only if the job is in one of the queues;
    *  - a job will only be in state 'registered' if in one of the queues;
-   *  - no job will be in the two queues simulatenously
+   *  - no job will be in the two queues simultaneously;
    *
    *  Note that PG locks should not be acquired while holding jobs_lock.
    */
@@ -523,6 +523,19 @@ protected: // used by the unit-tests
 };
 
 template <>
+struct fmt::formatter<ScrubQueue::qu_state_t>
+    : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const ScrubQueue::qu_state_t& s, FormatContext& ctx)
+  {
+    auto out = ctx.out();
+    out = fmt::formatter<string_view>::format(
+      std::string{ScrubQueue::qu_state_text(s)}, ctx);
+    return out;
+  }
+};
+
+template <>
 struct fmt::formatter<ScrubQueue::ScrubJob> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
@@ -531,13 +544,10 @@ struct fmt::formatter<ScrubQueue::ScrubJob> {
   {
     return fmt::format_to(
       ctx.out(),
-      "{}, {} dead: {} - {} / failure: {} / pen. t.o.: {} / queue state: {}",
-      sjob.pgid,
-      sjob.schedule.scheduled_at,
-      sjob.schedule.deadline,
-      sjob.registration_state(),
-      sjob.resources_failure,
-      sjob.penalty_timeout,
-      ScrubQueue::qu_state_text(sjob.state));
+      "pg[{}] @ {:s} (dl:{:s}) - <{}> / failure: {} / pen. t.o.: {:s} / queue "
+      "state: {:.7}",
+      sjob.pgid, sjob.schedule.scheduled_at, sjob.schedule.deadline,
+      sjob.registration_state(), sjob.resources_failure, sjob.penalty_timeout,
+      sjob.state.load(std::memory_order_relaxed));
   }
 };

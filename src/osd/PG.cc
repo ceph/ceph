@@ -1685,10 +1685,8 @@ std::optional<requested_scrub_t> PG::validate_scrub_mode() const
  */
 void PG::on_info_history_change()
 {
-  dout(20) << __func__ << " for a " << (is_primary() ? "Primary" : "non-primary") <<dendl;
-
   ceph_assert(m_scrubber);
-  m_scrubber->on_maybe_registration_change(m_planned_scrub);
+  m_scrubber->on_primary_change(__func__, m_planned_scrub);
 }
 
 void PG::reschedule_scrub()
@@ -1705,10 +1703,9 @@ void PG::reschedule_scrub()
 void PG::on_primary_status_change(bool was_primary, bool now_primary)
 {
   // make sure we have a working scrubber when becoming a primary
-
   if (was_primary != now_primary) {
     ceph_assert(m_scrubber);
-    m_scrubber->on_primary_change(m_planned_scrub);
+    m_scrubber->on_primary_change(__func__, m_planned_scrub);
   }
 }
 
@@ -1742,10 +1739,10 @@ void PG::on_new_interval()
 
   assert(m_scrubber);
   // log some scrub data before we react to the interval
-  dout(20) << __func__ << (is_scrub_queued_or_active() ? " scrubbing " : " ")
+  dout(30) << __func__ << (is_scrub_queued_or_active() ? " scrubbing " : " ")
            << "flags: " << m_planned_scrub << dendl;
 
-  m_scrubber->on_maybe_registration_change(m_planned_scrub);
+  m_scrubber->on_primary_change(__func__, m_planned_scrub);
 }
 
 epoch_t PG::oldest_stored_osdmap() {
