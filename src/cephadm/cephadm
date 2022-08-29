@@ -7311,12 +7311,15 @@ class HostFacts():
 
     def _get_capacity(self, dev):
         # type: (str) -> int
-        """Determine the size of a given device"""
+        """Determine the size of a given device
+
+        The kernel always bases device size calculations based on a 512 byte
+        sector. For more information see
+        https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/include/linux/types.h?h=v5.15.63#n120
+        """
         size_path = os.path.join('/sys/block', dev, 'size')
         size_blocks = int(read_file([size_path]))
-        blk_path = os.path.join('/sys/block', dev, 'queue', 'logical_block_size')
-        blk_count = int(read_file([blk_path]))
-        return size_blocks * blk_count
+        return size_blocks * 512
 
     def _get_capacity_by_type(self, rota='0'):
         # type: (str) -> int
