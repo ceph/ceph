@@ -56,10 +56,10 @@ void BitmapFreelistManager::setup_merge_operator(KeyValueDB *db, string prefix)
   db->set_merge_operator(prefix, merge_op);
 }
 
-BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
+BitmapFreelistManager::BitmapFreelistManager(BlueStore* store,
 					     string meta_prefix,
 					     string bitmap_prefix)
-  : FreelistManager(cct),
+  : FreelistManager(store),
     meta_prefix(meta_prefix),
     bitmap_prefix(bitmap_prefix),
     enumerate_bl_pos(0)

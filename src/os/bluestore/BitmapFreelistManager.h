@@ -57,7 +57,7 @@ class BitmapFreelistManager : public FreelistManager {
   void _load_from_db(KeyValueDB* kvdb);
 
 public:
-  BitmapFreelistManager(CephContext* cct, std::string meta_prefix,
+  BitmapFreelistManager(BlueStore* store, std::string meta_prefix,
 			std::string bitmap_prefix);
 
   static void setup_merge_operator(KeyValueDB *db, std::string prefix);

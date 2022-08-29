@@ -86,10 +86,10 @@ void ZonedFreelistManager::setup_merge_operator(KeyValueDB *db, string prefix)
 }
 
 ZonedFreelistManager::ZonedFreelistManager(
-  CephContext* cct,
+  BlueStore* store,
   string meta_prefix,
   string info_prefix)
-  : FreelistManager(cct),
+  : FreelistManager(store),
     meta_prefix(meta_prefix),
     info_prefix(info_prefix),
     enumerate_zone_num(~0UL)
