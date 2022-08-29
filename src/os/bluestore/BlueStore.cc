@@ -19531,8 +19531,7 @@ int BlueStore::commit_freelist_type()
 //-------------------------------------------------------------------------------------
 int BlueStore::commit_to_null_manager()
 {
-  dout(5) << __func__ << " Set FreelistManager to NULL FM..." << dendl;
-  fm->set_null_manager();
+  dout(5) << "Set FreelistManager to NULL FM..." << dendl;
   freelist_type = "null";
 #if 1
   return commit_freelist_type();

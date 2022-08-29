@@ -95,6 +95,9 @@ public:
   }
   void get_meta(uint64_t target_size,
     std::vector<std::pair<std::string, std::string>>*) const override;
+  bool is_null_manager() const override {
+    return false;
+  }
 };
 
 #endif
