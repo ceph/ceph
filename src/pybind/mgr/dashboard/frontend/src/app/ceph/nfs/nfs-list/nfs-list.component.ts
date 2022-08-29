@@ -19,6 +19,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
 import { Task } from '../../../shared/models/task';
+import { JoinPipe } from '../../../shared/pipes/join.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -30,8 +31,6 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   providers: [TaskListService]
 })
 export class NfsListComponent extends ListWithDetails implements OnInit, OnDestroy {
-  @ViewChild('nfsState', { static: false })
-  nfsState: TemplateRef<any>;
   @ViewChild('nfsFsal', { static: true })
   nfsFsal: TemplateRef<any>;
 
@@ -62,6 +61,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   constructor(
     private authStorageService: AuthStorageService,
     private i18n: I18n,
+    private joinPipe: JoinPipe,
     private modalService: BsModalService,
     private nfsService: NfsService,
     private taskListService: TaskListService,
@@ -122,7 +122,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
       {
         name: this.i18n('Daemons'),
         prop: 'daemons',
-        flexGrow: 2
+        flexGrow: 2,
+        pipe: this.joinPipe
       },
       {
         name: this.i18n('Storage Backend'),
