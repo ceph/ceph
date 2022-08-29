@@ -484,6 +484,9 @@ options:
   default: false
   services:
   - mds_client
+  flags:
+  - startup
+  - no_mon_update
   with_legacy: true
 - name: client_fs
   type: str
