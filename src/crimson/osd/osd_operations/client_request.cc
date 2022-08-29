@@ -290,6 +290,12 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
     return reply_op_error(pg, -ENOENT);
   }
 
+  // blocklisted?
+  if (pg->get_peering_state().get_osdmap()->is_blocklisted(m->get_source_addr())) {
+    logger().debug("do_process: {} is blocklisted", m->get_source_addr());
+    return reply_op_error(pg, -EBLOCKLISTED);
+  }
+
   return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
     [this, pg](auto submitted, auto all_completed) mutable {
     return submitted.then_interruptible([this, pg] {
