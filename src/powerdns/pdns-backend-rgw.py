@@ -210,6 +210,8 @@ def init_config():
 def generate_app(config):
     # The Flask App
     app = Flask(__name__)
+    # workaround for https://github.com/pallets/flask/issues/2549
+    app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
     # Get the RGW Region Map
     region_map = parse_region_map(do_rgw_request('config'))
