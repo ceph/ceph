@@ -124,6 +124,9 @@ public:
     Transaction &t,
     CachedExtentRef e) = 0;
 
+  using check_child_trackers_ret = base_iertr::future<>;
+  virtual check_child_trackers_ret check_child_trackers(Transaction &t) = 0;
+
   /**
    * Calls f for each mapping in [begin, end)
    */
