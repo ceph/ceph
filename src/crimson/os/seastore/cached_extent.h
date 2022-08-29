@@ -26,6 +26,15 @@ class SegmentedAllocator;
 class TransactionManager;
 class ExtentPlacementManager;
 
+template <
+  typename node_key_t,
+  typename node_val_t,
+  typename internal_node_t,
+  typename leaf_node_t,
+  typename pin_t,
+  size_t node_size>
+class FixedKVBtree;
+
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
 
@@ -669,6 +678,14 @@ protected:
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
+  template <
+    typename node_key_t,
+    typename node_val_t,
+    typename internal_node_t,
+    typename leaf_node_t,
+    typename pin_t,
+    size_t node_size>
+  friend class FixedKVBtree;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);

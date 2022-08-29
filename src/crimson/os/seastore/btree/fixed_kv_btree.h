@@ -62,7 +62,7 @@ public:
   using iterator_fut = base_iertr::future<iterator>;
 
   using mapped_space_visitor_t = std::function<
-    void(paddr_t, node_key_t, extent_len_t, depth_t, extent_types_t)>;
+    void(paddr_t, node_key_t, extent_len_t, depth_t, extent_types_t, iterator&)>;
 
   class iterator {
   public:
@@ -450,6 +450,64 @@ public:
   }
   iterator_fut end(op_context_t<node_key_t> c) const {
     return upper_bound(c, min_max_t<node_key_t>::max);
+  }
+
+  using check_child_trackers_ret = base_iertr::future<>;
+  check_child_trackers_ret check_child_trackers(
+    op_context_t<node_key_t> c) {
+    mapped_space_visitor_t checker = [c](
+      paddr_t,
+      node_key_t,
+      extent_len_t,
+      depth_t depth,
+      extent_types_t,
+      iterator& iter) {
+      LOG_PREFIX(FixedKVBtree::check_child_trackers);
+      if (depth > 1) {
+        auto &node = iter.get_internal(depth).node;
+        auto it = node->begin();
+        while (it.get_offset() != node->get_size()) {
+          auto paddr = it.get_val();
+          auto tracker = node->child_trackers[it.get_offset()];
+          assert(tracker);
+          assert(!tracker->child
+            || node->maybe_generate_relative(
+                tracker->child->get_paddr()) == paddr);
+          if (!tracker->child) {
+            SUBTRACET(seastore_fixedkv_tree,
+              "checked pos {}, {}", c.trans, it.offset, *node);
+          } else {
+            SUBTRACET(seastore_fixedkv_tree,
+              "checked pos {}, {}, child: {}",
+              c.trans, it.offset, *node, *tracker->child);
+          }
+          it.offset++;
+        }
+      }
+      return seastar::now();
+    };
+
+    return seastar::do_with(
+      std::move(checker),
+      [this, c](auto &checker) {
+      return iterate_repeat(
+        c,
+        lower_bound(
+          c,
+          min_max_t<node_key_t>::min,
+          &checker),
+        [](auto &pos) {
+          if (pos.is_end()) {
+            return base_iertr::make_ready_future<
+              seastar::stop_iteration>(
+                seastar::stop_iteration::yes);
+          }
+          return base_iertr::make_ready_future<
+            seastar::stop_iteration>(
+              seastar::stop_iteration::no);
+        },
+        &checker);
+    });
   }
 
   using iterate_repeat_ret_inner = base_iertr::future<
@@ -1238,7 +1296,8 @@ private:
           root_node->get_node_meta().begin,
           root_node->get_length(),
           get_root().get_depth(),
-          internal_node_t::TYPE);
+          internal_node_t::TYPE,
+          iter);
 	return lookup_root_iertr::now();
       };
 
@@ -1267,7 +1326,8 @@ private:
           root_node->get_node_meta().begin,
           root_node->get_length(),
           get_root().get_depth(),
-          leaf_node_t::TYPE);
+          leaf_node_t::TYPE,
+          iter);
 	return lookup_root_iertr::now();
       };
 
@@ -1318,7 +1378,8 @@ private:
             node->get_node_meta().begin,
             node->get_length(),
             depth,
-            node->get_type());
+            node->get_type(),
+            iter);
         return seastar::now();
       };
 
@@ -1384,7 +1445,8 @@ private:
           node->get_node_meta().begin,
           node->get_length(),
           1,
-          node->get_type());
+          node->get_type(),
+          iter);
       return seastar::now();
     };
 

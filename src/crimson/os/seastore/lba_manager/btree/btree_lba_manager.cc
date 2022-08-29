@@ -339,6 +339,17 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
   });
 }
 
+BtreeLBAManager::check_child_trackers_ret
+BtreeLBAManager::check_child_trackers(
+  Transaction &t) {
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache, c,
+    [c](auto &btree) {
+    return btree.check_child_trackers(c);
+  });
+}
+
 BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
   Transaction &t,
   laddr_t begin,
