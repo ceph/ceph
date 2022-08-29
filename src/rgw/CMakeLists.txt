@@ -175,6 +175,15 @@ set(librgw_common_srcs
   rgw_tracer.cc
   rgw_lua_background.cc)
 
+list(APPEND librgw_common_srcs
+  store/rados/config/impl.cc
+  store/rados/config/period.cc
+  store/rados/config/period_config.cc
+  store/rados/config/realm.cc
+  store/rados/config/store.cc
+  store/rados/config/zone.cc
+  store/rados/config/zonegroup.cc)
+
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
