@@ -71,7 +71,7 @@ public:
   using iterator_fut = base_iertr::future<iterator>;
 
   using mapped_space_visitor_t = std::function<
-    void(paddr_t, node_key_t, extent_len_t, depth_t, extent_types_t)>;
+    void(paddr_t, node_key_t, extent_len_t, depth_t, extent_types_t, iterator&)>;
 
   class iterator {
   public:
@@ -469,6 +469,155 @@ public:
   }
   iterator_fut end(op_context_t<node_key_t> c) const {
     return upper_bound(c, min_max_t<node_key_t>::max);
+  }
+
+  template <typename child_node_t, typename node_t>
+  void check_node(
+    op_context_t<node_key_t> c,
+    TCachedExtentRef<node_t> node)
+  {
+    for (auto i : *node) {
+      CachedExtentRef child_node;
+      Transaction::get_extent_ret ret;
+
+      if constexpr (std::is_base_of_v<typename internal_node_t::base_t, child_node_t>) {
+        ret = c.trans.get_extent(
+          i->get_val().maybe_relative_to(node->get_paddr()),
+          &child_node);
+      } else {
+        if constexpr (leaf_has_children) {
+          ret = c.trans.get_extent(
+            i->get_val().paddr.maybe_relative_to(node->get_paddr()),
+            &child_node);
+        }
+      }
+      if (ret == Transaction::get_extent_ret::PRESENT) {
+        if (child_node->is_mutation_pending()) {
+          auto &prior = (child_node_t &)*child_node->prior_instance;
+          assert(prior.is_valid());
+          assert(prior.get_parent_tracker());
+          assert(prior.get_parent_tracker()->get_parent());
+          if (node->is_mutation_pending()) {
+            auto &n = node->get_stable_for_key(i->get_key());
+            assert(prior.get_parent_tracker()->get_parent().get() == &n);
+            auto pos = n.lower_bound_offset(i->get_key());
+            assert(pos < n.get_node_size());
+            assert(n.stable_children[pos] == &prior);
+          } else {
+            assert(prior.get_parent_tracker()->get_parent().get() == node.get());
+            assert(node->stable_children[i->get_offset()] == &prior);
+          }
+        } else if (child_node->is_initial_pending()) {
+          auto cnode = child_node->template cast<child_node_t>();
+          auto it = node->mutate_state.pending_children.find(
+            i->get_key(),
+            typename internal_node_t::base_t::pending_child_tracker_t::cmp_t());
+          assert(it != node->mutate_state.pending_children.end());
+          assert(it->child == cnode.get());
+          assert(cnode->get_parent_tracker());
+          assert(cnode->get_parent_tracker()->get_parent().get() == node.get());
+        } else {
+          assert(child_node->is_valid());
+          auto cnode = child_node->template cast<child_node_t>();
+          assert(cnode->get_parent_tracker());
+          if (node->is_pending()) {
+            auto &n = node->get_stable_for_key(i->get_key());
+            assert(cnode->get_parent_tracker()->get_parent().get() == &n);
+            auto pos = n.lower_bound_offset(i->get_key());
+            assert(pos < n.get_node_size());
+            assert(n.stable_children[pos] == cnode.get());
+          } else {
+            assert(cnode->get_parent_tracker()->get_parent().get() == node.get());
+            assert(node->stable_children[i->get_offset()] == cnode.get());
+          }
+        }
+      } else if (ret == Transaction::get_extent_ret::ABSENT) {
+        CachedExtent* child = nullptr;
+        if (node->is_pending()) {
+          auto &n = node->get_stable_for_key(i->get_key());
+          auto pos = n.lower_bound_offset(i->get_key());
+          assert(pos < n.get_node_size());
+          child = n.stable_children[pos];
+          if (child) {
+            auto c = (child_node_t*)child;
+            assert(c->get_parent_tracker());
+            assert(c->get_parent_tracker()->get_parent().get() == &n);
+          }
+        } else {
+          child = node->stable_children[i->get_offset()];
+          if (child) {
+            auto c = (child_node_t*)child;
+            assert(c->get_parent_tracker());
+            assert(c->get_parent_tracker()->get_parent().get() == node.get());
+          }
+        }
+
+        if (!child) {
+          if constexpr (
+            std::is_base_of_v<typename internal_node_t::base_t, child_node_t>)
+          {
+            assert(!c.cache.query_cache(i->get_val(), nullptr));
+          } else {
+            if constexpr (leaf_has_children) {
+              assert(!c.cache.query_cache(i->get_val().paddr, nullptr));
+            }
+          }
+        }
+      } else {
+        ceph_abort("impossible");
+      }
+    }
+  }
+
+  using check_child_trackers_ret = base_iertr::future<>;
+  check_child_trackers_ret check_child_trackers(
+    op_context_t<node_key_t> c) {
+    mapped_space_visitor_t checker = [c, this](
+      paddr_t,
+      node_key_t,
+      extent_len_t,
+      depth_t depth,
+      extent_types_t,
+      iterator& iter) {
+      if constexpr (!leaf_has_children) {
+        if (depth == 1) {
+          return seastar::now();
+        }
+      }
+      if (depth > 1) {
+        auto &node = iter.get_internal(depth).node;
+        assert(node->is_valid());
+        check_node<typename internal_node_t::base_t>(c, node);
+      } else {
+        assert(depth == 1);
+        auto &node = iter.leaf.node;
+        assert(node->is_valid());
+        check_node<LogicalCachedExtent>(c, node);
+      }
+      return seastar::now();
+    };
+
+    return seastar::do_with(
+      std::move(checker),
+      [this, c](auto &checker) {
+      return iterate_repeat(
+        c,
+        lower_bound(
+          c,
+          min_max_t<node_key_t>::min,
+          &checker),
+        [](auto &pos) {
+          if (pos.is_end()) {
+            return base_iertr::make_ready_future<
+              seastar::stop_iteration>(
+                seastar::stop_iteration::yes);
+          }
+          return base_iertr::make_ready_future<
+            seastar::stop_iteration>(
+              seastar::stop_iteration::no);
+        },
+        &checker);
+    });
   }
 
   using iterate_repeat_ret_inner = base_iertr::future<
@@ -1227,7 +1376,8 @@ private:
           root_node->get_node_meta().begin,
           root_node->get_length(),
           get_root().get_depth(),
-          internal_node_t::TYPE);
+          internal_node_t::TYPE,
+          iter);
 	return lookup_root_iertr::now();
       };
 
@@ -1258,7 +1408,8 @@ private:
           root_node->get_node_meta().begin,
           root_node->get_length(),
           get_root().get_depth(),
-          leaf_node_t::TYPE);
+          leaf_node_t::TYPE,
+          iter);
 	return lookup_root_iertr::now();
       };
 
@@ -1310,7 +1461,8 @@ private:
           node->get_node_meta().begin,
           node->get_length(),
           depth,
-          node->get_type());
+          node->get_type(),
+          iter);
       return seastar::now();
     };
 
@@ -1383,7 +1535,8 @@ private:
           node->get_node_meta().begin,
           node->get_length(),
           1,
-          node->get_type());
+          node->get_type(),
+          iter);
       return seastar::now();
     };
 

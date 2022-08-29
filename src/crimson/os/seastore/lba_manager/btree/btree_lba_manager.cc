@@ -451,6 +451,18 @@ BtreeLBAManager<leaf_has_children>::init_cached_extent(
 }
 
 template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::check_child_trackers_ret
+BtreeLBAManager<leaf_has_children>::check_child_trackers(
+  Transaction &t) {
+  auto c = get_context(t);
+  return with_btree<LBABtree<leaf_has_children>>(
+    cache, c,
+    [c](auto &btree) {
+    return btree.check_child_trackers(c);
+  });
+}
+
+template <bool leaf_has_children>
 typename BtreeLBAManager<leaf_has_children>::scan_mappings_ret
 BtreeLBAManager<leaf_has_children>::scan_mappings(
   Transaction &t,
@@ -672,6 +684,13 @@ BtreeLBAManager<leaf_has_children>::_update_mapping(
       });
     });
 }
+
+template BtreeLBAManager<true>::check_child_trackers_ret
+BtreeLBAManager<true>::check_child_trackers(
+  Transaction &t);
+template BtreeLBAManager<false>::check_child_trackers_ret
+BtreeLBAManager<false>::check_child_trackers(
+  Transaction &t);
 
 template BtreeLBAManager<true>::mkfs_ret
 BtreeLBAManager<true>::mkfs(Transaction &t);

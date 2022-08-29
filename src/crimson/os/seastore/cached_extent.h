@@ -706,6 +706,15 @@ protected:
   friend class crimson::os::seastore::ExtentPlacementManager;
   template <typename, typename>
   friend class BtreeNodePin;
+  template <
+    typename node_key_t,
+    typename node_val_t,
+    typename internal_node_t,
+    typename leaf_node_t,
+    typename pin_t,
+    size_t node_size,
+    bool leaf_has_children>
+  friend class FixedKVBtree;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
@@ -1090,6 +1099,15 @@ private:
     typename node_type_t,
     bool has_children>
   friend struct FixedKVLeafNode;
+  template <
+    typename node_key_t,
+    typename node_val_t,
+    typename internal_node_t,
+    typename leaf_node_t,
+    typename pin_t,
+    size_t node_size,
+    bool leaf_has_children>
+  friend class FixedKVBtree;
 };
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;
