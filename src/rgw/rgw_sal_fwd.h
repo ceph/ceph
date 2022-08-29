@@ -33,4 +33,9 @@ namespace rgw { namespace sal {
   class LuaManager;
   struct RGWRoleInfo;
 
+  class ConfigStore;
+  class RealmWriter;
+  class ZoneGroupWriter;
+  class ZoneWriter;
+
 } } // namespace rgw::sal
