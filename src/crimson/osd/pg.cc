@@ -110,7 +110,6 @@ PG::PG(
     pgmeta_oid{pgid.make_pgmeta_oid()},
     osdmap_gate("PG::osdmap_gate"),
     shard_services{shard_services},
-    osdmap{osdmap},
     backend(
       PGBackend::create(
 	pgid.pgid,
