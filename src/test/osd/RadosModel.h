@@ -1059,12 +1059,16 @@ public:
       }
 
       context->update_object_version(oid, version);
+      ceph_assert(rcompletion->is_complete());
+      int r = rcompletion->get_return_value();
+      assertf(r >= 0, "r = %d", r);
       if (rcompletion->get_version64() != version) {
 	std::cerr << "Error: racing read on " << oid << " returned version "
 		  << rcompletion->get_version64() << " rather than version "
 		  << version << std::endl;
 	ceph_abort_msg("racing read got wrong version");
       }
+      rcompletion->release();
 
       {
 	ObjectDesc old_value;
@@ -1076,7 +1080,6 @@ public:
 		    << old_value.most_recent() << std::endl;
       }
 
-      rcompletion->release();
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
       context->kick();
