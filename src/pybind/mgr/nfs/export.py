@@ -629,7 +629,8 @@ class ExportMgr:
                              path: str,
                              squash: str,
                              access_type: str,
-                             clients: list = []) -> Tuple[int, str, str]:
+                             clients: list = [],
+                             sectype: Optional[List[str]] = None) -> Tuple[int, str, str]:
         pseudo_path = normalize_path(pseudo_path)
 
         if not self._fetch_export(cluster_id, pseudo_path):
@@ -646,6 +647,7 @@ class ExportMgr:
                         "fs_name": fs_name,
                     },
                     "clients": clients,
+                    "sectype": sectype,
                 }
             )
             log.debug("creating cephfs export %s", export)
@@ -669,7 +671,8 @@ class ExportMgr:
                           squash: str,
                           bucket: Optional[str] = None,
                           user_id: Optional[str] = None,
-                          clients: list = []) -> Tuple[int, str, str]:
+                          clients: list = [],
+                          sectype: Optional[List[str]] = None) -> Tuple[int, str, str]:
         pseudo_path = normalize_path(pseudo_path)
 
         if not bucket and not user_id:
@@ -689,6 +692,7 @@ class ExportMgr:
                         "user_id": user_id,
                     },
                     "clients": clients,
+                    "sectype": sectype,
                 }
             )
             log.debug("creating rgw export %s", export)
