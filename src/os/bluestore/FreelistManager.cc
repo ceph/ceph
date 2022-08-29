@@ -7,6 +7,7 @@
 #include "ZonedFreelistManager.h"
 #endif
 #include "BlueStore.h"
+#include "FileFreelistManager.h"
 
 FreelistManager::FreelistManager(BlueStore* store)
   : store(store)
@@ -27,13 +28,6 @@ FreelistManager *FreelistManager::create(
   if (type == "bitmap") {
     return new BitmapFreelistManager(store, "B", "b");
   }
-  if (type == "null") {
-    // use BitmapFreelistManager with the null option to stop allocations from going to RocksDB
-    auto *fm = new BitmapFreelistManager(store, "B", "b");
-    fm->set_null_manager();
-    return fm;
-  }
-
 #ifdef HAVE_LIBZBD
   // With zoned drives there is only one FreelistManager implementation that we
   // can use, and we also know if a drive is zoned right after opening it
@@ -44,7 +38,8 @@ FreelistManager *FreelistManager::create(
   if (type == "zoned")
     return new ZonedFreelistManager(store, "Z", "z");
 #endif
-
+  if (type == "null" || type == "file")
+    return new FileFreelistManager(store);
   return NULL;
 }
 

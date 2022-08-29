@@ -5612,14 +5612,7 @@ int BlueStore::_create_fm(KeyValueDB::Transaction t,
   ceph_assert(!fm_restore || (freelist_type != "null"));
   ceph_assert(t != nullptr);
 
-  // when function is called in repair mode (to_repair=true) we skip db->open()/create()
-  bool can_have_null_fm = !is_db_rotational() &&
-                          cct->_conf->bluestore_allocation_from_file &&
-                          !bdev->is_smr();
-
-  // When allocation-info is stored in a single file we set freelist_type to "null"
-  if (can_have_null_fm) {
-    freelist_type = "null";
+  if (freelist_type == "null") {
     need_to_destage_allocation_file = true;
   }
   fm = FreelistManager::create(this, freelist_type, PREFIX_ALLOC);
@@ -5675,16 +5668,15 @@ int BlueStore::_create_fm(KeyValueDB::Transaction t,
 int BlueStore::_open_fm(bool read_only,
                         bool db_avail)
 {
-  bool can_have_null_fm = !is_db_rotational() &&
-                          !read_only &&
-                          db_avail &&
-                          cct->_conf->bluestore_allocation_from_file &&
-                          !bdev->is_smr();
-
-  if (can_have_null_fm) {
-    commit_to_null_manager();
-    need_to_destage_allocation_file = true;
+  dout(5) << __func__ << "::NCB::freelist_type=" << freelist_type << dendl;
+  if (freelist_type == "null") {
+    if (!read_only) {
+      need_to_destage_allocation_file = true;
+    }
   }
+
+  fm = FreelistManager::create(this, freelist_type, PREFIX_ALLOC);
+  ceph_assert(fm);
   int r = fm->init(db, read_only,
 	       [&](const std::string& key, std::string* result) {
 		 return read_meta(key, result);
@@ -7127,7 +7119,14 @@ int BlueStore::mkfs()
   } else
 #endif
   {
-    freelist_type = "bitmap";
+    bool can_have_null_fm = !is_db_rotational() &&
+                            cct->_conf->bluestore_allocation_from_file &&
+                            !bdev->is_smr();
+    if (can_have_null_fm) {
+      freelist_type = "null";
+    } else {
+      freelist_type = "bitmap";
+    }
   }
   dout(10) << " freelist_type " << freelist_type << dendl;
 

@@ -11,6 +11,7 @@ if(WITH_BLUESTORE)
   list(APPEND libos_srcs
     bluestore/Allocator.cc
     bluestore/BitmapFreelistManager.cc
+    bluestore/FileFreelistManager.cc
     bluestore/BlueFS.cc
     bluestore/bluefs_types.cc
     bluestore/BlueRocksEnv.cc
