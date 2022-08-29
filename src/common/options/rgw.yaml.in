@@ -1152,7 +1152,7 @@ options:
   type: str
   level: basic
   desc: RGW frontends configuration when running as librgw/nfs
-  long_desc: A comma delimited list of frontends configuration. Each configuration
+  long_desc: A comma-delimited list of frontends configuration. Each configuration
     contains the type of the frontend followed by an optional space delimited set
     of key=value config parameters.
   fmt_desc: Configures the HTTP frontend(s). The configuration for multiple
