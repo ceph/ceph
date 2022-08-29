@@ -599,9 +599,19 @@ endif()
 if(WITH_RBD)
   # Run rbd-unit-tests separate so they an run in parallel
   # For values see: src/include/rbd/features.h
+  add_test(NAME increase-local-port-range
+    COMMAND sudo sysctl -w net.ipv4.ip_local_port_range="1024 65535")
+  set_property(TEST increase-local-port-range PROPERTY
+    FIXTURES_SETUP more-local-ports)
+  add_test(NAME restore-local-port-range
+    COMMAND sudo sysctl -w net.ipv4.ip_local_port_range="32768 60999")
+  set_property(TEST restore-local-port-range PROPERTY
+    FIXTURES_CLEANUP more-local-ports)
   foreach(features N 0 1 61 109 127)
     add_ceph_test(run-rbd-unit-tests-${features}.sh
       ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh ${features})
+    set_property(TEST run-rbd-unit-tests-${features}.sh PROPERTY
+      FIXTURES_REQUIRED more-local-ports)
   endforeach()
   if(FREEBSD)
     add_ceph_test(rbd-ggate.sh ${CMAKE_CURRENT_SOURCE_DIR}/rbd-ggate.sh)
