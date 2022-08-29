@@ -1,4 +1,6 @@
 tasks:
 - s3tests:
     client.0:
+      force-branch: fixes_related_to_new_csv_parser
+      git_remote: https://github.com/galsalomon66/
       rgw_server: client.0
