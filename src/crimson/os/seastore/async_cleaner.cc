@@ -796,13 +796,12 @@ AsyncCleaner::AsyncCleaner(
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
-    trimmer(std::move(_trimmer)),
+    trimmer(_trimmer.get()),
     ool_segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::OOL)),
-    gc_process(*this)
+    gc_process(std::move(_trimmer), *this)
 {
   config.validate();
-  trimmer->set_background_callback(&gc_process);
 }
 
 void AsyncCleaner::register_metrics()
@@ -1015,21 +1014,63 @@ double AsyncCleaner::calc_gc_benefit_cost(
           (2 * age_factor - 2) * util + 1);
 }
 
-AsyncCleaner::gc_cycle_ret AsyncCleaner::GCProcess::run()
+void AsyncCleaner::GCProcess::log_state(const char *caller) const
+{
+  LOG_PREFIX(GCProcess::log_state);
+  DEBUG("caller {}, {}, {}",
+        caller,
+        JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+        AsyncCleaner::stat_printer_t{cleaner, true});
+}
+
+void AsyncCleaner::GCProcess::start()
+{
+  LOG_PREFIX(GCProcess::start);
+  INFO("done, start background, {}, {}",
+       JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+       AsyncCleaner::stat_printer_t{cleaner, true});
+  ceph_assert(is_stopping());
+  ceph_assert(trimmer->is_ready());
+  process_join = seastar::now(); // allow run()
+  process_join = run();
+  assert(!is_stopping());
+}
+
+seastar::future<> AsyncCleaner::GCProcess::stop()
+{
+  return seastar::futurize_invoke([this] {
+    if (is_stopping()) {
+      return seastar::now();
+    }
+    auto ret = std::move(*process_join);
+    process_join.reset();
+    assert(is_stopping());
+    do_wake_background();
+    return ret;
+  }).then([this] {
+    LOG_PREFIX(GCProcess::stop);
+    INFO("done, {}, {}",
+         JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+         AsyncCleaner::stat_printer_t{cleaner, true});
+    // run_until_halt() can be called at HALT
+  });
+}
+
+seastar::future<> AsyncCleaner::GCProcess::run()
 {
   ceph_assert(!is_stopping());
   return seastar::repeat([this] {
     if (is_stopping()) {
-      cleaner.log_gc_state("GCProcess::run(exit)");
+      log_state("run(exit)");
       return seastar::make_ready_future<seastar::stop_iteration>(
           seastar::stop_iteration::yes);
     }
     return seastar::futurize_invoke([this] {
-      if (cleaner.gc_should_run()) {
-        cleaner.log_gc_state("GCProcess::run(gc)");
-        return cleaner.do_gc_cycle();
+      if (background_should_run()) {
+        log_state("run(background)");
+        return do_background_cycle();
       } else {
-        cleaner.log_gc_state("GCProcess::run(block)");
+        log_state("run(block)");
         ceph_assert(!blocking_background);
         blocking_background = seastar::promise<>();
         return blocking_background->get_future();
@@ -1040,27 +1081,27 @@ AsyncCleaner::gc_cycle_ret AsyncCleaner::GCProcess::run()
   });
 }
 
-AsyncCleaner::gc_cycle_ret AsyncCleaner::do_gc_cycle()
+seastar::future<> AsyncCleaner::GCProcess::do_background_cycle()
 {
   if (trimmer->should_trim_alloc()) {
     return trimmer->trim_alloc(
     ).handle_error(
       crimson::ct_error::assert_all{
-	"AsyncCleaner::do_gc_cycle encountered invalid error in trim_alloc"
+	"GCProcess::do_background_cycle encountered invalid error in trim_alloc"
       }
     );
   } else if (trimmer->should_trim_dirty()) {
     return trimmer->trim_dirty(
     ).handle_error(
       crimson::ct_error::assert_all{
-	"AsyncCleaner::do_gc_cycle encountered invalid error in trim_dirty"
+	"GCProcess::do_background_cycle encountered invalid error in trim_dirty"
       }
     );
-  } else if (gc_should_reclaim_space()) {
-    return gc_reclaim_space(
+  } else if (cleaner.gc_should_reclaim_space()) {
+    return cleaner.gc_reclaim_space(
     ).handle_error(
       crimson::ct_error::assert_all{
-	"AsyncCleaner::do_gc_cycle encountered invalid error in gc_reclaim_space"
+	"GCProcess::do_background_cycle encountered invalid error in gc_reclaim_space"
       }
     );
   } else {
@@ -1277,7 +1318,7 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   state = cleaner_state_t::MOUNT;
   stats = {};
 
-  trimmer->reset();
+  gc_process.mount();
   
   space_tracker.reset(
     detailed ?
@@ -1418,13 +1459,8 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
 
 void AsyncCleaner::start_gc()
 {
-  LOG_PREFIX(AsyncCleaner::start_gc);
   ceph_assert(state == cleaner_state_t::SCAN_SPACE);
   state = cleaner_state_t::READY;
-  INFO("done, start GC, {}, {}",
-       JournalTrimmerImpl::stat_printer_t{*trimmer, true},
-       stat_printer_t{*this, true});
-  ceph_assert(trimmer->is_ready());
   gc_process.start();
 }
 
@@ -1435,14 +1471,7 @@ seastar::future<> AsyncCleaner::stop()
   } else {
     state = cleaner_state_t::STOP;
   }
-  return gc_process.stop(
-  ).then([this] {
-    LOG_PREFIX(AsyncCleaner::stop);
-    INFO("done, {}, {}",
-         JournalTrimmerImpl::stat_printer_t{*trimmer, true},
-         stat_printer_t{*this, true});
-    // run_until_halt() can be called at HALT
-  });
+  return gc_process.stop();
 }
 
 bool AsyncCleaner::check_usage()
@@ -1589,15 +1618,6 @@ segment_id_t AsyncCleaner::get_next_reclaim_segment() const
     ceph_abort("impossible!");
     return NULL_SEG_ID;
   }
-}
-
-void AsyncCleaner::log_gc_state(const char *caller) const
-{
-  LOG_PREFIX(AsyncCleaner::log_gc_state);
-  DEBUG("caller {}, {}, {}",
-        caller,
-        JournalTrimmerImpl::stat_printer_t{*trimmer, true},
-        stat_printer_t{*this, true});
 }
 
 seastar::future<>

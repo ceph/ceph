@@ -903,7 +903,7 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
-  JournalTrimmerImplRef trimmer;
+  JournalTrimmerImpl *trimmer;
 
   ExtentCallbackInterface *ecb = nullptr;
 
@@ -922,12 +922,12 @@ public:
   }
 
   journal_type_t get_journal_type() const {
-    return trimmer->get_journal_type();
+    return gc_process.get_journal_type();
   }
 
   void set_extent_callback(ExtentCallbackInterface *cb) {
     ecb = cb;
-    trimmer->set_extent_callback(cb);
+    gc_process.set_extent_callback(cb);
   }
 
   using mount_ertr = base_ertr;
@@ -1093,30 +1093,32 @@ private:
    *
    * TODO: move up to EPM
    */
-  using gc_cycle_ret = seastar::future<>;
   class GCProcess : public BackgroundListener {
   public:
-    GCProcess(AsyncCleaner &cleaner) : cleaner(cleaner) {}
-
-    void start() {
-      ceph_assert(is_stopping());
-      process_join = seastar::now(); // allow run()
-      process_join = run();
-      assert(!is_stopping());
+    GCProcess(
+        JournalTrimmerImplRef &&_trimmer,
+        AsyncCleaner &cleaner)
+        : trimmer(std::move(_trimmer)), cleaner(cleaner) {
+      trimmer->set_background_callback(this);
     }
 
-    gc_cycle_ret stop() {
-      if (is_stopping()) {
-        return seastar::now();
-      }
-      auto ret = std::move(*process_join);
-      process_join.reset();
-      assert(is_stopping());
-      do_wake_background();
-      return ret;
+    journal_type_t get_journal_type() const {
+      return trimmer->get_journal_type();
     }
 
-    gc_cycle_ret run_until_halt() {
+    void set_extent_callback(ExtentCallbackInterface *cb) {
+      trimmer->set_extent_callback(cb);
+    }
+
+    void mount() {
+      trimmer->reset();
+    }
+
+    void start();
+
+    seastar::future<> stop();
+
+    seastar::future<> run_until_halt() {
       ceph_assert(is_stopping());
       if (is_running_until_halt) {
 	return seastar::now();
@@ -1124,9 +1126,9 @@ private:
       is_running_until_halt = true;
       return seastar::do_until(
 	[this] {
-	  cleaner.log_gc_state("GCProcess::run_until_halt");
+	  log_state("run_until_halt");
 	  assert(is_running_until_halt);
-	  if (cleaner.gc_should_run()) {
+	  if (background_should_run()) {
 	    return false;
 	  } else {
 	    is_running_until_halt = false;
@@ -1134,7 +1136,7 @@ private:
 	  }
 	},
 	[this] {
-	  return cleaner.do_gc_cycle();
+	  return do_background_cycle();
 	}
       );
     }
@@ -1143,8 +1145,8 @@ private:
       ceph_assert(!blocking_io);
       return seastar::do_until(
         [this] {
-          cleaner.log_gc_state("GCProcess::io_await_hard_limits");
-          return !cleaner.should_block_on_gc();
+          log_state("io_await_hard_limits");
+          return !should_block_io();
         },
         [this] {
           blocking_io = seastar::promise<>();
@@ -1157,7 +1159,7 @@ private:
       if (is_stopping()) {
         return;
       }
-      if (cleaner.gc_should_run()) {
+      if (background_should_run()) {
         do_wake_background();
       }
     }
@@ -1166,7 +1168,7 @@ private:
       if (!cleaner.is_ready()) {
         return;
       }
-      if (!cleaner.should_block_on_gc() && blocking_io) {
+      if (!should_block_io() && blocking_io) {
         blocking_io->set_value();
         blocking_io = std::nullopt;
       }
@@ -1177,7 +1179,9 @@ private:
       return !process_join;
     }
 
-    gc_cycle_ret run();
+    void log_state(const char *caller) const;
+
+    seastar::future<> run();
 
     void do_wake_background() {
       if (blocking_background) {
@@ -1186,14 +1190,29 @@ private:
       }
     }
 
+    bool background_should_run() const {
+      ceph_assert(cleaner.is_ready());
+      return cleaner.gc_should_reclaim_space()
+        || trimmer->should_trim_dirty()
+        || trimmer->should_trim_alloc();
+    }
+
+    bool should_block_io() const {
+      assert(cleaner.is_ready());
+      return trimmer->should_block_on_trim() ||
+             cleaner.should_block_on_reclaim();
+    }
+
+    seastar::future<> do_background_cycle();
+
+    JournalTrimmerImplRef trimmer;
     AsyncCleaner &cleaner;
-    std::optional<gc_cycle_ret> process_join;
+
+    std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
     std::optional<seastar::promise<>> blocking_io;
     bool is_running_until_halt = false;
   } gc_process;
-
-  gc_cycle_ret do_gc_cycle();
 
   using do_reclaim_space_ertr = base_ertr;
   using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
@@ -1273,12 +1292,6 @@ private:
       (double)segments.get_total_bytes();
   }
 
-  /**
-   * should_block_on_gc
-   *
-   * Encapsulates whether block pending gc.
-   */
-
   bool should_block_on_reclaim() const {
     assert(is_ready());
     if (get_segments_reclaimable() == 0) {
@@ -1287,13 +1300,6 @@ private:
     auto aratio = get_projected_available_ratio();
     return aratio < config.available_ratio_hard_limit;
   }
-
-  bool should_block_on_gc() const {
-    assert(is_ready());
-    return trimmer->should_block_on_trim() || should_block_on_reclaim();
-  }
-
-  void log_gc_state(const char *caller) const;
 
   using scan_extents_ertr = SegmentManagerGroup::scan_valid_records_ertr;
   using scan_extents_ret = scan_extents_ertr::future<>;
@@ -1318,18 +1324,6 @@ private:
       ((aratio < config.available_ratio_gc_max) &&
        (rratio > config.reclaim_ratio_gc_threshold))
     );
-  }
-
-  /**
-   * gc_should_run
-   *
-   * True if gc should be running.
-   */
-  bool gc_should_run() const {
-    ceph_assert(is_ready());
-    return gc_should_reclaim_space()
-      || trimmer->should_trim_dirty()
-      || trimmer->should_trim_alloc();
   }
 
   void adjust_segment_util(double old_usage, double new_usage) {
