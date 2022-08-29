@@ -120,6 +120,8 @@ public:
     Transaction &t,
     CachedExtentRef e) final;
 
+  check_child_trackers_ret check_child_trackers(Transaction &t) final;
+
   scan_mappings_ret scan_mappings(
     Transaction &t,
     laddr_t begin,

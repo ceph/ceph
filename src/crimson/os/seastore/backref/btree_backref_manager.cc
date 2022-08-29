@@ -332,6 +332,17 @@ BtreeBackrefManager::merge_cached_backrefs(
   });
 }
 
+BtreeBackrefManager::check_child_trackers_ret
+BtreeBackrefManager::check_child_trackers(
+  Transaction &t) {
+  auto c = get_context(t);
+  return with_btree<BackrefBtree>(
+    cache, c,
+    [c](auto &btree) {
+    return btree.check_child_trackers(c);
+  });
+}
+
 BtreeBackrefManager::scan_mapped_space_ret
 BtreeBackrefManager::scan_mapped_space(
   Transaction &t,
@@ -419,7 +430,7 @@ BtreeBackrefManager::scan_mapped_space(
       BackrefBtree::mapped_space_visitor_t f =
 	[&scan_visitor, block_size, FNAME, c](
 	  paddr_t paddr, paddr_t key, extent_len_t len,
-	  depth_t depth, extent_types_t type) {
+	  depth_t depth, extent_types_t type, BackrefBtree::iterator&) {
 	TRACET("tree node {}~{} {}, depth={} used",
 	       c.trans, paddr, len, type, depth);
 	ceph_assert(paddr.is_absolute());

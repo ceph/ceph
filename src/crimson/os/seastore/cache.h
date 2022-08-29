@@ -25,6 +25,15 @@ class BtreeBackrefManager;
 
 namespace crimson::os::seastore {
 
+template <
+  typename node_key_t,
+  typename node_val_t,
+  typename internal_node_t,
+  typename leaf_node_t,
+  typename pin_t,
+  size_t node_size,
+  bool leaf_has_children>
+class FixedKVBtree;
 class BackrefManager;
 class SegmentProvider;
 
@@ -1540,6 +1549,15 @@ private:
     }
   }
 
+  template <
+    typename node_key_t,
+    typename node_val_t,
+    typename internal_node_t,
+    typename leaf_node_t,
+    typename pin_t,
+    size_t node_size,
+    bool leaf_has_children>
+  friend class FixedKVBtree;
 };
 using CacheRef = std::unique_ptr<Cache>;
 

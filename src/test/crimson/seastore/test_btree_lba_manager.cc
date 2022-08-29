@@ -499,6 +499,11 @@ struct btree_lba_manager_test : btree_test_base {
   }
 
   void check_mappings(test_transaction_t &t) {
+    (void)with_trans_intr(
+      *t.t,
+      [=, this](auto &t) {
+	return lba_manager->check_child_trackers(t);
+      }).unsafe_get0();
     for (auto &&i: t.mappings) {
       auto laddr = i.first;
       auto len = i.second.len;

@@ -1139,16 +1139,6 @@ protected:
 
 private:
   laddr_t laddr = L_ADDR_NULL;
-
-  template <
-    typename node_key_t,
-    typename node_val_t,
-    typename internal_node_t,
-    typename leaf_node_t,
-    typename pin_t,
-    size_t node_size,
-    bool leaf_has_children>
-  friend class FixedKVBtree;
 };
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;
