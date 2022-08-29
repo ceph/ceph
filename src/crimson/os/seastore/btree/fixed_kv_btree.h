@@ -77,7 +77,7 @@ public:
   using iterator_fut = base_iertr::future<iterator>;
 
   using mapped_space_visitor_t = std::function<
-    void(paddr_t, node_key_t, extent_len_t, depth_t, extent_types_t)>;
+    void(paddr_t, node_key_t, extent_len_t, depth_t, extent_types_t, iterator&)>;
 
   class iterator {
   public:
@@ -1377,7 +1377,8 @@ private:
         root_node->get_node_meta().begin,
         root_node->get_length(),
         get_root().get_depth(),
-        internal_node_t::TYPE);
+        internal_node_t::TYPE,
+        iter);
       return lookup_root_iertr::now();
     };
     auto on_found_leaf =
@@ -1388,7 +1389,8 @@ private:
         root_node->get_node_meta().begin,
         root_node->get_length(),
         get_root().get_depth(),
-        leaf_node_t::TYPE);
+        leaf_node_t::TYPE,
+        iter);
       return lookup_root_iertr::now();
     };
 
@@ -1465,7 +1467,8 @@ private:
           node->get_node_meta().begin,
           node->get_length(),
           depth,
-          node->get_type());
+          node->get_type(),
+          iter);
       return seastar::now();
     };
 
@@ -1532,7 +1535,8 @@ private:
           node->get_node_meta().begin,
           node->get_length(),
           1,
-          node->get_type());
+          node->get_type(),
+          iter);
       return seastar::now();
     };
 

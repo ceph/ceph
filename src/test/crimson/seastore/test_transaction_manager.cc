@@ -561,6 +561,11 @@ struct transaction_manager_test_t :
 	    ++iter;
 	  });
       }).unsafe_get0();
+    (void)with_trans_intr(
+      *t.t,
+      [=, this](auto &t) {
+	return lba_manager->check_child_trackers(t);
+      }).unsafe_get0();
   }
 
   bool try_submit_transaction(test_transaction_t t) {
