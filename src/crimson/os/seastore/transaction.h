@@ -544,14 +544,12 @@ public:
   TransactionConflictCondition(Transaction &t) : t(t) {}
 
   template <typename Fut>
-  std::pair<bool, std::optional<Fut>> may_interrupt() {
+  std::optional<Fut> may_interrupt() {
     if (t.conflicted) {
-      return {
-	true,
-	seastar::futurize<Fut>::make_exception_future(
-	  transaction_conflict())};
+      return seastar::futurize<Fut>::make_exception_future(
+	transaction_conflict());
     } else {
-      return {false, std::optional<Fut>()};
+      return std::optional<Fut>();
     }
   }
 

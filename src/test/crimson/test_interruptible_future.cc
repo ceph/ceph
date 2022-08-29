@@ -19,12 +19,12 @@ public:
     : interrupt(interrupt) {}
 
   template <typename T>
-  std::pair<bool, std::optional<T>> may_interrupt() {
-    if (interrupt)
-      return std::pair<bool, std::optional<T>>(
-	  true, seastar::futurize<T>::make_exception_future(test_interruption()));
-    else
-      return std::pair<bool, std::optional<T>>(false, std::optional<T>());
+  std::optional<T> may_interrupt() {
+    if (interrupt) {
+      return seastar::futurize<T>::make_exception_future(test_interruption());
+    } else {
+      return std::optional<T>();
+    }
   }
 
   template <typename T>
