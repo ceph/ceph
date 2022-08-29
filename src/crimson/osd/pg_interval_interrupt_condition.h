@@ -24,16 +24,16 @@ public:
   bool is_primary();
 
   template <typename Fut>
-  std::pair<bool, std::optional<Fut>> may_interrupt() {
+  std::optional<Fut> may_interrupt() {
     if (new_interval_created()) {
-      return {true, seastar::futurize<Fut>::make_exception_future(
-        ::crimson::common::actingset_changed(is_primary()))};
+      return seastar::futurize<Fut>::make_exception_future(
+        ::crimson::common::actingset_changed(is_primary()));
     }
     if (is_stopping()) {
-      return {true, seastar::futurize<Fut>::make_exception_future(
-        ::crimson::common::system_shutdown_exception())};
+      return seastar::futurize<Fut>::make_exception_future(
+        ::crimson::common::system_shutdown_exception());
     }
-    return {false, std::optional<Fut>()};
+    return std::optional<Fut>();
   }
 
   template <typename T>

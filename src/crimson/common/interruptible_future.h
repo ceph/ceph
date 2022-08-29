@@ -170,17 +170,17 @@ auto call_with_interruption_impl(
   // global "interrupt_cond" with the interruption condition, and go ahead
   // executing the Func.
   assert(interrupt_condition);
-  auto [interrupt, fut] = interrupt_condition->template may_interrupt<
+  auto fut = interrupt_condition->template may_interrupt<
     typename futurator_t::type>();
   INTR_FUT_DEBUG(
     "call_with_interruption_impl: may_interrupt: {}, "
     "local interrupt_condition: {}, "
     "global interrupt_cond: {},{}",
-    interrupt,
+    (bool)fut,
     (void*)interrupt_condition.get(),
     (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
     typeid(InterruptCond).name());
-  if (interrupt) {
+  if (fut) {
     return std::move(*fut);
   }
   interrupt_cond<InterruptCond>.set(interrupt_condition);
@@ -271,15 +271,15 @@ Result non_futurized_call_with_interruption(
   Func&& func, T&&... args)
 {
   assert(interrupt_condition);
-  auto [interrupt, fut] = interrupt_condition->template may_interrupt<seastar::future<>>();
+  auto fut = interrupt_condition->template may_interrupt<seastar::future<>>();
   INTR_FUT_DEBUG(
     "non_futurized_call_with_interruption may_interrupt: {}, "
     "interrupt_condition: {}, interrupt_cond: {},{}",
-    interrupt,
+    (bool)fut,
     (void*)interrupt_condition.get(),
     (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
     typeid(InterruptCond).name());
-  if (interrupt) {
+  if (fut) {
     std::rethrow_exception(fut->get_exception());
   }
   interrupt_cond<InterruptCond>.set(interrupt_condition);
