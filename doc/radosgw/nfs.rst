@@ -130,7 +130,7 @@ are unique to RGW NFS.
 
 In particular, front-end selection is handled specially by the librgw.so runtime.  By default, only the
 ``rgw-nfs`` frontend is started. Additional frontends (e.g., ``beast``) are enabled via the
-``rgw nfs frontends`` config option.  It's syntax is identical to the ordinary ``rgw frontends`` option.
+``rgw nfs frontends`` config option.  Its syntax is identical to the ordinary ``rgw frontends`` option.
 Default options for non-default frontends are specified via ``rgw frontend defaults`` as normal.
 
 ganesha.conf
