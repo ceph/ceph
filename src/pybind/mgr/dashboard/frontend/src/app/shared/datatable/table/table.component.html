@@ -114,10 +114,10 @@
                 <input class="custom-control-input"
                        type="checkbox"
                        [name]="column.prop"
-                       [id]="column.prop"
+                       id="{{ column.prop }}{{ tableName }}"
                        [checked]="!column.isHidden">
                 <label class="custom-control-label"
-                       [for]="column.prop">{{ column.name }}</label>
+                       for="{{ column.prop }}{{ tableName }}">{{ column.name }}</label>
               </div>
             </button>
           </ng-container>
