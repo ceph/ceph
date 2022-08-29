@@ -631,6 +631,9 @@ if(WITH_RADOSGW AND WITH_RADOSGW_LUA_PACKAGES)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
+
+CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
+  "NOT WITH_SYSTEM_BOOST" OFF)
 # require minimally the bundled version
 if(WITH_SYSTEM_BOOST)
   if(ENABLE_SHARED)
@@ -719,9 +722,6 @@ endif()
 
 option(WITH_GRAFANA "install grafana dashboards" OFF)
 add_subdirectory(monitoring/ceph-mixin)
-
-CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
-  "NOT WITH_SYSTEM_BOOST" OFF)
 
 include(CTags)
 option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")
