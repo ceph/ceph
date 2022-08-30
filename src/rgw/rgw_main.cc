@@ -64,9 +64,9 @@
 #include <sys/prctl.h>
 #endif
 
-#define dout_subsys ceph_subsys_rgw
-
 using namespace std;
+
+static constexpr auto dout_subsys = ceph_subsys_rgw;
 
 namespace {
 TracepointProvider::Traits rgw_op_tracepoint_traits("librgw_op_tp.so",

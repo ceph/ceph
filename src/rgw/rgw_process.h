@@ -18,11 +18,6 @@
 
 #include <atomic>
 
-#if !defined(dout_subsys)
-#define dout_subsys ceph_subsys_rgw
-#define def_dout_subsys
-#endif
-
 #define dout_context g_ceph_context
 
 extern void signal_shutdown();
@@ -198,10 +193,6 @@ extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      rgw::sal::Store* store,
                                      bool skip_retarget = false);
 
-#if defined(def_dout_subsys)
-#undef def_dout_subsys
-#undef dout_subsys
-#endif
 #undef dout_context
 
 #endif /* RGW_PROCESS_H */

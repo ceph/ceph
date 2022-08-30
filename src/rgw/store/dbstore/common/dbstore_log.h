@@ -12,7 +12,6 @@
 #include <fstream>
 #include "common/dout.h"
 
-#define dout_subsys ceph_subsys_rgw
 #undef dout_prefix
 #define dout_prefix *_dout << "rgw dbstore: "
 

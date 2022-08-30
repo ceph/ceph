@@ -18,8 +18,6 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_bucket.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 struct rgw_http_param_pair;
 class RGWRESTConn;
 
