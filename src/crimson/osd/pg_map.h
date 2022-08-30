@@ -141,6 +141,7 @@ public:
 
   pgs_t& get_pgs() { return pgs; }
   const pgs_t& get_pgs() const { return pgs; }
+  auto get_pg_count() const { return pgs.size(); }
   PGMap() = default;
   ~PGMap();
 };

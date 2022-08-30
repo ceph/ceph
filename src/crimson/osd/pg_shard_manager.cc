@@ -54,10 +54,9 @@ seastar::future<> PGShardManager::load_pgs()
 	      ShardServices &shard_services) {
 	      return shard_services.load_pg(
 		pgid
-	      ).then([pgid, &per_shard_state, &shard_services](auto &&pg) {
+	      ).then([pgid, &per_shard_state](auto &&pg) {
 		logger().info("load_pgs: loaded {}", pgid);
 		per_shard_state.pg_map.pg_loaded(pgid, std::move(pg));
-		shard_services.inc_pg_num();
 		return seastar::now();
 	      });
 	    });
