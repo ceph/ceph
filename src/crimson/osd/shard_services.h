@@ -211,16 +211,6 @@ public:
 
   // TODO: add config to control mapping
   PGShardMapping pg_to_shard_mapping{0, 1};
-  unsigned num_pgs = 0;
-  unsigned get_pg_num() const {
-    return num_pgs;
-  }
-  void inc_pg_num() {
-    ++num_pgs;
-  }
-  void dec_pg_num() {
-    --num_pgs;
-  }
 
   std::set<pg_t> pg_created;
   seastar::future<> send_pg_created(pg_t pgid);
@@ -362,6 +352,11 @@ public:
     return dispatch_context({}, std::move(ctx));
   }
 
+  /// Return core-local pg count * number of cores
+  unsigned get_num_local_pgs() const {
+    return local_state.pg_map.get_pg_count();
+  }
+
   // OSDMapService
   cached_map_t get_map() const final { return local_state.get_osdmap(); }
   epoch_t get_up_epoch() const final { return local_state.up_epoch; }
@@ -379,7 +374,6 @@ public:
   }
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
-  FORWARD_TO_OSD_SINGLETON(get_pg_num)
   FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
 
   FORWARD_TO_OSD_SINGLETON(osdmap_subscribe)
@@ -388,8 +382,6 @@ public:
   FORWARD_TO_OSD_SINGLETON(remove_want_pg_temp)
   FORWARD_TO_OSD_SINGLETON(requeue_pg_temp)
   FORWARD_TO_OSD_SINGLETON(send_pg_created)
-  FORWARD_TO_OSD_SINGLETON(inc_pg_num)
-  FORWARD_TO_OSD_SINGLETON(dec_pg_num)
   FORWARD_TO_OSD_SINGLETON(send_alive)
   FORWARD_TO_OSD_SINGLETON(send_pg_temp)
   FORWARD_CONST(get_mnow, get_mnow, osd_singleton_state)
