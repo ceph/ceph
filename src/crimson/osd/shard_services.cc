@@ -94,6 +94,15 @@ Ref<PG> PerShardState::get_pg(spg_t pgid)
   return pg_map.get_pg(pgid);
 }
 
+HeartbeatStampsRef PerShardState::get_hb_stamps(int peer)
+{
+  auto [stamps, added] = heartbeat_stamps.try_emplace(peer);
+  if (added) {
+    stamps->second = ceph::make_ref<HeartbeatStamps>(peer);
+  }
+  return stamps->second;
+}
+
 OSDSingletonState::OSDSingletonState(
   int whoami,
   crimson::net::Messenger &cluster_msgr,
@@ -255,15 +264,6 @@ void OSDSingletonState::prune_pg_created()
       ++i;
     }
   }
-}
-
-HeartbeatStampsRef OSDSingletonState::get_hb_stamps(int peer)
-{
-  auto [stamps, added] = heartbeat_stamps.try_emplace(peer);
-  if (added) {
-    stamps->second = ceph::make_ref<HeartbeatStamps>(peer);
-  }
-  return stamps->second;
 }
 
 seastar::future<> OSDSingletonState::send_alive(const epoch_t want)
