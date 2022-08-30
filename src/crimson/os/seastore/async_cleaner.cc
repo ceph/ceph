@@ -796,7 +796,6 @@ AsyncCleaner::AsyncCleaner(
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
-    trimmer(_trimmer.get()),
     ool_segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::OOL)),
     gc_process(std::move(_trimmer), *this)
@@ -921,6 +920,8 @@ segment_id_t AsyncCleaner::allocate_segment(
 {
   LOG_PREFIX(AsyncCleaner::allocate_segment);
   assert(seq != NULL_SEG_SEQ);
+  ceph_assert(type == segment_type_t::OOL ||
+              trimmer != nullptr); // segment_type_t::JOURNAL
   for (auto it = segments.begin();
        it != segments.end();
        ++it) {
@@ -1668,7 +1669,8 @@ segment_id_t AsyncCleaner::get_next_reclaim_segment() const
   }
   for (auto& [_id, segment_info] : segments) {
     if (segment_info.is_closed() &&
-        !segment_info.is_in_journal(trimmer->get_journal_tail())) {
+        (trimmer == nullptr ||
+         !segment_info.is_in_journal(trimmer->get_journal_tail()))) {
       double benefit_cost = calc_gc_benefit_cost(_id, now_time, bound_time);
       if (benefit_cost > max_benefit_cost) {
         id = _id;
