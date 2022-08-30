@@ -1164,6 +1164,8 @@ options:
   services:
   - rgw
   with_legacy: true
+  see_also:
+  - rgw_frontends
 - name: rgw_rados_pool_autoscale_bias
   type: float
   level: advanced
