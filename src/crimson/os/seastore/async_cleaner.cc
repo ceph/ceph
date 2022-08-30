@@ -885,17 +885,6 @@ void AsyncCleaner::register_metrics()
     sm::make_counter("projected_used_bytes_sum", stats.projected_used_bytes_sum,
 		    sm::description("the sum of the projected usage in bytes")),
 
-    sm::make_counter("io_count", stats.io_count,
-		    sm::description("the sum of IOs")),
-    sm::make_counter("io_blocked_count", stats.io_blocked_count,
-		    sm::description("IOs that are blocked by gc")),
-    sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
-		    sm::description("IOs that are blocked by trimming")),
-    sm::make_counter("io_blocked_count_reclaim", stats.io_blocked_count_reclaim,
-		    sm::description("IOs that are blocked by reclaimming")),
-    sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
-		     sm::description("the sum of blocking IOs")),
-
     sm::make_counter("reclaimed_bytes", stats.reclaimed_bytes,
 		     sm::description("rewritten bytes due to reclaim")),
     sm::make_counter("reclaimed_segment_bytes", stats.reclaimed_segment_bytes,
@@ -1056,6 +1045,68 @@ seastar::future<> AsyncCleaner::GCProcess::stop()
   });
 }
 
+seastar::future<> AsyncCleaner::GCProcess::run_until_halt()
+{
+  ceph_assert(is_stopping());
+  if (is_running_until_halt) {
+    return seastar::now();
+  }
+  is_running_until_halt = true;
+  return seastar::do_until(
+    [this] {
+      log_state("run_until_halt");
+      assert(is_running_until_halt);
+      if (background_should_run()) {
+        return false;
+      } else {
+        is_running_until_halt = false;
+        return true;
+      }
+    },
+    [this] {
+      return do_background_cycle();
+    }
+  );
+}
+
+seastar::future<> AsyncCleaner::GCProcess::maybe_block_io()
+{
+  ceph_assert(!blocking_io);
+  // The pipeline configuration prevents another IO from entering
+  // prepare until the prior one exits and clears this.
+  ++stats.io_count;
+  bool is_blocked = false;
+  if (trimmer->should_block_on_trim()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_trim;
+  }
+  if (cleaner.should_block_on_reclaim()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_reclaim;
+  }
+  if (is_blocked) {
+    ++stats.io_blocking_num;
+    ++stats.io_blocked_count;
+    stats.io_blocked_sum += stats.io_blocking_num;
+  }
+  return seastar::do_until(
+    [this] {
+      log_state("maybe_block_io(await_hard_limits)");
+      return !should_block_io();
+    },
+    [this] {
+      blocking_io = seastar::promise<>();
+      return blocking_io->get_future();
+    }
+  ).then([this, is_blocked] {
+    ceph_assert(!blocking_io);
+    if (is_blocked) {
+      assert(stats.io_blocking_num > 0);
+      --stats.io_blocking_num;
+    }
+  });
+}
+
 seastar::future<> AsyncCleaner::GCProcess::run()
 {
   ceph_assert(!is_stopping());
@@ -1107,6 +1158,23 @@ seastar::future<> AsyncCleaner::GCProcess::do_background_cycle()
   } else {
     return seastar::now();
   }
+}
+
+void AsyncCleaner::GCProcess::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  metrics.add_group("gc_process", {
+    sm::make_counter("io_count", stats.io_count,
+                     sm::description("the sum of IOs")),
+    sm::make_counter("io_blocked_count", stats.io_blocked_count,
+                     sm::description("IOs that are blocked by gc")),
+    sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
+                     sm::description("IOs that are blocked by trimming")),
+    sm::make_counter("io_blocked_count_reclaim", stats.io_blocked_count_reclaim,
+                     sm::description("IOs that are blocked by reclaimming")),
+    sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
+                     sm::description("the sum of blocking IOs"))
+  });
 }
 
 AsyncCleaner::do_reclaim_space_ret
@@ -1624,32 +1692,11 @@ seastar::future<>
 AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
 {
   ceph_assert(is_ready());
-  // The pipeline configuration prevents another IO from entering
-  // prepare until the prior one exits and clears this.
-  ++stats.io_count;
-  bool is_blocked = false;
-  if (trimmer->should_block_on_trim()) {
-    is_blocked = true;
-    ++stats.io_blocked_count_trim;
-  }
-  if (should_block_on_reclaim()) {
-    is_blocked = true;
-    ++stats.io_blocked_count_reclaim;
-  }
-  if (is_blocked) {
-    ++stats.io_blocking_num;
-    ++stats.io_blocked_count;
-    stats.io_blocked_sum += stats.io_blocking_num;
-  }
-  return gc_process.io_await_hard_limits(
-  ).then([this, projected_usage, is_blocked] {
+  return gc_process.maybe_block_io(
+  ).then([this, projected_usage] {
     stats.projected_used_bytes += projected_usage;
     ++stats.projected_count;
     stats.projected_used_bytes_sum += stats.projected_used_bytes;
-    if (is_blocked) {
-      assert(stats.io_blocking_num > 0);
-      --stats.io_blocking_num;
-    }
   });
 }
 
