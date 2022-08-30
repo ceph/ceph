@@ -104,7 +104,6 @@ about Ceph, see our `Architecture`_ section.
    rbd/index
    radosgw/index
    mgr/index
-   mgr/dashboard
    api/index
    architecture
    Developer Guide <dev/developer_guide/index>
