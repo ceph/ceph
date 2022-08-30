@@ -109,8 +109,9 @@ namespace rgw {
     bool have_http() {
       return have_http_frontend;
     }
-  }; /* AppMain */
 
+    static OpsLogFile* ops_log_file;
+  }; /* AppMain */
 } // namespace rgw
 
 static inline RGWRESTMgr *set_logging(RGWRESTMgr* mgr)
