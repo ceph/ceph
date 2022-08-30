@@ -276,25 +276,41 @@ if(WITH_RADOSGW_MOTR)
 endif()
 
 set(rgw_a_srcs
+  librgw.cc
+  rgw_appmain.cc
+  rgw_asio_client.cc
+  rgw_asio_frontend.cc
   rgw_auth_keystone.cc
   rgw_client_io.cc
+  rgw_file.cc
   rgw_frontend.cc
   rgw_http_client_curl.cc
+  rgw_kmip_client_impl.cc
   rgw_loadgen.cc
+  rgw_loadgen_process.cc
+  rgw_log.cc
+  rgw_lua_request.cc
+  rgw_opa.cc
+  rgw_os_lib.cc
   rgw_period_pusher.cc
+  rgw_process.cc
   rgw_realm_reloader.cc
   rgw_realm_watcher.cc
-  rgw_os_lib.cc
-  rgw_process.cc
+  rgw_rest_bucket.cc
+  rgw_rest_config.cc
+  rgw_rest_info.cc
+  rgw_rest_log.cc
+  rgw_rest_metadata.cc
+  rgw_rest_ratelimit.cc
+  rgw_rest_realm.cc
+  rgw_rest_sts.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
-  rgw_rest_info.cc
   rgw_rest_user.cc
+  rgw_signal.cc
   rgw_swift_auth.cc
   rgw_usage.cc
-  rgw_opa.cc
-  rgw_sts.cc
-  rgw_rest_sts.cc)
+  rgw_sts.cc)
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)
@@ -308,6 +324,7 @@ add_library(rgw_a STATIC
 
 target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
+target_include_directories(rgw_a PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
 
@@ -345,13 +362,7 @@ target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock spawn)
 
 set(radosgw_srcs
-  rgw_main.cc
-  rgw_file.cc
-  librgw.cc
-  rgw_loadgen_process.cc
-  rgw_asio_client.cc
-  rgw_asio_frontend.cc
-  rgw_kmip_client_impl.cc)
+  rgw_main.cc)
 
 add_executable(radosgw ${radosgw_srcs})
 
@@ -415,7 +426,7 @@ target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
 set(librgw_srcs
-  ${radosgw_srcs})
+  librgw.cc)
 add_library(rgw SHARED ${librgw_srcs})
 
 target_compile_definitions(rgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")

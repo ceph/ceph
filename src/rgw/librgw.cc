@@ -51,23 +51,14 @@
 
 using namespace std;
 
-namespace {
-  TracepointProvider::Traits rgw_op_tracepoint_traits(
-    "librgw_op_tp.so", "rgw_op_tracing");
-  TracepointProvider::Traits rgw_rados_tracepoint_traits(
-    "librgw_rados_tp.so", "rgw_rados_tracing");
-}
-
-bool global_stop = false;
-
-static void handle_sigterm(int signum)
-{
-  dout(20) << __func__ << " SIGUSR1 ignored" << dendl;
-}
-
 namespace rgw {
 
-  using std::string;
+  bool global_stop = false;
+
+  static void handle_sigterm(int signum)
+  {
+    dout(20) << __func__ << " SIGUSR1 ignored" << dendl;
+  }
 
   static std::mutex librgw_mtx;
 
@@ -486,7 +477,7 @@ namespace rgw {
   int RGWLib::init(vector<const char*>& args)
   {
     /* alternative default for module */
-    map<string,string> defaults = {
+    map<std::string,std::string> defaults = {
       { "debug_rgw", "1/5" },
       { "keyring", "$rgw_data/keyring" },
       { "log_file", "/var/log/radosgw/$cluster-$name.log" },
