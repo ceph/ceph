@@ -1908,7 +1908,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterRemoteUpdateWatcherError
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
-  ASSERT_EQ(-EINVAL, shutdown_ctx.wait());
+  ASSERT_EQ(0, shutdown_ctx.wait());
 }
 
 TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterLocalUpdateWatcherError) {
@@ -1950,7 +1950,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterLocalUpdateWatcherError)
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
-  ASSERT_EQ(-EINVAL, shutdown_ctx.wait());
+  ASSERT_EQ(0, shutdown_ctx.wait());
 }
 
 TEST_F(TestMockImageReplayerSnapshotReplayer, LoadImageMetaError) {

@@ -1402,8 +1402,6 @@ void Replayer<I>::handle_unregister_remote_update_watcher(int r) {
   if (r < 0) {
     derr << "failed to unregister remote update watcher: " << cpp_strerror(r)
          << dendl;
-    handle_replay_complete(
-      r, "failed to unregister remote image update watcher");
   }
 
   unregister_local_update_watcher();
@@ -1427,8 +1425,6 @@ void Replayer<I>::handle_unregister_local_update_watcher(int r) {
   if (r < 0) {
     derr << "failed to unregister local update watcher: " << cpp_strerror(r)
          << dendl;
-    handle_replay_complete(
-      r, "failed to unregister local image update watcher");
   }
 
   delete m_update_watch_ctx;
