@@ -129,6 +129,9 @@ class PerShardState {
     return next_tid++;
   }
 
+  HeartbeatStampsRef get_hb_stamps(int peer);
+  std::map<int, HeartbeatStampsRef> heartbeat_stamps;
+
 public:
   PerShardState(
     int whoami,
@@ -223,9 +226,6 @@ public:
   ceph::signedspan get_mnow() const {
     return ceph::mono_clock::now() - startup_time;
   }
-
-  HeartbeatStampsRef get_hb_stamps(int peer);
-  std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
   struct DirectFinisher {
     void queue(Context *c) {
@@ -388,7 +388,7 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_alive)
   FORWARD_TO_OSD_SINGLETON(send_pg_temp)
   FORWARD_CONST(get_mnow, get_mnow, osd_singleton_state)
-  FORWARD_TO_OSD_SINGLETON(get_hb_stamps)
+  FORWARD_TO_LOCAL(get_hb_stamps)
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
 
