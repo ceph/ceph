@@ -30,12 +30,14 @@ repository. Python Sphinx renders the source into HTML and manpages.
 
 Viewing Old Ceph Documentation
 ==============================
-The https://docs.ceph.com link displays the ``master`` branch by default, but
-you can view the documentation for older versions of Ceph (e.g., ``mimic``) by
-replacing the version name in the url (e.g. ``pacific`` in
-`https://docs.ceph.com/en/pacific <https://docs.ceph.com/en/pacific>`_) with the
-branch name you prefer (e.g. ``mimic``, to create a URL that reads
-`https://docs.ceph.com/en/mimic/ <https://docs.ceph.com/en/mimic/>`_).
+The https://docs.ceph.com link displays the latest release branch by default
+(for example, if "Quincy" is the most recent release, then by default
+https://docs.ceph.com displays the documentation for Quincy), but you can view
+the documentation for older versions of Ceph (for example, ``pacific``) by
+replacing the version name in the url (for example, ``quincy`` in
+`https://docs.ceph.com/en/pacific <https://docs.ceph.com/en/quincy>`_) with the
+branch name you prefer (for example, ``pacific``, to create a URL that reads
+`https://docs.ceph.com/en/pacific/ <https://docs.ceph.com/en/pacific/>`_).
 
 .. _making_contributions:
 
@@ -140,13 +142,13 @@ Select a Branch
 ---------------
 
 When you make small changes to the documentation, such as fixing typographical
-errors or clarifying explanations, use the ``master`` branch (default). You
-should also use the ``master`` branch when making contributions to features that
-are in the current release. ``master`` is the most commonly used branch. :
+errors or clarifying explanations, use the ``main`` branch (default). You
+should also use the ``main`` branch when making contributions to features that
+are in the current release. ``main`` is the most commonly used branch. :
 
 .. prompt:: bash $
 
-	git checkout master
+	git checkout main
 
 When you make changes to documentation that affect an upcoming release, use 
 the ``next`` branch. ``next`` is the second most commonly used branch. :
@@ -158,7 +160,7 @@ the ``next`` branch. ``next`` is the second most commonly used branch. :
 When you are making substantial contributions such as new features that are not
 yet in the current release; if your contribution is related to an issue with a
 tracker ID; or, if you want to see your documentation rendered on the Ceph.com
-website before it gets merged into the ``master`` branch, you should create a
+website before it gets merged into the ``main`` branch, you should create a
 branch. To distinguish branches that include only documentation updates, we
 prepend them with ``wip-doc`` by convention, following the form
 ``wip-doc-{your-branch-name}``. If the branch relates to an issue filed in
