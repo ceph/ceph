@@ -915,7 +915,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 	  } else {
 	    start = from;
 	  }
-	  dout(10) << __func__ << " channnel " << p.first
+	  dout(10) << __func__ << " channel " << p.first
 		   << " from " << from << " to " << to << dendl;
 	  for (version_t v = start; v < to; ++v) {
 	    bufferlist ebl;
@@ -936,6 +936,9 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 	  entries.erase(entries.begin());
 	}
 	for (auto& p : entries) {
+	  if (!match(p.second)) {
+	    continue;
+	  }
 	  if (f) {
 	    f->dump_object("entry", p.second);
 	  } else {
@@ -967,10 +970,12 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 	    LogEntry le;
 	    auto p = ebl.cbegin();
 	    decode(le, p);
-	    if (f) {
-	      f->dump_object("entry", le);
-	    } else {
-	      ss << le << "\n";
+	    if (match(le)) {
+	      if (f) {
+	        f->dump_object("entry", le);
+	      } else {
+	        ss << le << "\n";
+	      }
 	    }
 	  }
 	}
