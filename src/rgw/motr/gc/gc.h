@@ -68,22 +68,19 @@ struct motr_gc_obj_info {
   Meta mobj;                   // motr obj
   std::time_t deletion_time;   // time when Motr object was requested for deletion
   std::uint64_t size;          // size of obj
-  std::uint64_t size_actual;   // size of disk
   bool is_multipart;           // flag to indicate if object is multipart
   std::string multipart_iname; // part index name
 
   motr_gc_obj_info() {}
   motr_gc_obj_info(const std::string& _tag, const std::string& _name, Meta& _mobj,
                    const std::time_t& _deletion_time, const std::uint64_t& _size,
-                   const std::uint64_t& _size_actual, bool _is_multipart,
-                   const std::string& _multipart_iname)
+                   bool _is_multipart, const std::string& _multipart_iname)
       : tag(_tag), name(_name), mobj(_mobj),
         deletion_time(_deletion_time), size(_size),
-        size_actual(_size_actual), is_multipart(_is_multipart),
-        multipart_iname(_multipart_iname) {}
+        is_multipart(_is_multipart), multipart_iname(_multipart_iname) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(12, 2, bl);
+    ENCODE_START(11, 2, bl);
     encode(tag, bl);
     encode(name, bl);
     encode(mobj.oid.u_hi, bl);
@@ -93,14 +90,13 @@ struct motr_gc_obj_info {
     encode(mobj.layout_id, bl);
     encode(deletion_time, bl);
     encode(size, bl);
-    encode(size_actual, bl);
     encode(is_multipart, bl);
     encode(multipart_iname, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(12, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(11, 2, 2, bl);
     decode(tag, bl);
     decode(name, bl);
     decode(mobj.oid.u_hi, bl);
@@ -110,7 +106,6 @@ struct motr_gc_obj_info {
     decode(mobj.layout_id, bl);
     decode(deletion_time, bl);
     decode(size, bl);
-    decode(size_actual, bl);
     decode(is_multipart, bl);
     decode(multipart_iname, bl);
     DECODE_FINISH(bl);
@@ -172,7 +167,9 @@ class MotrGC : public DoutPrefixProvider {
   int dequeue(std::string iname, motr_gc_obj_info obj);
 
   int list(std::vector<std::unordered_map<std::string, std::string>> &gc_entries);
-  int delete_motr_obj_from_gc(motr_gc_obj_info ginfo);
+  int delete_obj_from_gc(motr_gc_obj_info ginfo);
+  int process_parts(motr_gc_obj_info ginfo, std::time_t end_time);
+  int delete_motr_obj(Meta motr_obj);
   int get_locked_gc_index(uint32_t& rand_ind, uint32_t& lease_duration);
   int un_lock_gc_index(uint32_t& index);
 

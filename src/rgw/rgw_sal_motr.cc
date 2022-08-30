@@ -2216,7 +2216,33 @@ int MotrObject::remove_mobj_and_index_entry(
   if (ent.meta.size != 0) {
     if (ent.meta.category == RGWObjCategory::MultiMeta) {
       this->set_category(RGWObjCategory::MultiMeta);
-      rc = this->delete_part_objs(dpp, &size_rounded);
+      if (store->gc_enabled()) {
+        std::string upload_id;
+        rc = store->get_upload_id(bucket_name, delete_key, upload_id);
+        if (rc < 0) {
+          ldpp_dout(dpp, 0) <<__func__<< ": ERROR: get_upload_id failed. rc=" << rc << dendl;
+        } else {
+          std::string obj_key = delete_key;
+          obj_key = obj_key.erase(obj_key.size() - 1, 2);
+          std::string obj_fqdn = bucket_name + "/" + obj_key;
+          std::string obj_part_iname = "motr.rgw.object." + bucket_name + "." +
+                                       obj_key + "." + upload_id + ".parts";
+          ldpp_dout(dpp, 20) << __func__ << ": object part index=" << obj_part_iname << dendl;
+          ::Meta *mobj = reinterpret_cast<::Meta*>(&this->meta);
+          motr_gc_obj_info gc_obj(upload_id, obj_fqdn, *mobj, std::time(nullptr),
+                                ent.meta.size, true, obj_part_iname);
+          rc = store->get_gc()->enqueue(gc_obj);
+          if (rc == 0) {
+            pushed_to_gc = true;
+            ldpp_dout(dpp, 20) << __func__ << ": pushed object " << obj_fqdn
+                               << " with tag " << upload_id 
+                               << " to motr garbage collector." << dendl;
+          }
+        }
+      }
+      if (!pushed_to_gc) {
+        rc = this->delete_part_objs(dpp, &size_rounded);
+      }
     } else {
       // Handling Simple Object Deletion
       // Open the object if not already open.
@@ -2236,12 +2262,13 @@ int MotrObject::remove_mobj_and_index_entry(
         std::string obj_fqdn = bucket_name + "/" + delete_key;
         ::Meta *mobj = reinterpret_cast<::Meta*>(&this->meta);
         motr_gc_obj_info gc_obj(tag, obj_fqdn, *mobj, std::time(nullptr),
-                                ent.meta.size, size_rounded, false, "");
+                                ent.meta.size, false, "");
         rc = store->get_gc()->enqueue(gc_obj);
         if (rc == 0) {
           pushed_to_gc = true;
-          ldpp_dout(dpp, 20) <<__func__<< ": Pushed the delete req for OID="
-            << tag << " to the motr garbage collector." << dendl;
+          ldpp_dout(dpp, 20) << __func__ << ": pushed object " << obj_fqdn
+                               << " with tag " << tag 
+                               << " to motr garbage collector." << dendl;
         }
       }
       if (! pushed_to_gc)
