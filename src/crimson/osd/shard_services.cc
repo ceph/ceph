@@ -39,7 +39,10 @@ PerShardState::PerShardState(
   : whoami(whoami),
     store(store),
     throttler(crimson::common::local_conf()),
-    obc_registry(crimson::common::local_conf())
+    obc_registry(crimson::common::local_conf()),
+    next_tid(
+      static_cast<ceph_tid_t>(seastar::this_shard_id()) <<
+      (std::numeric_limits<ceph_tid_t>::digits - 8))
 {
   perf = build_osd_logger(&cct);
   cct.get_perfcounters_collection()->add(perf);
