@@ -5157,6 +5157,11 @@ def prepare_ssh(
             logger.info('Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])
 
+    if ctx.with_centralized_logging:
+        for t in ['loki', 'promtail']:
+            logger.info('Deploying %s service with default placement...' % t)
+            cli(['orch', 'apply', t])
+
 
 def enable_cephadm_mgr_module(
     cli: Callable, wait_for_mgr_restart: Callable
@@ -9141,6 +9146,10 @@ def _get_parser():
         '--skip-monitoring-stack',
         action='store_true',
         help='Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter)')
+    parser_bootstrap.add_argument(
+        '--with-centralized-logging',
+        action='store_true',
+        help='Automatically provision centralized logging (promtail, loki)')
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
