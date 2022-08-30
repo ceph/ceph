@@ -15,8 +15,9 @@
 #include "include/byteorder.h"
 #include "include/denc.h"
 #include "include/buffer.h"
-#include "include/uuid.h"
+#include "include/intarith.h"
 #include "include/interval_set.h"
+#include "include/uuid.h"
 
 namespace crimson::os::seastore {
 

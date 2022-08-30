@@ -25,6 +25,7 @@
 #define _ENC_DEC_H
 
 #include <array>
+#include <bit>
 #include <cstring>
 #include <concepts>
 #include <map>
@@ -41,7 +42,6 @@
 #include <boost/optional.hpp>
 
 #include "include/compat.h"
-#include "include/intarith.h"
 #include "include/int_types.h"
 #include "include/scope_guard.h"
 
@@ -477,7 +477,7 @@ inline void denc_varint_lowz(uint64_t v, size_t& p) {
 }
 inline void denc_varint_lowz(uint64_t v,
 			     ceph::buffer::list::contiguous_appender& p) {
-  int lowznib = v ? (ctz(v) / 4) : 0;
+  int lowznib = v ? (std::countr_zero(v) / 4) : 0;
   if (lowznib > 3)
     lowznib = 3;
   v >>= lowznib * 4;
@@ -514,7 +514,7 @@ inline void denc_signed_varint_lowz(int64_t v, It& p) {
     v = -v;
     negative = true;
   }
-  unsigned lowznib = v ? (ctz(v) / 4) : 0u;
+  unsigned lowznib = v ? (std::countr_zero(std::bit_cast<uint64_t>(v)) / 4) : 0u;
   if (lowznib > 3)
     lowznib = 3;
   v >>= lowznib * 4;
@@ -559,7 +559,7 @@ inline void denc_lba(uint64_t v, size_t& p) {
 template<class It>
 requires (!is_const_iterator<It>)
 inline void denc_lba(uint64_t v, It& p) {
-  int low_zero_nibbles = v ? (int)(ctz(v) / 4) : 0;
+  int low_zero_nibbles = v ? std::countr_zero(v) / 4 : 0;
   int pos;
   uint32_t word;
   int t = low_zero_nibbles - 3;
