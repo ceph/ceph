@@ -896,7 +896,8 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
-  JournalTrimmerImpl *trimmer;
+  // optional, set if this cleaner is assigned to SegmentedJournal
+  JournalTrimmer *trimmer = nullptr;
 
   ExtentCallbackInterface *ecb = nullptr;
 
@@ -921,6 +922,10 @@ public:
   void set_extent_callback(ExtentCallbackInterface *cb) {
     ecb = cb;
     gc_process.set_extent_callback(cb);
+  }
+
+  void set_journal_trimmer(JournalTrimmer &_trimmer) {
+    trimmer = &_trimmer;
   }
 
   using mount_ertr = base_ertr;
@@ -953,6 +958,8 @@ public:
   void close_segment(segment_id_t segment) final;
 
   void update_segment_avail_bytes(segment_type_t type, paddr_t offset) final {
+    assert(type == segment_type_t::OOL ||
+           trimmer != nullptr); // segment_type_t::JOURNAL
     segments.update_written_to(type, offset);
     gc_process.maybe_wake_background();
   }
@@ -1204,10 +1211,10 @@ private:
    * Segments calculations
    */
   std::size_t get_segments_in_journal() const {
-    if (trimmer->get_journal_type() == journal_type_t::CIRCULAR) {
-      return 0;
-    } else {
+    if (trimmer != nullptr) {
       return trimmer->get_num_rolls();
+    } else {
+      return 0;
     }
   }
   std::size_t get_segments_in_journal_closed() const {
@@ -1315,6 +1322,8 @@ private:
       data_category_t category,
       reclaim_gen_t generation) {
     ceph_assert(state == cleaner_state_t::MOUNT);
+    ceph_assert(s_type == segment_type_t::OOL ||
+                trimmer != nullptr); // segment_type_t::JOURNAL
     auto old_usage = calc_utilization(segment);
     segments.init_closed(segment, seq, s_type, category, generation);
     auto new_usage = calc_utilization(segment);

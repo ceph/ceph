@@ -689,6 +689,7 @@ TransactionManagerRef make_transaction_manager(
 
   if (journal_type == journal_type_t::SEGMENTED) {
     cache->set_segment_provider(*async_cleaner);
+    async_cleaner->set_journal_trimmer(journal_trimmer);
   }
 
   JournalRef journal;
