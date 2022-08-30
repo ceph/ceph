@@ -895,6 +895,9 @@ def test_ps_s3_notification_filter_on_master():
         notif_id = event['Records'][0]['s3']['configurationId']
         key_name = event['Records'][0]['s3']['object']['key']
         awsRegion = event['Records'][0]['awsRegion']
+        assert_equal(awsRegion, zonegroup)
+        bucket_arn = event['Records'][0]['s3']['bucket']['arn']
+        assert_equal(bucket_arn, "arn:aws:s3:"+awsRegion+"::"+bucket_name)
         if notif_id == notification_name+'_1':
             found_in1.append(key_name)
         elif notif_id == notification_name+'_2':
@@ -909,7 +912,6 @@ def test_ps_s3_notification_filter_on_master():
     assert_equal(set(found_in1), set(expected_in1))
     assert_equal(set(found_in2), set(expected_in2))
     assert_equal(set(found_in3), set(expected_in3))
-    assert_equal(awsRegion, zonegroup)
     if not skip_notif4:
         assert_equal(set(found_in4), set(expected_in4))
 

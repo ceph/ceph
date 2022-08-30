@@ -687,12 +687,15 @@ static inline void populate_event(reservation_t& res,
   // configurationId is filled from notification configuration
   event.bucket_name = res.bucket->get_name();
   event.bucket_ownerIdentity = res.bucket->get_owner() ? res.bucket->get_owner()->get_id().id : "";
-  event.bucket_arn = to_string(rgw::ARN(res.bucket->get_key()));
+  const auto region = res.store->get_zone()->get_zonegroup().get_api_name();
+  rgw::ARN bucket_arn(res.bucket->get_key());
+  bucket_arn.region = region; 
+  event.bucket_arn = to_string(bucket_arn);
   event.object_key = res.object_name ? *res.object_name : obj->get_name();
   event.object_size = size;
   event.object_etag = etag;
   event.object_versionId = version;
-  event.awsRegion = res.store->get_zone()->get_zonegroup().get_api_name();
+  event.awsRegion = region;
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
