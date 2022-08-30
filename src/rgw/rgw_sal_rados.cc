@@ -1653,7 +1653,7 @@ int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **psta
 
 int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Read &read_op, optional_yield y, rgw_obj* target_obj)
 {
-  read_op.params.attrs = &attrs;
+  read_op.params.attrs = &state.attrset;
   read_op.params.target_obj = target_obj;
   read_op.params.obj_size = &state.size;
   read_op.params.lastmod = &state.mtime;
@@ -1692,8 +1692,8 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, o
   /* Temporarily set target */
   state.obj = target;
   set_atomic();
-  attrs[attr_name] = attr_val;
-  r = set_obj_attrs(dpp, &attrs, nullptr, y);
+  state.attrset[attr_name] = attr_val;
+  r = set_obj_attrs(dpp, &state.attrset, nullptr, y);
   /* Restore target */
   state.obj = save;
 
@@ -1711,8 +1711,8 @@ int RadosObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* att
 }
 
 bool RadosObject::is_expired() {
-  auto iter = attrs.find(RGW_ATTR_DELETE_AT);
-  if (iter != attrs.end()) {
+  auto iter = state.attrset.find(RGW_ATTR_DELETE_AT);
+  if (iter != state.attrset.end()) {
     utime_t delete_at;
     try {
       auto bufit = iter->second.cbegin();
