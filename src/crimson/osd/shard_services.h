@@ -123,6 +123,13 @@ class PerShardState {
     return std::make_pair(std::move(op), std::move(fut));
   }
 
+  // tids for ops i issue, prefixed with core id to ensure uniqueness
+  ceph_tid_t next_tid;
+  ceph_tid_t get_tid() {
+    return next_tid++;
+  }
+
+public:
   PerShardState(
     int whoami,
     crimson::os::FuturizedStore &store);
@@ -173,12 +180,6 @@ public:
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
   crimson::mgr::Client &mgrc;
-
-  // tids for ops i issue
-  unsigned int next_tid{0};
-  ceph_tid_t get_tid() {
-    return (ceph_tid_t)next_tid++;
-  }
 
   std::unique_ptr<OSDMeta> meta_coll;
   template <typename... Args>
@@ -352,6 +353,9 @@ public:
     return dispatch_context({}, std::move(ctx));
   }
 
+  /// Return per-core tid
+  ceph_tid_t get_tid() { return local_state.get_tid(); }
+
   /// Return core-local pg count * number of cores
   unsigned get_num_local_pgs() const {
     return local_state.pg_map.get_pg_count();
@@ -377,7 +381,6 @@ public:
   FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
 
   FORWARD_TO_OSD_SINGLETON(osdmap_subscribe)
-  FORWARD_TO_OSD_SINGLETON(get_tid)
   FORWARD_TO_OSD_SINGLETON(queue_want_pg_temp)
   FORWARD_TO_OSD_SINGLETON(remove_want_pg_temp)
   FORWARD_TO_OSD_SINGLETON(requeue_pg_temp)
