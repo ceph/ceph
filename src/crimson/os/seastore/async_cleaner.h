@@ -887,13 +887,6 @@ private:
     uint64_t closed_ool_used_bytes = 0;
     uint64_t closed_ool_total_bytes = 0;
 
-    uint64_t io_blocking_num = 0;
-    uint64_t io_count = 0;
-    uint64_t io_blocked_count = 0;
-    uint64_t io_blocked_count_trim = 0;
-    uint64_t io_blocked_count_reclaim = 0;
-    uint64_t io_blocked_sum = 0;
-
     uint64_t reclaiming_bytes = 0;
     uint64_t reclaimed_bytes = 0;
     uint64_t reclaimed_segment_bytes = 0;
@@ -1112,48 +1105,17 @@ private:
 
     void mount() {
       trimmer->reset();
+      stats = {};
+      register_metrics();
     }
 
     void start();
 
     seastar::future<> stop();
 
-    seastar::future<> run_until_halt() {
-      ceph_assert(is_stopping());
-      if (is_running_until_halt) {
-	return seastar::now();
-      }
-      is_running_until_halt = true;
-      return seastar::do_until(
-	[this] {
-	  log_state("run_until_halt");
-	  assert(is_running_until_halt);
-	  if (background_should_run()) {
-	    return false;
-	  } else {
-	    is_running_until_halt = false;
-	    return true;
-	  }
-	},
-	[this] {
-	  return do_background_cycle();
-	}
-      );
-    }
+    seastar::future<> run_until_halt();
 
-    seastar::future<> io_await_hard_limits() {
-      ceph_assert(!blocking_io);
-      return seastar::do_until(
-        [this] {
-          log_state("io_await_hard_limits");
-          return !should_block_io();
-        },
-        [this] {
-          blocking_io = seastar::promise<>();
-          return blocking_io->get_future();
-        }
-      );
-    }
+    seastar::future<> maybe_block_io();
 
     void maybe_wake_background() final {
       if (is_stopping()) {
@@ -1204,6 +1166,18 @@ private:
     }
 
     seastar::future<> do_background_cycle();
+
+    void register_metrics();
+
+    struct {
+      uint64_t io_blocking_num = 0;
+      uint64_t io_count = 0;
+      uint64_t io_blocked_count = 0;
+      uint64_t io_blocked_count_trim = 0;
+      uint64_t io_blocked_count_reclaim = 0;
+      uint64_t io_blocked_sum = 0;
+    } stats;
+    seastar::metrics::metric_group metrics;
 
     JournalTrimmerImplRef trimmer;
     AsyncCleaner &cleaner;
