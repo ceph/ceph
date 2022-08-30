@@ -8,6 +8,7 @@ export interface CephDevice {
   life_expectancy_min?: string;
   life_expectancy_max?: string;
   life_expectancy_stamp?: string;
+  life_expectancy_enabled?: boolean;
 }
 
 /**
