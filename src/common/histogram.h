@@ -14,8 +14,8 @@
 #define CEPH_HISTOGRAM_H
 
 #include <list>
-
 #include "include/encoding.h"
+#include "include/intarith.h"
 
 namespace ceph {
   class Formatter;
