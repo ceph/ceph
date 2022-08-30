@@ -50,34 +50,34 @@ private:
    *  * |                                                     |     migrating)
    *  * | (v2)                                                v
    *  * \-----> V2_GET_MUTABLE_METADATA                   V1_GET_SNAPSHOTS
-   *  *             |                                         |
-   *  *             |     -EOPNOTSUPP                         v
-   *  *             |  * * *                              V1_GET_LOCKS
-   *  *             |  *   *                                  |
-   *  *             v  v   *                                  v
-   *  *         V2_GET_PARENT                              <apply>
-   *  *             |                                         |
+   *  *    *        |                                         |
+   *  *    *        |     -EOPNOTSUPP                         v
+   *  *    *        |  * * *                              V1_GET_LOCKS
+   *  *    *        |  *   *                                  |
+   *  *    *        v  v   *                                  v
+   *  *    *    V2_GET_PARENT                              <apply>
+   *  *    *        |                                         |
    *  *             v                                         |
    *  * * * * * GET_MIGRATION_HEADER (skip if not             |
    *  (ENOENT)      |                 migrating)              |
    *                v                                         |
-   *            V2_GET_METADATA                               |
-   *                |                                         |
-   *                v                                         |
-   *            V2_GET_POOL_METADATA                          |
-   *                |                                         |
-   *                v (skip if not enabled)                   |
-   *            V2_GET_OP_FEATURES                            |
-   *                |                                         |
-   *                v                                         |
-   *            V2_GET_GROUP                                  |
-   *                |                                         |
-   *                |     -EOPNOTSUPP                         |
-   *                |   * * * *                               |
-   *                |   *     *                               |
-   *                v   v     *                               |
-   *            V2_GET_SNAPSHOTS (skip if no snaps)           |
-   *                |                                         |
+   *       *    V2_GET_METADATA                               |
+   *       *        |                                         |
+   *       *        v                                         |
+   *       *    V2_GET_POOL_METADATA                          |
+   *       *        |                                         |
+   *       *        v (skip if not enabled)                   |
+   *       *    V2_GET_OP_FEATURES                            |
+   *       *        |                                         |
+   *       *        v                                         |
+   *       *    V2_GET_GROUP                                  |
+   *       *        |                                         |
+   *       *        |        -EOPNOTSUPP                      |
+   *       *        |     * * *                               |
+   *       *        |     *   *                               |
+   *       *        v     v   *                               |
+   *        * * V2_GET_SNAPSHOTS (skip if no snaps)           |
+   *     (ENOENT)   |                                         |
    *                v                                         |
    *            V2_REFRESH_PARENT (skip if no parent or       |
    *                |              refresh not needed)        |
