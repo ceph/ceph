@@ -29,11 +29,11 @@ namespace rgw {
       {}
     ~RGWLib() {}
 
-    rgw::sal::Store* get_store() { return main.store; }
+    rgw::sal::Store* get_store() { return main.get_store(); }
 
     RGWLibFrontend* get_fe() { return fe; }
 
-    rgw::LDAPHelper* get_ldh() { return main.ldh.get(); }
+    rgw::LDAPHelper* get_ldh() { return main.get_ldh(); }
     CephContext *get_cct() const override { return cct.get(); }
     unsigned get_subsys() const { return ceph_subsys_rgw; }
     std::ostream& gen_prefix(std::ostream& out) const { return out << "lib rgw: "; }

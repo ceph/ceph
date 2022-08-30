@@ -514,7 +514,7 @@ namespace rgw {
     common_init_finish(g_ceph_context);
 
     main.init_storage();
-    if (! main.store) {
+    if (! main.get_store()) {
       mutex.lock();
       init_timer.cancel_all_events();
       init_timer.shutdown();

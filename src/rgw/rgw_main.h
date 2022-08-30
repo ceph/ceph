@@ -78,9 +78,6 @@ namespace rgw {
     rgw::sal::Store* store;
     DoutPrefixProvider* dpp;
 
-    friend int main(int, char*[]); // doesnt work gcc-12.1
-    friend class RGWLib;
-
   public:
     AppMain(DoutPrefixProvider* dpp)
       : dpp(dpp)
@@ -90,6 +87,10 @@ namespace rgw {
 
     rgw::sal::Store* get_store() {
       return store;
+    }
+
+    rgw::LDAPHelper* get_ldh() {
+      return ldh.get();
     }
 
     void init_frontends1(bool nfs = false);
