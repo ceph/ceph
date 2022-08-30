@@ -375,32 +375,38 @@ tests:
            description: "Root volume is dangerously full: 4.811% free."
 
  # network packets dropped
- - interval: 1s
+ - interval: 1m
    input_series:
     - series: 'node_network_receive_drop_total{device="eth0",
       instance="node-exporter",job="node-exporter"}'
-      values: '1+1x500'
+      values: '0+600x10'
     - series: 'node_network_transmit_drop_total{device="eth0",
       instance="node-exporter",job="node-exporter"}'
-      values: '1+1x500'
+      values: '0+600x10'
+    - series: 'node_network_receive_packets_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '0+750x10'
+    - series: 'node_network_transmit_packets_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '0+750x10'
    promql_expr_test:
      - expr: |
          (
-           increase(node_network_receive_drop_total{device!="lo"}[1m]) +
-           increase(node_network_transmit_drop_total{device!="lo"}[1m])
+           rate(node_network_receive_drop_total{device!="lo"}[1m]) +
+           rate(node_network_transmit_drop_total{device!="lo"}[1m])
          ) / (
-           increase(node_network_receive_packets_total{device!="lo"}[1m]) +
-           increase(node_network_transmit_packets_total{device!="lo"}[1m])
-         ) >= 0.0001 or (
-           increase(node_network_receive_drop_total{device!="lo"}[1m]) +
-           increase(node_network_transmit_drop_total{device!="lo"}[1m])
+           rate(node_network_receive_packets_total{device!="lo"}[1m]) +
+           rate(node_network_transmit_packets_total{device!="lo"}[1m])
+         ) >= 0.0050000000000000001 and (
+           rate(node_network_receive_drop_total{device!="lo"}[1m]) +
+           rate(node_network_transmit_drop_total{device!="lo"}[1m])
          ) >= 10
 
        eval_time: 5m
        exp_samples:
          - labels: '{device="eth0", instance="node-exporter",
            job="node-exporter"}'
-           value: 1.2E+02
+           value: 8E-1
    alert_rule_test:
      - eval_time: 5m
        alertname: CephNodeNetworkPacketDrops
@@ -414,35 +420,41 @@ tests:
            type: ceph_default
          exp_annotations:
            summary: One or more NICs reports packet drops
-           description: "Node node-exporter experiences packet drop > 0.01% or > 10 packets/s on interface eth0."
+           description: "Node node-exporter experiences packet drop > 0.5% or > 10 packets/s on interface eth0."
 
  # network packets errors
- - interval: 1s
+ - interval: 1m
    input_series:
     - series: 'node_network_receive_errs_total{device="eth0",
       instance="node-exporter",job="node-exporter"}'
-      values: '1+1x500'
+      values: '0+600x10'
     - series: 'node_network_transmit_errs_total{device="eth0",
       instance="node-exporter",job="node-exporter"}'
-      values: '1+1x500'
+      values: '0+600x10'
+    - series: 'node_network_transmit_packets_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '0+750x10'
+    - series: 'node_network_receive_packets_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '0+750x10'
    promql_expr_test:
      - expr: |
          (
-           increase(node_network_receive_errs_total{device!="lo"}[1m]) +
-           increase(node_network_transmit_errs_total{device!="lo"}[1m])
+           rate(node_network_receive_errs_total{device!="lo"}[1m]) +
+           rate(node_network_transmit_errs_total{device!="lo"}[1m])
          ) / (
-           increase(node_network_receive_packets_total{device!="lo"}[1m]) +
-           increase(node_network_transmit_packets_total{device!="lo"}[1m])
+           rate(node_network_receive_packets_total{device!="lo"}[1m]) +
+           rate(node_network_transmit_packets_total{device!="lo"}[1m])
          ) >= 0.0001 or (
-           increase(node_network_receive_errs_total{device!="lo"}[1m]) +
-           increase(node_network_transmit_errs_total{device!="lo"}[1m])
+           rate(node_network_receive_errs_total{device!="lo"}[1m]) +
+           rate(node_network_transmit_errs_total{device!="lo"}[1m])
          ) >= 10
 
        eval_time: 5m
        exp_samples:
          - labels: '{device="eth0", instance="node-exporter",
            job="node-exporter"}'
-           value: 1.2E+02
+           value: 8E-01
    alert_rule_test:
      - eval_time: 5m
        alertname: CephNodeNetworkPacketErrors
