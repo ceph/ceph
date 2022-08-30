@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab expandtab
 
 #include "include/denc.h"
 #include "include/intarith.h"
@@ -7,6 +7,7 @@
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 
@@ -24,20 +25,18 @@ SET_SUBSYS(seastore_tm);
 namespace crimson::os::seastore {
 
 TransactionManager::TransactionManager(
-  AsyncCleanerRef _async_cleaner,
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
-  ExtentPlacementManagerRef &&epm,
-  BackrefManagerRef&& backref_manager)
-  : async_cleaner(std::move(_async_cleaner)),
-    cache(std::move(_cache)),
+  ExtentPlacementManagerRef &&_epm,
+  BackrefManagerRef&& _backref_manager)
+  : cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
-    epm(std::move(epm)),
-    backref_manager(std::move(backref_manager))
+    epm(std::move(_epm)),
+    backref_manager(std::move(_backref_manager))
 {
-  async_cleaner->set_extent_callback(this);
+  epm->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
 }
 
@@ -45,13 +44,13 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
-  return async_cleaner->mount(
+  return epm->mount(
   ).safe_then([this] {
     return journal->open_for_mkfs();
   }).safe_then([this](auto start_seq) {
     journal->get_trimmer().update_journal_tails(start_seq, start_seq);
     journal->get_trimmer().set_journal_head(start_seq);
-    return epm->open();
+    return epm->open_for_write();
   }).safe_then([this, FNAME]() {
     return with_transaction_intr(
       Transaction::src_t::MUTATE,
@@ -87,7 +86,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   LOG_PREFIX(TransactionManager::mount);
   INFO("enter");
   cache->init();
-  return async_cleaner->mount(
+  return epm->mount(
   ).safe_then([this] {
     return journal->replay(
       [this](
@@ -121,8 +120,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
           return lba_manager->init_cached_extent(t, e);
         }
       }).si_then([this, &t] {
-        assert(async_cleaner->debug_check_space(
-                 *async_cleaner->get_empty_space_tracker()));
+        epm->start_scan_space();
         return backref_manager->scan_mapped_space(
           t,
           [this](
@@ -134,21 +132,21 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
             assert(laddr == L_ADDR_NULL);
             backref_manager->cache_new_backref_extent(paddr, type);
             cache->update_tree_extents_num(type, 1);
-            async_cleaner->mark_space_used(paddr, len, true);
+            epm->mark_space_used(paddr, len);
           } else if (laddr == L_ADDR_NULL) {
             cache->update_tree_extents_num(type, -1);
-            async_cleaner->mark_space_free(paddr, len, true);
+            epm->mark_space_free(paddr, len);
           } else {
             cache->update_tree_extents_num(type, 1);
-            async_cleaner->mark_space_used(paddr, len, true);
+            epm->mark_space_used(paddr, len);
           }
         });
       });
     });
   }).safe_then([this] {
-    return epm->open();
+    return epm->open_for_write();
   }).safe_then([FNAME, this] {
-    async_cleaner->complete_init();
+    epm->start_gc();
     INFO("completed");
   }).handle_error(
     mount_ertr::pass_further{},
@@ -162,7 +160,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 TransactionManager::close_ertr::future<> TransactionManager::close() {
   LOG_PREFIX(TransactionManager::close);
   INFO("enter");
-  return async_cleaner->stop(
+  return epm->stop_gc(
   ).then([this] {
     return cache->close();
   }).safe_then([this] {
@@ -283,12 +281,12 @@ TransactionManager::submit_transaction(
     size_t projected_usage = t.get_allocation_size();
     SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
     return trans_intr::make_interruptible(
-      async_cleaner->reserve_projected_usage(projected_usage)
+      epm->reserve_projected_usage(projected_usage)
     ).then_interruptible([this, &t] {
       return submit_transaction_direct(t);
     }).finally([this, FNAME, projected_usage, &t] {
       SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
-      async_cleaner->release_projected_usage(projected_usage);
+      epm->release_projected_usage(projected_usage);
     });
   });
 }
@@ -351,8 +349,7 @@ TransactionManager::submit_transaction_direct(
       cache->complete_commit(
           tref,
           submit_result.record_block_base,
-          start_seq,
-          async_cleaner.get());
+          start_seq);
 
       std::vector<CachedExtentRef> lba_to_clear;
       std::vector<CachedExtentRef> backref_to_clear;
@@ -565,7 +562,7 @@ TransactionManager::get_extents_if_live(
         {
           auto paddr_seg_id = paddr.as_seg_paddr().get_segment_id();
           return trans_intr::parallel_for_each(
-            std::move(pin_list),
+            pin_list,
             [=, this, &list, &t](
               LBAPinRef &pin) -> Cache::get_extent_iertr::future<>
           {
@@ -627,62 +624,80 @@ TransactionManagerRef make_transaction_manager(
     const std::vector<Device*> &secondary_devices,
     bool is_test)
 {
-  LOG_PREFIX(make_transaction_manager);
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto backref_manager = create_backref_manager(*cache);
 
-  epm->add_device(primary_device, true);
-  if (primary_device->get_device_type() == device_type_t::SEGMENTED) {
+  auto p_device_type = primary_device->get_device_type();
+  ceph_assert(p_device_type == device_type_t::SEGMENTED ||
+              p_device_type == device_type_t::RANDOM_BLOCK);
+
+  if (p_device_type == device_type_t::SEGMENTED) {
     sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
   }
   for (auto &p_dev : secondary_devices) {
-    epm->add_device(p_dev, false);
     ceph_assert(p_dev->get_device_type() == device_type_t::SEGMENTED);
     sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
   }
+
+  auto journal_type = (p_device_type == device_type_t::SEGMENTED ?
+                       journal_type_t::SEGMENTED : journal_type_t::CIRCULAR);
+  seastore_off_t roll_size;
+  seastore_off_t roll_start;
+  if (journal_type == journal_type_t::SEGMENTED) {
+    roll_size = static_cast<SegmentManager*>(primary_device)->get_segment_size();
+    roll_start = 0;
+  } else {
+    // FIXME: get from runtime configration instead of static defaults
+    roll_size = journal::CircularBoundedJournal::mkfs_config_t
+                       ::get_default().total_size;
+    // see CircularBoundedJournal::get_start_addr()
+    roll_start = journal::CBJOURNAL_START_ADDRESS +
+                 primary_device->get_block_size();
+  }
+  ceph_assert(roll_size % primary_device->get_block_size() == 0);
+  ceph_assert(roll_start % primary_device->get_block_size() == 0);
 
   bool cleaner_is_detailed;
   AsyncCleaner::config_t cleaner_config;
   if (is_test) {
     cleaner_is_detailed = true;
-    cleaner_config = AsyncCleaner::config_t::get_test();
+    cleaner_config = AsyncCleaner::config_t::get_test(
+        roll_size, journal_type);
   } else {
     cleaner_is_detailed = false;
-    cleaner_config = AsyncCleaner::config_t::get_default();
+    cleaner_config = AsyncCleaner::config_t::get_default(
+        roll_size, journal_type);
   }
   auto async_cleaner = std::make_unique<AsyncCleaner>(
     cleaner_config,
     std::move(sms),
     *backref_manager,
-    cleaner_is_detailed);
+    cleaner_is_detailed,
+    journal_type,
+    roll_start,
+    roll_size);
 
-  if (primary_device->get_device_type() == device_type_t::SEGMENTED) {
+  if (journal_type == journal_type_t::SEGMENTED) {
     cache->set_segment_provider(*async_cleaner);
   }
 
-  auto p_device_type = primary_device->get_device_type();
   JournalRef journal;
-  if (p_device_type == device_type_t::SEGMENTED) {
+  if (journal_type == journal_type_t::SEGMENTED) {
     journal = journal::make_segmented(*async_cleaner, *async_cleaner);
   } else {
-    ceph_assert(p_device_type == device_type_t::RANDOM_BLOCK);
     journal = journal::make_circularbounded(
       *async_cleaner,
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
-    async_cleaner->set_disable_trim(true);
-    ERROR("disabling journal trimming since support for CircularBoundedJournal "
-          "hasn't been added yet");
   }
-  epm->init_ool_writers(
-      *async_cleaner,
-      async_cleaner->get_ool_segment_seq_allocator());
+
+  epm->set_async_cleaner(std::move(async_cleaner));
+  epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(
-    std::move(async_cleaner),
     std::move(journal),
     std::move(cache),
     std::move(lba_manager),

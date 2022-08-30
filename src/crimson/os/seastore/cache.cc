@@ -804,6 +804,7 @@ void Cache::invalidate_extent(
 {
   if (!extent.may_conflict()) {
     assert(extent.transactions.empty());
+    extent.state = CachedExtent::extent_state_t::INVALID;
     return;
   }
 
@@ -1415,8 +1416,7 @@ void Cache::backref_batch_update(
 void Cache::complete_commit(
   Transaction &t,
   paddr_t final_block_start,
-  journal_seq_t start_seq,
-  AsyncCleaner *cleaner)
+  journal_seq_t start_seq)
 {
   LOG_PREFIX(Cache::complete_commit);
   SUBTRACET(seastore_t, "final_block_start={}, start_seq={}",
@@ -1424,6 +1424,10 @@ void Cache::complete_commit(
 
   std::vector<backref_entry_ref> backref_list;
   t.for_each_fresh_block([&](const CachedExtentRef &i) {
+    if (!i->is_valid()) {
+      return;
+    }
+
     bool is_inline = false;
     if (i->is_inline()) {
       is_inline = true;
@@ -1432,39 +1436,33 @@ void Cache::complete_commit(
     i->last_committed_crc = i->get_crc32c();
     i->on_initial_write();
 
-    if (i->is_valid()) {
-      i->state = CachedExtent::extent_state_t::CLEAN;
-      DEBUGT("add extent as fresh, inline={} -- {}",
-             t, is_inline, *i);
-      const auto t_src = t.get_src();
-      add_extent(i, &t_src);
-      if (cleaner) {
-	cleaner->mark_space_used(
+    i->state = CachedExtent::extent_state_t::CLEAN;
+    DEBUGT("add extent as fresh, inline={} -- {}",
+	   t, is_inline, *i);
+    const auto t_src = t.get_src();
+    add_extent(i, &t_src);
+    epm.mark_space_used(i->get_paddr(), i->get_length());
+    if (is_backref_mapped_extent_node(i)) {
+      DEBUGT("backref_list new {} len {}",
+	     t,
+	     i->get_paddr(),
+	     i->get_length());
+      backref_list.emplace_back(
+	std::make_unique<backref_entry_t>(
 	  i->get_paddr(),
-	  i->get_length());
-      }
-      if (is_backref_mapped_extent_node(i)) {
-	DEBUGT("backref_list new {} len {}",
-	       t,
-	       i->get_paddr(),
-	       i->get_length());
-	backref_list.emplace_back(
-	  std::make_unique<backref_entry_t>(
-	    i->get_paddr(),
-	    i->is_logical()
-	    ? i->cast<LogicalCachedExtent>()->get_laddr()
-	    : (is_lba_node(i->get_type())
-	      ? i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin
-	      : L_ADDR_NULL),
-	    i->get_length(),
-	    i->get_type(),
-	    start_seq));
-      } else if (is_backref_node(i->get_type())) {
-	add_backref_extent(i->get_paddr(), i->get_type());
-      } else {
-	ERRORT("{}", t, *i);
-	ceph_abort("not possible");
-      }
+	  i->is_logical()
+	  ? i->cast<LogicalCachedExtent>()->get_laddr()
+	  : (is_lba_node(i->get_type())
+	    ? i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin
+	    : L_ADDR_NULL),
+	  i->get_length(),
+	  i->get_type(),
+	  start_seq));
+    } else if (is_backref_node(i->get_type())) {
+      add_backref_extent(i->get_paddr(), i->get_type());
+    } else {
+      ERRORT("{}", t, *i);
+      ceph_abort("not possible");
     }
   });
 
@@ -1487,18 +1485,12 @@ void Cache::complete_commit(
     }
   }
 
-  if (cleaner) {
-    for (auto &i: t.retired_set) {
-      cleaner->mark_space_free(
-	i->get_paddr(),
-	i->get_length());
-    }
-    for (auto &i: t.existing_block_list) {
-      if (i->is_valid()) {
-	cleaner->mark_space_used(
-	  i->get_paddr(),
-	  i->get_length());
-      }
+  for (auto &i: t.retired_set) {
+    epm.mark_space_free(i->get_paddr(), i->get_length());
+  }
+  for (auto &i: t.existing_block_list) {
+    if (i->is_valid()) {
+      epm.mark_space_used(i->get_paddr(), i->get_length());
     }
   }
 
@@ -1768,9 +1760,18 @@ Cache::replay_delta(
       DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
             journal_seq, record_base, delta, *extent);
 
-      assert(extent->version == delta.pversion);
+      if (extent->last_committed_crc != delta.prev_crc) {
+        // FIXME: we can't rely on crc to detect whether is delta is
+        // out-of-date.
+        ERROR("identified delta crc {} doesn't match the extent at {} {}, "
+              "probably is out-dated -- {}",
+              delta, journal_seq, record_base, *extent);
+        ceph_assert(epm.get_journal_type() == journal_type_t::CIRCULAR);
+        remove_extent(extent);
+        return replay_delta_ertr::make_ready_future<bool>(false);
+      }
 
-      assert(extent->last_committed_crc == delta.prev_crc);
+      assert(extent->version == delta.pversion);
       extent->apply_delta_and_adjust_crc(record_base, delta.bl);
       extent->set_modify_time(modify_time);
       assert(extent->last_committed_crc == delta.final_crc);

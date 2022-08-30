@@ -2842,7 +2842,12 @@ void MDSRankDispatcher::handle_asok_command(
     command_dump_tree(cmdmap, *css, f);
   } else if (command == "dump loads") {
     std::lock_guard l(mds_lock);
-    r = balancer->dump_loads(f);
+    int64_t depth = -1;
+    bool got = cmd_getval(cmdmap, "depth", depth);
+    if (!got || depth < 0) {
+      dout(10) << "no depth limit when dirfrags dump_load" << dendl;
+    }
+    r = balancer->dump_loads(f, depth);
   } else if (command == "dump snaps") {
     std::lock_guard l(mds_lock);
     string server;

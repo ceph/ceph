@@ -679,7 +679,7 @@ public:
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldpp_dout(dpp, 5) << "lease cr failed, done early " << dendl;
+          ldpp_dout(dpp, 5) << "failed to take lease" << dendl;
           set_status("lease lock failed, early abort");
           return set_cr_error(lease_cr->get_ret_status());
         }
@@ -926,8 +926,8 @@ public:
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldpp_dout(dpp, 5) << "lease cr failed, done early " << dendl;
-          set_status("failed acquiring lock");
+          ldpp_dout(dpp, 5) << "failed to take lease" << dendl;
+          set_status("lease lock failed, early abort");
           return set_cr_error(lease_cr->get_ret_status());
         }
         set_sleeping(true);
@@ -977,6 +977,7 @@ public:
           for (; iter != result.keys.end(); ++iter) {
             if (!lease_cr->is_locked()) {
               lost_lock = true;
+              tn->log(1, "lease is lost, abort");
               break;
             }
             yield; // allow entries_index consumer to make progress
@@ -1621,7 +1622,7 @@ public:
       /* sync! */
       do {
         if (!lease_cr->is_locked()) {
-          tn->log(10, "lost lease");
+          tn->log(1, "lease is lost, abort");
           lost_lock = true;
           break;
         }
@@ -1754,7 +1755,7 @@ public:
         while (!lease_cr->is_locked()) {
           if (lease_cr->is_done()) {
             drain_all();
-            tn->log(10, "failed to take lease");
+            tn->log(5, "failed to take lease");
             return lease_cr->get_ret_status();
           }
           set_sleeping(true);
@@ -1787,7 +1788,7 @@ public:
       do {
         if (!lease_cr->is_locked()) {
           lost_lock = true;
-          tn->log(10, "lost lease");
+          tn->log(1, "lease is lost, abort");
           break;
         }
 #define INCREMENTAL_MAX_ENTRIES 100

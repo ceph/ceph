@@ -331,6 +331,7 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
         init_managers();
         return transaction_manager->mkfs();
       }).safe_then([this] {
+        init_managers();
         return transaction_manager->mount();
       }).safe_then([this] {
         return repeat_eagain([this] {
@@ -1860,9 +1861,10 @@ uuid_d SeaStore::get_fsid() const
 
 void SeaStore::init_managers()
 {
-  ceph_assert(!transaction_manager);
-  ceph_assert(!collection_manager);
-  ceph_assert(!onode_manager);
+  transaction_manager.reset();
+  collection_manager.reset();
+  onode_manager.reset();
+
   std::vector<Device*> sec_devices;
   for (auto &dev : secondaries) {
     sec_devices.emplace_back(dev.get());

@@ -6,6 +6,7 @@
 #include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/async_cleaner.h"
+#include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/transaction_manager.h"
 
 SET_SUBSYS(seastore_cleaner);
@@ -466,16 +467,24 @@ AsyncCleaner::AsyncCleaner(
   config_t config,
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
-  bool detailed)
+  bool detailed,
+  journal_type_t type,
+  seastore_off_t roll_start,
+  seastore_off_t roll_size)
   : detailed(detailed),
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
+    journal_type(type),
+    roll_start(roll_start),
+    roll_size(roll_size),
     ool_segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::OOL)),
     gc_process(*this)
 {
   config.validate();
+  ceph_assert(roll_start >= 0);
+  ceph_assert(roll_size > 0);
 }
 
 void AsyncCleaner::register_metrics()
@@ -640,10 +649,8 @@ void AsyncCleaner::update_journal_tails(
   journal_seq_t alloc_tail)
 {
   LOG_PREFIX(AsyncCleaner::update_journal_tails);
-  if (disable_trim) return;
 
   if (dirty_tail != JOURNAL_SEQ_NULL) {
-    assert(dirty_tail.offset.get_addr_type() != paddr_types_t::RANDOM_BLOCK);
     ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
                 journal_head >= dirty_tail);
     if (journal_dirty_tail != JOURNAL_SEQ_NULL &&
@@ -663,7 +670,6 @@ void AsyncCleaner::update_journal_tails(
   if (alloc_tail != JOURNAL_SEQ_NULL) {
     ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
                 journal_head >= alloc_tail);
-    assert(alloc_tail.offset.get_addr_type() != paddr_types_t::RANDOM_BLOCK);
     if (journal_alloc_tail != JOURNAL_SEQ_NULL &&
         journal_alloc_tail > alloc_tail) {
       ERROR("journal_alloc_tail {} => {} is backwards!",
@@ -817,7 +823,7 @@ AsyncCleaner::gc_trim_alloc()
       });
     });
   }).safe_then([this, FNAME] {
-    DEBUGT("finish, alloc_tail={}", journal_alloc_tail);
+    DEBUG("finish, alloc_tail={}", journal_alloc_tail);
   });
 }
 
@@ -855,7 +861,7 @@ AsyncCleaner::gc_trim_dirty()
       });
     });
   }).safe_then([this, FNAME] {
-    DEBUGT("finish, dirty_tail={}", journal_dirty_tail);
+    DEBUG("finish, dirty_tail={}", journal_dirty_tail);
   });
 }
 
@@ -905,27 +911,32 @@ AsyncCleaner::do_reclaim_space(
         // retrieve live extents
         DEBUGT("start, backref_entries={}, backref_extents={}",
                t, backref_entries.size(), extents.size());
-        return trans_intr::parallel_for_each(
-          backref_entries,
-          [this, FNAME, &extents, &t](auto &ent)
-        {
-          TRACET("getting extent of type {} at {}~{}",
-            t,
-            ent.type,
-            ent.paddr,
-            ent.len);
-          return ecb->get_extents_if_live(
-            t, ent.type, ent.paddr, ent.laddr, ent.len
-          ).si_then([FNAME, &extents, &ent, &t](auto list) {
-            if (list.empty()) {
-              TRACET("addr {} dead, skipping", t, ent.paddr);
-            } else {
-              for (auto &e : list) {
-                extents.emplace_back(std::move(e));
-              }
-            }
-          });
-        }).si_then([FNAME, &extents, this, &reclaimed, &t] {
+	return seastar::do_with(
+	  std::move(backref_entries),
+	  [this, &extents, &t](auto &backref_entries) {
+	  return trans_intr::parallel_for_each(
+	    backref_entries,
+	    [this, &extents, &t](auto &ent)
+	  {
+	    LOG_PREFIX(AsyncCleaner::do_reclaim_space);
+	    TRACET("getting extent of type {} at {}~{}",
+	      t,
+	      ent.type,
+	      ent.paddr,
+	      ent.len);
+	    return ecb->get_extents_if_live(
+	      t, ent.type, ent.paddr, ent.laddr, ent.len
+	    ).si_then([FNAME, &extents, &ent, &t](auto list) {
+	      if (list.empty()) {
+		TRACET("addr {} dead, skipping", t, ent.paddr);
+	      } else {
+		for (auto &e : list) {
+		  extents.emplace_back(std::move(e));
+		}
+	      }
+	    });
+	  });
+	}).si_then([FNAME, &extents, this, &reclaimed, &t] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
           auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
@@ -979,6 +990,16 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
       reclaim_state->start_pos,
       reclaim_state->end_pos
     ).si_then([this, &t](auto pin_list) {
+      if (!pin_list.empty()) {
+	auto it = pin_list.begin();
+	auto &first_pin = *it;
+	if (first_pin->get_key() < reclaim_state->start_pos) {
+	  // BackrefManager::get_mappings may include a entry before
+	  // reclaim_state->start_pos, which is semantically inconsistent
+	  // with the requirements of the cleaner
+	  pin_list.erase(it);
+	}
+      }
       return backref_manager.retrieve_backref_extents_in_range(
         t,
         reclaim_state->start_pos,
@@ -1020,7 +1041,7 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
             auto old_usage = calc_utilization(segment_to_release);
             if(unlikely(old_usage != 0)) {
               space_tracker->dump_usage(segment_to_release);
-              ERRORT("segment {} old_usage {} != 0",
+              ERROR("segment {} old_usage {} != 0",
                      segment_to_release, old_usage);
               ceph_abort();
             }
@@ -1044,7 +1065,8 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   LOG_PREFIX(AsyncCleaner::mount);
   const auto& sms = sm_group->get_segment_managers();
   INFO("{} segment managers", sms.size());
-  init_complete = false;
+  ceph_assert(state == cleaner_state_t::STOP);
+  state = cleaner_state_t::MOUNT;
   stats = {};
   journal_head = JOURNAL_SEQ_NULL;
   journal_alloc_tail = JOURNAL_SEQ_NULL;
@@ -1187,14 +1209,11 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
   });
 }
 
-void AsyncCleaner::complete_init()
+void AsyncCleaner::start_gc()
 {
-  LOG_PREFIX(AsyncCleaner::complete_init);
-  if (disable_trim) {
-    init_complete = true;
-    return;
-  }
-  init_complete = true;
+  LOG_PREFIX(AsyncCleaner::start_gc);
+  ceph_assert(state == cleaner_state_t::SCAN_SPACE);
+  state = cleaner_state_t::READY;
   INFO("done, start GC, {}", gc_stat_printer_t{this, true});
   ceph_assert(journal_head != JOURNAL_SEQ_NULL);
   ceph_assert(journal_alloc_tail != JOURNAL_SEQ_NULL);
@@ -1204,17 +1223,60 @@ void AsyncCleaner::complete_init()
 
 seastar::future<> AsyncCleaner::stop()
 {
+  if (is_ready()) {
+    state = cleaner_state_t::HALT;
+  } else {
+    state = cleaner_state_t::STOP;
+  }
   return gc_process.stop(
   ).then([this] {
     LOG_PREFIX(AsyncCleaner::stop);
     INFO("done, {}", gc_stat_printer_t{this, true});
+    // run_until_halt() can be called at HALT
   });
+}
+
+bool AsyncCleaner::check_usage()
+{
+  SpaceTrackerIRef tracker(space_tracker->make_empty());
+  ecb->with_transaction_weak(
+      "check_usage",
+      [this, &tracker](auto &t) {
+    return backref_manager.scan_mapped_space(
+      t,
+      [&tracker](
+        paddr_t paddr,
+        extent_len_t len,
+        extent_types_t type,
+        laddr_t laddr)
+    {
+      if (paddr.get_addr_type() == paddr_types_t::SEGMENT) {
+        if (is_backref_node(type)) {
+          assert(laddr == L_ADDR_NULL);
+          tracker->allocate(
+            paddr.as_seg_paddr().get_segment_id(),
+            paddr.as_seg_paddr().get_segment_off(),
+            len);
+        } else if (laddr == L_ADDR_NULL) {
+          tracker->release(
+            paddr.as_seg_paddr().get_segment_id(),
+            paddr.as_seg_paddr().get_segment_off(),
+            len);
+        } else {
+          tracker->allocate(
+            paddr.as_seg_paddr().get_segment_id(),
+            paddr.as_seg_paddr().get_segment_off(),
+            len);
+        }
+      }
+    });
+  }).unsafe_get0();
+  return space_tracker->equals(*tracker);
 }
 
 void AsyncCleaner::mark_space_used(
   paddr_t addr,
-  extent_len_t len,
-  bool init_scan)
+  extent_len_t len)
 {
   LOG_PREFIX(AsyncCleaner::mark_space_used);
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
@@ -1222,7 +1284,7 @@ void AsyncCleaner::mark_space_used(
   }
   auto& seg_addr = addr.as_seg_paddr();
 
-  if (!init_scan && !init_complete) {
+  if (state < cleaner_state_t::SCAN_SPACE) {
     return;
   }
 
@@ -1246,11 +1308,10 @@ void AsyncCleaner::mark_space_used(
 
 void AsyncCleaner::mark_space_free(
   paddr_t addr,
-  extent_len_t len,
-  bool init_scan)
+  extent_len_t len)
 {
   LOG_PREFIX(AsyncCleaner::mark_space_free);
-  if (!init_complete && !init_scan) {
+  if (state < cleaner_state_t::SCAN_SPACE) {
     return;
   }
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
@@ -1324,8 +1385,7 @@ segment_id_t AsyncCleaner::get_next_reclaim_segment() const
 void AsyncCleaner::log_gc_state(const char *caller) const
 {
   LOG_PREFIX(AsyncCleaner::log_gc_state);
-  if (LOCAL_LOGGER.is_enabled(seastar::log_level::debug) &&
-      !disable_trim) {
+  if (LOCAL_LOGGER.is_enabled(seastar::log_level::debug)) {
     DEBUG("caller {}, {}", caller, gc_stat_printer_t{this, true});
   }
 }
@@ -1333,10 +1393,7 @@ void AsyncCleaner::log_gc_state(const char *caller) const
 seastar::future<>
 AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
 {
-  if (disable_trim) {
-    return seastar::now();
-  }
-  ceph_assert(init_complete);
+  ceph_assert(is_ready());
   // The pipeline configuration prevents another IO from entering
   // prepare until the prior one exits and clears this.
   ceph_assert(!blocked_io_wake);
@@ -1378,8 +1435,7 @@ AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
 
 void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
 {
-  if (disable_trim) return;
-  ceph_assert(init_complete);
+  ceph_assert(is_ready());
   ceph_assert(stats.projected_used_bytes >= projected_usage);
   stats.projected_used_bytes -= projected_usage;
   return maybe_wake_gc_blocked_io();
@@ -1388,14 +1444,14 @@ void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
 std::ostream &operator<<(std::ostream &os, AsyncCleaner::gc_stat_printer_t stats)
 {
   os << "gc_stats(";
-  if (stats.cleaner->init_complete) {
+  if (stats.cleaner->is_ready()) {
     os << "should_block_on_(trim=" << stats.cleaner->should_block_on_trim()
        << ", reclaim=" << stats.cleaner->should_block_on_reclaim() << ")"
        << ", should_(trim_dirty=" << stats.cleaner->gc_should_trim_dirty()
        << ", trim_alloc=" << stats.cleaner->gc_should_trim_alloc()
        << ", reclaim=" << stats.cleaner->gc_should_reclaim_space() << ")";
   } else {
-    os << "init";
+    os << "not-ready";
   }
   os << ", projected_avail_ratio=" << stats.cleaner->get_projected_available_ratio()
      << ", reclaim_ratio=" << stats.cleaner->get_reclaim_ratio()
@@ -1404,7 +1460,7 @@ std::ostream &operator<<(std::ostream &os, AsyncCleaner::gc_stat_printer_t stats
     os << ", journal_head=" << stats.cleaner->journal_head
        << ", alloc_tail=" << stats.cleaner->journal_alloc_tail
        << ", dirty_tail=" << stats.cleaner->journal_dirty_tail;
-    if (stats.cleaner->init_complete) {
+    if (stats.cleaner->is_ready()) {
       os << ", alloc_tail_target=" << stats.cleaner->get_alloc_tail_target()
          << ", dirty_tail_target=" << stats.cleaner->get_dirty_tail_target()
          << ", tail_limit=" << stats.cleaner->get_tail_limit();

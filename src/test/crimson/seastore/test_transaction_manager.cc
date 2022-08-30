@@ -8,7 +8,6 @@
 #include "test/crimson/gtest_seastar.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
-#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
@@ -75,9 +74,9 @@ struct transaction_manager_test_t :
   seastar::future<> set_up_fut() final {
     std::string j_type = GetParam();
     if (j_type == "segmented") {
-      return tm_setup(journal_type_t::SEGMENT_JOURNAL);
+      return tm_setup(journal_type_t::SEGMENTED);
     } else if (j_type == "circularbounded") {
-      return tm_setup(journal_type_t::CIRCULARBOUNDED_JOURNAL);
+      return tm_setup(journal_type_t::CIRCULAR);
     } else {
       ceph_assert(0 == "no support");
     }
@@ -400,40 +399,7 @@ struct transaction_manager_test_t :
   }
 
   bool check_usage() {
-    auto t = create_weak_test_transaction();
-    SpaceTrackerIRef tracker(async_cleaner->get_empty_space_tracker());
-    with_trans_intr(
-      *t.t,
-      [this, &tracker](auto &t) {
-      return backref_manager->scan_mapped_space(
-        t,
-        [&tracker](
-          paddr_t paddr,
-          extent_len_t len,
-          extent_types_t type,
-          laddr_t laddr) {
-        if (paddr.get_addr_type() == paddr_types_t::SEGMENT) {
-          if (is_backref_node(type)) {
-            assert(laddr == L_ADDR_NULL);
-            tracker->allocate(
-              paddr.as_seg_paddr().get_segment_id(),
-              paddr.as_seg_paddr().get_segment_off(),
-              len);
-          } else if (laddr == L_ADDR_NULL) {
-            tracker->release(
-              paddr.as_seg_paddr().get_segment_id(),
-              paddr.as_seg_paddr().get_segment_off(),
-              len);
-          } else {
-            tracker->allocate(
-              paddr.as_seg_paddr().get_segment_id(),
-              paddr.as_seg_paddr().get_segment_off(),
-              len);
-          }
-        }
-      });
-    }).unsafe_get0();
-    return async_cleaner->debug_check_space(*tracker);
+    return epm->check_usage();
   }
 
   void replay() {
@@ -609,7 +575,8 @@ struct transaction_manager_test_t :
 	"try_submit_transaction hit invalid error"
       }
     ).then([this](auto ret) {
-      return async_cleaner->run_until_halt().then([ret] { return ret; });
+      return epm->run_background_work_until_halt(
+      ).then([ret] { return ret; });
     }).get0();
 
     if (success) {
@@ -659,7 +626,7 @@ struct transaction_manager_test_t :
 	    });
 	});
     }).safe_then([this]() {
-      return async_cleaner->run_until_halt();
+      return epm->run_background_work_until_halt();
     }).handle_error(
       crimson::ct_error::assert_all{
 	"Invalid error in SeaStore::list_collections"
