@@ -15,6 +15,34 @@ but you may view documentation for older branches (e.g., ``argonaut``) or future
 branches (e.g., ``next``) as well as work-in-progress branches by substituting
 ``master`` with the branch name you prefer.
 
+Another way to suggest a documentation correction is to make a pull request.
+The instructions for making a pull request against the Ceph documentation are
+in the section :ref:`making_contributions`.
+
+If this is your first time making an improvement to the documentation or
+if you have noticed a small mistake (such as a spelling error or a typo),
+it will be easier to send an email than to make a pull request. You will
+be credited for the improvement unless you instruct Ceph Upstream
+Documentation not to credit you.
+
+Location of the Documentation in the Repository
+===============================================
+
+The Ceph documentation source is in the ``ceph/doc`` directory of the Ceph
+repository. Python Sphinx renders the source into HTML and manpages. 
+
+Viewing Old Ceph Documentation
+==============================
+The https://docs.ceph.com link displays the latest release branch by default
+(for example, if "Quincy" is the most recent release, then by default
+https://docs.ceph.com displays the documentation for Quincy), but you can view
+the documentation for older versions of Ceph (for example, ``pacific``) by
+replacing the version name in the url (for example, ``quincy`` in
+`https://docs.ceph.com/en/pacific <https://docs.ceph.com/en/quincy>`_) with the
+branch name you prefer (for example, ``pacific``, to create a URL that reads
+`https://docs.ceph.com/en/pacific/ <https://docs.ceph.com/en/pacific/>`_).
+
+.. _making_contributions:
 
 Making Contributions
 ====================
@@ -118,13 +146,13 @@ Select a Branch
 ---------------
 
 When you make small changes to the documentation, such as fixing typographical
-errors or clarifying explanations, use the ``master`` branch (default). You
-should also use the ``master`` branch when making contributions to features that
-are in the current release. ``master`` is the most commonly used branch. :
+errors or clarifying explanations, use the ``main`` branch (default). You
+should also use the ``main`` branch when making contributions to features that
+are in the current release. ``main`` is the most commonly used branch. :
 
 .. prompt:: bash $
 
-	git checkout master
+	git checkout main
 
 When you make changes to documentation that affect an upcoming release, use 
 the ``next`` branch. ``next`` is the second most commonly used branch. :
@@ -136,7 +164,7 @@ the ``next`` branch. ``next`` is the second most commonly used branch. :
 When you are making substantial contributions such as new features that are not
 yet in the current release; if your contribution is related to an issue with a
 tracker ID; or, if you want to see your documentation rendered on the Ceph.com
-website before it gets merged into the ``master`` branch, you should create a
+website before it gets merged into the ``main`` branch, you should create a
 branch. To distinguish branches that include only documentation updates, we
 prepend them with ``wip-doc`` by convention, following the form
 ``wip-doc-{your-branch-name}``. If the branch relates to an issue filed in
