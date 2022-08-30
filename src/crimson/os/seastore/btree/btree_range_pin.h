@@ -12,6 +12,8 @@
 
 namespace crimson::os::seastore {
 
+constexpr uint16_t MAX_FIXEDKVBTREE_DEPTH = 8;
+
 template <typename T>
 struct min_max_t {};
 
@@ -128,10 +130,6 @@ class btree_range_pin_t : public boost::intrusive::set_base_hook<> {
 
   using index_t = boost::intrusive::set<btree_range_pin_t>;
 
-  static auto get_tuple(const fixed_kv_node_meta_t<node_bound_t> &meta) {
-    return std::make_tuple(-meta.depth, meta.begin);
-  }
-
   void acquire_ref() {
     ref = CachedExtentRef(extent);
   }
@@ -189,25 +187,30 @@ public:
 
   friend bool operator<(
     const btree_range_pin_t &lhs, const btree_range_pin_t &rhs) {
-    return get_tuple(lhs.range) < get_tuple(rhs.range);
+    assert(lhs.range.depth == rhs.range.depth);
+    return lhs.range.begin < rhs.range.begin;
   }
   friend bool operator>(
     const btree_range_pin_t &lhs, const btree_range_pin_t &rhs) {
-    return get_tuple(lhs.range) > get_tuple(rhs.range);
+    assert(lhs.range.depth == rhs.range.depth);
+    return lhs.range.begin > rhs.range.begin;
   }
   friend bool operator==(
     const btree_range_pin_t &lhs, const btree_range_pin_t &rhs) {
-    return get_tuple(lhs.range) == rhs.get_tuple(rhs.range);
+    assert(lhs.range.depth == rhs.range.depth);
+    return lhs.range.begin == rhs.range.begin;
   }
 
   struct meta_cmp_t {
     bool operator()(
       const btree_range_pin_t &lhs, const fixed_kv_node_meta_t<node_bound_t> &rhs) const {
-      return get_tuple(lhs.range) < get_tuple(rhs);
+      assert(lhs.range.depth == rhs.depth);
+      return lhs.range.begin < rhs.begin;
     }
     bool operator()(
       const fixed_kv_node_meta_t<node_bound_t> &lhs, const btree_range_pin_t &rhs) const {
-      return get_tuple(lhs) < get_tuple(rhs.range);
+      assert(lhs.depth == rhs.range.depth);
+      return lhs.begin < rhs.range.begin;
     }
   };
 
@@ -256,8 +259,10 @@ public:
 template <typename node_bound_t>
 class btree_pin_set_t {
   friend class btree_range_pin_t<node_bound_t>;
-  using pins_t = typename btree_range_pin_t<node_bound_t>::index_t;
-  pins_t pins;
+  using pins_by_depth_t = std::array<
+    typename btree_range_pin_t<node_bound_t>::index_t,
+    MAX_FIXEDKVBTREE_DEPTH>;
+  pins_by_depth_t pins_by_depth;
 
   /// Removes pin from set optionally checking whether parent has other children
   void remove_pin(btree_range_pin_t<node_bound_t> &pin, bool do_check_parent)
@@ -267,7 +272,8 @@ class btree_pin_set_t {
     ceph_assert(pin.pins);
     ceph_assert(!pin.ref);
 
-    pins.erase(pin);
+    auto &layer = pins_by_depth[pin.range.depth];
+    layer.erase(layer.s_iterator_to(pin));
     pin.pins = nullptr;
 
     if (do_check_parent) {
@@ -279,7 +285,9 @@ class btree_pin_set_t {
     btree_range_pin_t<node_bound_t> &to,
     btree_range_pin_t<node_bound_t> &from)
   {
-    pins.replace_node(pins.iterator_to(from), to);
+    assert(to.range.depth == from.range.depth);
+    pins_by_depth[from.range.depth].replace_node(
+      btree_range_pin_t<node_bound_t>::index_t::s_iterator_to(from), to);
   }
 
   /// Returns parent pin if exists
@@ -288,10 +296,11 @@ class btree_pin_set_t {
   {
     auto cmeta = meta;
     cmeta.depth++;
-    auto iter = pins.upper_bound(
+    auto &layer = pins_by_depth[cmeta.depth];
+    auto iter = layer.upper_bound(
       cmeta,
       typename btree_range_pin_t<node_bound_t>::meta_cmp_t());
-    if (iter == pins.begin()) {
+    if (iter == layer.begin()) {
       return nullptr;
     } else {
       --iter;
@@ -314,10 +323,11 @@ class btree_pin_set_t {
     auto cmeta = meta;
     cmeta.depth--;
 
-    auto iter = pins.lower_bound(
+    auto &layer = pins_by_depth[cmeta.depth];
+    auto iter = layer.lower_bound(
       cmeta,
       typename btree_range_pin_t<node_bound_t>::meta_cmp_t());
-    if (iter == pins.end()) {
+    if (iter == layer.end()) {
       return nullptr;
     } else if (meta.is_parent_of(iter->range)) {
       return &*iter;
@@ -336,6 +346,7 @@ class btree_pin_set_t {
   }
 
 public:
+  btree_pin_set_t() {}
   /// Adds pin to set, assumes set is consistent
   void add_pin(btree_range_pin_t<node_bound_t> &pin)
   {
@@ -343,7 +354,8 @@ public:
     ceph_assert(!pin.pins);
     ceph_assert(!pin.ref);
 
-    auto [prev, inserted] = pins.insert(pin);
+    auto &layer = pins_by_depth[pin.range.depth];
+    auto [prev, inserted] = layer.insert(pin);
     if (!inserted) {
       crimson::get_logger(ceph_subsys_seastore_lba).error(
 	"{}: unable to add {} ({}), found {} ({})",
@@ -405,13 +417,17 @@ public:
 
   template <typename F>
   void scan(F &&f) {
-    for (auto &i : pins) {
-      std::invoke(f, i);
+    for (auto &layer : pins_by_depth) {
+      for (auto &i : layer) {
+	std::invoke(f, i);
+      }
     }
   }
 
   ~btree_pin_set_t() {
-    ceph_assert(pins.empty());
+    for (auto &layer : pins_by_depth) {
+      ceph_assert(layer.empty());
+    }
   }
 };
 
