@@ -156,7 +156,6 @@ class StoreObject : public Object {
   protected:
     RGWObjState state;
     Bucket* bucket;
-    Attrs attrs;
     bool delete_marker{false};
 
   public:
@@ -171,18 +170,15 @@ class StoreObject : public Object {
 
     StoreObject()
       : state(),
-      bucket(nullptr),
-      attrs()
+      bucket(nullptr)
       {}
     StoreObject(const rgw_obj_key& _k)
       : state(),
-      bucket(),
-      attrs()
+      bucket()
       { state.obj.key = _k; }
     StoreObject(const rgw_obj_key& _k, Bucket* _b)
       : state(),
-      bucket(_b),
-      attrs()
+      bucket(_b)
       { state.obj.init(_b->get_key(), _k); }
     StoreObject(StoreObject& _o) = default;
 
