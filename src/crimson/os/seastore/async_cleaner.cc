@@ -557,7 +557,7 @@ JournalTrimmerImpl::trim_alloc()
   assert(background_callback->is_ready());
   return repeat_eagain([this, FNAME] {
     return extent_callback->with_transaction_intr(
-      Transaction::src_t::CLEANER_TRIM_ALLOC,
+      Transaction::src_t::TRIM_ALLOC,
       "trim_alloc",
       [this, FNAME](auto &t)
     {
@@ -591,7 +591,7 @@ JournalTrimmerImpl::trim_dirty()
   assert(background_callback->is_ready());
   return repeat_eagain([this, FNAME] {
     return extent_callback->with_transaction_intr(
-      Transaction::src_t::CLEANER_TRIM_DIRTY,
+      Transaction::src_t::TRIM_DIRTY,
       "trim_dirty",
       [this, FNAME](auto &t)
     {
@@ -1023,7 +1023,7 @@ SegmentCleaner::do_reclaim_space(
     reclaimed = 0;
     runs++;
     return extent_callback->with_transaction_intr(
-      Transaction::src_t::CLEANER_RECLAIM,
+      Transaction::src_t::CLEANER,
       "clean_reclaim_space",
       [this, &backref_extents, &pin_list, &reclaimed](auto &t)
     {

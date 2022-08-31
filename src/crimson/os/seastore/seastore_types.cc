@@ -397,12 +397,12 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "MUTATE";
   case transaction_type_t::READ:
     return os << "READ";
-  case transaction_type_t::CLEANER_TRIM_DIRTY:
-    return os << "CLEANER_TRIM_DIRTY";
-  case transaction_type_t::CLEANER_TRIM_ALLOC:
-    return os << "CLEANER_TRIM_ALLOC";
-  case transaction_type_t::CLEANER_RECLAIM:
-    return os << "CLEANER_RECLAIM";
+  case transaction_type_t::TRIM_DIRTY:
+    return os << "TRIM_DIRTY";
+  case transaction_type_t::TRIM_ALLOC:
+    return os << "TRIM_ALLOC";
+  case transaction_type_t::CLEANER:
+    return os << "CLEANER";
   case transaction_type_t::MAX:
     return os << "TRANS_TYPE_NULL";
   default:
