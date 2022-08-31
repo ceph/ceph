@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     name: Verify
     steps:
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        shell: bash
       - name: Action
         id: checklist
         uses: ceph/ceph-pr-checklist-action@32e92d1a2a7c9991ed51de5fccb2296551373d60
