@@ -4,8 +4,9 @@
 #include "crimson/os/seastore/extent_placement_manager.h"
 
 #include "crimson/common/config_proxy.h"
+#include "crimson/os/seastore/logging.h"
 
-SET_SUBSYS(seastore_journal);
+SET_SUBSYS(seastore_epm);
 
 namespace crimson::os::seastore {
 
@@ -216,6 +217,63 @@ void ExtentPlacementManager::set_primary_device(Device *device)
     prefer_ool = true;
     add_device(primary_device);
   }
+}
+
+ExtentPlacementManager::open_ertr::future<>
+ExtentPlacementManager::open_for_write()
+{
+  LOG_PREFIX(ExtentPlacementManager::open_for_write);
+  INFO("started with {} devices", num_devices);
+  ceph_assert(primary_device != nullptr);
+  return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
+    return writer->open();
+  }).safe_then([this] {
+    return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
+      return writer->open();
+    });
+  });
+}
+
+ExtentPlacementManager::alloc_paddr_iertr::future<>
+ExtentPlacementManager::delayed_alloc_or_ool_write(
+    Transaction &t,
+    const std::list<LogicalCachedExtentRef> &delayed_extents)
+{
+  LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
+  DEBUGT("start with {} delayed extents",
+         t, delayed_extents.size());
+  assert(writer_refs.size());
+  return seastar::do_with(
+      std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>(),
+      [this, &t, &delayed_extents](auto& alloc_map) {
+    for (auto& extent : delayed_extents) {
+      // For now, just do ool allocation for any delayed extent
+      auto writer_ptr = get_writer(
+          extent->get_user_hint(),
+          get_extent_category(extent->get_type()),
+          extent->get_reclaim_generation());
+      alloc_map[writer_ptr].emplace_back(extent);
+    }
+    return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
+      auto writer = p.first;
+      auto& extents = p.second;
+      return writer->alloc_write_ool_extents(t, extents);
+    });
+  });
+}
+
+ExtentPlacementManager::close_ertr::future<>
+ExtentPlacementManager::close()
+{
+  LOG_PREFIX(ExtentPlacementManager::close);
+  INFO("started");
+  return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
+    return writer->close();
+  }).safe_then([this] {
+    return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
+      return writer->close();
+    });
+  });
 }
 
 void ExtentPlacementManager::BackgroundProcess::log_state(const char *caller) const
