@@ -1605,6 +1605,12 @@ public:
 
   /** Get the config for stores/filters */
   static Config get_config(bool admin, CephContext* cct);
+
+  /** Create a ConfigStore */
+  static auto create_config_store(const DoutPrefixProvider* dpp,
+                                  std::string_view type)
+      -> std::unique_ptr<rgw::sal::ConfigStore>;
+
 };
 
 /** @} */
