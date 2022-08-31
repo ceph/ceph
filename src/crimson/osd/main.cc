@@ -245,6 +245,7 @@ int main(int argc, const char* argv[])
             );
           }
           sharded_conf().start(init_params.name, cluster_name).get();
+          local_conf().start().get();
           auto stop_conf = seastar::deferred_stop(sharded_conf());
           sharded_perf_coll().start().get();
           auto stop_perf_coll = seastar::deferred_stop(sharded_perf_coll());
