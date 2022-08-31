@@ -146,7 +146,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this] {
     return epm->open_for_write();
   }).safe_then([FNAME, this] {
-    epm->start_gc();
+    epm->start_background();
     INFO("completed");
   }).handle_error(
     mount_ertr::pass_further{},
@@ -160,7 +160,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 TransactionManager::close_ertr::future<> TransactionManager::close() {
   LOG_PREFIX(TransactionManager::close);
   INFO("enter");
-  return epm->stop_gc(
+  return epm->stop_background(
   ).then([this] {
     return cache->close();
   }).safe_then([this] {
@@ -675,36 +675,34 @@ TransactionManagerRef make_transaction_manager(
         roll_size, journal_type);
   }
 
-  auto ref_journal_trimmer = JournalTrimmerImpl::create(
+  auto journal_trimmer = JournalTrimmerImpl::create(
       *backref_manager, trimmer_config,
       journal_type, roll_start, roll_size);
-  JournalTrimmer &journal_trimmer = *ref_journal_trimmer;
 
   auto async_cleaner = std::make_unique<AsyncCleaner>(
     cleaner_config,
     std::move(sms),
     *backref_manager,
-    cleaner_is_detailed,
-    std::move(ref_journal_trimmer));
+    cleaner_is_detailed);
 
   if (journal_type == journal_type_t::SEGMENTED) {
     cache->set_segment_provider(*async_cleaner);
-    async_cleaner->set_journal_trimmer(journal_trimmer);
+    async_cleaner->set_journal_trimmer(*journal_trimmer);
   }
 
   JournalRef journal;
   if (journal_type == journal_type_t::SEGMENTED) {
     journal = journal::make_segmented(
       *async_cleaner,
-      journal_trimmer);
+      *journal_trimmer);
   } else {
     journal = journal::make_circularbounded(
-      journal_trimmer,
+      *journal_trimmer,
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
   }
 
-  epm->set_async_cleaner(std::move(async_cleaner));
+  epm->init(std::move(journal_trimmer), std::move(async_cleaner));
   epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(

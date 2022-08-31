@@ -173,9 +173,9 @@ SegmentedOolWriter::alloc_write_ool_extents(
   });
 }
 
-void ExtentPlacementManager::set_async_cleaner(AsyncCleanerRef &&_cleaner)
+void ExtentPlacementManager::init(
+    JournalTrimmerImplRef &&trimmer, AsyncCleanerRef &&cleaner)
 {
-  cleaner = std::move(_cleaner);
   writer_refs.clear();
 
   ceph_assert(RECLAIM_GENERATIONS > 0);
@@ -199,6 +199,8 @@ void ExtentPlacementManager::set_async_cleaner(AsyncCleanerRef &&_cleaner)
                              ->get_segment_managers()) {
     add_device(device);
   }
+
+  background_process.init(std::move(trimmer), std::move(cleaner));
 }
 
 void ExtentPlacementManager::set_primary_device(Device *device)
@@ -214,6 +216,196 @@ void ExtentPlacementManager::set_primary_device(Device *device)
     prefer_ool = true;
     add_device(primary_device);
   }
+}
+
+void ExtentPlacementManager::BackgroundProcess::log_state(const char *caller) const
+{
+  LOG_PREFIX(BackgroundProcess::log_state);
+  DEBUG("caller {}, {}, {}",
+        caller,
+        JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+        AsyncCleaner::stat_printer_t{*cleaner, true});
+}
+
+void ExtentPlacementManager::BackgroundProcess::start_background()
+{
+  LOG_PREFIX(BackgroundProcess::start_background);
+  INFO("{}, {}",
+       JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+       AsyncCleaner::stat_printer_t{*cleaner, true});
+  ceph_assert(trimmer->check_is_ready());
+  ceph_assert(state == state_t::SCAN_SPACE);
+  assert(!is_running());
+  process_join = seastar::now();
+  state = state_t::RUNNING;
+  assert(is_running());
+  process_join = run();
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::stop_background()
+{
+  return seastar::futurize_invoke([this] {
+    if (!is_running()) {
+      if (state != state_t::HALT) {
+        state = state_t::STOP;
+      }
+      return seastar::now();
+    }
+    auto ret = std::move(*process_join);
+    process_join.reset();
+    state = state_t::HALT;
+    assert(!is_running());
+    do_wake_background();
+    return ret;
+  }).then([this] {
+    LOG_PREFIX(BackgroundProcess::stop_background);
+    INFO("done, {}, {}",
+         JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+         AsyncCleaner::stat_printer_t{*cleaner, true});
+    // run_until_halt() can be called at HALT
+  });
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::run_until_halt()
+{
+  ceph_assert(state == state_t::HALT);
+  assert(!is_running());
+  if (is_running_until_halt) {
+    return seastar::now();
+  }
+  is_running_until_halt = true;
+  return seastar::do_until(
+    [this] {
+      log_state("run_until_halt");
+      assert(is_running_until_halt);
+      if (background_should_run()) {
+        return false;
+      } else {
+        is_running_until_halt = false;
+        return true;
+      }
+    },
+    [this] {
+      return do_background_cycle();
+    }
+  );
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
+    std::size_t projected_usage)
+{
+  ceph_assert(is_ready());
+  ceph_assert(!blocking_io);
+  // The pipeline configuration prevents another IO from entering
+  // prepare until the prior one exits and clears this.
+  ++stats.io_count;
+  bool is_blocked = false;
+  if (trimmer->should_block_on_trim()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_trim;
+  }
+  if (cleaner->should_block_on_reclaim()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_reclaim;
+  }
+  if (is_blocked) {
+    ++stats.io_blocking_num;
+    ++stats.io_blocked_count;
+    stats.io_blocked_sum += stats.io_blocking_num;
+  }
+  return seastar::do_until(
+    [this] {
+      log_state("reserve_projected_usage(await_hard_limits)");
+      return !should_block_io();
+    },
+    [this] {
+      blocking_io = seastar::promise<>();
+      return blocking_io->get_future();
+    }
+  ).then([this, is_blocked, projected_usage] {
+    ceph_assert(!blocking_io);
+    if (is_blocked) {
+      assert(stats.io_blocking_num > 0);
+      --stats.io_blocking_num;
+    }
+    cleaner->reserve_projected_usage(projected_usage);
+  });
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::run()
+{
+  assert(is_running());
+  return seastar::repeat([this] {
+    if (!is_running()) {
+      log_state("run(exit)");
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
+    }
+    return seastar::futurize_invoke([this] {
+      if (background_should_run()) {
+        log_state("run(background)");
+        return do_background_cycle();
+      } else {
+        log_state("run(block)");
+        ceph_assert(!blocking_background);
+        blocking_background = seastar::promise<>();
+        return blocking_background->get_future();
+      }
+    }).then([] {
+      return seastar::stop_iteration::no;
+    });
+  });
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::do_background_cycle()
+{
+  assert(is_ready());
+  if (trimmer->should_trim_alloc()) {
+    return trimmer->trim_alloc(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+	"do_background_cycle encountered invalid error in trim_alloc"
+      }
+    );
+  } else if (trimmer->should_trim_dirty()) {
+    return trimmer->trim_dirty(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+	"do_background_cycle encountered invalid error in trim_dirty"
+      }
+    );
+  } else if (cleaner->should_reclaim_space()) {
+    return cleaner->reclaim_space(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+	"do_background_cycle encountered invalid error in reclaim_space"
+      }
+    );
+  } else {
+    return seastar::now();
+  }
+}
+
+void ExtentPlacementManager::BackgroundProcess::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  metrics.add_group("background_process", {
+    sm::make_counter("io_count", stats.io_count,
+                     sm::description("the sum of IOs")),
+    sm::make_counter("io_blocked_count", stats.io_blocked_count,
+                     sm::description("IOs that are blocked by gc")),
+    sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
+                     sm::description("IOs that are blocked by trimming")),
+    sm::make_counter("io_blocked_count_reclaim", stats.io_blocked_count_reclaim,
+                     sm::description("IOs that are blocked by reclaimming")),
+    sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
+                     sm::description("the sum of blocking IOs"))
+  });
 }
 
 }
