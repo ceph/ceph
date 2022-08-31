@@ -403,15 +403,15 @@ private:
 
     bool background_should_run() const {
       assert(is_ready());
-      return cleaner->should_reclaim_space()
+      return cleaner->should_clean_space()
         || trimmer->should_trim_dirty()
         || trimmer->should_trim_alloc();
     }
 
     bool should_block_io() const {
       assert(is_ready());
-      return trimmer->should_block_on_trim() ||
-             cleaner->should_block_on_reclaim();
+      return trimmer->should_block_io_on_trim() ||
+             cleaner->should_block_io_on_clean();
     }
 
     seastar::future<> do_background_cycle();
@@ -423,7 +423,7 @@ private:
       uint64_t io_count = 0;
       uint64_t io_blocked_count = 0;
       uint64_t io_blocked_count_trim = 0;
-      uint64_t io_blocked_count_reclaim = 0;
+      uint64_t io_blocked_count_clean = 0;
       uint64_t io_blocked_sum = 0;
     } stats;
     seastar::metrics::metric_group metrics;

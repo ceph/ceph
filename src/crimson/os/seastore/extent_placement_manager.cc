@@ -180,24 +180,26 @@ void ExtentPlacementManager::init(
   writer_refs.clear();
 
   ceph_assert(RECLAIM_GENERATIONS > 0);
+  auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
+  ceph_assert(segment_cleaner != nullptr);
   data_writers_by_gen.resize(RECLAIM_GENERATIONS, {});
   for (reclaim_gen_t gen = 0; gen < RECLAIM_GENERATIONS; ++gen) {
     writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-          data_category_t::DATA, gen, *cleaner,
-          cleaner->get_ool_segment_seq_allocator()));
+          data_category_t::DATA, gen, *segment_cleaner,
+          segment_cleaner->get_ool_segment_seq_allocator()));
     data_writers_by_gen[gen] = writer_refs.back().get();
   }
 
   md_writers_by_gen.resize(RECLAIM_GENERATIONS - 1, {});
   for (reclaim_gen_t gen = 1; gen < RECLAIM_GENERATIONS; ++gen) {
     writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-          data_category_t::METADATA, gen, *cleaner,
-          cleaner->get_ool_segment_seq_allocator()));
+          data_category_t::METADATA, gen, *segment_cleaner,
+          segment_cleaner->get_ool_segment_seq_allocator()));
     md_writers_by_gen[gen - 1] = writer_refs.back().get();
   }
 
-  for (auto *device : cleaner->get_segment_manager_group()
-                             ->get_segment_managers()) {
+  for (auto *device : segment_cleaner->get_segment_manager_group()
+                                     ->get_segment_managers()) {
     add_device(device);
   }
 
@@ -361,13 +363,13 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
   // prepare until the prior one exits and clears this.
   ++stats.io_count;
   bool is_blocked = false;
-  if (trimmer->should_block_on_trim()) {
+  if (trimmer->should_block_io_on_trim()) {
     is_blocked = true;
     ++stats.io_blocked_count_trim;
   }
-  if (cleaner->should_block_on_reclaim()) {
+  if (cleaner->should_block_io_on_clean()) {
     is_blocked = true;
-    ++stats.io_blocked_count_reclaim;
+    ++stats.io_blocked_count_clean;
   }
   if (is_blocked) {
     ++stats.io_blocking_num;
@@ -437,11 +439,11 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
 	"do_background_cycle encountered invalid error in trim_dirty"
       }
     );
-  } else if (cleaner->should_reclaim_space()) {
-    return cleaner->reclaim_space(
+  } else if (cleaner->should_clean_space()) {
+    return cleaner->clean_space(
     ).handle_error(
       crimson::ct_error::assert_all{
-	"do_background_cycle encountered invalid error in reclaim_space"
+	"do_background_cycle encountered invalid error in clean_space"
       }
     );
   } else {
@@ -459,8 +461,8 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics()
                      sm::description("IOs that are blocked by gc")),
     sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
                      sm::description("IOs that are blocked by trimming")),
-    sm::make_counter("io_blocked_count_reclaim", stats.io_blocked_count_reclaim,
-                     sm::description("IOs that are blocked by reclaimming")),
+    sm::make_counter("io_blocked_count_clean", stats.io_blocked_count_clean,
+                     sm::description("IOs that are blocked by cleaning")),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
                      sm::description("the sum of blocking IOs"))
   });
