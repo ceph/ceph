@@ -905,7 +905,9 @@ private:
   // optional, set if this cleaner is assigned to SegmentedJournal
   JournalTrimmer *trimmer = nullptr;
 
-  ExtentCallbackInterface *ecb = nullptr;
+  ExtentCallbackInterface *extent_callback = nullptr;
+
+  BackgroundListener *background_callback = nullptr;
 
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
 
@@ -914,20 +916,18 @@ public:
     config_t config,
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
-    bool detailed,
-    JournalTrimmerImplRef &&trimmer);
+    bool detailed);
 
   SegmentSeqAllocator& get_ool_segment_seq_allocator() {
     return *ool_segment_seq_allocator;
   }
 
-  journal_type_t get_journal_type() const {
-    return gc_process.get_journal_type();
+  void set_extent_callback(ExtentCallbackInterface *cb) {
+    extent_callback = cb;
   }
 
-  void set_extent_callback(ExtentCallbackInterface *cb) {
-    ecb = cb;
-    gc_process.set_extent_callback(cb);
+  void set_background_callback(BackgroundListener *cb) {
+    background_callback = cb;
   }
 
   void set_journal_trimmer(JournalTrimmer &_trimmer) {
@@ -938,12 +938,9 @@ public:
   using mount_ret = mount_ertr::future<>;
   mount_ret mount();
 
-  void start_scan_space() {
-    gc_process.start_scan_space();
-    assert(space_tracker->equals(*space_tracker->make_empty()));
+  bool check_usage_is_empty() {
+    return space_tracker->equals(*space_tracker->make_empty());
   }
-
-  void start_gc();
 
   /*
    * SegmentProvider interfaces
@@ -962,7 +959,7 @@ public:
     assert(type == segment_type_t::OOL ||
            trimmer != nullptr); // segment_type_t::JOURNAL
     segments.update_written_to(type, offset);
-    gc_process.maybe_wake_background();
+    background_callback->maybe_wake_background();
   }
 
   void update_modify_time(
@@ -983,11 +980,11 @@ public:
     paddr_t addr,
     extent_len_t len);
 
-  seastar::future<> reserve_projected_usage(std::size_t projected_usage);
+  void reserve_projected_usage(std::size_t projected_usage);
 
   void release_projected_usage(size_t projected_usage);
 
-  store_statfs_t stat() const {
+  store_statfs_t get_stat() const {
     store_statfs_t st;
     st.total = segments.get_total_bytes();
     st.available = segments.get_total_bytes() - stats.used_bytes;
@@ -999,13 +996,40 @@ public:
     return st;
   }
 
-  seastar::future<> stop();
+  bool should_block_on_reclaim() const {
+    assert(background_callback->is_ready());
+    if (get_segments_reclaimable() == 0) {
+      return false;
+    }
+    auto aratio = get_projected_available_ratio();
+    return aratio < config.available_ratio_hard_limit;
+  }
+
+  bool should_reclaim_space() const {
+    assert(background_callback->is_ready());
+    if (get_segments_reclaimable() == 0) {
+      return false;
+    }
+    auto aratio = segments.get_available_ratio();
+    auto rratio = get_reclaim_ratio();
+    return (
+      (aratio < config.available_ratio_hard_limit) ||
+      ((aratio < config.available_ratio_gc_max) &&
+       (rratio > config.reclaim_ratio_gc_threshold))
+    );
+  }
+
+  using reclaim_space_ertr = base_ertr;
+  using reclaim_space_ret = reclaim_space_ertr::future<>;
+  reclaim_space_ret reclaim_space();
+
+  struct stat_printer_t {
+    const AsyncCleaner &cleaner;
+    bool detailed = false;
+  };
+  friend std::ostream &operator<<(std::ostream &, const stat_printer_t &);
 
   // Testing interfaces
-
-  seastar::future<> run_until_halt() {
-    return gc_process.run_until_halt();
-  }
 
   bool check_usage();
 
@@ -1086,133 +1110,6 @@ private:
   };
   std::optional<reclaim_state_t> reclaim_state;
 
-  /**
-   * GCProcess
-   *
-   * Background gc process.
-   *
-   * TODO: move up to EPM
-   */
-  class GCProcess : public BackgroundListener {
-  public:
-    GCProcess(
-        JournalTrimmerImplRef &&_trimmer,
-        AsyncCleaner &cleaner)
-        : trimmer(std::move(_trimmer)), cleaner(cleaner) {
-      trimmer->set_background_callback(this);
-    }
-
-    journal_type_t get_journal_type() const {
-      return trimmer->get_journal_type();
-    }
-
-    void set_extent_callback(ExtentCallbackInterface *cb) {
-      trimmer->set_extent_callback(cb);
-    }
-
-    void mount() {
-      ceph_assert(state == state_t::STOP);
-      state = state_t::MOUNT;
-      trimmer->reset();
-      stats = {};
-      register_metrics();
-    }
-
-    void start_scan_space() {
-      ceph_assert(state == state_t::MOUNT);
-      state = state_t::SCAN_SPACE;
-    }
-
-    void start();
-
-    seastar::future<> stop();
-
-    seastar::future<> run_until_halt();
-
-    seastar::future<> maybe_block_io();
-
-    state_t get_state() const final {
-      return state;
-    }
-
-    void maybe_wake_background() final {
-      if (!is_running()) {
-        return;
-      }
-      if (background_should_run()) {
-        do_wake_background();
-      }
-    }
-
-    void maybe_wake_blocked_io() final {
-      if (!is_ready()) {
-        return;
-      }
-      if (!should_block_io() && blocking_io) {
-        blocking_io->set_value();
-        blocking_io = std::nullopt;
-      }
-    }
-
-  private:
-    bool is_running() const {
-      if (state == state_t::RUNNING) {
-        assert(process_join);
-        return true;
-      } else {
-        assert(!process_join);
-        return false;
-      }
-    }
-
-    void log_state(const char *caller) const;
-
-    seastar::future<> run();
-
-    void do_wake_background() {
-      if (blocking_background) {
-	blocking_background->set_value();
-	blocking_background = std::nullopt;
-      }
-    }
-
-    bool background_should_run() const {
-      assert(is_ready());
-      return cleaner.gc_should_reclaim_space()
-        || trimmer->should_trim_dirty()
-        || trimmer->should_trim_alloc();
-    }
-
-    bool should_block_io() const {
-      assert(is_ready());
-      return trimmer->should_block_on_trim() ||
-             cleaner.should_block_on_reclaim();
-    }
-
-    seastar::future<> do_background_cycle();
-
-    void register_metrics();
-
-    struct {
-      uint64_t io_blocking_num = 0;
-      uint64_t io_count = 0;
-      uint64_t io_blocked_count = 0;
-      uint64_t io_blocked_count_trim = 0;
-      uint64_t io_blocked_count_reclaim = 0;
-      uint64_t io_blocked_sum = 0;
-    } stats;
-    seastar::metrics::metric_group metrics;
-
-    JournalTrimmerImplRef trimmer;
-    AsyncCleaner &cleaner;
-
-    std::optional<seastar::future<>> process_join;
-    std::optional<seastar::promise<>> blocking_background;
-    std::optional<seastar::promise<>> blocking_io;
-    bool is_running_until_halt = false;
-    state_t state = state_t::STOP;
-  } gc_process;
-
   using do_reclaim_space_ertr = base_ertr;
   using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
   do_reclaim_space_ret do_reclaim_space(
@@ -1220,10 +1117,6 @@ private:
     const backref_pin_list_t &pin_list,
     std::size_t &reclaimed,
     std::size_t &runs);
-
-  using gc_reclaim_space_ertr = base_ertr;
-  using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
-  gc_reclaim_space_ret gc_reclaim_space();
 
   /*
    * Segments calculations
@@ -1291,39 +1184,11 @@ private:
       (double)segments.get_total_bytes();
   }
 
-  bool should_block_on_reclaim() const {
-    assert(gc_process.is_ready());
-    if (get_segments_reclaimable() == 0) {
-      return false;
-    }
-    auto aratio = get_projected_available_ratio();
-    return aratio < config.available_ratio_hard_limit;
-  }
-
   using scan_extents_ertr = SegmentManagerGroup::scan_valid_records_ertr;
   using scan_extents_ret = scan_extents_ertr::future<>;
   scan_extents_ret scan_no_tail_segment(
     const segment_header_t& header,
     segment_id_t segment_id);
-
-  /**
-   * gc_should_reclaim_space
-   *
-   * Encapsulates logic for whether gc should be reclaiming segment space.
-   */
-  bool gc_should_reclaim_space() const {
-    assert(gc_process.is_ready());
-    if (get_segments_reclaimable() == 0) {
-      return false;
-    }
-    auto aratio = segments.get_available_ratio();
-    auto rratio = get_reclaim_ratio();
-    return (
-      (aratio < config.available_ratio_hard_limit) ||
-      ((aratio < config.available_ratio_gc_max) &&
-       (rratio > config.reclaim_ratio_gc_threshold))
-    );
-  }
 
   void adjust_segment_util(double old_usage, double new_usage) {
     auto old_index = get_bucket_index(old_usage);
@@ -1339,7 +1204,7 @@ private:
       segment_type_t s_type,
       data_category_t category,
       reclaim_gen_t generation) {
-    assert(gc_process.get_state() == state_t::MOUNT);
+    assert(background_callback->get_state() == state_t::MOUNT);
     ceph_assert(s_type == segment_type_t::OOL ||
                 trimmer != nullptr); // segment_type_t::JOURNAL
     auto old_usage = calc_utilization(segment);
@@ -1350,12 +1215,6 @@ private:
       ool_segment_seq_allocator->set_next_segment_seq(seq);
     }
   }
-
-  struct stat_printer_t {
-    const AsyncCleaner &cleaner;
-    bool detailed = false;
-  };
-  friend std::ostream &operator<<(std::ostream &, const stat_printer_t &);
 };
 using AsyncCleanerRef = std::unique_ptr<AsyncCleaner>;
 

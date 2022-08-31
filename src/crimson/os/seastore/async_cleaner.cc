@@ -792,15 +792,13 @@ AsyncCleaner::AsyncCleaner(
   config_t config,
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
-  bool detailed,
-  JournalTrimmerImplRef &&_trimmer)
+  bool detailed)
   : detailed(detailed),
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
     ool_segment_seq_allocator(
-      new SegmentSeqAllocator(segment_type_t::OOL)),
-    gc_process(std::move(_trimmer), *this)
+      new SegmentSeqAllocator(segment_type_t::OOL))
 {
   config.validate();
 }
@@ -932,7 +930,7 @@ segment_id_t AsyncCleaner::allocate_segment(
     if (segment_info.is_empty()) {
       auto old_usage = calc_utilization(seg_id);
       segments.mark_open(seg_id, seq, type, category, generation);
-      gc_process.maybe_wake_background();
+      background_callback->maybe_wake_background();
       auto new_usage = calc_utilization(seg_id);
       adjust_segment_util(old_usage, new_usage);
       INFO("opened, {}", stat_printer_t{*this, false});
@@ -1006,189 +1004,6 @@ double AsyncCleaner::calc_gc_benefit_cost(
           (2 * age_factor - 2) * util + 1);
 }
 
-void AsyncCleaner::GCProcess::log_state(const char *caller) const
-{
-  LOG_PREFIX(GCProcess::log_state);
-  DEBUG("caller {}, {}, {}",
-        caller,
-        JournalTrimmerImpl::stat_printer_t{*trimmer, true},
-        AsyncCleaner::stat_printer_t{cleaner, true});
-}
-
-void AsyncCleaner::GCProcess::start()
-{
-  LOG_PREFIX(GCProcess::start);
-  INFO("done, start background, {}, {}",
-       JournalTrimmerImpl::stat_printer_t{*trimmer, true},
-       AsyncCleaner::stat_printer_t{cleaner, true});
-  ceph_assert(trimmer->check_is_ready());
-  ceph_assert(state == state_t::SCAN_SPACE);
-  assert(!is_running());
-  process_join = seastar::now();
-  state = state_t::RUNNING;
-  assert(is_running());
-  process_join = run();
-}
-
-seastar::future<> AsyncCleaner::GCProcess::stop()
-{
-  return seastar::futurize_invoke([this] {
-    if (!is_running()) {
-      if (state != state_t::HALT) {
-        state = state_t::STOP;
-      }
-      return seastar::now();
-    }
-    auto ret = std::move(*process_join);
-    process_join.reset();
-    state = state_t::HALT;
-    assert(!is_running());
-    do_wake_background();
-    return ret;
-  }).then([this] {
-    LOG_PREFIX(GCProcess::stop);
-    INFO("done, {}, {}",
-         JournalTrimmerImpl::stat_printer_t{*trimmer, true},
-         AsyncCleaner::stat_printer_t{cleaner, true});
-    // run_until_halt() can be called at HALT
-  });
-}
-
-seastar::future<> AsyncCleaner::GCProcess::run_until_halt()
-{
-  ceph_assert(state == state_t::HALT);
-  assert(!is_running());
-  if (is_running_until_halt) {
-    return seastar::now();
-  }
-  is_running_until_halt = true;
-  return seastar::do_until(
-    [this] {
-      log_state("run_until_halt");
-      assert(is_running_until_halt);
-      if (background_should_run()) {
-        return false;
-      } else {
-        is_running_until_halt = false;
-        return true;
-      }
-    },
-    [this] {
-      return do_background_cycle();
-    }
-  );
-}
-
-seastar::future<> AsyncCleaner::GCProcess::maybe_block_io()
-{
-  ceph_assert(is_ready());
-  ceph_assert(!blocking_io);
-  // The pipeline configuration prevents another IO from entering
-  // prepare until the prior one exits and clears this.
-  ++stats.io_count;
-  bool is_blocked = false;
-  if (trimmer->should_block_on_trim()) {
-    is_blocked = true;
-    ++stats.io_blocked_count_trim;
-  }
-  if (cleaner.should_block_on_reclaim()) {
-    is_blocked = true;
-    ++stats.io_blocked_count_reclaim;
-  }
-  if (is_blocked) {
-    ++stats.io_blocking_num;
-    ++stats.io_blocked_count;
-    stats.io_blocked_sum += stats.io_blocking_num;
-  }
-  return seastar::do_until(
-    [this] {
-      log_state("maybe_block_io(await_hard_limits)");
-      return !should_block_io();
-    },
-    [this] {
-      blocking_io = seastar::promise<>();
-      return blocking_io->get_future();
-    }
-  ).then([this, is_blocked] {
-    ceph_assert(!blocking_io);
-    if (is_blocked) {
-      assert(stats.io_blocking_num > 0);
-      --stats.io_blocking_num;
-    }
-  });
-}
-
-seastar::future<> AsyncCleaner::GCProcess::run()
-{
-  assert(is_running());
-  return seastar::repeat([this] {
-    if (!is_running()) {
-      log_state("run(exit)");
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::yes);
-    }
-    return seastar::futurize_invoke([this] {
-      if (background_should_run()) {
-        log_state("run(background)");
-        return do_background_cycle();
-      } else {
-        log_state("run(block)");
-        ceph_assert(!blocking_background);
-        blocking_background = seastar::promise<>();
-        return blocking_background->get_future();
-      }
-    }).then([] {
-      return seastar::stop_iteration::no;
-    });
-  });
-}
-
-seastar::future<> AsyncCleaner::GCProcess::do_background_cycle()
-{
-  assert(is_ready());
-  if (trimmer->should_trim_alloc()) {
-    return trimmer->trim_alloc(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-	"GCProcess::do_background_cycle encountered invalid error in trim_alloc"
-      }
-    );
-  } else if (trimmer->should_trim_dirty()) {
-    return trimmer->trim_dirty(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-	"GCProcess::do_background_cycle encountered invalid error in trim_dirty"
-      }
-    );
-  } else if (cleaner.gc_should_reclaim_space()) {
-    return cleaner.gc_reclaim_space(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-	"GCProcess::do_background_cycle encountered invalid error in gc_reclaim_space"
-      }
-    );
-  } else {
-    return seastar::now();
-  }
-}
-
-void AsyncCleaner::GCProcess::register_metrics()
-{
-  namespace sm = seastar::metrics;
-  metrics.add_group("gc_process", {
-    sm::make_counter("io_count", stats.io_count,
-                     sm::description("the sum of IOs")),
-    sm::make_counter("io_blocked_count", stats.io_blocked_count,
-                     sm::description("IOs that are blocked by gc")),
-    sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
-                     sm::description("IOs that are blocked by trimming")),
-    sm::make_counter("io_blocked_count_reclaim", stats.io_blocked_count_reclaim,
-                     sm::description("IOs that are blocked by reclaimming")),
-    sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
-                     sm::description("the sum of blocking IOs"))
-  });
-}
-
 AsyncCleaner::do_reclaim_space_ret
 AsyncCleaner::do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
@@ -1200,7 +1015,7 @@ AsyncCleaner::do_reclaim_space(
                         &pin_list, &reclaimed, &runs] {
     reclaimed = 0;
     runs++;
-    return ecb->with_transaction_intr(
+    return extent_callback->with_transaction_intr(
       Transaction::src_t::CLEANER_RECLAIM,
       "reclaim_space",
       [this, &backref_extents, &pin_list, &reclaimed](auto &t)
@@ -1248,7 +1063,7 @@ AsyncCleaner::do_reclaim_space(
 	      ent.type,
 	      ent.paddr,
 	      ent.len);
-	    return ecb->get_extents_if_live(
+	    return extent_callback->get_extents_if_live(
 	      t, ent.type, ent.paddr, ent.laddr, ent.len
 	    ).si_then([FNAME, &extents, &ent, &t](auto list) {
 	      if (list.empty()) {
@@ -1269,21 +1084,21 @@ AsyncCleaner::do_reclaim_space(
             [this, modify_time, &t, &reclaimed](auto ext)
           {
             reclaimed += ext->get_length();
-            return ecb->rewrite_extent(
+            return extent_callback->rewrite_extent(
                 t, ext, reclaim_state->target_generation, modify_time);
           });
         });
       }).si_then([this, &t] {
-        return ecb->submit_transaction_direct(t);
+        return extent_callback->submit_transaction_direct(t);
       });
     });
   });
 }
 
-AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
+AsyncCleaner::reclaim_space_ret AsyncCleaner::reclaim_space()
 {
-  LOG_PREFIX(AsyncCleaner::gc_reclaim_space);
-  assert(gc_process.is_ready());
+  LOG_PREFIX(AsyncCleaner::reclaim_space);
+  assert(background_callback->is_ready());
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
     auto &segment_info = segments[seg_id];
@@ -1307,7 +1122,7 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
   // Backref-tree doesn't support tree-read during tree-updates with parallel
   // transactions.  So, concurrent transactions between trim and reclaim are
   // not allowed right now.
-  return ecb->with_transaction_weak(
+  return extent_callback->with_transaction_weak(
       "retrieve_from_backref_tree",
       [this](auto &t) {
     return backref_manager.get_mappings(
@@ -1363,9 +1178,9 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
           reclaim_state.reset();
           return sm_group->release_segment(segment_to_release
           ).handle_error(
-            gc_reclaim_space_ertr::pass_further{},
+            reclaim_space_ertr::pass_further{},
             crimson::ct_error::assert_all{
-              "AsyncCleaner::gc_reclaim_space encountered invalid error in release_segment"
+              "AsyncCleaner::reclaim_space encountered invalid error in release_segment"
             }
           ).safe_then([this, FNAME, segment_to_release] {
             auto old_usage = calc_utilization(segment_to_release);
@@ -1380,10 +1195,10 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
             adjust_segment_util(old_usage, new_usage);
             INFO("released {}, {}",
                  segment_to_release, stat_printer_t{*this, false});
-            gc_process.maybe_wake_blocked_io();
+            background_callback->maybe_wake_blocked_io();
           });
         } else {
-          return gc_reclaim_space_ertr::now();
+          return reclaim_space_ertr::now();
         }
       });
     });
@@ -1395,9 +1210,8 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   LOG_PREFIX(AsyncCleaner::mount);
   const auto& sms = sm_group->get_segment_managers();
   INFO("{} segment managers", sms.size());
-  stats = {};
 
-  gc_process.mount();
+  assert(background_callback->get_state() == state_t::MOUNT);
   
   space_tracker.reset(
     detailed ?
@@ -1411,6 +1225,8 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
     segments.add_segment_manager(*sm);
   }
   segments.assign_ids();
+
+  stats = {};
   metrics.clear();
   register_metrics();
 
@@ -1536,20 +1352,10 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
   });
 }
 
-void AsyncCleaner::start_gc()
-{
-  gc_process.start();
-}
-
-seastar::future<> AsyncCleaner::stop()
-{
-  return gc_process.stop();
-}
-
 bool AsyncCleaner::check_usage()
 {
   SpaceTrackerIRef tracker(space_tracker->make_empty());
-  ecb->with_transaction_weak(
+  extent_callback->with_transaction_weak(
       "check_usage",
       [this, &tracker](auto &t) {
     return backref_manager.scan_mapped_space(
@@ -1589,10 +1395,9 @@ void AsyncCleaner::mark_space_used(
   extent_len_t len)
 {
   LOG_PREFIX(AsyncCleaner::mark_space_used);
+  assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
-    return;
-  }
-  if (gc_process.get_state() < state_t::SCAN_SPACE) {
     return;
   }
 
@@ -1606,7 +1411,7 @@ void AsyncCleaner::mark_space_used(
   auto new_usage = calc_utilization(seg_addr.get_segment_id());
   adjust_segment_util(old_usage, new_usage);
 
-  gc_process.maybe_wake_background();
+  background_callback->maybe_wake_background();
   assert(ret > 0);
   DEBUG("segment {} new len: {}~{}, live_bytes: {}",
         seg_addr.get_segment_id(),
@@ -1620,9 +1425,8 @@ void AsyncCleaner::mark_space_free(
   extent_len_t len)
 {
   LOG_PREFIX(AsyncCleaner::mark_space_free);
-  if (gc_process.get_state() < state_t::SCAN_SPACE) {
-    return;
-  }
+  assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
   }
@@ -1640,7 +1444,7 @@ void AsyncCleaner::mark_space_free(
     len);
   auto new_usage = calc_utilization(seg_addr.get_segment_id());
   adjust_segment_util(old_usage, new_usage);
-  gc_process.maybe_wake_blocked_io();
+  background_callback->maybe_wake_blocked_io();
   assert(ret >= 0);
   DEBUG("segment {} free len: {}~{}, live_bytes: {}",
         seg_addr.get_segment_id(),
@@ -1686,38 +1490,35 @@ segment_id_t AsyncCleaner::get_next_reclaim_segment() const
     return id;
   } else {
     ceph_assert(get_segments_reclaimable() == 0);
-    // see gc_should_reclaim_space()
+    // see should_reclaim_space()
     ceph_abort("impossible!");
     return NULL_SEG_ID;
   }
 }
 
-seastar::future<>
-AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
+void AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
 {
-  return gc_process.maybe_block_io(
-  ).then([this, projected_usage] {
-    stats.projected_used_bytes += projected_usage;
-    ++stats.projected_count;
-    stats.projected_used_bytes_sum += stats.projected_used_bytes;
-  });
+  assert(background_callback->is_ready());
+  stats.projected_used_bytes += projected_usage;
+  ++stats.projected_count;
+  stats.projected_used_bytes_sum += stats.projected_used_bytes;
 }
 
 void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
 {
-  ceph_assert(gc_process.is_ready());
+  assert(background_callback->is_ready());
   ceph_assert(stats.projected_used_bytes >= projected_usage);
   stats.projected_used_bytes -= projected_usage;
-  gc_process.maybe_wake_blocked_io();
+  background_callback->maybe_wake_blocked_io();
 }
 
 std::ostream &operator<<(
     std::ostream &os, const AsyncCleaner::stat_printer_t &stats)
 {
   os << "AsyncCleaner(";
-  if (stats.cleaner.gc_process.is_ready()) {
+  if (stats.cleaner.background_callback->is_ready()) {
     os << "should_block_on_reclaim=" << stats.cleaner.should_block_on_reclaim()
-       << ", should_reclaim=" << stats.cleaner.gc_should_reclaim_space();
+       << ", should_reclaim=" << stats.cleaner.should_reclaim_space();
   } else {
     os << "not-ready";
   }

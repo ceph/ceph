@@ -89,17 +89,16 @@ public:
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
-  // TODO: device tiering
-  void set_async_cleaner(AsyncCleanerRef &&_cleaner);
+  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&);
 
   void set_primary_device(Device *device);
 
   void set_extent_callback(ExtentCallbackInterface *cb) {
-    cleaner->set_extent_callback(cb);
+    background_process.set_extent_callback(cb);
   }
 
   journal_type_t get_journal_type() const {
-    return cleaner->get_journal_type();
+    return background_process.get_journal_type();
   }
 
   seastore_off_t get_block_size() const {
@@ -114,12 +113,14 @@ public:
   }
 
   store_statfs_t get_stat() const {
-    return cleaner->stat();
+    return background_process.get_stat();
   }
 
-  using mount_ret = AsyncCleaner::mount_ret;
+  using mount_ertr = crimson::errorator<
+      crimson::ct_error::input_output_error>;
+  using mount_ret = mount_ertr::future<>;
   mount_ret mount() {
-    return cleaner->mount();
+    return background_process.mount();
   }
 
   using open_ertr = ExtentOolWriter::open_ertr;
@@ -137,11 +138,11 @@ public:
   }
 
   void start_scan_space() {
-    return cleaner->start_scan_space();
+    return background_process.start_scan_space();
   }
 
-  void start_gc() {
-    return cleaner->start_gc();
+  void start_background() {
+    return background_process.start_background();
   }
 
   struct alloc_result_t {
@@ -233,8 +234,8 @@ public:
     });
   }
 
-  seastar::future<> stop_gc() {
-    return cleaner->stop();
+  seastar::future<> stop_background() {
+    return background_process.stop_background();
   }
 
   using close_ertr = ExtentOolWriter::close_ertr;
@@ -261,25 +262,19 @@ public:
   }
 
   void mark_space_used(paddr_t addr, extent_len_t len) {
-    // TODO: improve tests to drop the cleaner check
-    if (cleaner) {
-      cleaner->mark_space_used(addr, len);
-    }
+    background_process.mark_space_used(addr, len);
   }
 
   void mark_space_free(paddr_t addr, extent_len_t len) {
-    // TODO: improve tests to drop the cleaner check
-    if (cleaner) {
-      cleaner->mark_space_free(addr, len);
-    }
+    background_process.mark_space_free(addr, len);
   }
 
   seastar::future<> reserve_projected_usage(std::size_t projected_usage) {
-    return cleaner->reserve_projected_usage(projected_usage);
+    return background_process.reserve_projected_usage(projected_usage);
   }
 
   void release_projected_usage(std::size_t projected_usage) {
-    return cleaner->release_projected_usage(projected_usage);
+    return background_process.release_projected_usage(projected_usage);
   }
 
   // Testing interfaces
@@ -291,11 +286,11 @@ public:
   }
 
   bool check_usage() {
-    return cleaner->check_usage();
+    return background_process.check_usage();
   }
 
   seastar::future<> run_background_work_until_halt() {
-    return cleaner->run_until_halt();
+    return background_process.run_until_halt();
   }
 
 private:
@@ -321,6 +316,172 @@ private:
     }
   }
 
+  /**
+   * BackgroundProcess
+   *
+   * Background process to schedule background transactions.
+   *
+   * TODO: device tiering
+   */
+  class BackgroundProcess : public BackgroundListener {
+  public:
+    BackgroundProcess() = default;
+
+    void init(JournalTrimmerImplRef &&_trimmer,
+              AsyncCleanerRef &&_cleaner) {
+      trimmer = std::move(_trimmer);
+      trimmer->set_background_callback(this);
+      cleaner = std::move(_cleaner);
+      cleaner->set_background_callback(this);
+    }
+
+    journal_type_t get_journal_type() const {
+      return trimmer->get_journal_type();
+    }
+
+    void set_extent_callback(ExtentCallbackInterface *cb) {
+      trimmer->set_extent_callback(cb);
+      cleaner->set_extent_callback(cb);
+    }
+
+    store_statfs_t get_stat() const {
+      return cleaner->get_stat();
+    }
+
+    using mount_ret = ExtentPlacementManager::mount_ret;
+    mount_ret mount() {
+      ceph_assert(state == state_t::STOP);
+      state = state_t::MOUNT;
+      trimmer->reset();
+      stats = {};
+      register_metrics();
+      return cleaner->mount();
+    }
+
+    void start_scan_space() {
+      ceph_assert(state == state_t::MOUNT);
+      state = state_t::SCAN_SPACE;
+      ceph_assert(cleaner->check_usage_is_empty());
+    }
+
+    void start_background();
+
+    void mark_space_used(paddr_t addr, extent_len_t len) {
+      if (state < state_t::SCAN_SPACE) {
+        return;
+      }
+      assert(cleaner);
+      cleaner->mark_space_used(addr, len);
+    }
+
+    void mark_space_free(paddr_t addr, extent_len_t len) {
+      if (state < state_t::SCAN_SPACE) {
+        return;
+      }
+      assert(cleaner);
+      cleaner->mark_space_free(addr, len);
+    }
+
+    seastar::future<> reserve_projected_usage(std::size_t projected_usage);
+
+    void release_projected_usage(std::size_t projected_usage) {
+      ceph_assert(is_ready());
+      return cleaner->release_projected_usage(projected_usage);
+    }
+
+    seastar::future<> stop_background();
+
+    // Testing interfaces
+
+    bool check_usage() {
+      return cleaner->check_usage();
+    }
+
+    seastar::future<> run_until_halt();
+
+  protected:
+    state_t get_state() const final {
+      return state;
+    }
+
+    void maybe_wake_background() final {
+      if (!is_running()) {
+        return;
+      }
+      if (background_should_run()) {
+        do_wake_background();
+      }
+    }
+
+    void maybe_wake_blocked_io() final {
+      if (!is_ready()) {
+        return;
+      }
+      if (!should_block_io() && blocking_io) {
+        blocking_io->set_value();
+        blocking_io = std::nullopt;
+      }
+    }
+
+  private:
+    bool is_running() const {
+      if (state == state_t::RUNNING) {
+        assert(process_join);
+        return true;
+      } else {
+        assert(!process_join);
+        return false;
+      }
+    }
+
+    void log_state(const char *caller) const;
+
+    seastar::future<> run();
+
+    void do_wake_background() {
+      if (blocking_background) {
+	blocking_background->set_value();
+	blocking_background = std::nullopt;
+      }
+    }
+
+    bool background_should_run() const {
+      assert(is_ready());
+      return cleaner->should_reclaim_space()
+        || trimmer->should_trim_dirty()
+        || trimmer->should_trim_alloc();
+    }
+
+    bool should_block_io() const {
+      assert(is_ready());
+      return trimmer->should_block_on_trim() ||
+             cleaner->should_block_on_reclaim();
+    }
+
+    seastar::future<> do_background_cycle();
+
+    void register_metrics();
+
+    struct {
+      uint64_t io_blocking_num = 0;
+      uint64_t io_count = 0;
+      uint64_t io_blocked_count = 0;
+      uint64_t io_blocked_count_trim = 0;
+      uint64_t io_blocked_count_reclaim = 0;
+      uint64_t io_blocked_sum = 0;
+    } stats;
+    seastar::metrics::metric_group metrics;
+
+    JournalTrimmerImplRef trimmer;
+    AsyncCleanerRef cleaner;
+
+    std::optional<seastar::future<>> process_join;
+    std::optional<seastar::promise<>> blocking_background;
+    std::optional<seastar::promise<>> blocking_io;
+    bool is_running_until_halt = false;
+    state_t state = state_t::STOP;
+  };
+
   bool prefer_ool;
   std::vector<ExtentOolWriterRef> writer_refs;
   std::vector<ExtentOolWriter*> data_writers_by_gen;
@@ -331,8 +492,7 @@ private:
   Device* primary_device = nullptr;
   std::size_t num_devices = 0;
 
-  // TODO: device tiering
-  AsyncCleanerRef cleaner;
+  BackgroundProcess background_process;
 };
 
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
