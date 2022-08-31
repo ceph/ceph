@@ -851,23 +851,6 @@ bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
 }
 
 
-void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
-{
-  dout(10) << __func__ << " " << snaps << dendl;
-
-  auto p = items.begin();
-  while (p != items.end()) {
-    CDentry *dn = p->second;
-    ++p;
-
-    if (dn->last == CEPH_NOSNAP)
-      continue;
-
-    try_trim_snap_dentry(dn, snaps);
-  }
-}
-
-
 /**
  * steal_dentry -- semi-violently move a dentry from one CDir to another
  * (*) violently, in that nitems, most pins, etc. are not correctly maintained 
