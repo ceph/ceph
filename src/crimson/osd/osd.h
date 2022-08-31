@@ -120,10 +120,15 @@ public:
   ~OSD() final;
 
   seastar::future<> open_meta_coll();
-  seastar::future<> open_or_create_meta_coll();
-  seastar::future<> mkfs(uuid_d osd_uuid,
-                         uuid_d cluster_fsid,
-                         std::string osdspec_affinity);
+  static seastar::future<OSDMeta> open_or_create_meta_coll(
+    crimson::os::FuturizedStore &store
+  );
+  static seastar::future<> mkfs(
+    crimson::os::FuturizedStore &store,
+    unsigned whoami,
+    uuid_d osd_uuid,
+    uuid_d cluster_fsid,
+    std::string osdspec_affinity);
 
   seastar::future<> start();
   seastar::future<> stop();
@@ -139,8 +144,13 @@ public:
   uint64_t send_pg_stats();
 
 private:
-  seastar::future<> _write_superblock();
-  seastar::future<> _write_key_meta();
+  static seastar::future<> _write_superblock(
+    crimson::os::FuturizedStore &store,
+    OSDMeta meta,
+    OSDSuperblock superblock);
+  static seastar::future<> _write_key_meta(
+    crimson::os::FuturizedStore &store
+  );
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();
