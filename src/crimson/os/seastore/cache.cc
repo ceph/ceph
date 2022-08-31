@@ -133,9 +133,9 @@ void Cache::register_metrics()
   std::map<src_t, sm::label_instance> labels_by_src {
     {src_t::MUTATE, sm::label_instance("src", "MUTATE")},
     {src_t::READ, sm::label_instance("src", "READ")},
-    {src_t::CLEANER_TRIM_DIRTY, sm::label_instance("src", "CLEANER_TRIM_DIRTY")},
-    {src_t::CLEANER_TRIM_ALLOC, sm::label_instance("src", "CLEANER_TRIM_ALLOC")},
-    {src_t::CLEANER_RECLAIM, sm::label_instance("src", "CLEANER_RECLAIM")},
+    {src_t::TRIM_DIRTY, sm::label_instance("src", "TRIM_DIRTY")},
+    {src_t::TRIM_ALLOC, sm::label_instance("src", "TRIM_ALLOC")},
+    {src_t::CLEANER, sm::label_instance("src", "CLEANER")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -531,7 +531,7 @@ void Cache::register_metrics()
         // READ transaction won't contain any tree inserts and erases
         continue;
       }
-      if (is_cleaner_transaction(src) &&
+      if (is_background_transaction(src) &&
           (tree_label == onode_label ||
            tree_label == omap_label)) {
         // CLEANER transaction won't contain any onode/omap tree operations
@@ -622,12 +622,12 @@ void Cache::register_metrics()
       // should be consistent with checks in account_conflict()
       if ((src1 == Transaction::src_t::READ &&
            src2 == Transaction::src_t::READ) ||
-          (src1 == Transaction::src_t::CLEANER_TRIM_DIRTY &&
-           src2 == Transaction::src_t::CLEANER_TRIM_DIRTY) ||
-          (src1 == Transaction::src_t::CLEANER_RECLAIM &&
-           src2 == Transaction::src_t::CLEANER_RECLAIM) ||
-          (src1 == Transaction::src_t::CLEANER_TRIM_ALLOC &&
-           src2 == Transaction::src_t::CLEANER_TRIM_ALLOC)) {
+          (src1 == Transaction::src_t::TRIM_DIRTY &&
+           src2 == Transaction::src_t::TRIM_DIRTY) ||
+          (src1 == Transaction::src_t::CLEANER &&
+           src2 == Transaction::src_t::CLEANER) ||
+          (src1 == Transaction::src_t::TRIM_ALLOC &&
+           src2 == Transaction::src_t::TRIM_ALLOC)) {
         continue;
       }
       std::ostringstream oss;
@@ -871,7 +871,7 @@ void Cache::mark_transaction_conflicted(
     auto ool_record_bytes = (ool_stats.md_bytes + ool_stats.get_data_bytes());
     efforts.ool_record_bytes += ool_record_bytes;
 
-    if (is_cleaner_transaction(t.get_src())) {
+    if (is_background_transaction(t.get_src())) {
       // CLEANER transaction won't contain any onode/omap tree operations
       assert(t.onode_tree_stats.is_clear());
       assert(t.omap_tree_stats.is_clear());
@@ -1252,7 +1252,7 @@ record_t Cache::prepare_record(
     record.push_back(std::move(delta));
   }
 
-  if (is_cleaner_transaction(trans_src)) {
+  if (is_background_transaction(trans_src)) {
     assert(journal_head != JOURNAL_SEQ_NULL);
     assert(journal_dirty_tail != JOURNAL_SEQ_NULL);
     journal_seq_t dirty_tail;
@@ -1335,8 +1335,8 @@ record_t Cache::prepare_record(
       record.size.get_raw_mdlength(),
       record.size.dlength,
       sea_time_point_printer_t{record.modify_time});
-  if (is_cleaner_transaction(trans_src)) {
-    // CLEANER transaction won't contain any onode tree operations
+  if (is_background_transaction(trans_src)) {
+    // background transaction won't contain any onode tree operations
     assert(t.onode_tree_stats.is_clear());
     assert(t.omap_tree_stats.is_clear());
   } else {
@@ -1379,9 +1379,9 @@ record_t Cache::prepare_record(
     (record.size.get_raw_mdlength() - record.get_delta_size());
 
   auto &rewrite_version_stats = t.get_rewrite_version_stats();
-  if (trans_src == Transaction::src_t::CLEANER_TRIM_DIRTY) {
+  if (trans_src == Transaction::src_t::TRIM_DIRTY) {
     stats.committed_dirty_version.increment_stat(rewrite_version_stats);
-  } else if (trans_src == Transaction::src_t::CLEANER_RECLAIM) {
+  } else if (trans_src == Transaction::src_t::CLEANER) {
     stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
   } else {
     assert(rewrite_version_stats.is_clear());

@@ -1662,9 +1662,9 @@ std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail);
 enum class transaction_type_t : uint8_t {
   MUTATE = 0,
   READ, // including weak and non-weak read transactions
-  CLEANER_TRIM_DIRTY,
-  CLEANER_TRIM_ALLOC,
-  CLEANER_RECLAIM,
+  TRIM_DIRTY,
+  TRIM_ALLOC,
+  CLEANER,
   MAX
 };
 
@@ -1679,14 +1679,14 @@ constexpr bool is_valid_transaction(transaction_type_t type) {
   return type < transaction_type_t::MAX;
 }
 
-constexpr bool is_cleaner_transaction(transaction_type_t type) {
-  return (type >= transaction_type_t::CLEANER_TRIM_DIRTY &&
+constexpr bool is_background_transaction(transaction_type_t type) {
+  return (type >= transaction_type_t::TRIM_DIRTY &&
           type < transaction_type_t::MAX);
 }
 
 constexpr bool is_trim_transaction(transaction_type_t type) {
-  return (type == transaction_type_t::CLEANER_TRIM_DIRTY ||
-      type == transaction_type_t::CLEANER_TRIM_ALLOC);
+  return (type == transaction_type_t::TRIM_DIRTY ||
+      type == transaction_type_t::TRIM_ALLOC);
 }
 
 struct record_size_t {

@@ -181,7 +181,7 @@ SegmentedJournal::scan_last_segment(
       }
       for (auto &record_header : *maybe_headers) {
         ceph_assert(is_valid_transaction(record_header.type));
-        if (is_cleaner_transaction(record_header.type)) {
+        if (is_background_transaction(record_header.type)) {
           has_tail_delta = true;
         }
       }
