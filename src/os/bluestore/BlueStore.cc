@@ -1181,7 +1181,9 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
       *(o->cache_age_bin) -= 1;
       auto pinned = !o->pop_cache();
       ceph_assert(!pinned);
+      ceph_assert(o->nref == 1);
       o->c->onode_map._remove(o->oid);
+      delete o;
     }
   }
   void move_pinned(OnodeCacheShard *to, BlueStore::Onode *o) override
@@ -1934,12 +1936,15 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid,
     return p->second;
   }
   ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
-  onode_map[oid] = o;
+  // new element inserted
+  onode_map[oid] = o.get();
+  o->_get(); // do proper pinning
   cache->_add(o.get(), 1);
   cache->_trim();
   return o;
 }
 
+// Remember to nref-- outside of _remove().
 void BlueStore::OnodeSpace::_remove(const ghobject_t& oid)
 {
   ldout(cache->cct, 20) << __func__ << " " << oid << " " << dendl;
@@ -1953,7 +1958,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 
   {
     std::lock_guard l(cache->lock);
-    ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
+    ceph::unordered_map<ghobject_t,Onode*>::iterator p = onode_map.find(oid);
     if (p == onode_map.end()) {
       cache->logger->inc(l_bluestore_onode_misses);
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
@@ -1980,7 +1985,8 @@ void BlueStore::OnodeSpace::clear()
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 10) << __func__ << " " << onode_map.size()<< dendl;
   for (auto &p : onode_map) {
-    cache->_rm(p.second.get());
+    cache->_rm(p.second);
+    p.second->_put();
   }
   onode_map.clear();
 }
@@ -2000,7 +2006,7 @@ void BlueStore::OnodeSpace::rename(
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
 			<< dendl;
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
+  ceph::unordered_map<ghobject_t,Onode*>::iterator po, pn;
   po = onode_map.find(old_oid);
   pn = onode_map.find(new_oid);
   ceph_assert(po != pn);
@@ -2009,19 +2015,21 @@ void BlueStore::OnodeSpace::rename(
   if (pn != onode_map.end()) {
     ldout(cache->cct, 30) << __func__ << "  removing target " << pn->second
 			  << dendl;
-    cache->_rm(pn->second.get());
+    cache->_rm(pn->second);
     onode_map.erase(pn);
+    pn->second->_put();
   }
   OnodeRef o = po->second;
 
   // install a non-existent onode at old location
   oldo.reset(new Onode(o->c, old_oid, o->key));
-  po->second = oldo;
+  po->second = oldo.get();
   cache->_add(oldo.get(), 1);
   // add at new position and fix oid, key.
   // This will pin 'o' and implicitly touch cache
   // when it will eventually become unpinned
-  onode_map.insert(make_pair(new_oid, o));
+  onode_map.insert(make_pair(new_oid, o.get()));
+  o->_get();
   ceph_assert(o->pinned);
 
   o->oid = new_oid;
@@ -2034,7 +2042,7 @@ bool BlueStore::OnodeSpace::map_any(std::function<bool(Onode*)> f)
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 20) << __func__ << dendl;
   for (auto& i : onode_map) {
-    if (f(i.second.get())) {
+    if (f(i.second)) {
       return true;
     }
   }
@@ -3658,6 +3666,15 @@ void BlueStore::Onode::calc_omap_tail(
   out->push_back('~');
 }
 
+inline void BlueStore::Onode::_get_core() {
+  bool was_pinned = pinned;
+  pinned = nref >= 2;
+  bool r = !was_pinned && pinned;
+  if (cached && r) {
+    c->get_onode_cache()->_pin(this);
+  }
+}
+
 void BlueStore::Onode::get() {
   if (++nref >= 2 && !pinned) {
     OnodeCacheShard* ocs = c->get_onode_cache();
@@ -3668,17 +3685,36 @@ void BlueStore::Onode::get() {
       ocs = c->get_onode_cache();
       ocs->lock.lock();
     }
-    bool was_pinned = pinned;
-    pinned = nref >= 2;
-    bool r = !was_pinned && pinned;
-    if (cached && r) {
-      ocs->_pin(this);
-    }
+    _get_core();
     ocs->lock.unlock();
   }
 }
+
+void BlueStore::Onode::_get() {
+  if (++nref >= 2 && !pinned) {
+    _get_core();
+  }
+}
+
+inline void BlueStore::Onode::_put_core() {
+  bool need_unpin = pinned;
+  pinned = pinned && nref >= 2;
+  need_unpin = need_unpin && !pinned;
+  if (cached && need_unpin) {
+    OnodeCacheShard* ocs = c->get_onode_cache();
+    if (exists) {
+      ocs->_unpin(this);
+    } else {
+      ocs->_unpin_and_rm(this);
+      ceph_assert(nref == 1);
+      // we should nref--, but we are deleting object anyway
+      c->onode_map._remove(oid);
+      delete this;
+    }
+  }
+}
+
 void BlueStore::Onode::put() {
-  ++put_nref;
   int n = --nref;
   if (n == 1) {
     OnodeCacheShard* ocs = c->get_onode_cache();
@@ -3689,23 +3725,26 @@ void BlueStore::Onode::put() {
       ocs = c->get_onode_cache();
       ocs->lock.lock();
     }
-    bool need_unpin = pinned;
-    pinned = pinned && nref >= 2;
-    need_unpin = need_unpin && !pinned;
-    if (cached && need_unpin) {
-      if (exists) {
-        ocs->_unpin(this);
-      } else {
-        ocs->_unpin_and_rm(this);
-        // remove will also decrement nref
-        c->onode_map._remove(oid);
-      }
-    }
+    _put_core();
     ocs->lock.unlock();
+  } else {
+    if (n == 0) {
+      // this is only possible if onode is not in cache
+      ceph_assert(!cached);
+      delete this;
+    }
   }
-  auto pn = --put_nref;
-  if (nref == 0 && pn == 0) {
-    delete this;
+}
+
+void BlueStore::Onode::_put() {
+  int n = --nref;
+  if (n == 1) {
+    _put_core();
+  } else {
+    if (n == 0) {
+      ceph_assert(!cached);
+      delete this;
+    }
   }
 }
 
@@ -4120,9 +4159,13 @@ void BlueStore::Collection::split_cache(
       // physically out of cache during the transition
       OnodeRef o_pin = o;
       ceph_assert(o->pinned);
-
+      // do we really need put/get?
+      o->_get();
+      p->second->_put();
       p = onode_map.onode_map.erase(p);
-      dest->onode_map.onode_map[o->oid] = o;
+      //make sure that onode_map[o->oid] does not exist
+      auto res = dest->onode_map.onode_map.insert(make_pair(o->oid, o.get()));
+      ceph_assert(res.second); // a new element must be added
       if (o->cached) {
         get_onode_cache()->move_pinned(dest->get_onode_cache(), o.get());
       }

@@ -1137,7 +1137,6 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     std::atomic_int nref;  ///< reference count
-    std::atomic_int put_nref = {0};
     Collection *c;
     ghobject_t oid;
 
@@ -1209,6 +1208,10 @@ public:
     void flush();
     void get();
     void put();
+    void _get();
+    void _put();
+    void _get_core();
+    void _put_core();
 
     inline bool put_cache() {
       ceph_assert(!cached);
@@ -1412,7 +1415,7 @@ public:
 
   private:
     /// forward lookups
-    mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
+    mempool::bluestore_cache_meta::unordered_map<ghobject_t,Onode*> onode_map;
 
     friend struct Collection; // for split_cache()
     friend struct Onode; // for put()
