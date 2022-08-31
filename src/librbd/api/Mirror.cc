@@ -115,6 +115,26 @@ int remove_peer_config_key(librados::IoCtx& io_ctx,
   return 0;
 }
 
+std::string get_mon_host(CephContext* cct) {
+  std::string mon_host;
+  if (auto mon_addrs = cct->get_mon_addrs();
+      mon_addrs != nullptr && !mon_addrs->empty()) {
+    CachedStackStringStream css;
+    for (auto it = mon_addrs->begin(); it != mon_addrs->end(); ++it) {
+      if (it != mon_addrs->begin()) {
+        *css << ",";
+      }
+      *css << *it;
+    }
+    mon_host = css->str();
+  } else {
+    ldout(cct, 20) << "falling back to mon_host in conf" << dendl;
+    mon_host = cct->_conf.get_val<std::string>("mon_host");
+  }
+  ldout(cct, 20) << "mon_host=" << mon_host << dendl;
+  return mon_host;
+}
+
 int create_bootstrap_user(CephContext* cct, librados::Rados& rados,
                           std::string* peer_client_id, std::string* cephx_key) {
   ldout(cct, 20) << dendl;
@@ -1298,8 +1318,7 @@ int Mirror<I>::peer_bootstrap_create(librados::IoCtx& io_ctx,
     return r;
   }
 
-  std::string mon_host = cct->_conf.get_val<std::string>("mon_host");
-  ldout(cct, 20) << "mon_host=" << mon_host << dendl;
+  std::string mon_host = get_mon_host(cct);
 
   // format the token response
   bufferlist token_bl;
@@ -1471,7 +1490,7 @@ int Mirror<I>::peer_bootstrap_import(librados::IoCtx& io_ctx,
       return r;
     }
 
-    std::string local_mon_host = cct->_conf.get_val<std::string>("mon_host");
+    std::string local_mon_host = get_mon_host(cct);
 
     // create local cluster peer in remote cluster
     r = create_bootstrap_peer(cct, remote_io_ctx,
