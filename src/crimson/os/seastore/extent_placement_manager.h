@@ -8,7 +8,6 @@
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal/segment_allocator.h"
-#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
@@ -124,18 +123,7 @@ public:
   }
 
   using open_ertr = ExtentOolWriter::open_ertr;
-  open_ertr::future<> open_for_write() {
-    LOG_PREFIX(ExtentPlacementManager::open);
-    SUBINFO(seastore_journal, "started with {} devices", num_devices);
-    ceph_assert(primary_device != nullptr);
-    return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
-      return writer->open();
-    }).safe_then([this] {
-      return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
-        return writer->open();
-      });
-    });
-  }
+  open_ertr::future<> open_for_write();
 
   void start_scan_space() {
     return background_process.start_scan_space();
@@ -210,46 +198,14 @@ public:
   using alloc_paddr_iertr = ExtentOolWriter::alloc_write_iertr;
   alloc_paddr_iertr::future<> delayed_alloc_or_ool_write(
     Transaction& t,
-    const std::list<LogicalCachedExtentRef>& delayed_extents) {
-    LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
-    SUBDEBUGT(seastore_journal, "start with {} delayed extents",
-              t, delayed_extents.size());
-    assert(writer_refs.size());
-    return seastar::do_with(
-        std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>(),
-        [this, &t, &delayed_extents](auto& alloc_map) {
-      for (auto& extent : delayed_extents) {
-        // For now, just do ool allocation for any delayed extent
-        auto writer_ptr = get_writer(
-            extent->get_user_hint(),
-            get_extent_category(extent->get_type()),
-            extent->get_reclaim_generation());
-        alloc_map[writer_ptr].emplace_back(extent);
-      }
-      return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
-        auto writer = p.first;
-        auto& extents = p.second;
-        return writer->alloc_write_ool_extents(t, extents);
-      });
-    });
-  }
+    const std::list<LogicalCachedExtentRef>& delayed_extents);
 
   seastar::future<> stop_background() {
     return background_process.stop_background();
   }
 
   using close_ertr = ExtentOolWriter::close_ertr;
-  close_ertr::future<> close() {
-    LOG_PREFIX(ExtentPlacementManager::close);
-    SUBINFO(seastore_journal, "started");
-    return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
-      return writer->close();
-    }).safe_then([this] {
-      return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
-        return writer->close();
-      });
-    });
-  }
+  close_ertr::future<> close();
 
   using read_ertr = Device::read_ertr;
   read_ertr::future<> read(
