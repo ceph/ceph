@@ -130,6 +130,12 @@ class RbdServiceTest(unittest.TestCase):
             'namespace': ''
         }
 
+        # test with limit 0, it should return a list of pools with an empty list, but
+        rbd_pool_list = RbdService.rbd_pool_list(['test_pool'], offset=0, limit=0)
+        self.assertEqual(rbd_pool_list, ([], 1))
+
+        self.rbd_inst_mock.namespace_list.return_value = []
+
         rbd_pool_list = RbdService.rbd_pool_list(['test_pool'], offset=0, limit=5)
         self.assertEqual(rbd_pool_list, ([{
             'id': '3c1a5ee60a88',
