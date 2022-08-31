@@ -325,6 +325,8 @@ int main(int argc, const char* argv[])
               osd_uuid.generate_random();
             }
             osd.mkfs(
+	      *store,
+	      whoami,
               osd_uuid,
               local_conf().get_val<uuid_d>("fsid"),
               config["osdspec-affinity"].as<std::string>()).get();
