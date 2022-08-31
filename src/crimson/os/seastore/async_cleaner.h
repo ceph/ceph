@@ -386,9 +386,22 @@ private:
  * Callback interface to wake up background works
  */
 struct BackgroundListener {
+  enum class state_t {
+    STOP,
+    MOUNT,
+    SCAN_SPACE,
+    RUNNING,
+    HALT,
+  };
+
   virtual ~BackgroundListener() = default;
   virtual void maybe_wake_background() = 0;
   virtual void maybe_wake_blocked_io() = 0;
+  virtual state_t get_state() const = 0;
+
+  bool is_ready() const {
+    return get_state() >= state_t::RUNNING;
+  }
 };
 
 /**
@@ -418,14 +431,14 @@ public:
     return std::min(get_alloc_tail(), get_dirty_tail());
   }
 
-  bool is_ready() const {
+  bool check_is_ready() const {
     return (get_journal_head() != JOURNAL_SEQ_NULL &&
             get_dirty_tail() != JOURNAL_SEQ_NULL &&
             get_alloc_tail() != JOURNAL_SEQ_NULL);
   }
 
   std::size_t get_num_rolls() const {
-    if (!is_ready()) {
+    if (!check_is_ready()) {
       return 0;
     }
     assert(get_journal_head().segment_seq >=
@@ -807,15 +820,8 @@ public:
 };
 
 class AsyncCleaner : public SegmentProvider {
-  enum class cleaner_state_t {
-    STOP,
-    MOUNT,
-    SCAN_SPACE,
-    READY,
-    HALT,
-  } state = cleaner_state_t::STOP;
-
 public:
+  using state_t = BackgroundListener::state_t;
   using base_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
 
@@ -933,16 +939,11 @@ public:
   mount_ret mount();
 
   void start_scan_space() {
-    ceph_assert(state == cleaner_state_t::MOUNT);
-    state = cleaner_state_t::SCAN_SPACE;
+    gc_process.start_scan_space();
     assert(space_tracker->equals(*space_tracker->make_empty()));
   }
 
   void start_gc();
-
-  bool is_ready() const {
-    return state >= cleaner_state_t::READY;
-  }
 
   /*
    * SegmentProvider interfaces
@@ -1003,7 +1004,6 @@ public:
   // Testing interfaces
 
   seastar::future<> run_until_halt() {
-    ceph_assert(state == cleaner_state_t::HALT);
     return gc_process.run_until_halt();
   }
 
@@ -1111,9 +1111,16 @@ private:
     }
 
     void mount() {
+      ceph_assert(state == state_t::STOP);
+      state = state_t::MOUNT;
       trimmer->reset();
       stats = {};
       register_metrics();
+    }
+
+    void start_scan_space() {
+      ceph_assert(state == state_t::MOUNT);
+      state = state_t::SCAN_SPACE;
     }
 
     void start();
@@ -1124,8 +1131,12 @@ private:
 
     seastar::future<> maybe_block_io();
 
+    state_t get_state() const final {
+      return state;
+    }
+
     void maybe_wake_background() final {
-      if (is_stopping()) {
+      if (!is_running()) {
         return;
       }
       if (background_should_run()) {
@@ -1134,7 +1145,7 @@ private:
     }
 
     void maybe_wake_blocked_io() final {
-      if (!cleaner.is_ready()) {
+      if (!is_ready()) {
         return;
       }
       if (!should_block_io() && blocking_io) {
@@ -1144,8 +1155,14 @@ private:
     }
 
   private:
-    bool is_stopping() const {
-      return !process_join;
+    bool is_running() const {
+      if (state == state_t::RUNNING) {
+        assert(process_join);
+        return true;
+      } else {
+        assert(!process_join);
+        return false;
+      }
     }
 
     void log_state(const char *caller) const;
@@ -1160,14 +1177,14 @@ private:
     }
 
     bool background_should_run() const {
-      ceph_assert(cleaner.is_ready());
+      assert(is_ready());
       return cleaner.gc_should_reclaim_space()
         || trimmer->should_trim_dirty()
         || trimmer->should_trim_alloc();
     }
 
     bool should_block_io() const {
-      assert(cleaner.is_ready());
+      assert(is_ready());
       return trimmer->should_block_on_trim() ||
              cleaner.should_block_on_reclaim();
     }
@@ -1193,6 +1210,7 @@ private:
     std::optional<seastar::promise<>> blocking_background;
     std::optional<seastar::promise<>> blocking_io;
     bool is_running_until_halt = false;
+    state_t state = state_t::STOP;
   } gc_process;
 
   using do_reclaim_space_ertr = base_ertr;
@@ -1274,7 +1292,7 @@ private:
   }
 
   bool should_block_on_reclaim() const {
-    assert(is_ready());
+    assert(gc_process.is_ready());
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1294,7 +1312,7 @@ private:
    * Encapsulates logic for whether gc should be reclaiming segment space.
    */
   bool gc_should_reclaim_space() const {
-    assert(is_ready());
+    assert(gc_process.is_ready());
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1321,7 +1339,7 @@ private:
       segment_type_t s_type,
       data_category_t category,
       reclaim_gen_t generation) {
-    ceph_assert(state == cleaner_state_t::MOUNT);
+    assert(gc_process.get_state() == state_t::MOUNT);
     ceph_assert(s_type == segment_type_t::OOL ||
                 trimmer != nullptr); // segment_type_t::JOURNAL
     auto old_usage = calc_utilization(segment);

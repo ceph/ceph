@@ -491,7 +491,7 @@ void JournalTrimmerImpl::update_journal_tails(
 
 journal_seq_t JournalTrimmerImpl::get_tail_limit() const
 {
-  ceph_assert(is_ready());
+  assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       journal_type,
       -static_cast<seastore_off_t>(config.max_journal_bytes),
@@ -502,7 +502,7 @@ journal_seq_t JournalTrimmerImpl::get_tail_limit() const
 
 journal_seq_t JournalTrimmerImpl::get_dirty_tail_target() const
 {
-  ceph_assert(is_ready());
+  assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       journal_type,
       -static_cast<seastore_off_t>(config.target_journal_dirty_bytes),
@@ -513,7 +513,7 @@ journal_seq_t JournalTrimmerImpl::get_dirty_tail_target() const
 
 journal_seq_t JournalTrimmerImpl::get_alloc_tail_target() const
 {
-  ceph_assert(is_ready());
+  assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       journal_type,
       -static_cast<seastore_off_t>(config.target_journal_alloc_bytes),
@@ -524,7 +524,7 @@ journal_seq_t JournalTrimmerImpl::get_alloc_tail_target() const
 
 std::size_t JournalTrimmerImpl::get_dirty_journal_size() const
 {
-  if (!is_ready()) {
+  if (!background_callback->is_ready()) {
     return 0;
   }
   auto ret = journal_head.relative_to(
@@ -538,7 +538,7 @@ std::size_t JournalTrimmerImpl::get_dirty_journal_size() const
 
 std::size_t JournalTrimmerImpl::get_alloc_journal_size() const
 {
-  if (!is_ready()) {
+  if (!background_callback->is_ready()) {
     return 0;
   }
   auto ret = journal_head.relative_to(
@@ -554,6 +554,7 @@ JournalTrimmerImpl::trim_ertr::future<>
 JournalTrimmerImpl::trim_alloc()
 {
   LOG_PREFIX(JournalTrimmerImpl::trim_alloc);
+  assert(background_callback->is_ready());
   return repeat_eagain([this, FNAME] {
     return extent_callback->with_transaction_intr(
       Transaction::src_t::CLEANER_TRIM_ALLOC,
@@ -587,6 +588,7 @@ JournalTrimmerImpl::trim_ertr::future<>
 JournalTrimmerImpl::trim_dirty()
 {
   LOG_PREFIX(JournalTrimmerImpl::trim_dirty);
+  assert(background_callback->is_ready());
   return repeat_eagain([this, FNAME] {
     return extent_callback->with_transaction_intr(
       Transaction::src_t::CLEANER_TRIM_DIRTY,
@@ -639,7 +641,7 @@ std::ostream &operator<<(
     std::ostream &os, const JournalTrimmerImpl::stat_printer_t &stats)
 {
   os << "JournalTrimmer(";
-  if (stats.trimmer.is_ready()) {
+  if (stats.trimmer.background_callback->is_ready()) {
     os << "should_block_on_trim=" << stats.trimmer.should_block_on_trim()
        << ", should_(trim_dirty=" << stats.trimmer.should_trim_dirty()
        << ", trim_alloc=" << stats.trimmer.should_trim_alloc() << ")";
@@ -650,7 +652,7 @@ std::ostream &operator<<(
     os << ", journal_head=" << stats.trimmer.get_journal_head()
        << ", alloc_tail=" << stats.trimmer.get_alloc_tail()
        << ", dirty_tail=" << stats.trimmer.get_dirty_tail();
-    if (stats.trimmer.is_ready()) {
+    if (stats.trimmer.background_callback->is_ready()) {
       os << ", alloc_tail_target=" << stats.trimmer.get_alloc_tail_target()
          << ", dirty_tail_target=" << stats.trimmer.get_dirty_tail_target()
          << ", tail_limit=" << stats.trimmer.get_tail_limit();
@@ -1019,22 +1021,28 @@ void AsyncCleaner::GCProcess::start()
   INFO("done, start background, {}, {}",
        JournalTrimmerImpl::stat_printer_t{*trimmer, true},
        AsyncCleaner::stat_printer_t{cleaner, true});
-  ceph_assert(is_stopping());
-  ceph_assert(trimmer->is_ready());
-  process_join = seastar::now(); // allow run()
+  ceph_assert(trimmer->check_is_ready());
+  ceph_assert(state == state_t::SCAN_SPACE);
+  assert(!is_running());
+  process_join = seastar::now();
+  state = state_t::RUNNING;
+  assert(is_running());
   process_join = run();
-  assert(!is_stopping());
 }
 
 seastar::future<> AsyncCleaner::GCProcess::stop()
 {
   return seastar::futurize_invoke([this] {
-    if (is_stopping()) {
+    if (!is_running()) {
+      if (state != state_t::HALT) {
+        state = state_t::STOP;
+      }
       return seastar::now();
     }
     auto ret = std::move(*process_join);
     process_join.reset();
-    assert(is_stopping());
+    state = state_t::HALT;
+    assert(!is_running());
     do_wake_background();
     return ret;
   }).then([this] {
@@ -1048,7 +1056,8 @@ seastar::future<> AsyncCleaner::GCProcess::stop()
 
 seastar::future<> AsyncCleaner::GCProcess::run_until_halt()
 {
-  ceph_assert(is_stopping());
+  ceph_assert(state == state_t::HALT);
+  assert(!is_running());
   if (is_running_until_halt) {
     return seastar::now();
   }
@@ -1072,6 +1081,7 @@ seastar::future<> AsyncCleaner::GCProcess::run_until_halt()
 
 seastar::future<> AsyncCleaner::GCProcess::maybe_block_io()
 {
+  ceph_assert(is_ready());
   ceph_assert(!blocking_io);
   // The pipeline configuration prevents another IO from entering
   // prepare until the prior one exits and clears this.
@@ -1110,9 +1120,9 @@ seastar::future<> AsyncCleaner::GCProcess::maybe_block_io()
 
 seastar::future<> AsyncCleaner::GCProcess::run()
 {
-  ceph_assert(!is_stopping());
+  assert(is_running());
   return seastar::repeat([this] {
-    if (is_stopping()) {
+    if (!is_running()) {
       log_state("run(exit)");
       return seastar::make_ready_future<seastar::stop_iteration>(
           seastar::stop_iteration::yes);
@@ -1135,6 +1145,7 @@ seastar::future<> AsyncCleaner::GCProcess::run()
 
 seastar::future<> AsyncCleaner::GCProcess::do_background_cycle()
 {
+  assert(is_ready());
   if (trimmer->should_trim_alloc()) {
     return trimmer->trim_alloc(
     ).handle_error(
@@ -1272,6 +1283,7 @@ AsyncCleaner::do_reclaim_space(
 AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
 {
   LOG_PREFIX(AsyncCleaner::gc_reclaim_space);
+  assert(gc_process.is_ready());
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
     auto &segment_info = segments[seg_id];
@@ -1383,8 +1395,6 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   LOG_PREFIX(AsyncCleaner::mount);
   const auto& sms = sm_group->get_segment_managers();
   INFO("{} segment managers", sms.size());
-  ceph_assert(state == cleaner_state_t::STOP);
-  state = cleaner_state_t::MOUNT;
   stats = {};
 
   gc_process.mount();
@@ -1528,18 +1538,11 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
 
 void AsyncCleaner::start_gc()
 {
-  ceph_assert(state == cleaner_state_t::SCAN_SPACE);
-  state = cleaner_state_t::READY;
   gc_process.start();
 }
 
 seastar::future<> AsyncCleaner::stop()
 {
-  if (is_ready()) {
-    state = cleaner_state_t::HALT;
-  } else {
-    state = cleaner_state_t::STOP;
-  }
   return gc_process.stop();
 }
 
@@ -1589,12 +1592,11 @@ void AsyncCleaner::mark_space_used(
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
   }
-  auto& seg_addr = addr.as_seg_paddr();
-
-  if (state < cleaner_state_t::SCAN_SPACE) {
+  if (gc_process.get_state() < state_t::SCAN_SPACE) {
     return;
   }
 
+  auto& seg_addr = addr.as_seg_paddr();
   stats.used_bytes += len;
   auto old_usage = calc_utilization(seg_addr.get_segment_id());
   [[maybe_unused]] auto ret = space_tracker->allocate(
@@ -1618,7 +1620,7 @@ void AsyncCleaner::mark_space_free(
   extent_len_t len)
 {
   LOG_PREFIX(AsyncCleaner::mark_space_free);
-  if (state < cleaner_state_t::SCAN_SPACE) {
+  if (gc_process.get_state() < state_t::SCAN_SPACE) {
     return;
   }
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
@@ -1693,7 +1695,6 @@ segment_id_t AsyncCleaner::get_next_reclaim_segment() const
 seastar::future<>
 AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
 {
-  ceph_assert(is_ready());
   return gc_process.maybe_block_io(
   ).then([this, projected_usage] {
     stats.projected_used_bytes += projected_usage;
@@ -1704,7 +1705,7 @@ AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
 
 void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
 {
-  ceph_assert(is_ready());
+  ceph_assert(gc_process.is_ready());
   ceph_assert(stats.projected_used_bytes >= projected_usage);
   stats.projected_used_bytes -= projected_usage;
   gc_process.maybe_wake_blocked_io();
@@ -1714,7 +1715,7 @@ std::ostream &operator<<(
     std::ostream &os, const AsyncCleaner::stat_printer_t &stats)
 {
   os << "AsyncCleaner(";
-  if (stats.cleaner.is_ready()) {
+  if (stats.cleaner.gc_process.is_ready()) {
     os << "should_block_on_reclaim=" << stats.cleaner.should_block_on_reclaim()
        << ", should_reclaim=" << stats.cleaner.gc_should_reclaim_space();
   } else {
