@@ -1232,7 +1232,8 @@ public:
 
       context->update_object_version(oid, version);
       ceph_assert(rcompletion->is_complete());
-      ceph_assert(rcompletion->get_return_value() == 1);
+      int r = rcompletion->get_return_value();
+      assertf(r >= 0, "r = %d", r);
       if (rcompletion->get_version64() != version) {
 	std::cerr << "Error: racing read on " << oid << " returned version "
 		  << rcompletion->get_version64() << " rather than version "
