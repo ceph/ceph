@@ -344,6 +344,10 @@ else
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 $with_zbd && install_libzbd_on_ubuntu focal
                 ;;
+            *Jammy*)
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
+                $SUDO apt-get install -y gcc
+                ;;
             *)
                 $SUDO apt-get install -y gcc
                 ;;
