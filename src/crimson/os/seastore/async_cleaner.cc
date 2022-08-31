@@ -642,7 +642,7 @@ std::ostream &operator<<(
 {
   os << "JournalTrimmer(";
   if (stats.trimmer.background_callback->is_ready()) {
-    os << "should_block_on_trim=" << stats.trimmer.should_block_on_trim()
+    os << "should_block_io_on_trim=" << stats.trimmer.should_block_io_on_trim()
        << ", should_(trim_dirty=" << stats.trimmer.should_trim_dirty()
        << ", trim_alloc=" << stats.trimmer.should_trim_alloc() << ")";
   } else {
@@ -788,7 +788,14 @@ void SpaceTrackerSimple::dump_usage(segment_id_t id) const
        id, live_bytes_by_segment[id].live_bytes);
 }
 
-AsyncCleaner::AsyncCleaner(
+std::ostream &operator<<(
+    std::ostream &os, const AsyncCleaner::stat_printer_t &stats)
+{
+  stats.cleaner.print(os, stats.detailed);
+  return os;
+}
+
+SegmentCleaner::SegmentCleaner(
   config_t config,
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
@@ -803,7 +810,7 @@ AsyncCleaner::AsyncCleaner(
   config.validate();
 }
 
-void AsyncCleaner::register_metrics()
+void SegmentCleaner::register_metrics()
 {
   namespace sm = seastar::metrics;
   stats.segment_util.buckets.resize(UTIL_BUCKETS);
@@ -816,7 +823,7 @@ void AsyncCleaner::register_metrics()
   i = get_bucket_index(UTIL_STATE_EMPTY);
   stats.segment_util.buckets[i].count = segments.get_num_segments();
 
-  metrics.add_group("async_cleaner", {
+  metrics.add_group("segment_cleaner", {
     sm::make_counter("segments_number",
 		     [this] { return segments.get_num_segments(); },
 		     sm::description("the number of segments")),
@@ -912,13 +919,13 @@ void AsyncCleaner::register_metrics()
   });
 }
 
-segment_id_t AsyncCleaner::allocate_segment(
+segment_id_t SegmentCleaner::allocate_segment(
     segment_seq_t seq,
     segment_type_t type,
     data_category_t category,
     reclaim_gen_t generation)
 {
-  LOG_PREFIX(AsyncCleaner::allocate_segment);
+  LOG_PREFIX(SegmentCleaner::allocate_segment);
   assert(seq != NULL_SEG_SEQ);
   ceph_assert(type == segment_type_t::OOL ||
               trimmer != nullptr); // segment_type_t::JOURNAL
@@ -944,9 +951,9 @@ segment_id_t AsyncCleaner::allocate_segment(
   return NULL_SEG_ID;
 }
 
-void AsyncCleaner::close_segment(segment_id_t segment)
+void SegmentCleaner::close_segment(segment_id_t segment)
 {
-  LOG_PREFIX(AsyncCleaner::close_segment);
+  LOG_PREFIX(SegmentCleaner::close_segment);
   auto old_usage = calc_utilization(segment);
   segments.mark_closed(segment);
   auto &seg_info = segments[segment];
@@ -962,7 +969,7 @@ void AsyncCleaner::close_segment(segment_id_t segment)
   INFO("closed, {} -- {}", stat_printer_t{*this, false}, seg_info);
 }
 
-double AsyncCleaner::calc_gc_benefit_cost(
+double SegmentCleaner::calc_gc_benefit_cost(
   segment_id_t id,
   const sea_time_point &now_time,
   const sea_time_point &bound_time) const
@@ -1004,8 +1011,8 @@ double AsyncCleaner::calc_gc_benefit_cost(
           (2 * age_factor - 2) * util + 1);
 }
 
-AsyncCleaner::do_reclaim_space_ret
-AsyncCleaner::do_reclaim_space(
+SegmentCleaner::do_reclaim_space_ret
+SegmentCleaner::do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
     const backref_pin_list_t &pin_list,
     std::size_t &reclaimed,
@@ -1017,14 +1024,14 @@ AsyncCleaner::do_reclaim_space(
     runs++;
     return extent_callback->with_transaction_intr(
       Transaction::src_t::CLEANER_RECLAIM,
-      "reclaim_space",
+      "clean_reclaim_space",
       [this, &backref_extents, &pin_list, &reclaimed](auto &t)
     {
       return seastar::do_with(
         std::vector<CachedExtentRef>(backref_extents),
         [this, &t, &reclaimed, &pin_list](auto &extents)
       {
-        LOG_PREFIX(AsyncCleaner::do_reclaim_space);
+        LOG_PREFIX(SegmentCleaner::do_reclaim_space);
         // calculate live extents
         auto cached_backref_entries =
           backref_manager.get_cached_backref_entries_in_range(
@@ -1057,7 +1064,7 @@ AsyncCleaner::do_reclaim_space(
 	    backref_entries,
 	    [this, &extents, &t](auto &ent)
 	  {
-	    LOG_PREFIX(AsyncCleaner::do_reclaim_space);
+	    LOG_PREFIX(SegmentCleaner::do_reclaim_space);
 	    TRACET("getting extent of type {} at {}~{}",
 	      t,
 	      ent.type,
@@ -1095,9 +1102,9 @@ AsyncCleaner::do_reclaim_space(
   });
 }
 
-AsyncCleaner::reclaim_space_ret AsyncCleaner::reclaim_space()
+SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
 {
-  LOG_PREFIX(AsyncCleaner::reclaim_space);
+  LOG_PREFIX(SegmentCleaner::clean_space);
   assert(background_callback->is_ready());
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
@@ -1178,9 +1185,9 @@ AsyncCleaner::reclaim_space_ret AsyncCleaner::reclaim_space()
           reclaim_state.reset();
           return sm_group->release_segment(segment_to_release
           ).handle_error(
-            reclaim_space_ertr::pass_further{},
+            clean_space_ertr::pass_further{},
             crimson::ct_error::assert_all{
-              "AsyncCleaner::reclaim_space encountered invalid error in release_segment"
+              "SegmentCleaner::clean_space encountered invalid error in release_segment"
             }
           ).safe_then([this, FNAME, segment_to_release] {
             auto old_usage = calc_utilization(segment_to_release);
@@ -1198,16 +1205,16 @@ AsyncCleaner::reclaim_space_ret AsyncCleaner::reclaim_space()
             background_callback->maybe_wake_blocked_io();
           });
         } else {
-          return reclaim_space_ertr::now();
+          return clean_space_ertr::now();
         }
       });
     });
   });
 }
 
-AsyncCleaner::mount_ret AsyncCleaner::mount()
+SegmentCleaner::mount_ret SegmentCleaner::mount()
 {
-  LOG_PREFIX(AsyncCleaner::mount);
+  LOG_PREFIX(SegmentCleaner::mount);
   const auto& sms = sm_group->get_segment_managers();
   INFO("{} segment managers", sms.size());
 
@@ -1293,11 +1300,11 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   });
 }
 
-AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
+SegmentCleaner::scan_extents_ret SegmentCleaner::scan_no_tail_segment(
   const segment_header_t &segment_header,
   segment_id_t segment_id)
 {
-  LOG_PREFIX(AsyncCleaner::scan_no_tail_segment);
+  LOG_PREFIX(SegmentCleaner::scan_no_tail_segment);
   INFO("scan {} {}", segment_id, segment_header);
   return seastar::do_with(
     scan_valid_records_cursor({
@@ -1352,7 +1359,7 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_no_tail_segment(
   });
 }
 
-bool AsyncCleaner::check_usage()
+bool SegmentCleaner::check_usage()
 {
   SpaceTrackerIRef tracker(space_tracker->make_empty());
   extent_callback->with_transaction_weak(
@@ -1390,11 +1397,11 @@ bool AsyncCleaner::check_usage()
   return space_tracker->equals(*tracker);
 }
 
-void AsyncCleaner::mark_space_used(
+void SegmentCleaner::mark_space_used(
   paddr_t addr,
   extent_len_t len)
 {
-  LOG_PREFIX(AsyncCleaner::mark_space_used);
+  LOG_PREFIX(SegmentCleaner::mark_space_used);
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
   // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
@@ -1420,11 +1427,11 @@ void AsyncCleaner::mark_space_used(
         space_tracker->get_usage(seg_addr.get_segment_id()));
 }
 
-void AsyncCleaner::mark_space_free(
+void SegmentCleaner::mark_space_free(
   paddr_t addr,
   extent_len_t len)
 {
-  LOG_PREFIX(AsyncCleaner::mark_space_free);
+  LOG_PREFIX(SegmentCleaner::mark_space_free);
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
   // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
@@ -1453,9 +1460,9 @@ void AsyncCleaner::mark_space_free(
         space_tracker->get_usage(seg_addr.get_segment_id()));
 }
 
-segment_id_t AsyncCleaner::get_next_reclaim_segment() const
+segment_id_t SegmentCleaner::get_next_reclaim_segment() const
 {
-  LOG_PREFIX(AsyncCleaner::get_next_reclaim_segment);
+  LOG_PREFIX(SegmentCleaner::get_next_reclaim_segment);
   segment_id_t id = NULL_SEG_ID;
   double max_benefit_cost = 0;
   sea_time_point now_time;
@@ -1490,13 +1497,13 @@ segment_id_t AsyncCleaner::get_next_reclaim_segment() const
     return id;
   } else {
     ceph_assert(get_segments_reclaimable() == 0);
-    // see should_reclaim_space()
+    // see should_clean_space()
     ceph_abort("impossible!");
     return NULL_SEG_ID;
   }
 }
 
-void AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
+void SegmentCleaner::reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
   stats.projected_used_bytes += projected_usage;
@@ -1504,7 +1511,7 @@ void AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
   stats.projected_used_bytes_sum += stats.projected_used_bytes;
 }
 
-void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
+void SegmentCleaner::release_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
   ceph_assert(stats.projected_used_bytes >= projected_usage);
@@ -1512,29 +1519,27 @@ void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
   background_callback->maybe_wake_blocked_io();
 }
 
-std::ostream &operator<<(
-    std::ostream &os, const AsyncCleaner::stat_printer_t &stats)
+void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
 {
-  os << "AsyncCleaner(";
-  if (stats.cleaner.background_callback->is_ready()) {
-    os << "should_block_on_reclaim=" << stats.cleaner.should_block_on_reclaim()
-       << ", should_reclaim=" << stats.cleaner.should_reclaim_space();
+  os << "SegmentCleaner(";
+  if (background_callback->is_ready()) {
+    os << "should_block_io_on_clean=" << should_block_io_on_clean()
+       << ", should_clean=" << should_clean_space();
   } else {
     os << "not-ready";
   }
-  os << ", projected_avail_ratio=" << stats.cleaner.get_projected_available_ratio()
-     << ", reclaim_ratio=" << stats.cleaner.get_reclaim_ratio()
-     << ", alive_ratio=" << stats.cleaner.get_alive_ratio();
-  if (stats.detailed) {
+  os << ", projected_avail_ratio=" << get_projected_available_ratio()
+     << ", reclaim_ratio=" << get_reclaim_ratio()
+     << ", alive_ratio=" << get_alive_ratio();
+  if (is_detailed) {
     os << ", unavailable_unreclaimable="
-       << stats.cleaner.get_unavailable_unreclaimable_bytes() << "B"
+       << get_unavailable_unreclaimable_bytes() << "B"
        << ", unavailable_reclaimble="
-       << stats.cleaner.get_unavailable_reclaimable_bytes() << "B"
-       << ", alive=" << stats.cleaner.stats.used_bytes << "B"
-       << ", " << stats.cleaner.segments;
+       << get_unavailable_reclaimable_bytes() << "B"
+       << ", alive=" << stats.used_bytes << "B"
+       << ", " << segments;
   }
   os << ")";
-  return os;
 }
 
 }

@@ -661,16 +661,16 @@ TransactionManagerRef make_transaction_manager(
   ceph_assert(roll_start % primary_device->get_block_size() == 0);
 
   bool cleaner_is_detailed;
-  AsyncCleaner::config_t cleaner_config;
+  SegmentCleaner::config_t cleaner_config;
   JournalTrimmerImpl::config_t trimmer_config;
   if (is_test) {
     cleaner_is_detailed = true;
-    cleaner_config = AsyncCleaner::config_t::get_test();
+    cleaner_config = SegmentCleaner::config_t::get_test();
     trimmer_config = JournalTrimmerImpl::config_t::get_test(
         roll_size, journal_type);
   } else {
     cleaner_is_detailed = false;
-    cleaner_config = AsyncCleaner::config_t::get_default();
+    cleaner_config = SegmentCleaner::config_t::get_default();
     trimmer_config = JournalTrimmerImpl::config_t::get_default(
         roll_size, journal_type);
   }
@@ -679,21 +679,21 @@ TransactionManagerRef make_transaction_manager(
       *backref_manager, trimmer_config,
       journal_type, roll_start, roll_size);
 
-  auto async_cleaner = std::make_unique<AsyncCleaner>(
+  auto segment_cleaner = SegmentCleaner::create(
     cleaner_config,
     std::move(sms),
     *backref_manager,
     cleaner_is_detailed);
 
   if (journal_type == journal_type_t::SEGMENTED) {
-    cache->set_segment_provider(*async_cleaner);
-    async_cleaner->set_journal_trimmer(*journal_trimmer);
+    cache->set_segment_provider(*segment_cleaner);
+    segment_cleaner->set_journal_trimmer(*journal_trimmer);
   }
 
   JournalRef journal;
   if (journal_type == journal_type_t::SEGMENTED) {
     journal = journal::make_segmented(
-      *async_cleaner,
+      *segment_cleaner,
       *journal_trimmer);
   } else {
     journal = journal::make_circularbounded(
@@ -702,7 +702,7 @@ TransactionManagerRef make_transaction_manager(
       "");
   }
 
-  epm->init(std::move(journal_trimmer), std::move(async_cleaner));
+  epm->init(std::move(journal_trimmer), std::move(segment_cleaner));
   epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(
