@@ -36,22 +36,19 @@ namespace crimson::osd {
 PerShardState::PerShardState(
   int whoami,
   ceph::mono_time startup_time,
+  PerfCounters *perf,
+  PerfCounters *recoverystate_perf,
   crimson::os::FuturizedStore &store)
   : whoami(whoami),
     store(store),
+    perf(perf), recoverystate_perf(recoverystate_perf),
     throttler(crimson::common::local_conf()),
     obc_registry(crimson::common::local_conf()),
     next_tid(
       static_cast<ceph_tid_t>(seastar::this_shard_id()) <<
       (std::numeric_limits<ceph_tid_t>::digits - 8)),
     startup_time(startup_time)
-{
-  perf = build_osd_logger(&cct);
-  cct.get_perfcounters_collection()->add(perf);
-
-  recoverystate_perf = build_recoverystate_perf(&cct);
-  cct.get_perfcounters_collection()->add(recoverystate_perf);
-}
+{}
 
 seastar::future<> PerShardState::stop_pgs()
 {
@@ -130,6 +127,12 @@ OSDSingletonState::OSDSingletonState(
 {
   crimson::common::local_conf().add_observer(this);
   osdmaps[0] = boost::make_local_shared<OSDMap>();
+
+  perf = build_osd_logger(&cct);
+  cct.get_perfcounters_collection()->add(perf);
+
+  recoverystate_perf = build_recoverystate_perf(&cct);
+  cct.get_perfcounters_collection()->add(recoverystate_perf);
 }
 
 seastar::future<> OSDSingletonState::send_to_osd(

@@ -145,6 +145,8 @@ public:
   PerShardState(
     int whoami,
     ceph::mono_time startup_time,
+    PerfCounters *perf,
+    PerfCounters *recoverystate_perf,
     crimson::os::FuturizedStore &store);
 };
 
@@ -172,6 +174,8 @@ private:
   const int whoami;
 
   crimson::common::CephContext cct;
+  PerfCounters *perf = nullptr;
+  PerfCounters *recoverystate_perf = nullptr;
 
   OSDState osd_state;
 
