@@ -82,24 +82,120 @@ public:
 
   seastar::future<> set_up_epoch(epoch_t e);
 
-  FORWARD(pg_created, pg_created, osd_singleton_state.pg_map)
-  auto load_pgs() {
-    return osd_singleton_state.load_pgs(shard_services);
+  template <typename F>
+  auto with_remote_shard_state(core_id_t core, F &&f) {
+    ceph_assert(core == 0);
+    auto &local_state_ref = local_state;
+    auto &shard_services_ref = shard_services;
+    return seastar::smp::submit_to(
+      core,
+      [f=std::forward<F>(f), &local_state_ref, &shard_services_ref]() mutable {
+	return std::invoke(
+	  std::move(f), local_state_ref, shard_services_ref);
+      });
   }
-  FORWARD_TO_OSD_SINGLETON(stop_pgs)
-  FORWARD_CONST(get_pg_stats, get_pg_stats, osd_singleton_state)
 
-  FORWARD_CONST(for_each_pg, for_each_pg, osd_singleton_state)
-  auto get_num_pgs() const { return osd_singleton_state.pg_map.get_pgs().size(); }
+  /// Runs opref on the appropriate core, creating the pg as necessary.
+  template <typename T>
+  seastar::future<> run_with_pg_maybe_create(
+    typename T::IRef op
+  ) {
+    ceph_assert(op->use_count() == 1);
+    auto &logger = crimson::get_logger(ceph_subsys_osd);
+    static_assert(T::can_create());
+    logger.debug("{}: can_create", *op);
 
-  auto broadcast_map_to_pgs(epoch_t epoch) {
-    return osd_singleton_state.broadcast_map_to_pgs(
-      *this, shard_services, epoch);
+    auto core = osd_singleton_state.pg_to_shard_mapping.maybe_create_pg(
+      op->get_pgid());
+
+    local_state.registry.remove_from_registry(*op);
+    return with_remote_shard_state(
+      core,
+      [op=std::move(op)](
+	PerShardState &per_shard_state,
+	ShardServices &shard_services) mutable {
+	per_shard_state.registry.add_to_registry(*op);
+	auto &logger = crimson::get_logger(ceph_subsys_osd);
+	auto &opref = *op;
+	return opref.template with_blocking_event<
+	  PGMap::PGCreationBlockingEvent
+	  >([&shard_services, &opref](
+	      auto &&trigger) {
+	    return shard_services.get_or_create_pg(
+	      std::move(trigger),
+	      opref.get_pgid(), opref.get_epoch(),
+	      std::move(opref.get_create_info()));
+	  }).then([&logger, &shard_services, &opref](Ref<PG> pgref) {
+	    logger.debug("{}: have_pg", opref);
+	    return opref.with_pg(shard_services, pgref);
+	  }).then([op=std::move(op)] {});
+      });
   }
+
+  /// Runs opref on the appropriate core, waiting for pg as necessary
+  template <typename T>
+  seastar::future<> run_with_pg_maybe_wait(
+    typename T::IRef op
+  ) {
+    ceph_assert(op->use_count() == 1);
+    auto &logger = crimson::get_logger(ceph_subsys_osd);
+    static_assert(!T::can_create());
+    logger.debug("{}: !can_create", *op);
+
+    auto core = osd_singleton_state.pg_to_shard_mapping.maybe_create_pg(
+      op->get_pgid());
+
+    local_state.registry.remove_from_registry(*op);
+    return with_remote_shard_state(
+      core,
+      [op=std::move(op)](
+	PerShardState &per_shard_state,
+	ShardServices &shard_services) mutable {
+	per_shard_state.registry.add_to_registry(*op);
+	auto &logger = crimson::get_logger(ceph_subsys_osd);
+	auto &opref = *op;
+	return opref.template with_blocking_event<
+	  PGMap::PGCreationBlockingEvent
+	  >([&shard_services, &opref](
+	      auto &&trigger) {
+	    return shard_services.wait_for_pg(
+	      std::move(trigger), opref.get_pgid());
+	  }).then([&logger, &shard_services, &opref](Ref<PG> pgref) {
+	    logger.debug("{}: have_pg", opref);
+	    return opref.with_pg(shard_services, pgref);
+	  }).then([op=std::move(op)] {});
+      });
+  }
+
+  seastar::future<> load_pgs();
+  seastar::future<> stop_pgs();
+
+  std::map<pg_t, pg_stat_t> get_pg_stats() const;
+
+  template <typename F>
+  void for_each_pg(F &&f) const {
+    for (auto &&pg: local_state.pg_map.get_pgs()) {
+      std::apply(f, pg);
+    }
+  }
+
+  auto get_num_pgs() const {
+    return osd_singleton_state.pg_to_shard_mapping.get_num_pgs();
+  }
+
+  seastar::future<> broadcast_map_to_pgs(epoch_t epoch);
 
   template <typename F>
   auto with_pg(spg_t pgid, F &&f) {
-    return std::invoke(std::forward<F>(f), osd_singleton_state.get_pg(pgid));
+    core_id_t core = osd_singleton_state.pg_to_shard_mapping.get_pg_mapping(
+      pgid);
+    return with_remote_shard_state(
+      core,
+      [pgid, f=std::move(f)](auto &local_state, auto &local_service) mutable {
+	return std::invoke(
+	  std::move(f),
+	  local_state.pg_map.get_pg(pgid));
+      });
   }
 
   template <typename T, typename... Args>
@@ -108,8 +204,9 @@ public:
       std::forward<Args>(args)...);
     auto &logger = crimson::get_logger(ceph_subsys_osd);
     logger.debug("{}: starting {}", *op, __func__);
-    auto &opref = *op;
 
+    auto &opref = *op;
+    auto id = op->get_id();
     auto fut = opref.template enter_stage<>(
       opref.get_connection_pipeline().await_active
     ).then([this, &opref, &logger] {
@@ -135,37 +232,17 @@ public:
       logger.debug("{}: got map {}, entering get_pg", opref, epoch);
       return opref.template enter_stage<>(
 	opref.get_connection_pipeline().get_pg);
-    }).then([this, &logger, &opref] {
+    }).then([this, &logger, &opref, op=std::move(op)]() mutable {
       logger.debug("{}: in get_pg", opref);
       if constexpr (T::can_create()) {
 	logger.debug("{}: can_create", opref);
-	return opref.template with_blocking_event<
-	  PGMap::PGCreationBlockingEvent
-	  >([this, &opref](auto &&trigger) {
-	    std::ignore = this; // avoid clang warning
-	    return osd_singleton_state.get_or_create_pg(
-	      *this,
-	      shard_services,
-	      std::move(trigger),
-	      opref.get_pgid(), opref.get_epoch(),
-	      std::move(opref.get_create_info()));
-	  });
+	return run_with_pg_maybe_create<T>(std::move(op));
       } else {
 	logger.debug("{}: !can_create", opref);
-	return opref.template with_blocking_event<
-	  PGMap::PGCreationBlockingEvent
-	  >([this, &opref](auto &&trigger) {
-	    std::ignore = this; // avoid clang warning
-	    return osd_singleton_state.wait_for_pg(
-	      std::move(trigger), opref.get_pgid());
-	  });
+	return run_with_pg_maybe_wait<T>(std::move(op));
       }
-    }).then([this, &logger, &opref](Ref<PG> pgref) {
-      logger.debug("{}: have_pg", opref);
-      return opref.with_pg(get_shard_services(), pgref);
-    }).then([op] { /* Retain refcount on op until completion */ });
-
-    return std::make_pair(std::move(op), std::move(fut));
+    });
+    return std::make_pair(id, std::move(fut));
   }
 };
 
