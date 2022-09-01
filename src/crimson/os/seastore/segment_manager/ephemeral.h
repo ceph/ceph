@@ -102,7 +102,7 @@ public:
     size_t len,
     ceph::bufferptr &out) final;
 
-  size_t get_size() const final {
+  size_t get_available_size() const final {
     return config.size;
   }
   seastore_off_t get_block_size() const final {
