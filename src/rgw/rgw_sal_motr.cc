@@ -2949,6 +2949,13 @@ int MotrStore::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* 
   return 0;
 }
 
+int MotrStore::list_all_zones(const DoutPrefixProvider* dpp,
+                            std::list<std::string>& zone_ids)
+{
+  zone_ids.push_back(zone.get_id());
+    return 0;
+}
+
 int MotrStore::cluster_stat(RGWClusterStat& stats)
 {
   return 0;

@@ -597,6 +597,11 @@ namespace rgw::sal {
     return realm->get_id();
   }
 
+  RGWBucketSyncPolicyHandlerRef DBZone::get_sync_policy_handler()
+  {
+    return nullptr;
+  }
+
   std::unique_ptr<LuaManager> DBStore::get_lua_manager()
   {
     return std::make_unique<DBLuaManager>(this);
@@ -1748,6 +1753,13 @@ namespace rgw::sal {
       return -ENOMEM;
 
     zg->reset(group);
+    return 0;
+  }
+
+  int DBStore::list_all_zones(const DoutPrefixProvider* dpp,
+			      std::list<std::string>& zone_ids)
+  {
+    zone_ids.push_back(zone.get_id());
     return 0;
   }
 
