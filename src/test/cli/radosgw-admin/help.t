@@ -363,7 +363,7 @@
      --event-id                event id in a pubsub subscription
   
   Script options:
-     --context                 context in which the script runs. one of: preRequest, postRequest, background
+     --context                 context in which the script runs. one of: prerequest, postrequest, background, getdata, putdata
      --package                 name of the lua package that should be added/removed to/from the allowlist
      --allow-compilation       package is allowed to compile C code as part of its installation
   

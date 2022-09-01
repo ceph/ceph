@@ -122,6 +122,9 @@ static inline int posix_errortrans(int r)
   return r;
 }
 
+
+static const std::string LUA_CONTEXT_LIST("prerequest, postrequest, background, getdata, putdata");
+
 void usage()
 {
   cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
@@ -480,7 +483,7 @@ void usage()
   cout << "   --subscription            pubsub subscription name\n";
   cout << "   --event-id                event id in a pubsub subscription\n";
   cout << "\nScript options:\n";
-  cout << "   --context                 context in which the script runs. one of: preRequest, postRequest, background\n";
+  cout << "   --context                 context in which the script runs. one of: "+LUA_CONTEXT_LIST+"\n";
   cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
   cout << "   --allow-compilation       package is allowed to compile C code as part of its installation\n";
   cout << "\nradoslist options:\n";
@@ -10396,7 +10399,7 @@ next:
     }
     const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
     if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest, background" << std::endl;
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
     if (script_ctx == rgw::lua::context::background && !tenant.empty()) {
@@ -10418,7 +10421,7 @@ next:
     }
     const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
     if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest, background" << std::endl;
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
     auto lua_manager = store->get_lua_manager();
@@ -10442,7 +10445,7 @@ next:
     }
     const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
     if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest, background" << std::endl;
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
     auto lua_manager = store->get_lua_manager();

@@ -4,14 +4,15 @@
 #include "include/common_fwd.h"
 #include "rgw_sal_fwd.h"
 
-struct req_state;
+struct lua_State;
+class req_state;
 class RGWREST;
 class OpsLogSink;
-namespace rgw::lua {
-  class Background;
-}
 
 namespace rgw::lua::request {
+
+// create the request metatable
+void create_top_metatable(lua_State* L, req_state* s, const char* op_name);
 
 // execute a lua script in the Request context
 int execute(
@@ -20,8 +21,7 @@ int execute(
     OpsLogSink* olog,
     req_state *s, 
     const char* op_name,
-    const std::string& script,
-    rgw::lua::Background* background = nullptr);
+    const std::string& script);
 
-}
+} // namespace rgw::lua::request
 
