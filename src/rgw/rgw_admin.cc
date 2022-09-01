@@ -63,6 +63,8 @@ extern "C" {
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_checkpoint.h"
 #include "rgw_lua.h"
+#include "rgw_sal.h"
+#include "rgw_sal_config.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -4199,6 +4201,8 @@ int main(int argc, const char **argv)
   /* common_init_finish needs to be called after g_conf().set_val() */
   common_init_finish(g_ceph_context);
 
+  std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
+
   if (args.empty()) {
     usage();
     exit(1);
@@ -4370,6 +4374,13 @@ int main(int argc, const char **argv)
 
     StoreManager::Config cfg = StoreManager::get_config(true, g_ceph_context);
 
+    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+    cfgstore = StoreManager::create_config_store(dpp(), config_store_type);
+    if (!cfgstore) {
+      cerr << "couldn't init config storage provider" << std::endl;
+      return EIO;
+    }
+
     if (raw_storage_op) {
       store = StoreManager::get_raw_storage(dpp(),
 					    g_ceph_context,
@@ -4388,7 +4399,7 @@ int main(int argc, const char **argv)
     }
     if (!store) {
       cerr << "couldn't init storage provider" << std::endl;
-      return 5; //EIO
+      return EIO;
     }
 
     /* Needs to be after the store is initialized.  Note, user could be empty here. */
