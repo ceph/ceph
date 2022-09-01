@@ -45,7 +45,7 @@ namespace rgw {
     int stop();
   };
 
-  extern RGWLib rgwlib;
+  extern RGWLib* g_rgwlib;
 
 /* request interface */
 
@@ -130,7 +130,7 @@ namespace rgw {
     inline req_state* get_state() { return this->RGWRequest::s; }
 
     RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user)
-      :  RGWRequest(rgwlib.get_store()->get_new_req_id()),
+      :  RGWRequest(g_rgwlib->get_store()->get_new_req_id()),
 	 tuser(std::move(_user)), cct(_cct)
       {}
 
@@ -188,7 +188,7 @@ namespace rgw {
 	io_ctx.init(_cct);
 
 	RGWRequest::init_state(&rstate);
-	RGWHandler::init(rgwlib.get_store(), &rstate, &io_ctx);
+	RGWHandler::init(g_rgwlib->get_store(), &rstate, &io_ctx);
 
 	get_state()->req_id = store->zone_unique_id(id);
 	get_state()->trans_id = store->zone_unique_trans_id(id);

@@ -276,7 +276,6 @@ if(WITH_RADOSGW_MOTR)
 endif()
 
 set(rgw_a_srcs
-  librgw.cc
   rgw_appmain.cc
   rgw_asio_client.cc
   rgw_asio_frontend.cc
@@ -286,6 +285,7 @@ set(rgw_a_srcs
   rgw_frontend.cc
   rgw_http_client_curl.cc
   rgw_kmip_client_impl.cc
+  rgw_lib.cc
   rgw_loadgen.cc
   rgw_loadgen_process.cc
   rgw_log.cc

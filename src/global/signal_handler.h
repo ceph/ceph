@@ -22,7 +22,7 @@
 
 typedef void (*signal_handler_t)(int);
 namespace ceph {
-  struct BackTrace;
+struct BackTrace;
 }
 
 #if defined(HAVE_SIGDESCR_NP)
