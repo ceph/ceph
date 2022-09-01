@@ -502,6 +502,10 @@ public:
     return paddr_t(device, offset);
   }
 
+  void swap(paddr_t &other) {
+    std::swap(internal_paddr, other.internal_paddr);
+  }
+
   device_id_t get_device_id() const {
     return static_cast<device_id_t>(internal_paddr >> BLOCK_OFF_BITS);
   }
@@ -879,6 +883,11 @@ enum class journal_type_t {
 struct journal_seq_t {
   segment_seq_t segment_seq = NULL_SEG_SEQ;
   paddr_t offset = P_ADDR_NULL;
+
+  void swap(journal_seq_t &other) {
+    std::swap(segment_seq, other.segment_seq);
+    std::swap(offset, other.offset);
+  }
 
   // produces a pseudo journal_seq_t relative to this by offset
   journal_seq_t add_offset(

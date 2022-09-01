@@ -662,23 +662,30 @@ TransactionManagerRef make_transaction_manager(
 
   bool cleaner_is_detailed;
   AsyncCleaner::config_t cleaner_config;
+  JournalTrimmerImpl::config_t trimmer_config;
   if (is_test) {
     cleaner_is_detailed = true;
-    cleaner_config = AsyncCleaner::config_t::get_test(
+    cleaner_config = AsyncCleaner::config_t::get_test();
+    trimmer_config = JournalTrimmerImpl::config_t::get_test(
         roll_size, journal_type);
   } else {
     cleaner_is_detailed = false;
-    cleaner_config = AsyncCleaner::config_t::get_default(
+    cleaner_config = AsyncCleaner::config_t::get_default();
+    trimmer_config = JournalTrimmerImpl::config_t::get_default(
         roll_size, journal_type);
   }
+
+  auto ref_journal_trimmer = JournalTrimmerImpl::create(
+      *backref_manager, trimmer_config,
+      journal_type, roll_start, roll_size);
+  JournalTrimmer &journal_trimmer = *ref_journal_trimmer;
+
   auto async_cleaner = std::make_unique<AsyncCleaner>(
     cleaner_config,
     std::move(sms),
     *backref_manager,
     cleaner_is_detailed,
-    journal_type,
-    roll_start,
-    roll_size);
+    std::move(ref_journal_trimmer));
 
   if (journal_type == journal_type_t::SEGMENTED) {
     cache->set_segment_provider(*async_cleaner);
@@ -686,10 +693,12 @@ TransactionManagerRef make_transaction_manager(
 
   JournalRef journal;
   if (journal_type == journal_type_t::SEGMENTED) {
-    journal = journal::make_segmented(*async_cleaner, *async_cleaner);
+    journal = journal::make_segmented(
+      *async_cleaner,
+      journal_trimmer);
   } else {
     journal = journal::make_circularbounded(
-      *async_cleaner,
+      journal_trimmer,
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
   }
