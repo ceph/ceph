@@ -1946,6 +1946,12 @@ void BlueStore::OnodeSpace::_remove(const ghobject_t& oid)
   onode_map.erase(oid);
 }
 
+BlueStore::OnodeSpace::onode_map_t::node_type BlueStore::OnodeSpace::_extract(const ghobject_t& oid)
+{
+  ldout(cache->cct, 20) << __func__ << " " << oid << " " << dendl;
+  return onode_map.extract(oid);
+}
+
 BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 {
   ldout(cache->cct, 30) << __func__ << dendl;
@@ -3678,7 +3684,6 @@ void BlueStore::Onode::get() {
   }
 }
 void BlueStore::Onode::put() {
-  ++put_nref;
   int n = --nref;
   if (n == 1) {
     OnodeCacheShard* ocs = c->get_onode_cache();
@@ -3697,15 +3702,21 @@ void BlueStore::Onode::put() {
         ocs->_unpin(this);
       } else {
         ocs->_unpin_and_rm(this);
-        // remove will also decrement nref
-        c->onode_map._remove(oid);
+	// hold onode for a bit longer
+	auto hold = c->onode_map._extract(oid);
+	// the idea is to yank onode while still under lock
+	// and let current put() finish before starting next put()
+	ocs->lock.unlock();
+	// here is logically end of current put()
+	// finally nref-- on the onode oid, here we will call put() again
+	return;
       }
     }
     ocs->lock.unlock();
-  }
-  auto pn = --put_nref;
-  if (nref == 0 && pn == 0) {
-    delete this;
+  } else {
+    if (n == 0) {
+      delete this;
+    }
   }
 }
 

@@ -1137,7 +1137,6 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     std::atomic_int nref;  ///< reference count
-    std::atomic_int put_nref = {0};
     Collection *c;
     ghobject_t oid;
 
@@ -1409,15 +1408,17 @@ public:
 
   struct OnodeSpace {
     OnodeCacheShard *cache;
+    using onode_map_t = mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef>;
 
   private:
-    /// forward lookups
-    mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
+    onode_map_t onode_map;
 
+    /// forward lookups
     friend struct Collection; // for split_cache()
     friend struct Onode; // for put()
     friend struct LruOnodeCacheShard;
     void _remove(const ghobject_t& oid);
+    onode_map_t::node_type _extract(const ghobject_t& oid);
   public:
     OnodeSpace(OnodeCacheShard *c) : cache(c) {}
     ~OnodeSpace() {
