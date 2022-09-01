@@ -38,6 +38,7 @@ void OSDOperationRegistry::do_stop()
 }
 
 OSDOperationRegistry::OSDOperationRegistry()
+  : OperationRegistryT(seastar::this_shard_id())
 {
   constexpr auto historic_reg_index =
     static_cast<size_t>(OperationTypeCode::historic_client_request);
