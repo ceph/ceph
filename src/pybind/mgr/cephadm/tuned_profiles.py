@@ -47,16 +47,39 @@ class TunedProfileUtils():
             self._write_tuned_profiles(host, profiles)
 
     def _remove_stray_tuned_profiles(self, host: str, profiles: List[Dict[str, str]]) -> None:
+        """
+        this function looks at the contents of /etc/sysctl.d/ for profiles we have written
+        that should now be removed. It assumes any file with "-cephadm-tuned-profile.conf" in
+        it is written by us any without that are not. Only files written by us are considered
+        candidates for removal. The "profiles" parameter is a list of dictionaries that map
+        profile names to the file contents to actually be written to the
+        /etc/sysctl.d/<profile-name>-cephadm-tuned-profile.conf. For example
+        [
+            {
+                'profile1': 'setting1: value1\nsetting2: value2'
+            },
+            {
+                'profile2': 'setting3: value3'
+            }
+        ]
+        what we want to end up doing is going through the keys of the dicts and appending
+        -cephadm-tuned-profile.conf to the profile names to build our list of profile files that
+        SHOULD be on the host. Then if we see any file names that don't match this, but
+        DO include "-cephadm-tuned-profile.conf" (implying they're from us), remove them.
+        """
         if host in self.mgr.offline_hosts:
             return
         cmd = ['ls', SYSCTL_DIR]
         found_files = self.mgr.ssh.check_execute_command(host, cmd).split('\n')
         found_files = [s.strip() for s in found_files]
+        profile_names: List[str] = sum([[*p] for p in profiles], [])  # extract all profiles names
+        profile_names = list(set(profile_names))  # remove duplicates
+        expected_files = [p + '-cephadm-tuned-profile.conf' for p in profile_names]
         updated = False
         for file in found_files:
             if '-cephadm-tuned-profile.conf' not in file:
                 continue
-            if not any(file.split('-')[0] in p.keys() for p in profiles):
+            if file not in expected_files:
                 logger.info(f'Removing stray tuned profile file {file}')
                 cmd = ['rm', '-f', f'{SYSCTL_DIR}/{file}']
                 self.mgr.ssh.check_execute_command(host, cmd)
