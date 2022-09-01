@@ -2338,3 +2338,47 @@ TEST(LibRadosAio, PoolEIOFlag) {
   ASSERT_TRUE(max_success + 1 == min_failed);
   my_lock.unlock();
 }
+
+// This test case reproduces https://tracker.ceph.com/issues/57152
+TEST(LibRadosAio, MultiReads) {
+
+  // here we test multithreaded aio reads
+
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  auto my_completion = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ASSERT_TRUE(my_completion);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion.get(),
+                                           bl1, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+
+  // Don't use std::vector to store bufferlists (e.g for parallelizing aio_reads),
+  // as they are being moved whenever the vector resizes
+  // and will cause invalidated references.
+  std::deque<std::pair<bufferlist, std::unique_ptr<AioCompletion>>> reads;
+  for (int i = 0; i < 100; i++) {
+    // std::deque is appropriate here as emplace_back() is obliged to
+    // preserve the referenced inserted element. (Unlike insert() or erase())
+    auto& [bl, aiocp] = reads.emplace_back();
+    aiocp = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+    ASSERT_TRUE(aiocp);
+    ASSERT_EQ(0, test_data.m_ioctx.aio_read("foo", aiocp.get(),
+                                            &bl, sizeof(buf), 0));
+  }
+  for (auto& [bl, aiocp] : reads) {
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, aiocp->wait_for_complete());
+    }
+    ASSERT_EQ((int)sizeof(buf), aiocp->get_return_value());
+    ASSERT_EQ(0, memcmp(buf, bl.c_str(), sizeof(buf)));
+  }
+}
