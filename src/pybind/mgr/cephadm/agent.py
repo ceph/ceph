@@ -14,15 +14,14 @@ import tempfile
 import threading
 import time
 
-
-from mgr_util import verify_tls_files
-from orchestrator import DaemonDescriptionStatus, OrchestratorError
+from orchestrator import DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.ssl_cert_utils import SSLCerts
+from mgr_util import test_port_allocation, PortAlreadyInUse
 
 from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional
 
@@ -52,62 +51,43 @@ class AgentEndpoint:
         self.ssl_certs = SSLCerts()
         self.server_port = 7150
         self.server_addr = self.mgr.get_mgr_ip()
-        self.host_data: Server = None
 
     def configure_routes(self) -> None:
-
-        self.host_data = HostData(self.mgr,
-                                  self.server_port,
-                                  self.server_addr,
-                                  self.cert_file.name,
-                                  self.key_file.name)
-
-        # configure routes
         d = cherrypy.dispatch.RoutesDispatcher()
-        d.connect(name='host-data', route='/',
+        d.connect(name='host-data', route='/data',
                   controller=self.host_data.POST,
                   conditions=dict(method=['POST']))
+        cherrypy.tree.mount(None, '/', config={'/': {'request.dispatch': d}})
 
-        cherrypy.tree.mount(None, '/data', config={'/': {'request.dispatch': d}})
-
-    def configure_tls(self) -> None:
-        try:
-            old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
-            old_key = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_KEY)
-            if not old_key or not old_cert:
-                raise OrchestratorError('No old credentials for agent found')
+    def configure_tls(self, server: Server) -> None:
+        old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
+        old_key = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_KEY)
+        if old_cert and old_key:
             self.ssl_certs.load_root_credentials(old_cert, old_key)
-        except (OrchestratorError, json.decoder.JSONDecodeError, KeyError, ValueError):
+        else:
             self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
             self.mgr.set_store(self.KV_STORE_AGENT_ROOT_CERT, self.ssl_certs.get_root_cert())
             self.mgr.set_store(self.KV_STORE_AGENT_ROOT_KEY, self.ssl_certs.get_root_key())
 
-        cert, key = self.ssl_certs.generate_cert(self.mgr.get_mgr_ip())
-        self.key_file = tempfile.NamedTemporaryFile()
-        self.key_file.write(key.encode('utf-8'))
-        self.key_file.flush()  # pkey_tmp must not be gc'ed
-        self.cert_file = tempfile.NamedTemporaryFile()
-        self.cert_file.write(cert.encode('utf-8'))
-        self.cert_file.flush()  # cert_tmp must not be gc'ed
-        verify_tls_files(self.cert_file.name, self.key_file.name)
+        host = self.mgr.get_hostname()
+        addr = self.mgr.get_mgr_ip()
+        server.ssl_certificate, server.ssl_private_key = self.ssl_certs.generate_cert_files(host, addr)
 
     def find_free_port(self) -> None:
         max_port = self.server_port + 150
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         while self.server_port <= max_port:
             try:
-                sock.bind((self.server_addr, self.server_port))
-                sock.close()
+                test_port_allocation(self.server_addr, self.server_port)
                 self.host_data.socket_port = self.server_port
                 self.mgr.log.debug(f'Cephadm agent endpoint using {self.server_port}')
                 return
-            except OSError:
+            except PortAlreadyInUse:
                 self.server_port += 1
-        self.mgr.log.error(
-            'Cephadm agent endpoint could not find free port in range 7150-7300 and failed to start')
+        self.mgr.log.error(f'Cephadm agent could not find free port in range {max_port - 150}-{max_port} and failed to start')
 
     def configure(self) -> None:
-        self.configure_tls()
+        self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
+        self.configure_tls(self.host_data)
         self.configure_routes()
         self.find_free_port()
 
@@ -115,14 +95,19 @@ class AgentEndpoint:
 class HostData(Server):
     exposed = True
 
-    def __init__(self, mgr: "CephadmOrchestrator", port: int, host: str, ssl_ca_cert: str, ssl_priv_key: str):
+    def __init__(self, mgr: "CephadmOrchestrator", port: int, host: str):
         self.mgr = mgr
         super().__init__()
         self.socket_port = port
-        self.ssl_certificate = ssl_ca_cert
-        self.ssl_private_key = ssl_priv_key
-        self._socket_host = host
+        self.socket_host = host
         self.subscribe()
+
+    def stop(self) -> None:
+        # we must call unsubscribe before stopping the server,
+        # otherwise the port is not released and we will get
+        # an exception when trying to restart it
+        self.unsubscribe()
+        super().stop()
 
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
@@ -262,7 +247,8 @@ class AgentMessageThread(threading.Thread):
             root_cert_tmp.flush()
             root_cert_fname = root_cert_tmp.name
 
-            cert, key = self.agent.ssl_certs.generate_cert(self.mgr.get_mgr_ip())
+            cert, key = self.agent.ssl_certs.generate_cert(
+                self.mgr.get_hostname(), self.mgr.get_mgr_ip())
 
             cert_tmp = tempfile.NamedTemporaryFile()
             cert_tmp.write(cert.encode('utf-8'))

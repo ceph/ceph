@@ -51,6 +51,10 @@ UNDERLINE_SEQ = "\033[4m"
 logger = logging.getLogger(__name__)
 
 
+class PortAlreadyInUse(Exception):
+    pass
+
+
 class CephfsConnectionException(Exception):
     def __init__(self, error_code: int, error_message: str):
         self.errno = error_code
@@ -409,6 +413,22 @@ def format_bytes(n: int, width: int, colored: bool = False) -> str:
     return format_units(n, width, colored, decimal=False)
 
 
+def test_port_allocation(addr: str, port: int) -> None:
+    """Checks if the port is available
+    :raises PortAlreadyInUse: in case port is already in use
+    :raises Exception: any generic error other than port already in use
+    """
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind((addr, port))
+        sock.close()
+    except socket.error as e:
+        if e.errno == errno.EADDRINUSE:
+            raise PortAlreadyInUse
+        else:
+            raise e
+
+
 def merge_dicts(*args: Dict[T, Any]) -> Dict[T, Any]:
     """
     >>> merge_dicts({1:2}, {3:4})
@@ -492,7 +512,7 @@ def create_self_signed_cert(organisation: str = 'Ceph',
                             common_name: str = 'mgr',
                             dname: Optional[Dict[str, str]] = None) -> Tuple[str, str]:
     """Returns self-signed PEM certificates valid for 10 years.
-    
+
     The optional dname parameter provides complete control of the cert/key
     creation by supporting all valid RDNs via a dictionary. However, if dname
     is not provided the default O and CN settings will be applied.
