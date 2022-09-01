@@ -1029,6 +1029,7 @@ class MotrStore : public StoreStore {
     virtual void set_luarocks_path(const std::string& path) override {
       luarocks_path = path;
     }
+    virtual void register_admin_apis(RGWRESTMgr* mgr) override { };
 
     int open_idx(struct m0_uint128 *id, bool create, struct m0_idx *out);
     void close_idx(struct m0_idx *idx) { m0_idx_fini(idx); }
