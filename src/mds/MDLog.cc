@@ -840,9 +840,10 @@ void MDLog::_trim_expired_segments()
 	       << " <= " << ls->seq << "/" << ls->offset << dendl;
       break;
     }
-    //avoid triming if the SP has other references in the MDS   
-    //In this context the SP has 3 references: ls / expired_segments / segments 
-    if ( ls.use_count() > 3 ){ //ugly: mv to const if we want this approch
+    // avoid triming if the LogSegmentRef has other references in the MDS.   
+    // in the context of mdlog: it has LS_REF_COUNTS(3) references from - 
+    // local ls / expired_segments / segments 
+    if ( ls.use_count() > LS_REF_COUNTS ){ 
       dout(10) << "_trim_expired_segments skipping trim for " << ls->seq << "/" << ls->offset
 	       << " segment reference-count = " << ls.use_count() << dendl;
       break;

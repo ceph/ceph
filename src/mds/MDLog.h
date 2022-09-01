@@ -274,10 +274,6 @@ protected:
   MDSContext::vec waitfor_replay;
 
   // -- segments --
-  //std::map<uint64_t,LogSegment*> segments;
-  //std::set<LogSegment*> expiring_segments;
-  //std::set<LogSegment*> expired_segments;
-
   std::map<uint64_t,LogSegmentRef> segments;
   std::set<LogSegmentRef> expiring_segments;
   std::set<LogSegmentRef> expired_segments;  
@@ -314,5 +310,6 @@ private:
   LogEvent *cur_event = nullptr;
 
   LogSegmentRef null_lsr;
+  const int LS_REF_COUNTS = 3; // indicate the number of valid references mdlog has to a SP segment
 };
 #endif
