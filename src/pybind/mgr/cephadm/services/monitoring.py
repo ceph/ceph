@@ -319,6 +319,23 @@ class PrometheusService(CephadmService):
                 alerts = f.read()
             r['files']['/etc/prometheus/alerting/ceph_alerts.yml'] = alerts
 
+        # Include custom alerts if present in key value store. This enables the
+        # users to add custom alerts. Write the file in any case, so that if the
+        # content of the key value store changed, that file is overwritten
+        # (emptied in case they value has been removed from the key value
+        # store). This prevents the necessity to adapt `cephadm` binary to
+        # remove the file.
+        #
+        # Don't use the template engine for it as
+        #
+        #   1. the alerts are always static and
+        #   2. they are a template themselves for the Go template engine, which
+        #      use curly braces and escaping that is cumbersome and unnecessary
+        #      for the user.
+        #
+        r['files']['/etc/prometheus/alerting/custom_alerts.yml'] = \
+            self.mgr.get_store('services/prometheus/alerting/custom_alerts.yml', '')
+
         return r, sorted(self.calculate_deps())
 
     def calculate_deps(self) -> List[str]:
