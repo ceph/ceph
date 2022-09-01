@@ -146,7 +146,7 @@ void TMDriver::clear()
 
 size_t TMDriver::get_size() const
 {
-  return device->get_size() * .5;
+  return device->get_available_size() * .5;
 }
 
 seastar::future<> TMDriver::mkfs()

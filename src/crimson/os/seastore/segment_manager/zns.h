@@ -99,7 +99,7 @@ namespace crimson::os::seastore::segment_manager::zns {
       size_t len, 
       ceph::bufferptr &out) final;
 
-    size_t get_size() const final {
+    size_t get_available_size() const final {
       return metadata.size;
     };
 

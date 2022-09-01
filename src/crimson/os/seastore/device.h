@@ -71,7 +71,7 @@ public:
 
   virtual seastore_off_t get_block_size() const = 0;
 
-  virtual std::size_t get_size() const = 0;
+  virtual std::size_t get_available_size() const = 0;
 
   virtual secondary_device_set_t& get_secondary_devices() = 0;
 

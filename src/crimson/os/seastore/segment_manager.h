@@ -170,8 +170,8 @@ public:
   /* Methods for discovering device geometry, segmentid set, etc */
   virtual seastore_off_t get_segment_size() const = 0;
   virtual device_segment_id_t get_num_segments() const {
-    ceph_assert(get_size() % get_segment_size() == 0);
-    return ((device_segment_id_t)(get_size() / get_segment_size()));
+    ceph_assert(get_available_size() % get_segment_size() == 0);
+    return ((device_segment_id_t)(get_available_size() / get_segment_size()));
   }
 
   virtual ~SegmentManager() {}
