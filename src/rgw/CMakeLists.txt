@@ -121,12 +121,15 @@ set(librgw_common_srcs
   rgw_rados.cc
   rgw_resolve.cc
   rgw_rest.cc
+  rgw_rest_bucket.cc
   rgw_rest_client.cc
+  rgw_rest_config.cc
   rgw_rest_conn.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
   rgw_rest_pubsub.cc
   rgw_rest_pubsub_common.cc
+  rgw_rest_ratelimit.cc
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
@@ -283,16 +286,10 @@ set(rgw_a_srcs
   rgw_realm_watcher.cc
   rgw_os_lib.cc
   rgw_process.cc
-  rgw_rest_bucket.cc
-  rgw_rest_config.cc
-  rgw_rest_log.cc
-  rgw_rest_metadata.cc
-  rgw_rest_realm.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
   rgw_rest_info.cc
   rgw_rest_user.cc
-  rgw_rest_ratelimit.cc
   rgw_swift_auth.cc
   rgw_usage.cc
   rgw_opa.cc
