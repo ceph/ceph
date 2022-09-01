@@ -190,12 +190,6 @@ class Format(str, enum.Enum):
 SimpleData = Any
 
 
-ObjectResponseFuncType = Union[
-    Callable[..., Dict[Any, Any]],
-    Callable[..., List[Any]],
-]
-
-
 class SimpleDataProvider(Protocol):
     def to_simplified(self) -> SimpleData:
         """Return a simplified representation of the current object.
@@ -432,15 +426,29 @@ class ErrorResponse(ErrorResponseBase):
     @classmethod
     def wrap(
         cls: Type[E], exc: Exception, return_value: Optional[int] = None
-    ) -> E:
+    ) -> ErrorResponseBase:
+        if isinstance(exc, ErrorResponseBase):
+            return exc
         if return_value is None:
             try:
-                return_value = -int(getattr(exc, "errno"))
+                return_value = int(getattr(exc, "errno"))
+                if return_value > 0:
+                    return_value = -return_value
             except (AttributeError, ValueError):
                 pass
         err = cls(str(exc), return_value=return_value)
         setattr(err, "__cause__", exc)
         return err
+
+
+ObjectResponseFuncType = Union[
+    Callable[..., Dict[Any, Any]],
+    Callable[..., List[Any]],
+    Callable[..., SimpleDataProvider],
+    Callable[..., JSONDataProvider],
+    Callable[..., YAMLDataProvider],
+    Callable[..., ReturnValueProvider],
+]
 
 
 def _get_requested_format(f: ObjectResponseFuncType, kw: Dict[str, Any]) -> str:
@@ -529,3 +537,76 @@ class Responder:
         # on the ceph cli/api
         setattr(_format_response, "extra_args", {"format": str})
         return _format_response
+
+
+class ErrorResponseHandler:
+    """ErrorResponseHandler is a very simple decorator that handles functions that
+    raise exceptions inheriting from ErrorResponseBase. If such an exception
+    is raised that exception can and will be converted to a mgr response tuple.
+    This is similar to Responder but error handling is all this decorator does.
+    """
+
+    def __call__(self, f: Callable[..., Tuple[int, str, str]]) -> HandlerFuncType:
+        """Wrap a python function so that if the function raises an exception inheriting
+        ErrorResponderBase the error is correctly converted to a mgr response.
+        """
+
+        @wraps(f)
+        def _format_response(*args: Any, **kwargs: Any) -> Tuple[int, str, str]:
+            try:
+                retval, body, sts = f(*args, **kwargs)
+            except ErrorResponseBase as e:
+                return e.format_response()
+            return retval, body, sts
+
+        return _format_response
+
+
+class ConstantResponderBase:
+    """The constant responder base assumes that a wrapped function should not
+    be passing data back to the manager. It only responds with the default
+    (constant) values provided. The process_response function allows a subclass
+    to handle/log/validate any values that were returned from the wrapped
+    function.
+
+    This class can be used a building block for special decorators that
+    do not normally emit response data.
+    """
+
+    def mgr_return_value(self) -> int:
+        return 0
+
+    def mgr_body_value(self) -> str:
+        return ""
+
+    def mgr_status_value(self) -> str:
+        return ""
+
+    def process_response(self, result: Any) -> None:
+        return None
+
+    def __call__(self, f: Callable) -> HandlerFuncType:
+        """Wrap a python function so that if the function raises an exception
+        inheriting ErrorResponderBase the error is correctly converted to a mgr
+        response. Otherwise, it returns a default set of constant values.
+        """
+
+        @wraps(f)
+        def _format_response(*args: Any, **kwargs: Any) -> Tuple[int, str, str]:
+            try:
+                self.process_response(f(*args, **kwargs))
+            except ErrorResponseBase as e:
+                return e.format_response()
+            return self.mgr_return_value(), self.mgr_body_value(), self.mgr_status_value()
+        return _format_response
+
+
+class EmptyResponder(ConstantResponderBase):
+    """Always respond with an empty (string) body. Checks that the wrapped function
+    returned None in order to ensure it is not being used on functions that
+    return data objects.
+    """
+
+    def process_response(self, result: Any) -> None:
+        if result is not None:
+            raise ValueError("EmptyResponder expects None from wrapped functions")

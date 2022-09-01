@@ -108,9 +108,13 @@ following commands::
 Exposing commands
 -----------------
 
-There are two approaches for exposing a command. The first one is to
-use the ``@CLICommand`` decorator to decorate the method which handles
-the command. like this
+There are two approaches for exposing a command. The first method involves using
+the ``@CLICommand`` decorator to decorate the methods needed to handle a command.
+The second method uses a ``COMMANDS`` attribute defined for the module class.
+
+
+The CLICommand approach
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: python
 
@@ -131,7 +135,7 @@ the command. like this
        else:
            location = blackhole
        self.send_object_to(obj, location)
-       return HandleCommandResult(stdout=f'the black hole swallowed '{oid}'")
+       return HandleCommandResult(stdout=f"the black hole swallowed '{oid}'")
 
 The first parameter passed to ``CLICommand`` is the "name" of the command.
 Since there are lots of commands in Ceph, we tend to group related commands
@@ -164,7 +168,11 @@ In addition to ``@CLICommand``, you could also use ``@CLIReadCommand`` or
 ``@CLIWriteCommand`` if your command only requires read permissions or
 write permissions respectively.
 
-The second one is to set the ``COMMANDS`` class attribute of your module to
+
+The COMMANDS Approach
+~~~~~~~~~~~~~~~~~~~~~
+
+This method uses the ``COMMANDS`` class attribute of your module to define
 a list of dicts like this::
 
     COMMANDS = [
@@ -196,6 +204,192 @@ when they are sent:
 
 .. py:currentmodule:: mgr_module
 .. automethod:: MgrModule.handle_command
+
+
+Responses and Formatting
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Functions that handle manager commands are expected to return a three element
+tuple with the type signature ``Tuple[int, str, str]``. The first element is a
+return value/error code, where zero indicates no error and a negative `errno`_
+is typically used for error conditions.  The second element corresponds to the
+command's "output". The third element corresponds to the command's "error
+output" (akin to stderr) and is frequently used to report textual error details
+when the return code is non-zero. The ``mgr_module.HandleCommandResult`` type
+can also be used in lieu of a response tuple.
+
+.. _`errno`: https://man7.org/linux/man-pages/man3/errno.3.html
+
+When the implementation of a command raises an exception one of two possible
+approaches to handling the exception exist. First, the command function can do
+nothing and let the exception bubble up to the manager.  When this happens the
+manager will automatically set a return code to -EINVAL and record a trace-back
+in the error output. This trace-back can be very long in some cases. The second
+approach is to handle an exception within a try-except block and convert the
+exception to an error code that better fits the exception (converting a
+KeyError to -ENOENT, for example).  In this case the error output may also be
+set to something more specific and actionable by the one calling the command.
+
+In many cases, especially in more recent versions of Ceph, manager commands are
+designed to return structured output to the caller. Structured output includes
+machine-parsable data such as JSON, YAML, XML, etc. JSON is the most common
+structured output format returned by manager commands. As of Ceph Reef, there
+are a number of new decorators available from the ``object_format`` module that
+help manage formatting output and handling exceptions automatically.  The
+intent is that most of the implementation of a manager command can be written in
+an idiomatic (aka "Pythonic") style and the decorators will take care of most of
+the work needed to format the output and return manager response tuples.
+
+In most cases, net new code should use the ``Responder`` decorator. Example:
+
+.. code:: python
+
+   @CLICommand('antigravity list wormholes', perm='r')
+   @Responder()
+   def list_wormholes(self, oid: str, details: bool = False) -> List[Dict[str, Any]]:
+       '''List wormholes associated with the supplied oid.
+       '''
+       with self.open_wormhole_db() as db:
+           wormholes = db.query(oid=oid)
+       if not details:
+           return [{'name': wh.name} for wh in wormholes]
+       return [{'name': wh.name, 'age': wh.get_age(), 'destination': wh.dest}
+               for wh in wormholes]
+
+Formatting
+++++++++++
+
+The ``Responder`` decorator automatically takes care of converting Python
+objects into a response tuple with formatted output. By default, this decorator
+can automatically return JSON and YAML. When invoked from the command line the
+``--format`` flag can be used to select the response format. If left
+unspecified, JSON will be returned. The automatic formatting can be applied to
+any basic Python type: lists, dicts, str, int, etc. Other objects can be
+formatted automatically if they meet the ``SimpleDataProvider`` protocol - they
+provide a ``to_simplified`` method. The ``to_simplified`` function must return
+a simplified representation of the object made out of basic types.
+
+.. code:: python
+
+   class MyCleverObject:
+       def to_simplified(self) -> Dict[str, int]:
+           # returns a python object(s) made up from basic types
+           return {"gravitons": 999, "tachyons": 404}
+
+   @CLICommand('antigravity list wormholes', perm='r')
+   @Responder()
+   def list_wormholes(self, oid: str, details: bool = False) -> MyCleverObject:
+       '''List wormholes associated with the supplied oid.
+       '''
+       ...
+
+The behavior of the automatic output formatting can be customized and extednted
+to other types of formatting (XML, Plain Text, etc). As this is a complex
+topic, please refer to the module documentation for the ``object_format``
+module.
+
+
+
+Error Handling
+++++++++++++++
+
+Additionally, the ``Responder`` decorator can automatically handle converting
+some  exceptions into response tuples. Any raised exception inheriting from
+``ErrorResponseBase`` will be automatically converted into a response tuple.
+The common approach will be to use ``ErrorResponse``, an exception type that
+can be used directly and has arguments for the error output and return value or
+it can be constructed from an existing exception using the ``wrap``
+classmethod. The wrap classmethod will automatically use the exception text and
+if available the ``errno`` property of other exceptions.
+
+Converting our previous example to use this exception handling approach:
+
+.. code:: python
+
+   @CLICommand('antigravity list wormholes', perm='r')
+   @Responder()
+   def list_wormholes(self, oid: str, details: bool = False) -> List[Dict[str, Any]]:
+       '''List wormholes associated with the supplied oid.
+       '''
+       try:
+           with self.open_wormhole_db() as db:
+               wormholes = db.query(oid=oid)
+       except UnknownOIDError:
+            raise ErrorResponse(f"Unknown oid: {oid}", return_value=-errno.ENOENT)
+       except WormholeDBError as err:
+           raise ErrorResponse.wrap(err)
+       if not details:
+           return [{'name': wh.name} for wh in wormholes]
+       return [{'name': wh.name, 'age': wh.get_age(), 'destination': wh.dest}
+               for wh in wormholes]
+
+
+.. note:: Because the decorator can not determine the difference between a
+   programming mistake and an expected error condition it does not try to
+   catch all exceptions.
+
+
+
+Additional Decorators
++++++++++++++++++++++
+
+The ``object_format`` module provides additional decorators to complement
+``Responder`` but for cases where ``Responder`` is insufficient or too "heavy
+weight".
+
+The ``ErrorResponseHandler`` decorator exists for cases where you *must* still
+return a manager response tuple but want to handle errors as exceptions (as in
+typical Python code). In short, it works like ``Responder`` but only with
+regards to exceptions. Just like ``Responder`` it handles exceptions that
+inherit from ``ErrorResponseBase``. This can be useful in cases where you need
+to return raw data in the output. Example:
+
+.. code:: python
+
+   @CLICommand('antigravity dump config', perm='r')
+   @ErrorResponseHandler()
+   def dump_config(self, oid: str) -> Tuple[int, str, str]:
+       '''Dump configuration
+       '''
+       # we have no control over what data is inside the blob!
+       try:
+            blob = self.fetch_raw_config_blob(oid)
+            return 0, blob, ''
+       except KeyError:
+            raise ErrorResponse("Blob does not exist", return_value=-errno.ENOENT)
+
+
+The ``EmptyResponder`` decorator exists for cases where, on a success
+condition, no output should be generated at all. If you used ``Responder`` and
+default JSON formatting you may always see outputs like ``{}`` or ``[]`` if the
+command completes without error. Instead, ``EmptyResponder`` helps you create
+manager commands that obey the `Rule of Silence`_ when the command has no
+interesting output to emit on success. The functions that ``EmptyResponder``
+decorate should always return ``None``. Like both ``Responder`` and
+``ErrorResponseHandler`` exceptions that inhert from ``ErrorResponseBase`` will
+be automatically processed. Example:
+
+.. code:: python
+
+   @CLICommand('antigravity create wormhole', perm='rw')
+   @EmptyResponder()
+   def create_wormhole(self, oid: str, name: str) -> None:
+       '''Create a new wormhole.
+       '''
+       try:
+           with self.open_wormhole_db() as db:
+               wh = Wormhole(name)
+               db.insert(oid=oid, wormhole=wh)
+       except UnknownOIDError:
+           raise ErrorResponse(f"Unknown oid: {oid}", return_value=-errno.ENOENT)
+       except InvalidWormholeError as err:
+           raise ErrorResponse.wrap(err)
+       except WormholeDBError as err:
+           raise ErrorResponse.wrap(err)
+
+
+.. _`Rule of Silence`: http://www.linfo.org/rule_of_silence.html
+
 
 Configuration options
 ---------------------
