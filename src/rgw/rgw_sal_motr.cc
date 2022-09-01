@@ -2228,11 +2228,10 @@ int MotrObject::remove_mobj_and_index_entry(
         if (rc < 0) {
           ldpp_dout(dpp, 0) <<__func__<< ": ERROR: get_upload_id failed. rc=" << rc << dendl;
         } else {
-          std::string obj_key = delete_key;
-          obj_key = obj_key.erase(obj_key.size() - 1, 2);
-          std::string obj_fqdn = bucket_name + "/" + obj_key;
+          std::string obj_fqdn = bucket_name + "/" + delete_key;
           std::string obj_part_iname = "motr.rgw.object." + bucket_name + "." +
-                                       obj_key + "." + upload_id + ".parts";
+                                       this->get_name() + "." + upload_id +
+                                       ".parts";
           ldpp_dout(dpp, 20) << __func__ << ": object part index=" << obj_part_iname << dendl;
           ::Meta *mobj = reinterpret_cast<::Meta*>(&this->meta);
           motr_gc_obj_info gc_obj(upload_id, obj_fqdn, *mobj, std::time(nullptr),
