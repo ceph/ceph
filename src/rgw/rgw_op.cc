@@ -5284,6 +5284,74 @@ int RGWCopyObj::verify_permission(optional_yield y)
 					      RGW_PERM_READ)) { 
 	  return -EACCES;
 	}
+
+  // Check for tagging permissions
+  auto tag_directive_in_req = s->info.env->get("HTTP_X_AMZ_TAGGING_DIRECTIVE");
+  
+  TaggingDirective tag_directive_type = TaggingDirective::NO_TAGGING_DIRECTIVE;
+  if (tag_directive_in_req) {
+    std::string tagging_directive_str(tag_directive_in_req);
+    if (tagging_directive_str.compare("COPY") == 0)
+      tag_directive_type = TaggingDirective::COPY_TAGGING_DIRECTIVE;
+    else if (tagging_directive_str.compare("REPLACE") == 0)
+      tag_directive_type = TaggingDirective::REPLACE_TAGGING_DIRECTIVE;
+    else {
+      ldpp_dout(this, 0) << "ERROR: Invalid tagging directive " << dendl;
+      s->err.message = "Unknown tagging directive.";
+      return -EINVAL;
+    }
+  }
+  TaggingPermission tagging_permission = TaggingPermission::NO_TAGGING_PERM;
+
+  if(Effect::Allow == eval_identity_or_session_policies(this,s->iam_user_policies,
+                                                                  s->env,
+                                                                  rgw::IAM::s3PutObjectTagging,
+                                                                  obj_arn)) {
+      tagging_permission |= TaggingPermission::PUT_TAGGING_PERM;
+                                                                  }
+
+  if(Effect::Allow == eval_identity_or_session_policies(this,s->iam_user_policies,
+                                                                  s->env,
+                                                                  rgw::IAM::s3GetObjectTagging,
+                                                                  obj_arn)) {
+      tagging_permission |= TaggingPermission::GET_TAGGING_PERM;
+                                                                  }
+
+  op_ret = s->src_object->get_obj_attrs(s->yield, this);
+  if (op_ret == 0) {
+      attrs = s->src_object->get_attrs();
+      auto tags = attrs.find(RGW_ATTR_TAGS);
+
+      // Check if either of PutObjectTagging or GetObjectTagging permissions with respective tags are not present.
+      if (tagging_permission != (TaggingPermission::GET_TAGGING_PERM | TaggingPermission::PUT_TAGGING_PERM)) {
+        if (tags != attrs.end()) {
+          //tags present on source object
+          if ((tag_directive_type != TaggingDirective::REPLACE_TAGGING_DIRECTIVE) &&
+              (tagging_permission == TaggingPermission::PUT_TAGGING_PERM)) {
+            //Deny copy operation if tagging directive is either "COPY" or No tagging directive
+            //since getObjectTagging permission is also required to get the tags of source object.
+            s->err.message = "Access Denied";
+            return -EACCES;
+          } else if ((tagging_permission == TaggingPermission::GET_TAGGING_PERM) ||
+                     (tagging_permission == TaggingPermission::NO_TAGGING_PERM)) {
+            //Deny copy operation if tags are present on source object and both
+            //(PutObjectTagging & getObjectTagging) permissions are missing.
+            s->err.message = "Access Denied";
+            return -EACCES;
+          }
+        } else {
+          //tags not present on source object
+          if ((tag_directive_type == TaggingDirective::REPLACE_TAGGING_DIRECTIVE) &&
+              (tagging_permission != TaggingPermission::PUT_TAGGING_PERM)) {
+            //If tags are not present on source object and tagging-directive specified as "REPLACE" then
+            //deny copy operation since PutObjectTagging permission is required.
+            s->err.message = "Access Denied";
+            return -EACCES;
+          }
+        }
+      }
+   } //op_ret end
+  
       //remove src object tags as it may interfere with policy evaluation of destination obj
       if (has_s3_existing_tag || has_s3_resource_tag)
         rgw_iam_remove_objtags(this, s, s->src_object.get(), has_s3_existing_tag, has_s3_resource_tag);

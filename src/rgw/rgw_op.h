@@ -1485,6 +1485,29 @@ public:
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
 
+enum class TaggingPermission : short {
+NO_TAGGING_PERM,
+PUT_TAGGING_PERM,
+GET_TAGGING_PERM
+};
+
+enum class TaggingDirective {
+NO_TAGGING_DIRECTIVE,
+COPY_TAGGING_DIRECTIVE,
+REPLACE_TAGGING_DIRECTIVE
+};
+
+constexpr TaggingPermission& operator|=(TaggingPermission& lhs, TaggingPermission rhs) {
+    using TaggingPermissionType = std::underlying_type<TaggingPermission>::type;
+    return lhs = TaggingPermission( static_cast<TaggingPermissionType>(lhs) | static_cast<TaggingPermissionType>(rhs));
+}
+
+constexpr TaggingPermission operator|(TaggingPermission lhs, TaggingPermission rhs) {
+    TaggingPermission tg;
+    using TaggingPermissionType = std::underlying_type<TaggingPermission>::type;
+    return  tg = TaggingPermission( static_cast<TaggingPermissionType>(lhs) | static_cast<TaggingPermissionType>(rhs));
+}
+
 class RGWCopyObj : public RGWOp {
 protected:
   RGWAccessControlPolicy dest_policy;
