@@ -23,11 +23,6 @@ using namespace std;
 
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 
-namespace {
-  extern TracepointProvider::Traits rgw_op_tracepoint_traits;
-  extern TracepointProvider::Traits rgw_rados_tracepoint_traits;
-}
-
 static sig_t sighandler_alrm;
 
 static void godown_alarm(int signum)
