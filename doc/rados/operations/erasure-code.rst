@@ -4,12 +4,24 @@
  Erasure code
 =============
 
-A Ceph pool is associated to a type to sustain the loss of an OSD
-(i.e. a disk since most of the time there is one OSD per disk). The
-default choice when `creating a pool <../pools>`_ is *replicated*,
-meaning every object is copied on multiple disks. The `Erasure Code
-<https://en.wikipedia.org/wiki/Erasure_code>`_ pool type can be used
-instead to save space.
+By default, Ceph `pools <../pools>`_ are created with the type "replicated". In
+replicated-type pools, every object is copied to multiple disks (this
+multiple copying is the "replication").
+
+In contrast, `erasure-coded <https://en.wikipedia.org/wiki/Erasure_code>`_
+pools use a method of data protection that is different from replication. In
+erasure coding, data is broken into fragments of two kinds: data blocks and
+parity blocks. If a drive fails or becomes corrupted, the parity blocks are
+used to rebuild the data. At scale, erasure-coding saves space relative to
+replication.
+
+In this documentation, data blocks are referred to as "data chunks"
+and parity blocks are referred to as "encoding chunks".
+
+Erasure codes are also called "forward error corrections codes". The
+first forward error correction code was developed in 1950 by Richard
+Hamming at Bell Laboratories.
+
 
 Creating a sample erasure coded pool
 ------------------------------------
