@@ -6,8 +6,8 @@
 #include "include/types.h"
 #include "common/Formatter.h"
 #include "crimson/osd/pg.h"
-#include "crimson/osd/pg_shard_manager.h"
 #include "crimson/osd/osdmap_service.h"
+#include "crimson/osd/shard_services.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include "osd/PeeringState.h"
@@ -21,9 +21,9 @@ namespace {
 namespace crimson::osd {
 
 PGAdvanceMap::PGAdvanceMap(
-  PGShardManager &shard_manager, Ref<PG> pg, epoch_t to,
+  ShardServices &shard_services, Ref<PG> pg, epoch_t to,
   PeeringCtx &&rctx, bool do_init)
-  : shard_manager(shard_manager), pg(pg), from(std::nullopt), to(to),
+  : shard_services(shard_services), pg(pg), to(to),
     rctx(std::move(rctx)), do_init(do_init) {}
 
 PGAdvanceMap::~PGAdvanceMap() {}
@@ -71,7 +71,7 @@ seastar::future<> PGAdvanceMap::start()
       boost::make_counting_iterator(*from + 1),
       boost::make_counting_iterator(to + 1),
       [this](epoch_t next_epoch) {
-        return shard_manager.get_shard_services().get_map(next_epoch).then(
+        return shard_services.get_map(next_epoch).then(
           [this] (cached_map_t&& next_map) {
             logger().debug("{}: advancing map to {}",
                            *this, next_map->get_epoch());
@@ -81,21 +81,21 @@ seastar::future<> PGAdvanceMap::start()
         pg->handle_activate_map(rctx);
         logger().debug("{}: map activated", *this);
         if (do_init) {
-          shard_manager.pg_created(pg->get_pgid(), pg);
-          shard_manager.get_shard_services().inc_pg_num();
+          shard_services.pg_created(pg->get_pgid(), pg);
+          shard_services.inc_pg_num();
           logger().info("PGAdvanceMap::start new pg {}", *pg);
         }
         return seastar::when_all_succeed(
           pg->get_need_up_thru()
-	  ? shard_manager.get_shard_services().send_alive(
+	  ? shard_services.send_alive(
 	    pg->get_same_interval_since())
 	  : seastar::now(),
-          shard_manager.get_shard_services().dispatch_context(
+          shard_services.dispatch_context(
             pg->get_collection_ref(),
             std::move(rctx)));
       }).then_unpack([this] {
         logger().debug("{}: sending pg temp", *this);
-        return shard_manager.get_shard_services().send_pg_temp();
+        return shard_services.send_pg_temp();
       });
   }).then([this, ref=std::move(ref)] {
     logger().debug("{}: complete", *this);

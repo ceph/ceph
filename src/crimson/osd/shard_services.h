@@ -90,6 +90,23 @@ class PerShardState {
     return registry.stop();
   }
 
+  // PGMap state
+  PGMap pg_map;
+
+  seastar::future<> stop_pgs();
+  std::map<pg_t, pg_stat_t> get_pg_stats() const;
+  seastar::future<> broadcast_map_to_pgs(
+    ShardServices &shard_services,
+    epoch_t epoch);
+
+  Ref<PG> get_pg(spg_t pgid);
+  template <typename F>
+  void for_each_pg(F &&f) const {
+    for (auto &pg : pg_map.get_pgs()) {
+      std::invoke(f, pg.first, pg.second);
+    }
+  }
+
   template <typename T, typename... Args>
   auto start_operation(Args&&... args) {
     if (__builtin_expect(stopping, false)) {
@@ -173,6 +190,10 @@ public:
     return *meta_coll;
   }
 
+  auto get_pool_info(int64_t poolid) {
+    return get_meta_coll().load_final_pool_info(poolid);
+  }
+
   // global pg temp state
   struct pg_temp_t {
     std::vector<int> acting;
@@ -188,6 +209,8 @@ public:
   void requeue_pg_temp();
   seastar::future<> send_pg_temp();
 
+  // TODO: add config to control mapping
+  PGShardMapping pg_to_shard_mapping{0, 1};
   unsigned num_pgs = 0;
   unsigned get_pg_num() const {
     return num_pgs;
@@ -238,46 +261,6 @@ public:
                     epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
-
-  // PGMap state
-  PGMap pg_map;
-
-  seastar::future<Ref<PG>> make_pg(
-    ShardServices &shard_services,
-    cached_map_t create_map,
-    spg_t pgid,
-    bool do_create);
-  seastar::future<Ref<PG>> handle_pg_create_info(
-    PGShardManager &shard_manager,
-    ShardServices &shard_services,
-    std::unique_ptr<PGCreateInfo> info);
-  seastar::future<Ref<PG>> get_or_create_pg(
-    PGShardManager &shard_manager,
-    ShardServices &shard_services,
-    PGMap::PGCreationBlockingEvent::TriggerI&&,
-    spg_t pgid,
-    epoch_t epoch,
-    std::unique_ptr<PGCreateInfo> info);
-  seastar::future<Ref<PG>> wait_for_pg(
-    PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
-  Ref<PG> get_pg(spg_t pgid);
-  seastar::future<> load_pgs(ShardServices &shard_services);
-  seastar::future<Ref<PG>> load_pg(
-    ShardServices &shard_services,
-    spg_t pgid);
-  seastar::future<> stop_pgs();
-  std::map<pg_t, pg_stat_t> get_pg_stats() const;
-  seastar::future<> broadcast_map_to_pgs(
-    PGShardManager &shard_manager,
-    ShardServices &shard_services,
-    epoch_t epoch);
-
-  template <typename F>
-  void for_each_pg(F &&f) const {
-    for (auto &pg : pg_map.get_pgs()) {
-      std::invoke(f, pg.first, pg.second);
-    }
-  }
 };
 
 #define FORWARD_CONST(FROM_METHOD, TO_METHOD, TARGET)		\
@@ -341,6 +324,22 @@ public:
     return *local_state.perf;
   }
 
+  // Local PG Management
+  seastar::future<Ref<PG>> make_pg(
+    cached_map_t create_map,
+    spg_t pgid,
+    bool do_create);
+  seastar::future<Ref<PG>> handle_pg_create_info(
+    std::unique_ptr<PGCreateInfo> info);
+  seastar::future<Ref<PG>> get_or_create_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&&,
+    spg_t pgid,
+    epoch_t epoch,
+    std::unique_ptr<PGCreateInfo> info);
+  seastar::future<Ref<PG>> wait_for_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
+  seastar::future<Ref<PG>> load_pg(spg_t pgid);
+
   /// Dispatch and reset ctx transaction
   seastar::future<> dispatch_context_transaction(
     crimson::os::CollectionRef col, PeeringCtx &ctx);
@@ -376,6 +375,7 @@ public:
       });
   }
 
+  FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD_TO_OSD_SINGLETON(get_pg_num)
   FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
 
@@ -391,6 +391,8 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_pg_temp)
   FORWARD_CONST(get_mnow, get_mnow, osd_singleton_state)
   FORWARD_TO_OSD_SINGLETON(get_hb_stamps)
+
+  FORWARD(pg_created, pg_created, local_state.pg_map)
 
   FORWARD(
     maybe_get_cached_obc, maybe_get_cached_obc, local_state.obc_registry)
