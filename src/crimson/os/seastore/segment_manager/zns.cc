@@ -309,11 +309,11 @@ ZNSSegmentManager::mount_ret ZNSSegmentManager::mount()
 {
   return open_device(
     device_path, seastar::open_flags::rw
-  ).safe_then([=](auto p) {
+  ).safe_then([=, this](auto p) {
     device = std::move(p.first);
     auto sd = p.second;
     return read_metadata(device, sd);
-  }).safe_then([=](auto meta){
+  }).safe_then([=, this](auto meta){
     metadata = meta;
     return mount_ertr::now();
   });
@@ -331,11 +331,11 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
     size_t(),
     size_t(),
     size_t(),
-    [=](auto &device, auto &stat, auto &sb, auto &zone_size_sects, auto &nr_zones, auto &size) {
+    [=, this](auto &device, auto &stat, auto &sb, auto &zone_size_sects, auto &nr_zones, auto &size) {
       return open_device(
 	device_path,
 	seastar::open_flags::rw
-      ).safe_then([=, &device, &stat, &sb, &zone_size_sects, &nr_zones, &size](auto p) {
+      ).safe_then([=, this, &device, &stat, &sb, &zone_size_sects, &nr_zones, &size](auto p) {
 	device = p.first;
 	stat = p.second;
 	return device.ioctl(
@@ -423,7 +423,7 @@ ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
   LOG_PREFIX(ZNSSegmentManager::open);
   return seastar::do_with(
     blk_zone_range{},
-    [=](auto &range) {
+    [=, this](auto &range) {
       range = make_range(
 	id,
 	metadata.segment_size,
@@ -433,7 +433,7 @@ ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
 	range
       );
     }
-  ).safe_then([=] {
+  ).safe_then([=, this] {
     DEBUG("segment {}, open successful", id);
     return open_ertr::future<SegmentRef>(
       open_ertr::ready_future_marker{},
@@ -528,7 +528,7 @@ ZNSSegmentManager::release_ertr::future<> ZNSSegmentManager::release(
   DEBUG("Resetting zone/segment {}", id);
   return seastar::do_with(
     blk_zone_range{},
-    [=](auto &range) {
+    [=, this](auto &range) {
       range = make_range(
 	id,
 	metadata.segment_size,
@@ -576,7 +576,7 @@ Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
   LOG_PREFIX(ZNSSegmentManager::segment_close);
   return seastar::do_with(
     blk_zone_range{},
-    [=](auto &range) {
+    [=, this](auto &range) {
       range = make_range(
 	id,
 	metadata.segment_size,
