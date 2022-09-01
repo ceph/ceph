@@ -2037,10 +2037,11 @@ void CInode::decode_lock_inest(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_ixattr(bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(get_inode()->version, bl);
   encode(get_inode()->ctime, bl);
   encode_xattrs(bl);
+  encode(get_inode()->xattr_version, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2048,13 +2049,16 @@ void CInode::decode_lock_ixattr(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
   auto _inode = allocate_inode(*get_inode());
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   decode(_inode->version, p);
   utime_t tm;
   decode(tm, p);
   if (_inode->ctime < tm)
     _inode->ctime = tm;
   decode_xattrs(p);
+  if (struct_v >= 2) {
+    decode(_inode->xattr_version, p);
+  }
   DECODE_FINISH(p);
   reset_inode(std::move(_inode));
 }
