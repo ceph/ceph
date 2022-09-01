@@ -51,8 +51,10 @@ class GrafanaService(CephadmService):
         grafana_data_sources = self.mgr.template.render(
             'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services, 'loki_host': loki_host})
 
-        cert = self.mgr.get_store('grafana_crt')
-        pkey = self.mgr.get_store('grafana_key')
+        cert_path = f'{daemon_spec.host}/grafana_crt'
+        key_path = f'{daemon_spec.host}/grafana_key'
+        cert = self.mgr.get_store(cert_path)
+        pkey = self.mgr.get_store(key_path)
         if cert and pkey:
             try:
                 verify_tls(cert, pkey)
@@ -60,9 +62,9 @@ class GrafanaService(CephadmService):
                 logger.warning('Provided grafana TLS certificates invalid: %s', str(e))
                 cert, pkey = None, None
         if not (cert and pkey):
-            cert, pkey = create_self_signed_cert('Ceph', 'cephadm')
-            self.mgr.set_store('grafana_crt', cert)
-            self.mgr.set_store('grafana_key', pkey)
+            cert, pkey = create_self_signed_cert('Ceph', daemon_spec.host)
+            self.mgr.set_store(cert_path, cert)
+            self.mgr.set_store(key_path, pkey)
             if 'dashboard' in self.mgr.get('mgr_map')['modules']:
                 self.mgr.check_mon_command({
                     'prefix': 'dashboard set-grafana-api-ssl-verify',
@@ -112,6 +114,17 @@ class GrafanaService(CephadmService):
             'dashboard set-grafana-api-url',
             service_url
         )
+
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before grafana daemon is removed.
+        """
+        if daemon.hostname is not None:
+            # delete cert/key entires for this grafana daemon
+            cert_path = f'{daemon.hostname}/grafana_crt'
+            key_path = f'{daemon.hostname}/grafana_key'
+            self.mgr.set_store(cert_path, None)
+            self.mgr.set_store(key_path, None)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
