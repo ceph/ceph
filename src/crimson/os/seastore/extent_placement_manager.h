@@ -94,7 +94,7 @@ public:
 
   void set_primary_device(Device *device);
 
-  void set_extent_callback(AsyncCleaner::ExtentCallbackInterface *cb) {
+  void set_extent_callback(ExtentCallbackInterface *cb) {
     cleaner->set_extent_callback(cb);
   }
 
