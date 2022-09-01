@@ -55,6 +55,7 @@ class FakeMgr:
         self.tuned_profiles = TunedProfileStore(self)
         self.tuned_profiles.profiles = profiles
         self.ssh = SSHManager(self)
+        self.offline_hosts = []
 
     def set_store(self, what: str, value: str):
         raise SaveError(f'{what}: {value}')
