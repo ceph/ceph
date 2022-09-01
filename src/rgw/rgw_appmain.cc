@@ -98,7 +98,13 @@ void rgw::AppMain::init_frontends1(bool nfs)
   g_conf().early_expand_meta(rgw_frontends_str, &cerr);
   get_str_vec(rgw_frontends_str, ",", frontends);
 
-  if (!nfs) {
+  /* default frontends */
+  if (nfs) {
+    const auto is_rgw_nfs = [](const auto& s){return s == "rgw-nfs";};
+    if (std::find_if(frontends.begin(), frontends.end(), is_rgw_nfs) == frontends.end()) {
+      frontends.push_back("rgw-nfs");
+    }
+  } else {
     if (frontends.empty()) {
       frontends.push_back("beast");
     }
