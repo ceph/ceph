@@ -386,6 +386,10 @@ class RadosObject : public StoreObject {
 
     virtual ~RadosObject();
 
+    virtual void invalidate() override {
+      StoreObject::invalidate();
+      rados_ctx->invalidate(get_obj());
+    }
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y, bool prevent_versioning) override;
     virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
