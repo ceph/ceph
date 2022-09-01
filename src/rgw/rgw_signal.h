@@ -17,15 +17,15 @@
 
 
 namespace rgw {
-  namespace signal {
+namespace signal {
 
-    void signal_shutdown();
-    void wait_shutdown();
-    int signal_fd_init();
-    void signal_fd_finalize();
-    void handle_sigterm(int signum);
-    void handle_sigterm(int signum);
-    void sighup_handler(int signum);
+void signal_shutdown();
+void wait_shutdown();
+int signal_fd_init();
+void signal_fd_finalize();
+void handle_sigterm(int signum);
+void handle_sigterm(int signum);
+void sighup_handler(int signum);
 
-  } // namespace signal
+} // namespace signal
 } // namespace rgw

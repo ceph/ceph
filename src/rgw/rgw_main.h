@@ -51,67 +51,66 @@ public:
 
 namespace rgw {
 
-  class RGWLib;
+class RGWLib;
+class AppMain {
+  /* several components should be initalized only if librgw is
+    * also serving HTTP */
+  bool have_http_frontend{false};
+  bool nfs{false};
 
-  class AppMain {
-    /* several components should be initalized only if librgw is
-     * also serving HTTP */
-    bool have_http_frontend{false};
-    bool nfs{false};
+  std::vector<RGWFrontend*> fes;
+  std::vector<RGWFrontendConfig*> fe_configs;
+  std::multimap<string, RGWFrontendConfig*> fe_map;
+  std::unique_ptr<rgw::LDAPHelper> ldh;
+  OpsLogSink* olog;
+  RGWREST rest;
+  std::unique_ptr<rgw::lua::Background> lua_background;
+  std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
+  std::unique_ptr<rgw::dmclock::SchedulerCtx> sched_ctx;
+  std::unique_ptr<ActiveRateLimiter> ratelimiter;
+  // wow, realm reloader has a lot of parts
+  std::unique_ptr<RGWRealmReloader> reloader;
+  std::unique_ptr<RGWPeriodPusher> pusher;
+  std::unique_ptr<RGWFrontendPauser> fe_pauser;
+  std::unique_ptr<RGWRealmWatcher> realm_watcher;
+  std::unique_ptr<RGWPauser> rgw_pauser;
+  rgw::sal::Store* store;
+  DoutPrefixProvider* dpp;
 
-    std::vector<RGWFrontend*> fes;
-    std::vector<RGWFrontendConfig*> fe_configs;
-    std::multimap<string, RGWFrontendConfig*> fe_map;
-    std::unique_ptr<rgw::LDAPHelper> ldh;
-    OpsLogSink* olog;
-    RGWREST rest;
-    std::unique_ptr<rgw::lua::Background> lua_background;
-    std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
-    std::unique_ptr<rgw::dmclock::SchedulerCtx> sched_ctx;
-    std::unique_ptr<ActiveRateLimiter> ratelimiter;
-    // wow, realm reloader has a lot of parts
-    std::unique_ptr<RGWRealmReloader> reloader;
-    std::unique_ptr<RGWPeriodPusher> pusher;
-    std::unique_ptr<RGWFrontendPauser> fe_pauser;
-    std::unique_ptr<RGWRealmWatcher> realm_watcher;
-    std::unique_ptr<RGWPauser> rgw_pauser;
-    rgw::sal::Store* store;
-    DoutPrefixProvider* dpp;
+public:
+  AppMain(DoutPrefixProvider* dpp)
+    : dpp(dpp)
+    {}
 
-  public:
-    AppMain(DoutPrefixProvider* dpp)
-      : dpp(dpp)
-      {}
+  void shutdown();
 
-    void shutdown();
+  rgw::sal::Store* get_store() {
+    return store;
+  }
 
-    rgw::sal::Store* get_store() {
-      return store;
-    }
+  rgw::LDAPHelper* get_ldh() {
+    return ldh.get();
+  }
 
-    rgw::LDAPHelper* get_ldh() {
-      return ldh.get();
-    }
+  void init_frontends1(bool nfs = false);
+  void init_numa();
+  void init_storage();
+  void init_perfcounters();
+  void init_http_clients();
+  void cond_init_apis();
+  void init_ldap();
+  void init_opslog();
+  int init_frontends2(RGWLib* rgwlib = nullptr);
+  void init_tracepoints();
+  void init_notification_endpoints();
+  void init_lua();
 
-    void init_frontends1(bool nfs = false);
-    void init_numa();
-    void init_storage();
-    void init_perfcounters();
-    void init_http_clients();
-    void cond_init_apis();
-    void init_ldap();
-    void init_opslog();
-    int init_frontends2(RGWLib* rgwlib = nullptr);
-    void init_tracepoints();
-    void init_notification_endpoints();
-    void init_lua();
+  bool have_http() {
+    return have_http_frontend;
+  }
 
-    bool have_http() {
-      return have_http_frontend;
-    }
-
-    static OpsLogFile* ops_log_file;
-  }; /* AppMain */
+  static OpsLogFile* ops_log_file;
+}; /* AppMain */
 } // namespace rgw
 
 static inline RGWRESTMgr *set_logging(RGWRESTMgr* mgr)
