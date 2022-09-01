@@ -1640,6 +1640,31 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return r
 
+    def tell_command(self, daemon_type: str, daemon_id: str, cmd_dict: dict, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Helper for `ceph tell` command execution.
+
+        See send_command for general case.
+
+        :param dict cmd_dict: expects a prefix i.e.:
+            cmd_dict = {
+                'prefix': 'heap',
+                'heapcmd': 'stats',
+            }
+        :return: status int, out std, err str
+        """
+        t1 = time.time()
+        result = CommandResult()
+        self.send_command(result, daemon_type, daemon_id, json.dumps(cmd_dict), "", inbuf)
+        r = result.wait()
+        t2 = time.time()
+
+        self.log.debug("tell_command on {0}.{1}: '{2}' -> {3} in {4:.5f}s".format(
+            daemon_type, daemon_id, cmd_dict['prefix'], r[0], t2 - t1
+        ))
+
+        return r
+
     def send_command(
             self,
             result: CommandResult,
