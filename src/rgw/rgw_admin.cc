@@ -1192,7 +1192,7 @@ static void show_reshard_status(
 class StoreDestructor {
   rgw::sal::Store* store;
 public:
-  explicit StoreDestructor(rgw::sal::RadosStore* _s) : store(_s) {}
+  explicit StoreDestructor(rgw::sal::Store* _s) : store(_s) {}
   ~StoreDestructor() {
     StoreManager::close_storage(store);
     rgw_http_client_cleanup();
@@ -2104,12 +2104,12 @@ static int do_period_pull(RGWRESTConn *remote_conn, const string& url,
   return 0;
 }
 
-static int read_current_period_id(rgw::sal::RadosStore* store, const std::string& realm_id,
+static int read_current_period_id(rgw::sal::Store* store, const std::string& realm_id,
                                   const std::string& realm_name,
                                   std::string* period_id)
 {
   RGWRealm realm(realm_id, realm_name);
-  int ret = realm.init(dpp(), g_ceph_context, store->svc()->sysobj, null_yield);
+  int ret = realm.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
   if (ret < 0) {
     std::cerr << "failed to read realm: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -2496,9 +2496,9 @@ static void sync_status(Formatter *formatter)
     const rgw_zone_id& source_id = iter.first;
     string source_str = "source: ";
     string s = source_str + source_id.id;
-    RGWZone *sz;
-    if ((sz = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(source_id))) {
-      s += string(" (") + sz->name + ")";
+    std::unique_ptr<rgw::sal::Zone> sz;
+    if (store->get_zone()->get_zonegroup().get_zone_by_id(source_id.id, &sz) == 0) {
+      s += string(" (") + sz->get_name() + ")";
     }
     data_status.push_back(s);
     get_data_sync_status(source_id, data_status, source_str.size());
@@ -2678,16 +2678,14 @@ static void get_hint_entities(const std::set<rgw_zone_id>& zones, const std::set
 
 static rgw_zone_id resolve_zone_id(const string& s)
 {
-  rgw_zone_id result;
-
-  RGWZone *zone;
-  if ((zone = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(s))) {
+  std::unique_ptr<rgw::sal::Zone> zone;
+  int ret = store->get_zone()->get_zonegroup().get_zone_by_id(s, &zone);
+  if (ret < 0)
+    ret = store->get_zone()->get_zonegroup().get_zone_by_name(s, &zone);
+  if (ret < 0)
     return rgw_zone_id(s);
-  }
-  if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(s, &result)) {
-    return result;
-  }
-  return rgw_zone_id(s);
+
+  return rgw_zone_id(zone->get_id());
 }
 
 rgw_zone_id validate_zone_id(const rgw_zone_id& zone_id)
@@ -2699,7 +2697,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
 {
   rgw_zone_id zone_id = opt_target_zone.value_or(store->get_zone()->get_id());
 
-  auto zone_policy_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_sync_policy_handler(zone_id);
+  auto zone_policy_handler = store->get_zone()->get_sync_policy_handler();
 
   RGWBucketSyncPolicyHandlerRef bucket_handler;
 
@@ -2808,7 +2806,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
   return 0;
 }
 
-static int bucket_sync_info(rgw::sal::RadosStore* store, const RGWBucketInfo& info,
+static int bucket_sync_info(rgw::sal::Store* store, const RGWBucketInfo& info,
                               std::ostream& out)
 {
   const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
@@ -2846,7 +2844,7 @@ static int bucket_sync_info(rgw::sal::RadosStore* store, const RGWBucketInfo& in
   return 0;
 }
 
-static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& info,
+static int bucket_sync_status(rgw::sal::Store* store, const RGWBucketInfo& info,
                               const rgw_zone_id& source_zone_id,
 			      std::optional<rgw_bucket>& opt_source_bucket,
                               std::ostream& out)
@@ -2882,21 +2880,26 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
   set<rgw_zone_id> zone_ids;
 
   if (!source_zone_id.empty()) {
-    auto z = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zonegroup().zones.find(source_zone_id);
-    if (z == static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zonegroup().zones.end()) {
+    std::unique_ptr<rgw::sal::Zone> zone;
+    int ret = store->get_zone()->get_zonegroup().get_zone_by_id(source_zone_id.id, &zone);
+    if (ret < 0) {
       ldpp_dout(dpp(), -1) << "Source zone not found in zonegroup "
           << zonegroup.get_name() << dendl;
       return -EINVAL;
     }
     auto c = zone_conn_map.find(source_zone_id);
     if (c == zone_conn_map.end()) {
-      ldpp_dout(dpp(), -1) << "No connection to zone " << z->second.name << dendl;
+      ldpp_dout(dpp(), -1) << "No connection to zone " << zone->get_name() << dendl;
       return -EINVAL;
     }
     zone_ids.insert(source_zone_id);
   } else {
-    for (const auto& entry : static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zonegroup().zones) {
-      zone_ids.insert(entry.second.id);
+    std::list<std::string> ids;
+    int ret = store->get_zone()->get_zonegroup().list_zones(ids);
+    if (ret == 0) {
+      for (const auto& entry : ids) {
+	zone_ids.insert(entry);
+      }
     }
   }
 
@@ -2917,7 +2920,7 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
 	continue;
       }
       if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-	bucket_source_sync_status(dpp(), store, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone(), z->second,
+	bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(store), static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone(), z->second,
 				  c->second,
 				  info, pipe,
 				  width, out);
@@ -2980,7 +2983,7 @@ static int check_pool_support_omap(const rgw_pool& pool)
   return 0;
 }
 
-int check_reshard_bucket_params(rgw::sal::RadosStore* store,
+int check_reshard_bucket_params(rgw::sal::Store* store,
 				const string& bucket_name,
 				const string& tenant,
 				const string& bucket_id,
@@ -3089,10 +3092,6 @@ static int trim_sync_error_log(int shard_id, const string& marker, int delay_ms)
     }
   }
   // unreachable
-}
-
-const string& get_tier_type(rgw::sal::RadosStore* store) {
-  return store->svc()->zone->get_zone().tier_type;
 }
 
 static bool symmetrical_flow_opt(const string& opt)
@@ -3233,9 +3232,13 @@ void resolve_zone_id_opt(std::optional<string>& zone_name, std::optional<rgw_zon
     return;
   }
   zone_id.emplace();
-  if (!static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(*zone_name, &(*zone_id))) {
+  std::unique_ptr<rgw::sal::Zone> zone;
+  int ret = store->get_zone()->get_zonegroup().get_zone_by_name(*zone_name, &zone);
+  if (ret < 0) {
     cerr << "WARNING: cannot find source zone id for name=" << *zone_name << std::endl;
     zone_id = rgw_zone_id(*zone_name);
+  } else {
+    zone_id->id = zone->get_id();
   }
 }
 void resolve_zone_ids_opt(std::optional<vector<string> >& names, std::optional<vector<rgw_zone_id> >& ids)
@@ -3246,9 +3249,13 @@ void resolve_zone_ids_opt(std::optional<vector<string> >& names, std::optional<v
   ids.emplace();
   for (auto& name : *names) {
     rgw_zone_id zid;
-    if (!static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(name, &zid)) {
+    std::unique_ptr<rgw::sal::Zone> zone;
+    int ret = store->get_zone()->get_zonegroup().get_zone_by_name(name, &zone);
+    if (ret < 0) {
       cerr << "WARNING: cannot find source zone id for name=" << name << std::endl;
       zid = rgw_zone_id(name);
+    } else {
+      zid.id = zone->get_id();
     }
     ids->push_back(zid);
   }
@@ -3270,9 +3277,9 @@ class JSONFormatter_PrettyZone : public JSONFormatter {
     void encode_json(const char *name, const void *pval, ceph::Formatter *f) const override {
       auto zone_id = *(static_cast<const rgw_zone_id *>(pval));
       string zone_name;
-      RGWZone *zone;
-      if ((zone = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(zone_id))) {
-        zone_name = zone->name;
+      std::unique_ptr<rgw::sal::Zone> zone;
+      if (store->get_zone()->get_zonegroup().get_zone_by_id(zone_id.id, &zone) == 0) {
+        zone_name = zone->get_name();
       } else {
         cerr << "WARNING: cannot find zone name for id=" << zone_id << std::endl;
         zone_name = zone_id.id;
@@ -4477,9 +4484,12 @@ int main(int argc, const char **argv)
   }
 
   if (!source_zone_name.empty()) {
-    if (!static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(source_zone_name, &source_zone)) {
+    std::unique_ptr<rgw::sal::Zone> zone;
+    if (store->get_zone()->get_zonegroup().get_zone_by_name(source_zone_name, &zone) < 0) {
       cerr << "WARNING: cannot find source zone id for name=" << source_zone_name << std::endl;
       source_zone = source_zone_name;
+    } else {
+      source_zone.id = zone->get_id();
     }
   }
 
@@ -4496,7 +4506,7 @@ int main(int argc, const char **argv)
 
   oath_init();
 
-  StoreDestructor store_destructor(static_cast<rgw::sal::RadosStore*>(store));
+  StoreDestructor store_destructor(store);
 
   if (raw_storage_op) {
     try_to_resolve_local_entities(realm_id, realm_name,
@@ -4556,7 +4566,7 @@ int main(int argc, const char **argv)
       break;
     case OPT::PERIOD_GET_CURRENT:
       {
-        int ret = read_current_period_id(static_cast<rgw::sal::RadosStore*>(store), realm_id, realm_name, &period_id);
+        int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
 	if (ret < 0) {
 	  return -ret;
 	}
@@ -4906,7 +4916,7 @@ int main(int argc, const char **argv)
       break;
     case OPT::REALM_LIST_PERIODS:
       {
-        int ret = read_current_period_id(static_cast<rgw::sal::RadosStore*>(store), realm_id, realm_name, &period_id);
+        int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
 	if (ret < 0) {
 	  return -ret;
 	}
@@ -5923,7 +5933,7 @@ int main(int argc, const char **argv)
     case OPT::ZONE_LIST:
       {
 	list<string> zones;
-	int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->list_zones(dpp(), zones);
+	int ret = store->list_all_zones(dpp(), zones);
 	if (ret < 0) {
 	  cerr << "failed to list zones: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -7830,7 +7840,7 @@ next:
   }
 
   if (opt_cmd == OPT::BUCKET_RESHARD) {
-    int ret = check_reshard_bucket_params(static_cast<rgw::sal::RadosStore*>(store),
+    int ret = check_reshard_bucket_params(store,
 					  bucket_name,
 					  tenant,
 					  bucket_id,
@@ -7881,7 +7891,7 @@ next:
   }
 
   if (opt_cmd == OPT::RESHARD_ADD) {
-    int ret = check_reshard_bucket_params(static_cast<rgw::sal::RadosStore*>(store),
+    int ret = check_reshard_bucket_params(store,
 					  bucket_name,
 					  tenant,
 					  bucket_id,
@@ -8454,9 +8464,7 @@ next:
     RGWStorageStats stats(omit_utilized_stats);
     ceph::real_time last_stats_sync;
     ceph::real_time last_stats_update;
-    int ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->user->read_stats(dpp(), user->get_id(), &stats, null_yield,
-										 &last_stats_sync,
-										 &last_stats_update);
+    int ret = user->read_stats(dpp(), null_yield, &stats, &last_stats_sync, &last_stats_update);
     if (ret < 0) {
       if (ret == -ENOENT) { /* in case of ENOENT */
         cerr << "User has not been initialized or user does not exist" << std::endl;
@@ -8587,7 +8595,7 @@ next:
     int i = (specified_shard_id ? shard_id : 0);
 
     if (period_id.empty()) {
-      int ret = read_current_period_id(static_cast<rgw::sal::RadosStore*>(store), realm_id, realm_name, &period_id);
+      int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
       if (ret < 0) {
         return -ret;
       }
@@ -8632,7 +8640,7 @@ next:
     int i = (specified_shard_id ? shard_id : 0);
 
     if (period_id.empty()) {
-      int ret = read_current_period_id(static_cast<rgw::sal::RadosStore*>(store), realm_id, realm_name, &period_id);
+      int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
       if (ret < 0) {
         return -ret;
       }
@@ -9039,7 +9047,7 @@ next:
     if (ret < 0) {
       return -ret;
     }
-    bucket_sync_info(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), std::cout);
+    bucket_sync_info(store, bucket->get_info(), std::cout);
   }
 
   if (opt_cmd == OPT::BUCKET_SYNC_STATUS) {
@@ -9051,7 +9059,7 @@ next:
     if (ret < 0) {
       return -ret;
     }
-    bucket_sync_status(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), source_zone, opt_source_bucket, std::cout);
+    bucket_sync_status(store, bucket->get_info(), source_zone, opt_source_bucket, std::cout);
   }
 
   if (opt_cmd == OPT::BUCKET_SYNC_MARKERS) {
@@ -10284,7 +10292,7 @@ next:
   }
 
   if (opt_cmd == OPT::PUBSUB_SUB_GET) {
-    if (get_tier_type(static_cast<rgw::sal::RadosStore*>(store)) != "pubsub") {
+    if (store->get_zone()->get_tier_type() != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
     }
@@ -10308,7 +10316,7 @@ next:
   }
 
  if (opt_cmd == OPT::PUBSUB_SUB_RM) {
-    if (get_tier_type(static_cast<rgw::sal::RadosStore*>(store)) != "pubsub") {
+    if (store->get_zone()->get_tier_type() != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
     }
@@ -10328,7 +10336,7 @@ next:
   }
 
  if (opt_cmd == OPT::PUBSUB_SUB_PULL) {
-    if (get_tier_type(static_cast<rgw::sal::RadosStore*>(store)) != "pubsub") {
+    if (store->get_zone()->get_tier_type() != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
     }
@@ -10353,7 +10361,7 @@ next:
  }
 
  if (opt_cmd == OPT::PUBSUB_EVENT_RM) {
-    if (get_tier_type(static_cast<rgw::sal::RadosStore*>(store)) != "pubsub") {
+    if (store->get_zone()->get_tier_type() != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
     }
@@ -10462,7 +10470,7 @@ next:
       cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
-    const auto rc = rgw::lua::add_package(dpp(), static_cast<rgw::sal::RadosStore*>(store), null_yield, *script_package, bool(allow_compilation));
+    const auto rc = rgw::lua::add_package(dpp(), store, null_yield, *script_package, bool(allow_compilation));
     if (rc < 0) {
       cerr << "ERROR: failed to add lua package: " << script_package << " .error: " << rc << std::endl;
       return -rc;
@@ -10479,7 +10487,7 @@ next:
       cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
-    const auto rc = rgw::lua::remove_package(dpp(), static_cast<rgw::sal::RadosStore*>(store), null_yield, *script_package);
+    const auto rc = rgw::lua::remove_package(dpp(), store, null_yield, *script_package);
     if (rc == -ENOENT) {
       cerr << "WARNING: package " << script_package << " did not exists or already removed" << std::endl;
       return 0;
@@ -10497,7 +10505,7 @@ next:
   if (opt_cmd == OPT::SCRIPT_PACKAGE_LIST) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     rgw::lua::packages_t packages;
-    const auto rc = rgw::lua::list_packages(dpp(), static_cast<rgw::sal::RadosStore*>(store), null_yield, packages);
+    const auto rc = rgw::lua::list_packages(dpp(), store, null_yield, packages);
     if (rc == -ENOENT) {
       std::cout << "no lua packages in allowlist" << std::endl;
     } else if (rc < 0) {
