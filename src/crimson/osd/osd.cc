@@ -21,6 +21,7 @@
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPeeringOp.h"
+#include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MOSDRepOpReply.h"
@@ -48,7 +49,6 @@
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/osd_operations/client_request.h"
-#include "crimson/osd/osd_operations/compound_peering_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
@@ -708,10 +708,8 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
     case CEPH_MSG_OSD_OP:
       return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
     case MSG_OSD_PG_CREATE2:
-      get_shard_services().start_operation<CompoundPeeringRequest>(
-	pg_shard_manager,
-	conn,
-	m);
+      return handle_pg_create(
+	conn, boost::static_pointer_cast<MOSDPGCreate2>(m));
       return seastar::now();
     case MSG_COMMAND:
       return handle_command(conn, boost::static_pointer_cast<MCommand>(m));
@@ -1015,6 +1013,41 @@ seastar::future<> OSD::handle_osd_op(crimson::net::ConnectionRef conn,
     *this,
     conn,
     std::move(m));
+  return seastar::now();
+}
+
+seastar::future<> OSD::handle_pg_create(crimson::net::ConnectionRef conn,
+					Ref<MOSDPGCreate2> m)
+{
+  for (auto& [pgid, when] : m->pgs) {
+    const auto &[created, created_stamp] = when;
+    auto q = m->pg_extra.find(pgid);
+    ceph_assert(q != m->pg_extra.end());
+    auto& [history, pi] = q->second;
+    logger().debug(
+      "{}: {} e{} @{} "
+      "history {} pi {}",
+      __func__, pgid, created, created_stamp,
+      history, pi);
+    if (!pi.empty() &&
+	m->epoch < pi.get_bounds().second) {
+      logger().error(
+        "got pg_create on {} epoch {}  "
+        "unmatched past_intervals {} (history {})",
+        pgid, m->epoch,
+        pi, history);
+    } else {
+      std::ignore = pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
+	  conn,
+	  pg_shard_t(),
+	  pgid,
+	  m->epoch,
+	  m->epoch,
+	  NullEvt(),
+	  true,
+	  new PGCreateInfo(pgid, m->epoch, history, pi, true));
+    }
+  }
   return seastar::now();
 }
 
