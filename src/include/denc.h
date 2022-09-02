@@ -41,6 +41,7 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
+#include "include/cpp_lib_backport.h"
 #include "include/compat.h"
 #include "include/int_types.h"
 #include "include/scope_guard.h"
