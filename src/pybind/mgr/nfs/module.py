@@ -34,6 +34,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             readonly: Optional[bool] = False,
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
+            sectype: Optional[List[str]] = None,
     ) -> Tuple[int, str, str]:
         """Create a CephFS export"""
         return self.export_mgr.create_export(
@@ -45,6 +46,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             path=path,
             squash=squash,
             addr=client_addr,
+            sectype=sectype,
         )
 
     @CLICommand('nfs export create rgw', perm='rw')
@@ -57,6 +59,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             readonly: Optional[bool] = False,
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
+            sectype: Optional[List[str]] = None,
     ) -> Tuple[int, str, str]:
         """Create an RGW export"""
         return self.export_mgr.create_export(
@@ -68,6 +71,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             read_only=readonly,
             squash=squash,
             addr=client_addr,
+            sectype=sectype,
         )
 
     @CLICommand('nfs export rm', perm='rw')
