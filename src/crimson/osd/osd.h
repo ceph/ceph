@@ -169,6 +169,8 @@ private:
 
   seastar::future<> handle_osd_map(crimson::net::ConnectionRef conn,
                                    Ref<MOSDMap> m);
+  seastar::future<> handle_pg_create(crimson::net::ConnectionRef conn,
+				     Ref<MOSDPGCreate2> m);
   seastar::future<> handle_osd_op(crimson::net::ConnectionRef conn,
 				  Ref<MOSDOp> m);
   seastar::future<> handle_rep_op(crimson::net::ConnectionRef conn,
