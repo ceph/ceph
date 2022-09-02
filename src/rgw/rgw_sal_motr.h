@@ -33,6 +33,7 @@ extern "C" {
 #include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
 #include "motr/gc/gc.h"
+#include <sstream>
 typedef void (*progress_cb)(off_t, void*);
 
 class MotrGC;
@@ -574,6 +575,13 @@ class MotrObject : public Object {
       struct m0_uint128 oid = {};
       struct m0_fid pver = {};
       uint64_t layout_id = 0;
+
+      std::string oid_str() {
+        std::ostringstream oid_stream;
+        oid_stream << "0x" << std::hex << oid.u_hi
+                   << ":0x" << oid.u_lo;
+        return oid_stream.str();
+      }
 
       void encode(bufferlist& bl) const
       {

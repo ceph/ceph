@@ -2262,8 +2262,7 @@ int MotrObject::remove_mobj_and_index_entry(
       }
       size_rounded = roundup(ent.meta.size, get_unit_sz());
       if (store->gc_enabled()) {
-        std::string tag = PRIx64 + std::to_string(this->meta.oid.u_hi) + ":" +
-                          PRIx64 + std::to_string(this->meta.oid.u_lo);
+        std::string tag = this->meta.oid_str();
         std::string obj_fqdn = bucket_name + "/" + delete_key;
         ::Meta *mobj = reinterpret_cast<::Meta*>(&this->meta);
         motr_gc_obj_info gc_obj(tag, obj_fqdn, *mobj, std::time(nullptr),

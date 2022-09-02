@@ -283,8 +283,7 @@ int MotrGC::process_parts(motr_gc_obj_info ginfo, std::time_t end_time) {
     mobj.decode(iter);
     ldout(cct, 20) <<__func__<< ": part_num=" << info.num
                              << " part_size=" << info.size << dendl;
-    std::string tag = PRIx64 + std::to_string(mobj.oid.u_hi) + ":" +
-                      PRIx64 + std::to_string(mobj.oid.u_lo);
+    std::string tag = mobj.oid_str();
     std::string part_name = "part.";
     char buff[32];
     snprintf(buff, sizeof(buff), "%08d", (int)info.num);
@@ -323,14 +322,14 @@ int MotrGC::process_parts(motr_gc_obj_info ginfo, std::time_t end_time) {
 int MotrGC::delete_motr_obj(Meta motr_obj) {
   int rc;
   struct m0_op *op = nullptr;
-  char fid_str[M0_FID_STR_LEN];
-  snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&motr_obj.oid));
 
   if (!motr_obj.oid.u_hi || !motr_obj.oid.u_lo) {
-    ldout(cct, 0) <<__func__<< ": invalid motr object oid=" << fid_str << dendl;
+    ldpp_dout(this, 0) <<__func__<< ": invalid motr object oid="
+                       << motr_obj.oid_str() << dendl;
     return -EINVAL;
   }
-  ldout(cct, 10) <<__func__<< ": deleting motr object oid=" << fid_str << dendl;
+  ldpp_dout(this, 10) <<__func__<< ": deleting motr object oid="
+                      << motr_obj.oid_str() << dendl;
 
   // Open the object.
   if (motr_obj.layout_id == 0) {

@@ -41,6 +41,13 @@ struct Meta {
   struct m0_fid pver = {};
   uint64_t layout_id = 0;
 
+  std::string oid_str() {
+    std::ostringstream oid_stream;
+    oid_stream << "0x" << std::hex << oid.u_hi
+               << ":0x" << oid.u_lo;
+    return oid_stream.str();
+  }
+
   void encode(bufferlist &bl) const {
     ENCODE_START(5, 5, bl);
     encode(oid.u_hi, bl);
