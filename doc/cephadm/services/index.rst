@@ -432,7 +432,7 @@ Cephadm supports the deployment of multiple daemons on the same host:
     service_type: rgw
     placement:
       label: rgw
-      count-per-host: 2
+      count_per_host: 2
 
 The main reason for deploying multiple daemons per host is an additional
 performance benefit for running multiple RGW and MDS daemons on the same host.
