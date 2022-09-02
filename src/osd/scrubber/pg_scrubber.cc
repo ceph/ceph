@@ -2128,6 +2128,10 @@ PgScrubber::PgScrubber(PG* pg)
 void PgScrubber::set_scrub_begin_time()
 {
   scrub_begin_stamp = ceph_clock_now();
+  m_osds->clog->debug() << fmt::format(
+    "{} {} starts",
+    m_pg->info.pgid.pgid,
+    m_mode_desc);
 }
 
 void PgScrubber::set_scrub_duration()
