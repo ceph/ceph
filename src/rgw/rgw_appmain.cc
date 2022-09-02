@@ -560,7 +560,7 @@ void rgw::AppMain::init_lua()
   }
 } /* init_lua */
 
-void rgw::AppMain::shutdown()
+void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   if (store->get_name() == "rados") {
     reloader.reset(); // stop the realm reloader
@@ -580,10 +580,7 @@ void rgw::AppMain::shutdown()
   }
 
   ldh.reset(nullptr); // deletes
-
-  unregister_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
-  shutdown_async_signal_handler();
-
+  finalize_async_signals(); // callback
   rgw_log_usage_finalize();
   
   delete olog;
