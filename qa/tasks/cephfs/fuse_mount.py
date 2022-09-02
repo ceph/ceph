@@ -312,6 +312,11 @@ class FuseMount(CephFSMount):
             if cleanup:
                 self.cleanup()
             return
+        if self.is_blocked():
+            self._run_umount_lf()
+            if cleanup:
+                self.cleanup()
+            return
 
         try:
             log.info('Running fusermount -u on {name}...'.format(name=self.client_remote.name))
@@ -344,15 +349,8 @@ class FuseMount(CephFSMount):
                     """).format(self._fuse_conn))
                     self._fuse_conn = None
 
-                stderr = StringIO()
                 # make sure its unmounted
-                try:
-                    self.client_remote.run(
-                        args=['sudo', 'umount', '-l', '-f', self.hostfs_mntpt],
-                        stderr=stderr, timeout=UMOUNT_TIMEOUT, omit_sudo=False)
-                except CommandFailedError:
-                    if self.is_mounted():
-                        raise
+                self._run_umount_lf()
 
         self._fuse_conn = None
         self.id = None
@@ -385,6 +383,11 @@ class FuseMount(CephFSMount):
             # However, we will still hit the aggressive wait if there is an ongoing
             # mount -o remount (especially if the remount is stuck because MDSs
             # are unavailable)
+
+        if self.is_blocked():
+            self._run_umount_lf()
+            self.cleanup()
+            return
 
         # cleanup is set to to fail since clieanup must happen after umount is
         # complete; otherwise following call to run.wait hangs.

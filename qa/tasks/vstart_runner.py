@@ -55,6 +55,7 @@ vstart_runner.py -
 """
 
 from io import StringIO
+from json import loads
 from collections import defaultdict
 import getpass
 import signal
@@ -647,6 +648,12 @@ class LocalCephFSMount():
         self.fs.wait_for_daemons()
         log.info('Ready to start {}...'.format(type(self).__name__))
 
+    def is_blocked(self):
+        self.fs = LocalFilesystem(self.ctx, name=self.cephfs_name)
+
+        output = self.fs.mon_manager.raw_cluster_cmd(args='osd blocklist ls')
+        return self.addr in output
+
 
 class LocalKernelMount(LocalCephFSMount, KernelMount):
     def __init__(self, ctx, test_dir, client_id=None,
@@ -660,6 +667,21 @@ class LocalKernelMount(LocalCephFSMount, KernelMount):
 
         # Make vstart_runner compatible with teuth and qa/tasks/cephfs.
         self._mount_bin = [os.path.join(BIN_PREFIX , 'mount.ceph')]
+
+    def get_global_addr(self):
+        self.get_global_inst()
+        self.addr = self.inst[self.inst.find(' ') + 1 : ]
+        return self.addr
+
+    def get_global_inst(self):
+        clients = self.client_remote.run(
+            args=f'{CEPH_CMD} tell mds.* session ls',
+            stdout=StringIO()).stdout.getvalue()
+        clients = loads(clients)
+        for c in clients:
+            if c['id'] == self.id:
+                self.inst = c['inst']
+                return self.inst
 
 
 class LocalFuseMount(LocalCephFSMount, FuseMount):
