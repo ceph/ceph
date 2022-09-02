@@ -67,6 +67,7 @@ void RefreshRequest<I>::send() {
 template <typename I>
 void RefreshRequest<I>::send_get_migration_header() {
   if (m_image_ctx.ignore_migrating) {
+    m_migration_spec = {};
     if (m_image_ctx.old_format) {
       send_v1_get_snapshots();
     } else {
@@ -222,6 +223,7 @@ Context *RefreshRequest<I>::handle_v1_read_header(int *result) {
   if (migrating) {
     send_get_migration_header();
   } else {
+    m_migration_spec = {};
     send_v1_get_snapshots();
   }
   return nullptr;
@@ -437,6 +439,8 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
     ldout(cct, 5) << "ignoring dynamically disabled exclusive lock" << dendl;
     m_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
     m_incomplete_update = true;
+  } else {
+    m_incomplete_update = false;
   }
 
   if (((m_incompatible_features & RBD_FEATURE_NON_PRIMARY) != 0U) &&
@@ -454,6 +458,7 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
   }
   m_read_only = (m_read_only_flags != 0U);
 
+  m_legacy_parent = false;
   send_v2_get_parent();
   return nullptr;
 }
@@ -498,9 +503,14 @@ Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
       *result = cls_client::parent_overlap_get_finish(&it, &parent_overlap);
     }
 
-    if (*result >= 0 && parent_overlap) {
-      m_parent_md.overlap = *parent_overlap;
-      m_head_parent_overlap = true;
+    if (*result >= 0) {
+      if (parent_overlap) {
+        m_parent_md.overlap = *parent_overlap;
+        m_head_parent_overlap = true;
+      } else {
+        m_parent_md.overlap = 0;
+        m_head_parent_overlap = false;
+      }
     }
   } else if (*result >= 0) {
     *result = cls_client::get_parent_finish(&it, &m_parent_md.spec,
@@ -522,10 +532,10 @@ Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
   if ((m_features & RBD_FEATURE_MIGRATING) != 0) {
     ldout(cct, 1) << "migrating feature set" << dendl;
     send_get_migration_header();
-    return nullptr;
+  } else {
+    m_migration_spec = {};
+    send_v2_get_metadata();
   }
-
-  send_v2_get_metadata();
   return nullptr;
 }
 
@@ -536,6 +546,7 @@ void RefreshRequest<I>::send_v2_get_metadata() {
 
   auto ctx = create_context_callback<
     RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_metadata>(this);
+  m_metadata.clear();
   auto req = GetMetadataRequest<I>::create(
     m_image_ctx.md_ctx, m_image_ctx.header_oid, true,
     ImageCtx::METADATA_CONF_PREFIX, ImageCtx::METADATA_CONF_PREFIX, 0U,
@@ -592,6 +603,7 @@ Context *RefreshRequest<I>::handle_v2_get_pool_metadata(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_get_op_features() {
   if ((m_features & RBD_FEATURE_OPERATIONS) == 0LL) {
+    m_op_features = 0;
     send_v2_get_group();
     return;
   }
@@ -663,12 +675,15 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
     *result = cls_client::image_group_get_finish(&it, &m_group_spec);
   }
 
-  if (*result < 0 && *result != -EOPNOTSUPP) {
+  if (*result == -EOPNOTSUPP) {
+    m_group_spec = {};
+  } else if (*result < 0) {
     lderr(cct) << "failed to retrieve group: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
   }
 
+  m_legacy_snapshot = LEGACY_SNAPSHOT_DISABLED;
   send_v2_get_snapshots();
   return nullptr;
 }
@@ -765,9 +780,13 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
       } else {
         std::optional<uint64_t> parent_overlap;
         *result = cls_client::parent_overlap_get_finish(&it, &parent_overlap);
-        if (*result >= 0 && parent_overlap && m_parent_md.spec.pool_id > -1) {
-          m_snap_parents[i].spec = m_parent_md.spec;
-          m_snap_parents[i].overlap = *parent_overlap;
+        if (*result >= 0) {
+          if (parent_overlap && m_parent_md.spec.pool_id > -1) {
+            m_snap_parents[i].spec = m_parent_md.spec;
+            m_snap_parents[i].overlap = *parent_overlap;
+          } else {
+            m_snap_parents[i] = {};
+          }
         }
       }
     }
