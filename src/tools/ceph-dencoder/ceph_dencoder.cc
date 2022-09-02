@@ -69,7 +69,7 @@ vector<DencoderPlugin> load_plugins()
   if (auto ceph_lib = getenv("CEPH_LIB"); ceph_lib) {
     mod_dir = ceph_lib;
   } else if (fs::is_regular_file("CMakeCache.txt")) {
-    mod_dir = std::filesystem::canonical("lib");
+    mod_dir = fs::canonical("lib");
   }
   vector<DencoderPlugin> dencoder_plugins;
   for (auto& entry : fs::directory_iterator(mod_dir)) {

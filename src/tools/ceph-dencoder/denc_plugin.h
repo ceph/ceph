@@ -1,10 +1,14 @@
 #include <dlfcn.h>
+#if __has_include(<filesystem>)
 #include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <vector>
 
 #include "denc_registry.h"
-
-namespace fs = std::filesystem;
 
 class DencoderPlugin {
   using dencoders_t = std::vector<std::pair<std::string, Dencoder*>>;
