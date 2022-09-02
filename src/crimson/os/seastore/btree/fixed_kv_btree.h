@@ -933,8 +933,11 @@ public:
         e->get_paddr(),
         n_fixed_kv_extent->get_paddr(),
         n_fixed_kv_extent
-      ).si_then([c, e] {
+      ).si_then([c, e, n_fixed_kv_extent] {
         c.cache.retire_extent(c.trans, e);
+        if (n_fixed_kv_extent->is_leaf()) {
+          c.trans.link_fixedkv_leaf_node(n_fixed_kv_extent);
+        }
       });
     };
     
@@ -1729,6 +1732,10 @@ private:
         *left,
         *right);
       c.cache.retire_extent(c.trans, pos.node);
+      if (left->is_leaf()) {
+        c.trans.link_fixedkv_leaf_node(left);
+        c.trans.link_fixedkv_leaf_node(right);
+      }
 
       get_tree_stats<self_type>(c.trans).extents_num_delta++;
       return std::make_pair(left, right);
@@ -1973,6 +1980,9 @@ private:
         SUBTRACET(seastore_fixedkv_tree, "l: {}, r: {}, replacement: {}", c.trans, *l, *r, *replacement);
         c.cache.retire_extent(c.trans, l);
         c.cache.retire_extent(c.trans, r);
+        if (replacement->is_leaf()) {
+          c.trans.link_fixedkv_leaf_node(replacement);
+        }
         get_tree_stats<self_type>(c.trans).extents_num_delta--;
       } else {
         LOG_PREFIX(FixedKVBtree::merge_level);
@@ -2017,6 +2027,10 @@ private:
           c.trans, *l, *r, *replacement_l, *replacement_r);
         c.cache.retire_extent(c.trans, l);
         c.cache.retire_extent(c.trans, r);
+        if (replacement_l->is_leaf()) {
+          c.trans.link_fixedkv_leaf_node(replacement_l);
+          c.trans.link_fixedkv_leaf_node(replacement_r);
+        }
       }
 
       return seastar::now();

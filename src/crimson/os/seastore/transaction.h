@@ -14,11 +14,25 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/btree/btree_child_tracker.h"
+#include "crimson/os/seastore/btree/btree_range_pin.h"
 
 namespace crimson::os::seastore {
 
+template <typename node_bound_t>
+struct pins_t {
+  pins_by_depth_t<node_bound_t> pin_layers;
+
+  void clear() {
+    for (auto &layer : pin_layers) {
+      layer.clear();
+    }
+  }
+};
+
 class SeaStore;
 class Transaction;
+template <typename node_bound_t>
+struct pins_t;
 
 struct io_stat_t {
   uint64_t num = 0;
@@ -121,14 +135,17 @@ public:
       ref->state = CachedExtent::extent_state_t::INVALID;
       ref->on_invalidated(*this);
       write_set.erase(*ref);
+      may_remove_linked_fixedkv_pin(ref);
     } else if (ref->is_initial_pending()) {
       ref->state = CachedExtent::extent_state_t::INVALID;
       ref->on_invalidated(*this);
       write_set.erase(*ref);
+      may_remove_linked_fixedkv_pin(ref);
     } else if (ref->is_mutation_pending()) {
       ref->state = CachedExtent::extent_state_t::INVALID;
       ref->on_invalidated(*this);
       write_set.erase(*ref);
+      may_remove_linked_fixedkv_pin(ref);
       assert(ref->prior_instance);
       retired_set.insert(ref->prior_instance);
       assert(read_set.count(ref->prior_instance->get_paddr()));
@@ -175,9 +192,12 @@ public:
       fresh_block_stats.increment(ref->get_length());
     }
     write_set.insert(*ref);
-    if (is_backref_node(ref->get_type()))
+    if (is_backref_node(ref->get_type())) {
       fresh_backref_extents++;
+    }
   }
+
+  void link_fixedkv_leaf_node(CachedExtentRef ref);
 
   uint64_t get_num_fresh_backref() const {
     return fresh_backref_extents;
@@ -207,6 +227,7 @@ public:
     mutated_block_list.push_back(ref);
     if (!ref->is_exist_mutation_pending()) {
       write_set.insert(*ref);
+      may_link_fixedkv_pin(ref);
     } else {
       assert(write_set.find_offset(ref->get_paddr()) !=
 	     write_set.end());
@@ -329,13 +350,7 @@ public:
       trans_id(trans_id)
   {}
 
-  void invalidate_clear_write_set() {
-    for (auto &&i: write_set) {
-      i.state = CachedExtent::extent_state_t::INVALID;
-      i.on_invalidated(*this, true);
-    }
-    write_set.clear();
-  }
+  void invalidate_clear_write_set();
 
   ~Transaction() {
     LOG_PREFIX(Transaction::~Transaction);
@@ -495,6 +510,11 @@ public:
     return root;
   }
 
+  template <typename node_key_t, typename T>
+  TCachedExtentRef<T> may_get_fixedkv_leaf_node(
+    extent_types_t type,
+    node_key_t key);
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -509,6 +529,12 @@ private:
 
   seastore_off_t offset = 0; ///< relative offset of next block
   seastore_off_t delayed_temp_offset = 0;
+
+  pins_t<paddr_t> pending_backref_nodes;
+  pins_t<laddr_t> pending_lba_nodes;
+
+  void may_link_fixedkv_pin(CachedExtentRef &ref);
+  void may_remove_linked_fixedkv_pin(CachedExtentRef &ref);
 
   /**
    * read_set

@@ -1031,6 +1031,9 @@ record_t Cache::prepare_record(
   SUBTRACET(seastore_t, "enter", t);
   t.committed = true;
 
+  t.pending_lba_nodes.clear();
+  t.pending_backref_nodes.clear();
+
   auto trans_src = t.get_src();
   assert(!t.is_weak());
   assert(trans_src != Transaction::src_t::READ);

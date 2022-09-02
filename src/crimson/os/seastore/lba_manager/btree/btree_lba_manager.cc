@@ -120,26 +120,47 @@ BtreeLBAManager::get_mapping(
   LOG_PREFIX(BtreeLBAManager::get_mapping);
   TRACET("{}", t, offset);
   auto c = get_context(t);
-  return with_btree_ret<LBABtree, LBAPinRef>(
-    cache,
-    c,
-    [FNAME, c, offset](auto &btree) {
-      return btree.lower_bound(
-	c, offset
-      ).si_then([FNAME, offset, c](auto iter) -> get_mapping_ret {
-	if (iter.is_end() || iter.get_key() != offset) {
-	  ERRORT("laddr={} doesn't exist", c.trans, offset);
-	  return crimson::ct_error::enoent::make();
-	} else {
-	  TRACET("{} got {}, {}",
-	         c.trans, offset, iter.get_key(), iter.get_val());
-	  auto e = iter.get_pin();
-	  return get_mapping_ret(
-	    interruptible::ready_future_marker{},
-	    std::move(e));
-	}
-      });
+  LBALeafNodeRef extent = t.may_get_fixedkv_leaf_node<laddr_t, LBALeafNode>(
+    extent_types_t::LADDR_LEAF, offset);
+  if (!extent) {
+    extent = pin_set.maybe_get_leaf_node<LBALeafNode>(offset);
+  }
+  if (extent && extent->is_valid()) {
+    auto it = extent->lower_bound(offset);
+    assert(it.get_key() == offset);
+    auto val = it.get_val();
+    val.paddr = val.paddr.maybe_relative_to(extent->get_paddr());
+    DEBUGT("got lba leaf {}", t, *extent);
+    if (!extent->is_pending_in_trans(c.trans.get_trans_id())) {
+      t.add_to_read_set(extent);
+    }
+    return extent->wait_io().then([extent, val, offset]() mutable {
+      return get_mapping_iertr::make_ready_future<LBAPinRef>(
+	std::make_unique<BtreeLBAPin>(
+	  extent, val, lba_node_meta_t(offset, offset + val.len, 0)));
     });
+  } else {
+    return with_btree_ret<LBABtree, LBAPinRef>(
+      cache,
+      c,
+      [FNAME, c, offset](auto &btree) {
+	return btree.lower_bound(
+	  c, offset
+	).si_then([FNAME, offset, c](auto iter) -> get_mapping_ret {
+	  if (iter.is_end() || iter.get_key() != offset) {
+	    ERRORT("laddr={} doesn't exist", c.trans, offset);
+	    return crimson::ct_error::enoent::make();
+	  } else {
+	    TRACET("{} got {}, {}",
+		   c.trans, offset, iter.get_key(), iter.get_val());
+	    auto e = iter.get_pin();
+	    return get_mapping_ret(
+	      interruptible::ready_future_marker{},
+	      std::move(e));
+	  }
+	});
+      });
+  }
 }
 
 BtreeLBAManager::alloc_extent_ret
