@@ -65,6 +65,10 @@ if(WITH_RADOSGW)
     target_link_libraries(denc-mod-rgw
       rdkafka)
   endif()
+  if(WITH_RADOSGW_LUA_PACKAGES)
+    target_link_libraries(denc-mod-rgw
+      Boost::filesystem)
+  endif()
 endif()
 
 if(WITH_RBD)
