@@ -168,13 +168,16 @@ int main(int argc, char *argv[])
   rgw::signal::wait_shutdown();
 
   derr << "shutting down" << dendl;
-  main.shutdown();
 
-  unregister_async_signal_handler(SIGHUP, rgw::signal::sighup_handler);
-  unregister_async_signal_handler(SIGTERM, rgw::signal::handle_sigterm);
-  unregister_async_signal_handler(SIGINT, rgw::signal::handle_sigterm);
-  unregister_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
-  shutdown_async_signal_handler();
+  const auto finalize_async_signals = []() {
+    unregister_async_signal_handler(SIGHUP, rgw::signal::sighup_handler);
+    unregister_async_signal_handler(SIGTERM, rgw::signal::handle_sigterm);
+    unregister_async_signal_handler(SIGINT, rgw::signal::handle_sigterm);
+    unregister_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
+    shutdown_async_signal_handler();
+  };
+
+  main.shutdown(finalize_async_signals);
 
   dout(1) << "final shutdown" << dendl;
 

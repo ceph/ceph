@@ -82,7 +82,8 @@ public:
     : dpp(dpp)
     {}
 
-  void shutdown();
+  void shutdown(std::function<void(void)> finalize_async_signals
+	       = []() { /* nada */});
 
   rgw::sal::Store* get_store() {
     return store;

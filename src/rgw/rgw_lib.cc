@@ -39,6 +39,7 @@
 #include "rgw_lib.h"
 #include "rgw_lib_frontend.h"
 #include "rgw_perf_counters.h"
+#include "rgw_signal.h"
 #include "rgw_main.h"
 
 #include <errno.h>
@@ -53,11 +54,6 @@ using namespace std;
 namespace rgw {
 
   RGWLib* g_rgwlib = nullptr;
-
-  static void handle_sigterm(int signum)
-  {
-    dout(20) << __func__ << " SIGUSR1 ignored" << dendl;
-  }
 
   class C_InitTimeout : public Context {
   public:
@@ -536,7 +532,13 @@ namespace rgw {
   int RGWLib::stop()
   {
     derr << "shutting down" << dendl;
-    main.shutdown();
+
+    const auto finalize_async_signals = []() {
+      unregister_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
+      shutdown_async_signal_handler();
+    };
+
+    main.shutdown(finalize_async_signals);
 
     return 0;
   } /* RGWLib::stop() */
