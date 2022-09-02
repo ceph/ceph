@@ -8,7 +8,6 @@
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
-#include "test/crimson/seastore/transaction_manager_test_state.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -24,7 +23,7 @@ constexpr uint64_t DEFAULT_TEST_SIZE = 1 << 20;
 constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 
 struct rbm_test_t :
-  public seastar_test_suite_t, TMTestState {
+  public seastar_test_suite_t {
   std::unique_ptr<BlockRBManager> rbm_manager;
   std::unique_ptr<random_block_device::RBMDevice> device;
 
@@ -61,13 +60,13 @@ struct rbm_test_t :
     config.block_size = DEFAULT_BLOCK_SIZE;
     config.total_size = DEFAULT_TEST_SIZE;
     config.device_id = d_id;
-    return tm_setup();
+    return seastar::now();
   }
 
   seastar::future<> tear_down_fut() final {
     rbm_manager.reset();
     device.reset();
-    return tm_teardown();
+    return seastar::now();
   }
 
   auto mkfs() {
@@ -102,7 +101,7 @@ struct rbm_test_t :
   }
 
   auto alloc_extent(rbm_transaction &t, size_t size) {
-    auto tt = create_mutate_transaction(); // dummy transaction
+    auto tt = make_test_transaction(); // dummy transaction
     auto extent = rbm_manager->find_free_block(*tt, size).unsafe_get0();
     if (!extent.empty()) {
       alloc_delta_t alloc_info;
@@ -351,7 +350,8 @@ TEST_F(rbm_test_t, check_free_blocks)
    mkfs();
    open();
    rbm_manager->rbm_sync_block_bitmap_by_range(10, 12, bitmap_op_types_t::ALL_SET).unsafe_get0();
-   rbm_manager->check_bitmap_blocks().unsafe_get0();
+   rbm_manager->close().unsafe_get0();
+   open();
    ASSERT_TRUE(rbm_manager->get_free_blocks() == DEFAULT_TEST_SIZE/DEFAULT_BLOCK_SIZE - 5);
    auto free = rbm_manager->get_free_blocks();
    interval_set<blk_no_t> alloc_ids;
