@@ -1,4 +1,4 @@
-if(${WITH_CEPHFS})
+if(WITH_LIBCEPHFS)
   add_executable(ceph_test_libcephfs
     test.cc
     readdir_r_cb.cc
@@ -75,5 +75,4 @@ if(${WITH_CEPHFS})
     )
   install(TARGETS ceph_test_libcephfs_access
     DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif(${WITH_CEPHFS})  
-
+endif(WITH_LIBCEPHFS)
