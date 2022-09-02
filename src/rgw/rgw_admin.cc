@@ -5133,8 +5133,24 @@ int main(int argc, const char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+
+        bool need_zone_update = false;
+
         if (zone.realm_id != zonegroup.realm_id) {
           zone.realm_id = zonegroup.realm_id;
+          need_zone_update = true;
+        }
+
+        for (auto a : tier_config_add) {
+          ret = zone.tier_config.set(a.first, a.second);
+          if (ret < 0) {
+            cerr << "ERROR: failed to set configurable: " << a << std::endl;
+            return EINVAL;
+          }
+          need_zone_update = true;
+        }
+
+        if (need_zone_update) {
           ret = zone.update(dpp(), null_yield);
           if (ret < 0) {
             cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
@@ -5143,14 +5159,6 @@ int main(int argc, const char **argv)
         }
 
         string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
-
-        for (auto a : tier_config_add) {
-          int r = zone.tier_config.set(a.first, a.second);
-          if (r < 0) {
-            cerr << "ERROR: failed to set configurable: " << a << std::endl;
-            return EINVAL;
-          }
-        }
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
         string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
