@@ -49,7 +49,8 @@ add_denc_mod(denc-mod-osd
 target_link_libraries(denc-mod-osd
   os
   osd
-  mon)
+  mon
+  erasure_code)
 
 if(WITH_RADOSGW)
   add_denc_mod(denc-mod-rgw
