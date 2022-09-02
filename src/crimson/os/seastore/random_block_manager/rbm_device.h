@@ -154,7 +154,9 @@ public:
 class TestMemory : public RBMDevice {
 public:
 
-  TestMemory(size_t size) : buf(nullptr), size(size) {}
+  TestMemory(size_t size) : buf(nullptr) {
+    RBMDevice::size = size;
+  }
   ~TestMemory() {
     if (buf) {
       ::munmap(buf, size);
@@ -200,6 +202,5 @@ public:
     uint16_t stream = 0) final;
 
   char *buf;
-  size_t size;
 };
 }
