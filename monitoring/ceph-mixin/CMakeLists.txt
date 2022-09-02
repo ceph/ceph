@@ -11,17 +11,6 @@ if(WITH_GRAFANA)
       include(AddCephTest)
       set(CEPH_BUILD_VIRTUALENV ${CMAKE_BINARY_DIR})
 
-      add_test(NAME jsonnet-build
-          COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/jsonnet-build.sh ${CMAKE_CURRENT_BINARY_DIR})
-      set_property(TEST jsonnet-build PROPERTY
-          FIXTURES_SETUP jsonnet)
-      add_test(NAME jsonnet-cleanup
-          COMMAND rm -rf go-jsonnet
-                         ${CMAKE_CURRENT_BINARY_DIR}/jsonnet
-                         ${CMAKE_CURRENT_BINARY_DIR}/jsonnetfmt)
-      set_property(TEST jsonnet-cleanup PROPERTY
-          FIXTURES_CLEANUP jsonnet)
-
       add_test(NAME jsonnet-bundler-build
           COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/jsonnet-bundler-build.sh ${CMAKE_CURRENT_BINARY_DIR})
       set_property(TEST jsonnet-bundler-build PROPERTY
@@ -34,12 +23,10 @@ if(WITH_GRAFANA)
       add_tox_test(grafana-lint TOX_ENVS lint)
       add_tox_test(jsonnet-lint TOX_ENVS jsonnet-lint)
       set_property(TEST run-tox-jsonnet-lint PROPERTY
-          FIXTURES_REQUIRED venv-for-jsonnet-lint jsonnet
-          ENVIRONMENT "PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{PATH}")
+          FIXTURES_REQUIRED venv-for-jsonnet-lint)
       add_tox_test(jsonnet-check TOX_ENVS jsonnet-check)
       set_property(TEST run-tox-jsonnet-check PROPERTY
-          FIXTURES_REQUIRED venv-for-jsonnet-check jsonnet jsonnet-bundler
-          ENVIRONMENT "PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{PATH}")
+          FIXTURES_REQUIRED venv-for-jsonnet-check jsonnet-bundler)
 
       add_tox_test(alerts-check TOX_ENVS alerts-check)
       add_tox_test(alerts-lint TOX_ENVS alerts-lint)
