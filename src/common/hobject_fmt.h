@@ -6,6 +6,7 @@
  * \file fmtlib formatters for some hobject.h classes
  */
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include "common/hobject.h"
 #include "include/object_fmt.h"
