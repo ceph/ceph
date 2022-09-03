@@ -330,7 +330,8 @@ To remove a setting from an existing profile::
 
   Modifying the placement will require re-applying a profile with the same name. Keep
   in mind that profiles are tracked by their name, so whenever a profile with the same
-  name as an existing profile is applied, it will overwrite the old profile.
+  name as an existing profile is applied, it will overwrite the old profile unless
+  --no-overwrite is passed.
 
 SSH Configuration
 =================
