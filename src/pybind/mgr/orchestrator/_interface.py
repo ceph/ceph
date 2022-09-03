@@ -687,7 +687,7 @@ class Orchestrator(object):
         """Update an existing snmp gateway service"""
         raise NotImplementedError()
 
-    def apply_tuned_profiles(self, specs: List[TunedProfileSpec]) -> OrchResult[str]:
+    def apply_tuned_profiles(self, specs: List[TunedProfileSpec], no_overwrite: bool) -> OrchResult[str]:
         """Add or update an existing tuned profile"""
         raise NotImplementedError()
 
