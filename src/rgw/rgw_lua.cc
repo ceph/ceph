@@ -79,19 +79,17 @@ std::string script_oid(context ctx, const std::string& tenant) {
 
 int read_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::string& script)
 {
-
-  return manager->get_script(dpp, y, script_oid(ctx, tenant), script);
-
+  return manager ? manager->get_script(dpp, y, script_oid(ctx, tenant), script) : -ENOENT;
 }
 
 int write_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script)
 {
-  return manager->put_script(dpp, y, script_oid(ctx, tenant), script);
+  return manager ? manager->put_script(dpp, y, script_oid(ctx, tenant), script) : -ENOENT;
 }
 
 int delete_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx)
 {
-  return manager->del_script(dpp, y, script_oid(ctx, tenant));
+  return manager ? manager->del_script(dpp, y, script_oid(ctx, tenant)) : -ENOENT;
 }
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES
