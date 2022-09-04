@@ -865,7 +865,14 @@ Context *RefreshRequest<I>::handle_v2_refresh_parent(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  if (*result == -ENOENT && m_enoent_retries++ < MAX_ENOENT_RETRIES) {
+    ldout(cct, 10) << "out-of-sync parent info detected, retrying" << dendl;
+    ceph_assert(m_refresh_parent != nullptr);
+    delete m_refresh_parent;
+    m_refresh_parent = nullptr;
+    send_v2_get_mutable_metadata();
+    return nullptr;
+  } else if (*result < 0) {
     lderr(cct) << "failed to refresh parent image: " << cpp_strerror(*result)
                << dendl;
     save_result(result);
