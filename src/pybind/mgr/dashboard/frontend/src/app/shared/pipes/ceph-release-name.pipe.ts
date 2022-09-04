@@ -10,8 +10,8 @@ export class CephReleaseNamePipe implements PipeTransform {
     const result = /ceph version\s+[^ ]+\s+\(.+\)\s+(.+)\s+\((.+)\)/.exec(value);
     if (result) {
       if (result[2] === 'dev') {
-        // Assume this is actually master
-        return 'master';
+        // Assume this is actually main
+        return 'main';
       } else {
         // Return the "nautilus" part
         return result[1];
