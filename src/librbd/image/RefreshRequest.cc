@@ -805,8 +805,8 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
     }
   }
 
-  if (*result == -ENOENT) {
-    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
+  if (*result == -ENOENT && m_enoent_retries++ < MAX_ENOENT_RETRIES) {
+    ldout(cct, 10) << "out-of-sync snapshot state detected, retrying" << dendl;
     send_v2_get_mutable_metadata();
     return nullptr;
   } else if (m_legacy_snapshot == LEGACY_SNAPSHOT_DISABLED &&

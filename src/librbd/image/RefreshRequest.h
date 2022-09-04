@@ -27,6 +27,8 @@ template<typename> class RefreshParentRequest;
 template<typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
+  static constexpr int MAX_ENOENT_RETRIES = 10;
+
   static RefreshRequest *create(ImageCtxT &image_ctx, bool acquiring_lock,
                                 bool skip_open_parent, Context *on_finish) {
     return new RefreshRequest(image_ctx, acquiring_lock, skip_open_parent,
@@ -143,6 +145,8 @@ private:
 
   bool m_legacy_parent = false;
   LegacySnapshot m_legacy_snapshot = LEGACY_SNAPSHOT_DISABLED;
+
+  int m_enoent_retries = 0;
 
   uint8_t m_order = 0;
   uint64_t m_size = 0;
