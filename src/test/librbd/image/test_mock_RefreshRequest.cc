@@ -722,7 +722,6 @@ TEST_F(TestMockImageRefreshRequest, SuccessLegacySnapshotNoTimestampV2) {
   ASSERT_EQ(0, ctx.wait());
 }
 
-
 TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   REQUIRE_FORMAT_V2();
 
@@ -763,6 +762,38 @@ TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageRefreshRequest, SnapshotV2EnoentRetriesLimit) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap"));
+
+  MockRefreshImageCtx mock_image_ctx(*ictx);
+  MockGetMetadataRequest mock_get_metadata_request;
+  expect_op_work_queue(mock_image_ctx);
+  expect_test_features(mock_image_ctx);
+
+  InSequence seq;
+  for (int i = 0; i < RefreshRequest<>::MAX_ENOENT_RETRIES + 1; ++i) {
+    expect_get_mutable_metadata(mock_image_ctx, ictx->features, 0);
+    expect_get_parent(mock_image_ctx, 0);
+    expect_get_metadata(mock_image_ctx, mock_get_metadata_request,
+                        mock_image_ctx.header_oid, {}, 0);
+    expect_get_metadata(mock_image_ctx, mock_get_metadata_request, RBD_INFO, {},
+                        0);
+    expect_apply_metadata(mock_image_ctx, 0);
+    expect_get_group(mock_image_ctx, 0);
+    expect_get_snapshots(mock_image_ctx, false, -ENOENT);
+  }
+
+  C_SaferCond ctx;
+  auto req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
+  req->send();
+
+  ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
 TEST_F(TestMockImageRefreshRequest, SuccessChild) {
