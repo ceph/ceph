@@ -21,7 +21,7 @@ export class NfsFormClientComponent implements OnInit {
 
   @ContentChild('squashHelper', { static: true }) squashHelperTpl: TemplateRef<any>;
 
-  nfsSquash: any[] = this.nfsService.nfsSquash;
+  nfsSquash: any[] = Object.keys(this.nfsService.nfsSquash);
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
   icons = Icons;
   clientsFormArray: FormArray;
