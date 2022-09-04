@@ -88,6 +88,7 @@ export class HostsPageHelper extends PageHelper {
     // Verify labels are added or removed from Labels column
     // First find row with hostname, then find labels in the row
     this.getTableCell(this.columnIndex.hostname, hostname)
+      .click()
       .parent()
       .find(`datatable-body-cell:nth-child(${this.columnIndex.labels}) .badge`)
       .should(($ele) => {
