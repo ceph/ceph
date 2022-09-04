@@ -834,8 +834,10 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
 
+  mock_image_ctx.features &= ~RBD_FEATURE_OPERATIONS;
+
   InSequence seq;
-  expect_get_mutable_metadata(mock_image_ctx, ictx2->features, 0);
+  expect_get_mutable_metadata(mock_image_ctx, mock_image_ctx.features, 0);
   expect_get_parent(mock_image_ctx, 0);
   MockGetMetadataRequest mock_get_metadata_request;
   expect_get_metadata(mock_image_ctx, mock_get_metadata_request,
@@ -843,7 +845,6 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
   expect_get_metadata(mock_image_ctx, mock_get_metadata_request, RBD_INFO, {},
                       0);
   expect_apply_metadata(mock_image_ctx, 0);
-  expect_get_op_features(mock_image_ctx, RBD_OPERATION_FEATURE_CLONE_CHILD, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(*mock_refresh_parent_request, true);
   expect_refresh_parent_send(mock_image_ctx, *mock_refresh_parent_request, 0);
@@ -892,8 +893,10 @@ TEST_F(TestMockImageRefreshRequest, SuccessChildDontOpenParent) {
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
 
+  mock_image_ctx.features &= ~RBD_FEATURE_OPERATIONS;
+
   InSequence seq;
-  expect_get_mutable_metadata(mock_image_ctx, ictx2->features, 0);
+  expect_get_mutable_metadata(mock_image_ctx, mock_image_ctx.features, 0);
   expect_get_parent(mock_image_ctx, 0);
   MockGetMetadataRequest mock_get_metadata_request;
   expect_get_metadata(mock_image_ctx, mock_get_metadata_request,
@@ -901,7 +904,6 @@ TEST_F(TestMockImageRefreshRequest, SuccessChildDontOpenParent) {
   expect_get_metadata(mock_image_ctx, mock_get_metadata_request, RBD_INFO, {},
                       0);
   expect_apply_metadata(mock_image_ctx, 0);
-  expect_get_op_features(mock_image_ctx, RBD_OPERATION_FEATURE_CLONE_CHILD, 0);
   expect_get_group(mock_image_ctx, 0);
   if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
     expect_init_exclusive_lock(mock_image_ctx, mock_exclusive_lock, 0);
