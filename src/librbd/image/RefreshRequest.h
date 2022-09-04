@@ -80,9 +80,9 @@ private:
    *       *        v     v   *                               |
    *        * * V2_GET_SNAPSHOTS (skip if no snaps)           |
    *     (ENOENT)   |                                         |
-   *                v                                         |
-   *            V2_REFRESH_PARENT (skip if no parent or       |
-   *                |              refresh not needed)        |
+   *       *        v                                         |
+   *        * * V2_REFRESH_PARENT (skip if no parent or       |
+   *     (ENOENT)   |              refresh not needed)        |
    *                v                                         |
    *            V2_INIT_EXCLUSIVE_LOCK (skip if lock          |
    *                |                   active or disabled)   |
