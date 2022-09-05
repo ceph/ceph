@@ -219,11 +219,13 @@ block_sm_superblock_t make_superblock(
   size_t tracker_off = data.block_size;
   size_t first_seg_off = tracker_size + tracker_off;
   size_t segments = (size - first_seg_off) / config_segment_size;
+  size_t available_size = segments * config_segment_size;
 
-  INFO("{} disk_size={}, segment_size={}, segments={}, block_size={}, "
-       "tracker_off={}, first_seg_off={}",
+  INFO("{} disk_size={}, available_size={}, segment_size={}, segments={}, "
+       "block_size={}, tracker_off={}, first_seg_off={}",
        device_id_printer_t{device_id},
        size,
+       available_size,
        config_segment_size,
        segments,
        data.block_size,
@@ -231,7 +233,7 @@ block_sm_superblock_t make_superblock(
        first_seg_off);
 
   return block_sm_superblock_t{
-    size,
+    available_size,
     config_segment_size,
     data.block_size,
     segments,
@@ -419,6 +421,11 @@ Segment::write_ertr::future<> BlockSegment::write(
 
   write_pointer = offset + bl.length();
   return manager.segment_write(paddr, bl);
+}
+
+Segment::write_ertr::future<> BlockSegment::advance_wp(
+  seastore_off_t offset) {
+  return write_ertr::now();
 }
 
 Segment::close_ertr::future<> BlockSegmentManager::segment_close(

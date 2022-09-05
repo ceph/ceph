@@ -129,7 +129,7 @@ void segments_info_t::add_segment_manager(
   device_id_t d_id = segment_manager.get_device_id();
   auto ssize = segment_manager.get_segment_size();
   auto nsegments = segment_manager.get_num_segments();
-  auto sm_size = segment_manager.get_size();
+  auto sm_size = segment_manager.get_available_size();
   INFO("adding segment manager {}, size={}, ssize={}, segments={}",
        device_id_printer_t{d_id}, sm_size, ssize, nsegments);
   ceph_assert(ssize > 0);
