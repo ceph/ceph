@@ -34,3 +34,9 @@
 #define AT_REMOVEDIR        0x200
 
 #define MAXSYMLINKS  65000
+
+#define O_DIRECTORY 0200000
+#define O_NOFOLLOW  0400000
+
+#define XATTR_CREATE  1
+#define XATTR_REPLACE 2

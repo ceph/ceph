@@ -147,7 +147,10 @@ TEST(ACL, SetACL) {
   ASSERT_EQ(ceph_fchown(cmount, fd, 65534, 65534), 0);
 
   ASSERT_EQ(0, ceph_conf_set(cmount, "client_permissions", "1"));
+  // "nobody" will be ignored on Windows
+  #ifndef _WIN32
   ASSERT_EQ(ceph_open(cmount, test_file, O_RDWR, 0), -EACCES);
+  #endif
   ASSERT_EQ(0, ceph_conf_set(cmount, "client_permissions", "0"));
 
   size_t acl_buf_size = acl_ea_size(5);

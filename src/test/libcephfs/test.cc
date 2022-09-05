@@ -25,7 +25,10 @@
 #include <dirent.h>
 #include <sys/uio.h>
 #include <sys/time.h>
+
+#ifndef _WIN32
 #include <sys/resource.h>
+#endif
 
 #include "common/Clock.h"
 
@@ -595,7 +598,7 @@ TEST(LibCephFS, Xattrs) {
     sprintf(xattrv, "testxattr%c", i);
     ASSERT_TRUE(!strncmp(xattrv, gxattrv, alen));
 
-    n = index(p, '\0');
+    n = strchr(p, '\0');
     n++;
     len -= (n - p);
     p = n;
@@ -895,8 +898,11 @@ TEST(LibCephFS, Fchown) {
 
   ceph_close(cmount, fd);
 
+  // "nobody" will be ignored on Windows
+  #ifndef _WIN32
   fd = ceph_open(cmount, test_file, O_RDWR, 0);
   ASSERT_EQ(fd, -EACCES);
+  #endif
 
   ceph_shutdown(cmount);
 }
@@ -2167,6 +2173,8 @@ TEST(LibCephFS, OperationsOnRoot)
   ceph_shutdown(cmount);
 }
 
+// no rlimits on Windows
+#ifndef _WIN32
 static void shutdown_racer_func()
 {
   const int niter = 32;
@@ -2212,6 +2220,7 @@ TEST(LibCephFS, ShutdownRace)
    */
 //  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
 }
+#endif
 
 static void get_current_time_utimbuf(struct utimbuf *utb)
 {
@@ -2442,7 +2451,8 @@ TEST(LibCephFS, SnapXattrs) {
   ASSERT_LT(0, alen);
   ASSERT_LT(alen, xbuflen);
   gxattrv[alen] = '\0';
-  char *s = strchrnul(gxattrv, '.');
+  char *s = strchr(gxattrv, '.');
+  ASSERT_NE(0, s);
   ASSERT_LT(s, gxattrv + alen);
   ASSERT_EQ('.', *s);
   *s = '\0';
@@ -2469,7 +2479,8 @@ TEST(LibCephFS, SnapXattrs) {
   ASSERT_LT(0, alen);
   ASSERT_LT(alen, xbuflen);
   gxattrv2[alen] = '\0';
-  s = strchrnul(gxattrv2, '.');
+  s = strchr(gxattrv2, '.');
+  ASSERT_NE(0, s);
   ASSERT_LT(s, gxattrv2 + alen);
   ASSERT_EQ('.', *s);
   *s = '\0';
@@ -3331,8 +3342,11 @@ TEST(LibCephFS, Chownat) {
   ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "1"), 0);
   ceph_close(cmount, fd);
 
+  // "nobody" will be ignored on Windows
+  #ifndef _WIN32
   fd = ceph_open(cmount, file_path, O_RDWR, 0);
   ASSERT_EQ(fd, -EACCES);
+  #endif
 
   ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "0"), 0);
   ASSERT_EQ(0, ceph_unlink(cmount, file_path));
@@ -3372,8 +3386,11 @@ TEST(LibCephFS, ChownatATFDCWD) {
   ASSERT_EQ(ceph_chownat(cmount, CEPHFS_AT_FDCWD, rel_file_path, 65534, 65534, 0), 0);
   ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "1"), 0);
 
+  // "nobody" will be ignored on Windows
+  #ifndef _WIN32
   fd = ceph_open(cmount, file_path, O_RDWR, 0);
   ASSERT_EQ(fd, -EACCES);
+  #endif
 
   ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "0"), 0);
   ASSERT_EQ(0, ceph_unlink(cmount, file_path));
