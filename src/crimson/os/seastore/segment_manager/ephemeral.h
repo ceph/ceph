@@ -48,6 +48,7 @@ public:
   seastore_off_t get_write_ptr() const final { return write_pointer; }
   close_ertr::future<> close() final;
   write_ertr::future<> write(seastore_off_t offset, ceph::bufferlist bl) final;
+  write_ertr::future<> advance_wp(seastore_off_t offset) final;
 
   ~EphemeralSegment() {}
 };
@@ -101,7 +102,7 @@ public:
     size_t len,
     ceph::bufferptr &out) final;
 
-  size_t get_size() const final {
+  size_t get_available_size() const final {
     return config.size;
   }
   seastore_off_t get_block_size() const final {

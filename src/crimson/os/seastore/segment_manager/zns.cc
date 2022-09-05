@@ -14,6 +14,8 @@ SET_SUBSYS(seastore_device);
 
 #define SECT_SHIFT	9
 #define RESERVED_ZONES 	1
+// limit the max padding buf size to 1MB
+#define MAX_PADDING_SIZE 1048576
 
 namespace crimson::os::seastore::segment_manager::zns {
 
@@ -43,7 +45,7 @@ static open_device_ret open_device(
 }
 
 static zns_sm_metadata_t make_metadata(
-  uint64_t size,
+  uint64_t total_size,
   seastore_meta_t meta,
   const seastar::stat_data &data,
   size_t zone_size_sectors,
@@ -59,13 +61,17 @@ static zns_sm_metadata_t make_metadata(
   size_t segment_size = zone_size;
   size_t zones_per_segment = segment_size / zone_size;
   size_t segments = (num_zones - RESERVED_ZONES) / zones_per_segment;
+  size_t available_size = zone_capacity * segments;
+
+  assert(total_size == num_zones * zone_size);
 
   WARN("Ignoring configuration values for device and segment size");
   INFO(
-    "device size {}, block_size {}, allocated_size {},"
+    "device size {}, available_size {}, block_size {}, allocated_size {},"
     " total zones {}, zone_size {}, zone_capacity {},"
     " total segments {}, zones per segment {}, segment size {}",
-    size,
+    total_size,
+    available_size,
     data.block_size,
     data.allocated_size,
     num_zones,
@@ -76,7 +82,7 @@ static zns_sm_metadata_t make_metadata(
     zone_capacity * zones_per_segment);
 
   zns_sm_metadata_t ret = zns_sm_metadata_t{
-    size,
+    available_size,
     segment_size,
     zone_capacity * zones_per_segment,
     zones_per_segment,
@@ -123,8 +129,8 @@ static seastar::future<size_t> get_blk_dev_size(
 // zone_size should be in 512B sectors
 static seastar::future<> reset_device(
   seastar::file &device,
-  uint32_t zone_size_sects,
-  uint32_t nr_zones)
+  uint64_t zone_size_sects,
+  uint64_t nr_zones)
 {
   return seastar::do_with(
     blk_zone_range{},
@@ -303,11 +309,11 @@ ZNSSegmentManager::mount_ret ZNSSegmentManager::mount()
 {
   return open_device(
     device_path, seastar::open_flags::rw
-  ).safe_then([=](auto p) {
+  ).safe_then([=, this](auto p) {
     device = std::move(p.first);
     auto sd = p.second;
     return read_metadata(device, sd);
-  }).safe_then([=](auto meta){
+  }).safe_then([=, this](auto meta){
     metadata = meta;
     return mount_ertr::now();
   });
@@ -325,11 +331,11 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
     size_t(),
     size_t(),
     size_t(),
-    [=](auto &device, auto &stat, auto &sb, auto &zone_size_sects, auto &nr_zones, auto &size) {
+    [=, this](auto &device, auto &stat, auto &sb, auto &zone_size_sects, auto &nr_zones, auto &size) {
       return open_device(
 	device_path,
 	seastar::open_flags::rw
-      ).safe_then([=, &device, &stat, &sb, &zone_size_sects, &nr_zones, &size](auto p) {
+      ).safe_then([=, this, &device, &stat, &sb, &zone_size_sects, &nr_zones, &size](auto p) {
 	device = p.first;
 	stat = p.second;
 	return device.ioctl(
@@ -417,7 +423,7 @@ ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
   LOG_PREFIX(ZNSSegmentManager::open);
   return seastar::do_with(
     blk_zone_range{},
-    [=](auto &range) {
+    [=, this](auto &range) {
       range = make_range(
 	id,
 	metadata.segment_size,
@@ -427,12 +433,39 @@ ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
 	range
       );
     }
-  ).safe_then([=] {
-    DEBUG("segment open successful");
+  ).safe_then([=, this] {
+    DEBUG("segment {}, open successful", id);
     return open_ertr::future<SegmentRef>(
       open_ertr::ready_future_marker{},
       SegmentRef(new ZNSSegment(*this, id))
     );
+  });
+}
+
+using blk_finish_zone_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
+using blk_finish_zone_ret = blk_finish_zone_ertr::future<>;
+static blk_finish_zone_ret blk_finish_zone(
+    seastar::file &device,
+    blk_zone_range &range)
+{
+  LOG_PREFIX(ZNSSegmentManager::blk_finish_zone);
+  return device.ioctl(
+    BLKFINISHZONE,
+    &range
+  ).then_wrapped([=](auto f) -> blk_finish_zone_ret {
+    if (f.failed()) {
+      DEBUG("BLKFINISHZONE ioctl failed");
+      return crimson::ct_error::input_output_error::make();
+    } else {
+      int ret = f.get();
+      if (ret == 0) {
+        return seastar::now();
+      } else {
+        DEBUG("BLKFINISHZONE ioctl failed with return code {}", ret);
+        return crimson::ct_error::input_output_error::make();
+      }
+    }
   });
 }
 
@@ -446,7 +479,7 @@ blk_close_zone_ret blk_close_zone(
   return device.ioctl(
     BLKCLOSEZONE, 
     &range
-  ).then_wrapped([=](auto f) -> blk_open_zone_ret{
+  ).then_wrapped([=](auto f) -> blk_open_zone_ret {
     if (f.failed()) {
       return crimson::ct_error::input_output_error::make();
     }
@@ -461,18 +494,46 @@ blk_close_zone_ret blk_close_zone(
   });
 }
 
+using blk_reset_zone_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
+using blk_reset_zone_ret = blk_reset_zone_ertr::future<>;
+blk_reset_zone_ret blk_reset_zone(
+    seastar::file &device,
+    blk_zone_range &range)
+{
+  LOG_PREFIX(ZNSSegmentManager::blk_reset_zone);
+  return device.ioctl(
+    BLKRESETZONE,
+    &range
+  ).then_wrapped([=](auto f) -> blk_reset_zone_ret {
+    if (f.failed()) {
+      DEBUG("BLKRESETZONE ioctl failed");
+      return crimson::ct_error::input_output_error::make();
+    } else {
+      int ret = f.get();
+      if (ret == 0) {
+        return seastar::now();
+      } else {
+        DEBUG("BLKRESETZONE ioctl failed with return code {}", ret);
+        return crimson::ct_error::input_output_error::make();
+      }
+    }
+  });
+}
+
 ZNSSegmentManager::release_ertr::future<> ZNSSegmentManager::release(
   segment_id_t id) 
 {
   LOG_PREFIX(ZNSSegmentManager::release);
+  DEBUG("Resetting zone/segment {}", id);
   return seastar::do_with(
     blk_zone_range{},
-    [=](auto &range) {
+    [=, this](auto &range) {
       range = make_range(
 	id,
 	metadata.segment_size,
         metadata.first_segment_offset);
-      return blk_close_zone(
+      return blk_reset_zone(
 	device,
 	range
       );
@@ -492,12 +553,12 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
   auto& seg_addr = addr.as_seg_paddr();
   if (seg_addr.get_segment_id().device_segment_id() >= get_num_segments()) {
     ERROR("invalid segment {}",
-      addr);
+      seg_addr.get_segment_id().device_segment_id());
     return crimson::ct_error::invarg::make();
   }
   
-  if (seg_addr.get_segment_off() + len > metadata.segment_size) {
-    ERROR("invalid offset {}, len {}",
+  if (seg_addr.get_segment_off() + len > metadata.segment_capacity) {
+    ERROR("invalid read offset {}, len {}",
       addr,
       len);
     return crimson::ct_error::invarg::make();
@@ -512,21 +573,21 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
 Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
   segment_id_t id, seastore_off_t write_pointer)
 {
-  LOG_PREFIX(ZNSSegmentManager::close);
+  LOG_PREFIX(ZNSSegmentManager::segment_close);
   return seastar::do_with(
     blk_zone_range{},
-    [=](auto &range) {
+    [=, this](auto &range) {
       range = make_range(
 	id,
 	metadata.segment_size,
         metadata.first_segment_offset);
-      return blk_close_zone(
+      return blk_finish_zone(
 	device,
 	range
       );
     }
   ).safe_then([=] {
-    DEBUG("close successful");
+    DEBUG("zone finish successful");
     return Segment::close_ertr::now();
   });
 }
@@ -590,17 +651,70 @@ Segment::write_ertr::future<> ZNSSegment::write(
   seastore_off_t offset, ceph::bufferlist bl)
 {
   LOG_PREFIX(ZNSSegment::write);
-  if (offset < write_pointer || offset % manager.metadata.block_size != 0) {
-    ERROR("invalid segment write on segment {} to offset {}",
-      id,
-      offset);
+  if (offset != write_pointer || offset % manager.metadata.block_size != 0) {
+    ERROR("Segment offset and zone write pointer mismatch. "
+          "segment {} segment-offset {} write pointer {}",
+          id, offset, write_pointer);
     return crimson::ct_error::invarg::make();
   }
-  if (offset + bl.length() > manager.metadata.segment_size)
+  if (offset + bl.length() > manager.metadata.segment_capacity) {
     return crimson::ct_error::enospc::make();
+  }
   
   write_pointer = offset + bl.length();
   return manager.segment_write(paddr_t::make_seg_paddr(id, offset), bl);
+}
+
+Segment::write_ertr::future<> ZNSSegment::write_padding_bytes(
+  size_t padding_bytes)
+{
+  LOG_PREFIX(ZNSSegment::write_padding_bytes);
+  DEBUG("Writing {} padding bytes to segment {} at wp {}",
+        padding_bytes, id, write_pointer);
+
+  return crimson::repeat([FNAME, padding_bytes, this] () mutable {
+    size_t bufsize = 0;
+    if (padding_bytes >= MAX_PADDING_SIZE) {
+      bufsize = MAX_PADDING_SIZE;
+    } else {
+      bufsize = padding_bytes;
+    }
+
+    padding_bytes -= bufsize;
+    bufferptr bp(ceph::buffer::create_page_aligned(bufsize));
+    bp.zero();
+    bufferlist padd_bl;
+    padd_bl.append(bp);
+    return write(write_pointer, padd_bl).safe_then([FNAME, padding_bytes, this]() {
+      if (padding_bytes == 0) {
+        return write_ertr::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+      } else {
+        return write_ertr::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
+      }
+    });
+  });
+}
+
+// Advance write pointer, to given offset.
+Segment::write_ertr::future<> ZNSSegment::advance_wp(
+  seastore_off_t offset)
+{
+  LOG_PREFIX(ZNSSegment::advance_wp);
+
+  DEBUG("Advancing write pointer from {} to {}", write_pointer, offset);
+  if (offset < write_pointer) {
+    return crimson::ct_error::invarg::make();
+  }
+
+  size_t padding_bytes = offset - write_pointer;
+
+  if (padding_bytes == 0) {
+    return write_ertr::now();
+  }
+
+  assert(padding_bytes % manager.metadata.block_size == 0);
+
+  return write_padding_bytes(padding_bytes);
 }
 
 }
