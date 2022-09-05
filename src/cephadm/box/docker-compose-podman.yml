@@ -57,4 +57,4 @@ services:
 volumes:
   var-lib-docker:
 
-network_mode: public
+network_mode: host

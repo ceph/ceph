@@ -254,7 +254,7 @@ class Cluster(Target):
                 dcflags += f' -f {Config.get("docker_v1_yaml")}'
             run_shell_command(f'{engine_compose()} {dcflags} up --scale hosts={hosts} -d')
         else:
-            run_shell_command(f'{engine_compose()} -f {Config.get("podman_yaml")} --podman-run-args "--group-add keep-groups --network=host --device /dev/fuse -it {loop_device_arg}" up --scale hosts={hosts} -d')
+            run_shell_command(f'{engine_compose()} -f {Config.get("podman_yaml")} --podman-run-args "--group-add keep-groups --device /dev/fuse -it {loop_device_arg}" up --scale hosts={hosts} -d')
 
         run_shell_command('sudo sysctl net.ipv4.conf.all.forwarding=1')
         run_shell_command('sudo iptables -P FORWARD ACCEPT')
