@@ -1052,8 +1052,14 @@ public:
 	  std::cerr << "Error: oid " << oid << " write returned error code "
 		    << err << std::endl;
 	}
-	if ((*i)->get_version64() > version)
+	if ((*i)->get_version64() > version) {
+          std::cout << num << ":  oid " << oid << " updating version " << version
+                    << " to " << (*i)->get_version64() << std::endl;
 	  version = (*i)->get_version64();
+        } else {
+          std::cout << num << ":  oid " << oid << " version " << version
+                    << " is already newer than " << (*i)->get_version64() << std::endl;
+        }
 	(*i)->release();
 	waiting.erase(i++);
       }
@@ -1227,10 +1233,14 @@ public:
 	  std::cerr << "Error: oid " << oid << " writesame returned error code "
 	       << err << std::endl;
 	}
-	if ((*i)->get_version64() > version)
+	if ((*i)->get_version64() > version) {
+          std::cout << "oid " << oid << "updating version " << version
+                    << "to " << (*i)->get_version64() << std::endl;
 	  version = (*i)->get_version64();
-	(*i)->release();
-	waiting.erase(i++);
+        } else {
+          std::cout << "oid " << oid << "version " << version
+                    << "is already newer than " << (*i)->get_version64() << std::endl;
+        }
       }
 
       context->update_object_version(oid, version);
