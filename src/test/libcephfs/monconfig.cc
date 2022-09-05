@@ -13,6 +13,7 @@
  */
 
 #include "gtest/gtest.h"
+#include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
 #include "common/ceph_context.h"
 #include <errno.h>
