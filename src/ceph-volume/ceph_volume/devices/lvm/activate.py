@@ -268,10 +268,7 @@ class Activate(object):
         elif not osd_id and osd_fsid:
             tags = {'ceph.osd_fsid': osd_fsid}
         elif osd_id and not osd_fsid:
-            if not osd_id.isdigit():
-                tags = {'ceph.osd_fsid': osd_id}
-            else:
-                raise RuntimeError('could not activate osd.{}, please provide the '
+            raise RuntimeError('could not activate osd.{}, please provide the '
                                'osd_fsid too'.format(osd_id))
         else:
             raise RuntimeError('Please provide both osd_id and osd_fsid')
@@ -376,6 +373,8 @@ class Activate(object):
         if len(self.argv) == 0:
             print(sub_command_help)
             return
+        if not self.argv[0].isdigit() and self.argv[0]:
+            self.argv.insert(0,"")
         args = parser.parse_args(self.argv)
         if args.activate_all:
             self.activate_all(args)
