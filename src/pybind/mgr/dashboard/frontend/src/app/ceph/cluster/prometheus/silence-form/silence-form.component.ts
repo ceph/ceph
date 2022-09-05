@@ -37,6 +37,8 @@ export class SilenceFormComponent {
   permission: Permission;
   form: CdFormGroup;
   rules: PrometheusRule[];
+  matchName = '';
+  matchValue = '';
 
   recreate = false;
   edit = false;
@@ -63,6 +65,7 @@ export class SilenceFormComponent {
   ];
 
   datetimeFormat = 'YYYY-MM-DD HH:mm';
+  isNavigate = true;
 
   constructor(
     private router: Router,
@@ -180,7 +183,7 @@ export class SilenceFormComponent {
     this.getModeSpecificData();
   }
 
-  private getRules() {
+  getRules() {
     this.prometheusService.ifPrometheusConfigured(
       () =>
         this.prometheusService.getRules().subscribe(
@@ -206,6 +209,7 @@ export class SilenceFormComponent {
         );
       }
     );
+    return this.rules;
   }
 
   private getModeSpecificData() {
@@ -256,13 +260,11 @@ export class SilenceFormComponent {
 
   private fillFormByAlert(alert: AlertmanagerAlert) {
     const labels = alert.labels;
-    Object.keys(labels).forEach((key) =>
-      this.setMatcher({
-        name: key,
-        value: labels[key],
-        isRegex: false
-      })
-    );
+    this.setMatcher({
+      name: 'alertname',
+      value: labels.alertname,
+      isRegex: false
+    });
   }
 
   private setMatcher(matcher: AlertmanagerSilenceMatcher, index?: number) {
@@ -292,20 +294,26 @@ export class SilenceFormComponent {
     this.validateMatchers();
   }
 
-  submit() {
+  submit(data?: any) {
     if (this.form.invalid) {
       return;
     }
     this.prometheusService.setSilence(this.getSubmitData()).subscribe(
       (resp) => {
-        this.router.navigate(['/monitoring/silences']);
+        if (data) {
+          data.silenceId = resp.body['silenceId'];
+        }
+        if (this.isNavigate) {
+          this.router.navigate(['/monitoring/silences']);
+        }
         this.notificationService.show(
           NotificationType.success,
-          this.getNotificationTile(resp.body['silenceId']),
+          this.getNotificationTile(this.matchers),
           undefined,
           undefined,
           'Prometheus'
         );
+        this.matchers = [];
       },
       () => this.form.setErrors({ cdSubmitButton: true })
     );
@@ -323,7 +331,7 @@ export class SilenceFormComponent {
     return payload;
   }
 
-  private getNotificationTile(id: string) {
+  private getNotificationTile(matchers: AlertmanagerSilenceMatcher[]) {
     let action;
     if (this.edit) {
       action = this.succeededLabels.EDITED;
@@ -332,6 +340,23 @@ export class SilenceFormComponent {
     } else {
       action = this.succeededLabels.CREATED;
     }
-    return `${action} ${this.resource} ${id}`;
+    let msg = '';
+    for (const matcher of matchers) {
+      msg = msg.concat(` ${matcher.name} - ${matcher.value},`);
+    }
+    return `${action} ${this.resource} for ${msg.slice(0, -1)}`;
+  }
+
+  createSilenceFromNotification(data: any) {
+    this.isNavigate = false;
+    this.setMatcher({
+      name: 'alertname',
+      value: data['title'].split(' ')[0],
+      isRegex: false
+    });
+    this.createForm();
+    this.form.get('comment').setValue('Silence created from the alert notification');
+    this.setupDates();
+    this.submit(data);
   }
 }

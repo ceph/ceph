@@ -53,6 +53,7 @@ export enum Icons {
   health = 'fa fa-heartbeat', // Health
   circle = 'fa fa-circle', // Circle
   bell = 'fa fa-bell', // Notification
+  mute = 'fa fa-bell-slash', // Mute or silence
   tag = 'fa fa-tag', // Tag, Badge
   leftArrow = 'fa fa-angle-left', // Left facing angle
   rightArrow = 'fa fa-angle-right', // Right facing angle

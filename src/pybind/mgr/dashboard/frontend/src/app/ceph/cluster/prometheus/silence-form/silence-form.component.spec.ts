@@ -15,7 +15,10 @@ import { ErrorComponent } from '~/app/core/error/error.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { AlertmanagerSilence } from '~/app/shared/models/alertmanager-silence';
+import {
+  AlertmanagerSilence,
+  AlertmanagerSilenceMatcher
+} from '~/app/shared/models/alertmanager-silence';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -283,12 +286,7 @@ describe('SilenceFormComponent', () => {
       expectMode('alertAdd', false, false, 'Create');
       expect(prometheusService.getSilences).not.toHaveBeenCalled();
       expect(prometheusService.getAlerts).toHaveBeenCalled();
-      expect(component.matchers).toEqual([
-        createMatcher('alertname', 'alert0', false),
-        createMatcher('instance', 'someInstance', false),
-        createMatcher('job', 'someJob', false),
-        createMatcher('severity', 'someSeverity', false)
-      ]);
+      expect(component.matchers).toEqual([createMatcher('alertname', 'alert0', false)]);
       expect(component.matcherMatch).toEqual({
         cssClass: 'has-success',
         status: 'Matches 1 rule with 1 active alert.'
@@ -495,14 +493,22 @@ describe('SilenceFormComponent', () => {
     let silence: AlertmanagerSilence;
     const silenceId = '50M3-10N6-1D';
 
-    const expectSuccessNotification = (titleStartsWith: string) =>
+    const expectSuccessNotification = (
+      titleStartsWith: string,
+      matchers: AlertmanagerSilenceMatcher[]
+    ) => {
+      let msg = '';
+      for (const matcher of matchers) {
+        msg = msg.concat(` ${matcher.name} - ${matcher.value},`);
+      }
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `${titleStartsWith} silence ${silenceId}`,
+        `${titleStartsWith} silence for ${msg.slice(0, -1)}`,
         undefined,
         undefined,
         'Prometheus'
       );
+    };
 
     const fillAndSubmit = () => {
       ['createdBy', 'comment'].forEach((attr) => {
@@ -564,7 +570,7 @@ describe('SilenceFormComponent', () => {
     it('should create a silence', () => {
       fillAndSubmit();
       expect(prometheusService.setSilence).toHaveBeenCalledWith(silence);
-      expectSuccessNotification('Created');
+      expectSuccessNotification('Created', silence.matchers);
     });
 
     it('should recreate a silence', () => {
@@ -572,7 +578,7 @@ describe('SilenceFormComponent', () => {
       component.id = 'recreateId';
       fillAndSubmit();
       expect(prometheusService.setSilence).toHaveBeenCalledWith(silence);
-      expectSuccessNotification('Recreated');
+      expectSuccessNotification('Recreated', silence.matchers);
     });
 
     it('should edit a silence', () => {
@@ -581,7 +587,7 @@ describe('SilenceFormComponent', () => {
       silence.id = component.id;
       fillAndSubmit();
       expect(prometheusService.setSilence).toHaveBeenCalledWith(silence);
-      expectSuccessNotification('Edited');
+      expectSuccessNotification('Edited', silence.matchers);
     });
   });
 });
