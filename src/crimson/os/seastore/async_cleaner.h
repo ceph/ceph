@@ -1357,6 +1357,12 @@ public:
     return nullptr;
   }
 
+  paddr_t alloc_paddr(extent_len_t length) {
+    // TODO: implement allocation strategy (dirty metadata and multiple devices)
+    auto rbs = rb_group->get_rb_managers();
+    return rbs[0]->alloc_extent(length);
+  }
+
   // Testing interfaces
 
   bool check_usage() final {

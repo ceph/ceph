@@ -157,6 +157,10 @@ public:
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
       fresh_block_stats.increment(ref->get_length());
+    } else if (ref->get_paddr().is_absolute()) {
+      assert(ref->is_logical());
+      delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
+      fresh_block_stats.increment(ref->get_length());
     } else {
       assert(ref->get_paddr() == make_record_relative_paddr(0));
       ref->set_paddr(make_record_relative_paddr(offset));
@@ -175,6 +179,7 @@ public:
 
   void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
     write_set.erase(*ref);
+    assert(ref->get_paddr().is_delayed());
     ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
     inline_block_list.push_back(ref);
@@ -183,6 +188,7 @@ public:
 
   void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
     write_set.erase(*ref);
+    assert(ref->get_paddr().is_delayed());
     ref->set_paddr(final_addr);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());

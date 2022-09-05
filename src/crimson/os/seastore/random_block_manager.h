@@ -84,7 +84,10 @@ public:
     >;
   using allocate_ret = allocate_ertr::future<paddr_t>;
   // allocator, return start addr of allocated blocks
-  virtual allocate_ret alloc_extent(Transaction &t, size_t size) = 0;
+  virtual paddr_t alloc_extent(size_t size) = 0;
+
+  virtual void mark_space_used(paddr_t paddr, size_t len) = 0;
+  virtual void mark_space_free(paddr_t paddr, size_t len) = 0;
 
   using abort_allocation_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -106,6 +109,7 @@ public:
   virtual device_id_t get_device_id() const = 0;
   virtual const seastore_meta_t &get_meta() const = 0;
   virtual Device* get_device() = 0;
+  virtual paddr_t get_start() = 0;
   virtual ~RandomBlockManager() {}
 };
 using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;
