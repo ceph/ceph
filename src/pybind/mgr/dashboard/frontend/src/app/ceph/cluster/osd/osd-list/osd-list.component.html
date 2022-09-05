@@ -86,7 +86,8 @@
 
 <ng-template #osdUsageTpl
              let-row="row">
-  <cd-usage-bar [total]="row.stats.stat_bytes"
+  <cd-usage-bar [title]="'osd ' + row.osd"
+                [total]="row.stats.stat_bytes"
                 [used]="row.stats.stat_bytes_used"
                 [warningThreshold]="osdSettings.nearfull_ratio"
                 [errorThreshold]="osdSettings.full_ratio">

@@ -22,6 +22,8 @@ export class UsageBarComponent implements OnChanges {
   decimals = 0;
   @Input()
   calculatePerc = true;
+  @Input()
+  title = $localize`usage`;
 
   usedPercentage: number;
   freePercentage: number;
