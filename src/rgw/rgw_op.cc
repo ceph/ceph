@@ -7637,7 +7637,7 @@ void RGWBulkUploadOp::execute(optional_yield y)
         case rgw::tar::FileType::NORMAL_FILE: {
           ldpp_dout(this, 2) << "handling regular file" << dendl;
 
-          std::string_view filename;
+          std::string filename;
 	  if (bucket_path.empty())
 	    filename = header->get_filename();
 	  else
