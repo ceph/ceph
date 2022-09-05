@@ -25,8 +25,11 @@
 #include <dirent.h>
 #include <sys/uio.h>
 #include <sys/time.h>
-#include <sys/resource.h>
 #include <string.h>
+
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
 
 #include "common/Clock.h"
 #include "common/ceph_json.h"
