@@ -494,4 +494,53 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics()
   });
 }
 
+RandomBlockOolWriter::alloc_write_iertr::future<>
+RandomBlockOolWriter::alloc_write_ool_extents(
+  Transaction& t,
+  std::list<LogicalCachedExtentRef>& extents)
+{
+  if (extents.empty()) {
+    return alloc_write_iertr::now();
+  }
+  return seastar::with_gate(write_guard, [this, &t, &extents] {
+    return do_write(t, extents);
+  });
+}
+
+RandomBlockOolWriter::alloc_write_iertr::future<>
+RandomBlockOolWriter::do_write(
+  Transaction& t,
+  std::list<LogicalCachedExtentRef>& extents)
+{
+  LOG_PREFIX(RandomBlockOolWriter::do_write);
+  assert(!extents.empty());
+  DEBUGT("start with {} allocated extents",
+         t, extents.size());
+  return trans_intr::do_for_each(extents,
+    [this, &t, FNAME](auto& ex) {
+    auto paddr = ex->get_paddr();
+    assert(paddr.is_absolute());
+    RandomBlockManager * rbm = rb_cleaner->get_rbm(paddr); 
+    assert(rbm);
+    TRACE("extent {}, allocated addr {}", ex, paddr);
+    auto& stats = t.get_ool_write_stats();
+    stats.extents.num += 1;
+    stats.extents.bytes += ex->get_length();
+    stats.num_records += 1;
+
+    return rbm->write(paddr,
+      ex->get_bptr()
+    ).handle_error(
+      alloc_write_iertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"Invalid error when writing record"}
+    ).safe_then([&t, &ex, paddr, FNAME]() {
+      TRACET("ool extent written at {} -- {}",
+	     t, paddr, *ex);
+      t.mark_extent_ool(ex, paddr);
+      return alloc_write_iertr::now();
+    });
+  });
+}
+
 }
