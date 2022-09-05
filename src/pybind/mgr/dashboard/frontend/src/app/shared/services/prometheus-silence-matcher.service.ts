@@ -39,10 +39,7 @@ export class PrometheusSilenceMatcherService {
     return this.describeMatch(rules);
   }
 
-  private getMatchedRules(
-    matcher: AlertmanagerSilenceMatcher,
-    rules: PrometheusRule[]
-  ): PrometheusRule[] {
+  getMatchedRules(matcher: AlertmanagerSilenceMatcher, rules: PrometheusRule[]): PrometheusRule[] {
     const attributePath = this.getAttributePath(matcher.name);
     return rules.filter((r) => _.get(r, attributePath) === matcher.value);
   }
