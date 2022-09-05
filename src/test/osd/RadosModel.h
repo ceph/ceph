@@ -1051,6 +1051,7 @@ public:
 	if (int err = (*i)->get_return_value()) {
 	  std::cerr << "Error: oid " << oid << " write returned error code "
 		    << err << std::endl;
+          ceph_abort();
 	}
 	if ((*i)->get_version64() > version) {
           std::cout << num << ":  oid " << oid << " updating version " << version
@@ -1232,6 +1233,7 @@ public:
 	if (int err = (*i)->get_return_value()) {
 	  std::cerr << "Error: oid " << oid << " writesame returned error code "
 	       << err << std::endl;
+          ceph_abort();
 	}
 	if ((*i)->get_version64() > version) {
           std::cout << "oid " << oid << "updating version " << version
