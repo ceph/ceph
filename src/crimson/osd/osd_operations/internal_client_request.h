@@ -14,6 +14,8 @@ namespace crimson::osd {
 
 class InternalClientRequest : public PhasedOperationT<InternalClientRequest>,
                               private CommonClientRequest {
+  std::vector<OSDOp> osd_ops;
+
 public:
   explicit InternalClientRequest(Ref<PG> pg);
   ~InternalClientRequest();

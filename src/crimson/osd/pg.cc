@@ -255,8 +255,18 @@ void PG::on_activate(interval_set<snapid_t>)
   projected_last_update = peering_state.get_info().last_update;
 }
 
+// replicas
+void PG::on_activate_committed()
+{
+  logger().info("PG {} {} {}", pgid, __func__, get_acting_recovery_backfill());
+  wait_for_active_blocker.unblock();
+}
+
+// primary
 void PG::on_activate_complete()
 {
+  logger().info("PG {} {} {}", pgid, __func__, get_acting_recovery_backfill());
+  ceph_assert(!get_acting_recovery_backfill().empty());
   wait_for_active_blocker.unblock();
 
   if (peering_state.needs_recovery()) {

@@ -74,6 +74,10 @@ struct InterruptibleOperation : Operation {
   using interruptible_future =
     ::crimson::interruptible::interruptible_future<
       ::crimson::osd::IOInterruptCondition, ValuesT>;
+  template <typename ErroratorT, typename ValuesT = void>
+  using interruptible_errorated_future =
+    ::crimson::interruptible::interruptible_errorated_future<
+      ::crimson::osd::IOInterruptCondition, ErroratorT, ValuesT>;
   using interruptor =
     ::crimson::interruptible::interruptor<
       ::crimson::osd::IOInterruptCondition>;

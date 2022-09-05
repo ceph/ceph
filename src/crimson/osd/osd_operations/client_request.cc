@@ -192,6 +192,20 @@ ClientRequest::process_pg_op(
   });
 }
 
+auto ClientRequest::reply_op_error(Ref<PG>& pg, int err)
+{
+  auto reply = crimson::make_message<MOSDOpReply>(
+    m.get(), err, pg->get_osdmap_epoch(),
+    m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
+    !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
+  reply->set_reply_versions(eversion_t(), 0);
+  reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
+  return conn->send(std::move(reply)).then([] {
+    return seastar::make_ready_future<ClientRequest::seq_mode_t>
+      (seq_mode_t::OUT_OF_ORDER);
+  });
+}
+
 ClientRequest::interruptible_future<ClientRequest::seq_mode_t>
 ClientRequest::process_op(Ref<PG> &pg)
 {
@@ -199,8 +213,9 @@ ClientRequest::process_op(Ref<PG> &pg)
     pp(*pg).recover_missing
   ).then_interruptible(
     [this, pg]() mutable {
-    return do_recover_missing(pg, m->get_hobj());
-  }).then_interruptible([this, pg]() mutable {
+    op_info.set_from_op(&*m, *pg->get_osdmap());
+    return do_recover_missing(pg, m->get_hobj(), op_info);
+  }).safe_then_interruptible([this, pg]() mutable {
     return pg->already_complete(m->get_reqid()).then_unpack_interruptible(
       [this, pg](bool completed, int ret) mutable
       -> PG::load_obc_iertr::future<seq_mode_t> {
@@ -215,7 +230,6 @@ ClientRequest::process_op(Ref<PG> &pg)
         return enter_stage<interruptor>(pp(*pg).get_obc).then_interruptible(
           [this, pg]() mutable -> PG::load_obc_iertr::future<seq_mode_t> {
           logger().debug("{}: got obc lock", *this);
-          op_info.set_from_op(&*m, *pg->get_osdmap());
           // XXX: `do_with()` is just a workaround for `with_obc_func_t` imposing
           // `future<void>`.
           return seastar::do_with(seq_mode_t{}, [this, &pg] (seq_mode_t& mode) {
@@ -235,26 +249,14 @@ ClientRequest::process_op(Ref<PG> &pg)
         });
       }
     });
-  }).safe_then_interruptible([pg=std::move(pg)] (const seq_mode_t mode) {
+  }, crimson::ct_error::eagain::handle([this, pg]() mutable {
+    return reply_op_error(pg, -EAGAIN);
+  })).safe_then_interruptible([pg=std::move(pg)] (const seq_mode_t mode) {
     return seastar::make_ready_future<seq_mode_t>(mode);
   }, PG::load_obc_ertr::all_same_way([](auto &code) {
     logger().error("ClientRequest saw error code {}", code);
     return seastar::make_ready_future<seq_mode_t>(seq_mode_t::OUT_OF_ORDER);
   }));
-}
-
-auto ClientRequest::reply_op_error(Ref<PG>& pg, int err)
-{
-  auto reply = crimson::make_message<MOSDOpReply>(
-    m.get(), err, pg->get_osdmap_epoch(),
-    m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
-    !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
-  reply->set_reply_versions(eversion_t(), 0);
-  reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
-  return conn->send(std::move(reply)).then([] {
-    return seastar::make_ready_future<ClientRequest::seq_mode_t>
-      (seq_mode_t::OUT_OF_ORDER);
-  });
 }
 
 ClientRequest::interruptible_future<ClientRequest::seq_mode_t>
