@@ -1243,6 +1243,8 @@ public:
           std::cout << "oid " << oid << "version " << version
                     << "is already newer than " << (*i)->get_version64() << std::endl;
         }
+	(*i)->release();
+	waiting.erase(i++);
       }
 
       context->update_object_version(oid, version);
