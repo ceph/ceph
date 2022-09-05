@@ -4893,10 +4893,11 @@ int MotrStore::store_email_info(const DoutPrefixProvider *dpp, optional_yield y,
   return rc;
 }
 
-int MotrStore::list_gc_objs(std::vector<std::unordered_map<std::string, std::string>>& gc_entries)
+int MotrStore::list_gc_objs(std::vector<std::unordered_map<std::string, std::string>>& gc_entries,
+                                            std::vector<std::string>& inac_queues)
 {
   auto gc = new MotrGC(cctx, this);
-  int rc = gc->list(gc_entries);
+  int rc = gc->list(gc_entries, inac_queues);
   if (rc < 0) {
     ldout(cctx, LOG_ERROR) <<__func__ << ": ERROR: failed to list gc items: rc=" << rc << dendl;
   }

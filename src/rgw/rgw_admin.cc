@@ -7815,8 +7815,11 @@ next:
     #ifdef WITH_RADOSGW_MOTR
     ldpp_dout(dpp(), 20) << "Listing GC objects from Motr" << dendl;
     std::vector<std::unordered_map<std::string, std::string>> gc_entries;
+    std::vector<std::string> inac_queues; // inaccessible queues
+    uint32_t count = 0;
+    formatter->open_object_section("");
     formatter->open_array_section("entries");
-    int ret = static_cast<rgw::sal::MotrStore*>(store)->list_gc_objs(gc_entries);
+    int ret = static_cast<rgw::sal::MotrStore*>(store)->list_gc_objs(gc_entries, inac_queues);
     if (ret < 0) {
       cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -7829,6 +7832,16 @@ next:
       formatter->dump_string("deletion_time", ginfo["deletion_time"]);
       formatter->dump_string("size", ginfo["size"]);
       formatter->dump_string("is_multipart", ginfo["is_multipart"]);
+      formatter->close_section();
+      count++;
+    }
+    formatter->close_section();
+    formatter->dump_string("count", std::to_string(count));
+    if(!inac_queues.empty()){
+      formatter->open_array_section("inaccessible_queues");
+      for(auto q : inac_queues) {
+        formatter->dump_stream("") << q;
+      }
       formatter->close_section();
     }
     formatter->close_section();
