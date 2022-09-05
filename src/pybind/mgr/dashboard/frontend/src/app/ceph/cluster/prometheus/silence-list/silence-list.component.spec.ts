@@ -11,6 +11,8 @@ import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -22,6 +24,8 @@ describe('SilenceListComponent', () => {
   let component: SilenceListComponent;
   let fixture: ComponentFixture<SilenceListComponent>;
   let prometheusService: PrometheusService;
+  let authStorageService: AuthStorageService;
+  let prometheusPermissions: Permission;
 
   configureTestBed({
     imports: [
@@ -36,6 +40,11 @@ describe('SilenceListComponent', () => {
   });
 
   beforeEach(() => {
+    authStorageService = TestBed.inject(AuthStorageService);
+    prometheusPermissions = new Permission(['update', 'delete', 'read', 'create']);
+    spyOn(authStorageService, 'getPermissions').and.callFake(() => ({
+      prometheus: prometheusPermissions
+    }));
     fixture = TestBed.createComponent(SilenceListComponent);
     component = fixture.componentInstance;
     prometheusService = TestBed.inject(PrometheusService);
