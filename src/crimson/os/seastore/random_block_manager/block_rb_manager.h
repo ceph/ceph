@@ -85,6 +85,12 @@ public:
     assert(device);
     return get_size() / get_block_size();
   }
+  const seastore_meta_t &get_meta() const final {
+    return device->get_meta();
+  }
+  RBMDevice* get_device() {
+    return device;
+  }
 
 private:
   /*

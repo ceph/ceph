@@ -27,16 +27,23 @@ class EphemeralTestState {
 protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
-  std::unique_ptr<random_block_device::RBMDevice> rb_device;
+  random_block_device::RBMDeviceRef rb_device;
+  std::list<random_block_device::RBMDeviceRef> secondary_rb_devices;
   journal_type_t journal_type;
 
-  EphemeralTestState(std::size_t num_segment_managers) {
-    assert(num_segment_managers > 0);
-    secondary_segment_managers.resize(num_segment_managers - 1);
+  EphemeralTestState(std::size_t num_device_managers) {
+    assert(num_device_managers > 0);
+    secondary_segment_managers.resize(num_device_managers - 1);
+    secondary_rb_devices.resize(num_device_managers - 1);
   }
 
   std::size_t get_num_devices() const {
-    return secondary_segment_managers.size() + 1;
+    if (journal_type == journal_type_t::SEGMENTED) {
+      return secondary_segment_managers.size() + 1;
+    } else {
+      assert(journal_type == journal_type_t::RANDOM_BLOCK);
+      return secondary_rb_devices.size() + 1;
+    }
   }
 
   virtual void _init() = 0;
@@ -57,9 +64,11 @@ protected:
     LOG_PREFIX(EphemeralTestState::restart_fut);
     SUBINFO(test, "begin ...");
     return teardown().then([this] {
-      segment_manager->remount();
-      for (auto &sec_sm : secondary_segment_managers) {
-        sec_sm->remount();
+      if (journal_type == journal_type_t::SEGMENTED) {
+	segment_manager->remount();
+	for (auto &sec_sm : secondary_segment_managers) {
+	  sec_sm->remount();
+	}
       }
       _init();
       return _mount().handle_error(crimson::ct_error::assert_all{});
@@ -117,8 +126,9 @@ protected:
 
   seastar::future<> randomblock_setup()
   {
+    LOG_PREFIX(EphemeralTestState::randomblock_setup);
     rb_device = random_block_device::create_test_ephemeral(
-      journal::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
+      journal::DEFAULT_TEST_CBJOURNAL_SIZE, journal::DEFAULT_TEST_CBJOURNAL_SIZE);
     return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
     ).then([this]() {
       device_config_t config = get_rbm_ephemeral_device_config(0, 1);
@@ -133,8 +143,8 @@ protected:
   seastar::future<> tm_setup(
     journal_type_t type = journal_type_t::SEGMENTED) {
     LOG_PREFIX(EphemeralTestState::tm_setup);
-    SUBINFO(test, "begin with {} devices ...", get_num_devices());
     journal_type = type;
+    SUBINFO(test, "begin with {} devices ...", get_num_devices());
     // FIXME: should not initialize segment_manager with circularbounded-journal
     if (journal_type == journal_type_t::SEGMENTED) {
       return segment_setup();
@@ -153,6 +163,9 @@ protected:
         sec_sm.reset();
       }
       rb_device.reset();
+      for (auto &sec_rb : secondary_rb_devices) {
+        sec_rb.reset();
+      }
       SUBINFO(test, "finish");
     });
   }
@@ -172,15 +185,17 @@ protected:
 
   virtual void _init() override {
     std::vector<Device*> sec_devices;
-    for (auto &sec_sm : secondary_segment_managers) {
-      sec_devices.emplace_back(sec_sm.get());
-    }
     if (journal_type == journal_type_t::RANDOM_BLOCK) {
       // FIXME: should not initialize segment_manager with circularbounded-journal
       // FIXME: no secondary device in the single device test
-      sec_devices.emplace_back(segment_manager.get());
+      for (auto &sec_rb : secondary_rb_devices) {
+	sec_devices.emplace_back(sec_rb.get());
+      }
       tm = make_transaction_manager(rb_device.get(), sec_devices, true);
     } else {
+      for (auto &sec_sm : secondary_segment_managers) {
+	sec_devices.emplace_back(sec_sm.get());
+      }
       tm = make_transaction_manager(segment_manager.get(), sec_devices, true);
     }
     epm = tm->get_epm();

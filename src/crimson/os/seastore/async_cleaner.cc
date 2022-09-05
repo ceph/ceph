@@ -1543,9 +1543,11 @@ void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
 }
 
 RBMCleaner::RBMCleaner(
+  RBMDeviceGroupRef&& rb_group,
   BackrefManager &backref_manager,
   bool detailed)
   : detailed(detailed),
+    rb_group(std::move(rb_group)),
     backref_manager(backref_manager)
 {}
 
@@ -1594,7 +1596,21 @@ RBMCleaner::clean_space_ret RBMCleaner::clean_space()
 RBMCleaner::mount_ret RBMCleaner::mount()
 {
   stats = {};
-  return mount_ertr::now();
+  return seastar::do_with(
+    rb_group->get_rb_managers(),
+    [](auto &rbs) {
+    return crimson::do_for_each(
+      rbs.begin(),
+      rbs.end(),
+      [](auto& it) {
+      return it->open(
+      ).handle_error(
+	crimson::ct_error::input_output_error::pass_further(),
+	crimson::ct_error::assert_all{
+	"Invalid error when opening RBM"}
+      );
+    });
+  });
 }
 
 }
