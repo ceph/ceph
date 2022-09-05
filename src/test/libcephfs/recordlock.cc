@@ -19,6 +19,7 @@
 #error "!GTEST_IS_THREADSAFE"
 #endif
 
+#include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
 #include <errno.h>
 #include <sys/fcntl.h>

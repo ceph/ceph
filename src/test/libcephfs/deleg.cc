@@ -7,6 +7,7 @@
  */
 
 #include "gtest/gtest.h"
+#include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/stat.h"
 #include <errno.h>
