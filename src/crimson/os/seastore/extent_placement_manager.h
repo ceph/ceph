@@ -9,6 +9,9 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/random_block_manager.h"
+#include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
+#include "crimson/os/seastore/randomblock_manager_group.h"
 
 namespace crimson::os::seastore {
 

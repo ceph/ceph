@@ -14,6 +14,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/segment_manager_group.h"
+#include "crimson/os/seastore/randomblock_manager_group.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
 
@@ -1290,14 +1291,20 @@ using RBMCleanerRef = std::unique_ptr<RBMCleaner>;
 class RBMCleaner : public AsyncCleaner {
 public:
   RBMCleaner(
+    RBMDeviceGroupRef&& rb_group,
     BackrefManager &backref_manager,
     bool detailed);
 
   static RBMCleanerRef create(
+      RBMDeviceGroupRef&& rb_group,
       BackrefManager &backref_manager,
       bool detailed) {
     return std::make_unique<RBMCleaner>(
-      backref_manager, detailed);
+      std::move(rb_group), backref_manager, detailed);
+  }
+
+  RBMDeviceGroup* get_rb_group() {
+    return rb_group.get();
   }
 
   /*
@@ -1340,6 +1347,16 @@ public:
 
   clean_space_ret clean_space() final;
 
+  RandomBlockManager* get_rbm(paddr_t paddr) {
+    auto rbs = rb_group->get_rb_managers();
+    for (auto p : rbs) {
+      if (p->get_device_id() == paddr.get_device_id()) {
+	return p;
+      }
+    }
+    return nullptr;
+  }
+
   // Testing interfaces
 
   bool check_usage() final {
@@ -1354,7 +1371,7 @@ public:
 
 private:
   const bool detailed;
-
+  RBMDeviceGroupRef rb_group;
   BackrefManager &backref_manager;
 
 

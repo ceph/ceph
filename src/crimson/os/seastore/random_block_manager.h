@@ -104,6 +104,8 @@ public:
   virtual extent_len_t get_block_size() const = 0;
   virtual uint64_t get_free_blocks() const = 0;
   virtual device_id_t get_device_id() const = 0;
+  virtual const seastore_meta_t &get_meta() const = 0;
+  virtual Device* get_device() = 0;
   virtual ~RandomBlockManager() {}
 };
 using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;

@@ -178,28 +178,45 @@ void ExtentPlacementManager::init(
 {
   writer_refs.clear();
 
-  auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
-  ceph_assert(segment_cleaner != nullptr);
-  auto num_writers = generation_to_writer(REWRITE_GENERATIONS);
-  data_writers_by_gen.resize(num_writers, {});
-  for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
-    writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-          data_category_t::DATA, gen, *segment_cleaner,
-          segment_cleaner->get_ool_segment_seq_allocator()));
-    data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
-  }
+  if (trimmer->get_journal_type() == journal_type_t::SEGMENTED) {
+    auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
+    ceph_assert(segment_cleaner != nullptr);
+    auto num_writers = generation_to_writer(REWRITE_GENERATIONS);
+    data_writers_by_gen.resize(num_writers, {});
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+	    data_category_t::DATA, gen, *segment_cleaner,
+	    segment_cleaner->get_ool_segment_seq_allocator()));
+      data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+    }
 
-  md_writers_by_gen.resize(num_writers, {});
-  for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
-    writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-          data_category_t::METADATA, gen, *segment_cleaner,
-          segment_cleaner->get_ool_segment_seq_allocator()));
-    md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
-  }
+    md_writers_by_gen.resize(num_writers, {});
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+	    data_category_t::METADATA, gen, *segment_cleaner,
+	    segment_cleaner->get_ool_segment_seq_allocator()));
+      md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+    }
 
-  for (auto *device : segment_cleaner->get_segment_manager_group()
-                                     ->get_segment_managers()) {
-    add_device(device);
+    for (auto *device : segment_cleaner->get_segment_manager_group()
+				       ->get_segment_managers()) {
+      add_device(device);
+    }
+  } else {
+    assert(trimmer->get_journal_type() == journal_type_t::RANDOM_BLOCK);
+    auto rb_cleaner = dynamic_cast<RBMCleaner*>(cleaner.get());
+    ceph_assert(rb_cleaner != nullptr);
+    auto num_writers = generation_to_writer(REWRITE_GENERATIONS);
+    data_writers_by_gen.resize(num_writers, {});
+    md_writers_by_gen.resize(num_writers, {});
+    writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(
+	    rb_cleaner));
+    // TODO: implement eviction in RBCleaner and introduce further writers
+    data_writers_by_gen[generation_to_writer(OOL_GENERATION)] = writer_refs.back().get();
+    md_writers_by_gen[generation_to_writer(OOL_GENERATION)] = writer_refs.back().get();
+    for (auto *rb : rb_cleaner->get_rb_group()->get_rb_managers()) {
+      add_device(rb->get_device());
+    }
   }
 
   background_process.init(std::move(trimmer), std::move(cleaner));
@@ -211,13 +228,11 @@ void ExtentPlacementManager::set_primary_device(Device *device)
   primary_device = device;
   if (device->get_backend_type() == backend_type_t::SEGMENTED) {
     prefer_ool = false;
-    ceph_assert(devices_by_id[device->get_device_id()] == device);
   } else {
-    // RBM device is not in the cleaner.
     ceph_assert(device->get_backend_type() == backend_type_t::RANDOM_BLOCK);
     prefer_ool = true;
-    add_device(primary_device);
   }
+  ceph_assert(devices_by_id[device->get_device_id()] == device);
 }
 
 ExtentPlacementManager::open_ertr::future<>
@@ -227,10 +242,16 @@ ExtentPlacementManager::open_for_write()
   INFO("started with {} devices", num_devices);
   ceph_assert(primary_device != nullptr);
   return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
-    return writer->open();
+    if (writer) {
+      return writer->open();
+    }
+    return open_ertr::now();
   }).safe_then([this] {
     return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
-      return writer->open();
+      if (writer) {
+	return writer->open();
+      }
+      return open_ertr::now();
     });
   });
 }
@@ -269,10 +290,16 @@ ExtentPlacementManager::close()
   LOG_PREFIX(ExtentPlacementManager::close);
   INFO("started");
   return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
-    return writer->close();
+    if (writer) {
+      return writer->close();
+    }
+    return close_ertr::now();
   }).safe_then([this] {
     return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
-      return writer->close();
+      if (writer) {
+	return writer->close();
+      }
+      return close_ertr::now();
     });
   });
 }
