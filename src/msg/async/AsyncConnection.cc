@@ -407,6 +407,12 @@ void AsyncConnection::process() {
 
       SocketOptions opts;
       opts.priority = async_msgr->get_socket_priority();
+      if (async_msgr->cct->_conf->mon_use_min_delay_socket) {
+          if (async_msgr->get_mytype() == CEPH_ENTITY_TYPE_MON &&
+              peer_is_mon()) {
+            opts.priority = SOCKET_PRIORITY_MIN_DELAY;
+          }
+      }
       opts.connect_bind_addr = msgr->get_myaddrs().front();
       ssize_t r = worker->connect(target_addr, opts, &cs);
       if (r < 0) {
@@ -451,7 +457,13 @@ void AsyncConnection::process() {
     case STATE_ACCEPTING: {
       center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
       state = STATE_CONNECTION_ESTABLISHED;
-
+      if (async_msgr->cct->_conf->mon_use_min_delay_socket) {
+        if (async_msgr->get_mytype() == CEPH_ENTITY_TYPE_MON &&
+            peer_is_mon()) {
+          cs.set_priority(cs.fd(), SOCKET_PRIORITY_MIN_DELAY,
+                          target_addr.get_family());
+        }
+      }
       break;
     }
 
