@@ -190,6 +190,10 @@ public:
     write_set.insert(*ref);
   }
 
+  void mark_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
+    mark_delayed_extent_ool(ref, final_addr);
+  }
+
   void add_mutated_extent(CachedExtentRef ref) {
     ceph_assert(!is_weak());
     assert(ref->is_exist_mutation_pending() ||

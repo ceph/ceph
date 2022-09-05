@@ -85,6 +85,36 @@ private:
   seastar::gate write_guard;
 };
 
+
+class RandomBlockOolWriter : public ExtentOolWriter {
+public:
+  RandomBlockOolWriter(RBMCleaner* rb_cleaner) :
+    rb_cleaner(rb_cleaner) {}
+
+  using open_ertr = ExtentOolWriter::open_ertr;
+  open_ertr::future<> open() final {
+    return open_ertr::now();
+  }
+
+  alloc_write_iertr::future<> alloc_write_ool_extents(
+    Transaction &t,
+    std::list<LogicalCachedExtentRef> &extents) final;
+
+  close_ertr::future<> close() final {
+    return write_guard.close().then([this] {
+      write_guard = seastar::gate();
+      return close_ertr::now();
+    });
+  }
+private:
+  alloc_write_iertr::future<> do_write(
+    Transaction& t,
+    std::list<LogicalCachedExtentRef> &extent);
+
+  RBMCleaner* rb_cleaner;
+  seastar::gate write_guard;
+};
+
 class ExtentPlacementManager {
 public:
   ExtentPlacementManager() {
