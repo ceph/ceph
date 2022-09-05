@@ -30,6 +30,8 @@ public:
   using open_ertr = base_ertr;
   virtual open_ertr::future<> open() = 0;
 
+  virtual paddr_t alloc_paddr(extent_len_t length) = 0;
+
   using alloc_write_ertr = base_ertr;
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
   virtual alloc_write_iertr::future<> alloc_write_ool_extents(
@@ -70,6 +72,10 @@ public:
     });
   }
 
+  paddr_t alloc_paddr(extent_len_t length) final {
+    return make_delayed_temp_paddr(0);
+  }
+
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
@@ -106,6 +112,12 @@ public:
       return close_ertr::now();
     });
   }
+
+  paddr_t alloc_paddr(extent_len_t length) final {
+    assert(rb_cleaner);
+    return rb_cleaner->alloc_paddr(length);
+  }
+
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
@@ -184,36 +196,49 @@ public:
 
     // XXX: bp might be extended to point to differnt memory (e.g. PMem)
     // according to the allocator.
-    auto bp = ceph::bufferptr(
+    auto alloc_paddr = [this](rewrite_gen_t gen, 
+      data_category_t category, extent_len_t length) 
+      -> alloc_result_t {
+      auto bp = ceph::bufferptr(
       buffer::create_page_aligned(length));
-    bp.zero();
+      bp.zero();
+      paddr_t addr;
+      if (gen == INLINE_GENERATION) {
+	addr = make_record_relative_paddr(0);
+      } else if (category == data_category_t::DATA) {
+	assert(data_writers_by_gen[generation_to_writer(gen)]);
+	addr = data_writers_by_gen[
+	  generation_to_writer(gen)]->alloc_paddr(length);
+      } else {
+	assert(category == data_category_t::METADATA);
+	assert(md_writers_by_gen[generation_to_writer(gen)]);
+	addr = md_writers_by_gen[
+	  generation_to_writer(gen)]->alloc_paddr(length);
+      }
+      return {addr,
+	      std::move(bp),
+	      gen};
+    };
 
     if (!is_logical_type(type)) {
       // TODO: implement out-of-line strategy for physical extent.
-      return {make_record_relative_paddr(0),
-              std::move(bp),
-              INLINE_GENERATION};
+      assert(get_extent_category(type) == data_category_t::METADATA);
+      return alloc_paddr(INLINE_GENERATION, data_category_t::METADATA, length);
     }
 
     if (hint == placement_hint_t::COLD) {
       assert(gen == INIT_GENERATION);
-      return {make_delayed_temp_paddr(0),
-              std::move(bp),
-              MIN_REWRITE_GENERATION};
+      return alloc_paddr(MIN_REWRITE_GENERATION, get_extent_category(type), length);
     }
 
     if (get_extent_category(type) == data_category_t::METADATA &&
         gen == INIT_GENERATION) {
       if (prefer_ool) {
-        return {make_delayed_temp_paddr(0),
-                std::move(bp),
-                OOL_GENERATION};
+	return alloc_paddr(OOL_GENERATION, get_extent_category(type), length);
       } else {
         // default not to ool metadata extents to reduce padding overhead.
         // TODO: improve padding so we can default to the prefer_ool path.
-        return {make_record_relative_paddr(0),
-                std::move(bp),
-                INLINE_GENERATION};
+	return alloc_paddr(INLINE_GENERATION, get_extent_category(type), length);
       }
     } else {
       assert(get_extent_category(type) == data_category_t::DATA ||
@@ -223,9 +248,7 @@ public:
       } else if (gen == INIT_GENERATION) {
         gen = OOL_GENERATION;
       }
-      return {make_delayed_temp_paddr(0),
-              std::move(bp),
-              gen};
+      return alloc_paddr(gen, get_extent_category(type), length);
     }
   }
 

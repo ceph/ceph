@@ -21,6 +21,7 @@
 #include "crimson/common/layout.h"
 #include "include/buffer.h"
 #include "include/uuid.h"
+#include "avlallocator.h"
 
 
 namespace crimson::os::seastore {
@@ -56,8 +57,7 @@ public:
    * TODO: multiple allocation
    *
    */
-  allocate_ret alloc_extent(
-      Transaction &t, size_t size) final; // allocator, return blocks
+  paddr_t alloc_extent(size_t size) final; // allocator, return blocks
 
   abort_allocation_ertr::future<> abort_allocation(Transaction &t) final;
   write_ertr::future<> complete_allocation(Transaction &t) final;
@@ -71,7 +71,9 @@ public:
    * support such case.
    */
   BlockRBManager(RBMDevice * device, std::string path)
-    : device(device), path(path) {}
+    : device(device), path(path) {
+    allocator.reset(new AvlAllocator);
+  }
 
   write_ertr::future<> write(rbm_abs_addr addr, bufferlist &bl);
 
@@ -92,12 +94,34 @@ public:
     return device;
   }
 
+  void mark_space_used(paddr_t paddr, size_t len) final {
+    assert(allocator);
+    rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
+    assert(addr >= device->get_journal_size() + device->get_journal_start() &&
+	   addr + len <= device->get_available_size());
+    allocator->mark_extent_used(addr, len);
+  }
+
+  void mark_space_free(paddr_t paddr, size_t len) final {
+    assert(allocator);
+    rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
+    assert(addr >= device->get_journal_size() + device->get_journal_start() &&
+	   addr + len <= device->get_available_size());
+    allocator->free_extent(addr, len);
+  }
+
+  paddr_t get_start() final {
+    return convert_abs_addr_to_paddr(
+      device->get_journal_start() + device->get_journal_size(),
+      device->get_device_id());
+  }
+
 private:
   /*
    * this contains the number of bitmap blocks, free blocks and
    * rbm specific information
    */
-  //FreelistManager free_manager; // TODO: block management
+  ExtentAllocatorRef allocator;
   RBMDevice * device;
   std::string path;
   int stream_id; // for multi-stream
