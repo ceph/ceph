@@ -302,13 +302,18 @@ void Shell::get_command_spec(const std::vector<std::string> &arguments,
 
 Shell::Action *Shell::find_action(const CommandSpec &command_spec,
                                   CommandSpec **matching_spec, bool *is_alias) {
-  for (size_t i = 0; i < get_actions().size(); ++i) {
-    Action *action = get_actions()[i];
+  // sort such that all "trash purge schedule ..." actions come before
+  // "trash purge"
+  std::vector<Action *> actions(get_actions());
+  std::sort(actions.begin(), actions.end(), [](auto lhs, auto rhs) {
+    return lhs->command_spec.size() > rhs->command_spec.size();
+  });
+
+  for (Action *action : actions) {
     if (action->command_spec.size() <= command_spec.size()) {
-      if (std::includes(action->command_spec.begin(),
-                        action->command_spec.end(),
-                        command_spec.begin(),
-                        command_spec.begin() + action->command_spec.size())) {
+      if (std::equal(action->command_spec.begin(),
+                     action->command_spec.end(),
+                     command_spec.begin())) {
         if (matching_spec != NULL) {
           *matching_spec = &action->command_spec;
         }
@@ -318,11 +323,9 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
     }
     if (!action->alias_command_spec.empty() &&
         action->alias_command_spec.size() <= command_spec.size()) {
-      if (std::includes(action->alias_command_spec.begin(),
-                        action->alias_command_spec.end(),
-                        command_spec.begin(),
-                        command_spec.begin() +
-                          action->alias_command_spec.size())) {
+      if (std::equal(action->alias_command_spec.begin(),
+                     action->alias_command_spec.end(),
+                     command_spec.begin())) {
         if (matching_spec != NULL) {
           *matching_spec = &action->alias_command_spec;
         }
