@@ -6749,6 +6749,7 @@ class YumDnf(Packager):
         'scientific': ('centos', 'el'),
         'rocky': ('centos', 'el'),
         'almalinux': ('centos', 'el'),
+        'ol': ('centos', 'el'),
         'fedora': ('fedora', 'fc'),
         'mariner': ('mariner', 'cm'),
     }
