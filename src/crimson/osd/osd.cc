@@ -1115,10 +1115,10 @@ seastar::future<> OSD::handle_rep_op_reply(crimson::net::ConnectionRef conn,
   spg_t pgid = m->get_spg();
   return pg_shard_manager.with_pg(
     pgid,
-    [conn=std::move(conn), m=std::move(m)](auto &&pg) {
+    [m=std::move(m)](auto &&pg) {
       if (pg) {
 	m->finish_decode();
-	pg->handle_rep_op_reply(conn, *m);
+	pg->handle_rep_op_reply(*m);
       } else {
 	logger().warn("stale reply: {}", *m);
       }

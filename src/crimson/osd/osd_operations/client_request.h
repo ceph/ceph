@@ -29,7 +29,8 @@ class ShardServices;
 class ClientRequest final : public PhasedOperationT<ClientRequest>,
                             private CommonClientRequest {
   OSD &osd;
-  const crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionFRef conn;
+
   // must be after conn due to ConnectionPipeline's life-time
   Ref<MOSDOp> m;
   OpInfo op_info;

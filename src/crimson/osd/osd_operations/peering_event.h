@@ -106,7 +106,7 @@ public:
 
 class RemotePeeringEvent : public PeeringEvent<RemotePeeringEvent> {
 protected:
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionFRef conn;
   // must be after conn due to ConnectionPipeline's life-time
   PipelineHandle handle;
 
