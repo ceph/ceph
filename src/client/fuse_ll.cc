@@ -45,6 +45,8 @@
 #define FINO_STAG(x) ((x) >> 48)
 #define MAKE_FINO(i,s) ((i) | ((int64_t)(s) << 48))
 #define STAG_MASK 0xffff
+#define G_NOSNAP_STAG   0 // for all CEPH_NOSNAP
+#define G_SNAPDIR_STAG  1 // for all CEPH_SNAPDIR
 
 #define MINORBITS	20
 #define MINORMASK	((1U << MINORBITS) - 1)
@@ -52,6 +54,18 @@
 #define MAJOR(dev)	((unsigned int) ((dev) >> MINORBITS))
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
+
+/*
+ * The dedicated struct for snapid <-> stag map for each ceph
+ * inode, and the stag is a number in range [2, 0xffff], and
+ * the stag number 0 is reserved for CEPH_NOSNAP and 1 is
+ * reserved for CEPH_SNAPDIR.
+ */
+struct ceph_fuse_fake_inode_stag {
+  ceph::unordered_map<uint64_t,int> snap_stag_map;  // <snapid, stagid>
+  ceph::unordered_map<int, uint64_t> stag_snap_map; // <stagid, snapid>
+  int last_stag = 1;
+};
 
 static const ceph::unordered_map<int,int> cephfs_errno_to_system_errno = {
   {CEPHFS_EBLOCKLISTED,    ESHUTDOWN},
@@ -139,20 +153,19 @@ public:
   int fd_on_success;
   Client *client;
 
-  struct fuse_session *se;
+  struct fuse_session *se = nullptr;
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   struct fuse_cmdline_opts opts;
   struct fuse_conn_info_opts *conn_opts;
 #else
-  struct fuse_chan *ch;
-  char *mountpoint;
+  struct fuse_chan *ch = nullptr;
+  char *mountpoint = nullptr;
 #endif
 
   ceph::mutex stag_lock = ceph::make_mutex("fuse_ll.cc stag_lock");
-  int last_stag;
 
-  ceph::unordered_map<uint64_t,int> snap_stag_map;
-  ceph::unordered_map<int,uint64_t> stag_snap_map;
+  // a map of <ceph ino, fino stag/snapid map>
+  ceph::unordered_map<uint64_t, struct ceph_fuse_fake_inode_stag> g_fino_maps;
 
   pthread_key_t fuse_req_key = 0;
   void set_fuse_req(fuse_req_t);
@@ -250,7 +263,9 @@ static void fuse_ll_forget(fuse_req_t req, fuse_ino_t ino,
 			   long unsigned nlookup)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
-  cfuse->client->ll_forget(cfuse->iget(ino), nlookup+1);
+  Inode *in = cfuse->iget(ino);
+  if (in)
+    cfuse->client->ll_forget(in, nlookup+1);
   fuse_reply_none(req);
 }
 
@@ -259,11 +274,16 @@ static void fuse_ll_getattr(fuse_req_t req, fuse_ino_t ino,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
   struct stat stbuf;
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
-  
+
   (void) fi; // XXX
 
   if (cfuse->client->ll_getattr(in, &stbuf, perms)
@@ -282,8 +302,13 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int mask = 0;
@@ -319,8 +344,13 @@ static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_setxattr(in, name, value, size, flags, perms);
@@ -333,9 +363,14 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
   char buf[size];
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_listxattr(in, buf, size, perms);
@@ -358,9 +393,14 @@ static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
   char buf[size];
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_getxattr(in, name, buf, size, perms);
@@ -379,8 +419,13 @@ static void fuse_ll_removexattr(fuse_req_t req, fuse_ino_t ino,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_removexattr(in, name, perms);
@@ -394,10 +439,14 @@ static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
-  void *dirp;
-
   UserPerm perms(ctx->uid, ctx->gid);
+  void *dirp;
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_opendir(in, fi->flags, (dir_result_t **)&dirp,
@@ -416,11 +465,15 @@ static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
   char buf[PATH_MAX + 1];  // leave room for a null terminator
   UserPerm perms(ctx->uid, ctx->gid);
-  get_fuse_groups(perms, req);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
 
+  get_fuse_groups(perms, req);
   int r = cfuse->client->ll_readlink(in, buf, sizeof(buf) - 1, perms);
   if (r >= 0) {
     buf[r] = '\0';
@@ -437,9 +490,14 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *i2, *i1 = cfuse->iget(parent);
   struct fuse_entry_param fe;
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *i2, *i1 = cfuse->iget(parent);
+  if (!i1) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   memset(&fe, 0, sizeof(fe));
@@ -499,6 +557,11 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 #endif
 
   i1 = cfuse->iget(parent);
+  if (!i1) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   int r = cfuse->client->ll_mkdir(i1, name, mode, &fe.attr, &i2, perm);
   if (r == 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
@@ -517,8 +580,13 @@ static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(parent);
   UserPerm perm(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(parent);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perm, req);
 
   int r = cfuse->client->ll_unlink(in, name, perm);
@@ -531,8 +599,13 @@ static void fuse_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(parent);
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(parent);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_rmdir(in, name, perms);
@@ -546,9 +619,14 @@ static void fuse_ll_symlink(fuse_req_t req, const char *existing,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *i2, *i1 = cfuse->iget(parent);
   struct fuse_entry_param fe;
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *i2, *i1 = cfuse->iget(parent);
+  if (!i1) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   memset(&fe, 0, sizeof(fe));
@@ -576,9 +654,14 @@ static void fuse_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  UserPerm perm(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(parent);
   Inode *nin = cfuse->iget(newparent);
-  UserPerm perm(ctx->uid, ctx->gid);
+  if (!in || !nin) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perm, req);
 
   int r = cfuse->client->ll_rename(in, name, nin, newname, perm);
@@ -593,14 +676,18 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  struct fuse_entry_param fe;
   Inode *in = cfuse->iget(ino);
   Inode *nin = cfuse->iget(newparent);
-  struct fuse_entry_param fe;
+  if (!in || !nin) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
 
   memset(&fe, 0, sizeof(fe));
   UserPerm perm(ctx->uid, ctx->gid);
   get_fuse_groups(perm, req);
-  
+
   /*
    * Note that we could successfully link, but then fail the subsequent
    * getattr and return an error. Perhaps we should ignore getattr errors,
@@ -635,9 +722,14 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
   Fh *fh = NULL;
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_open(in, fi->flags, &fh, perms);
@@ -829,10 +921,14 @@ static void fuse_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
   struct readdir_context rc;
   rc.req = req;
+  rc.snap = cfuse->fino_snap(ino);
+  if (rc.snap == CEPH_MAXSNAP) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
   rc.buf = new char[size];
   rc.size = size;
   rc.pos = 0;
-  rc.snap = cfuse->fino_snap(ino);
 
   int r = cfuse->client->readdir_r_cb(dirp, fuse_ll_add_dirent, &rc);
   if (r == 0 || r == -CEPHFS_ENOSPC)  /* ignore ENOSPC from our callback */
@@ -864,8 +960,13 @@ static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *in = cfuse->iget(ino);
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->inode_permission(in, perms, mask);
@@ -878,10 +979,15 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *i1 = cfuse->iget(parent), *i2;
   struct fuse_entry_param fe;
   Fh *fh = NULL;
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *i1 = cfuse->iget(parent), *i2;
+  if (!i1) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   memset(&fe, 0, sizeof(fe));
@@ -914,9 +1020,14 @@ static void fuse_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 {
   struct statvfs stbuf;
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
-  Inode *in = cfuse->iget(ino);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   UserPerm perms(ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+  if (!in) {
+    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    return;
+  }
+
   get_fuse_groups(perms, req);
 
   int r = cfuse->client->ll_statfs(in, &stbuf, perms);
@@ -1158,16 +1269,8 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
 
 CephFuse::Handle::Handle(Client *c, int fd) :
   fd_on_success(fd),
-  client(c),
-  se(NULL),
-#if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
-  ch(NULL),
-  mountpoint(NULL),
-#endif
-  last_stag(0)
+  client(c)
 {
-  snap_stag_map[CEPH_NOSNAP] = 0;
-  stag_snap_map[0] = CEPH_NOSNAP;
   memset(&args, 0, sizeof(args));
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   memset(&opts, 0, sizeof(opts));
@@ -1409,8 +1512,25 @@ uint64_t CephFuse::Handle::fino_snap(uint64_t fino)
   } else {
     std::lock_guard l(stag_lock);
     uint64_t stag = FINO_STAG(fino);
-    ceph_assert(stag_snap_map.count(stag));
-    return stag_snap_map[stag];
+    if (stag == 0)
+      return CEPH_NOSNAP;
+    else if (stag == 1)
+      return CEPH_SNAPDIR;
+
+    inodeno_t ino = FINO_INO(fino);
+
+    // does the fino_maps for the ino exist ?
+    if (!g_fino_maps.count(ino))
+      return CEPH_MAXSNAP;
+
+    auto &fino_maps = g_fino_maps[ino];
+
+    // does the stagid <--> snapid map exist ?
+    if (!fino_maps.stag_snap_map.count(stag))
+      return CEPH_MAXSNAP;
+
+    // get the snapid
+    return fino_maps.stag_snap_map[stag];
   }
 }
 
@@ -1422,14 +1542,17 @@ Inode * CephFuse::Handle::iget(fuse_ino_t fino)
   if (client->use_faked_inos()) {
     return client->ll_get_inode((ino_t)fino);
   } else {
-    vinodeno_t vino(FINO_INO(fino), fino_snap(fino));
+    uint64_t snap = fino_snap(fino);
+    if (snap == CEPH_MAXSNAP)
+      return NULL;
+    vinodeno_t vino(FINO_INO(fino), snap);
     return client->ll_get_inode(vino);
   }
 }
 
 void CephFuse::Handle::iput(Inode *in)
 {
-    client->ll_put(in);
+  client->ll_put(in);
 }
 
 uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
@@ -1444,35 +1567,57 @@ uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
     if (snapid == CEPH_NOSNAP && ino == client->get_root_ino())
       return FUSE_ROOT_ID;
 
-    std::lock_guard l(stag_lock);
-    auto p = snap_stag_map.find(snapid);
-    if (p != snap_stag_map.end()) {
-      inodeno_t fino = MAKE_FINO(ino, p->second);
-      return fino;
-    }
+    int stag;
+    if (snapid == CEPH_NOSNAP) {
+      stag = G_NOSNAP_STAG;
+    } else if (snapid == CEPH_SNAPDIR) {
+      stag = G_SNAPDIR_STAG;
+    } else {
+      std::lock_guard l(stag_lock);
+      auto &fino_maps = g_fino_maps[ino]; // will insert it anyway if not exists
 
-    int first = last_stag & STAG_MASK;
-    int stag =  (++last_stag) & STAG_MASK;
-    for (; stag != first; stag = (++last_stag) & STAG_MASK) {
-      if (stag == 0)
-	continue;
-
-      auto p = stag_snap_map.find(stag);
-      if (p == stag_snap_map.end()) {
-	snap_stag_map[snapid] = stag;
-	stag_snap_map[stag] = snapid;
-	break;
+      // already exist ?
+      if (fino_maps.snap_stag_map.count(snapid)) {
+        inodeno_t fino = MAKE_FINO(ino, fino_maps.snap_stag_map[snapid]);
+        return fino;
       }
 
-      if (!client->ll_get_snap_ref(p->second)) {
-	snap_stag_map.erase(p->second);
-	snap_stag_map[snapid] = stag;
-	p->second = snapid;
-	break;
+      // create a new snapid <--> stagid map
+      int first = fino_maps.last_stag & STAG_MASK;
+      stag =  (++fino_maps.last_stag) & STAG_MASK;
+      for (; stag != first; stag = (++fino_maps.last_stag) & STAG_MASK) {
+        // stag 0 is reserved for CEPH_NOSNAP and 1 for CEPH_SNAPDIR
+        if (stag == 0 || stag == 1)
+          continue;
+
+        // the new stag is not used ?
+        if (!fino_maps.stag_snap_map.count(stag)) {
+          fino_maps.snap_stag_map[snapid] = stag;
+          fino_maps.stag_snap_map[stag] = snapid;
+          break;
+        }
+
+        // the stag is already used by a snpaid,
+        // try to free it
+        auto _snapid = fino_maps.stag_snap_map[stag];
+        if (!client->ll_get_snap_ref(_snapid)) {
+          fino_maps.snap_stag_map.erase(_snapid);
+          fino_maps.snap_stag_map[snapid] = stag;
+          fino_maps.stag_snap_map[stag] = snapid;
+          break;
+        }
+      }
+      if (stag == first) {
+        /*
+         * It shouldn't be here because the max snapshots for each
+         * directory is 4_K, and here we have around 64_K, which is
+         * from 0xffff - 2, stags could be used for each directory.
+         *
+         * More detail please see mds 'mds_max_snaps_per_dir' option.
+         */
+        ceph_abort_msg("run out of stag");
       }
     }
-    if (stag == first)
-      ceph_abort_msg("run out of stag");
 
     inodeno_t fino = MAKE_FINO(ino, stag);
     //cout << "make_fake_ino " << ino << "." << snapid << " -> " << fino << std::endl;
