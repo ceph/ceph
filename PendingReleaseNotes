@@ -77,6 +77,9 @@ Relevant tracker: https://tracker.ceph.com/issues/55521
 
   https://docs.ceph.com/en/latest/mgr/telemetry/
 
+* OSD: The issue of high CPU utilization during recovery/backfill operations
+  has been fixed. For more details, see: https://tracker.ceph.com/issues/56530.
+
 >=15.2.17
 
 * OSD: Octopus modified the SnapMapper key format from
