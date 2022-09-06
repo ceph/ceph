@@ -277,7 +277,6 @@ class RadosUser : public StoreUser {
     RadosUser(RadosStore *_st, const RGWUserInfo& _i) : StoreUser(_i), store(_st) { }
     RadosUser(RadosStore *_st) : store(_st) { }
     RadosUser(RadosUser& _o) = default;
-    RadosUser() {}
 
     virtual std::unique_ptr<User> clone() override {
       return std::unique_ptr<User>(new RadosUser(*this));
@@ -359,8 +358,6 @@ class RadosObject : public StoreObject {
 
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
     };
-
-    RadosObject() = default;
 
     RadosObject(RadosStore *_st, const rgw_obj_key& _k)
       : StoreObject(_k),
