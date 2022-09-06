@@ -242,6 +242,7 @@ struct Inode : RefCountedObject {
   std::map<frag_t, std::vector<mds_rank_t>> frag_repmap; // non-auth mds mappings
 
   std::list<Context*> waitfor_caps;
+  std::list<Context*> waitfor_caps_pending;
   std::list<Context*> waitfor_commit;
   std::list<ceph::condition_variable*> waitfor_deleg;
 
