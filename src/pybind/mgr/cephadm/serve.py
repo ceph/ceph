@@ -125,7 +125,7 @@ class CephadmServe:
             try:
                 get_cert_issuer_info(cert)
                 verify_tls(cert, key)
-                self.mgr.remove_health_warning('GRAFANA_CERT_ERROR')
+                self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
             except ServerConfigException as e:
                 err_msg = f"""
                 Detected invalid grafana certificates. Please, use the following commands:
@@ -142,7 +142,7 @@ class CephadmServe:
 
                 """
                 self.log.error(f'Detected invalid grafana certificate on host {d.hostname}: {e}')
-                self.mgr.set_health_warning('GRAFANA_CERT_ERROR',
+                self.mgr.set_health_warning('CEPHADM_CERT_ERROR',
                                             f'Invalid grafana certificate on host {d.hostname}: {e}',
                                             1, [err_msg])
                 break
