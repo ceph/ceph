@@ -1028,6 +1028,7 @@ protected:
   }
   void wait_on_context_list(std::list<Context*>& ls);
   void signal_context_list(std::list<Context*>& ls);
+  void signal_caps_inode(Inode *in);
 
   // -- metadata cache stuff
 
