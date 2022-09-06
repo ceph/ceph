@@ -158,9 +158,7 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_stream("time") << time;
   f->dump_string("remote_addr", remote_addr);
   f->dump_string("user", user);
-  stringstream s;
-  s << obj;
-  f->dump_string("obj", s.str());
+  f->dump_stream("obj") << obj;
   f->dump_string("op", op);
   f->dump_string("uri", uri);
   f->dump_string("http_status", http_status);
@@ -173,6 +171,7 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_string("referrer", referrer);
   f->dump_string("bucket_id", bucket_id);
   f->dump_string("trans_id", trans_id);
+  f->dump_unsigned("identity_type", identity_type);
 }
 
 void ACLPermission::dump(Formatter *f) const

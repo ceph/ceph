@@ -144,6 +144,34 @@ else(NOT CMAKE_CROSSCOMPILING)
   message(STATUS "Assuming unaligned access is supported")
 endif(NOT CMAKE_CROSSCOMPILING)
 
+set(version_script_source "v1 { }; v2 { } v1;")
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt "${version_script_source}")
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_FLAGS "-Werror -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt")
+check_c_source_compiles("
+__attribute__((__symver__ (\"func@v1\"))) void func_v1() {};
+__attribute__((__symver__ (\"func@v2\"))) void func_v2() {};
+
+int main() {}"
+  HAVE_ATTR_SYMVER)
+  if(NOT HAVE_ATTR_SYMVER)
+    if(CMAKE_CXX_FLAGS MATCHES "-flto" AND NOT CMAKE_CXX_FLAGS MATCHES "-flto-partition=none")
+      # https://tracker.ceph.com/issues/40060
+      message(FATAL_ERROR "please pass -flto-partition=none as part of CXXFLAGS")
+    endif()
+  endif()
+set(CMAKE_REQUIRED_FLAGS -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt)
+check_c_source_compiles("
+void func_v1() {}
+__asm__(\".symver func_v1, func@v1\");
+void func_v2() {}
+__asm__(\".symver func_v2, func@v2\");
+
+int main() {}"
+  HAVE_ASM_SYMVER)
+file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt)
+cmake_pop_check_state()
+
 # should use LINK_OPTIONS instead of LINK_LIBRARIES, if we can use cmake v3.14+
 try_compile(HAVE_LINK_VERSION_SCRIPT
   ${CMAKE_CURRENT_BINARY_DIR}

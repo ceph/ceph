@@ -34,6 +34,7 @@ if(WITH_MGR)
     mgr_commands.cc
     $<TARGET_OBJECTS:mgr_cap_obj>)
   add_executable(ceph-mgr ${mgr_srcs})
+  target_compile_definitions(ceph-mgr PRIVATE PY_SSIZE_T_CLEAN)
   target_link_libraries(ceph-mgr
     osdc client heap_profiler
     global-static ceph-common

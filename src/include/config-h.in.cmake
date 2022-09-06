@@ -271,6 +271,12 @@
 /* Define if the C compiler supports __PRETTY_FUNCTION__ */
 #cmakedefine HAVE_PRETTY_FUNC
 
+/* Define if the C compiler supports __attribute__((__symver__ (".."))) */
+#cmakedefine HAVE_ATTR_SYMVER
+
+/* Define if the C compiler supports __asm__(".symver ..") */
+#cmakedefine HAVE_ASM_SYMVER
+
 /* Have eventfd extension. */
 #cmakedefine HAVE_EVENTFD
 

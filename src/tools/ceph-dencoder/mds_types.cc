@@ -23,9 +23,14 @@ using namespace std;
 #undef TYPE_FEATUREFUL_NOCOPY
 #undef MESSAGE
 
-#include "denc_registry.h"
+#include "denc_plugin.h"
 
-void register_mds_dencoders()
+DENC_API void register_dencoders(DencoderPlugin* plugin)
 {
 #include "mds_types.h"
+}
+
+DENC_API void unregister_dencoders(DencoderPlugin* plugin)
+{
+  plugin->unregister_dencoders();
 }
