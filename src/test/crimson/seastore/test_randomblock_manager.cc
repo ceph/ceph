@@ -53,17 +53,26 @@ struct rbm_test_t :
 
   seastar::future<> set_up_fut() final {
     device.reset(new random_block_device::TestMemory(DEFAULT_TEST_SIZE));
-    rbm_manager.reset(new BlockRBManager(device.get(), std::string()));
     device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
+    device->set_device_id(d_id);
+    rbm_manager.reset(new BlockRBManager(device.get(), std::string()));
     config.start = paddr_t::make_blk_paddr(d_id, 0);
     config.end = paddr_t::make_blk_paddr(d_id, DEFAULT_TEST_SIZE);
     config.block_size = DEFAULT_BLOCK_SIZE;
     config.total_size = DEFAULT_TEST_SIZE;
     config.device_id = d_id;
-    return seastar::now();
+    return device->mount().handle_error(crimson::ct_error::assert_all{}
+    ).then([this] {
+      return rbm_manager->mkfs(config).handle_error(crimson::ct_error::assert_all{}
+      ).then([this] {
+	return rbm_manager->open().handle_error(crimson::ct_error::assert_all{});
+      });
+    });
   }
 
   seastar::future<> tear_down_fut() final {
+    rbm_manager->close().unsafe_get0();
+    device->close().unsafe_get0();
     rbm_manager.reset();
     device.reset();
     return seastar::now();
@@ -79,7 +88,7 @@ struct rbm_test_t :
   }
 
   auto open() {
-    return rbm_manager->open("", config.start).unsafe_get0();
+    return rbm_manager->open().unsafe_get0();
   }
 
   auto write(uint64_t addr, bufferptr &ptr) {
@@ -196,8 +205,6 @@ struct rbm_test_t :
 TEST_F(rbm_test_t, mkfs_test)
 {
  run_async([this] {
-   mkfs();
-   open();
    auto super = read_rbm_header();
    ASSERT_TRUE(
        super.block_size == DEFAULT_BLOCK_SIZE &&
@@ -213,8 +220,6 @@ TEST_F(rbm_test_t, mkfs_test)
 TEST_F(rbm_test_t, open_test)
 {
  run_async([this] {
-   mkfs();
-   open();
    auto content = generate_extent(1);
    write(
        DEFAULT_BLOCK_SIZE,
@@ -239,8 +244,6 @@ TEST_F(rbm_test_t, open_test)
 TEST_F(rbm_test_t, block_alloc_test)
 {
  run_async([this] {
-   mkfs();
-   open();
    auto t = create_rbm_transaction();
    alloc_extent(*t, DEFAULT_BLOCK_SIZE);
    auto alloc_ids = get_allocated_blk_ids(*t);
@@ -258,8 +261,6 @@ TEST_F(rbm_test_t, block_alloc_test)
 TEST_F(rbm_test_t, block_alloc_free_test)
 {
  run_async([this] {
-   mkfs();
-   open();
    auto t = create_rbm_transaction();
    alloc_extent(*t, DEFAULT_BLOCK_SIZE);
    auto alloc_ids = get_allocated_blk_ids(*t);
@@ -295,6 +296,7 @@ TEST_F(rbm_test_t, many_block_alloc)
    config.end = paddr_t::make_blk_paddr(d_id, (DEFAULT_TEST_SIZE * 1024));
    config.block_size = DEFAULT_BLOCK_SIZE;
    config.total_size = DEFAULT_TEST_SIZE * 1024;
+   rbm_manager->close().unsafe_get0();
    mkfs();
    open();
    auto max = rbm_manager->max_block_by_bitmap_block();
@@ -347,8 +349,6 @@ TEST_F(rbm_test_t, many_block_alloc)
 TEST_F(rbm_test_t, check_free_blocks)
 {
  run_async([this] {
-   mkfs();
-   open();
    rbm_manager->rbm_sync_block_bitmap_by_range(10, 12, bitmap_op_types_t::ALL_SET).unsafe_get0();
    rbm_manager->close().unsafe_get0();
    open();

@@ -24,6 +24,7 @@
 
 namespace crimson::os::seastore {
 
+constexpr rbm_abs_addr RBM_START_ADDRESS = 0;
 constexpr uint32_t RBM_SUPERBLOCK_SIZE = 4096;
 
 using RBMDevice = random_block_device::RBMDevice;
@@ -186,7 +187,7 @@ public:
   mkfs_ertr::future<> mkfs(mkfs_config_t) final;
   read_ertr::future<> read(paddr_t addr, bufferptr &buffer) final;
   write_ertr::future<> write(paddr_t addr, bufferptr &buf) final;
-  open_ertr::future<> open(const std::string &path, paddr_t start) final;
+  open_ertr::future<> open() final;
   close_ertr::future<> close() final;
 
   /*
