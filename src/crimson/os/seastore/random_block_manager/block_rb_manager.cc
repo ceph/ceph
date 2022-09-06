@@ -121,14 +121,14 @@ BlockRBManager::mkfs_ertr::future<> BlockRBManager::mkfs(mkfs_config_t config)
 {
   LOG_PREFIX(BlockRBManager::mkfs);
   DEBUG("path {}", path);
-  return _open_device(path).safe_then([this, &config, FNAME]() {
+  return _open_device(path).safe_then([this, config, FNAME]() {
     rbm_abs_addr addr = convert_paddr_to_abs_addr(
       config.start);
     return read_rbm_header(addr).safe_then([FNAME](auto super) {
       DEBUG("already exists ");
       return mkfs_ertr::now();
     }).handle_error(
-      crimson::ct_error::enoent::handle([this, &config, FNAME](auto) {
+      crimson::ct_error::enoent::handle([this, config, FNAME](auto) {
 	super.uuid = uuid_d(); // TODO
 	super.magic = 0xFF; // TODO
 	super.start = convert_paddr_to_abs_addr(
@@ -474,30 +474,24 @@ BlockRBManager::write_ertr::future<> BlockRBManager::sync_allocation(
   });
 }
 
-BlockRBManager::open_ertr::future<> BlockRBManager::open(
-    const std::string &path, paddr_t paddr)
+BlockRBManager::open_ertr::future<> BlockRBManager::open()
 {
-  LOG_PREFIX(BlockRBManager::open);
-  DEBUG("open: path{}", path);
-  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-  return _open_device(path
-  ).safe_then([this, addr]() {
-    return read_rbm_header(addr).safe_then([&](auto s)
-      -> open_ertr::future<> {
-      if (s.magic != 0xFF) {
-	return crimson::ct_error::enoent::make();
-      }
-      super = s;
-      return check_bitmap_blocks().safe_then([]() {
-	return open_ertr::now();
-	  });
-    }).handle_error(
-      open_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error read_rbm_header in BlockRBManager::open"
-      }
-    );
-  });
+  return read_rbm_header(RBM_START_ADDRESS
+  ).safe_then([&](auto s)
+    -> open_ertr::future<> {
+    if (s.magic != 0xFF) {
+      return crimson::ct_error::enoent::make();
+    }
+    super = s;
+    return check_bitmap_blocks().safe_then([]() {
+      return open_ertr::now();
+    });
+  }).handle_error(
+    open_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error read_rbm_header in BlockRBManager::open"
+    }
+  );
 }
 
 BlockRBManager::write_ertr::future<> BlockRBManager::write(
