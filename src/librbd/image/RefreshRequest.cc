@@ -67,6 +67,7 @@ void RefreshRequest<I>::send() {
 template <typename I>
 void RefreshRequest<I>::send_get_migration_header() {
   if (m_image_ctx.ignore_migrating) {
+    m_migration_spec = {};
     if (m_image_ctx.old_format) {
       send_v1_get_snapshots();
     } else {
@@ -95,7 +96,7 @@ Context *RefreshRequest<I>::handle_get_migration_header(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result == 0) {
+  if (*result >= 0) {
     auto it = m_out_bl.cbegin();
     *result = cls_client::migration_get_finish(&it, &m_migration_spec);
   } else if (*result == -ENOENT) {
@@ -222,6 +223,7 @@ Context *RefreshRequest<I>::handle_v1_read_header(int *result) {
   if (migrating) {
     send_get_migration_header();
   } else {
+    m_migration_spec = {};
     send_v1_get_snapshots();
   }
   return nullptr;
@@ -252,7 +254,7 @@ Context *RefreshRequest<I>::handle_v1_get_snapshots(int *result) {
 
   std::vector<std::string> snap_names;
   std::vector<uint64_t> snap_sizes;
-  if (*result == 0) {
+  if (*result >= 0) {
     auto it = m_out_bl.cbegin();
     *result = cls_client::old_snapshot_list_finish(&it, &snap_names,
                                                    &snap_sizes, &m_snapc);
@@ -305,15 +307,16 @@ Context *RefreshRequest<I>::handle_v1_get_locks(int *result) {
   ldout(cct, 10) << this << " " << __func__ << ": "
                  << "r=" << *result << dendl;
 
-  if (*result == 0) {
+  if (*result >= 0) {
     auto it = m_out_bl.cbegin();
     ClsLockType lock_type;
     *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                      &lock_type, &m_lock_tag);
-    if (*result == 0) {
+    if (*result >= 0) {
       m_exclusive_locked = (lock_type == ClsLockType::EXCLUSIVE);
     }
   }
+
   if (*result < 0) {
     lderr(cct) << "failed to retrieve locks: " << cpp_strerror(*result)
                << dendl;
@@ -405,10 +408,10 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
   }
 
   if (*result >= 0) {
-    ClsLockType lock_type = ClsLockType::NONE;
+    ClsLockType lock_type;
     *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                      &lock_type, &m_lock_tag);
-    if (*result == 0) {
+    if (*result >= 0) {
       m_exclusive_locked = (lock_type == ClsLockType::EXCLUSIVE);
     }
   }
@@ -436,6 +439,8 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
     ldout(cct, 5) << "ignoring dynamically disabled exclusive lock" << dendl;
     m_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
     m_incomplete_update = true;
+  } else {
+    m_incomplete_update = false;
   }
 
   if (((m_incompatible_features & RBD_FEATURE_NON_PRIMARY) != 0U) &&
@@ -453,6 +458,7 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
   }
   m_read_only = (m_read_only_flags != 0U);
 
+  m_legacy_parent = false;
   send_v2_get_parent();
   return nullptr;
 }
@@ -488,20 +494,25 @@ Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
 
   auto it = m_out_bl.cbegin();
   if (!m_legacy_parent) {
-    if (*result == 0) {
+    if (*result >= 0) {
       *result = cls_client::parent_get_finish(&it, &m_parent_md.spec);
     }
 
     std::optional<uint64_t> parent_overlap;
-    if (*result == 0) {
+    if (*result >= 0) {
       *result = cls_client::parent_overlap_get_finish(&it, &parent_overlap);
     }
 
-    if (*result == 0 && parent_overlap) {
-      m_parent_md.overlap = *parent_overlap;
-      m_head_parent_overlap = true;
+    if (*result >= 0) {
+      if (parent_overlap) {
+        m_parent_md.overlap = *parent_overlap;
+        m_head_parent_overlap = true;
+      } else {
+        m_parent_md.overlap = 0;
+        m_head_parent_overlap = false;
+      }
     }
-  } else if (*result == 0) {
+  } else if (*result >= 0) {
     *result = cls_client::get_parent_finish(&it, &m_parent_md.spec,
                                             &m_parent_md.overlap);
     m_head_parent_overlap = true;
@@ -512,7 +523,7 @@ Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
     m_legacy_parent = true;
     send_v2_get_parent();
     return nullptr;
-  } if (*result < 0) {
+  } else if (*result < 0) {
     lderr(cct) << "failed to retrieve parent: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
@@ -521,10 +532,10 @@ Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
   if ((m_features & RBD_FEATURE_MIGRATING) != 0) {
     ldout(cct, 1) << "migrating feature set" << dendl;
     send_get_migration_header();
-    return nullptr;
+  } else {
+    m_migration_spec = {};
+    send_v2_get_metadata();
   }
-
-  send_v2_get_metadata();
   return nullptr;
 }
 
@@ -535,6 +546,7 @@ void RefreshRequest<I>::send_v2_get_metadata() {
 
   auto ctx = create_context_callback<
     RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_metadata>(this);
+  m_metadata.clear();
   auto req = GetMetadataRequest<I>::create(
     m_image_ctx.md_ctx, m_image_ctx.header_oid, true,
     ImageCtx::METADATA_CONF_PREFIX, ImageCtx::METADATA_CONF_PREFIX, 0U,
@@ -591,6 +603,7 @@ Context *RefreshRequest<I>::handle_v2_get_pool_metadata(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_get_op_features() {
   if ((m_features & RBD_FEATURE_OPERATIONS) == 0LL) {
+    m_op_features = 0;
     send_v2_get_group();
     return;
   }
@@ -618,10 +631,12 @@ Context *RefreshRequest<I>::handle_v2_get_op_features(int *result) {
 
   // -EOPNOTSUPP handler not required since feature bit implies OSD
   // supports the method
-  if (*result == 0) {
+  if (*result >= 0) {
     auto it = m_out_bl.cbegin();
-    cls_client::op_features_get_finish(&it, &m_op_features);
-  } else if (*result < 0) {
+    *result = cls_client::op_features_get_finish(&it, &m_op_features);
+  }
+
+  if (*result < 0) {
     lderr(cct) << "failed to retrieve op features: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
@@ -655,16 +670,20 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
   ldout(cct, 10) << this << " " << __func__ << ": "
                  << "r=" << *result << dendl;
 
-  if (*result == 0) {
+  if (*result >= 0) {
     auto it = m_out_bl.cbegin();
-    cls_client::image_group_get_finish(&it, &m_group_spec);
+    *result = cls_client::image_group_get_finish(&it, &m_group_spec);
   }
-  if (*result < 0 && *result != -EOPNOTSUPP) {
+
+  if (*result == -EOPNOTSUPP) {
+    m_group_spec = {};
+  } else if (*result < 0) {
     lderr(cct) << "failed to retrieve group: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
   }
 
+  m_legacy_snapshot = LEGACY_SNAPSHOT_DISABLED;
   send_v2_get_snapshots();
   return nullptr;
 }
@@ -754,16 +773,20 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
       *result = cls_client::snapshot_get_finish(&it, &m_snap_infos[i]);
     }
 
-    if (*result == 0) {
+    if (*result >= 0) {
       if (m_legacy_parent) {
         *result = cls_client::get_parent_finish(&it, &m_snap_parents[i].spec,
                                                 &m_snap_parents[i].overlap);
       } else {
         std::optional<uint64_t> parent_overlap;
         *result = cls_client::parent_overlap_get_finish(&it, &parent_overlap);
-        if (*result == 0 && parent_overlap && m_parent_md.spec.pool_id > -1) {
-          m_snap_parents[i].spec = m_parent_md.spec;
-          m_snap_parents[i].overlap = *parent_overlap;
+        if (*result >= 0) {
+          if (parent_overlap && m_parent_md.spec.pool_id > -1) {
+            m_snap_parents[i].spec = m_parent_md.spec;
+            m_snap_parents[i].overlap = *parent_overlap;
+          } else {
+            m_snap_parents[i] = {};
+          }
         }
       }
     }
@@ -782,8 +805,8 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
     }
   }
 
-  if (*result == -ENOENT) {
-    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
+  if (*result == -ENOENT && m_enoent_retries++ < MAX_ENOENT_RETRIES) {
+    ldout(cct, 10) << "out-of-sync snapshot state detected, retrying" << dendl;
     send_v2_get_mutable_metadata();
     return nullptr;
   } else if (m_legacy_snapshot == LEGACY_SNAPSHOT_DISABLED &&
@@ -842,7 +865,14 @@ Context *RefreshRequest<I>::handle_v2_refresh_parent(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  if (*result == -ENOENT && m_enoent_retries++ < MAX_ENOENT_RETRIES) {
+    ldout(cct, 10) << "out-of-sync parent info detected, retrying" << dendl;
+    ceph_assert(m_refresh_parent != nullptr);
+    delete m_refresh_parent;
+    m_refresh_parent = nullptr;
+    send_v2_get_mutable_metadata();
+    return nullptr;
+  } else if (*result < 0) {
     lderr(cct) << "failed to refresh parent image: " << cpp_strerror(*result)
                << dendl;
     save_result(result);

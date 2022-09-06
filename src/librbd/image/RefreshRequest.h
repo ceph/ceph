@@ -27,6 +27,8 @@ template<typename> class RefreshParentRequest;
 template<typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
+  static constexpr int MAX_ENOENT_RETRIES = 10;
+
   static RefreshRequest *create(ImageCtxT &image_ctx, bool acquiring_lock,
                                 bool skip_open_parent, Context *on_finish) {
     return new RefreshRequest(image_ctx, acquiring_lock, skip_open_parent,
@@ -50,37 +52,37 @@ private:
    *  * |                                                     |     migrating)
    *  * | (v2)                                                v
    *  * \-----> V2_GET_MUTABLE_METADATA                   V1_GET_SNAPSHOTS
-   *  *             |                                         |
-   *  *             |     -EOPNOTSUPP                         v
-   *  *             |  * * *                              V1_GET_LOCKS
-   *  *             |  *   *                                  |
-   *  *             v  v   *                                  v
-   *  *         V2_GET_PARENT                              <apply>
-   *  *             |                                         |
+   *  *    *        |                                         |
+   *  *    *        |     -EOPNOTSUPP                         v
+   *  *    *        |  * * *                              V1_GET_LOCKS
+   *  *    *        |  *   *                                  |
+   *  *    *        v  v   *                                  v
+   *  *    *    V2_GET_PARENT                              <apply>
+   *  *    *        |                                         |
    *  *             v                                         |
    *  * * * * * GET_MIGRATION_HEADER (skip if not             |
    *  (ENOENT)      |                 migrating)              |
    *                v                                         |
-   *            V2_GET_METADATA                               |
-   *                |                                         |
-   *                v                                         |
-   *            V2_GET_POOL_METADATA                          |
-   *                |                                         |
-   *                v (skip if not enabled)                   |
-   *            V2_GET_OP_FEATURES                            |
-   *                |                                         |
-   *                v                                         |
-   *            V2_GET_GROUP                                  |
-   *                |                                         |
-   *                |     -EOPNOTSUPP                         |
-   *                |   * * * *                               |
-   *                |   *     *                               |
-   *                v   v     *                               |
-   *            V2_GET_SNAPSHOTS (skip if no snaps)           |
-   *                |                                         |
-   *                v                                         |
-   *            V2_REFRESH_PARENT (skip if no parent or       |
-   *                |              refresh not needed)        |
+   *       *    V2_GET_METADATA                               |
+   *       *        |                                         |
+   *       *        v                                         |
+   *       *    V2_GET_POOL_METADATA                          |
+   *       *        |                                         |
+   *       *        v (skip if not enabled)                   |
+   *       *    V2_GET_OP_FEATURES                            |
+   *       *        |                                         |
+   *       *        v                                         |
+   *       *    V2_GET_GROUP                                  |
+   *       *        |                                         |
+   *       *        |        -EOPNOTSUPP                      |
+   *       *        |     * * *                               |
+   *       *        |     *   *                               |
+   *       *        v     v   *                               |
+   *        * * V2_GET_SNAPSHOTS (skip if no snaps)           |
+   *     (ENOENT)   |                                         |
+   *       *        v                                         |
+   *        * * V2_REFRESH_PARENT (skip if no parent or       |
+   *     (ENOENT)   |              refresh not needed)        |
    *                v                                         |
    *            V2_INIT_EXCLUSIVE_LOCK (skip if lock          |
    *                |                   active or disabled)   |
@@ -143,6 +145,8 @@ private:
 
   bool m_legacy_parent = false;
   LegacySnapshot m_legacy_snapshot = LEGACY_SNAPSHOT_DISABLED;
+
+  int m_enoent_retries = 0;
 
   uint8_t m_order = 0;
   uint64_t m_size = 0;
