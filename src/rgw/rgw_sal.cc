@@ -304,8 +304,8 @@ StoreManager::Config StoreManager::get_config(bool admin, CephContext* cct)
     /* Check to see if d3n is configured, but only for non-admin */
     const auto& d3n = g_conf().get_val<bool>("rgw_d3n_l1_local_datacache_enabled");
     if (!admin && d3n) {
-      if (g_conf().get_val<size_t>("rgw_max_chunk_size") !=
-	  g_conf().get_val<size_t>("rgw_obj_stripe_size")) {
+      if (g_conf().get_val<Option::size_t>("rgw_max_chunk_size") !=
+	  g_conf().get_val<Option::size_t>("rgw_obj_stripe_size")) {
 	lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that the chunk_size equals stripe_size)" << dendl;
       } else if (!g_conf().get_val<bool>("rgw_beast_enable_async")) {
 	lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires yield context - rgw_beast_enable_async=true)" << dendl;
