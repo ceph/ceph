@@ -268,13 +268,14 @@ public:
 
 void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSContext *fin)
 {
-  dout(10) << __func__ << " log_seq " << log_seq << dendl;
+  dout(10) << __func__ << " log_seq " << log_seq << " committed_log_seq " << committed_log_seq
+           << " committing_log_seq " << committing_log_seq << dendl;
   if (r < 0) {
     mds->handle_write_error(r);
     return;
   }
 
-  ceph_assert(log_seq <= committing_log_seq);
+  ceph_assert(log_seq == committing_log_seq);
   ceph_assert(log_seq >= committed_log_seq);
   committed_log_seq = log_seq;
   num_pending_commit--;
@@ -333,7 +334,8 @@ void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
 
 void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 {
-  dout(10) << __func__ << " log_seq " << log_seq << dendl;
+  dout(10) << __func__ << " log_seq " << log_seq << " committing_log_seq:"
+          << committing_log_seq << dendl;
 
   ceph_assert(num_pending_commit == 0);
   num_pending_commit++;
@@ -1056,6 +1058,12 @@ void OpenFileTable::_prefetch_dirfrags()
     CInode *diri = mdcache->get_inode(ino);
     if (!diri)
       continue;
+
+    if (!diri->is_dir()) {
+      dout(10) << " " << *diri << " is not dir" << dendl;
+      continue;
+    }
+
     if (diri->state_test(CInode::STATE_REJOINUNDEF))
       continue;
 
