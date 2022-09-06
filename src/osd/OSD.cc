@@ -7559,16 +7559,16 @@ MPGStats* OSD::collect_pg_stats()
       });
   }
   store_statfs_t st;
-  bool per_pool_stats = false;
+  bool per_pool_stats = true;
   bool per_pool_omap_stats = false;
   for (auto p : pool_set) {
     int r = store->pool_statfs(p, &st, &per_pool_omap_stats);
     if (r == -ENOTSUP) {
+      per_pool_stats = false;
       break;
     } else {
       assert(r >= 0);
       m->pool_stat[p] = st;
-      per_pool_stats = true;
     }
   }
 
