@@ -1027,6 +1027,9 @@ EOF
         fi
         echo start osd.$osd
         local osd_pid
+        echo 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
+            $extra_seastar_args $extra_osd_args \
+            -i $osd $ARGS $COSD_ARGS
         run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
             $extra_seastar_args $extra_osd_args \
             -i $osd $ARGS $COSD_ARGS &
