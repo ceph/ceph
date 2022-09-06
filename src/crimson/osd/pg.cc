@@ -1256,8 +1256,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
     });
 }
 
-void PG::handle_rep_op_reply(crimson::net::ConnectionRef conn,
-			     const MOSDRepOpReply& m)
+void PG::handle_rep_op_reply(const MOSDRepOpReply& m)
 {
   if (!can_discard_replica_op(m)) {
     backend->got_rep_op_reply(m);

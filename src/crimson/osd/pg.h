@@ -554,8 +554,7 @@ public:
     with_obc_func_t&& f);
 
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
-  void handle_rep_op_reply(crimson::net::ConnectionRef conn,
-			   const MOSDRepOpReply& m);
+  void handle_rep_op_reply(const MOSDRepOpReply& m);
   interruptible_future<> do_update_log_missing(Ref<MOSDPGUpdateLogMissing> m);
   interruptible_future<> do_update_log_missing_reply(
                          Ref<MOSDPGUpdateLogMissingReply> m);
