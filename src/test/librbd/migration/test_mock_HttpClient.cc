@@ -8,6 +8,7 @@
 #include "librbd/migration/HttpClient.h"
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
+#include <unistd.h>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -83,10 +84,29 @@ public:
     TestMockFixture::TearDown();
   }
 
+  // if we have a racing where another thread manages to bind and listen the
+  // port picked by this acceptor, try again.
+  static constexpr int MAX_BIND_RETRIES = 42;
+
   void create_acceptor(bool reuse) {
-    m_acceptor.emplace(*m_image_ctx->asio_engine,
+    for (int retries = 0;; retries++) {
+      try {
+	m_acceptor.emplace(*m_image_ctx->asio_engine,
                        boost::asio::ip::tcp::endpoint(
                          boost::asio::ip::tcp::v4(), m_server_port), reuse);
+	// yay!
+	break;
+      } catch (const boost::system::system_error& e) {
+	if (retries == MAX_BIND_RETRIES) {
+	  throw;
+	}
+	if (e.code() != boost::system::errc::address_in_use) {
+	  throw;
+	}
+      }
+      // backoff a little bit
+      usleep(retries * 10'000);
+    }
     m_server_port = m_acceptor->local_endpoint().port();
   }
 
