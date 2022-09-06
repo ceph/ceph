@@ -149,10 +149,9 @@ function install_boost_on_ubuntu {
                               cut -d' ' -f2 |
                               cut -d'.' -f1,2)
     if test -n "$installed_ver"; then
-        if echo "$installed_ver" | grep -q "^$ver"; then
-            return
-        else
-            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove "ceph-libboost.*${installed_ver}.*"
+        local correct_version_installed=$(echo "$installed_ver" | grep -q "^$ver")
+        if ! $correct_version_installed; then
+	    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove "ceph-libboost.*${installed_ver}.*"
             $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost${installed_ver}.list
         fi
     fi
