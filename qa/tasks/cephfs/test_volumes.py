@@ -1590,6 +1590,9 @@ class TestSubvolumeGroups(TestVolumesHelper):
         # clone snapshot which will create '_index' directory
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
 
+        # wait for clone to complete
+        self._wait_for_clone_to_complete(clone)
+
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
 
@@ -1604,6 +1607,11 @@ class TestSubvolumeGroups(TestVolumesHelper):
         self.assertEqual(len(ret_list), len(subvolumegroups))
 
         self.assertEqual(all(elem in subvolumegroups for elem in ret_list), True)
+
+        # cleanup
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+        for groupname in subvolumegroups:
+            self._fs_cmd("subvolumegroup", "rm", self.volname, groupname)
 
     def test_subvolume_group_ls_for_nonexistent_volume(self):
         # tests the 'fs subvolumegroup ls' command when /volume doesn't exist
