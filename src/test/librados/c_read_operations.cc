@@ -578,20 +578,26 @@ TEST_F(CReadOpsTest, ExecUserBuf) {
 TEST_F(CReadOpsTest, Stat) {
   rados_read_op_t op = rados_create_read_op();
   uint64_t size = 1;
-  int rval;
+  int rval = 0;
   rados_read_op_stat(op, &size, NULL, &rval);
   EXPECT_EQ(-ENOENT, rados_read_op_operate(op, ioctx, obj, 0));
   EXPECT_EQ(-EIO, rval);
   EXPECT_EQ(1u, size);
   rados_release_read_op(op);
 
-  write_object();
+  time_t ts = 1457129052;
+  rados_write_op_t wop = rados_create_write_op();
+  rados_write_op_write(wop, data, len, 0);
+  ASSERT_EQ(0, rados_write_op_operate(wop, ioctx, obj, &ts, 0));
+  rados_release_write_op(wop);
 
+  time_t ts2;
   op = rados_create_read_op();
-  rados_read_op_stat(op, &size, NULL, &rval);
-  EXPECT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_read_op_stat(op, &size, &ts2, &rval);
+  ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
   EXPECT_EQ(0, rval);
   EXPECT_EQ(len, size);
+  EXPECT_EQ(ts2, ts);
   rados_release_read_op(op);
 
   op = rados_create_read_op();
@@ -603,6 +609,47 @@ TEST_F(CReadOpsTest, Stat) {
 
   op = rados_create_read_op();
   rados_read_op_stat(op, NULL, NULL, NULL);
+  EXPECT_EQ(-ENOENT, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+}
+
+TEST_F(CReadOpsTest, Stat2) {
+  rados_read_op_t op = rados_create_read_op();
+  uint64_t size = 1;
+  int rval = 0;
+  rados_read_op_stat2(op, &size, NULL, &rval);
+  EXPECT_EQ(-ENOENT, rados_read_op_operate(op, ioctx, obj, 0));
+  EXPECT_EQ(-EIO, rval);
+  EXPECT_EQ(1u, size);
+  rados_release_read_op(op);
+
+  struct timespec ts;
+  ts.tv_sec = 1457129052;
+  ts.tv_nsec = 123456789;
+  rados_write_op_t wop = rados_create_write_op();
+  rados_write_op_write(wop, data, len, 0);
+  ASSERT_EQ(0, rados_write_op_operate2(wop, ioctx, obj, &ts, 0));
+  rados_release_write_op(wop);
+
+  struct timespec ts2 = {};
+  op = rados_create_read_op();
+  rados_read_op_stat2(op, &size, &ts2, &rval);
+  ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  EXPECT_EQ(0, rval);
+  EXPECT_EQ(len, size);
+  EXPECT_EQ(ts2.tv_sec, ts.tv_sec);
+  EXPECT_EQ(ts2.tv_nsec, ts.tv_nsec);
+  rados_release_read_op(op);
+
+  op = rados_create_read_op();
+  rados_read_op_stat2(op, NULL, NULL, NULL);
+  EXPECT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+
+  remove_object();
+
+  op = rados_create_read_op();
+  rados_read_op_stat2(op, NULL, NULL, NULL);
   EXPECT_EQ(-ENOENT, rados_read_op_operate(op, ioctx, obj, 0));
   rados_release_read_op(op);
 }
