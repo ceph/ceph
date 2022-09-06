@@ -27,6 +27,7 @@
 #include "mon/MonCommand.h"
 
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrUpdate.h"
 #include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
@@ -267,6 +268,8 @@ bool DaemonServer::ms_dispatch2(const ref_t<Message>& m)
       return handle_report(ref_cast<MMgrReport>(m));
     case MSG_MGR_OPEN:
       return handle_open(ref_cast<MMgrOpen>(m));
+    case MSG_MGR_UPDATE:
+      return handle_update(ref_cast<MMgrUpdate>(m));
     case MSG_MGR_CLOSE:
       return handle_close(ref_cast<MMgrClose>(m));
     case MSG_COMMAND:
@@ -526,6 +529,49 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
     // connections that require an update in the event of stats
     // configuration changes.
     daemon_connections.insert(con);
+  }
+
+  return true;
+}
+
+bool DaemonServer::handle_update(const ref_t<MMgrUpdate>& m)
+{
+  DaemonKey key;
+  if (!m->service_name.empty()) {
+    key.type = m->service_name;
+  } else {
+    key.type = ceph_entity_type_name(m->get_connection()->get_peer_type());
+  }
+  key.name = m->daemon_name;
+
+  dout(10) << "from " << m->get_connection() << " " << key << dendl;
+
+  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT &&
+      m->service_name.empty()) {
+    // Clients should not be sending us update request
+    dout(10) << "rejecting update request from non-daemon client " << m->daemon_name
+	     << dendl;
+    clog->warn() << "rejecting report from non-daemon client " << m->daemon_name
+		 << " at " << m->get_connection()->get_peer_addrs();
+    m->get_connection()->mark_down();
+    return true;
+  }
+
+
+  {
+    std::unique_lock locker(lock);
+
+    DaemonStatePtr daemon;
+    // Look up the DaemonState
+    if (daemon_state.exists(key)) {
+      dout(20) << "updating existing DaemonState for " << key << dendl;
+
+      daemon = daemon_state.get(key);
+      if (m->need_metadata_update &&
+          !m->daemon_metadata.empty()) {
+        daemon_state.update_metadata(daemon, m->daemon_metadata);
+      }
+    }
   }
 
   return true;
