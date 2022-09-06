@@ -2110,6 +2110,21 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_stat)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_stat);
 
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_stat2)(
+  rados_ioctx_t io,
+  const char *o,
+  uint64_t *psize,
+  struct timespec *pmtime)
+{
+  tracepoint(librados, rados_stat2_enter, io, o);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->stat2(oid, psize, pmtime);
+  tracepoint(librados, rados_stat2_exit, retval, psize, pmtime);
+  return retval;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_stat2);
+
 extern "C" int LIBRADOS_C_API_BASE_F(rados_tmap_update)(
   rados_ioctx_t io,
   const char *o,
@@ -2993,6 +3008,21 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_stat)(
   return retval;
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_aio_stat);
+
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_stat2)(
+  rados_ioctx_t io, const char *o,
+  rados_completion_t completion,
+  uint64_t *psize, struct timespec *pmtime)
+{
+  tracepoint(librados, rados_aio_stat2_enter, io, o, completion);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->aio_stat2(oid, (librados::AioCompletionImpl*)completion,
+		       psize, pmtime);
+  tracepoint(librados, rados_aio_stat2_exit, retval);
+  return retval;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_aio_stat2);
 
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_cmpext)(
   rados_ioctx_t io, const char *o,
@@ -4145,6 +4175,18 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_stat)(
   tracepoint(librados, rados_read_op_stat_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_stat);
+
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_stat2)(
+  rados_read_op_t read_op,
+  uint64_t *psize,
+  struct timespec *pmtime,
+  int *prval)
+{
+  tracepoint(librados, rados_read_op_stat2_enter, read_op, psize, pmtime, prval);
+  ((::ObjectOperation *)read_op)->stat(psize, pmtime, prval);
+  tracepoint(librados, rados_read_op_stat2_exit);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_stat2);
 
 class C_bl_to_buf : public Context {
   char *out_buf;

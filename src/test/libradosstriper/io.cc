@@ -42,14 +42,25 @@ TEST_F(StriperTestPP, SimpleWriteFullPP) {
 }
 
 TEST_F(StriperTest, Stat) {
-  uint64_t psize;
-  time_t pmtime;
+  uint64_t size = 0;
+  time_t mtime = 0;
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_striper_write(striper, "Stat", buf, sizeof(buf), 0));
-  ASSERT_EQ(0, rados_striper_stat(striper, "Stat", &psize, &pmtime));
-  ASSERT_EQ(psize, sizeof(buf));
-  ASSERT_EQ(-ENOENT, rados_striper_stat(striper, "nonexistent", &psize, &pmtime));
+  ASSERT_EQ(0, rados_striper_stat(striper, "Stat", &size, &mtime));
+  ASSERT_EQ(size, sizeof(buf));
+  ASSERT_EQ(-ENOENT, rados_striper_stat(striper, "nonexistent", &size, &mtime));
+}
+
+TEST_F(StriperTest, Stat2) {
+  uint64_t size = 0;
+  struct timespec mtime = {};
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_striper_write(striper, "Stat2", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_striper_stat2(striper, "Stat2", &size, &mtime));
+  ASSERT_EQ(size, sizeof(buf));
+  ASSERT_EQ(-ENOENT, rados_striper_stat2(striper, "nonexistent", &size, &mtime));
 }
 
 TEST_F(StriperTestPP, StatPP) {
@@ -58,11 +69,24 @@ TEST_F(StriperTestPP, StatPP) {
   bufferlist bl;
   bl.append(buf, sizeof(buf));
   ASSERT_EQ(0, striper.write("Statpp", bl, sizeof(buf), 0));
-  uint64_t psize;
-  time_t pmtime;
-  ASSERT_EQ(0, striper.stat("Statpp", &psize, &pmtime));
-  ASSERT_EQ(psize, sizeof(buf));
-  ASSERT_EQ(-ENOENT, striper.stat("nonexistent", &psize, &pmtime));
+  uint64_t size = 0;
+  time_t mtime = 0;
+  ASSERT_EQ(0, striper.stat("Statpp", &size, &mtime));
+  ASSERT_EQ(size, sizeof(buf));
+  ASSERT_EQ(-ENOENT, striper.stat("nonexistent", &size, &mtime));
+}
+
+TEST_F(StriperTestPP, Stat2PP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, striper.write("Stat2pp", bl, sizeof(buf), 0));
+  uint64_t size = 0;
+  struct timespec mtime = {};
+  ASSERT_EQ(0, striper.stat2("Stat2pp", &size, &mtime));
+  ASSERT_EQ(size, sizeof(buf));
+  ASSERT_EQ(-ENOENT, striper.stat2("nonexistent", &size, &mtime));
 }
 
 TEST_F(StriperTest, RoundTrip) {
