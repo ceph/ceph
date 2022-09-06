@@ -99,6 +99,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolumegroup exist '
+                   'name=vol_name,type=CephString ',
+            'desc': "Check a volume for the existence of subvolumegroup",
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolume ls '
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
@@ -195,6 +201,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=group_name,type=CephString,req=false ',
             'desc': "Get the information of a CephFS subvolume in a volume, "
                     "and optionally, in a specific subvolume group",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume exist '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Check a volume for the existence of a subvolume, "
+                    "optionally in a specified subvolume group",
             'perm': 'r'
         },
         {
@@ -549,6 +563,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'])
 
     @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_exist(self, inbuf, cmd):
+        return self.vc.subvolume_group_exists(vol_name=cmd['vol_name'])
+
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
@@ -638,6 +656,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                       sub_name=cmd['sub_name'],
                                       group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_exist(self, inbuf, cmd):
+        return self.vc.subvolume_exists(vol_name=cmd['vol_name'],
+                                        group_name=cmd.get('group_name', None))
+    
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_metadata_set(self, inbuf, cmd):
         return self.vc.set_user_metadata(vol_name=cmd['vol_name'],

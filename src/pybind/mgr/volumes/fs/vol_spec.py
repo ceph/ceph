@@ -1,4 +1,9 @@
 import os
+from .operations.index import Index
+from .operations.group import Group
+from .operations.trash import Trash
+from .operations.versions.subvolume_base import SubvolumeBase
+
 
 class VolSpec(object):
     """
@@ -11,6 +16,8 @@ class VolSpec(object):
     DEFAULT_NS_PREFIX = "fsvolumens_"
     # default mode for subvol prefix and group
     DEFAULT_MODE = 0o755
+    # internal directories
+    INTERNAL_DIRS = [Group.NO_GROUP_NAME, Index.GROUP_NAME, Trash.GROUP_NAME, SubvolumeBase.LEGACY_CONF_DIR]
 
     def __init__(self, snapshot_prefix, subvolume_prefix=None, pool_ns_prefix=None):
         self.snapshot_prefix = snapshot_prefix

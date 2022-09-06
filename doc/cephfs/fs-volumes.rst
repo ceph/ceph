@@ -135,6 +135,16 @@ The output format is JSON and contains fields as follows.
 * created_at: time of creation of subvolume group in the format "YYYY-MM-DD HH:MM:SS"
 * data_pool: data pool the subvolume group belongs to
 
+Check the presence of any subvolume group using::
+
+    $ ceph fs subvolumegroup exist <vol_name>
+
+The strings returned by the 'exist' command:
+    * "subvolumegroup exists": if any subvolumegroup is present
+    * "no subvolumegroup exists": if no subvolumegroup is present
+
+.. note:: It checks for the presence of custom groups and not the default one. To validate the emptiness of the volume, subvolumegroup existence check alone is not sufficient. The subvolume existence also needs to be checked as there might be subvolumes in the default group.
+
 Resize a subvolume group using::
 
     $ ceph fs subvolumegroup resize <vol_name> <group_name> <new_size> [--no_shrink]
@@ -274,6 +284,14 @@ List subvolumes using::
     $ ceph fs subvolume ls <vol_name> [--group_name <subvol_group_name>]
 
 .. note:: subvolumes that are removed but have snapshots retained, are also listed.
+
+Check the presence of any subvolume using::
+
+    $ ceph fs subvolume exist <vol_name> [--group_name <subvol_group_name>]
+
+The strings returned by the 'exist' command:
+    * "subvolume exists": if any subvolume of given group_name is present
+    * "no subvolume exists": if no subvolume of given group_name is present
 
 Set custom metadata on the subvolume as a key-value pair using::
 
