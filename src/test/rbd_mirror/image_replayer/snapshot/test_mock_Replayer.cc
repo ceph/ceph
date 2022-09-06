@@ -569,6 +569,11 @@ public:
     EXPECT_CALL(mock_instance_watcher, notify_sync_complete(image_id));
   }
 
+  void expect_cancel_sync_request(MockInstanceWatcher& mock_instance_watcher,
+                                  const std::string& image_id) {
+    EXPECT_CALL(mock_instance_watcher, cancel_sync_request(image_id));
+  }
+
   void expect_image_copy(MockImageCopyRequest& mock_image_copy_request,
                          uint64_t src_snap_id_start, uint64_t src_snap_id_end,
                          uint64_t dst_snap_id_start,
@@ -1901,7 +1906,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterRemoteUpdateWatcherError
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
-  ASSERT_EQ(-EINVAL, shutdown_ctx.wait());
+  ASSERT_EQ(0, shutdown_ctx.wait());
 }
 
 TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterLocalUpdateWatcherError) {
@@ -1943,7 +1948,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterLocalUpdateWatcherError)
 
   C_SaferCond shutdown_ctx;
   mock_replayer.shut_down(&shutdown_ctx);
-  ASSERT_EQ(-EINVAL, shutdown_ctx.wait());
+  ASSERT_EQ(0, shutdown_ctx.wait());
 }
 
 TEST_F(TestMockImageReplayerSnapshotReplayer, LoadImageMetaError) {
@@ -3140,6 +3145,173 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ImageNameUpdated) {
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
                                         mock_local_image_ctx,
                                         mock_remote_image_ctx));
+}
+
+TEST_F(TestMockImageReplayerSnapshotReplayer, ApplyImageStatePendingShutdown) {
+  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
+  librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+
+  MockReplayerListener mock_replayer_listener;
+  expect_notification(mock_threads, mock_replayer_listener);
+
+  InSequence seq;
+
+  MockInstanceWatcher mock_instance_watcher;
+  MockImageMeta mock_image_meta;
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_image_ctx,
+                                      mock_image_meta);
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
+  C_SaferCond shutdown_ctx;
+  m_pool_meta_cache.set_remote_pool_meta(
+    m_remote_io_ctx.get_id(),
+    {"remote mirror uuid", "remote mirror peer uuid"});
+
+  librbd::UpdateWatchCtx* update_watch_ctx = nullptr;
+  ASSERT_EQ(0, init_entry_replayer(mock_replayer, mock_threads,
+                                   mock_local_image_ctx,
+                                   mock_remote_image_ctx,
+                                   mock_replayer_listener,
+                                   mock_image_meta,
+                                   &update_watch_ctx));
+
+  // inject snapshot
+  mock_remote_image_ctx.snap_info = {
+    {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
+       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
+       CEPH_NOSNAP, true, 0, {}},
+     0, {}, 0, 0, {}}}};
+
+  // sync snap1
+  expect_load_image_meta(mock_image_meta, false, 0);
+  expect_is_refresh_required(mock_local_image_ctx, false);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+  MockSnapshotCopyRequest mock_snapshot_copy_request;
+  expect_snapshot_copy(mock_snapshot_copy_request, 0, 1, 0, {{1, CEPH_NOSNAP}},
+                       0);
+  MockGetImageStateRequest mock_get_image_state_request;
+  expect_get_image_state(mock_get_image_state_request, 1, 0);
+  MockCreateNonPrimaryRequest mock_create_non_primary_request;
+  expect_create_non_primary_request(mock_create_non_primary_request,
+                                    false, "remote mirror uuid", 1,
+                                    {{1, CEPH_NOSNAP}}, 11, 0);
+  MockImageStateUpdateRequest mock_image_state_update_request;
+  expect_update_mirror_image_state(mock_image_state_update_request, 0);
+  expect_notify_sync_request(mock_instance_watcher, mock_local_image_ctx.id, 0);
+  MockImageCopyRequest mock_image_copy_request;
+  expect_image_copy(mock_image_copy_request, 0, 1, 0, {},
+                    {{1, CEPH_NOSNAP}}, 0);
+  MockApplyImageStateRequest mock_apply_state_request;
+  EXPECT_CALL(mock_apply_state_request, send())
+    .WillOnce(Invoke([this, &req=mock_apply_state_request,
+                      &replayer=mock_replayer, &ctx=shutdown_ctx]() {
+      // inject a shutdown, to be pended due to STATE_REPLAYING
+      replayer.shut_down(&ctx);
+      m_threads->work_queue->queue(req.on_finish, 0);
+    }));
+  expect_cancel_sync_request(mock_instance_watcher, mock_local_image_ctx.id);
+  expect_mirror_image_snapshot_set_copy_progress(
+      mock_local_image_ctx, 11, true, 0, 0);
+  expect_notify_update(mock_local_image_ctx);
+  expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
+
+  // shutdown should be resumed
+  expect_unregister_update_watcher(mock_remote_image_ctx, 234, 0);
+  expect_unregister_update_watcher(mock_local_image_ctx, 123, 0);
+
+  // wake-up replayer
+  update_watch_ctx->handle_notify();
+
+  ASSERT_EQ(0, wait_for_notification(1));
+  ASSERT_FALSE(mock_replayer.is_replaying());
+  ASSERT_EQ(0, mock_replayer.get_error_code());
+
+  ASSERT_EQ(0, shutdown_ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerSnapshotReplayer, ApplyImageStateErrorPendingShutdown) {
+  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
+  librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+
+  MockReplayerListener mock_replayer_listener;
+  expect_notification(mock_threads, mock_replayer_listener);
+
+  InSequence seq;
+
+  MockInstanceWatcher mock_instance_watcher;
+  MockImageMeta mock_image_meta;
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_image_ctx,
+                                      mock_image_meta);
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
+  C_SaferCond shutdown_ctx;
+  m_pool_meta_cache.set_remote_pool_meta(
+    m_remote_io_ctx.get_id(),
+    {"remote mirror uuid", "remote mirror peer uuid"});
+
+  librbd::UpdateWatchCtx* update_watch_ctx = nullptr;
+  ASSERT_EQ(0, init_entry_replayer(mock_replayer, mock_threads,
+                                   mock_local_image_ctx,
+                                   mock_remote_image_ctx,
+                                   mock_replayer_listener,
+                                   mock_image_meta,
+                                   &update_watch_ctx));
+
+  // inject snapshot
+  mock_remote_image_ctx.snap_info = {
+    {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
+       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
+       CEPH_NOSNAP, true, 0, {}},
+     0, {}, 0, 0, {}}}};
+
+  // sync snap1
+  expect_load_image_meta(mock_image_meta, false, 0);
+  expect_is_refresh_required(mock_local_image_ctx, false);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+  MockSnapshotCopyRequest mock_snapshot_copy_request;
+  expect_snapshot_copy(mock_snapshot_copy_request, 0, 1, 0, {{1, CEPH_NOSNAP}},
+                       0);
+  MockGetImageStateRequest mock_get_image_state_request;
+  expect_get_image_state(mock_get_image_state_request, 1, 0);
+  MockCreateNonPrimaryRequest mock_create_non_primary_request;
+  expect_create_non_primary_request(mock_create_non_primary_request,
+                                    false, "remote mirror uuid", 1,
+                                    {{1, CEPH_NOSNAP}}, 11, 0);
+  MockImageStateUpdateRequest mock_image_state_update_request;
+  expect_update_mirror_image_state(mock_image_state_update_request, 0);
+  expect_notify_sync_request(mock_instance_watcher, mock_local_image_ctx.id, 0);
+  MockImageCopyRequest mock_image_copy_request;
+  expect_image_copy(mock_image_copy_request, 0, 1, 0, {},
+                    {{1, CEPH_NOSNAP}}, 0);
+  MockApplyImageStateRequest mock_apply_state_request;
+  EXPECT_CALL(mock_apply_state_request, send())
+    .WillOnce(Invoke([this, &req=mock_apply_state_request,
+                      &replayer=mock_replayer, &ctx=shutdown_ctx]() {
+      // inject a shutdown, to be pended due to STATE_REPLAYING
+      replayer.shut_down(&ctx);
+      m_threads->work_queue->queue(req.on_finish, -EINVAL);
+    }));
+  expect_cancel_sync_request(mock_instance_watcher, mock_local_image_ctx.id);
+  expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
+
+  // shutdown should be resumed
+  expect_unregister_update_watcher(mock_remote_image_ctx, 234, 0);
+  expect_unregister_update_watcher(mock_local_image_ctx, 123, 0);
+
+  // wake-up replayer
+  update_watch_ctx->handle_notify();
+
+  ASSERT_EQ(0, shutdown_ctx.wait());
 }
 
 } // namespace snapshot
