@@ -87,13 +87,13 @@ seastar::future<> PeeringEvent<T>::with_pg(
       return complete_rctx(shard_services, pg);
     }).then_interruptible([pg, &shard_services]()
 			  -> typename T::template interruptible_future<> {
-        if (!pg->get_need_up_thru()) {
-          return seastar::now();
-        }
-        return shard_services.send_alive(pg->get_same_interval_since());
-      }).then_interruptible([&shard_services] {
-        return shard_services.send_pg_temp();
-      });
+      if (!pg->get_need_up_thru()) {
+	return seastar::now();
+      }
+      return shard_services.send_alive(pg->get_same_interval_since());
+    }).then_interruptible([&shard_services] {
+      return shard_services.send_pg_temp();
+    });
   }, [this](std::exception_ptr ep) {
     logger().debug("{}: interrupted with {}", *this, ep);
   }, pg);
