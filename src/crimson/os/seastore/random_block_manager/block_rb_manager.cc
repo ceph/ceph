@@ -120,59 +120,31 @@ BlockRBManager::mkfs_ertr::future<> BlockRBManager::initialize_blk_alloc_area()
 BlockRBManager::mkfs_ertr::future<> BlockRBManager::mkfs(mkfs_config_t config)
 {
   LOG_PREFIX(BlockRBManager::mkfs);
-  DEBUG("path {}", path);
-  return _open_device(path).safe_then([this, config, FNAME]() {
-    rbm_abs_addr addr = convert_paddr_to_abs_addr(
-      config.start);
-    return read_rbm_header(addr).safe_then([FNAME](auto super) {
-      DEBUG("already exists ");
-      return mkfs_ertr::now();
-    }).handle_error(
-      crimson::ct_error::enoent::handle([this, config, FNAME](auto) {
-	super.uuid = uuid_d(); // TODO
-	super.magic = 0xFF; // TODO
-	super.start = convert_paddr_to_abs_addr(
-	  config.start);
-	super.end = convert_paddr_to_abs_addr(
-	  config.end);
-	super.block_size = config.block_size;
-	super.size = config.total_size;
-	super.free_block_count = config.total_size/config.block_size - 2;
-	super.alloc_area_size = get_alloc_area_size();
-	super.start_alloc_area = RBM_SUPERBLOCK_SIZE;
-	super.start_data_area =
-	  super.start_alloc_area + super.alloc_area_size;
-	super.crc = 0;
-	super.feature |= RBM_BITMAP_BLOCK_CRC;
-	super.device_id = config.device_id;
+  super.uuid = uuid_d(); // TODO
+  super.magic = 0xFF; // TODO
+  super.start = convert_paddr_to_abs_addr(
+    config.start);
+  super.end = convert_paddr_to_abs_addr(
+    config.end);
+  super.block_size = config.block_size;
+  super.size = config.total_size;
+  super.free_block_count = config.total_size/config.block_size - 2;
+  super.alloc_area_size = get_alloc_area_size();
+  super.start_alloc_area = RBM_SUPERBLOCK_SIZE;
+  super.start_data_area =
+    super.start_alloc_area + super.alloc_area_size;
+  super.crc = 0;
+  super.feature |= RBM_BITMAP_BLOCK_CRC;
+  super.device_id = config.device_id;
 
-	DEBUG(" super {} ", super);
-	// write super block
-	return write_rbm_header().safe_then([this] {
-	  return initialize_blk_alloc_area();
-	}).handle_error(
-	  mkfs_ertr::pass_further{},
-	  crimson::ct_error::assert_all{
-	  "Invalid error write_rbm_header in BlockRBManager::mkfs"
-	});
-      }),
-      mkfs_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-        "Invalid error read_rbm_header in BlockRBManager::mkfs"
-      }
-    );
-  }).safe_then([this]() {
-    if (device) {
-      return device->close(
-      ).safe_then([]() {
-	return mkfs_ertr::now();
-      });
-    }
-    return mkfs_ertr::now();
+  DEBUG("super {} ", super);
+  // write super block
+  return write_rbm_header().safe_then([this] {
+    return initialize_blk_alloc_area();
   }).handle_error(
     mkfs_ertr::pass_further{},
     crimson::ct_error::assert_all{
-    "Invalid error open_device in BlockRBManager::mkfs"
+    "Invalid error write_rbm_header in BlockRBManager::mkfs"
   });
 }
 
