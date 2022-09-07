@@ -483,7 +483,12 @@ TEST(LibCephFS, DirLs) {
     sscanf(name, "dirf%d", &size);
     ASSERT_TRUE(stx.stx_mask & CEPH_STATX_SIZE);
     ASSERT_EQ(stx.stx_size, (size_t)size);
+    // On Windows, dirent uses long (4B) inodes, which get trimmed
+    // and can't be used.
+    // TODO: consider defining ceph_dirent.
+    #ifndef _WIN32
     ASSERT_EQ(stx.stx_ino, rdent.d_ino);
+    #endif
     //ASSERT_EQ(st.st_mode, (mode_t)0666);
   }
   ASSERT_EQ(found, entries);
