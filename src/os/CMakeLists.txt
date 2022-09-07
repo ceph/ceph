@@ -36,6 +36,8 @@ if(WITH_BLUESTORE)
     bluestore/AvlAllocator.cc
     bluestore/BtreeAllocator.cc
     bluestore/HybridAllocator.cc
+    bluestore/PrintOnode.cc
+    bluestore/BlueAdmin.cc
   )
 endif(WITH_BLUESTORE)
 
