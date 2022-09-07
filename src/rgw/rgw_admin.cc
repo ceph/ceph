@@ -8993,10 +8993,11 @@ next:
   if (opt_cmd == OPT::SYNC_GROUP_FLOW_CREATE) {
     CHECK_TRUE(require_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
     CHECK_TRUE(require_opt(opt_flow_id), "ERROR: --flow-id not specified", EINVAL);
-    CHECK_TRUE(require_opt(opt_flow_type,
-                           (symmetrical_flow_opt(*opt_flow_type) ||
-                            directional_flow_opt(*opt_flow_type))),
-                           "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)", EINVAL);
+    CHECK_TRUE(require_opt(opt_flow_type),
+                           "ERROR: --flow-type not specified (options: symmetrical, directional)", EINVAL);
+    CHECK_TRUE((symmetrical_flow_opt(*opt_flow_type) ||
+                            directional_flow_opt(*opt_flow_type)),
+                           "ERROR: --flow-type invalid (options: symmetrical, directional)", EINVAL);
 
     SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
     ret = sync_policy_ctx.init();
@@ -9043,10 +9044,11 @@ next:
   if (opt_cmd == OPT::SYNC_GROUP_FLOW_REMOVE) {
     CHECK_TRUE(require_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
     CHECK_TRUE(require_opt(opt_flow_id), "ERROR: --flow-id not specified", EINVAL);
-    CHECK_TRUE(require_opt(opt_flow_type,
-                           (symmetrical_flow_opt(*opt_flow_type) ||
-                            directional_flow_opt(*opt_flow_type))),
-                           "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)", EINVAL);
+    CHECK_TRUE(require_opt(opt_flow_type),
+                           "ERROR: --flow-type not specified (options: symmetrical, directional)", EINVAL);
+    CHECK_TRUE((symmetrical_flow_opt(*opt_flow_type) ||
+                            directional_flow_opt(*opt_flow_type)),
+                           "ERROR: --flow-type invalid (options: symmetrical, directional)", EINVAL);
 
     SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
     ret = sync_policy_ctx.init();
