@@ -1939,12 +1939,66 @@ void PGMap::get_stuck_stats(
 	val = i->second.last_unstale;
     }
 
+    if ((types & STUCK_PEERING) && (i->second.state & PG_STATE_PEERING)) {
+      if (i->second.last_peered < val)
+	val = i->second.last_peered;
+    }
+
     // val is now the earliest any of the requested stuck states began
     if (val < cutoff) {
       stuck_pgs[i->first] = i->second;
     }
   }
 }
+
+void PGMap::get_stuck_stats_by_pool(
+  int types, const utime_t cutoff,
+  mempool::pgmap::unordered_map<uint64_t, vector<pg_t>>& pool_stuck_pg_map) const
+{
+  ceph_assert(types != 0);
+  for (auto i = pg_stat.begin();
+       i != pg_stat.end();
+       ++i) {
+    utime_t val = cutoff; // don't care about >= cutoff so that is infinity
+
+    if ((types & STUCK_INACTIVE) && !(i->second.state & PG_STATE_ACTIVE)) {
+      if (i->second.last_active < val)
+	val = i->second.last_active;
+    }
+
+    if ((types & STUCK_UNCLEAN) && !(i->second.state & PG_STATE_CLEAN)) {
+      if (i->second.last_clean < val)
+	val = i->second.last_clean;
+    }
+
+    if ((types & STUCK_DEGRADED) && (i->second.state & PG_STATE_DEGRADED)) {
+      if (i->second.last_undegraded < val)
+	val = i->second.last_undegraded;
+    }
+
+    if ((types & STUCK_UNDERSIZED) && (i->second.state & PG_STATE_UNDERSIZED)) {
+      if (i->second.last_fullsized < val)
+	val = i->second.last_fullsized;
+    }
+
+    if ((types & STUCK_STALE) && (i->second.state & PG_STATE_STALE)) {
+      if (i->second.last_unstale < val)
+	val = i->second.last_unstale;
+    }
+
+    if ((types & STUCK_PEERING) && (i->second.state & PG_STATE_PEERING)) {
+      if (i->second.last_peered < val)
+	val = i->second.last_peered;
+    }
+
+    // val is now the earliest any of the requested stuck states began
+    if (val < cutoff) {
+      const auto pool_id = i->first.pool();
+      pool_stuck_pg_map[pool_id].push_back(i->first);
+    }
+  }
+}
+
 
 void PGMap::dump_stuck(ceph::Formatter *f, int types, utime_t cutoff) const
 {
@@ -1962,12 +2016,45 @@ void PGMap::dump_stuck(ceph::Formatter *f, int types, utime_t cutoff) const
   f->close_section();
 }
 
+void PGMap::dump_stuck_by_pool(ceph::Formatter *f, int types, utime_t cutoff) const
+{
+  mempool::pgmap::unordered_map<uint64_t, vector<pg_t>> pool_stuck_pg_map;
+  get_stuck_stats_by_pool(types, cutoff, pool_stuck_pg_map);
+  f->open_object_section("stuck_pg_stats");
+  for (auto i = pool_stuck_pg_map.begin();
+       i != pool_stuck_pg_map.end();
+       ++i) {
+    f->open_object_section(std::to_string(i->first));
+    f->dump_stream("pgs") << i->second;
+    f->close_section();
+  }
+  f->close_section();
+}
+
 void PGMap::dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const
 {
   mempool::pgmap::unordered_map<pg_t, pg_stat_t> stuck_pg_stats;
   get_stuck_stats(types, cutoff, stuck_pg_stats);
   if (!stuck_pg_stats.empty())
     dump_pg_stats_plain(ss, stuck_pg_stats, true);
+}
+
+int PGMap::dump_stuck_unavailable_pg_stats(
+  //TODO: make it such that we have poolid as key
+  // and value to be: pgid, state and etc.
+  ceph::Formatter *f,
+  int threshold) const
+{
+  int stuck_types = 0;
+  stuck_types |= PGMap::STUCK_INACTIVE;
+  stuck_types |= PGMap::STUCK_STALE;
+  stuck_types |= PGMap::STUCK_PEERING;
+
+  utime_t now(ceph_clock_now());
+  utime_t cutoff = now - utime_t(threshold, 0);
+  dump_stuck_by_pool(f, stuck_types, cutoff);
+
+  return 0;
 }
 
 int PGMap::dump_stuck_pg_stats(
@@ -3435,6 +3522,37 @@ void PGMap::print_summary(ceph::Formatter *f, ostream *out) const
     f->close_section();
   }
   PGMapDigest::print_summary(f, out);
+}
+
+void PGMap::print_pool_unavailable_pgs(ceph::Formatter *f, std::ostream *out, const OSDMap& osdmap) const
+{
+  if (f) {
+    f->open_object_section("per_pool_pgs_by_unavailable");
+    for (auto& i: num_pg_by_pool_state) {
+      const string& pool_name = osdmap.get_pool_name(i.first);
+      int unavailable_count = 0;
+      f->open_object_section(std::to_string(i.first));
+      f->dump_string("pool_name", pool_name);
+      f->open_array_section("pg_state_counts");
+      for (auto& j : i.second) {
+        f->open_object_section("pg_state_count");
+        f->dump_string("state_name", pg_state_string(j.first));
+        f->dump_int("count", j.second);
+        if ((j.first & PG_STATE_INCOMPLETE) || (j.first & PG_STATE_DOWN)){
+          unavailable_count += j.second;
+        }
+        f->close_section();
+      }
+      f->close_section();
+      f->dump_int("unavailable_pg_count", unavailable_count);
+      auto q = num_pg_by_pool.find(i.first);
+      if (q != num_pg_by_pool.end()){
+        f->dump_unsigned("total_pgs", q->second);
+      }
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 int process_pg_map_command(

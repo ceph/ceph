@@ -359,6 +359,7 @@ public:
   static const int STUCK_UNDERSIZED = (1<<2);
   static const int STUCK_DEGRADED = (1<<3);
   static const int STUCK_STALE = (1<<4);
+  static const int STUCK_PEERING = (1<<5);
   
   PGMap()
     : version(0),
@@ -468,12 +469,17 @@ public:
   void get_stuck_stats(
     int types, const utime_t cutoff,
     mempool::pgmap::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const;
+  void get_stuck_stats_by_pool(
+    int types, const utime_t cutoff,
+    mempool::pgmap::unordered_map<uint64_t, std::vector<pg_t>>& pool_stuck_pg_map) const;
   void dump_stuck(ceph::Formatter *f, int types, utime_t cutoff) const;
+  void dump_stuck_by_pool(ceph::Formatter *f, int types, utime_t cutoff) const;
   void dump_stuck_plain(std::ostream& ss, int types, utime_t cutoff) const;
   int dump_stuck_pg_stats(std::stringstream &ds,
 			  ceph::Formatter *f,
 			  int threshold,
 			  std::vector<std::string>& args) const;
+  int dump_stuck_unavailable_pg_stats(ceph::Formatter *f, int threshold) const;
   void dump(std::ostream& ss) const;
   void dump_basic(std::ostream& ss) const;
   void dump_pg_stats(std::ostream& ss, bool brief) const;
@@ -498,7 +504,7 @@ public:
     const OSDMap& osdmap,
     health_check_map_t *checks) const;
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
-
+  void print_pool_unavailable_pgs(ceph::Formatter *f, std::ostream *out, const OSDMap& osdmap) const;
   static void generate_test_instances(std::list<PGMap*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(PGMap)

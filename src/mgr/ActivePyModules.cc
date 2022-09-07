@@ -485,6 +485,15 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     f.close_section();
   } else if (what == "have_local_config_map") {
     f.dump_bool("have_local_config_map", have_local_config_map);
+  } else if (what == "pool_unavailable_pgs"){
+    without_gil_t no_gil;
+    cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap,
+				const PGMap& pg_map) {
+      no_gil.acquire_gil();
+      const auto threshold = g_conf().get_val<int64_t>("mon_pg_stuck_threshold");
+      pg_map.dump_stuck_unavailable_pg_stats(&f, (int)threshold);
+      pg_map.print_pool_unavailable_pgs(&f, nullptr, osdmap);
+    });
   } else if (what == "active_clean_pgs"){
     without_gil_t no_gil;
     cluster_state.with_pgmap(
