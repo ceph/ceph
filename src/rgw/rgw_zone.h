@@ -79,7 +79,7 @@ class RGWSI_SysObj;
 class RGWSI_Zone;
 
 class RGWSystemMetaObj {
-protected:
+public:
   std::string id;
   std::string name;
 
@@ -1095,6 +1095,7 @@ class RGWPeriod;
 
 class RGWRealm : public RGWSystemMetaObj
 {
+public:
   std::string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
@@ -1207,6 +1208,7 @@ WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
  */
 class RGWPeriod
 {
+public:
   std::string id; //< a uuid
   epoch_t epoch{0};
   std::string predecessor_uuid;
