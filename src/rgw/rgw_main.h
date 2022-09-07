@@ -68,6 +68,7 @@ class AppMain {
   std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
   std::unique_ptr<rgw::dmclock::SchedulerCtx> sched_ctx;
   std::unique_ptr<ActiveRateLimiter> ratelimiter;
+  std::map<std::string, std::string> service_map_meta;
   // wow, realm reloader has a lot of parts
   std::unique_ptr<RGWRealmReloader> reloader;
   std::unique_ptr<RGWPeriodPusher> pusher;
