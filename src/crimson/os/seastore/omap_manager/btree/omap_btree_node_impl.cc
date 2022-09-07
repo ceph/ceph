@@ -248,7 +248,11 @@ OMapInnerNode::list(
 		assert(child_result.begin()->first > result.rbegin()->first);
 	      }
 	      if (child_result.size() && start && first_entry) {
-		assert(child_result.begin()->first > *start);
+		if (config.inclusive) {
+		  assert(child_result.begin()->first >= *start);
+		} else {
+		  assert(child_result.begin()->first > *start);
+		}
 	      }
 	      result.merge(std::move(child_result));
 	      ++biter;
