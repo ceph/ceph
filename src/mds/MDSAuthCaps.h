@@ -21,6 +21,7 @@
 
 #include "include/common_fwd.h"
 #include "include/types.h"
+#include "include/encoding.h"
 #include "common/debug.h"
 
 #include "mdstypes.h"
@@ -93,9 +94,25 @@ struct MDSCapSpec {
   bool allow_full() const {
     return (caps & FULL);
   }
+
+  void encode(ceph::buffer::list& bl) const {
+    using ceph::encode;
+    __u8 struct_v = 1;
+    encode(struct_v, bl);
+    encode(caps, bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    using ceph::decode;
+    __u8 struct_v;
+    decode(struct_v, bl);
+    decode(caps, bl);
+  }
+
 private:
   unsigned caps = 0;
 };
+WRITE_CLASS_ENCODER(MDSCapSpec)
 
 // conditions before we are allowed to do it
 struct MDSCapMatch {
@@ -149,12 +166,35 @@ struct MDSCapMatch {
    */
   bool match_path(std::string_view target_path) const;
 
+  void encode(ceph::buffer::list& bl) const {
+    using ceph::encode;
+    __u8 struct_v = 1;
+    encode(struct_v, bl);
+    encode(uid, bl);
+    encode(gids, bl);
+    encode(path, bl);
+    encode(fs_name, bl);
+    encode(root_squash, bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    using ceph::decode;
+    __u8 struct_v;
+    decode(struct_v, bl);
+    decode(uid, bl);
+    decode(gids, bl);
+    decode(path, bl);
+    decode(fs_name, bl);
+    decode(root_squash, bl);
+  }
+
   int64_t uid;       // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
   std::vector<gid_t> gids;  // Use these GIDs
   std::string path;  // Require path to be child of this (may be "" or "/" for any)
   std::string fs_name;
   bool root_squash=false;
 };
+WRITE_CLASS_ENCODER(MDSCapMatch)
 
 struct MDSCapGrant {
   MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_,
@@ -169,6 +209,30 @@ struct MDSCapGrant {
 
   void parse_network();
 
+  void encode(ceph::buffer::list& bl) const {
+    using ceph::encode;
+    __u8 struct_v = 1;
+    encode(struct_v, bl);
+    encode(spec, bl);
+    encode(match, bl);
+    encode(network, bl);
+    encode(network_parsed, bl, 0);
+    encode(network_prefix, bl);
+    encode(network_valid, bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    using ceph::decode;
+    __u8 struct_v;
+    decode(struct_v, bl);
+    decode(spec, bl);
+    decode(match, bl);
+    decode(network, bl);
+    decode(network_parsed, bl);
+    decode(network_prefix, bl);
+    decode(network_valid, bl);
+  }
+
   MDSCapSpec spec;
   MDSCapMatch match;
 
@@ -178,6 +242,7 @@ struct MDSCapGrant {
   unsigned network_prefix = 0;
   bool network_valid = true;
 };
+WRITE_CLASS_ENCODER(MDSCapGrant)
 
 class MDSAuthCaps
 {
@@ -224,11 +289,26 @@ public:
     return false;
   }
 
+  void encode(ceph::buffer::list& bl) const {
+    using ceph::encode;
+    __u8 struct_v = 1;
+    encode(struct_v, bl);
+    encode(grants, bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    using ceph::decode;
+    __u8 struct_v;
+    decode(struct_v, bl);
+    decode(grants, bl);
+  }
+
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 private:
   CephContext *cct = nullptr;
   std::vector<MDSCapGrant> grants;
 };
+WRITE_CLASS_ENCODER(MDSAuthCaps)
 
 std::ostream &operator<<(std::ostream &out, const MDSCapMatch &match);
 std::ostream &operator<<(std::ostream &out, const MDSCapSpec &spec);
