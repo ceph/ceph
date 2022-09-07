@@ -515,6 +515,9 @@ public:
     extent_types_t type,
     node_key_t key);
 
+  template <typename node_key_t, typename T>
+  std::list<TCachedExtentRef<T>> get_fixedkv_leaves_in_range(
+    node_key_t key, extent_len_t length);
 private:
   friend class Cache;
   friend Ref make_test_transaction();

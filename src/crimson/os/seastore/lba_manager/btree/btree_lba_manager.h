@@ -166,6 +166,10 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
+  get_mappings_ret _get_mappings(
+    Transaction &t,
+    laddr_t offset, extent_len_t length);
+
   /**
    * update_refcount
    *

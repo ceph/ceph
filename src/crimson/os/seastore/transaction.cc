@@ -83,6 +83,64 @@ TCachedExtentRef<T> Transaction::may_get_fixedkv_leaf_node(
   }
 }
 
+template <typename node_key_t, typename T>
+std::list<TCachedExtentRef<T>> Transaction::get_fixedkv_leaves_in_range(
+  node_key_t key, extent_len_t length)
+{
+  static_assert(std::is_same_v<node_key_t, laddr_t>
+    || std::is_same_v<node_key_t, paddr_t>);
+
+  if constexpr (std::is_same_v<node_key_t, laddr_t>) {
+    std::list<TCachedExtentRef<T>> leaves;
+
+    auto &layer = pending_lba_nodes.pin_layers[1];
+    if (layer.empty()) {
+      return leaves;
+    }
+    auto iter = layer.lower_bound(
+      key,
+      typename btree_range_pin_t<node_key_t>::node_bound_cmp_t());
+
+    if (iter != layer.begin() &&
+	(iter == layer.end() || iter->range.begin != key)) {
+      --iter;
+    }
+
+    for (; iter != layer.end()
+	    && iter->range.begin < key + length
+	    && iter->range.end > key;
+	iter++) {
+      leaves.push_back((T*)&(iter->get_extent()));
+    }
+
+    return leaves;
+  } else {
+    std::list<TCachedExtentRef<T>> leaves;
+
+    auto &layer = pending_backref_nodes.pin_layers[1];
+    if (layer.empty()) {
+      return leaves;
+    }
+    auto iter = layer.lower_bound(
+      key,
+      typename btree_range_pin_t<node_key_t>::node_bound_cmp_t());
+
+    if (iter != layer.begin() &&
+	(iter == layer.end() || iter->range.begin != key)) {
+      --iter;
+    }
+
+    for (; iter != layer.end()
+	    && iter->range.begin < key + length
+	    && iter->range.end > key;
+	iter++) {
+      leaves.push_back((T*)&(iter->get_extent()));
+    }
+
+    return leaves;
+  }
+}
+
 void Transaction::may_link_fixedkv_pin(CachedExtentRef &ref) {
   if (is_lba_node(ref->get_type())) {
     auto &lba_node = (lba_manager::btree::LBANode&)*ref;
@@ -146,4 +204,7 @@ Transaction::may_get_fixedkv_leaf_node<paddr_t, backref::BackrefLeafNode>(
   extent_types_t type,
   paddr_t key);
 
+template std::list<TCachedExtentRef<lba_manager::btree::LBALeafNode>>
+Transaction::get_fixedkv_leaves_in_range(
+  laddr_t key, extent_len_t length);
 } // namespace crimson::os::seastore

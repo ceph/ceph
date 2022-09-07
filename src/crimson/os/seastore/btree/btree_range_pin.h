@@ -149,6 +149,10 @@ public:
   btree_range_pin_t(const btree_range_pin_t &rhs, CachedExtent *extent)
     : range(rhs.range), extent(extent) {}
 
+  const fixed_kv_node_meta_t<node_bound_t>& get_range() {
+    return range;
+  }
+
   bool has_ref() const {
     return !!ref;
   }
@@ -392,6 +396,48 @@ public:
     } else {
       return nullptr;
     }
+  }
+
+  template <typename T>
+  std::optional<std::list<TCachedExtentRef<T>>>
+  maybe_get_continuous_leaves_in_range(
+    node_bound_t key, extent_len_t length)
+  {
+    std::list<TCachedExtentRef<T>> leaves;
+
+    auto &layer = pins_by_depth[1];
+    auto iter = layer.lower_bound(
+      key,
+      typename btree_range_pin_t<node_bound_t>::node_bound_cmp_t());
+
+    if (iter != layer.begin() &&
+	(iter == layer.end() || iter->range.begin != key)) {
+      --iter;
+    }
+
+    node_bound_t last_end = min_max_t<node_bound_t>::max;
+    for (; iter != layer.end()
+	    && iter->range.begin < key + length
+	    && iter->range.end > key;
+	iter++) {
+      if (auto &ext = iter->get_extent();
+	  !ext.is_valid()
+	  || (last_end != min_max_t<node_bound_t>::max
+	    && iter->range.begin != last_end)) {
+	ceph_assert((ext.is_valid()) ? iter->range.begin > last_end : true);
+	return std::optional<std::list<TCachedExtentRef<T>>>();
+      }
+      last_end = iter->range.end;
+      leaves.push_back((T*)&(iter->get_extent()));
+    }
+
+    if (last_end == min_max_t<node_bound_t>::max
+	|| last_end < key + length) {
+      return std::optional<std::list<TCachedExtentRef<T>>>();
+    }
+    return std::make_optional<
+      std::list<TCachedExtentRef<T>>>(
+	std::move(leaves));
   }
 
   /// Adds pin to set, assumes set is consistent
