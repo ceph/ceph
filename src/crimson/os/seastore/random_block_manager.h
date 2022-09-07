@@ -61,7 +61,7 @@ public:
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,
     crimson::ct_error::enoent>;
-  virtual open_ertr::future<> open(const std::string &path, paddr_t start) = 0;
+  virtual open_ertr::future<> open() = 0;
 
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
