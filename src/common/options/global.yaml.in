@@ -1189,6 +1189,34 @@ options:
   fmt_desc: The maximum port number to which an OSD or MDS daemon will bind.
   default: 7568
   with_legacy: true
+- name: ms_bind_port_min_osd
+  type: int
+  level: advanced
+  desc: Lowest port number to bind OSD daemon(s) to
+  fmt_desc: The minimum port number to which an OSD daemon will bind.
+  default: 0
+  with_legacy: true
+- name: ms_bind_port_max_osd
+  type: int
+  level: advanced
+  desc: Highest port number to bind OSD daemon(s) to
+  fmt_desc: The maximum port number to which an OSD daemon will bind.
+  default: 0
+  with_legacy: true
+- name: ms_bind_port_min_mds
+  type: int
+  level: advanced
+  desc: Lowest port number to bind MDS daemon(s) to
+  fmt_desc: The minimum port number to which an MDS daemon will bind.
+  default: 0
+  with_legacy: true
+- name: ms_bind_port_max_mds
+  type: int
+  level: advanced
+  desc: Highest port number to bind MDS daemon(s) to
+  fmt_desc: The maximum port number to which an MDS daemon will bind.
+  default: 0
+  with_legacy: true
 # FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
 - name: ms_bind_retry_count
   type: int

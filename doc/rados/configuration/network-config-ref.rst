@@ -314,6 +314,10 @@ addresses.
 
 .. confval:: ms_bind_port_min
 .. confval:: ms_bind_port_max
+.. confval:: ms_bind_port_min_osd
+.. confval:: ms_bind_port_max_osd
+.. confval:: ms_bind_port_min_mds
+.. confval:: ms_bind_port_max_mds
 .. confval:: ms_bind_ipv4
 .. confval:: ms_bind_ipv6
 .. confval:: public_bind_addr

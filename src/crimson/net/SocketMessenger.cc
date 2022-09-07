@@ -165,9 +165,30 @@ SocketMessenger::bind(const entity_addrvec_t& addrs)
                           [this, addrs] (auto& count) {
     return seastar::repeat_until_value([this, addrs, &count] {
       assert(count >= 0);
+
+      int ms_bind_port_min=0;
+      int ms_bind_port_max=0;
+
+      if (this->get_myname().is_osd() &&
+          local_conf()->ms_bind_port_min_osd &&
+          local_conf()->ms_bind_port_max_osd) {
+        ms_bind_port_min = local_conf()->ms_bind_port_min_osd;
+        ms_bind_port_max = local_conf()->ms_bind_port_max_osd;
+      }
+      else if (this->get_myname().is_mds() &&
+              local_conf()->ms_bind_port_min_mds &&
+              local_conf()->ms_bind_port_max_mds) {
+        ms_bind_port_min = local_conf()->ms_bind_port_min_mds;
+        ms_bind_port_max = local_conf()->ms_bind_port_max_mds;
+      }
+      else {
+        ms_bind_port_min = local_conf()->ms_bind_port_min;
+        ms_bind_port_max = local_conf()->ms_bind_port_max;
+      }
+
       return try_bind(addrs,
-                      local_conf()->ms_bind_port_min,
-                      local_conf()->ms_bind_port_max)
+                      ms_bind_port_min,
+                      ms_bind_port_max)
       .safe_then([this] {
         logger().info("{} try_bind: done", *this);
         return seastar::make_ready_future<std::optional<std::error_code>>(

@@ -99,9 +99,30 @@ int Processor::bind(const entity_addrvec_t &bind_addrs,
 	  continue;
 	}
       } else {
+	// determine bind port range
+	int ms_bind_port_min=0;
+	int ms_bind_port_max=0;
+
+	if (msgr->get_myname().is_osd() &&
+	    msgr->cct->_conf->ms_bind_port_min_osd &&
+	    msgr->cct->_conf->ms_bind_port_max_osd) {
+	  ms_bind_port_min = msgr->cct->_conf->ms_bind_port_min_osd;
+	  ms_bind_port_max = msgr->cct->_conf->ms_bind_port_max_osd;
+	}
+	else if (msgr->get_myname().is_mds() &&
+	         msgr->cct->_conf->ms_bind_port_min_mds &&
+	         msgr->cct->_conf->ms_bind_port_max_mds) {
+	  ms_bind_port_min = msgr->cct->_conf->ms_bind_port_min_mds;
+	  ms_bind_port_max = msgr->cct->_conf->ms_bind_port_max_mds;
+	}
+	else {
+	  ms_bind_port_min = msgr->cct->_conf->ms_bind_port_min;
+	  ms_bind_port_max = msgr->cct->_conf->ms_bind_port_max;
+	}
+
 	// try a range of ports
-	for (int port = msgr->cct->_conf->ms_bind_port_min;
-	     port <= msgr->cct->_conf->ms_bind_port_max;
+	for (int port = ms_bind_port_min;
+	     port <= ms_bind_port_max;
 	     port++) {
 	  if (avoid_ports.count(port))
 	    continue;
@@ -118,8 +139,8 @@ int Processor::bind(const entity_addrvec_t &bind_addrs,
 	if (r < 0) {
 	  lderr(msgr->cct) << __func__ << " unable to bind to " << listen_addr
 			   << " on any port in range "
-			   << msgr->cct->_conf->ms_bind_port_min
-			   << "-" << msgr->cct->_conf->ms_bind_port_max << ": "
+			   << ms_bind_port_min
+			   << "-" << ms_bind_port_max << ": "
 			   << cpp_strerror(r) << dendl;
 	  listen_addr.set_port(0); // Clear port before retry, otherwise we shall fail again.
 	  continue;
