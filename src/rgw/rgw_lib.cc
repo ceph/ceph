@@ -520,7 +520,7 @@ namespace rgw {
     main.init_opslog();
 
     init_async_signal_handler();
-    register_async_signal_handler(SIGUSR1, handle_sigterm);
+    register_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
 
     main.init_tracepoints();
     main.init_frontends2(this /* rgwlib */);
