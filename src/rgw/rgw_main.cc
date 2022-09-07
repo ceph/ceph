@@ -132,6 +132,9 @@ int main(int argc, char *argv[])
   register_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
+  main.init_perfcounters();
+  main.init_http_clients();
+
   main.init_storage();
   if (! main.get_store()) {
     mutex.lock();
@@ -143,8 +146,6 @@ int main(int argc, char *argv[])
     return EIO;
   }
 
-  main.init_perfcounters();
-  main.init_http_clients();
   main.cond_init_apis();
 
   mutex.lock();
