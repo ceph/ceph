@@ -23,7 +23,9 @@
     <a ngbNavLink
        i18n>Overall Performance</a>
     <ng-template ngbNavContent>
-      <cd-grafana [grafanaPath]="'rgw-overview?'"
+      <cd-grafana i18n-title
+                  title="RGW overview"
+                  [grafanaPath]="'rgw-overview?'"
                   [type]="'metrics'"
                   uid="WAkugZpiz"
                   grafanaStyle="two">
@@ -36,7 +38,9 @@
     <a ngbNavLink
        i18n>Sync Performance</a>
     <ng-template ngbNavContent>
-      <cd-grafana [grafanaPath]="'radosgw-sync-overview?'"
+      <cd-grafana i18n-title
+                  title="Radosgw sync overview"
+                  [grafanaPath]="'radosgw-sync-overview?'"
                   [type]="'metrics'"
                   uid="rgw-sync-overview"
                   grafanaStyle="two">
