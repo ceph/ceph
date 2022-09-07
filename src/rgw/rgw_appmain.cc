@@ -381,7 +381,6 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     g_conf().get_val<string>("rgw_frontend_defaults");
   get_str_vec(frontend_defs_str, ",", frontends_def);
 
-  std::map<std::string, std::string> service_map_meta;
   service_map_meta["pid"] = stringify(getpid());
 
   std::map<std::string, std::unique_ptr<RGWFrontendConfig> > fe_def_map;
