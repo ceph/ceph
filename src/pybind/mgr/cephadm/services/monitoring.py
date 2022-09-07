@@ -298,6 +298,12 @@ class PrometheusService(CephadmService):
         except AttributeError:
             retention_time = '15d'
 
+        try:
+            retention_size = prom_spec.retention_size if prom_spec.retention_size else '0'
+        except AttributeError:
+            # default to disabled
+            retention_size = '0'
+
         deps = []  # type: List[str]
 
         # scrape mgrs
@@ -378,7 +384,8 @@ class PrometheusService(CephadmService):
                     self.mgr.template.render(
                         'services/prometheus/prometheus.yml.j2', context)
             },
-            'retention_time': retention_time
+            'retention_time': retention_time,
+            'retention_size': retention_size
         }
 
         # include alerts, if present in the container
