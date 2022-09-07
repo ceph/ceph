@@ -495,6 +495,9 @@ namespace rgw {
 
     common_init_finish(g_ceph_context);
 
+    main.init_perfcounters();
+    main.init_http_clients();
+
     main.init_storage();
     if (! main.get_store()) {
       mutex.lock();
@@ -506,8 +509,6 @@ namespace rgw {
       return -EIO;
     }
 
-    main.init_perfcounters();
-    main.init_http_clients();
     main.cond_init_apis();
 
     mutex.lock();
