@@ -304,9 +304,10 @@ public:
   }
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
+
+  std::vector<MDSCapGrant> grants;
 private:
   CephContext *cct = nullptr;
-  std::vector<MDSCapGrant> grants;
 };
 WRITE_CLASS_ENCODER(MDSAuthCaps)
 

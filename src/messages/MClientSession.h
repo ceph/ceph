@@ -17,10 +17,11 @@
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
+#include "mds/MDSAuthCaps.h"
 
 class MClientSession final : public SafeMessage {
 private:
-  static constexpr int HEAD_VERSION = 5;
+  static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -31,6 +32,7 @@ public:
   std::map<std::string, std::string> metadata;
   feature_bitset_t supported_features;
   metric_spec_t metric_spec;
+  MDSAuthCaps auth_caps;
 
   int get_op() const { return head.op; }
   version_t get_seq() const { return head.seq; }
@@ -81,6 +83,9 @@ public:
     if (header.version >= 5) {
       decode(flags, p);
     }
+    if (header.version >= 6) {
+      decode(auth_caps, p);
+    }
   }
   void encode_payload(uint64_t features) override { 
     using ceph::encode;
@@ -96,6 +101,7 @@ public:
       encode(supported_features, payload);
       encode(metric_spec, payload);
       encode(flags, payload);
+      encode(auth_caps, payload);
     }
   }
 private:
