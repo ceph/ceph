@@ -11,6 +11,6 @@ Go installed on the Linux machine.
 ```
 aws --endpoint-url http://localhost:8000 s3 mb s3://sample-bucket
 ```
-3. Navigate through your file system to where the Go example code is using your terminal.
+3. Navigate through your file system to where the Golang example code exist on your terminal.
 4. Run ``` go mod tidy ``` to install the required Go packages on the system.
-5. Run the Go program as ``` go run object-upload.go sample-bucket fortuna.txt ``` on the terminal window to test out object upload to Ceph RGW cluster.
+5. Run the Golang program as ``` go run object-upload.go -b sample-bucket -f fortuna.txt ``` on the terminal window to test out object upload to Ceph RGW cluster.
