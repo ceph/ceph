@@ -8,6 +8,7 @@ set(libclient_srcs
   MetaSession.cc
   Trace.cc
   posix_acl.cc
-  Delegation.cc)
+  Delegation.cc
+  ${CMAKE_SOURCE_DIR}/src/common/MDSAuthCaps.cc)
 add_library(client STATIC ${libclient_srcs})
 target_link_libraries(client osdc)

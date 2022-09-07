@@ -22,6 +22,7 @@
 #include "common/ceph_mutex.h"
 #include "common/cmdparse.h"
 #include "common/compiler_extensions.h"
+#include "common/MDSAuthCaps.h"
 #include "include/common_fwd.h"
 #include "include/cephfs/ceph_ll_client.h"
 #include "include/filepath.h"
@@ -542,6 +543,10 @@ public:
   int mksnap(const char *path, const char *name, const UserPerm& perm,
              mode_t mode=0, const std::map<std::string, std::string> &metadata={});
   int rmsnap(const char *path, const char *name, const UserPerm& perm, bool check_perms=false);
+
+  // cephx mds auth caps checking
+  int mds_check_access(Inode *in, const UserPerm& perms, int mask,
+                       uid_t new_uid=-1, gid_t new_gid=-1);
 
   // Inode permission checking
   int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
@@ -1603,6 +1608,8 @@ private:
   uint64_t nr_metadata_request = 0;
   uint64_t nr_read_request = 0;
   uint64_t nr_write_request = 0;
+
+  MDSAuthCaps mds_auth_caps;
 };
 
 /**

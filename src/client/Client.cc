@@ -370,7 +370,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     async_ino_releasor(m->cct),
     objecter_finisher(m->cct),
     m_command_hook(this),
-    fscid(0)
+    fscid(0), mds_auth_caps(m->cct)
 {
   _reset_faked_inos();
 
@@ -2362,6 +2362,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
 
       session->mds_features = std::move(m->supported_features);
       session->mds_metric_flags = std::move(m->metric_spec.metric_flags);
+      mds_auth_caps.grants = std::move(m->auth_caps.grants);
 
       renew_caps(session.get());
       session->state = MetaSession::STATE_OPEN;
@@ -5753,6 +5754,31 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   // may drop inode's last ref
   if (deleted_inode)
     _try_to_trim_inode(in, true);
+}
+
+int Client::mds_check_access(Inode *in, const UserPerm& perms, int mask,
+                             uid_t new_uid, gid_t new_gid)
+{
+  const gid_t *gids;
+  int count = perms.get_gids(&gids);
+  std::vector<uint64_t> gid_list;
+  entity_addr_t addr = messenger->get_myaddrs().front();
+  filepath path;
+
+  in->make_long_path(path);
+  if (count) {
+    gid_list.reserve(count);
+    for (int i = 0; i < count; ++i) {
+      gid_list.push_back(gids[i]);
+    }
+  }
+  if (!mds_auth_caps.is_capable(path.get_path(), in->uid, in->gid, in->mode,
+                                perms.uid(), perms.gid(), &gid_list, mask,
+                                new_uid, new_gid, addr)) {
+    return -CEPHFS_EACCES;
+  }
+
+  return 0;
 }
 
 int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
