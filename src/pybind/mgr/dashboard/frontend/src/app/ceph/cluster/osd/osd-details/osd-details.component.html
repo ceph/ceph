@@ -55,7 +55,9 @@
       <a ngbNavLink
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
-        <cd-grafana [grafanaPath]="'osd-device-details?var-osd=osd.' + osd['id']"
+        <cd-grafana i18n-title
+                    title="OSD details"
+                    [grafanaPath]="'osd-device-details?var-osd=osd.' + osd['id']"
                     [type]="'metrics'"
                     uid="CrAHE0iZz"
                     grafanaStyle="three">

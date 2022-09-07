@@ -73,7 +73,9 @@
       <ng-template ngbNavContent>
         <ng-container *ngIf="lokiServiceStatus$ | async as lokiServiceStatus; else daemonLogsTpl">
           <div *ngIf="promtailServiceStatus$ | async as promtailServiceStatus; else daemonLogsTpl">
-            <cd-grafana [grafanaPath]="'explore?'"
+            <cd-grafana i18n-title
+                        title="Daemon logs"
+                        [grafanaPath]="'explore?'"
                         [type]="'logs'"
                         uid="CrAHE0iZz"
                         grafanaStyle="two">
