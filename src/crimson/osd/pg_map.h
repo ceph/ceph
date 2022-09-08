@@ -75,6 +75,13 @@ public:
     }
   }
 
+  template <typename F>
+  void for_each_pgid(F &&f) const {
+    for (const auto &i: pg_to_core) {
+      std::invoke(f, i.first);
+    }
+  }
+
 private:
   std::map<core_id_t, unsigned> core_to_num_pgs;
   std::map<spg_t, core_id_t> pg_to_core;

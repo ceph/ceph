@@ -1229,7 +1229,7 @@ seastar::future<> OSD::update_heartbeat_peers()
     return seastar::now();;
   }
 
-  return pg_shard_manager.for_each_pg([this](auto &pgid, auto &pg) {
+  pg_shard_manager.for_each_pgid([this](auto &pgid) {
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(pgid.pgid,
                                  &up, nullptr,
@@ -1241,9 +1241,9 @@ seastar::future<> OSD::update_heartbeat_peers()
         heartbeat->add_peer(osd, osdmap->get_epoch());
       }
     }
-  }).then([this] {
-    heartbeat->update_peers(whoami);
   });
+  heartbeat->update_peers(whoami);
+  return seastar::now();
 }
 
 seastar::future<> OSD::handle_peering_op(
