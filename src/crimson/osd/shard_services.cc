@@ -52,6 +52,7 @@ PerShardState::PerShardState(
 
 seastar::future<> PerShardState::stop_pgs()
 {
+  assert_core();
   return seastar::parallel_for_each(
     pg_map.get_pgs(),
     [](auto& p) {
@@ -61,6 +62,7 @@ seastar::future<> PerShardState::stop_pgs()
 
 std::map<pg_t, pg_stat_t> PerShardState::get_pg_stats() const
 {
+  assert_core();
   std::map<pg_t, pg_stat_t> ret;
   for (auto [pgid, pg] : pg_map.get_pgs()) {
     if (pg->is_primary()) {
@@ -77,6 +79,7 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
   ShardServices &shard_services,
   epoch_t epoch)
 {
+  assert_core();
   auto &pgs = pg_map.get_pgs();
   return seastar::parallel_for_each(
     pgs.begin(), pgs.end(),
@@ -90,11 +93,13 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
 {
+  assert_core();
   return pg_map.get_pg(pgid);
 }
 
 HeartbeatStampsRef PerShardState::get_hb_stamps(int peer)
 {
+  assert_core();
   auto [stamps, added] = heartbeat_stamps.try_emplace(peer);
   if (added) {
     stamps->second = ceph::make_ref<HeartbeatStamps>(peer);
