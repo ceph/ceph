@@ -10480,7 +10480,7 @@ tags:
   name: Auth
 - description: Cephfs Management API
   name: Cephfs
-- description: Get Cluster Details
+- description: Get Ceph Users
   name: Cluster
 - description: Manage Cluster Configurations
   name: ClusterConfiguration
