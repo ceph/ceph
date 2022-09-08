@@ -29,7 +29,7 @@ namespace {
 
   // if we have a racing where another thread manages to bind and listen the
   // port picked by this acceptor, try again.
-  static constexpr int MAX_BIND_RETRIES = 42;
+  static constexpr int MAX_BIND_RETRIES = 60;
 
   tcp::acceptor try_bind(boost::asio::io_context& ioctx) {
     using tcp = boost::asio::ip::tcp;
@@ -50,7 +50,7 @@ namespace {
 	}
       }
       // backoff a little bit
-      usleep(retries * 10'000);
+      sleep(1);
     }
     return acceptor;
   }
