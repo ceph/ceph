@@ -49,8 +49,9 @@ void ClientRequest::complete_request()
 }
 
 ClientRequest::ClientRequest(
-  OSD &osd, crimson::net::ConnectionRef conn, Ref<MOSDOp> &&m)
-  : osd(osd),
+  ShardServices &shard_services, crimson::net::ConnectionRef conn,
+  Ref<MOSDOp> &&m)
+  : put_historic_shard_services(&shard_services),
     conn(std::move(conn)),
     m(std::move(m)),
     instance_handle(new instance_handle_t)
@@ -173,6 +174,7 @@ seastar::future<> ClientRequest::with_pg_int(
 seastar::future<> ClientRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pgref)
 {
+  put_historic_shard_services = &shard_services;
   pgref->client_request_orderer.add_request(*this);
   auto ret = on_complete.get_future();
   std::ignore = with_pg_int(
@@ -347,7 +349,8 @@ bool ClientRequest::is_misdirected(const PG& pg) const
 
 void ClientRequest::put_historic() const
 {
-  osd.get_shard_services().get_registry().put_historic(*this);
+  ceph_assert_always(put_historic_shard_services);
+  put_historic_shard_services->get_registry().put_historic(*this);
 }
 
 }
