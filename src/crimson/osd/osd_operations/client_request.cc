@@ -301,26 +301,26 @@ ClientRequest::do_process(
 
   return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
     [this, pg, &ihref](auto submitted, auto all_completed) mutable {
-    return submitted.then_interruptible([this, pg, &ihref] {
-      return ihref.enter_stage<interruptor>(pp(*pg).wait_repop, *this);
-    }).then_interruptible(
-      [this, pg, all_completed=std::move(all_completed), &ihref]() mutable {
-      return all_completed.safe_then_interruptible(
-        [this, pg, &ihref](MURef<MOSDOpReply> reply) {
-	return ihref.enter_stage<interruptor>(pp(*pg).send_reply, *this
-	).then_interruptible(
-          [this, reply=std::move(reply)]() mutable {
-          return conn->send(std::move(reply)).then([] {
-            return seastar::make_ready_future<seq_mode_t>(seq_mode_t::IN_ORDER);
-          });
-        });
-      }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
-        return process_op(ihref, pg);
-      }));
-    });
- }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
-    return process_op(ihref, pg);
-  }));
+      return submitted.then_interruptible([this, pg, &ihref] {
+	return ihref.enter_stage<interruptor>(pp(*pg).wait_repop, *this);
+      }).then_interruptible(
+	[this, pg, all_completed=std::move(all_completed), &ihref]() mutable {
+	  return all_completed.safe_then_interruptible(
+	    [this, pg, &ihref](MURef<MOSDOpReply> reply) {
+	      return ihref.enter_stage<interruptor>(pp(*pg).send_reply, *this
+	      ).then_interruptible(
+		[this, reply=std::move(reply)]() mutable {
+		  return conn->send(std::move(reply)).then([] {
+		    return seastar::make_ready_future<seq_mode_t>(seq_mode_t::IN_ORDER);
+		  });
+		});
+	    }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
+	      return process_op(ihref, pg);
+	    }));
+	});
+    }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
+      return process_op(ihref, pg);
+    }));
 }
 
 bool ClientRequest::is_misdirected(const PG& pg) const
