@@ -96,10 +96,12 @@
         <a (click)="toggleSubMenu('cluster')"
            class="nav-link dropdown-toggle"
            [attr.aria-expanded]="displayedSubMenu == 'cluster'"
-           aria-controls="collapseBasic">
+           aria-controls="cluster-nav"
+           role="button">
           <ng-container i18n>Cluster</ng-container>
         </a>
         <ul class="list-unstyled"
+            id="cluster-nav"
             [ngbCollapse]="displayedSubMenu !== 'cluster'">
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_hosts"
@@ -192,12 +194,14 @@
         <a class="nav-link dropdown-toggle"
            (click)="toggleSubMenu('block')"
            [attr.aria-expanded]="displayedSubMenu == 'block'"
-           aria-controls="collapseBasic"
+           aria-controls="block-nav"
+           role="button"
            [ngStyle]="blockHealthColor()">
           <ng-container i18n>Block</ng-container>
         </a>
 
         <ul class="list-unstyled"
+            id="block-nav"
             [ngbCollapse]="displayedSubMenu !== 'block'">
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_block_images"
@@ -252,10 +256,12 @@
         <a class="nav-link dropdown-toggle"
            (click)="toggleSubMenu('rgw')"
            [attr.aria-expanded]="displayedSubMenu == 'rgw'"
-           aria-controls="collapseBasic">
+           aria-controls="gateway-nav"
+           role="button">
           <ng-container i18n>Object Gateway</ng-container>
         </a>
         <ul class="list-unstyled"
+            id="gateway-nav"
             [ngbCollapse]="displayedSubMenu !== 'rgw'">
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_rgw_daemons">

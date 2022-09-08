@@ -2,7 +2,8 @@
      placement="bottom-right">
   <a ngbDropdownToggle
      i18n-title
-     title="Logged in user">
+     title="Logged in user"
+     role="button">
     <i [ngClass]="[icons.user]"></i>
     <span i18n
           class="d-md-none">Logged in user</span>
@@ -11,7 +12,7 @@
     <button ngbDropdownItem
             disabled
             i18n>Signed in as <strong>{{ username }}</strong></button>
-    <li class="dropdown-divider"></li>
+    <hr class="dropdown-divider" />
     <button ngbDropdownItem
             *ngIf="!sso"
             routerLink="/user-profile/edit">
