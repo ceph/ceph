@@ -29,6 +29,7 @@ class SocketConnection;
 using SocketConnectionRef = seastar::shared_ptr<SocketConnection>;
 
 class SocketConnection : public Connection {
+  const seastar::shard_id core;
   SocketMessenger& messenger;
   std::unique_ptr<Protocol> protocol;
 
