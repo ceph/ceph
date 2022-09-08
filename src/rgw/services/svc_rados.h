@@ -66,6 +66,7 @@ public:
 
   void init() {}
   void shutdown() override;
+  void stop_processor();
 
   uint64_t instance_id();
   bool check_secure_mon_conn() const;
