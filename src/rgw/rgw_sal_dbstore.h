@@ -899,6 +899,7 @@ public:
       virtual void set_luarocks_path(const std::string& path) override {
         luarocks_path = path;
       }
+      virtual void register_admin_apis(RGWRESTMgr* mgr) override { };
 
       /* Unique to DBStore */
       void setDBStoreManager(DBStoreManager *stm) { dbsm = stm; }
