@@ -425,6 +425,9 @@ class TunedProfileStore():
             self.profiles[k] = TunedProfileSpec.from_json(v)
             self.profiles[k]._last_updated = datetime_to_str(datetime_now())
 
+    def exists(self, profile_name: str) -> bool:
+        return profile_name in self.profiles
+
     def save(self) -> None:
         profiles_json = {k: v.to_json() for k, v in self.profiles.items()}
         self.mgr.set_store('tuned_profiles', json.dumps(profiles_json))
