@@ -20,6 +20,14 @@ overrides:
         mon osdmap full prune txsize: 2
 tasks:
 - thrashosds:
+    timeout: 2400
     dump_ops_enable: false
     sighup_delay: 0
     min_in: 3
+    noscrub_toggle_delay: 0
+    chance_down: 0
+    chance_thrash_pg_upmap: 0
+    reweight_osd: 0
+    thrash_primary_affinity: false
+    ceph_objectstore_tool: false
+    chance_inject_pause_short: 0
