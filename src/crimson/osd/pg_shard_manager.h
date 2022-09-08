@@ -240,6 +240,17 @@ public:
       });
   }
 
+  /**
+   * for_each_pgid
+   *
+   * Syncronously invokes f on each pgid
+   */
+  template <typename F>
+  void for_each_pgid(F &&f) const {
+    return get_osd_singleton_state().pg_to_shard_mapping.for_each_pgid(
+      std::forward<F>(f));
+  }
+
   auto get_num_pgs() const {
     return get_osd_singleton_state().pg_to_shard_mapping.get_num_pgs();
   }
