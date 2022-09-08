@@ -191,22 +191,30 @@ BtreeOMapManager::omap_list_ret
 BtreeOMapManager::omap_list(
   const omap_root_t &omap_root,
   Transaction &t,
-  const std::optional<std::string> &start,
+  const std::optional<std::string> &first,
+  const std::optional<std::string> &last,
   omap_list_config_t config)
 {
   LOG_PREFIX(BtreeOMapManager::omap_list);
-  if (start) {
-    DEBUGT("{}, start: {}", t, omap_root, *start);
+  if (first && last) {
+    DEBUGT("{}, first: {}, last: {}", t, omap_root, *first, *last);
+    assert(last >= first);
+  } else if (first) {
+    DEBUGT("{}, first: {}", t, omap_root, *first);
+  } else if (last) {
+    DEBUGT("{}, last: {}", t, omap_root, *last);
   } else {
     DEBUGT("{}", t, omap_root);
   }
+
   return get_omap_root(
     get_omap_context(t, omap_root.hint),
     omap_root
-  ).si_then([this, config, &t, &start, &omap_root](auto extent) {
+  ).si_then([this, config, &t, &first, &last, &omap_root](auto extent) {
     return extent->list(
       get_omap_context(t, omap_root.hint),
-      start,
+      first,
+      last,
       config);
   });
 }

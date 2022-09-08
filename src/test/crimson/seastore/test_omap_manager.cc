@@ -140,14 +140,19 @@ struct omap_manager_test_t :
   void list(
     const omap_root_t &omap_root,
     Transaction &t,
-    const std::optional<std::string> &start,
+    const std::optional<std::string> &first,
+    const std::optional<std::string> &last,
     size_t max = 128,
     bool inclusive = false) {
 
-    if (start) {
-      logger().debug("list on {}", *start);
+    if (first && last) {
+      logger().debug("list on {} ~ {}", *first, *last);
+    } else if (first) {
+      logger().debug("list on {} ~ end", *first);
+    } else if (last) {
+      logger().debug("list on start ~ {}", *last);
     } else {
-      logger().debug("list on start");
+      logger().debug("list on start ~ end");
     }
 
     auto config = OMapManager::omap_list_config_t::with_max(max);
@@ -157,17 +162,25 @@ struct omap_manager_test_t :
     auto [complete, results] = with_trans_intr(
       t,
       [&, this](auto &t) {
-	return omap_manager->omap_list(omap_root, t, start, config);
+	return omap_manager->omap_list(omap_root, t, first, last, config);
       }).unsafe_get0();
 
-    test_omap_t::iterator it;
-    if (start) {
+    test_omap_t::iterator it, lit;
+    if (first) {
       it = config.inclusive ?
-	test_omap_mappings.lower_bound(*start) :
-	test_omap_mappings.upper_bound(*start);
+	test_omap_mappings.lower_bound(*first) :
+	test_omap_mappings.upper_bound(*first);
     } else {
       it = test_omap_mappings.begin();
     }
+    if (last) {
+      lit = config.inclusive ?
+	test_omap_mappings.upper_bound(*last) :
+	test_omap_mappings.lower_bound(*last);
+    } else {
+      lit = test_omap_mappings.end();
+    }
+
     for (auto &&[k, v]: results) {
       EXPECT_NE(it, test_omap_mappings.end());
       if (it == test_omap_mappings.end())
@@ -176,7 +189,7 @@ struct omap_manager_test_t :
       EXPECT_EQ(v, it->second);
       it++;
     }
-    if (it == test_omap_mappings.end()) {
+    if (it == lit) {
       EXPECT_TRUE(complete);
     } else {
       EXPECT_EQ(results.size(), max);
@@ -397,17 +410,17 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
 
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, std::nullopt);
+      list(omap_root, *t, std::nullopt, std::nullopt);
     }
 
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, temp, 100);
+      list(omap_root, *t, temp, std::nullopt, 100);
     }
 
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, temp, 100, true);
+      list(omap_root, *t, temp, std::nullopt, 100, true);
     }
 
     {
@@ -440,12 +453,12 @@ TEST_F(omap_manager_test_t, force_inner_node_split_list)
 
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, temp, 10240);
+      list(omap_root, *t, temp, std::nullopt, 10240);
     }
 
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, temp, 10240, true);
+      list(omap_root, *t, temp, std::nullopt, 10240, true);
     }
 
     {
