@@ -633,6 +633,7 @@ class CephadmServe:
             hosts=self.mgr.cache.get_non_draining_hosts() if spec.service_name(
             ) == 'agent' else self.mgr.cache.get_schedulable_hosts(),
             unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
+            draining_hosts=self.mgr.cache.get_draining_hosts(),
             daemons=daemons,
             networks=self.mgr.cache.networks,
             filter_new_host=(
@@ -1011,6 +1012,7 @@ class CephadmServe:
                     spec=ServiceSpec('mon', placement=pspec),
                     hosts=self.mgr.cache.get_schedulable_hosts(),
                     unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
+                    draining_hosts=self.mgr.cache.get_draining_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )
@@ -1041,6 +1043,7 @@ class CephadmServe:
                     spec=ServiceSpec('mon', placement=ks.placement),
                     hosts=self.mgr.cache.get_schedulable_hosts(),
                     unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
+                    draining_hosts=self.mgr.cache.get_draining_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )

@@ -2546,6 +2546,7 @@ Then run the following:
             spec=spec,
             hosts=self.cache.get_schedulable_hosts(),
             unreachable_hosts=self.cache.get_unreachable_hosts(),
+            draining_hosts=self.cache.get_draining_hosts(),
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
             allow_colo=svc.allow_colo(),
@@ -2624,6 +2625,7 @@ Then run the following:
             spec=spec,
             hosts=self.inventory.all_specs(),  # All hosts, even those without daemon refresh
             unreachable_hosts=self.cache.get_unreachable_hosts(),
+            draining_hosts=self.cache.get_draining_hosts(),
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
             allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
