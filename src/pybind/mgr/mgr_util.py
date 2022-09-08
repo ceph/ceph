@@ -417,6 +417,7 @@ def test_port_allocation(addr: str, port: int) -> None:
     """Checks if the port is available
     :raises PortAlreadyInUse: in case port is already in use
     :raises Exception: any generic error other than port already in use
+    If no exception is raised, the port can be assumed available
     """
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
