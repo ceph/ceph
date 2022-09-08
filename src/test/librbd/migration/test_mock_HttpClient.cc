@@ -86,7 +86,7 @@ public:
 
   // if we have a racing where another thread manages to bind and listen the
   // port picked by this acceptor, try again.
-  static constexpr int MAX_BIND_RETRIES = 42;
+  static constexpr int MAX_BIND_RETRIES = 60;
 
   void create_acceptor(bool reuse) {
     for (int retries = 0;; retries++) {
@@ -105,7 +105,7 @@ public:
 	}
       }
       // backoff a little bit
-      usleep(retries * 10'000);
+      sleep(1);
     }
     m_server_port = m_acceptor->local_endpoint().port();
   }
