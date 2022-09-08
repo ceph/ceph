@@ -94,7 +94,7 @@ public:
   // with other message types than just the `MOSDOp`. The type erasure
   // happens in the ctor of `OpsExecuter`.
   struct ExecutableMessage {
-    virtual crimson::net::ConnectionRef get_connection() const = 0;
+    virtual const crimson::net::ConnectionFRef &get_connection() const = 0;
     virtual osd_reqid_t get_reqid() const = 0;
     virtual utime_t get_mtime() const = 0;
     virtual epoch_t get_map_epoch() const = 0;
@@ -109,7 +109,7 @@ public:
   public:
     ExecutableMessagePimpl(const ImplT* pimpl) : pimpl(pimpl) {
     }
-    crimson::net::ConnectionRef get_connection() const final {
+    const crimson::net::ConnectionFRef &get_connection() const final {
       return pimpl->get_connection();
     }
     osd_reqid_t get_reqid() const final {
