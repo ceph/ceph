@@ -66,6 +66,7 @@ public:
 
   void init() {}
   void shutdown() override;
+  void stop_processor();
 
   std::string cluster_fsid();
   uint64_t instance_id();
