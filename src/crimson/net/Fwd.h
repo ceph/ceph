@@ -38,6 +38,7 @@ using stop_t = seastar::stop_iteration;
 
 class Connection;
 using ConnectionRef = seastar::shared_ptr<Connection>;
+using ConnectionFRef = seastar::foreign_ptr<ConnectionRef>;
 
 class Dispatcher;
 class ChainedDispatchers;

@@ -47,15 +47,16 @@ const hobject_t& WatchTimeoutRequest::get_target_oid() const
 PG::do_osd_ops_params_t
 WatchTimeoutRequest::get_do_osd_ops_params() const
 {
-  PG::do_osd_ops_params_t params;
-  params.conn = watch->conn;
-  params.reqid.name = watch->entity_name;
-  // as in the classical's simple_opc_create()
-  params.mtime = ceph_clock_now();
-  params.map_epoch = get_pg().get_osdmap_epoch();
-  params.orig_source_inst = { watch->entity_name, watch->winfo.addr };
-  //entity_inst_t orig_source_inst;
-  params.features = 0;
+  osd_reqid_t reqid;
+  reqid.name = watch->entity_name;
+  PG::do_osd_ops_params_t params{
+    watch->conn,
+    reqid,
+    ceph_clock_now(),
+    get_pg().get_osdmap_epoch(),
+    entity_inst_t{ watch->entity_name, watch->winfo.addr },
+    0
+  };
   logger().debug("{}: params.reqid={}", __func__, params.reqid);
   return params;
 }
@@ -77,7 +78,7 @@ Watch::~Watch()
   logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
 }
 
-seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
+seastar::future<> Watch::connect(crimson::net::ConnectionFRef conn, bool)
 {
   if (this->conn == conn) {
     logger().debug("conn={} already connected", conn);
@@ -210,7 +211,7 @@ std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs)
   return out;
 }
 
-Notify::Notify(crimson::net::ConnectionRef conn,
+Notify::Notify(crimson::net::ConnectionFRef conn,
                const notify_info_t& ninfo,
                const uint64_t client_gid,
                const uint64_t user_version)

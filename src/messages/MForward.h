@@ -48,7 +48,7 @@ public:
     tid(t), client_caps(caps), msg(NULL) {
     client_type = m->get_source().type();
     client_addrs = m->get_source_addrs();
-    if (auto con = m->get_connection()) {
+    if (auto &con = m->get_connection()) {
       client_socket_addr = con->get_peer_socket_addr();
     }
     con_features = feat;

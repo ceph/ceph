@@ -247,8 +247,10 @@ class Message : public RefCountedObject {
 public:
 #ifdef WITH_SEASTAR
   using ConnectionRef = crimson::net::ConnectionRef;
+  using ConnectionFRef = crimson::net::ConnectionFRef;
 #else
   using ConnectionRef = ::ConnectionRef;
+  using ConnectionFRef = ::ConnectionRef;
 #endif // WITH_SEASTAR
 
 protected:
@@ -269,7 +271,7 @@ protected:
   /* time at which message was fully read */
   utime_t recv_complete_stamp;
 
-  ConnectionRef connection;
+  ConnectionFRef connection;
 
   uint32_t magic = 0;
 
@@ -344,7 +346,7 @@ protected:
       completion_hook->complete(0);
   }
 public:
-  const ConnectionRef& get_connection() const { return connection; }
+  const ConnectionFRef& get_connection() const { return connection; }
   void set_connection(ConnectionRef c) {
     connection = std::move(c);
   }

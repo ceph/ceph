@@ -93,7 +93,7 @@ class SyntheticWorkload;
 class SyntheticDispatcher final
     : public crimson::net::Dispatcher {
   public:
-  std::map<crimson::net::ConnectionRef, std::deque<payload_seq_t> > conn_sent;
+  std::map<crimson::net::Connection*, std::deque<payload_seq_t> > conn_sent;
   std::map<payload_seq_t, bufferlist> sent;
   unsigned index;
   SyntheticWorkload *workload;
@@ -124,9 +124,9 @@ class SyntheticDispatcher final
       if (sent.count(pl.seq)) {
         logger().info(" {} conn= {} {}", __func__,
           m->get_connection(), pl);
-        ceph_assert(conn_sent[m->get_connection()].front() == pl.seq);
+        ceph_assert(conn_sent[&*m->get_connection()].front() == pl.seq);
         ceph_assert(pl.data.contents_equal(sent[pl.seq]));
-        conn_sent[m->get_connection()].pop_front();
+        conn_sent[&*m->get_connection()].pop_front();
         sent.erase(pl.seq);
       }
 
@@ -169,7 +169,7 @@ class SyntheticDispatcher final
     encode(pl, bl);
     m->set_data(bl);
     sent[pl.seq] = pl.data;
-    conn_sent[con].push_back(pl.seq);
+    conn_sent[&*con].push_back(pl.seq);
     logger().info("{} conn= {} send i= {}",
       __func__, con, pl.seq);
 
@@ -181,17 +181,17 @@ class SyntheticDispatcher final
   }
 
   void clear_pending(crimson::net::ConnectionRef con) {
-    for (std::deque<uint64_t>::iterator it = conn_sent[con].begin();
-         it != conn_sent[con].end(); ++it)
+    for (std::deque<uint64_t>::iterator it = conn_sent[&*con].begin();
+         it != conn_sent[&*con].end(); ++it)
       sent.erase(*it);
-    conn_sent.erase(con);
+    conn_sent.erase(&*con);
   }
 
   void print() {
-    for (auto && [conn, list] : conn_sent) {
+    for (auto && [connptr, list] : conn_sent) {
       if (!list.empty()) {
         logger().info("{} {} wait {}", __func__,
-                      conn, list.size());
+                      (void*)connptr, list.size());
       }
     }
   }
