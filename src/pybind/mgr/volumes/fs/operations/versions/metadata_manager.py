@@ -4,6 +4,7 @@ import logging
 import sys
 import threading
 import configparser
+import re
 
 import cephfs
 
@@ -97,14 +98,16 @@ class MetadataManager(object):
             if len(self.config.items(section)) == 0:
                 self.config.remove_section(section)
 
-
         try:
             with _lock:
-                fd = self.fs.open(self.config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, self.mode)
+                tmp_config_path = self.config_path + b'.tmp'
+                fd = self.fs.open(tmp_config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, self.mode)
                 with _ConfigWriter(self.fs, fd) as cfg_writer:
                     self.config.write(cfg_writer)
                     cfg_writer.fsync()
-            log.info("wrote {0} bytes to config {1}".format(cfg_writer.wrote, self.config_path))
+                self.fs.rename(tmp_config_path, self.config_path)
+            log.info(f"wrote {cfg_writer.wrote} bytes to config {tmp_config_path}")
+            log.info(f"Renamed {tmp_config_path} to config {self.config_path}")
         except cephfs.Error as e:
             raise MetadataMgrException(-e.args[0], e.args[1])
 
@@ -169,7 +172,29 @@ class MetadataManager(object):
                 metadata_dict[option] = self.config.get(section,option)
         return metadata_dict
 
+    def list_all_keys_with_specified_values_from_section(self, section, value):
+        keys = []
+        if self.config.has_section(section):
+            options = self.config.options(section)
+            for option in options:
+                if (value == self.config.get(section, option)) :
+                    keys.append(option)
+        return keys
+
     def section_has_item(self, section, item):
         if not self.config.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
         return item in [v[1] for v in self.config.items(section)]
+
+    def has_snap_metadata_section(self):
+        sections = self.config.sections()
+        r = re.compile('SNAP_METADATA_.*')
+        for section in sections:
+            if r.match(section):
+                return True
+        return False
+
+    def list_snaps_with_metadata(self):
+        sections = self.config.sections()
+        r = re.compile('SNAP_METADATA_.*')
+        return [section[len("SNAP_METADATA_"):] for section in sections if r.match(section)]
