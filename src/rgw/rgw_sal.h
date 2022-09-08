@@ -23,6 +23,7 @@
 #include "rgw_datalog_notify.h"
 #include "include/random.h"
 
+class RGWRESTMgr;
 class RGWAccessListFilter;
 class RGWLC;
 struct rgw_user_bucket;
@@ -451,6 +452,8 @@ class Store {
     virtual const std::string& get_luarocks_path() const = 0;
     /** Set the location of where lua packages are installed */
     virtual void set_luarocks_path(const std::string& path) = 0;
+    /** Register admin APIs unique to this store */
+    virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
 };
 
 /**
