@@ -7,11 +7,12 @@ vrrp_script check_backend {
     fall 2
 }
 
-vrrp_instance VI_0 {
-  state {{ state }}
-  priority 100
+{% for x in range(virtual_ips|length) %}
+vrrp_instance VI_{{ x }} {
+  state {{ states[x] }}
+  priority {{ priorities[x] }}
   interface {{ interface }}
-  virtual_router_id 51
+  virtual_router_id {{ 50 + x }}
   advert_int 1
   authentication {
       auth_type PASS
@@ -24,9 +25,10 @@ vrrp_instance VI_0 {
     {% endfor %}
   }
   virtual_ipaddress {
-    {{ spec.virtual_ip }} dev {{ interface }}
+    {{ virtual_ips[x] }} dev {{ interface }}
   }
   track_script {
       check_backend
   }
 }
+{% endfor %}
