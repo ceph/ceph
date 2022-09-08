@@ -10,6 +10,7 @@ import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { PaginateObservable } from '~/app/shared/api/paginate.model';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -66,7 +67,8 @@ describe('ServicesComponent', () => {
     component = fixture.componentInstance;
     const orchService = TestBed.inject(OrchestratorService);
     const cephServiceService = TestBed.inject(CephServiceService);
-    spyOn(orchService, 'status').and.returnValue(of({ available: true }));
+    const paginate_obs = new PaginateObservable<any>(of({ available: true }));
+    spyOn(orchService, 'status').and.returnValue(paginate_obs);
     spyOn(cephServiceService, 'list').and.returnValue(of(services));
     fixture.detectChanges();
   });
@@ -87,7 +89,10 @@ describe('ServicesComponent', () => {
   });
 
   it('should return all services', () => {
-    component.getServices(new CdTableFetchDataContext(() => undefined));
+    const context = new CdTableFetchDataContext(() => undefined)
+    context.pageInfo.offset = 0;
+    context.pageInfo.limit = -1
+    component.getServices(context);
     expect(component.services.length).toBe(2);
   });
 

@@ -7,8 +7,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
+import { of } from 'rxjs';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { PaginateObservable } from '~/app/shared/api/paginate.model';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
@@ -533,6 +535,8 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
     describe('should test service mds', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'mds');
+        const paginate_obs = new PaginateObservable<any>(of({}));
+        spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
       });
 
       it('should test mds valid service id', () => {
@@ -558,7 +562,8 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       });
 
       it('should check whether edit field is correctly loaded', () => {
-        const cephServiceSpy = spyOn(cephServiceService, 'list').and.callThrough();
+        const paginate_obs = new PaginateObservable<any>(of({}));
+        const cephServiceSpy = spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
         component.ngOnInit();
         expect(cephServiceSpy).toBeCalledTimes(2);
         expect(component.action).toBe('Edit');

@@ -10,6 +10,7 @@ import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { HostService } from '~/app/shared/api/host.service';
+import { PaginateObservable } from '~/app/shared/api/paginate.model';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -117,6 +118,8 @@ describe('ServiceDaemonListComponent', () => {
     }
   ];
 
+  const context = new CdTableFetchDataContext(() => undefined);
+
   const getDaemonsByHostname = (hostname?: string) => {
     return hostname ? _.filter(daemons, { hostname: hostname }) : daemons;
   };
@@ -147,7 +150,12 @@ describe('ServiceDaemonListComponent', () => {
     spyOn(cephServiceService, 'getDaemons').and.callFake(() =>
       of(getDaemonsByServiceName(component.serviceName))
     );
-    spyOn(cephServiceService, 'list').and.returnValue(of(services));
+
+    const paginate_obs = new PaginateObservable<any>(of(services));
+    spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
+    context.pageInfo.offset = 0;
+    context.pageInfo.limit = -1;
+
     fixture.detectChanges();
   });
 
@@ -157,18 +165,18 @@ describe('ServiceDaemonListComponent', () => {
 
   it('should list daemons by host', () => {
     component.hostname = 'mon0';
-    component.getDaemons(new CdTableFetchDataContext(() => undefined));
+    component.getDaemons(context);
     expect(component.daemons.length).toBe(1);
   });
 
   it('should list daemons by service', () => {
     component.serviceName = 'osd';
-    component.getDaemons(new CdTableFetchDataContext(() => undefined));
+    component.getDaemons(context);
     expect(component.daemons.length).toBe(3);
   });
 
   it('should list services', () => {
-    component.getServices(new CdTableFetchDataContext(() => undefined));
+    component.getServices(context);
     expect(component.services.length).toBe(2);
   });
 
