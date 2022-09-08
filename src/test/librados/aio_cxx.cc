@@ -2284,6 +2284,7 @@ void pool_io_callback(completion_t cb, void *arg /* Actually AioCompletion* */)
 }
 
 TEST(LibRadosAio, PoolEIOFlag) {
+  SKIP_IF_CRIMSON();
   AioTestDataPP test_data;
   ASSERT_EQ("", test_data.init());
 
