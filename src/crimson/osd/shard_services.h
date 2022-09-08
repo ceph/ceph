@@ -61,6 +61,9 @@ class PerShardState {
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 
+  const core_id_t core = seastar::this_shard_id();
+#define assert_core() ceph_assert(seastar::this_shard_id() == core);
+
   const int whoami;
   crimson::os::FuturizedStore &store;
   crimson::common::CephContext cct;
@@ -74,11 +77,18 @@ class PerShardState {
 
   epoch_t up_epoch = 0;
   OSDMapService::cached_map_t osdmap;
-  const auto &get_osdmap() const { return osdmap; }
+  const auto &get_osdmap() const {
+    assert_core();
+    return osdmap;
+  }
   void update_map(OSDMapService::cached_map_t new_osdmap) {
+    assert_core();
     osdmap = std::move(new_osdmap);
   }
-  void set_up_epoch(epoch_t epoch) { up_epoch = epoch; }
+  void set_up_epoch(epoch_t epoch) {
+    assert_core();
+    up_epoch = epoch;
+  }
 
   crimson::osd::ObjectContextRegistry obc_registry;
 
@@ -89,6 +99,7 @@ class PerShardState {
   // case the shutdown may never succeed.
   bool stopping = false;
   seastar::future<> stop_registry() {
+    assert_core();
     crimson::get_logger(ceph_subsys_osd).info("PerShardState::{}", __func__);
     stopping = true;
     return registry.stop();
@@ -106,6 +117,7 @@ class PerShardState {
   Ref<PG> get_pg(spg_t pgid);
   template <typename F>
   void for_each_pg(F &&f) const {
+    assert_core();
     for (auto &pg : pg_map.get_pgs()) {
       std::invoke(f, pg.first, pg.second);
     }
@@ -113,10 +125,13 @@ class PerShardState {
 
   template <typename T, typename... Args>
   auto start_operation(Args&&... args) {
+    assert_core();
     if (__builtin_expect(stopping, false)) {
       throw crimson::common::system_shutdown_exception();
     }
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
+    crimson::get_logger(ceph_subsys_osd).info(
+      "PerShardState::{}, {}", __func__, *op);
     auto fut = op->start().then([op /* by copy */] {
       // ensure the op's lifetime is appropriate. It is not enough to
       // guarantee it's alive at the scheduling stages (i.e. `then()`
@@ -129,6 +144,7 @@ class PerShardState {
   // tids for ops i issue, prefixed with core id to ensure uniqueness
   ceph_tid_t next_tid;
   ceph_tid_t get_tid() {
+    assert_core();
     return next_tid++;
   }
 
@@ -138,6 +154,7 @@ class PerShardState {
   // Time state
   const ceph::mono_time startup_time;
   ceph::signedspan get_mnow() const {
+    assert_core();
     return ceph::mono_clock::now() - startup_time;
   }
 
