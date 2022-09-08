@@ -603,6 +603,6 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   rgw::kafka::shutdown();
 #endif
-
   rgw_perf_stop(g_ceph_context);
+  ratelimiter.reset(); // deletes--ensure this happens before we destruct
 } /* AppMain::shutdown */
