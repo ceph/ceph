@@ -35,11 +35,13 @@ class MetricType(Enum):
 
 
 FS_TOP_PROG_STR = 'cephfs-top'
+FS_TOP_ALL_FS_APP = 'ALL_FS_APP'
+FS_TOP_FS_SELECTED_APP = 'SELECTED_FS_APP'
 
 # version match b/w fstop and stats emitted by mgr/stats
 FS_TOP_SUPPORTED_VER = 2
 
-ITEMS_PAD_LEN = 1
+ITEMS_PAD_LEN = 3
 ITEMS_PAD = " " * ITEMS_PAD_LEN
 DEFAULT_REFRESH_INTERVAL = 1
 # min refresh interval allowed
@@ -151,15 +153,14 @@ class FSTop(object):
     def __init__(self, args):
         self.rados = None
         self.stdscr = None  # curses instance
-        self.flag = 1
+        self.current_screen = ""
         self.client_name = args.id
         self.cluster_name = args.cluster
         self.conffile = args.conffile
         self.refresh_interval_secs = args.delay
+        self.PAD_HEIGHT = 10000  # height of the fstop_pad
+        self.PAD_WIDTH = 300  # width of the fstop_pad
         self.exit_ev = threading.Event()
-
-    def refresh_window_size(self):
-        self.height, self.width = self.stdscr.getmaxyx()
 
     def handle_signal(self, signum, _):
         self.exit_ev.set()
@@ -217,6 +218,7 @@ class FSTop(object):
 
     def setup_curses(self, win):
         self.stdscr = win
+        self.stdscr.keypad(True)
         curses.use_default_colors()
         curses.start_color()
         try:
@@ -225,21 +227,22 @@ class FSTop(object):
             # If the terminal do not support the visibility
             # requested it will raise an exception
             pass
+        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
         self.run_all_display()
 
-    def display_menu(self, stdscr, selected_row_idx):
+    def display_fs_menu(self, stdscr, selected_row_idx):
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         global fs_list
         if not fs_list:
             title = ['No filesystem available',
-                     'Press "q" to go back to home (all filesystem info) screen']
+                     'Press "q" to go back to home (All Filesystem Info) screen']
             pos_x1 = w // 2 - len(title[0]) // 2
             pos_x2 = w // 2 - len(title[1]) // 2
             stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
             stdscr.addstr(3, pos_x2, title[1])
         else:
-            title = ['Filesystems', 'Press "q" to go back to home (all filesystem info) screen']
+            title = ['Filesystems', 'Press "q" to go back to home (All Filesystem Info) screen']
             pos_x1 = w // 2 - len(title[0]) // 2
             pos_x2 = w // 2 - len(title[1]) // 2
             stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
@@ -270,14 +273,16 @@ class FSTop(object):
             elif key == curses.KEY_DOWN and curr_row < len(fs_list) - 1:
                 curr_row += 1
             elif (key in [curses.KEY_ENTER, 10, 13]) and fs_list:
+                self.stdscr.erase()
                 self.run_display(fs_list[curr_row])
                 endmenu = True
             elif key == ord('q'):
+                self.stdscr.erase()
                 self.run_all_display()
                 endmenu = True
 
             try:
-                self.display_menu(stdscr, curr_row)
+                self.display_fs_menu(stdscr, curr_row)
             except curses.error:
                 pass
             curses.halfdelay(self.refresh_interval_secs)
@@ -287,7 +292,7 @@ class FSTop(object):
         if opt == ord('m'):
             curses.wrapper(self.set_key)
         elif opt == ord('q'):
-            if self.flag == 1:
+            if self.current_screen == FS_TOP_ALL_FS_APP:
                 quit()
             else:
                 self.run_all_display()
@@ -389,10 +394,18 @@ class FSTop(object):
             # return empty string for none type
             return ''
 
-    def refresh_top_line_and_build_coord(self):
-        if self.topl is None:
-            return
+    @staticmethod
+    def has_metric(metadata, metrics_key):
+        return metrics_key in metadata
 
+    @staticmethod
+    def has_metrics(metadata, metrics_keys):
+        for key in metrics_keys:
+            if not FSTop.has_metric(metadata, key):
+                return False
+        return True
+
+    def create_top_line_and_build_coord(self):
         xp = 0
         x_coord_map = {}
 
@@ -439,55 +452,30 @@ class FSTop(object):
             x_coord_map[item] = (xp, nlen)
             xp += nlen
         title = ITEMS_PAD.join(heading)
-        hlen = min(self.width - 2, len(title))
-        self.topl.addnstr(2, 0, title, hlen, curses.A_STANDOUT | curses.A_BOLD)
-        self.topl.refresh()
+        self.fsstats.addstr(self.tablehead_y, 0, title, curses.A_STANDOUT | curses.A_BOLD)
         return x_coord_map
 
-    @staticmethod
-    def has_metric(metadata, metrics_key):
-        return metrics_key in metadata
-
-    @staticmethod
-    def has_metrics(metadata, metrics_keys):
-        for key in metrics_keys:
-            if not FSTop.has_metric(metadata, key):
-                return False
-        return True
-
-    def refresh_client(self, client_id, metrics, counters,
-                       client_meta, x_coord_map, y_coord):
+    def create_client(self, client_id, metrics, counters,
+                      client_meta, x_coord_map, y_coord):
         global last_time
         size = 0
         cur_time = time.time()
         duration = cur_time - last_time
         last_time = cur_time
-        remaining_hlen = self.width - 1
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_START:
             coord = x_coord_map[item]
-            hlen = coord[1] - len(ITEMS_PAD)
-            hlen = min(hlen, remaining_hlen)
-            if remaining_hlen < coord[1]:
-                remaining_hlen = 0
-            else:
-                remaining_hlen -= coord[1]
+            hlen = coord[1] - 1
             if item == FS_TOP_MAIN_WINDOW_COL_CLIENT_ID:
-                self.mainw.addnstr(y_coord, coord[0],
-                                   wrap(client_id.split('.')[1], hlen),
-                                   hlen)
+                self.fsstats.addstr(y_coord, coord[0],
+                                    wrap(client_id.split('.')[1], hlen), curses.A_DIM)
             elif item == FS_TOP_MAIN_WINDOW_COL_MNT_ROOT:
                 if FSTop.has_metric(client_meta,
                                     CLIENT_METADATA_MOUNT_ROOT_KEY):
-                    self.mainw.addnstr(
+                    self.fsstats.addstr(
                         y_coord, coord[0],
-                        wrap(client_meta[
-                            CLIENT_METADATA_MOUNT_ROOT_KEY], hlen),
-                        hlen)
+                        wrap(client_meta[CLIENT_METADATA_MOUNT_ROOT_KEY], hlen), curses.A_DIM)
                 else:
-                    self.mainw.addnstr(y_coord, coord[0], "N/A", hlen)
-
-            if remaining_hlen == 0:
-                return
+                    self.fsstats.addstr(y_coord, coord[0], "N/A", curses.A_DIM)
 
         cidx = 0
         for item in counters:
@@ -495,59 +483,37 @@ class FSTop(object):
                 cidx += 1
                 continue
             coord = x_coord_map[item]
-            hlen = coord[1] - len(ITEMS_PAD)
-            hlen = min(hlen, remaining_hlen)
-            if remaining_hlen < coord[1]:
-                remaining_hlen = 0
-            else:
-                remaining_hlen -= coord[1]
             m = metrics[cidx]
             key = MGR_STATS_COUNTERS[cidx]
             typ = MAIN_WINDOW_TOP_LINE_METRICS[key]
             if item.lower() in client_meta.get(
                     CLIENT_METADATA_VALID_METRICS_KEY, []):
                 if typ == MetricType.METRIC_TYPE_PERCENTAGE:
-                    self.mainw.addnstr(y_coord, coord[0],
-                                       f'{calc_perc(m)}', hlen)
+                    self.fsstats.addstr(y_coord, coord[0],
+                                        f'{calc_perc(m)}', curses.A_DIM)
                 elif typ == MetricType.METRIC_TYPE_LATENCY:
-                    self.mainw.addnstr(y_coord, coord[0],
-                                       f'{calc_lat(m)}', hlen)
+                    self.fsstats.addstr(y_coord, coord[0],
+                                        f'{calc_lat(m)}', curses.A_DIM)
                 elif typ == MetricType.METRIC_TYPE_STDEV:
-                    self.mainw.addnstr(y_coord, coord[0],
-                                       f'{calc_stdev(m)}', hlen)
+                    self.fsstats.addstr(y_coord, coord[0],
+                                        f'{calc_stdev(m)}', curses.A_DIM)
                 elif typ == MetricType.METRIC_TYPE_SIZE:
-                    self.mainw.addnstr(y_coord, coord[0],
-                                       f'{calc_size(m)}', hlen)
+                    self.fsstats.addstr(y_coord, coord[0],
+                                        f'{calc_size(m)}', curses.A_DIM)
 
                     # average io sizes
-                    if remaining_hlen == 0:
-                        return
                     if key == "READ_IO_SIZES":
                         coord = x_coord_map["READ_IO_AVG"]
                     elif key == "WRITE_IO_SIZES":
                         coord = x_coord_map["WRITE_IO_AVG"]
-                    hlen = coord[1] - len(ITEMS_PAD)
-                    hlen = min(hlen, remaining_hlen)
-                    if remaining_hlen < coord[1]:
-                        remaining_hlen = 0
-                    else:
-                        remaining_hlen -= coord[1]
-                    self.mainw.addnstr(y_coord, coord[0],
-                                       f'{calc_avg_size(m)}', hlen)
+                    self.fsstats.addstr(y_coord, coord[0],
+                                        f'{calc_avg_size(m)}', curses.A_DIM)
 
                     # io speeds
-                    if remaining_hlen == 0:
-                        return
                     if key == "READ_IO_SIZES":
                         coord = x_coord_map["READ_IO_SPEED"]
                     elif key == "WRITE_IO_SIZES":
                         coord = x_coord_map["WRITE_IO_SPEED"]
-                    hlen = coord[1] - len(ITEMS_PAD)
-                    hlen = min(hlen, remaining_hlen)
-                    if remaining_hlen < coord[1]:
-                        remaining_hlen = 0
-                    else:
-                        remaining_hlen -= coord[1]
                     size = 0
                     if key == "READ_IO_SIZES":
                         if m[1] > 0:
@@ -561,22 +527,18 @@ class FSTop(object):
                             last_size = last_write_size.get(client_id, 0)
                             size = m[1] - last_size
                             last_write_size[client_id] = m[1]
-                    self.mainw.addnstr(y_coord, coord[0],
-                                       f'{calc_speed(abs(size), duration)}',
-                                       hlen)
+                    self.fsstats.addstr(y_coord, coord[0],
+                                        f'{calc_speed(abs(size), duration)}', curses.A_DIM)
                 else:
                     # display 0th element from metric tuple
-                    self.mainw.addnstr(y_coord, coord[0], f'{m[0]}', hlen)
+                    self.fsstats.addstr(y_coord, coord[0], f'{m[0]}', curses.A_DIM)
             else:
-                self.mainw.addnstr(y_coord, coord[0], "N/A", hlen)
+                self.fsstats.addstr(y_coord, coord[0], "N/A", curses.A_DIM)
             cidx += 1
-
-            if remaining_hlen == 0:
-                return
 
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_END:
             coord = x_coord_map[item]
-            hlen = coord[1] - len(ITEMS_PAD)
+            wrapLen = self.PAD_WIDTH - coord[0]
             # always place the FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR in the
             # last, it will be a very long string to display
             if item == FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR:
@@ -584,51 +546,35 @@ class FSTop(object):
                                      [CLIENT_METADATA_MOUNT_POINT_KEY,
                                       CLIENT_METADATA_HOSTNAME_KEY,
                                       CLIENT_METADATA_IP_KEY]):
-                    self.mainw.addnstr(
+                    mount_point = f'{client_meta[CLIENT_METADATA_MOUNT_POINT_KEY]}@'\
+                        f'{client_meta[CLIENT_METADATA_HOSTNAME_KEY]}/'\
+                        f'{client_meta[CLIENT_METADATA_IP_KEY]}'
+                    self.fsstats.addstr(
                         y_coord, coord[0],
-                        f'{client_meta[CLIENT_METADATA_MOUNT_POINT_KEY]}@'
-                        f'{client_meta[CLIENT_METADATA_HOSTNAME_KEY]}/'
-                        f'{client_meta[CLIENT_METADATA_IP_KEY]}',
-                        remaining_hlen)
+                        wrap(mount_point, wrapLen), curses.A_DIM)
                 else:
-                    self.mainw.addnstr(y_coord, coord[0],
-                                       "N/A", remaining_hlen)
-            hlen = min(hlen, remaining_hlen)
-            if remaining_hlen < coord[1]:
-                remaining_hlen = 0
-            else:
-                remaining_hlen -= coord[1]
-            if remaining_hlen == 0:
-                return
+                    self.fsstats.addstr(y_coord, coord[0], "N/A", curses.A_DIM)
 
-    def refresh_clients(self, x_coord_map, stats_json, fs_name):
+    def create_clients(self, x_coord_map, stats_json, fs_name):
         counters = [m.upper() for m in stats_json[GLOBAL_COUNTERS_KEY]]
-        y_coord = 0
-        hlen = min(self.width - 2, len(FS_TOP_NAME_TOPL_FMT))
+        self.tablehead_y += 2
         res = stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
         client_cnt = len(res)
-        self.topl.addnstr(0, 0, FS_TOP_NAME_TOPL_FMT.format(
-            fs_name=fs_name, client_count=client_cnt), hlen)
-        self.topl.refresh()
+        self.fsstats.addstr(self.tablehead_y, 0, FS_TOP_NAME_TOPL_FMT.format(
+            fs_name=fs_name, client_count=client_cnt), curses.A_BOLD | curses.A_ITALIC)
+        self.tablehead_y += 2
         if client_cnt:
             for client_id, metrics in \
                     stats_json[GLOBAL_METRICS_KEY][fs_name].items():
-                self.refresh_client(
+                self.create_client(
                     client_id, metrics, counters, res[client_id],
-                    x_coord_map, y_coord)
-                y_coord += 1
+                    x_coord_map, self.tablehead_y)
+                self.tablehead_y += 1
 
-    def refresh_main_window(self, x_coord_map, stats_json, fs_name):
-        if self.mainw is None:
-            return
-        self.refresh_clients(x_coord_map, stats_json, fs_name)
-        self.mainw.refresh()
-
-    def refresh_header(self, stats_json, headline):
-        hlen = self.width - 2
+    def create_header(self, stats_json, help, screen_title="", color_id=0):
         num_clients, num_mounts, num_kclients, num_libs = 0, 0, 0, 0
         if not stats_json['version'] == FS_TOP_SUPPORTED_VER:
-            self.header.addnstr(0, 0, 'perf stats version mismatch!', hlen)
+            self.header.addstr(0, 0, 'perf stats version mismatch!', curses.A_BOLD)
             return False
         global fs_list
         for fs_name in fs_list:
@@ -645,116 +591,256 @@ class FSTop(object):
                      "kernel_version" in metadata])
                 num_libs = num_clients - (num_mounts + num_kclients)
         now = datetime.now().ctime()
-        self.header.addnstr(0, 0, FS_TOP_VERSION_HEADER_FMT.format(
-                            prog_name=FS_TOP_PROG_STR, now=now),
-                            hlen, curses.A_STANDOUT | curses.A_BOLD)
-        self.header.addnstr(1, 0, FS_TOP_CLIENT_HEADER_FMT.format(
-                            num_clients=num_clients, num_mounts=num_mounts,
-                            num_kclients=num_kclients, num_libs=num_libs), hlen)
-        self.header.addnstr(2, 0, headline, hlen)
-        self.header.refresh()
+        self.header.addstr(0, 0, FS_TOP_VERSION_HEADER_FMT.format(prog_name=FS_TOP_PROG_STR,
+                                                                  now=now), curses.A_BOLD)
+        self.header.addstr(2, 0, screen_title, curses.color_pair(color_id) | curses.A_BOLD)
+        self.header.addstr(3, 0, FS_TOP_CLIENT_HEADER_FMT.format(num_clients=num_clients,
+                                                                 num_mounts=num_mounts,
+                                                                 num_kclients=num_kclients,
+                                                                 num_libs=num_libs), curses.A_DIM)
+        self.header.addstr(4, 0, help, curses.A_DIM)
         return True
 
     def run_display(self, fs):
-        while not self.exit_ev.is_set():
-            # use stdscr.clear() instead of clearing each window
-            # to avoid screen blinking.
-            self.stdscr.clear()
-            self.refresh_window_size()
+        # clear the pads to have a smooth refresh
+        self.header.erase()
+        self.fsstats.erase()
 
+        self.current_screen = FS_TOP_FS_SELECTED_APP
+        screen_title = "Selected Filesystem Info"
+        help_commands = "Press 'q' to go back to home (All Filesystem Info) screen"\
+            " | Press 'm' to select another filesystem"
+        curses.init_pair(3, curses.COLOR_MAGENTA, -1)
+
+        top, left = 0, 0  # where to place pad
+        vscrollOffset, hscrollOffset = 0, 0  # scroll offsets
+
+        # calculate the initial viewport height and width
+        windowsize = self.stdscr.getmaxyx()
+        self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
+
+        # create header subpad
+        self.header_height = 7
+        self.header = self.fstop_pad.subwin(self.header_height, self.viewportWidth, 0, 0)
+
+        # create fsstats subpad
+        fsstats_begin_y = self.header_height
+        fsstats_height = self.PAD_HEIGHT - self.header_height
+        self.fsstats = self.fstop_pad.subwin(fsstats_height, self.PAD_WIDTH, fsstats_begin_y, 0)
+
+        curses.halfdelay(1)
+        cmd = self.stdscr.getch()
+        while not self.exit_ev.is_set():
+            if cmd in [ord('m'), ord('q')]:
+                self.set_option(cmd)
+                self.exit_ev.set()
+
+            # header display
             global fs_list
             fs_list = self.get_fs_names()
             stats_json = self.perf_stats_query()
-            self.flag = 0
-            help_text = " [Press 'q' to go back to home (all filesystem info) screen"\
-                        " and 'm' to select another filesystem]"
+            vscrollEnd = 0
+            if fs not in fs_list:
+                help = "Error: The selected filesystem is not available now. " + help_commands
+                self.header.erase()  # erase previous text
+                self.create_header(stats_json, help, screen_title, 3)
+            else:
+                self.tablehead_y = 0
+                help = "HELP: " + help_commands
+                self.fsstats.erase()  # erase previous text
 
-            # coordinate constants for windowing -- (height, width, y, x)
-            # NOTE: requires initscr() call before accessing COLS, LINES.
-            try:
-                HEADER_WINDOW_COORD = (4, self.width - 1, 0, 0)
-                self.header = curses.newwin(*HEADER_WINDOW_COORD)
-                if fs not in fs_list:
-                    self.stdscr.refresh()
-                    headline = "INFO: Selected filesystem is not available now" + help_text
-                    self.refresh_header(stats_json, headline)
+                vscrollEnd = len(stats_json[CLIENT_METADATA_KEY].get(fs, {}))
+                if self.create_header(stats_json, help, screen_title, 3):
+                    x_coord_map = self.create_top_line_and_build_coord()
+                    self.create_clients(x_coord_map, stats_json, fs)
+
+            # scroll and refresh
+            if cmd == curses.KEY_DOWN:
+                if (vscrollEnd - vscrollOffset) > 1:
+                    vscrollOffset += 1
                 else:
-                    if self.height >= 5:
-                        TOPLINE_WINDOW_COORD = (3, self.width - 1, 4, 0)
-                        self.topl = curses.newwin(*TOPLINE_WINDOW_COORD)
-                    else:
-                        self.topl = None
-                    if self.height >= 8:
-                        MAIN_WINDOW_COORD = (self.height - 7, self.width - 1, 7, 0)
-                        self.mainw = curses.newwin(*MAIN_WINDOW_COORD)
-                    else:
-                        self.mainw = None
-                    headline = "HELP: Selected filesystem info" + help_text
-                    if self.refresh_header(stats_json, headline):
-                        x_coord_map = self.refresh_top_line_and_build_coord()
-                        self.refresh_main_window(x_coord_map, stats_json, fs)
-                curses.halfdelay(self.refresh_interval_secs * 10)
-                c = self.header.getch()
-                if c in [ord('m'), ord('q')]:
-                    self.set_option(c)
-            except curses.error:
-                # this may happen when addstr the terminal window
-                # size changed, just retry it
-                pass
+                    vscrollOffset = vscrollEnd
+            elif cmd == curses.KEY_UP:
+                if vscrollOffset > 0:
+                    vscrollOffset -= 1
+            elif cmd == curses.KEY_NPAGE:
+                if (vscrollEnd - vscrollOffset) / 20 > 1:
+                    vscrollOffset += 20
+                else:
+                    vscrollOffset = vscrollEnd
+            elif cmd == curses.KEY_PPAGE:
+                if vscrollOffset / 20 >= 1:
+                    vscrollOffset -= 20
+                else:
+                    vscrollOffset = 0
+            elif cmd == curses.KEY_RIGHT:
+                if hscrollOffset < self.PAD_WIDTH - self.viewportWidth - 1:
+                    hscrollOffset += 1
+            elif cmd == curses.KEY_LEFT:
+                if hscrollOffset > 0:
+                    hscrollOffset -= 1
+            elif cmd == curses.KEY_HOME:
+                hscrollOffset = 0
+            elif cmd == curses.KEY_END:
+                hscrollOffset = self.PAD_WIDTH - self.viewportWidth - 1
+            elif cmd == curses.KEY_RESIZE:
+                # terminal resize event. Update the viewport dimensions
+                windowsize = self.stdscr.getmaxyx()
+                self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
+
+            if cmd:
+                try:
+                    # refresh the viewport for the header portion
+                    if cmd not in [curses.KEY_DOWN,
+                                   curses.KEY_UP,
+                                   curses.KEY_NPAGE,
+                                   curses.KEY_PPAGE,
+                                   curses.KEY_RIGHT,
+                                   curses.KEY_LEFT]:
+                        self.fstop_pad.refresh(0, 0,
+                                               top, left,
+                                               top + self.header_height, left + self.viewportWidth)
+                    # refresh the viewport for the current table header portion in the fsstats pad
+                    if cmd not in [curses.KEY_DOWN,
+                                   curses.KEY_UP,
+                                   curses.KEY_NPAGE,
+                                   curses.KEY_PPAGE]:
+                        self.fstop_pad.refresh(fsstats_begin_y, hscrollOffset,
+                                               top + fsstats_begin_y, left,
+                                               7, left + self.viewportWidth)
+                    # refresh the viewport for the current client records portion in the fsstats pad
+                    self.fstop_pad.refresh(fsstats_begin_y + 1 + vscrollOffset, hscrollOffset,
+                                           top + fsstats_begin_y + 2, left,
+                                           top + self.viewportHeight, left + self.viewportWidth)
+                except curses.error:
+                    # This happens when the user switches to a terminal of different zoom size.
+                    # just retry it.
+                    pass
+            # End scroll and refresh
+
+            curses.halfdelay(self.refresh_interval_secs * 10)
+            cmd = self.stdscr.getch()
 
     def run_all_display(self):
-        while not self.exit_ev.is_set():
-            # use stdscr.clear() instead of clearing each window
-            # to avoid screen blinking.
-            self.stdscr.clear()
-            self.refresh_window_size()
+        # clear text from the previous screen
+        if self.current_screen == FS_TOP_FS_SELECTED_APP:
+            self.header.erase()
 
-            self.flag = 1
+        self.current_screen = FS_TOP_ALL_FS_APP
+        screen_title = "All Filesystem Info"
+        curses.init_pair(2, curses.COLOR_CYAN, -1)
+
+        top, left = 0, 0  # where to place pad
+        vscrollOffset, hscrollOffset = 0, 0  # scroll offsets
+
+        # calculate the initial viewport height and width
+        windowsize = self.stdscr.getmaxyx()
+        self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
+
+        # create header subpad
+        self.header_height = 7
+        self.header = self.fstop_pad.subwin(self.header_height, self.viewportWidth, 0, 0)
+
+        # create fsstats subpad
+        fsstats_begin_y = self.header_height
+        fsstats_height = self.PAD_HEIGHT - self.header_height
+        self.fsstats = self.fstop_pad.subwin(fsstats_height, self.PAD_WIDTH, fsstats_begin_y, 0)
+
+        curses.halfdelay(1)
+        cmd = self.stdscr.getch()
+        while not self.exit_ev.is_set():
+            if cmd in [ord('m'), ord('q')]:
+                self.set_option(cmd)
+                self.exit_ev.set()
+
+            # header display
             global fs_list
             fs_list = self.get_fs_names()
             stats_json = self.perf_stats_query()
+            vscrollEnd = 0
+            if not fs_list:
+                help = "INFO: No filesystem is available [Press 'q' to quit]"
+                self.header.erase()  # erase previous text
+                self.fsstats.erase()
+                self.create_header(stats_json, help, screen_title, 2)
+            else:
+                self.tablehead_y = 0
+                help = "HELP: Press 'm' to select a filesystem | Press 'q' to quit"
+                self.fsstats.erase()  # erase previous text
+                for index, fs in enumerate(fs_list):
+                    #  Get the vscrollEnd in advance
+                    vscrollEnd += len(stats_json[CLIENT_METADATA_KEY].get(fs, {}))
+                    if self.create_header(stats_json, help, screen_title, 2):
+                        if not index:  # do it only for the first fs
+                            x_coord_map = self.create_top_line_and_build_coord()
+                        self.create_clients(x_coord_map, stats_json, fs)
 
-            # coordinate constants for windowing -- (height, width, y, x)
-            # NOTE: requires initscr() call before accessing COLS, LINES.
-            try:
-                HEADER_WINDOW_COORD = (4, self.width - 1, 0, 0)
-                self.header = curses.newwin(*HEADER_WINDOW_COORD)
-                if not fs_list:
-                    self.stdscr.refresh()
-                    headline = "INFO: No filesystem is available"\
-                        " [Press 'q' to quit]"
-                    self.refresh_header(stats_json, headline)
+            # scroll and refresh
+            if cmd == curses.KEY_DOWN:
+                if (vscrollEnd - vscrollOffset) > 1:
+                    vscrollOffset += 1
                 else:
-                    main, top, num_client = 7, 4, 0
-                    for fs in fs_list:
-                        if self.height >= 5 + num_client:
-                            TOPLINE_WINDOW_COORD = (3, self.width - 1, top, 0)
-                            self.topl = curses.newwin(*TOPLINE_WINDOW_COORD)
-                        else:
-                            self.topl = None
-                        if self.height >= 8 + num_client:
-                            MAIN_WINDOW_COORD = (self.height - 7, self.width - 1,
-                                                 main, 0)
-                            self.mainw = curses.newwin(*MAIN_WINDOW_COORD)
-                        else:
-                            self.mainw = None
-                        client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs, {})
-                        num_client = len(client_metadata)
-                        top = top + (num_client + 4)
-                        main = main + (num_client + 4)
-                        headline = "HELP: All filesystem info"\
-                            " [Press 'm' to select a filesystem and 'q' to quit]"
-                        if self.refresh_header(stats_json, headline):
-                            x_coord_map = self.refresh_top_line_and_build_coord()
-                            self.refresh_main_window(x_coord_map, stats_json, fs)
-                curses.halfdelay(self.refresh_interval_secs * 10)
-                c = self.header.getch()
-                if c in [ord('m'), ord('q')]:
-                    self.set_option(c)
-            except curses.error:
-                # this may happen when addstr the terminal window
-                # size changed, just retry it
-                pass
+                    vscrollOffset = vscrollEnd
+            elif cmd == curses.KEY_UP:
+                if vscrollOffset > 0:
+                    vscrollOffset -= 1
+            elif cmd == curses.KEY_NPAGE:
+                if (vscrollEnd - vscrollOffset) / 20 > 1:
+                    vscrollOffset += 20
+                else:
+                    vscrollOffset = vscrollEnd
+            elif cmd == curses.KEY_PPAGE:
+                if vscrollOffset / 20 >= 1:
+                    vscrollOffset -= 20
+                else:
+                    vscrollOffset = 0
+            elif cmd == curses.KEY_RIGHT:
+                if hscrollOffset < self.PAD_WIDTH - self.viewportWidth - 1:
+                    hscrollOffset += 1
+            elif cmd == curses.KEY_LEFT:
+                if hscrollOffset > 0:
+                    hscrollOffset -= 1
+            elif cmd == curses.KEY_HOME:
+                hscrollOffset = 0
+            elif cmd == curses.KEY_END:
+                hscrollOffset = self.PAD_WIDTH - self.viewportWidth - 1
+            elif cmd == curses.KEY_RESIZE:
+                # terminal resize event. Update the viewport dimensions
+                windowsize = self.stdscr.getmaxyx()
+                self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
+            if cmd:
+                try:
+                    # refresh the viewport for the header portion
+                    if cmd not in [curses.KEY_DOWN,
+                                   curses.KEY_UP,
+                                   curses.KEY_NPAGE,
+                                   curses.KEY_PPAGE,
+                                   curses.KEY_RIGHT,
+                                   curses.KEY_LEFT]:
+                        self.fstop_pad.refresh(0, 0,
+                                               top, left,
+                                               top + self.header_height, left + self.viewportWidth)
+                    # refresh the viewport for the current table header portion in the fsstats pad
+                    if cmd not in [curses.KEY_DOWN,
+                                   curses.KEY_UP,
+                                   curses.KEY_NPAGE,
+                                   curses.KEY_PPAGE]:
+                        self.fstop_pad.refresh(fsstats_begin_y, hscrollOffset,
+                                               top + fsstats_begin_y, left,
+                                               7, left + self.viewportWidth)
+                    # refresh the viewport for the current client records portion in the fsstats pad
+                    self.fstop_pad.refresh(fsstats_begin_y + 1 + vscrollOffset, hscrollOffset,
+                                           top + fsstats_begin_y + 2, left,
+                                           top + self.viewportHeight, left + self.viewportWidth)
+                except curses.error:
+                    # This happens when the user switches to a terminal of different zoom size.
+                    # just retry it.
+                    pass
+            # End scroll and refresh
+
+            curses.halfdelay(self.refresh_interval_secs * 10)
+            cmd = self.stdscr.getch()
+# End class FSTop
 
 
 if __name__ == '__main__':
