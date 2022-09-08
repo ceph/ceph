@@ -100,8 +100,12 @@ public:
    *
    * @param omap_root: omap btree root information
    * @param t: current transaction
-   * @param start: nullopt sorts before any string, behavior
-   *        based on config.inclusive
+   * @param first: range start, nullopt sorts before any string,
+   * 	    behavior based on config.inclusive,
+   * 	    must alive during the call
+   * @param last: range end, nullopt sorts after any string,
+   * 	    behavior based on config.inclusive,
+   * 	    must alive during the call
    * @param config: see below for params
    * @retval listed key->value and bool indicating complete
    */
@@ -151,7 +155,8 @@ public:
   virtual omap_list_ret omap_list(
     const omap_root_t &omap_root,
     Transaction &t,
-    const std::optional<std::string> &start,
+    const std::optional<std::string> &first,
+    const std::optional<std::string> &last,
     omap_list_config_t config = omap_list_config_t()) = 0;
 
   /**

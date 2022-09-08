@@ -897,9 +897,10 @@ SeaStore::_omap_list_ret SeaStore::_omap_list(
     BtreeOMapManager(*transaction_manager),
     root,
     start,
-    [&t, config](auto &manager, auto& root, auto& start) {
-      return manager.omap_list(root, t, start, config);
-    });
+    std::optional<std::string>(std::nullopt),
+    [&t, config](auto &manager, auto &root, auto &start, auto &end) {
+      return manager.omap_list(root, t, start, end, config);
+  });
 }
 
 SeaStore::omap_get_values_ret_t SeaStore::omap_list(
@@ -918,13 +919,13 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_list(
     Transaction::src_t::READ,
     "omap_list",
     op_type_t::OMAP_LIST,
-    [this, config, &start](auto &t, auto &onode) {
+    [this, config, start](auto &t, auto &onode) {
       return _omap_list(
 	onode,
 	onode.get_layout().omap_root,
 	t, start, config
       );
-    });
+  });
 }
 
 SeaStore::omap_get_values_ret_t SeaStore::omap_get_values(
@@ -932,8 +933,9 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_get_values(
   const ghobject_t &oid,
   const std::optional<string> &start)
 {
-  return seastar::do_with(oid, start,
-			  [this, ch=std::move(ch)](auto& oid, auto& start) {
+  return seastar::do_with(
+    oid,
+    [this, start, ch=std::move(ch)](auto& oid) {
     return omap_list(
       ch, oid, start,
       OMapManager::omap_list_config_t::with_inclusive(false));

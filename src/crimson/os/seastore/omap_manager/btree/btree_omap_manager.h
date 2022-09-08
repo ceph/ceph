@@ -90,7 +90,8 @@ public:
   omap_list_ret omap_list(
     const omap_root_t &omap_root,
     Transaction &t,
-    const std::optional<std::string> &start,
+    const std::optional<std::string> &first,
+    const std::optional<std::string> &last,
     omap_list_config_t config = omap_list_config_t()) final;
 
   omap_clear_ret omap_clear(
