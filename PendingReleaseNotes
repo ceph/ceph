@@ -5,6 +5,9 @@
   'AT_STATX_DONT_SYNC' macro. The 'AT_NO_ATTR_SYNC' macro will be removed in
   the future.
 
+* OSD: The issue of high CPU utilization during recovery/backfill operations
+  has been fixed. For more details, see: https://tracker.ceph.com/issues/56530.
+
 >=17.2.1
 
 * The "BlueStore zero block detection" feature (first introduced to Quincy in
