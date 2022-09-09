@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -x
 
+# increase local port range in case we run out of local port
+# due to large amount of TIME_WAIT connections.
+sudo sysctl -w net.ipv4.ip_local_port_range="1024 65535"
+
 # this should be run from the src directory in the ceph.git
 
 source $(dirname $0)/detect-build-env-vars.sh
