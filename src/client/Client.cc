@@ -8050,9 +8050,9 @@ void Client::stat_to_statx(struct stat *st, struct ceph_statx *stx)
   stx->stx_atime = st->st_atimespec;
 #elif __WIN32
   stx->stx_mtime.tv_sec = st->st_mtime;
-  stx->stx_mtime.tv_nsec = 0
+  stx->stx_mtime.tv_nsec = 0;
   stx->stx_atime.tv_sec = st->st_atime;
-  stx->stx_atime.tv_nsec = 0
+  stx->stx_atime.tv_nsec = 0;
 #else
   stx->stx_mtime = st->st_mtim;
   stx->stx_atime = st->st_atim;
@@ -8653,12 +8653,11 @@ int Client::utimes(const char *relpath, struct timeval times[2],
   int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
-  struct stat attr;
-  utime_t atime(times[0]);
-  utime_t mtime(times[1]);
+  struct ceph_statx attr;
+  utime_t(times[0]).to_timespec(&attr.stx_atime);
+  utime_t(times[1]).to_timespec(&attr.stx_mtime);
 
-  attr_set_atime_and_mtime(&attr, atime, mtime);
-  return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
+  return _setattrx(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
 int Client::lutimes(const char *relpath, struct timeval times[2],
@@ -8682,12 +8681,11 @@ int Client::lutimes(const char *relpath, struct timeval times[2],
   int r = path_walk(path, &in, perms, false);
   if (r < 0)
     return r;
-  struct stat attr;
-  utime_t atime(times[0]);
-  utime_t mtime(times[1]);
+  struct ceph_statx attr;
+  utime_t(times[0]).to_timespec(&attr.stx_atime);
+  utime_t(times[1]).to_timespec(&attr.stx_mtime);
 
-  attr_set_atime_and_mtime(&attr, atime, mtime);
-  return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
+  return _setattrx(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
 int Client::futimes(int fd, struct timeval times[2], const UserPerm& perms)
@@ -8722,12 +8720,11 @@ int Client::futimens(int fd, struct timespec times[2], const UserPerm& perms)
   if (f->flags & O_PATH)
     return -CEPHFS_EBADF;
 #endif
-  struct stat attr;
-  utime_t atime(times[0]);
-  utime_t mtime(times[1]);
+  struct ceph_statx attr;
+  utime_t(times[0]).to_timespec(&attr.stx_atime);
+  utime_t(times[1]).to_timespec(&attr.stx_mtime);
 
-  attr_set_atime_and_mtime(&attr, atime, mtime);
-  return _setattr(f->inode, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
+  return _setattrx(f->inode, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
 int Client::utimensat(int dirfd, const char *relpath, struct timespec times[2], int flags,
@@ -8766,12 +8763,11 @@ int Client::utimensat(int dirfd, const char *relpath, struct timespec times[2], 
   if (r < 0) {
     return r;
   }
-  struct stat attr;
-  utime_t atime(times[0]);
-  utime_t mtime(times[1]);
+  struct ceph_statx attr;
+  utime_t(times[0]).to_timespec(&attr.stx_atime);
+  utime_t(times[1]).to_timespec(&attr.stx_mtime);
 
-  attr_set_atime_and_mtime(&attr, atime, mtime);
-  return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
+  return _setattrx(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
 int Client::flock(int fd, int operation, uint64_t owner)
