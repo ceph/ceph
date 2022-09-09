@@ -254,6 +254,7 @@ options:
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+	--crimson-smp: number of cores to use for crimson
 \n
 EOF
 
@@ -292,6 +293,7 @@ parse_secondary_devs() {
     done
 }
 
+crimson_smp=1
 while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug)
@@ -505,6 +507,10 @@ case $1 in
         ;;
     --seastore-secondary-devs)
         parse_secondary_devs --seastore-devs "$2"
+        shift
+        ;;
+    --crimson-smp)
+        crimson_smp=$2
         shift
         ;;
     --bluestore-spdk)
@@ -962,8 +968,10 @@ start_osd() {
     do
 	local extra_seastar_args
 	if [ "$ceph_osd" == "crimson-osd" ]; then
-	    # designate a single CPU node $osd for osd.$osd
-	    extra_seastar_args="--smp 1 --cpuset $osd"
+        bottom_cpu=$(( osd * crimson_smp ))
+        top_cpu=$(( bottom_cpu + crimson_smp ))
+	    # set a single CPU nodes for each osd
+	    extra_seastar_args="--smp $crimson_smp --cpuset $bottom_cpu-$top_cpu"
 	    if [ "$debug" -ne 0 ]; then
 		extra_seastar_args+=" --debug"
 	    fi
