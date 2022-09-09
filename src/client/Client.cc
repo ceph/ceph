@@ -3805,8 +3805,17 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 				   flush,
 				   cap->mseq,
                                    cap_epoch_barrier);
-  m->caller_uid = in->cap_dirtier_uid;
-  m->caller_gid = in->cap_dirtier_gid;
+  /*
+   * Since the setattr will check the cephx mds auth access before
+   * buffering the changes, so it makes no sense any more to let
+   * the cap update to check the access in MDS again.
+   *
+   * For new clients with old MDSs that doesn't support
+   * CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK we will force the session
+   * to be readonly if root_squash is enabled as a workaround.
+   */
+  m->caller_uid = -1;
+  m->caller_gid = -1;
 
   m->head.issue_seq = cap->issue_seq;
   m->set_tid(flush_tid);
@@ -4081,8 +4090,6 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
     capsnap.btime = in->btime;
     capsnap.xattrs = in->xattrs;
     capsnap.xattr_version = in->xattr_version;
-    capsnap.cap_dirtier_uid = in->cap_dirtier_uid;
-    capsnap.cap_dirtier_gid = in->cap_dirtier_gid;
 
     if (used & CEPH_CAP_FILE_WR) {
       ldout(cct, 10) << __func__ << " WR used on " << *in << dendl;
@@ -4105,12 +4112,6 @@ void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
   capsnap.time_warp_seq = in->time_warp_seq;
   capsnap.change_attr = in->change_attr;
   capsnap.dirty |= in->caps_dirty();
-
-  /* Only reset it if it wasn't set before */
-  if (capsnap.cap_dirtier_uid == -1) {
-    capsnap.cap_dirtier_uid = in->cap_dirtier_uid;
-    capsnap.cap_dirtier_gid = in->cap_dirtier_gid;
-  }
 
   if (capsnap.dirty & CEPH_CAP_FILE_WR) {
     capsnap.inline_data = in->inline_data;
@@ -4135,8 +4136,13 @@ void Client::send_flush_snap(Inode *in, MetaSession *session,
   auto m = make_message<MClientCaps>(CEPH_CAP_OP_FLUSHSNAP,
 				     in->ino, in->snaprealm->ino, 0,
 				     in->auth_cap->mseq, cap_epoch_barrier);
-  m->caller_uid = capsnap.cap_dirtier_uid;
-  m->caller_gid = capsnap.cap_dirtier_gid;
+  /*
+   * Since the setattr will check the cephx mds auth access before
+   * buffering the changes, so it makes no sense any more to let
+   * the cap update to check the access in MDS again.
+   */
+  m->caller_uid = -1;
+  m->caller_gid = -1;
 
   m->set_client_tid(capsnap.flush_tid);
   m->head.snap_follows = follows;
@@ -5570,11 +5576,6 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, con
   ldout(cct, 5) << __func__ << " mds." << session->mds_num
 	  << " cleaned " << ccap_string(cleaned) << " on " << *in
 	  << " with " << ccap_string(dirty) << dendl;
-
-  if (!dirty) {
-    in->cap_dirtier_uid = -1;
-    in->cap_dirtier_gid = -1;
-  }
 
   if (!cleaned) {
     ldout(cct, 10) << " tid " << m->get_client_tid() << " != any cap bit tids" << dendl;
@@ -8006,27 +8007,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
   memset(&args, 0, sizeof(args));
 
-  // make the change locally?
-  if ((in->cap_dirtier_uid >= 0 && perms.uid() != in->cap_dirtier_uid) ||
-      (in->cap_dirtier_gid >= 0 && perms.gid() != in->cap_dirtier_gid)) {
-    ldout(cct, 10) << __func__ << " caller " << perms.uid() << ":" << perms.gid()
-		   << " != cap dirtier " << in->cap_dirtier_uid << ":"
-		   << in->cap_dirtier_gid << ", forcing sync setattr"
-		   << dendl;
-    /*
-     * This works because we implicitly flush the caps as part of the
-     * request, so the cap update check will happen with the writeback
-     * cap context, and then the setattr check will happen with the
-     * caller's context.
-     *
-     * In reality this pattern is likely pretty rare (different users
-     * setattr'ing the same file).  If that turns out not to be the
-     * case later, we can build a more complex pipelined cap writeback
-     * infrastructure...
-     */
-    mask |= CEPH_SETATTR_CTIME;
-  }
-
   bool do_sync = true;
   int res;
   {
@@ -8047,8 +8027,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   if (!mask) {
     // caller just needs us to bump the ctime
     in->ctime = ceph_clock_now();
-    in->cap_dirtier_uid = perms.uid();
-    in->cap_dirtier_gid = perms.gid();
     if (issued & CEPH_CAP_AUTH_EXCL)
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
     else if (issued & CEPH_CAP_FILE_EXCL)
@@ -8068,8 +8046,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->uid = stx->stx_uid;
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
@@ -8088,8 +8064,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->gid = stx->stx_gid;
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
@@ -8108,8 +8082,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->mode = (in->mode & ~07777) | (stx->stx_mode & 07777);
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
@@ -8140,8 +8112,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->btime = utime_t(stx->stx_btime);
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_BTIME;
@@ -8160,8 +8130,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->fscrypt_auth = *aux;
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_FSCRYPT_AUTH;
@@ -8186,8 +8154,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
         stx->stx_size >= in->size) {
       if (stx->stx_size > in->size) {
         in->size = in->reported_size = stx->stx_size;
-        in->cap_dirtier_uid = perms.uid();
-        in->cap_dirtier_gid = perms.gid();
         in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
         mask &= ~(CEPH_SETATTR_SIZE);
         mask |= CEPH_SETATTR_MTIME;
@@ -8208,8 +8174,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->fscrypt_file = *aux;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
       mask &= ~CEPH_SETATTR_FSCRYPT_FILE;
@@ -8225,8 +8189,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
       in->mtime = utime_t(stx->stx_mtime);
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->time_warp_seq++;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
       mask &= ~CEPH_SETATTR_MTIME;
@@ -8234,8 +8196,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
                utime_t(stx->stx_mtime) > in->mtime) {
       in->mtime = utime_t(stx->stx_mtime);
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
       mask &= ~CEPH_SETATTR_MTIME;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
@@ -8252,8 +8212,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
       in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->time_warp_seq++;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
       mask &= ~CEPH_SETATTR_ATIME;
@@ -8261,8 +8219,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
                utime_t(stx->stx_atime) > in->atime) {
       in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
-      in->cap_dirtier_uid = perms.uid();
-      in->cap_dirtier_gid = perms.gid();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
       mask &= ~CEPH_SETATTR_ATIME;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
