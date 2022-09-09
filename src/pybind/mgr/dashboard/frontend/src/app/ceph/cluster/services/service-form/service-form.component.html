@@ -93,8 +93,7 @@
         </div>
 
         <!-- unmanaged -->
-        <div class="form-group row"
-             *ngIf="serviceForm.controls.service_type.value !== 'snmp-gateway'">
+        <div class="form-group row">
           <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input class="custom-control-input"
@@ -212,35 +211,37 @@
         </ng-container>
 
         <!-- iSCSI -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'iscsi'">
-          <!-- pool -->
-          <div class="form-group row">
-            <label i18n
-                   class="cd-col-form-label required"
-                   for="pool">Pool</label>
-            <div class="cd-col-form-input">
-              <select id="pool"
-                      name="pool"
-                      class="form-control"
-                      formControlName="pool">
-                <option *ngIf="pools === null"
-                        [ngValue]="null"
-                        i18n>Loading...</option>
-                <option *ngIf="pools && pools.length === 0"
-                        [ngValue]="null"
-                        i18n>-- No pools available --</option>
-                <option *ngIf="pools && pools.length > 0"
-                        [ngValue]="null"
-                        i18n>-- Select a pool --</option>
-                <option *ngFor="let pool of pools"
-                        [value]="pool.pool_name">{{ pool.pool_name }}</option>
-              </select>
-              <span class="invalid-feedback"
-                    *ngIf="serviceForm.showError('pool', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+        <!-- pool -->
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'iscsi'">
+          <label i18n
+                 class="cd-col-form-label required"
+                 for="pool">Pool</label>
+          <div class="cd-col-form-input">
+            <select id="pool"
+                    name="pool"
+                    class="form-control"
+                    formControlName="pool">
+              <option *ngIf="pools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="pools && pools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No pools available --</option>
+              <option *ngIf="pools && pools.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a pool --</option>
+              <option *ngFor="let pool of pools"
+                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('pool', frm, 'required')"
+                  i18n>This field is required.</span>
           </div>
+        </div>
 
+        <!-- fields in iSCSI which are hidden when unmanaged is true -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'iscsi'">
           <!-- trusted_ip_list -->
           <div class="form-group row">
             <label class="cd-col-form-label"
@@ -331,7 +332,7 @@
         </ng-container>
 
         <!-- Ingress -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'ingress'">
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'ingress'">
           <!-- virtual_ip -->
           <div class="form-group row">
             <label class="cd-col-form-label"
@@ -417,7 +418,8 @@
             </div>
           </div>
           <!-- virtual_interface_networks -->
-          <div class="form-group row">
+          <div class="form-group row"
+               *ngIf="!serviceForm.controls.unmanaged.value">
             <label class="cd-col-form-label"
                    for="virtual_interface_networks">
               <span i18n>CIDR Networks</span>
@@ -435,7 +437,7 @@
         </ng-container>
 
         <!-- SNMP-Gateway -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'snmp-gateway'">
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'snmp-gateway'">
           <!-- snmp-version -->
           <div class="form-group row">
             <label class="cd-col-form-label required"
