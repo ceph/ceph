@@ -1,25 +1,39 @@
 #!/usr/bin/env bash
-set -ex
+set -x
 
 # this should be run from the src directory in the ceph.git
 
 source $(dirname $0)/detect-build-env-vars.sh
 PATH="$CEPH_BIN:$PATH"
 
+function run_with_feature() {
+  local feature=$1
+  shift
+  if [ -z $feature ]; then
+    unset RBD_FEATURES
+  else
+    export RBD_FEATURES=$feature
+  fi
+  if ! unittest_librbd; then
+    sudo netstat -tnpW
+    exit 1
+  fi
+}
+
 if [ $# = 0 ]; then
   # mimic the old behaviour
   TESTS='0 1 61 109 127'
-  unset RBD_FEATURES; unittest_librbd
+  run_with_feature
 elif [ $# = 1 -a "${1}" = N ] ; then
   # new style no feature request
-  unset RBD_FEATURES; unittest_librbd
-else 
+  run_with_feature
+else
   TESTS="$*"
 fi
 
 for i in ${TESTS}
 do
-    RBD_FEATURES=$i unittest_librbd
+  run_with_feature $i
 done
 
 echo OK
