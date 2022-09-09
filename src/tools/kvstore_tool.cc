@@ -25,6 +25,9 @@ StoreTool::StoreTool(const string& type,
     g_conf()->rocksdb_perf = true;
     g_conf()->rocksdb_collect_compaction_stats = true;
   }
+  if (to_repair) {
+    g_conf()->bluefs_min_flush_size = 0;
+  }
 
   if (type == "bluestore-kv") {
 #ifdef WITH_BLUESTORE
@@ -377,4 +380,9 @@ void StoreTool::compact_range(const string& prefix,
 int StoreTool::destructive_repair()
 {
   return db->repair(std::cout);
+}
+
+bool StoreTool::db_restore(const string& backup_dir)
+{
+  return db->db_restore(backup_dir);
 }
