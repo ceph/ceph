@@ -195,7 +195,7 @@ if [ $stop_all -eq 1 ]; then
     fi
 
     # killing processes
-    to_kill="$ceph_osd ceph-mon ceph-mds ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd"
+    to_kill="$ceph_osd ceph-mon ceph-mds ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd cephfs-top"
     since_kill=0
     for step in 0 1 1 2 3 5 8; do
         sleep $step
