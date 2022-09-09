@@ -633,7 +633,7 @@ seastar::future<> CoreState::broadcast_map_to_pgs(
   auto &pgs = pg_map.get_pgs();
   return seastar::parallel_for_each(
     pgs.begin(), pgs.end(),
-    [=, &shard_manager, &shard_services](auto& pg) {
+    [=, &shard_manager, &shard_services, this](auto& pg) {
       return shard_services.start_operation<PGAdvanceMap>(
 	shard_manager, pg.second, pg.second->get_osdmap_epoch(), epoch,
 	PeeringCtx{}, false
