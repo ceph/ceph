@@ -25,7 +25,7 @@
 #include "mdstypes.h"
 #include "include/ipaddr.h"
 
-#define dout_subsys ceph_subsys_mds
+#define dout_subsys ceph_subsys_mds_auth
 
 #undef dout_prefix
 #define dout_prefix *_dout << "MDSAuthCap "
