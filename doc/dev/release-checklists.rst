@@ -42,6 +42,7 @@ Scripts
 Misc
 ~~~~
 - [x] update src/ceph-volume/ceph_volume/__init__.py (`__release__`)
+- [x] update src/tools/monmaptool.cc (`min_mon_release` and corresponding output in `src/test/cli/monmaptool`)
 
 Feature bits
 ------------
