@@ -10258,11 +10258,31 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
+  int do_sync = true;
   if ((flags & O_TRUNC) == 0 && in->caps_issued_mask(want)) {
-    // update wanted?
-    check_caps(in, CHECK_CAPS_NODELAY);
-  } else {
+    int mask = MAY_READ;
 
+    if (cmode & CEPH_FILE_MODE_WR) {
+      mask |= MAY_WRITE;
+    }
+
+    std::string path;
+    int result = in->make_path_string(path);
+    if (result) {
+      ldout(cct, 20) << __func__ << " absolute path: " << path << dendl;
+      if (path.length())
+        path = path.substr(1);    // drop leading /
+      result = mds_check_access(path, perms, mask);
+      if (result) {
+        return result;
+      }
+      // update wanted?
+      check_caps(in, CHECK_CAPS_NODELAY);
+      do_sync = false;
+    }
+  }
+
+  if (do_sync) {
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
     filepath path;
     in->make_nosnap_relative_path(path);
