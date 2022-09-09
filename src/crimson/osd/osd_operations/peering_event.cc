@@ -74,7 +74,7 @@ seastar::future<> PeeringEvent<T>::with_pg(
 	  return pg->osdmap_gate.wait_for_map(
 	    std::move(trigger), evt.get_epoch_sent());
 	});
-    }).then_interruptible([this, pg](auto) {
+    }).then_interruptible([this, pg] {
       return this->template enter_stage<interruptor>(pp(*pg).process);
     }).then_interruptible([this, pg] {
       // TODO: likely we should synchronize also with the pg log-based

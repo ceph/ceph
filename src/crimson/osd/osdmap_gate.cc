@@ -23,17 +23,17 @@ void OSDMapGate<OSDMapGateTypeV>::OSDMapBlocker::dump_detail(Formatter *f) const
 }
 
 template <OSDMapGateType OSDMapGateTypeV>
-seastar::future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map(
+seastar::future<> OSDMapGate<OSDMapGateTypeV>::wait_for_map(
   typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
   epoch_t epoch,
   ShardServices *shard_services)
 {
   if (__builtin_expect(stopping, false)) {
-    return seastar::make_exception_future<epoch_t>(
+    return seastar::make_exception_future<>(
 	crimson::common::system_shutdown_exception());
   }
   if (current >= epoch) {
-    return seastar::make_ready_future<epoch_t>(current);
+    return seastar::now();
   } else {
     logger().info("evt epoch is {}, i have {}, will wait", epoch, current);
     auto &blocker = waiting_peering.emplace(
@@ -58,8 +58,8 @@ void OSDMapGate<OSDMapGateTypeV>::got_map(epoch_t epoch) {
   current = epoch;
   auto first = waiting_peering.begin();
   auto last = waiting_peering.upper_bound(epoch);
-  std::for_each(first, last, [epoch](auto& blocked_requests) {
-    blocked_requests.second.promise.set_value(epoch);
+  std::for_each(first, last, [](auto& blocked_requests) {
+    blocked_requests.second.promise.set_value();
   });
   waiting_peering.erase(first, last);
 }

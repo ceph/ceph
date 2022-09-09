@@ -41,7 +41,7 @@ public:
     OSDMapBlocker &operator=(const OSDMapBlocker &) = delete;
     OSDMapBlocker &operator=(OSDMapBlocker &&) = delete;
 
-    seastar::shared_promise<epoch_t> promise;
+    seastar::shared_promise<> promise;
 
     void dump_detail(Formatter *f) const final;
   };
@@ -63,10 +63,10 @@ public:
   /**
    * wait_for_map
    *
-   * Wait for an osdmap whose epoch is greater or equal to given epoch.
+   * Wait for an osdmap whose epoch is equal to given epoch.
    * If shard_services is non-null, request map if not present.
    */
-  seastar::future<epoch_t>
+  seastar::future<>
   wait_for_map(
     typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
     epoch_t epoch,

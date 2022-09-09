@@ -126,8 +126,8 @@ public:
 	    opref.get_epoch(),
 	    &shard_services);
 	});
-    }).then([&logger, &opref](auto epoch) {
-      logger.debug("{}: got map {}, entering get_pg", opref, epoch);
+    }).then([&logger, &opref] {
+      logger.debug("{}: got map {}, entering get_pg", opref, opref.get_epoch());
       return opref.template enter_stage<>(
 	opref.get_connection_pipeline().get_pg);
     }).then([this, &logger, &opref] {

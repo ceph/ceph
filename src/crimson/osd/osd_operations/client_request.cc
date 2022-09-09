@@ -137,7 +137,7 @@ seastar::future<> ClientRequest::with_pg_int(
 	      std::move(trigger),
 	      m->get_min_epoch());
 	  });
-      }).then_interruptible([this, this_instance_id, &pg](auto map) {
+      }).then_interruptible([this, this_instance_id, &pg] {
 	logger().debug("{}.{}: after wait_for_map", *this, this_instance_id);
 	return enter_stage<interruptor>(pp(pg).wait_for_active);
       }).then_interruptible([this, this_instance_id, &pg]() {
