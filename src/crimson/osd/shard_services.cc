@@ -636,10 +636,11 @@ seastar::future<> CoreState::broadcast_map_to_pgs(
     [=, &shard_manager, &shard_services](auto& pg) {
       return shard_services.start_operation<PGAdvanceMap>(
 	shard_manager, pg.second, pg.second->get_osdmap_epoch(), epoch,
-	PeeringCtx{}, false).second;
-    }).then([epoch, this] {
-      osdmap_gate.got_map(epoch);
-      return seastar::make_ready_future();
+	PeeringCtx{}, false
+      ).second.then([epoch, this] {
+        osdmap_gate.got_map(epoch);
+        return seastar::now();
+      });
     });
 }
 
