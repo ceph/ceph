@@ -9935,6 +9935,10 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
   if ((flags & O_TRUNC) == 0 && in->caps_issued_mask(want)) {
+    int result = mds_check_access(in, perms, MAY_READ);
+    if (result) {
+      return result;
+    }
     // update wanted?
     check_caps(in, CHECK_CAPS_NODELAY);
   } else {
