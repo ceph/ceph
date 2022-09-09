@@ -7888,6 +7888,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   union ceph_mds_request_args args;
   bool kill_sguid = false;
   int inode_drop = 0;
+  filepath path;
+  MetaRequest *req;
 
   ldout(cct, 10) << __func__ << " mask " << mask << " issued " <<
     ccap_string(issued) <<  " perms " << perms << dendl;
@@ -7925,6 +7927,23 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     mask |= CEPH_SETATTR_CTIME;
   }
 
+  bool do_sync = true;
+  int res;
+  {
+    std::string path;
+    res = in->make_path_string(path);
+    if (res) {
+      ldout(cct, 20) << " absolute path: " << path << dendl;
+      if (path.length())
+        path = path.substr(1);    // drop leading /
+      res = mds_check_access(path, perms, MAY_WRITE);
+      if (res) {
+        goto out;
+      }
+      do_sync = false;
+    }
+  }
+
   if (!mask) {
     // caller just needs us to bump the ctime
     in->ctime = ceph_clock_now();
@@ -7947,7 +7966,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   if (mask & CEPH_SETATTR_UID) {
     ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
 
-    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
+    if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
@@ -7967,7 +7986,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   if (mask & CEPH_SETATTR_GID) {
     ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
 
-    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
+    if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
@@ -7987,7 +8006,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   if (mask & CEPH_SETATTR_MODE) {
     ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
 
-    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
+    if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
@@ -8001,7 +8020,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     } else {
       mask &= ~CEPH_SETATTR_MODE;
     }
-  } else if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL) && S_ISREG(in->mode)) {
+  } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL) && S_ISREG(in->mode)) {
     if (kill_sguid && (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
       in->mode &= ~(S_ISUID|S_ISGID);
     } else {
@@ -8019,7 +8038,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   if (mask & CEPH_SETATTR_BTIME) {
     ldout(cct,10) << "changing btime to " << in->btime << dendl;
 
-    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
+    if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
@@ -8043,7 +8062,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     }
 
     ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
-    if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL) &&
+    if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL) &&
         !(mask & CEPH_SETATTR_KILL_SGUID) &&
         stx->stx_size >= in->size) {
       if (stx->stx_size > in->size) {
@@ -8065,7 +8084,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (mask & CEPH_SETATTR_MTIME) {
-    if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
+    if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
       in->mtime = utime_t(stx->stx_mtime);
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
@@ -8073,7 +8092,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->time_warp_seq++;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
       mask &= ~CEPH_SETATTR_MTIME;
-    } else if (in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
+    } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
                utime_t(stx->stx_mtime) > in->mtime) {
       in->mtime = utime_t(stx->stx_mtime);
       in->ctime = ceph_clock_now();
@@ -8092,7 +8111,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (mask & CEPH_SETATTR_ATIME) {
-    if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
+    if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
       in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
@@ -8100,7 +8119,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->time_warp_seq++;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
       mask &= ~CEPH_SETATTR_ATIME;
-    } else if (in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
+    } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
                utime_t(stx->stx_atime) > in->atime) {
       in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
@@ -8129,9 +8148,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     return 0;
   }
 
-  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETATTR);
-
-  filepath path;
+  req = new MetaRequest(CEPH_MDS_OP_SETATTR);
 
   in->make_nosnap_relative_path(path);
   req->set_filepath(path);
@@ -8142,7 +8159,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   req->head.args.setattr.mask = mask;
   req->regetattr_mask = mask;
 
-  int res = make_request(req, perms, inp);
+  res = make_request(req, perms, inp);
+
+out:
   ldout(cct, 10) << "_setattr result=" << res << dendl;
   return res;
 }
