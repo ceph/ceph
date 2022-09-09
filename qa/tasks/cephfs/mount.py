@@ -195,8 +195,12 @@ class CephFSMount(object):
         return False
 
     def is_mounted(self):
-        return self.hostfs_mntpt in \
-            self.client_remote.read_file('/proc/self/mounts',stdout=StringIO())
+        file = self.client_remote.read_file('/proc/self/mounts',stdout=StringIO())
+        if self.hostfs_mntpt in file:
+            return True
+        else:
+            log.debug(f"not mounted; /proc/self/mounts is:\n{file}")
+            return False
 
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
