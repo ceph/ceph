@@ -115,11 +115,11 @@ seastar::future<> ClientRequest::with_pg_int(
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
   return interruptor::with_interruption(
-    [this, pgref, this_instance_id, &ihref]() mutable {
+    [this, pgref, this_instance_id, &ihref, &shard_services]() mutable {
       PG &pg = *pgref;
       if (pg.can_discard_op(*m)) {
-	return osd.send_incremental_map(
-	  conn, m->get_map_epoch()
+	return shard_services.send_incremental_map(
+	  std::ref(*conn), m->get_map_epoch()
 	).then([this, this_instance_id, pgref] {
 	  logger().debug("{}.{}: discarding", *this, this_instance_id);
 	  pgref->client_request_orderer.remove_request(*this);
@@ -310,6 +310,7 @@ ClientRequest::do_process(
 	      return ihref.enter_stage<interruptor>(pp(*pg).send_reply, *this
 	      ).then_interruptible(
 		[this, reply=std::move(reply)]() mutable {
+		  logger().debug("{}: sending response", *this);
 		  return conn->send(std::move(reply)).then([] {
 		    return seastar::make_ready_future<seq_mode_t>(seq_mode_t::IN_ORDER);
 		  });

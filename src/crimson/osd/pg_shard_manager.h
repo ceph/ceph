@@ -127,6 +127,8 @@ public:
   FORWARD_TO_OSD_SINGLETON(init_meta_coll)
   FORWARD_TO_OSD_SINGLETON(get_meta_coll)
 
+  FORWARD_TO_OSD_SINGLETON(set_superblock)
+
   // Core OSDMap methods
   FORWARD_TO_OSD_SINGLETON(get_local_map)
   FORWARD_TO_OSD_SINGLETON(load_map_bl)

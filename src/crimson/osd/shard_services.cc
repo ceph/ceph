@@ -365,6 +365,7 @@ seastar::future<std::map<epoch_t, bufferlist>> OSDSingletonState::load_map_bls(
   epoch_t first,
   epoch_t last)
 {
+  ceph_assert(first <= last);
   return seastar::map_reduce(boost::make_counting_iterator<epoch_t>(first),
 			     boost::make_counting_iterator<epoch_t>(last + 1),
 			     [this](epoch_t e) {
@@ -664,6 +665,37 @@ seastar::future<> ShardServices::dispatch_context(
     return seastar::now();
   });
 }
+
+seastar::future<> OSDSingletonState::send_incremental_map(
+  crimson::net::Connection &conn,
+  epoch_t first)
+{
+  if (first >= superblock.oldest_map) {
+    return load_map_bls(
+      first, superblock.newest_map
+    ).then([this, &conn, first](auto&& bls) {
+      auto m = crimson::make_message<MOSDMap>(
+	monc.get_fsid(),
+	osdmap->get_encoding_features());
+      m->oldest_map = first;
+      m->newest_map = superblock.newest_map;
+      m->maps = std::move(bls);
+      return conn.send(std::move(m));
+    });
+  } else {
+    return load_map_bl(osdmap->get_epoch()
+    ).then([this, &conn](auto&& bl) mutable {
+      auto m = crimson::make_message<MOSDMap>(
+	monc.get_fsid(),
+	osdmap->get_encoding_features());
+      m->oldest_map = superblock.oldest_map;
+      m->newest_map = superblock.newest_map;
+      m->maps.emplace(osdmap->get_epoch(), std::move(bl));
+      return conn.send(std::move(m));
+    });
+  }
+}
+
 
 
 };

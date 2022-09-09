@@ -376,6 +376,7 @@ seastar::future<> OSD::start()
     );
   }).then([this](OSDSuperblock&& sb) {
     superblock = std::move(sb);
+    pg_shard_manager.set_superblock(sb);
     return pg_shard_manager.get_local_map(superblock.current_epoch);
   }).then([this](OSDMapService::local_cached_map_t&& map) {
     osdmap = make_local_shared_foreign(OSDMapService::local_cached_map_t(map));
@@ -909,6 +910,7 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
         superblock.clean_thru = last;
       }
       pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
+      pg_shard_manager.set_superblock(superblock);
       logger().debug("OSD::handle_osd_map: do_transaction...");
       return store.do_transaction(
 	pg_shard_manager.get_meta_coll().collection(),
@@ -1071,32 +1073,6 @@ seastar::future<> OSD::handle_update_log_missing_reply(
     std::move(conn),
     std::move(m));
   return seastar::now();
-}
-
-seastar::future<> OSD::send_incremental_map(crimson::net::ConnectionRef conn,
-					    epoch_t first)
-{
-  if (first >= superblock.oldest_map) {
-    return pg_shard_manager.load_map_bls(first, superblock.newest_map)
-    .then([this, conn, first](auto&& bls) {
-      auto m = crimson::make_message<MOSDMap>(monc->get_fsid(),
-	  osdmap->get_encoding_features());
-      m->oldest_map = first;
-      m->newest_map = superblock.newest_map;
-      m->maps = std::move(bls);
-      return conn->send(std::move(m));
-    });
-  } else {
-    return pg_shard_manager.load_map_bl(osdmap->get_epoch())
-    .then([this, conn](auto&& bl) mutable {
-      auto m = crimson::make_message<MOSDMap>(monc->get_fsid(),
-	  osdmap->get_encoding_features());
-      m->oldest_map = superblock.oldest_map;
-      m->newest_map = superblock.newest_map;
-      m->maps.emplace(osdmap->get_epoch(), std::move(bl));
-      return conn->send(std::move(m));
-    });
-  }
 }
 
 seastar::future<> OSD::handle_rep_op(crimson::net::ConnectionRef conn,
