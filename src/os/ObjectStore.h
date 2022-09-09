@@ -781,6 +781,7 @@ public:
   virtual bool has_builtin_csum() const {
     return false;
   }
+  virtual bool db_backup(const std::string& dst_dir) { return false; }
 };
 
 #endif

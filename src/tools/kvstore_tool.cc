@@ -378,3 +378,8 @@ int StoreTool::destructive_repair()
 {
   return db->repair(std::cout);
 }
+
+bool StoreTool::db_restore(const string& backup_dir)
+{
+  return db->db_restore(backup_dir);
+}

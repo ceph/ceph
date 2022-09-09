@@ -396,6 +396,10 @@ public:
 			     const std::string& start, const std::string& end) {}
   virtual void compact_range_async(const std::string& prefix,
 				   const std::string& start, const std::string& end) {}
+  /// backup db
+  virtual bool db_backup(const std::string& dst_dir) { return false; }
+  /// restore db
+  virtual bool db_restore(const std::string& backup_dir) { return false; }
 
   // See RocksDB merge operator definition, we support the basic
   // associative merge only right now.

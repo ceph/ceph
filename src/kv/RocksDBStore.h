@@ -17,6 +17,7 @@
 #include "rocksdb/statistics.h"
 #include "rocksdb/table.h"
 #include "rocksdb/db.h"
+#include "rocksdb/utilities/backupable_db.h"
 #include "kv/rocksdb_cache/BinnedLRUCache.h"
 #include <errno.h>
 #include "common/errno.h"
@@ -56,10 +57,13 @@ namespace rocksdb{
   class Iterator;
   class Logger;
   class ColumnFamilyHandle;
+  class BackupEngine;
+  class BackupEngineReadOnly;
   struct Options;
   struct BlockBasedTableOptions;
   struct DBOptions;
   struct ColumnFamilyOptions;
+  struct BackupableDBOptions;
 }
 
 extern rocksdb::Logger *create_rocksdb_ceph_logger();
@@ -234,6 +238,10 @@ public:
 			   const std::string& end) override {
     compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
+  /// backup rocksdb
+  bool db_backup(const std::string& dst_dir) override;
+  /// restore rocksdb
+  bool db_restore(const std::string& backup_dir) override;
 
   RocksDBStore(CephContext *c, const std::string &path, std::map<std::string,std::string> opt, void *p) :
     cct(c),

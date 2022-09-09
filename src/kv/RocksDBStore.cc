@@ -2123,6 +2123,52 @@ void RocksDBStore::compact_range(const string& start, const string& end)
   }
 }
 
+bool RocksDBStore::db_backup(const string& dst_dir)
+{
+  rocksdb::Status s;
+  rocksdb::BackupableDBOptions engine_options(dst_dir, rocksdb::Env::Default());
+  rocksdb::BackupEngine *backup_engine;
+  std::unique_ptr<rocksdb::BackupEngine> backup_engine_;
+
+  s = rocksdb::BackupEngine::Open(env, engine_options, &backup_engine);
+  if (!s.ok()) {
+    derr << s.ToString() << dendl;
+    return s.ok();
+  }
+  backup_engine_.reset(backup_engine);
+  s = backup_engine_->CreateNewBackup(db);
+  if (!s.ok()) {
+    derr << s.ToString() << dendl;
+    return s.ok();
+  }
+  backup_engine_.reset();
+
+  return s.ok();
+}
+
+bool RocksDBStore::db_restore(const string& backup_dir)
+{
+  rocksdb::Status s;
+  rocksdb::BackupableDBOptions engine_options(backup_dir, rocksdb::Env::Default());
+  rocksdb::BackupEngineReadOnly *backup_engine_ro;
+  std::unique_ptr<rocksdb::BackupEngineReadOnly> backup_engine_ro_;
+
+  s = rocksdb::BackupEngineReadOnly::Open(env, engine_options, &backup_engine_ro);
+  if (!s.ok()) {
+    derr << s.ToString() << dendl;
+    return s.ok();
+  }
+  backup_engine_ro_.reset(backup_engine_ro);
+  s = backup_engine_ro->RestoreDBFromLatestBackup(path, path+".wal");
+  if (!s.ok()) {
+    derr << s.ToString() << dendl;
+    return s.ok();
+  }
+  backup_engine_ro_.reset();
+
+  return s.ok();
+}
+
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 {
   delete dbiter;

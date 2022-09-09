@@ -20,4 +20,5 @@
     destructive-repair  (use only as last resort! may corrupt healthy data)
     stats
     histogram [prefix]
+    db-restore <backup_dir>
   

@@ -3278,6 +3278,25 @@ will start to track new ops received afterwards.";
       st.dump(f);
       f->close_section();
     }
+  } else if (prefix == "db_backup") {
+    string dst_dir;
+    if (!(cmd_getval(cmdmap, "dst_dir", dst_dir))) {
+      ss << "Error db backup: no dst dir provided";
+      ret = -EINVAL;
+      goto out;
+    }
+    dout(1) << "triggering manual db backup" << dendl;
+    auto start = ceph::coarse_mono_clock::now();
+    bool ret = store->db_backup(dst_dir);
+    auto end = ceph::coarse_mono_clock::now();
+    double duration = std::chrono::duration<double>(end-start).count();
+    if(!ret) {
+      ss << "db backup failed";
+    } else {
+      dout(1) << "finished db backup in "
+              << duration
+              << " seconds" << dendl;
+    }
   } else {
     ceph_abort_msg("broken asok registration");
   }
@@ -4124,6 +4143,12 @@ void OSD::final_init()
 				     asok_hook,
 				     "Commpact object store's omap."
                                      " WARNING: Compaction probably slows your requests");
+  ceph_assert(r == 0);
+
+  r = admin_socket->register_command("db_backup " \
+                                     "name=dst_dir,type=CephString",
+                                     asok_hook,
+                                     "Backup rocksdb to other filesystem, and then you can use it to restore db");
   ceph_assert(r == 0);
 
   r = admin_socket->register_command("get_mapped_pools",

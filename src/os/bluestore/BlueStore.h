@@ -3311,6 +3311,12 @@ public:
     double lat_threshold,
     std::function<std::string (const ceph::timespan& lat)> fn) const;
 
+  bool db_backup(const std::string& dst_dir) override {
+    ceph_assert(db);
+    bool ret = db->db_backup(dst_dir);
+    return ret;
+  }
+
 private:
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
