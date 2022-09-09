@@ -1,7 +1,7 @@
   $ monmaptool --create --add a 10.10.10.10:1234 /tmp/test.monmap.1234
   monmaptool: monmap file /tmp/test.monmap.1234
   monmaptool: generated fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
-  setting min_mon_release = octopus
+  setting min_mon_release = pacific
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ monmaptool --feature-list --feature-list plain --feature-list parseable /tmp/test.monmap.1234
