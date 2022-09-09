@@ -45,7 +45,7 @@ dokanLibDir="${depsToolsetDir}/dokany/lib"
 
 # Allow for OS specific customizations through the OS flag (normally
 # passed through from win32_build).
-# Valid options are currently "ubuntu" and "suse".
+# Valid options are currently "ubuntu", "rhel", and "suse".
 OS=${OS:-"ubuntu"}
 
 function _make() {
@@ -63,6 +63,26 @@ mkdir -p $depsSrcDir
 
 echo "Installing required packages."
 case "$OS" in
+    rhel)
+        # pkgconf needs https://bugzilla.redhat.com/show_bug.cgi?id=1975416
+        sudo yum -y --setopt=skip_missing_names_on_install=False install \
+            mingw64-gcc-c++ \
+            cmake \
+            pkgconf \
+            python3-devel \
+            autoconf \
+            libtool \
+            ninja-build \
+            zip \
+            python3-Cython \
+            python3-PyYAML \
+            gcc \
+            diffutils \
+            patch \
+            wget \
+            perl \
+            git-core
+        ;;
     ubuntu)
         sudo apt-get update
         sudo env DEBIAN_FRONTEND=noninteractive apt-get -y install \
