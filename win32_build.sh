@@ -39,17 +39,20 @@ EMBEDDED_DBG_SYM=${EMBEDDED_DBG_SYM:-}
 
 OS=${OS}
 if [[ -z $OS ]]; then
-    if [[ -f /etc/os-release ]] && \
-            $(grep -q "^NAME=\".*SUSE.*\"" /etc/os-release);  then
+    source /etc/os-release
+    case "$ID" in
+    opensuse*|suse|sles)
         OS="suse"
-    elif [[ -f /etc/lsb-release ]] && \
-            $(grep -q "^DISTRIB_ID=Ubuntu" /etc/lsb-release);  then
+        ;;
+    ubuntu)
         OS="ubuntu"
-    else
-        echo "Unsupported Linux distro, only SUSE and Ubuntu are currently \
+        ;;
+    *)
+        echo "Unsupported Linux distro $ID, only SUSE and Ubuntu are currently \
 supported. Set the OS variable to override"
         exit 1
-    fi
+        ;;
+    esac
 fi
 export OS="$OS"
 
