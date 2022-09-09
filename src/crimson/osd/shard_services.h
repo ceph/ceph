@@ -226,6 +226,15 @@ private:
     return *meta_coll;
   }
 
+  OSDSuperblock superblock;
+  void set_superblock(OSDSuperblock _superblock) {
+    superblock = std::move(_superblock);
+  }
+
+  seastar::future<> send_incremental_map(
+    crimson::net::Connection &conn,
+    epoch_t first);
+
   auto get_pool_info(int64_t poolid) {
     return get_meta_coll().load_final_pool_info(poolid);
   }
@@ -420,6 +429,8 @@ public:
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
+
+  FORWARD_TO_OSD_SINGLETON(send_incremental_map)
 
   FORWARD_TO_OSD_SINGLETON(osdmap_subscribe)
   FORWARD_TO_OSD_SINGLETON(queue_want_pg_temp)

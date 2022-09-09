@@ -141,9 +141,6 @@ public:
   seastar::future<> dump_pg_state_history(Formatter*) const;
   void print(std::ostream&) const;
 
-  seastar::future<> send_incremental_map(crimson::net::ConnectionRef conn,
-					 epoch_t first);
-
   /// @return the seq id of the pg stats being sent
   uint64_t send_pg_stats();
 
