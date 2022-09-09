@@ -97,9 +97,6 @@ struct CapSnap {
   bool writing = false, dirty_data = false;
   uint64_t flush_tid = 0;
 
-  int64_t cap_dirtier_uid = -1;
-  int64_t cap_dirtier_gid = -1;
-
   explicit CapSnap(Inode *i)
     : in(i)
   {}
