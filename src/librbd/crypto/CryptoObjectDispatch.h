@@ -104,6 +104,7 @@ public:
 private:
   ImageCtxT* m_image_ctx;
   CryptoInterface* m_crypto;
+  uint64_t m_data_offset_object_no;
 };
 
 } // namespace crypto
