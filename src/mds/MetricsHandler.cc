@@ -166,7 +166,9 @@ void MetricsHandler::handle_payload(Session *session, const CapInfoPayload &payl
 
 void MetricsHandler::handle_payload(Session *session, const ReadLatencyPayload &payload) {
   dout(20) << ": type=" << payload.get_type()
-	   << ", session=" << session << ", latency=" << payload.lat << dendl;
+           << ", session=" << session << ", latency=" << payload.lat
+           << ", avg=" << payload.mean << ", sq_sum=" << payload.sq_sum
+           << ", count=" << payload.count << dendl;
 
   auto it = client_metrics_map.find(session->info.inst);
   if (it == client_metrics_map.end()) {
@@ -176,12 +178,17 @@ void MetricsHandler::handle_payload(Session *session, const ReadLatencyPayload &
   auto &metrics = it->second.second;
   metrics.update_type = UPDATE_TYPE_REFRESH;
   metrics.read_latency_metric.lat = payload.lat;
+  metrics.read_latency_metric.mean = payload.mean;
+  metrics.read_latency_metric.sq_sum = payload.sq_sum;
+  metrics.read_latency_metric.count = payload.count;
   metrics.read_latency_metric.updated = true;
 }
 
 void MetricsHandler::handle_payload(Session *session, const WriteLatencyPayload &payload) {
   dout(20) << ": type=" << payload.get_type()
-	   << ", session=" << session << ", latency=" << payload.lat << dendl;
+           << ", session=" << session << ", latency=" << payload.lat
+           << ", avg=" << payload.mean << ", sq_sum=" << payload.sq_sum
+           << ", count=" << payload.count << dendl;
 
   auto it = client_metrics_map.find(session->info.inst);
   if (it == client_metrics_map.end()) {
@@ -191,12 +198,17 @@ void MetricsHandler::handle_payload(Session *session, const WriteLatencyPayload 
   auto &metrics = it->second.second;
   metrics.update_type = UPDATE_TYPE_REFRESH;
   metrics.write_latency_metric.lat = payload.lat;
+  metrics.write_latency_metric.mean = payload.mean;
+  metrics.write_latency_metric.sq_sum = payload.sq_sum;
+  metrics.write_latency_metric.count = payload.count;
   metrics.write_latency_metric.updated = true;
 }
 
 void MetricsHandler::handle_payload(Session *session, const MetadataLatencyPayload &payload) {
   dout(20) << ": type=" << payload.get_type()
-	   << ", session=" << session << ", latency=" << payload.lat << dendl;
+           << ", session=" << session << ", latency=" << payload.lat
+           << ", avg=" << payload.mean << ", sq_sum=" << payload.sq_sum
+           << ", count=" << payload.count << dendl;
 
   auto it = client_metrics_map.find(session->info.inst);
   if (it == client_metrics_map.end()) {
@@ -206,6 +218,9 @@ void MetricsHandler::handle_payload(Session *session, const MetadataLatencyPaylo
   auto &metrics = it->second.second;
   metrics.update_type = UPDATE_TYPE_REFRESH;
   metrics.metadata_latency_metric.lat = payload.lat;
+  metrics.metadata_latency_metric.mean = payload.mean;
+  metrics.metadata_latency_metric.sq_sum = payload.sq_sum;
+  metrics.metadata_latency_metric.count = payload.count;
   metrics.metadata_latency_metric.updated = true;
 }
 
