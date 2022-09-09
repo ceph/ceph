@@ -82,7 +82,6 @@ depsToolsetDir="$DEPS_DIR/mingw"
 cmakeGenerator="Ninja"
 lz4Dir="${depsToolsetDir}/lz4"
 sslDir="${depsToolsetDir}/openssl"
-curlDir="${depsToolsetDir}/curl"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 backtraceDir="${depsToolsetDir}/libbacktrace"
@@ -93,7 +92,7 @@ wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
 
-depsDirs="$lz4Dir;$curlDir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
+depsDirs="$lz4Dir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
 depsDirs+=";$winLibDir"
 
 # Cmake recommends using CMAKE_PREFIX_PATH instead of link_directories.
@@ -104,8 +103,6 @@ linkDirs="$zlibDir/lib"
 
 lz4Lib="${lz4Dir}/lib/dll/liblz4-1.dll"
 lz4Include="${lz4Dir}/lib"
-curlLib="${curlDir}/lib/libcurl.dll.a"
-curlInclude="${curlDir}/include"
 
 if [[ -n $CLEAN_BUILD ]]; then
     echo "Cleaning up build dir: $BUILD_DIR"
