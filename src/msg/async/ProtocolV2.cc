@@ -2596,7 +2596,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
 CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing) {
   ldout(cct, 20) << __func__ << " existing=" << existing << dendl;
 
-  std::lock_guard<std::mutex> l(existing->lock);
+  std::unique_lock<std::mutex> l(existing->lock);
 
   ProtocolV2 *exproto = dynamic_cast<ProtocolV2 *>(existing->protocol.get());
   if (!exproto) {
@@ -2607,6 +2607,7 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
   if (exproto->state == CLOSED) {
     ldout(cct, 1) << __func__ << " existing " << existing << " already closed."
                   << dendl;
+    l.unlock();
     return send_server_ident();
   }
 
@@ -2636,6 +2637,7 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
         << dendl;
     existing->protocol->stop();
     existing->dispatch_queue->queue_reset(existing.get());
+    l.unlock();
     return send_server_ident();
   }
 
