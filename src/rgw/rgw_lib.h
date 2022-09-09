@@ -20,9 +20,9 @@ namespace rgw {
   class RGWLibFrontend;
 
   class RGWLib : public DoutPrefixProvider {
+    boost::intrusive_ptr<CephContext> cct;
     AppMain main;
     RGWLibFrontend* fe;
-    boost::intrusive_ptr<CephContext> cct;
 
   public:
     RGWLib() : main(this), fe(nullptr)
