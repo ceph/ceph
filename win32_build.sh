@@ -35,7 +35,7 @@ SKIP_ZIP=${SKIP_ZIP:-}
 # well as llvm rely on mspdb*.dll in order to support this proprietary format.
 EMBEDDED_DBG_SYM=${EMBEDDED_DBG_SYM:-}
 # Allow for OS specific customizations through the OS flag.
-# Valid options are currently "ubuntu" and "suse".
+# Valid options are currently "ubuntu", "suse", and "rhel".
 
 OS=${OS}
 if [[ -z $OS ]]; then
@@ -44,12 +44,16 @@ if [[ -z $OS ]]; then
     opensuse*|suse|sles)
         OS="suse"
         ;;
+    rhel|centos)
+        OS="rhel"
+        ;;
     ubuntu)
         OS="ubuntu"
         ;;
     *)
-        echo "Unsupported Linux distro $ID, only SUSE and Ubuntu are currently \
-supported. Set the OS variable to override"
+        echo "Unsupported Linux distro $ID."
+        echo "only SUSE, Ubuntu and RHEL are supported."
+        echo "Set the OS environment variable to override."
         exit 1
         ;;
     esac
