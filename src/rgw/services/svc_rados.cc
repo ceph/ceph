@@ -45,6 +45,7 @@ void RGWSI_RADOS::shutdown()
   if (async_processor) {
     async_processor->stop();
   }
+  rados.shutdown();
 }
 
 void RGWSI_RADOS::stop_processor()
