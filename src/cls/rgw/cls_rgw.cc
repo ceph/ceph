@@ -14,6 +14,7 @@
 #include "common/strtol.h"
 #include "common/escape.h"
 #include "common/config_proxy.h"
+#include "common/tracer.h"
 #include "osd/osd_types.h"
 
 #include "include/compat.h"
@@ -149,7 +150,8 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
 static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key& obj_key,
                                RGWModifyOp op, const string& tag, real_time timestamp,
                                const rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
-                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace)
+                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace,
+                               const jspan_context* bilog_trace = nullptr)
 {
   bufferlist bl;
 
@@ -172,6 +174,9 @@ static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key&
   }
   if (zones_trace) {
     entry.zones_trace = std::move(*zones_trace);
+  }
+  if (bilog_trace) {
+    entry.bi_trace = std::move(*bilog_trace);
   }
 
   string key;
@@ -1278,7 +1283,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
 			     entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
 			     header.max_marker, op.bilog_flags, NULL, NULL,
-			     &op.zones_trace);
+			     &op.zones_trace, &op.bi_trace);
     if (rc < 0) {
       CLS_LOG_BITX(bitx_inst, 0,
 		   "ERROR: %s: log_index_operation failed with rc=%d",
