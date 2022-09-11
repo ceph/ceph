@@ -387,11 +387,8 @@ int process_request(rgw::sal::Store* const store,
       goto done;
     }
 
-
-    const auto trace_name = std::string(op->name()) + " " + s->trans_id;
-    s->trace = tracing::rgw::tracer.start_trace(trace_name, s->trace_enabled);
-    s->trace->SetAttribute(tracing::rgw::OP, op->name());
-    s->trace->SetAttribute(tracing::rgw::TYPE, tracing::rgw::REQUEST);
+    s->trace = tracing::rgw::tracer.start_trace(op->name(), s->trace_enabled);
+    s->trace->SetAttribute(tracing::rgw::TRANS_ID, s->trans_id);
 
     ret = rgw_process_authenticated(handler, op, req, s, yield, store);
     if (ret < 0) {
@@ -406,7 +403,9 @@ int process_request(rgw::sal::Store* const store,
 done:
   if (op) {
     if (s->trace) {
-      s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
+      s->trace->SetAttribute(tracing::rgw::OP_RESULT, op->get_ret());
+      s->trace->SetAttribute(tracing::rgw::HOST_ID, store->get_host_id());
+
       if (!rgw::sal::User::empty(s->user)) {
         s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
       }
