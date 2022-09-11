@@ -118,7 +118,8 @@ template <typename I>
 CopyupRequest<I>::CopyupRequest(I *ictx, uint64_t objectno,
                                 Extents &&image_extents,
                                 const ZTracer::Trace &parent_trace)
-  : m_image_ctx(ictx), m_object_no(objectno), m_image_extents(image_extents),
+  : m_image_ctx(ictx), m_object_no(objectno),
+    m_image_extents(std::move(image_extents)),
     m_trace(librbd::util::create_trace(*m_image_ctx, "copy-up", parent_trace))
 {
   ceph_assert(m_image_ctx->data_ctx.is_valid());
