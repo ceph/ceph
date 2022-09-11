@@ -556,6 +556,7 @@ void rgw_bi_log_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
   JSONDecoder::decode_json("zones_trace", zones_trace, obj);
+  JSONDecoder::decode_json("bi_trace", bi_trace, obj);
 }
 
 void rgw_bi_log_entry::dump(Formatter *f) const
@@ -589,6 +590,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   f->dump_string("owner", owner);
   f->dump_string("owner_display_name", owner_display_name);
   encode_json("zones_trace", zones_trace, f);
+  encode_json("bi_trace", bi_trace, f);
 }
 
 void rgw_bi_log_entry::generate_test_instances(list<rgw_bi_log_entry*>& ls)
@@ -890,3 +892,21 @@ std::ostream& operator<<(std::ostream& out, cls_rgw_reshard_status status) {
 
   return out;
 }
+
+void encode_json(const char *name, const jspan_context& span_ctx, Formatter *f) {
+  using namespace opentelemetry;
+  using namespace trace;
+  ceph::bufferlist bl;
+  tracing::encode(span_ctx, bl);
+  encode_json("bi_trace", bl, f);
+}
+
+void decode_json_obj(jspan_context& span_ctx, JSONObj *obj) {
+  using namespace opentelemetry;
+  using namespace trace;
+  bufferlist bl;
+  decode_json_obj(bl, obj);
+  auto bl_iter = bl.cbegin();
+  tracing::decode(span_ctx, bl_iter);
+}
+
