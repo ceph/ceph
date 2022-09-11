@@ -272,6 +272,7 @@ void RGWServices_Def::shutdown()
     return;
   }
 
+  datalog_rados.reset();
   sysobj->shutdown();
   sysobj_core->shutdown();
   notify->shutdown();
