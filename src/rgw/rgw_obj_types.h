@@ -27,6 +27,7 @@
 
 #include "common/dout.h"
 #include "common/Formatter.h"
+#include "common/tracer.h"
 
 struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   std::string name;
@@ -488,6 +489,7 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_raw_obj& o) {
 struct rgw_obj {
   rgw_bucket bucket;
   rgw_obj_key key;
+  jspan_context trace_ctx{false, false};
 
   bool in_extra_data{false}; /* in-memory only member, does not serialize */
 
@@ -593,6 +595,9 @@ struct rgw_obj {
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<rgw_obj*>& o);
+    
+  jspan_context& get_trace() { return trace_ctx; }
+  void set_trace (jspan_context&& _trace_ctx) { trace_ctx = std::move(_trace_ctx); }
 
   bool operator==(const rgw_obj& o) const {
     return (key == o.key) &&

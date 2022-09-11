@@ -922,6 +922,7 @@ public:
       bool blind;
       bool prepared{false};
       rgw_zone_set *zones_trace{nullptr};
+      jspan_context bilog_trace{false, false};
 
       int init_bs(const DoutPrefixProvider *dpp, optional_yield y) {
         int r =
@@ -964,6 +965,10 @@ public:
 
       void set_zones_trace(rgw_zone_set *_zones_trace) {
         zones_trace = _zones_trace;
+      }
+
+      void set_bilog_trace(jspan_context&& _bilog_trace) {
+        bilog_trace = _bilog_trace;
       }
 
       int prepare(const DoutPrefixProvider *dpp, RGWModifyOp, const std::string *write_tag, optional_yield y);
@@ -1427,9 +1432,11 @@ public:
 
   int cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, std::string& tag, rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, std::string& tag, int64_t pool, uint64_t epoch,
-                          rgw_bucket_dir_entry& ent, RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
+                          rgw_bucket_dir_entry& ent, RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr,
+                          const jspan_context *bilog_trace = nullptr);
   int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
-                           RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
+                           RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr,
+                           const jspan_context *bilog_trace = nullptr);
   int cls_obj_complete_del(BucketShard& bs, std::string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
                            ceph::real_time& removed_mtime, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_cancel(BucketShard& bs, std::string& tag, rgw_obj& obj,

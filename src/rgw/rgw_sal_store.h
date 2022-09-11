@@ -268,6 +268,9 @@ class StoreObject : public Object {
       return -ENOENT;
     }
 
+    jspan_context& get_trace() override { return state.obj.get_trace(); }
+    void set_trace (jspan_context&& _trace_ctx) override { state.obj.set_trace(std::move(_trace_ctx)); }
+
     virtual void print(std::ostream& out) const override {
       if (bucket)
 	out << bucket << ":";
