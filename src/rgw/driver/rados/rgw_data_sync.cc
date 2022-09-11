@@ -25,6 +25,7 @@
 #include "rgw_sync_error_repo.h"
 #include "rgw_sync_module.h"
 #include "rgw_sal.h"
+#include "rgw_tracer.h"
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -4916,6 +4917,7 @@ public:
 int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
 {
   int ret;
+  jspan trace;
   reenter(this) {
     do {
       if (lease_cr && !lease_cr->is_locked()) {
@@ -5092,6 +5094,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
+        trace = tracing::rgw::tracer.add_span("RGWBucketShardIncrementalSyncCR::operate", entry->bi_trace);
         // yield {
           set_status() << "start object sync";
           if (!marker_tracker.start(cur_id, 0, entry->timestamp)) {
