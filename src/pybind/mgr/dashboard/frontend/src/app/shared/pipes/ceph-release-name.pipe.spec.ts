@@ -14,11 +14,11 @@ describe('CephReleaseNamePipe', () => {
     expect(pipe.transform(value)).toBe('mimic');
   });
 
-  it('recognizes a development release as the master branch', () => {
+  it('recognizes a development release as the main branch', () => {
     const value =
       'ceph version 13.1.0-534-g23d3751b89 \
        (23d3751b897b31d2bda57aeaf01acb5ff3c4a9cd) nautilus (dev)';
-    expect(pipe.transform(value)).toBe('master');
+    expect(pipe.transform(value)).toBe('main');
   });
 
   it('transforms with wrong version format', () => {

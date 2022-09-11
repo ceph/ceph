@@ -18,8 +18,6 @@
 #include "services/svc_zone_utils.h"
 #include "include/ceph_assert.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 class OpsLogSink;
 
 namespace rgw {
@@ -47,7 +45,7 @@ namespace rgw {
     rgw::LDAPHelper* get_ldh() { return ldh; }
 
     CephContext *get_cct() const override { return cct.get(); }
-    unsigned get_subsys() const { return dout_subsys; }
+    unsigned get_subsys() const { return ceph_subsys_rgw; }
     std::ostream& gen_prefix(std::ostream& out) const { return out << "lib rgw: "; }
 
     int init();

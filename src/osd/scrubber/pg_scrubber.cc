@@ -492,63 +492,57 @@ void PgScrubber::rm_from_osd_scrubbing()
   unregister_from_osd();
 }
 
-void PgScrubber::on_primary_change(const requested_scrub_t& request_flags)
+void PgScrubber::on_primary_change(
+  std::string_view caller,
+  const requested_scrub_t& request_flags)
 {
-  dout(10) << __func__ << (is_primary() ? " Primary " : " Replica ")
-	   << " flags: " << request_flags << dendl;
-
   if (!m_scrub_job) {
+    // we won't have a chance to see more logs from this function, thus:
+    dout(10) << fmt::format(
+		  "{}: (from {}& w/{}) {}.Reg-state:{:.7}. No scrub-job",
+		  __func__, caller, request_flags,
+		  (is_primary() ? "Primary" : "Replica/other"),
+		  registration_state())
+	     << dendl;
     return;
   }
 
-  dout(15) << __func__ << " scrub-job state: " << m_scrub_job->state_desc()
-	   << dendl;
-
+  auto pre_state = m_scrub_job->state_desc();
+  auto pre_reg = registration_state();
   if (is_primary()) {
     auto suggested = m_osds->get_scrub_services().determine_scrub_time(
-      request_flags,
-      m_pg->info,
-      m_pg->get_pgpool().info.opts);
+      request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
     m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
   } else {
     m_osds->get_scrub_services().remove_from_osd_queue(m_scrub_job);
   }
 
-  dout(15) << __func__ << " done " << registration_state() << dendl;
-}
-
-void PgScrubber::on_maybe_registration_change(
-  const requested_scrub_t& request_flags)
-{
-  dout(10) << __func__ << (is_primary() ? " Primary " : " Replica/other ")
-	   << registration_state() << " flags: " << request_flags << dendl;
-
-  on_primary_change(request_flags);
-  dout(15) << __func__ << " done " << registration_state() << dendl;
+  dout(10)
+    << fmt::format(
+	 "{} (from {} {}): {}. <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
+	 __func__, caller, request_flags,
+	 (is_primary() ? "Primary" : "Replica/other"), pre_reg, pre_state,
+	 registration_state(), m_scrub_job->state_desc())
+    << dendl;
 }
 
 void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
 {
-  dout(10) << __func__ << " flags: " << request_flags << dendl;
-
-  {
-    // verify that the 'in_q' status matches our "Primariority"
-    if (m_scrub_job && is_primary() && !m_scrub_job->in_queues) {
-      dout(1) << __func__ << " !!! primary but not scheduled! " << dendl;
-    }
+  dout(10) << fmt::format("{}: flags:<{}>", __func__, request_flags) << dendl;
+  // verify that the 'in_q' status matches our "Primariority"
+  if (m_scrub_job && is_primary() && !m_scrub_job->in_queues) {
+    dout(1) << __func__ << " !!! primary but not scheduled! " << dendl;
   }
 
   if (is_primary() && m_scrub_job) {
     ceph_assert(m_pg->is_locked());
     auto suggested = m_osds->get_scrub_services().determine_scrub_time(
-      request_flags,
-      m_pg->info,
-      m_pg->get_pgpool().info.opts);
+      request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
     m_osds->get_scrub_services().update_job(m_scrub_job, suggested);
     m_pg->publish_stats_to_osd();
   }
 
-  dout(15) << __func__ << " done " << registration_state() << dendl;
+  dout(15) << __func__ << ": done " << registration_state() << dendl;
 }
 
 void PgScrubber::scrub_requested(scrub_level_t scrub_level,
@@ -1093,7 +1087,7 @@ int PgScrubber::build_replica_map_chunk()
       auto required_fixes = m_be->replica_clean_meta(replica_scrubmap,
 						     m_end.is_max(),
 						     m_start,
-						     *this);
+						     get_snap_mapper_accessor());
       // actuate snap-mapper changes:
       apply_snap_mapper_fixes(required_fixes);
 
@@ -1267,14 +1261,19 @@ void PgScrubber::apply_snap_mapper_fixes(
 
   for (auto& [fix_op, hoid, snaps, bogus_snaps] : fix_list) {
 
-    if (fix_op == snap_mapper_op_t::update) {
+    if (fix_op != snap_mapper_op_t::add) {
 
       // must remove the existing snap-set before inserting the correct one
       if (auto r = m_pg->snap_mapper.remove_oid(hoid, &t_drv); r < 0) {
 
 	derr << __func__ << ": remove_oid returned " << cpp_strerror(r)
 	     << dendl;
-	ceph_abort();
+	if (fix_op == snap_mapper_op_t::update) {
+	  // for inconsistent snapmapper objects (i.e. for
+	  // snap_mapper_op_t::inconsistent), we don't fret if we can't remove
+	  // the old entries
+	  ceph_abort();
+	}
       }
 
       m_osds->clog->error() << fmt::format(
@@ -1299,7 +1298,6 @@ void PgScrubber::apply_snap_mapper_fixes(
     }
 
     // now - insert the correct snap-set
-
     m_pg->snap_mapper.add_oid(hoid, snaps, &t_drv);
   }
 
@@ -1331,7 +1329,8 @@ void PgScrubber::maps_compare_n_cleanup()
 {
   m_pg->add_objects_scrubbed_count(m_be->get_primary_scrubmap().objects.size());
 
-  auto required_fixes = m_be->scrub_compare_maps(m_end.is_max(), *this);
+  auto required_fixes =
+    m_be->scrub_compare_maps(m_end.is_max(), get_snap_mapper_accessor());
   if (!required_fixes.inconsistent_objs.empty()) {
     if (state_test(PG_STATE_REPAIR)) {
       dout(10) << __func__ << ": discarding scrub results (repairing)" << dendl;

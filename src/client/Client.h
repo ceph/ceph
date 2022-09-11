@@ -1073,7 +1073,7 @@ protected:
 
   int authenticate();
 
-  Inode* get_quota_root(Inode *in, const UserPerm& perms);
+  Inode* get_quota_root(Inode *in, const UserPerm& perms, quota_max_t type=QUOTA_ANY);
   bool check_quota_condition(Inode *in, const UserPerm& perms,
 			     std::function<bool (const Inode &)> test);
   bool is_quota_files_exceeded(Inode *in, const UserPerm& perms);

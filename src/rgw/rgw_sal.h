@@ -23,6 +23,7 @@
 #include "rgw_datalog_notify.h"
 #include "include/random.h"
 
+class RGWRESTMgr;
 class RGWAccessListFilter;
 class RGWLC;
 struct rgw_user_bucket;
@@ -316,6 +317,8 @@ class Store {
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) = 0;
     /** Lookup a zonegroup by ID */
     virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) = 0;
+    /** List all zones in all zone groups by ID */
+    virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) = 0;
     /** Get statistics about the cluster represented by this Store */
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
@@ -449,6 +452,8 @@ class Store {
     virtual const std::string& get_luarocks_path() const = 0;
     /** Set the location of where lua packages are installed */
     virtual void set_luarocks_path(const std::string& path) = 0;
+    /** Register admin APIs unique to this store */
+    virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
 };
 
 /**
@@ -1467,6 +1472,8 @@ public:
   virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) = 0;
   /** Get a zone by Name */
   virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) = 0;
+  /** List zones in zone group by ID */
+  virtual int list_zones(std::list<std::string>& zone_ids) = 0;
   /** Clone a copy of this zonegroup. */
   virtual std::unique_ptr<ZoneGroup> clone() = 0;
 };
@@ -1505,6 +1512,8 @@ class Zone {
     virtual const std::string& get_realm_id() = 0;
     /** Get the tier type for the zone */
     virtual const std::string_view get_tier_type() = 0;
+    /** Get a handler for zone sync policy. */
+    virtual RGWBucketSyncPolicyHandlerRef get_sync_policy_handler() = 0;
 };
 
 /**

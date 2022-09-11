@@ -85,7 +85,7 @@ ostream& operator<<(ostream &out, const Inode &in)
   if (in.is_dir() && in.has_dir_layout())
     out << " has_dir_layout";
 
-  if (in.quota.is_enable())
+  if (in.quota.is_enabled())
     out << " " << in.quota;
 
   out << ' ' << &in << ")";

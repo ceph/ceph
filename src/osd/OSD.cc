@@ -1989,7 +1989,10 @@ void OSDService::_queue_for_recovery(
 // Commands shared between OSD's console and admin console:
 namespace ceph::osd_cmds {
 
-int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f, std::ostream& os);
+int heap(CephContext& cct,
+         const cmdmap_t& cmdmap,
+         std::ostream& outos,
+         std::ostream& erros);
 
 } // namespace ceph::osd_cmds
 
@@ -2903,7 +2906,9 @@ will start to track new ops received afterwards.";
   }
 
   else if (prefix == "heap") {
-    ret = ceph::osd_cmds::heap(*cct, cmdmap, *f, ss);
+    std::stringstream outss;
+    ret = ceph::osd_cmds::heap(*cct, cmdmap, outss, ss);
+    outbl.append(outss);
   }
 
   else if (prefix == "debug dump_missing") {
@@ -3863,8 +3868,8 @@ int OSD::init()
   start_boot();
 
   // Override a few options if mclock scheduler is enabled.
-  maybe_override_max_osd_capacity_for_qos();
   maybe_override_options_for_qos();
+  maybe_override_max_osd_capacity_for_qos();
 
   return 0;
 
@@ -9807,17 +9812,8 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
             << " elapsed_sec: " << elapsed
             << dendl;
 
-    // Persist iops to the MON store
-    ret = mon_cmd_set_config(max_capacity_iops_config, std::to_string(iops));
-    if (ret < 0) {
-      // Fallback to setting the config within the in-memory "values" map.
-      cct->_conf.set_val(max_capacity_iops_config, std::to_string(iops));
-    }
-
-    // Override the max osd capacity for all shards
-    for (auto& shard : shards) {
-      shard->update_scheduler_config();
-    }
+    // Persist the iops value to the MON store.
+    mon_cmd_set_config(max_capacity_iops_config, std::to_string(iops));
   }
 }
 
@@ -9870,7 +9866,41 @@ bool OSD::maybe_override_options_for_qos()
   return false;
 }
 
-int OSD::mon_cmd_set_config(const std::string &key, const std::string &val)
+/**
+ * A context for receiving status from a background mon command to set
+ * a config option and optionally apply the changes on each op shard.
+ */
+class MonCmdSetConfigOnFinish : public Context {
+  OSD *osd;
+  CephContext *cct;
+  std::string key;
+  std::string val;
+  bool update_shard;
+public:
+  explicit MonCmdSetConfigOnFinish(
+    OSD *o,
+    CephContext *cct,
+    const std::string &k,
+    const std::string &v,
+    const bool s)
+      : osd(o), cct(cct), key(k), val(v), update_shard(s) {}
+  void finish(int r) override {
+    if (r != 0) {
+      // Fallback to setting the config within the in-memory "values" map.
+      cct->_conf.set_val_default(key, val);
+    }
+
+    // If requested, apply this option on the
+    // active scheduler of each op shard.
+    if (update_shard) {
+      for (auto& shard : osd->shards) {
+        shard->update_scheduler_config();
+      }
+    }
+  }
+};
+
+void OSD::mon_cmd_set_config(const std::string &key, const std::string &val)
 {
   std::string cmd =
     "{"
@@ -9879,21 +9909,20 @@ int OSD::mon_cmd_set_config(const std::string &key, const std::string &val)
       "\"name\": \"" + key + "\", "
       "\"value\": \"" + val + "\""
     "}";
-
   vector<std::string> vcmd{cmd};
-  bufferlist inbl;
-  std::string outs;
-  C_SaferCond cond;
-  monc->start_mon_command(vcmd, inbl, nullptr, &outs, &cond);
-  int r = cond.wait();
-  if (r < 0) {
-    derr << __func__ << " Failed to set config key " << key
-         << " err: " << cpp_strerror(r)
-         << " errstr: " << outs << dendl;
-    return r;
-  }
 
-  return 0;
+  // List of config options to be distributed across each op shard.
+  // Currently limited to a couple of mClock options.
+  static const std::vector<std::string> shard_option =
+    { "osd_mclock_max_capacity_iops_hdd", "osd_mclock_max_capacity_iops_ssd" };
+  const bool update_shard = std::find(shard_option.begin(),
+                                      shard_option.end(),
+                                      key) != shard_option.end();
+
+  auto on_finish = new MonCmdSetConfigOnFinish(this, cct, key,
+                                               val, update_shard);
+  dout(10) << __func__ << " Set " << key << " = " << val << dendl;
+  monc->start_mon_command(vcmd, {}, nullptr, nullptr, on_finish);
 }
 
 bool OSD::unsupported_objstore_for_qos()
@@ -10885,17 +10914,19 @@ void OSD::ShardedOpWQ::stop_for_fast_shutdown()
 
 namespace ceph::osd_cmds {
 
-int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
-	 std::ostream& os)
+int heap(CephContext& cct,
+         const cmdmap_t& cmdmap,
+         std::ostream& outos,
+         std::ostream& erros)
 {
   if (!ceph_using_tcmalloc()) {
-        os << "could not issue heap profiler command -- not using tcmalloc!";
+        erros << "could not issue heap profiler command -- not using tcmalloc!";
         return -EOPNOTSUPP;
   }
 
   string cmd;
   if (!cmd_getval(cmdmap, "heapcmd", cmd)) {
-        os << "unable to get value for command \"" << cmd << "\"";
+        erros << "unable to get value for command \"" << cmd << "\"";
        return -EINVAL;
   }
 
@@ -10907,7 +10938,7 @@ int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
     cmd_vec.push_back(val);
   }
 
-  ceph_heap_profiler_handle_command(cmd_vec, os);
+  ceph_heap_profiler_handle_command(cmd_vec, outos);
 
   return 0;
 }

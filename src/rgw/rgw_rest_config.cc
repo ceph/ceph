@@ -32,34 +32,6 @@
 
 using namespace std;
 
-void RGWOp_ZoneGroupMap_Get::execute(optional_yield y) {
-  op_ret = zonegroup_map.read(this, g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 5) << "failed to read zone_group map" << dendl;
-  }
-}
-
-void RGWOp_ZoneGroupMap_Get::send_response() {
-  set_req_state_err(s, op_ret);
-  dump_errno(s);
-  end_header(s);
-
-  if (op_ret < 0)
-    return;
-
-  if (old_format) {
-    RGWRegionMap region_map;
-    region_map.regions = zonegroup_map.zonegroups;
-    region_map.master_region = zonegroup_map.master_zonegroup;
-    region_map.quota.bucket_quota = zonegroup_map.quota.bucket_quota;
-    region_map.quota.user_quota = zonegroup_map.quota.user_quota;
-    encode_json("region-map", region_map, s->formatter);
-  } else {
-    encode_json("zonegroup-map", zonegroup_map, s->formatter);
-  }
-  flusher.flush();
-}
-
 void RGWOp_ZoneConfig_Get::send_response() {
   const RGWZoneParams& zone_params = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone_params();
 
@@ -78,11 +50,8 @@ RGWOp* RGWHandler_Config::op_get() {
   bool exists;
   string type = s->info.args.get("type", &exists);
 
-  if (type.compare("zonegroup-map") == 0) {
-    return new RGWOp_ZoneGroupMap_Get(false);
-  } else if (type.compare("zone") == 0) {
+  if (type.compare("zone") == 0) {
     return new RGWOp_ZoneConfig_Get();
-  } else {
-    return new RGWOp_ZoneGroupMap_Get(true);
   }
+  return nullptr;
 }

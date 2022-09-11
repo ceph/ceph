@@ -47,6 +47,7 @@ class DPDKServerSocketImpl : public ServerSocketImpl {
   virtual int fd() const override {
     return _listener.fd();
   }
+  virtual void set_priority(int sd, int prio, int domain) override {}
 };
 
 // NativeConnectedSocketImpl

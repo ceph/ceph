@@ -147,8 +147,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            service_type: 'iscsi',
-            unmanaged: false
+            service_type: 'iscsi'
           })
         ]
       ],
@@ -180,8 +179,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            service_type: 'ingress',
-            unmanaged: false
+            service_type: 'ingress'
           })
         ]
       ],
@@ -189,8 +187,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            service_type: 'ingress',
-            unmanaged: false
+            service_type: 'ingress'
           })
         ]
       ],
@@ -199,8 +196,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         [
           CdValidators.number(false),
           CdValidators.requiredIf({
-            service_type: 'ingress',
-            unmanaged: false
+            service_type: 'ingress'
           })
         ]
       ],
@@ -209,8 +205,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         [
           CdValidators.number(false),
           CdValidators.requiredIf({
-            service_type: 'ingress',
-            unmanaged: false
+            service_type: 'ingress'
           })
         ]
       ],
@@ -485,7 +480,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   getServiceIds(selectedServiceType: string) {
     this.serviceIds = this.serviceList
-      .filter((service) => service['service_type'] === selectedServiceType)
+      ?.filter((service) => service['service_type'] === selectedServiceType)
       .map((service) => service['service_id']);
   }
 
@@ -564,6 +559,47 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       serviceName = `${serviceType}.${serviceId}`;
       serviceSpec['service_id'] = serviceId;
     }
+
+    // These services has some fields to be
+    // filled out even if unmanaged is true
+    switch (serviceType) {
+      case 'ingress':
+        serviceSpec['backend_service'] = values['backend_service'];
+        serviceSpec['service_id'] = values['backend_service'];
+        if (_.isNumber(values['frontend_port']) && values['frontend_port'] > 0) {
+          serviceSpec['frontend_port'] = values['frontend_port'];
+        }
+        if (_.isString(values['virtual_ip']) && !_.isEmpty(values['virtual_ip'])) {
+          serviceSpec['virtual_ip'] = values['virtual_ip'].trim();
+        }
+        if (_.isNumber(values['monitor_port']) && values['monitor_port'] > 0) {
+          serviceSpec['monitor_port'] = values['monitor_port'];
+        }
+        break;
+
+      case 'iscsi':
+        serviceSpec['pool'] = values['pool'];
+        break;
+
+      case 'snmp-gateway':
+        serviceSpec['credentials'] = {};
+        serviceSpec['snmp_version'] = values['snmp_version'];
+        serviceSpec['snmp_destination'] = values['snmp_destination'];
+        if (values['snmp_version'] === 'V3') {
+          serviceSpec['engine_id'] = values['engine_id'];
+          serviceSpec['auth_protocol'] = values['auth_protocol'];
+          serviceSpec['credentials']['snmp_v3_auth_username'] = values['snmp_v3_auth_username'];
+          serviceSpec['credentials']['snmp_v3_auth_password'] = values['snmp_v3_auth_password'];
+          if (values['privacy_protocol'] !== null) {
+            serviceSpec['privacy_protocol'] = values['privacy_protocol'];
+            serviceSpec['credentials']['snmp_v3_priv_password'] = values['snmp_v3_priv_password'];
+          }
+        } else {
+          serviceSpec['credentials']['snmp_community'] = values['snmp_community'];
+        }
+        break;
+    }
+
     if (!values['unmanaged']) {
       switch (values['placement']) {
         case 'hosts':
@@ -589,7 +625,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           break;
         case 'iscsi':
-          serviceSpec['pool'] = values['pool'];
           if (_.isString(values['trusted_ip_list']) && !_.isEmpty(values['trusted_ip_list'])) {
             serviceSpec['trusted_ip_list'] = values['trusted_ip_list'].trim();
           }
@@ -605,40 +640,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           break;
         case 'ingress':
-          serviceSpec['backend_service'] = values['backend_service'];
-          serviceSpec['service_id'] = values['backend_service'];
-          if (_.isString(values['virtual_ip']) && !_.isEmpty(values['virtual_ip'])) {
-            serviceSpec['virtual_ip'] = values['virtual_ip'].trim();
-          }
-          if (_.isNumber(values['frontend_port']) && values['frontend_port'] > 0) {
-            serviceSpec['frontend_port'] = values['frontend_port'];
-          }
-          if (_.isNumber(values['monitor_port']) && values['monitor_port'] > 0) {
-            serviceSpec['monitor_port'] = values['monitor_port'];
-          }
           serviceSpec['ssl'] = values['ssl'];
           if (values['ssl']) {
             serviceSpec['ssl_cert'] = values['ssl_cert']?.trim();
             serviceSpec['ssl_key'] = values['ssl_key']?.trim();
           }
           serviceSpec['virtual_interface_networks'] = values['virtual_interface_networks'];
-          break;
-        case 'snmp-gateway':
-          serviceSpec['credentials'] = {};
-          serviceSpec['snmp_version'] = values['snmp_version'];
-          serviceSpec['snmp_destination'] = values['snmp_destination'];
-          if (values['snmp_version'] === 'V3') {
-            serviceSpec['engine_id'] = values['engine_id'];
-            serviceSpec['auth_protocol'] = values['auth_protocol'];
-            serviceSpec['credentials']['snmp_v3_auth_username'] = values['snmp_v3_auth_username'];
-            serviceSpec['credentials']['snmp_v3_auth_password'] = values['snmp_v3_auth_password'];
-            if (values['privacy_protocol'] !== null) {
-              serviceSpec['privacy_protocol'] = values['privacy_protocol'];
-              serviceSpec['credentials']['snmp_v3_priv_password'] = values['snmp_v3_priv_password'];
-            }
-          } else {
-            serviceSpec['credentials']['snmp_community'] = values['snmp_community'];
-          }
           break;
       }
     }

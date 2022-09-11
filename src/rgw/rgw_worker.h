@@ -1,5 +1,3 @@
-
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -23,8 +21,6 @@
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
-
-#define dout_subsys ceph_subsys_rgw
 
 class RGWRados;
 
@@ -54,7 +50,7 @@ class RGWRadosThread {
     }
 
   CephContext *get_cct() const { return cct; }
-  unsigned get_subsys() const { return dout_subsys; }
+  unsigned get_subsys() const { return ceph_subsys_rgw; }
   std::ostream& gen_prefix(std::ostream& out) const { return out << "rgw rados thread: "; }
 
   };

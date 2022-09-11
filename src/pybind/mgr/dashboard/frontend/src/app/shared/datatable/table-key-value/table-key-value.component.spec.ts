@@ -12,6 +12,7 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { TablePaginationComponent } from '../table-pagination/table-pagination.component';
 import { TableComponent } from '../table/table.component';
 import { TableKeyValueComponent } from './table-key-value.component';
 
@@ -20,7 +21,7 @@ describe('TableKeyValueComponent', () => {
   let fixture: ComponentFixture<TableKeyValueComponent>;
 
   configureTestBed({
-    declarations: [TableComponent, TableKeyValueComponent],
+    declarations: [TableComponent, TableKeyValueComponent, TablePaginationComponent],
     imports: [
       FormsModule,
       NgxDatatableModule,

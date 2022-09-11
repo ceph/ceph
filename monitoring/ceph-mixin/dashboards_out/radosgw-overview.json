@@ -99,24 +99,24 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n  rate(ceph_rgw_get_initial_lat_count{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"}\n",
+               "expr": "label_replace(\n  rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_get_initial_lat_count{job=~\"$job\"}[$__rate_interval]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
-               "legendFormat": "GET AVG",
+               "legendFormat": "GET {{rgw_host}}",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n  rate(ceph_rgw_put_initial_lat_count{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"}\n",
+               "expr": "label_replace(\n  rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_put_initial_lat_count{job=~\"$job\"}[$__rate_interval]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
-               "legendFormat": "PUT AVG",
+               "legendFormat": "PUT {{rgw_host}}",
                "refId": "B"
             }
          ],
          "thresholds": [ ],
          "timeFrom": null,
          "timeShift": null,
-         "title": "Average GET/PUT Latencies",
+         "title": "Average GET/PUT Latencies by RGW Instance",
          "tooltip": {
             "shared": true,
             "sort": 0,

@@ -14,9 +14,11 @@ cmake_policy(SET CMP0065 NEW)
 cmake_policy(SET CMP0074 NEW)
 cmake_policy(SET CMP0075 NEW)
 cmake_policy(SET CMP0093 NEW)
-if(POLICY CMP0127)
-  cmake_policy(SET CMP0127 NEW)
-endif()
+foreach(policy CMP0127 CMP0135)
+  if(POLICY ${policy})
+    cmake_policy(SET ${policy} NEW)
+  endif()
+endforeach()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -631,6 +633,9 @@ if(WITH_RADOSGW AND WITH_RADOSGW_LUA_PACKAGES)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
+
+CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
+  "NOT WITH_SYSTEM_BOOST" OFF)
 # require minimally the bundled version
 if(WITH_SYSTEM_BOOST)
   if(ENABLE_SHARED)
@@ -719,9 +724,6 @@ endif()
 
 option(WITH_GRAFANA "install grafana dashboards" OFF)
 add_subdirectory(monitoring/ceph-mixin)
-
-CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
-  "NOT WITH_SYSTEM_BOOST" OFF)
 
 include(CTags)
 option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")

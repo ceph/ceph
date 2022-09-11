@@ -94,8 +94,12 @@ public:
 
   void set_primary_device(Device *device);
 
-  void set_extent_callback(AsyncCleaner::ExtentCallbackInterface *cb) {
+  void set_extent_callback(ExtentCallbackInterface *cb) {
     cleaner->set_extent_callback(cb);
+  }
+
+  journal_type_t get_journal_type() const {
+    return cleaner->get_journal_type();
   }
 
   seastore_off_t get_block_size() const {

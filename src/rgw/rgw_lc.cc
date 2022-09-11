@@ -142,7 +142,8 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
     transition_action action;
     action.days = elem.second.get_days();
     action.date = ceph::from_iso_8601(elem.second.get_date());
-    action.storage_class = elem.first;
+    action.storage_class
+      = rgw_placement_rule::get_canonical_storage_class(elem.first);
     op.noncur_transitions.emplace(elem.first, std::move(action));
   }
   std::string prefix;

@@ -39,6 +39,13 @@
 #include "rgw_service.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
+#include "rgw_rest_admin.h"
+#include "rgw_rest_bucket.h"
+#include "rgw_rest_metadata.h"
+#include "rgw_rest_log.h"
+#include "rgw_rest_config.h"
+#include "rgw_rest_ratelimit.h"
+#include "rgw_rest_realm.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
@@ -1232,6 +1239,11 @@ int RadosStore::get_zonegroup(const std::string& id,
   return 0;
 }
 
+int RadosStore::list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids)
+{
+  return svc()->zone->list_zones(dpp, zone_ids);
+}
+
 int RadosStore::cluster_stat(RGWClusterStat& stats)
 {
   rados_cluster_stat_t rados_stats;
@@ -1413,6 +1425,18 @@ void RadosStore::finalize(void)
 {
   if (rados)
     rados->finalize();
+}
+
+void RadosStore::register_admin_apis(RGWRESTMgr* mgr)
+{
+  mgr->register_resource("bucket", new RGWRESTMgr_Bucket);
+  /*Registering resource for /admin/metadata */
+  mgr->register_resource("metadata", new RGWRESTMgr_Metadata);
+  mgr->register_resource("log", new RGWRESTMgr_Log);
+  /* XXX These may become global when cbodley is done with his zone work */
+  mgr->register_resource("config", new RGWRESTMgr_Config);
+  mgr->register_resource("realm", new RGWRESTMgr_Realm);
+  mgr->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
 }
 
 std::unique_ptr<LuaManager> RadosStore::get_lua_manager()
@@ -3019,6 +3043,15 @@ int RadosZoneGroup::get_zone_by_name(const std::string& name, std::unique_ptr<Zo
   return 0;
 }
 
+int RadosZoneGroup::list_zones(std::list<std::string>& zone_ids)
+{
+  for (const auto& entry : group.zones)
+    {
+      zone_ids.push_back(entry.second.id);
+    }
+  return 0;
+}
+
 std::unique_ptr<Zone> RadosZone::clone()
 {
   if (local_zone)
@@ -3091,6 +3124,11 @@ const std::string_view RadosZone::get_tier_type()
     return store->svc()->zone->get_zone().tier_type;
 
   return rgw_zone.id;
+}
+
+RGWBucketSyncPolicyHandlerRef RadosZone::get_sync_policy_handler()
+{
+  return store->svc()->zone->get_sync_policy_handler(get_id());
 }
 
 RadosLuaManager::RadosLuaManager(RadosStore* _s) : 

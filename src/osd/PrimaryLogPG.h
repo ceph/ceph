@@ -442,9 +442,6 @@ public:
     release_object_locks(manager);
   }
 
-  bool pg_is_repair() override {
-    return is_repair();
-  }
   void inc_osd_stat_repaired() override {
     osd->inc_osd_stat_repaired();
   }

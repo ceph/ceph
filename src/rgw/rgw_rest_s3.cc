@@ -614,8 +614,8 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
     std::string key = "HTTP_";
     key.append(*k);
     boost::replace_all(key, "-", "_");
+    ldpp_dout(this, 10) << "after splitting cache kv key: " << key  << " " << *v << dendl;
     rgw_env->set(std::move(key), std::string(*v));
-    ldpp_dout(this, 10) << "after splitting cache kv key: " << key  << " " << rgw_env->get(key.c_str())  << dendl;
   }
   ret = RGWOp::verify_requester(auth_registry, y);
   if(!ret && backup_range) {
@@ -3493,7 +3493,7 @@ void RGWCopyObj_ObjStore_S3::send_response()
   if (op_ret == 0) {
     dump_time(s, "LastModified", mtime);
     if (!etag.empty()) {
-      s->formatter->dump_string("ETag", std::move(etag));
+      s->formatter->dump_format("ETag", "\"%s\"",etag.c_str());
     }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);

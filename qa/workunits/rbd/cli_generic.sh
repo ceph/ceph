@@ -1413,6 +1413,52 @@ test_perf_image_iostat() {
     ceph osd pool rm rbd1 rbd1 --yes-i-really-really-mean-it
 }
 
+test_mirror_pool_peer_bootstrap_create() {
+    echo "testing mirror pool peer bootstrap create..."
+    remove_images
+
+    ceph osd pool create rbd1 8
+    rbd pool init rbd1
+    rbd mirror pool enable rbd1 image
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+    rbd mirror pool enable rbd2 pool
+
+    readarray -t MON_ADDRS < <(ceph mon dump |
+        sed -n 's/^[0-9]: \(.*\) mon\.[a-z]$/\1/p')
+
+    # check that all monitors make it to the token even if only one
+    # valid monitor is specified
+    BAD_MON_ADDR="1.2.3.4:6789"
+    MON_HOST="${MON_ADDRS[0]},$BAD_MON_ADDR"
+    TOKEN="$(rbd mirror pool peer bootstrap create \
+        --mon-host "$MON_HOST" rbd1 | base64 -d)"
+    TOKEN_FSID="$(jq -r '.fsid' <<< "$TOKEN")"
+    TOKEN_CLIENT_ID="$(jq -r '.client_id' <<< "$TOKEN")"
+    TOKEN_KEY="$(jq -r '.key' <<< "$TOKEN")"
+    TOKEN_MON_HOST="$(jq -r '.mon_host' <<< "$TOKEN")"
+
+    test "$TOKEN_FSID" = "$(ceph fsid)"
+    test "$TOKEN_KEY" = "$(ceph auth get-key client.$TOKEN_CLIENT_ID)"
+    for addr in "${MON_ADDRS[@]}"; do
+        fgrep "$addr" <<< "$TOKEN_MON_HOST"
+    done
+    expect_fail fgrep "$BAD_MON_ADDR" <<< "$TOKEN_MON_HOST"
+
+    # check that the token does not change, including across pools
+    test "$(rbd mirror pool peer bootstrap create \
+        --mon-host "$MON_HOST" rbd1 | base64 -d)" = "$TOKEN"
+    test "$(rbd mirror pool peer bootstrap create \
+        rbd1 | base64 -d)" = "$TOKEN"
+    test "$(rbd mirror pool peer bootstrap create \
+        --mon-host "$MON_HOST" rbd2 | base64 -d)" = "$TOKEN"
+    test "$(rbd mirror pool peer bootstrap create \
+        rbd2 | base64 -d)" = "$TOKEN"
+
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
+    ceph osd pool rm rbd1 rbd1 --yes-i-really-really-mean-it
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -1436,5 +1482,6 @@ test_namespace
 test_trash_purge_schedule
 test_mirror_snapshot_schedule
 test_perf_image_iostat
+test_mirror_pool_peer_bootstrap_create
 
 echo OK

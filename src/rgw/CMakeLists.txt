@@ -121,12 +121,15 @@ set(librgw_common_srcs
   rgw_rados.cc
   rgw_resolve.cc
   rgw_rest.cc
+  rgw_rest_bucket.cc
   rgw_rest_client.cc
+  rgw_rest_config.cc
   rgw_rest_conn.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
   rgw_rest_pubsub.cc
   rgw_rest_pubsub_common.cc
+  rgw_rest_ratelimit.cc
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
@@ -162,8 +165,11 @@ set(librgw_common_srcs
   rgw_datalog.cc
   rgw_datalog_notify.cc
   cls_fifo_legacy.cc
+  rgw_log.cc
+  rgw_lua_request.cc
   rgw_lua_utils.cc
   rgw_lua.cc
+  rgw_lua_data_filter.cc
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc)
@@ -275,23 +281,15 @@ set(rgw_a_srcs
   rgw_frontend.cc
   rgw_http_client_curl.cc
   rgw_loadgen.cc
-  rgw_log.cc
-  rgw_lua_request.cc
   rgw_period_pusher.cc
   rgw_realm_reloader.cc
   rgw_realm_watcher.cc
   rgw_os_lib.cc
   rgw_process.cc
-  rgw_rest_bucket.cc
-  rgw_rest_config.cc
-  rgw_rest_log.cc
-  rgw_rest_metadata.cc
-  rgw_rest_realm.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
   rgw_rest_info.cc
   rgw_rest_user.cc
-  rgw_rest_ratelimit.cc
   rgw_swift_auth.cc
   rgw_usage.cc
   rgw_opa.cc

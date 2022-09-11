@@ -15,8 +15,9 @@
 #include "include/byteorder.h"
 #include "include/denc.h"
 #include "include/buffer.h"
-#include "include/uuid.h"
+#include "include/intarith.h"
 #include "include/interval_set.h"
+#include "include/uuid.h"
 
 namespace crimson::os::seastore {
 
@@ -420,6 +421,8 @@ using seastore_off_t = int32_t;
 using u_seastore_off_t = uint32_t;
 constexpr seastore_off_t MAX_SEG_OFF =
   std::numeric_limits<seastore_off_t>::max();
+constexpr seastore_off_t MIN_SEG_OFF =
+  std::numeric_limits<seastore_off_t>::min();
 constexpr seastore_off_t NULL_SEG_OFF = MAX_SEG_OFF;
 constexpr auto SEGMENT_OFF_BITS = std::numeric_limits<u_seastore_off_t>::digits;
 
@@ -497,6 +500,10 @@ public:
     device_id_t device,
     seastore_off_t offset) {
     return paddr_t(device, offset);
+  }
+
+  void swap(paddr_t &other) {
+    std::swap(internal_paddr, other.internal_paddr);
   }
 
   device_id_t get_device_id() const {
@@ -863,7 +870,13 @@ std::ostream& operator<<(std::ostream& out, device_type_t t);
 bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
-/* Monotonically increasing identifier for the location of a
+enum class journal_type_t {
+  SEGMENTED,
+  CIRCULAR
+};
+
+/**
+ * Monotonically increasing identifier for the location of a
  * journal_record.
  */
 // JOURNAL_SEQ_NULL == JOURNAL_SEQ_MAX == journal_seq_t{}
@@ -871,9 +884,23 @@ struct journal_seq_t {
   segment_seq_t segment_seq = NULL_SEG_SEQ;
   paddr_t offset = P_ADDR_NULL;
 
-  journal_seq_t add_offset(seastore_off_t o) const {
-    return {segment_seq, offset.add_offset(o)};
+  void swap(journal_seq_t &other) {
+    std::swap(segment_seq, other.segment_seq);
+    std::swap(offset, other.offset);
   }
+
+  // produces a pseudo journal_seq_t relative to this by offset
+  journal_seq_t add_offset(
+      journal_type_t type,
+      seastore_off_t off,
+      seastore_off_t roll_start,
+      seastore_off_t roll_size) const;
+
+  seastore_off_t relative_to(
+      journal_type_t type,
+      const journal_seq_t& r,
+      seastore_off_t roll_start,
+      seastore_off_t roll_size) const;
 
   DENC(journal_seq_t, v, p) {
     DENC_START(1, 1, p);
@@ -1917,7 +1944,9 @@ struct write_result_t {
   seastore_off_t length;
 
   journal_seq_t get_end_seq() const {
-    return start_seq.add_offset(length);
+    return journal_seq_t{
+      start_seq.segment_seq,
+      start_seq.offset.add_offset(length)};
   }
 };
 std::ostream& operator<<(std::ostream&, const write_result_t&);

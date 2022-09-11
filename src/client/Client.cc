@@ -4589,7 +4589,10 @@ public:
   explicit C_Client_Remount(Client *c) : client(c) {}
   void finish(int r) override {
     ceph_assert(r == 0);
-    client->_do_remount(true);
+    auto result = client->_do_remount(true);
+    if (result.second) {
+      ceph_abort();
+    }
   }
 };
 
@@ -6669,6 +6672,17 @@ void Client::_unmount(bool abort)
   }
 
   mref_writer.update_state(CLIENT_UNMOUNTED);
+
+  /*
+   * Stop the remount_queue before clearing the mountpoint memory
+   * to avoid possible use-after-free bug.
+   */
+  if (remount_cb) {
+    ldout(cct, 10) << "unmount stopping remount finisher" << dendl;
+    remount_finisher.wait_for_empty();
+    remount_finisher.stop();
+    remount_cb = nullptr;
+  }
 
   ldout(cct, 2) << "unmounted." << dendl;
 }
@@ -11224,7 +11238,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   // quota but we can see a parent of it that does have a quota, we'll
   // respect that one instead.
   ceph_assert(root != nullptr);
-  InodeRef quota_root = root->quota.is_enable() ? root : get_quota_root(root.get(), perms);
+  InodeRef quota_root = root->quota.is_enabled(QUOTA_MAX_BYTES) ? root : get_quota_root(root.get(), perms, QUOTA_MAX_BYTES);
 
   // get_quota_root should always give us something if client quotas are
   // enabled
@@ -12848,7 +12862,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   int ret = _do_setxattr(in, name, value, size, flags, perms);
   if (ret >= 0 && check_realm) {
     // check if snaprealm was created for quota inode
-    if (in->quota.is_enable() &&
+    if (in->quota.is_enabled() &&
 	!(in->snaprealm && in->snaprealm->ino == in->ino))
       ret = -CEPHFS_EOPNOTSUPP;
   }
@@ -13077,7 +13091,7 @@ int Client::_vxattrcb_fscrypt_file_set(Inode *in, const void *val, size_t size,
 
 bool Client::_vxattrcb_quota_exists(Inode *in)
 {
-  return in->quota.is_enable() &&
+  return in->quota.is_enabled() &&
    (in->snapid != CEPH_NOSNAP ||
     (in->snaprealm && in->snaprealm->ino == in->ino));
 }
@@ -14086,9 +14100,9 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   }
   if (cct->_conf.get_val<bool>("client_quota") && fromdir != todir) {
     Inode *fromdir_root =
-      fromdir->quota.is_enable() ? fromdir : get_quota_root(fromdir, perm);
+      fromdir->quota.is_enabled(QUOTA_MAX_FILES) ? fromdir : get_quota_root(fromdir, perm, QUOTA_MAX_FILES);
     Inode *todir_root =
-      todir->quota.is_enable() ? todir : get_quota_root(todir, perm);
+      todir->quota.is_enabled(QUOTA_MAX_FILES) ? todir : get_quota_root(todir, perm, QUOTA_MAX_FILES);
     if (fromdir_root != todir_root) {
       return -CEPHFS_EXDEV;
     }
@@ -15471,7 +15485,7 @@ bool Client::ms_handle_refused(Connection *con)
   return false;
 }
 
-Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
+Inode *Client::get_quota_root(Inode *in, const UserPerm& perms, quota_max_t type)
 {
   Inode *quota_in = root_ancestor;
   SnapRealm *realm = in->snaprealm;
@@ -15486,7 +15500,7 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
       if (p == inode_map.end())
 	break;
 
-      if (p->second->quota.is_enable()) {
+      if (p->second->quota.is_enabled(type)) {
 	quota_in = p->second;
 	break;
       }

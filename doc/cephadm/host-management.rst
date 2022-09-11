@@ -267,7 +267,7 @@ Then apply the tuning profile with::
 This profile will then be written to ``/etc/sysctl.d/`` on each host matching the
 given placement and `sysctl --system` will be run on the host.
 
-.. note:: 
+.. note::
 
   The exact filename the profile will be written to is within ``/etc/sysctl.d/`` is
   ``<profile-name>-cephadm-tuned-profile.conf`` where <profile-name>
@@ -280,6 +280,11 @@ given placement and `sysctl --system` will be run on the host.
 
   These settings are applied only at the host level, and are not specific
   to any certain daemon or container
+
+.. note::
+
+  Applying tuned profiles is idempotent when the ``--no-overwrite`` option is passed.
+  In this case existing profiles with the same name are not overwritten.
 
 
 Viewing Profiles
@@ -325,7 +330,8 @@ To remove a setting from an existing profile::
 
   Modifying the placement will require re-applying a profile with the same name. Keep
   in mind that profiles are tracked by their name, so whenever a profile with the same
-  name as an existing profile is applied, it will overwrite the old profile.
+  name as an existing profile is applied, it will overwrite the old profile unless
+  --no-overwrite is passed.
 
 SSH Configuration
 =================

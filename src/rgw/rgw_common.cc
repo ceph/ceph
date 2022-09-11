@@ -36,7 +36,8 @@
 #include <sstream>
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
+
+static constexpr auto dout_subsys = ceph_subsys_rgw;
 
 using rgw::ARN;
 using rgw::IAM::Effect;

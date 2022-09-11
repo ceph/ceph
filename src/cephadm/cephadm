@@ -2637,6 +2637,9 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                     port = meta['ports'][0]
             r += [f'--web.listen-address={ip}:{port}']
             if daemon_type == 'prometheus':
+                config = get_parm(ctx.config_json)
+                retention_time = config.get('retention_time', '15d')
+                r += [f'--storage.tsdb.retention.time={retention_time}']
                 scheme = 'http'
                 host = get_fqdn()
                 r += [f'--web.external-url={scheme}://{host}:{port}']
@@ -5528,6 +5531,8 @@ def save_cluster_config(ctx: CephadmContext, uid: int, gid: int, fsid: str) -> N
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
 
+    ctx.error_code = 0
+
     if not ctx.output_config:
         ctx.output_config = os.path.join(ctx.output_dir, CEPH_CONF)
     if not ctx.output_keyring:
@@ -5746,6 +5751,7 @@ def command_bootstrap(ctx):
             out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
             logger.info(out)
         except Exception:
+            ctx.error_code = -errno.EINVAL
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
 
     save_cluster_config(ctx, uid, gid, fsid)
@@ -5771,7 +5777,7 @@ def command_bootstrap(ctx):
                 'For more information see:\n\n'
                 '\thttps://docs.ceph.com/en/latest/mgr/telemetry/\n')
     logger.info('Bootstrap complete.')
-    return 0
+    return ctx.error_code
 
 ##################################
 
@@ -8437,12 +8443,15 @@ class HostFacts():
 
     def _get_capacity(self, dev):
         # type: (str) -> int
-        """Determine the size of a given device"""
+        """Determine the size of a given device
+
+        The kernel always bases device size calculations based on a 512 byte
+        sector. For more information see
+        https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/include/linux/types.h?h=v5.15.63#n120
+        """
         size_path = os.path.join('/sys/block', dev, 'size')
         size_blocks = int(read_file([size_path]))
-        blk_path = os.path.join('/sys/block', dev, 'queue', 'logical_block_size')
-        blk_count = int(read_file([blk_path]))
-        return size_blocks * blk_count
+        return size_blocks * 512
 
     def _get_capacity_by_type(self, disk_type='hdd'):
         # type: (str) -> int
