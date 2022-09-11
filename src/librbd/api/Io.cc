@@ -294,7 +294,7 @@ void Io<I>::aio_discard(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
   }
 
   auto req = io::ImageDispatchSpec::create_discard(
-    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, off, len,
+    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
     discard_granularity_bytes, image_ctx.get_data_io_context(), trace);
   req->send();
 }
@@ -326,7 +326,7 @@ void Io<I>::aio_write_same(I &image_ctx, io::AioCompletion *aio_comp,
   }
 
   auto req = io::ImageDispatchSpec::create_write_same(
-    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, off, len,
+    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
     std::move(bl), image_ctx.get_data_io_context(), op_flags, trace);
   req->send();
 }
@@ -409,7 +409,7 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
       bl.append_zero(data_length);
 
       auto req = io::ImageDispatchSpec::create_write_same(
-        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, off, len,
+        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
         std::move(bl), image_ctx.get_data_io_context(), op_flags, trace);
       req->send();
       return;
@@ -465,7 +465,7 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
       write_same_ctx, &image_ctx, io::AIO_TYPE_WRITESAME);
     auto req = io::ImageDispatchSpec::create_write_same(
       image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, write_same_aio_comp,
-      write_same_offset, write_same_length, std::move(bl),
+      {{write_same_offset, write_same_length}}, std::move(bl),
       image_ctx.get_data_io_context(), op_flags, trace);
     req->send();
     return;
@@ -475,7 +475,7 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
   uint32_t discard_granularity_bytes = 0;
 
   auto req = io::ImageDispatchSpec::create_discard(
-    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, off, len,
+    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
     discard_granularity_bytes, image_ctx.get_data_io_context(), trace);
   req->send();
 }

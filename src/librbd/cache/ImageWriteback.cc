@@ -75,8 +75,8 @@ void ImageWriteback<I>::aio_discard(uint64_t offset, uint64_t length,
       on_finish, image_ctx, io::AIO_TYPE_DISCARD);
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_discard(
-    *image_ctx, io::IMAGE_DISPATCH_LAYER_WRITEBACK_CACHE, aio_comp, offset,
-    length, discard_granularity_bytes,
+    *image_ctx, io::IMAGE_DISPATCH_LAYER_WRITEBACK_CACHE, aio_comp,
+    {{offset, length}}, discard_granularity_bytes,
     image_ctx->get_data_io_context(), trace);
   req->send();
 }
@@ -113,8 +113,8 @@ void ImageWriteback<I>::aio_writesame(uint64_t offset, uint64_t length,
       on_finish, image_ctx, io::AIO_TYPE_WRITESAME);
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_write_same(
-    *image_ctx, io::IMAGE_DISPATCH_LAYER_WRITEBACK_CACHE, aio_comp, offset,
-    length, std::move(bl), image_ctx->get_data_io_context(),
+    *image_ctx, io::IMAGE_DISPATCH_LAYER_WRITEBACK_CACHE, aio_comp,
+    {{offset, length}}, std::move(bl), image_ctx->get_data_io_context(),
     fadvise_flags, trace);
   req->send();
 }
