@@ -3225,7 +3225,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
       return r;
   }
 
-  auto index_span = tracing::rgw::tracer.add_span("Update Index", target->get_target()->get_trace());
+  auto index_span = tracing::rgw::tracer.add_span("update_index", target->get_target()->get_trace());
   index_op->set_bilog_trace(index_span->GetContext());
 
   auto& ioctx = ref.pool.ioctx();
