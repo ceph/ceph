@@ -753,7 +753,7 @@ public:
         denc(sbid, p);
       }
       if (include_ref_map) {
-	used_in_blob.encode(p);
+	used_in_blob.encode_new(p, blob);
       }
     }
     void decode(

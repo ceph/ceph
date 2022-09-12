@@ -317,7 +317,7 @@ static inline bool operator!=(const bluestore_extent_ref_map_t& l,
 			      const bluestore_extent_ref_map_t& r) {
   return !(l == r);
 }
-
+struct bluestore_blob_t;
 /// blob_use_tracker: a set of per-alloc unit ref buckets to track blob usage
 struct bluestore_blob_use_tracker_t {
   // N.B.: There is no need to minimize au_size/num_au
@@ -499,6 +499,11 @@ struct bluestore_blob_use_tracker_t {
       }
     }
   }
+
+  void encode_new(ceph::buffer::list::contiguous_appender& p,
+		  const bluestore_blob_t& bblob) const;
+  void decode_new(ceph::buffer::ptr::const_iterator& p,
+		  const bluestore_blob_t& bblob);
 
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bluestore_blob_use_tracker_t*>& o);

@@ -395,6 +395,85 @@ bluestore_blob_use_tracker_t::operator=(const bluestore_blob_use_tracker_t& rhs)
   return *this;
 }
 
+void bluestore_blob_use_tracker_t::encode_new(
+  ceph::buffer::list::contiguous_appender& p,
+  const bluestore_blob_t& bblob) const {
+  denc_varint(au_size, p);
+  if (au_size) {
+    denc_varint(num_au, p);
+    if (!num_au) {
+      denc_varint(total_bytes, p);
+    } else {
+      // only encode present blocks
+      // non-compressed case first
+      ceph_assert(!bblob.is_compressed());
+      // we really expect it to match extent sizes
+      size_t mem_pos = 0;
+      for (auto& i : bblob.get_extents()) {
+	ceph_assert((i.length % au_size) == 0);
+	if (i.is_valid()) {
+	  for (size_t z = 0; z < i.length; z += au_size) {
+	    ceph_assert(bytes_per_au[mem_pos] == au_size);
+	    ++mem_pos;
+	  }
+	} else {
+	  for (size_t z = 0; z < i.length; z += au_size) {
+	    ceph_assert(bytes_per_au[mem_pos] == 0);
+	    ++mem_pos;
+	  }
+	}
+      }
+      ceph_assert(mem_pos == num_au);
+      #if 0
+      for (size_t i = 0; i < num_au; ++i) {
+	denc_varint(bytes_per_au[i], p);
+      }
+      #endif
+    }
+  }
+}
+
+void bluestore_blob_use_tracker_t::decode_new(
+  ceph::buffer::ptr::const_iterator& p,
+  const bluestore_blob_t& bblob) {
+  clear();
+  denc_varint(au_size, p);
+  if (au_size) {
+    uint32_t _num_au;
+    denc_varint(_num_au, p);
+    if (!_num_au) {
+      num_au = 0;
+      denc_varint(total_bytes, p);
+    } else {
+      allocate(_num_au);
+      // non-compressed case first
+      ceph_assert(!bblob.is_compressed());
+      // we really expect it to match extent sizes
+      size_t mem_pos = 0;
+      for (auto& i : bblob.get_extents()) {
+	ceph_assert((i.length % au_size) == 0);
+	if (i.is_valid()) {
+	  for (size_t z = 0; z < i.length; z += au_size) {
+	    bytes_per_au[mem_pos] = au_size;
+	    ++mem_pos;
+	  }
+	} else {
+	  for (size_t z = 0; z < i.length; z += au_size) {
+	    bytes_per_au[mem_pos] = 0;
+	    ++mem_pos;
+	  }
+	}
+      }
+      ceph_assert(mem_pos == num_au);
+#if 0
+      for (size_t i = 0; i < _num_au; ++i) {
+	denc_varint(bytes_per_au[i], p);
+      }
+#endif
+    }
+  }
+}
+
 void bluestore_blob_use_tracker_t::allocate(uint32_t au_count)
 {
   ceph_assert(au_count != 0);

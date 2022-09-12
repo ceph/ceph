@@ -2404,16 +2404,66 @@ void BlueStore::Blob::decode(
   bool include_ref_map,
   Collection *coll)
 {
+  lgeneric_subdout(g_ceph_context, bluestore, 0) << "AA p=" << p.get_offset() << dendl;
   denc(blob, p, struct_v);
+  lgeneric_subdout(g_ceph_context, bluestore, 0) << "BB p=" << p.get_offset() << dendl;
   if (blob.is_shared()) {
     denc(*sbid, p);
   }
+  lgeneric_subdout(g_ceph_context, bluestore, 0) << "CC p=" << p.get_offset() << dendl;
   if (include_ref_map) {
     if (struct_v > 1) {
-      used_in_blob.decode(p);
+      lgeneric_subdout(g_ceph_context, bluestore, 0) << "DD p=" << p.get_offset() << dendl;
+      const char* start = p.get_pos();
+
+      used_in_blob.decode_new(p, blob);
+      const char* end = p.get_pos();
+
+      lgeneric_subdout(g_ceph_context, bluestore, 0)
+	<< "DD " << pretty_binary_string(std::string(start, end - start)) << dendl;
+      // now testing new extent encoding mode
+#if 0
+      {
+	int t_size = (end - start) * 4;
+	//ceph::buffer::ptr t_ptr(t_size);
+	ceph::buffer::list t_bl;
+	//t_bl.append(t_ptr);
+	{
+	  auto app = t_bl.get_contiguous_appender(t_size);
+	  used_in_blob.encode_new(app, blob);
+	}
+	lgeneric_subdout(g_ceph_context, bluestore, 0)
+	  << "XA " << t_bl.length() << " "
+	  << pretty_binary_string(t_bl.to_str()) << dendl;
+	auto par = t_bl.front().begin_deep();
+
+	bluestore_blob_use_tracker_t tt;
+	tt.decode_new(par, blob);
+	lgeneric_subdout(g_ceph_context, bluestore, 0)
+	  << "XB " << used_in_blob.au_size << " " << tt.au_size
+	  << (used_in_blob.au_size != tt.au_size? "ERROR":"") << dendl;
+	lgeneric_subdout(g_ceph_context, bluestore, 0)
+	  << "XC " << used_in_blob.num_au << " " << tt.num_au
+	  << (used_in_blob.num_au != tt.num_au? "ERROR":"") << dendl;
+	if (used_in_blob.num_au == tt.num_au) {
+	  std::stringstream ss;
+	  ss << std::hex;
+	  bool error = false;
+	  for (size_t i = 0; i < used_in_blob.num_au; i++) {
+	    ss << used_in_blob.bytes_per_au[i] << ":" << tt.bytes_per_au[i];
+	    error |= used_in_blob.bytes_per_au[i] != tt.bytes_per_au[i];
+	  }
+	  lgeneric_subdout(g_ceph_context, bluestore, 0)
+	    << "XD " << ss.str()
+	    << (error?"ERROR":"") <<dendl;
+	}
+      }
+#endif
+
     } else {
       used_in_blob.clear();
       bluestore_extent_ref_map_t legacy_ref_map;
+      lgeneric_subdout(g_ceph_context, bluestore, 0) << "EE p=" << p.get_offset() << dendl;
       legacy_ref_map.decode(p);
       if (coll) {
         for (auto r : legacy_ref_map.ref_map) {
@@ -2425,6 +2475,7 @@ void BlueStore::Blob::decode(
       }
     }
   }
+  lgeneric_subdout(g_ceph_context, bluestore, 0) << "FF p=" << p.get_offset() << dendl;
 }
 #endif
 
