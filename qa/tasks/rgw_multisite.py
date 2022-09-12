@@ -10,7 +10,6 @@ from tasks.util.rgw import rgwadmin, wait_for_radosgw
 from tasks.util.rados import create_ec_pool, create_replicated_pool
 from tasks.rgw_multi import multisite
 from tasks.rgw_multi.zone_rados import RadosZone as RadosZone
-from tasks.rgw_multi.zone_ps import PSZone as PSZone
 
 from teuthology.orchestra import run
 from teuthology import misc
@@ -33,7 +32,6 @@ class RGWMultisite(Task):
 
     * 'is_master' is passed on the command line as --master
     * 'is_default' is passed on the command line as --default
-    * 'is_pubsub' is used to create a zone with tier-type=pubsub
     * 'endpoints' given as client names are replaced with actual endpoints
 
             zonegroups:
@@ -79,9 +77,6 @@ class RGWMultisite(Task):
                   - name: test-zone2
                     is_default: true
                     endpoints: [c2.client.0]
-                  - name: test-zone3
-                    is_pubsub: true
-                    endpoints: [c1.client.1]
 
     """
     def __init__(self, ctx, config):
@@ -373,10 +368,7 @@ def create_zonegroup(cluster, gateways, period, config):
 def create_zone(ctx, cluster, gateways, creds, zonegroup, config):
     """ create a zone with the given configuration """
     zone = multisite.Zone(config['name'], zonegroup, cluster)
-    if config.pop('is_pubsub', False):
-        zone = PSZone(config['name'], zonegroup, cluster)
-    else:
-        zone = RadosZone(config['name'], zonegroup, cluster)
+    zone = RadosZone(config['name'], zonegroup, cluster)
 
     # collect Gateways for the zone's endpoints
     endpoints = config.get('endpoints')
