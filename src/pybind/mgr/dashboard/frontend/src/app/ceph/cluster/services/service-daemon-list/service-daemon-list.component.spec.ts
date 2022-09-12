@@ -1,3 +1,4 @@
+import { HttpHeaders } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
@@ -19,6 +20,7 @@ import { ServiceDaemonListComponent } from './service-daemon-list.component';
 describe('ServiceDaemonListComponent', () => {
   let component: ServiceDaemonListComponent;
   let fixture: ComponentFixture<ServiceDaemonListComponent>;
+  let headers: HttpHeaders;
 
   const daemons = [
     {
@@ -151,7 +153,8 @@ describe('ServiceDaemonListComponent', () => {
       of(getDaemonsByServiceName(component.serviceName))
     );
 
-    const paginate_obs = new PaginateObservable<any>(of(services));
+    headers = new HttpHeaders().set('X-Total-Count', '2');
+    const paginate_obs = new PaginateObservable<any>(of({ body: services, headers: headers }));
     spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
     context.pageInfo.offset = 0;
     context.pageInfo.limit = -1;

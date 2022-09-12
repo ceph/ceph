@@ -1,3 +1,4 @@
+import { HttpHeaders } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -21,6 +22,7 @@ import { ServicesComponent } from './services.component';
 describe('ServicesComponent', () => {
   let component: ServicesComponent;
   let fixture: ComponentFixture<ServicesComponent>;
+  let headers: HttpHeaders;
 
   const fakeAuthStorageService = {
     getPermissions: () => {
@@ -67,10 +69,11 @@ describe('ServicesComponent', () => {
     component = fixture.componentInstance;
     const orchService = TestBed.inject(OrchestratorService);
     const cephServiceService = TestBed.inject(CephServiceService);
-    const paginate_obs = new PaginateObservable<any>(of({ available: true }));
-    spyOn(orchService, 'status').and.returnValue(paginate_obs);
-    spyOn(cephServiceService, 'list').and.returnValue(of(services));
-    fixture.detectChanges();
+    spyOn(orchService, 'status').and.returnValue(of({ available: true }));
+    headers = new HttpHeaders().set('X-Total-Count', '2');
+    const paginate_obs = new PaginateObservable<any>(of({ body: services, headers: headers }));
+
+    spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
   });
 
   it('should create', () => {
@@ -89,9 +92,9 @@ describe('ServicesComponent', () => {
   });
 
   it('should return all services', () => {
-    const context = new CdTableFetchDataContext(() => undefined)
+    const context = new CdTableFetchDataContext(() => undefined);
     context.pageInfo.offset = 0;
-    context.pageInfo.limit = -1
+    context.pageInfo.limit = -1;
     component.getServices(context);
     expect(component.services.length).toBe(2);
   });
