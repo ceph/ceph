@@ -701,11 +701,11 @@ protected:
 	uint64_t olh_epoch;
     std::unique_ptr<rgw::sal::Object> head_obj;
     std::string upload_id;
+    int part_num;
     std::string oid; /* object->name() + "." + "upload_id" + "." + part_num */
     std::unique_ptr<rgw::sal::Object> meta_obj;
     DB::Object op_target;
     DB::Object::Write parent_op;
-    int part_num;
     std::string part_num_str;
     uint64_t total_data_size = 0; /* for total data being uploaded */
     bufferlist head_data;
