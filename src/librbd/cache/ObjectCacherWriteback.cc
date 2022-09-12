@@ -169,10 +169,10 @@ bool ObjectCacherWriteback::may_copy_on_write(const object_t& oid,
   uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
   // reverse map this object extent onto the parent
-  vector<pair<uint64_t,uint64_t> > objectx;
-  io::util::extent_to_file(
-          m_ictx, object_no, 0, m_ictx->layout.object_size, objectx);
-  uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
+  auto [parent_extents, _] = io::util::object_to_area_extents(
+      m_ictx, object_no, {{0, m_ictx->layout.object_size}});
+  uint64_t object_overlap = m_ictx->prune_parent_extents(parent_extents,
+                                                         overlap);
   bool may = object_overlap > 0;
   ldout(m_ictx->cct, 10) << "may_copy_on_write " << oid << " " << read_off
                          << "~" << read_len << " = " << may << dendl;
@@ -230,8 +230,6 @@ void ObjectCacherWriteback::overwrite_extent(const object_t& oid, uint64_t off,
                                              uint64_t len,
                                              ceph_tid_t original_journal_tid,
                                              ceph_tid_t new_journal_tid) {
-  typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
-
   ldout(m_ictx->cct, 20) << __func__ << ": " << oid << " "
                          << off << "~" << len << " "
                          << "journal_tid=" << original_journal_tid << ", "
@@ -242,10 +240,9 @@ void ObjectCacherWriteback::overwrite_extent(const object_t& oid, uint64_t off,
   // all IO operations are flushed prior to closing the journal
   ceph_assert(original_journal_tid != 0 && m_ictx->journal != NULL);
 
-  Extents file_extents;
-  io::util::extent_to_file(m_ictx, object_no, off, len, file_extents);
-  for (Extents::iterator it = file_extents.begin();
-       it != file_extents.end(); ++it) {
+  auto [image_extents, _] = io::util::object_to_area_extents(m_ictx, object_no,
+                                                             {{off, len}});
+  for (auto it = image_extents.begin(); it != image_extents.end(); ++it) {
     if (new_journal_tid != 0) {
       // ensure new journal event is safely committed to disk before
       // committing old event

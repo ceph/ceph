@@ -658,11 +658,10 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
       if (parent_overlap == 0) {
         return false;
       }
-      std::vector<std::pair<uint64_t, uint64_t>> extents;
-      util::extent_to_file(m_image_ctx, m_object_no, 0,
-                               m_image_ctx->layout.object_size, extents);
-      auto overlap = m_image_ctx->prune_parent_extents(
-          extents, parent_overlap);
+      auto [parent_extents, _] = util::object_to_area_extents(
+          m_image_ctx, m_object_no, {{0, m_image_ctx->layout.object_size}});
+      auto overlap = m_image_ctx->prune_parent_extents(parent_extents,
+                                                       parent_overlap);
       return overlap > 0;
     });
 }

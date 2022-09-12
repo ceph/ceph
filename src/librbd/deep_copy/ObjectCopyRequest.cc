@@ -72,10 +72,11 @@ void ObjectCopyRequest<I>::send() {
 template <typename I>
 void ObjectCopyRequest<I>::send_list_snaps() {
   // image extents are consistent across src and dst so compute once
-  io::util::extent_to_file(
-          m_dst_image_ctx, m_dst_object_number, 0,
-          m_dst_image_ctx->layout.object_size, m_image_extents);
-  ldout(m_cct, 20) << "image_extents=" << m_image_extents << dendl;
+  std::tie(m_image_extents, m_image_area) = io::util::object_to_area_extents(
+      m_dst_image_ctx, m_dst_object_number,
+      {{0, m_dst_image_ctx->layout.object_size}});
+  ldout(m_cct, 20) << "image_extents=" << m_image_extents
+                   << " area=" << m_image_area << dendl;
 
   auto ctx = create_async_context_callback(
     *m_src_image_ctx, create_context_callback<
