@@ -1249,11 +1249,12 @@ namespace rgw::sal {
                 ptail_placement_rule(_ptail_placement_rule),
                 head_obj(std::move(_head_obj)),
                 upload_id(upload->get_upload_id()),
+                part_num(_part_num),
                 oid(head_obj->get_name() + "." + upload_id +
                     "." + std::to_string(part_num)),
                 meta_obj(((DBMultipartUpload*)upload)->get_meta_obj()),
                 op_target(_store->getDB(), head_obj->get_bucket()->get_info(), head_obj->get_obj(), upload_id),
-                parent_op(&op_target), part_num(_part_num),
+                parent_op(&op_target),
                 part_num_str(_part_num_str) {}
 
   int DBMultipartWriter::prepare(optional_yield y)
@@ -2024,24 +2025,19 @@ extern "C" {
   void *newDBStore(CephContext *cct)
   {
     rgw::sal::DBStore *store = new rgw::sal::DBStore();
-    if (store) {
-      DBStoreManager *dbsm = new DBStoreManager(cct);
+    DBStoreManager *dbsm = new DBStoreManager(cct);
 
-      if (!dbsm ) {
-        delete store; store = nullptr;
-      }
-
-      DB *db = dbsm->getDB();
-      if (!db) {
-        delete dbsm;
-        delete store; store = nullptr;
-      }
-
-      store->setDBStoreManager(dbsm);
-      store->setDB(db);
-      db->set_store((rgw::sal::Store*)store);
-      db->set_context(cct);
+    DB *db = dbsm->getDB();
+    if (!db) {
+      delete dbsm;
+      delete store;
+      return nullptr;
     }
+
+    store->setDBStoreManager(dbsm);
+    store->setDB(db);
+    db->set_store((rgw::sal::Store*)store);
+    db->set_context(cct);
 
     return store;
   }
