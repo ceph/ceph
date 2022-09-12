@@ -90,7 +90,7 @@ TEST(LibCephFS, SnapQuota) {
 
   // ensure subdir noquota xattr under snap
   sprintf(c_temp, "/.snap/test_snap_dir_quota_xattr_snap_%d/test_snap_dir_quota_xattr_%d/subdir_noquota", mypid, mypid);
-  EXPECT_EQ(-ENODATA, ceph_getxattr(cmount, c_temp, "ceph.quota.max_bytes", (void *)gxattrv, xbuflen));
+  EXPECT_EQ(-CEPHFS_ENODATA, ceph_getxattr(cmount, c_temp, "ceph.quota.max_bytes", (void *)gxattrv, xbuflen));
 
   // listxattr() shouldn't return ceph.quota.max_bytes vxattr
   sprintf(c_temp, "/.snap/test_snap_dir_quota_xattr_snap_%d/test_snap_dir_quota_xattr_%d", mypid, mypid);
