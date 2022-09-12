@@ -85,6 +85,7 @@ class Device(object):
         'lsm_data',
     ]
     pretty_report_sys_fields = [
+        'actuators',
         'human_readable_size',
         'model',
         'removable',
