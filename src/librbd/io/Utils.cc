@@ -84,7 +84,7 @@ bool assemble_write_same_extent(
 }
 
 template <typename I>
-void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
+void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* read_extents,
                  librados::snap_t snap_id, const ZTracer::Trace &trace,
                  Context* on_finish) {
 
@@ -93,11 +93,12 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
   std::shared_lock image_locker{image_ctx->image_lock};
 
   // calculate reverse mapping onto the image
-  Extents parent_extents;
-  for (auto& extent: *extents) {
-    extent_to_file(image_ctx, object_no, extent.offset, extent.length,
-                   parent_extents);
+  Extents extents;
+  for (const auto& extent : *read_extents) {
+    extents.emplace_back(extent.offset, extent.length);
   }
+  auto [parent_extents, area] = object_to_area_extents(image_ctx, object_no,
+                                                       extents);
 
   uint64_t parent_overlap = 0;
   uint64_t object_overlap = 0;
@@ -117,19 +118,20 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
   ldout(cct, 20) << dendl;
 
   ceph::bufferlist* parent_read_bl;
-  if (extents->size() > 1) {
+  if (read_extents->size() > 1) {
     auto parent_comp = new ReadResult::C_ObjectReadMergedExtents(
-            cct, extents, on_finish);
+        cct, read_extents, on_finish);
     parent_read_bl = &parent_comp->bl;
     on_finish = parent_comp;
   } else {
-    parent_read_bl = &extents->front().bl;
+    parent_read_bl = &read_extents->front().bl;
   }
 
   auto comp = AioCompletion::create_and_start(on_finish, image_ctx->parent,
                                               AIO_TYPE_READ);
-  ldout(cct, 20) << "completion " << comp << ", extents " << parent_extents
-                 << dendl;
+  ldout(cct, 20) << "completion=" << comp
+                 << " parent_extents=" << parent_extents
+                 << " area=" << area << dendl;
   auto req = io::ImageDispatchSpec::create_read(
     *image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
     std::move(parent_extents), ReadResult{parent_read_bl},
@@ -195,13 +197,15 @@ void file_to_extents(I* image_ctx, uint64_t offset, uint64_t length,
 }
 
 template <typename I>
-void extent_to_file(I* image_ctx, uint64_t object_no, uint64_t offset,
-                    uint64_t length,
-                    std::vector<std::pair<uint64_t, uint64_t> >& extents) {
-  Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
-                          offset, length, extents);
-  // TODO: return area
-  image_ctx->io_image_dispatcher->remap_to_logical(extents);
+std::pair<Extents, ImageArea> object_to_area_extents(
+    I* image_ctx, uint64_t object_no, const Extents& object_extents) {
+  Extents extents;
+  for (auto [off, len] : object_extents) {
+    Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no, off,
+                            len, extents);
+  }
+  auto area = image_ctx->io_image_dispatcher->remap_to_logical(extents);
+  return {std::move(extents), area};
 }
 
 template <typename I>
@@ -245,10 +249,9 @@ template void librbd::io::util::file_to_extents(
         librbd::ImageCtx *image_ctx, uint64_t offset, uint64_t length,
         uint64_t buffer_offset,
         striper::LightweightObjectExtents* object_extents);
-template void librbd::io::util::extent_to_file(
-        librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t offset,
-        uint64_t length,
-        std::vector<std::pair<uint64_t, uint64_t> >& extents);
+template auto librbd::io::util::object_to_area_extents(
+    librbd::ImageCtx* image_ctx, uint64_t object_no, const Extents& extents)
+    -> std::pair<Extents, ImageArea>;
 template uint64_t librbd::io::util::area_to_raw_offset(
     const librbd::ImageCtx& image_ctx, uint64_t offset, ImageArea area);
 template auto librbd::io::util::raw_to_area_offset(

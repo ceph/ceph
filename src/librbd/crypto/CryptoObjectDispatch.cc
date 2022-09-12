@@ -619,9 +619,8 @@ int CryptoObjectDispatch<I>::prepare_copyup(
       auto [aligned_off, aligned_len] = m_crypto->align(
               extent.get_off(), extent.get_len());
 
-      io::Extents image_extents;
-      io::util::extent_to_file(
-              m_image_ctx, object_no, aligned_off, aligned_len, image_extents);
+      auto [image_extents, _] = io::util::object_to_area_extents(
+          m_image_ctx, object_no, {{aligned_off, aligned_len}});
 
       ceph::bufferlist encrypted_bl;
       uint64_t position = 0;

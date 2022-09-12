@@ -89,9 +89,9 @@ struct C_AssembleSnapshotDeltas : public C_AioRequest {
       SnapshotDelta* assembled_image_snapshot_delta) {
     for (auto& [key, object_extents] : object_snapshot_delta) {
       for (auto& object_extent : object_extents) {
-        Extents image_extents;
-        io::util::extent_to_file(image_ctx, object_no, object_extent.get_off(),
-                                 object_extent.get_len(), image_extents);
+        auto [image_extents, _] = io::util::object_to_area_extents(
+            image_ctx, object_no,
+            {{object_extent.get_off(), object_extent.get_len()}});
 
         auto& intervals = (*image_snapshot_delta)[key];
         auto& assembled_intervals = (*assembled_image_snapshot_delta)[key];
