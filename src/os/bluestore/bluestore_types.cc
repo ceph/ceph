@@ -1058,7 +1058,7 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
 
 // bluestore_shared_blob_t
 MEMPOOL_DEFINE_OBJECT_FACTORY(bluestore_shared_blob_t, bluestore_shared_blob_t,
-	          bluestore_cache_other);
+	          bluestore_shared_blob);
 
 void bluestore_shared_blob_t::dump(Formatter *f) const
 {

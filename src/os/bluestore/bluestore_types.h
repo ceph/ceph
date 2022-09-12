@@ -27,7 +27,6 @@
 #include "common/hobject.h"
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
-#include "include/mempool.h"
 #include "include/ceph_hash.h"
 
 namespace ceph {

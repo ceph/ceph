@@ -2164,8 +2164,8 @@ private:
   bool collections_had_errors = false;
   std::map<coll_t,CollectionRef> new_coll_map;
 
-  std::vector<OnodeCacheShard*> onode_cache_shards;
-  std::vector<BufferCacheShard*> buffer_cache_shards;
+  mempool::bluestore_cache_buffer::vector<BufferCacheShard*> buffer_cache_shards;
+  mempool::bluestore_cache_onode::vector<OnodeCacheShard*> onode_cache_shards;
 
   /// protect zombie_osr_set
   ceph::mutex zombie_osr_lock = ceph::make_mutex("BlueStore::zombie_osr_lock");
@@ -2440,13 +2440,13 @@ private:
         }
       }
       virtual uint64_t _get_used_bytes() const {
-        return mempool::bluestore_Buffer::allocated_bytes() +
-          mempool::bluestore_Blob::allocated_bytes() +
-          mempool::bluestore_Extent::allocated_bytes() +
+        return mempool::bluestore_blob::allocated_bytes() +
+          mempool::bluestore_extent::allocated_bytes() +
+          mempool::bluestore_cache_buffer::allocated_bytes() +
           mempool::bluestore_cache_meta::allocated_bytes() +
           mempool::bluestore_cache_other::allocated_bytes() +
 	   mempool::bluestore_cache_onode::allocated_bytes() +
-          mempool::bluestore_SharedBlob::allocated_bytes() +
+          mempool::bluestore_shared_blob::allocated_bytes() +
           mempool::bluestore_inline_bl::allocated_bytes();
       }
       virtual void shift_bins() {

@@ -153,10 +153,10 @@ namespace mempool {
   f(bluestore_cache_onode)	      \
   f(bluestore_cache_meta)	      \
   f(bluestore_cache_other)	      \
-  f(bluestore_Buffer)		      \
-  f(bluestore_Extent)		      \
-  f(bluestore_Blob)		      \
-  f(bluestore_SharedBlob)	      \
+  f(bluestore_cache_buffer)	      \
+  f(bluestore_extent)		      \
+  f(bluestore_blob)		      \
+  f(bluestore_shared_blob)	      \
   f(bluestore_inline_bl)	      \
   f(bluestore_fsck)		      \
   f(bluestore_txc)		      \
