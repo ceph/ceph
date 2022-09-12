@@ -20,7 +20,6 @@
 
 #define dout_context g_ceph_context
 
-extern void signal_shutdown();
 
 namespace rgw::dmclock {
   class Scheduler;

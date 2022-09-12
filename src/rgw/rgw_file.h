@@ -1010,7 +1010,7 @@ namespace rgw {
 	  return -ERR_USER_SUSPENDED;
       } else {
 	/* try external authenticators (ldap for now) */
-	rgw::LDAPHelper* ldh = rgwlib.get_ldh(); /* !nullptr */
+	rgw::LDAPHelper* ldh = g_rgwlib->get_ldh(); /* !nullptr */
 	RGWToken token;
 	/* boost filters and/or string_ref may throw on invalid input */
 	try {
@@ -1314,7 +1314,7 @@ namespace rgw {
     RGWUserInfo* get_user() { return &user->get_info(); }
 
     void update_user(const DoutPrefixProvider *dpp) {
-      (void) rgwlib.get_store()->get_user_by_access_key(dpp, key.id, null_yield, &user);
+      (void) g_rgwlib->get_store()->get_user_by_access_key(dpp, key.id, null_yield, &user);
     }
 
     void close();

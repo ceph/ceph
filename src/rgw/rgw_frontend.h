@@ -6,6 +6,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "common/RWLock.h"
 
@@ -188,12 +189,12 @@ public:
 
 // FrontendPauser implementation for RGWRealmReloader
 class RGWFrontendPauser : public RGWRealmReloader::Pauser {
-  std::list<RGWFrontend*> &frontends;
+  std::vector<RGWFrontend*> &frontends;
   RGWRealmReloader::Pauser* pauser;
   rgw::auth::ImplicitTenants& implicit_tenants;
 
  public:
-  RGWFrontendPauser(std::list<RGWFrontend*> &frontends,
+  RGWFrontendPauser(std::vector<RGWFrontend*> &frontends,
                     rgw::auth::ImplicitTenants& implicit_tenants,
                     RGWRealmReloader::Pauser* pauser = nullptr)
     : frontends(frontends),
