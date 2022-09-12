@@ -18,8 +18,5 @@ overrides:
             endpoints: [c2.client.0]
           - name: test-zone3
             endpoints: [c1.client.1]
-          - name: test-zone4
-            endpoints: [c2.client.1]
-            is_pubsub: true
   rgw-multisite-tests:
-    args: [tests.py, tests_ps.py]
+    args: [tests.py]
