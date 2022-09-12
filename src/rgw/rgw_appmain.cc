@@ -477,7 +477,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     fes.push_back(fe);
   }
 
-  std::string daemon_type = (nfs) ? "rgw-nfs" : "nfs";
+  std::string daemon_type = (nfs) ? "rgw-nfs" : "rgw";
   r = store->register_to_service_map(dpp, daemon_type, service_map_meta);
   if (r < 0) {
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
