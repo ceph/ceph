@@ -28,6 +28,10 @@
 #include "common/Checksummer.h"
 #include "include/mempool.h"
 #include "include/ceph_hash.h"
+//extern CephContext *g_ceph_context;
+#include "global/global_context.h"
+#include "common/debug.h"
+#include "common/pretty_binary.h"
 
 namespace ceph {
   class Formatter;
@@ -130,20 +134,94 @@ struct denc_traits<PExtentVector> {
       p +=  per * size;
     }
   }
-  static void encode(const PExtentVector& v,
+  static void encode_disable(const PExtentVector& v,
 		     ceph::buffer::list::contiguous_appender& p) {
     denc_varint(v.size(), p);
     for (auto& i : v) {
       denc(i, p);
     }
   }
-  static void decode(PExtentVector& v, ceph::buffer::ptr::const_iterator& p) {
+  static void decode_disable(PExtentVector& v, ceph::buffer::ptr::const_iterator& p) {
     unsigned num;
     denc_varint(num, p);
     v.clear();
     v.resize(num);
     for (unsigned i=0; i<num; ++i) {
       denc(v[i], p);
+    }
+  }
+
+  static void encode(const PExtentVector& v,
+			 ceph::buffer::list::contiguous_appender& p) {
+    denc_varint(v.size(), p);
+    //calculate common rank
+    uint64_t common = 0;
+    for (auto& i : v) {
+      if (i.is_valid()) {
+	common |= i.length;
+      }
+      common |= i.length;
+    }
+    ceph_assert(common != 0);
+    uint8_t rank = ctz(common);
+    denc(rank, p);
+    int64_t offset_pred = 0;
+    for (auto& i : v) {
+      //denc(i, p);
+      if (!i.is_valid()) {
+	// encode hole as negative length
+	int64_t length = (-(int64_t)i.length) >> rank;
+	denc_signed_varint(length, p);
+	offset_pred += i.length;
+      } else {
+	int64_t length = i.length >> rank;
+	bool needs_offset_diff = offset_pred != (int64_t)i.offset;
+	if (needs_offset_diff) {
+	  length = (length << 1) | 1;
+	  denc_signed_varint(length, p);
+	  int64_t offset = i.offset - offset_pred;
+	  offset = offset >> rank;
+	  denc_signed_varint(offset, p);
+	} else {
+	  // offset is exactly as expected
+	  length = (length << 1) | 0;
+	  denc_signed_varint(length, p);
+	  // and we do not encode offset
+	}
+	offset_pred = i.offset + i.length;	
+      }
+    }
+  }
+  static void decode(PExtentVector& v, ceph::buffer::ptr::const_iterator& p) {
+    unsigned num;
+    uint64_t offset_prev = 0;
+    denc_varint(num, p);
+    v.clear();
+    v.resize(num);
+    uint8_t rank;
+    denc(rank, p);
+    for (unsigned i=0; i<num; ++i) {
+      int64_t length;
+      denc_signed_varint(length, p);
+      if (length < 0) {
+	v[i].length = - (length << rank);
+	v[i].offset = v[i].INVALID_OFFSET;
+	offset_prev += v[i].length;
+      } else {
+	bool has_offset_diff = length & 1;
+	length = (length >> 1) << rank;
+	v[i].length = length ;
+	if (has_offset_diff) {
+	  int64_t offset;
+	  denc_signed_varint(offset, p);
+	  offset = offset << rank;
+	  offset_prev += offset;
+	  v[i].offset = offset_prev;
+	} else {
+	  v[i].offset = offset_prev;
+	}
+	offset_prev += v[i].length;	
+      }
     }
   }
 };
