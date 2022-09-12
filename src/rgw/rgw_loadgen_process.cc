@@ -11,14 +11,13 @@
 #include "rgw_process.h"
 #include "rgw_loadgen.h"
 #include "rgw_client_io.h"
+#include "rgw_signal.h"
 
 #include <atomic>
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
-
-extern void signal_shutdown();
 
 void RGWLoadGenProcess::checkpoint()
 {
@@ -100,7 +99,7 @@ done:
 
   delete[] objs;
 
-  signal_shutdown();
+  rgw::signal::signal_shutdown();
 } /* RGWLoadGenProcess::run() */
 
 void RGWLoadGenProcess::gen_request(const string& method,

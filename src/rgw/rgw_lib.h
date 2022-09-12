@@ -5,18 +5,13 @@
 #define RGW_LIB_H
 
 #include <mutex>
-#include "include/unordered_map.h"
-#include "global/global_init.h"
 #include "rgw_common.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 #include "rgw_request.h"
-#include "rgw_frontend.h"
-#include "rgw_process.h"
-#include "rgw_rest_s3.h" // RGW_Auth_S3
 #include "rgw_ldap.h"
-#include "services/svc_zone_utils.h"
 #include "include/ceph_assert.h"
+#include "rgw_main.h"
 
 class OpsLogSink;
 
@@ -25,35 +20,32 @@ namespace rgw {
   class RGWLibFrontend;
 
   class RGWLib : public DoutPrefixProvider {
-    RGWFrontendConfig* fec;
-    RGWLibFrontend* fe;
-    OpsLogSink* olog;
-    rgw::LDAPHelper* ldh{nullptr};
-    RGWREST rest; // XXX needed for RGWProcessEnv
-    rgw::sal::Store* store;
     boost::intrusive_ptr<CephContext> cct;
+    AppMain main;
+    RGWLibFrontend* fe;
 
   public:
-    RGWLib() : fec(nullptr), fe(nullptr), olog(nullptr), store(nullptr)
+    RGWLib() : main(this), fe(nullptr)
       {}
     ~RGWLib() {}
 
-    rgw::sal::Store* get_store() { return store; }
+    rgw::sal::Store* get_store() { return main.get_store(); }
 
     RGWLibFrontend* get_fe() { return fe; }
 
-    rgw::LDAPHelper* get_ldh() { return ldh; }
-
+    rgw::LDAPHelper* get_ldh() { return main.get_ldh(); }
     CephContext *get_cct() const override { return cct.get(); }
     unsigned get_subsys() const { return ceph_subsys_rgw; }
     std::ostream& gen_prefix(std::ostream& out) const { return out << "lib rgw: "; }
+
+    void set_fe(RGWLibFrontend* fe);
 
     int init();
     int init(std::vector<const char *>& args);
     int stop();
   };
 
-  extern RGWLib rgwlib;
+  extern RGWLib* g_rgwlib;
 
 /* request interface */
 
@@ -109,14 +101,12 @@ namespace rgw {
 
   }; /* RGWLibIO */
 
-/* XXX */
   class RGWRESTMgr_Lib : public RGWRESTMgr {
   public:
     RGWRESTMgr_Lib() {}
     ~RGWRESTMgr_Lib() override {}
   }; /* RGWRESTMgr_Lib */
 
-/* XXX */
   class RGWHandler_Lib : public RGWHandler {
     friend class RGWRESTMgr_Lib;
   public:
@@ -140,7 +130,7 @@ namespace rgw {
     inline req_state* get_state() { return this->RGWRequest::s; }
 
     RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user)
-      :  RGWRequest(rgwlib.get_store()->get_new_req_id()),
+      :  RGWRequest(g_rgwlib->get_store()->get_new_req_id()),
 	 tuser(std::move(_user)), cct(_cct)
       {}
 
@@ -198,7 +188,7 @@ namespace rgw {
 	io_ctx.init(_cct);
 
 	RGWRequest::init_state(&rstate);
-	RGWHandler::init(rgwlib.get_store(), &rstate, &io_ctx);
+	RGWHandler::init(g_rgwlib->get_store(), &rstate, &io_ctx);
 
 	get_state()->req_id = store->zone_unique_id(id);
 	get_state()->trans_id = store->zone_unique_trans_id(id);
