@@ -34,11 +34,11 @@ if [ -r /etc/os-release ]; then
           if [ "$MAJOR_VER" -ge "9" ] ; then
               PYBUILD="3.9"
           elif [ "$MAJOR_VER" -ge "8" ] ; then
-              PYBUILD="3.6"
+              PYBUILD="3.8"
           fi
           ;;
       opensuse*|suse|sles)
-          PYBUILD="3"
+          PYBUILD="3.8"
           ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
           ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
           ;;
