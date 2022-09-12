@@ -112,11 +112,6 @@ enum {
     RBD_IO_OPERATION_COMPARE_AND_WRITE)
 };
 
-enum ImageExtentsMapType {
-    IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL,
-    IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL,
-};
-
 enum ObjectDispatchLayer {
   OBJECT_DISPATCH_LAYER_NONE = 0,
   OBJECT_DISPATCH_LAYER_CACHE,
@@ -274,6 +269,13 @@ using striper::LightweightObjectExtents;
 
 typedef std::pair<uint64_t,uint64_t> Extent;
 typedef std::vector<Extent> Extents;
+
+enum class ImageArea {
+  DATA,
+  CRYPTO_HEADER
+};
+
+std::ostream& operator<<(std::ostream& os, ImageArea area);
 
 struct ReadExtent {
     const uint64_t offset;

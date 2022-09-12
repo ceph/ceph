@@ -65,6 +65,14 @@ void extent_to_file(ImageCtxT *image_ctx, uint64_t object_no, uint64_t offset,
                     std::vector<std::pair<uint64_t, uint64_t> >& extents);
 
 template <typename ImageCtxT = librbd::ImageCtx>
+uint64_t area_to_raw_offset(const ImageCtxT& image_ctx, uint64_t offset,
+                            ImageArea area);
+
+template <typename ImageCtxT = librbd::ImageCtx>
+std::pair<uint64_t, ImageArea> raw_to_area_offset(const ImageCtxT& image_ctx,
+                                                  uint64_t offset);
+
+template <typename ImageCtxT = librbd::ImageCtx>
 uint64_t get_file_offset(ImageCtxT *image_ctx, uint64_t object_no,
                          uint64_t offset);
 

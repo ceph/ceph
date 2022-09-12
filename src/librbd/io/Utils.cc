@@ -186,8 +186,8 @@ void file_to_extents(I* image_ctx, uint64_t offset, uint64_t length,
                      uint64_t buffer_offset,
                      striper::LightweightObjectExtents* object_extents) {
   Extents extents = {{offset, length}};
-  image_ctx->io_image_dispatcher->remap_extents(
-          extents, IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL);
+  // TODO: pass area
+  image_ctx->io_image_dispatcher->remap_to_physical(extents, ImageArea::DATA);
   for (auto [off, len] : extents) {
     Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, off, len, 0,
                              buffer_offset, object_extents);
@@ -200,8 +200,24 @@ void extent_to_file(I* image_ctx, uint64_t object_no, uint64_t offset,
                     std::vector<std::pair<uint64_t, uint64_t> >& extents) {
   Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
                           offset, length, extents);
-  image_ctx->io_image_dispatcher->remap_extents(
-          extents, IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL);
+  // TODO: return area
+  image_ctx->io_image_dispatcher->remap_to_logical(extents);
+}
+
+template <typename I>
+uint64_t area_to_raw_offset(const I& image_ctx, uint64_t offset,
+                            ImageArea area) {
+  Extents extents = {{offset, 0}};
+  image_ctx.io_image_dispatcher->remap_to_physical(extents, area);
+  return extents[0].first;
+}
+
+template <typename I>
+std::pair<uint64_t, ImageArea> raw_to_area_offset(const I& image_ctx,
+                                                  uint64_t offset) {
+  Extents extents = {{offset, 0}};
+  auto area = image_ctx.io_image_dispatcher->remap_to_logical(extents);
+  return {extents[0].first, area};
 }
 
 template <typename I>
@@ -209,8 +225,7 @@ uint64_t get_file_offset(I* image_ctx, uint64_t object_no, uint64_t offset) {
   auto off = Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
                                       object_no, offset);
   Extents extents = {{off, 0}};
-  image_ctx->io_image_dispatcher->remap_extents(
-          extents, IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL);
+  image_ctx->io_image_dispatcher->remap_to_logical(extents);
   return extents[0].first;
 }
 
@@ -234,6 +249,11 @@ template void librbd::io::util::extent_to_file(
         librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t offset,
         uint64_t length,
         std::vector<std::pair<uint64_t, uint64_t> >& extents);
+template uint64_t librbd::io::util::area_to_raw_offset(
+    const librbd::ImageCtx& image_ctx, uint64_t offset, ImageArea area);
+template auto librbd::io::util::raw_to_area_offset(
+    const librbd::ImageCtx& image_ctx, uint64_t offset)
+    -> std::pair<uint64_t, ImageArea>;
 template uint64_t librbd::io::util::get_file_offset(
         librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t offset);
  
