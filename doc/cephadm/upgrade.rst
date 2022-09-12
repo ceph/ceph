@@ -199,7 +199,7 @@ Staggered Upgrade
 =================
 
 Some users may prefer to upgrade components in phases rather than all at once.
-The upgrade command, starting in 16.2.10 and 17.2.1 allows parameters
+The upgrade command, starting in 16.2.11 and 17.2.1 allows parameters
 to limit which daemons are upgraded by a single upgrade command. The options in
 include ``daemon_types``, ``services``, ``hosts`` and ``limit``. ``daemon_types``
 takes a comma-separated list of daemon types and will only upgrade daemons of those
