@@ -79,10 +79,15 @@ public:
     CompletionEvent
   > tracking_events;
 
-  class instance_handle_t
-    : public seastar::enable_lw_shared_from_this<instance_handle_t> {
+  class instance_handle_t : public boost::intrusive_ref_counter<
+    instance_handle_t, boost::thread_unsafe_counter> {
   public:
-    using ref_t = seastar::lw_shared_ptr<instance_handle_t>;
+    // intrusive_ptr because seastar::lw_shared_ptr includes a cpu debug check
+    // that we will fail since the core on which we allocate the request may not
+    // be the core on which we perform with_pg_int.  This is harmless, since we
+    // don't leave any references on the source core, so we just bypass it by using
+    // intrusive_ptr instead.
+    using ref_t = boost::intrusive_ptr<instance_handle_t>;
     PipelineHandle handle;
 
     std::tuple<
@@ -144,7 +149,7 @@ public:
   };
   instance_handle_t::ref_t instance_handle;
   void reset_instance_handle() {
-    instance_handle = seastar::make_lw_shared<instance_handle_t>();
+    instance_handle = new instance_handle_t;
   }
   auto get_instance_handle() { return instance_handle; }
 
