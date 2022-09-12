@@ -570,9 +570,51 @@ public:
     if (has_csum()) {
       denc(csum_type, p);
       denc(csum_chunk_order, p);
-      denc_varint(csum_data.length(), p);
-      memcpy(p.get_pos_add(csum_data.length()), csum_data.c_str(),
-	     csum_data.length());
+      ceph_assert(extents.size() > 0);
+#if 0
+      if (extents[0].is_valid()) {
+	denc_varint(csum_data.length(), p);
+	memcpy(p.get_pos_add(csum_data.length()), csum_data.c_str(),
+	       csum_data.length());
+      } else {
+	uint32_t cut = (extents[0].length >> csum_chunk_order) * 4;
+	denc_varint(csum_data.length() - cut, p);
+	memcpy(p.get_pos_add(csum_data.length() - cut), csum_data.c_str() + cut,
+	       csum_data.length() - cut);
+      }
+#endif
+#if 1
+      //calculate count of checksums present
+      size_t chksums_valid = 0;
+      size_t chksums_all = 0;
+      for (auto& i : extents) {
+	chksums_all += i.length >> csum_chunk_order;
+	if (i.is_valid()) {
+	  chksums_valid += i.length >> csum_chunk_order;
+	}
+      }
+      //      ceph_assert(len == int(chksums_all * 4));
+
+      //buffer::ptr csum_wire = p.get_ptr(chksums_valid * 4);
+      // make space in message for csum
+      char* csum_wire = p.get_pos_add(chksums_valid * 4);
+      //csum_data.length() - cut), csum_data.c_str() + cut, csum_data.length() - cut);
+      //csum_data = buffer::ptr(chksums_all * 4);
+      size_t chk_data_pos = 0;
+      size_t chk_wire_pos = 0;
+      for (auto& i : extents) {
+	size_t chk_cnt = i.length >> csum_chunk_order;
+	if (i.is_valid()) {
+	  memcpy(csum_wire + chk_wire_pos * 4,
+		 csum_data.c_str() + chk_data_pos * 4,
+		 chk_cnt * 4);
+	  chk_data_pos += chk_cnt;
+	  chk_wire_pos += chk_cnt;
+	} else {
+	  chk_data_pos += chk_cnt;
+	}
+      }
+#endif
     }
     if (has_unused()) {
       denc(unused, p);
@@ -581,7 +623,50 @@ public:
 
   void decode(ceph::buffer::ptr::const_iterator& p, uint64_t struct_v) {
     ceph_assert(struct_v == 1 || struct_v == 2);
+    lgeneric_subdout(g_ceph_context, bluestore, 0) << "A p=" << p.get_offset() << dendl;
+    const char* start = p.get_pos();
     denc(extents, p);
+    lgeneric_subdout(g_ceph_context, bluestore, 0) << "B p=" << p.get_offset() << dendl;
+    const char* end = p.get_pos();
+    lgeneric_subdout(g_ceph_context, bluestore, 0)
+      << "Bx " << pretty_binary_string(std::string(start, end - start)) << dendl;
+    // now testing new extent encoding mode
+    #if 0
+    {
+      int t_size = (end - start) * 4;
+      //ceph::buffer::ptr t_ptr(t_size);
+      ceph::buffer::list t_bl;
+      //t_bl.append(t_ptr);
+      {
+      auto app = t_bl.get_contiguous_appender(t_size);
+      denc_traits<PExtentVector>::encode_new(extents, app);
+      }
+      lgeneric_subdout(g_ceph_context, bluestore, 0)
+	<< "TA " << t_bl.length() << " "
+	<< pretty_binary_string(t_bl.to_str()) << dendl;
+      auto par = t_bl.front().begin_deep();
+      PExtentVector new_exts;
+      denc_traits<PExtentVector>::decode_new(new_exts, par);
+      lgeneric_subdout(g_ceph_context, bluestore, 0)
+	<< "TB " << extents.size() << " " << new_exts.size()
+	<< (extents.size() != new_exts.size()? "ERROR":"") << dendl;
+      if (extents.size() == new_exts.size()) {
+	std::stringstream ss;
+	ss << std::hex;
+	bool error = false;
+	for (size_t i = 0; i < extents.size(); i++) {
+	  ss << extents[i].length << " " << extents[i].offset << ":"
+	     << new_exts[i].length << " " << new_exts[i].offset << " ";
+	  error |= extents[i].length != new_exts[i].length;
+	  error |= extents[i].offset != new_exts[i].offset;
+	}
+	lgeneric_subdout(g_ceph_context, bluestore, 0)
+	  << "TC " << ss.str()
+	  << (error?"ERROR":"") <<dendl;
+      }
+    }
+    #endif
+
     denc_varint(flags, p);
     if (is_compressed()) {
       denc_varint_lowz(logical_length, p);
@@ -589,17 +674,68 @@ public:
     } else {
       logical_length = get_ondisk_length();
     }
+    lgeneric_subdout(g_ceph_context, bluestore, 0) << "C p=" << p.get_offset() << dendl;
+
     if (has_csum()) {
       denc(csum_type, p);
       denc(csum_chunk_order, p);
-      int len;
-      denc_varint(len, p);
-      csum_data = p.get_ptr(len);
+      //int len;
+      //denc_varint(len, p);
+      lgeneric_subdout(g_ceph_context, bluestore, 0) << "D p=" << p.get_offset() << dendl;
+#if 0
+      if (extents[0].is_valid()) {
+	csum_data = p.get_ptr(len);
+      } else {
+	lgeneric_subdout(g_ceph_context, bluestore, 0)
+	  << "D1 p=" << p.get_offset()
+	  << "len=" << len
+	  << "e[0].l" << extents[0].length
+	  << "order" << (int)csum_chunk_order
+	  << dendl;
+	uint32_t prepend = (extents[0].length >> csum_chunk_order) * 4;
+	csum_data = buffer::ptr(prepend + len);
+	buffer::ptr temp = p.get_ptr(len);
+	memcpy(csum_data.c_str() + prepend, temp.c_str(), len);	
+      }
+#endif
+#if 1
+      //calculate count of checksums present
+      size_t chksums_valid = 0;
+      size_t chksums_all = 0;
+      for (auto& i : extents) {
+	chksums_all += i.length >> csum_chunk_order;
+	if (i.is_valid()) {
+	  chksums_valid += i.length >> csum_chunk_order;
+	}
+      }
+      //ceph_assert(len == int(chksums_all * 4));
+      buffer::ptr csum_wire = p.get_ptr(chksums_valid * 4);
+      csum_data = buffer::ptr(chksums_all * 4);
+      size_t chk_data_pos = 0;
+      size_t chk_wire_pos = 0;
+      for (auto& i : extents) {
+	size_t chk_cnt = i.length >> csum_chunk_order;
+	if (i.is_valid()) {
+	  memcpy(csum_data.c_str() + chk_data_pos * 4,
+		 csum_wire.c_str() + chk_wire_pos * 4,
+		 chk_cnt * 4);
+	  chk_data_pos += chk_cnt;
+	  chk_wire_pos += chk_cnt;
+	} else {
+	  chk_data_pos += chk_cnt;
+	}
+      }
+#endif
+      lgeneric_subdout(g_ceph_context, bluestore, 0) << "E p=" << p.get_offset() << dendl;
+
       csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
     }
     if (has_unused()) {
       denc(unused, p);
     }
+    const char* endend = p.get_pos();
+    lgeneric_subdout(g_ceph_context, bluestore, 0)
+      << "F p=" << p.get_offset() << " s=" << endend - start << dendl;
   }
 
   bool can_split() const {
