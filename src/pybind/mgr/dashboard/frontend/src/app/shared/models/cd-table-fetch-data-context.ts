@@ -23,7 +23,7 @@ export class CdTableFetchDataContext {
   }
 
   toParams(): HttpParams {
-    if (this.pageInfo.offset == NaN) {
+    if (Number.isNaN(this.pageInfo.offset)) {
       this.pageInfo.offset = 0;
     }
 

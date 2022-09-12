@@ -5,7 +5,6 @@ export class PaginateObservable<Type> {
   observable: Observable<Type>;
   count: number;
 
-  subscribe: any;
   constructor(obs: Observable<Type>) {
     this.observable = obs.pipe(
       map((response: any) => {

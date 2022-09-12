@@ -11,6 +11,7 @@ import rbd
 from .. import mgr
 from ..exceptions import DashboardException
 from ..plugins.ttl_cache import ttl_cache
+from ._paginate import ListPaginator
 from .ceph_service import CephService
 
 try:
@@ -452,50 +453,30 @@ class RbdService(object):
     @classmethod
     def rbd_pool_list(cls, pool_names: List[str], namespace: Optional[str] = None, offset: int = 0,
                       limit: int = 5, search: str = '', sort: str = ''):
-        offset = int(offset)
-        limit = int(limit)
-        # let's use -1 to denotate we want ALL images for now. Iscsi currently gathers
-        # all images therefore, we need this.
-        if limit < -1:
-            raise DashboardException(msg=f'Wrong limit value {limit}', code=400)
-
-        refs = cls._rbd_pool_image_refs(pool_names, namespace)
-        image_refs = []
-        # transform to list so that we can count
-        for ref in refs:
-            if search in ref['name']:
-                image_refs.append(ref)
-            elif search in ref['pool_name']:
-                image_refs.append(ref)
-            elif search in ref['namespace']:
-                image_refs.append(ref)
+        image_refs = cls._rbd_pool_image_refs(pool_names, namespace)
+        params = ['name', 'pool_name', 'namespace']
+        paginator = ListPaginator(offset, limit, sort, search, image_refs,
+                                  searchable_params=params, sortable_params=params,
+                                  default_sort='+name')
 
         result = []
-        end = offset + limit
-        if len(sort) < 2:
-            sort = '+name'
-        descending = sort[0] == '-'
-        sort_by = sort[1:]
-        if sort_by not in ['name', 'pool_name', 'namespace']:
-            sort_by = 'name'
-        if limit == -1:
-            end = len(image_refs)
-        for image_ref in sorted(image_refs, key=lambda v: v[sort_by],
-                                reverse=descending)[offset:end]:
-            ioctx = cls.get_ioctx(image_ref['pool_name'], namespace=image_ref['namespace'])
-            try:
-                stat = cls._rbd_image_stat(
-                    ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['name'])
-            except rbd.ImageNotFound:
+        for image_ref in paginator.list():
+            with mgr.rados.open_ioctx(image_ref['pool_name']) as ioctx:
+                ioctx.set_namespace(image_ref['namespace'])
                 # Check if the RBD has been deleted partially. This happens for example if
                 # the deletion process of the RBD has been started and was interrupted.
+
                 try:
-                    stat = cls._rbd_image_stat_removing(
-                        ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['id'])
+                    stat = cls._rbd_image_stat(
+                        ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['name'])
                 except rbd.ImageNotFound:
-                    continue
-            result.append(stat)
-        return result, len(image_refs)
+                    try:
+                        stat = cls._rbd_image_stat_removing(
+                            ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['id'])
+                    except rbd.ImageNotFound:
+                        continue
+                result.append(stat)
+        return result, paginator.get_count()
 
     @classmethod
     def get_image(cls, image_spec):
