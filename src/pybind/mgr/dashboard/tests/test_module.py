@@ -15,12 +15,6 @@ class DashboardCommandsTest(unittest.TestCase, CLICommandTestMixin):
         self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
         self.assertEqual(str(ctx.exception), self.CMD_ERR.format('foo://localhost:3000'))
 
-    def test_grafana_set_url_invalid_hostname(self):
-        with self.assertRaises(CmdException) as ctx:
-            self.exec_cmd('set-grafana-api-url', value='https://bar:3000')
-        self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
-        self.assertEqual(str(ctx.exception), self.CMD_ERR.format('https://bar:3000'))
-
     def test_grafana_set_url_invalid_port(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('set-grafana-api-url', value='https://localhost:foobar')
