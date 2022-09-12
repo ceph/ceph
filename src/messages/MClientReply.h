@@ -326,7 +326,18 @@ public:
   epoch_t get_mdsmap_epoch() const { return head.mdsmap_epoch; }
 
   int get_result() const {
+    #ifdef _WIN32
+    // libclient and libcephfs return CEPHFS_E* errors, which are basically
+    // Linux errno codes. If we convert mds errors to host errno values, we
+    // end up mixing error codes.
+    //
+    // For Windows, we'll preserve the original error value, which is expected
+    // to be a linux (CEPHFS_E*) error. It may be worth doing the same for
+    // other platforms.
+    return head.result;
+    #else
     return ceph_to_hostos_errno((__s32)(__u32)head.result);
+    #endif
   }
 
   void set_result(int r) { head.result = r; }
