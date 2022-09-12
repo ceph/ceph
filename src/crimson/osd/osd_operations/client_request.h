@@ -18,6 +18,7 @@
 #include "crimson/osd/pg_activation_blocker.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
+#include "crimson/common/utility.h"
 #include "messages/MOSDOp.h"
 
 namespace crimson::osd {
@@ -30,7 +31,6 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
   OSD &osd;
   const crimson::net::ConnectionRef conn;
   // must be after conn due to ConnectionPipeline's life-time
-  PipelineHandle handle;
   Ref<MOSDOp> m;
   OpInfo op_info;
   seastar::promise<> on_complete;
@@ -51,6 +51,102 @@ public:
     friend class LttngBackend;
     friend class HistoricBackend;
   };
+
+  /**
+   * instance_handle_t
+   *
+   * Client request is, at present, the only Operation which can be requeued.
+   * This is, mostly, fine.  However, reusing the PipelineHandle or
+   * BlockingEvent structures before proving that the prior instance has stopped
+   * can create hangs or crashes due to violations of the BlockerT and
+   * PipelineHandle invariants.
+   *
+   * To solve this, we create an instance_handle_t which contains the events
+   * for the portion of execution that can be rerun as well as the
+   * PipelineHandle.  ClientRequest::with_pg_int grabs a reference to the current
+   * instance_handle_t and releases its PipelineHandle in the finally block.
+   * On requeue, we create a new instance_handle_t with a fresh PipelineHandle
+   * and events tuple and use it and use it for the next invocation of
+   * with_pg_int.
+   */
+  std::tuple<
+    StartEvent,
+    ConnectionPipeline::AwaitActive::BlockingEvent,
+    ConnectionPipeline::AwaitMap::BlockingEvent,
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    ConnectionPipeline::GetPG::BlockingEvent,
+    PGMap::PGCreationBlockingEvent,
+    CompletionEvent
+  > tracking_events;
+
+  class instance_handle_t
+    : public seastar::enable_lw_shared_from_this<instance_handle_t> {
+  public:
+    using ref_t = seastar::lw_shared_ptr<instance_handle_t>;
+    PipelineHandle handle;
+
+    std::tuple<
+      PGPipeline::AwaitMap::BlockingEvent,
+      PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
+      PGPipeline::WaitForActive::BlockingEvent,
+      PGActivationBlocker::BlockingEvent,
+      PGPipeline::RecoverMissing::BlockingEvent,
+      PGPipeline::GetOBC::BlockingEvent,
+      PGPipeline::Process::BlockingEvent,
+      PGPipeline::WaitRepop::BlockingEvent,
+      PGPipeline::SendReply::BlockingEvent,
+      CompletionEvent
+      > pg_tracking_events;
+
+    template <typename BlockingEventT, typename InterruptorT=void, typename F>
+    auto with_blocking_event(F &&f, ClientRequest &op) {
+      auto ret = std::forward<F>(f)(
+	typename BlockingEventT::template Trigger<ClientRequest>{
+	  std::get<BlockingEventT>(pg_tracking_events), op
+	});
+      if constexpr (std::is_same_v<InterruptorT, void>) {
+	return ret;
+      } else {
+	using ret_t = decltype(ret);
+	return typename InterruptorT::template futurize_t<ret_t>{std::move(ret)};
+      }
+    }
+
+    template <typename InterruptorT=void, typename StageT>
+    auto enter_stage(StageT &stage, ClientRequest &op) {
+      return this->template with_blocking_event<
+	typename StageT::BlockingEvent,
+	InterruptorT>(
+	  [&stage, this](auto &&trigger) {
+	    return handle.template enter<ClientRequest>(
+	      stage, std::move(trigger));
+	  }, op);
+    }
+
+    template <
+      typename InterruptorT=void, typename BlockingObj, typename Method,
+      typename... Args>
+    auto enter_blocker(
+      ClientRequest &op, BlockingObj &obj, Method method, Args&&... args) {
+      return this->template with_blocking_event<
+	typename BlockingObj::Blocker::BlockingEvent,
+	InterruptorT>(
+	  [&obj, method,
+	   args=std::forward_as_tuple(std::move(args)...)](auto &&trigger) mutable {
+	    return apply_method_to_tuple(
+	      obj, method,
+	      std::tuple_cat(
+		std::forward_as_tuple(std::move(trigger)),
+		std::move(args))
+	    );
+	  }, op);
+    }
+  };
+  instance_handle_t::ref_t instance_handle;
+  void reset_instance_handle() {
+    instance_handle = seastar::make_lw_shared<instance_handle_t>();
+  }
+  auto get_instance_handle() { return instance_handle; }
 
   using ordering_hook_t = boost::intrusive::list_member_hook<>;
   ordering_hook_t ordering_hook;
@@ -93,7 +189,7 @@ public:
     return m->get_spg();
   }
   ConnectionPipeline &get_connection_pipeline();
-  PipelineHandle &get_handle() { return handle; }
+  PipelineHandle &get_handle() { return instance_handle->handle; }
   epoch_t get_epoch() const { return m->get_min_epoch(); }
 
   seastar::future<> with_pg_int(
@@ -114,6 +210,7 @@ private:
   };
 
   interruptible_future<seq_mode_t> do_process(
+    instance_handle_t &ihref,
     Ref<PG>& pg,
     crimson::osd::ObjectContextRef obc);
   ::crimson::interruptible::interruptible_future<
@@ -121,7 +218,8 @@ private:
     Ref<PG> &pg);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition, seq_mode_t> process_op(
-    Ref<PG> &pg);
+      instance_handle_t &ihref,
+      Ref<PG> &pg);
   bool is_pg_op() const;
 
   ConnectionPipeline &cp();
@@ -136,24 +234,6 @@ private:
   bool is_misdirected(const PG& pg) const;
 
 public:
-  std::tuple<
-    StartEvent,
-    ConnectionPipeline::AwaitActive::BlockingEvent,
-    ConnectionPipeline::AwaitMap::BlockingEvent,
-    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
-    ConnectionPipeline::GetPG::BlockingEvent,
-    PGMap::PGCreationBlockingEvent,
-    PGPipeline::AwaitMap::BlockingEvent,
-    PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
-    PGPipeline::WaitForActive::BlockingEvent,
-    PGActivationBlocker::BlockingEvent,
-    PGPipeline::RecoverMissing::BlockingEvent,
-    PGPipeline::GetOBC::BlockingEvent,
-    PGPipeline::Process::BlockingEvent,
-    PGPipeline::WaitRepop::BlockingEvent,
-    PGPipeline::SendReply::BlockingEvent,
-    CompletionEvent
-  > tracking_events;
 
   friend class LttngBackend;
   friend class HistoricBackend;
