@@ -151,6 +151,22 @@ struct LBALeafNode
 
   static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
 
+  bool should_contain(laddr_t key) {
+    auto meta = get_meta();
+    if (meta.is_within_range(key)) {
+      auto it = this->begin();
+      auto first_key = it->get_key();
+      return (first_key <= key) ? true : false;
+    } else if (meta.end <= key) {
+      auto it = this->end();
+      --it;
+      auto last_key = it->get_key();
+      auto last_len = it->get_val().len;
+      return (last_key <= key && last_key + last_len > key) ? true : false;
+    }
+    return false;
+  }
+
   void update(
     const_iterator iter,
     lba_map_val_t val) final {

@@ -161,6 +161,8 @@ public:
   void add_to_read_set(CachedExtentRef ref) {
     if (is_weak()) return;
 
+    assert(ref->is_valid());
+
     auto it = ref->transactions.lower_bound(
       this, read_set_item_t<Transaction>::trans_cmp_t());
     if (it != ref->transactions.end() && it->t == this) return;

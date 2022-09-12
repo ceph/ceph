@@ -195,6 +195,11 @@ private:
     Transaction &t,
     laddr_t addr,
     update_func_t &&f);
+
+  get_mapping_ret _get_mapping(
+    Transaction &t,
+    laddr_t offset);
+
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 
