@@ -121,13 +121,16 @@ int BlueStore::print_onode(const std::string& key, std::string* out)
   Collection* c = new Collection(this, nullptr, nullptr, cid);
   CollectionRef cr(c);
   bufferlist v;
+  size_t metadata_size = 0;
   int r;
   r = db->get(PREFIX_OBJ, key.c_str(), key.size(), &v);
   if (r != 0) {
     return -ENOENT;
   }
   get_key_object(key, &oid);
-  report << "oid " << oid << std::endl;
+  report << "oid " << oid
+         << " size " << v.length() << std::endl;
+  metadata_size += v.length();
   Onode on(c, oid, key);
   on.exists = true;
 
@@ -162,10 +165,12 @@ int BlueStore::print_onode(const std::string& key, std::string* out)
     }
     report << "shard @ 0x" << std::hex << x.offset << std::dec
        << " size " << v.length() << std::endl;
+    metadata_size += v.length();
     ExtentMap::ExtentDecoderPrinter edecoder(*this, spanning_blobs);
     edecoder.decode_some(v, c);
     report << edecoder.get_string();
   }
+  report << "total metadata size " << metadata_size << std::endl;
   dout(20) << std::endl << report.str() << dendl;
   *out = report.str();
   return 0;
