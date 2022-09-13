@@ -314,6 +314,20 @@ target_link_libraries(ceph_test_rgw_directory PRIVATE
   target_link_libraries(ceph_test_rgw_directory PRIVATE spawn)
 install(TARGETS ceph_test_rgw_directory DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(ceph_test_rgw_d4n_filter
+  rgw_d4n_filter_test.cc
+  )
+target_include_directories(ceph_test_rgw_d4n_filter SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/dbstore/common")
+target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
+  rgw_common
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+  target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE spawn)
+install(TARGETS ceph_test_rgw_d4n_filter DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 # ceph_test_librgw_file_gp (just the rgw_file get-put bucket ops)
 add_executable(ceph_test_librgw_file_gp
   librgw_file_gp.cc
