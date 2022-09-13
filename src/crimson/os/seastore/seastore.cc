@@ -1104,7 +1104,7 @@ void SeaStore::on_error(ceph::os::Transaction &t) {
   abort();
 }
 
-seastar::future<> SeaStore::do_transaction(
+seastar::future<> SeaStore::do_transaction_no_callbacks(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
@@ -1141,16 +1141,6 @@ seastar::future<> SeaStore::do_transaction(
         }).si_then([this, &ctx] {
           return transaction_manager->submit_transaction(*ctx.transaction);
         });
-      }).safe_then([&ctx]() {
-        for (auto i : {
-            ctx.ext_transaction.get_on_applied(),
-            ctx.ext_transaction.get_on_commit(),
-            ctx.ext_transaction.get_on_applied_sync()}) {
-          if (i) {
-            i->complete(0);
-          }
-        }
-        return seastar::now();
       });
     });
 }
