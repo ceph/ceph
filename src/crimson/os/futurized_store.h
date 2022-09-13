@@ -134,8 +134,27 @@ public:
   virtual seastar::future<CollectionRef> open_collection(const coll_t& cid) = 0;
   virtual seastar::future<std::vector<coll_t>> list_collections() = 0;
 
-  virtual seastar::future<> do_transaction(CollectionRef ch,
-					   ceph::os::Transaction&& txn) = 0;
+protected:
+  virtual seastar::future<> do_transaction_no_callbacks(
+    CollectionRef ch,
+    ceph::os::Transaction&& txn) = 0;
+
+public:
+  seastar::future<> do_transaction(
+    CollectionRef ch,
+    ceph::os::Transaction&& txn) {
+    std::unique_ptr<Context> on_commit(
+      ceph::os::Transaction::collect_all_contexts(txn));
+    return do_transaction_no_callbacks(
+      std::move(ch), std::move(txn)
+    ).then([on_commit=std::move(on_commit)]() mutable {
+      auto c = on_commit.release();
+      if (c) c->complete(0);
+      return seastar::now();
+    });
+  }
+
+
   /**
    * flush
    *
@@ -378,10 +397,10 @@ public:
   seastar::future<std::vector<coll_t>> list_collections() final {
     return proxy(&T::list_collections);
   }
-  seastar::future<> do_transaction(
+  seastar::future<> do_transaction_no_callbacks(
     CollectionRef ch,
     ceph::os::Transaction &&txn) final {
-    return proxy(&T::do_transaction, std::move(ch), std::move(txn));
+    return proxy(&T::do_transaction_no_callbacks, std::move(ch), std::move(txn));
   }
   seastar::future<> flush(CollectionRef ch) final {
     return proxy(&T::flush, std::move(ch));
