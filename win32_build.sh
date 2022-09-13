@@ -212,6 +212,7 @@ if [[ -z $SKIP_DLL_COPY ]]; then
         $sslDir/bin/libssl-1_1-x64.dll
         $mingwTargetLibDir/libstdc++-6.dll
         $mingwTargetLibDir/libgcc_s_seh-1.dll
+        $mingwTargetLibDir/libssp*.dll
         $mingwLibpthreadDir/libwinpthread-1.dll
         $boostDir/lib/*.dll)
     echo "Copying required dlls to $binDir."
