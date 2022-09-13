@@ -109,7 +109,7 @@ struct FixedKVInternalNode
 	    ? &delta_buffer : nullptr;
   }
 
-  CachedExtentRef duplicate_for_write() override {
+  CachedExtentRef duplicate_for_write(Transaction&) override {
     assert(delta_buffer.empty());
     return CachedExtentRef(new node_type_t(*this));
   };
@@ -338,7 +338,7 @@ struct FixedKVLeafNode
     return this->is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
-  CachedExtentRef duplicate_for_write() override {
+  CachedExtentRef duplicate_for_write(Transaction&) override {
     assert(delta_buffer.empty());
     return CachedExtentRef(new node_type_t(*this));
   };
