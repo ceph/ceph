@@ -156,9 +156,9 @@ int main(int argc, char *argv[])
   main.init_ldap();
   main.init_opslog();
   main.init_tracepoints();
+  main.init_lua();
   main.init_frontends2(nullptr /* RGWLib */);
   main.init_notification_endpoints();
-  main.init_lua();
 
 #if defined(HAVE_SYS_PRCTL_H)
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
