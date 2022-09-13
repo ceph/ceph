@@ -1587,7 +1587,7 @@ class TestCephadm(object):
             before_digest = cephadm_module.cache.get_host_client_files('test')[
                 '/etc/ceph/ceph.conf'][0]
             cephadm_module._set_extra_ceph_conf('[mon]\nk2=v2')
-            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
+            CephadmServe(cephadm_module)._write_all_client_files()
             after_digest = cephadm_module.cache.get_host_client_files('test')[
                 '/etc/ceph/ceph.conf'][0]
             assert before_digest != after_digest
