@@ -490,6 +490,8 @@ install(TARGETS
   ceph_test_stress_watch
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# limited Windows signal support, skipped for now
+if(NOT WIN32)
 add_executable(ceph_test_c2c
   test_c2c.cc
   )
@@ -503,6 +505,7 @@ target_link_libraries(ceph_test_c2c
 install(TARGETS
   ceph_test_c2c
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif(NOT WIN32)
 
 if(WITH_FUSE)
   add_executable(ceph_test_cfuse_cache_invalidate
