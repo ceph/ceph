@@ -91,6 +91,7 @@ int D4NFilterUser::create_bucket(const DoutPrefixProvider* dpp,
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y) 
 {
+  // Currently untested -Sam
   if (setattrs != NULL) {
     /* Ensure setattrs and delattrs do not overlap */
     if (delattrs != NULL) {
