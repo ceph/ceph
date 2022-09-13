@@ -4780,7 +4780,7 @@ def get_public_net_from_cfg(ctx: CephadmContext) -> Optional[str]:
         return None
 
     # Ensure all public CIDR networks are valid
-    public_network = cp.get('global', 'public_network')
+    public_network = cp.get('global', 'public_network').strip('"').strip("'")
     rc, _, err_msg = check_subnet(public_network)
     if rc:
         raise Error(f'Invalid public_network {public_network} parameter: {err_msg}')
@@ -4877,7 +4877,7 @@ def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
     cp = read_config(ctx.config)
     cluster_network = ctx.cluster_network
     if cluster_network is None and cp.has_option('global', 'cluster_network'):
-        cluster_network = cp.get('global', 'cluster_network')
+        cluster_network = cp.get('global', 'cluster_network').strip('"').strip("'")
 
     if cluster_network:
         cluser_nets = set([x.strip() for x in cluster_network.split(',')])

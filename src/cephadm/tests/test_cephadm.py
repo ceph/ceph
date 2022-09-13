@@ -2404,6 +2404,43 @@ class TestNetworkValidation:
         with pytest.raises(Exception):
             rc = cd.ip_in_sublets('fe80:2030:31:24', 'fe80::/64')
 
+
+    @pytest.mark.parametrize("conf", [
+"""[global]
+public_network='1.1.1.0/24,2.2.2.0/24'
+cluster_network="3.3.3.0/24, 4.4.4.0/24"
+""",
+"""[global]
+public_network=" 1.1.1.0/24,2.2.2.0/24 "
+cluster_network=3.3.3.0/24, 4.4.4.0/24
+""",
+"""[global]
+public_network= 1.1.1.0/24,  2.2.2.0/24 
+cluster_network='3.3.3.0/24,4.4.4.0/24'
+"""])
+    @mock.patch('cephadm.list_networks')
+    def test_get_networks_from_conf(self, _list_networks, conf, cephadm_fs):
+        cephadm_fs.create_file('ceph.conf', contents=conf)
+        _list_networks.return_value = {'1.1.1.0/24': {'eth0': ['1.1.1.1']},
+                                       '2.2.2.0/24': {'eth1': ['2.2.2.2']},
+                                       '3.3.3.0/24': {'eth2': ['3.3.3.3']},
+                                       '4.4.4.0/24': {'eth3': ['4.4.4.4']}}
+        ctx = cd.CephadmContext()
+        ctx.config = 'ceph.conf'
+        ctx.mon_ip = '1.1.1.1'
+        ctx.cluster_network = None
+        # what the cephadm module does with the public network string is
+        # [x.strip() for x in out.split(',')]
+        # so we must make sure our output, through that alteration,
+        # generates correctly formatted networks
+        def _str_to_networks(s):
+            return [x.strip() for x in s.split(',')]
+        public_network = cd.get_public_net_from_cfg(ctx)
+        assert _str_to_networks(public_network) == ['1.1.1.0/24', '2.2.2.0/24']
+        cluster_network, ipv6 = cd.prepare_cluster_network(ctx)
+        assert not ipv6
+        assert _str_to_networks(cluster_network) == ['3.3.3.0/24', '4.4.4.0/24']
+
 class TestRescan(fake_filesystem_unittest.TestCase):
 
     def setUp(self):
