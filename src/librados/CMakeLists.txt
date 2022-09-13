@@ -6,7 +6,6 @@ add_library(librados_impl STATIC
   librados_tp.cc)
 
 # C/C++ API
-
 add_library(librados ${CEPH_SHARED}
   librados_c.cc
   librados_cxx.cc
