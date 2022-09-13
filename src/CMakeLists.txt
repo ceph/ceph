@@ -249,6 +249,12 @@ if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
     "$<$<COMPILE_LANGUAGE:CXX>:-fdiagnostics-color=${DIAGNOSTICS_COLOR}>")
 endif()
 
+if(MINGW)
+  # Fedora and RHEL set CMAKE_DL_LIBS on MINGW, which we must un-set here.
+  # Details at https://bugzilla.redhat.com/show_bug.cgi?id=2127529
+  set(CMAKE_DL_LIBS "")
+endif()
+
 set(EXTRALIBS ${CMAKE_DL_LIBS})
 if(HAVE_POSIX_TIMERS)
   list(APPEND EXTRALIBS ${RT_LIBRARY})
