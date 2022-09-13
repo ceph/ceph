@@ -519,9 +519,31 @@ a spec like
         - host2
         - host3
     extra_container_args:
-      -  "--cpus=2"
+      - "--cpus=2"
 
 which would cause each mon daemon to be deployed with `--cpus=2`.
+
+Mounting Files with Extra Container Arguments
+---------------------------------------------
+
+A common use case for extra container arguments is to mount additional
+files within the container. However, some intuitive formats for doing
+so can cause deployment to fail (see https://tracker.ceph.com/issues/57338).
+The recommended syntax for mounting a file with extra container arguments is:
+
+.. code-block:: yaml
+
+    extra_container_args:
+      - "-v"
+      - "/absolute/file/path/on/host:/absolute/file/path/in/container"
+
+For example:
+
+.. code-block:: yaml
+
+    extra_container_args:
+      - "-v"
+      - "/opt/ceph_cert/host.cert:/etc/grafana/certs/cert_file:ro"
 
 Custom Config Files
 ===================
