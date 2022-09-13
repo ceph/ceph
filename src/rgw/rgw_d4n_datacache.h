@@ -6,8 +6,6 @@
 #include <string>
 #include <iostream>
 
-#define dout_subsys ceph_subsys_rgw
-
 class RGWD4NCache {
   public:
     CephContext *cct;

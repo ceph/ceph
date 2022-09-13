@@ -20,6 +20,14 @@
 
 namespace rgw { namespace sal {
 
+static inline Bucket* nextBucket(Bucket* t)
+{
+  if (!t)
+    return nullptr;
+
+  return dynamic_cast<FilterBucket*>(t)->get_next();
+}
+
 static inline Object* nextObject(Object* t)
 {
   if (!t)
@@ -83,6 +91,7 @@ int D4NFilterUser::create_bucket(const DoutPrefixProvider* dpp,
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y) 
 {
+  // Currently untested -Sam
   if (setattrs != NULL) {
     /* Ensure setattrs and delattrs do not overlap */
     if (delattrs != NULL) {
@@ -268,7 +277,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     ldpp_dout(dpp, 20) << "D4N Filter: Directory delete operation succeeded." << dendl;
   }
 
-  int delObjReturn = source->filter->get_d4n_cache()->delObject(source);
+  int delObjReturn = source->filter->get_d4n_cache()->delObject(source->get_name());
 
   if (delObjReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache delete operation failed." << dendl;
