@@ -6,8 +6,6 @@
 #include <string>
 #include <iostream>
 
-#define dout_subsys ceph_subsys_rgw
-
 struct cache_obj {
   std::string bucket_name; // s3 bucket name
   std::string obj_name; // s3 obj name

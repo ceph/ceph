@@ -392,6 +392,11 @@ StoreManager::Config StoreManager::get_config(bool admin, CephContext* cct)
   if (config_filter == "base") {
     cfg.filter_name = "base";
   }
+#ifdef WITH_RADOSGW_D4N_FILTER
+  else if (config_filter == "d4n") {
+    cfg.filter_name= "d4n";
+  }
+#endif
 
   return cfg;
 }
