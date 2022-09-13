@@ -371,7 +371,8 @@ public:
     ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
 	      existing_paddr,
 	      PLACEMENT_HINT_NULL,
-	      NULL_GENERATION);
+	      NULL_GENERATION,
+	      t.get_trans_id());
 
     t.add_fresh_extent(ext);
 
