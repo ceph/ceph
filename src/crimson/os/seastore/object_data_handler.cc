@@ -144,24 +144,46 @@ ObjectDataHandler::write_ret do_insertions(
 	       ctx.t,
 	       region.addr,
 	       region.len);
-	return ctx.tm.alloc_extent<ObjectDataBlock>(
+	using repeat_ret = get_iertr::future<seastar::stop_iteration>;
+  extent_len_t alloc_limit = crimson::common::get_conf<uint64_t>(
+      "seastore_max_allocate_size");
+  extent_len_t off = 0;
+  return trans_intr::repeat(
+    [ctx, alloc_limit, &region, &off]() mutable -> repeat_ret
+    {
+      if (off >= region.len) {
+		  return get_iertr::make_ready_future<
+		    seastar::stop_iteration
+		    >(seastar::stop_iteration::yes);
+		  }
+      auto alloc_size = alloc_limit ? std::min(alloc_limit, region.len - off) : region.len;
+      auto laddr = region.addr + off;
+      return ctx.tm.alloc_extent<ObjectDataBlock>(
 	  ctx.t,
-	  region.addr,
-	  region.len
-	).si_then([&region](auto extent) {
-	  if (extent->get_laddr() != region.addr) {
+	  laddr,
+	  alloc_size
+	).si_then([&region, laddr, alloc_size, &off](auto extent) {
+	  if (extent->get_laddr() != laddr) {
 	    logger().debug(
 	      "object_data_handler::do_insertions alloc got addr {},"
 	      " should have been {}",
 	      extent->get_laddr(),
-	      region.addr);
+	      laddr);
 	  }
-	  ceph_assert(extent->get_laddr() == region.addr);
-	  ceph_assert(extent->get_length() == region.len);
-	  auto iter = region.to_write->cbegin();
-	  iter.copy(region.len, extent->get_bptr().c_str());
-	  return ObjectDataHandler::write_iertr::now();
+	  ceph_assert(extent->get_laddr() == laddr);
+	  ceph_assert(extent->get_length() == alloc_size);
+	  auto iter = region.to_write->cbegin(off);
+	  iter.copy(alloc_size, extent->get_bptr().c_str());
+    off += alloc_size;
+	  return get_iertr::make_ready_future<
+		  seastar::stop_iteration
+		  >(seastar::stop_iteration::no);
 	});
+    }).si_then([&region, &off]{
+    ceph_assert(off == region.len);  
+    return ObjectDataHandler::write_iertr::now();
+  }
+  );
       } else if (!region.existing_paddr){
 	DEBUGT("reserving: {}~{}",
 	       ctx.t,

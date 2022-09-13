@@ -70,6 +70,11 @@ options:
   level: dev
   desc: default logical address space reservation for seastore objects' metadata
   default: 16777216
+- name: seastore_max_allocate_size
+  type: uint
+  level: dev
+  desc: maximum size in bytes of data block allocated to write, 0 for unlimited.
+  default: 65536 
 - name: seastore_cache_lru_size
   type: size
   level: advanced
