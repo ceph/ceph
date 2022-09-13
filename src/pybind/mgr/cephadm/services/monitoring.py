@@ -298,6 +298,12 @@ class PrometheusService(CephadmService):
         except AttributeError:
             retention_time = '15d'
 
+        try:
+            retention_size = spec.retention_size if spec.retention_size else '0'
+        except AttributeError:
+            # default to disabled
+            retention_size = '0'
+
         t = self.mgr.get('mgr_map').get('services', {}).get('prometheus', None)
         sd_port = self.mgr.service_discovery_port
         srv_end_point = ''
@@ -332,7 +338,8 @@ class PrometheusService(CephadmService):
                 'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context),
                 'root_cert.pem': self.mgr.http_server.service_discovery.ssl_certs.get_root_cert()
             },
-            'retention_time': retention_time
+            'retention_time': retention_time,
+            'retention_size': retention_size
         }
 
         # include alerts, if present in the container
