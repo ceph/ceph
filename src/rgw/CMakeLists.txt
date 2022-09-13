@@ -176,6 +176,8 @@ set(librgw_common_srcs
   rgw_lua_background.cc)
 
 list(APPEND librgw_common_srcs
+  store/immutable_config/store.cc
+  store/json_config/store.cc
   store/rados/config/impl.cc
   store/rados/config/period.cc
   store/rados/config/period_config.cc
