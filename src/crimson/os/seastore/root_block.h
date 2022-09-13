@@ -42,7 +42,7 @@ struct RootBlock : CachedExtent {
 
   RootBlock(const RootBlock &rhs) = default;
 
-  CachedExtentRef duplicate_for_write() final {
+  CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new RootBlock(*this));
   };
 

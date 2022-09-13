@@ -1012,7 +1012,7 @@ CachedExtentRef Cache::duplicate_for_write(
     return i;
   }
 
-  auto ret = i->duplicate_for_write();
+  auto ret = i->duplicate_for_write(t);
   ret->pending_for_transaction = t.get_trans_id();
   ret->prior_instance = i;
   // duplicate_for_write won't occur after ool write finished

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/os/seastore/cached_extent.h"
+#include "crimson/os/seastore/transaction.h"
 
 #include "crimson/common/log.h"
 

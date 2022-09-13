@@ -192,7 +192,7 @@ public:
    * structure which defers updating the actual buffer until
    * on_delta_write().
    */
-  virtual CachedExtentRef duplicate_for_write() = 0;
+  virtual CachedExtentRef duplicate_for_write(Transaction &t) = 0;
 
   /**
    * prepare_write
@@ -846,7 +846,7 @@ public:
 
   extent_len_t get_length() const final { return length; }
 
-  CachedExtentRef duplicate_for_write() final {
+  CachedExtentRef duplicate_for_write(Transaction&) final {
     ceph_assert(0 == "Should never happen for a placeholder");
     return CachedExtentRef();
   }
