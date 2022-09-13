@@ -54,7 +54,7 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
   TestBlock(const TestBlock &other)
     : LogicalCachedExtent(other) {}
 
-  CachedExtentRef duplicate_for_write() final {
+  CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new TestBlock(*this));
   };
 
@@ -93,7 +93,7 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
   TestBlockPhysical(const TestBlockPhysical &other)
     : CachedExtent(other) {}
 
-  CachedExtentRef duplicate_for_write() final {
+  CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new TestBlockPhysical(*this));
   };
 
