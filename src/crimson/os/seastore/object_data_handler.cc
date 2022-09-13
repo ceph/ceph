@@ -887,6 +887,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
 	  bl.length()
 	).si_then([this, ctx,logical_offset, &bl](
 		   auto pins) {
+	  ceph_assert(!pins.empty());
 	  return overwrite(
 	    ctx, logical_offset, bl.length(),
 	    bufferlist(bl), std::move(pins));
