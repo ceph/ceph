@@ -341,13 +341,16 @@ and the metrics will not be visible in Prometheus.
 Setting up Prometheus
 -----------------------
 
-Setting Prometheus Retention Time
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Setting Prometheus Retention Size and Time
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Cephadm provides the option to set the Prometheus TDSB retention time using
-a ``retention_time`` field in the Prometheus service spec. The value defaults
-to 15 days (15d). If you would like a different value, such as 1 year (1y) you
-can apply a service spec similar to:
+Cephadm can configure Prometheus TSDB retention by specifying ``retention_time``
+and ``retention_size`` values in the Prometheus service spec.
+The retention time value defaults to 15 days (15d). Users can set a different value/unit where
+supported units are: 'y', 'w', 'd', 'h', 'm' and 's'. The retention size value defaults
+to 0 (disabled). Supported units in this case are: 'B', 'KB', 'MB', 'GB', 'TB', 'PB' and 'EB'.
+
+In the following example spec we set the retention time to 1 year and the size to 1GB.
 
 .. code-block:: yaml
 
@@ -356,6 +359,7 @@ can apply a service spec similar to:
       count: 1
     spec:
       retention_time: "1y"
+      retention_size: "1GB"
 
 .. note::
 

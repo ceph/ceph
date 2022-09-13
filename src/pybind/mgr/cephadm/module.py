@@ -28,7 +28,7 @@ from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     ServiceSpec, PlacementSpec, \
     HostPlacementSpec, IngressSpec, \
-    TunedProfileSpec
+    TunedProfileSpec, PrometheusSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -2532,6 +2532,19 @@ Then run the following:
             # _trigger preview refresh needs to be smart and
             # should only refresh if a change has been detected
             self._trigger_preview_refresh(specs=[cast(DriveGroupSpec, spec)])
+
+        if spec.service_type == 'prometheus':
+            spec = cast(PrometheusSpec, spec)
+            if spec.retention_time:
+                valid_units = ['y', 'w', 'd', 'h', 'm', 's']
+                m = re.search(rf"^(\d+)({'|'.join(valid_units)})$", spec.retention_time)
+                if not m:
+                    raise OrchestratorError(f"Invalid retention time. Valid units are: {', '.join(valid_units)}")
+            if spec.retention_size:
+                valid_units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB']
+                m = re.search(rf"^(\d+)({'|'.join(valid_units)})$", spec.retention_size)
+                if not m:
+                    raise OrchestratorError(f"Invalid retention size. Valid units are: {', '.join(valid_units)}")
 
         return self._apply_service_spec(cast(ServiceSpec, spec))
 
