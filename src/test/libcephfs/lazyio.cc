@@ -13,6 +13,7 @@
  */
 
 #include "gtest/gtest.h"
+#include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
 #include <errno.h>
