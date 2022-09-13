@@ -10,7 +10,7 @@ std::vector< std::pair<std::string, std::string> > RGWD4NCache::buildObject(rgw:
   rgw::sal::Attrs::iterator attrs;
  
   // Convert to vector
-  if (baseBinary != NULL && newBinary != NULL) {
+  if (baseBinary != NULL) {
     for (attrs = baseBinary->begin(); attrs != baseBinary->end(); ++attrs) {
       values.push_back(std::make_pair(attrs->first, attrs->second.to_str()));
     }
@@ -67,6 +67,11 @@ void RGWD4NCache::findClient(cpp_redis::client *client) {
   if (client->is_connected())
     return;
 
+  if (host == "" || port == 0) { 
+    dout(10) << "RGW D4N Cache: D4N cache endpoint not configured correctly" << dendl;
+    exit(-1);
+  }
+
   client->connect(host, port, nullptr);
 
   if (!client->is_connected())
@@ -107,11 +112,6 @@ int RGWD4NCache::setObject(rgw::sal::Attrs baseAttrs, rgw::sal::Attrs* newAttrs,
   keys.push_back(key);
 
   // Every set will be new
-  if (host == "" || port == 0) { // where else should I add this check? -Sam
-    dout(10) << "RGW D4N Cache: D4N cache endpoint not configured correctly" << dendl;
-    return -1;
-  }
-
   try {
     std::vector< std::pair<std::string, std::string> > redisObject = buildObject(&baseAttrs, newAttrs);
       
@@ -172,7 +172,7 @@ int RGWD4NCache::getObject(rgw::sal::Object* source) {
 
       client.sync_commit(std::chrono::milliseconds(1000));
 
-      if (key_exist < 0 ) {
+      if (key_exist < 0) {
         dout(20) << "RGW D4N Cache: Object is not in cache." << dendl;
         return key_exist;
       }

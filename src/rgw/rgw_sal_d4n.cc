@@ -20,6 +20,14 @@
 
 namespace rgw { namespace sal {
 
+static inline Bucket* nextBucket(Bucket* t)
+{
+  if (!t)
+    return nullptr;
+
+  return dynamic_cast<FilterBucket*>(t)->get_next();
+}
+
 static inline Object* nextObject(Object* t)
 {
   if (!t)
@@ -40,6 +48,7 @@ int D4NFilterStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y) 
 {
+  // Currently untested -Sam
   if (setattrs != NULL) {
     int updateAttrsReturn = filter->get_d4n_cache()->updateAttrs(this->get_name(), setattrs);
 
@@ -73,7 +82,7 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
 int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
                                 rgw_obj* target_obj)
 {
-  int getObjReturn = filter->get_d4n_cache()->getObject(this);
+  int getObjReturn = filter->get_d4n_cache()->getObject(this); // Currently untested -Sam
 
   if (getObjReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get attrs operation failed." << dendl;
@@ -89,7 +98,7 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
-  int updateAttrsReturn = filter->get_d4n_cache()->updateAttrs(this->get_name(), &update);
+  int updateAttrsReturn = filter->get_d4n_cache()->updateAttrs(this->get_name(), &update); // Currently untested -Sam
 
   if (updateAttrsReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache update attribute operation failed." << dendl;
@@ -105,7 +114,7 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
 {
   std::vector<std::string> fields;
   fields.push_back((std::string)attr_name);
-  int delAttrReturn = filter->get_d4n_cache()->delAttrs(this->get_name(), fields);
+  int delAttrReturn = filter->get_d4n_cache()->delAttrs(this->get_name(), fields); // Currently untested -Sam
 
   if (delAttrReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache delete attribute operation failed." << dendl;
