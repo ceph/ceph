@@ -205,7 +205,8 @@ public:
       last_commit,
       [this](Transaction& t) {
         return on_transaction_destruct(t);
-      }
+      },
+      ++next_id
     );
     SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
              *ret, name, src, is_weak);
@@ -284,7 +285,8 @@ public:
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
-                NULL_GENERATION);
+                NULL_GENERATION,
+		TRANS_ID_NULL);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent, add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
@@ -303,7 +305,8 @@ public:
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
-                NULL_GENERATION);
+                NULL_GENERATION,
+		TRANS_ID_NULL);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent(placeholder), reading ... -- {}",
           T::TYPE, offset, length, *ret);
@@ -639,7 +642,8 @@ public:
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
               result.paddr,
               hint,
-              result.gen);
+              result.gen,
+	      t.get_trans_id());
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
               "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
@@ -981,6 +985,8 @@ private:
 
   // FIXME: This is specific to the segmented implementation
   SegmentProvider *segment_provider = nullptr;
+
+  transaction_id_t next_id = 0;
 
   /**
    * dirty

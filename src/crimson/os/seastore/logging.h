@@ -15,11 +15,13 @@
 #define LOG(level_, MSG, ...) \
   LOCAL_LOGGER.log(level_, "{}: " MSG, FNAME , ##__VA_ARGS__)
 #define LOGT(level_, MSG, t, ...) \
-  LOCAL_LOGGER.log(level_, "{} {}: " MSG, (void*)&t, FNAME , ##__VA_ARGS__)
+  LOCAL_LOGGER.log(level_, "{} trans.{} {}: " MSG, (void*)&t, \
+    (t).get_trans_id(), FNAME , ##__VA_ARGS__)
 #define SUBLOG(subname_, level_, MSG, ...) \
   LOGGER(subname_).log(level_, "{}: " MSG, FNAME , ##__VA_ARGS__)
 #define SUBLOGT(subname_, level_, MSG, t, ...) \
-  LOGGER(subname_).log(level_, "{} {}: " MSG, (void*)&t, FNAME , ##__VA_ARGS__)
+  LOGGER(subname_).log(level_, "{} trans.{} {}: " MSG, (void*)&t, \
+    (t).get_trans_id(), FNAME , ##__VA_ARGS__)
 
 #define TRACE(...) LOG(seastar::log_level::trace, __VA_ARGS__)
 #define TRACET(...) LOGT(seastar::log_level::trace, __VA_ARGS__)
