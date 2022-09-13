@@ -664,7 +664,7 @@ function run_osd() {
     echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $osd_data/new.json
     ceph osd new $uuid -i $osd_data/new.json
     rm $osd_data/new.json
-    ceph-osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid
+    $CEPH_OSD -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
     local key_fn=$osd_data/keyring
     cat > $key_fn<<EOF
@@ -674,7 +674,7 @@ EOF
     echo adding osd$id key to auth repository
     ceph -i "$key_fn" auth add osd.$id osd "allow *" mon "allow profile osd" mgr "allow profile osd"
     echo start osd.$id
-    ceph-osd -i $id $ceph_args &
+    $CEPH_OSD -i $id $ceph_args &
 
     # If noup is set, then can't wait for this osd
     if ceph osd dump --format=json | jq '.flags_set[]' | grep -q '"noup"' ; then
@@ -719,7 +719,7 @@ function run_osd_filestore() {
     echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $osd_data/new.json
     ceph osd new $uuid -i $osd_data/new.json
     rm $osd_data/new.json
-    ceph-osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid --osd-objectstore=filestore
+    $CEPH_OSD -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid --osd-objectstore=filestore
 
     local key_fn=$osd_data/keyring
     cat > $key_fn<<EOF
@@ -729,7 +729,7 @@ EOF
     echo adding osd$id key to auth repository
     ceph -i "$key_fn" auth add osd.$id osd "allow *" mon "allow profile osd" mgr "allow profile osd"
     echo start osd.$id
-    ceph-osd -i $id $ceph_args &
+    $CEPH_OSD -i $id $ceph_args &
 
     # If noup is set, then can't wait for this osd
     if ceph osd dump --format=json | jq '.flags_set[]' | grep -q '"noup"' ; then
@@ -879,7 +879,7 @@ function activate_osd() {
     mkdir -p $osd_data
 
     echo start osd.$id
-    ceph-osd -i $id $ceph_args &
+    $CEPH_OSD -i $id $ceph_args &
 
     [ "$id" = "$(cat $osd_data/whoami)" ] || return 1
 

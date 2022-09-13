@@ -52,10 +52,14 @@ export LD_LIBRARY_PATH="$(pwd)/lib"
 
 # TODO: Use getops
 dryrun=false
+ceph_osd=ceph-osd
 while [ $# -ge 1 ]; do
 case $1 in
     --dry-run)
         dryrun=true
+        ;;
+    --crimson)
+        ceph_osd=crimson-osd
         ;;
     *)
         break
@@ -67,6 +71,8 @@ all=false
 if [ "$1" = "" ]; then
    all=true
 fi
+
+export CEPH_OSD=$ceph_osd
 
 select=("$@")
 
