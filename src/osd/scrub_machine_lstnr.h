@@ -89,6 +89,8 @@ struct ScrubMachineListener {
 
   virtual void on_digest_updates() = 0;
 
+  virtual void scrub_begin() = 0;
+
   /// the part that actually finalizes a scrub
   virtual void scrub_finish() = 0;
 

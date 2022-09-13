@@ -1930,6 +1930,14 @@ PgScrubber::PgScrubber(PG* pg)
   m_fsm->initiate();
 }
 
+void PgScrubber::scrub_begin()
+{
+  stringstream ss;
+  ss << m_pg->info.pgid.pgid << " " << m_mode_desc << " starts";
+  dout(2) << ss.str() << dendl;
+  m_osds->clog->debug(ss);
+}
+
 void PgScrubber::reserve_replicas()
 {
   dout(10) << __func__ << dendl;

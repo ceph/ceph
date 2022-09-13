@@ -375,6 +375,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void on_digest_updates() final;
 
+  void scrub_begin() final;
+
   void scrub_finish() final;
 
   ScrubMachineListener::MsgAndEpoch
