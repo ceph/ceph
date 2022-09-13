@@ -71,6 +71,21 @@
                       (click)="remove(i); $event.stopPropagation()">
                 <i [ngClass]="[icons.trash]"></i>
               </button>
+              <button *ngIf="notification.application == 'Prometheus' && notification.type != 2 && !notification.alertSilenced"
+                      class="btn btn-link float-right text-muted mute"
+                      title="Silence Alert"
+                      i18n-title
+                      (click)="silence(notification)">
+                <i [ngClass]="[icons.mute]"></i>
+              </button>
+              <button *ngIf="notification.application == 'Prometheus' && notification.type != 2 && notification.alertSilenced"
+                      class="btn btn-link float-right text-muted mute"
+                      title="Expire Silence"
+                      i18n-title
+                      (click)="expire(notification)">
+                <i [ngClass]="[icons.bell]"></i>
+              </button>
+
 
               <h6 class="card-title bold">{{ notification.title }}</h6>
               <p class="card-text"
