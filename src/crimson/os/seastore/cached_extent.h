@@ -76,9 +76,55 @@ using read_set_t = std::set<
   read_set_item_t<T>,
   typename read_set_item_t<T>::cmp_t>;
 
+struct trans_spec_view_t {
+  // if the extent is pending, contains the id of the owning transaction;
+  // TRANS_ID_NULL otherwise
+  transaction_id_t pending_for_transaction = TRANS_ID_NULL;
+
+  struct cmp_t {
+    bool operator()(
+      const trans_spec_view_t &lhs,
+      const trans_spec_view_t &rhs) const
+    {
+      return lhs.pending_for_transaction < rhs.pending_for_transaction;
+    }
+    bool operator()(
+      const transaction_id_t &lhs,
+      const trans_spec_view_t &rhs) const
+    {
+      return lhs < rhs.pending_for_transaction;
+    }
+    bool operator()(
+      const trans_spec_view_t &lhs,
+      const transaction_id_t &rhs) const
+    {
+      return lhs.pending_for_transaction < rhs;
+    }
+  };
+
+  using trans_view_hook_t =
+    boost::intrusive::set_member_hook<
+      boost::intrusive::link_mode<
+        boost::intrusive::auto_unlink>>;
+  trans_view_hook_t trans_view_hook;
+
+  using trans_view_member_options =
+    boost::intrusive::member_hook<
+      trans_spec_view_t,
+      trans_view_hook_t,
+      &trans_spec_view_t::trans_view_hook>;
+  using trans_view_set_t = boost::intrusive::set<
+    trans_spec_view_t,
+    trans_view_member_options,
+    boost::intrusive::constant_time_size<false>,
+    boost::intrusive::compare<cmp_t>>;
+};
+
 class ExtentIndex;
-class CachedExtent : public boost::intrusive_ref_counter<
-  CachedExtent, boost::thread_unsafe_counter> {
+class CachedExtent
+  : public boost::intrusive_ref_counter<
+      CachedExtent, boost::thread_unsafe_counter>,
+    public trans_spec_view_t {
   enum class extent_state_t : uint8_t {
     INITIAL_WRITE_PENDING, // In Transaction::write_set and fresh_block_list
     MUTATION_PENDING,      // In Transaction::write_set and mutated_block_list
@@ -117,12 +163,14 @@ public:
   void init(extent_state_t _state,
             paddr_t paddr,
             placement_hint_t hint,
-            rewrite_gen_t gen) {
+            rewrite_gen_t gen,
+	    transaction_id_t trans_id) {
     assert(gen == NULL_GENERATION || is_rewrite_generation(gen));
     state = _state;
     set_paddr(paddr);
     user_hint = hint;
     rewrite_generation = gen;
+    pending_for_transaction = trans_id;
   }
 
   void set_modify_time(sea_time_point t) {

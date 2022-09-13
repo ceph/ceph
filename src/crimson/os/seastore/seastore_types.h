@@ -24,6 +24,9 @@ namespace crimson::os::seastore {
 /* using a special xattr key "omap_header" to store omap header */
   const std::string OMAP_HEADER_XATTR_KEY = "omap_header";
 
+using transaction_id_t = uint64_t;
+constexpr transaction_id_t TRANS_ID_NULL = 0;
+
 /*
  * Note: NULL value is usually the default and max value.
  */
