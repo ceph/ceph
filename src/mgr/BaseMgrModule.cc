@@ -726,6 +726,34 @@ ceph_have_mon_connection(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_update_availability(BaseMgrModule *self, PyObject *args)
+{
+  uint64_t pool_id = 0;
+  char *pool_name = nullptr;
+  double started_at = 0;
+  uint64_t uptime = 0;
+  double last_uptime = 0;
+  uint64_t downtime = 0;
+  double last_downtime = 0;
+  uint64_t num_failures = 0;
+  bool is_avail = true;
+  dout(10) << "ceph_update_availability" << dendl;
+  if (!PyArg_ParseTuple(args, "ksfkfkfkb:ceph_update_availability",
+			&pool_id, &pool_name, &started_at, &uptime,
+      &last_uptime, &downtime, &last_downtime,
+      &num_failures, &is_avail)) {
+    return nullptr;
+  }
+  without_gil([&] {
+    self->py_modules->update_availability(
+      pool_id, pool_name, started_at, uptime,
+      last_uptime, downtime, last_downtime,
+      num_failures, is_avail);
+  });
+  Py_RETURN_NONE;
+}
+
+static PyObject*
 ceph_update_progress_event(BaseMgrModule *self, PyObject *args)
 {
   char *evid = nullptr;
@@ -1506,6 +1534,9 @@ PyMethodDef BaseMgrModule_methods[] = {
    METH_VARARGS, "Complete a progress event"},
   {"_ceph_clear_all_progress_events", (PyCFunction)ceph_clear_all_progress_events,
    METH_NOARGS, "Clear all progress events"},
+
+  {"_ceph_update_availability", (PyCFunction)ceph_update_availability,
+   METH_VARARGS, "Update availability of pools"},
 
   {"_ceph_dispatch_remote", (PyCFunction)ceph_dispatch_remote,
     METH_VARARGS, "Dispatch a call to another module"},

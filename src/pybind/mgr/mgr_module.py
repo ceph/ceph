@@ -2098,6 +2098,21 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return self._ceph_have_mon_connection()
 
+    def update_availability(self,
+                            pool_id: int,
+                            pool_name: str,
+                            started_at: float,
+                            uptime: int,
+                            last_uptime: float,
+                            downtime: int,
+                            last_downtime: float,
+                            num_failures: int,
+                            is_avail: bool) -> None:
+        self.log.debug("update_availability")
+        return self._ceph_update_availability(pool_id, pool_name, started_at,
+                                              uptime, last_uptime, downtime,
+                                              last_downtime, num_failures, is_avail)
+
     def update_progress_event(self,
                               evid: str,
                               desc: str,

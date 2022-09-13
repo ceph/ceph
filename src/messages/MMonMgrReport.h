@@ -23,7 +23,7 @@
 
 class MMonMgrReport final : public PaxosServiceMessage {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -31,6 +31,7 @@ public:
   health_check_map_t health_checks;
   ceph::buffer::list service_map_bl;  // encoded ServiceMap
   std::map<std::string,ProgressEvent> progress_events;
+  std::map<std::uint64_t, PoolAvailability> pool_availability;
   uint64_t gid = 0;
 
   MMonMgrReport()
@@ -45,7 +46,7 @@ public:
   void print(std::ostream& out) const override {
     out << get_type_name() << "(gid " << gid
 	<< ", " << health_checks.checks.size() << " checks, "
-	<< progress_events.size() << " progress events)";
+	<< progress_events.size() << " progress events, " << pool_availability.size() << " pools)" ;
   }
 
   void encode_payload(uint64_t features) override {
@@ -55,6 +56,7 @@ public:
     encode(service_map_bl, payload);
     encode(progress_events, payload);
     encode(gid, payload);
+    encode(pool_availability, payload);
 
     if (!HAVE_FEATURE(features, SERVER_NAUTILUS) ||
 	!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -85,6 +87,10 @@ public:
     if (header.version >= 3) {
       decode(gid, p);
     }
+    if (header.version >= 4) {
+      decode(pool_availability, p);
+    }
+
   }
 private:
   template<class T, typename... Args>

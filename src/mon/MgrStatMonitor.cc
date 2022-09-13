@@ -86,6 +86,9 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 	       << " service_map e" << service_map.epoch
 	       << " " << progress_events.size() << " progress events"
 	       << dendl;
+      if (!p.end()) {
+	      decode(pool_availability, p);
+      }
     }
     catch (ceph::buffer::error& e) {
       derr << "failed to decode mgrstat state; luminous dev version? "
@@ -156,6 +159,7 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ceph_assert(pending_service_map_bl.length());
   bl.append(pending_service_map_bl);
   encode(pending_progress_events, bl);
+  encode(pending_pool_availability, bl);
   put_version(t, version, bl);
   put_last_committed(t, version);
 
@@ -234,6 +238,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
     pending_service_map_bl.swap(m->service_map_bl);
   }
   pending_progress_events.swap(m->progress_events);
+  pending_pool_availability.swap(m->pool_availability);
   dout(10) << __func__ << " " << pending_digest << ", "
 	   << pending_health_checks.checks.size() << " health checks, "
 	   << progress_events.size() << " progress events" << dendl;
@@ -260,6 +265,17 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   jf.close_section();
   jf.flush(*_dout);
   *_dout << dendl;
+  dout(20) << "pool availability:\n";
+  JSONFormatter jf(true);
+  jf.open_object_section("pool_availability");
+  for (auto& i : pending_pool_availability) {
+    jf.open_object_section(std::to_string(i.first));
+    i.second.dump(&jf);
+    jf.close_section();
+  }
+  jf.close_section();
+  jf.flush(*_dout);
+  *_dout << dendl;  
   return true;
 }
 

@@ -11,12 +11,13 @@ class PoolAvailability(object):
     Keeps the initial and target pg_num values
     """
     def __init__(self, pool_name: str) -> None:
+        now = time.time()
         self.pool_name  = pool_name
-        self.started_at = time.time()
+        self.started_at = now
         self.uptime = 0
-        self.last_uptime = time.time()
+        self.last_uptime = now
         self.downtime = 0
-        self.last_downtime = None
+        self.last_downtime = now
         self.num_failures = 0
         self.is_avail = True
 
@@ -168,6 +169,16 @@ class Availability(MgrModule):
                      self._pool_avail_map[pool_id].downtime,
                      self._pool_avail_map[pool_id].is_avail
                 ))
+                self.update_availability(pool_id,
+                                         self._pool_avail_map[pool_id].pool_name,
+                                         self._pool_avail_map[pool_id].started_at,
+                                         self._pool_avail_map[pool_id].uptime,
+                                         self._pool_avail_map[pool_id].last_uptime,
+                                         self._pool_avail_map[pool_id].downtime,
+                                         self._pool_avail_map[pool_id].last_downtime,
+                                         self._pool_avail_map[pool_id].num_failures,
+                                         self._pool_avail_map[pool_id].is_avail
+                                        )
 
             self._shutdown.wait(timeout=self.sleep_interval)
 

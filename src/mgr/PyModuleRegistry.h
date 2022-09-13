@@ -173,6 +173,12 @@ public:
     }
   }
 
+  void get_pool_availability(std::map<uint64_t, PoolAvailability> *pool_availability) {
+    if (active_modules) {
+      active_modules->get_pool_availability(pool_availability);
+    }
+  }
+
   // FIXME: breaking interface so that I don't have to go rewrite all
   // the places that call into these (for now)
   // >>>

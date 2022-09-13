@@ -64,7 +64,7 @@ private:
   PyModuleRegistry &py_module_registry;
 
   std::map<std::string,ProgressEvent> progress_events;
-
+  std::map<uint64_t, PoolAvailability> pool_availability;
   mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
 
 public:
@@ -150,6 +150,16 @@ public:
 			 health_check_map_t&& checks);
   void get_health_checks(health_check_map_t *checks);
 
+  void update_availability(const uint64_t pool_id,
+			     const std::string& pool_name,
+           const double started_at,
+			     uint64_t uptime,
+           double last_uptime,
+           uint64_t downtime,
+           double last_downtime,
+           uint64_t num_failures,
+           bool is_avail);
+  void get_pool_availability(std::map<uint64_t, PoolAvailability>* pool_avail);
   void update_progress_event(const std::string& evid,
 			     const std::string& desc,
 			     float progress,

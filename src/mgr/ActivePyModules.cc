@@ -1279,6 +1279,35 @@ void ActivePyModules::get_health_checks(health_check_map_t *checks)
   }
 }
 
+void ActivePyModules::update_availability(
+  const uint64_t pool_id,
+  const std::string& pool_name,
+  const double started_at,
+	uint64_t uptime,
+  double last_uptime,
+  uint64_t downtime,
+  double last_downtime,
+  uint64_t num_failures,
+  bool is_avail)
+{
+  std::lock_guard l(lock);
+  auto& pe = pool_availability[pool_id];
+  pe.pool_name = pool_name;
+  pe.started_at = started_at;
+  pe.uptime = uptime;
+  pe.last_uptime = last_uptime;
+  pe.downtime = downtime;
+  pe.last_downtime = last_downtime;
+  pe.num_failures = num_failures;
+  pe.is_avail = is_avail;
+}
+
+void ActivePyModules::get_pool_availability(std::map<uint64_t, PoolAvailability> *pool_avail)
+{
+  std::lock_guard l(lock);
+  *pool_avail = pool_availability;
+}
+
 void ActivePyModules::update_progress_event(
   const std::string& evid,
   const std::string& desc,
@@ -1308,7 +1337,7 @@ void ActivePyModules::get_progress_events(std::map<std::string,ProgressEvent> *e
 {
   std::lock_guard l(lock);
   *events = progress_events;
-}
+} 
 
 void ActivePyModules::config_notify()
 {

@@ -2569,6 +2569,7 @@ void DaemonServer::send_report()
   m->gid = monc->get_global_id();
   py_modules.get_health_checks(&m->health_checks);
   py_modules.get_progress_events(&m->progress_events);
+  py_modules.get_pool_availability(&m->pool_availability);
 
   cluster_state.with_mutable_pgmap([&](PGMap& pg_map) {
       cluster_state.update_delta_stats();
