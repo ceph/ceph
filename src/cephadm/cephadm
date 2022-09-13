@@ -3163,7 +3163,7 @@ def get_container(ctx: CephadmContext,
             '--cidfile',
             runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id),
         ])
-        if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
+        if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION and not ctx.no_cgroups_split:
             container_args.append('--cgroups=split')
 
     return CephContainer.for_daemon(
@@ -9093,6 +9093,11 @@ def _get_parser():
         action='store_true',
         default=not CONTAINER_INIT,
         help='Do not run podman/docker with `--init`')
+    parser.add_argument(
+        '--no-cgroups-split',
+        action='store_true',
+        default=False,
+        help='Do not run containers with --cgroups=split (currently only relevant when using podman)')
 
     subparsers = parser.add_subparsers(help='sub-command')
 

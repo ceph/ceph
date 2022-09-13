@@ -1320,6 +1320,9 @@ class CephadmServe:
         if not self.mgr.container_init:
             final_args += ['--no-container-init']
 
+        if not self.mgr.cgroups_split:
+            final_args += ['--no-cgroups-split']
+
         # subcommand
         final_args.append(command)
 
