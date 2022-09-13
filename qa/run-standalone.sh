@@ -52,10 +52,16 @@ export LD_LIBRARY_PATH="$(pwd)/lib"
 
 # TODO: Use getops
 dryrun=false
-if [[ "$1" = "--dry-run" ]]; then
-    dryrun=true
-    shift
-fi
+while [ $# -ge 1 ]; do
+case $1 in
+    --dry-run)
+        dryrun=true
+        ;;
+    *)
+        break
+esac
+shift
+done
 
 all=false
 if [ "$1" = "" ]; then
