@@ -1,6 +1,4 @@
 #include "rgw_d4n_datacache.h"
-#include "rgw_sal_d4n.h"
-#include <iostream>
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -69,6 +67,11 @@ void RGWD4NCache::findClient(cpp_redis::client *client) {
   if (client->is_connected())
     return;
 
+  if (host == "" || port == 0) { 
+    dout(10) << "RGW D4N Cache: D4N cache endpoint not configured correctly" << dendl;
+    exit(-1);
+  }
+
   client->connect(host, port, nullptr);
 
   if (!client->is_connected())
@@ -108,7 +111,7 @@ int RGWD4NCache::setObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal
 
   /* Every set will be treated as new */
   try {
-    std::vector< std::pair<std::string, std::string> > redisObject = buildObject(&baseAttrs, newAttrs);
+    std::vector< std::pair<std::string, std::string> > redisObject = buildObject(baseAttrs, newAttrs);
       
     if (redisObject.empty()) {
       return -1;
@@ -146,11 +149,10 @@ int RGWD4NCache::getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal
     rgw::sal::Attrs::iterator it;
     std::vector<std::string> fields;
 
-    for (it = source->get_attrs().begin(); it != source->get_attrs().end(); ++it) {
+    for (it = baseAttrs->begin(); it != baseAttrs->end(); ++it) {
       fields.push_back(it->first);
     }
 
-    
     try {
       client.hmget(key, fields, [&key_exist, &newAttrs, &fields, &values](cpp_redis::reply &reply) {
         if (reply.is_array()) {
@@ -176,7 +178,7 @@ int RGWD4NCache::getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal
         return -1;
       }
     } catch(std::exception &e) {
-      return -1;
+      exit(-1);
     }
   } else {
     return -2;
@@ -185,10 +187,10 @@ int RGWD4NCache::getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal
   return 0;
 }
 
-int RGWD4NCache::delObject(rgw::sal::Object* source) {
+int RGWD4NCache::delObject(std::string oid) {
   int result = 0;
   std::vector<std::string> keys;
-  std::string key = "rgw-object:" + source->get_name() + ":cache";
+  std::string key = "rgw-object:" + oid + ":cache";
   keys.push_back(key);
 
   if (!client.is_connected()) {
