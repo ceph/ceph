@@ -194,6 +194,9 @@ void PG::recheck_readable()
     if (mnow < prior_readable_until_ub) {
       logger().info("{} will wait (mnow {} < prior_readable_until_ub {})",
 		    __func__, mnow, prior_readable_until_ub);
+      queue_check_readable(
+	peering_state.get_last_peering_reset(),
+	prior_readable_until_ub - mnow);
     } else {
       logger().info("{} no longer wait (mnow {} >= prior_readable_until_ub {})",
 		    __func__, mnow, prior_readable_until_ub);
