@@ -337,11 +337,13 @@ public:
     bool weak,
     src_t src,
     journal_seq_t initiated_after,
-    on_destruct_func_t&& f
+    on_destruct_func_t&& f,
+    transaction_id_t trans_id
   ) : weak(weak),
       handle(std::move(handle)),
       on_destruct(std::move(f)),
-      src(src)
+      src(src),
+      trans_id(trans_id)
   {}
 
   void invalidate_clear_write_set() {
@@ -468,6 +470,10 @@ public:
     return existing_block_stats;
   }
 
+  transaction_id_t get_trans_id() const {
+    return trans_id;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -553,17 +559,21 @@ private:
   on_destruct_func_t on_destruct;
 
   const src_t src;
+
+  transaction_id_t trans_id = TRANS_ID_NULL;
 };
 using TransactionRef = Transaction::Ref;
 
 /// Should only be used with dummy staged-fltree node extent manager
 inline TransactionRef make_test_transaction() {
+  static transaction_id_t next_id = 0;
   return std::make_unique<Transaction>(
     get_dummy_ordering_handle(),
     false,
     Transaction::src_t::MUTATE,
     JOURNAL_SEQ_NULL,
-    [](Transaction&) {}
+    [](Transaction&) {},
+    ++next_id
   );
 }
 
