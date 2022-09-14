@@ -5787,7 +5787,7 @@ int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
     // For directories, DACs are overridable.
     // For files, Read/write DACs are always overridable but executable DACs are
     // overridable when there is at least one exec bit set
-    if(!S_ISDIR(in->mode) && (want & MAY_EXEC) && !(in->mode & S_IXUGO))
+    if(!S_ISDIR(in->mode) && (want & CLIENT_MAY_EXEC) && !(in->mode & S_IXUGO))
       return -CEPHFS_EACCES;
     return 0;
   }
@@ -5813,7 +5813,7 @@ int Client::xattr_permission(Inode *in, const char *name, unsigned want,
 
   r = 0;
   if (strncmp(name, "system.", 7) == 0) {
-    if ((want & MAY_WRITE) && (perms.uid() != 0 && perms.uid() != in->uid))
+    if ((want & CLIENT_MAY_WRITE) && (perms.uid() != 0 && perms.uid() != in->uid))
       r = -CEPHFS_EPERM;
   } else {
     r = inode_permission(in, perms, want);
@@ -5837,7 +5837,7 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
     goto out;
 
   if (mask & CEPH_SETATTR_SIZE) {
-    r = inode_permission(in, perms, MAY_WRITE);
+    r = inode_permission(in, perms, CLIENT_MAY_WRITE);
     if (r < 0)
       goto out;
   }
@@ -5873,7 +5873,7 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
       if (check_mask & mask) {
 	goto out;
       } else {
-	r = inode_permission(in, perms, MAY_WRITE);
+	r = inode_permission(in, perms, CLIENT_MAY_WRITE);
 	if (r < 0)
 	  goto out;
       }
@@ -5891,13 +5891,13 @@ int Client::may_open(Inode *in, int flags, const UserPerm& perms)
   unsigned want = 0;
 
   if ((flags & O_ACCMODE) == O_WRONLY)
-    want = MAY_WRITE;
+    want = CLIENT_MAY_WRITE;
   else if ((flags & O_ACCMODE) == O_RDWR)
-    want = MAY_READ | MAY_WRITE;
+    want = CLIENT_MAY_READ | CLIENT_MAY_WRITE;
   else if ((flags & O_ACCMODE) == O_RDONLY)
-    want = MAY_READ;
+    want = CLIENT_MAY_READ;
   if (flags & O_TRUNC)
-    want |= MAY_WRITE;
+    want |= CLIENT_MAY_WRITE;
 
   int r = 0;
   switch (in->mode & S_IFMT) {
@@ -5905,7 +5905,7 @@ int Client::may_open(Inode *in, int flags, const UserPerm& perms)
       r = -CEPHFS_ELOOP;
       goto out;
     case S_IFDIR:
-      if (want & MAY_WRITE) {
+      if (want & CLIENT_MAY_WRITE) {
 	r = -CEPHFS_EISDIR;
 	goto out;
       }
@@ -5929,7 +5929,7 @@ int Client::may_lookup(Inode *dir, const UserPerm& perms)
   if (r < 0)
     goto out;
 
-  r = inode_permission(dir, perms, MAY_EXEC);
+  r = inode_permission(dir, perms, CLIENT_MAY_EXEC);
 out:
   ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
   return r;
@@ -5942,7 +5942,7 @@ int Client::may_create(Inode *dir, const UserPerm& perms)
   if (r < 0)
     goto out;
 
-  r = inode_permission(dir, perms, MAY_EXEC | MAY_WRITE);
+  r = inode_permission(dir, perms, CLIENT_MAY_EXEC | CLIENT_MAY_WRITE);
 out:
   ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
   return r;
@@ -5955,7 +5955,7 @@ int Client::may_delete(Inode *dir, const char *name, const UserPerm& perms)
   if (r < 0)
     goto out;
 
-  r = inode_permission(dir, perms, MAY_EXEC | MAY_WRITE);
+  r = inode_permission(dir, perms, CLIENT_MAY_EXEC | CLIENT_MAY_WRITE);
   if (r < 0)
     goto out;
 
@@ -6020,7 +6020,7 @@ int Client::may_hardlink(Inode *in, const UserPerm& perms)
   if ((in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))
     goto out;
 
-  r = inode_permission(in, perms, MAY_READ | MAY_WRITE);
+  r = inode_permission(in, perms, CLIENT_MAY_READ | CLIENT_MAY_WRITE);
 out:
   ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
   return r;
@@ -7757,7 +7757,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     auxsize = aux->size();
 
   ldout(cct, 10) << __func__ << " mask " << mask << " issued " <<
-    ccap_string(issued) <<  " aux size " << auxsize << dendl;
+    ccap_string(issued) <<  " aux size " << auxsize << " perms " << perms << dendl;
 
   if (in->snapid != CEPH_NOSNAP) {
     return -CEPHFS_EROFS;
@@ -12723,7 +12723,7 @@ int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size,
 		      const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
-    int r = xattr_permission(in.get(), name, MAY_READ, perms);
+    int r = xattr_permission(in.get(), name, CLIENT_MAY_READ, perms);
     if (r < 0)
       return r;
   }
@@ -12746,7 +12746,7 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
 
   std::scoped_lock lock(client_lock);
   if (!fuse_default_permissions) {
-    int r = xattr_permission(in, name, MAY_READ, perms);
+    int r = xattr_permission(in, name, CLIENT_MAY_READ, perms);
     if (r < 0)
       return r;
   }
@@ -12926,7 +12926,7 @@ int Client::_setxattr(InodeRef &in, const char *name, const void *value,
 		      size_t size, int flags, const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
-    int r = xattr_permission(in.get(), name, MAY_WRITE, perms);
+    int r = xattr_permission(in.get(), name, CLIENT_MAY_WRITE, perms);
     if (r < 0)
       return r;
   }
@@ -13014,7 +13014,7 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
 
   std::scoped_lock lock(client_lock);
   if (!fuse_default_permissions) {
-    int r = xattr_permission(in, name, MAY_WRITE, perms);
+    int r = xattr_permission(in, name, CLIENT_MAY_WRITE, perms);
     if (r < 0)
       return r;
   }
@@ -13056,7 +13056,7 @@ int Client::_removexattr(Inode *in, const char *name, const UserPerm& perms)
 int Client::_removexattr(InodeRef &in, const char *name, const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
-    int r = xattr_permission(in.get(), name, MAY_WRITE, perms);
+    int r = xattr_permission(in.get(), name, CLIENT_MAY_WRITE, perms);
     if (r < 0)
       return r;
   }
@@ -13078,7 +13078,7 @@ int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
 
   std::scoped_lock lock(client_lock);
   if (!fuse_default_permissions) {
-    int r = xattr_permission(in, name, MAY_WRITE, perms);
+    int r = xattr_permission(in, name, CLIENT_MAY_WRITE, perms);
     if (r < 0)
       return r;
   }

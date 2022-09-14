@@ -1271,9 +1271,9 @@ private:
   };
 
   enum {
-    MAY_EXEC = 1,
-    MAY_WRITE = 2,
-    MAY_READ = 4,
+    CLIENT_MAY_EXEC = 1,
+    CLIENT_MAY_WRITE = 2,
+    CLIENT_MAY_READ = 4,
   };
 
   std::unique_ptr<CephContext, std::function<void(CephContext*)>> cct_deleter;
