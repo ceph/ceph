@@ -87,6 +87,13 @@ public:
     Transaction &t,
     const std::string &key) final;
 
+  omap_rm_key_range_ret omap_rm_key_range(
+    omap_root_t &omap_root,
+    Transaction &t,
+    const std::string &first,
+    const std::string &last,
+    omap_list_config_t config) final;
+
   omap_list_ret omap_list(
     const omap_root_t &omap_root,
     Transaction &t,
