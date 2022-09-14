@@ -15,6 +15,7 @@ import { EmptyPipe } from './empty.pipe';
 import { EncodeUriPipe } from './encode-uri.pipe';
 import { FilterPipe } from './filter.pipe';
 import { HealthColorPipe } from './health-color.pipe';
+import { HealthLabelPipe } from './health-label.pipe';
 import { IopsPipe } from './iops.pipe';
 import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
 import { JoinPipe } from './join.pipe';
@@ -40,6 +41,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
     HealthColorPipe,
+    HealthLabelPipe,
     DimlessPipe,
     CephShortVersionPipe,
     CephReleaseNamePipe,
@@ -71,6 +73,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
     HealthColorPipe,
+    HealthLabelPipe,
     DimlessPipe,
     CephShortVersionPipe,
     CephReleaseNamePipe,
