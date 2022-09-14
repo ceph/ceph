@@ -26,6 +26,27 @@ ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
 
 
+def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEntity:
+    """
+    Map the daemon id to a cephx keyring entity name
+    """
+    # despite this mapping entity names to daemons, self.TYPE within
+    # the CephService class refers to service types, not daemon types
+    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress']:
+        return AuthEntity(f'client.{daemon_type}.{daemon_id}')
+    elif daemon_type in ['crash', 'agent']:
+        if host == "":
+            raise OrchestratorError(
+                f'Host not provided to generate <{daemon_type}> auth entity name')
+        return AuthEntity(f'client.{daemon_type}.{host}')
+    elif daemon_type == 'mon':
+        return AuthEntity('mon.')
+    elif daemon_type in ['mgr', 'osd', 'mds']:
+        return AuthEntity(f'{daemon_type}.{daemon_id}')
+    else:
+        raise OrchestratorError(f"unknown daemon type {daemon_type}")
+
+
 class CephadmDaemonDeploySpec:
     # typing.NamedTuple + Generic is broken in py36
     def __init__(self, host: str, daemon_id: str,
@@ -80,6 +101,9 @@ class CephadmDaemonDeploySpec:
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def entity_name(self) -> str:
+        return get_auth_entity(self.daemon_type, self.daemon_id, host=self.host)
 
     def config_get_files(self) -> Dict[str, Any]:
         files = self.extra_files
@@ -237,6 +261,29 @@ class CephadmService(metaclass=ABCMeta):
             })
             if err:
                 self.mgr.log.warning(f"Unable to update caps for {entity}")
+
+            # get keyring anyway
+            ret, keyring, err = self.mgr.mon_command({
+                'prefix': 'auth get',
+                'entity': entity,
+            })
+            if err:
+                raise OrchestratorError(f"Unable to fetch keyring for {entity}: {err}")
+
+        # strip down keyring
+        #  - don't include caps (auth get includes them; get-or-create does not)
+        #  - use pending key if present
+        key = None
+        for line in keyring.splitlines():
+            if ' = ' not in line:
+                continue
+            line = line.strip()
+            (ls, rs) = line.split(' = ', 1)
+            if ls == 'key' and not key:
+                key = rs
+            if ls == 'pending key':
+                key = rs
+        keyring = f'[{entity}]\nkey = {key}\n'
         return keyring
 
     def _inventory_get_fqdn(self, hostname: str) -> str:
@@ -450,24 +497,7 @@ class CephService(CephadmService):
         self.remove_keyring(daemon)
 
     def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
-        """
-        Map the daemon id to a cephx keyring entity name
-        """
-        # despite this mapping entity names to daemons, self.TYPE within
-        # the CephService class refers to service types, not daemon types
-        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress']:
-            return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
-        elif self.TYPE in ['crash', 'agent']:
-            if host == "":
-                raise OrchestratorError(
-                    f'Host not provided to generate <{self.TYPE}> auth entity name')
-            return AuthEntity(f'client.{self.TYPE}.{host}')
-        elif self.TYPE == 'mon':
-            return AuthEntity('mon.')
-        elif self.TYPE in ['mgr', 'osd', 'mds']:
-            return AuthEntity(f'{self.TYPE}.{daemon_id}')
-        else:
-            raise OrchestratorError("unknown daemon type")
+        return get_auth_entity(self.TYPE, daemon_id, host=host)
 
     def get_config_and_keyring(self,
                                daemon_type: str,
@@ -524,7 +554,7 @@ class MonService(CephService):
         # get mon. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get',
-            'entity': self.get_auth_entity(name),
+            'entity': daemon_spec.entity_name(),
         })
 
         extra_config = '[mon.%s]\n' % name
@@ -1030,7 +1060,7 @@ class CephfsMirrorService(CephService):
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(daemon_spec.daemon_id),
+            'entity': daemon_spec.entity_name(),
             'caps': ['mon', 'profile cephfs-mirror',
                      'mds', 'allow r',
                      'osd', 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*',

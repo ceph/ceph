@@ -938,11 +938,13 @@ class CephadmServe:
                     if self.mgr.cache.rm_scheduled_daemon_action(dd.hostname, dd.name()):
                         self.mgr.cache.save_host(dd.hostname)
                 except OrchestratorError as e:
+                    self.log.exception(e)
                     self.mgr.events.from_orch_error(e)
                     if dd.daemon_type in daemons_post:
                         del daemons_post[dd.daemon_type]
                     # continue...
                 except Exception as e:
+                    self.log.exception(e)
                     self.mgr.events.for_daemon_from_exception(dd.name(), e)
                     if dd.daemon_type in daemons_post:
                         del daemons_post[dd.daemon_type]

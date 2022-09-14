@@ -116,6 +116,7 @@ public:
   int call(
     std::string_view command,
     const cmdmap_t& cmdmap,
+    const bufferlist&,
     Formatter *f,
     std::ostream& errss,
     ceph::buffer::list& out) override {

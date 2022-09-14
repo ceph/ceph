@@ -472,7 +472,7 @@ class TestCephadm(object):
                         '--extra-container-args=--cpus=2',
                         '--extra-container-args=--quiet'
                     ],
-                    stdin='{"config": "", "keyring": ""}',
+                    stdin='{"config": "", "keyring": "[client.crash.test]\\nkey = None\\n"}',
                     image='',
                 )
 
@@ -494,7 +494,7 @@ class TestCephadm(object):
         ]
         conf_outs = [json.dumps(c.to_json()) for c in configs]
         stdin_str = '{' + \
-            f'"config": "", "keyring": "", "custom_config_files": [{conf_outs[0]}, {conf_outs[1]}]' + '}'
+            f'"config": "", "keyring": "[client.crash.test]\\nkey = None\\n", "custom_config_files": [{conf_outs[0]}, {conf_outs[1]}]' + '}'
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, ServiceSpec(service_type='crash', custom_configs=configs), CephadmOrchestrator.apply_crash):
                 _run_cephadm.assert_called_with(
