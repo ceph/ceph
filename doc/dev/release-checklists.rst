@@ -43,6 +43,7 @@ Misc
 ~~~~
 - [x] update src/ceph-volume/ceph_volume/__init__.py (`__release__`)
 - [x] update src/tools/monmaptool.cc (`min_mon_release` and corresponding output in `src/test/cli/monmaptool`)
+- [x] update src/cephadm/cephadm (`DEFAULT_IMAGE_RELEASE` to X)
 
 Feature bits
 ------------
@@ -107,3 +108,4 @@ First stable release
 
 - [ ] src/ceph_release: change type `stable`
 - [ ] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
+- [ ] src/cephadm/cephadm: update `LATEST_STABLE_RELEASE`
