@@ -631,10 +631,11 @@ class Monitoring(object):
         cmd = daemon_type.replace('-', '_')
         code = -1
         err = ''
+        out = ''
         version = ''
         if daemon_type == 'alertmanager':
             for cmd in ['alertmanager', 'prometheus-alertmanager']:
-                _, err, code = call(ctx, [
+                out, err, code = call(ctx, [
                     ctx.container_engine.path, 'exec', container_id, cmd,
                     '--version'
                 ], verbosity=CallVerbosity.QUIET)
@@ -642,12 +643,14 @@ class Monitoring(object):
                     break
             cmd = 'alertmanager'  # reset cmd for version extraction
         else:
-            _, err, code = call(ctx, [
+            out, err, code = call(ctx, [
                 ctx.container_engine.path, 'exec', container_id, cmd, '--version'
             ], verbosity=CallVerbosity.QUIET)
-        if code == 0 and \
-                err.startswith('%s, version ' % cmd):
-            version = err.split(' ')[2]
+        if code == 0:
+            if err.startswith('%s, version ' % cmd):
+                version = err.split(' ')[2]
+            elif out.startswith('%s, version ' % cmd):
+                version = out.split(' ')[2]
         return version
 
 ##################################
