@@ -11936,6 +11936,12 @@ Inode *Client::open_snapdir(Inode *diri)
 
     in->dirfragtree.clear();
     in->snapdir_parent = diri;
+    // copy posix acls to snapshotted inode
+    for (auto &[xattr_key, xattr_value] : diri->xattrs) {
+      if (xattr_key.rfind("system.", 0) == 0) {
+        in->xattrs[xattr_key] = xattr_value;
+      }
+    }
     diri->flags |= I_SNAPDIR_OPEN;
     inode_map[vino] = in;
     if (use_faked_inos())
