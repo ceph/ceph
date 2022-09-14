@@ -603,8 +603,9 @@ void ObjectCopyRequest<I>::merge_write_ops() {
     for (auto [image_offset, image_length] : read_op.image_extent_map) {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
-      io::util::file_to_extents(m_dst_image_ctx, image_offset,
-                                image_length, buffer_offset, &object_extents);
+      io::util::area_to_object_extents(m_dst_image_ctx, image_offset,
+                                       image_length, m_image_area,
+                                       buffer_offset, &object_extents);
       for (auto& object_extent : object_extents) {
         ldout(m_cct, 20) << "src_snap_seq=" << src_snap_seq << ", "
                          << "object_offset=" << object_extent.offset << ", "
@@ -759,8 +760,9 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     for (auto z = zero_interval.begin(); z != zero_interval.end(); ++z) {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
-      io::util::file_to_extents(m_dst_image_ctx, z.get_start(), z.get_len(), 0,
-                                &object_extents);
+      io::util::area_to_object_extents(m_dst_image_ctx, z.get_start(),
+                                       z.get_len(), m_image_area, 0,
+                                       &object_extents);
       for (auto& object_extent : object_extents) {
         ceph_assert(object_extent.offset + object_extent.length <=
                       m_dst_image_ctx->layout.object_size);

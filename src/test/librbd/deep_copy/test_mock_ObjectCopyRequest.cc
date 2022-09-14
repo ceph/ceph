@@ -45,10 +45,11 @@ inline ImageCtx* get_image_ctx(MockTestImageCtx* image_ctx) {
 namespace io {
 namespace util {
 
-template <> void file_to_extents(
-        MockTestImageCtx* image_ctx, uint64_t offset, uint64_t length,
-        uint64_t buffer_offset,
-        striper::LightweightObjectExtents* object_extents) {
+template <>
+void area_to_object_extents(MockTestImageCtx* image_ctx, uint64_t offset,
+                            uint64_t length, ImageArea area,
+                            uint64_t buffer_offset,
+                            striper::LightweightObjectExtents* object_extents) {
   Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
                            0, buffer_offset, object_extents);
 }

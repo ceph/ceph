@@ -179,9 +179,9 @@ void CopyupRequest<I>::read_from_parent() {
     &CopyupRequest<I>::handle_read_from_parent>(
       this, librbd::util::get_image_ctx(m_image_ctx->parent), AIO_TYPE_READ);
 
-  ldout(cct, 20) << "completion=" << comp << ", "
-                 << "extents=" << m_image_extents
-                 << dendl;
+  ldout(cct, 20) << "completion=" << comp
+                 << " image_extents=" << m_image_extents
+                 << " area=" << m_image_area << dendl;
   auto req = io::ImageDispatchSpec::create_read(
     *m_image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
     std::move(m_image_extents), m_image_area,
@@ -677,8 +677,8 @@ void CopyupRequest<I>::convert_copyup_extent_map() {
   // convert the image-extent extent map to object-extents
   for (auto [image_offset, image_length] : image_extent_map) {
     striper::LightweightObjectExtents object_extents;
-    util::file_to_extents(
-      m_image_ctx, image_offset, image_length, 0, &object_extents);
+    util::area_to_object_extents(m_image_ctx, image_offset, image_length,
+                                 m_image_area, 0, &object_extents);
     for (auto& object_extent : object_extents) {
       m_copyup_extent_map.emplace_back(
         object_extent.offset, object_extent.length);

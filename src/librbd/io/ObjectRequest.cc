@@ -992,7 +992,7 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
      m_list_snaps_flags | LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS);
 
   ImageListSnapsRequest<I> req(
-    *image_ctx->parent, aio_comp, std::move(parent_extents),
+    *image_ctx->parent, aio_comp, std::move(parent_extents), m_image_area,
     {0, image_ctx->parent->snap_id}, list_snaps_flags, &m_parent_snapshot_delta,
     this->m_trace);
   req.send();
@@ -1023,8 +1023,9 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
 
       // map image-extents back to this object
       striper::LightweightObjectExtents object_extents;
-      io::util::file_to_extents(image_ctx, image_extent.get_off(),
-                                image_extent.get_len(), 0, &object_extents);
+      io::util::area_to_object_extents(image_ctx, image_extent.get_off(),
+                                       image_extent.get_len(), m_image_area, 0,
+                                       &object_extents);
       for (auto& object_extent : object_extents) {
         ceph_assert(object_extent.object_no == this->m_object_no);
         intervals.insert(

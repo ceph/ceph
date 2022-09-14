@@ -95,6 +95,10 @@ enum {
   IMAGE_DISPATCH_FLAG_QOS_MASK                = (
     IMAGE_DISPATCH_FLAG_QOS_BPS_MASK |
     IMAGE_DISPATCH_FLAG_QOS_IOPS_MASK),
+
+  // TODO: pass area through ImageDispatchInterface and remove
+  // this flag
+  IMAGE_DISPATCH_FLAG_CRYPTO_HEADER           = 1 << 6
 };
 
 enum {

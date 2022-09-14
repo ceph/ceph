@@ -184,12 +184,11 @@ bool trigger_copyup(I* image_ctx, uint64_t object_no, IOContext io_context,
 }
 
 template <typename I>
-void file_to_extents(I* image_ctx, uint64_t offset, uint64_t length,
-                     uint64_t buffer_offset,
-                     striper::LightweightObjectExtents* object_extents) {
+void area_to_object_extents(I* image_ctx, uint64_t offset, uint64_t length,
+                            ImageArea area, uint64_t buffer_offset,
+                            striper::LightweightObjectExtents* object_extents) {
   Extents extents = {{offset, length}};
-  // TODO: pass area
-  image_ctx->io_image_dispatcher->remap_to_physical(extents, ImageArea::DATA);
+  image_ctx->io_image_dispatcher->remap_to_physical(extents, area);
   for (auto [off, len] : extents) {
     Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, off, len, 0,
                              buffer_offset, object_extents);
@@ -245,10 +244,10 @@ template int librbd::io::util::clip_request(
 template bool librbd::io::util::trigger_copyup(
         librbd::ImageCtx *image_ctx, uint64_t object_no, IOContext io_context,
         Context* on_finish);
-template void librbd::io::util::file_to_extents(
-        librbd::ImageCtx *image_ctx, uint64_t offset, uint64_t length,
-        uint64_t buffer_offset,
-        striper::LightweightObjectExtents* object_extents);
+template void librbd::io::util::area_to_object_extents(
+    librbd::ImageCtx* image_ctx, uint64_t offset, uint64_t length,
+    ImageArea area, uint64_t buffer_offset,
+    striper::LightweightObjectExtents* object_extents);
 template auto librbd::io::util::object_to_area_extents(
     librbd::ImageCtx* image_ctx, uint64_t object_no, const Extents& extents)
     -> std::pair<Extents, ImageArea>;

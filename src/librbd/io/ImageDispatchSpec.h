@@ -238,6 +238,16 @@ private:
     ceph_assert(aio_comp->image_dispatcher_ctx == nullptr);
     aio_comp->image_dispatcher_ctx = &dispatcher_ctx;
     aio_comp->get();
+
+    switch (area) {
+    case ImageArea::DATA:
+      break;
+    case ImageArea::CRYPTO_HEADER:
+      image_dispatch_flags |= IMAGE_DISPATCH_FLAG_CRYPTO_HEADER;
+      break;
+    default:
+      ceph_abort();
+    }
   }
 };
 
