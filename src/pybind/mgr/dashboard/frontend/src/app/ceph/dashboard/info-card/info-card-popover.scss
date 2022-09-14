@@ -9,6 +9,17 @@
     max-height: 19vh;
     max-width: 100%;
     overflow: auto;
+
+    li {
+      span {
+        font-size: 1.1em;
+        font-weight: bold;
+      }
+
+      span.health-warn-description {
+        color: vv.$health-color-warning-wcag-aa-regular-text !important;
+      }
+    }
   }
 }
 
@@ -33,6 +44,7 @@
   border: 1px solid vv.$gray-200;
   border-radius: 3px;
   cursor: pointer;
+  font-size: 1.25em;
   padding: 7px;
 }
 

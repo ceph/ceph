@@ -6,7 +6,9 @@
     <span>{{ groupTitle }}</span>
     <button type="button"
             class="popover-icon btn btn-link p-0"
-            (click)="popInfo.toggle()">
+            (click)="popInfo.toggle()"
+            aria-label="learn more"
+            i18n-aria-label>
       <i [ngClass]="[icons.infoCircle, icons.large]"></i>
     </button>
   </div>

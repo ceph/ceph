@@ -19,7 +19,7 @@ module.exports = (on, _config) => {
     log({ message, optional }) {
       optional ? console.log(message, optional) : console.log(message);
       return null;
-    },
+    }
   });
 };
 
