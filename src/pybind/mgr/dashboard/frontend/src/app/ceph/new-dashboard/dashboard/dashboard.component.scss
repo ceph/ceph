@@ -1,3 +1,47 @@
+.alerts {
+  height: 17rem;
+
+  div {
+    padding-top: 0;
+  }
+}
+
 div {
   padding-top: 20px;
+}
+
+ngx-simplebar {
+  height: 18rem;
+}
+
+hr {
+  margin-bottom: 2px;
+  margin-top: 2px;
+}
+
+.position-right {
+  margin-left: auto;
+  order: 2;
+}
+
+button.dropdown-toggle {
+  position: relative;
+
+  &::after {
+    border: 0;
+    content: '\f054';
+    font-family: 'ForkAwesome';
+    font-size: 1rem;
+    position: absolute;
+    right: 20px;
+    transition: transform 0.3s ease-in-out;
+  }
+
+  &[aria-expanded='true']::after {
+    transform: rotate(90deg);
+  }
+
+  &:focus {
+    box-shadow: none;
+  }
 }

@@ -1,14 +1,20 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import _ from 'lodash';
+import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CssHelper } from '~/app/shared/classes/css-helper';
-import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { AlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { CardComponent } from '../card/card.component';
@@ -28,11 +34,98 @@ export class SummaryServiceMock {
   }
 }
 
-describe('CardComponent', () => {
+describe('Dashbord Component', () => {
   let component: DashboardComponent;
   let fixture: ComponentFixture<DashboardComponent>;
   let configurationService: ConfigurationService;
   let orchestratorService: MgrModuleService;
+  let getHealthSpy: jasmine.Spy;
+  let getAlertsSpy: jasmine.Spy;
+
+  const healthPayload: Record<string, any> = {
+    health: { status: 'HEALTH_OK' },
+    mon_status: { monmap: { mons: [] }, quorum: [] },
+    osd_map: { osds: [] },
+    mgr_map: { standbys: [] },
+    hosts: 0,
+    rgw: 0,
+    fs_map: { filesystems: [], standbys: [] },
+    iscsi_daemons: 0,
+    client_perf: {},
+    scrub_status: 'Inactive',
+    pools: [],
+    df: { stats: {} },
+    pg_info: { object_stats: { num_objects: 0 } }
+  };
+
+  const alertsPayload: AlertmanagerAlert[] = [
+    {
+      labels: {
+        alertname: 'CephMgrPrometheusModuleInactive',
+        instance: 'ceph2:9283',
+        job: 'ceph',
+        severity: 'critical'
+      },
+      annotations: {
+        description: 'The mgr/prometheus module at ceph2:9283 is unreachable.',
+        summary: 'The mgr/prometheus module is not available'
+      },
+      startsAt: '2022-09-28T08:23:41.152Z',
+      endsAt: '2022-09-28T15:28:01.152Z',
+      generatorURL: 'http://prometheus:9090/testUrl',
+      status: {
+        state: 'active',
+        silencedBy: null,
+        inhibitedBy: null
+      },
+      receivers: ['ceph2'],
+      fingerprint: 'fingerprint'
+    },
+    {
+      labels: {
+        alertname: 'CephOSDDownHigh',
+        instance: 'ceph:9283',
+        job: 'ceph',
+        severity: 'critical'
+      },
+      annotations: {
+        description: '66.67% or 2 of 3 OSDs are down (>= 10%).',
+        summary: 'More than 10% of OSDs are down'
+      },
+      startsAt: '2022-09-28T14:17:22.665Z',
+      endsAt: '2022-09-28T15:28:32.665Z',
+      generatorURL: 'http://prometheus:9090/testUrl',
+      status: {
+        state: 'active',
+        silencedBy: null,
+        inhibitedBy: null
+      },
+      receivers: ['default'],
+      fingerprint: 'fingerprint'
+    },
+    {
+      labels: {
+        alertname: 'CephHealthWarning',
+        instance: 'ceph:9283',
+        job: 'ceph',
+        severity: 'warning'
+      },
+      annotations: {
+        description: 'The cluster state has been HEALTH_WARN for more than 15 minutes.',
+        summary: 'Ceph is in the WARNING state'
+      },
+      startsAt: '2022-09-28T08:41:38.454Z',
+      endsAt: '2022-09-28T15:28:38.454Z',
+      generatorURL: 'http://prometheus:9090/testUrl',
+      status: {
+        state: 'active',
+        silencedBy: null,
+        inhibitedBy: null
+      },
+      receivers: ['ceph'],
+      fingerprint: 'fingerprint'
+    }
+  ];
 
   const configValueData: any = {
     value: [
@@ -52,14 +145,10 @@ describe('CardComponent', () => {
   };
 
   configureTestBed({
-    imports: [RouterTestingModule, HttpClientTestingModule],
+    imports: [RouterTestingModule, HttpClientTestingModule, ToastrModule.forRoot(), PipesModule],
     declarations: [DashboardComponent, CardComponent, DashboardPieComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: [
-      CssHelper,
-      DimlessBinaryPipe,
-      { provide: SummaryService, useClass: SummaryServiceMock }
-    ]
+    providers: [{ provide: SummaryService, useClass: SummaryServiceMock }, CssHelper]
   });
 
   beforeEach(() => {
@@ -67,6 +156,11 @@ describe('CardComponent', () => {
     component = fixture.componentInstance;
     configurationService = TestBed.inject(ConfigurationService);
     orchestratorService = TestBed.inject(MgrModuleService);
+    getHealthSpy = spyOn(TestBed.inject(HealthService), 'getMinimalHealth');
+    getHealthSpy.and.returnValue(of(healthPayload));
+    spyOn(TestBed.inject(PrometheusService), 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
+    getAlertsSpy = spyOn(TestBed.inject(PrometheusService), 'getAlerts');
+    getAlertsSpy.and.returnValue(of(alertsPayload));
   });
 
   it('should create', () => {
@@ -85,5 +179,85 @@ describe('CardComponent', () => {
     expect(component.detailsCardData.fsid).toBe('e90a0d58-658e-4148-8f61-e896c86f0696');
     expect(component.detailsCardData.orchestrator).toBe('Cephadm');
     expect(component.detailsCardData.cephVersion).toBe('17.0.0-12222-gcd0cd7cb quincy (dev)');
+  });
+
+  it('should check if the respective icon is shown for each status', () => {
+    const payload = _.cloneDeep(healthPayload);
+
+    // HEALTH_WARN
+    payload.health['status'] = 'HEALTH_WARN';
+    payload.health['checks'] = [
+      { severity: 'HEALTH_WARN', type: 'WRN', summary: { message: 'fake warning' } }
+    ];
+
+    getHealthSpy.and.returnValue(of(payload));
+    fixture.detectChanges();
+    const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[title="Status"] i'));
+    expect(clusterStatusCard.nativeElement.title).toEqual(`${payload.health.status}`);
+
+    // HEALTH_ERR
+    payload.health['status'] = 'HEALTH_ERR';
+    payload.health['checks'] = [
+      { severity: 'HEALTH_ERR', type: 'ERR', summary: { message: 'fake error' } }
+    ];
+
+    getHealthSpy.and.returnValue(of(payload));
+    fixture.detectChanges();
+    expect(clusterStatusCard.nativeElement.title).toEqual(`${payload.health.status}`);
+
+    // HEALTH_OK
+    payload.health['status'] = 'HEALTH_OK';
+    payload.health['checks'] = [
+      { severity: 'HEALTH_OK', type: 'OK', summary: { message: 'fake success' } }
+    ];
+
+    getHealthSpy.and.returnValue(of(payload));
+    fixture.detectChanges();
+    expect(clusterStatusCard.nativeElement.title).toEqual(`${payload.health.status}`);
+  });
+
+  it('should show the actual alert count on each alerts pill', () => {
+    fixture.detectChanges();
+
+    const successNotification = fixture.debugElement.query(By.css('button[id=warningAlerts] span'));
+
+    const dangerNotification = fixture.debugElement.query(By.css('button[id=dangerAlerts] span'));
+
+    expect(successNotification.nativeElement.textContent).toBe('1');
+    expect(dangerNotification.nativeElement.textContent).toBe('2');
+  });
+
+  it('should show the critical alerts window and its content', () => {
+    const payload = _.cloneDeep(alertsPayload[0]);
+    component.toggleAlertsWindow('danger');
+    fixture.detectChanges();
+
+    const cardTitle = fixture.debugElement.query(By.css('.tc_alerts h6.card-title'));
+
+    expect(cardTitle.nativeElement.textContent).toBe(payload.labels.alertname);
+    expect(component.alertType).not.toBe('warning');
+  });
+
+  it('should show the warning alerts window and its content', () => {
+    const payload = _.cloneDeep(alertsPayload[2]);
+    component.toggleAlertsWindow('warning');
+    fixture.detectChanges();
+
+    const cardTitle = fixture.debugElement.query(By.css('.tc_alerts h6.card-title'));
+
+    expect(cardTitle.nativeElement.textContent).toBe(payload.labels.alertname);
+    expect(component.alertType).not.toBe('critical');
+  });
+
+  it('should only show the pills when the alerts are not empty', () => {
+    getAlertsSpy.and.returnValue(of({}));
+    fixture.detectChanges();
+
+    const successNotification = fixture.debugElement.query(By.css('button[id=warningAlerts]'));
+
+    const dangerNotification = fixture.debugElement.query(By.css('button[id=dangerAlerts]'));
+
+    expect(successNotification).toBe(null);
+    expect(dangerNotification).toBe(null);
   });
 });

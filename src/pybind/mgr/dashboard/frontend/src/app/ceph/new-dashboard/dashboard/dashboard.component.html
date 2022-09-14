@@ -3,7 +3,7 @@
     <cd-card title="Details"
              i18n-title
              class="col-sm-3 px-3">
-      <dl>
+      <dl class="ml-4 mr-4">
         <dt>FSID</dt>
         <dd>{{ detailsCardData.fsid }}</dd>
         <dt>Orchestror</dt>
@@ -13,52 +13,72 @@
       </dl>
     </cd-card>
 
-    <cd-card *ngIf="healthData"
-             title="Status"
+    <cd-card title="Status"
              i18n-title
              class="col-sm-6 px-3">
-      <div class="d-flex">
-        <i *ngIf="healthData.health?.status == 'HEALTH_OK'"
-           class="pl-2 fa fa-check-circle text-success"></i>
-        <i *ngIf="healthData.health?.status == 'HEALTH_WARN'"
-           class="pl-2 fa fa-exclamation-triangle text-warning"></i>
-        <i *ngIf="healthData.health?.status == 'HEALTH_ERR'"
-           class="pl-2 fa fa-exclamation-triangle text-danger"></i>
-        <p class="pl-2 pr-5">Cluster</p>
-        <i class="fa fa-exclamation-triangle"></i>
-        <p class="pl-2">Data Health</p>
+      <div class="d-flex ml-4 mr-4 mb-5"
+           *ngIf="healthData$ | async as healthData">
+        <i *ngIf="healthData.health?.status"
+           [ngClass]="[healthData.health.status | healthIcon, icons.large]"
+           [ngStyle]="healthData.health.status | healthColor"
+           [title]="healthData.health.status"></i>
+        <span class="ml-2 mt-n1"
+              i18n>Cluster</span>
       </div>
-      <hr />
-      <div class="d-flex flex-wrap">
-        <p>Notifications</p>
-        <!-- Potentially make widget component -->
-        <button class="ml-3 btn btn-outline-danger rounded-pill">
-          <i class="fa fa-exclamation-circle"></i>
-          <a>1</a>
-        </button>
-        <span class="ml-2 btn btn-outline-warning rounded-pill">
-          <i class="fa fa-exclamation-triangle"></i>
-          <a>1</a>
-        </span>
-        <span class="ml-2 btn btn-outline-success rounded-pill">
-          <i class="fa fa-check-circle"></i>
-          <a>1</a>
-        </span>
-        <span class="ml-2 btn btn-outline-primary rounded-pill">
-          <i class="fa fa-info-circle"></i>
-          <a>1</a>
-        </span>
-        <span class="ml-2 btn btn-outline-info rounded-pill">
-          <i class="fa fa-bell"></i>
-          <a>1</a>
-        </span>
-      </div>
+      <section class="border-top mt-5"
+               *ngIf="isAlertmanagerConfigured && (crticialActiveAlerts || warningActiveAlerts)">
+        <div class="d-flex flex-wrap ml-4 mr-4">
+          <span class="pt-2"
+                i18n>Alerts</span>
+          <!-- Potentially make widget component -->
+          <button class="btn btn-outline-danger rounded-pill ml-2"
+                  [ngClass]="{'active': showAlerts && alertType === 'critical'}"
+                  title="Danger"
+                  (click)="toggleAlertsWindow('danger')"
+                  id="dangerAlerts"
+                  i18n-title
+                  *ngIf="crticialActiveAlerts">
+            <i [ngClass]="[icons.danger]"></i>
+            <span>{{ crticialActiveAlerts }}</span>
+          </button>
+
+          <button class="btn btn-outline-warning rounded-pill ml-2"
+                  [ngClass]="{'active': showAlerts && alertType === 'warning'}"
+                  title="Warning"
+                  (click)="toggleAlertsWindow('warning')"
+                  id="warningAlerts"
+                  i18n-title
+                  *ngIf="warningActiveAlerts">
+            <i [ngClass]="[icons.infoCircle]"></i>
+            <span>{{ warningActiveAlerts }}</span>
+          </button>
+
+          <div class="pt-0 position-right">
+            <button class="btn btn-block dropdown-toggle"
+                    data-toggle="collapse"
+                    aria-label="toggle alert window"
+                    [attr.aria-expanded]="showAlerts"
+                    (click)="toggleAlertsWindow('danger')"></button>
+
+          </div>
+        </div>
+        <div class="alerts pt-0"
+             *ngIf="showAlerts">
+          <hr class="mt-4">
+          <ngx-simplebar [options]="simplebar">
+            <div class="card-body pl-0 pr-1 pt-1">
+              <ng-container *ngTemplateOutlet="alertsCard"></ng-container>
+            </div>
+          </ngx-simplebar>
+        </div>
+      </section>
     </cd-card>
 
     <cd-card title="Capacity"
              i18n-title
              class="col-sm-3 px-3">
-      <ng-container *ngIf="{osdSettings: osdSettings$ | async, capacity: capacity$ | async} as values">
+      <ng-container class="ml-4 mr-4"
+                    *ngIf="{osdSettings: osdSettings$ | async, capacity: capacity$ | async} as values">
         <ng-container *ngIf="values.osdSettings && values.capacity">
           <cd-dashboard-pie [data]="{max: values.capacity.total_bytes, current: values.capacity.total_used_raw_bytes}"
                             [lowThreshold]="values.osdSettings.nearfull_ratio"
@@ -73,19 +93,56 @@
     <cd-card title="Inventory"
              i18n-title
              class="col-sm-3 px-3">
-             Text
+      <div class="ml-4 mr-4">
+        Text
+      </div>
     </cd-card>
 
     <cd-card title="Capacity utilization"
              i18n-title
              class="col-sm-6 px-3">
-             Text
+      <div class="ml-4 mr-4">
+        Text
+      </div>
     </cd-card>
 
     <cd-card title="Events"
              i18n-title
              class="col-sm-3 px-3">
-             Text
+      <div class="ml-4 mr-4">
+        Text
+      </div>
     </cd-card>
   </div>
 </div>
+
+<ng-template #alertsCard>
+  <ng-container *ngFor="let alert of alerts; let i = index">
+    <div [ngClass]="borderClass"
+         *ngIf="alertType === alert.labels.severity">
+      <div class="card tc_alerts border-0 pt-3">
+        <div class="row no-gutters">
+          <div class="col-sm-1 text-center">
+            <span [ngClass]="[icons.stack, icons.large, textClass]">
+              <i [ngClass]="[icons.circle, icons.stack2x]"></i>
+              <i [ngClass]="[icons.stack1x, icons.inverse, icons.warning]"></i>
+            </span>
+          </div>
+          <div class="col-md-11">
+            <div class="card-body pl-0 pr-1 pt-1">
+              <h6 class="card-title bold">{{ alert.labels.alertname }}</h6>
+              <p class="card-text mr-3"
+                 [innerHtml]="alert.annotations.summary"></p>
+              <p class="card-text text-muted mr-3">
+                <small class="date"
+                       [title]="alert.startsAt | cdDate"
+                       i18n>Active since: {{ alert.startsAt  | relativeDate }}</small>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <hr>
+    </div>
+  </ng-container>
+</ng-template>

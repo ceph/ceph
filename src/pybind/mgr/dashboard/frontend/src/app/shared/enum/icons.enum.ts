@@ -34,6 +34,8 @@ export enum Icons {
   info = 'fa fa-info', // Notification information
   infoCircle = 'fa fa-info-circle', // Info on landing page
   questionCircle = 'fa fa-question-circle-o',
+  danger = 'fa fa-exclamation-circle',
+  success = 'fa fa-check-circle',
   check = 'fa fa-check', // Notification check
   show = 'fa fa-eye', // Show
   paragraph = 'fa fa-paragraph', // Silence Matcher - Attribute name
