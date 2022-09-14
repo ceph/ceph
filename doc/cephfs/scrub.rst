@@ -131,3 +131,15 @@ Control (ongoing) File System Scrubs
    {
        "return_code": 0
    }
+
+Evaluate strays using recursive scrub
+=====================================
+
+- In order to evaluate strays i.e. purge stray directories in ``~mdsdir`` use the following command::
+
+    ceph tell mds.<fsname>:0 scrub start ~mdsdir recursive
+
+- ``~mdsdir`` is not enqueued by default when scrubbing at root. In order to perform stray evaluation
+  at root, run scrub with flag ``scrub_mdsdir``::
+
+    ceph tell mds.<fsname>:0 scrub start / scrub_mdsdir
