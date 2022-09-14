@@ -193,6 +193,7 @@ WRITE_CLASS_ENCODER(KeyServerData::Incremental)
 class KeyServer : public KeyStore {
   CephContext *cct;
   KeyServerData data;
+  std::map<EntityName, CryptoKey> used_pending_keys;
   mutable ceph::mutex lock;
 
   int _rotate_secret(uint32_t service_id, KeyServerData &pending_data);
@@ -211,6 +212,11 @@ public:
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
   bool get_caps(const EntityName& name, const std::string& type, AuthCapsInfo& caps) const;
   bool get_active_rotating_secret(const EntityName& name, CryptoKey& secret) const;
+
+  void note_used_pending_key(const EntityName& name, const CryptoKey& key);
+  void clear_used_pending_keys();
+  std::map<EntityName,CryptoKey> get_used_pending_keys();
+
   int start_server();
   void rotate_timeout(double timeout);
 

@@ -291,6 +291,7 @@ class AdminHook : public AdminSocketHook {
 public:
   explicit AdminHook(Monitor *m) : mon(m) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
@@ -4510,6 +4511,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
   switch (op->get_req()->get_type()) {
     // auth
     case MSG_MON_GLOBAL_ID:
+    case MSG_MON_USED_PENDING_KEYS:
     case CEPH_MSG_AUTH:
       op->set_type_service();
       /* no need to check caps here */

@@ -122,7 +122,7 @@ bool KeyServerData::get_caps(CephContext *cct, const EntityName& name,
   ldout(cct, 10) << "get_caps: name=" << name.to_str() << dendl;
   auto iter = secrets.find(name);
   if (iter != secrets.end()) {
-    ldout(cct, 10) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
+    ldout(cct, 10) << "get_caps: num of caps=" << iter->second.caps.size() << dendl;
     auto capsiter = iter->second.caps.find(type);
     if (capsiter != iter->second.caps.end()) {
       caps_info.caps = capsiter->second;
@@ -148,7 +148,6 @@ KeyServer::KeyServer(CephContext *cct_, KeyRing *extra_secrets)
 int KeyServer::start_server()
 {
   std::scoped_lock l{lock};
-
   _dump_rotating_secrets();
   return 0;
 }
@@ -236,6 +235,26 @@ bool KeyServer::get_service_secret(uint32_t service_id,
   std::scoped_lock l{lock};
 
   return data.get_service_secret(cct, service_id, secret_id, secret);
+}
+
+void KeyServer::note_used_pending_key(const EntityName& name, const CryptoKey& key)
+{
+  std::scoped_lock l(lock);
+  used_pending_keys[name] = key;
+}
+
+void KeyServer::clear_used_pending_keys()
+{
+  std::scoped_lock l(lock);
+  used_pending_keys.clear();
+}
+
+std::map<EntityName,CryptoKey> KeyServer::get_used_pending_keys()
+{
+  std::map<EntityName,CryptoKey> ret;
+  std::scoped_lock l(lock);
+  ret.swap(used_pending_keys);
+  return ret;
 }
 
 bool KeyServer::generate_secret(CryptoKey& secret)
