@@ -42,6 +42,6 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   }
 
   toggleSidebar() {
-    this.notificationService.toggleSidebar();
+    this.notificationService.toggleSidebar(false, 'all');
   }
 }

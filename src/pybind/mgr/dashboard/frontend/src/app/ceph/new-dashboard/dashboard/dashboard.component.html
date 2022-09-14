@@ -13,44 +13,49 @@
       </dl>
     </cd-card>
 
-    <cd-card *ngIf="healthData"
-             title="Status"
+    <cd-card title="Status"
              i18n-title
              class="col-sm-6 px-3">
-      <div class="d-flex">
-        <i *ngIf="healthData.health?.status == 'HEALTH_OK'"
-           class="pl-2 fa fa-check-circle text-success"></i>
-        <i *ngIf="healthData.health?.status == 'HEALTH_WARN'"
-           class="pl-2 fa fa-exclamation-triangle text-warning"></i>
-        <i *ngIf="healthData.health?.status == 'HEALTH_ERR'"
-           class="pl-2 fa fa-exclamation-triangle text-danger"></i>
-        <p class="pl-2 pr-5">Cluster</p>
+      <div class="d-flex ml-2">
+        <i *ngIf="healthData?.health?.status"
+           [ngClass]="[healthData.health.status | healthIcon, icons.large]"
+           [ngStyle]="healthData.health.status | healthColor"
+           [title]="healthData.health.status"></i>
+        <span class="ml-2 mt-n1"
+              i18n>Cluster</span>
       </div>
-      <hr />
-      <div class="d-flex flex-wrap">
-        <p>Notifications</p>
-        <!-- Potentially make widget component -->
-        <button class="ml-3 btn btn-outline-danger rounded-pill">
-          <i class="fa fa-exclamation-circle"></i>
-          <a>1</a>
-        </button>
-        <span class="ml-2 btn btn-outline-warning rounded-pill">
-          <i class="fa fa-exclamation-triangle"></i>
-          <a>1</a>
-        </span>
-        <span class="ml-2 btn btn-outline-success rounded-pill">
-          <i class="fa fa-check-circle"></i>
-          <a>1</a>
-        </span>
-        <span class="ml-2 btn btn-outline-primary rounded-pill">
-          <i class="fa fa-info-circle"></i>
-          <a>1</a>
-        </span>
-        <span class="ml-2 btn btn-outline-info rounded-pill">
-          <i class="fa fa-bell"></i>
-          <a>1</a>
-        </span>
-      </div>
+      <section class="border-top mt-5">
+        <div class="d-flex flex-wrap">
+          <span class="pt-2"
+                i18n>Notifications</span>
+          <!-- Potentially make widget component -->
+          <button class="btn btn-outline-danger rounded-pill ml-2"
+                  (click)="toggleSidebar('Prometheus', type.error)"
+                  id="dangerNotification">
+            <i [ngClass]="[icons.danger]"></i>
+            <span *ngIf="notificationCountTest$ | async as count">{{ count?.error }}</span>
+          </button>
+
+          <button class="btn btn-outline-success rounded-pill ml-2"
+                  (click)="toggleSidebar('Prometheus', type.success)"
+                  id="successNotification">
+            <i [ngClass]="[icons.success]"></i>
+            <span *ngIf="notificationCountTest$ | async as count">{{ count.success }}</span>
+          </button>
+          <button class="btn btn-outline-primary rounded-pill ml-2"
+                  (click)="toggleSidebar('Prometheus', type.info)"
+                  id="infoNotification">
+            <i [ngClass]="[icons.infoCircle]"></i>
+            <span *ngIf="notificationCountTest$ | async as count">{{ count?.info }}</span>
+          </button>
+          <button class="btn btn-outline-info rounded-pill ml-2"
+                  (click)="toggleSidebar('Ceph')"
+                  id="cephNotification">
+            <i [ngClass]="[icons.bell]"></i>
+            <span *ngIf="notificationCountTest$ | async as count">{{ count?.cephNotifications }}</span>
+          </button>
+        </div>
+      </section>
     </cd-card>
 
     <cd-card title="Capacity"

@@ -5,7 +5,7 @@ import {
   HostBinding,
   NgZone,
   OnDestroy,
-  OnInit
+  OnInit,
 } from '@angular/core';
 
 import { Mutex } from 'async-mutex';
@@ -32,6 +32,10 @@ import { TaskMessageService } from '~/app/shared/services/task-message.service';
 })
 export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   @HostBinding('class.active') isSidebarOpened = false;
+
+  notificationType: number;
+
+  notificationApplication: string = 'Ceph';
 
   notifications: CdNotification[];
   private interval: number;
@@ -93,12 +97,23 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     );
 
     this.subs.add(
-      this.notificationService.sidebarSubject.subscribe((forceClose) => {
+      this.notificationService.sidebarSubject.subscribe(({ forceClose, notificationType, notificationApplication, keepOpen }) => {
         if (forceClose) {
           this.isSidebarOpened = false;
+        } else if (keepOpen) {
+          this.isSidebarOpened = true;
         } else {
           this.isSidebarOpened = !this.isSidebarOpened;
+          this.notificationType = -1;
         }
+
+        notificationType !== -1
+          ? this.notificationType = notificationType
+          : this.notificationType = -1;
+
+          notificationApplication
+          ? this.notificationApplication = notificationApplication
+          : this.notificationApplication = 'Ceph';
 
         window.clearTimeout(this.timeout);
         this.timeout = window.setTimeout(() => {
@@ -155,6 +170,12 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
 
   remove(index: number) {
     this.notificationService.remove(index);
+  }
+
+  removeSpecific(type: number, application = 'Prometheus') {
+    application === 'all'
+      ? this.removeAll()
+      : this.notificationService.removeSpecific(type, application)
   }
 
   closeSidebar() {

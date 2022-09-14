@@ -30,6 +30,7 @@ import { SanitizeHtmlPipe } from './sanitize-html.pipe';
 import { SearchHighlightPipe } from './search-highlight.pipe';
 import { TruncatePipe } from './truncate.pipe';
 import { UpperFirstPipe } from './upper-first.pipe';
+import { HealthIconPipe } from './health-icon.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -62,7 +63,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     MapPipe,
     TruncatePipe,
     SanitizeHtmlPipe,
-    SearchHighlightPipe
+    SearchHighlightPipe,
+    HealthIconPipe
   ],
   exports: [
     ArrayPipe,
@@ -93,7 +95,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     MapPipe,
     TruncatePipe,
     SanitizeHtmlPipe,
-    SearchHighlightPipe
+    SearchHighlightPipe,
+    HealthIconPipe
   ],
   providers: [
     ArrayPipe,
@@ -120,7 +123,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DurationPipe,
     MapPipe,
     TruncatePipe,
-    SanitizeHtmlPipe
+    SanitizeHtmlPipe,
+    HealthIconPipe
   ]
 })
 export class PipesModule {}

@@ -2,13 +2,15 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 import { IndividualConfig, ToastrService } from 'ngx-toastr';
-import { BehaviorSubject, Subject } from 'rxjs';
+import { BehaviorSubject, Observable, of as observableOf, Subject } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
+import { NotificationCount } from '../models/notification-count.model';
 import { CdDatePipe } from '../pipes/cd-date.pipe';
 import { TaskMessageService } from './task-message.service';
+import { TimerService } from './timer.service';
 
 @Injectable({
   providedIn: 'root'
@@ -30,7 +32,8 @@ export class NotificationService {
   constructor(
     public toastr: ToastrService,
     private taskMessageService: TaskMessageService,
-    private cdDatePipe: CdDatePipe
+    private cdDatePipe: CdDatePipe,
+    private timerService: TimerService
   ) {
     const stringNotifications = localStorage.getItem(this.KEY);
     let notifications: CdNotification[] = [];
@@ -53,6 +56,27 @@ export class NotificationService {
   removeAll() {
     localStorage.removeItem(this.KEY);
     this.dataSource.next([]);
+  }
+
+  /**
+   * Removes a specific set of notification given the type and application.
+   */
+  removeSpecific(type: number, app = 'Prometheus') {
+    const recent = this.dataSource.getValue();
+    let indices = [];
+
+    for(let index = 0; index < recent.length; index++) {
+      if (app === 'Prometheus' && recent[index].type === type && recent[index].application === app) {
+        indices.push(index);
+      } else if (app !== 'Prometheus' && recent[index].application === app) {
+        indices.push(index);
+      }
+    }
+    for (const index of indices.reverse()) {
+      recent.splice(index, 1);
+    }
+    this.dataSource.next(recent);
+    localStorage.setItem(this.KEY, JSON.stringify(recent));
   }
 
   /**
@@ -121,6 +145,24 @@ export class NotificationService {
       }
       this.queueToShow(config);
     }, 10);
+  }
+
+  getNotificationCount() : Observable<NotificationCount> {
+    return this.timerService.get(() => observableOf({
+      error: this._getNotificationCount(NotificationType.error),
+      info: this._getNotificationCount(NotificationType.info),
+      success: this._getNotificationCount(NotificationType.success),
+      cephNotifications: this._getNotificationCount(undefined, 'Ceph')
+     }), 1000
+    );
+  }
+
+  private _getNotificationCount(type?: number, application = 'Prometheus') {
+    return this.dataSource.getValue().filter((notification: CdNotification) =>
+      application === 'Prometheus'
+        ? notification.application === application && notification.type === type
+        : notification.application === application
+    ).length;
   }
 
   private queueToShow(config: CdNotificationConfig) {
@@ -231,7 +273,12 @@ export class NotificationService {
     this.hideToasties = suspend;
   }
 
-  toggleSidebar(forceClose = false) {
-    this.sidebarSubject.next(forceClose);
+  toggleSidebar(forceClose = false, notificationApplication = 'Prometheus', notificationType = -1, keepOpen = false) {
+    this.sidebarSubject.next({
+      forceClose: forceClose,
+      notificationApplication: notificationApplication,
+      notificationType: notificationType,
+      keepOpen: keepOpen
+    });
   }
 }

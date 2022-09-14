@@ -1,7 +1,8 @@
 <ng-template #tasksTpl>
   <!-- Executing -->
   <div *ngFor="let executingTask of executingTasks; trackBy:trackByFn">
-    <div class="card tc_task border-0">
+    <div class="card tc_task border-0"
+         *ngIf="notificationApplication !== 'Prometheus'">
       <div class="row no-gutters">
         <div class="col-md-2 text-center">
           <span [ngClass]="[icons.stack, icons.large2x]"
@@ -44,7 +45,7 @@
   <ng-container *ngIf="notifications.length > 0">
     <button type="button"
             class="btn btn-light btn-block"
-            (click)="removeAll(); $event.stopPropagation()">
+            (click)="removeSpecific(notificationType, notificationApplication); $event.stopPropagation()">
       <i [ngClass]="[icons.trash]"
          aria-hidden="true"></i>
       &nbsp;
@@ -55,7 +56,8 @@
 
     <div *ngFor="let notification of notifications; let i = index"
          [ngClass]="notification.borderClass">
-      <div class="card tc_notification border-0">
+      <div class="card tc_notification border-0"
+           *ngIf="(notification.type === notificationType || notificationType === -1) && (notification.application === notificationApplication || notificationApplication === 'all')">
         <div class="row no-gutters">
           <div class="col-md-2 text-center">
             <span [ngClass]="[icons.stack, icons.large2x,  notification.textClass]">
@@ -91,9 +93,9 @@
             </div>
           </div>
         </div>
+        <hr>
       </div>
 
-      <hr>
     </div>
   </ng-container>
 </ng-template>
@@ -105,9 +107,7 @@
   </div>
 </ng-template>
 
-<div class="card"
-     (clickOutside)="closeSidebar()"
-     [clickOutsideEnabled]="isSidebarOpened">
+<div class="card">
   <div class="card-header">
     <ng-container i18n>Tasks and Notifications</ng-container>
 

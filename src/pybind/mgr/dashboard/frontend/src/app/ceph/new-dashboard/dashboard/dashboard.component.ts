@@ -7,8 +7,12 @@ import { ClusterService } from '~/app/shared/api/cluster.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { DashboardDetails } from '~/app/shared/models/cd-details';
+import { NotificationCount } from '~/app/shared/models/notification-count.model';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import {
@@ -22,7 +26,7 @@ import { SummaryService } from '~/app/shared/services/summary.service';
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss']
 })
-export class DashboardComponent implements OnInit, OnDestroy {
+export class DashboardComponent implements OnInit, OnDestroy{
   detailsCardData: DashboardDetails = {};
   osdSettings$: Observable<any>;
   interval = new Subscription();
@@ -31,6 +35,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   color: string;
   capacity$: Observable<any>;
   healthData: any;
+
+  notificationType: number;
+  notificationCountTest$: Observable<NotificationCount>;
+  type = NotificationType;
+
+  icons = Icons;
+
   constructor(
     private summaryService: SummaryService,
     private configService: ConfigurationService,
@@ -39,7 +50,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private osdService: OsdService,
     private authStorageService: AuthStorageService,
     private featureToggles: FeatureTogglesService,
-    private healthService: HealthService
+    private healthService: HealthService,
+    public notificationService: NotificationService,
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -51,6 +63,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.osdSettings$ = this.osdService.getOsdSettings();
     this.capacity$ = this.clusterService.getCapacity();
     this.getHealth();
+    this.notificationCountTest$ = this.notificationService.getNotificationCount();
+  }
+
+  toggleSidebar(notificationApplication = 'Prometheus', notificationType = -1) {
+    this.notificationService.toggleSidebar(false, notificationApplication, notificationType, (this.notificationType !== notificationType))
+    this.notificationType = notificationType;
   }
 
   ngOnDestroy() {

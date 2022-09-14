@@ -166,7 +166,7 @@ describe('NotificationsSidebarComponent', () => {
     it('should always close if sidebarSubject value is true', fakeAsync(() => {
       // Closed before next value
       expect(component.isSidebarOpened).toBeFalsy();
-      notificationService.sidebarSubject.next(true);
+      notificationService.sidebarSubject.next({forceClose: true, keepOpen: false});
       tick();
       expect(component.isSidebarOpened).toBeFalsy();
 

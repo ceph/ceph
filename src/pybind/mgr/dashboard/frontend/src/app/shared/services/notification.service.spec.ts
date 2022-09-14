@@ -51,7 +51,7 @@ describe('NotificationService', () => {
       'cdNotifications',
       '[{"type":2,"message":"foobar","timestamp":"2018-05-24T09:41:32.726Z"}]'
     );
-    service = new NotificationService(null, null, null);
+    service = new NotificationService(null, null, null, null);
     expect(service['dataSource'].getValue().length).toBe(1);
   }));
 
