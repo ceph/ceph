@@ -73,7 +73,7 @@ public:
     }
     auto req = io::ImageDispatchSpec::create_list_snaps(
       m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
-      aio_comp, {{m_image_offset, m_image_length}},
+      aio_comp, {{m_image_offset, m_image_length}}, io::ImageArea::DATA,
       {m_diff_context.from_snap_id, m_diff_context.end_snap_id},
       list_snaps_flags, &m_snapshot_delta, {});
     req->send();

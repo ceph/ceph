@@ -343,7 +343,8 @@ void ObjectReadRequest<I>::copyup() {
   if (it == image_ctx->copyup_list.end()) {
     // create and kick off a CopyupRequest
     auto new_req = CopyupRequest<I>::create(
-      image_ctx, this->m_object_no, std::move(parent_extents), this->m_trace);
+        image_ctx, this->m_object_no, std::move(parent_extents), area,
+        this->m_trace);
 
     image_ctx->copyup_list[this->m_object_no] = new_req;
     image_ctx->copyup_list_lock.unlock();
@@ -569,8 +570,8 @@ void AbstractObjectWriteRequest<I>::copyup() {
   auto it = image_ctx->copyup_list.find(this->m_object_no);
   if (it == image_ctx->copyup_list.end()) {
     auto new_req = CopyupRequest<I>::create(
-      image_ctx, this->m_object_no, std::move(this->m_parent_extents),
-      this->m_trace);
+        image_ctx, this->m_object_no, std::move(this->m_parent_extents),
+        m_image_area, this->m_trace);
     this->m_parent_extents.clear();
 
     // make sure to wait on this CopyupRequest

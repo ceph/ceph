@@ -39,9 +39,9 @@ struct CopyupRequest<librbd::MockImageCtx> {
             const Extents&));
 
     static CopyupRequest* s_instance;
-    static CopyupRequest* create(librbd::MockImageCtx *ictx,
-                                 uint64_t objectno, Extents &&image_extents,
-                                 const ZTracer::Trace &parent_trace) {
+    static CopyupRequest* create(librbd::MockImageCtx* ictx, uint64_t objectno,
+                                 Extents&& image_extents, ImageArea area,
+                                 const ZTracer::Trace& parent_trace) {
       return s_instance;
     }
 

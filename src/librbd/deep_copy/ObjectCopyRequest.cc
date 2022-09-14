@@ -105,8 +105,8 @@ void ObjectCopyRequest<I>::send_list_snaps() {
     ctx, get_image_ctx(m_src_image_ctx), io::AIO_TYPE_GENERIC);
   auto req = io::ImageDispatchSpec::create_list_snaps(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_NONE, aio_comp,
-    io::Extents{m_image_extents}, std::move(snap_ids), list_snaps_flags,
-    &m_snapshot_delta, {});
+    io::Extents{m_image_extents}, m_image_area, std::move(snap_ids),
+    list_snaps_flags, &m_snapshot_delta, {});
   req->send();
 }
 
@@ -173,8 +173,8 @@ void ObjectCopyRequest<I>::send_read() {
 
   auto req = io::ImageDispatchSpec::create_read(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
-    std::move(image_extents), std::move(read_result), io_context, op_flags,
-    read_flags, {});
+    std::move(image_extents), m_image_area, std::move(read_result),
+    io_context, op_flags, read_flags, {});
   req->send();
 }
 

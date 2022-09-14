@@ -134,7 +134,7 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* read_extents,
                  << " area=" << area << dendl;
   auto req = io::ImageDispatchSpec::create_read(
     *image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
-    std::move(parent_extents), ReadResult{parent_read_bl},
+    std::move(parent_extents), area, ReadResult{parent_read_bl},
     image_ctx->parent->get_data_io_context(), 0, 0, trace);
   req->send();
 }

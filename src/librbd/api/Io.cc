@@ -231,9 +231,9 @@ void Io<I>::aio_read(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
   }
 
   auto req = io::ImageDispatchSpec::create_read(
-    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    std::move(read_result), image_ctx.get_data_io_context(), op_flags, 0,
-    trace);
+      image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
+      {{off, len}}, io::ImageArea::DATA, std::move(read_result),
+      image_ctx.get_data_io_context(), op_flags, 0, trace);
   req->send();
 }
 
@@ -263,8 +263,9 @@ void Io<I>::aio_write(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
   }
 
   auto req = io::ImageDispatchSpec::create_write(
-    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    std::move(bl), image_ctx.get_data_io_context(), op_flags, trace);
+      image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
+      {{off, len}}, io::ImageArea::DATA, std::move(bl),
+      image_ctx.get_data_io_context(), op_flags, trace);
   req->send();
 }
 
@@ -294,8 +295,9 @@ void Io<I>::aio_discard(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
   }
 
   auto req = io::ImageDispatchSpec::create_discard(
-    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    discard_granularity_bytes, image_ctx.get_data_io_context(), trace);
+      image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
+      {{off, len}}, io::ImageArea::DATA, discard_granularity_bytes,
+      image_ctx.get_data_io_context(), trace);
   req->send();
 }
 
@@ -326,8 +328,9 @@ void Io<I>::aio_write_same(I &image_ctx, io::AioCompletion *aio_comp,
   }
 
   auto req = io::ImageDispatchSpec::create_write_same(
-    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    std::move(bl), image_ctx.get_data_io_context(), op_flags, trace);
+      image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
+      {{off, len}}, io::ImageArea::DATA, std::move(bl),
+      image_ctx.get_data_io_context(), op_flags, trace);
   req->send();
 }
 
@@ -399,8 +402,9 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
 
       aio_comp->aio_type = io::AIO_TYPE_WRITE;
       auto req = io::ImageDispatchSpec::create_write(
-        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-        std::move(bl), image_ctx.get_data_io_context(), op_flags, trace);
+          image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
+          {{off, len}}, io::ImageArea::DATA, std::move(bl),
+          image_ctx.get_data_io_context(), op_flags, trace);
       req->send();
       return;
     } else if (prepend_length == 0 && append_length == 0) {
@@ -409,8 +413,9 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
       bl.append_zero(data_length);
 
       auto req = io::ImageDispatchSpec::create_write_same(
-        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-        std::move(bl), image_ctx.get_data_io_context(), op_flags, trace);
+          image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
+          {{off, len}}, io::ImageArea::DATA, std::move(bl),
+          image_ctx.get_data_io_context(), op_flags, trace);
       req->send();
       return;
     }
@@ -437,9 +442,9 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
       auto prepend_aio_comp = io::AioCompletion::create_and_start(
         prepend_ctx, &image_ctx, io::AIO_TYPE_WRITE);
       auto prepend_req = io::ImageDispatchSpec::create_write(
-        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, prepend_aio_comp,
-        {{prepend_offset, prepend_length}}, std::move(bl),
-        image_ctx.get_data_io_context(), op_flags, trace);
+          image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, prepend_aio_comp,
+          {{prepend_offset, prepend_length}}, io::ImageArea::DATA,
+          std::move(bl), image_ctx.get_data_io_context(), op_flags, trace);
       prepend_req->send();
     }
 
@@ -451,9 +456,9 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
       auto append_aio_comp = io::AioCompletion::create_and_start(
         append_ctx, &image_ctx, io::AIO_TYPE_WRITE);
       auto append_req = io::ImageDispatchSpec::create_write(
-        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, append_aio_comp,
-        {{append_offset, append_length}}, std::move(bl),
-        image_ctx.get_data_io_context(), op_flags, trace);
+          image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, append_aio_comp,
+          {{append_offset, append_length}}, io::ImageArea::DATA,
+          std::move(bl), image_ctx.get_data_io_context(), op_flags, trace);
       append_req->send();
     }
 
@@ -464,9 +469,9 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
     auto write_same_aio_comp = io::AioCompletion::create_and_start(
       write_same_ctx, &image_ctx, io::AIO_TYPE_WRITESAME);
     auto req = io::ImageDispatchSpec::create_write_same(
-      image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, write_same_aio_comp,
-      {{write_same_offset, write_same_length}}, std::move(bl),
-      image_ctx.get_data_io_context(), op_flags, trace);
+        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, write_same_aio_comp,
+        {{write_same_offset, write_same_length}}, io::ImageArea::DATA,
+        std::move(bl), image_ctx.get_data_io_context(), op_flags, trace);
     req->send();
     return;
   }
@@ -475,8 +480,9 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
   uint32_t discard_granularity_bytes = 0;
 
   auto req = io::ImageDispatchSpec::create_discard(
-    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    discard_granularity_bytes, image_ctx.get_data_io_context(), trace);
+      image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
+      {{off, len}}, io::ImageArea::DATA, discard_granularity_bytes,
+      image_ctx.get_data_io_context(), trace);
   req->send();
 }
 
@@ -509,9 +515,9 @@ void Io<I>::aio_compare_and_write(I &image_ctx, io::AioCompletion *aio_comp,
   }
 
   auto req = io::ImageDispatchSpec::create_compare_and_write(
-    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    std::move(cmp_bl), std::move(bl), mismatch_off,
-    image_ctx.get_data_io_context(), op_flags, trace);
+      image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
+      {{off, len}}, io::ImageArea::DATA, std::move(cmp_bl), std::move(bl),
+      mismatch_off, image_ctx.get_data_io_context(), op_flags, trace);
   req->send();
 }
 
