@@ -1348,7 +1348,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	ctx, src, io::AIO_TYPE_READ);
       auto req = io::ImageDispatchSpec::create_read(
         *src, io::IMAGE_DISPATCH_LAYER_NONE, comp,
-        {{offset, len}}, io::ReadResult{bl},
+        {{offset, len}}, io::ImageArea::DATA, io::ReadResult{bl},
         src->get_data_io_context(), fadvise_flags, 0, trace);
 
       ctx->read_trace = trace;
@@ -1561,7 +1561,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
                                                    io::AIO_TYPE_READ);
       auto req = io::ImageDispatchSpec::create_read(
         *ictx, io::IMAGE_DISPATCH_LAYER_NONE, c,
-        {{off, read_len}}, io::ReadResult{&bl},
+        {{off, read_len}}, io::ImageArea::DATA, io::ReadResult{&bl},
         ictx->get_data_io_context(), 0, 0, trace);
       req->send();
 

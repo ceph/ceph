@@ -125,12 +125,12 @@ public:
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_read(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
-      AioCompletion *aio_comp, Extents &&image_extents,
+      AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
       ReadResult &&read_result, IOContext io_context, int op_flags,
       int read_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
-                                 std::move(image_extents),
+                                 std::move(image_extents), area,
                                  Read{std::move(read_result), read_flags},
                                  io_context, op_flags, parent_trace);
   }
@@ -138,12 +138,12 @@ public:
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_discard(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
-      AioCompletion *aio_comp, Extents &&image_extents,
+      AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
       uint32_t discard_granularity_bytes, IOContext io_context,
       const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
-                                 std::move(image_extents),
+                                 std::move(image_extents), area,
                                  Discard{discard_granularity_bytes},
                                  io_context, 0, parent_trace);
   }
@@ -151,24 +151,25 @@ public:
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_write(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
-      AioCompletion *aio_comp, Extents &&image_extents,
+      AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
       bufferlist &&bl, IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
-                                 std::move(image_extents), Write{std::move(bl)},
+                                 std::move(image_extents), area,
+                                 Write{std::move(bl)},
                                  io_context, op_flags, parent_trace);
   }
 
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_write_same(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
-      AioCompletion *aio_comp, Extents &&image_extents,
+      AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
       bufferlist &&bl, IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
-                                 std::move(image_extents),
+                                 std::move(image_extents), area,
                                  WriteSame{std::move(bl)},
                                  io_context, op_flags, parent_trace);
   }
@@ -176,12 +177,12 @@ public:
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_compare_and_write(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
-      AioCompletion *aio_comp, Extents &&image_extents,
+      AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
       bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
       IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
-                                 std::move(image_extents),
+                                 std::move(image_extents), area,
                                  CompareAndWrite{std::move(cmp_bl),
                                                  std::move(bl),
                                                  mismatch_offset},
@@ -195,18 +196,19 @@ public:
       const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp, {},
+                                 ImageArea::DATA /* dummy for {} */,
                                  Flush{flush_source}, {}, 0, parent_trace);
   }
 
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_list_snaps(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
-      AioCompletion *aio_comp, Extents &&image_extents, SnapIds&& snap_ids,
-      int list_snaps_flags, SnapshotDelta* snapshot_delta,
+      AioCompletion *aio_comp, Extents &&image_extents, ImageArea area,
+      SnapIds&& snap_ids, int list_snaps_flags, SnapshotDelta* snapshot_delta,
       const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
-                                 std::move(image_extents),
+                                 std::move(image_extents), area,
                                  ListSnaps{std::move(snap_ids),
                                            list_snaps_flags, snapshot_delta},
                                  {}, 0, parent_trace);
@@ -227,8 +229,8 @@ private:
   ImageDispatchSpec(ImageDispatcherInterface* image_dispatcher,
                     ImageDispatchLayer image_dispatch_layer,
                     AioCompletion* aio_comp, Extents&& image_extents,
-                    Request&& request, IOContext io_context, int op_flags,
-                    const ZTracer::Trace& parent_trace)
+                    ImageArea area, Request&& request, IOContext io_context,
+                    int op_flags, const ZTracer::Trace& parent_trace)
     : dispatcher_ctx(this), image_dispatcher(image_dispatcher),
       dispatch_layer(image_dispatch_layer), aio_comp(aio_comp),
       image_extents(std::move(image_extents)), request(std::move(request)),

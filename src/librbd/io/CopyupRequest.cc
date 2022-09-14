@@ -116,10 +116,10 @@ private:
 
 template <typename I>
 CopyupRequest<I>::CopyupRequest(I *ictx, uint64_t objectno,
-                                Extents &&image_extents,
+                                Extents &&image_extents, ImageArea area,
                                 const ZTracer::Trace &parent_trace)
   : m_image_ctx(ictx), m_object_no(objectno),
-    m_image_extents(std::move(image_extents)),
+    m_image_extents(std::move(image_extents)), m_image_area(area),
     m_trace(librbd::util::create_trace(*m_image_ctx, "copy-up", parent_trace))
 {
   ceph_assert(m_image_ctx->data_ctx.is_valid());
@@ -184,7 +184,7 @@ void CopyupRequest<I>::read_from_parent() {
                  << dendl;
   auto req = io::ImageDispatchSpec::create_read(
     *m_image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
-    std::move(m_image_extents),
+    std::move(m_image_extents), m_image_area,
     ReadResult{&m_copyup_extent_map, &m_copyup_data},
     m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
   req->send();

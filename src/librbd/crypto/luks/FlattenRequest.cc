@@ -74,8 +74,9 @@ void FlattenRequest<I>::read_header() {
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_read(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-          {{0, data_offset}}, io::ReadResult{&m_bl},
-          m_image_ctx->get_data_io_context(), 0, 0, trace);
+          {{0, data_offset}}, io::ImageArea::CRYPTO_HEADER,
+          io::ReadResult{&m_bl}, m_image_ctx->get_data_io_context(), 0, 0,
+          trace);
   req->send();
 }
 
@@ -121,8 +122,8 @@ void FlattenRequest<I>::write_header() {
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_write(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-          {{0, m_bl.length()}}, std::move(m_bl),
-          m_image_ctx->get_data_io_context(), 0, trace);
+          {{0, m_bl.length()}}, io::ImageArea::CRYPTO_HEADER,
+          std::move(m_bl), m_image_ctx->get_data_io_context(), 0, trace);
   req->send();
 }
 
