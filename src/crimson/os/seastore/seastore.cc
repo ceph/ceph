@@ -1459,8 +1459,43 @@ SeaStore::tm_ret SeaStore::_omap_rmkeyrange(
 {
   LOG_PREFIX(SeaStore::_omap_rmkeyrange);
   DEBUGT("{} first={} last={}", *ctx.transaction, *onode, first, last);
-  assert(0 == "not supported yet");
-  return tm_iertr::now();
+  if (first > last) {
+    ERRORT("range error, first: {} > last:{}", *ctx.transaction, first, last);
+    ceph_abort();
+  }
+  auto omap_root = onode->get_layout().omap_root.get(
+    onode->get_metadata_hint(device->get_block_size()));
+  if (omap_root.is_null()) {
+    return seastar::now();
+  } else {
+    return seastar::do_with(
+      BtreeOMapManager(*transaction_manager),
+      onode->get_layout().omap_root.get(
+        onode->get_metadata_hint(device->get_block_size())),
+      std::move(first),
+      std::move(last),
+      [&ctx, &onode](
+	auto &omap_manager,
+	auto &omap_root,
+	auto &first,
+	auto &last) {
+      auto config = OMapManager::omap_list_config_t::with_inclusive(true);
+      config.max_result_size = 
+	std::numeric_limits<decltype(config.max_result_size)>::max();
+      return omap_manager.omap_rm_key_range(
+	omap_root,
+	*ctx.transaction,
+	first,
+	last,
+	config
+      ).si_then([&] {
+        if (omap_root.must_update()) {
+          onode->get_mutable_layout(*ctx.transaction
+          ).omap_root.update(omap_root);
+        }
+      });
+    });
+  }
 }
 
 SeaStore::tm_ret SeaStore::_truncate(
