@@ -11,7 +11,12 @@
  * Foundation.  See file COPYING.
  *
  */
+
 #include <qatzip.h>
+
+extern "C" {
+#include "icp_sal_user.h"
+}
 
 #include "common/ceph_context.h"
 #include "common/common_init.h"
@@ -19,6 +24,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "QatAccel.h"
+
 
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
@@ -33,6 +39,7 @@ static std::ostream& _prefix(std::ostream* _dout)
 // -----------------------------------------------------------------------------
 // default window size for Zlib 1.2.8, negated for raw deflate
 #define ZLIB_DEFAULT_WIN_SIZE -15
+#define QAT_SECTION_NAME_SIZE 32
 
 /* Estimate data expansion after decompression */
 static const unsigned int expansion_ratio[] = {5, 20, 50, 100, 200, 1000, 10000};
@@ -42,13 +49,50 @@ void QzSessionDeleter::operator() (struct QzSession_S *session) {
   delete session;
 }
 
+const char *g_dev_tag = "SHIM";
+static Cpa16U get_instance_num(void)
+{
+    int len;
+    char *section_name;
+    Cpa16U num_instances;
+    CpaStatus status;
+#if __GLIBC_PREREQ(2, 17)
+    section_name = secure_getenv("QAT_SECTION_NAME");
+#else
+    section_name = getenv("QAT_SECTION_NAME");
+#endif
+
+    if (!section_name || !(len = strlen(section_name))) {
+        section_name = (char *)g_dev_tag;
+    } else if (len >= QAT_SECTION_NAME_SIZE) {
+        dout(1) << "The length of QAT_SECTION_NAME exceeds the limit." << dendl;
+        return -1;
+    }
+
+    status = icp_sal_userStart(section_name);
+    if (CPA_STATUS_SUCCESS != status) {
+        dout(1) << "Error userStartMultiProcess" << status
+                << "switch to SW if permitted" << dendl;
+        return -1;
+    }
+
+    status = cpaDcGetNumInstances(&num_instances);
+    if (CPA_STATUS_SUCCESS != status) {
+        dout(1) << "Error in cpaDcGetNumInstances status = " << status << dendl;
+        return -1;
+    }
+    dout(1) << "Number of instance: " << num_instances << dendl;
+    icp_sal_userStop();
+    return num_instances;
+}
+
 static bool get_qz_params(const std::string &alg, QzSessionParams_T &params) {
   int rc;
   rc = qzGetDefaults(&params);
   if (rc != QZ_OK)
     return false;
   params.direction = QZ_DIR_BOTH;
-  params.is_busy_polling = true;
+  params.is_busy_polling = false;
   if (alg == "zlib") {
     params.comp_algorithm = QZ_DEFLATE;
     params.data_fmt = QZ_DEFLATE_RAW;
@@ -83,13 +127,10 @@ struct cached_session_t {
     : accel{accel}, session{std::move(sess)} {}
 
   ~cached_session_t() {
+    // All session is put into accel->sessions.
     std::scoped_lock lock{accel->mutex};
-    // if the cache size is still under its upper bound, the current session is put into
-    // accel->sessions. otherwise it's released right
-    uint64_t sessions_num = g_ceph_context->_conf.get_val<uint64_t>("qat_compressor_session_max_number");
-    if (accel->sessions.size() < sessions_num) {
-      accel->sessions.push_back(std::move(session));
-    }
+    accel->sessions.push_back(std::move(session));
+    accel->cond.notify_one();
   }
 
   struct QzSession_S* get() {
@@ -102,25 +143,12 @@ struct cached_session_t {
 };
 
 QatAccel::session_ptr QatAccel::get_session() {
-  {
-    std::scoped_lock lock{mutex};
-    if (!sessions.empty()) {
-      auto session = std::move(sessions.back());
-      sessions.pop_back();
-      return session;
-    }
-  }
+  std::unique_lock lock{mutex};
+  cond.wait(lock, [this](){return !sessions.empty();});
 
-  // If there are no available session to use, we try allocate a new
-  // session.
-  QzSessionParams_T params = {(QzHuffmanHdr_T)0,};
-  session_ptr session(new struct QzSession_S());
-  memset(session.get(), 0, sizeof(struct QzSession_S));
-  if (get_qz_params(alg_name, params) && setup_session(session, params)) {
-    return session;
-  } else {
-    return nullptr;
-  }
+  auto session = std::move(sessions.back());
+  sessions.pop_back();
+  return session;
 }
 
 QatAccel::QatAccel() {}
@@ -147,6 +175,20 @@ bool QatAccel::init(const std::string &alg) {
   }
 
   alg_name = alg;
+
+  Cpa16U sessions_num = get_instance_num();
+  for (Cpa16U i = 0; i < sessions_num; i++) {
+    QzSessionParams_T params = {(QzHuffmanHdr_T)0,};
+    session_ptr session(new struct QzSession_S());
+    memset(session.get(), 0, sizeof(struct QzSession_S));
+    if (get_qz_params(alg_name, params) && setup_session(session, params)) {
+      sessions.push_back(std::move(session));
+    } else {
+      dout(1) << "init session failed " << dendl;
+      return false;
+    }
+  }
+
   return true;
 }
 

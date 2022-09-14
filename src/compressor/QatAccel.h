@@ -48,6 +48,7 @@ class QatAccel {
   friend struct cached_session_t;
   std::vector<session_ptr> sessions;
   std::mutex mutex;
+  std::condition_variable cond;
   std::string alg_name;
 };
 
