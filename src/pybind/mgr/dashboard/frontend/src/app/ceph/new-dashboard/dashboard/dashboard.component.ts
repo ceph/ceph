@@ -1,15 +1,18 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable, Subscription } from 'rxjs';
+import { Observable } from 'rxjs';
 
 import { ClusterService } from '~/app/shared/api/cluster.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { OsdService } from '~/app/shared/api/osd.service';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { DashboardDetails } from '~/app/shared/models/cd-details';
 import { Permissions } from '~/app/shared/models/permissions';
+import { AlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import {
   FeatureTogglesMap$,
@@ -25,12 +28,27 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 export class DashboardComponent implements OnInit, OnDestroy {
   detailsCardData: DashboardDetails = {};
   osdSettings$: Observable<any>;
-  interval = new Subscription();
+  interval: number;
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
   color: string;
   capacity$: Observable<any>;
-  healthData: any;
+  healthData$: Observable<Object>;
+  prometheusAlerts$: Observable<AlertmanagerAlert[]>;
+
+  isAlertmanagerConfigured = false;
+  icons = Icons;
+  showAlerts = false;
+  simplebar = {
+    autoHide: false
+  };
+  textClass: string;
+  borderClass: string;
+  alertType: string;
+  alerts: AlertmanagerAlert[];
+  crticialActiveAlerts: number;
+  warningActiveAlerts: number;
+
   constructor(
     private summaryService: SummaryService,
     private configService: ConfigurationService,
@@ -39,7 +57,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private osdService: OsdService,
     private authStorageService: AuthStorageService,
     private featureToggles: FeatureTogglesService,
-    private healthService: HealthService
+    private healthService: HealthService,
+    public prometheusService: PrometheusService,
+    private ngZone: NgZone
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -47,14 +67,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.getDetailsCardData();
-
     this.osdSettings$ = this.osdService.getOsdSettings();
     this.capacity$ = this.clusterService.getCapacity();
-    this.getHealth();
+    this.healthData$ = this.healthService.getMinimalHealth();
+    this.triggerPrometheusAlerts();
+
+    this.ngZone.runOutsideAngular(() => {
+      this.interval = window.setInterval(() => {
+        this.ngZone.run(() => {
+          this.triggerPrometheusAlerts();
+        });
+      }, 5000);
+    });
   }
 
   ngOnDestroy() {
-    this.interval.unsubscribe();
+    window.clearInterval(this.interval);
+  }
+
+  toggleAlertsWindow(type: string) {
+    type === 'danger' ? (this.alertType = 'critical') : (this.alertType = type);
+    this.textClass = `text-${type}`;
+    this.borderClass = `border-${type}`;
+    this.showAlerts = !this.showAlerts;
   }
 
   getDetailsCardData() {
@@ -72,9 +107,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  getHealth() {
-    this.healthService.getMinimalHealth().subscribe((data: any) => {
-      this.healthData = data;
+  triggerPrometheusAlerts() {
+    this.prometheusService.ifAlertmanagerConfigured(() => {
+      this.isAlertmanagerConfigured = true;
+
+      this.prometheusService.getAlerts().subscribe((alerts) => {
+        this.alerts = alerts;
+        this.crticialActiveAlerts = alerts.filter(
+          (alert: AlertmanagerAlert) =>
+            alert.status.state === 'active' && alert.labels.severity === 'critical'
+        ).length;
+        this.warningActiveAlerts = alerts.filter(
+          (alert: AlertmanagerAlert) =>
+            alert.status.state === 'active' && alert.labels.severity === 'warning'
+        ).length;
+      });
     });
   }
 }
