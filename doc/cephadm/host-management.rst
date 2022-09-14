@@ -320,11 +320,11 @@ for this purpose.
 
 To add or modify a setting for an existing profile::
 
-    ceph orch tuned-profile add-setting <setting-name> <value>
+    ceph orch tuned-profile add-setting <profile-name> <setting-name> <value>
 
 To remove a setting from an existing profile::
 
-    ceph orch tuned-profile rm-setting <setting-name>
+    ceph orch tuned-profile rm-setting <profile-name> <setting-name>
 
 .. note:: 
 
