@@ -74,7 +74,6 @@ seastar::future<> PGAdvanceMap::start()
           });
       }).then([this] {
         pg->handle_activate_map(rctx);
-        handle.exit();
         if (do_init) {
           shard_manager.pg_created(pg->get_pgid(), pg);
           shard_manager.get_shard_services().inc_pg_num();
