@@ -5090,13 +5090,14 @@ int BlueStore::_write_bdev_label(CephContext *cct,
   z.zero();
   bl.append(std::move(z));
 
-  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_WRONLY|O_CLOEXEC));
+  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_WRONLY|O_CLOEXEC|O_DIRECT));
   if (fd < 0) {
     fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
 	 << dendl;
     return fd;
   }
+  bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
   int r = bl.write_fd(fd);
   if (r < 0) {
     derr << __func__ << " failed to write to " << path
