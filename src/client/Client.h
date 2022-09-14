@@ -1275,9 +1275,9 @@ private:
   };
 
   enum {
-    MAY_EXEC = 1,
-    MAY_WRITE = 2,
-    MAY_READ = 4,
+    CLIENT_MAY_EXEC = 1,
+    CLIENT_MAY_WRITE = 2,
+    CLIENT_MAY_READ = 4,
   };
 
   typedef std::function<void(dir_result_t*, MetaRequest*, InodeRef&, frag_t)> fill_readdir_args_cb_t;
