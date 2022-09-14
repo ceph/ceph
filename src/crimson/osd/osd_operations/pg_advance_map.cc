@@ -70,10 +70,13 @@ seastar::future<> PGAdvanceMap::start()
       [this](epoch_t next_epoch) {
         return shard_manager.get_map(next_epoch).then(
           [this] (cached_map_t&& next_map) {
+            logger().debug("{}: advancing map to {}",
+                           *this, next_map->get_epoch());
             pg->handle_advance_map(next_map, rctx);
           });
       }).then([this] {
         pg->handle_activate_map(rctx);
+        logger().debug("{}: map activated", *this);
         if (do_init) {
           shard_manager.pg_created(pg->get_pgid(), pg);
           shard_manager.get_shard_services().inc_pg_num();
@@ -88,6 +91,7 @@ seastar::future<> PGAdvanceMap::start()
             pg->get_collection_ref(),
             std::move(rctx)));
       }).then_unpack([this] {
+        logger().debug("{}: sending pg temp", *this);
         return shard_manager.get_shard_services().send_pg_temp();
       });
   }).then([this, ref=std::move(ref)] {
