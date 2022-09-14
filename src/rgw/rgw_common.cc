@@ -3048,7 +3048,8 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
 
   if ((config_store == "dbstore") ||
-      (config_store == "motr")) {
+      (config_store == "motr") || 
+      (config_store == "daos")) {
     // These stores don't use the mon
     flags |= CINIT_FLAG_NO_MON_CONFIG;
   }

@@ -33,6 +33,9 @@
 #include "rgw_sal_motr.h"
 #endif
 
+#ifdef WITH_RADOSGW_DAOS
+#include "rgw_sal_daos.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -44,7 +47,11 @@ extern rgw::sal::Store* newDBStore(CephContext *cct);
 #ifdef WITH_RADOSGW_MOTR
 extern rgw::sal::Store* newMotrStore(CephContext *cct);
 #endif
+#ifdef WITH_RADOSGW_DAOS
+extern rgw::sal::Store* newDaosStore(CephContext *cct);
+#endif
 extern rgw::sal::Store* newBaseFilter(rgw::sal::Store* next);
+
 }
 
 RGWObjState::RGWObjState() {
@@ -211,6 +218,22 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
   }
 #endif
 
+#ifdef WITH_RADOSGW_DAOS
+  else if (cfg.store_name.compare("daos") == 0) {
+    store = newDaosStore(cct);
+    if (store == nullptr) {
+      ldpp_dout(dpp, 0) << "newDaosStore() failed!" << dendl;
+      return store;
+    }
+    int ret = store->initialize(cct, dpp);
+    if (ret != 0) {
+      ldpp_dout(dpp, 20) << "ERROR: store->initialize() failed: " << ret << dendl;
+      delete store;
+      return nullptr;
+    }
+  }
+#endif
+
   if (cfg.filter_name.compare("base") == 0) {
     rgw::sal::Store* next = store;
     store = newBaseFilter(next);
@@ -263,6 +286,17 @@ rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvide
   } else if (cfg.store_name.compare("motr") == 0) {
 #ifdef WITH_RADOSGW_MOTR
     store = newMotrStore(cct);
+#else
+    store = nullptr;
+#endif
+  } else if (cfg.store_name.compare("daos") == 0) {
+#ifdef WITH_RADOSGW_DAOS
+    store = newDaosStore(cct);
+
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
+    }
 #else
     store = nullptr;
 #endif
@@ -322,6 +356,11 @@ StoreManager::Config StoreManager::get_config(bool admin, CephContext* cct)
 #ifdef WITH_RADOSGW_MOTR
   else if (config_store == "motr") {
     cfg.store_name = "motr";
+  }
+#endif
+#ifdef WITH_RADOSGW_DAOS
+  else if (config_store == "daos") {
+    cfg.store_name = "daos";
   }
 #endif
 
