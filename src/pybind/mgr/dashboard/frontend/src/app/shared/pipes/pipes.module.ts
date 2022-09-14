@@ -15,6 +15,7 @@ import { EmptyPipe } from './empty.pipe';
 import { EncodeUriPipe } from './encode-uri.pipe';
 import { FilterPipe } from './filter.pipe';
 import { HealthColorPipe } from './health-color.pipe';
+import { HealthIconPipe } from './health-icon.pipe';
 import { HealthLabelPipe } from './health-label.pipe';
 import { IopsPipe } from './iops.pipe';
 import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
@@ -64,7 +65,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     MapPipe,
     TruncatePipe,
     SanitizeHtmlPipe,
-    SearchHighlightPipe
+    SearchHighlightPipe,
+    HealthIconPipe
   ],
   exports: [
     ArrayPipe,
@@ -96,7 +98,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     MapPipe,
     TruncatePipe,
     SanitizeHtmlPipe,
-    SearchHighlightPipe
+    SearchHighlightPipe,
+    HealthIconPipe
   ],
   providers: [
     ArrayPipe,
@@ -123,7 +126,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DurationPipe,
     MapPipe,
     TruncatePipe,
-    SanitizeHtmlPipe
+    SanitizeHtmlPipe,
+    HealthIconPipe
   ]
 })
 export class PipesModule {}
