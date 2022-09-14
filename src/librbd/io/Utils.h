@@ -53,11 +53,12 @@ void unsparsify(CephContext* cct, ceph::bufferlist* bl,
 template <typename ImageCtxT = librbd::ImageCtx>
 bool trigger_copyup(ImageCtxT *image_ctx, uint64_t object_no,
                     IOContext io_context, Context* on_finish);
-                
+
 template <typename ImageCtxT = librbd::ImageCtx>
-void file_to_extents(ImageCtxT *image_ctx, uint64_t offset, uint64_t length,
-                     uint64_t buffer_offset,
-                     striper::LightweightObjectExtents* object_extents);
+void area_to_object_extents(ImageCtxT* image_ctx, uint64_t offset,
+                            uint64_t length, ImageArea area,
+                            uint64_t buffer_offset,
+                            striper::LightweightObjectExtents* object_extents);
 
 template <typename ImageCtxT = librbd::ImageCtx>
 std::pair<Extents, ImageArea> object_to_area_extents(

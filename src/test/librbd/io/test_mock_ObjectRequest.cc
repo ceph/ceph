@@ -71,8 +71,9 @@ struct ImageListSnapsRequest<librbd::MockTestImageCtx> {
   }
   ImageListSnapsRequest(
       librbd::MockImageCtx& image_ctx, AioCompletion* aio_comp,
-      Extents&& image_extents, SnapIds&& snap_ids, int list_snaps_flags,
-      SnapshotDelta* snapshot_delta, const ZTracer::Trace& parent_trace) {
+      Extents&& image_extents, ImageArea area, SnapIds&& snap_ids,
+      int list_snaps_flags, SnapshotDelta* snapshot_delta,
+      const ZTracer::Trace& parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     s_instance->image_extents = image_extents;
@@ -91,10 +92,11 @@ ImageListSnapsRequest<librbd::MockTestImageCtx>* ImageListSnapsRequest<librbd::M
 
 namespace util {
 
-template <> void file_to_extents(
-        MockTestImageCtx* image_ctx, uint64_t offset, uint64_t length,
-        uint64_t buffer_offset,
-        striper::LightweightObjectExtents* object_extents) {
+template <>
+void area_to_object_extents(MockTestImageCtx* image_ctx, uint64_t offset,
+                            uint64_t length, ImageArea area,
+                            uint64_t buffer_offset,
+                            striper::LightweightObjectExtents* object_extents) {
   Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
                            0, buffer_offset, object_extents);
 }
