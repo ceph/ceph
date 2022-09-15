@@ -265,7 +265,7 @@ class Activate(object):
 
         if osd_id and osd_fsid:
             tags = {'ceph.osd_id': osd_id, 'ceph.osd_fsid': osd_fsid}
-        elif osd_id and not osd_fsid:
+        elif osd_id:
             if osd_id.isdigit():
                 tags = {'ceph.osd_id': osd_id}
             else:
