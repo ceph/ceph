@@ -929,32 +929,37 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
     return set_cr_done();
   }
   reenter(this) {
+    // use LOCK_FLAG_MAY_RENEW for the initial lock request, so we can reacquire
+    // locks that we previously held
+    lock.set_may_renew(true);
 
-    last_renew_try_time = Clock::now();
     while (!going_down) {
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock));
-      current_time = Clock::now();
-      if (current_time - last_renew_try_time > interval_tolerance) {
-        // renewal should happen between 50%-90% of interval
-        ldout(store->ctx(), 1) << *this << ": WARNING: did not renew lock " << obj << ": within 90\% of interval. " <<
-          (current_time - last_renew_try_time) << " > " << interval_tolerance << dendl;
-      }
-      last_renew_try_time = current_time;
 
       caller->set_sleeping(false); /* will only be relevant when we return, that's why we can do it early */
       if (retcode < 0) {
-        set_locked(false);
-        ldout(store->ctx(), 20) << *this << ": couldn't lock " << obj << ": retcode=" << retcode << dendl;
-        return set_state(RGWCoroutine_Error, retcode);
+        if (retcode == -EBUSY && last_locked_at != Clock::zero()) {
+          ldout(store->ctx(), 1) << *this << ": ERROR: Lock renewal on "
+              << obj << " failed due to timeout. This is likely caused by "
+              "extreme latency on the " << obj.pool << " pool." << dendl;
+        } else {
+          ldout(store->ctx(), 20) << *this << ": couldn't lock " << obj << ": retcode=" << retcode << dendl;
+        }
+        last_locked_at = Clock::zero();
+        return set_cr_error(retcode);
       }
       ldout(store->ctx(), 20) << *this << ": successfully locked " << obj << dendl;
-      set_locked(true);
+      last_locked_at = Clock::now();
 
-      yield wait(utime_t(interval / 2, 0));
+      // use LOCK_FLAG_MUST_RENEW for renewal requests so that it fails after
+      // the lock expires
+      lock.set_must_renew(true);
+
+      yield wait(utime_t{interval / 2});
     }
-    set_locked(false); /* moot at this point anyway */
+    last_locked_at = Clock::zero();
     yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock));
-    return set_state(RGWCoroutine_Done);
+    return set_cr_done();
   }
   return 0;
 }

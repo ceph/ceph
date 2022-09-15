@@ -1406,33 +1406,27 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   rados::cls::lock::Lock lock;
   const rgw_raw_obj obj;
 
-  int interval;
+  ceph::timespan interval;
   bool going_down{ false };
-  bool locked{false};
-  
-  const ceph::timespan interval_tolerance;
-  const ceph::timespan ts_interval;
 
   RGWCoroutine *caller;
 
   bool aborted{false};
 
   using Clock = ceph::coarse_mono_clock;
-  Clock::time_point last_renew_try_time;
-  Clock::time_point current_time;
+  Clock::time_point last_locked_at;
 
 public:
-  RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
-                       const rgw_raw_obj& _obj,
-                       const std::string& lock_name, int _interval, RGWCoroutine *_caller)
-    : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-    lock(lock_name), obj(_obj),
-    interval(_interval), interval_tolerance(ceph::make_timespan(9*interval/10)), ts_interval(ceph::make_timespan(interval)),
-      caller(_caller)
+  RGWContinuousLeaseCR(RGWAsyncRadosProcessor* async_rados,
+                       rgw::sal::RadosStore* store, const rgw_raw_obj& obj,
+                       const std::string& lock_name, int interval_sec,
+                       RGWCoroutine* caller)
+    : RGWCoroutine(store->ctx()), async_rados(async_rados), store(store),
+      lock(lock_name), obj(obj), interval(std::chrono::seconds(interval_sec)),
+      caller(caller)
   {
     lock.set_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct));
-    lock.set_duration(ts_interval);
-    lock.set_may_renew(true);
+    lock.set_duration(interval);
   }
 
   virtual ~RGWContinuousLeaseCR() override;
@@ -1440,14 +1434,10 @@ public:
   int operate(const DoutPrefixProvider *dpp) override;
 
   bool is_locked() const {
-    if (Clock::now() - last_renew_try_time > ts_interval) {
+    if (last_locked_at == Clock::zero()) { // not locked yet
       return false;
     }
-    return locked;
-  }
-
-  void set_locked(bool status) {
-    locked = status;
+    return Clock::now() < last_locked_at + interval; // check lock expiry
   }
 
   void go_down() {
