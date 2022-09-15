@@ -205,7 +205,7 @@ void read(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
 
   std::size_t off = 0;
   ceph::buffer::list bl;
-  while (auto toread = std::max(len - off, io_size)) {
+  while (auto toread = std::min(len - off, io_size)) {
     R::ReadOp op;
     op.read(off, toread, &bl);
     r.execute(obj, pool, std::move(op), nullptr, y[ec]);
