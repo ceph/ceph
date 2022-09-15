@@ -7,6 +7,7 @@ import requests
 
 from ..exceptions import DashboardException
 from ..security import Scope
+from ..services import ceph_service
 from ..settings import Settings
 from . import APIDoc, APIRouter, BaseController, Endpoint, RESTController, Router
 
@@ -41,6 +42,9 @@ class PrometheusRESTController(RESTController):
     def _get_api_url(self, host):
         return host.rstrip('/') + '/api/v1'
 
+    def balancer_status(self):
+        return ceph_service.CephService.send_command('mon', 'balancer status')
+
     def _proxy(self, base_url, method, path, api_name, params=None, payload=None, verify=True):
         # type (str, str, str, str, dict, dict, bool)
         try:
@@ -57,8 +61,16 @@ class PrometheusRESTController(RESTController):
             raise DashboardException(
                 "Error parsing Prometheus Alertmanager response: {}".format(e.msg),
                 component='prometheus')
-        if content['status'] == 'success':
+        balancer_status = self.balancer_status()
+        if content['status'] == 'success':  # pylint: disable=R1702
             if 'data' in content:
+                if balancer_status['active'] and balancer_status['no_optimization_needed'] and path == '/alerts':  # noqa E501  #pylint: disable=line-too-long
+                    for alert in content['data']:
+                        for k, v in alert.items():
+                            if k == 'labels':
+                                for key, value in v.items():
+                                    if key == 'alertname' and value == 'CephPGImbalance':
+                                        content['data'].remove(alert)
                 return content['data']
             return content
         raise DashboardException(content, http_status_code=400, component='prometheus')

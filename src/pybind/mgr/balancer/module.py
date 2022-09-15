@@ -324,6 +324,7 @@ class Module(MgrModule):
     last_optimize_started = ''
     last_optimize_duration = ''
     optimize_result = ''
+    no_optimization_needed = False
     success_string = 'Optimization plan created successfully'
     in_progress_string = 'in progress'
 
@@ -342,6 +343,7 @@ class Module(MgrModule):
             'last_optimize_started': self.last_optimize_started,
             'last_optimize_duration': self.last_optimize_duration,
             'optimize_result': self.optimize_result,
+            'no_optimization_needed': self.no_optimization_needed,
             'mode': self.get_module_option('mode'),
         }
         return (0, json.dumps(s, indent=4, sort_keys=True), '')
@@ -1023,6 +1025,7 @@ class Module(MgrModule):
                 break
         self.log.info('prepared %d/%d changes' % (total_did, max_optimizations))
         if total_did == 0:
+            self.no_optimization_needed = True
             return -errno.EALREADY, 'Unable to find further optimization, ' \
                                     'or pool(s) pg_num is decreasing, ' \
                                     'or distribution is already perfect'
