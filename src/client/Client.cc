@@ -10216,7 +10216,6 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
   int want, have = 0;
   bool movepos = false;
-  std::unique_ptr<C_SaferCond> onuninline;
   int64_t rc = 0;
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
@@ -10259,31 +10258,26 @@ retry:
     have &= ~(CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO);
 
   if (in->inline_version < CEPH_INLINE_NONE) {
-    if (!(have & CEPH_CAP_FILE_CACHE)) {
-      onuninline.reset(new C_SaferCond("Client::_read_uninline_data flock"));
-      uninline_data(in, onuninline.get());
-    } else {
-      uint32_t len = in->inline_data.length();
-      uint64_t endoff = offset + size;
-      if (endoff > in->size)
-        endoff = in->size;
+    uint32_t len = in->inline_data.length();
+    uint64_t endoff = offset + size;
+    if (endoff > in->size)
+      endoff = in->size;
 
-      if (offset < len) {
-        if (endoff <= len) {
-          bl->substr_of(in->inline_data, offset, endoff - offset);
-        } else {
-          bl->substr_of(in->inline_data, offset, len - offset);
-          bl->append_zero(endoff - len);
-        }
-        rc = endoff - offset;
-      } else if ((uint64_t)offset < endoff) {
-        bl->append_zero(endoff - offset);
-        rc = endoff - offset;
+    if (offset < len) {
+      if (endoff <= len) {
+        bl->substr_of(in->inline_data, offset, endoff - offset);
       } else {
-        rc = 0;
+        bl->substr_of(in->inline_data, offset, len - offset);
+        bl->append_zero(endoff - len);
       }
-      goto success;
+      rc = endoff - offset;
+    } else if ((uint64_t)offset < endoff) {
+      bl->append_zero(endoff - offset);
+      rc = endoff - offset;
+    } else {
+      rc = 0;
     }
+    goto success;
   }
 
   if (!conf->client_debug_force_sync_read &&
@@ -10341,19 +10335,6 @@ success:
 
 done:
   // done!
-  
-  if (onuninline) {
-    client_lock.unlock();
-    int ret = onuninline->wait();
-    client_lock.lock();
-    if (ret >= 0 || ret == -CEPHFS_ECANCELED) {
-      in->inline_data.clear();
-      in->inline_version = CEPH_INLINE_NONE;
-      in->mark_caps_dirty(CEPH_CAP_FILE_WR);
-      check_caps(in, 0);
-    } else
-      rc = ret;
-  }
   if (have) {
     put_cap_ref(in, CEPH_CAP_FILE_RD);
   }
