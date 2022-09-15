@@ -135,6 +135,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   permissions unless explicitly granted by topic policy.
 * RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
   so it can be run for images in the trash.
+* PG dump: The default output of `ceph pg dump --format json` has changed. The
+  default json format produces a rather massive output in large clusters and
+  isn't scalable. So we have removed the 'network_ping_times' section from
+  the output. Details in the tracker: https://tracker.ceph.com/issues/57460
 
 >=18.0.0
 
