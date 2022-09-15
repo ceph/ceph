@@ -2633,6 +2633,7 @@ private:
   void _set_per_pool_omap();
   void _update_osd_memory_options();
   int print_onode(const std::string& key, std::string* out);
+  int print_shared_blob(uint64_t blob_id, std::string* out);
 
   int _open_bdev(bool create);
   // Verifies if disk space is enough for reserved + min bluefs

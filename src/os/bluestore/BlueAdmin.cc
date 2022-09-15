@@ -45,6 +45,12 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       this,
       "print object internals");
     ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore blob "
+      "name=blob_id,type=CephInt,req=true",
+      this,
+      "print blob");
+    ceph_assert(r == 0);
   }
 }
 
@@ -120,6 +126,15 @@ int BlueStore::SocketHook::call(
     dout(1) << __func__ << " key=" << pretty_binary_string(key) << dendl;
     std::string str;
     store.print_onode(key, &str);
+    out.append(str);
+  } else if (command == "bluestore blob") {
+    int64_t blob_id;
+    cmd_getval(cmdmap, "blob_id", blob_id);
+    std::string str;
+    r = store.print_shared_blob(blob_id, &str);
+    if (r != 0) {
+      return -ENOENT;
+    }
     out.append(str);
   } else {
     ss << "Invalid command" << std::endl;

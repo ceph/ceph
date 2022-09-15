@@ -1,6 +1,6 @@
 #include "BlueStore.h"
 #include "common/pretty_binary.h"
-
+#include "os/kv.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore "
@@ -8,7 +8,9 @@
 #define dout_context store.cct
 #define dout_subsys ceph_subsys_bluestore
 
-const std::string PREFIX_OBJ = "O";
+const std::string PREFIX_OBJ = "O";    // object name -> onode_t
+const std::string PREFIX_SHARED_BLOB = "X"; // u64 SB id -> shared_blob_t
+
 template<typename S>
 int get_key_object(const S& key, ghobject_t *oid);
 
@@ -172,6 +174,26 @@ int BlueStore::print_onode(const std::string& key, std::string* out)
   }
   report << "total metadata size " << metadata_size << std::endl;
   dout(20) << std::endl << report.str() << dendl;
+  *out = report.str();
+  return 0;
+}
+
+int BlueStore::print_shared_blob(uint64_t blob_id, std::string* out)
+{
+  std::stringstream report;
+  std::string key;
+  bufferlist v;
+  _key_encode_u64(blob_id, &key);
+  dout(30) << __func__ << " blob_key=" << pretty_binary_string(key) << dendl;
+  int r = db->get(PREFIX_SHARED_BLOB, key, &v);
+  if (r < 0) {
+    return -ENOENT;
+  }
+  bluestore_shared_blob_t blob(blob_id);
+  auto p = v.cbegin();
+  decode(blob, p);
+  report << "ID: " << blob_id << std::endl;
+  report << blob.ref_map << std::endl;
   *out = report.str();
   return 0;
 }
