@@ -912,8 +912,9 @@ class HAproxy(object):
     @staticmethod
     def get_sysctl_settings() -> List[str]:
         return [
-            '# IP forwarding',
+            '# IP forwarding and non-local bind',
             'net.ipv4.ip_forward = 1',
+            'net.ipv4.ip_nonlocal_bind = 1',
         ]
 
 ##################################
