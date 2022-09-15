@@ -1054,7 +1054,8 @@ class CephFSMount(object):
         self.background_procs.append(rproc)
         return rproc
 
-    def create_n_files(self, fs_path, count, sync=False, dirsync=False, unlink=False, finaldirsync=False):
+    def create_n_files(self, fs_path, count, sync=False, dirsync=False,
+                       unlink=False, finaldirsync=False, hard_links=0):
         """
         Create n files.
 
@@ -1062,6 +1063,7 @@ class CephFSMount(object):
         :param dirsync: sync the containing directory after closing the file
         :param unlink: unlink the file after closing
         :param finaldirsync: sync the containing directory after closing the last file
+        :param hard_links: create given number of hard link(s) for each file
         """
 
         assert(self.is_mounted())
@@ -1070,8 +1072,12 @@ class CephFSMount(object):
 
         pyscript = dedent(f"""
             import os
+            import uuid
 
             n = {count}
+            create_hard_links = False
+            if {hard_links} > 0:
+                create_hard_links = True
             path = "{abs_path}"
 
             dpath = os.path.dirname(path)
@@ -1092,6 +1098,9 @@ class CephFSMount(object):
                         os.unlink(fpath)
                     if {dirsync}:
                         os.fsync(dirfd)
+                    if create_hard_links:
+                        for j in range({hard_links}):
+                            os.system(f"ln {{fpath}} {{dpath}}/{{fnameprefix}}_{{i}}_{{uuid.uuid4()}}")     
                 if {finaldirsync}:
                     os.fsync(dirfd)
             finally:
