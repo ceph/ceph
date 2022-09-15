@@ -4734,6 +4734,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
           continue;
         }
         trace = tracing::rgw::tracer.add_span("RGWBucketShardIncrementalSyncCR::operate", entry->bi_trace);
+        trace->SetAttribute(tracing::rgw::HOST_ID, sync_env->store->get_host_id());
         // yield {
           set_status() << "start object sync";
           if (!marker_tracker.start(cur_id, 0, entry->timestamp)) {
