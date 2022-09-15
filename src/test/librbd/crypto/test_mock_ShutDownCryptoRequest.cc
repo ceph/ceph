@@ -38,7 +38,6 @@ struct TestMockShutDownCryptoRequest : public TestMockFixture {
   Context *on_finish = &finished_cond;
   MockShutDownCryptoRequest* mock_shutdown_crypto_request;
   MockEncryptionFormat* mock_encryption_format;
-  std::unique_ptr<MockEncryptionFormat> result_format;
   Context* shutdown_object_dispatch_context;
   Context* shutdown_image_dispatch_context;
 
@@ -51,7 +50,7 @@ struct TestMockShutDownCryptoRequest : public TestMockFixture {
     mock_encryption_format = new MockEncryptionFormat();
     mock_image_ctx->encryption_format.reset(mock_encryption_format);
     mock_shutdown_crypto_request = MockShutDownCryptoRequest::create(
-          mock_image_ctx, &result_format, on_finish);
+        mock_image_ctx, on_finish);
   }
 
   void TearDown() override {
@@ -142,7 +141,6 @@ TEST_F(TestMockShutDownCryptoRequest, Success) {
   shutdown_image_dispatch_context->complete(0);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
-  ASSERT_EQ(mock_encryption_format, result_format.get());
 }
 
 TEST_F(TestMockShutDownCryptoRequest, ShutdownParent) {
@@ -169,7 +167,6 @@ TEST_F(TestMockShutDownCryptoRequest, ShutdownParent) {
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
   ASSERT_EQ(nullptr, parent_image_ctx->encryption_format.get());
-  ASSERT_EQ(mock_encryption_format, result_format.get());
   delete parent_image_ctx;
 }
 
