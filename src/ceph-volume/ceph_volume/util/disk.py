@@ -777,7 +777,7 @@ class AllowLoopDevices(object):
 allow_loop_devices = AllowLoopDevices()
 
 
-def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys/dev/block'):
+def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys/dev/block', device=''):
     def holder_inner_loop():
         for holder in holders:
             # /sys/block/sdy/holders/dm-8/dm/uuid
@@ -787,7 +787,10 @@ def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys
 
     # First, get devices that are _not_ partitions
     result = list()
-    dev_names = os.listdir(_sys_block_path)
+    if not device:
+        dev_names = os.listdir(_sys_block_path)
+    else:
+        dev_names = [device]
     for dev in dev_names:
         name = kname = os.path.join("/dev", dev)
         if not os.path.exists(name):
