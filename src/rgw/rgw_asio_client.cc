@@ -15,11 +15,12 @@ using namespace rgw::asio;
 ClientIO::ClientIO(parser_type& parser, bool is_ssl,
                    const endpoint_type& local_endpoint,
                    const endpoint_type& remote_endpoint)
-  : parser(parser), is_ssl(is_ssl),
+  : parser(parser), response(), serializer(response), is_ssl(is_ssl),
     local_endpoint(local_endpoint),
-    remote_endpoint(remote_endpoint),
-    txbuf(*this)
+    remote_endpoint(remote_endpoint)
 {
+  response.version(11);
+  response.keep_alive(parser.keep_alive());
 }
 
 ClientIO::~ClientIO() = default;
@@ -94,98 +95,28 @@ int ClientIO::init_env(CephContext *cct)
   return 0;
 }
 
-size_t ClientIO::complete_request()
-{
-  perfcounter->inc(l_rgw_qlen, -1);
-  perfcounter->inc(l_rgw_qactive, -1);
-  return 0;
-}
-
-void ClientIO::flush()
-{
-  txbuf.pubsync();
-}
-
 size_t ClientIO::send_status(int status, const char* status_name)
 {
-  static constexpr size_t STATUS_BUF_SIZE = 128;
-
-  char statusbuf[STATUS_BUF_SIZE];
-  const auto statuslen = snprintf(statusbuf, sizeof(statusbuf),
-                                  "HTTP/1.1 %d %s\r\n", status, status_name);
-
-  return txbuf.sputn(statusbuf, statuslen);
-}
-
-size_t ClientIO::send_100_continue()
-{
-  const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
-  const size_t sent = txbuf.sputn(HTTTP_100_CONTINUE,
-                                  sizeof(HTTTP_100_CONTINUE) - 1);
-  flush();
-  return sent;
-}
-
-static constexpr size_t TIME_BUF_SIZE = 128;
-static size_t dump_date_header(char (&timestr)[TIME_BUF_SIZE])
-{
-  const time_t gtime = time(nullptr);
-  struct tm result;
-  struct tm const * const tmp = gmtime_r(&gtime, &result);
-  if (tmp == nullptr) {
-    return 0;
-  }
-  return strftime(timestr, sizeof(timestr),
-                  "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp);
-}
-
-size_t ClientIO::complete_header()
-{
-  size_t sent = 0;
-
-  char timestr[TIME_BUF_SIZE];
-  if (dump_date_header(timestr)) {
-    sent += txbuf.sputn(timestr, strlen(timestr));
-  }
-
-  if (parser.keep_alive()) {
-    constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
-    sent += txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
-  } else {
-    constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
-    sent += txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
-  }
-
-  constexpr char HEADER_END[] = "\r\n";
-  sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
-
-  flush();
-  return sent;
+  response.result(status);
+  return 0; // accounted for later in complete_header()
 }
 
 size_t ClientIO::send_header(const std::string_view& name,
                              const std::string_view& value)
 {
-  static constexpr char HEADER_SEP[] = ": ";
-  static constexpr char HEADER_END[] = "\r\n";
-
-  size_t sent = 0;
-
-  sent += txbuf.sputn(name.data(), name.length());
-  sent += txbuf.sputn(HEADER_SEP, sizeof(HEADER_SEP) - 1);
-  sent += txbuf.sputn(value.data(), value.length());
-  sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
-
-  return sent;
+  response.insert(beast::string_view{name.data(), name.size()},
+                  beast::string_view{value.data(), value.size()});
+  return 0; // accounted for later in complete_header()
 }
 
 size_t ClientIO::send_content_length(uint64_t len)
 {
-  static constexpr size_t CONLEN_BUF_SIZE = 128;
+  response.content_length(len);
+  return 0; // accounted for later in complete_header()
+}
 
-  char sizebuf[CONLEN_BUF_SIZE];
-  const auto sizelen = snprintf(sizebuf, sizeof(sizebuf),
-                                "Content-Length: %" PRIu64 "\r\n", len);
-
-  return txbuf.sputn(sizebuf, sizelen);
+size_t ClientIO::send_chunked_transfer_encoding()
+{
+  response.chunked(true);
+  return 0; // accounted for later in complete_header()
 }

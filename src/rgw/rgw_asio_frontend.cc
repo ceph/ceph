@@ -72,6 +72,20 @@ class StreamIO : public rgw::asio::ClientIO {
   timeout_timer& timeout;
   yield_context yield;
   parse_buffer& buffer;
+  bool sent_headers = false;
+
+  size_t write_headers() {
+    // serialize the headers to stream and return the number of bytes written
+    boost::system::error_code ec;
+    timeout.start();
+    const size_t bytes = http::async_write_header(stream, serializer, yield[ec]);
+    timeout.cancel();
+    if (ec) {
+      ldout(cct, 4) << "failed to write headers: " << ec.message() << dendl;
+      throw rgw::io::Exception(ec);
+    }
+    return bytes;
+  }
  public:
   StreamIO(CephContext *cct, Stream& stream, timeout_timer& timeout,
            rgw::asio::parser_type& parser, yield_context yield,
@@ -83,19 +97,31 @@ class StreamIO : public rgw::asio::ClientIO {
         buffer(buffer)
   {}
 
-  size_t write_data(const char* buf, size_t len) override {
+  size_t send_body(const char* buf, size_t len) override {
+    size_t bytes = 0;
+    if (!sent_headers) {
+      // we didn't get a content-length so this needs to be chunked
+      response.chunked(true);
+      bytes = write_headers();
+      sent_headers = true;
+    }
+
+    auto& body = response.body();
+    body.data = const_cast<char*>(buf); // buffer_body::writer doesn't modify
+    body.size = len;
+    body.more = true;
+
     boost::system::error_code ec;
     timeout.start();
-    auto bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
-                                          yield[ec]);
+    bytes += http::async_write(stream, serializer, yield[ec]);
     timeout.cancel();
-    if (ec) {
-      ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
+    if (ec && ec != http::error::need_buffer) {
+      ldout(cct, 4) << "failed to write response body: " << ec.message() << dendl;
       if (ec == boost::asio::error::broken_pipe) {
         boost::system::error_code ec_ignored;
         stream.lowest_layer().shutdown(tcp_socket::shutdown_both, ec_ignored);
       }
-      throw rgw::io::Exception(ec.value(), std::system_category());
+      throw rgw::io::Exception(ec);
     }
     return bytes;
   }
@@ -116,10 +142,86 @@ class StreamIO : public rgw::asio::ClientIO {
       }
       if (ec) {
         ldout(cct, 4) << "failed to read body: " << ec.message() << dendl;
-        throw rgw::io::Exception(ec.value(), std::system_category());
+        throw rgw::io::Exception(ec);
       }
     }
     return max - body_remaining.size;
+  }
+
+  size_t complete_request() override {
+    perfcounter->inc(l_rgw_qlen, -1);
+    perfcounter->inc(l_rgw_qactive, -1);
+
+    if (!sent_headers) {
+      // there was no body
+      response.content_length(0);
+      sent_headers = true;
+      return write_headers();
+    }
+
+    // write 'eof' to the serializer. chunked encoding will add the last chunk
+    auto& body = response.body();
+    body.data = nullptr;
+    body.size = 0;
+    body.more = false;
+
+    boost::system::error_code ec;
+    timeout.start();
+    const size_t bytes = http::async_write(stream, serializer, yield[ec]);
+    timeout.cancel();
+    if (ec) {
+      ldout(cct, 4) << "failed to complete request: " << ec.message() << dendl;
+      throw rgw::io::Exception(ec);
+    }
+    return bytes;
+  }
+
+  size_t send_100_continue() override {
+    http::response<http::empty_body> res;
+    res.version(11);
+    res.result(http::status::continue_);
+    // TODO: add Server header
+    boost::system::error_code ec;
+    timeout.start();
+    const auto bytes = http::async_write(stream, res, yield[ec]);
+    timeout.cancel();
+    if (ec) {
+      ldout(cct, 4) << "failed to write 100-continue: " << ec.message() << dendl;
+      throw rgw::io::Exception(ec);
+    }
+    return bytes;
+  }
+
+  size_t complete_header() override {
+    // add a Date header if there isn't one
+    if (response.find(http::field::date) == response.end()) {
+      const time_t gtime = time(nullptr);
+      struct tm result;
+      struct tm const * const tmp = gmtime_r(&gtime, &result);
+      if (tmp) {
+        char timestr[TIME_BUF_SIZE];
+        size_t len = strftime(timestr, sizeof(timestr),
+                              "%a, %d %b %Y %H:%M:%S %Z", tmp);
+        response.set(http::field::date, {timestr, len});
+      }
+    }
+
+    if (!response.has_content_length() && !response.chunked()) {
+      // wait until send_body() or complete_request() to decide what to do
+      return 0;
+    }
+
+    // serialize the headers to stream and return the number of bytes written
+    boost::system::error_code ec;
+    timeout.start();
+    const auto bytes = http::async_write_header(stream, serializer, yield[ec]);
+    timeout.cancel();
+    if (ec) {
+      ldout(cct, 4) << "failed to write headers: " << ec.message() << dendl;
+      throw rgw::io::Exception(ec);
+    }
+    sent_headers = true;
+    return bytes;
   }
 };
 
@@ -252,11 +354,8 @@ void handle_connection(boost::asio::io_context& context,
                            is_ssl, socket.local_endpoint(),
                            remote_endpoint};
 
-      auto real_client_io = rgw::io::add_reordering(
-                              rgw::io::add_buffering(cct,
-                                rgw::io::add_chunking(
-                                  rgw::io::add_conlen_controlling(
-                                    &real_client))));
+      auto real_client_io = rgw::io::add_conlen_controlling(
+                              &real_client);
       RGWRestfulIO client(cct, &real_client_io);
       optional_yield y = null_yield;
       if (cct->_conf->rgw_beast_enable_async) {
