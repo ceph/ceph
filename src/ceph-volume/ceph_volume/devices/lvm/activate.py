@@ -317,7 +317,7 @@ class Activate(object):
             
         Activate OSD with  individual ID and FSID:
             ceph-volume lvm activate {ID} {FSID}
-            
+        
         The lvs associated with the OSD need to have been prepared previously,
         so that all needed tags and metadata exist.
 
