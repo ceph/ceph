@@ -91,6 +91,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 
 >=18.0.0
 
+* PG dump: The default format of `ceph pg dump` has changed. The default json
+  format produces a rather massive output in large clusters and isn't scalable.
+  The old format can still be obtained by passing `all`: `ceph pg dump all`.
+  Relevant tracker: https://tracker.ceph.com/issues/57460
 * The RGW policy parser now rejects unknown principals by default. If you are
   mirroring policies between RGW and AWS, you may wish to set
   "rgw policy reject invalid principals" to "false". This affects only newly set
