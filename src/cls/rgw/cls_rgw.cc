@@ -1274,7 +1274,9 @@ public:
                                                                               keep separate instance entry for the delete markers */
 
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: read_key_entry() idx=%s ret=%d", instance_idx.c_str(), ret);
+      // return ENOENT is proper when inserting a delete marker
+      if (ret != -ENOENT || !check_delete_marker)
+        CLS_LOG(0, "ERROR: read_key_entry() idx=%s ret=%d", instance_idx.c_str(), ret);
       return ret;
     }
     initialized = true;
