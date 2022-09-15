@@ -403,6 +403,8 @@ done:
   if (op) {
     if (s->trace) {
       s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
+      s->trace->SetAttribute(tracing::rgw::HOST_ID, driver->get_host_id());
+
       if (!rgw::sal::User::empty(s->user)) {
         s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
       }
