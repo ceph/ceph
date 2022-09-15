@@ -23,11 +23,9 @@ namespace crypto {
 using librbd::util::create_context_callback;
 
 template <typename I>
-ShutDownCryptoRequest<I>::ShutDownCryptoRequest(
-        I* image_ctx, EncryptionFormat* format,
-        Context* on_finish) : m_image_ctx(image_ctx), m_format(format),
-                              m_on_finish(on_finish) {
-}
+ShutDownCryptoRequest<I>::ShutDownCryptoRequest(I* image_ctx,
+                                                Context* on_finish)
+    : m_image_ctx(image_ctx), m_on_finish(on_finish) {}
 
 template <typename I>
 void ShutDownCryptoRequest<I>::send() {
@@ -97,12 +95,7 @@ void ShutDownCryptoRequest<I>::finish(int r) {
   if (r == 0) {
     {
       std::unique_lock image_locker{m_image_ctx->image_lock};
-      if (m_format != nullptr) {
-        *m_format = std::move(m_image_ctx->encryption_format);
-        m_format = nullptr;
-      } else {
-        m_image_ctx->encryption_format.reset();
-      }
+      m_image_ctx->encryption_format.reset();
     }
     
     if (m_image_ctx->parent != nullptr) {
