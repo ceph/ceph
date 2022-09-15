@@ -112,7 +112,10 @@ class Device(object):
             if "dm-" not in real_path:
                 self.path = real_path
         if not sys_info.devices:
-            sys_info.devices = disk.get_devices()
+            if self.path:
+                sys_info.devices = disk.get_devices(device=self.path)
+            else:
+                sys_info.devices = disk.get_devices()
         if sys_info.devices.get(self.path, {}):
             self.device_nodes = sys_info.devices[self.path]['device_nodes']
         self.sys_api = sys_info.devices.get(self.path, {})
