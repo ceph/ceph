@@ -736,8 +736,9 @@ eagain_ifuture<Ref<Node>> Node::load(
         ceph_abort("fatal error");
       }
       auto impl = LeafNodeImpl::load(extent, *field_type);
+      auto *derived_ptr = impl.get();
       return eagain_iertr::make_ready_future<Ref<Node>>(
-	new LeafNode(impl.get(), std::move(impl)));
+	new LeafNode(derived_ptr, std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
       if (extent->get_length() != c.vb.get_internal_node_size()) {
         ERRORT("load addr={:x}, is_level_tail={} error, "
@@ -746,8 +747,9 @@ eagain_ifuture<Ref<Node>> Node::load(
         ceph_abort("fatal error");
       }
       auto impl = InternalNodeImpl::load(extent, *field_type);
+      auto *derived_ptr = impl.get();
       return eagain_iertr::make_ready_future<Ref<Node>>(
-	new InternalNode(impl.get(), std::move(impl)));
+	new InternalNode(derived_ptr, std::move(impl)));
     } else {
       ceph_abort("impossible path");
     }
@@ -1762,8 +1764,9 @@ eagain_ifuture<InternalNode::fresh_node_t> InternalNode::allocate(
 {
   return InternalNodeImpl::allocate(c, hint, field_type, is_level_tail, level
   ).si_then([](auto&& fresh_impl) {
+    auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<InternalNode>(new InternalNode(
-          fresh_impl.impl.get(), std::move(fresh_impl.impl)));
+          derived_ptr, std::move(fresh_impl.impl)));
     return fresh_node_t{node, fresh_impl.mut};
   });
 }
@@ -2262,8 +2265,9 @@ eagain_ifuture<LeafNode::fresh_node_t> LeafNode::allocate(
 {
   return LeafNodeImpl::allocate(c, hint, field_type, is_level_tail
   ).si_then([](auto&& fresh_impl) {
+    auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<LeafNode>(new LeafNode(
-          fresh_impl.impl.get(), std::move(fresh_impl.impl)));
+          derived_ptr, std::move(fresh_impl.impl)));
     return fresh_node_t{node, fresh_impl.mut};
   });
 }
