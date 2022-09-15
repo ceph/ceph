@@ -272,7 +272,24 @@ void RGWServices_Def::shutdown()
     return;
   }
 
+  role_rados->shutdown();
   datalog_rados.reset();
+  user_rados->shutdown();
+  sync_modules->shutdown();
+  otp->shutdown();
+  notify->shutdown();
+  meta_be_otp->shutdown();
+  meta_be_sobj->shutdown();
+  meta->shutdown();
+  mdlog->shutdown();
+  config_key_rados->shutdown();
+  cls->shutdown();
+  bilog_rados->shutdown();
+  bi_rados->shutdown();
+  bucket_sync_sobj->shutdown();
+  bucket_sobj->shutdown();
+  finisher->shutdown();
+
   sysobj->shutdown();
   sysobj_core->shutdown();
   notify->shutdown();
