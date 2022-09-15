@@ -265,13 +265,13 @@ class Activate(object):
 
         if osd_id and osd_fsid:
             tags = {'ceph.osd_id': osd_id, 'ceph.osd_fsid': osd_fsid}
-        elif not osd_id and osd_fsid:
-            tags = {'ceph.osd_fsid': osd_fsid}
         elif osd_id and not osd_fsid:
-            raise RuntimeError('could not activate osd.{}, please provide the '
-                               'osd_fsid too'.format(osd_id))
+            if osd_id.isdigit():
+                tags = {'ceph.osd_id': osd_id}
+            else:
+                tags = {'ceph.osd_fsid': osd_id}
         else:
-            raise RuntimeError('Please provide both osd_id and osd_fsid')
+            raise RuntimeError('Please provide osd_id or osd_fsid or both of them')
         lvs = api.get_lvs(tags=tags)
         if not lvs:
             raise RuntimeError('could not find osd.%s with osd_fsid %s' %
@@ -308,9 +308,16 @@ class Activate(object):
         sub_command_help = dedent("""
         Activate OSDs by discovering them with LVM and mounting them in their
         appropriate destination:
-
+        
+        Activate OSD with  individual ID:
+            ceph-volume lvm activate {ID}
+        
+        Activate OSD with  individual FSID:
+            ceph-volume lvm activate {FSID}
+            
+        Activate OSD with  individual ID and FSID:
             ceph-volume lvm activate {ID} {FSID}
-
+            
         The lvs associated with the OSD need to have been prepared previously,
         so that all needed tags and metadata exist.
 
