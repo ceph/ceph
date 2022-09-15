@@ -930,10 +930,10 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
   }
   reenter(this) {
 
-    last_renew_try_time = ceph::coarse_mono_clock::now();
+    last_renew_try_time = Clock::now();
     while (!going_down) {
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock));
-      current_time = ceph::coarse_mono_clock::now();
+      current_time = Clock::now();
       if (current_time - last_renew_try_time > interval_tolerance) {
         // renewal should happen between 50%-90% of interval
         ldout(store->ctx(), 1) << *this << ": WARNING: did not renew lock " << obj << ": within 90\% of interval. " <<

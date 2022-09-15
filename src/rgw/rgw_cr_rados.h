@@ -1416,9 +1416,10 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   RGWCoroutine *caller;
 
   bool aborted{false};
-  
-  ceph::coarse_mono_time last_renew_try_time;
-  ceph::coarse_mono_time current_time;
+
+  using Clock = ceph::coarse_mono_clock;
+  Clock::time_point last_renew_try_time;
+  Clock::time_point current_time;
 
 public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
@@ -1439,7 +1440,7 @@ public:
   int operate(const DoutPrefixProvider *dpp) override;
 
   bool is_locked() const {
-    if (ceph::coarse_mono_clock::now() - last_renew_try_time > ts_interval) {
+    if (Clock::now() - last_renew_try_time > ts_interval) {
       return false;
     }
     return locked;
