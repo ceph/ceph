@@ -4,8 +4,9 @@
 #include "crimson/os/seastore/extent_placement_manager.h"
 
 #include "crimson/common/config_proxy.h"
+#include "crimson/os/seastore/logging.h"
 
-SET_SUBSYS(seastore_journal);
+SET_SUBSYS(seastore_epm);
 
 namespace crimson::os::seastore {
 
@@ -173,32 +174,36 @@ SegmentedOolWriter::alloc_write_ool_extents(
   });
 }
 
-void ExtentPlacementManager::set_async_cleaner(AsyncCleanerRef &&_cleaner)
+void ExtentPlacementManager::init(
+    JournalTrimmerImplRef &&trimmer, AsyncCleanerRef &&cleaner)
 {
-  cleaner = std::move(_cleaner);
   writer_refs.clear();
 
   ceph_assert(RECLAIM_GENERATIONS > 0);
+  auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
+  ceph_assert(segment_cleaner != nullptr);
   data_writers_by_gen.resize(RECLAIM_GENERATIONS, {});
   for (reclaim_gen_t gen = 0; gen < RECLAIM_GENERATIONS; ++gen) {
     writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-          data_category_t::DATA, gen, *cleaner,
-          cleaner->get_ool_segment_seq_allocator()));
+          data_category_t::DATA, gen, *segment_cleaner,
+          segment_cleaner->get_ool_segment_seq_allocator()));
     data_writers_by_gen[gen] = writer_refs.back().get();
   }
 
   md_writers_by_gen.resize(RECLAIM_GENERATIONS - 1, {});
   for (reclaim_gen_t gen = 1; gen < RECLAIM_GENERATIONS; ++gen) {
     writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-          data_category_t::METADATA, gen, *cleaner,
-          cleaner->get_ool_segment_seq_allocator()));
+          data_category_t::METADATA, gen, *segment_cleaner,
+          segment_cleaner->get_ool_segment_seq_allocator()));
     md_writers_by_gen[gen - 1] = writer_refs.back().get();
   }
 
-  for (auto *device : cleaner->get_segment_manager_group()
-                             ->get_segment_managers()) {
+  for (auto *device : segment_cleaner->get_segment_manager_group()
+                                     ->get_segment_managers()) {
     add_device(device);
   }
+
+  background_process.init(std::move(trimmer), std::move(cleaner));
 }
 
 void ExtentPlacementManager::set_primary_device(Device *device)
@@ -214,6 +219,253 @@ void ExtentPlacementManager::set_primary_device(Device *device)
     prefer_ool = true;
     add_device(primary_device);
   }
+}
+
+ExtentPlacementManager::open_ertr::future<>
+ExtentPlacementManager::open_for_write()
+{
+  LOG_PREFIX(ExtentPlacementManager::open_for_write);
+  INFO("started with {} devices", num_devices);
+  ceph_assert(primary_device != nullptr);
+  return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
+    return writer->open();
+  }).safe_then([this] {
+    return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
+      return writer->open();
+    });
+  });
+}
+
+ExtentPlacementManager::alloc_paddr_iertr::future<>
+ExtentPlacementManager::delayed_alloc_or_ool_write(
+    Transaction &t,
+    const std::list<LogicalCachedExtentRef> &delayed_extents)
+{
+  LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
+  DEBUGT("start with {} delayed extents",
+         t, delayed_extents.size());
+  assert(writer_refs.size());
+  return seastar::do_with(
+      std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>(),
+      [this, &t, &delayed_extents](auto& alloc_map) {
+    for (auto& extent : delayed_extents) {
+      // For now, just do ool allocation for any delayed extent
+      auto writer_ptr = get_writer(
+          extent->get_user_hint(),
+          get_extent_category(extent->get_type()),
+          extent->get_reclaim_generation());
+      alloc_map[writer_ptr].emplace_back(extent);
+    }
+    return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
+      auto writer = p.first;
+      auto& extents = p.second;
+      return writer->alloc_write_ool_extents(t, extents);
+    });
+  });
+}
+
+ExtentPlacementManager::close_ertr::future<>
+ExtentPlacementManager::close()
+{
+  LOG_PREFIX(ExtentPlacementManager::close);
+  INFO("started");
+  return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
+    return writer->close();
+  }).safe_then([this] {
+    return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
+      return writer->close();
+    });
+  });
+}
+
+void ExtentPlacementManager::BackgroundProcess::log_state(const char *caller) const
+{
+  LOG_PREFIX(BackgroundProcess::log_state);
+  DEBUG("caller {}, {}, {}",
+        caller,
+        JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+        AsyncCleaner::stat_printer_t{*cleaner, true});
+}
+
+void ExtentPlacementManager::BackgroundProcess::start_background()
+{
+  LOG_PREFIX(BackgroundProcess::start_background);
+  INFO("{}, {}",
+       JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+       AsyncCleaner::stat_printer_t{*cleaner, true});
+  ceph_assert(trimmer->check_is_ready());
+  ceph_assert(state == state_t::SCAN_SPACE);
+  assert(!is_running());
+  process_join = seastar::now();
+  state = state_t::RUNNING;
+  assert(is_running());
+  process_join = run();
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::stop_background()
+{
+  return seastar::futurize_invoke([this] {
+    if (!is_running()) {
+      if (state != state_t::HALT) {
+        state = state_t::STOP;
+      }
+      return seastar::now();
+    }
+    auto ret = std::move(*process_join);
+    process_join.reset();
+    state = state_t::HALT;
+    assert(!is_running());
+    do_wake_background();
+    return ret;
+  }).then([this] {
+    LOG_PREFIX(BackgroundProcess::stop_background);
+    INFO("done, {}, {}",
+         JournalTrimmerImpl::stat_printer_t{*trimmer, true},
+         AsyncCleaner::stat_printer_t{*cleaner, true});
+    // run_until_halt() can be called at HALT
+  });
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::run_until_halt()
+{
+  ceph_assert(state == state_t::HALT);
+  assert(!is_running());
+  if (is_running_until_halt) {
+    return seastar::now();
+  }
+  is_running_until_halt = true;
+  return seastar::do_until(
+    [this] {
+      log_state("run_until_halt");
+      assert(is_running_until_halt);
+      if (background_should_run()) {
+        return false;
+      } else {
+        is_running_until_halt = false;
+        return true;
+      }
+    },
+    [this] {
+      return do_background_cycle();
+    }
+  );
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
+    std::size_t projected_usage)
+{
+  ceph_assert(is_ready());
+  ceph_assert(!blocking_io);
+  // The pipeline configuration prevents another IO from entering
+  // prepare until the prior one exits and clears this.
+  ++stats.io_count;
+  bool is_blocked = false;
+  if (trimmer->should_block_io_on_trim()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_trim;
+  }
+  if (cleaner->should_block_io_on_clean()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_clean;
+  }
+  if (is_blocked) {
+    ++stats.io_blocking_num;
+    ++stats.io_blocked_count;
+    stats.io_blocked_sum += stats.io_blocking_num;
+  }
+  return seastar::do_until(
+    [this] {
+      log_state("reserve_projected_usage(await_hard_limits)");
+      return !should_block_io();
+    },
+    [this] {
+      blocking_io = seastar::promise<>();
+      return blocking_io->get_future();
+    }
+  ).then([this, is_blocked, projected_usage] {
+    ceph_assert(!blocking_io);
+    if (is_blocked) {
+      assert(stats.io_blocking_num > 0);
+      --stats.io_blocking_num;
+    }
+    cleaner->reserve_projected_usage(projected_usage);
+  });
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::run()
+{
+  assert(is_running());
+  return seastar::repeat([this] {
+    if (!is_running()) {
+      log_state("run(exit)");
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
+    }
+    return seastar::futurize_invoke([this] {
+      if (background_should_run()) {
+        log_state("run(background)");
+        return do_background_cycle();
+      } else {
+        log_state("run(block)");
+        ceph_assert(!blocking_background);
+        blocking_background = seastar::promise<>();
+        return blocking_background->get_future();
+      }
+    }).then([] {
+      return seastar::stop_iteration::no;
+    });
+  });
+}
+
+seastar::future<>
+ExtentPlacementManager::BackgroundProcess::do_background_cycle()
+{
+  assert(is_ready());
+  if (trimmer->should_trim_alloc()) {
+    return trimmer->trim_alloc(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+	"do_background_cycle encountered invalid error in trim_alloc"
+      }
+    );
+  } else if (trimmer->should_trim_dirty()) {
+    return trimmer->trim_dirty(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+	"do_background_cycle encountered invalid error in trim_dirty"
+      }
+    );
+  } else if (cleaner->should_clean_space()) {
+    return cleaner->clean_space(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+	"do_background_cycle encountered invalid error in clean_space"
+      }
+    );
+  } else {
+    return seastar::now();
+  }
+}
+
+void ExtentPlacementManager::BackgroundProcess::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  metrics.add_group("background_process", {
+    sm::make_counter("io_count", stats.io_count,
+                     sm::description("the sum of IOs")),
+    sm::make_counter("io_blocked_count", stats.io_blocked_count,
+                     sm::description("IOs that are blocked by gc")),
+    sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
+                     sm::description("IOs that are blocked by trimming")),
+    sm::make_counter("io_blocked_count_clean", stats.io_blocked_count_clean,
+                     sm::description("IOs that are blocked by cleaning")),
+    sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
+                     sm::description("the sum of blocking IOs"))
+  });
 }
 
 }

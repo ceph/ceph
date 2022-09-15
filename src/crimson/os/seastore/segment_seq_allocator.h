@@ -41,7 +41,7 @@ private:
   segment_seq_t next_segment_seq = 0;
   segment_type_t type = segment_type_t::NULL_SEG;
   friend class journal::SegmentedJournal;
-  friend class AsyncCleaner;
+  friend class SegmentCleaner;
 };
 
 using SegmentSeqAllocatorRef =

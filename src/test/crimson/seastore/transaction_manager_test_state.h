@@ -206,7 +206,7 @@ protected:
     ).handle_error(
       crimson::ct_error::assert_all{"Error in mount"}
     ).then([this] {
-      return epm->stop_gc();
+      return epm->stop_background();
     }).then([this] {
       return epm->run_background_work_until_halt();
     });
