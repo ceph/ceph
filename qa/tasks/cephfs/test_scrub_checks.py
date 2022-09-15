@@ -9,6 +9,7 @@ from teuthology.exceptions import CommandFailedError
 from teuthology.contextutil import safe_while
 import os
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from textwrap import dedent
 
 log = logging.getLogger(__name__)
 
@@ -332,6 +333,34 @@ class TestScrubChecks(CephFSTestCase):
 
         # fragstat should be fixed
         self.mount_a.run_shell(["rmdir", test_dir])
+
+    def test_stray_evaluation_with_scrub(self):
+        self.fs.set_allow_new_snaps(True)
+        
+        test_dir = "stray_eval_dir"
+        self.mount_a.run_shell(["mkdir", test_dir])
+        client_path = os.path.join(self.mount_a.mountpoint, test_dir)
+        self.mount_a.create_n_files(fs_path=f"{test_dir}/file", count=2000,
+                                    hard_links=3)
+        self.mount_a.run_shell(["mkdir", f"{client_path}/.snap/snap1-{test_dir}"])
+        self.mount_a.run_shell(f"find {client_path}/ -type f -delete")
+        self.mount_a.run_shell(["rmdir", f"{client_path}/.snap/snap1-{test_dir}"])
+        perf_dump = self.fs.rank_tell(["perf", "dump"], 0)
+        self.assertNotEqual(perf_dump.get('mds_cache').get('num_strays'),
+                            0, "mdcache.num_strays is zero")
+
+        log.info(
+            f"num of strays: {perf_dump.get('mds_cache').get('num_strays')}")
+
+        out_json = self.fs.run_scrub(["start", "~mdsdir", "recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+
+        self.fs.wait_until_scrub_complete()
+
+        perf_dump = self.fs.rank_tell(["perf", "dump"], 0)
+        self.assertEqual(int(perf_dump.get('mds_cache').get('num_strays')),
+                         0, "mdcache.num_strays is non-zero")
 
     @staticmethod
     def json_validator(json_out, rc, element, expected_value):
