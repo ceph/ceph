@@ -113,4 +113,14 @@ target_link_libraries(
   crimson-seastore
   aio)
 
+add_executable(unittest-seastore-extent-allocator
+  test_extent_allocator.cc)
+add_ceph_test(unittest-seastore-extent-allocator
+  unittest-seastore-extent-allocator --memory 256M --smp 1)
+target_link_libraries(
+  unittest-seastore-extent-allocator
+  crimson::gtest
+  crimson-seastore
+  aio)
+
 add_subdirectory(onode_tree)
