@@ -1563,7 +1563,7 @@ class CephFSMount(object):
         :param val: xattr value
         :return: None
         """
-        kwargs['args'] = ["setfattr", "-n", key, "-v", val, path]
+        kwargs['args'] = ["setfattr", "-n", str(key), "-v", str(val), path]
         if kwargs.pop('sudo', False):
             kwargs['args'].insert(0, 'sudo')
             kwargs['omit_sudo'] = False
