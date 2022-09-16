@@ -680,19 +680,26 @@ TransactionManagerRef make_transaction_manager(
       *backref_manager, trimmer_config,
       journal_type, roll_start, roll_size);
 
-  auto segment_cleaner = SegmentCleaner::create(
-    cleaner_config,
-    std::move(sms),
-    *backref_manager,
-    cleaner_is_detailed);
+  AsyncCleanerRef cleaner;
 
   if (journal_type == journal_type_t::SEGMENTED) {
+    cleaner = SegmentCleaner::create(
+      cleaner_config,
+      std::move(sms),
+      *backref_manager,
+      cleaner_is_detailed);
+    auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
     cache->set_segment_provider(*segment_cleaner);
     segment_cleaner->set_journal_trimmer(*journal_trimmer);
+  } else {
+    cleaner = RBMCleaner::create(
+      *backref_manager,
+      cleaner_is_detailed);
   }
 
   JournalRef journal;
   if (journal_type == journal_type_t::SEGMENTED) {
+    auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
     journal = journal::make_segmented(
       *segment_cleaner,
       *journal_trimmer);
@@ -703,7 +710,7 @@ TransactionManagerRef make_transaction_manager(
       "");
   }
 
-  epm->init(std::move(journal_trimmer), std::move(segment_cleaner));
+  epm->init(std::move(journal_trimmer), std::move(cleaner));
   epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(
