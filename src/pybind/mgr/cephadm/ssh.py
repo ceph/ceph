@@ -140,7 +140,7 @@ class SSHManager:
         cmd = sudo_prefix + " ".join(quote(x) for x in cmd)
         logger.debug(f'Running command: {cmd}')
         try:
-            r = await conn.run('sudo true', check=True, timeout=5)
+            r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)
             r = await conn.run(cmd, input=stdin)
         # handle these Exceptions otherwise you might get a weird error like TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
         except (asyncssh.ChannelOpenError, asyncssh.ProcessError, Exception) as e:
