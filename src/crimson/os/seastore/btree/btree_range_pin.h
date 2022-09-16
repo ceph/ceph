@@ -128,8 +128,6 @@ class btree_range_pin_t : public boost::intrusive::set_base_hook<> {
   CachedExtent *extent = nullptr;
   CachedExtentRef ref;
 
-  using index_t = boost::intrusive::set<btree_range_pin_t>;
-
   void acquire_ref() {
     ref = CachedExtentRef(extent);
   }
@@ -139,6 +137,8 @@ class btree_range_pin_t : public boost::intrusive::set_base_hook<> {
   }
 
 public:
+  using index_t = boost::intrusive::set<btree_range_pin_t>;
+
   btree_range_pin_t() = default;
   btree_range_pin_t(CachedExtent *extent)
     : extent(extent) {}
@@ -241,6 +241,10 @@ public:
 
 };
 
+template <typename node_bound_t>
+using pins_by_depth_t = std::array<
+  typename btree_range_pin_t<node_bound_t>::index_t,
+  MAX_FIXEDKVBTREE_DEPTH>;
 /**
  * btree_pin_set_t
  *
@@ -259,10 +263,7 @@ public:
 template <typename node_bound_t>
 class btree_pin_set_t {
   friend class btree_range_pin_t<node_bound_t>;
-  using pins_by_depth_t = std::array<
-    typename btree_range_pin_t<node_bound_t>::index_t,
-    MAX_FIXEDKVBTREE_DEPTH>;
-  pins_by_depth_t pins_by_depth;
+  pins_by_depth_t<node_bound_t> pins_by_depth;
 
   /// Removes pin from set optionally checking whether parent has other children
   void remove_pin(btree_range_pin_t<node_bound_t> &pin, bool do_check_parent)
