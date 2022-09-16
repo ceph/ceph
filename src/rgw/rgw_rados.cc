@@ -3890,7 +3890,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const DoutPrefixProvider *dpp,
                RGWFetchObjFilter *filter,
                rgw_zone_set *zones_trace,
-               std::optional<uint64_t>* bytes_transferred)
+               std::optional<uint64_t>* bytes_transferred,
+               const jspan_context* trace_ctx)
 {
   /* source is in a different zonegroup, copy from there */
 
@@ -3901,7 +3902,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
-
+  if (trace_ctx) {
+    auto trace = tracing::rgw::tracer.add_span("fetch_remote_obj", *trace_ctx);
+    dest_obj->set_trace(trace->GetContext());
+  }
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this->store, nullptr, user_id,

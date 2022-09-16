@@ -1343,7 +1343,7 @@ public:
   }
 
   RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, 
-      rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
+      rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace, const jspan_context *trace_ctx = nullptr) override {
     ldpp_dout(dpp, 10) << conf->id << ": sync_object: b=" << sync_pipe << 
           " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     return new RGWPSHandleObjCreateCR(sc, sync_pipe, key, env, versioned_epoch);

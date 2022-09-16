@@ -2274,7 +2274,7 @@ class RGWDefaultDataSyncModule : public RGWDataSyncModule {
 public:
   RGWDefaultDataSyncModule() {}
 
-  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace, const jspan_context *trace_ctx = nullptr) override;
   RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
@@ -2604,19 +2604,23 @@ class RGWObjFetchCR : public RGWCoroutine {
 
   int try_num{0};
   std::shared_ptr<bool> need_retry;
+
+  const jspan_context *trace_ctx;
 public:
   RGWObjFetchCR(RGWDataSyncCtx *_sc,
                 rgw_bucket_sync_pipe& _sync_pipe,
                 rgw_obj_key& _key,
                 std::optional<rgw_obj_key> _dest_key,
                 std::optional<uint64_t> _versioned_epoch,
-                rgw_zone_set *_zones_trace) : RGWCoroutine(_sc->cct),
+                rgw_zone_set *_zones_trace,
+                const jspan_context *_trace_ctx = nullptr) : RGWCoroutine(_sc->cct),
                                               sc(_sc), sync_env(_sc->env),
                                               sync_pipe(_sync_pipe),
                                               key(_key),
                                               dest_key(_dest_key),
                                               versioned_epoch(_versioned_epoch),
-                                              zones_trace(_zones_trace) {
+                                              zones_trace(_zones_trace),
+                                              trace_ctx(_trace_ctx) {
   }
 
 
@@ -2741,7 +2745,7 @@ public:
                                        key, dest_key, versioned_epoch,
                                        true,
                                        std::static_pointer_cast<RGWFetchObjFilter>(filter),
-                                       zones_trace, sync_env->counters, dpp));
+                                       zones_trace, sync_env->counters, dpp, trace_ctx));
         }
         if (retcode < 0) {
           if (*need_retry) {
@@ -2761,9 +2765,9 @@ public:
   }
 };
 
-RGWCoroutine *RGWDefaultDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
+RGWCoroutine *RGWDefaultDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace, const jspan_context *trace_ctx)
 {
-  return new RGWObjFetchCR(sc, sync_pipe, key, std::nullopt, versioned_epoch, zones_trace);
+  return new RGWObjFetchCR(sc, sync_pipe, key, std::nullopt, versioned_epoch, zones_trace, trace_ctx);
 }
 
 RGWCoroutine *RGWDefaultDataSyncModule::remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
@@ -2788,7 +2792,7 @@ class RGWArchiveDataSyncModule : public RGWDefaultDataSyncModule {
 public:
   RGWArchiveDataSyncModule() {}
 
-  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace, const jspan_context *trace_ctx = nullptr) override;
   RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
@@ -2815,7 +2819,7 @@ int RGWArchiveSyncModule::create_instance(const DoutPrefixProvider *dpp, CephCon
   return 0;
 }
 
-RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
+RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace, const jspan_context *trace_ctx)
 {
   auto sync_env = sc->env;
   ldout(sc->cct, 5) << "SYNC_ARCHIVE: sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
@@ -4067,6 +4071,8 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   RGWSyncTraceNodeRef tn;
   std::string zone_name;
 
+  const jspan_context trace_ctx;
+
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncCtx *_sc,
                              rgw_bucket_sync_pipe& _sync_pipe,
@@ -4076,7 +4082,7 @@ public:
                              const rgw_bucket_entry_owner& _owner,
                              RGWModifyOp _op, RGWPendingState _op_state,
 		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker, rgw_zone_set& _zones_trace,
-                             RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sc->cct),
+                             RGWSyncTraceNodeRef& _tn_parent, const jspan_context& _trace_ctx) : RGWCoroutine(_sc->cct),
 						      sc(_sc), sync_env(_sc->env),
                                                       sync_pipe(_sync_pipe), bs(_sync_pipe.info.source_bs),
                                                       key(_key), versioned(_versioned), versioned_epoch(_versioned_epoch),
@@ -4085,7 +4091,8 @@ public:
                                                       op_state(_op_state),
                                                       entry_marker(_entry_marker),
                                                       marker_tracker(_marker_tracker),
-                                                      sync_status(0){
+                                                      sync_status(0),
+                                                      trace_ctx(_trace_ctx) {
     stringstream ss;
     ss << bucket_shard_str{bs} << "/" << key << "[" << versioned_epoch.value_or(0) << "]";
     set_description() << "bucket sync single entry (source_zone=" << sc->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state;
@@ -4140,7 +4147,7 @@ public:
 	      pretty_print(sc->env, "Syncing object s3://{}/{} in sync from zone {}\n",
 			   bs.bucket.name, key, zone_name);
 	    }
-            call(data_sync_module->sync_object(dpp, sc, sync_pipe, key, versioned_epoch, &zones_trace));
+            call(data_sync_module->sync_object(dpp, sc, sync_pipe, key, versioned_epoch, &zones_trace, &trace_ctx));
           } else if (op == CLS_RGW_OP_DEL || op == CLS_RGW_OP_UNLINK_INSTANCE) {
             set_status("removing obj");
 	    if (versioned_epoch) {
@@ -4354,7 +4361,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
                                  false, /* versioned, only matters for object removal */
                                  entry->versioned_epoch, entry->mtime,
                                  entry->owner, entry->get_modify_op(), CLS_RGW_STATE_COMPLETE,
-                                 entry->key, &marker_tracker, zones_trace, tn),
+                                 entry->key, &marker_tracker, zones_trace, tn, jspan_context{false, false}),
                       false);
         }
         drain_with_cb(cct->_conf->rgw_bucket_sync_spawn_window,
@@ -4568,6 +4575,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
 {
   int ret;
   jspan trace;
+  jspan_context trace_ctx{false, false};
   reenter(this) {
     do {
       if (lease_cr && !lease_cr->is_locked()) {
@@ -4750,7 +4758,8 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
             spawn(new SyncCR(sc, sync_pipe, key,
                              entry->is_versioned(), versioned_epoch,
                              entry->timestamp, owner, entry->op, entry->state,
-                             cur_id, &marker_tracker, entry->zones_trace, tn),
+                             cur_id, &marker_tracker, entry->zones_trace, tn,
+                             trace->GetContext()),
                   false);
           }
         // }
