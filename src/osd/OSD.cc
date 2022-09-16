@@ -210,8 +210,8 @@ static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
 }
 
 
-//Initial features in new superblock.
-//Features here are also automatically upgraded
+// Initial features in new superblock.
+// Features here are also automatically upgraded
 CompatSet OSD::get_osd_initial_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
   CompatSet::FeatureSet ceph_osd_feature_ro_compat;
