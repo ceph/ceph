@@ -2536,6 +2536,30 @@ int ECBackend::be_deep_scrub(
     sleeptime.sleep();
   }
 
+  bool skip = false;
+  utime_t age;
+  if (cct->_conf->osd_deep_scrub_check_data_min_age > 0) {
+    object_info_t oi;
+    bufferlist bv;
+    // copy it, dont' move it
+    bv.append(o.attrs[OI_ATTR]);
+    try {
+      auto bliter = bv.cbegin();
+      decode(oi, bliter);
+
+      age = ceph_clock_now() - oi.local_mtime;
+      if (age < cct->_conf->osd_deep_scrub_check_data_min_age) {
+        skip = true;
+      }
+    } catch (...) {
+      dout(5) << __func__ << " bad object_info_t: " << poid << dendl;
+    }
+  }
+  dout(10) << __func__ << " " << poid
+           << " age " << age
+           << " skip " << skip
+           << dendl;
+
   if (pos.data_pos == 0) {
     pos.data_hash = bufferhash(-1);
   }
@@ -2544,33 +2568,35 @@ int ECBackend::be_deep_scrub(
   if (stride % sinfo.get_chunk_size())
     stride += sinfo.get_chunk_size() - (stride % sinfo.get_chunk_size());
 
-  bufferlist bl;
-  r = store->read(
-    ch,
-    ghobject_t(
-      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    pos.data_pos,
-    stride, bl,
-    fadvise_flags);
-  if (r < 0) {
-    dout(20) << __func__ << "  " << poid << " got "
-	     << r << " on read, read_error" << dendl;
-    o.read_error = true;
-    return 0;
-  }
-  if (bl.length() % sinfo.get_chunk_size()) {
-    dout(20) << __func__ << "  " << poid << " got "
-	     << r << " on read, not chunk size " << sinfo.get_chunk_size() << " aligned"
-	     << dendl;
-    o.read_error = true;
-    return 0;
-  }
-  if (r > 0) {
-    pos.data_hash << bl;
-  }
-  pos.data_pos += r;
-  if (r == (int)stride) {
-    return -EINPROGRESS;
+  if (!skip) {
+    bufferlist bl;
+    r = store->read(
+      ch,
+      ghobject_t(
+        poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      pos.data_pos,
+      stride, bl,
+      fadvise_flags);
+    if (r < 0) {
+      dout(20) << __func__ << "  " << poid << " got "
+               << r << " on read, read_error" << dendl;
+      o.read_error = true;
+      return 0;
+    }
+    if (bl.length() % sinfo.get_chunk_size()) {
+      dout(20) << __func__ << "  " << poid << " got "
+               << r << " on read, not chunk size " << sinfo.get_chunk_size() << " aligned"
+               << dendl;
+      o.read_error = true;
+      return 0;
+    }
+    if (r > 0) {
+      pos.data_hash << bl;
+    }
+    pos.data_pos += r;
+    if (r == (int)stride) {
+      return -EINPROGRESS;
+    }
   }
 
   ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, &o.attrs);
@@ -2586,7 +2612,7 @@ int ECBackend::be_deep_scrub(
         o.ec_size_mismatch = true;
         return 0;
       }
-      if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
+      if (!skip && (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos)) {
 	dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
 		<< std::hex << pos
 		<< " expected 0x" << hinfo->get_total_chunk_size() << std::dec
@@ -2595,8 +2621,8 @@ int ECBackend::be_deep_scrub(
 	return 0;
       }
 
-      if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
-	  pos.data_hash.digest()) {
+      if (!skip && (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
+	  pos.data_hash.digest())) {
 	dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
 		<< std::hex << pos.data_hash.digest() << " !=  expected 0x"
 		<< hinfo->get_chunk_hash(get_parent()->whoami_shard().shard)

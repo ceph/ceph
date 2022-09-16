@@ -648,6 +648,34 @@ int ReplicatedBackend::be_deep_scrub(
   }
 
   ceph_assert(poid == pos.ls[pos.pos]);
+
+  bool skip = false;
+  utime_t age;
+  if (cct->_conf->osd_deep_scrub_check_data_min_age > 0) {
+    object_info_t oi;
+    bufferlist bv;
+    // copy it, dont' move it
+    bv.append(o.attrs[OI_ATTR]);
+    try {
+      auto bliter = bv.cbegin();
+      decode(oi, bliter);
+
+      age = ceph_clock_now() - oi.local_mtime;
+      if (age < cct->_conf->osd_deep_scrub_check_data_min_age) {
+        pos.data_pos = -1; // pos.data_done() will be true
+        o.digest = oi.data_digest;
+        o.digest_present = true;
+        skip = true;
+      }
+    } catch (...) {
+      dout(5) << __func__ << " bad object_info_t: " << poid << dendl;
+    }
+  }
+  dout(10) << __func__ << " " << poid
+           << " age " << age
+           << " skip " << skip
+           << dendl;
+
   if (!pos.data_done()) {
     if (pos.data_pos == 0) {
       pos.data_hash = bufferhash(-1);

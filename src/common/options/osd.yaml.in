@@ -428,6 +428,12 @@ options:
     this
   default: 2_hr
   with_legacy: true
+- name: osd_deep_scrub_check_data_min_age
+  type: int
+  level: advanced
+  desc: Deep scrub read object data if object was last modified longer ago than this(in seconds)
+  default: 0
+  with_legacy: true
 - name: osd_deep_scrub_large_omap_object_key_threshold
   type: uint
   level: advanced
