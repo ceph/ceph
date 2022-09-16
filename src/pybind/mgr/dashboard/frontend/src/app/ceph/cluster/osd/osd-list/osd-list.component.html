@@ -66,13 +66,50 @@
 <ng-template #criticalConfirmationTpl
              let-safeToPerform="safeToPerform"
              let-message="message"
+             let-active="active"
+             let-missingStats="missingStats"
+             let-storedPgs="storedPgs"
              let-actionDescription="actionDescription"
              let-osdIds="osdIds">
   <div *ngIf="!safeToPerform"
-       class="danger">
-    <cd-alert-panel type="warning"
-                    i18n>The {selection.hasSingleSelection, select, true {OSD is} other {OSDs are}} not safe to be
-      {{ actionDescription }}! {{ message }}</cd-alert-panel>
+       class="danger mb-3">
+    <cd-alert-panel type="warning">
+      <span i18n>
+        The {selection.hasSingleSelection, select, true {OSD is} other {OSDs are}} not safe to be
+        {{ actionDescription }}!
+      </span>
+      <br>
+      <ul class="mb-0 pl-4">
+        <li *ngIf="active.length > 0"
+             i18n>
+          {selection.hasSingleSelection, select, true {} other {{{ active | join }} : }}
+          Some PGs are currently mapped to
+          {active.length === 1, select, true {it} other {them}}.
+        </li>
+        <li *ngIf="missingStats.length > 0"
+             i18n>
+          {selection.hasSingleSelection, select, true {} other {{{ missingStats | join }} : }}
+          There are no reported stats and not all PGs are active and clean.
+        </li>
+        <li *ngIf="storedPgs.length > 0"
+             i18n>
+          {selection.hasSingleSelection, select, true {OSD} other {{{ storedPgs | join }} : OSDs }}
+          still store some PG data and not all PGs are active and clean.
+        </li>
+        <li *ngIf="message">
+          {{ message }}
+        </li>
+      </ul>
+    </cd-alert-panel>
+  </div>
+  <div *ngIf="safeToPerform"
+       class="danger mb-3">
+    <cd-alert-panel type="info">
+      <span i18n>
+        The {selection.hasSingleSelection, select, true {OSD is} other {OSDs are}}
+        safe to destroy without reducing data durability.
+      </span>
+    </cd-alert-panel>
   </div>
   <ng-container i18n><strong>OSD {{ osdIds | join }}</strong> will be
   <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
