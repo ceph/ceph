@@ -3171,6 +3171,7 @@ int OSD::run_osd_bench_test(
   ostream &ss)
 {
   int ret = 0;
+  srand(time(NULL) % (unsigned long) -1);
   uint32_t duration = cct->_conf->osd_bench_duration;
 
   if (bsize > (int64_t) cct->_conf->osd_bench_max_block_size) {
@@ -3252,12 +3253,6 @@ int OSD::run_osd_bench_test(
     }
   }
 
-  bufferlist bl;
-  bufferptr bp(bsize);
-  memset(bp.c_str(), 'a', bp.length());
-  bl.push_back(std::move(bp));
-  bl.rebuild_page_aligned();
-
   {
     C_SaferCond waiter;
     if (!service.meta_ch->flush_commit(&waiter)) {
@@ -3265,10 +3260,15 @@ int OSD::run_osd_bench_test(
     }
   }
 
+  bufferlist bl;
   utime_t start = ceph_clock_now();
   for (int64_t pos = 0; pos < count; pos += bsize) {
     char nm[30];
     unsigned offset = 0;
+    bufferptr bp(bsize);
+    memset(bp.c_str(), rand() & 0xff, bp.length());
+    bl.push_back(std::move(bp));
+    bl.rebuild_page_aligned();
     if (onum && osize) {
       snprintf(nm, sizeof(nm), "disk_bw_test_%d", (int)(rand() % onum));
       offset = rand() % (osize / bsize) * bsize;
@@ -3283,6 +3283,7 @@ int OSD::run_osd_bench_test(
     if (!onum || !osize) {
       cleanupt.remove(coll_t::meta(), ghobject_t(soid));
     }
+    bl.clear();
   }
 
   {
