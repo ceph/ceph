@@ -700,6 +700,7 @@ class PgAutoscaler(MgrModule):
         # drop them from consideration.
         too_few = []
         too_many = []
+        warn_pools = []
         bytes_and_ratio = []
         health_checks: Dict[str, Dict[str, Union[int, str, List[str]]]] = {}
 
@@ -722,6 +723,7 @@ class PgAutoscaler(MgrModule):
             if not p['would_adjust']:
                 continue
             if p['pg_autoscale_mode'] == 'warn':
+                warn_pools.append(p['pool_name'])
                 msg = 'Pool %s has %d placement groups, should have %d' % (
                     p['pool_name'],
                     p['pg_num_target'],
@@ -761,9 +763,15 @@ class PgAutoscaler(MgrModule):
                                    .format(p['pool_name'],
                                            p['pg_num_final'], r))
 
+        warn_pools_string = ",".join(warn_pools)
         if too_few:
-            summary = "{0} pools have too few placement groups".format(
-                len(too_few))
+            count_of_too_few = len(too_few)
+            if count_of_too_few == 1:
+                summary = "{0} pool has too few placement groups".format(
+                    warn_pools_string)
+            else:
+                summary = "{0} pools have too few placement groups".format(
+                    warn_pools_string)
             health_checks['POOL_TOO_FEW_PGS'] = {
                 'severity': 'warning',
                 'summary': summary,
@@ -771,8 +779,13 @@ class PgAutoscaler(MgrModule):
                 'detail': too_few
             }
         if too_many:
-            summary = "{0} pools have too many placement groups".format(
-                len(too_many))
+            count_of_too_many = len(too_many)
+            if count_of_too_few == 1:
+                summary = "{0} pool has too many placement groups".format(
+                    warn_pools_string)
+            else:
+                summary = "{0} pools have too many placement groups".format(
+                    warn_pools_string)
             health_checks['POOL_TOO_MANY_PGS'] = {
                 'severity': 'warning',
                 'summary': summary,
