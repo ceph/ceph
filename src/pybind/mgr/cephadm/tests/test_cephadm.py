@@ -1938,3 +1938,119 @@ Traceback (most recent call last):
         with with_host(cephadm_module, 'test1', refresh_hosts=False, rm_with_force=True):
             with with_host(cephadm_module, 'test2', refresh_hosts=False, rm_with_force=False):
                 cephadm_module.inventory.add_label('test2', '_admin')
+
+    @pytest.mark.parametrize("facts, settings, expected_value",
+                             [
+                                 # All options are available on all hosts
+                                 (
+                                     {
+                                         "host1":
+                                         {
+                                             "sysctl_options":
+                                             {
+                                                 'opt1': 'val1',
+                                                 'opt2': 'val2',
+                                             }
+                                         },
+                                         "host2":
+                                         {
+                                             "sysctl_options":
+                                             {
+                                                 'opt1': '',
+                                                 'opt2': '',
+                                             }
+                                         },
+                                     },
+                                     {'opt1', 'opt2'},  # settings
+                                     {'host1': [], 'host2': []}  # expected_value
+                                 ),
+                                 # opt1 is missing on host 1, opt2 is missing on host2
+                                 ({
+                                     "host1":
+                                     {
+                                         "sysctl_options":
+                                         {
+                                             'opt2': '',
+                                             'optX': '',
+                                         }
+                                     },
+                                     "host2":
+                                     {
+                                         "sysctl_options":
+                                         {
+                                             'opt1': '',
+                                             'opt3': '',
+                                             'opt4': '',
+                                         }
+                                     },
+                                 },
+                                     {'opt1', 'opt2'},  # settings
+                                     {'host1': ['opt1'], 'host2': ['opt2']}  # expected_value
+                                 ),
+                                 # All options are missing on all hosts
+                                 ({
+                                     "host1":
+                                     {
+                                         "sysctl_options":
+                                         {
+                                         }
+                                     },
+                                     "host2":
+                                     {
+                                         "sysctl_options":
+                                         {
+                                         }
+                                     },
+                                 },
+                                     {'opt1', 'opt2'},  # settings
+                                     {'host1': ['opt1', 'opt2'], 'host2': [
+                                         'opt1', 'opt2']}  # expected_value
+                                 ),
+                             ]
+                             )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_tuned_profiles_settings_validation(self, facts, settings, expected_value, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            spec = mock.Mock()
+            spec.settings = sorted(settings)
+            spec.placement.filter_matching_hostspecs = mock.Mock()
+            spec.placement.filter_matching_hostspecs.return_value = ['host1', 'host2']
+            cephadm_module.cache.facts = facts
+            assert cephadm_module._validate_tunedprofile_settings(spec) == expected_value
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_tuned_profiles_validation(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+
+            with pytest.raises(OrchestratorError, match="^Invalid placement specification.+"):
+                spec = mock.Mock()
+                spec.settings = {'a': 'b'}
+                spec.placement = PlacementSpec(hosts=[])
+                cephadm_module._validate_tuned_profile_spec(spec)
+
+            with pytest.raises(OrchestratorError, match="Invalid spec: settings section cannot be empty."):
+                spec = mock.Mock()
+                spec.settings = {}
+                spec.placement = PlacementSpec(hosts=['host1', 'host2'])
+                cephadm_module._validate_tuned_profile_spec(spec)
+
+            with pytest.raises(OrchestratorError, match="^Placement 'count' field is no supported .+"):
+                spec = mock.Mock()
+                spec.settings = {'a': 'b'}
+                spec.placement = PlacementSpec(count=1)
+                cephadm_module._validate_tuned_profile_spec(spec)
+
+            with pytest.raises(OrchestratorError, match="^Placement 'count_per_host' field is no supported .+"):
+                spec = mock.Mock()
+                spec.settings = {'a': 'b'}
+                spec.placement = PlacementSpec(count_per_host=1, label='foo')
+                cephadm_module._validate_tuned_profile_spec(spec)
+
+            with pytest.raises(OrchestratorError, match="^Found invalid host"):
+                spec = mock.Mock()
+                spec.settings = {'a': 'b'}
+                spec.placement = PlacementSpec(hosts=['host1', 'host2'])
+                cephadm_module.inventory = mock.Mock()
+                cephadm_module.inventory.all_specs = mock.Mock(
+                    return_value=[mock.Mock().hostname, mock.Mock().hostname])
+                cephadm_module._validate_tuned_profile_spec(spec)
