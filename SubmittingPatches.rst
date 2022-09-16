@@ -6,7 +6,7 @@ Patches to Ceph can be divided into three categories:
 
     1. patches targeting Ceph kernel code
     2. patches targeting the "main" branch
-    3. patches targeting stable branches (e.g.: "nautilus")
+    3. patches targeting stable branches (e.g.: "quincy")
 
 Some parts of Ceph - notably the RBD and CephFS kernel clients - are maintained
 within the Linux Kernel. For patches targeting this code, please refer to the
