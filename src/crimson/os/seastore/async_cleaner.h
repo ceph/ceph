@@ -1284,4 +1284,98 @@ private:
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
 };
 
+class RBMCleaner;
+using RBMCleanerRef = std::unique_ptr<RBMCleaner>;
+
+class RBMCleaner : public AsyncCleaner {
+public:
+  RBMCleaner(
+    BackrefManager &backref_manager,
+    bool detailed);
+
+  static RBMCleanerRef create(
+      BackrefManager &backref_manager,
+      bool detailed) {
+    return std::make_unique<RBMCleaner>(
+      backref_manager, detailed);
+  }
+
+  /*
+   * AsyncCleaner interfaces
+   */
+
+  void set_background_callback(BackgroundListener *cb) final {
+    background_callback = cb;
+  }
+
+  void set_extent_callback(ExtentCallbackInterface *cb) final {
+    extent_callback = cb;
+  }
+
+  store_statfs_t get_stat() const final {
+    store_statfs_t st;
+    // TODO 
+    return st;
+  }
+
+  void print(std::ostream &, bool is_detailed) const final;
+
+  mount_ret mount() final;
+
+  void mark_space_used(paddr_t, extent_len_t) final;
+
+  void mark_space_free(paddr_t, extent_len_t) final;
+
+  void reserve_projected_usage(std::size_t) final;
+
+  void release_projected_usage(size_t) final;
+
+  bool should_block_io_on_clean() const final {
+    return false;
+  }
+
+  bool should_clean_space() const final {
+    return false;
+  }
+
+  clean_space_ret clean_space() final;
+
+  // Testing interfaces
+
+  bool check_usage() final {
+    // TODO
+    return true;
+  }
+
+  bool check_usage_is_empty() const final {
+    // TODO
+    return true;
+  }
+
+private:
+  const bool detailed;
+
+  BackrefManager &backref_manager;
+
+
+  struct {
+    /**
+     * used_bytes
+     *
+     * Bytes occupied by live extents
+     */
+    uint64_t used_bytes = 0;
+
+    /**
+     * projected_used_bytes
+     *
+     * Sum of projected bytes used by each transaction between throttle
+     * acquisition and commit completion.  See reserve_projected_usage()
+     */
+    uint64_t projected_used_bytes = 0;
+  } stats;
+
+  ExtentCallbackInterface *extent_callback = nullptr;
+  BackgroundListener *background_callback = nullptr;
+};
 }

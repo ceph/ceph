@@ -1542,4 +1542,59 @@ void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
   os << ")";
 }
 
+RBMCleaner::RBMCleaner(
+  BackrefManager &backref_manager,
+  bool detailed)
+  : detailed(detailed),
+    backref_manager(backref_manager)
+{}
+
+void RBMCleaner::print(std::ostream &os, bool is_detailed) const
+{
+  // TODO
+  return;
+}
+
+void RBMCleaner::mark_space_used(
+  paddr_t addr,
+  extent_len_t len)
+{
+  // TODO
+  return;
+}
+
+void RBMCleaner::mark_space_free(
+  paddr_t addr,
+  extent_len_t len)
+{
+  // TODO
+  return;
+}
+
+void RBMCleaner::reserve_projected_usage(std::size_t projected_usage)
+{
+  assert(background_callback->is_ready());
+  stats.projected_used_bytes += projected_usage;
+}
+
+void RBMCleaner::release_projected_usage(std::size_t projected_usage)
+{
+  assert(background_callback->is_ready());
+  ceph_assert(stats.projected_used_bytes >= projected_usage);
+  stats.projected_used_bytes -= projected_usage;
+  background_callback->maybe_wake_blocked_io();
+}
+
+RBMCleaner::clean_space_ret RBMCleaner::clean_space()
+{
+  // TODO 
+  return clean_space_ertr::now();
+}
+
+RBMCleaner::mount_ret RBMCleaner::mount()
+{
+  stats = {};
+  return mount_ertr::now();
+}
+
 }
