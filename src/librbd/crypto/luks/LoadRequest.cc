@@ -143,16 +143,11 @@ void LoadRequest<I>::handle_read_header(int r) {
   // parse header via libcryptsetup
   r = m_header.load(CRYPT_LUKS);
   if (r != 0) {
-    m_image_ctx->image_lock.lock_shared();
-    auto image_size = m_image_ctx->get_image_size(m_image_ctx->snap_id);
-    m_image_ctx->image_lock.unlock_shared();
-
-    auto max_header_size = std::min(MAXIMUM_HEADER_SIZE, image_size);
-    if (m_offset < max_header_size) {
+    if (m_offset < MAXIMUM_HEADER_SIZE) {
       // perhaps we did not feed the entire header to libcryptsetup, retry
       auto ctx = create_context_callback<
               LoadRequest<I>, &LoadRequest<I>::handle_read_header>(this);
-      read(max_header_size, ctx);
+      read(MAXIMUM_HEADER_SIZE, ctx);
       return;
     }
 
@@ -176,6 +171,17 @@ void LoadRequest<I>::handle_read_header(int r) {
     lderr(m_image_ctx->cct) << "unsupported cipher mode: " << cipher_mode
                             << dendl;
     finish(-ENOTSUP);
+    return;
+  }
+
+  m_image_ctx->image_lock.lock_shared();
+  uint64_t image_size = m_image_ctx->get_image_size(CEPH_NOSNAP);
+  m_image_ctx->image_lock.unlock_shared();
+
+  if (m_header.get_data_offset() > image_size) {
+    lderr(m_image_ctx->cct) << "image is too small, data offset "
+                            << m_header.get_data_offset() << dendl;
+    finish(-EINVAL);
     return;
   }
 
