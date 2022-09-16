@@ -1127,7 +1127,7 @@ public:
                        const rgw_user& user_id,
                        req_info *info,
                        const rgw_zone_id& source_zone,
-                       const rgw_obj& dest_obj,
+                       rgw_obj dest_obj,
                        const rgw_obj& src_obj,
                        RGWBucketInfo& dest_bucket_info,
                        RGWBucketInfo *src_bucket_info,
@@ -1155,7 +1155,8 @@ public:
                        const rgw_obj& stat_dest_obj,
                        const rgw_zone_set_entry& source_trace_entry,
                        rgw_zone_set *zones_trace = nullptr,
-                       std::optional<uint64_t>* bytes_transferred = 0);
+                       std::optional<uint64_t>* bytes_transferred = 0,
+                       const jspan_context *trace_ctx = nullptr);
   /**
    * Copy an object.
    * dest_obj: the object to copy into

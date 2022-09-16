@@ -4117,7 +4117,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
-               const rgw_obj& dest_obj,
+               rgw_obj dest_obj,
                const rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo *src_bucket_info,
@@ -4145,7 +4145,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_obj& stat_dest_obj,
                const rgw_zone_set_entry& source_trace_entry,
                rgw_zone_set *zones_trace,
-               std::optional<uint64_t>* bytes_transferred)
+               std::optional<uint64_t>* bytes_transferred,
+               const jspan_context* trace_ctx)
 {
   /* source is in a different zonegroup, copy from there */
 
@@ -4156,7 +4157,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
-
+  if (trace_ctx) {
+    auto trace = tracing::rgw::tracer.add_span("fetch_remote_obj", *trace_ctx);
+    dest_obj.set_trace(trace->GetContext());
+  }
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
