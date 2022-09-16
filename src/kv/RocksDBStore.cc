@@ -1039,10 +1039,6 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
   }
   //check if sharding_def matches stored_sharding_def
   std::vector<ColumnFamily> stored_sharding_def;
-  parse_sharding_def(stored_sharding_text, stored_sharding_def);
-
-  std::sort(stored_sharding_def.begin(), stored_sharding_def.end(),
-	    [](ColumnFamily& a, ColumnFamily& b) { return a.name < b.name; } );
 
   std::vector<string> rocksdb_cfs;
   status = rocksdb::DB::ListColumnFamilies(rocksdb::DBOptions(opt),
@@ -1052,6 +1048,18 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
     return -EIO;
   }
   dout(5) << __func__ << " column families from rocksdb: " << rocksdb_cfs << dendl;
+
+  //This code handles the case of upgrading from a previous version that has no stored sharding_def
+  if (stored_sharding_text.empty() && rocksdb_cfs.size() > 1) {
+    for (auto& cname:rocksdb_cfs) {
+      if (cname != "default")
+       stored_sharding_text += cname + " ";
+    }
+  }
+  parse_sharding_def(stored_sharding_text, stored_sharding_def);
+
+  std::sort(stored_sharding_def.begin(), stored_sharding_def.end(),
+           [](ColumnFamily& a, ColumnFamily& b) { return a.name < b.name; } );
 
   auto emplace_cf = [&] (const RocksDBStore::ColumnFamily& column,
 			 int32_t shard_id,
