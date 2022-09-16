@@ -185,6 +185,14 @@ void LoadRequest<I>::handle_read_header(int r) {
     return;
   }
 
+  uint64_t stripe_period = m_image_ctx->get_stripe_period();
+  if (m_header.get_data_offset() % stripe_period != 0) {
+    lderr(m_image_ctx->cct) << "incompatible stripe pattern, data offset "
+                            << m_header.get_data_offset() << dendl;
+    finish(-EINVAL);
+    return;
+  }
+
   read_volume_key();
   return;
 }
