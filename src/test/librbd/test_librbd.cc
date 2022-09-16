@@ -2625,6 +2625,86 @@ TEST_F(TestLibRBD, EncryptionLoadBadSize)
   }
 }
 
+TEST_F(TestLibRBD, EncryptionLoadBadStripePattern)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_STRIPINGV2);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
+
+  librbd::RBD rbd;
+  auto name1 = get_temp_image_name();
+  auto name2 = get_temp_image_name();
+  auto name3 = get_temp_image_name();
+  std::string passphrase = "some passphrase";
+
+  {
+    int order = 22;
+    ASSERT_EQ(0, rbd.create3(ioctx, name1.c_str(), 20 << 20, features, &order,
+                             2 << 20, 2));
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name1.c_str(), nullptr));
+
+    librbd::encryption_luks1_format_options_t opts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, passphrase};
+    ASSERT_EQ(0, image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, &opts,
+                                         sizeof(opts)));
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(12 << 20, size);
+  }
+
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name1.c_str(), nullptr));
+
+    // different but compatible striping pattern
+    librbd::ImageOptions image_opts;
+    ASSERT_EQ(0, image_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, 1 << 20));
+    ASSERT_EQ(0, image_opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, 2));
+    ASSERT_EQ(0, image.deep_copy(ioctx, name2.c_str(), image_opts));
+  }
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name2.c_str(), nullptr));
+
+    librbd::encryption_luks_format_options_t opts = {passphrase};
+    ASSERT_EQ(0, image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, &opts,
+                                       sizeof(opts)));
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(12 << 20, size);
+  }
+
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name1.c_str(), nullptr));
+
+    // incompatible striping pattern
+    librbd::ImageOptions image_opts;
+    ASSERT_EQ(0, image_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, 1 << 20));
+    ASSERT_EQ(0, image_opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, 3));
+    ASSERT_EQ(0, image.deep_copy(ioctx, name3.c_str(), image_opts));
+  }
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name3.c_str(), nullptr));
+
+    librbd::encryption_luks_format_options_t opts = {passphrase};
+    ASSERT_EQ(-EINVAL, image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, &opts,
+                                             sizeof(opts)));
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(20 << 20, size);
+  }
+}
+
 #endif
 
 TEST_F(TestLibRBD, TestIOWithIOHint)
