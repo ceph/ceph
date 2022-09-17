@@ -88,7 +88,8 @@ namespace TOPNSPC::crypto {
     };
 
 
-# if OPENSSL_VERSION_NUMBER < 0x10100000L
+  // boringssl doesn't have HMAC_CTX_get_md()
+# if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(OPENSSL_IS_BORINGSSL)
   class HMAC {
   private:
     HMAC_CTX mContext;
