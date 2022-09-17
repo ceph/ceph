@@ -1913,6 +1913,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_max_copy_obj_concurrent_io
+  type: int
+  level: advanced
+  desc: Number of refcount operations to process concurrently when executing copy_obj
+  default: 10
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_sync_obj_etag_verify
   type: bool
   level: advanced
