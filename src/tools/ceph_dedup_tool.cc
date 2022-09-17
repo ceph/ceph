@@ -629,7 +629,6 @@ private:
   void try_dedup_and_accumulate_result(ObjectItem &object);
   bool ok_to_dedup_all();
   int do_chunk_dedup(chunk_t &chunk);
-  void mark_non_dedup(ObjectCursor start, ObjectCursor end);
   bufferlist read_object(ObjectItem &object);
   std::vector<std::tuple<bufferlist, pair<uint64_t, uint64_t>>> do_cdc(
     ObjectItem &object,
