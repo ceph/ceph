@@ -638,7 +638,6 @@ private:
 
   IoCtx io_ctx;
   IoCtx chunk_io_ctx;
-  std::list<chunk_t> duplicable_chunks;
   size_t total_duplicated_size = 0;
   size_t total_object_size = 0;
 
