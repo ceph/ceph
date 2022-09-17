@@ -554,10 +554,7 @@ public:
     bool find(string& fp) {
       std::shared_lock lock(fingerprint_lock);
       auto found_item = fp_map.find(fp);
-      if (found_item != fp_map.end()) {
-        return true;
-      }
-      return false;
+      return found_item != fp_map.end();
     }
 
     // return true if the chunk is duplicate
@@ -570,10 +567,7 @@ public:
       }
       auto &target = found_iter->second;
       target++;
-      if (target >= dedup_threshold && dedup_threshold != -1) {
-        return true;
-      }
-      return false;
+      return target >= dedup_threshold && dedup_threshold != -1;
     }
 
     void init(size_t dedup_threshold_) {
