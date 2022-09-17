@@ -26,6 +26,9 @@
 #  include <openssl/engine.h>
 #  include <openssl/err.h>
 #endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+#ifdef OPENSSL_IS_BORINGSSL
+#  include <openssl/mem.h> // for OPENSSL_cleanse
+#endif
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
