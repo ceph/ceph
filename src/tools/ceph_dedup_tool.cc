@@ -642,7 +642,7 @@ private:
   size_t total_object_size = 0;
 
   std::set<std::string> oid_for_evict;
-  size_t chunk_size = 0;
+  const size_t chunk_size = 0;
   pg_pool_t::fingerprint_t fp_type = pg_pool_t::TYPE_FINGERPRINT_NONE;
   std::string chunk_algo;
   SampleDedupGlobal &sample_dedup_global;
