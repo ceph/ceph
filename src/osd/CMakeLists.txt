@@ -52,7 +52,7 @@ if(HAS_VTA)
 endif()
 add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
-  PUBLIC dmclock::dmclock Boost::MPL
+  PUBLIC dmclock::dmclock Boost::MPL common
   PRIVATE os heap_profiler cpu_profiler fmt::fmt ${CMAKE_DL_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
