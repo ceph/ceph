@@ -30,6 +30,12 @@ using std::string;
 using std::ostream;
 using std::vector;
 
+#ifdef OPENSSL_IS_BORINGSSL
+void ceph::crypto::init_openssl_engine_once()
+{
+  // no CONF_modules_load() in boringssl
+}
+#else
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_common
@@ -144,3 +150,4 @@ void ceph::crypto::init_openssl_engine_once()
   static std::once_flag flag;
   std::call_once(flag, init_engine);
 }
+#endif
