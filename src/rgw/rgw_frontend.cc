@@ -58,7 +58,7 @@ void RGWFrontendConfig::set_default_config(RGWFrontendConfig& def_conf)
   }
 }
 
-std::optional<string> RGWFrontendConfig::get_val(const std::string& key)
+std::optional<string> RGWFrontendConfig::get_val(const std::string& key) const
 {
  auto iter = config_map.find(key);
  if (iter == config_map.end()) {
