@@ -9,9 +9,6 @@ import json
 import time
 from io import StringIO
 
-
-from teuthology.orchestra import run
-
 log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
@@ -52,8 +49,6 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "please list clients to run on"
 
-    #assert hasattr(ctx, 'rgw')
-    testdir = teuthology.get_testdir(ctx)
     args = [
         'ceph-dedup-tool']
     if config.get('op', None):
