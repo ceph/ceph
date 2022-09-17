@@ -655,8 +655,8 @@ void SampleDedupWorkerThread::crawl()
 {
   cout << "new iteration" << std::endl;
 
-  for (ObjectCursor current_object = begin;
-      current_object < end;) {
+  ObjectCursor current_object = begin;
+  while (current_object < end) {
     std::vector<ObjectItem> objects;
     // Get the list of object IDs to deduplicate
     std::tie(objects, current_object) = get_objects(current_object, end, 100);
@@ -674,8 +674,7 @@ void SampleDedupWorkerThread::crawl()
   vector<AioCompRef> evict_completions(oid_for_evict.size());
   int i = 0;
   for (auto &oid : oid_for_evict) {
-    auto completion = do_async_evict(oid);
-    evict_completions[i] = move(completion);
+    evict_completions[i] = do_async_evict(oid);
     i++;
   }
   for (auto &completion : evict_completions) {
@@ -712,7 +711,7 @@ std::tuple<std::vector<ObjectItem>, ObjectCursor> SampleDedupWorkerThread::get_o
     &next);
   if (ret < 0 ) {
     cerr << "error object_list" << std::endl;
-    objects.resize(0);
+    objects.clear();
   }
 
   return std::make_tuple(objects, next);
