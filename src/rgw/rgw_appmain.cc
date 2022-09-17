@@ -52,8 +52,10 @@
 #include "rgw_process.h"
 #include "rgw_frontend.h"
 #include "rgw_http_client_curl.h"
+#ifdef HAVE_KMIP
 #include "rgw_kmip_client.h"
 #include "rgw_kmip_client_impl.h"
+#endif
 #include "rgw_perf_counters.h"
 #include "rgw_signal.h"
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
@@ -233,7 +235,9 @@ void rgw::AppMain::init_http_clients()
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
   rgw_http_client_init(dpp->get_cct());
+#ifdef HAVE_KMIP
   rgw_kmip_client_init(*new RGWKMIPManagerImpl(dpp->get_cct()));
+#endif
 } /* init_http_clients */
 
 void rgw::AppMain::cond_init_apis() 
@@ -583,7 +587,9 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
   rgw_http_client_cleanup();
+#ifdef HAVE_KMIP
   rgw_kmip_client_cleanup();
+#endif
   rgw::curl::cleanup_curl();
   g_conf().remove_observer(implicit_tenant_context.get());
   implicit_tenant_context.reset(); // deletes

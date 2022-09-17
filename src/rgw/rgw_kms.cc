@@ -12,7 +12,9 @@
 #include "rgw/rgw_keystone.h"
 #include "rgw/rgw_b64.h"
 #include "rgw/rgw_kms.h"
+#ifdef HAVE_KMIP
 #include "rgw/rgw_kmip_client.h"
+#endif
 #include <rapidjson/allocators.h>
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
@@ -761,6 +763,7 @@ public:
 
 };
 
+#ifdef HAVE_KMIP
 class KmipSecretEngine;
 class KmipGetTheKey {
 private:
@@ -859,6 +862,7 @@ public:
 	return r;
   }
 };
+#endif
 
 static int get_actual_key_from_conf(const DoutPrefixProvider* dpp,
                                     CephContext *cct,
@@ -1053,7 +1057,7 @@ static int reconstitute_actual_key_from_vault(const DoutPrefixProvider *dpp,
     return get_actual_key_from_vault(dpp, cct, kctx, attrs, actual_key, false);
 }
 
-
+#ifdef HAVE_KMIP
 static int get_actual_key_from_kmip(const DoutPrefixProvider *dpp,
                                      CephContext *cct,
                                      std::string_view key_id,
@@ -1070,6 +1074,8 @@ static int get_actual_key_from_kmip(const DoutPrefixProvider *dpp,
     return -EINVAL;
   }
 }
+#endif
+
 class KMSContext : public SSEContext {
   CephContext *cct;
 public:
@@ -1169,11 +1175,11 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext 
   if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
     return reconstitute_actual_key_from_vault(dpp, cct, kctx, attrs, actual_key);
   }
-
+#ifdef HAVE_KMIP
   if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
     return get_actual_key_from_kmip(dpp, cct, key_id, actual_key);
   }
-
+#endif
   if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
     std::string key_selector = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
     return get_actual_key_from_conf(dpp, cct, key_id, key_selector, actual_key);
