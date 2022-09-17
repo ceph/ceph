@@ -739,7 +739,7 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(ObjectItem &object
   bufferlist data = read_object(object);
   if (data.length() == 0) {
     cerr << __func__ << " skip object " << object.oid
-      << " dedup (read failed)\n";
+	 << " read returned size 0" << std::endl;
     return;
   }
   auto chunks = do_cdc(object, data);
@@ -752,7 +752,8 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(ObjectItem &object
   }
   if (chunk_total_amount != data.length()) {
     cerr << __func__ << " sum of chunked length(" << chunk_total_amount
-      << ") is different from object data length(" << data.length() << ")\n";
+	 << ") is different from object data length(" << data.length() << ")"
+	 << std::endl;
     return;
   }
 
