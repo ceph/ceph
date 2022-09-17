@@ -232,7 +232,6 @@ public:
     io_ctx(io_ctx), n(n), m(m), begin(begin), end(end), 
     report_period(report_period), total_objects(num_objects), max_read_size(max_read_size)
   {}
-  CrawlerThread() { }
 
   void signal(int signum) {
     std::lock_guard l{m_lock};
@@ -537,7 +536,7 @@ void ChunkScrub::chunk_scrub_common()
 
 using AioCompRef = unique_ptr<AioCompletion>;
 
-class SampleDedupWorkerThread : public CrawlerThread
+class SampleDedupWorkerThread : public Thread
 {
 public:
   struct chunk_t {
@@ -1670,15 +1669,10 @@ int make_crawling_daemon(const po::variables_map &opts)
       return -EINVAL;
     }
 
-    bool debug = false;
-    if (opts.count("debug")) {
-      debug = true;
-    }
-
-    estimate_threads.clear();
     SampleDedupWorkerThread::SampleDedupGlobal sample_dedup_global(
       chunk_dedup_threshold, sampling_ratio);
 
+    std::list<SampleDedupWorkerThread> threads;
     for (unsigned i = 0; i < max_thread; i++) {
       cout << " add thread.. " << std::endl;
       ObjectCursor shard_start;
@@ -1691,23 +1685,20 @@ int make_crawling_daemon(const po::variables_map &opts)
         &shard_start,
         &shard_end);
 
-      unique_ptr<CrawlerThread> ptr (
-          new SampleDedupWorkerThread(
-            io_ctx,
-            chunk_io_ctx,
-            shard_start,
-            shard_end,
-            chunk_size,
-            fp_algo,
-            chunk_algo,
-            sample_dedup_global));
-      ptr->set_debug(debug);
-      ptr->create("sample_dedup");
-      estimate_threads.push_back(move(ptr));
+      threads.emplace_back(
+	io_ctx,
+	chunk_io_ctx,
+	shard_start,
+	shard_end,
+	chunk_size,
+	fp_algo,
+	chunk_algo,
+	sample_dedup_global);
+      threads.back().create("sample_dedup");
     }
 
-    for (auto &p : estimate_threads) {
-      p->join();
+    for (auto &p : threads) {
+      p.join();
     }
     if (loop) {
       sleep(wakeup_period);
