@@ -628,7 +628,6 @@ private:
   std::vector<size_t> sample_object(size_t count);
   void try_dedup_and_accumulate_result(ObjectItem &object);
   bool ok_to_dedup_all();
-  void do_object_dedup(ObjectItem &object);
   int do_chunk_dedup(chunk_t &chunk);
   void mark_non_dedup(ObjectCursor start, ObjectCursor end);
   bufferlist read_object(ObjectItem &object);
@@ -849,21 +848,6 @@ std::string SampleDedupWorkerThread::generate_fingerprint(bufferlist chunk_data)
       break;
   }
   return ret;
-}
-
-void SampleDedupWorkerThread::do_object_dedup(ObjectItem &object)
-{
-  ObjectReadOperation op;
-  op.tier_flush();
-
-  int ret = io_ctx.operate(
-      object.oid,
-      &op,
-      NULL);
-  if (ret < 0) {
-    cerr << " tier_flush fail : " << cpp_strerror(ret) << std::endl;
-  }
-  return;
 }
 
 int SampleDedupWorkerThread::do_chunk_dedup(chunk_t &chunk)
