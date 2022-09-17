@@ -585,7 +585,6 @@ public:
 
   struct SampleDedupGlobal {
     FpStore fp_store;
-    double object_dedup_threshold = -1;
     double sampling_ratio = -1;
     SampleDedupGlobal(
       int chunk_threshold,
