@@ -561,13 +561,13 @@ public:
     bool add(chunk_t& chunk) {
       std::unique_lock lock(fingerprint_lock);
       auto found_iter = fp_map.find(chunk.fingerprint);
+      ssize_t cur_reference = 1;
       if (found_iter == fp_map.end()) {
-        auto ret = fp_map.insert({chunk.fingerprint, 1});
-        found_iter = ret.first;
+        fp_map.insert({chunk.fingerprint, 1});
+      } else {
+	cur_reference = ++found_iter->second;
       }
-      auto &target = found_iter->second;
-      target++;
-      return target >= dedup_threshold && dedup_threshold != -1;
+      return cur_reference >= dedup_threshold && dedup_threshold != -1;
     }
 
     void init(size_t dedup_threshold_) {
