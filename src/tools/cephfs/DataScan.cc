@@ -948,6 +948,8 @@ int DataScan::scan_links()
     for (auto it = metadata_io.nobjects_begin(); it != it_end; ++it) {
       const std::string oid = it->get_oid();
 
+      dout(10) << "step " << step << ": handling object " << oid << dendl;
+
       uint64_t dir_ino = 0;
       uint64_t frag_id = 0;
       int r = parse_oid(oid, &dir_ino, &frag_id);
@@ -1116,7 +1118,13 @@ int DataScan::scan_links()
 
   used_inos.clear();
 
+  dout(10) << "processing " << dup_primaries.size() << " dup_primaries, "
+	   << remote_links.size() << " remote_links" << dendl;
+
   for (auto& p : dup_primaries) {
+
+    dout(10) << "handling dup " << p.first << dendl;
+
     link_info_t newest;
     for (auto& q : p.second) {
       if (q.version > newest.version) {
@@ -1178,8 +1186,13 @@ int DataScan::scan_links()
     }
   }
 
+  dout(10) << "removing dup dentries from " << to_remove.size() << " objects"
+	   << dendl;
+
   for (auto& p : to_remove) {
     object_t frag_oid = InodeStore::get_object_name(p.first.ino, p.first.frag, "");
+
+    dout(10) << "removing dup dentries from " << p.first << dendl;
 
     int r = metadata_io.omap_rm_keys(frag_oid.name, p.second);
     if (r != 0) {
@@ -1189,7 +1202,12 @@ int DataScan::scan_links()
   }
   to_remove.clear();
 
+  dout(10) << "processing " << bad_nlink_inos.size() << " bad_nlink_inos"
+	   << dendl;
+
   for (auto &p : bad_nlink_inos) {
+    dout(10) << "handling bad_nlink_ino " << p.first << dendl;
+
     InodeStore inode;
     snapid_t first;
     int r = read_dentry(p.second.dirino, p.second.frag, p.second.name, &inode, &first);
@@ -1209,7 +1227,12 @@ int DataScan::scan_links()
       return r;
   }
 
+  dout(10) << "processing " << injected_inos.size() << " injected_inos"
+	   << dendl;
+
   for (auto &p : injected_inos) {
+    dout(10) << "handling injected_ino " << p.first << dendl;
+
     InodeStore inode;
     snapid_t first;
     int r = read_dentry(p.second.dirino, p.second.frag, p.second.name, &inode, &first);
@@ -1229,6 +1252,8 @@ int DataScan::scan_links()
       return r;
   }
 
+  dout(10) << "updating inotable" << dendl;
+
   for (auto& p : max_ino_map) {
     InoTable inotable(nullptr);
     inotable.set_rank(p.first);
@@ -1246,6 +1271,8 @@ int DataScan::scan_links()
 	return r;
     }
   }
+
+  dout(10) << "updating snaptable" << dendl;
 
   {
     SnapServer snaptable;
