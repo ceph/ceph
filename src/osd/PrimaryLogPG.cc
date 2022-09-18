@@ -7434,6 +7434,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  p.second.set_flag(chunk_info_t::FLAG_MISSING);
 	  // punch hole
 	  t->zero(soid, p.first, p.second.length);
+	  interval_set<uint64_t> ch;
+	  ch.insert(p.first, p.second.length);
+	  ctx->modified_ranges.union_of(ch);
+	  ctx->clean_regions.mark_data_region_dirty(p.first, p.second.length);
 	}
 	oi.clear_data_digest();
 	ctx->delta_stats.num_wr++;
