@@ -10,10 +10,10 @@ from mgr_util import CephfsClient
 
 from .fs_util import listdir, has_subdir
 
-from .operations.volume import create_volume, \
-    delete_volume, list_volumes, open_volume, get_pool_names
 from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
+from .operations.volume import create_volume, delete_volume, \
+    list_volumes, open_volume, get_pool_names, get_pool_ids, get_pending_subvol_deletions_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
 from .operations.trash import Trash
@@ -133,6 +133,51 @@ class VolumeClient(CephfsClient["Module"]):
             return -errno.ESHUTDOWN, "", "shutdown in progress"
         volumes = list_volumes(self.mgr)
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
+
+    def volume_info(self, **kwargs):
+        ret     = None
+        volname = kwargs['vol_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                path = self.volspec.base_dir
+                vol_info_dict = {}
+                try:
+                    st = fs_handle.statx(path.encode('utf-8'), cephfs.CEPH_STATX_SIZE,
+                                         cephfs.AT_SYMLINK_NOFOLLOW)
+
+                    usedbytes = st['size']
+                    vol_info_dict = get_pending_subvol_deletions_count(path)
+                    vol_info_dict['used_size'] = int(usedbytes)
+                except cephfs.Error as e:
+                    if e.args[0] == errno.ENOENT:
+                        pass
+                df = self.mgr.get("df")
+                pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
+                osdmap = self.mgr.get("osd_map")
+                pools = dict([(p['pool'], p) for p in osdmap['pools']])
+                metadata_pool_id, data_pool_ids = get_pool_ids(self.mgr, volname)
+                vol_info_dict["pools"] = {"metadata": [], "data": []}
+                for pool_id in [metadata_pool_id] + data_pool_ids:
+                    if pool_id == metadata_pool_id:
+                        pool_type = "metadata"
+                    else:
+                        pool_type = "data"
+                    vol_info_dict["pools"][pool_type].append({
+                                    'name': pools[pool_id]['pool_name'],
+                                    'used': pool_stats[pool_id]['bytes_used'],
+                                    'avail': pool_stats[pool_id]['max_avail']})
+
+                mon_addr_lst = []
+                mon_map_mons = self.mgr.get('mon_map')['mons']
+                for mon in mon_map_mons:
+                    ip_port = mon['addr'].split("/")[0]
+                    mon_addr_lst.append(ip_port)
+                vol_info_dict["mon_addrs"] = mon_addr_lst
+                ret = 0, json.dumps(vol_info_dict, indent=4, sort_keys=True), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
 
     ### subvolume operations
 
