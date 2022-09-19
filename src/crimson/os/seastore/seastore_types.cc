@@ -771,14 +771,17 @@ bool can_delay_allocation(device_type_t type) {
 }
 
 device_type_t string_to_device_type(std::string type) {
-  if (type == "segmented") {
-    return device_type_t::SEGMENTED;
+  if (type == "HDD") {
+    return device_type_t::HDD;
   }
-  if (type == "random_block") {
-    return device_type_t::RANDOM_BLOCK;
+  if (type == "SSD") {
+    return device_type_t::SSD;
   }
-  if (type == "pmem") {
-    return device_type_t::PMEM;
+  if (type == "ZNS") {
+    return device_type_t::ZNS;
+  }
+  if (type == "RANDOM_BLOCK_SSD") {
+    return device_type_t::RANDOM_BLOCK_SSD;
   }
   return device_type_t::NONE;
 }
@@ -788,14 +791,28 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
   switch (t) {
   case device_type_t::NONE:
     return out << "NONE";
-  case device_type_t::SEGMENTED:
-    return out << "SEGMENTED";
-  case device_type_t::RANDOM_BLOCK:
-    return out << "RANDOM_BLOCK";
-  case device_type_t::PMEM:
-    return out << "PMEM";
+  case device_type_t::HDD:
+    return out << "HDD";
+  case device_type_t::SSD:
+    return out << "SSD";
+  case device_type_t::ZNS:
+    return out << "ZNS";
+  case device_type_t::SEGMENTED_EPHEMERAL:
+    return out << "SEGMENTED_EPHEMERAL";
+  case device_type_t::RANDOM_BLOCK_SSD:
+    return out << "RANDOM_BLOCK_SSD";
+  case device_type_t::RANDOM_BLOCK_EPHEMERAL:
+    return out << "RANDOM_BLOCK_EPHEMERAL";
   default:
     return out << "INVALID_DEVICE_TYPE!";
+  }
+}
+
+std::ostream& operator<<(std::ostream& out, backend_type_t btype) {
+  if (btype == backend_type_t::SEGMENTED) {
+    return out << "SEGMENTED";
+  } else {
+    return out << "RANDOM_BLOCK";
   }
 }
 
