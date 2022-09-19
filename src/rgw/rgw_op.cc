@@ -2153,6 +2153,7 @@ void RGWGetObj::execute(optional_yield y)
   std::unique_ptr<RGWGetObj_Filter> decrypt;
   std::unique_ptr<RGWGetObj_Filter> run_lua;
   map<string, bufferlist>::iterator attr_iter;
+  std::string labels;
 
   perfcounter->inc(l_rgw_get);
 
@@ -2320,6 +2321,11 @@ void RGWGetObj::execute(optional_yield y)
     send_response_data(bl, 0, 0);
     return;
   }
+
+  labels = ceph::perf_counters::cache_key("z_rgw", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
+  //ldpp_dout(this, 20) << "labels for perf counters cache: " << labels << dendl;
+  perf_counters_cache->add(labels);
+  perf_counters_cache->inc(labels, l_rgw_metrics_get_b, s->obj_size);
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
@@ -4166,7 +4172,7 @@ void RGWPutObj::execute(optional_yield y)
   s->obj_size = ofs;
   s->object->set_obj_size(ofs);
 
-  std::string labels = ceph::perf_counters::cache_key("rgw_perfcounters_cache", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
+  std::string labels = ceph::perf_counters::cache_key("z_rgw", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
   //ldpp_dout(this, 20) << "labels for perf counters cache: " << labels << dendl;
   perf_counters_cache->add(labels);
   perf_counters_cache->inc(labels, l_rgw_metrics_put_b, s->obj_size);
