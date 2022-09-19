@@ -1046,6 +1046,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   issued |= in->caps_dirty();
   int new_issued = ~issued & (int)st->cap.caps;
 
+  bool need_snapdir_attr_refresh = false;
   if ((new_version || (new_issued & CEPH_CAP_AUTH_SHARED)) &&
       !(issued & CEPH_CAP_AUTH_EXCL)) {
     in->mode = st->mode;
@@ -1055,6 +1056,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->snap_btime = st->snap_btime;
     in->snap_metadata = st->snap_metadata;
     in->fscrypt_auth = st->fscrypt_auth;
+    need_snapdir_attr_refresh = true;
   }
 
   if ((new_version || (new_issued & CEPH_CAP_LINK_SHARED)) &&
@@ -1063,6 +1065,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   }
 
   if (new_version || (new_issued & CEPH_CAP_ANY_RD)) {
+    need_snapdir_attr_refresh = true;
     update_inode_file_time(in, issued, st->time_warp_seq,
 			   st->ctime, st->mtime, st->atime);
   }
@@ -1100,6 +1103,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     auto p = st->xattrbl.cbegin();
     decode(in->xattrs, p);
     in->xattr_version = st->xattr_version;
+    need_snapdir_attr_refresh = true;
   }
 
   if (st->inline_version > in->inline_version) {
@@ -1150,6 +1154,13 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     }
   } else {
     in->snap_caps |= st->cap.caps;
+  }
+
+  if (need_snapdir_attr_refresh && in->is_dir() && in->snapid == CEPH_NOSNAP) {
+    vinodeno_t vino(in->ino, CEPH_SNAPDIR);
+    if (inode_map.count(vino)) {
+      refresh_snapdir_attrs(inode_map[vino], in);
+    }
   }
 
   return in;
@@ -7994,6 +8005,12 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
   if (!mask) {
     in->change_attr++;
+    if (in->is_dir() && in->snapid == CEPH_NOSNAP) {
+      vinodeno_t vino(in->ino, CEPH_SNAPDIR);
+      if (inode_map.count(vino)) {
+        refresh_snapdir_attrs(inode_map[vino], in);
+      }
+    }
     return 0;
   }
 
@@ -11914,34 +11931,40 @@ int Client::get_caps_issued(const char *path, const UserPerm& perms)
 // =========================================
 // low level
 
+void Client::refresh_snapdir_attrs(Inode *in, Inode *diri) {
+  ldout(cct, 10) << __func__ << ": snapdir inode=" << *in
+                 << ", inode=" << *diri << dendl;
+  in->ino = diri->ino;
+  in->snapid = CEPH_SNAPDIR;
+  in->mode = diri->mode;
+  in->uid = diri->uid;
+  in->gid = diri->gid;
+  in->nlink = 1;
+  in->mtime = diri->mtime;
+  in->ctime = diri->ctime;
+  in->btime = diri->btime;
+  in->atime = diri->atime;
+  in->size = diri->size;
+  in->change_attr = diri->change_attr;
+
+  in->dirfragtree.clear();
+  in->snapdir_parent = diri;
+  // copy posix acls to snapshotted inode
+  in->xattrs.clear();
+  for (auto &[xattr_key, xattr_value] : diri->xattrs) {
+    if (xattr_key.rfind("system.", 0) == 0) {
+      in->xattrs[xattr_key] = xattr_value;
+    }
+  }
+}
+
 Inode *Client::open_snapdir(Inode *diri)
 {
   Inode *in;
   vinodeno_t vino(diri->ino, CEPH_SNAPDIR);
   if (!inode_map.count(vino)) {
     in = new Inode(this, vino, &diri->layout);
-
-    in->ino = diri->ino;
-    in->snapid = CEPH_SNAPDIR;
-    in->mode = diri->mode;
-    in->uid = diri->uid;
-    in->gid = diri->gid;
-    in->nlink = 1;
-    in->mtime = diri->mtime;
-    in->ctime = diri->ctime;
-    in->btime = diri->btime;
-    in->atime = diri->atime;
-    in->size = diri->size;
-    in->change_attr = diri->change_attr;
-
-    in->dirfragtree.clear();
-    in->snapdir_parent = diri;
-    // copy posix acls to snapshotted inode
-    for (auto &[xattr_key, xattr_value] : diri->xattrs) {
-      if (xattr_key.rfind("system.", 0) == 0) {
-        in->xattrs[xattr_key] = xattr_value;
-      }
-    }
+    refresh_snapdir_attrs(in, diri);
     diri->flags |= I_SNAPDIR_OPEN;
     inode_map[vino] = in;
     if (use_faked_inos())
