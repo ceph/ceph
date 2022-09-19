@@ -8,6 +8,8 @@ cleanup() {
         echo "Starting cleanup..."
         kcli delete plan -y ceph || true
         kcli delete network ceph-dashboard -y
+        kcli delete pool ceph-dashboard -y
+        rm -rf ${HOME}/.kcli
         docker container prune -f
         echo "Cleanup completed."
     fi

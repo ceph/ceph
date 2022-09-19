@@ -1,5 +1,6 @@
 import {
   AfterViewInit,
+  ChangeDetectorRef,
   Component,
   Input,
   OnChanges,
@@ -97,7 +98,8 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private daemonService: DaemonService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private cdRef: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -214,6 +216,10 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     this.columns = this.columns.filter((col: any) => {
       return !this.hiddenColumns.includes(col.prop);
     });
+
+    setTimeout(() => {
+      this.cdRef.detectChanges();
+    }, 1000);
   }
 
   ngOnChanges() {
