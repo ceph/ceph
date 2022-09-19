@@ -309,7 +309,7 @@ public:
       CephContext* _cct) : 
         cct(_cct),
         topic(_topic),
-        conn(kafka::connect(_endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), args.get_optional("ca-location"))) ,
+        conn(kafka::connect(_endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), args.get_optional("ca-location"), args.get_optional("mechanism"))) ,
         ack_level(get_ack_level(args)) {
     if (!conn) { 
       throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
