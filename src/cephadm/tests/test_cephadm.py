@@ -21,7 +21,7 @@ from pyfakefs import fake_filesystem_unittest
 
 with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('cephadm', 'cephadm').load_module()
+    cd = SourceFileLoader('cephadm', 'cephadm.py').load_module()
 
 
 def get_ceph_conf(
