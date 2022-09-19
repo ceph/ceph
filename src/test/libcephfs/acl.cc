@@ -310,3 +310,54 @@ TEST(ACL, Disabled) {
   free(acl_buf);
   ceph_shutdown(cmount);
 }
+
+TEST(ACL, SnapdirACL) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_acl_type", "posix_acl"));
+
+  int acl_buf_size = acl_ea_size(5);
+  void *acl1_buf = malloc(acl_buf_size);
+  void *acl2_buf = malloc(acl_buf_size);
+  void *acl3_buf = malloc(acl_buf_size);
+
+  ASSERT_EQ(generate_test_acl(acl1_buf, acl_buf_size, 0750), 0);
+
+  char test_dir1[256];
+  sprintf(test_dir1, "dir1_acl_default_%d", getpid());
+  ASSERT_EQ(ceph_mkdir(cmount, test_dir1, 0750), 0);
+
+  // set default acl
+  ASSERT_EQ(ceph_setxattr(cmount, test_dir1, ACL_EA_DEFAULT, acl1_buf, acl_buf_size, 0), 0);
+
+  char test_dir2[262];
+  sprintf(test_dir2, "%s/dir2", test_dir1);
+  ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0755), 0);
+
+  // inherit default acl
+  ASSERT_EQ(ceph_getxattr(cmount, test_dir2, ACL_EA_DEFAULT, acl2_buf, acl_buf_size), acl_buf_size);
+  ASSERT_EQ(memcmp(acl1_buf, acl2_buf, acl_buf_size), 0);
+
+  char test_dir2_snapdir[512];
+  sprintf(test_dir2_snapdir, "%s/dir2/.snap", test_dir1);
+
+  // inherit default acl
+  ASSERT_EQ(ceph_getxattr(cmount, test_dir2_snapdir, ACL_EA_DEFAULT, acl3_buf, acl_buf_size), acl_buf_size);
+  ASSERT_EQ(memcmp(acl2_buf, acl3_buf, acl_buf_size), 0);
+
+  memset(acl2_buf, 0, acl_buf_size);
+  memset(acl3_buf, 0, acl_buf_size);
+
+  ASSERT_EQ(ceph_getxattr(cmount, test_dir2, ACL_EA_ACCESS, acl2_buf, acl_buf_size), acl_buf_size);
+  ASSERT_EQ(ceph_getxattr(cmount, test_dir2_snapdir, ACL_EA_ACCESS, acl3_buf, acl_buf_size), acl_buf_size);
+  ASSERT_EQ(memcmp(acl2_buf, acl3_buf, acl_buf_size), 0);
+
+  free(acl1_buf);
+  free(acl2_buf);
+  free(acl3_buf);
+  ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
+  ASSERT_EQ(ceph_rmdir(cmount, test_dir1), 0);
+  ceph_shutdown(cmount);
+}
