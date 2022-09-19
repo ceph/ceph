@@ -562,8 +562,11 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
     ldout(cct, 1) << __func__ << " error sending " << m << ", "
                   << cpp_strerror(rc) << dendl;
   } else {
-    connection->logger->inc(
-        l_msgr_send_bytes, total_send_size - connection->outgoing_bl.length());
+    const auto sent_bytes = total_send_size - connection->outgoing_bl.length();
+    connection->logger->inc(l_msgr_send_bytes, sent_bytes);
+    if (session_stream_handlers.tx) {
+      connection->logger->inc(l_msgr_send_encrypted_bytes, sent_bytes);
+    }
     ldout(cct, 10) << __func__ << " sending " << m
                    << (rc ? " continuely." : " done.") << dendl;
   }
@@ -1483,6 +1486,10 @@ CtPtr ProtocolV2::handle_message() {
   connection->logger->inc(l_msgr_recv_messages);
   connection->logger->inc(l_msgr_recv_bytes,
                           rx_frame_asm.get_frame_onwire_len());
+  if (session_stream_handlers.rx) {
+    connection->logger->inc(l_msgr_recv_encrypted_bytes,
+                            rx_frame_asm.get_frame_onwire_len());
+  }
 
   messenger->ms_fast_preprocess(message);
   fast_dispatch_time = ceph::mono_clock::now();
