@@ -793,7 +793,7 @@ $DAEMONOPTS
         mgr disabled modules = rook
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
-        cephadm path = $CEPH_ROOT/src/cephadm/cephadm
+        cephadm path = $CEPH_BIN/cephadm
 $DAEMONOPTS
         $(format_conf "${extra_conf}")
 [osd]

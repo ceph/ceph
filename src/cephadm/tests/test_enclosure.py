@@ -5,7 +5,7 @@ from tests.fixtures import host_sysfs
 
 with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('cephadm', 'cephadm').load_module()
+    cd = SourceFileLoader('cephadm', 'cephadm.py').load_module()
 
 
 @pytest.fixture

@@ -1475,7 +1475,6 @@ install -m 0644 -D COPYING %{buildroot}%{_docdir}/ceph/COPYING
 install -m 0644 -D etc/sysctl/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
 install -m 0755 -D src/tools/rbd_nbd/rbd-nbd_quiesce %{buildroot}%{_libexecdir}/rbd-nbd/rbd-nbd_quiesce
 
-install -m 0755 src/cephadm/cephadm %{buildroot}%{_sbindir}/cephadm
 mkdir -p %{buildroot}%{_sharedstatedir}/cephadm
 chmod 0700 %{buildroot}%{_sharedstatedir}/cephadm
 mkdir -p %{buildroot}%{_sharedstatedir}/cephadm/.ssh
