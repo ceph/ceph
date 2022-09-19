@@ -3940,29 +3940,35 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     f->close_section();
 
-    mgrmon()->count_metadata("ceph_version", &mgr);
-    f->open_object_section("mgr");
-    for (auto& p : mgr) {
-      f->dump_int(p.first.c_str(), p.second);
-      overall[p.first] += p.second;
+    if (!mgr.empty()) {
+      mgrmon()->count_metadata("ceph_version", &mgr);
+      f->open_object_section("mgr");
+      for (auto& p : mgr) {
+        f->dump_int(p.first.c_str(), p.second);
+        overall[p.first] += p.second;
+      }
+      f->close_section();
     }
-    f->close_section();
 
-    osdmon()->count_metadata("ceph_version", &osd);
-    f->open_object_section("osd");
-    for (auto& p : osd) {
-      f->dump_int(p.first.c_str(), p.second);
-      overall[p.first] += p.second;
+    if (!osd.empty()) {
+      osdmon()->count_metadata("ceph_version", &osd);
+      f->open_object_section("osd");
+      for (auto& p : osd) {
+        f->dump_int(p.first.c_str(), p.second);
+        overall[p.first] += p.second;
+      }
+      f->close_section();
     }
-    f->close_section();
 
-    mdsmon()->count_metadata("ceph_version", &mds);
-    f->open_object_section("mds");
-    for (auto& p : mds) {
-      f->dump_int(p.first.c_str(), p.second);
-      overall[p.first] += p.second;
+    if (!mds.empty()) {
+      mdsmon()->count_metadata("ceph_version", &mds);
+      f->open_object_section("mds");
+      for (auto& p : mds) {
+        f->dump_int(p.first.c_str(), p.second);
+        overall[p.first] += p.second;
+      }
+      f->close_section();
     }
-    f->close_section();
 
     for (auto& p : mgrstatmon()->get_service_map().services) {
       auto &service = p.first;
