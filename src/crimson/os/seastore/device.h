@@ -67,6 +67,8 @@ public:
 
   virtual device_type_t get_device_type() const = 0;
 
+  virtual backend_type_t get_backend_type() const = 0;
+
   virtual const seastore_meta_t &get_meta() const = 0;
 
   virtual seastore_off_t get_block_size() const = 0;
