@@ -3861,6 +3861,7 @@ int OSD::init()
   start_boot();
 
   // Override a few options if mclock scheduler is enabled.
+  maybe_override_sleep_options_for_qos();
   maybe_override_options_for_qos();
   maybe_override_max_osd_capacity_for_qos();
 
@@ -9964,7 +9965,17 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
   std::lock_guard l{osd_lock};
 
   if (changed.count("osd_max_backfills") ||
-      changed.count("osd_delete_sleep") ||
+      changed.count("osd_recovery_max_active") ||
+      changed.count("osd_recovery_max_active_hdd") ||
+      changed.count("osd_recovery_max_active_ssd")) {
+    if (!maybe_override_options_for_qos(&changed) &&
+        changed.count("osd_max_backfills")) {
+      // Scheduler is not "mclock". Fallback to earlier behavior
+      service.local_reserver.set_max(cct->_conf->osd_max_backfills);
+      service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
+    }
+  }
+  if (changed.count("osd_delete_sleep") ||
       changed.count("osd_delete_sleep_hdd") ||
       changed.count("osd_delete_sleep_ssd") ||
       changed.count("osd_delete_sleep_hybrid") ||
@@ -9976,16 +9987,8 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_recovery_sleep") ||
       changed.count("osd_recovery_sleep_hdd") ||
       changed.count("osd_recovery_sleep_ssd") ||
-      changed.count("osd_recovery_sleep_hybrid") ||
-      changed.count("osd_recovery_max_active") ||
-      changed.count("osd_recovery_max_active_hdd") ||
-      changed.count("osd_recovery_max_active_ssd")) {
-    if (!maybe_override_options_for_qos() &&
-        changed.count("osd_max_backfills")) {
-      // Scheduler is not "mclock". Fallback to earlier behavior
-      service.local_reserver.set_max(cct->_conf->osd_max_backfills);
-      service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
-    }
+      changed.count("osd_recovery_sleep_hybrid")) {
+    maybe_override_sleep_options_for_qos();
   }
   if (changed.count("osd_min_recovery_priority")) {
     service.local_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);
@@ -10154,30 +10157,105 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
   }
 }
 
-bool OSD::maybe_override_options_for_qos()
+bool OSD::maybe_override_options_for_qos(const std::set<std::string> *changed)
 {
-  // If the scheduler enabled is mclock, override the recovery, backfill
-  // and sleep options so that mclock can meet the QoS goals.
+  // Override options only if the scheduler enabled is mclock and the
+  // underlying objectstore is supported by mclock
   if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
       !unsupported_objstore_for_qos()) {
-    dout(1) << __func__
-            << ": Changing recovery/backfill/sleep settings for QoS" << dendl;
+    static const std::map<std::string, uint64_t> recovery_qos_defaults {
+      {"osd_recovery_max_active", 0},
+      {"osd_recovery_max_active_hdd", 10},
+      {"osd_recovery_max_active_ssd", 20},
+      {"osd_max_backfills", 10},
+    };
 
-    // Set high value for recovery max active
-    uint32_t rec_max_active = 1000;
-    cct->_conf.set_val(
-      "osd_recovery_max_active", std::to_string(rec_max_active));
-    cct->_conf.set_val(
-      "osd_recovery_max_active_hdd", std::to_string(rec_max_active));
-    cct->_conf.set_val(
-      "osd_recovery_max_active_ssd", std::to_string(rec_max_active));
+    // Check if we were called because of a configuration change
+    if (changed != nullptr) {
+      if (cct->_conf.get_val<bool>("osd_mclock_override_recovery_settings")) {
+        if (changed->count("osd_max_backfills")) {
+          dout(1) << __func__ << " Set local and remote max backfills to "
+                   << cct->_conf->osd_max_backfills << dendl;
+          service.local_reserver.set_max(cct->_conf->osd_max_backfills);
+          service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
+        }
+      } else {
+        // Recovery options change was attempted without setting
+        // the 'osd_mclock_override_recovery_settings' option.
+        // Find the key to remove from the configuration db.
+        std::string key;
+        if (changed->count("osd_max_backfills")) {
+          key = "osd_max_backfills";
+        } else if (changed->count("osd_recovery_max_active")) {
+          key = "osd_recovery_max_active";
+        } else if (changed->count("osd_recovery_max_active_hdd")) {
+          key = "osd_recovery_max_active_hdd";
+        } else if (changed->count("osd_recovery_max_active_ssd")) {
+          key = "osd_recovery_max_active_ssd";
+        } else {
+          // No key that we are interested in. Return.
+          return true;
+        }
 
-    // Set high value for osd_max_backfill
-    uint32_t max_backfills = 1000;
-    cct->_conf.set_val("osd_max_backfills", std::to_string(max_backfills));
-    service.local_reserver.set_max(max_backfills);
-    service.remote_reserver.set_max(max_backfills);
+        // Remove the current entry from the configuration if
+        // different from its default value.
+        auto val = recovery_qos_defaults.find(key);
+        if (val != recovery_qos_defaults.end() &&
+            cct->_conf.get_val<uint64_t>(key) != val->second) {
+          static const std::vector<std::string> osds = {
+            "osd",
+            "osd." + std::to_string(whoami)
+          };
 
+          for (auto osd : osds) {
+            std::string cmd =
+              "{"
+                "\"prefix\": \"config rm\", "
+                "\"who\": \"" + osd + "\", "
+                "\"name\": \"" + key + "\""
+              "}";
+            vector<std::string> vcmd{cmd};
+
+            dout(1) << __func__ << " Removing Key: " << key
+                    << " for " << osd << " from Mon db" << dendl;
+            monc->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+          }
+
+          // Raise a cluster warning indicating that the changes did not
+          // take effect and indicate the reason why.
+          clog->warn() << "Change to " << key << " on osd."
+                       << std::to_string(whoami) << " did not take effect."
+                       << " Enable osd_mclock_override_recovery_settings before"
+                       << " setting this option.";
+        }
+      }
+    } else { // if (changed != nullptr) (osd boot-up)
+      // Override the default recovery max active and max backfills to
+      // higher values based on the type of backing device (hdd/ssd).
+      // This section is executed only during osd boot-up.
+      for (auto opt : recovery_qos_defaults) {
+        cct->_conf.set_val_default(opt.first, std::to_string(opt.second));
+        if (opt.first == "osd_max_backfills") {
+          service.local_reserver.set_max(opt.second);
+          service.remote_reserver.set_max(opt.second);
+        }
+        dout(1) << __func__ << " Set default value for " << opt.first
+                << " to " << opt.second << dendl;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+void OSD::maybe_override_sleep_options_for_qos()
+{
+  // Override options only if the scheduler enabled is mclock and the
+  // underlying objectstore is supported by mclock
+  if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
+      !unsupported_objstore_for_qos()) {
+
+    // Override the various sleep settings
     // Disable recovery sleep
     cct->_conf.set_val("osd_recovery_sleep", std::to_string(0));
     cct->_conf.set_val("osd_recovery_sleep_hdd", std::to_string(0));
@@ -10198,9 +10276,7 @@ bool OSD::maybe_override_options_for_qos()
 
     // Disable scrub sleep
     cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
-    return true;
   }
-  return false;
 }
 
 /**
