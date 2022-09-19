@@ -389,6 +389,7 @@ Note regarding different variables used in the code
   (Not the case for e.g. OSDs. OSDs are always called OSD.N)
 * a ``daemon_name`` is ``<daemon_type>.<daemon_id>``
 
+.. _compiling-cephadm:
 
 Compiling cephadm
 =================
