@@ -156,6 +156,7 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.8.key=push-endpoint&Attributes.entry.8.value=<endpoint>]
    [&Attributes.entry.9.key=persistent&Attributes.entry.9.value=true|false]
    [&Attributes.entry.10.key=cloudevents&Attributes.entry.10.value=true|false]
+   [&Attributes.entry.11.key=mechanism&Attributes.entry.11.value=<mechanism>]
 
 Request parameters:
 
@@ -215,6 +216,14 @@ Request parameters:
    requests will otherwise be rejected.
  - user/password: This must be provided along with ``use-ssl``. Connections to
    the broker will otherwise fail.
+ - mechanism: may be provided together with user/password (default: ``PLAIN``). The supported SASL mechanisms are:
+
+  - PLAIN
+  - SCRAM-SHA-256
+  - SCRAM-SHA-512
+  - GSSAPI
+  - OAUTHBEARER
+
  - port: This defaults to 9092.
  - kafka-ack-level: No end2end acking is required. Messages may persist in the
    broker before being delivered to their final destinations. Two ack methods
