@@ -21,6 +21,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
+#include "common/perf_counters_cache_key.h"
 #include "rgw_tracer.h"
 
 #include "rgw_rados.h"
@@ -4164,6 +4165,11 @@ void RGWPutObj::execute(optional_yield y)
   }
   s->obj_size = ofs;
   s->object->set_obj_size(ofs);
+
+  std::string labels = ceph::perf_counters::cache_key("rgw_perfcounters_cache", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
+  //ldpp_dout(this, 20) << "labels for perf counters cache: " << labels << dendl;
+  perf_counters_cache->add(labels);
+  perf_counters_cache->inc(labels, l_rgw_metrics_put_b, s->obj_size);
 
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 

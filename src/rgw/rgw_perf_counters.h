@@ -3,8 +3,10 @@
 
 #pragma once
 #include "include/common_fwd.h"
+#include "common/perf_counters_cache.h"
 
 extern PerfCounters *perfcounter;
+extern PerfCountersCache *perf_counters_cache;
 
 extern int rgw_perf_start(CephContext *cct);
 extern void rgw_perf_stop(CephContext *cct);

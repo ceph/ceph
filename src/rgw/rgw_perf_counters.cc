@@ -6,6 +6,7 @@
 #include "common/ceph_context.h"
 
 PerfCounters *perfcounter = NULL;
+PerfCountersCache *perf_counters_cache = NULL;
 
 int rgw_perf_start(CephContext *cct)
 {
@@ -66,6 +67,10 @@ int rgw_perf_start(CephContext *cct)
   
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);
+
+  // TODO: change target_size to be a config var
+  size_t target_size = 10;
+  perf_counters_cache = new PerfCountersCache(cct, target_size);
   return 0;
 }
 
@@ -74,5 +79,6 @@ void rgw_perf_stop(CephContext *cct)
   ceph_assert(perfcounter);
   cct->get_perfcounters_collection()->remove(perfcounter);
   delete perfcounter;
+  delete perf_counters_cache;
 }
 
