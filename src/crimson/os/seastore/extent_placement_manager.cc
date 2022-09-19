@@ -210,12 +210,12 @@ void ExtentPlacementManager::set_primary_device(Device *device)
 {
   ceph_assert(primary_device == nullptr);
   primary_device = device;
-  if (device->get_device_type() == device_type_t::SEGMENTED) {
+  if (device->get_device_type() == device_type_t::SSD) {
     prefer_ool = false;
     ceph_assert(devices_by_id[device->get_device_id()] == device);
   } else {
     // RBM device is not in the cleaner.
-    ceph_assert(device->get_device_type() == device_type_t::RANDOM_BLOCK);
+    ceph_assert(device->get_device_type() == device_type_t::RANDOM_BLOCK_SSD);
     prefer_ool = true;
     add_device(primary_device);
   }

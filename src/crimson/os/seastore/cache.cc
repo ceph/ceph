@@ -1766,7 +1766,7 @@ Cache::replay_delta(
         ERROR("identified delta crc {} doesn't match the extent at {} {}, "
               "probably is out-dated -- {}",
               delta, journal_seq, record_base, *extent);
-        ceph_assert(epm.get_journal_type() == journal_type_t::CIRCULAR);
+        ceph_assert(epm.get_journal_type() == journal_type_t::RANDOM_BLOCK);
         remove_extent(extent);
         return replay_delta_ertr::make_ready_future<bool>(false);
       }

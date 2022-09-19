@@ -145,7 +145,7 @@ journal_seq_t journal_seq_t::add_offset(
   if (type == journal_type_t::SEGMENTED) {
     joff = offset.as_seg_paddr().get_segment_off();
   } else {
-    assert(type == journal_type_t::CIRCULAR);
+    assert(type == journal_type_t::RANDOM_BLOCK);
     auto boff = offset.as_blk_paddr().get_block_off();
     assert(boff <= MAX_SEG_OFF);
     joff = boff;
@@ -196,7 +196,7 @@ seastore_off_t journal_seq_t::relative_to(
     ret += (static_cast<int64_t>(offset.as_seg_paddr().get_segment_off()) -
             static_cast<int64_t>(r.offset.as_seg_paddr().get_segment_off()));
   } else {
-    assert(type == journal_type_t::CIRCULAR);
+    assert(type == journal_type_t::RANDOM_BLOCK);
     ret += (static_cast<int64_t>(offset.as_blk_paddr().get_block_off()) -
             static_cast<int64_t>(r.offset.as_blk_paddr().get_block_off()));
   }

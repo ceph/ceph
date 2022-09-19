@@ -315,7 +315,7 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
               true,
               device_spec_t{
                 (magic_t)std::rand(),
-                device_type_t::SEGMENTED,
+                device_type_t::SSD,
                 0},
               seastore_meta_t{new_osd_fsid},
               sds}

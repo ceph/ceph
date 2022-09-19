@@ -76,7 +76,7 @@ struct transaction_manager_test_t :
     if (j_type == "segmented") {
       return tm_setup(journal_type_t::SEGMENTED);
     } else if (j_type == "circularbounded") {
-      return tm_setup(journal_type_t::CIRCULAR);
+      return tm_setup(journal_type_t::RANDOM_BLOCK);
     } else {
       ceph_assert(0 == "no support");
     }

@@ -162,7 +162,7 @@ seastar::future<> TMDriver::mkfs()
       device_config_t{
         true,
         (magic_t)std::rand(),
-        device_type_t::SEGMENTED,
+        device_type_t::SSD,
         0,
         meta,
         secondary_device_set_t()});

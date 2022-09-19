@@ -236,7 +236,7 @@ public:
   // Testing interfaces
 
   void test_init_no_background(Device *test_device) {
-    assert(test_device->get_device_type() == device_type_t::SEGMENTED);
+    assert(test_device->get_device_type() == device_type_t::SSD);
     add_device(test_device);
     set_primary_device(test_device);
   }
