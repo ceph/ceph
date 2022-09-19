@@ -346,17 +346,4 @@ export class SilenceFormComponent {
     }
     return `${action} ${this.resource} for ${msg.slice(0, -1)}`;
   }
-
-  createSilenceFromNotification(data: any) {
-    this.isNavigate = false;
-    this.setMatcher({
-      name: 'alertname',
-      value: data['title'].split(' ')[0],
-      isRegex: false
-    });
-    this.createForm();
-    this.form.get('comment').setValue('Silence created from the alert notification');
-    this.setupDates();
-    this.submit(data);
-  }
 }
