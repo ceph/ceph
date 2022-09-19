@@ -34,7 +34,7 @@ device_config_t get_ephemeral_device_config(
 {
   assert(num_devices > index);
   magic_t magic = 0xabcd;
-  auto type = device_type_t::SEGMENTED;
+  auto type = device_type_t::SEGMENTED_EPHEMERAL;
   bool is_major_device;
   secondary_device_set_t secondary_devices;
   if (index == 0) {

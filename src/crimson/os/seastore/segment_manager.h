@@ -55,7 +55,7 @@ struct block_sm_superblock_t {
     ceph_assert(first_segment_offset > tracker_offset &&
                 first_segment_offset % block_size == 0);
     ceph_assert(config.spec.magic != 0);
-    ceph_assert(config.spec.dtype == device_type_t::SEGMENTED);
+    ceph_assert(config.spec.dtype == device_type_t::SSD);
     ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
     if (!config.major_dev) {
       ceph_assert(config.secondary_devices.size() == 0);
@@ -152,7 +152,7 @@ using SegmentManagerRef = std::unique_ptr<SegmentManager>;
 class SegmentManager : public Device {
 public:
   device_type_t get_device_type() const final {
-    return device_type_t::SEGMENTED;
+    return device_type_t::SSD;
   }
 
   using open_ertr = crimson::errorator<

@@ -105,7 +105,7 @@ public:
   }
 
   device_type_t get_device_type() const final {
-    return device_type_t::RANDOM_BLOCK;
+    return device_type_t::RANDOM_BLOCK_SSD;
   }
 
   const seastore_meta_t &get_meta() const final {
