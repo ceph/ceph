@@ -155,6 +155,10 @@ public:
     return device_type_t::SSD;
   }
 
+  backend_type_t get_backend_type() const final {
+    return backend_type_t::SEGMENTED;
+  }
+
   using open_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,
