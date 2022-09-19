@@ -159,10 +159,6 @@ export class HostsPageHelper extends PageHelper {
     this.clickActionButton('start-drain');
     this.checkLabelExists(hostname, ['_no_schedule'], true);
 
-    // unselect it to avoid colliding with any other selection
-    // in different steps
-    this.getTableCell(this.columnIndex.hostname, hostname).click();
-
     this.clickTab('cd-host-details', hostname, 'Daemons');
     cy.get('cd-host-details').within(() => {
       cy.wait(20000);
