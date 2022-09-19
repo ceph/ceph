@@ -237,30 +237,26 @@ class FSTop(object):
         if not fs_list:
             title = ['No filesystem available',
                      'Press "q" to go back to home (All Filesystem Info) screen']
-            pos_x1 = w // 2 - len(title[0]) // 2
-            pos_x2 = w // 2 - len(title[1]) // 2
-            stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
-            stdscr.addstr(3, pos_x2, title[1])
         else:
             title = ['Filesystems', 'Press "q" to go back to home (All Filesystem Info) screen']
-            pos_x1 = w // 2 - len(title[0]) // 2
-            pos_x2 = w // 2 - len(title[1]) // 2
-            stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
-            stdscr.addstr(3, pos_x2, title[1])
-            for index, name in enumerate(fs_list):
-                x = w // 2 - len(name) // 2
-                y = h // 2 - len(fs_list) // 2 + index
-                if index == selected_row_idx:
-                    stdscr.attron(curses.color_pair(1))
-                    stdscr.addstr(y, x, name)
-                    stdscr.attroff(curses.color_pair(1))
-                else:
-                    stdscr.addstr(y, x, name)
+        pos_x1 = w // 2 - len(title[0]) // 2
+        pos_x2 = w // 2 - len(title[1]) // 2
+        stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
+        stdscr.addstr(3, pos_x2, title[1], curses.A_DIM)
+        for index, name in enumerate(fs_list):
+            x = w // 2 - len(name) // 2
+            y = h // 2 - len(fs_list) // 2 + index
+            if index == selected_row_idx:
+                stdscr.attron(curses.color_pair(1))
+                stdscr.addstr(y, x, name)
+                stdscr.attroff(curses.color_pair(1))
+            else:
+                stdscr.addstr(y, x, name)
         stdscr.refresh()
 
     def set_key(self, stdscr):
         curses.curs_set(0)
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        curses.init_pair(1, curses.COLOR_MAGENTA, curses.COLOR_WHITE)
         curr_row = 0
         key = 0
         endmenu = False
@@ -290,12 +286,16 @@ class FSTop(object):
 
     def set_option(self, opt):
         if opt == ord('m'):
-            curses.wrapper(self.set_key)
+            if fs_list:
+                curses.wrapper(self.set_key)
+            else:
+                return False
         elif opt == ord('q'):
             if self.current_screen == FS_TOP_ALL_FS_APP:
                 quit()
             else:
                 self.run_all_display()
+        return True
 
     def verify_perf_stats_support(self):
         mon_cmd = {'prefix': 'mgr module ls', 'format': 'json'}
@@ -749,8 +749,8 @@ class FSTop(object):
         cmd = self.stdscr.getch()
         while not self.exit_ev.is_set():
             if cmd in [ord('m'), ord('q')]:
-                self.set_option(cmd)
-                self.exit_ev.set()
+                if self.set_option(cmd):
+                    self.exit_ev.set()
 
             # header display
             global fs_list
