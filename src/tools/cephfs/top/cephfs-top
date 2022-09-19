@@ -7,6 +7,7 @@ import errno
 import json
 import signal
 import time
+import math
 
 from collections import OrderedDict
 from datetime import datetime
@@ -30,6 +31,7 @@ class MetricType(Enum):
     METRIC_TYPE_PERCENTAGE = 1
     METRIC_TYPE_LATENCY = 2
     METRIC_TYPE_SIZE = 3
+    METRIC_TYPE_STDEV = 4
 
 
 FS_TOP_PROG_STR = 'cephfs-top'
@@ -53,6 +55,11 @@ MAIN_WINDOW_TOP_LINE_ITEMS_START = [ITEMS_PAD,
                                     FS_TOP_MAIN_WINDOW_COL_MNT_ROOT]
 MAIN_WINDOW_TOP_LINE_ITEMS_END = [FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR]
 
+MAIN_WINDOW_TOP_LINE_METRICS_LEGACY = ["READ_LATENCY",
+                                       "WRITE_LATENCY",
+                                       "METADATA_LATENCY"
+                                       ]
+
 # adjust this map according to stats version and maintain order
 # as emitted by mgr/stast
 MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
@@ -66,6 +73,12 @@ MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
     ("OPENED_INODES", MetricType.METRIC_TYPE_NONE),
     ("READ_IO_SIZES", MetricType.METRIC_TYPE_SIZE),
     ("WRITE_IO_SIZES", MetricType.METRIC_TYPE_SIZE),
+    ("AVG_READ_LATENCY", MetricType.METRIC_TYPE_LATENCY),
+    ("STDEV_READ_LATENCY", MetricType.METRIC_TYPE_STDEV),
+    ("AVG_WRITE_LATENCY", MetricType.METRIC_TYPE_LATENCY),
+    ("STDEV_WRITE_LATENCY", MetricType.METRIC_TYPE_STDEV),
+    ("AVG_METADATA_LATENCY", MetricType.METRIC_TYPE_LATENCY),
+    ("STDEV_METADATA_LATENCY", MetricType.METRIC_TYPE_STDEV),
 ])
 MGR_STATS_COUNTERS = list(MAIN_WINDOW_TOP_LINE_METRICS.keys())
 
@@ -95,7 +108,14 @@ def calc_perc(c):
 
 
 def calc_lat(c):
-    return round(c[0] + c[1] / 1000000000, 2)
+    return round(c[0] * 1000 + c[1] / 1000000, 2)
+
+
+def calc_stdev(c):
+    stdev = 0.0
+    if c[1] > 1:
+        stdev = math.sqrt(c[0] / (c[1] - 1)) / 1000000
+    return round(stdev, 2)
 
 
 # in MB
@@ -228,6 +248,18 @@ class FSTop(object):
             return "rtio"
         if item == "WRITE_IO_SIZES":
             return "wtio"
+        if item == 'AVG_READ_LATENCY':
+            return 'rlatavg'
+        if item == 'STDEV_READ_LATENCY':
+            return 'rlatsd'
+        if item == 'AVG_WRITE_LATENCY':
+            return 'wlatavg'
+        if item == 'STDEV_WRITE_LATENCY':
+            return 'wlatsd'
+        if item == 'AVG_METADATA_LATENCY':
+            return 'mlatavg'
+        if item == 'STDEV_METADATA_LATENCY':
+            return 'mlatsd'
         else:
             # return empty string for none type
             return ''
@@ -236,9 +268,11 @@ class FSTop(object):
         if typ == MetricType.METRIC_TYPE_PERCENTAGE:
             return "(%)"
         elif typ == MetricType.METRIC_TYPE_LATENCY:
-            return "(s)"
+            return "(ms)"
         elif typ == MetricType.METRIC_TYPE_SIZE:
             return "(MB)"
+        elif typ == MetricType.METRIC_TYPE_STDEV:
+            return "(ms)"
         else:
             # return empty string for none type
             return ''
@@ -283,6 +317,8 @@ class FSTop(object):
             xp += nlen
 
         for item, typ in MAIN_WINDOW_TOP_LINE_METRICS.items():
+            if item in MAIN_WINDOW_TOP_LINE_METRICS_LEGACY:
+                continue
             it = f'{self.items(item)}{self.mtype(typ)}'
             heading.append(it)
             nlen = len(it) + len(ITEMS_PAD)
@@ -334,6 +370,7 @@ class FSTop(object):
 
     def refresh_client(self, client_id, metrics, counters, client_meta, x_coord_map, y_coord):
         global last_time
+        size = 0
         cur_time = time.time()
         duration = cur_time - last_time
         last_time = cur_time
@@ -363,6 +400,9 @@ class FSTop(object):
 
         cidx = 0
         for item in counters:
+            if item in MAIN_WINDOW_TOP_LINE_METRICS_LEGACY:
+                cidx += 1
+                continue
             coord = x_coord_map[item]
             hlen = coord[1] - len(ITEMS_PAD)
             hlen = min(hlen, remaining_hlen)
@@ -378,6 +418,8 @@ class FSTop(object):
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_perc(m)}', hlen)
                 elif typ == MetricType.METRIC_TYPE_LATENCY:
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_lat(m)}', hlen)
+                elif typ == MetricType.METRIC_TYPE_STDEV:
+                    self.mainw.addnstr(y_coord, coord[0], f'{calc_stdev(m)}', hlen)
                 elif typ == MetricType.METRIC_TYPE_SIZE:
                     self.mainw.addnstr(y_coord, coord[0], f'{calc_size(m)}', hlen)
 

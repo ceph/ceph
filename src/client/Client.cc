@@ -168,6 +168,30 @@ bool Client::is_reserved_vino(vinodeno_t &vino) {
   return false;
 }
 
+// running average and standard deviation -- presented in
+// Donald Knuth's TAoCP, Volume II.
+double calc_average(double old_avg, double value, uint64_t count) {
+  double new_avg;
+  if (count == 1) {
+    new_avg = value;
+  } else {
+    new_avg = old_avg + ((value - old_avg) / count);
+  }
+
+  return new_avg;
+}
+
+double calc_sq_sum(double old_sq_sum, double old_mean, double new_mean,
+                   double value, uint64_t count) {
+  double new_sq_sum;
+  if (count == 1) {
+    new_sq_sum = 0.0;
+  } else {
+    new_sq_sum = old_sq_sum + (value - old_mean)*(value - new_mean);
+  }
+
+  return new_sq_sum;
+}
 
 // -------------
 
@@ -583,6 +607,16 @@ void Client::_finish_init()
     plb.add_time_avg(l_c_wrlat, "wrlat", "Latency of a file data write operation");
     plb.add_time_avg(l_c_read, "rdlat", "Latency of a file data read operation");
     plb.add_time_avg(l_c_fsync, "fsync", "Latency of a file sync operation");
+    // average, standard deviation mds/r/w/ latencies
+    plb.add_time(l_c_md_avg, "mdavg", "Average latency for processing metadata requests");
+    plb.add_u64(l_c_md_sqsum, "mdsqsum", "Sum of squares (to calculate variability/stdev) for metadata requests");
+    plb.add_u64(l_c_md_ops, "mdops", "Total metadata IO operations");
+    plb.add_time(l_c_rd_avg, "readavg", "Average latency for processing read requests");
+    plb.add_u64(l_c_rd_sqsum, "readsqsum", "Sum of squares ((to calculate variability/stdev) for read requests");
+    plb.add_u64(l_c_rd_ops, "rdops", "Total read IO operations");
+    plb.add_time(l_c_wr_avg, "writeavg", "Average latency for processing write requests");
+    plb.add_u64(l_c_wr_sqsum, "writesqsum", "Sum of squares ((to calculate variability/stdev) for write requests");
+    plb.add_u64(l_c_wr_ops, "rdops", "Total write IO operations");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
   }
@@ -708,6 +742,63 @@ void Client::shutdown()
   }
 }
 
+void Client::update_io_stat_metadata(utime_t latency) {
+  auto lat_nsec = latency.to_nsec();
+  // old values are used to compute new ones
+  auto o_avg = logger->tget(l_c_md_avg).to_nsec();
+  auto o_sqsum = logger->get(l_c_md_sqsum);
+
+  auto n_avg = calc_average(o_avg, lat_nsec, nr_metadata_request);
+  auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, lat_nsec,
+                              nr_metadata_request);
+
+  logger->tinc(l_c_lat, latency);
+  logger->tinc(l_c_reply, latency);
+
+  utime_t avg;
+  avg.set_from_double(n_avg / 1000000000);
+  logger->tset(l_c_md_avg, avg);
+  logger->set(l_c_md_sqsum, n_sqsum);
+  logger->set(l_c_md_ops, nr_metadata_request);
+}
+
+void Client::update_io_stat_read(utime_t latency) {
+  auto lat_nsec = latency.to_nsec();
+  // old values are used to compute new ones
+  auto o_avg = logger->tget(l_c_rd_avg).to_nsec();
+  auto o_sqsum = logger->get(l_c_rd_sqsum);
+
+  auto n_avg = calc_average(o_avg, lat_nsec, nr_read_request);
+  auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, lat_nsec,
+                              nr_read_request);
+
+  logger->tinc(l_c_read, latency);
+
+  utime_t avg;
+  avg.set_from_double(n_avg / 1000000000);
+  logger->tset(l_c_rd_avg, avg);
+  logger->set(l_c_rd_sqsum, n_sqsum);
+  logger->set(l_c_rd_ops, nr_read_request);
+}
+
+void Client::update_io_stat_write(utime_t latency) {
+  auto lat_nsec = latency.to_nsec();
+  // old values are used to compute new ones
+  auto o_avg = logger->tget(l_c_wr_avg).to_nsec();
+  auto o_sqsum = logger->get(l_c_wr_sqsum);
+
+  auto n_avg = calc_average(o_avg, lat_nsec, nr_write_request);
+  auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, lat_nsec,
+                              nr_write_request);
+
+  logger->tinc(l_c_wrlat, latency);
+
+  utime_t avg;
+  avg.set_from_double(n_avg / 1000000000);
+  logger->tset(l_c_wr_avg, avg);
+  logger->set(l_c_wr_sqsum, n_sqsum);
+  logger->set(l_c_wr_ops, nr_write_request);
+}
 
 // ===================
 // metadata cache stuff
@@ -1919,8 +2010,9 @@ int Client::make_request(MetaRequest *request,
   utime_t lat = ceph_clock_now();
   lat -= request->sent_stamp;
   ldout(cct, 20) << "lat " << lat << dendl;
-  logger->tinc(l_c_lat, lat);
-  logger->tinc(l_c_reply, lat);
+
+  ++nr_metadata_request;
+  update_io_stat_metadata(lat);
 
   put_request(request);
   return r;
@@ -6706,21 +6798,30 @@ void Client::collect_and_send_global_metrics() {
   // read latency
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_READ_LATENCY)) {
-    metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read)));
+    metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read),
+                                                    logger->tget(l_c_rd_avg),
+                                                    logger->get(l_c_rd_sqsum),
+                                                    nr_read_request));
     message.push_back(metric);
   }
 
   // write latency
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_WRITE_LATENCY)) {
-    metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat)));
+    metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat),
+                                                    logger->tget(l_c_wr_avg),
+                                                    logger->get(l_c_wr_sqsum),
+                                                    nr_write_request));
     message.push_back(metric);
   }
 
   // metadata latency
   if (_collect_and_send_global_metrics ||
       session->mds_metric_flags.test(CLIENT_METRIC_TYPE_METADATA_LATENCY)) {
-    metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat)));
+    metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat),
+                                                        logger->tget(l_c_md_avg),
+                                                        logger->get(l_c_md_sqsum),
+                                                        nr_metadata_request));
     message.push_back(metric);
   }
 
@@ -10136,7 +10237,9 @@ success:
   
   lat = ceph_clock_now();
   lat -= start;
-  logger->tinc(l_c_read, lat);
+
+  ++nr_read_request;
+  update_io_stat_read(lat);
 
 done:
   // done!
@@ -10595,7 +10698,9 @@ success:
   // time
   lat = ceph_clock_now();
   lat -= start;
-  logger->tinc(l_c_wrlat, lat);
+
+  ++nr_write_request;
+  update_io_stat_write(lat);
 
   if (fpos) {
     lock_fh_pos(f);
