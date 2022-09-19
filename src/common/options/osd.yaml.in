@@ -1107,6 +1107,27 @@ options:
   - custom
   flags:
   - runtime
+- name: osd_mclock_override_recovery_settings
+  type: bool
+  level: advanced
+  desc: Setting this option enables the override of recovery/backfill limits
+    for the mClock scheduler.
+  long_desc: This option when set enables the override of the max recovery
+    active and the max backfills limits with mClock scheduler active. These
+    options are not modifiable when mClock scheduler is active. Any attempt
+    to modify these values without setting this option will reset the
+    recovery or backfill option back to its default value.
+  fmt_desc: Setting this option will enable the override of the
+    recovery/backfill limits for the mClock scheduler as defined by the
+    ``osd_recovery_max_active_hdd``, ``osd_recovery_max_active_ssd`` and
+    ``osd_max_backfills`` options.
+  default: false
+  see_also:
+  - osd_recovery_max_active_hdd
+  - osd_recovery_max_active_ssd
+  - osd_max_backfills
+  flags:
+  - runtime
 # Set to true for testing.  Users should NOT set this.
 # If set to true even after reading enough shards to
 # decode the object, any error will be reported.
