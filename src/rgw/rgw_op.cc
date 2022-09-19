@@ -30,7 +30,6 @@
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_acl_swift.h"
-#include "rgw_aio_throttle.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_log.h"
@@ -3975,8 +3974,6 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   // create the object processor
-  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
-                                s->yield);
   std::unique_ptr<rgw::sal::Writer> processor;
 
   rgw_placement_rule *pdest_placement = &s->dest_placement;
@@ -4417,9 +4414,6 @@ void RGWPostObj::execute(optional_yield y)
     if (s->bucket->versioning_enabled()) {
       obj->gen_rand_obj_instance_name();
     }
-
-    auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
-                                  s->yield);
 
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = store->get_atomic_writer(this, s->yield, std::move(obj),
