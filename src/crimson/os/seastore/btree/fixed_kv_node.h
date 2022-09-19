@@ -62,6 +62,7 @@ struct FixedKVNode : CachedExtent {
   child_trans_views_t child_trans_views;
   parent_tracker_ref parent_tracker;
   size_t capacity = 0;
+  back_tracker_t *child_back_tracker = nullptr;
 
   FixedKVNode(size_t capacity, ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)),

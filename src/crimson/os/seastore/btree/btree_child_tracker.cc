@@ -54,9 +54,27 @@ child_trans_views_t::remove_trans_view(Transaction &t) {
   return res;
 }
 
+template <typename key_t>
+back_tracker_t<key_t>::~back_tracker_t() {
+  if constexpr (std::is_same_v<key_t, laddr_t>) {
+    auto &p = (lba_manager::btree::LBANode&)*parent;
+    ceph_assert(p.back_tracker_to_me && p.back_tracker_to_me == this);
+    p.back_tracker_to_me = nullptr;
+  } else {
+    static_assert(std::is_same_v<key_t, paddr_t>);
+    auto &p = (backref::BackrefNode&)*parent;
+    ceph_assert(p.back_tracker_to_me && p.back_tracker_to_me == this);
+    p.back_tracker_to_me = nullptr;
+  }
+}
+
 template std::list<std::pair<CachedExtent*, uint64_t>>
 child_trans_views_t::remove_trans_view<lba_manager::btree::LBANode>(Transaction &t);
 
 template std::list<std::pair<CachedExtent*, uint64_t>>
 child_trans_views_t::remove_trans_view<backref::BackrefNode>(Transaction &t);
+
+template class back_tracker_t<laddr_t>;
+template class back_tracker_t<paddr_t>;
+
 } // namespace crimson::os::seastore

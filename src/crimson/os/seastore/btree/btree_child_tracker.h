@@ -114,4 +114,24 @@ struct parent_tracker_t {
 using parent_tracker_ref =
   std::unique_ptr<parent_tracker_t>;
 
+// back_tracker is used to reference parents from children in the fixed
+// kv btree.
+//
+// NOTE THAT: it should only be used to track relations of non-pending
+// fixed kv btree nodes. In other words, back_trackers should only be
+// used to find the parent when both the parent and the child are "stable"
+// or the parent is "stable" and the child is mutation pending
+template <typename key_t>
+struct back_tracker_t
+  : public boost::intrusive_ref_counter<
+      back_tracker_t<key_t>, boost::thread_unsafe_counter> {
+  back_tracker_t(CachedExtentRef parent)
+    : parent(parent) {}
+  CachedExtentRef parent;
+  ~back_tracker_t();
+};
+template <typename key_t>
+using back_tracker_ref =
+  boost::intrusive_ptr<back_tracker_t<key_t>>;
+
 } // namespace crimson::os::seastore
