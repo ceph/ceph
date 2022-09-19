@@ -126,7 +126,7 @@ CROSS_COMPILE="${MINGW_PREFIX}" ./Configure \
     mingw64 shared --prefix=$sslDir --libdir="$sslDir/lib"
 _make depend
 _make
-_make install
+_make install_sw
 
 echo "Building libcurl."
 cd $depsSrcDir
