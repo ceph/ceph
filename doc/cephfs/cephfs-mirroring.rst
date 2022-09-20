@@ -131,7 +131,10 @@ To stop a mirroring directory snapshots use::
   $ ceph fs snapshot mirror remove <fs_name> <path>
 
 Only absolute directory paths are allowed. Also, paths are normalized by the mirroring
-module, therefore, `/a/b/../b` is equivalent to `/a/b`.
+module, therefore, `/a/b/../b` is equivalent to `/a/b`. Also note that paths always
+start from the cephfs file-system root and not from the host system mount point.
+
+e.g.::
 
   $ mkdir -p /d0/d1/d2
   $ ceph fs snapshot mirror add cephfs /d0/d1/d2
