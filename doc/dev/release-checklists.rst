@@ -95,6 +95,14 @@ QA suite
 - [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
 
 
+ceph-build
+----------
+In the `ceph/ceph-build.git` repo:
+
+- [x] add the version -> X mapping (`release_from_version()` in `scripts/build_utils.sh`)
+- [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/build_osc`)
+- [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/setup_osc`)
+
 
 First release candidate
 =======================
