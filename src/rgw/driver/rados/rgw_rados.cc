@@ -4158,6 +4158,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   int ret;
 
   auto trace = tracing::rgw::tracer.add_span("fetch_remote_obj", dest_obj.get_trace());
+  trace->SetAttribute(tracing::rgw::OBJECT_NAME, dest_obj.key.name);
+  trace->SetAttribute(tracing::rgw::BUCKET_NAME, dest_bucket_info.bucket.name);
   dest_obj.set_trace(trace->GetContext());
 
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
