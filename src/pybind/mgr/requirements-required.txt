@@ -5,7 +5,7 @@ cryptography
 jsonpatch
 Jinja2
 pecan
-prettytable==3.3.0
+prettytable<3.4.0
 pyfakefs
 pyOpenSSL
 pytest-cov==2.7.1
