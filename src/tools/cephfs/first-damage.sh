@@ -58,7 +58,9 @@ function traverse {
   mrados ls | grep -E '[[:xdigit:]]{8,}\.[[:xdigit:]]+' > "$T"
   while read obj; do
     local O=$(mktemp -p /tmp "$obj".XXXXXX)
-    for dnk in $(mrados listomapkeys "$obj"); do
+    local KEYS=$(mktemp -p /tmp "$obj"-keys.XXXXXX)
+    mrados listomapkeys "$obj" > "$KEYS"
+    while read dnk; do
       mrados getomapval "$obj" "$dnk" "$O"
       local first=$(dd if="$O" bs=1 count=4 | od --endian=little -An -t u8)
       if [ "$first" -gt "$NEXT_SNAP" ]; then
@@ -68,7 +70,7 @@ function traverse {
           mrados rmomapkey "$obj" "$dnk"
         fi
       fi
-    done
+    done < "$KEYS"
     rm "$O"
   done < "$T"
 }
