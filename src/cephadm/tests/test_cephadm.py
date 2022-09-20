@@ -152,8 +152,8 @@ class TestCephAdm(object):
         args = cd._parse_args(['--image', 'foo', 'version'])
         assert args.image == 'foo'
 
-    def test_parse_mem_usage(self):
-        cd.logger = mock.Mock()
+    @mock.patch('cephadm.logger')
+    def test_parse_mem_usage(self, logger):
         len, summary = cd._parse_mem_usage(0, 'c6290e3f1489,-- / --')
         assert summary == {}
 
@@ -175,8 +175,8 @@ class TestCephAdm(object):
             cd._parse_podman_version('inval.id')
         assert 'inval' in str(res.value)
 
-    def test_is_ipv6(self):
-        cd.logger = mock.Mock()
+    @mock.patch('cephadm.logger')
+    def test_is_ipv6(self, logger):
         for good in ("[::1]", "::1",
                      "fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"):
             assert cd.is_ipv6(good)
@@ -324,7 +324,8 @@ class TestCephAdm(object):
 
     @mock.patch('cephadm.call_throws')
     @mock.patch('cephadm.get_parm')
-    def test_registry_login(self, get_parm, call_throws):
+    @mock.patch('cephadm.logger')
+    def test_registry_login(self, _logger, get_parm, call_throws):
         # test normal valid login with url, username and password specified
         call_throws.return_value = '', '', 0
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -616,8 +617,8 @@ class TestCephAdm(object):
                 None
             ),
         ])
-    def test_get_container_info(self, daemon_filter, by_name, daemon_list, container_stats, output):
-        cd.logger = mock.Mock()
+    @mock.patch('cephadm.logger')
+    def test_get_container_info(self, logger, daemon_filter, by_name, daemon_list, container_stats, output):
         ctx = cd.CephadmContext()
         ctx.fsid = '00000000-0000-0000-0000-0000deadbeef'
         ctx.container_engine = mock_podman()
@@ -725,7 +726,8 @@ class TestCephAdm(object):
             ),
         ])
     @mock.patch('cephadm.call')
-    def test_infer_fsid(self, _call, fsid, ceph_conf, list_daemons, result, err, cephadm_fs):
+    @mock.patch('cephadm.logger')
+    def test_infer_fsid(self, _logger, _call, fsid, ceph_conf, list_daemons, result, err, cephadm_fs):
         # build the context
         ctx = cd.CephadmContext()
         ctx.fsid = fsid
@@ -1078,8 +1080,9 @@ class TestMaintenance:
 
     @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
+    @mock.patch('cephadm.logger')
     @mock.patch('cephadm.systemd_target_state')
-    def test_enter_failure_1(self, _target_state, _call, _listdir):
+    def test_enter_failure_1(self, _target_state, _logger, _call, _listdir):
         _call.return_value = '', '', 999
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -1090,8 +1093,9 @@ class TestMaintenance:
 
     @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
+    @mock.patch('cephadm.logger')
     @mock.patch('cephadm.systemd_target_state')
-    def test_enter_failure_2(self, _target_state, _call, _listdir):
+    def test_enter_failure_2(self, _target_state, _logger, _call, _listdir):
         _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -1102,9 +1106,10 @@ class TestMaintenance:
 
     @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
+    @mock.patch('cephadm.logger')
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
-    def test_exit_failure_1(self, _target_exists, _target_state, _call, _listdir):
+    def test_exit_failure_1(self, _target_exists, _target_state, _logger, _call, _listdir):
         _call.return_value = '', '', 999
         _target_state.return_value = False
         _target_exists.return_value = True
@@ -1116,9 +1121,10 @@ class TestMaintenance:
 
     @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
+    @mock.patch('cephadm.logger')
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
-    def test_exit_failure_2(self, _target_exists, _target_state, _call, _listdir):
+    def test_exit_failure_2(self, _target_exists, _target_state, _logger, _call, _listdir):
         _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = False
         _target_exists.return_value = True
@@ -1725,7 +1731,8 @@ class TestCheckHost:
 
     @mock.patch('cephadm.find_executable', return_value='foo')
     @mock.patch('cephadm.check_time_sync', return_value=True)
-    def test_container_engine(self, find_executable, check_time_sync):
+    @mock.patch('cephadm.logger')
+    def test_container_engine(self, _logger, find_executable, check_time_sync):
         ctx = cd.CephadmContext()
 
         ctx.container_engine = None
@@ -2023,7 +2030,8 @@ class TestValidateRepo:
             """)),
         ])
     @mock.patch('cephadm.find_executable', return_value='foo')
-    def test_http_validation(self, find_executable, values, cephadm_fs):
+    @mock.patch('cephadm.logger')
+    def test_http_validation(self, _logger, find_executable, values, cephadm_fs):
         from urllib.error import HTTPError
 
         os_release = values['os_release']
@@ -2050,7 +2058,8 @@ class TestPull:
     @mock.patch('time.sleep')
     @mock.patch('cephadm.call', return_value=('', '', 0))
     @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
-    def test_error(self, get_image_info_from_inspect, call, sleep):
+    @mock.patch('cephadm.logger')
+    def test_error(self, _logger, get_image_info_from_inspect, call, sleep):
         ctx = cd.CephadmContext()
         ctx.container_engine = mock_podman()
         ctx.insecure = False
@@ -2071,10 +2080,9 @@ class TestPull:
             cd.command_pull(ctx)
         assert err in str(e.value)
 
-    @mock.patch('cephadm.logger')
     @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
     @mock.patch('cephadm.infer_local_ceph_image', return_value='last_local_ceph_image')
-    def test_image(self, infer_local_ceph_image, get_image_info_from_inspect, logger):
+    def test_image(self, infer_local_ceph_image, get_image_info_from_inspect):
         cmd = ['pull']
         with with_cephadm_ctx(cmd) as ctx:
             retval = cd.command_pull(ctx)
@@ -2157,7 +2165,8 @@ spec:
             assert dic == retdic
 
     @mock.patch('cephadm.call', return_value=('', '', 0))
-    def test_distribute_ssh_keys(self, call):
+    @mock.patch('cephadm.logger')
+    def test_distribute_ssh_keys(self, _logger, call):
         ctx = cd.CephadmContext()
         ctx.ssh_public_key = None
         ctx.ssh_user = 'root'
@@ -2419,7 +2428,8 @@ cluster_network=3.3.3.0/24, 4.4.4.0/24
     cluster_network='3.3.3.0/24,4.4.4.0/24'
 """])
     @mock.patch('cephadm.list_networks')
-    def test_get_networks_from_conf(self, _list_networks, conf, cephadm_fs):
+    @mock.patch('cephadm.logger')
+    def test_get_networks_from_conf(self, _logger, _list_networks, conf, cephadm_fs):
         cephadm_fs.create_file('ceph.conf', contents=conf)
         _list_networks.return_value = {'1.1.1.0/24': {'eth0': ['1.1.1.1']},
                                        '2.2.2.0/24': {'eth1': ['2.2.2.2']},
@@ -2559,24 +2569,28 @@ class TestRescan(fake_filesystem_unittest.TestCase):
         self.ctx = cd.CephadmContext()
         self.ctx.func = cd.command_rescan_disks
 
-    def test_no_hbas(self):
+    @mock.patch('cephadm.logger')
+    def test_no_hbas(self, _logger):
         out = cd.command_rescan_disks(self.ctx)
         assert out == 'Ok. No compatible HBAs found'
 
-    def test_success(self):
+    @mock.patch('cephadm.logger')
+    def test_success(self, _logger):
         self.fs.create_file('/sys/class/scsi_host/host0/scan')
         self.fs.create_file('/sys/class/scsi_host/host1/scan')
         out = cd.command_rescan_disks(self.ctx)
         assert out.startswith('Ok. 2 adapters detected: 2 rescanned, 0 skipped, 0 failed')
 
-    def test_skip_usb_adapter(self):
+    @mock.patch('cephadm.logger')
+    def test_skip_usb_adapter(self, _logger):
         self.fs.create_file('/sys/class/scsi_host/host0/scan')
         self.fs.create_file('/sys/class/scsi_host/host1/scan')
         self.fs.create_file('/sys/class/scsi_host/host1/proc_name', contents='usb-storage')
         out = cd.command_rescan_disks(self.ctx)
         assert out.startswith('Ok. 2 adapters detected: 1 rescanned, 1 skipped, 0 failed')
 
-    def test_skip_unknown_adapter(self):
+    @mock.patch('cephadm.logger')
+    def test_skip_unknown_adapter(self, _logger):
         self.fs.create_file('/sys/class/scsi_host/host0/scan')
         self.fs.create_file('/sys/class/scsi_host/host1/scan')
         self.fs.create_file('/sys/class/scsi_host/host1/proc_name', contents='unknown')
