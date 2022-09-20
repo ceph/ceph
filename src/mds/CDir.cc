@@ -3753,6 +3753,7 @@ bool CDir::scrub_local()
   if (!good && scrub_infop->header->get_repair()) {
     mdcache->repair_dirfrag_stats(this);
     scrub_infop->header->set_repaired();
+    good = true;
   }
   return good;
 }
