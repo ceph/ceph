@@ -178,9 +178,9 @@ void mClockScheduler::set_balanced_profile_allocations()
   // Client Allocation:
   //   reservation: 40% | weight: 1 | limit: 100% |
   // Background Recovery Allocation:
-  //   reservation: 40% | weight: 1 | limit: 150% |
+  //   reservation: 40% | weight: 1 | limit: 80% |
   // Background Best Effort Allocation:
-  //   reservation: 20% | weight: 2 | limit: max |
+  //   reservation: 20% | weight: 1 | limit: 50% |
 
   // Client
   uint64_t client_res = static_cast<uint64_t>(
@@ -193,14 +193,15 @@ void mClockScheduler::set_balanced_profile_allocations()
   uint64_t rec_res = static_cast<uint64_t>(
     std::round(0.40 * max_osd_capacity));
   uint64_t rec_lim = static_cast<uint64_t>(
-    std::round(1.5 * max_osd_capacity));
+    std::round(0.80 * max_osd_capacity));
   uint64_t rec_wgt = default_min;
 
   // Background Best Effort
   uint64_t best_effort_res = static_cast<uint64_t>(
     std::round(0.20 * max_osd_capacity));
-  uint64_t best_effort_lim = default_max;
-  uint64_t best_effort_wgt = 2;
+  uint64_t best_effort_lim = static_cast<uint64_t>(
+    std::round(0.50 * max_osd_capacity));
+  uint64_t best_effort_wgt = default_min;
 
   // Set the allocations for the mclock clients
   client_allocs[
@@ -225,9 +226,9 @@ void mClockScheduler::set_high_recovery_ops_profile_allocations()
   // Client Allocation:
   //   reservation: 30% | weight: 1 | limit: 80% |
   // Background Recovery Allocation:
-  //   reservation: 60% | weight: 2 | limit: 200% |
+  //   reservation: 60% | weight: 2 | limit: 100% |
   // Background Best Effort Allocation:
-  //   reservation: 1 | weight: 2 | limit: max |
+  //   reservation: 10% | weight: 1 | limit: 40% |
 
   // Client
   uint64_t client_res = static_cast<uint64_t>(
@@ -240,13 +241,15 @@ void mClockScheduler::set_high_recovery_ops_profile_allocations()
   uint64_t rec_res = static_cast<uint64_t>(
     std::round(0.60 * max_osd_capacity));
   uint64_t rec_lim = static_cast<uint64_t>(
-    std::round(2.0 * max_osd_capacity));
+    std::round(max_osd_capacity));
   uint64_t rec_wgt = 2;
 
   // Background Best Effort
-  uint64_t best_effort_res = default_min;
-  uint64_t best_effort_lim = default_max;
-  uint64_t best_effort_wgt = 2;
+  uint64_t best_effort_res = static_cast<uint64_t>(
+    std::round(0.10 * max_osd_capacity));
+  uint64_t best_effort_lim = static_cast<uint64_t>(
+    std::round(0.40 * max_osd_capacity));
+  uint64_t best_effort_wgt = default_min;
 
   // Set the allocations for the mclock clients
   client_allocs[
@@ -269,30 +272,31 @@ void mClockScheduler::set_high_recovery_ops_profile_allocations()
 void mClockScheduler::set_high_client_ops_profile_allocations()
 {
   // Client Allocation:
-  //   reservation: 50% | weight: 2 | limit: max |
+  //   reservation: 60% | weight: 2 | limit: max |
   // Background Recovery Allocation:
-  //   reservation: 25% | weight: 1 | limit: 100% |
+  //   reservation: 25% | weight: 1 | limit: 50% |
   // Background Best Effort Allocation:
-  //   reservation: 25% | weight: 2 | limit: max |
+  //   reservation: 15% | weight: 1 | limit: 30% |
 
   // Client
   uint64_t client_res = static_cast<uint64_t>(
-    std::round(0.50 * max_osd_capacity));
-  uint64_t client_wgt = 2;
+    std::round(0.60 * max_osd_capacity));
   uint64_t client_lim = default_max;
+  uint64_t client_wgt = 2;
 
   // Background Recovery
   uint64_t rec_res = static_cast<uint64_t>(
     std::round(0.25 * max_osd_capacity));
   uint64_t rec_lim = static_cast<uint64_t>(
-    std::round(max_osd_capacity));
+    std::round(0.50 * max_osd_capacity));
   uint64_t rec_wgt = default_min;
 
   // Background Best Effort
   uint64_t best_effort_res = static_cast<uint64_t>(
-    std::round(0.25 * max_osd_capacity));
-  uint64_t best_effort_lim = default_max;
-  uint64_t best_effort_wgt = 2;
+    std::round(0.15 * max_osd_capacity));
+  uint64_t best_effort_lim = static_cast<uint64_t>(
+    std::round(0.30 * max_osd_capacity));
+  uint64_t best_effort_wgt = default_min;
 
   // Set the allocations for the mclock clients
   client_allocs[
