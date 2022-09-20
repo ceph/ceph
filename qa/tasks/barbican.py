@@ -8,6 +8,7 @@ import http
 import json
 import time
 import math
+import os
 
 from urllib.parse import urlparse
 
@@ -157,11 +158,15 @@ def fix_barbican_api(ctx, cclient):
                          '/prop_dir =/ s#etc/barbican#{}/etc/barbican#'.format(get_barbican_dir(ctx)),
                          'bin/barbican-api'])
 
-def copy_policy_json(ctx, cclient):
-    run_in_barbican_dir(ctx, cclient,
-                        ['cp',
-                         get_barbican_dir(ctx)+'/etc/barbican/policy.json',
-                         get_barbican_dir(ctx)])
+def copy_policy_file(ctx, cclient):
+    policy_json_path = get_barbican_dir(ctx)+'/etc/barbican/policy.json'
+    if os.path.exists(policy_json_path):
+        run_in_barbican_dir(ctx, cclient,
+                            ['cp', policy_json_path, get_barbican_dir(ctx)])
+    policy_yaml_path = get_barbican_dir(ctx)+'/etc/barbican/policy.yaml'
+    if os.path.exists(policy_yaml_path):
+        run_in_barbican_dir(ctx, cclient,
+                            ['cp', policy_yaml_path, get_barbican_dir(ctx)])
 
 def create_barbican_conf(ctx, cclient):
     barbican_host, barbican_port = ctx.barbican.endpoints[cclient]
@@ -189,7 +194,7 @@ def configure_barbican(ctx, config):
     set_authtoken_params(ctx, cclient, cconfig)
     fix_barbican_api(ctx, cclient)
     fix_barbican_api_paste(ctx, cclient)
-    copy_policy_json(ctx, cclient)
+    copy_policy_file(ctx, cclient)
     create_barbican_conf(ctx, cclient)
     try:
         yield
