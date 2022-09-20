@@ -504,10 +504,10 @@ seastar::future<Ref<PG>> CoreState::handle_pg_create_info(
 	    rctx.transaction);
 
 	  return shard_services.start_operation<PGAdvanceMap>(
-	    shard_manager, pg, pg->get_osdmap_epoch(),
-	    osdmap->get_epoch(), std::move(rctx), true).second.then([pg=pg] {
+	    shard_manager, pg, osdmap->get_epoch(), std::move(rctx), true
+	  ).second.then([pg=pg] {
 	      return seastar::make_ready_future<Ref<PG>>(pg);
-	    });
+	  });
 	});
     });
 }
@@ -635,8 +635,8 @@ seastar::future<> CoreState::broadcast_map_to_pgs(
     pgs.begin(), pgs.end(),
     [=, &shard_manager, &shard_services](auto& pg) {
       return shard_services.start_operation<PGAdvanceMap>(
-	shard_manager, pg.second, pg.second->get_osdmap_epoch(), epoch,
-	PeeringCtx{}, false).second;
+	shard_manager, pg.second, epoch, PeeringCtx{}, false
+      ).second;
     }).then([epoch, this] {
       osdmap_gate.got_map(epoch);
       return seastar::make_ready_future();
