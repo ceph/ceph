@@ -147,14 +147,15 @@ CEPH_NAME={}
 CEPH_RANK={}
 CEPH_SEQ={}
 CEPH_CHANNEL={}
-MESSAGE
+MESSAGE={:S}
 )",
       clog_type_to_syslog_level(le.prio),
       le.stamp.to_nsec(),
       le.name.to_str(),
       le.rank,
       le.seq,
-      le.channel);
+      le.channel,
+      le);
 
     uint64_t msg_len = htole64(le.msg.size());
     meta_buf.resize(meta_buf.size() + sizeof(msg_len));

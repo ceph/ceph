@@ -48,7 +48,6 @@ int string_to_syslog_facility(std::string s);
 
 std::string clog_type_to_string(clog_type t);
 
-
 struct LogEntryKey {
 private:
   uint64_t _hash = 0;
@@ -202,11 +201,27 @@ template <> struct fmt::formatter<EntityName> : fmt::formatter<std::string_view>
 };
 
 template <> struct fmt::formatter<LogEntry> : fmt::formatter<std::string_view> {
+  template <typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    auto it = ctx.begin();
+    if (it != ctx.end() && *it == 'S') {
+      short_log = true;
+      ++it;
+    }
+    return it;
+  }
   template <typename FormatContext>
   auto format(const LogEntry& e, FormatContext& ctx) {
-    return fmt::format_to(ctx.out(), "{} {} ({}) {} : {} {} {}",
-			  e.stamp, e.name, e.rank, e.seq, e.channel, e.prio, e.msg);
+    if (short_log) {
+      return fmt::format_to(ctx.out(), "{} ({}) {} : {} {} {}",
+			    e.name, e.rank, e.seq, e.channel, e.prio, e.msg);
+    } else {
+      return fmt::format_to(ctx.out(), "{} {} ({}) {} : {} {} {}",
+			    e.stamp, e.name, e.rank, e.seq, e.channel, e.prio, e.msg);
+    }
   }
+  bool short_log{false};
 };
 
 #endif
