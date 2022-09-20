@@ -2376,6 +2376,9 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                     port = meta['ports'][0]
             r += [f'--web.listen-address={ip}:{port}']
             if daemon_type == 'prometheus':
+                config = get_parm(ctx.config_json)
+                retention_time = config.get('retention_time', '15d')
+                r += [f'--storage.tsdb.retention.time={retention_time}']
                 scheme = 'http'
                 host = get_fqdn()
                 r += [f'--web.external-url={scheme}://{host}:{port}']
