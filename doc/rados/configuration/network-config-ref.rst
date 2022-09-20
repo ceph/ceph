@@ -60,7 +60,9 @@ By default, daemons `bind`_ to ports within the ``6800:7300`` range. You may
 configure this range at your discretion. Before configuring your IP tables,
 check the default ``iptables`` configuration.
 
-	sudo iptables -L
+.. prompt:: bash $
+
+   sudo iptables -L
 
 Some Linux distributions include rules that reject all inbound requests
 except SSH from all network interfaces. For example:: 
@@ -80,7 +82,9 @@ default. Additionally, Ceph Monitors always operate on the public
 network. When you add the rule using the example below, make sure you
 replace ``{iface}`` with the public network interface (e.g., ``eth0``,
 ``eth1``, etc.), ``{ip-address}`` with the IP address of the public
-network and ``{netmask}`` with the netmask for the public network. ::
+network and ``{netmask}`` with the netmask for the public network. :
+
+.. prompt:: bash $
 
    sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 6789 -j ACCEPT
 
@@ -98,9 +102,11 @@ you replace ``{iface}`` with the public network interface (e.g., ``eth0``,
 ``eth1``, etc.), ``{ip-address}`` with the IP address of the public network
 and ``{netmask}`` with the netmask of the public network.
 
-For example:: 
+For example:
 
-	sudo iptables -A INPUT -i {iface} -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
+.. prompt:: bash $
+
+   sudo iptables -A INPUT -i {iface} -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
 
 
 OSD IP Tables
@@ -139,9 +145,11 @@ the public network and other Ceph OSD Daemons will connect using the cluster
 network. When you add the rule using the example below, make sure you replace
 ``{iface}`` with the network interface (e.g., ``eth0``, ``eth1``, etc.),
 ``{ip-address}`` with the IP address and ``{netmask}`` with the netmask of the
-public or cluster network. For example:: 
+public or cluster network. For example:
 
-	sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
+.. prompt:: bash $
+
+   sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
 
 .. tip:: If you run Ceph Metadata Servers on the same Ceph Node as the 
    Ceph OSD Daemons, you can consolidate the public network configuration step. 
