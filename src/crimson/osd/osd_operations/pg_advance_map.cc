@@ -21,9 +21,9 @@ namespace {
 namespace crimson::osd {
 
 PGAdvanceMap::PGAdvanceMap(
-  PGShardManager &shard_manager, Ref<PG> pg, epoch_t from, epoch_t to,
+  PGShardManager &shard_manager, Ref<PG> pg, epoch_t to,
   PeeringCtx &&rctx, bool do_init)
-  : shard_manager(shard_manager), pg(pg), from(from), to(to),
+  : shard_manager(shard_manager), pg(pg), from(std::nullopt), to(to),
     rctx(std::move(rctx)), do_init(do_init) {}
 
 PGAdvanceMap::~PGAdvanceMap() {}
@@ -32,7 +32,7 @@ void PGAdvanceMap::print(std::ostream &lhs) const
 {
   lhs << "PGAdvanceMap("
       << "pg=" << pg->get_pgid()
-      << " from=" << from
+      << " from=" << (from ? *from : -1)
       << " to=" << to;
   if (do_init) {
     lhs << " do_init";
@@ -44,7 +44,9 @@ void PGAdvanceMap::dump_detail(Formatter *f) const
 {
   f->open_object_section("PGAdvanceMap");
   f->dump_stream("pgid") << pg->get_pgid();
-  f->dump_int("from", from);
+  if (from) {
+    f->dump_int("from", *from);
+  }
   f->dump_int("to", to);
   f->dump_bool("do_init", do_init);
   f->close_section();
@@ -60,12 +62,13 @@ seastar::future<> PGAdvanceMap::start()
   return enter_stage<>(
     pg->peering_request_pg_pipeline.process
   ).then([this] {
+    from = pg->get_osdmap_epoch();
     if (do_init) {
       pg->handle_initialize(rctx);
       pg->handle_activate_map(rctx);
     }
     return seastar::do_for_each(
-      boost::make_counting_iterator(from + 1),
+      boost::make_counting_iterator(*from + 1),
       boost::make_counting_iterator(to + 1),
       [this](epoch_t next_epoch) {
         return shard_manager.get_map(next_epoch).then(
