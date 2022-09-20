@@ -45,6 +45,7 @@ public:
 
     void dump_detail(Formatter *f) const final;
   };
+  using Blocker = OSDMapBlocker;
 
 private:
   // order the promises in ascending order of the waited osdmap epoch,
