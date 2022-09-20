@@ -179,7 +179,7 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
       device_type_t dtype = device_entry.second.dtype;
       std::ostringstream oss;
       oss << root << "/block." << dtype << "." << std::to_string(id);
-      return Device::make_device(oss.str()
+      return Device::make_device(oss.str(), dtype
       ).then([this, magic](DeviceRef sec_dev) {
         return sec_dev->mount(
         ).safe_then([this, sec_dev=std::move(sec_dev), magic]() mutable {
@@ -283,7 +283,7 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
                 auto id = std::stoi(entry_name.substr(dtype_end + 1));
                 std::ostringstream oss;
                 oss << root << "/" << entry_name;
-                return Device::make_device(oss.str()
+                return Device::make_device(oss.str(), dtype
                 ).then([this, &sds, id, dtype, new_osd_fsid](DeviceRef sec_dev) {
                   magic_t magic = (magic_t)std::rand();
                   sds.emplace(
@@ -1882,7 +1882,7 @@ seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   const ConfigValues &config)
 {
   return Device::make_device(
-    device
+    device, device_type_t::SSD
   ).then([&device](DeviceRef device_obj) {
 #ifndef NDEBUG
     bool is_test = true;

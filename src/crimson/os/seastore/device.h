@@ -116,7 +116,9 @@ public:
     });
   }
 
-  static seastar::future<DeviceRef> make_device(const std::string &device);
+  static seastar::future<DeviceRef> make_device(
+    const std::string &device,
+    device_type_t dtype);
 };
 
 }
