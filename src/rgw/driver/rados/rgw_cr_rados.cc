@@ -740,6 +740,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
 
   rgw::sal::RadosBucket dest_bucket(store, dest_bucket_info);
   rgw::sal::RadosObject dest_obj(store, dest_key.value_or(key), &dest_bucket);
+  dest_obj.set_trace(std::move(trace_ctx));
 
   rgw_obj stat_dest_obj;
 
@@ -784,8 +785,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        stat_dest_obj,
                        source_trace_entry,
                        &zones_trace,
-                       &bytes_transferred,
-                       &trace_ctx);
+                       &bytes_transferred);
 
   if (r < 0) {
     ldpp_dout(dpp, 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
