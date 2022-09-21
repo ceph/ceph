@@ -1149,12 +1149,44 @@ private:
     auto init_internal = [c, depth, begin, end,
                           parent_pos=std::move(parent_pos)]
                           (internal_node_t &node) {
+      LOG_PREFIX(FixedKVBtree::get_internal_node);
       assert(!node.is_pending());
       assert(!node.pin.is_linked());
       node.pin.set_range(fixed_kv_node_meta_t<node_key_t>{begin, end, depth});
       if (parent_pos) {
         auto &parent = parent_pos->node;
         parent->link_child(node, parent_pos->pos);
+
+        if (!parent->is_pending()) {
+          if (!parent->back_tracker_to_me) {
+            parent->back_tracker_to_me = new back_tracker_t<node_key_t>(parent);
+          }
+          node.back_tracker = parent->back_tracker_to_me;
+          SUBTRACE(seastore_fixedkv_tree, "new back_tracker: {}, this: {}",
+            (void*)node.back_tracker.get(), *parent);
+        } else if (parent->is_mutation_pending()) {
+          auto &prior = (internal_node_t&)*parent->get_prior_instance();
+          if (!prior.back_tracker_to_me) {
+            prior.back_tracker_to_me = new back_tracker_t<node_key_t>(parent);
+          }
+          node.back_tracker = prior.back_tracker_to_me;
+          SUBTRACE(seastore_fixedkv_tree,
+            "new back_tracker: {}, this: {}, prior: {}",
+            (void*)node.back_tracker.get(), *parent, prior);
+        } else {
+          auto stable_parent = c.pins->template maybe_get_node<leaf_node_t>(
+            begin, depth + 1);
+          ceph_assert(stable_parent);
+          assert(stable_parent->begin().get_key() <= begin);
+          if (!stable_parent->back_tracker_to_me) {
+            stable_parent->back_tracker_to_me =
+              new back_tracker_t<node_key_t>(stable_parent);
+          }
+          node.back_tracker = stable_parent->back_tracker_to_me;
+          SUBTRACE(seastore_fixedkv_tree,
+            "new back_tracker: {}, this: {}, stable_parent: {}",
+            (void*)node.back_tracker.get(), *parent, *stable_parent);
+        }
       } else {
         assert(c.trans.get_root());
         c.trans.get_root()->template link_root_node<node_key_t>(node);
@@ -1221,12 +1253,44 @@ private:
     auto init_leaf = [c, begin, end, 
                       parent_pos=std::move(parent_pos)]
                       (leaf_node_t &node) {
+      LOG_PREFIX(FixedKVBtree::get_leaf_node);
       assert(!node.is_pending());
       assert(!node.pin.is_linked());
       node.pin.set_range(fixed_kv_node_meta_t<node_key_t>{begin, end, 1});
       if (parent_pos) {
         auto &parent = parent_pos->node;
         parent->link_child(node, parent_pos->pos);
+
+        if (!parent->is_pending()) {
+          if (!parent->back_tracker_to_me) {
+            parent->back_tracker_to_me = new back_tracker_t<node_key_t>(parent);
+          }
+          node.back_tracker = parent->back_tracker_to_me;
+          SUBTRACE(seastore_fixedkv_tree, "new back_tracker: {}, this: {}",
+            (void*)node.back_tracker.get(), *parent);
+        } else if (parent->is_mutation_pending()) {
+          auto &prior = (internal_node_t &)*parent->get_prior_instance();
+          if (!prior.back_tracker_to_me) {
+            prior.back_tracker_to_me = new back_tracker_t<node_key_t>(parent);
+          }
+          node.back_tracker = prior.back_tracker_to_me;
+          SUBTRACE(seastore_fixedkv_tree,
+            "new back_tracker: {}, this: {}, prior: {}",
+            (void*)node.back_tracker.get(), *parent, prior);
+        } else {
+          auto stable_parent = c.pins->template maybe_get_node<leaf_node_t>(
+            begin, 2);
+          ceph_assert(stable_parent);
+          assert(stable_parent->begin().get_key() <= begin);
+          if (!stable_parent->back_tracker_to_me) {
+            stable_parent->back_tracker_to_me =
+              new back_tracker_t<node_key_t>(stable_parent);
+          }
+          node.back_tracker = stable_parent->back_tracker_to_me;
+          SUBTRACE(seastore_fixedkv_tree,
+            "new back_tracker: {}, this: {}, stable_parent: {}",
+            (void*)node.back_tracker.get(), *parent, *stable_parent);
+        }
       } else {
         assert(c.trans.get_root());
         c.trans.get_root()->template link_root_node<node_key_t>(node);

@@ -198,9 +198,6 @@ class CachedExtent
 
   uint32_t last_committed_crc = 0;
 
-  // Points at current version while in state MUTATION_PENDING
-  CachedExtentRef prior_instance;
-
   // time of the last modification
   sea_time_point modify_time = NULL_TIME;
 
@@ -619,6 +616,9 @@ private:
   reclaim_gen_t reclaim_generation;
 
 protected:
+  // Points at current version while in state MUTATION_PENDING
+  CachedExtentRef prior_instance;
+
   CachedExtent(CachedExtent &&other) = delete;
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
   CachedExtent(const CachedExtent &other)

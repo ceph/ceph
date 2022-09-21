@@ -62,7 +62,8 @@ struct FixedKVNode : CachedExtent {
   child_trans_views_t child_trans_views;
   parent_tracker_ref parent_tracker;
   size_t capacity = 0;
-  back_tracker_t *child_back_tracker = nullptr;
+  back_tracker_t<node_key_t> *back_tracker_to_me = nullptr;
+  back_tracker_ref<node_key_t> back_tracker;
 
   FixedKVNode(size_t capacity, ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)),
@@ -75,7 +76,8 @@ struct FixedKVNode : CachedExtent {
     : CachedExtent(rhs),
       pin(rhs.pin, this),
       child_trackers(rhs.child_trackers),
-      capacity(rhs.capacity)
+      capacity(rhs.capacity),
+      back_tracker(rhs.back_tracker)
   {}
 
   virtual fixed_kv_node_meta_t<node_key_t> get_node_meta() const = 0;
@@ -116,9 +118,16 @@ struct FixedKVNode : CachedExtent {
 	tv_map.reset();
 #endif
       }
-
-      parent_tracker.reset();
     }
+
+    assert(prior_instance);
+    auto &prior = (FixedKVNode<node_key_t>&)*prior_instance;
+    if (prior.back_tracker_to_me) {
+      prior.back_tracker_to_me->parent = this;
+      back_tracker_to_me = prior.back_tracker_to_me;
+    }
+    parent_tracker.reset();
+
     this->child_trans_views.views_by_transaction.resize(capacity, std::nullopt);
   }
 
@@ -145,6 +154,7 @@ struct FixedKVNode : CachedExtent {
 	  }
 	}
       }
+      back_tracker.reset();
       parent_tracker.reset();
     }
   }
@@ -205,6 +215,30 @@ struct FixedKVInternalNode
   FixedKVInternalNode(const FixedKVInternalNode &rhs)
     : FixedKVNode<NODE_KEY>(rhs),
       node_layout_t(this->get_bptr().c_str()) {}
+
+  void adjust_child_back_trackers() {
+    LOG_PREFIX(FixedKVInternalNode::adjust_child_back_trackers);
+    for (auto it = this->child_trackers.begin();
+	 it != this->child_trackers.begin() + this->get_size();
+	 it++) {
+      auto tracker = *it;
+      if (tracker && tracker->child) {
+	if (!this->back_tracker_to_me) {
+	  this->back_tracker_to_me = new back_tracker_t<NODE_KEY>(this);
+	  SUBTRACE(seastore_fixedkv_tree, "new back_tracker: {}, this: {}",
+	    (void*)this->back_tracker_to_me, *this);
+	}
+	auto &child = (base_t&)*tracker->child;
+	child.back_tracker = this->back_tracker_to_me;
+      }
+    }
+  }
+
+  void prepare_commit() final {
+    if (this->is_initial_pending()) {
+      adjust_child_back_trackers();
+    }
+  }
 
   void init_child_trackers() {
     LOG_PREFIX(FixedKVInternalNode::init_child_trackers);
@@ -591,12 +625,27 @@ struct FixedKVInternalNode
     t.trackers_to_rm.push_back(tracker);
     tracker = new child_tracker_t(new_node);
     t.new_pending_trackers.push_back(tracker);
+    if (this->is_mutation_pending()) {
+      // for newly created internal nodes(by split/merge/balance), we don't
+      // have to initiate their children's back_tracker fields, because we'll
+      // update them in on_initial_write; however, for mutation pending internal
+      // nodes, we need to attach their new children's back_tracker to the
+      // prior instance, so those back_trackers can point to the correct
+      // internal node in on_replace_prior.
+      //
+      // This also applies to the following insert/replace method.
+      assert(this->prior_instance);
+      auto &prior = (FixedKVNode<NODE_KEY>&)*this->prior_instance;
+      auto &new_child = (base_t&)*new_node;
+      new_child.back_tracker = prior.back_tracker_to_me;
+    }
     SUBTRACE(seastore_fixedkv_tree,
-      "old tracker: {}, new tracker: {}, new extent: {}, this: {}",
+      "old tracker: {}, new tracker: {}, new extent: {}, this: {}, back_tracker: {}",
       (void*)old_tracker,
       (void*)tracker,
       *new_node,
-      *this);
+      *this,
+      (void*)((base_t&)*new_node).back_tracker.get());
 
     return this->journal_update(
       iter,
@@ -637,8 +686,14 @@ struct FixedKVInternalNode
     auto &tracker = this->child_trackers[iter.get_offset()];
     tracker = new child_tracker_t(new_node);
     t.new_pending_trackers.push_back(tracker);
+    if (this->is_mutation_pending()) {
+      assert(this->prior_instance);
+      auto &prior = (FixedKVNode<NODE_KEY>&)*this->prior_instance;
+      auto &new_child = (base_t&)*new_node;
+      new_child.back_tracker = prior.back_tracker_to_me;
+    }
     SUBTRACE(seastore_fixedkv_tree,
-      "new tracker: {}, this: {} new extent: {}",
+      "new tracker: {}, this: {} new extent: {}, back_tracker: {}",
       (void*)this->child_trackers[iter.get_offset()],
       *this,
       *new_node);
@@ -697,8 +752,14 @@ struct FixedKVInternalNode
     t.trackers_to_rm.push_back(tracker);
     tracker = new child_tracker_t(new_node);
     t.new_pending_trackers.push_back(tracker);
+    if (this->is_mutation_pending()) {
+      assert(this->prior_instance);
+      auto &prior = (FixedKVNode<NODE_KEY>&)*this->prior_instance;
+      auto &new_child = (base_t&)*new_node;
+      new_child.back_tracker = prior.back_tracker_to_me;
+    }
     SUBTRACE(seastore_fixedkv_tree,
-      "old tracker: {}, new tracker: {}, this: {} new extent: {}",
+      "old tracker: {}, new tracker: {}, this: {} new extent: {}, back_tracker: {}",
       (void*)old_tracker,
       (void*)tracker,
       *this,
