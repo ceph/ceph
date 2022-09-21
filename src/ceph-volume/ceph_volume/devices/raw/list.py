@@ -101,16 +101,16 @@ class List(object):
                                     'failed to determine if parent device {} is BlueStore. err: {}'.format(parent, e)))
                         continue
 
-                bs_info = _get_bluestore_info(dev)
-                if bs_info is None:
-                    # None is also returned in the rare event that there is an issue reading info from
-                    # a BlueStore disk, so be sure to log our assumption that it isn't bluestore
-                    logger.info('device {} does not have BlueStore information'.format(dev))
-                    continue
-                uuid = bs_info['osd_uuid']
-                if uuid not in result:
-                    result[uuid] = {}
-                result[uuid].update(bs_info)
+            bs_info = _get_bluestore_info(dev)
+            if bs_info is None:
+                # None is also returned in the rare event that there is an issue reading info from
+                # a BlueStore disk, so be sure to log our assumption that it isn't bluestore
+                logger.info('device {} does not have BlueStore information'.format(dev))
+                continue
+            uuid = bs_info['osd_uuid']
+            if uuid not in result:
+                result[uuid] = {}
+            result[uuid].update(bs_info)
 
         return result
 
