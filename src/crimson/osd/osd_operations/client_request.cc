@@ -204,13 +204,14 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
     [this, pg]() mutable {
     return do_recover_missing(pg, m->get_hobj());
   }).then_interruptible([this, pg, &ihref]() mutable {
-    return pg->already_complete(m->get_reqid()).then_unpack_interruptible(
-      [this, pg, &ihref](bool completed, int ret) mutable
+    return pg->already_complete(m->get_reqid()).then_interruptible(
+      [this, pg, &ihref](auto completed) mutable
       -> PG::load_obc_iertr::future<seq_mode_t> {
       if (completed) {
         auto reply = crimson::make_message<MOSDOpReply>(
-          m.get(), ret, pg->get_osdmap_epoch(),
+          m.get(), completed->err, pg->get_osdmap_epoch(),
           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
+	reply->set_reply_versions(completed->version, completed->user_version);
         return conn->send(std::move(reply)).then([] {
           return seastar::make_ready_future<seq_mode_t>(seq_mode_t::OUT_OF_ORDER);
         });

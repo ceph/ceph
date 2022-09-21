@@ -1444,7 +1444,7 @@ bool PG::is_degraded_or_backfilling_object(const hobject_t& soid) const {
   return false;
 }
 
-PG::interruptible_future<std::tuple<bool, int>>
+PG::interruptible_future<std::optional<PG::complete_op_t>>
 PG::already_complete(const osd_reqid_t& reqid)
 {
   eversion_t version;
@@ -1454,11 +1454,15 @@ PG::already_complete(const osd_reqid_t& reqid)
 
   if (peering_state.get_pg_log().get_log().get_request(
 	reqid, &version, &user_version, &ret, &op_returns)) {
-    return backend->request_committed(reqid, version).then([ret] {
-      return seastar::make_ready_future<std::tuple<bool, int>>(true, ret);
+    complete_op_t dupinfo{
+      user_version,
+      version,
+      ret};
+    return backend->request_committed(reqid, version).then([dupinfo] {
+      return seastar::make_ready_future<std::optional<complete_op_t>>(dupinfo);
     });
   } else {
-    return seastar::make_ready_future<std::tuple<bool, int>>(false, 0);
+    return seastar::make_ready_future<std::optional<complete_op_t>>(std::nullopt);
   }
 }
 
