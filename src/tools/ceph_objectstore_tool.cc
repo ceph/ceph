@@ -14,8 +14,10 @@
 
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional.hpp>
+#include <fstream>
 
 #include <stdlib.h>
 
@@ -430,7 +432,7 @@ static int get_fd_data(int fd, bufferlist &bl)
   return 0;
 }
 
-int get_log(ObjectStore *fs, __u8 struct_ver,
+int get_log(CephContext *cct, ObjectStore *fs, __u8 struct_ver,
 	    spg_t pgid, const pg_info_t &info,
 	    PGLog::IndexedLog &log, pg_missing_t &missing)
 {
@@ -442,7 +444,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
     ostringstream oss;
     ceph_assert(struct_ver > 0);
     PGLog::read_log_and_missing(
-      fs, ch,
+      cct, fs, ch,
       pgid.make_pgmeta_oid(),
       info, log, missing,
       oss,
@@ -1068,7 +1070,8 @@ int add_osdmap(ObjectStore *store, metadata_section &ms)
   return get_osdmap(store, ms.map_epoch, ms.osdmap, ms.osdmap_bl);
 }
 
-int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
+int ObjectStoreTool::do_export(
+    CephContext *cct, ObjectStore *fs, coll_t coll, spg_t pgid,
     pg_info_t &info, epoch_t map_epoch, __u8 struct_ver,
     const OSDSuperblock& superblock,
     PastIntervals &past_intervals)
@@ -1078,7 +1081,7 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
 
   cerr << "Exporting " << pgid << " info " << info << std::endl;
 
-  int ret = get_log(fs, struct_ver, pgid, info, log, missing);
+  int ret = get_log(cct, fs, struct_ver, pgid, info, log, missing);
   if (ret > 0)
       return ret;
 
@@ -3147,6 +3150,136 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
   return r;
 }
 
+
+const int ceph_entity_name_type(const string name)
+{
+  if (name == "mds") return CEPH_ENTITY_TYPE_MDS;
+  if (name == "osd") return CEPH_ENTITY_TYPE_OSD;
+  if (name == "mon") return CEPH_ENTITY_TYPE_MON;
+  if (name == "client") return CEPH_ENTITY_TYPE_CLIENT;
+  if (name == "mgr") return CEPH_ENTITY_TYPE_MGR;
+  if (name == "auth") return CEPH_ENTITY_TYPE_AUTH;
+  return -1;
+}
+
+eversion_t get_eversion_from_str(const string& s) {
+  eversion_t e;
+  vector<string> result;
+  boost::split(result, s, boost::is_any_of("'"));
+  if (result.size() != 2) {
+    cerr << "eversion_t: invalid format: '" << s << "'" << std::endl;
+    return e;
+  }
+  e.epoch   = atoi(result[0].c_str());
+  e.version = atoi(result[1].c_str());
+  return e;
+}
+
+osd_reqid_t get_reqid_from_str(const string& s) {
+  osd_reqid_t reqid;
+
+  vector<string> result;
+  boost::split(result, s, boost::is_any_of(".:"));
+  if (result.size() != 4) {
+    cerr << "reqid: invalid format " << s << std::endl;
+    return osd_reqid_t();
+  }
+  reqid.name._type = ceph_entity_name_type(result[0]);
+  reqid.name._num = atoi(result[1].c_str());
+
+  reqid.inc = atoi(result[2].c_str());
+  reqid.tid = atoi(result[3].c_str());
+  return reqid;
+}
+
+void do_dups_inject_transction(ObjectStore *store, spg_t r_pgid, map<string,bufferlist> *new_dups)
+{
+  ObjectStore::Transaction t;
+  coll_t coll(r_pgid);
+  cerr << "injecting dups into pgid:" << r_pgid << " num of dups:" << new_dups->size() << std::endl;
+  t.omap_setkeys(coll, r_pgid.make_pgmeta_oid(), (*new_dups));
+  auto ch = store->open_collection(coll);
+  store->queue_transaction(ch, std::move(t));
+  new_dups->clear();
+}
+
+int do_dups_inject_object(ObjectStore *store, spg_t r_pgid, json_spirit::mObject &in_json_obj,
+                          map<string,bufferlist> *new_dups, bool debug) {
+  std::map<std::string, json_spirit::mValue>::const_iterator it = in_json_obj.find("generate");
+  int32_t generate = 0;
+  if (it != in_json_obj.end()) {
+    generate = atoi(it->second.get_str().c_str());
+  }
+
+  it = in_json_obj.find("reqid");
+  if (it == in_json_obj.end()) {
+    return 1;
+  }
+  osd_reqid_t reqid(get_reqid_from_str(it->second.get_str()));
+  it = in_json_obj.find("version");
+  if (it == in_json_obj.end()) {
+    return 1;
+  }
+  eversion_t version(get_eversion_from_str(it->second.get_str()));
+  it = in_json_obj.find("user_version");
+  if (it == in_json_obj.end()) {
+    return 1;
+  }
+  version_t user_version = atoi(it->second.get_str().c_str());
+  it = in_json_obj.find("return_code");
+  if (it == in_json_obj.end()) {
+    return 1;
+  }
+  int32_t return_code = atoi(it->second.get_str().c_str());
+  if (generate) {
+    for(auto i = 0; i < generate; ++i) {
+      version.version++;
+      if (debug) {
+        cout << "generate dups reqid " << reqid << " v=" << version << std::endl;
+      }
+      pg_log_dup_t tmp(version, user_version, reqid, return_code);
+      bufferlist bl;
+      encode(tmp, bl);
+      (*new_dups)[tmp.get_key_name()] = std::move(bl);
+      if ( new_dups->size() > 50000 ) {
+        do_dups_inject_transction(store, r_pgid, new_dups);
+	cout << "inject of " << i << " dups into pgid:" << r_pgid << " done..." << std::endl;
+      }
+    }
+    return 0;
+  } else {
+    pg_log_dup_t tmp(version, user_version, reqid, return_code);
+    if (debug) {
+      cout << "adding dup: " << tmp << "into key:" << tmp.get_key_name() << std::endl;
+    }
+    bufferlist bl;
+    encode(tmp, bl);
+    (*new_dups)[tmp.get_key_name()] = std::move(bl);
+  }
+  return 0;
+}
+
+void do_dups_inject_from_json(ObjectStore *store, spg_t r_pgid, json_spirit::mValue &inJson, bool debug)
+{
+  map<string,bufferlist> new_dups;
+  const vector<json_spirit::mValue>& o = inJson.get_array();
+  for (const auto& obj : o) {
+    if (obj.type() == json_spirit::obj_type) {
+      json_spirit::mObject Mobj = obj.get_obj();
+      do_dups_inject_object(store, r_pgid, Mobj, &new_dups, debug);
+    } else {
+      throw std::runtime_error("JSON array/object not allowed type:" + obj.type());
+      return;
+    }
+  }
+  if (new_dups.size() > 0) {
+    do_dups_inject_transction(store, r_pgid, &new_dups);
+  }
+
+
+  return ;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -3480,7 +3613,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (op == "import" || op == "dump-export" || op == "set-osdmap" || op == "set-inc-osdmap") {
+  } else if (op == "import" || op == "dump-export" || op == "set-osdmap" || op == "set-inc-osdmap" || op == "pg-log-inject-dups") {
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
@@ -3859,7 +3992,7 @@ int main(int argc, char **argv)
       || op == "export-remove" || op == "mark-complete"
       || op == "reset-last-complete"
       || op == "trim-pg-log"
-      || op == "trim-pg-log-dups") &&
+      || op == "pg-log-inject-dups") &&
       pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
@@ -4086,7 +4219,7 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log" && op != "trim-pg-log-dups") {
+  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log" && op != "trim-pg-log-dups" && op != "pg-log-inject-dups") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, trim-pg-log-dups statfs)"
 	 << std::endl;
@@ -4378,7 +4511,7 @@ int main(int argc, char **argv)
 
     if (op == "export" || op == "export-remove") {
       ceph_assert(superblock != nullptr);
-      ret = tool.do_export(fs, coll, pgid, info, map_epoch, struct_ver, *superblock, past_intervals);
+      ret = tool.do_export(cct.get(), fs, coll, pgid, info, map_epoch, struct_ver, *superblock, past_intervals);
       if (ret == 0) {
         cerr << "Export successful" << std::endl;
         if (op == "export-remove") {
@@ -4397,7 +4530,7 @@ int main(int argc, char **argv)
     } else if (op == "log") {
       PGLog::IndexedLog log;
       pg_missing_t missing;
-      ret = get_log(fs, struct_ver, pgid, info, log, missing);
+      ret = get_log(cct.get(), fs, struct_ver, pgid, info, log, missing);
       if (ret < 0)
           goto out;
 
@@ -4482,6 +4615,34 @@ int main(int argc, char **argv)
       }
       cout << "Reseting last_complete succeeded" << std::endl;
    
+    } else if (op == "pg-log-inject-dups") {
+        if (!vm.count("file") || file == "-") {
+          cerr << "Must provide file containing JSON dups entries" << std::endl;
+          ret = 1;
+          goto out;
+        }
+        if (debug)
+          cerr << "opening file " << file << std::endl;
+
+        ifstream json_file_stream(file , std::ifstream::in);
+        if (!json_file_stream.is_open()) {
+          cerr << "unable to open file " << file << std::endl;
+          ret = -1;
+          goto out;
+        }
+        json_spirit::mValue result;
+        try {
+          if (!json_spirit::read(json_file_stream, result))
+            throw std::runtime_error("unparseable JSON " + file);
+          if (result.type() != json_spirit::array_type) {
+            cerr << "result is not an array_type - type=" << result.type() << std::endl;
+            throw std::runtime_error("not JSON array_type " + file);
+          }
+          do_dups_inject_from_json(fs, pgid, result, debug);
+        } catch (const std::runtime_error &e) {
+          cerr << e.what() << std::endl;;
+          return -1;
+        }
     } else {
       ceph_assert(!"Should have already checked for valid --op");
     }

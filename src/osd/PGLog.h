@@ -1334,7 +1334,8 @@ public:
     pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid, std::map<eversion_t, hobject_t> &divergent_priors,
-    bool require_rollback);
+    bool require_rollback,
+    const DoutPrefixProvider *dpp = nullptr);
 
   static void write_log_and_missing(
     ObjectStore::Transaction& t,
@@ -1344,7 +1345,8 @@ public:
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
     bool require_rollback,
-    bool *rebuilt_missing_set_with_deletes);
+    bool *rebuilt_missing_set_with_deletes,
+    const DoutPrefixProvider *dpp = nullptr);
 
   static void _write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
@@ -1361,7 +1363,8 @@ public:
     eversion_t dirty_to_dups,
     eversion_t dirty_from_dups,
     eversion_t write_from_dups,
-    std::set<std::string> *log_keys_debug
+    std::set<std::string> *log_keys_debug,
+    const DoutPrefixProvider *dpp = nullptr
     );
 
   static void _write_log_and_missing(
@@ -1382,7 +1385,8 @@ public:
     eversion_t dirty_from_dups,
     eversion_t write_from_dups,
     bool *may_include_deletes_in_missing_dirty,
-    std::set<std::string> *log_keys_debug
+    std::set<std::string> *log_keys_debug,
+    const DoutPrefixProvider *dpp = nullptr
     );
 
   void read_log_and_missing(
@@ -1395,7 +1399,7 @@ public:
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
-      store, ch, pgmeta_oid, info,
+      cct, store, ch, pgmeta_oid, info,
       log, missing, oss,
       tolerate_divergent_missing_log,
       &clear_divergent_priors,
@@ -1406,6 +1410,7 @@ public:
 
   template <typename missing_type>
   static void read_log_and_missing(
+    CephContext *cct,
     ObjectStore *store,
     ObjectStore::CollectionHandle &ch,
     ghobject_t pgmeta_oid,
@@ -1419,8 +1424,9 @@ public:
     std::set<std::string> *log_keys_debug = nullptr,
     bool debug_verify_stored_missing = false
     ) {
-    ldpp_dout(dpp, 20) << "read_log_and_missing coll " << ch->cid
+    ldpp_dout(dpp, 10) << "read_log_and_missing coll " << ch->cid
 		       << " " << pgmeta_oid << dendl;
+    size_t total_dups = 0;
 
     // legacy?
     struct stat st;
@@ -1438,6 +1444,7 @@ public:
     missing.may_include_deletes = false;
     std::list<pg_log_entry_t> entries;
     std::list<pg_log_dup_t> dups;
+    const auto NUM_DUPS_WARN_THRESHOLD = 2*cct->_conf->osd_pg_log_dups_tracked;
     if (p) {
       using ceph::decode;
       for (p->seek_to_first(); p->valid() ; p->next()) {
@@ -1469,10 +1476,19 @@ public:
 	  }
 	  missing.add(oid, std::move(item));
 	} else if (p->key().substr(0, 4) == std::string("dup_")) {
+	  ++total_dups;
 	  pg_log_dup_t dup;
 	  decode(dup, bp);
 	  if (!dups.empty()) {
 	    ceph_assert(dups.back().version < dup.version);
+	  }
+	  if (dups.size() == NUM_DUPS_WARN_THRESHOLD) {
+	    ldpp_dout(dpp, 0) << "read_log_and_missing WARN num of dups exceeded "
+			      << NUM_DUPS_WARN_THRESHOLD << "."
+			      << " You can be hit by THE DUPS BUG"
+			      << " https://tracker.ceph.com/issues/53729."
+			      << " Consider ceph-objectstore-tool --op trim-pg-log-dups"
+			      << dendl;
 	  }
 	  dups.push_back(dup);
 	} else {
@@ -1648,7 +1664,9 @@ public:
 	(*clear_divergent_priors) = false;
       missing.flush();
     }
-    ldpp_dout(dpp, 10) << "read_log_and_missing done" << dendl;
+    ldpp_dout(dpp, 10) << "read_log_and_missing done coll " << ch->cid
+		       << " total_dups=" << total_dups
+		       << " log.dups.size()=" << log.dups.size() << dendl;
   } // static read_log_and_missing
 
 #ifdef WITH_SEASTAR
