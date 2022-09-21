@@ -2675,6 +2675,8 @@ void BlueStore::ExtentMap::dup_2(BlueStore* b, TransContext* txc,
   newo->allocation_tracker = oldo->allocation_tracker;
   newo->onode.allocation_tracker_sbid = oldo->onode.allocation_tracker_sbid;
   txc->write_onode(newo);
+  //  derr << __func__ << "signal write sbid=" << oldo->onode.allocation_tracker_sbid << dendl;
+  txc->write_shared_blob(oldo->allocation_tracker);
 
   if (dstoff + length > newo->onode.size) {
     newo->onode.size = dstoff + length;
@@ -12896,7 +12898,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     string key;
     auto sbid = sb->get_sbid();
     get_shared_blob_key(sbid, &key);
-    if (sb->persistent->empty()) {
+    if (false && sb->persistent->empty()) {
       dout(20) << __func__ << " shared_blob 0x"
                << std::hex << sbid << std::dec
 	       << " is empty" << dendl;
