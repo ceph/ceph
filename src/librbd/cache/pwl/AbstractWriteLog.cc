@@ -313,8 +313,7 @@ void AbstractWriteLog<I>::log_perf() {
 
 template <typename I>
 void AbstractWriteLog<I>::periodic_stats() {
-  std::lock_guard locker(m_lock);
-  update_image_cache_state();
+  std::unique_lock locker(m_lock);
   ldout(m_image_ctx.cct, 5) << "STATS: m_log_entries=" << m_log_entries.size()
                             << ", m_dirty_log_entries=" << m_dirty_log_entries.size()
                             << ", m_free_log_entries=" << m_free_log_entries
@@ -327,6 +326,9 @@ void AbstractWriteLog<I>::periodic_stats() {
                             << ", m_current_sync_gen=" << m_current_sync_gen
                             << ", m_flushed_sync_gen=" << m_flushed_sync_gen
                             << dendl;
+
+  update_image_cache_state();
+  write_image_cache_state(locker);
 }
 
 template <typename I>
@@ -568,15 +570,15 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
 }
 
 template <typename I>
-void AbstractWriteLog<I>::update_image_cache_state() {
+void AbstractWriteLog<I>::write_image_cache_state(std::unique_lock<ceph::mutex>& locker) {
   using klass = AbstractWriteLog<I>;
   Context *ctx = util::create_context_callback<
-                 klass, &klass::handle_update_image_cache_state>(this);
-  update_image_cache_state(ctx);
+                 klass, &klass::handle_write_image_cache_state>(this);
+  m_cache_state->write_image_cache_state(locker, ctx);
 }
 
 template <typename I>
-void AbstractWriteLog<I>::update_image_cache_state(Context *on_finish) {
+void AbstractWriteLog<I>::update_image_cache_state() {
   ldout(m_image_ctx.cct, 10) << dendl;
 
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
@@ -591,11 +593,10 @@ void AbstractWriteLog<I>::update_image_cache_state(Context *on_finish) {
   m_cache_state->hit_bytes = m_perfcounter->get(l_librbd_pwl_rd_hit_bytes);
   m_cache_state->miss_bytes = m_perfcounter->get(l_librbd_pwl_rd_bytes) -
       m_cache_state->hit_bytes;
-  m_cache_state->write_image_cache_state(on_finish);
 }
 
 template <typename I>
-void AbstractWriteLog<I>::handle_update_image_cache_state(int r) {
+void AbstractWriteLog<I>::handle_write_image_cache_state(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
@@ -620,8 +621,9 @@ void AbstractWriteLog<I>::init(Context *on_finish) {
   Context *ctx = new LambdaContext(
     [this, on_finish](int r) {
       if (r >= 0) {
-        std::lock_guard locker(m_lock);
-        update_image_cache_state(on_finish);
+        std::unique_lock locker(m_lock);
+        update_image_cache_state();
+        m_cache_state->write_image_cache_state(locker, on_finish);
       } else {
         on_finish->complete(r);
       }
@@ -652,14 +654,15 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
       Context *next_ctx = override_ctx(r, ctx);
       periodic_stats();
 
-      std::lock_guard locker(m_lock);
+      std::unique_lock locker(m_lock);
       check_image_cache_state_clean();
       m_wake_up_enabled = false;
       m_log_entries.clear();
       m_cache_state->clean = true;
       m_cache_state->empty = true;
       remove_pool_file();
-      update_image_cache_state(next_ctx);
+      update_image_cache_state();
+      m_cache_state->write_image_cache_state(locker, next_ctx);
     });
   ctx = new LambdaContext(
     [this, ctx](int r) {
@@ -1305,6 +1308,7 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
 {
   GenericLogEntries dirty_entries;
   int published_reserves = 0;
+  bool need_update_state = false;
   ldout(m_image_ctx.cct, 20) << __func__ << ": completing" << dendl;
   for (auto &op : ops) {
     utime_t now = ceph_clock_now();
@@ -1327,6 +1331,7 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
       if (m_cache_state->clean && !this->m_dirty_log_entries.empty()) {
         m_cache_state->clean = false;
         update_image_cache_state();
+        need_update_state = true;
       }
     }
     op->complete(result);
@@ -1341,6 +1346,10 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
     m_perfcounter->hinc(l_librbd_pwl_log_op_app_to_appc_t_hist, app_lat.to_nsec(),
                       log_entry->ram_entry.write_bytes);
     m_perfcounter->tinc(l_librbd_pwl_log_op_app_to_cmp_t, now - op->log_append_start_time);
+  }
+  if (need_update_state) {
+    std::unique_lock locker(m_lock);
+    write_image_cache_state(locker);
   }
   // New entries may be flushable
   {
@@ -1746,6 +1755,7 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
   bool all_clean = false;
   int flushed = 0;
   bool has_write_entry = false;
+  bool need_update_state = false;
 
   ldout(cct, 20) << "Look for dirty entries" << dendl;
   {
@@ -1768,6 +1778,7 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
         if (!m_cache_state->clean && all_clean) {
           m_cache_state->clean = true;
           update_image_cache_state();
+          need_update_state = true;
         }
         break;
       }
@@ -1798,6 +1809,10 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
     }
 
     construct_flush_entries(entries_to_flush, post_unlock, has_write_entry);
+  }
+  if (need_update_state) {
+    std::unique_lock locker(m_lock);
+    write_image_cache_state(locker);
   }
 
   if (all_clean) {
@@ -2015,14 +2030,15 @@ void AbstractWriteLog<I>::flush_dirty_entries(Context *on_finish) {
   bool stop_flushing;
 
   {
-    std::lock_guard locker(m_lock);
+    std::unique_lock locker(m_lock);
     flushing = (0 != m_flush_ops_in_flight);
     all_clean = m_dirty_log_entries.empty();
+    stop_flushing = (m_shutting_down);
     if (!m_cache_state->clean && all_clean && !flushing) {
       m_cache_state->clean = true;
       update_image_cache_state();
+      write_image_cache_state(locker);
     }
-    stop_flushing = (m_shutting_down);
   }
 
   if (!flushing && (all_clean || stop_flushing)) {
