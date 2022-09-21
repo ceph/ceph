@@ -194,7 +194,9 @@ public:
     out << " size " << size << "/" << max_size;
     if (truncate_seq)
       out << " ts " << truncate_seq << "/" << truncate_size;
-    out << " mtime " << mtime;
+    out << " mtime " << mtime
+        << " ctime " << ctime
+        << " change_attr " << change_attr;
     if (time_warp_seq)
       out << " tws " << time_warp_seq;
 

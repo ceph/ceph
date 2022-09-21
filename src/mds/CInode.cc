@@ -3800,7 +3800,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   dout(20) << " pfile " << pfile << " pauth " << pauth
 	   << " plink " << plink << " pxattr " << pxattr
 	   << " plocal " << plocal
+	   << " mtime " << any_i->mtime
 	   << " ctime " << any_i->ctime
+	   << " change_attr " << any_i->change_attr
 	   << " valid=" << valid << dendl;
 
   // file
@@ -4148,7 +4150,7 @@ void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
 
   dout(20) << __func__ << " pfile " << pfile
 	   << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
-	   << " ctime " << i->ctime << dendl;
+	   << " mtime " << i->mtime << " ctime " << i->ctime << " change_attr " << i->change_attr << dendl;
 
   i = pfile ? pi:oi;
   m->set_layout(i->layout);
