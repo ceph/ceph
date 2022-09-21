@@ -179,6 +179,14 @@ def create_barbican_conf(ctx, cclient):
                          'echo -n -e "[DEFAULT]\nhost_href=' + barbican_url + '\n" ' + \
                          '>barbican.conf'])
 
+    log.info("run barbican db upgrade")
+    config_path = get_barbican_dir(ctx) + '/barbican.conf'
+    run_in_barbican_venv(ctx, cclient, ['barbican-manage', '--config-file', config_path,
+                                        'db', 'upgrade'])
+    log.info("run barbican db sync_secret_stores")
+    run_in_barbican_venv(ctx, cclient, ['barbican-manage', '--config-file', config_path,
+                                        'db', 'sync_secret_stores'])
+
 @contextlib.contextmanager
 def configure_barbican(ctx, config):
     """
