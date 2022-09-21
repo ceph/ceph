@@ -371,8 +371,8 @@ public:
   btree_pin_set_t() {}
 
   template <typename T>
-  TCachedExtentRef<T> maybe_get_leaf_node(node_bound_t key) {
-    auto &layer = pins_by_depth[1];
+  TCachedExtentRef<T> maybe_get_node(node_bound_t key, depth_t depth) {
+    auto &layer = pins_by_depth[depth];
     if (layer.empty()) {
       return nullptr;
     }

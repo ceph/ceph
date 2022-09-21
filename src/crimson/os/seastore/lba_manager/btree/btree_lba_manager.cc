@@ -266,7 +266,7 @@ BtreeLBAManager::get_mapping(
   LBALeafNodeRef extent = t.may_get_fixedkv_leaf_node<laddr_t, LBALeafNode>(
     extent_types_t::LADDR_LEAF, offset);
   if (!extent) {
-    extent = pin_set.maybe_get_leaf_node<LBALeafNode>(offset);
+    extent = pin_set.maybe_get_node<LBALeafNode>(offset, 1);
   }
   if (extent && extent->is_valid()) {
     if (!extent->is_pending_in_trans(t.get_trans_id())) {
