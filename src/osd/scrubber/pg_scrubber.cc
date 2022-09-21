@@ -1022,18 +1022,25 @@ void PgScrubber::on_init()
   m_pg->publish_stats_to_osd();
 }
 
+/*
+ * Note: as on_replica_init() is likely to be called twice (entering
+ * both ReplicaWaitUpdates & ActiveReplica), its operations should be
+ * idempotent.
+ * Now that it includes some state-changing operations, we need to check
+ * m_active against double-activation.
+ */
 void PgScrubber::on_replica_init()
 {
-  m_be = std::make_unique<ScrubBackend>(
-    *this,
-    *m_pg,
-    m_pg_whoami,
-    m_is_repair,
-    m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow);
-  m_active = true;
-  ++m_sessions_counter;
+  dout(10) << __func__ << " called with 'active' "
+	   << (m_active ? "set" : "cleared") << dendl;
+  if (!m_active) {
+    m_be = std::make_unique<ScrubBackend>(
+      *this, *m_pg, m_pg_whoami, m_is_repair,
+      m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow);
+    m_active = true;
+    ++m_sessions_counter;
+  }
 }
-
 
 int PgScrubber::build_primary_map_chunk()
 {
