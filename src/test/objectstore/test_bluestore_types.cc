@@ -330,6 +330,179 @@ TEST(bluestore_extent_ref_map_t, intersects)
   ASSERT_FALSE(m.intersects(55, 1));
 }
 
+TEST(bluestore_extent_ref_map_t, put2)
+{
+  bluestore_extent_ref_map_t m;
+  m.get(0x10,0x30);
+  m.get(0x20,0x10);
+  PExtentVector r;
+  r.emplace_back(0x0, 0x50);
+  PExtentVector o;
+  auto n = m;
+  bool c = m.put(r, o);
+  cout << "IN :" << n << " unref:" << r << std::endl;
+  cout << "OUT:" << m << " free:" << o << " changed:" << c << std::endl;
+}
+
+TEST(bluestore_extent_ref_map_t, put3)
+{
+  bluestore_extent_ref_map_t m;
+  m.get(0x10,0x30);
+  m.get(0x20,0x10);
+  PExtentVector r;
+  r.emplace_back(0x0, 0x10);
+  r.emplace_back(0x40, 0x10);
+  PExtentVector o;
+  auto n = m;
+  bool c = m.put(r, o);
+  cout << "IN :" << n << " unref:" << r << std::endl;
+  cout << "OUT:" << m << " free:" << o << " changed:" << c << std::endl;
+}
+
+TEST(bluestore_extent_ref_map_t, put_exh)
+{
+  auto append = [](PExtentVector& v, uint64_t off, uint32_t len) {
+    if (v.size() > 0) {
+      if (v.back().offset + v.back().length == off) {
+	v.back().length += len;
+	return;
+      }
+    }
+    v.emplace_back(off, len);
+  };
+  const int sec_count = 7;
+  char mode[sec_count + 1] = {0};
+
+  do {
+    bluestore_extent_ref_map_t ref_map;
+    std::string ref_map_str;
+    // prepare ref_map
+    for (int i = 0; i < sec_count; i++) {
+      ref_map_str.push_back('0' + mode[i]);
+      for (int j = 0 ; j < mode[i]; j++) {
+	ref_map.get(i * 16, 16);      
+      }
+    }
+
+    // cout << ref_map << std::endl;
+    // exhaustive release pattern
+    for (uint64_t bitmap = 1; bitmap < (1LL << sec_count); bitmap++) {
+      bluestore_extent_ref_map_t ref_map_copy = ref_map;
+      bluestore_extent_ref_map_t ref_map_exp;
+      PExtentVector unref;
+      PExtentVector freev;
+      bool exp_mod = false;
+      // prepare free pattern
+      for (int i = 0; i < sec_count; i++) {
+	int cnt = mode[i];
+	if (bitmap & (1LL << i)) {
+	  append(unref, i * 16, 16);
+	  if (mode[i] != 0) {
+	    exp_mod = true;
+	  }
+	  if (mode[i] < 2) {
+	    append(freev, i * 16, 16);
+	  }
+	  cnt = mode[i] - 1;
+	}
+	for (int j = 0; j < cnt; j++) {
+	  ref_map_exp.get(i * 16, 16);
+	}
+      }
+      PExtentVector result;
+      bool ref_mod = ref_map_copy.put(unref, result);
+      if(0)cout << bitmap << " " << ref_map_str << " " << ref_map << " "
+	   << unref << " " << result << " " << freev << " c=" << ref_mod << std::endl;
+      std::stringstream exp_free, calc_free, rm_exp, rm_copy;
+      calc_free << result;
+      exp_free << freev;
+      ASSERT_EQ(calc_free.str(), exp_free.str());
+      ASSERT_EQ(exp_mod, ref_mod);
+      rm_exp << ref_map_exp;
+      rm_copy << ref_map_copy;
+      ASSERT_EQ(rm_exp.str(), rm_copy.str());
+    }
+
+    int carry = 1;
+    for (int i = 0; i < sec_count + 1; i++) {
+      mode[i] += carry;
+      carry = 0;
+      if (mode[i] == 4) {
+	mode[i] = 0;
+	carry = 1;
+      }
+    }
+  } while (mode[sec_count] == 0);
+}
+
+TEST(bluestore_extent_ref_map_t, do_dup_exh)
+{
+  auto append = [](PExtentVector& v, uint64_t off, uint32_t len) {
+    if (v.size() > 0) {
+      if (v.back().offset + v.back().length == off) {
+	v.back().length += len;
+	return;
+      }
+    }
+    v.emplace_back(off, len);
+  };
+  const int sec_count = 7;
+  char mode[sec_count + 1] = {0};
+  // mode:
+  // 0 - not used in test
+  // 1 - not present in refmap = 0
+  // 2 - refmap = 1
+  // 3 - refmap = 2
+  // 4 - refmap = 3
+  // 111222-0-0-1
+  // 222333-2-2-2
+  do {
+    bluestore_extent_ref_map_t ref_map;
+    bluestore_extent_ref_map_t ref_map_exp;
+    PExtentVector refvec;
+    std::string ref_map_str;
+    // prepare ref_map
+    for (int i = 0; i < sec_count; i++) {
+      if (mode[i] == 0) {
+	ref_map_str.push_back('.');
+      } else {
+	ref_map_str.push_back('0' + mode[i] - 1);
+      }
+      for (int j = 0 ; j < mode[i] - 1; j++) {
+	ref_map.get(i * 16, 16);
+      }
+      if (mode[i] > 0) {
+	append(refvec, i * 16, 16);
+      }
+      int cnt = mode[i];
+      if (cnt == 1) {
+	cnt = 2;
+      }
+      for (int j = 0 ; j < cnt; j++) {
+	ref_map_exp.get(i * 16, 16);      
+      }
+    }
+    bluestore_extent_ref_map_t ref_save = ref_map;
+    ref_map.on_dup(refvec);
+    if(0)cout << ref_map_str << " IN:" << ref_save
+	      << " OUT:" << ref_map << " EXP:" << ref_map_exp << std::endl;
+    std::stringstream rm_exp, rm_calc;
+    rm_exp << ref_map_exp;
+    rm_calc << ref_map;
+    ASSERT_EQ(rm_exp.str(), rm_calc.str());
+    
+    int carry = 1;
+    for (int i = 0; i < sec_count + 1; i++) {
+      mode[i] += carry;
+      carry = 0;
+      if (mode[i] == 4) {
+	mode[i] = 0;
+	carry = 1;
+      }
+    }
+  } while (mode[sec_count] == 0);
+}
+
 TEST(bluestore_blob_t, calc_csum)
 {
   bufferlist bl;

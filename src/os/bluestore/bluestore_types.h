@@ -165,6 +165,7 @@ struct bluestore_extent_ref_map_t {
 
   void _check() const;
   void _maybe_merge_left(map_t::iterator& p);
+  void _maybe_merge_right(map_t::iterator& p);
 
   void clear() {
     ref_map.clear();
@@ -176,7 +177,17 @@ struct bluestore_extent_ref_map_t {
   void get(uint64_t offset, uint32_t len);
   void put(uint64_t offset, uint32_t len, PExtentVector *release,
 	   bool *maybe_unshared);
-
+  // Use extents in old_extents to unref regions in ref_map.
+  // Build extents_to_deallocate to contain only regions that should be released.
+  // Cases:
+  // 1. extent with no intersection with ref_map goes to output
+  // 2. extent intersects ref_map, regions with refcnt 1 go to output, region deleted
+  // 3. extent intersects ref_map, regions with refcnt>1 get refcnt--. no output generated
+  // TODO work on optimization
+  // returns: true if map changed, false if map not changed
+  bool put(PExtentVector& old_extents, PExtentVector& extents_to_deallocate);
+  // TODO explain me!
+  void on_dup(const PExtentVector& dup_extents);
   bool contains(uint64_t offset, uint32_t len) const;
   bool intersects(uint64_t offset, uint32_t len) const;
 
@@ -961,8 +972,9 @@ struct bluestore_onode_t {
   uint32_t expected_write_size = 0;
   uint32_t alloc_hint_flags = 0;
 
-  uint8_t flags = 0;
+  uint8_t flags = FLAG_ONE_TRACKER; // new objects in single tracker mode
 
+  uint64_t allocation_tracker_sbid = 0;
   std::map<uint32_t, uint64_t> zone_offset_refs;  ///< (zone, offset) refs to this onode
 
   enum {
@@ -970,6 +982,8 @@ struct bluestore_onode_t {
     FLAG_PGMETA_OMAP = 2,  ///< omap data is in meta omap prefix
     FLAG_PERPOOL_OMAP = 4, ///< omap data is in per-pool prefix; per-pool keys
     FLAG_PERPG_OMAP = 8,   ///< omap data is in per-pg prefix; per-pg keys
+    FLAG_ONE_TRACKER = 16, ///< no shared blob trackers in the object
+                           /// object has single tracker, shared with all clones
   };
 
   std::string get_flags_string() const {
@@ -1023,6 +1037,9 @@ struct bluestore_onode_t {
   bool is_perpg_omap() const {
     return has_flag(FLAG_PERPG_OMAP);
   }
+  bool has_one_tracker() const {
+    return has_flag(FLAG_ONE_TRACKER);
+  }
 
   void set_omap_flags(bool legacy) {
     set_flag(FLAG_OMAP | (legacy ? 0 : (FLAG_PERPOOL_OMAP | FLAG_PERPG_OMAP)));
@@ -1050,6 +1067,9 @@ struct bluestore_onode_t {
     denc_varint(v.alloc_hint_flags, p);
     if (struct_v >= 2) {
       denc(v.zone_offset_refs, p);
+    }
+    if (v.flags & FLAG_ONE_TRACKER) {
+      denc_varint(v.allocation_tracker_sbid, p);
     }
     DENC_FINISH(p);
   }

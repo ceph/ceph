@@ -883,6 +883,8 @@ public:
 
     void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
+    void dup_2(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
+      uint64_t&, uint64_t&, uint64_t&);
 
     bool needs_reshard() const {
       return needs_reshard_end > needs_reshard_begin;
@@ -1208,6 +1210,10 @@ public:
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
     std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
 
+    // SharedBlob used only for tracker feature
+    // it is shared with other onodes that are cloned from same root
+    SharedBlobRef allocation_tracker;
+
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_meta::string& k)
       : nref(0),
@@ -1319,7 +1325,23 @@ public:
 	  get_blob().calc_offset(0, nullptr);
     }
 #endif
-    
+    bool has_one_tracker() {
+      return onode.has_one_tracker() && allocation_tracker;
+    }
+    bluestore_shared_blob_t* get_one_tracker() {
+      ceph_assert(onode.has_one_tracker());
+      ceph_assert(allocation_tracker);
+      ceph_assert(allocation_tracker->is_loaded());
+      return allocation_tracker->persistent;
+    }
+    void create_one_tracker(uint64_t bid) {
+      ceph_assert(!has_one_tracker());
+      allocation_tracker = new SharedBlob(c);
+      allocation_tracker->loaded = true;
+      allocation_tracker->persistent = new bluestore_shared_blob_t(bid);
+      onode.set_flag(bluestore_onode_t::FLAG_ONE_TRACKER);
+      onode.allocation_tracker_sbid = bid;
+    }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 

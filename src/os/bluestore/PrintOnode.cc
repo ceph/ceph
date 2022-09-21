@@ -130,8 +130,6 @@ int BlueStore::print_onode(const std::string& key, std::string* out)
     return -ENOENT;
   }
   get_key_object(key, &oid);
-  report << "oid " << oid
-         << " size " << v.length() << std::endl;
   metadata_size += v.length();
   Onode on(c, oid, key);
   on.exists = true;
@@ -142,6 +140,8 @@ int BlueStore::print_onode(const std::string& key, std::string* out)
   auto p = v.front().begin_deep();
   on.onode.decode(p);
   // here we have bluestore_onode_t onode just decoded
+  report << "oid " << oid << " one_tracker " << on.onode.allocation_tracker_sbid
+         << " size " << v.length() << std::endl;
 
   // initialize extent_map
   edecoder.decode_spanning_blobs(p, c);

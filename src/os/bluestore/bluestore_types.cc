@@ -140,6 +140,20 @@ void bluestore_extent_ref_map_t::_maybe_merge_left(
   }
 }
 
+void bluestore_extent_ref_map_t::_maybe_merge_right(
+  map<uint64_t,record_t>::iterator& p)
+{
+  auto q = p;
+  ++q;
+  if (q == ref_map.end())
+    return;
+  if (q->second.refs == p->second.refs &&
+      p->first + p->second.length == q->first) {
+    p->second.length += q->second.length;
+    ref_map.erase(q);
+  }
+}
+
 void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
 {
   auto p = ref_map.lower_bound(offset);
@@ -276,6 +290,357 @@ out:
       }
     }
     *maybe_unshared = unshared;
+  }
+}
+
+bool bluestore_extent_ref_map_t::put(PExtentVector& old_extents, PExtentVector& to_dealloc)
+{
+  auto to_out = [&to_dealloc](uint64_t off, uint32_t len) {
+    if (to_dealloc.size() > 0) {
+      if (to_dealloc.back().offset + to_dealloc.back().length == off) {
+	to_dealloc.back().length += len;
+	return;
+      }
+    }
+    to_dealloc.emplace_back(off, len);
+  };
+  const int ak = 0;
+  bool ref_map_changed = false;
+  for (auto& pextent: old_extents) {
+    uint64_t off = pextent.offset;
+    uint32_t len = pextent.length;
+    if(ak)std::cout << "#0 " << off << " " << len << std::endl;
+    // find first extent p that has intersection with R = <off, off + len)
+    auto p = ref_map.lower_bound(off); // p >= off or p does not exist
+    if (p == ref_map.end()) {
+      if (p == ref_map.begin()) {
+	// ref_map empty
+	if(ak)std::cout << "#1 " << off << " " << len << std::endl;
+	to_out(off, len);
+	continue;
+      }
+      --p;
+      // prev element may intersect R
+      ceph_assert(p->first < off); // sanity check for lower_bound
+      if (p->first + p->second.length <= off) {
+	// 555    (p)
+	//    ... (o)
+	// nope, prev does not intersect R
+	//++p;
+	if(ak)std::cout << "#2 " << off << " " << len << std::endl;
+	to_out(off, len);
+	continue;
+      } else {
+	// prev intersects R, use it
+	if(ak)std::cout << "#2+ " << off << " " << len << std::endl;
+      }
+    } else {
+      if(ak)std::cout << "1p=" << p->first << "/" << p->second.length << "/" << p->second.refs << std::endl;
+      if (p != ref_map.begin()) {
+	--p;
+	// prev element may intersect R
+	if (p->first + p->second.length <= off) {
+	  // 555    (p)
+	  //    ... (o)
+	  // nope, prev does not intersect R
+	  ++p;
+	  if (p == ref_map.end()) {
+	    to_out(off, len);
+	    continue;
+	  }
+	}
+      }
+      if(ak)std::cout << "2p=" << p->first << "/" << p->second.length << "/" << p->second.refs << std::endl;
+    }
+    // here off if either inside p, or off < p
+    maybe_hole:
+    if (off < p->first) {
+      //    555    (p)
+      // ..??????? (o)
+      if(ak)std::cout << "p=" << p->first << "/" << p->second.length << "/" << p->second.refs << std::endl;
+      if(ak)std::cout << "#3 " << off << " " << len << std::endl;
+      if (p->first - off >= len) {
+	//     555 (p)
+	// ...     (o)
+	to_out(off, len);
+	continue;
+      } else {
+	//    555    (p)
+	// .....???? (o)
+	to_out(off, p->first - off);
+	len -= (p->first - off);
+	off = p->first;
+      }
+      // we fallback to next if
+    }
+    ceph_assert(len > 0);
+    if (off == p->first) {
+      off_and_p_same:
+      ceph_assert(off == p->first);
+      // 555??? (p)
+      // ...??? (o)
+      if (p->second.refs == 1) {
+	// last reference
+	if (off + len > p->first + p->second.length) {
+	  // 111    (p)  entire p in R
+	  // ...... (o)
+	  if(ak)std::cout << "#4 " << off << " " << len << std::endl;
+	  to_out(off, p->second.length);
+	  off += p->second.length;
+	  len -= p->second.length;
+	  ceph_assert(len > 0);
+	  // there might be more
+	  p = ref_map.erase(p);
+	  ref_map_changed = true;
+	  // next p: (off == p) OR there is hole (off < p) OR p does not exist
+	  if (p == ref_map.end()) {
+	    goto no_p;
+	  } else {
+	    goto maybe_hole;
+	  }
+	} else {
+	  // 111111 (p)  entire R in p (or equal)
+	  // ...    (o)
+	  uint32_t rest = p->second.length - len;
+	  // todo - is there a way to modify *p in-place ?
+	  if(ak)std::cout << "p=" << p->first << "/" << p->second.length << "/" << p->second.refs
+	    << " off=" << off << " len=" << len << " rest=" << rest << std::endl;
+	  p = ref_map.erase(p);
+	  ref_map_changed = true;
+	  if (rest > 0) {
+	    p = ref_map.emplace_hint(p, off + len,
+				     record_t(rest, 1));
+	    _maybe_merge_right(p);
+	  }
+	  if(ak)std::cout << "pt=" << p->first << "/" << p->second.length << "/" << p->second.refs
+		    << " off=" << off << " len=" << len << std::endl;
+
+	  if(ak)std::cout << "#5 " << off << " " << len << std::endl;
+	  to_out(off, len);
+	  // no R left
+	  continue;
+	}
+      } else {
+	// just reduce refs, do not release anything
+	if (off + len >= p->first + p->second.length) {
+	  // 555    (p)  entire p in R (or equal)
+	  // ...... (o)
+	  off += p->second.length;
+	  len -= p->second.length;
+	  --p->second.refs;
+	  _maybe_merge_left(p);
+	  ref_map_changed = true;
+	  if (len == 0) {
+	    // 555 (p) p equal R
+	    // ... (o)
+	    _maybe_merge_right(p);
+	    continue;
+	  }
+	  // there might be more
+	  ++p;
+	  // next p: (off == p) OR there is hole (off < p) OR p does not exist
+	  if (p == ref_map.end()) {
+	    goto no_p;
+	  } else {
+	    goto maybe_hole;
+	  }
+	} else {
+	  // 555555 (p)  entire R in p
+	  // ...    (o)
+	  ref_map.emplace_hint(p, off + len,
+	    record_t(p->second.length - len, p->second.refs)); //right untouched 
+	  p->second.length = len; // left side is ref--
+	  --p->second.refs;
+	  _maybe_merge_left(p);
+	  ref_map_changed = true;
+	  // 444555 (p)
+	  // ...    (o)
+	  // no R left, no need to ++p
+	  continue;
+	}
+      }
+    } else {
+      // 555555 (p)
+      //    ... (o)
+      ceph_assert(p->first < off);
+      ceph_assert(off <= p->first + p->second.length);
+      // split at (off - p->first)
+      uint32_t skipped = off - p->first;
+      uint32_t rest = p->second.length - skipped;
+      if(ak)std::cout << "! p=" << p->first << "/" << p->second.length << "/" << p->second.refs
+		<< " off=" << off << " len=" << len
+		<< " skipped=" << skipped << " rest=" << rest << std::endl;
+      p->second.length = skipped;
+      ref_map_changed = true;
+      // 555    (p)
+      //    ... (o)
+      // this will be modified soon anyway
+      p = ref_map.emplace_hint(p, off,
+        record_t(rest, p->second.refs));
+      //    555 (p)
+      //    ... (o)
+      // now we have off == p.first
+      goto off_and_p_same;
+    }
+    no_p:
+    if (len > 0) {
+      if(ak)std::cout << "#6 " << off << " " << len << std::endl;
+      to_out(off, len);
+    }
+  }
+  return ref_map_changed;
+}
+
+void bluestore_extent_ref_map_t::on_dup(const PExtentVector& dup_extents)
+{
+  const int ak = 0;
+  for (auto& pextent: dup_extents) {
+    if (!pextent.is_valid()) {
+      continue;
+    }
+    uint64_t off = pextent.offset;
+    uint32_t len = pextent.length;
+    if (ak) std::cout << "#0 " << off << " " << len << std::endl;
+    // find first extent p that has intersection with R = <off, off + len)
+    auto p = ref_map.lower_bound(off); // p >= off or p does not exist
+    if (p == ref_map.end()) {
+      if (p == ref_map.begin()) {
+	// ref_map empty
+	if (ak) std::cout << "#1 " << off << " " << len << std::endl;
+	ref_map.emplace_hint(p, off, record_t(len, 2));
+	continue;
+      }
+      --p;
+      // prev element may intersect R
+      ceph_assert(p->first < off); // sanity check for lower_bound
+      if (p->first + p->second.length <= off) {
+	// 555    (p)
+	//    ... (o)
+	// nope, prev does not intersect R
+	//++p;
+	if (ak) std::cout << "#2 " << off << " " << len << std::endl;
+	p = ref_map.emplace_hint(p, off, record_t(len, 2));
+	_maybe_merge_left(p);
+	_maybe_merge_right(p);
+	continue;
+      } else {
+	// prev intersects R, use it
+	if (ak) std::cout << "#2+ " << off << " " << len << std::endl;
+      }
+    } else {
+      if (ak) std::cout << "1p=" << p->first << "/" << p->second.length << "/" << p->second.refs << std::endl;
+      if (p != ref_map.begin()) {
+	--p;
+	// prev element may intersect R
+	if (p->first + p->second.length <= off) {
+	  // 555    (p)
+	  //    ... (o)
+	  // nope, prev does not intersect R
+	  ++p;
+	  if (p == ref_map.end()) {
+	    p = ref_map.emplace_hint(p, off, record_t(len, 2));
+	    _maybe_merge_left(p);
+	    _maybe_merge_right(p);
+	    continue;
+	  }
+	}
+      }
+      if (ak) std::cout << "2p=" << p->first << "/" << p->second.length << "/" << p->second.refs << std::endl;
+    }
+
+    // here off if either inside p, or off < p
+    maybe_hole:
+    if (off < p->first) {
+      //    555    (p)
+      // ..??????? (o)
+      if (ak) std::cout << "p=" << p->first << "/" << p->second.length << "/" << p->second.refs << std::endl;
+      if (ak) std::cout << "#3 " << off << " " << len << std::endl;
+      if (p->first - off >= len) {
+	//     555 (p)
+	// ...     (o)
+	p = ref_map.emplace_hint(p, off, record_t(len, 2));
+	_maybe_merge_left(p);
+	_maybe_merge_right(p);
+	continue;
+      } else {
+	//    555    (p)
+	// .....???? (o)
+	auto q = ref_map.emplace_hint(p, off, record_t(p->first - off, 2));
+	_maybe_merge_left(q);
+	len -= (p->first - off);
+	off = p->first;
+      }
+      // we fallback to next if
+    }
+    ceph_assert(len > 0);
+    if (off == p->first) {
+      off_and_p_same:
+      ceph_assert(off == p->first);
+      // 555??? (p)
+      // ...??? (o)
+      if (off + len >= p->first + p->second.length) {
+	// 555    (p)  entire p in R (or equal)
+	// ...... (o)
+	if (ak) std::cout << "p=" << p->first << "/" << p->second.length << "/" << p->second.refs << std::endl;
+	if (ak) std::cout << "#4 " << off << " " << len << std::endl;
+	off += p->second.length;
+	len -= p->second.length;
+	++p->second.refs;
+	_maybe_merge_left(p);
+	if (len == 0) {
+	  _maybe_merge_right(p);
+	  continue;
+	}
+	// there might be more
+	++p;
+	// next p: (off == p) OR there is hole (off < p) OR p does not exist
+	if (p == ref_map.end()) {
+	  goto no_p;
+	} else {
+	  goto maybe_hole;
+	}
+      } else {
+	// 555555 (p)  entire R in p
+	// ...    (o)
+	auto q = ref_map.emplace_hint(p, off + len,
+	  record_t(p->second.length - len, p->second.refs)); //right untouched
+	_maybe_merge_right(q);
+	p->second.length = len; // left side is ref++
+	++p->second.refs;
+	_maybe_merge_left(p);
+	// 666555 (p)
+	// ...    (o)
+	// no R left, no need to ++p
+	continue;
+      }
+    } else {
+      // 555555 (p)
+      //    ... (o)
+      ceph_assert(p->first < off);
+      ceph_assert(off <= p->first + p->second.length);
+      // split at (off - p->first)
+      uint32_t skipped = off - p->first;
+      uint32_t rest = p->second.length - skipped;
+      if (ak) std::cout << "! p=" << p->first << "/" << p->second.length << "/" << p->second.refs
+			<< " off=" << off << " len=" << len
+			<< " skipped=" << skipped << " rest=" << rest << std::endl;
+      p->second.length = skipped;
+      // 555    (p)
+      //    ... (o)
+      // this will be modified soon anyway
+      p = ref_map.emplace_hint(p, off, record_t(rest, p->second.refs));
+      _maybe_merge_right(p);
+      //    555 (p)
+      //    ... (o)
+      // now we have off == p.first
+      goto off_and_p_same;//_ref_2plus;
+    }
+    no_p:
+    if (len > 0) {
+      if (ak) std::cout << "#6 " << off << " " << len << std::endl;
+      p = ref_map.emplace_hint(p, off, record_t(len, 2));
+      _maybe_merge_left(p);
+    }
   }
 }
 

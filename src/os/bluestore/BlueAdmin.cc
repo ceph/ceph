@@ -106,11 +106,7 @@ int BlueStore::SocketHook::call(
     }
     std::stringstream s;
     for (auto& x : ls) {
-      ghobject_t tttt;
-      tttt.hobj.oid = x.hobj.oid;
-      tttt.hobj.pool = x.hobj.pool;
-      s << x << "<>" << x.hobj << "<>" << x.hobj.oid << "<>"
-	<< std::hex << std::hash<hobject_t>()(tttt.hobj) << std::dec << std::endl;
+      s << x << std::endl;
     }
     out.append(s.str());
     return r;

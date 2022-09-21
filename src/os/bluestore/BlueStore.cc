@@ -2482,7 +2482,8 @@ void BlueStore::ExtentMap::dump(Formatter* f) const
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
-
+  dup_2(b, txc, c, oldo, newo, srcoff, length, dstoff);
+  return;
   auto cct = onode->c->store->cct;
   bool inject_21040 =
     cct->_conf->bluestore_debug_inject_bug21040;  
@@ -2584,6 +2585,103 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   }
   newo->extent_map.dirty_range(dstoff, length);
 }
+
+void BlueStore::ExtentMap::dup_2(BlueStore* b, TransContext* txc,
+  CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
+  uint64_t& length, uint64_t& dstoff) {
+
+  auto cct = onode->c->store->cct;
+  vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
+  for (auto& e : oldo->extent_map.extent_map) {
+    e.blob->last_encoded_id = -1;
+  }
+
+  int n = 0;
+  uint64_t end = srcoff + length;
+  uint32_t dirty_range_begin = 0;
+  uint32_t dirty_range_end = 0;
+  bool src_dirty = false;
+  bluestore_shared_blob_t* tracker;// = o->get_one_tracker();
+  if (!oldo->has_one_tracker()) {
+    uint64_t bid = ++b->blobid_last;
+    dout(20) << __func__ << " " << bid << dendl;
+    txc->last_blobid = bid;
+    oldo->create_one_tracker(bid);
+    src_dirty = true;
+  }
+  tracker = oldo->get_one_tracker();
+  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
+    ep != oldo->extent_map.extent_map.end();
+    ++ep) {
+    auto& e = *ep;
+    if (e.logical_offset >= end) {
+      break;
+    }
+    dout(20) << __func__ << "  src " << e << dendl;
+    BlobRef cb;
+    bool blob_duped = true;
+    if (e.blob->last_encoded_id >= 0) {
+      cb = id_to_blob[e.blob->last_encoded_id];
+      blob_duped = false;
+    } else { 
+      // dup the blob
+      const bluestore_blob_t& blob = e.blob->get_blob();
+      ceph_assert(!blob.is_shared());
+      // make sure it is shared
+      cb = new Blob();
+      e.blob->last_encoded_id = n;
+      id_to_blob[n] = cb;
+      e.blob->dup(*cb);
+      // bump the extent refs on the copied blob's extents
+      tracker->ref_map.on_dup(blob.get_extents());      
+      //txc->write_shared_blob(e.blob->shared_blob);
+      dout(20) << __func__ << "    new " << *cb << dendl;
+    }
+
+    int skip_front, skip_back;
+    if (e.logical_offset < srcoff) {
+      skip_front = srcoff - e.logical_offset;
+    } else {
+      skip_front = 0;
+    }
+    if (e.logical_end() > end) {
+      skip_back = e.logical_end() - end;
+    } else {
+      skip_back = 0;
+    }
+
+    Extent* ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
+      e.blob_offset + skip_front, e.length - skip_front - skip_back, cb);
+    newo->extent_map.extent_map.insert(*ne);
+    ne->blob->get_ref(c.get(), ne->blob_offset, ne->length);
+    // fixme: we may leave parts of new blob unreferenced that could
+    // be freed (relative to the shared_blob).
+    txc->statfs_delta.stored() += ne->length;
+    if (e.blob->get_blob().is_compressed()) {
+      txc->statfs_delta.compressed_original() += ne->length;
+      if (blob_duped) {
+        txc->statfs_delta.compressed() +=
+          cb->get_blob().get_compressed_payload_length();
+      }
+    }
+    dout(20) << __func__ << "  dst " << *ne << dendl;
+    ++n;
+  }
+  if (src_dirty) {
+    oldo->extent_map.dirty_range(dirty_range_begin,
+      dirty_range_end - dirty_range_begin);
+    txc->write_onode(oldo);
+  }
+  newo->allocation_tracker = oldo->allocation_tracker;
+  newo->onode.allocation_tracker_sbid = oldo->onode.allocation_tracker_sbid;
+  txc->write_onode(newo);
+
+  if (dstoff + length > newo->onode.size) {
+    newo->onode.size = dstoff + length;
+  }
+  newo->extent_map.dirty_range(dstoff, length);
+}
+
 void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
 {
@@ -2636,7 +2734,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 			bl, &p->extents)) {
 	  if (force) {
 	    derr << __func__ << "  encode_some needs reshard" << dendl;
-	    ceph_assert(!force);
+	    ceph_assert(!force); // a complicated way to say assert(false);
 	  }
 	}
         size_t len = bl.length();
@@ -3799,6 +3897,12 @@ BlueStore::Onode* BlueStore::Onode::decode(
       mempool::mempool_bluestore_cache_data);
   } else {
     on->extent_map.init_shards(false, false);
+  }
+  if (on->onode.allocation_tracker_sbid != 0) {
+    ceph_assert(on->onode.has_one_tracker());
+    on->allocation_tracker = new SharedBlob(on->onode.allocation_tracker_sbid, c.get());
+    //    open_shared_blob(o.blob.allocation_tracker_sbid);
+    c->load_shared_blob(on->allocation_tracker);
   }
   return on;
 }
@@ -15849,7 +15953,7 @@ void BlueStore::_wctx_finish(
   }
   set<uint32_t> zones_with_releases;
 #endif
-
+  bool one_tracker_modified = false; // set when any extents in tracker is released
   auto oep = wctx->old_extents.begin();
   while (oep != wctx->old_extents.end()) {
     auto &lo = *oep;
@@ -15894,6 +15998,24 @@ void BlueStore::_wctx_finish(
 	r.clear();
 	r.swap(final);
       }
+      if (o->has_one_tracker()) {
+	PExtentVector final;
+	// Objects with one tracker should never have shared blobs.
+	ceph_assert(!blob.is_shared());
+	// For one_tracker objects each allocation is suspected of being shared.
+	// TODO: make distinction between shared allocations and local allocations to speed up
+	// Here we need access to one_tracker that is attached to Onode
+	bluestore_shared_blob_t* tracker = o->get_one_tracker();
+	// put should return:
+	// 1) extents to release
+	// 2) whether one_tracker was modified in the process
+	// 3) how much bytes were unshared (to ultimately discontinue use of tracker)
+	one_tracker_modified = tracker->ref_map.put(r, final);
+	// TODO - how to know when we reach 0 ref to tracker
+	// TODO - think about txc->released being simple vector, instead of interval_set
+	r.clear();
+	r.swap(final);
+      }
     }
     // we can't invalidate our logical extents as we drop them because
     // other lextents (either in our onode or others) may still
@@ -15923,7 +16045,10 @@ void BlueStore::_wctx_finish(
     }
     delete &lo;
   }
-
+  if (one_tracker_modified) {
+    // signal that we need to update shared blob tracker we use
+    txc->write_shared_blob(o->allocation_tracker);
+  }
 #ifdef HAVE_LIBZBD
   if (!zones_with_releases.empty()) {
     // we need to fault the entire extent range in here to determinte if we've dropped
