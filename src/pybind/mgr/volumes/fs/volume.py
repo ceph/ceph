@@ -2,6 +2,7 @@ import json
 import errno
 import logging
 import os
+import mgr_util
 from typing import TYPE_CHECKING
 
 import cephfs
@@ -152,6 +153,7 @@ class VolumeClient(CephfsClient["Module"]):
     def volume_info(self, **kwargs):
         ret     = None
         volname = kwargs['vol_name']
+        human_readable    = kwargs['human_readable']
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -163,7 +165,10 @@ class VolumeClient(CephfsClient["Module"]):
 
                     usedbytes = st['size']
                     vol_info_dict = get_pending_subvol_deletions_count(path)
-                    vol_info_dict['used_size'] = int(usedbytes)
+                    if human_readable:
+                        vol_info_dict['used_size'] = mgr_util.format_bytes(int(usedbytes), 5)
+                    else:
+                        vol_info_dict['used_size'] = int(usedbytes)
                 except cephfs.Error as e:
                     if e.args[0] == errno.ENOENT:
                         pass
@@ -178,10 +183,16 @@ class VolumeClient(CephfsClient["Module"]):
                         pool_type = "metadata"
                     else:
                         pool_type = "data"
-                    vol_info_dict["pools"][pool_type].append({
-                                    'name': pools[pool_id]['pool_name'],
-                                    'used': pool_stats[pool_id]['bytes_used'],
-                                    'avail': pool_stats[pool_id]['max_avail']})
+                    if human_readable:
+                        vol_info_dict["pools"][pool_type].append({
+                                        'name': pools[pool_id]['pool_name'],
+                                        'used': mgr_util.format_bytes(pool_stats[pool_id]['bytes_used'], 5),
+                                        'avail': mgr_util.format_bytes(pool_stats[pool_id]['max_avail'], 5)})
+                    else:
+                        vol_info_dict["pools"][pool_type].append({
+                                        'name': pools[pool_id]['pool_name'],
+                                        'used': pool_stats[pool_id]['bytes_used'],
+                                        'avail': pool_stats[pool_id]['max_avail']})
 
                 mon_addr_lst = []
                 mon_map_mons = self.mgr.get('mon_map')['mons']
