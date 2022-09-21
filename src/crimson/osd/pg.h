@@ -723,7 +723,14 @@ public:
 	return &it->second;
     }
   }
-  interruptible_future<std::tuple<bool, int>> already_complete(const osd_reqid_t& reqid);
+
+  struct complete_op_t {
+    const version_t user_version;
+    const eversion_t version;
+    const int err;
+  };
+  interruptible_future<std::optional<complete_op_t>>
+  already_complete(const osd_reqid_t& reqid);
   int get_recovery_op_priority() const {
     int64_t pri = 0;
     get_pgpool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
