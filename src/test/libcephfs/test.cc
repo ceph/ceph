@@ -1867,40 +1867,139 @@ TEST(LibCephFS, ChangeAttr) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, DirChangeAttr) {
+TEST(LibCephFS, DirChangeAttrCreateFile) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, "/"), 0);
 
-  char dirname[32], filename[56];
-  sprintf(dirname, "/dirchange%x", getpid());
-  sprintf(filename, "%s/foo", dirname);
+  char dirpath[32], filepath[56];
+  sprintf(dirpath, "/dirchange%x", getpid());
+  sprintf(filepath, "%s/foo", dirpath);
 
-  ASSERT_EQ(ceph_mkdir(cmount, dirname, 0755), 0);
+  ASSERT_EQ(ceph_mkdir(cmount, dirpath, 0755), 0);
 
   struct ceph_statx	stx;
-  ASSERT_EQ(ceph_statx(cmount, dirname, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, dirpath, &stx, CEPH_STATX_VERSION, 0), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
 
   uint64_t old_change_attr = stx.stx_version;
 
-  int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  /* Important: Follow an operation that changes the directory's ctime (setxattr)
+   * with one that changes the directory's mtime and ctime (create).
+   * Check that directory's change_attr is updated everytime ctime changes.
+   */
+
+  /* set xattr on dir, and check whether dir's change_attr is incremented */
+  ASSERT_EQ(ceph_setxattr(cmount, dirpath, "user.name", (void*)"bob", 3, XATTR_CREATE), 0);
+  ASSERT_EQ(ceph_statx(cmount, dirpath, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_GT(stx.stx_version, old_change_attr);
+  old_change_attr = stx.stx_version;
+
+  /* create a file within dir, and check whether dir's change_attr is incremented */
+  int fd = ceph_open(cmount, filepath, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+  ceph_close(cmount, fd);
+  ASSERT_EQ(ceph_statx(cmount, dirpath, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_GT(stx.stx_version, old_change_attr);
+
+  ASSERT_EQ(0, ceph_unlink(cmount, filepath));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dirpath));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, DirChangeAttrRenameFile) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char dirpath[32], filepath[56], newfilepath[56];
+  sprintf(dirpath, "/dirchange%x", getpid());
+  sprintf(filepath, "%s/foo", dirpath);
+
+  ASSERT_EQ(ceph_mkdir(cmount, dirpath, 0755), 0);
+
+  int fd = ceph_open(cmount, filepath, O_RDWR|O_CREAT|O_EXCL, 0666);
   ASSERT_LT(0, fd);
   ceph_close(cmount, fd);
 
-  ASSERT_EQ(ceph_statx(cmount, dirname, &stx, CEPH_STATX_VERSION, 0), 0);
+  /* Important: Follow an operation that changes the directory's ctime (setattr)
+   * with one that changes the directory's mtime and ctime (rename).
+   * Check that directory's change_attr is updated everytime ctime changes.
+   */
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_statx(cmount, dirpath, &stx, CEPH_STATX_VERSION, 0), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
-  ASSERT_NE(stx.stx_version, old_change_attr);
 
+  uint64_t old_change_attr = stx.stx_version;
+
+  /* chmod dir, and check whether dir's change_attr is incremented */
+  ASSERT_EQ(ceph_chmod(cmount, dirpath, 0777), 0);
+  ASSERT_EQ(ceph_statx(cmount, dirpath, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_GT(stx.stx_version, old_change_attr);
   old_change_attr = stx.stx_version;
 
-  ASSERT_EQ(ceph_unlink(cmount, filename), 0);
-  ASSERT_EQ(ceph_statx(cmount, dirname, &stx, CEPH_STATX_VERSION, 0), 0);
+  /* rename a file within dir, and check whether dir's change_attr is incremented */
+  sprintf(newfilepath, "%s/bar", dirpath);
+  ASSERT_EQ(ceph_rename(cmount, filepath, newfilepath), 0);
+  ASSERT_EQ(ceph_statx(cmount, dirpath, &stx, CEPH_STATX_VERSION, 0), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
-  ASSERT_NE(stx.stx_version, old_change_attr);
+  ASSERT_GT(stx.stx_version, old_change_attr);
 
+  ASSERT_EQ(0, ceph_unlink(cmount, newfilepath));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dirpath));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, DirChangeAttrRemoveFile) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char dirpath[32], filepath[56];
+  sprintf(dirpath, "/dirchange%x", getpid());
+  sprintf(filepath, "%s/foo", dirpath);
+
+  ASSERT_EQ(ceph_mkdir(cmount, dirpath, 0755), 0);
+
+  ASSERT_EQ(ceph_setxattr(cmount, dirpath, "user.name", (void*)"bob", 3, XATTR_CREATE), 0);
+
+  int fd = ceph_open(cmount, filepath, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+  ceph_close(cmount, fd);
+
+  /* Important: Follow an operation that changes the directory's ctime (removexattr)
+   * with one that changes the directory's mtime and ctime (remove a file).
+   * Check that directory's change_attr is updated everytime ctime changes.
+   */
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_statx(cmount, dirpath, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+
+  uint64_t old_change_attr = stx.stx_version;
+
+  /* remove xattr, and check whether dir's change_attr is incremented */
+  ASSERT_EQ(ceph_removexattr(cmount, dirpath, "user.name"), 0);
+  ASSERT_EQ(ceph_statx(cmount, dirpath, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_GT(stx.stx_version, old_change_attr);
+  old_change_attr = stx.stx_version;
+
+  /* remove a file within dir, and check whether dir's change_attr is incremented */
+  ASSERT_EQ(0, ceph_unlink(cmount, filepath));
+  ASSERT_EQ(ceph_statx(cmount, dirpath, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_GT(stx.stx_version, old_change_attr);
+
+  ASSERT_EQ(0, ceph_rmdir(cmount, dirpath));
   ceph_shutdown(cmount);
 }
 
