@@ -31,8 +31,7 @@ class Migrations:
         # We have the cache, the inventory, the config store, the upgrade (imagine changing the
         # upgrade code, while an old upgrade is still in progress), naming of daemons,
         # fs-layout of the daemons, etc.
-        if self.mgr.migration_current is None:
-            self.set(LAST_MIGRATION)
+        self.set_sane_migration_current()
 
         v = mgr.get_store('nfs_migration_queue')
         self.nfs_migration_queue = json.loads(v) if v else []
@@ -46,8 +45,29 @@ class Migrations:
         self.mgr.set_module_option('migration_current', val)
         self.mgr.migration_current = val
 
+    def set_sane_migration_current(self) -> None:
+        # migration current should always be an integer
+        # between 0 and LAST_MIGRATION (inclusive) in order to
+        # actually carry out migration. If we find
+        # it is None or too high of a value here we should
+        # set it to some sane value
+        mc: Optional[int] = self.mgr.migration_current
+        if mc is None:
+            logger.info('Found migration_current of "None". Setting to last migration.')
+            self.set(LAST_MIGRATION)
+            return
+
+        if mc > LAST_MIGRATION:
+            logger.error(f'Found migration_current of {mc} when max should be {LAST_MIGRATION}. Setting back to 0.')
+            # something has gone wrong and caused migration_current
+            # to be higher than it should be able to be. Best option
+            # we have here is to just set it back to 0
+            self.set(0)
+
     def is_migration_ongoing(self) -> bool:
-        return self.mgr.migration_current != LAST_MIGRATION
+        self.set_sane_migration_current()
+        mc: Optional[int] = self.mgr.migration_current
+        return mc is None or mc < LAST_MIGRATION
 
     def verify_no_migration(self) -> None:
         if self.is_migration_ongoing():
