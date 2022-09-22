@@ -630,20 +630,18 @@ TransactionManagerRef make_transaction_manager(
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto backref_manager = create_backref_manager(*cache);
 
-  auto p_device_type = primary_device->get_device_type();
-  ceph_assert(p_device_type == device_type_t::SEGMENTED ||
-              p_device_type == device_type_t::RANDOM_BLOCK);
+  auto p_backend_type = primary_device->get_backend_type();
 
-  if (p_device_type == device_type_t::SEGMENTED) {
+  if (p_backend_type == backend_type_t::SEGMENTED) {
     sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
   }
+
   for (auto &p_dev : secondary_devices) {
-    ceph_assert(p_dev->get_device_type() == device_type_t::SEGMENTED);
+    ceph_assert(p_dev->get_backend_type() == backend_type_t::SEGMENTED);
     sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
   }
 
-  auto journal_type = (p_device_type == device_type_t::SEGMENTED ?
-                       journal_type_t::SEGMENTED : journal_type_t::CIRCULAR);
+  auto journal_type = p_backend_type;
   seastore_off_t roll_size;
   seastore_off_t roll_start;
   if (journal_type == journal_type_t::SEGMENTED) {

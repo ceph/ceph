@@ -31,9 +31,10 @@ std::ostream& operator<<(std::ostream& out, const device_config_t& conf)
 }
 
 seastar::future<DeviceRef>
-Device::make_device(const std::string& device)
+Device::make_device(const std::string& device, device_type_t dtype)
 {
-  // TODO: configure device type
+  // TODO: support other backend types
+  assert(get_default_backend_of_device(dtype) == backend_type_t::SEGMENTED);
   return SegmentManager::get_segment_manager(device
   ).then([](DeviceRef ret) {
     return ret;

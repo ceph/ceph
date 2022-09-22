@@ -857,11 +857,14 @@ constexpr auto PLACEMENT_HINT_NULL = placement_hint_t::NUM_HINTS;
 
 std::ostream& operator<<(std::ostream& out, placement_hint_t h);
 
-enum alignas(4) device_type_t : uint_fast8_t {
+enum class alignas(4) device_type_t : uint_fast8_t {
   NONE = 0,
-  SEGMENTED, // i.e. Hard_Disk, SATA_SSD, NAND_NVME
-  RANDOM_BLOCK, // i.e. RANDOM_BD
-  PMEM, // i.e. NVDIMM, PMEM
+  HDD,
+  SSD,
+  ZNS,
+  SEGMENTED_EPHEMERAL,
+  RANDOM_BLOCK_SSD,
+  RANDOM_BLOCK_EPHEMERAL,
   NUM_TYPES
 };
 
@@ -870,10 +873,24 @@ std::ostream& operator<<(std::ostream& out, device_type_t t);
 bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
-enum class journal_type_t {
-  SEGMENTED,
-  CIRCULAR
+enum class backend_type_t {
+  SEGMENTED,    // SegmentManager: SSD, ZNS, HDD
+  RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
 };
+
+std::ostream& operator<<(std::ostream& out, backend_type_t);
+using journal_type_t = backend_type_t;
+
+constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
+  assert(dtype != device_type_t::NONE &&
+	 dtype != device_type_t::NUM_TYPES);
+  if (dtype >= device_type_t::HDD &&
+      dtype <= device_type_t::SEGMENTED_EPHEMERAL) {
+    return backend_type_t::SEGMENTED;
+  } else {
+    return backend_type_t::RANDOM_BLOCK;
+  }
+}
 
 /**
  * Monotonically increasing identifier for the location of a

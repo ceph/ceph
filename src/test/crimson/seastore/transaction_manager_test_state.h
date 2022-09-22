@@ -136,7 +136,7 @@ protected:
     if (journal_type == journal_type_t::SEGMENTED) {
       return segment_setup();
     } else {
-      assert(journal_type == journal_type_t::CIRCULAR);
+      assert(journal_type == journal_type_t::RANDOM_BLOCK);
       return randomblock_setup();
     }
   }
@@ -172,7 +172,7 @@ protected:
     for (auto &sec_sm : secondary_segment_managers) {
       sec_devices.emplace_back(sec_sm.get());
     }
-    if (journal_type == journal_type_t::CIRCULAR) {
+    if (journal_type == journal_type_t::RANDOM_BLOCK) {
       // FIXME: should not initialize segment_manager with circularbounded-journal
       // FIXME: no secondary device in the single device test
       sec_devices.emplace_back(segment_manager.get());
