@@ -29,8 +29,8 @@ public:
   Heartbeat(osd_id_t whoami,
             const crimson::osd::ShardServices& service,
 	    crimson::mon::Client& monc,
-	    crimson::net::MessengerRef front_msgr,
-	    crimson::net::MessengerRef back_msgr);
+	    crimson::net::Messenger &front_msgr,
+	    crimson::net::Messenger &back_msgr);
 
   seastar::future<> start(entity_addrvec_t front,
 			  entity_addrvec_t back);
@@ -45,8 +45,8 @@ public:
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
 
-  crimson::net::MessengerRef get_front_msgr() const;
-  crimson::net::MessengerRef get_back_msgr() const;
+  crimson::net::Messenger &get_front_msgr() const;
+  crimson::net::Messenger &get_back_msgr() const;
   void set_require_authorizer(bool);
 
   // Dispatcher methods
@@ -78,8 +78,8 @@ private:
   const osd_id_t whoami;
   const crimson::osd::ShardServices& service;
   crimson::mon::Client& monc;
-  crimson::net::MessengerRef front_msgr;
-  crimson::net::MessengerRef back_msgr;
+  crimson::net::Messenger &front_msgr;
+  crimson::net::Messenger &back_msgr;
 
   seastar::timer<seastar::lowres_clock> timer;
   // use real_clock so it can be converted to utime_t
