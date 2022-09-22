@@ -23,9 +23,10 @@ function run() {
         teardown $dir || return 1
     done
 }
-TEST_stretched_cluster_failover_add_three_osds(){
+TEST_stretched_cluster_uneven_weight() {
     local dir=$1
-    local OSDS=8
+    local OSDS=4
+    local weight=0.09000
     setup $dir || return 1
 
     run_mon $dir a --public-addr $CEPH_MON_A || return 1
@@ -65,7 +66,6 @@ TEST_stretched_cluster_failover_add_three_osds(){
       ceph osd crush move $zone root=default
     done
 
-
     ceph osd crush add-bucket node-2 host
     ceph osd crush add-bucket node-3 host
     ceph osd crush add-bucket node-4 host
@@ -77,18 +77,14 @@ TEST_stretched_cluster_failover_add_three_osds(){
     ceph osd crush move node-5 zone=pze
 
     ceph osd crush move osd.0 host=node-2
-    ceph osd crush move osd.1 host=node-2
-    ceph osd crush move osd.2 host=node-3
-    ceph osd crush move osd.3 host=node-3
-    ceph osd crush move osd.4 host=node-4
-    ceph osd crush move osd.5 host=node-4
-    ceph osd crush move osd.6 host=node-5
-    ceph osd crush move osd.7 host=node-5
+    ceph osd crush move osd.1 host=node-3
+    ceph osd crush move osd.2 host=node-4
+    ceph osd crush move osd.3 host=node-5
     
     ceph mon set_location a zone=iris host=node-2
     ceph mon set_location b zone=iris host=node-3
     ceph mon set_location c zone=pze host=node-4
-    ceph mon set_location d zone=pze  host=node-5
+    ceph mon set_location d zone=pze host=node-5
 
     hostname=$(hostname -s)
     ceph osd crush remove $hostname || return 1
@@ -108,7 +104,6 @@ rule stretch_rule {
         step chooseleaf firstn 2 type host
         step emit
 }
-
 # end crush map
 EOF
 
@@ -118,31 +113,33 @@ EOF
     ceph osd pool create $stretched_poolname 32 32 stretch_rule || return 1
     ceph osd pool set $stretched_poolname size 4 || return 1
 
-    sleep 3
+    ceph mon set_location e zone=arbiter host=node-1 || return 1
+    ceph mon enable_stretch_mode e stretch_rule zone || return 1 # Enter strech mode
 
-    ceph mon set_location e zone=arbiter host=node-1
-    ceph mon enable_stretch_mode e stretch_rule zone
+    # reweight to a more round decimal.
+    ceph osd crush reweight osd.0 $weight
+    ceph osd crush reweight osd.1 $weight
+    ceph osd crush reweight osd.2 $weight
+    ceph osd crush reweight osd.3 $weight
 
-    kill_daemons $dir KILL mon.c || return 1
-    kill_daemons $dir KILL mon.d || return 1
+    # Firstly, we test for stretch mode buckets != 2
+    ceph osd crush add-bucket sham zone || return 1
+    ceph osd crush move sham root=default || return 1
+    wait_for_health "INCORRECT_NUM_BUCKETS_STRETCH_MODE" || return 1
 
-    kill_daemons $dir KILL osd.4 || return 1
-    kill_daemons $dir KILL osd.5 || return 1
-    kill_daemons $dir KILL osd.6 || return 1
-    kill_daemons $dir KILL osd.7 || return 1
+    ceph osd crush rm sham # clear the health warn
+    wait_for_health_gone "INCORRECT_NUM_BUCKETS_STRETCH_MODE" || return 1
 
-    ceph -s
+    # Next, we test for uneven weights across buckets
 
-    sleep 3
+    ceph osd crush reweight osd.0 0.07000
 
-    run_osd $dir 8 || return 1
-    run_osd $dir 9 || return 1
-    run_osd $dir 10 || return 1
+    wait_for_health "UNEVEN_WEIGHTS_STRETCH_MODE" || return 1
 
-    ceph -s
+    ceph osd crush reweight osd.0 $weight # clear the health warn
 
-    sleep 3
+    wait_for_health_gone "UNEVEN_WEIGHTS_STRETCH_MODE" || return 1
 
     teardown $dir || return 1
 }
-main mon-stretch-fail-recovery "$@"
+main mon-stretched-cluster-uneven-weight "$@"
