@@ -19,8 +19,12 @@ CURRENT_PATH=`pwd`
 # install prerequisites
 # for rocksdb
 case $(distro_id) in
-	ubuntu|debian|devuan|softiron)
+	debian|devuan|softiron)
 		install git g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev cmake
+		;;
+	ubuntu)
+		install git g++-11 libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev cmake
+		export CXX_FLAGS="-std=c++20"
 		;;
 	centos|fedora|rhel)
         case $(distro_id) in
@@ -70,8 +74,12 @@ else
     CMAKE=cmake
 fi
 
+if [ $(distro_id) = "ubuntu" ]; then
+	STANDARD='-DCMAKE_CXX_STANDARD=20'
+fi
+
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
-mkdir ${BUILD_DIR} && cd ${BUILD_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=Debug -DWITH_TESTS=ON -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
+mkdir ${BUILD_DIR} && cd ${BUILD_DIR} && ${CMAKE} ${STANDARD} -DCMAKE_BUILD_TYPE=Debug -DWITH_TESTS=ON -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
 make rocksdb_env_librados_test -j8
 
 echo "Copy ceph.conf"
