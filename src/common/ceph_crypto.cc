@@ -21,11 +21,11 @@
 
 #include <openssl/evp.h>
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(WITH_SEASTAR)
 #  include <openssl/conf.h>
 #  include <openssl/engine.h>
 #  include <openssl/err.h>
-#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L || defined(WITH_SEASTAR) */
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -35,7 +35,7 @@
 
 namespace TOPNSPC::crypto::ssl {
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(WITH_SEASTAR)
 static std::atomic_uint32_t crypto_refs;
 
 
@@ -54,7 +54,7 @@ static struct {
   ceph::mutex lock = ceph::make_mutex("crypto::ssl::init_records::lock");;
 } init_records;
 
-static void
+[[maybe_unused]] static void
 ssl_locking_callback(
   const int mode,
   const int mutex_num,
@@ -80,7 +80,7 @@ ssl_locking_callback(
   }
 }
 
-static unsigned long
+[[maybe_unused]] static unsigned long
 ssl_get_thread_id(void)
 {
   static_assert(sizeof(unsigned long) >= sizeof(pthread_t));
@@ -92,10 +92,10 @@ ssl_get_thread_id(void)
   memcpy(&ret, &t, sizeof(pthread_t));
   return ret;
 }
-#endif /* not OPENSSL_VERSION_NUMBER < 0x10100000L */
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L || defined(WITH_SEASTAR) */
 
 static void init() {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(WITH_SEASTAR)
   if (++crypto_refs == 1) {
     // according to
     // https://wiki.openssl.org/index.php/Library_Initialization#libcrypto_Initialization
@@ -104,6 +104,8 @@ static void init() {
 
     // initialize locking callbacks, needed for thread safety.
     // http://www.openssl.org/support/faq.html#PROG1
+    // on modern OpenSSL versions these two calls are nops, therefore
+    // we need the `maybe_unused`.
     CRYPTO_set_locking_callback(&ssl_locking_callback);
     CRYPTO_set_id_callback(&ssl_get_thread_id);
 
@@ -124,11 +126,11 @@ static void init() {
     CRYPTO_THREADID_current(&tmp);
     init_records.tids.emplace_back(std::move(tmp));
   }
-#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L || defined(WITH_SEASTAR) */
 }
 
 static void shutdown() {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(WITH_SEASTAR)
   if (--crypto_refs != 0) {
     return;
   }
@@ -144,7 +146,7 @@ static void shutdown() {
     //    void ERR_remove_thread_state(void *);
     // We're basing on the OPENSSL_VERSION_NUMBER check to preserve
     // const-correctness without failing builds on modern envs.
-    for (const auto& tid : init_records.tids) {
+    for (auto& tid : init_records.tids) {
       ERR_remove_thread_state(&tid);
     }
   }
@@ -165,7 +167,7 @@ static void shutdown() {
 
   // NOTE: don't clear ssl_mutexes as we should be ready for init-deinit-init
   // sequence.
-#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L || defined(WITH_SEASTAR) */
 }
 
 void zeroize_for_security(void* const s, const size_t n) {

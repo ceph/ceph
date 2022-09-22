@@ -21,6 +21,7 @@
 
 #include "auth/KeyRing.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_crypto.h"
 #include "common/config_tracker.h"
 #include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
@@ -235,6 +236,10 @@ int main(int argc, const char* argv[])
         try {
           FatalSignal fatal_signal;
           seastar_apps_lib::stop_signal should_stop;
+          crimson::crypto::init();
+          auto stop_crypto = seastar::defer([] {
+            crimson::crypto::shutdown();
+          });
           if (config.count("debug")) {
             seastar::global_logger_registry().set_all_loggers_level(
               seastar::log_level::debug
