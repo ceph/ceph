@@ -669,6 +669,43 @@ public:
       iter);
   }
 
+  base_iertr::future<> update(
+    op_context_t<node_key_t> c,
+    typename leaf_node_t::Ref leaf,
+    typename leaf_node_t::iterator it,
+    node_val_t val)
+  {
+    LOG_PREFIX(FixedKVBtree::update);
+    SUBTRACET(
+      seastore_fixedkv_tree,
+      "update element at {}, pos {}",
+      c.trans,
+      it == leaf->end() ? min_max_t<node_key_t>::max : it.get_key(),
+      it.offset);
+    if (!leaf->is_pending()) {
+      leaf = c.cache.duplicate_for_write(
+        c.trans, leaf)->template cast<leaf_node_t>();
+      return may_link_parent_child(c, leaf
+      ).si_then([leaf, it, val, t=&c.trans] {
+        LOG_PREFIX(FixedKVBtree::update);
+        SUBTRACET(
+          seastore_fixedkv_tree,
+          "update element at pos {}, leaf {}",
+          *t,
+          it.offset,
+          *leaf);
+        leaf->update(leaf->iter_idx(it.offset), val);
+      });
+    }
+    SUBTRACET(
+      seastore_fixedkv_tree,
+      "update element at pos {}, leaf {}",
+      c.trans,
+      it.offset,
+      *leaf);
+    leaf->update(it, val);
+    return base_iertr::now();
+  }
 
   /**
    * remove
@@ -1122,6 +1159,49 @@ private:
         t, *parent, *child, parent_entry.pos);
       parent->add_child_trans_view(*child, parent_entry.pos);
     }
+  }
+
+  base_iertr::future<> may_link_parent_child(
+    op_context_t<node_key_t> c,
+    typename leaf_node_t::base_ref child)
+  {
+    if (child->get_node_meta().is_root()) {
+      may_link_to_root_block(c.trans, *child);
+      return base_iertr::now();
+    }
+    auto meta = child->get_node_meta();
+    auto parent = c.trans.template may_get_fixedkv_node<
+      node_key_t, internal_node_t>(
+        meta.begin, 2);
+    if (!parent) {
+      ceph_assert(child->back_tracker);
+      auto p = child->back_tracker->parent;
+      parent = p->template cast<internal_node_t>();
+      c.trans.add_to_read_set(parent);
+    }
+    ceph_assert(parent);
+
+    return base_iertr::future<>(parent->wait_io()
+    ).si_then([this, parent, meta, child, c] {
+      LOG_PREFIX(FixedKVBtree::may_link_parent_child);
+      auto it = parent->lower_bound(meta.begin);
+      ceph_assert(it.get_key() == meta.begin);
+      auto pos = it.offset;
+
+      if (parent->is_pending()) {
+        SUBTRACET(seastore_fixedkv_tree,
+          "linking to pending parent {}, child {}, at pos {}",
+          c.trans, *parent, *child, pos);
+        ceph_assert(c.trans.get_trans_id() == parent->pending_for_transaction);
+        parent->new_child(c.trans, *child, pos);
+        ceph_assert(!child->parent_tracker);
+      } else {
+        SUBTRACET(seastore_fixedkv_tree,
+          "add child trans view to parent {}, child {}, at pos {}",
+          c.trans, *parent, *child, pos);
+        parent->add_child_trans_view(*child, pos);
+      }
+    });
   }
 
 
