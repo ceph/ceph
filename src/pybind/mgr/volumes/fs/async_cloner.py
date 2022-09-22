@@ -126,6 +126,25 @@ def sync_attrs(fs_handle, target_path, source_statx):
         log.warning("error synchronizing attrs for {0} ({1})".format(target_path, e))
         raise e
 
+def sync_xattrs(fs_handle, source_path, target_path):
+    try:
+        val = fs_handle.getxattr(source_path, "ceph.fscrypt.auth")
+    except cephfs.NoData:
+        return
+    except cephfs.Error as e:
+        log.warning(
+            "error synchronizing xattrs(getxattr) for {0} ({1})".format(target_path, e)
+        )
+        raise e
+
+    try:
+        fs_handle.setxattr(target_path, "ceph.fscrypt.auth", val, 0)
+    except cephfs.Error as e:
+        log.warning(
+            "error synchronizing xattrs(setxattr) for {0} ({1})".format(target_path, e)
+        )
+        raise e
+
 def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
     """
     bulk copy data from source to destination -- only directories, symlinks
@@ -175,6 +194,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                             log.warning("cptree: (IGNORE) {0}".format(d_full_src))
                         if handled:
                             sync_attrs(fs_handle, d_full_dst, stx)
+                            sync_xattrs(fs_handle, d_full_src, d_full_dst)
                     d = fs_handle.readdir(dir_handle)
                 stx_root = fs_handle.statx(src_root_path, cephfs.CEPH_STATX_ATIME |
                                                           cephfs.CEPH_STATX_MTIME,
