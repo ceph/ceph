@@ -972,9 +972,7 @@ public:
         n_fixed_kv_extent
       ).si_then([c, e, n_fixed_kv_extent] {
         c.cache.retire_extent(c.trans, e);
-        if (n_fixed_kv_extent->is_leaf()) {
-          c.trans.link_fixedkv_leaf_node(n_fixed_kv_extent);
-        }
+        c.trans.link_fixedkv_leaf_node(n_fixed_kv_extent);
       });
     };
     
@@ -1845,6 +1843,7 @@ private:
       get_root().set_depth(iter.get_depth());
       ceph_assert(get_root().get_depth() <= MAX_FIXEDKVBTREE_DEPTH);
       may_link_to_root_block(c.trans, *nroot);
+      c.trans.link_fixedkv_leaf_node(nroot);
     }
 
     /* pos may be either node_position_t<leaf_node_t> or
@@ -1876,10 +1875,8 @@ private:
         *left,
         *right);
       c.cache.retire_extent(c.trans, pos.node);
-      if (left->is_leaf()) {
-        c.trans.link_fixedkv_leaf_node(left);
-        c.trans.link_fixedkv_leaf_node(right);
-      }
+      c.trans.link_fixedkv_leaf_node(left);
+      c.trans.link_fixedkv_leaf_node(right);
 
       get_tree_stats<self_type>(c.trans).extents_num_delta++;
       return std::make_pair(left, right);
@@ -2124,9 +2121,7 @@ private:
         SUBTRACET(seastore_fixedkv_tree, "l: {}, r: {}, replacement: {}", c.trans, *l, *r, *replacement);
         c.cache.retire_extent(c.trans, l);
         c.cache.retire_extent(c.trans, r);
-        if (replacement->is_leaf()) {
-          c.trans.link_fixedkv_leaf_node(replacement);
-        }
+        c.trans.link_fixedkv_leaf_node(replacement);
         get_tree_stats<self_type>(c.trans).extents_num_delta--;
       } else {
         LOG_PREFIX(FixedKVBtree::merge_level);
@@ -2171,10 +2166,8 @@ private:
           c.trans, *l, *r, *replacement_l, *replacement_r);
         c.cache.retire_extent(c.trans, l);
         c.cache.retire_extent(c.trans, r);
-        if (replacement_l->is_leaf()) {
-          c.trans.link_fixedkv_leaf_node(replacement_l);
-          c.trans.link_fixedkv_leaf_node(replacement_r);
-        }
+        c.trans.link_fixedkv_leaf_node(replacement_l);
+        c.trans.link_fixedkv_leaf_node(replacement_r);
       }
 
       return seastar::now();

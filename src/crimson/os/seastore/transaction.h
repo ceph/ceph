@@ -513,9 +513,9 @@ public:
   }
 
   template <typename node_key_t, typename T>
-  TCachedExtentRef<T> may_get_fixedkv_leaf_node(
-    extent_types_t type,
-    node_key_t key);
+  TCachedExtentRef<T> may_get_fixedkv_node(
+    node_key_t key,
+    depth_t depth);
 
   template <typename node_key_t, typename T>
   std::list<TCachedExtentRef<T>> get_fixedkv_leaves_in_range(

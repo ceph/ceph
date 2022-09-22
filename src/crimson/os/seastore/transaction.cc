@@ -25,13 +25,13 @@ void Transaction::invalidate_clear_write_set() {
 }
 
 template <typename node_key_t, typename T>
-TCachedExtentRef<T> Transaction::may_get_fixedkv_leaf_node(
-  extent_types_t type,
-  node_key_t key) {
+TCachedExtentRef<T> Transaction::may_get_fixedkv_node(
+  node_key_t key,
+  depth_t depth) {
   static_assert(std::is_same_v<node_key_t, laddr_t>
     || std::is_same_v<node_key_t, paddr_t>);
   if constexpr (std::is_same_v<node_key_t, laddr_t>) {
-    auto &layer = pending_lba_nodes.pin_layers[1];
+    auto &layer = pending_lba_nodes.pin_layers[depth];
     if (layer.empty()) {
       return nullptr;
     }
@@ -56,7 +56,7 @@ TCachedExtentRef<T> Transaction::may_get_fixedkv_leaf_node(
       return nullptr;
     }
   } else {
-    auto &layer = pending_backref_nodes.pin_layers[1];
+    auto &layer = pending_backref_nodes.pin_layers[depth];
     if (layer.empty()) {
       return nullptr;
     }
@@ -144,65 +144,62 @@ std::list<TCachedExtentRef<T>> Transaction::get_fixedkv_leaves_in_range(
 void Transaction::may_link_fixedkv_pin(CachedExtentRef &ref) {
   if (is_lba_node(ref->get_type())) {
     auto &lba_node = (lba_manager::btree::LBANode&)*ref;
-    if (lba_node.is_leaf()) {
-      assert(!lba_node.pin.is_linked());
-      auto &layer = pending_lba_nodes.pin_layers[1];
-      layer.insert(lba_node.pin);
-    }
+    assert(!lba_node.pin.is_linked());
+    auto &layer = pending_lba_nodes.pin_layers[
+      lba_node.get_node_meta().depth];
+    layer.insert(lba_node.pin);
   } else if (is_backref_node(ref->get_type())) {
     auto &backref_node = (backref::BackrefNode&)*ref;
-    if (backref_node.is_leaf()) {
-      assert(!backref_node.pin.is_linked());
-      auto &layer = pending_backref_nodes.pin_layers[1];
-      layer.insert(backref_node.pin);
-    }
+    assert(!backref_node.pin.is_linked());
+    auto &layer = pending_backref_nodes.pin_layers[
+      backref_node.get_node_meta().depth];
+    layer.insert(backref_node.pin);
   }
 }
 
 void Transaction::may_remove_linked_fixedkv_pin(CachedExtentRef &ref) {
   if (is_lba_node(ref->get_type())) {
     auto &lba_node = (lba_manager::btree::LBANode&)*ref;
-    if (lba_node.is_leaf()) {
-      assert(lba_node.pin.is_linked());
-      auto &layer = pending_lba_nodes.pin_layers[1];
-      layer.erase(
-	btree_range_pin_t<
-	  laddr_t>::index_t::s_iterator_to(lba_node.pin));
-    }
+    assert(lba_node.pin.is_linked());
+    auto &layer = pending_lba_nodes.pin_layers[
+      lba_node.get_node_meta().depth];
+    layer.erase(
+      btree_range_pin_t<
+	laddr_t>::index_t::s_iterator_to(lba_node.pin));
   } else if (is_backref_node(ref->get_type())) {
     auto &backref_node = (backref::BackrefNode&)*ref;
-    if (backref_node.is_leaf()) {
-      assert(backref_node.pin.is_linked());
-      auto &layer = pending_backref_nodes.pin_layers[1];
-      layer.erase(
-	btree_range_pin_t<
-	  paddr_t>::index_t::s_iterator_to(backref_node.pin));
-    }
+    assert(backref_node.pin.is_linked());
+    auto &layer = pending_backref_nodes.pin_layers[
+      backref_node.get_node_meta().depth];
+    layer.erase(
+      btree_range_pin_t<
+	paddr_t>::index_t::s_iterator_to(backref_node.pin));
   }
 }
 
 void Transaction::link_fixedkv_leaf_node(CachedExtentRef ref) {
   assert(is_lba_node(ref->get_type())
     || is_backref_node(ref->get_type()));
-#ifndef NDEBUG
-  if (is_lba_node(ref->get_type())) {
-    assert(ref->cast<lba_manager::btree::LBANode>()->is_leaf());
-  } else {
-    assert(ref->cast<backref::BackrefNode>()->is_leaf());
-  }
-#endif
   may_link_fixedkv_pin(ref);
 }
 
 
 template TCachedExtentRef<lba_manager::btree::LBALeafNode>
-Transaction::may_get_fixedkv_leaf_node<laddr_t, lba_manager::btree::LBALeafNode>(
-  extent_types_t type,
-  laddr_t key);
+Transaction::may_get_fixedkv_node<laddr_t, lba_manager::btree::LBALeafNode>(
+  laddr_t key,
+  depth_t depth);
 template TCachedExtentRef<backref::BackrefLeafNode>
-Transaction::may_get_fixedkv_leaf_node<paddr_t, backref::BackrefLeafNode>(
-  extent_types_t type,
-  paddr_t key);
+Transaction::may_get_fixedkv_node<paddr_t, backref::BackrefLeafNode>(
+  paddr_t key,
+  depth_t depth);
+template TCachedExtentRef<lba_manager::btree::LBAInternalNode>
+Transaction::may_get_fixedkv_node<laddr_t, lba_manager::btree::LBAInternalNode>(
+  laddr_t key,
+  depth_t depth);
+template TCachedExtentRef<backref::BackrefInternalNode>
+Transaction::may_get_fixedkv_node<paddr_t, backref::BackrefInternalNode>(
+  paddr_t key,
+  depth_t depth);
 
 template std::list<TCachedExtentRef<lba_manager::btree::LBALeafNode>>
 Transaction::get_fixedkv_leaves_in_range(

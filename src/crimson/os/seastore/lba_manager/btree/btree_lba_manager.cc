@@ -263,8 +263,8 @@ BtreeLBAManager::get_mapping(
 {
   LOG_PREFIX(BtreeLBAManager::get_mapping);
   TRACET("{}", t, offset);
-  LBALeafNodeRef extent = t.may_get_fixedkv_leaf_node<laddr_t, LBALeafNode>(
-    extent_types_t::LADDR_LEAF, offset);
+  LBALeafNodeRef extent = t.may_get_fixedkv_node<laddr_t, LBALeafNode>(
+    offset, 1);
   if (!extent) {
     extent = pin_set.maybe_get_node<LBALeafNode>(offset, 1);
   }
