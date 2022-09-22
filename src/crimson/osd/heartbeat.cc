@@ -30,8 +30,8 @@ namespace {
 Heartbeat::Heartbeat(osd_id_t whoami,
                      const crimson::osd::ShardServices& service,
                      crimson::mon::Client& monc,
-                     crimson::net::MessengerRef front_msgr,
-                     crimson::net::MessengerRef back_msgr)
+                     crimson::net::Messenger &front_msgr,
+                     crimson::net::Messenger &back_msgr)
   : whoami{whoami},
     service{service},
     monc{monc},
@@ -56,13 +56,13 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
   }
 
   using crimson::net::SocketPolicy;
-  front_msgr->set_policy(entity_name_t::TYPE_OSD,
+  front_msgr.set_policy(entity_name_t::TYPE_OSD,
                          SocketPolicy::lossy_client(0));
-  back_msgr->set_policy(entity_name_t::TYPE_OSD,
+  back_msgr.set_policy(entity_name_t::TYPE_OSD,
                         SocketPolicy::lossy_client(0));
-  return seastar::when_all_succeed(start_messenger(*front_msgr,
+  return seastar::when_all_succeed(start_messenger(front_msgr,
 						   front_addrs),
-                                   start_messenger(*back_msgr,
+                                   start_messenger(back_msgr,
 						   back_addrs))
     .then_unpack([this] {
       timer.arm_periodic(
@@ -87,11 +87,11 @@ seastar::future<> Heartbeat::stop()
 {
   logger().info("{}", __func__);
   timer.cancel();
-  front_msgr->stop();
-  back_msgr->stop();
+  front_msgr.stop();
+  back_msgr.stop();
   return gate.close().then([this] {
-    return seastar::when_all_succeed(front_msgr->shutdown(),
-				     back_msgr->shutdown());
+    return seastar::when_all_succeed(front_msgr.shutdown(),
+				     back_msgr.shutdown());
   }).then_unpack([] {
     return seastar::now();
   });
@@ -99,29 +99,29 @@ seastar::future<> Heartbeat::stop()
 
 const entity_addrvec_t& Heartbeat::get_front_addrs() const
 {
-  return front_msgr->get_myaddrs();
+  return front_msgr.get_myaddrs();
 }
 
 const entity_addrvec_t& Heartbeat::get_back_addrs() const
 {
-  return back_msgr->get_myaddrs();
+  return back_msgr.get_myaddrs();
 }
 
-crimson::net::MessengerRef Heartbeat::get_front_msgr() const
+crimson::net::Messenger& Heartbeat::get_front_msgr() const
 {
   return front_msgr;
 }
 
-crimson::net::MessengerRef Heartbeat::get_back_msgr() const
+crimson::net::Messenger& Heartbeat::get_back_msgr() const
 {
   return back_msgr;
 }
 
 void Heartbeat::set_require_authorizer(bool require_authorizer)
 {
-  if (front_msgr->get_require_authorizer() != require_authorizer) {
-    front_msgr->set_require_authorizer(require_authorizer);
-    back_msgr->set_require_authorizer(require_authorizer);
+  if (front_msgr.get_require_authorizer() != require_authorizer) {
+    front_msgr.set_require_authorizer(require_authorizer);
+    back_msgr.set_require_authorizer(require_authorizer);
   }
 }
 
@@ -520,9 +520,9 @@ void Heartbeat::Session::set_inactive_history(clock::time_point now)
 Heartbeat::Peer::Peer(Heartbeat& heartbeat, osd_id_t peer)
   : ConnectionListener(2), heartbeat{heartbeat}, peer{peer}, session{peer},
   con_front(peer, heartbeat.whoami > peer, Connection::type_t::front,
-            *heartbeat.front_msgr, *this),
+            heartbeat.front_msgr, *this),
   con_back(peer, heartbeat.whoami > peer, Connection::type_t::back,
-           *heartbeat.back_msgr, *this)
+           heartbeat.back_msgr, *this)
 {
   logger().info("Heartbeat::Peer: osd.{} added", peer);
 }

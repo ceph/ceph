@@ -357,7 +357,7 @@ seastar::future<> OSD::start()
   ).then([this] {
     heartbeat.reset(new Heartbeat{
 	whoami, get_shard_services(),
-	*monc, hb_front_msgr, hb_back_msgr});
+	*monc, *hb_front_msgr, *hb_back_msgr});
     return store.start();
   }).then([this] {
     return store.mount().handle_error(
@@ -513,10 +513,10 @@ seastar::future<> OSD::_send_boot()
   if (cluster_msgr->set_addr_unknowns(public_addrs)) {
     cluster_addrs = cluster_msgr->get_myaddrs();
   }
-  if (heartbeat->get_back_msgr()->set_addr_unknowns(cluster_addrs)) {
+  if (heartbeat->get_back_msgr().set_addr_unknowns(cluster_addrs)) {
     hb_back_addrs = heartbeat->get_back_addrs();
   }
-  if (heartbeat->get_front_msgr()->set_addr_unknowns(public_addrs)) {
+  if (heartbeat->get_front_msgr().set_addr_unknowns(public_addrs)) {
     hb_front_addrs = heartbeat->get_front_addrs();
   }
   logger().info("hb_back_msgr: {}", hb_back_addrs);
