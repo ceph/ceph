@@ -114,7 +114,9 @@ void DaemonMetricCollector::dump_asok_metrics() {
     if (!pid_path.size()) {
       continue;
     }
-    daemon_pids.push_back({daemon_name, std::stoi(pid_str)});
+    if (!pid_str.empty()) {
+      daemon_pids.push_back({daemon_name, std::stoi(pid_str)});
+    }
     json_object dump = boost::json::parse(perf_dump_response).as_object();
     json_object schema = boost::json::parse(perf_schema_response).as_object();
     for (auto &perf : schema) {
