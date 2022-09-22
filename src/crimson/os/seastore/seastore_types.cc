@@ -766,8 +766,8 @@ std::ostream& operator<<(std::ostream& out, placement_hint_t h)
 
 bool can_delay_allocation(device_type_t type) {
   // Some types of device may not support delayed allocation, for example PMEM.
-  return (type >= device_type_t::NONE &&
-          type <= device_type_t::RANDOM_BLOCK);
+  // All types of device currently support delayed allocation.
+  return true;
 }
 
 device_type_t string_to_device_type(std::string type) {
