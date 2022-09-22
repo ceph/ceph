@@ -1174,6 +1174,7 @@ private:
     if (!parent) {
       ceph_assert(child->back_tracker);
       auto p = child->back_tracker->parent;
+      ceph_assert(p->is_valid());
       parent = p->template cast<internal_node_t>();
       c.trans.add_to_read_set(parent);
     }

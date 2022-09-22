@@ -571,27 +571,66 @@ BtreeLBAManager::update_mapping(
 {
   LOG_PREFIX(BtreeLBAManager::update_mapping);
   TRACET("laddr={}, paddr {} => {}", t, laddr, prev_addr, addr);
-  return _update_mapping(
-    t,
-    laddr,
-    [prev_addr, addr](
-      const lba_map_val_t &in) {
-      assert(!addr.is_null());
-      lba_map_val_t ret = in;
-      ceph_assert(in.paddr == prev_addr);
-      ret.paddr = addr;
-      return ret;
+  LBALeafNodeRef extent = t.may_get_fixedkv_node<laddr_t, LBALeafNode>(
+    laddr, 1);
+  if (!extent) {
+    extent = pin_set.maybe_get_node<LBALeafNode>(laddr, 1);
+  }
+  if (extent && extent->is_valid() && extent->should_contain(laddr)) {
+    if (!extent->is_pending_in_trans(t.get_trans_id())) {
+      t.add_to_read_set(extent);
     }
-  ).si_then([&t, laddr, prev_addr, addr, FNAME](auto result) {
-      DEBUGT("laddr={}, paddr {} => {} done -- {}",
-             t, laddr, prev_addr, addr, result);
-    },
-    update_mapping_iertr::pass_further{},
-    /* ENOENT in particular should be impossible */
-    crimson::ct_error::assert_all{
-      "Invalid error in BtreeLBAManager::update_mapping"
-    }
-  );
+    return _update_mapping_iertr::future<>(extent->wait_io()
+    ).si_then(
+      [extent, laddr, prev_addr, addr,
+      &t, this]() mutable -> _update_mapping_iertr::future<> {
+      LOG_PREFIX(BtreeLBAManager::update_mapping);
+      auto it = extent->lower_bound(laddr);
+      if (it == extent->end() || it.get_key() != laddr) {
+	ERRORT("laddr={} doesn't exist, leaf node {}", t, laddr, *extent);
+	return crimson::ct_error::enoent::make();
+      }
+      auto val = it.get_val();
+      val.paddr = val.paddr.maybe_relative_to(extent->get_paddr());
+      DEBUGT("got lba leaf {}", t, *extent);
+      ceph_assert(val.paddr == prev_addr);
+      val.paddr = addr;
+      auto c = get_context(t);
+      return with_btree<LBABtree>(
+	cache,
+	c,
+	[val, c, extent, it](auto &btree) {
+	return btree.update(c, extent, it, val);
+      });
+    }).handle_error_interruptible(
+      update_mapping_iertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"Invalid error in BtreeLBAManager::update_mapping"
+      }
+    );
+  } else {
+    return _update_mapping(
+      t,
+      laddr,
+      [prev_addr, addr](
+	const lba_map_val_t &in) {
+	assert(!addr.is_null());
+	lba_map_val_t ret = in;
+	ceph_assert(in.paddr == prev_addr);
+	ret.paddr = addr;
+	return ret;
+      }
+    ).si_then([&t, laddr, prev_addr, addr, FNAME](auto result) {
+	DEBUGT("laddr={}, paddr {} => {} done -- {}",
+	       t, laddr, prev_addr, addr, result);
+      },
+      update_mapping_iertr::pass_further{},
+      /* ENOENT in particular should be impossible */
+      crimson::ct_error::assert_all{
+	"Invalid error in BtreeLBAManager::update_mapping"
+      }
+    );
+  }
 }
 
 BtreeLBAManager::get_physical_extent_if_live_ret
