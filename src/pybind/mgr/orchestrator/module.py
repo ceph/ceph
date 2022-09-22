@@ -215,7 +215,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             desc='Orchestrator backend',
             enum_allowed=['cephadm', 'rook', 'test_orchestrator'],
             runtime=True,
-        )
+        ),
+        Option(
+            'fail_fs',
+            type='bool',
+            default=False,
+            desc='Fail filesystem for rapid multi-rank mds upgrade'
+        ),
     ]
     NATIVE_OPTIONS = []  # type: List[dict]
 
@@ -340,6 +346,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
     def _select_orchestrator(self) -> str:
         return cast(str, self.get_module_option("orchestrator"))
+
+    def _get_fail_fs_value(self) -> bool:
+        return bool(self.get_module_option("fail_fs"))
 
     @_cli_write_command('orch host add')
     def _add_host(self,
@@ -1486,6 +1495,12 @@ Usage:
         self._set_backend('')
         assert self._select_orchestrator() is None
         self._set_backend(old_orch)
+        old_fs_fail_value = self._get_fail_fs_value()
+        self.set_module_option("fail_fs", True)
+        assert self._get_fail_fs_value() is True
+        self.set_module_option("fail_fs", False)
+        assert self._get_fail_fs_value() is False
+        self.set_module_option("fail_fs", old_fs_fail_value)
 
         e1 = self.remote('selftest', 'remote_from_orchestrator_cli_self_test', "ZeroDivisionError")
         try:

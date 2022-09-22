@@ -113,3 +113,15 @@ https://docs.ceph.com/en/quincy/cephadm/upgrade/#staggered-upgrade
 Relevant tracker: https://tracker.ceph.com/issues/55715
 
   Relevant tracker: https://tracker.ceph.com/issues/5614
+  
+* Cephadm may now be configured to carry out CephFS MDS upgrades without
+reducing ``max_mds`` to 1. Previously, Cephadm would reduce ``max_mds`` to 1 to
+avoid having two active MDS modifying on-disk structures with new versions,
+communicating cross-version-incompatible messages, or other potential
+incompatibilities. This could be disruptive for large-scale CephFS deployments
+because the cluster cannot easily reduce active MDS daemons to 1.
+NOTE: Staggered upgrade of the mons/mgrs may be necessary to take advantage
+of the feature, refer this link on how to perform it:
+https://docs.ceph.com/en/quincy/cephadm/upgrade/#staggered-upgrade
+Relevant tracker: https://tracker.ceph.com/issues/55715
+

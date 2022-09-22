@@ -11,6 +11,7 @@ log = logging.getLogger(__name__)
 
 # Everything up to CEPH_MDSMAP_ALLOW_STANDBY_REPLAY
 CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1<<5)
+CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 CEPH_MDSMAP_LAST = CEPH_MDSMAP_ALLOW_STANDBY_REPLAY
 UPGRADE_FLAGS_MASK = ((CEPH_MDSMAP_LAST<<1) - 1)
 def pre_upgrade_save(ctx, config):
@@ -59,21 +60,35 @@ def post_upgrade_checks(ctx, config):
         epoch = mdsmap['epoch']
         pre_upgrade_epoch = fs_state['epoch']
         assert pre_upgrade_epoch < epoch
-        should_decrease_max_mds = fs_state['max_mds'] > 1
+        multiple_max_mds = fs_state['max_mds'] > 1
         did_decrease_max_mds = False
         should_disable_allow_standby_replay = fs_state['flags'] & CEPH_MDSMAP_ALLOW_STANDBY_REPLAY
         did_disable_allow_standby_replay = False
+        did_fail_fs = False
         for i in range(pre_upgrade_epoch+1, mdsmap['epoch']):
             old_status = mdsc.status(epoch=i)
             old_fs = old_status.get_fsmap(fscid)
             old_mdsmap = old_fs['mdsmap']
-            if should_decrease_max_mds and old_mdsmap['max_mds'] == 1:
+            if not multiple_max_mds \
+                    and (old_mdsmap['flags'] & CEPH_MDSMAP_NOT_JOINABLE):
+                raise RuntimeError('mgr is failing fs when there is only one '
+                                   f'rank in epoch {i}.')
+            if multiple_max_mds \
+                    and (old_mdsmap['flags'] & CEPH_MDSMAP_NOT_JOINABLE) \
+                    and old_mdsmap['max_mds'] == 1:
+                raise RuntimeError('mgr is failing fs as well the max_mds '
+                                   f'is reduced in epoch {i}')
+            if old_mdsmap['flags'] & CEPH_MDSMAP_NOT_JOINABLE:
+                log.debug(f"max_mds not reduced in epoch {i} as fs was failed "
+                          "for carrying out rapid multi-rank mds upgrade")
+                did_fail_fs = True
+            if multiple_max_mds and old_mdsmap['max_mds'] == 1:
                 log.debug(f"max_mds reduced in epoch {i}")
                 did_decrease_max_mds = True
             if should_disable_allow_standby_replay and not (old_mdsmap['flags'] & CEPH_MDSMAP_ALLOW_STANDBY_REPLAY):
                 log.debug(f"allow_standby_replay disabled in epoch {i}")
                 did_disable_allow_standby_replay = True
-        assert not should_decrease_max_mds or did_decrease_max_mds
+        assert not multiple_max_mds or did_fail_fs or did_decrease_max_mds
         assert not should_disable_allow_standby_replay or did_disable_allow_standby_replay
 
 
