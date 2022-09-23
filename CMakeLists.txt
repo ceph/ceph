@@ -399,8 +399,10 @@ else()
   set(EXE_LINKER_USE_PIE ${ENABLE_SHARED})
 endif()
 
-# require libcurl with good curl_multi_wait(), see https://tracker.ceph.com/issues/15915
-find_package(CURL 7.32 REQUIRED)
+if(NOT WIN32)
+  # require libcurl with good curl_multi_wait(), see https://tracker.ceph.com/issues/15915
+  find_package(CURL 7.32 REQUIRED)
+endif()
 
 find_package(OpenSSL REQUIRED)
 set(CRYPTO_LIBS OpenSSL::Crypto)
