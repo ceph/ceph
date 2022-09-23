@@ -19,10 +19,6 @@ sslTag="OpenSSL_1_1_1c"
 sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
-curlTag="curl-7_84_0"
-curlSrcDir="${depsSrcDir}/curl"
-curlDir="${depsToolsetDir}/curl"
-
 # For now, we'll keep the version number within the file path when not using git.
 boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.79.0/source/boost_1_79_0.tar.gz"
 boostSrcDir="${depsSrcDir}/boost_1_79_0"
@@ -127,20 +123,6 @@ CROSS_COMPILE="${MINGW_PREFIX}" ./Configure \
 _make depend
 _make
 _make install_sw
-
-echo "Building libcurl."
-cd $depsSrcDir
-if [[ ! -d $curlSrcDir ]]; then
-    git clone --branch $curlTag --depth 1 https://github.com/curl/curl
-    cd $curlSrcDir
-fi
-cd $curlSrcDir
-./buildconf
-./configure --prefix=$curlDir --with-ssl=$sslDir --with-zlib=$zlibDir \
-            --host=${MINGW_BASE} --libdir="$curlDir/lib"
-_make
-_make install
-
 
 echo "Building boost."
 cd $depsSrcDir
