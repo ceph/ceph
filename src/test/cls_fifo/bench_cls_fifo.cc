@@ -177,6 +177,34 @@ void clean(R::RADOS& r, const R::IOContext& ioc, RCf::FIFO& f,
 }
 }
 
+#if FMT_VERSION >= 90000
+
+template <>
+struct fmt::formatter<bpo::options_description> :
+       fmt::ostream_formatter {};
+
+template <>
+struct fmt::formatter<rados::cls::fifo::part_header> :
+       fmt::ostream_formatter {};
+
+template <>
+struct fmt::formatter<rados::cls::fifo::info> :
+       fmt::ostream_formatter {};
+
+template <typename Clock, typename Duration>
+std::ostream& operator<< (std::ostream& ostr,
+                          const sc::time_point<Clock, Duration>& tp)
+{
+  auto tse = tp.time_since_epoch ();
+  return ostr << tse.count ();
+}
+
+template <typename Clock, typename Duration>
+struct fmt::formatter<sc::time_point<Clock, Duration>> :
+       fmt::ostream_formatter {};
+
+#endif
+
 int main(int argc, char* argv[])
 {
   const std::string_view prog(argv[0]);
