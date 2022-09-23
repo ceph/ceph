@@ -10097,11 +10097,11 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
       max_capacity_iops_config = "osd_mclock_max_capacity_iops_ssd";
     }
 
+    double default_iops = 0.0;
+    double cur_iops = 0.0;
     if (!force_run_benchmark) {
-      double default_iops = 0.0;
-
       // Get the current osd iops capacity
-      double cur_iops = cct->_conf.get_val<double>(max_capacity_iops_config);
+      cur_iops = cct->_conf.get_val<double>(max_capacity_iops_config);
 
       // Get the default max iops capacity
       auto val = cct->_conf.get_val_default(max_capacity_iops_config);
@@ -10152,8 +10152,31 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
             << " elapsed_sec: " << elapsed
             << dendl;
 
-    // Persist the iops value to the MON store.
-    mon_cmd_set_config(max_capacity_iops_config, std::to_string(iops));
+    // Get the threshold IOPS set for the underlying hdd/ssd.
+    double threshold_iops = 0.0;
+    if (store_is_rotational) {
+      threshold_iops = cct->_conf.get_val<double>(
+        "osd_mclock_iops_capacity_threshold_hdd");
+    } else {
+      threshold_iops = cct->_conf.get_val<double>(
+        "osd_mclock_iops_capacity_threshold_ssd");
+    }
+
+    // Persist the iops value to the MON store or throw cluster warning
+    // if the measured iops exceeds the set threshold. If the iops exceed
+    // the threshold, the default value is used.
+    if (iops > threshold_iops) {
+      clog->warn() << "OSD bench result of " << std::to_string(iops)
+                   << " IOPS exceeded the threshold limit of "
+                   << std::to_string(threshold_iops) << " IOPS for osd."
+                   << std::to_string(whoami) << ". IOPS capacity is unchanged"
+                   << " at " << std::to_string(cur_iops) << " IOPS. The"
+                   << " recommendation is to establish the osd's IOPS capacity"
+                   << " using other benchmark tools (e.g. Fio) and then"
+                   << " override osd_mclock_max_capacity_iops_[hdd|ssd].";
+    } else {
+      mon_cmd_set_config(max_capacity_iops_config, std::to_string(iops));
+    }
   }
 }
 
