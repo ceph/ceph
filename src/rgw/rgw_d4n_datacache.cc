@@ -9,17 +9,18 @@ std::vector< std::pair<std::string, std::string> > RGWD4NCache::buildObject(rgw:
   std::vector< std::pair<std::string, std::string> > values;
   rgw::sal::Attrs::iterator attrs;
  
-  // Convert to vector
-  if (baseBinary != NULL && newBinary != NULL) {
+  /* Convert to vector */
+  if (baseBinary != NULL) {
     for (attrs = baseBinary->begin(); attrs != baseBinary->end(); ++attrs) {
       values.push_back(std::make_pair(attrs->first, attrs->second.to_str()));
     }
 
-    // Update attributes
+    /* Update attributes */
     if (!newBinary->empty()) {
       for (attrs = newBinary->begin(); attrs != newBinary->end(); ++attrs) {
-        int index = 0;
+        long unsigned int index = 0;
 
+	/* Find if attribute already exists */
         for (const auto& pair : values) {
           if (pair.first == attrs->first) {
             break;
@@ -28,18 +29,19 @@ std::vector< std::pair<std::string, std::string> > RGWD4NCache::buildObject(rgw:
           index++;
         }
     
-        if (index != (int)values.size()) {
+        if (index != values.size()) {
           values[index] = std::make_pair(attrs->first, attrs->second.to_str());
         } else {
+	  /* If not, append it to existing attributes */
           values.push_back(std::make_pair(attrs->first, attrs->second.to_str()));
 	}
       }
     }
   } else if (newBinary != NULL) {
-    // Update attributes
+    /* Update attributes */
     if (!newBinary->empty()) {
       for (attrs = newBinary->begin(); attrs != newBinary->end(); ++attrs) {
-        int index = 0;
+        long unsigned int index = 0;
 
         for (const auto& pair : values) {
           if (pair.first == attrs->first) {
@@ -49,7 +51,7 @@ std::vector< std::pair<std::string, std::string> > RGWD4NCache::buildObject(rgw:
           index++;
         }
     
-        if (index != (int)values.size()) {
+        if (index != values.size()) {
           values[index] = std::make_pair(attrs->first, attrs->second.to_str());
         } else {
           values.push_back(std::make_pair(attrs->first, attrs->second.to_str()));
@@ -95,23 +97,16 @@ int RGWD4NCache::existKey(std::string key) {
   return result;
 }
 
-int RGWD4NCache::setObject(rgw::sal::Attrs baseAttrs, rgw::sal::Attrs* newAttrs, std::string oid) {
-  // Creating the index based on obj_name
+int RGWD4NCache::setObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal::Attrs* newAttrs) {
+  /* Creating the index based on obj_name */
   std::string key = "rgw-object:" + oid + ":cache";
+  std::string result;
+
   if (!client.is_connected()) {
     findClient(&client);
   }
 
-  std::string result;
-  std::vector<std::string> keys;
-  keys.push_back(key);
-
-  // Every set will be new
-  if (host == "" || port == 0) {
-    dout(10) << "RGW D4N Cache: D4N cache endpoint not configured correctly" << dendl;
-    return -1;
-  }
-
+  /* Every set will be treated as new */
   try {
     std::vector< std::pair<std::string, std::string> > redisObject = buildObject(&baseAttrs, newAttrs);
       
@@ -126,6 +121,12 @@ int RGWD4NCache::setObject(rgw::sal::Attrs baseAttrs, rgw::sal::Attrs* newAttrs,
     });
 
     client.sync_commit(std::chrono::milliseconds(1000));
+
+    if (result != "OK") {
+      return -1;
+    }
+
+    return 0;
   } catch(std::exception &e) {
     return -1;
   }
@@ -133,18 +134,16 @@ int RGWD4NCache::setObject(rgw::sal::Attrs baseAttrs, rgw::sal::Attrs* newAttrs,
   return 0;
 }
 
-int RGWD4NCache::getObject(rgw::sal::Object* source) {
+int RGWD4NCache::getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal::Attrs* newAttrs) {
   int key_exist = -2;
-  rgw::sal::Attrs newAttrs;
-  std::string key = "rgw-object:" + source->get_name() + ":cache";
-
+  std::string key = "rgw-object:" + oid + ":cache";
+  std::vector<std::string> values;
   if (!client.is_connected()) {
     findClient(&client);
   }
 
   if (existKey(key)) {
     rgw::sal::Attrs::iterator it;
-    rgw::sal::Attrs newAttrs;
     std::vector<std::string> fields;
 
     for (it = source->get_attrs().begin(); it != source->get_attrs().end(); ++it) {
@@ -153,18 +152,18 @@ int RGWD4NCache::getObject(rgw::sal::Object* source) {
 
     
     try {
-      client.hmget(key, fields, [&key_exist, &newAttrs, &fields](cpp_redis::reply &reply) {
+      client.hmget(key, fields, [&key_exist, &newAttrs, &fields, &values](cpp_redis::reply &reply) {
         if (reply.is_array()) {
 	  auto arr = reply.as_array();
 
 	  if (!arr[0].is_null()) {
 	    key_exist = 0;
 
-            for (int i = 0; i < static_cast<int>(fields.size()); ++i) {
+            for (long unsigned int i = 0; i < fields.size(); ++i) {
 	      std::string tmp = arr[i].as_string();
               buffer::list bl;
 	      bl.append(tmp.data(), std::strlen(tmp.data()));
-	      newAttrs.insert({fields[i], bl});
+	      newAttrs->insert({fields[i], bl});
             }
 	  }
 	}
@@ -172,23 +171,18 @@ int RGWD4NCache::getObject(rgw::sal::Object* source) {
 
       client.sync_commit(std::chrono::milliseconds(1000));
 
-      if (key_exist < 0 ) {
-        dout(20) << "RGW D4N Cache: Object is not in cache." << dendl;
-        return key_exist;
-      }
-   
-      // Update the zipper object's attributes 
-      int set_attrs_return = source->set_attrs(newAttrs);
-
-      if (set_attrs_return < 0) {
-        dout(20) << "RGW D4N Cache: Zipper object's attributes were not set." << dendl;
+      if (key_exist < 0) {
+        dout(20) << "RGW D4N Cache: Object was not retrievable." << dendl;
+        return -1;
       }
     } catch(std::exception &e) {
       return -1;
     }
+  } else {
+    return -2;
   }
- 
-  return key_exist;
+
+  return 0;
 }
 
 int RGWD4NCache::delObject(rgw::sal::Object* source) {
@@ -204,46 +198,13 @@ int RGWD4NCache::delObject(rgw::sal::Object* source) {
   if (existKey(key)) {
     try {
       client.del(keys, [&result](cpp_redis::reply &reply) {
-        if (reply.is_integer()) {
-          result = reply.as_integer();
-        }
+	if (reply.is_integer()) {
+	  result = reply.as_integer();
+	}
       });
 
       client.sync_commit(std::chrono::milliseconds(1000));
-      return result-1;
-    } catch(std::exception &e) {
-      return -1;
-    }
-  }
-    
-  dout(20) << "RGW D4N Cache: Object is not in cache." << dendl;
-  return -2;
-}
-
-int RGWD4NCache::updateAttrs(std::string oid, rgw::sal::Attrs* updateAttrs) {
-  int result = 0;
-  std::string key = "rgw-object:" + oid + ":cache";
- 
-  if (!client.is_connected()) {
-    findClient(&client);
-  }
-
-  if (existKey(key)) {
-    try {
-      std::vector< std::pair<std::string, std::string> > redisObject = buildObject(NULL, updateAttrs);
       
-      if (redisObject.empty()) {
-        return -1;
-      }
-
-      client.hmset(key, redisObject, [&result](cpp_redis::reply &reply) {
-        if (reply.is_integer()) {
-          result = reply.as_integer();
-        }
-      });
-
-      client.sync_commit(std::chrono::milliseconds(1000));
-
       return result - 1;
     } catch(std::exception &e) {
       return -1;
@@ -254,7 +215,7 @@ int RGWD4NCache::updateAttrs(std::string oid, rgw::sal::Attrs* updateAttrs) {
   return -2;
 }
 
-int RGWD4NCache::delAttrs(std::string oid, std::vector<std::string> fields) {
+int RGWD4NCache::delAttrs(std::string oid, std::vector<std::string>& baseFields, std::vector<std::string>& deleteFields) {
   int result = 0;
   std::string key = "rgw-object:" + oid + ":cache";
 
@@ -263,14 +224,22 @@ int RGWD4NCache::delAttrs(std::string oid, std::vector<std::string> fields) {
   }
 
   if (existKey(key)) {
+    /* Find if attribute doesn't exist */
+    for (const auto& delField : deleteFields) {
+      if (std::find(baseFields.begin(), baseFields.end(), delField) == baseFields.end()) {
+        deleteFields.erase(std::find(deleteFields.begin(), deleteFields.end(), delField));
+      }
+    }
+
     try {
-      client.hdel(key, fields, [&result](cpp_redis::reply &reply) {
-        if (reply.is_integer()) {
-          result = reply.as_integer();
-        }
+      client.hdel(key, deleteFields, [&result](cpp_redis::reply &reply) {
+	if (reply.is_integer()) {
+	  result = reply.as_integer();
+	}
       });
 
       client.sync_commit(std::chrono::milliseconds(1000));
+      
       return result - 1;
     } catch(std::exception &e) {
       return -1;

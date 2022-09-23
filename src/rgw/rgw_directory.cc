@@ -123,6 +123,11 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
       if (key_exist < 0 ) {
         return key_exist;
       }
+
+      // Fix host list -Sam
+      ptr->size_in_bytes = std::stoi(size);
+      ptr->c_obj.bucket_name = bucket_name;
+      ptr->c_obj.obj_name = obj_name;
     } catch(std::exception &e) {
       key_exist = -1;
     }
@@ -150,7 +155,7 @@ int RGWBlockDirectory::delValue(cache_block *ptr){
       });
 	
       client.sync_commit(std::chrono::milliseconds(1000));	
-      return result-1;
+      return result - 1;
     } catch(std::exception &e) {
       return -1;
     }
