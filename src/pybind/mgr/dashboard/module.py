@@ -6,12 +6,14 @@ import collections
 import errno
 import logging
 import os
+import socket
 import ssl
 import sys
 import tempfile
 import threading
 import time
 from typing import TYPE_CHECKING, Optional
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     if sys.version_info >= (3, 8):
@@ -268,7 +270,8 @@ class Module(MgrModule, CherryPyConfig):
         Option(name='standby_behaviour', type='str', default='redirect',
                enum_allowed=['redirect', 'error']),
         Option(name='standby_error_status_code', type='int', default=500,
-               min=400, max=599)
+               min=400, max=599),
+        Option(name='redirect_resolve_ip_addr', type='bool', default=False)
     ]
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:
@@ -525,6 +528,13 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
                         return None
 
                     if active_uri:
+                        if module.get_module_option('redirect_resolve_ip_addr'):
+                            p_result = urlparse(active_uri)
+                            hostname = str(p_result.hostname)
+                            fqdn_netloc = p_result.netloc.replace(
+                                hostname, socket.getfqdn(hostname))
+                            active_uri = p_result._replace(netloc=fqdn_netloc).geturl()
+
                         module.log.info("Redirecting to active '%s'", active_uri)
                         raise cherrypy.HTTPRedirect(active_uri)
                     else:
