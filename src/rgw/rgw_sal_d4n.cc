@@ -37,33 +37,94 @@ int D4NFilterStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   return 0;
 }
 
+std::unique_ptr<User> D4NFilterStore::get_user(const rgw_user &u)
+{
+  std::unique_ptr<User> user = next->get_user(u);
+
+  return std::make_unique<D4NFilterUser>(std::move(user), this);
+}
+
+std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
+{
+  std::unique_ptr<Object> o = next->get_object(k);
+
+  return std::make_unique<D4NFilterObject>(std::move(o), this, filter);
+}
+
+int D4NFilterUser::create_bucket(const DoutPrefixProvider* dpp,
+                              const rgw_bucket& b,
+                              const std::string& zonegroup_id,
+                              rgw_placement_rule& placement_rule,
+                              std::string& swift_ver_location,
+                              const RGWQuotaInfo * pquota_info,
+                              const RGWAccessControlPolicy& policy,
+                              Attrs& attrs,
+                              RGWBucketInfo& info,
+                              obj_version& ep_objv,
+                              bool exclusive,
+                              bool obj_lock_enabled,
+                              bool* existed,
+                              req_info& req_info,
+                              std::unique_ptr<Bucket>* bucket_out,
+                              optional_yield y)
+{
+  std::unique_ptr<Bucket> nb;
+  int ret;
+
+  ret = next->create_bucket(dpp, b, zonegroup_id, placement_rule, swift_ver_location, pquota_info, policy, attrs, info, ep_objv, exclusive, obj_lock_enabled, existed, req_info, &nb, y);
+  if (ret < 0)
+    return ret;
+
+  Bucket* fb = new D4NFilterBucket(std::move(nb), this, filter);
+  bucket_out->reset(fb);
+  return 0;
+}
+
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y) 
 {
   if (setattrs != NULL) {
-    int updateAttrsReturn = filter->get_d4n_cache()->updateAttrs(this->get_name(), setattrs);
+    /* Ensure setattrs and delattrs do not overlap */
+    if (delattrs != NULL) {
+      for (const auto& attr : *delattrs) {
+        if (std::find(setattrs->begin(), setattrs->end(), attr) != setattrs->end()) {
+          delattrs->erase(std::find(delattrs->begin(), delattrs->end(), attr));
+        }
+      }
+    }
+
+    int updateAttrsReturn = filter->get_d4n_cache()->setObject(this->get_name(), &(this->get_attrs()), setattrs);
 
     if (updateAttrsReturn < 0) {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache update attributes operation failed." << dendl;
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache set object attributes operation failed." << dendl;
     } else {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache update attributes operation succeeded." << dendl;
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache set object attributes operation succeeded." << dendl;
     }
   }
-  
+
   if (delattrs != NULL) {
-    std::vector<std::string> fields;
+    std::vector<std::string> delFields;
     Attrs::iterator attrs;
 
+    /* Extract fields from delattrs */
     for (attrs = delattrs->begin(); attrs != delattrs->end(); ++attrs) {
-      fields.push_back(attrs->first);
+      delFields.push_back(attrs->first);
     }
 
-    int delAttrsReturn = filter->get_d4n_cache()->delAttrs(this->get_name(), fields);
+    Attrs currentattrs = this->get_attrs();
+    std::vector<std::string> currentFields;
+    
+    /* Extract fields from current attrs */
+    for (attrs = currentattrs.begin(); attrs != currentattrs.end(); ++attrs) {
+      currentFields.push_back(attrs->first);
+    }
+    
+    int delAttrsReturn = filter->get_d4n_cache()->delAttrs(this->get_name(), currentFields, delFields);
 
     if (delAttrsReturn < 0) {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache delete attributes operation failed." << dendl;
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attributes operation failed." << dendl;
     } else {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache delete attributes operation succeeded." << dendl;
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attributes operation succeeded." << dendl;
     }
   }
 
@@ -73,15 +134,26 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
 int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
                                 rgw_obj* target_obj)
 {
-  int getObjReturn = filter->get_d4n_cache()->getObject(this);
+  rgw::sal::Attrs newAttrs;
+  int getAttrsReturn = filter->get_d4n_cache()->getObject(this->get_name(), &(this->get_attrs()), &newAttrs);
 
-  if (getObjReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache get attrs operation failed." << dendl;
+  if (getAttrsReturn < 0) {
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache get object attributes operation failed." << dendl;
+
+    return next->get_obj_attrs(y, dpp, target_obj);
   } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache get attrs operation succeeded." << dendl;
-  }
+    int setAttrsReturn = this->set_attrs(newAttrs);
+    
+    if (setAttrsReturn < 0) {
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache get object attributes operation failed." << dendl;
 
-  return next->get_obj_attrs(y, dpp, target_obj);
+      return next->get_obj_attrs(y, dpp, target_obj);
+    } else {
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache get object attributes operation succeeded." << dendl;
+  
+      return 0;
+    }
+  }
 }
 
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
@@ -89,12 +161,12 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
-  int updateAttrsReturn = filter->get_d4n_cache()->updateAttrs(this->get_name(), &update);
+  int updateAttrsReturn = filter->get_d4n_cache()->setObject(this->get_name(), &(this->get_attrs()), &update);
 
   if (updateAttrsReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache update attribute operation failed." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache modify object attribute operation failed." << dendl;
   } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache update attribute operation succeeded." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache modify object attribute operation succeeded." << dendl;
   }
 
   return next->modify_obj_attrs(attr_name, attr_val, y, dpp);  
@@ -103,14 +175,24 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
                                optional_yield y) 
 {
-  std::vector<std::string> fields;
-  fields.push_back((std::string)attr_name);
-  int delAttrReturn = filter->get_d4n_cache()->delAttrs(this->get_name(), fields);
+  std::vector<std::string> delFields;
+  delFields.push_back((std::string)attr_name);
+  
+  Attrs::iterator attrs;
+  Attrs currentattrs = this->get_attrs();
+  std::vector<std::string> currentFields;
+  
+  // Extract fields from current attrs
+  for (attrs = currentattrs.begin(); attrs != currentattrs.end(); ++attrs) {
+    currentFields.push_back(attrs->first);
+  }
+  
+  int delAttrReturn = filter->get_d4n_cache()->delAttrs(this->get_name(), currentFields, delFields);
 
   if (delAttrReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete attribute operation failed." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attribute operation failed." << dendl;
   } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete attribute operation succeeded." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attribute operation succeeded." << dendl;
   }
   
   return next->delete_obj_attrs(dpp, attr_name, y);  
@@ -119,6 +201,7 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
 std::unique_ptr<Object> D4NFilterStore::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
+
   return std::make_unique<D4NFilterObject>(std::move(o), this);
 }
 
@@ -161,7 +244,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation succeeded." << dendl;
   }
 
-  int getObjReturn = source->filter->get_d4n_cache()->getObject(source);
+  rgw::sal::Attrs newAttrs;
+  source->filter->get_d4n_cache()->getObject(source->get_name(), &(source->get_attrs()), &newAttrs);
+  int getObjReturn = source->set_attrs(newAttrs);
 
   if (getObjReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get operation failed." << dendl;
@@ -219,12 +304,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     ldpp_dout(save_dpp, 20) << "D4N Filter: Directory set operation succeeded." << dendl;
   }
 
-  int returnVal = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
-			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, y);
-  head_obj->get_obj_attrs(y, save_dpp);
-  
-  int setObjReturn = filter->get_d4n_cache()->setObject(head_obj->get_attrs(), &attrs, head_obj->get_name());
+  int setObjReturn = filter->get_d4n_cache()->setObject(head_obj->get_name(), &(head_obj->get_attrs()), &attrs);
 
   if (setObjReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set operation failed." << dendl;
@@ -232,7 +312,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set operation succeeded." << dendl;
   }
   
-  return returnVal;
+  return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
+			delete_at, if_match, if_nomatch, user_data, zones_trace,
+			canceled, y);
 }
 
 } } // namespace rgw::sal

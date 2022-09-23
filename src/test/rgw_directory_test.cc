@@ -37,14 +37,14 @@ class DirectoryFixture: public ::testing::Test {
     cache_block* c_blk;
 };
 
-// Successful initialization
+/* Successful initialization */
 TEST_F(DirectoryFixture, DirectoryInit) {
   ASSERT_NE(blk_dir, nullptr);
   ASSERT_NE(c_blk, nullptr);
-  ASSERT_NE((int)portStr.length(), (int)0);
+  ASSERT_NE(portStr.length(), static_cast<long unsigned int>(0));
 }
 
-// Successful setValue Call and Redis Check
+/* Successful setValue Call and Redis Check */
 TEST_F(DirectoryFixture, SetValueTest) {
   cpp_redis::client client;
   int key_exist = -1;
@@ -92,7 +92,7 @@ TEST_F(DirectoryFixture, SetValueTest) {
   client.flushall();
 }
 
-// Successful getValue Calls and Redis Check
+/* Successful getValue Calls and Redis Check */
 TEST_F(DirectoryFixture, GetValueTest) {
   cpp_redis::client client;
   int key_exist = -1;
@@ -137,7 +137,7 @@ TEST_F(DirectoryFixture, GetValueTest) {
   EXPECT_EQ(bucket_name, bucketName);
   EXPECT_EQ(obj_name, oid);
 
-  // Check if object name in directory instance matches redis update
+  /* Check if object name in directory instance matches redis update */
   client.hset("rgw-object:" + oid + ":directory", "obj_name", "newoid", [](cpp_redis::reply& reply) {
     if (reply.is_integer()) {
       ASSERT_EQ(reply.as_integer(), 0); // Zero keys exist
@@ -154,7 +154,7 @@ TEST_F(DirectoryFixture, GetValueTest) {
   client.flushall();
 }
 
-// Successful delValue Call and Redis Check
+/* Successful delValue Call and Redis Check */
 TEST_F(DirectoryFixture, DelValueTest) {
   cpp_redis::client client;
   vector<string> keys;
@@ -168,7 +168,7 @@ TEST_F(DirectoryFixture, DelValueTest) {
   
   client.exists(keys, [](cpp_redis::reply& reply) {
     if (reply.is_integer()) {
-      ASSERT_EQ(reply.as_integer(), 0); // Zero keys exist
+      ASSERT_EQ(reply.as_integer(), 0); /* Zero keys exist */
     }
   });
 

@@ -23,11 +23,10 @@ class RGWD4NCache {
 
     void findClient(cpp_redis::client *client);
     int existKey(std::string key);
-    int setObject(rgw::sal::Attrs baseAttrs, rgw::sal::Attrs* newAttrs, std::string oid);
-    int getObject(rgw::sal::Object* source);
-    int delObject(rgw::sal::Object* source);
-    int updateAttrs(std::string oid, rgw::sal::Attrs* updateAttrs);
-    int delAttrs(std::string oid, std::vector<std::string> fields);
+    int setObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal::Attrs* newAttrs);
+    int getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal::Attrs* newAttrs);
+    int delObject(std::string oid);
+    int delAttrs(std::string oid, std::vector<std::string>& baseFields, std::vector<std::string>& deleteFields);
 
   private:
     cpp_redis::client client;
