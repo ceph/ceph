@@ -45,6 +45,7 @@ class D4NFilterStore : public FilterStore {
     }
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
+    virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
 
@@ -58,6 +59,48 @@ class D4NFilterStore : public FilterStore {
     RGWBlockDirectory* get_block_dir() { return blk_dir; }
     cache_block* get_cache_block() { return c_blk; }
     RGWD4NCache* get_d4n_cache() { return d4n_cache; }
+};
+
+class D4NFilterUser : public FilterUser {
+  private:
+    D4NFilterStore* filter;
+
+  public:
+    D4NFilterUser(std::unique_ptr<User> _next, D4NFilterStore* _filter) : 
+      FilterUser(std::move(_next)),
+      filter(_filter) {}
+    //D4NFilterUser(FilterUser& u) : FilterUser(u.next->clone()) {}
+    virtual ~D4NFilterUser() = default;
+
+    virtual int create_bucket(const DoutPrefixProvider* dpp,
+                            const rgw_bucket& b,
+                            const std::string& zonegroup_id,
+                            rgw_placement_rule& placement_rule,
+                            std::string& swift_ver_location,
+                            const RGWQuotaInfo* pquota_info,
+                            const RGWAccessControlPolicy& policy,
+                            Attrs& attrs,
+                            RGWBucketInfo& info,
+                            obj_version& ep_objv,
+                            bool exclusive,
+                            bool obj_lock_enabled,
+                            bool* existed,
+                            req_info& req_info,
+                            std::unique_ptr<Bucket>* bucket,
+                            optional_yield y) override;
+};
+
+class D4NFilterBucket : public FilterBucket {
+  private:
+    D4NFilterStore* filter;
+
+  public:
+    D4NFilterBucket(std::unique_ptr<Bucket> _next, User* _user, D4NFilterStore* _filter) :
+      FilterBucket(std::move(_next), _user), 
+      filter(_filter) {}
+    virtual ~D4NFilterBucket() = default;
+   
+    virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
 };
 
 class D4NFilterObject : public FilterObject {
@@ -113,7 +156,6 @@ class D4NFilterWriter : public FilterWriter {
     const DoutPrefixProvider* save_dpp;
 
   public:
-    D4NFilterWriter(std::unique_ptr<Writer> _next, std::unique_ptr<Object> _head_obj) : FilterWriter(std::move(_next), std::move(_head_obj)) {} 
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, const DoutPrefixProvider* _dpp) 
     : FilterWriter(std::move(_next), std::move(_head_obj)),
     filter(_filter),
