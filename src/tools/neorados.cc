@@ -44,6 +44,17 @@ namespace bs = boost::system;
 namespace R = neorados;
 namespace s = spawn;
 
+#if FMT_VERSION >= 90000
+
+template <>
+struct fmt::formatter<R::Entry> : fmt::ostream_formatter {};
+
+template <>
+struct fmt::formatter<boost::program_options::options_description> :
+       fmt::ostream_formatter {};
+
+#endif
+
 std::string verstr(const std::tuple<uint32_t, uint32_t, uint32_t>& v)
 {
   const auto [maj, min, p] = v;
