@@ -1007,101 +1007,170 @@ public:
       old_addr,
       new_addr);
 
+    assert(depth <= get_root().get_depth());
+    if (depth == get_root().get_depth()) {
+      SUBTRACET(seastore_fixedkv_tree, "update at root", c.trans);
+
+      if (laddr != min_max_t<node_key_t>::min) {
+        SUBERRORT(
+          seastore_fixedkv_tree,
+          "updating root laddr {} at depth {} from {} to {},"
+          "laddr is not 0",
+          c.trans,
+          laddr,
+          depth,
+          old_addr,
+          new_addr,
+          get_root().get_location());
+        ceph_assert(0 == "impossible");
+      }
+
+      if (get_root().get_location() != old_addr) {
+        SUBERRORT(
+          seastore_fixedkv_tree,
+          "updating root laddr {} at depth {} from {} to {},"
+          "root addr {} does not match",
+          c.trans,
+          laddr,
+          depth,
+          old_addr,
+          new_addr,
+          get_root().get_location());
+        ceph_assert(0 == "impossible");
+      }
+
+      root_block = c.cache.duplicate_for_write(
+        c.trans, root_block
+      )->template cast<RootBlock>();
+      get_root().set_location(new_addr);
+      may_link_to_root_block(c.trans, *new_node);
+      return update_internal_mapping_iertr::now();
+    } else {
+      typename internal_node_t::Ref parent =
+        c.trans.template may_get_fixedkv_node<
+          node_key_t, internal_node_t>(laddr, depth + 1);
+      if (!parent) {
+        parent = c.pins->template maybe_get_node<internal_node_t>(
+          laddr, depth + 1);
+      }
+      if (parent && parent->is_valid()) {
+        assert(parent->begin().get_key() <= laddr);
+        if (!parent->is_pending_in_trans(c.trans.get_trans_id())) {
+          c.trans.add_to_read_set(parent);
+        }
+        return update_internal_mapping_iertr::future<>(parent->wait_io()
+        ).si_then(
+          [parent, laddr, old_addr, new_addr, new_node,
+          c, this]() mutable -> update_internal_mapping_iertr::future<> {
+          LOG_PREFIX(FixedKVBtree::update_internal_mapping);
+          auto it = parent->lower_bound(laddr);
+          assert(it != parent->end() && it.get_key() == laddr);
+          SUBDEBUGT(seastore_fixedkv_tree,
+            "got parent {}", c.trans, *parent);
+
+          if (it.get_val() != old_addr) {
+            SUBERRORT(
+              seastore_fixedkv_tree,
+              "updating laddr {} from {} to {},"
+              "node {} pos {} val addr {} does not match",
+              c.trans,
+              laddr,
+              old_addr,
+              new_addr,
+              *parent,
+              it.offset,
+              it->get_val());
+            ceph_assert(0 == "impossible");
+          }
+          if (!parent->is_pending()) {
+            parent = c.cache.duplicate_for_write(
+              c.trans, parent)->template cast<internal_node_t>();
+            return may_link_parent_child(c, parent
+            ).si_then([parent, it, new_addr, t=&c.trans, new_node] {
+              LOG_PREFIX(FixedKVBtree::update);
+              SUBTRACET(
+                seastore_fixedkv_tree,
+                "update element at pos {}, parent {}",
+                *t,
+                it.offset,
+                *parent);
+              parent->update(*t, it, new_addr, new_node);
+            });
+          }
+          SUBTRACET(
+            seastore_fixedkv_tree,
+            "update element at pos {}, parent {}",
+            c.trans,
+            it.offset,
+            *parent);
+          parent->update(c.trans, it, new_addr, new_node);
+          return base_iertr::now();
+        }).handle_error_interruptible(
+          update_internal_mapping_iertr::pass_further{},
+          crimson::ct_error::assert_all{
+            "Invalid error in FixedKVBtree::update_internal_mapping"
+          }
+        );
+      }
+    }
+
     return lower_bound(
       c, laddr
     ).si_then([=, this](auto iter) {
       assert(iter.get_depth() >= depth);
-      if (depth == iter.get_depth()) {
-        SUBTRACET(seastore_fixedkv_tree, "update at root", c.trans);
+      auto &parent = iter.get_internal(depth + 1);
+      assert(parent.node);
+      assert(parent.pos < parent.node->get_size());
+      auto piter = parent.node->iter_idx(parent.pos);
 
-        if (laddr != min_max_t<node_key_t>::min) {
-          SUBERRORT(
-            seastore_fixedkv_tree,
-            "updating root laddr {} at depth {} from {} to {},"
-            "laddr is not 0",
-            c.trans,
-            laddr,
-            depth,
-            old_addr,
-            new_addr,
-            get_root().get_location());
-          ceph_assert(0 == "impossible");
-        }
-
-        if (get_root().get_location() != old_addr) {
-          SUBERRORT(
-            seastore_fixedkv_tree,
-            "updating root laddr {} at depth {} from {} to {},"
-            "root addr {} does not match",
-            c.trans,
-            laddr,
-            depth,
-            old_addr,
-            new_addr,
-            get_root().get_location());
-          ceph_assert(0 == "impossible");
-        }
-
-        root_block = c.cache.duplicate_for_write(
-          c.trans, root_block
-        )->template cast<RootBlock>();
-        get_root().set_location(new_addr);
-        may_link_to_root_block(c.trans, *new_node);
-      } else {
-        auto &parent = iter.get_internal(depth + 1);
-        assert(parent.node);
-        assert(parent.pos < parent.node->get_size());
-        auto piter = parent.node->iter_idx(parent.pos);
-
-        if (piter->get_key() != laddr) {
-          SUBERRORT(
-            seastore_fixedkv_tree,
-            "updating laddr {} at depth {} from {} to {},"
-            "node {} pos {} val pivot addr {} does not match",
-            c.trans,
-            laddr,
-            depth,
-            old_addr,
-            new_addr,
-            *(parent.node),
-            parent.pos,
-            piter->get_key());
-          ceph_assert(0 == "impossible");
-        }
-
-
-        if (piter->get_val() != old_addr) {
-          SUBERRORT(
-            seastore_fixedkv_tree,
-            "updating laddr {} at depth {} from {} to {},"
-            "node {} pos {} val addr {} does not match",
-            c.trans,
-            laddr,
-            depth,
-            old_addr,
-            new_addr,
-            *(parent.node),
-            parent.pos,
-            piter->get_val());
-          ceph_assert(0 == "impossible");
-        }
-
-        if (!parent.node->is_pending()) {
-          CachedExtentRef mut = c.cache.duplicate_for_write(
-            c.trans,
-            parent.node
-          );
-          parent.node = mut->cast<internal_node_t>();
-          may_link_parent_child(iter, depth + 1, c.trans);
-        }
-        parent.node->update(c.trans, piter, new_addr, new_node);
-
-        /* Note, iter is now invalid as we didn't udpate either the parent
-         * node reference to the new mutable instance nor did we update the
-         * child pointer to the new node.  Not a problem as we'll now just
-         * destruct it.
-         */
+      if (piter->get_key() != laddr) {
+        SUBERRORT(
+          seastore_fixedkv_tree,
+          "updating laddr {} at depth {} from {} to {},"
+          "node {} pos {} val pivot addr {} does not match",
+          c.trans,
+          laddr,
+          depth,
+          old_addr,
+          new_addr,
+          *(parent.node),
+          parent.pos,
+          piter->get_key());
+        ceph_assert(0 == "impossible");
       }
+
+
+      if (piter->get_val() != old_addr) {
+        SUBERRORT(
+          seastore_fixedkv_tree,
+          "updating laddr {} at depth {} from {} to {},"
+          "node {} pos {} val addr {} does not match",
+          c.trans,
+          laddr,
+          depth,
+          old_addr,
+          new_addr,
+          *(parent.node),
+          parent.pos,
+          piter->get_val());
+        ceph_assert(0 == "impossible");
+      }
+
+      if (!parent.node->is_pending()) {
+        CachedExtentRef mut = c.cache.duplicate_for_write(
+          c.trans,
+          parent.node
+        );
+        parent.node = mut->cast<internal_node_t>();
+        may_link_parent_child(iter, depth + 1, c.trans);
+      }
+      parent.node->update(c.trans, piter, new_addr, new_node);
+
+      /* Note, iter is now invalid as we didn't udpate either the parent
+       * node reference to the new mutable instance nor did we update the
+       * child pointer to the new node.  Not a problem as we'll now just
+       * destruct it.
+       */
       return seastar::now();
     });
   }
@@ -1170,7 +1239,7 @@ private:
     auto meta = child->get_node_meta();
     auto parent = c.trans.template may_get_fixedkv_node<
       node_key_t, internal_node_t>(
-        meta.begin, 2);
+        meta.begin, meta.depth + 1);
     if (!parent) {
       ceph_assert(child->back_tracker);
       auto p = child->back_tracker->parent;
