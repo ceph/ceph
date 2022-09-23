@@ -175,7 +175,7 @@ TEST_F(DirectoryFixture, DelValueTest) {
   client.flushall();
 }
 
-// Successful delValue Call and Redis Check
+/* Successful delValue Call and Redis Check */
 TEST_F(DirectoryFixture, DelValueTest) {
   cpp_redis::client client;
   vector<string> keys;
@@ -189,7 +189,7 @@ TEST_F(DirectoryFixture, DelValueTest) {
   
   client.exists(keys, [](cpp_redis::reply& reply) {
     if (reply.is_integer()) {
-      ASSERT_EQ(reply.as_integer(), 0); // Zero keys exist
+      ASSERT_EQ(reply.as_integer(), 0); /* Zero keys exist */
     }
   });
 
