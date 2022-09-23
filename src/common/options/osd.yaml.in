@@ -1128,6 +1128,32 @@ options:
   - osd_max_backfills
   flags:
   - runtime
+- name: osd_mclock_iops_capacity_threshold_hdd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
+    the OSD bench results for an OSD (for rotational media)
+  long_desc: This option specifies the threshold IOPS capacity for an OSD under
+    which the OSD bench results can be considered for QoS calculations. Only
+    considered for osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
+    ignore OSD bench results for an OSD (for rotational media)
+  default: 500
+  flags:
+  - runtime
+- name: osd_mclock_iops_capacity_threshold_ssd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
+    the OSD bench results for an OSD (for solid state media)
+  long_desc: This option specifies the threshold IOPS capacity for an OSD under
+    which the OSD bench results can be considered for QoS calculations. Only
+    considered for osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
+    ignore OSD bench results for an OSD (for solid state media)
+  default: 80000
+  flags:
+  - runtime
 # Set to true for testing.  Users should NOT set this.
 # If set to true even after reading enough shards to
 # decode the object, any error will be reported.

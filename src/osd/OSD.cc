@@ -10093,11 +10093,11 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
       max_capacity_iops_config = "osd_mclock_max_capacity_iops_ssd";
     }
 
+    double default_iops = 0.0;
+    double cur_iops = 0.0;
     if (!force_run_benchmark) {
-      double default_iops = 0.0;
-
       // Get the current osd iops capacity
-      double cur_iops = cct->_conf.get_val<double>(max_capacity_iops_config);
+      cur_iops = cct->_conf.get_val<double>(max_capacity_iops_config);
 
       // Get the default max iops capacity
       auto val = cct->_conf.get_val_default(max_capacity_iops_config);
@@ -10148,8 +10148,34 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
             << " elapsed_sec: " << elapsed
             << dendl;
 
-    // Persist the iops value to the MON store.
-    mon_cmd_set_config(max_capacity_iops_config, std::to_string(iops));
+    // Check if the IOPS is within a threshold range for both hdd/ssd.
+    // Revert to the defaults if not as it can have performance
+    // implications. Raise a cluster log warning indicating this.
+    double threshold_iops = 0.0;
+    bool iops_exceed_threshold = false;
+    if (store_is_rotational) {
+      threshold_iops = cct->_conf.get_val<double>(
+        "osd_mclock_iops_capacity_threshold_hdd");
+      iops_exceed_threshold = (iops > threshold_iops);
+    } else {
+      threshold_iops = cct->_conf.get_val<double>(
+        "osd_mclock_iops_capacity_threshold_ssd");
+      iops_exceed_threshold = (iops > threshold_iops);
+    }
+
+    // Persist the iops value to the MON store or throw cluster warning
+    if (iops_exceed_threshold) {
+      clog->warn() << "OSD bench result of " << std::to_string(iops)
+                   << " IOPS exceeded the threshold limit of "
+                   << std::to_string(threshold_iops) << " IOPS for osd."
+                   << std::to_string(whoami) << ". IOPS capacity is unchanged"
+                   << " at " << std::to_string(cur_iops) << " IOPS. The"
+                   << " recommendation is to establish the osd's IOPS capacity"
+                   << " using other benchmark tools (e.g. Fio) and then"
+                   << " override osd_mclock_max_capacity_iops_[hdd|ssd].";
+    } else {
+      mon_cmd_set_config(max_capacity_iops_config, std::to_string(iops));
+    }
   }
 }
 
