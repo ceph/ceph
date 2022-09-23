@@ -168,7 +168,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
         ctx.cluster.run(
             args=[
                 'curl', '--silent',
-                'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
+                'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm.py',
                 run.Raw('>'),
                 ctx.cephadm,
                 run.Raw('&&'),
