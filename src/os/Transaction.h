@@ -13,6 +13,12 @@
 
 #define OPS_PER_PTR 32
 
+#ifdef WITH_SEASTAR
+namespace crimson::osd {
+  class HLTransaction;
+}
+#endif
+
 void decode_str_str_map_to_bl(ceph::buffer::list::const_iterator& p, ceph::buffer::list *out);
 void decode_str_set_to_bl(ceph::buffer::list::const_iterator& p, ceph::buffer::list *out);
 
@@ -1295,6 +1301,10 @@ public:
 
   void dump(ceph::Formatter *f);
   static void generate_test_instances(std::list<Transaction*>& o);
+
+#ifdef WITH_SEASTAR
+  friend crimson::osd::HLTransaction;
+#endif
 };
 WRITE_CLASS_ENCODER(Transaction)
 WRITE_CLASS_ENCODER(Transaction::TransactionData)

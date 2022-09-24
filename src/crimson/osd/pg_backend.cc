@@ -1159,12 +1159,10 @@ void PGBackend::clone(
   ObjectState& d_os,
   ceph::os::Transaction& txn)
 {
-  // Prepend the cloning operation to txn
-  ceph::os::Transaction c_txn;
-  c_txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
-  // Operations will be removed from txn while appending
-  c_txn.append(txn);
-  txn = std::move(c_txn);
+  // Append the clone op in order. It will be reordered around
+  // `_submit_transaction()`. The net effect is supposed be as
+  // in the classial `PGTransaction` -> `os::Transaction`.
+  txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
 
   ceph::bufferlist bv;
   snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
