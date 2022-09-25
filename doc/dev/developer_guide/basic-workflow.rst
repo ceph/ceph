@@ -280,13 +280,13 @@ believe that it works.
    
    .. note::
 
-      In the command `git push origin fix_1`, `origin` is the name of your fork
-      of the upstream Ceph repository, and can be thought of as a nickname for
-      `git@github.com:username/ceph.git`, where `username` is your GitHub
-      username.
+      In the command ``git push origin fix_1``, ``origin`` is the name of your
+      fork of the upstream Ceph repository, and can be thought of as a nickname
+      for ``git@github.com:username/ceph.git``, where ``username`` is your
+      GitHub username.
 
-      It is possible that `origin` is not the name of your fork. Discover the
-      name of your fork by running `git remote -v`, as shown here:
+      It is possible that ``origin`` is not the name of your fork. Discover the
+      name of your fork by running ``git remote -v``, as shown here:
 
       .. code-block:: bash
 
@@ -296,9 +296,16 @@ believe that it works.
          origin	git@github.com:username/ceph.git (fetch)
          origin	git@github.com:username/ceph.git (push)
 
-       The line "origin git@github.com:username/ceph.git (fetch)" and the line
-       "origin git@github.com:username/ceph.git (push)" provide the information
-       that "origin" is the name of your fork of the Ceph repository.
+      The line::
+     
+         origin git@github.com:username/ceph.git (fetch) 
+      
+      and the line:: 
+        
+         origin git@github.com:username/ceph.git (push) 
+         
+      provide the information that "origin" is the name of your fork of the
+      Ceph repository.
 
 
 Opening a GitHub pull request
