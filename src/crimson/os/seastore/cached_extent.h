@@ -248,6 +248,15 @@ public:
   virtual void prepare_write() {}
 
   /**
+   *
+   * prepare_commit
+   *
+   * Called on all extents in transactions' write_set right before
+   * the corresponding transactions being submitted to the journal.
+   */
+  virtual void prepare_commit() {}
+
+  /**
    * on_initial_write
    *
    * Called after commit of extent.  State will be CLEAN.

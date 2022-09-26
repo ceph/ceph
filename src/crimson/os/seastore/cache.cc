@@ -1088,6 +1088,7 @@ record_t Cache::prepare_record(
     }
 
     i->prepare_write();
+    i->prepare_commit();
     i->set_io_wait();
 
     assert(i->get_version() > 0);
@@ -1190,6 +1191,12 @@ record_t Cache::prepare_record(
 
     bufferlist bl;
     i->prepare_write();
+    i->prepare_commit();
+    // we set io_wait promise for inline/ool extents, because
+    // with back_tracker in place, other transactions can see
+    // fresh extents that are destined to be but not yet added
+    // to cache
+    i->set_io_wait();
     bl.append(i->get_bptr());
     if (i->get_type() == extent_types_t::ROOT) {
       ceph_assert(0 == "ROOT never gets written as a fresh block");
@@ -1230,6 +1237,8 @@ record_t Cache::prepare_record(
     assert(!i->is_inline());
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
+    i->prepare_commit();
+    i->set_io_wait();
     if (is_backref_mapped_extent_node(i)) {
       alloc_delta.alloc_blk_ranges.emplace_back(
 	i->get_paddr(),
@@ -1452,6 +1461,7 @@ void Cache::complete_commit(
     i->last_committed_crc = i->get_crc32c();
     i->pending_for_transaction = 0;
     i->on_initial_write();
+    i->complete_io();
 
     i->state = CachedExtent::extent_state_t::CLEAN;
     DEBUGT("add extent as fresh, inline={} -- {}",
