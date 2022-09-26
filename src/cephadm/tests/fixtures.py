@@ -7,7 +7,7 @@ import time
 from contextlib import contextmanager
 from pyfakefs import fake_filesystem
 
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 
 def import_cephadm():
@@ -117,13 +117,11 @@ def host_sysfs(fs: fake_filesystem.FakeFilesystem):
 @contextmanager
 def with_cephadm_ctx(
     cmd: List[str],
-    container_engine: Callable = mock_podman(),
     list_networks: Optional[Dict[str,Dict[str,List[str]]]] = None,
     hostname: Optional[str] = None,
 ):
     """
     :param cmd: cephadm command argv
-    :param container_engine: container engine mock (podman or docker)
     :param list_networks: mock 'list-networks' return
     :param hostname: mock 'socket.gethostname' return
     """
@@ -140,7 +138,7 @@ def with_cephadm_ctx(
          mock.patch('cephadm.logger'), \
          mock.patch('socket.gethostname', return_value=hostname):
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(cmd)
-        ctx.container_engine = container_engine
+        ctx.container_engine = mock_podman()
         if list_networks is not None:
             with mock.patch('cephadm.list_networks', return_value=list_networks):
                 yield ctx
