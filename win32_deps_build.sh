@@ -65,9 +65,10 @@ echo "Installing required packages."
 case "$OS" in
     ubuntu)
         sudo apt-get update
-        sudo apt-get -y install mingw-w64 cmake pkg-config \
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get -y install \
+            mingw-w64 cmake pkg-config \
             python3-dev python3-pip python3-yaml \
-                autoconf libtool ninja-build zip
+                autoconf libtool ninja-build wget zip
         sudo python3 -m pip install cython
         ;;
     suse)
