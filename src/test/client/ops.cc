@@ -35,5 +35,11 @@ TEST_F(TestClient, CheckZeroReclaimFlag) {
   ASSERT_EQ(client->check_unknown_reclaim_flag(0), true);
 }
 TEST_F(TestClient, CheckUnknownReclaimFlag) {
+  ASSERT_EQ(client->check_unknown_reclaim_flag(2), true);
+}
+TEST_F(TestClient, CheckNegativeReclaimFlagUnmasked) {
   ASSERT_EQ(client->check_unknown_reclaim_flag(-1 & ~MClientReclaim::FLAG_FINISH), true);
+}
+TEST_F(TestClient, CheckNegativeReclaimFlag) {
+  ASSERT_EQ(client->check_unknown_reclaim_flag(-1), true);
 }
