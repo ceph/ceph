@@ -223,15 +223,6 @@ std::pair<uint64_t, ImageArea> raw_to_area_offset(const I& image_ctx,
   return {extents[0].first, area};
 }
 
-template <typename I>
-uint64_t get_file_offset(I* image_ctx, uint64_t object_no, uint64_t offset) {
-  auto off = Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
-                                      object_no, offset);
-  Extents extents = {{off, 0}};
-  image_ctx->io_image_dispatcher->remap_to_logical(extents);
-  return extents[0].first;
-}
-
 } // namespace util
 } // namespace io
 } // namespace librbd
@@ -256,6 +247,3 @@ template uint64_t librbd::io::util::area_to_raw_offset(
 template auto librbd::io::util::raw_to_area_offset(
     const librbd::ImageCtx& image_ctx, uint64_t offset)
     -> std::pair<uint64_t, ImageArea>;
-template uint64_t librbd::io::util::get_file_offset(
-        librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t offset);
- 

@@ -72,10 +72,6 @@ template <typename ImageCtxT = librbd::ImageCtx>
 std::pair<uint64_t, ImageArea> raw_to_area_offset(const ImageCtxT& image_ctx,
                                                   uint64_t offset);
 
-template <typename ImageCtxT = librbd::ImageCtx>
-uint64_t get_file_offset(ImageCtxT *image_ctx, uint64_t object_no,
-                         uint64_t offset);
-
 inline ObjectDispatchLayer get_previous_layer(ObjectDispatchLayer layer) {
   return (ObjectDispatchLayer)(((int)layer) - 1);
 }
