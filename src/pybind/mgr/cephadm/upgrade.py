@@ -1156,7 +1156,7 @@ class CephadmUpgrade:
                     # no point in trying to redeploy with new version if active mgr is not on the new version
                     need_upgrade_deployer = []
 
-            if not need_upgrade_self:
+            if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                 # only after the mgr itself is upgraded can we expect daemons to have
                 # deployed_by == target_digests
                 need_upgrade += need_upgrade_deployer
