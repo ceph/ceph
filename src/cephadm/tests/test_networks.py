@@ -4,11 +4,9 @@ from unittest import mock
 
 import pytest
 
-from tests.fixtures import with_cephadm_ctx, cephadm_fs
+from tests.fixtures import with_cephadm_ctx, cephadm_fs, import_cephadm
 
-with mock.patch('builtins.open', create=True):
-    from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('cephadm', 'cephadm.py').load_module()
+cd = import_cephadm()
 
 
 class TestCommandListNetworks:

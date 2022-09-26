@@ -1,11 +1,9 @@
 import pytest
 
 from unittest import mock
-from tests.fixtures import host_sysfs
+from tests.fixtures import host_sysfs, import_cephadm
 
-with mock.patch('builtins.open', create=True):
-    from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('cephadm', 'cephadm.py').load_module()
+cd = import_cephadm()
 
 
 @pytest.fixture
