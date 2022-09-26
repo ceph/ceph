@@ -39,11 +39,13 @@ def _daemon_path():
 def mock_bad_firewalld():
     def raise_bad_firewalld():
         raise Exception('Called bad firewalld')
+
     _cephadm = import_cephadm()
     f = mock.Mock(_cephadm.Firewalld)
-    f.enable_service_for = lambda _ : raise_bad_firewalld()
-    f.apply_rules = lambda : raise_bad_firewalld()
-    f.open_ports = lambda _ : raise_bad_firewalld()
+    f.enable_service_for = lambda _: raise_bad_firewalld()
+    f.apply_rules = lambda: raise_bad_firewalld()
+    f.open_ports = lambda _: raise_bad_firewalld()
+
 
 def _mock_scrape_host(obj, interval):
     try:
@@ -115,7 +117,7 @@ def host_sysfs(fs: fake_filesystem.FakeFilesystem):
 @contextmanager
 def with_cephadm_ctx(
     cmd: List[str],
-    list_networks: Optional[Dict[str,Dict[str,List[str]]]] = None,
+    list_networks: Optional[Dict[str, Dict[str, List[str]]]] = None,
     hostname: Optional[str] = None,
 ):
     """
