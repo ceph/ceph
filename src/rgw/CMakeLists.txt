@@ -133,6 +133,7 @@ set(librgw_common_srcs
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
+  rgw_rest_user.cc
   rgw_s3select.cc
   rgw_role.cc
   rgw_sal.cc
@@ -317,7 +318,6 @@ set(rgw_a_srcs
   rgw_rest_sts.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
-  rgw_rest_user.cc
   rgw_signal.cc
   rgw_swift_auth.cc
   rgw_usage.cc
