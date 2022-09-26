@@ -466,6 +466,7 @@ public:
       if (depth > 1) {
         auto &node = iter.get_internal(depth).node;
         auto it = node->begin();
+        bool has_child = false;
         while (it.get_offset() != node->get_size()) {
           auto paddr = it.get_val();
           auto tracker = node->child_trackers[it.get_offset()];
@@ -477,11 +478,29 @@ public:
             SUBTRACET(seastore_fixedkv_tree,
               "checked pos {}, {}", c.trans, it.offset, *node);
           } else {
+            has_child = true;
+            auto &child = (typename internal_node_t::base_t&)*tracker->child.get();
+            if (node->is_mutation_pending() || child.is_mutation_pending()) {
+              assert(node->prior_instance);
+              auto &prior_instance = (typename internal_node_t::base_t&)
+                *node->prior_instance;
+              assert(child.back_tracker.get() ==
+                prior_instance.back_tracker_to_me);
+              assert(prior_instance.back_tracker_to_me->parent.get() ==
+                &prior_instance);
+            }
+            if (!node->is_pending() && !child.is_pending()) {
+              assert(child.back_tracker.get() == node->back_tracker_to_me);
+              assert(node->back_tracker_to_me->parent.get() == node.get());
+            }
             SUBTRACET(seastore_fixedkv_tree,
               "checked pos {}, {}, child: {}",
               c.trans, it.offset, *node, *tracker->child);
           }
           it.offset++;
+        }
+        if (!has_child) {
+          assert(!node->back_tracker_to_me);
         }
       }
       return seastar::now();
