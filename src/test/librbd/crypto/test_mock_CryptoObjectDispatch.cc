@@ -55,12 +55,6 @@ CopyupRequest<librbd::MockImageCtx>* CopyupRequest<
 
 namespace util {
 
-template <> uint64_t get_file_offset(
-        MockImageCtx *image_ctx, uint64_t object_no, uint64_t offset) {
-  return Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
-                                  object_no, offset);
-}
-
 namespace {
 
 struct Mock {
@@ -97,6 +91,13 @@ template <> void read_parent(
 
 namespace librbd {
 namespace crypto {
+
+template <>
+uint64_t get_file_offset(MockImageCtx *image_ctx, uint64_t object_no,
+                         uint64_t offset) {
+  return Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
+                                  object_no, offset);
+}
 
 using ::testing::_;
 using ::testing::ElementsAre;
@@ -795,5 +796,5 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, PrepareCopyup) {
   ASSERT_EQ(++it, snap2_result.end());
 }
 
-} // namespace io
+} // namespace crypto
 } // namespace librbd

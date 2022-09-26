@@ -27,6 +27,16 @@ using librbd::util::create_context_callback;
 using librbd::util::data_object_name;
 
 template <typename I>
+uint64_t get_file_offset(I* image_ctx, uint64_t object_no,
+                         uint64_t object_off) {
+  auto off = io::util::raw_to_area_offset(
+      *image_ctx, Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
+                                           object_no, object_off));
+  ceph_assert(off.second == io::ImageArea::DATA);
+  return off.first;
+}
+
+template <typename I>
 struct C_AlignedObjectReadRequest : public Context {
     I* image_ctx;
     CryptoInterface* crypto;
@@ -79,9 +89,7 @@ struct C_AlignedObjectReadRequest : public Context {
         r = 0;
         for (auto& extent: *extents) {
           auto crypto_ret = crypto->decrypt_aligned_extent(
-                  extent,
-                  io::util::get_file_offset(
-                          image_ctx, object_no, extent.offset));
+              extent, get_file_offset(image_ctx, object_no, extent.offset));
           if (crypto_ret != 0) {
             ceph_assert(crypto_ret < 0);
             r = crypto_ret;
@@ -494,8 +502,7 @@ bool CryptoObjectDispatch<I>::write(
 
   if (m_crypto->is_aligned(object_off, data.length())) {
     auto r = m_crypto->encrypt(
-            &data,
-            io::util::get_file_offset(m_image_ctx, object_no, object_off));
+        &data, get_file_offset(m_image_ctx, object_no, object_off));
     *dispatch_result = r == 0 ? io::DISPATCH_RESULT_CONTINUE
                               : io::DISPATCH_RESULT_COMPLETE;
     on_dispatched->complete(r);
