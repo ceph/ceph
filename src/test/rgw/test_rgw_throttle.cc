@@ -179,6 +179,7 @@ TEST_F(Aio_Throttle, YieldCostOverWindow)
       ASSERT_EQ(1u, c.size());
       EXPECT_EQ(-EDEADLK, c.front().result);
     });
+  context.run();
 }
 
 TEST_F(Aio_Throttle, YieldingThrottleOverMax)
