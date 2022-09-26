@@ -116,6 +116,7 @@ class label_insert_iterator {
   using value_type = label_writer;
   using reference = value_type&;
 
+  label_insert_iterator() = default;
   label_insert_iterator(base_iterator begin) : label{begin} {
     static_assert(std::output_iterator<label_insert_iterator, label_pair>);
   }
