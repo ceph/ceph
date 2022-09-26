@@ -15,13 +15,12 @@ from .fixtures import (
     mock_podman,
     with_cephadm_ctx,
     mock_bad_firewalld,
+    import_cephadm,
 )
 
 from pyfakefs import fake_filesystem_unittest
 
-with mock.patch('builtins.open', create=True):
-    from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('cephadm', 'cephadm.py').load_module()
+cd = import_cephadm()
 
 
 def get_ceph_conf(

@@ -2,12 +2,9 @@ from unittest import mock
 
 import pytest
 
-from tests.fixtures import with_cephadm_ctx
+from tests.fixtures import with_cephadm_ctx, import_cephadm
 
-with mock.patch("builtins.open", create=True):
-    from importlib.machinery import SourceFileLoader
-
-    cephadm = SourceFileLoader("cephadm", "cephadm.py").load_module()
+cephadm = import_cephadm()
 
 
 def test_container_engine():
