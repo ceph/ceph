@@ -10,9 +10,17 @@ from pyfakefs import fake_filesystem
 from typing import Callable, Dict, List, Optional
 
 
-with mock.patch('builtins.open', create=True):
-    from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('cephadm', 'cephadm.py').load_module()
+def import_cephadm():
+    """Import cephadm as a module.
+    """
+    with mock.patch('builtins.open', create=True):
+        from importlib.machinery import SourceFileLoader
+
+        cd = SourceFileLoader('cephadm', 'cephadm.py').load_module()
+    return cd
+
+
+cd = import_cephadm()
 
 
 def mock_docker():
