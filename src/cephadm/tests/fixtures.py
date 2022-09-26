@@ -90,7 +90,7 @@ def host_sysfs(fs: fake_filesystem.FakeFilesystem):
     """Create a fake filesystem to represent sysfs"""
     enc_path = '/sys/class/scsi_generic/sg2/device/enclosure/0:0:1:0'
     dev_path = '/sys/class/scsi_generic/sg2/device'
-    slot_count = 12 
+    slot_count = 12
     fs.create_dir(dev_path)
     fs.create_file(os.path.join(dev_path, 'vendor'), contents="EnclosuresInc")
     fs.create_file(os.path.join(dev_path, 'model'), contents="D12")
