@@ -11,26 +11,22 @@ from typing import Dict, List, Optional
 
 
 def import_cephadm():
-    """Import cephadm as a module.
-    """
-    with mock.patch('builtins.open', create=True):
-        from importlib.machinery import SourceFileLoader
+    """Import cephadm as a module."""
+    import cephadm as _cephadm
 
-        cd = SourceFileLoader('cephadm', 'cephadm.py').load_module()
-    return cd
-
-
-cd = import_cephadm()
+    return _cephadm
 
 
 def mock_docker():
-    docker = mock.Mock(cd.Docker)
+    _cephadm = import_cephadm()
+    docker = mock.Mock(_cephadm.Docker)
     docker.path = '/usr/bin/docker'
     return docker
 
 
 def mock_podman():
-    podman = mock.Mock(cd.Podman)
+    _cephadm = import_cephadm()
+    podman = mock.Mock(_cephadm.Podman)
     podman.path = '/usr/bin/podman'
     podman.version = (2, 1, 0)
     return podman
@@ -43,7 +39,8 @@ def _daemon_path():
 def mock_bad_firewalld():
     def raise_bad_firewalld():
         raise Exception('Called bad firewalld')
-    f = mock.Mock(cd.Firewalld)
+    _cephadm = import_cephadm()
+    f = mock.Mock(_cephadm.Firewalld)
     f.enable_service_for = lambda _ : raise_bad_firewalld()
     f.apply_rules = lambda : raise_bad_firewalld()
     f.open_ports = lambda _ : raise_bad_firewalld()
@@ -72,16 +69,17 @@ def cephadm_fs(
     uid = os.getuid()
     gid = os.getgid()
 
+    _cephadm = import_cephadm()
     with mock.patch('os.fchown'), \
          mock.patch('os.fchmod'), \
          mock.patch('platform.processor', return_value='x86_64'), \
          mock.patch('cephadm.extract_uid_gid', return_value=(uid, gid)):
 
-            fs.create_dir(cd.DATA_DIR)
-            fs.create_dir(cd.LOG_DIR)
-            fs.create_dir(cd.LOCK_DIR)
-            fs.create_dir(cd.LOGROTATE_DIR)
-            fs.create_dir(cd.UNIT_DIR)
+            fs.create_dir(_cephadm.DATA_DIR)
+            fs.create_dir(_cephadm.LOG_DIR)
+            fs.create_dir(_cephadm.LOCK_DIR)
+            fs.create_dir(_cephadm.LOGROTATE_DIR)
+            fs.create_dir(_cephadm.UNIT_DIR)
             fs.create_dir('/sys/block')
 
             yield fs
@@ -128,6 +126,7 @@ def with_cephadm_ctx(
     if not hostname:
         hostname = 'host1'
 
+    _cephadm = import_cephadm()
     with mock.patch('cephadm.attempt_bind'), \
          mock.patch('cephadm.call', return_value=('', '', 0)), \
          mock.patch('cephadm.call_timeout', return_value=0), \
@@ -137,7 +136,7 @@ def with_cephadm_ctx(
          mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}), \
          mock.patch('cephadm.logger'), \
          mock.patch('socket.gethostname', return_value=hostname):
-        ctx: cd.CephadmContext = cd.cephadm_init_ctx(cmd)
+        ctx: _cephadm.CephadmContext = _cephadm.cephadm_init_ctx(cmd)
         ctx.container_engine = mock_podman()
         if list_networks is not None:
             with mock.patch('cephadm.list_networks', return_value=list_networks):
