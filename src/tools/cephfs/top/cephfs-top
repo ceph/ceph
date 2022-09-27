@@ -8,11 +8,11 @@ import json
 import signal
 import time
 import math
+import threading
 
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum, unique
-from threading import Event
 
 import rados
 
@@ -83,8 +83,9 @@ MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
 MGR_STATS_COUNTERS = list(MAIN_WINDOW_TOP_LINE_METRICS.keys())
 
 FS_TOP_VERSION_HEADER_FMT = '{prog_name} - {now}'
-FS_TOP_CLIENT_HEADER_FMT = 'Client(s): {num_clients} - {num_mounts} FUSE, '\
-    '{num_kclients} kclient, {num_libs} libcephfs'
+FS_TOP_CLIENT_HEADER_FMT = 'Total Client(s): {num_clients} - '\
+    '{num_mounts} FUSE, {num_kclients} kclient, {num_libs} libcephfs'
+FS_TOP_NAME_TOPL_FMT = 'Filesystem: {fs_name} - {client_count} client(s)'
 
 CLIENT_METADATA_KEY = "client_metadata"
 CLIENT_METADATA_MOUNT_POINT_KEY = "mount_point"
@@ -99,6 +100,8 @@ GLOBAL_COUNTERS_KEY = "global_counters"
 last_time = time.time()
 last_read_size = {}
 last_write_size = {}
+
+fs_list = []
 
 
 def calc_perc(c):
@@ -148,11 +151,12 @@ class FSTop(object):
     def __init__(self, args):
         self.rados = None
         self.stdscr = None  # curses instance
+        self.flag = 1
         self.client_name = args.id
         self.cluster_name = args.cluster
         self.conffile = args.conffile
         self.refresh_interval_secs = args.delay
-        self.exit_ev = Event()
+        self.exit_ev = threading.Event()
 
     def refresh_window_size(self):
         self.height, self.width = self.stdscr.getmaxyx()
@@ -163,16 +167,19 @@ class FSTop(object):
     def init(self):
         try:
             if self.conffile:
-                r_rados = rados.Rados(rados_id=self.client_name, clustername=self.cluster_name,
+                r_rados = rados.Rados(rados_id=self.client_name,
+                                      clustername=self.cluster_name,
                                       conffile=self.conffile)
             else:
-                r_rados = rados.Rados(rados_id=self.client_name, clustername=self.cluster_name)
+                r_rados = rados.Rados(rados_id=self.client_name,
+                                      clustername=self.cluster_name)
             r_rados.conf_read_file()
             r_rados.connect()
             self.rados = r_rados
         except rados.Error as e:
             if e.errno == errno.ENOENT:
-                raise FSTopException(f'cluster {self.cluster_name} does not exist')
+                raise FSTopException(f'cluster {self.cluster_name}'
+                                     ' does not exist')
             else:
                 raise FSTopException(f'error connecting to cluster: {e}')
         self.verify_perf_stats_support()
@@ -188,10 +195,25 @@ class FSTop(object):
         stats_json = self.perf_stats_query()
         if not stats_json['version'] == FS_TOP_SUPPORTED_VER:
             raise FSTopException('perf stats version mismatch!')
-        missing = [m for m in stats_json["global_counters"] if m.upper() not in MGR_STATS_COUNTERS]
+        missing = [m for m in stats_json["global_counters"]
+                   if m.upper() not in MGR_STATS_COUNTERS]
         if missing:
-            raise FSTopException('Cannot handle unknown metrics from \'ceph fs perf stats\': '
-                                 f'{missing}')
+            raise FSTopException('Cannot handle unknown metrics from'
+                                 f'\'ceph fs perf stats\': {missing}')
+
+    def get_fs_names(self):
+        mon_cmd = {'prefix': 'fs ls', 'format': 'json'}
+        try:
+            ret, buf, out = self.rados.mon_command(json.dumps(mon_cmd), b'')
+        except Exception as e:
+            raise FSTopException(f'Error in fs ls: {e}')
+        fs_map = json.loads(buf.decode('utf-8'))
+        global fs_list
+        fs_list.clear()
+        for filesystem in fs_map:
+            fs = filesystem['name']
+            fs_list.append(fs)
+        return fs_list
 
     def setup_curses(self, win):
         self.stdscr = win
@@ -203,7 +225,72 @@ class FSTop(object):
             # If the terminal do not support the visibility
             # requested it will raise an exception
             pass
-        self.run_display()
+        self.run_all_display()
+
+    def display_menu(self, stdscr, selected_row_idx):
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+        global fs_list
+        if not fs_list:
+            title = ['No filesystem available',
+                     'Press "q" to go back to home (all filesystem info) screen']
+            pos_x1 = w // 2 - len(title[0]) // 2
+            pos_x2 = w // 2 - len(title[1]) // 2
+            stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
+            stdscr.addstr(3, pos_x2, title[1])
+        else:
+            title = ['Filesystems', 'Press "q" to go back to home (all filesystem info) screen']
+            pos_x1 = w // 2 - len(title[0]) // 2
+            pos_x2 = w // 2 - len(title[1]) // 2
+            stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
+            stdscr.addstr(3, pos_x2, title[1])
+            for index, name in enumerate(fs_list):
+                x = w // 2 - len(name) // 2
+                y = h // 2 - len(fs_list) // 2 + index
+                if index == selected_row_idx:
+                    stdscr.attron(curses.color_pair(1))
+                    stdscr.addstr(y, x, name)
+                    stdscr.attroff(curses.color_pair(1))
+                else:
+                    stdscr.addstr(y, x, name)
+        stdscr.refresh()
+
+    def set_key(self, stdscr):
+        curses.curs_set(0)
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        curr_row = 0
+        key = 0
+        endmenu = False
+        while not endmenu:
+            global fs_list
+            fs_list = self.get_fs_names()
+
+            if key == curses.KEY_UP and curr_row > 0:
+                curr_row -= 1
+            elif key == curses.KEY_DOWN and curr_row < len(fs_list) - 1:
+                curr_row += 1
+            elif (key in [curses.KEY_ENTER, 10, 13]) and fs_list:
+                self.run_display(fs_list[curr_row])
+                endmenu = True
+            elif key == ord('q'):
+                self.run_all_display()
+                endmenu = True
+
+            try:
+                self.display_menu(stdscr, curr_row)
+            except curses.error:
+                pass
+            curses.halfdelay(self.refresh_interval_secs)
+            key = stdscr.getch()
+
+    def set_option(self, opt):
+        if opt == ord('m'):
+            curses.wrapper(self.set_key)
+        elif opt == ord('q'):
+            if self.flag == 1:
+                quit()
+            else:
+                self.run_all_display()
 
     def verify_perf_stats_support(self):
         mon_cmd = {'prefix': 'mgr module ls', 'format': 'json'}
@@ -214,8 +301,8 @@ class FSTop(object):
         if ret != 0:
             raise FSTopException(f'error checking \'stats\' module: {out}')
         if 'stats' not in json.loads(buf.decode('utf-8'))['enabled_modules']:
-            raise FSTopException('\'stats\' module not enabled. Use \'ceph mgr module '
-                                 'enable stats\' to enable')
+            raise FSTopException('\'stats\' module not enabled. Use'
+                                 '\'ceph mgr module enable stats\' to enable')
 
     def perf_stats_query(self):
         mgr_cmd = {'prefix': 'fs perf stats', 'format': 'json'}
@@ -353,7 +440,7 @@ class FSTop(object):
             xp += nlen
         title = ITEMS_PAD.join(heading)
         hlen = min(self.width - 2, len(title))
-        self.topl.addnstr(0, 0, title, hlen, curses.A_STANDOUT | curses.A_BOLD)
+        self.topl.addnstr(2, 0, title, hlen, curses.A_STANDOUT | curses.A_BOLD)
         self.topl.refresh()
         return x_coord_map
 
@@ -368,7 +455,8 @@ class FSTop(object):
                 return False
         return True
 
-    def refresh_client(self, client_id, metrics, counters, client_meta, x_coord_map, y_coord):
+    def refresh_client(self, client_id, metrics, counters,
+                       client_meta, x_coord_map, y_coord):
         global last_time
         size = 0
         cur_time = time.time()
@@ -388,10 +476,13 @@ class FSTop(object):
                                    wrap(client_id.split('.')[1], hlen),
                                    hlen)
             elif item == FS_TOP_MAIN_WINDOW_COL_MNT_ROOT:
-                if FSTop.has_metric(client_meta, CLIENT_METADATA_MOUNT_ROOT_KEY):
-                    self.mainw.addnstr(y_coord, coord[0],
-                                       wrap(client_meta[CLIENT_METADATA_MOUNT_ROOT_KEY], hlen),
-                                       hlen)
+                if FSTop.has_metric(client_meta,
+                                    CLIENT_METADATA_MOUNT_ROOT_KEY):
+                    self.mainw.addnstr(
+                        y_coord, coord[0],
+                        wrap(client_meta[
+                            CLIENT_METADATA_MOUNT_ROOT_KEY], hlen),
+                        hlen)
                 else:
                     self.mainw.addnstr(y_coord, coord[0], "N/A", hlen)
 
@@ -413,15 +504,20 @@ class FSTop(object):
             m = metrics[cidx]
             key = MGR_STATS_COUNTERS[cidx]
             typ = MAIN_WINDOW_TOP_LINE_METRICS[key]
-            if item.lower() in client_meta.get(CLIENT_METADATA_VALID_METRICS_KEY, []):
+            if item.lower() in client_meta.get(
+                    CLIENT_METADATA_VALID_METRICS_KEY, []):
                 if typ == MetricType.METRIC_TYPE_PERCENTAGE:
-                    self.mainw.addnstr(y_coord, coord[0], f'{calc_perc(m)}', hlen)
+                    self.mainw.addnstr(y_coord, coord[0],
+                                       f'{calc_perc(m)}', hlen)
                 elif typ == MetricType.METRIC_TYPE_LATENCY:
-                    self.mainw.addnstr(y_coord, coord[0], f'{calc_lat(m)}', hlen)
+                    self.mainw.addnstr(y_coord, coord[0],
+                                       f'{calc_lat(m)}', hlen)
                 elif typ == MetricType.METRIC_TYPE_STDEV:
-                    self.mainw.addnstr(y_coord, coord[0], f'{calc_stdev(m)}', hlen)
+                    self.mainw.addnstr(y_coord, coord[0],
+                                       f'{calc_stdev(m)}', hlen)
                 elif typ == MetricType.METRIC_TYPE_SIZE:
-                    self.mainw.addnstr(y_coord, coord[0], f'{calc_size(m)}', hlen)
+                    self.mainw.addnstr(y_coord, coord[0],
+                                       f'{calc_size(m)}', hlen)
 
                     # average io sizes
                     if remaining_hlen == 0:
@@ -436,7 +532,8 @@ class FSTop(object):
                         remaining_hlen = 0
                     else:
                         remaining_hlen -= coord[1]
-                    self.mainw.addnstr(y_coord, coord[0], f'{calc_avg_size(m)}', hlen)
+                    self.mainw.addnstr(y_coord, coord[0],
+                                       f'{calc_avg_size(m)}', hlen)
 
                     # io speeds
                     if remaining_hlen == 0:
@@ -483,16 +580,19 @@ class FSTop(object):
             # always place the FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR in the
             # last, it will be a very long string to display
             if item == FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR:
-                if FSTop.has_metrics(client_meta, [CLIENT_METADATA_MOUNT_POINT_KEY,
-                                                   CLIENT_METADATA_HOSTNAME_KEY,
-                                                   CLIENT_METADATA_IP_KEY]):
-                    self.mainw.addnstr(y_coord, coord[0],
-                                       f'{client_meta[CLIENT_METADATA_MOUNT_POINT_KEY]}@'
-                                       f'{client_meta[CLIENT_METADATA_HOSTNAME_KEY]}/'
-                                       f'{client_meta[CLIENT_METADATA_IP_KEY]}',
-                                       remaining_hlen)
+                if FSTop.has_metrics(client_meta,
+                                     [CLIENT_METADATA_MOUNT_POINT_KEY,
+                                      CLIENT_METADATA_HOSTNAME_KEY,
+                                      CLIENT_METADATA_IP_KEY]):
+                    self.mainw.addnstr(
+                        y_coord, coord[0],
+                        f'{client_meta[CLIENT_METADATA_MOUNT_POINT_KEY]}@'
+                        f'{client_meta[CLIENT_METADATA_HOSTNAME_KEY]}/'
+                        f'{client_meta[CLIENT_METADATA_IP_KEY]}',
+                        remaining_hlen)
                 else:
-                    self.mainw.addnstr(y_coord, coord[0], "N/A", remaining_hlen)
+                    self.mainw.addnstr(y_coord, coord[0],
+                                       "N/A", remaining_hlen)
             hlen = min(hlen, remaining_hlen)
             if remaining_hlen < coord[1]:
                 remaining_hlen = 0
@@ -501,84 +601,156 @@ class FSTop(object):
             if remaining_hlen == 0:
                 return
 
-    def refresh_clients(self, x_coord_map, stats_json):
+    def refresh_clients(self, x_coord_map, stats_json, fs_name):
         counters = [m.upper() for m in stats_json[GLOBAL_COUNTERS_KEY]]
         y_coord = 0
-        for client_id, metrics in stats_json[GLOBAL_METRICS_KEY].items():
-            self.refresh_client(client_id,
-                                metrics,
-                                counters,
-                                stats_json[CLIENT_METADATA_KEY][client_id],
-                                x_coord_map,
-                                y_coord)
-            y_coord += 1
+        hlen = min(self.width - 2, len(FS_TOP_NAME_TOPL_FMT))
+        res = stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
+        client_cnt = len(res)
+        self.topl.addnstr(0, 0, FS_TOP_NAME_TOPL_FMT.format(
+            fs_name=fs_name, client_count=client_cnt), hlen)
+        self.topl.refresh()
+        if client_cnt:
+            for client_id, metrics in \
+                    stats_json[GLOBAL_METRICS_KEY][fs_name].items():
+                self.refresh_client(
+                    client_id, metrics, counters, res[client_id],
+                    x_coord_map, y_coord)
+                y_coord += 1
 
-    def refresh_main_window(self, x_coord_map, stats_json):
+    def refresh_main_window(self, x_coord_map, stats_json, fs_name):
         if self.mainw is None:
             return
-        self.refresh_clients(x_coord_map, stats_json)
+        self.refresh_clients(x_coord_map, stats_json, fs_name)
         self.mainw.refresh()
 
-    def refresh_header(self, stats_json):
+    def refresh_header(self, stats_json, headline):
         hlen = self.width - 2
+        num_clients, num_mounts, num_kclients, num_libs = 0, 0, 0, 0
         if not stats_json['version'] == FS_TOP_SUPPORTED_VER:
             self.header.addnstr(0, 0, 'perf stats version mismatch!', hlen)
             return False
-        client_metadata = stats_json[CLIENT_METADATA_KEY]
-        num_clients = len(client_metadata)
-        num_mounts = len([client for client, metadata in client_metadata.items() if
-                          CLIENT_METADATA_MOUNT_POINT_KEY in metadata
-                          and metadata[CLIENT_METADATA_MOUNT_POINT_KEY] != 'N/A'])
-        num_kclients = len([client for client, metadata in client_metadata.items() if
-                            "kernel_version" in metadata])
-        num_libs = num_clients - (num_mounts + num_kclients)
+        global fs_list
+        for fs_name in fs_list:
+            client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
+            client_cnt = len(client_metadata)
+            if client_cnt:
+                num_clients = num_clients + client_cnt
+                num_mounts = num_mounts + len(
+                    [client for client, metadata in client_metadata.items() if
+                     CLIENT_METADATA_MOUNT_POINT_KEY in metadata
+                     and metadata[CLIENT_METADATA_MOUNT_POINT_KEY] != 'N/A'])
+                num_kclients = num_kclients + len(
+                    [client for client, metadata in client_metadata.items() if
+                     "kernel_version" in metadata])
+                num_libs = num_clients - (num_mounts + num_kclients)
         now = datetime.now().ctime()
-        self.header.addnstr(0, 0,
-                            FS_TOP_VERSION_HEADER_FMT.format(prog_name=FS_TOP_PROG_STR, now=now),
+        self.header.addnstr(0, 0, FS_TOP_VERSION_HEADER_FMT.format(
+                            prog_name=FS_TOP_PROG_STR, now=now),
                             hlen, curses.A_STANDOUT | curses.A_BOLD)
-        self.header.addnstr(1, 0, FS_TOP_CLIENT_HEADER_FMT.format(num_clients=num_clients,
-                                                                  num_mounts=num_mounts,
-                                                                  num_kclients=num_kclients,
-                                                                  num_libs=num_libs), hlen)
+        self.header.addnstr(1, 0, FS_TOP_CLIENT_HEADER_FMT.format(
+                            num_clients=num_clients, num_mounts=num_mounts,
+                            num_kclients=num_kclients, num_libs=num_libs), hlen)
+        self.header.addnstr(2, 0, headline, hlen)
         self.header.refresh()
         return True
 
-    def run_display(self):
+    def run_display(self, fs):
         while not self.exit_ev.is_set():
             # use stdscr.clear() instead of clearing each window
             # to avoid screen blinking.
             self.stdscr.clear()
             self.refresh_window_size()
-            if self.width <= 2 or self.width <= 2:
-                self.exit_ev.wait(timeout=self.refresh_interval_secs)
-                continue
+
+            global fs_list
+            fs_list = self.get_fs_names()
+            stats_json = self.perf_stats_query()
+            self.flag = 0
+            help_text = " [Press 'q' to go back to home (all filesystem info) screen"\
+                        " and 'm' to select another filesystem]"
 
             # coordinate constants for windowing -- (height, width, y, x)
             # NOTE: requires initscr() call before accessing COLS, LINES.
             try:
-                HEADER_WINDOW_COORD = (2, self.width - 1, 0, 0)
+                HEADER_WINDOW_COORD = (4, self.width - 1, 0, 0)
                 self.header = curses.newwin(*HEADER_WINDOW_COORD)
-                if self.height >= 3:
-                    TOPLINE_WINDOW_COORD = (1, self.width - 1, 3, 0)
-                    self.topl = curses.newwin(*TOPLINE_WINDOW_COORD)
+                if fs not in fs_list:
+                    self.stdscr.refresh()
+                    headline = "INFO: Selected filesystem is not available now" + help_text
+                    self.refresh_header(stats_json, headline)
                 else:
-                    self.topl = None
-                if self.height >= 5:
-                    MAIN_WINDOW_COORD = (self.height - 4, self.width - 1, 4, 0)
-                    self.mainw = curses.newwin(*MAIN_WINDOW_COORD)
-                else:
-                    self.mainw = None
+                    if self.height >= 5:
+                        TOPLINE_WINDOW_COORD = (3, self.width - 1, 4, 0)
+                        self.topl = curses.newwin(*TOPLINE_WINDOW_COORD)
+                    else:
+                        self.topl = None
+                    if self.height >= 8:
+                        MAIN_WINDOW_COORD = (self.height - 7, self.width - 1, 7, 0)
+                        self.mainw = curses.newwin(*MAIN_WINDOW_COORD)
+                    else:
+                        self.mainw = None
+                    headline = "HELP: Selected filesystem info" + help_text
+                    if self.refresh_header(stats_json, headline):
+                        x_coord_map = self.refresh_top_line_and_build_coord()
+                        self.refresh_main_window(x_coord_map, stats_json, fs)
+                curses.halfdelay(self.refresh_interval_secs * 10)
+                c = self.header.getch()
+                if c in [ord('m'), ord('q')]:
+                    self.set_option(c)
             except curses.error:
-                # this may happen when creating the sub windows the
-                # terminal window size changed, just retry it
-                continue
+                # this may happen when addstr the terminal window
+                # size changed, just retry it
+                pass
 
+    def run_all_display(self):
+        while not self.exit_ev.is_set():
+            # use stdscr.clear() instead of clearing each window
+            # to avoid screen blinking.
+            self.stdscr.clear()
+            self.refresh_window_size()
+
+            self.flag = 1
+            global fs_list
+            fs_list = self.get_fs_names()
             stats_json = self.perf_stats_query()
+
+            # coordinate constants for windowing -- (height, width, y, x)
+            # NOTE: requires initscr() call before accessing COLS, LINES.
             try:
-                if self.refresh_header(stats_json):
-                    x_coord_map = self.refresh_top_line_and_build_coord()
-                    self.refresh_main_window(x_coord_map, stats_json)
-                self.exit_ev.wait(timeout=self.refresh_interval_secs)
+                HEADER_WINDOW_COORD = (4, self.width - 1, 0, 0)
+                self.header = curses.newwin(*HEADER_WINDOW_COORD)
+                if not fs_list:
+                    self.stdscr.refresh()
+                    headline = "INFO: No filesystem is available"\
+                        " [Press 'q' to quit]"
+                    self.refresh_header(stats_json, headline)
+                else:
+                    main, top, num_client = 7, 4, 0
+                    for fs in fs_list:
+                        if self.height >= 5 + num_client:
+                            TOPLINE_WINDOW_COORD = (3, self.width - 1, top, 0)
+                            self.topl = curses.newwin(*TOPLINE_WINDOW_COORD)
+                        else:
+                            self.topl = None
+                        if self.height >= 8 + num_client:
+                            MAIN_WINDOW_COORD = (self.height - 7, self.width - 1,
+                                                 main, 0)
+                            self.mainw = curses.newwin(*MAIN_WINDOW_COORD)
+                        else:
+                            self.mainw = None
+                        client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs, {})
+                        num_client = len(client_metadata)
+                        top = top + (num_client + 4)
+                        main = main + (num_client + 4)
+                        headline = "HELP: All filesystem info"\
+                            " [Press 'm' to select a filesystem and 'q' to quit]"
+                        if self.refresh_header(stats_json, headline):
+                            x_coord_map = self.refresh_top_line_and_build_coord()
+                            self.refresh_main_window(x_coord_map, stats_json, fs)
+                curses.halfdelay(self.refresh_interval_secs * 10)
+                c = self.header.getch()
+                if c in [ord('m'), ord('q')]:
+                    self.set_option(c)
             except curses.error:
                 # this may happen when addstr the terminal window
                 # size changed, just retry it
@@ -589,8 +761,9 @@ if __name__ == '__main__':
     def float_greater_than(x):
         value = float(x)
         if value < MIN_REFRESH_INTERVAL:
-            raise argparse.ArgumentTypeError(f'{value} should be greater than '
-                                             f'{MIN_REFRESH_INTERVAL}')
+            raise argparse.ArgumentTypeError(
+                'Refresh interval should be greater than or equal to'
+                f' {MIN_REFRESH_INTERVAL}')
         return value
 
     parser = argparse.ArgumentParser(description='Ceph Filesystem top utility')
@@ -601,9 +774,11 @@ if __name__ == '__main__':
     parser.add_argument('--conffile', nargs='?', default=None,
                         help='Path to cluster configuration file')
     parser.add_argument('--selftest', dest='selftest', action='store_true',
-                        help='run in selftest mode')
-    parser.add_argument('-d', '--delay', nargs='?', default=DEFAULT_REFRESH_INTERVAL,
-                        type=float_greater_than, help='Interval to refresh data '
+                        help='Run in selftest mode')
+    parser.add_argument('-d', '--delay', nargs='?',
+                        default=DEFAULT_REFRESH_INTERVAL,
+                        type=float_greater_than,
+                        help='Refresh interval in seconds '
                         f'(default: {DEFAULT_REFRESH_INTERVAL})')
 
     args = parser.parse_args()
