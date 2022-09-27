@@ -42,14 +42,14 @@ class FuseMount(CephFSMount):
         self._mount_cmd_logger = log.getChild('ceph-fuse.{id}'.format(id=self.client_id))
         self._mount_cmd_stdin = run.PIPE
 
-    def mount(self, mntopts=[], check_status=True, **kwargs):
+    def mount(self, mntopts=[], check_status=True, mntargs=[], **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 
         self.setup_netns()
 
         try:
-            return self._mount(mntopts, check_status)
+            return self._mount(mntopts, mntargs, check_status)
         except RuntimeError:
             # Catch exceptions by the mount() logic (i.e. not remote command
             # failures) and ensure the mount is not left half-up.
@@ -59,13 +59,13 @@ class FuseMount(CephFSMount):
             self.umount_wait(force=True)
             raise
 
-    def _mount(self, mntopts, check_status):
+    def _mount(self, mntopts, mntargs, check_status):
         log.info("Client client.%s config is %s" % (self.client_id,
                                                     self.client_config))
 
         self._create_mntpt()
 
-        retval = self._run_mount_cmd(mntopts, check_status)
+        retval = self._run_mount_cmd(mntopts, mntargs, check_status)
         if retval:
             return retval
 
@@ -73,8 +73,8 @@ class FuseMount(CephFSMount):
 
         self.mounted = True
 
-    def _run_mount_cmd(self, mntopts, check_status):
-        mount_cmd = self._get_mount_cmd(mntopts)
+    def _run_mount_cmd(self, mntopts, mntargs, check_status):
+        mount_cmd = self._get_mount_cmd(mntopts, mntargs)
         mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
 
         # Before starting ceph-fuse process, note the contents of
@@ -95,7 +95,7 @@ class FuseMount(CephFSMount):
         return self._wait_and_record_our_fuse_conn(
             check_status, pre_mount_conns, mountcmd_stdout, mountcmd_stderr)
 
-    def _get_mount_cmd(self, mntopts):
+    def _get_mount_cmd(self, mntopts, mntargs):
         daemon_signal = 'kill'
         if self.client_config.get('coverage') or \
            self.client_config.get('valgrind') is not None:
@@ -119,6 +119,8 @@ class FuseMount(CephFSMount):
             mount_cmd += ["--client_fs=" + self.cephfs_name]
         if mntopts:
             mount_cmd += mntopts
+        if mntargs:
+            mount_cmd += mntargs
 
         return mount_cmd
 
