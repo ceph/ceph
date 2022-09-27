@@ -26,6 +26,15 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
+_VALID_VERS_VARS = [
+    "CEPH_GIT_VER",
+    "CEPH_GIT_NICE_VER",
+    "CEPH_RELEASE",
+    "CEPH_RELEASE_NAME",
+    "CEPH_RELEASE_TYPE",
+]
+
+
 def _reexec(python):
     """Switch to the selected version of python by exec'ing into the desired
     python path.
@@ -44,7 +53,7 @@ def _did_rexec():
     return bool(os.environ.get("_BUILD_PYTHON_SET", ""))
 
 
-def _build(dest, src):
+def _build(dest, src, versioning_vars=None):
     """Build the binary."""
     os.chdir(src)
     tempdir = pathlib.Path(tempfile.mkdtemp(suffix=".cephadm.build"))
@@ -60,6 +69,8 @@ def _build(dest, src):
         # dir to be zipped. For now we just have a simple call to copy
         # (and rename) the one file we care about.
         shutil.copy("cephadm.py", tempdir / "__main__.py")
+        if versioning_vars:
+            generate_version_file(versioning_vars, tempdir / "_version.py")
         _compile(dest, tempdir)
     finally:
         shutil.rmtree(tempdir)
@@ -106,6 +117,24 @@ def _install_deps(tempdir):
     )
 
 
+def generate_version_file(versioning_vars, dest):
+    log.info("Generating version file")
+    log.debug("versioning_vars=%r", versioning_vars)
+    with open(dest, "w") as fh:
+        print("# GENERATED FILE -- do not edit", file=fh)
+        for key, value in versioning_vars:
+            print(f"{key} = {value!r}", file=fh)
+
+
+def version_kv_pair(value):
+    if "=" not in value:
+        raise argparse.ArgumentTypeError(f"not a key=value pair: {value!r}")
+    key, value = value.split("=", 1)
+    if key not in _VALID_VERS_VARS:
+        raise argparse.ArgumentTypeError(f"Unexpected key: {key!r}")
+    return key, value
+
+
 def main():
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter("cephadm/build.py: %(message)s"))
@@ -122,6 +151,14 @@ def main():
     )
     parser.add_argument(
         "--python", help="The path to the desired version of python"
+    )
+    parser.add_argument(
+        "--set-version-var",
+        "-S",
+        type=version_kv_pair,
+        dest="version_vars",
+        action="append",
+        help="Set a key=value pair in the generated version info file",
     )
     args = parser.parse_args()
 
@@ -151,7 +188,7 @@ def main():
     dest = pathlib.Path(args.dest).absolute()
     log.info("Source Dir: %s", source)
     log.info("Destination Path: %s", dest)
-    _build(dest, source)
+    _build(dest, source, versioning_vars=args.version_vars)
 
 
 if __name__ == "__main__":
