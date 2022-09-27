@@ -11,7 +11,13 @@ add_custom_command(
     ${CMAKE_CURRENT_SOURCE_DIR}/cephadm.py
     ${CMAKE_CURRENT_SOURCE_DIR}/build.py
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-  COMMAND ${Python3_EXECUTABLE} build.py ${bin_target_file}
+  COMMAND ${Python3_EXECUTABLE} build.py
+    --set-version-var=CEPH_GIT_VER=${CEPH_GIT_VER}
+    --set-version-var=CEPH_GIT_NICE_VER=${CEPH_GIT_NICE_VER}
+    --set-version-var=CEPH_RELEASE=${CEPH_RELEASE}
+    --set-version-var=CEPH_RELEASE_NAME=${CEPH_RELEASE_NAME}
+    --set-version-var=CEPH_RELEASE_TYPE=${CEPH_RELEASE_TYPE}
+    ${bin_target_file}
 )
 
 add_custom_target(cephadm ALL
