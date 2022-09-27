@@ -4,14 +4,14 @@ import pytest
 
 from tests.fixtures import with_cephadm_ctx, import_cephadm
 
-cephadm = import_cephadm()
+_cephadm = import_cephadm()
 
 
 def test_container_engine():
     with pytest.raises(NotImplementedError):
-        cephadm.ContainerEngine()
+        _cephadm.ContainerEngine()
 
-    class PhonyContainerEngine(cephadm.ContainerEngine):
+    class PhonyContainerEngine(_cephadm.ContainerEngine):
         EXE = "true"
 
     with mock.patch("cephadm.find_program") as find_program:
@@ -23,7 +23,7 @@ def test_container_engine():
 def test_podman():
     with mock.patch("cephadm.find_program") as find_program:
         find_program.return_value = "/usr/bin/podman"
-        pm = cephadm.Podman()
+        pm = _cephadm.Podman()
         find_program.assert_called()
         with pytest.raises(RuntimeError):
             pm.version
@@ -38,7 +38,7 @@ def test_podman():
 def test_podman_badversion():
     with mock.patch("cephadm.find_program") as find_program:
         find_program.return_value = "/usr/bin/podman"
-        pm = cephadm.Podman()
+        pm = _cephadm.Podman()
         find_program.assert_called()
         with mock.patch("cephadm.call_throws") as call_throws:
             call_throws.return_value = ("4.10.beta2", None, None)
@@ -50,5 +50,5 @@ def test_podman_badversion():
 def test_docker():
     with mock.patch("cephadm.find_program") as find_program:
         find_program.return_value = "/usr/bin/docker"
-        docker = cephadm.Docker()
+        docker = _cephadm.Docker()
         assert str(docker) == "docker (/usr/bin/docker)"
