@@ -36,7 +36,6 @@
 #include "rgw_rest_admin.h"
 #include "rgw_rest_info.h"
 #include "rgw_rest_usage.h"
-#include "rgw_rest_user.h"
 #include "rgw_rest_bucket.h"
 #include "rgw_rest_metadata.h"
 #include "rgw_rest_log.h"
@@ -320,17 +319,8 @@ void rgw::AppMain::cond_init_apis()
       RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
       admin_resource->register_resource("info", new RGWRESTMgr_Info);
       admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
-      admin_resource->register_resource("user", new RGWRESTMgr_User);
-      /* XXX dang part of this is RADOS specific */
-      admin_resource->register_resource("bucket", new RGWRESTMgr_Bucket);
-    
-      /*Registering resource for /admin/metadata */
-      admin_resource->register_resource("metadata", new RGWRESTMgr_Metadata);
-      /* XXX dang ifdef these RADOS ? */
-      admin_resource->register_resource("log", new RGWRESTMgr_Log);
-      admin_resource->register_resource("config", new RGWRESTMgr_Config);
-      admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
-      admin_resource->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
+      /* Register store-specific admin APIs */
+      store->register_admin_apis(admin_resource);
       rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
     }
   } /* have_http_frontend */
