@@ -6629,6 +6629,17 @@ void Client::_unmount(bool abort)
 
   mref_writer.update_state(CLIENT_UNMOUNTED);
 
+  /*
+   * Stop the remount_queue before clearing the mountpoint memory
+   * to avoid possible use-after-free bug.
+   */
+  if (remount_cb) {
+    ldout(cct, 10) << "unmount stopping remount finisher" << dendl;
+    remount_finisher.wait_for_empty();
+    remount_finisher.stop();
+    remount_cb = nullptr;
+  }
+
   ldout(cct, 2) << "unmounted." << dendl;
 }
 
