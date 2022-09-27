@@ -17,7 +17,7 @@ namespace ceph {
 
 namespace crimson::osd {
 
-class PGShardManager;
+class ShardServices;
 class PG;
 
 class PGAdvanceMap : public PhasedOperationT<PGAdvanceMap> {
@@ -25,7 +25,7 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::pg_advance_map;
 
 protected:
-  PGShardManager &shard_manager;
+  ShardServices &shard_services;
   Ref<PG> pg;
   PipelineHandle handle;
 
@@ -37,7 +37,7 @@ protected:
 
 public:
   PGAdvanceMap(
-    PGShardManager &shard_manager, Ref<PG> pg, epoch_t to,
+    ShardServices &shard_services, Ref<PG> pg, epoch_t to,
     PeeringCtx &&rctx, bool do_init);
   ~PGAdvanceMap();
 

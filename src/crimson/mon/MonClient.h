@@ -83,9 +83,9 @@ class Client : public crimson::net::Dispatcher,
   using command_result_t =
     seastar::future<std::tuple<std::int32_t, std::string, ceph::bufferlist>>;
   struct mon_command_t {
-    ceph::ref_t<MMonCommand> req;
+    MURef<MMonCommand> req;
     typename command_result_t::promise_type result;
-    mon_command_t(ceph::ref_t<MMonCommand> req);
+    mon_command_t(MURef<MMonCommand> req);
   };
   std::vector<mon_command_t> mon_commands;
 

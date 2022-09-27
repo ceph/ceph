@@ -89,8 +89,9 @@ public:
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
   seastar::future<std::vector<coll_t>> list_collections() final;
 
-  seastar::future<> do_transaction(CollectionRef c,
-                                   ceph::os::Transaction&& txn) final;
+  seastar::future<> do_transaction_no_callbacks(
+    CollectionRef c,
+    ceph::os::Transaction&& txn) final;
 
   // error injection
   seastar::future<> inject_data_error(const ghobject_t& o) final;

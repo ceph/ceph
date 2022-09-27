@@ -6,7 +6,6 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <boost/container/flat_set.hpp>
 
 #include "include/rados.h"
