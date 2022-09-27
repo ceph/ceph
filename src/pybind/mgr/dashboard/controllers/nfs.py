@@ -12,7 +12,8 @@ from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
 from .. import mgr
 from ..security import Scope
 from ..services.cephfs import CephFS
-from ..services.exception import DashboardException, serialize_dashboard_exception
+from ..services.exception import DashboardException, handle_cephfs_error, \
+    serialize_dashboard_exception
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
     ReadPermission, RESTController, Task, UIRouter
 from ._version import APIVersion
@@ -117,6 +118,7 @@ class NFSGaneshaExports(RESTController):
 
         return exports
 
+    @handle_cephfs_error()
     @NfsTask('create', {'path': '{path}', 'fsal': '{fsal.name}',
                         'cluster_id': '{cluster_id}'}, 2.0)
     @EndpointDoc("Creates a new NFS-Ganesha export",
