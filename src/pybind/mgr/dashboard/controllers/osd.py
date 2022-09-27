@@ -486,8 +486,18 @@ class Osd(RESTController):
 
     @RESTController.Resource('GET')
     def devices(self, svc_id):
-        # (str) -> dict
-        return CephService.send_command('mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
+        # type: (str) -> Union[list, str]
+        devices: Union[list, str] = CephService.send_command(
+            'mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
+        mgr_map = mgr.get('mgr_map')
+        available_modules = [m['name'] for m in mgr_map['available_modules']]
+
+        life_expectancy_enabled = any(
+            item.startswith('diskprediction_') for item in available_modules)
+        for device in devices:
+            device['life_expectancy_enabled'] = life_expectancy_enabled
+
+        return devices
 
 
 @UIRouter('/osd', Scope.OSD)
