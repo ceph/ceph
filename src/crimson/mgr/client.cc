@@ -156,8 +156,10 @@ void Client::report()
       logger().warn("report: no conn available; raport skipped");
       return seastar::now();
     }
-    auto pg_stats = with_stats.get_stats();
-    return conn->send(std::move(pg_stats));
+    return with_stats.get_stats(
+    ).then([this](auto &&pg_stats) {
+      return conn->send(std::move(pg_stats));
+    });
   });
 }
 

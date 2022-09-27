@@ -39,27 +39,21 @@ seastar::logger& logger()
 class OnCommit final: public Context
 {
   const int cpuid;
-  Context *oncommit;
   seastar::alien::instance &alien;
   seastar::promise<> &alien_done;
 public:
   OnCommit(
     int id,
     seastar::promise<> &done,
-    Context *oncommit,
     seastar::alien::instance &alien,
     ceph::os::Transaction& txn)
     : cpuid(id),
-      oncommit(oncommit),
       alien(alien),
       alien_done(done) {
   }
 
   void finish(int) final {
     return seastar::alien::submit_to(alien, cpuid, [this] {
-      if (oncommit) {
-        oncommit->complete(0);
-      }
       alien_done.set_value();
       return seastar::make_ready_future<>();
     }).wait();
@@ -437,8 +431,9 @@ auto AlienStore::omap_get_values(CollectionRef ch,
   });
 }
 
-seastar::future<> AlienStore::do_transaction(CollectionRef ch,
-                                             ceph::os::Transaction&& txn)
+seastar::future<> AlienStore::do_transaction_no_callbacks(
+  CollectionRef ch,
+  ceph::os::Transaction&& txn)
 {
   logger().debug("{}", __func__);
   auto id = seastar::this_shard_id();
@@ -450,13 +445,10 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
 	AlienCollection* alien_coll = static_cast<AlienCollection*>(ch.get());
         // moving the `ch` is crucial for buildability on newer S* versions.
 	return alien_coll->with_lock([this, ch=std::move(ch), id, &txn, &done] {
-	  Context *crimson_wrapper =
-	    ceph::os::Transaction::collect_all_contexts(txn);
 	  assert(tp);
 	  return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
-	    [this, ch, id, crimson_wrapper, &txn, &done, &alien=seastar::engine().alien()] {
-	    txn.register_on_commit(new OnCommit(id, done, crimson_wrapper,
-						alien, txn));
+	    [this, ch, id, &txn, &done, &alien=seastar::engine().alien()] {
+	    txn.register_on_commit(new OnCommit(id, done, alien, txn));
 	    auto c = static_cast<AlienCollection*>(ch.get());
 	    return store->queue_transaction(c->collection, std::move(txn));
 	  });

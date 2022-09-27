@@ -49,11 +49,12 @@ void ClientRequest::complete_request()
 }
 
 ClientRequest::ClientRequest(
-  OSD &osd, crimson::net::ConnectionRef conn, Ref<MOSDOp> &&m)
-  : osd(osd),
+  ShardServices &shard_services, crimson::net::ConnectionRef conn,
+  Ref<MOSDOp> &&m)
+  : put_historic_shard_services(&shard_services),
     conn(std::move(conn)),
     m(std::move(m)),
-    instance_handle(seastar::make_lw_shared<instance_handle_t>())
+    instance_handle(new instance_handle_t)
 {}
 
 ClientRequest::~ClientRequest()
@@ -115,11 +116,11 @@ seastar::future<> ClientRequest::with_pg_int(
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
   return interruptor::with_interruption(
-    [this, pgref, this_instance_id, &ihref]() mutable {
+    [this, pgref, this_instance_id, &ihref, &shard_services]() mutable {
       PG &pg = *pgref;
       if (pg.can_discard_op(*m)) {
-	return osd.send_incremental_map(
-	  conn, m->get_map_epoch()
+	return shard_services.send_incremental_map(
+	  std::ref(*conn), m->get_map_epoch()
 	).then([this, this_instance_id, pgref] {
 	  logger().debug("{}.{}: discarding", *this, this_instance_id);
 	  pgref->client_request_orderer.remove_request(*this);
@@ -173,6 +174,7 @@ seastar::future<> ClientRequest::with_pg_int(
 seastar::future<> ClientRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pgref)
 {
+  put_historic_shard_services = &shard_services;
   pgref->client_request_orderer.add_request(*this);
   auto ret = on_complete.get_future();
   std::ignore = with_pg_int(
@@ -301,26 +303,27 @@ ClientRequest::do_process(
 
   return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
     [this, pg, &ihref](auto submitted, auto all_completed) mutable {
-    return submitted.then_interruptible([this, pg, &ihref] {
-      return ihref.enter_stage<interruptor>(pp(*pg).wait_repop, *this);
-    }).then_interruptible(
-      [this, pg, all_completed=std::move(all_completed), &ihref]() mutable {
-      return all_completed.safe_then_interruptible(
-        [this, pg, &ihref](MURef<MOSDOpReply> reply) {
-	return ihref.enter_stage<interruptor>(pp(*pg).send_reply, *this
-	).then_interruptible(
-          [this, reply=std::move(reply)]() mutable {
-          return conn->send(std::move(reply)).then([] {
-            return seastar::make_ready_future<seq_mode_t>(seq_mode_t::IN_ORDER);
-          });
-        });
-      }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
-        return process_op(ihref, pg);
-      }));
-    });
- }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
-    return process_op(ihref, pg);
-  }));
+      return submitted.then_interruptible([this, pg, &ihref] {
+	return ihref.enter_stage<interruptor>(pp(*pg).wait_repop, *this);
+      }).then_interruptible(
+	[this, pg, all_completed=std::move(all_completed), &ihref]() mutable {
+	  return all_completed.safe_then_interruptible(
+	    [this, pg, &ihref](MURef<MOSDOpReply> reply) {
+	      return ihref.enter_stage<interruptor>(pp(*pg).send_reply, *this
+	      ).then_interruptible(
+		[this, reply=std::move(reply)]() mutable {
+		  logger().debug("{}: sending response", *this);
+		  return conn->send(std::move(reply)).then([] {
+		    return seastar::make_ready_future<seq_mode_t>(seq_mode_t::IN_ORDER);
+		  });
+		});
+	    }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
+	      return process_op(ihref, pg);
+	    }));
+	});
+    }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
+      return process_op(ihref, pg);
+    }));
 }
 
 bool ClientRequest::is_misdirected(const PG& pg) const
@@ -346,7 +349,8 @@ bool ClientRequest::is_misdirected(const PG& pg) const
 
 void ClientRequest::put_historic() const
 {
-  osd.get_shard_services().get_registry().put_historic(*this);
+  ceph_assert_always(put_historic_shard_services);
+  put_historic_shard_services->get_registry().put_historic(*this);
 }
 
 }

@@ -130,13 +130,17 @@ public:
                                       std::string_view format,
                                       ceph::bufferlist&& input) const final
   {
-    std::unique_ptr<Formatter> f{Formatter::create(format,
-                                                   "json-pretty",
-                                                   "json-pretty")};
+    std::unique_ptr<Formatter> fref{Formatter::create(format,
+						      "json-pretty",
+						      "json-pretty")};
+    Formatter *f = fref.get();
     f->open_object_section("pgstate_history");
-    osd.dump_pg_state_history(f.get());
-    f->close_section();
-    return seastar::make_ready_future<tell_result_t>(std::move(f));
+    return osd.dump_pg_state_history(
+      f
+    ).then([fref=std::move(fref)]() mutable {
+      fref->close_section();
+      return seastar::make_ready_future<tell_result_t>(std::move(fref));
+    });
   }
 private:
   const crimson::osd::OSD& osd;
@@ -369,7 +373,7 @@ public:
   {
     ghobject_t obj;
     try {
-      obj = test_ops_get_object_name(*shard_services.get_osdmap(), cmdmap);
+      obj = test_ops_get_object_name(*shard_services.get_map(), cmdmap);
     } catch (const std::invalid_argument& e) {
       logger().info("error during data error injection: {}", e.what());
       return seastar::make_ready_future<tell_result_t>(-EINVAL,
@@ -411,7 +415,7 @@ public:
   {
     ghobject_t obj;
     try {
-      obj = test_ops_get_object_name(*shard_services.get_osdmap(), cmdmap);
+      obj = test_ops_get_object_name(*shard_services.get_map(), cmdmap);
     } catch (const std::invalid_argument& e) {
       logger().info("error during metadata error injection: {}", e.what());
       return seastar::make_ready_future<tell_result_t>(-EINVAL,

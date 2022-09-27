@@ -1674,7 +1674,9 @@ WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
 #ifdef WITH_SEASTAR
-using OSDMapRef = boost::local_shared_ptr<const OSDMap>;
+#include "crimson/common/local_shared_foreign_ptr.h"
+using LocalOSDMapRef = boost::local_shared_ptr<const OSDMap>;
+using OSDMapRef = crimson::local_shared_foreign_ptr<LocalOSDMapRef>;
 #else
 using OSDMapRef = std::shared_ptr<const OSDMap>;
 #endif

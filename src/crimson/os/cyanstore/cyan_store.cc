@@ -334,8 +334,9 @@ CyanStore::omap_get_header(CollectionRef ch,
     o->omap_header);
 }
 
-seastar::future<> CyanStore::do_transaction(CollectionRef ch,
-                                            ceph::os::Transaction&& t)
+seastar::future<> CyanStore::do_transaction_no_callbacks(
+  CollectionRef ch,
+  ceph::os::Transaction&& t)
 {
   using ceph::os::Transaction;
   int r = 0;
@@ -521,14 +522,6 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
     f.flush(str);
     logger().error("{}", str.str());
     ceph_assert(r == 0);
-  }
-  for (auto i : {
-      t.get_on_applied(),
-      t.get_on_commit(),
-      t.get_on_applied_sync()}) {
-    if (i) {
-      i->complete(0);
-    }
   }
   return seastar::now();
 }

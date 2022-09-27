@@ -240,20 +240,20 @@ RecoveryBackend::handle_scan_get_digest(
     std::move(m.begin),
     crimson::common::local_conf().get_val<std::int64_t>("osd_backfill_scan_min"),
     crimson::common::local_conf().get_val<std::int64_t>("osd_backfill_scan_max")
-  ).then_interruptible([this,
-          query_epoch=m.query_epoch,
-          conn=m.get_connection()] (auto backfill_interval) {
-    auto reply = crimson::make_message<MOSDPGScan>(
-      MOSDPGScan::OP_SCAN_DIGEST,
-      pg.get_pg_whoami(),
-      pg.get_osdmap_epoch(),
-      query_epoch,
-      spg_t(pg.get_info().pgid.pgid, pg.get_primary().shard),
-      backfill_interval.begin,
-      backfill_interval.end);
-    encode(backfill_interval.objects, reply->get_data());
-    return conn->send(std::move(reply));
-  });
+  ).then_interruptible(
+    [this, query_epoch=m.query_epoch, &conn=*(m.get_connection())
+    ](auto backfill_interval) {
+      auto reply = crimson::make_message<MOSDPGScan>(
+	MOSDPGScan::OP_SCAN_DIGEST,
+	pg.get_pg_whoami(),
+	pg.get_osdmap_epoch(),
+	query_epoch,
+	spg_t(pg.get_info().pgid.pgid, pg.get_primary().shard),
+	backfill_interval.begin,
+	backfill_interval.end);
+      encode(backfill_interval.objects, reply->get_data());
+      return conn.send(std::move(reply));
+    });
 }
 
 RecoveryBackend::interruptible_future<>
