@@ -493,7 +493,7 @@ class Module(MgrModule):
 
         # Grab output from the "daemon.x heap stats" command
         for daemon in daemons:
-            daemon_type, daemon_id = daemon.split('.')
+            daemon_type, daemon_id = daemon.split('.', 1)
             heap_stats = self.parse_heap_stats(daemon_type, daemon_id)
             if heap_stats:
                 if (daemon_type != 'osd'):
@@ -568,7 +568,7 @@ class Module(MgrModule):
 
         # Grab output from the "dump_mempools" command
         for daemon in daemons:
-            daemon_type, daemon_id = daemon.split('.')
+            daemon_type, daemon_id = daemon.split('.', 1)
             cmd_dict = {
                 'prefix': 'dump_mempools',
                 'format': 'json'
