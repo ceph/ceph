@@ -84,6 +84,7 @@ struct client_config {
     client_config conf;
     entity_addr_t addr;
     ceph_assert(addr.parse(options["addr"].as<std::string>().c_str(), nullptr));
+    ceph_assert_always(addr.is_msgr2());
 
     conf.server_addr = addr;
     conf.block_size = options["cbs"].as<unsigned>();
@@ -114,6 +115,7 @@ struct server_config {
     server_config conf;
     entity_addr_t addr;
     ceph_assert(addr.parse(options["addr"].as<std::string>().c_str(), nullptr));
+    ceph_assert_always(addr.is_msgr2());
 
     conf.addr = addr;
     conf.block_size = options["sbs"].as<unsigned>();
