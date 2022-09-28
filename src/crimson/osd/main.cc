@@ -109,16 +109,6 @@ static uint64_t get_nonce()
   }
 }
 
-static void configure_crc_handling(crimson::net::Messenger& msgr)
-{
-  if (local_conf()->ms_crc_data) {
-    msgr.set_crc_data();
-  }
-  if (local_conf()->ms_crc_header) {
-    msgr.set_crc_header();
-  }
-}
-
 seastar::future<> fetch_config()
 {
   // i don't have any client before joining the cluster, so no need to have
@@ -134,7 +124,6 @@ seastar::future<> fetch_config()
     auto msgr = crimson::net::Messenger::create(entity_name_t::CLIENT(),
                                                 "temp_mon_client",
                                                 get_nonce());
-    configure_crc_handling(*msgr);
     crimson::mon::Client monc{*msgr, *auth_handler};
     msgr->set_auth_client(&monc);
     msgr->start({&monc}).get();
@@ -299,7 +288,6 @@ int main(int argc, const char* argv[])
             msgr = crimson::net::Messenger::create(entity_name_t::OSD(whoami),
                                                    name,
                                                    nonce);
-            configure_crc_handling(*msgr);
           }
           auto store = crimson::os::FuturizedStore::create(
             local_conf().get_val<std::string>("osd_objectstore"),

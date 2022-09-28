@@ -59,10 +59,7 @@ struct Server {
   Server(crimson::net::MessengerRef msgr)
     : byte_throttler(local_conf()->osd_client_message_size_cap),
       msgr{msgr}
-  {
-    msgr->set_crc_header();
-    msgr->set_crc_data();
-  }
+  { }
 };
 
 struct Client {
@@ -84,10 +81,7 @@ struct Client {
   Client(crimson::net::MessengerRef msgr)
     : byte_throttler(local_conf()->osd_client_message_size_cap),
       msgr{msgr}
-  {
-    msgr->set_crc_header();
-    msgr->set_crc_data();
-  }
+  { }
 };
 } // namespace seastar_pingpong
 

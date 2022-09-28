@@ -439,8 +439,6 @@ int main(int argc, char** argv)
                          CODE_ENVIRONMENT_UTILITY,
                          CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(cct.get());
-  cct->_conf.set_val("ms_crc_header", "false");
-  cct->_conf.set_val("ms_crc_data", "false");
 
   auto test_peer = FailoverTestPeer::create(cct.get(), cmd_peer_addr, nonstop);
   test_peer->wait();
