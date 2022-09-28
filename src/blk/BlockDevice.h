@@ -29,6 +29,7 @@
 #include "acconfig.h"
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
+#include "extblkdev/ExtBlkDevInterface.h"
 
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
 #include "aio/aio.h"
@@ -237,8 +238,8 @@ public:
   uint64_t get_optimal_io_size() const { return optimal_io_size; }
 
   /// hook to provide utilization of thinly-provisioned device
-  virtual bool get_thin_utilization(uint64_t *total, uint64_t *avail) const {
-    return false;
+  virtual int get_ebd_state(ExtBlkDevState &state) const {
+    return -ENOENT;
   }
 
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const = 0;

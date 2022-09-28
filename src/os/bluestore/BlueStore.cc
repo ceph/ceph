@@ -10404,15 +10404,16 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
       - buf->omap_allocated;
   }
 
-  uint64_t thin_total, thin_avail;
-  if (bdev->get_thin_utilization(&thin_total, &thin_avail)) {
-    buf->total += thin_total;
+  ExtBlkDevState ebd_state;
+  int rc = bdev->get_ebd_state(ebd_state);
+  if (rc == 0) {
+    buf->total += ebd_state.get_physical_total();
 
     // we are limited by both the size of the virtual device and the
     // underlying physical device.
-    bfree = std::min(bfree, thin_avail);
+    bfree = std::min(bfree, ebd_state.get_physical_avail());
 
-    buf->allocated = thin_total - thin_avail;
+    buf->allocated = ebd_state.get_physical_total() - ebd_state.get_physical_avail();;
   } else {
     buf->total += bdev->get_size();
   }

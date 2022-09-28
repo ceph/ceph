@@ -231,6 +231,7 @@ BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	cryptsetup-devel
 BuildRequires:	libcurl-devel
+BuildRequires:	libcap-devel
 BuildRequires:	libcap-ng-devel
 BuildRequires:	fmt-devel >= 6.2.1
 BuildRequires:	pkgconfig(libudev)
@@ -1537,6 +1538,8 @@ rm -rf %{_vpath_builddir}
 %dir %{_libdir}/ceph
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
+%dir %{_libdir}/ceph/extblkdev
+%{_libdir}/ceph/extblkdev/libceph_*.so*
 %dir %{_libdir}/ceph/compressor
 %{_libdir}/ceph/compressor/libceph_*.so*
 %{_unitdir}/ceph-crash.service
