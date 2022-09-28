@@ -492,7 +492,7 @@ void Elector::ping_check(int peer)
 {
   dout(20) << __func__ << " to peer " << peer << dendl;
 
-  if (peer >= mon->monmap->ranks.size()) {
+  if (peer >= ssize(mon->monmap->ranks)) {
     // Monitor no longer exists in the monmap,
     // therefore, we shouldn't ping this monitor
     // since we cannot lookup the address!
