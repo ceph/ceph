@@ -336,6 +336,8 @@ class Driver {
     const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, 
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) = 0;
+    /** Get a @a NotificationConfig object for global topic configuration */
+    virtual std::unique_ptr<NotificationConfig> get_notification_config(const std::string& tenant, std::optional<const std::string> subscription) = 0;
 
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
@@ -769,6 +771,8 @@ class Bucket {
     /** Abort multipart uploads in a bucket */
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct) = 0;
+    /** Get a @a NotificationConfig object for bucket topic configuration */
+    virtual std::unique_ptr<NotificationConfig> get_notification_config() = 0;
 
     /* dang - This is temporary, until the API is completed */
     virtual rgw_bucket& get_key() = 0;
@@ -1367,23 +1371,57 @@ public:
 };
 
 /**
+ * @brief Abstraction for a Notification configuration entry
+ *
+ * RGW can generate notifications for various events, and this represents a
+ * configuration entry for such a notification.  Config can exist globally or
+ * at the bucket level.
+ */
+class NotificationConfig {
+public:
+  class Result {
+  public:
+    virtual ~Result() = default;
+    virtual void encode(bufferlist& bl) const = 0;
+    virtual void decode(bufferlist::const_iterator& bl) = 0;
+    virtual void dump(Formatter *f) const = 0;
+  };
+  NotificationConfig() {}
+
+  virtual ~NotificationConfig() = default;
+
+  /** Read the config entry into @a data and (optionally) @a objv_tracker */
+  virtual int read(Result* data, RGWObjVersionTracker* objv_tracker) = 0;
+
+  /** Write @a info and (optionally) @a objv_tracker into the config */
+  virtual int write(const Result& info, RGWObjVersionTracker* obj_tracker,
+	      optional_yield y, const DoutPrefixProvider *dpp) = 0;
+
+  /** Remove the config, optionally a specific version */
+  virtual int remove(RGWObjVersionTracker* objv_tracker, optional_yield y,
+	     const DoutPrefixProvider *dpp) = 0;
+};
+
+WRITE_CLASS_ENCODER(NotificationConfig::Result)
+
+/**
  * @brief Abstraction for a Notification event
  *
  * RGW can generate notifications for various events, such as object creation or
  * deletion.
  */
 class Notification {
-protected:
-  public:
-    Notification() {}
+public:
+  Notification() {}
 
-    virtual ~Notification() = default;
+  virtual ~Notification() = default;
 
-    /** Indicate the start of the event associated with this notification */
-    virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) = 0;
-    /** Indicate the successful completion of the event associated with this notification */
-    virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) = 0;
+  /** Indicate the start of the event associated with this notification */
+  virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) = 0;
+  /** Indicate the successful completion of the event associated with this notification */
+  virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
+			     const ceph::real_time& mtime, const std::string& etag,
+			     const std::string& version) = 0;
 };
 
 /**

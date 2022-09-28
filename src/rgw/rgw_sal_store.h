@@ -377,6 +377,14 @@ public:
   using Lifecycle::get_entry;
 };
 
+class StoreNotificationConfig : public NotificationConfig {
+  std::string tenant;
+
+  public:
+    StoreNotificationConfig(const std::string& _tenant) : tenant(_tenant) {}
+    ~StoreNotificationConfig() = default;
+};
+
 class StoreNotification : public Notification {
 protected:
   Object* obj;

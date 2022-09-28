@@ -52,6 +52,8 @@ static struct m0_ufid_generator ufid_gr;
 
 namespace rgw::sal {
 
+static std::string pubsub_oid_prefix = "pubsub.";
+
 using ::ceph::encode;
 using ::ceph::decode;
 
@@ -838,6 +840,12 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
 int MotrBucket::abort_multiparts(const DoutPrefixProvider *dpp, CephContext *cct)
 {
   return 0;
+}
+
+std::unique_ptr<NotificationConfig> MotrBucket::get_notification_config() {
+  return std::make_unique<MotrNotificationConfig>(this->store, get_tenant(),
+		pubsub_oid_prefix + get_tenant() + ".bucket." +
+		get_name() + "/" + get_marker());
 }
 
 void MotrStore::finalize(void)
@@ -2975,7 +2983,7 @@ std::unique_ptr<Completions> MotrStore::get_completions(void)
 }
 
 std::unique_ptr<Notification> MotrStore::get_notification(Object* obj, Object* src_obj, req_state* s,
-    rgw::notify::EventType event_type, const string* object_name)
+    rgw::notify::EventType event_type, optional_yield y, const string* object_name)
 {
   return std::make_unique<MotrNotification>(obj, src_obj, event_type);
 }
@@ -2985,6 +2993,15 @@ std::unique_ptr<Notification>  MotrStore::get_notification(const DoutPrefixProvi
         std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y)
 {
   return std::make_unique<MotrNotification>(obj, src_obj, event_type);
+}
+
+std::unique_ptr<NotificationConfig> MotrStore::get_notification_config(const std::string& tenant, std::optional<const std::string> subscription)
+{
+  if (subscription)
+    return std::make_unique<MotrNotificationConfig>(this, tenant,
+		  pubsub_oid_prefix + tenant + ".sub." + *subscription);
+  return std::make_unique<MotrNotificationConfig>(this, tenant,
+		  pubsub_oid_prefix + tenant);
 }
 
 int MotrStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)

@@ -778,7 +778,7 @@ static inline bool notification_match(reservation_t& res,
 		      const RGWObjTags* req_tags)
 {
   RGWPubSub ps(res.store, res.user_tenant);
-  RGWPubSub::Bucket ps_bucket(&ps, res.bucket->get_key());
+  RGWPubSub::Bucket ps_bucket(&ps, res.bucket);
   rgw_pubsub_bucket_topics bucket_topics;
   auto rc = ps_bucket.get_topics(&bucket_topics);
   if (rc < 0) {

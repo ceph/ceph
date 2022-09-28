@@ -209,6 +209,7 @@ public:
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
     std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) override;
+  virtual std::unique_ptr<NotificationConfig> get_notification_config(const std::string& tenant, std::optional<const std::string> subscription) override;
 
   virtual RGWLC* get_rgwlc(void) override;
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override;
@@ -501,6 +502,7 @@ public:
 			      bool *is_truncated) override;
   virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 			       CephContext* cct) override;
+  virtual std::unique_ptr<NotificationConfig> get_notification_config() override;
 
   virtual rgw_bucket& get_key() override { return next->get_key(); }
   virtual RGWBucketInfo& get_info() override { return next->get_info(); }
@@ -832,6 +834,30 @@ public:
   virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
 						       const std::string& oid,
 						       const std::string& cookie) override;
+};
+
+class FilterNotificationConfig : public NotificationConfig {
+protected:
+  std::unique_ptr<NotificationConfig> next;
+
+public:
+  FilterNotificationConfig(std::unique_ptr<NotificationConfig> _next) : next(std::move(_next)) {}
+
+  virtual ~FilterNotificationConfig() = default;
+
+  virtual int read(Result* data, RGWObjVersionTracker* objv_tracker) override {
+    return next->read(data, objv_tracker);
+  }
+
+  virtual int write(const Result& info, RGWObjVersionTracker* objv_tracker,
+		    optional_yield y, const DoutPrefixProvider *dpp) override {
+    return next->write(info, objv_tracker, y, dpp);
+  }
+
+  virtual int remove(RGWObjVersionTracker* objv_tracker, optional_yield y,
+		     const DoutPrefixProvider *dpp) override {
+    return next->remove(objv_tracker, y, dpp);
+  }
 };
 
 class FilterNotification : public Notification {

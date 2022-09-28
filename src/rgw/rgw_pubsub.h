@@ -4,13 +4,11 @@
 #ifndef CEPH_RGW_PUBSUB_H
 #define CEPH_RGW_PUBSUB_H
 
-#include "services/svc_sys_obj.h"
+#include "rgw_sal.h"
 #include "rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_notify_event_type.h"
 #include <boost/container/flat_map.hpp>
-
-namespace rgw::sal { class RadosStore; }
 
 class XMLObj;
 
@@ -382,7 +380,7 @@ struct rgw_pubsub_sub_dest {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_sub_dest)
 
-struct rgw_pubsub_sub_config {
+struct rgw_pubsub_sub_config : public rgw::sal::NotificationConfig::Result {
   rgw_user user;
   std::string name;
   std::string topic;
@@ -521,7 +519,7 @@ struct rgw_pubsub_topic_filter {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_topic_filter)
 
-struct rgw_pubsub_bucket_topics {
+struct rgw_pubsub_bucket_topics : public rgw::sal::NotificationConfig::Result {
   std::map<std::string, rgw_pubsub_topic_filter> topics;
 
   void encode(bufferlist& bl) const {
@@ -540,7 +538,7 @@ struct rgw_pubsub_bucket_topics {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_bucket_topics)
 
-struct rgw_pubsub_topics {
+struct rgw_pubsub_topics : public rgw::sal::NotificationConfig::Result {
   std::map<std::string, rgw_pubsub_topic_subs> topics;
 
   void encode(bufferlist& bl) const {
@@ -566,46 +564,23 @@ class RGWPubSub
 {
   friend class Bucket;
 
-  rgw::sal::RadosStore* store;
+  rgw::sal::Driver* driver;
   const std::string tenant;
-  RGWSI_SysObj* svc_sysobj;
 
-  rgw_raw_obj meta_obj;
-
-  std::string meta_oid() const {
-    return pubsub_oid_prefix + tenant;
-  }
-
-  std::string bucket_meta_oid(const rgw_bucket& bucket) const {
-    return pubsub_oid_prefix + tenant + ".bucket." + bucket.name + "/" + bucket.marker;
-  }
-
-  std::string sub_meta_oid(const std::string& name) const {
-    return pubsub_oid_prefix + tenant + ".sub." + name;
-  }
-
-  template <class T>
-  int read(const rgw_raw_obj& obj, T* data, RGWObjVersionTracker* objv_tracker);
-
-  template <class T>
-  int write(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const T& info,
-	    RGWObjVersionTracker* obj_tracker, optional_yield y);
-
-  int remove(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, RGWObjVersionTracker* objv_tracker,
-	     optional_yield y);
+  std::unique_ptr<rgw::sal::NotificationConfig> global_config;
 
   int read_topics(rgw_pubsub_topics *result, RGWObjVersionTracker* objv_tracker);
   int write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
 			RGWObjVersionTracker* objv_tracker, optional_yield y);
 
 public:
-  RGWPubSub(rgw::sal::RadosStore* _store, const std::string& tenant);
+  RGWPubSub(rgw::sal::Driver* _driver, const std::string& tenant);
 
   class Bucket {
     friend class RGWPubSub;
     RGWPubSub *ps;
-    rgw_bucket bucket;
-    rgw_raw_obj bucket_meta_obj;
+    rgw::sal::Bucket* bucket;
+    std::unique_ptr<rgw::sal::NotificationConfig> bucket_config;
 
     // read the list of topics associated with a bucket and populate into result
     // use version tacker to enforce atomicity between read/write
@@ -617,8 +592,8 @@ public:
     int write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_bucket_topics& topics,
 		     RGWObjVersionTracker* objv_tracker, optional_yield y);
   public:
-    Bucket(RGWPubSub *_ps, const rgw_bucket& _bucket) : ps(_ps), bucket(_bucket) {
-      ps->get_bucket_meta_obj(bucket, &bucket_meta_obj);
+    Bucket(RGWPubSub *_ps, rgw::sal::Bucket* _bucket) : ps(_ps), bucket(_bucket) {
+      bucket_config = bucket->get_notification_config();
     }
 
     // read the list of topics associated with a bucket and populate into result
@@ -644,14 +619,12 @@ public:
 
   using BucketRef = std::shared_ptr<Bucket>;
 
-  BucketRef get_bucket(const rgw_bucket& bucket) {
+  BucketRef get_bucket(rgw::sal::Bucket* bucket) {
     return std::make_shared<Bucket>(this, bucket);
   }
 
-  void get_meta_obj(rgw_raw_obj *obj) const;
-  void get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const;
-
-  void get_sub_meta_obj(const std::string& name, rgw_raw_obj *obj) const;
+  std::unique_ptr<rgw::sal::NotificationConfig> get_meta_config() const;
+  void get_bucket_meta_config(rgw::sal::Bucket* bucket, std::unique_ptr<rgw::sal::NotificationConfig>* cfg) const;
 
   // get all topics (per tenant, if used)) and populate them into "result"
   // return 0 on success or if no topics exist, error code otherwise
@@ -677,40 +650,5 @@ public:
   // return 0 on success, error code otherwise
   int remove_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y);
 };
-
-
-template <class T>
-int RGWPubSub::read(const rgw_raw_obj& obj, T* result, RGWObjVersionTracker* objv_tracker)
-{
-  bufferlist bl;
-  int ret = rgw_get_system_obj(svc_sysobj,
-                               obj.pool, obj.oid,
-                               bl,
-                               objv_tracker,
-                               nullptr, null_yield, nullptr, nullptr);
-  if (ret < 0) {
-    return ret;
-  }
-
-  auto iter = bl.cbegin();
-  try {
-    decode(*result, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-
-  return 0;
-}
-
-template <class T>
-int RGWPubSub::write(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const T& info,
-			 RGWObjVersionTracker* objv_tracker, optional_yield y)
-{
-  bufferlist bl;
-  encode(info, bl);
-
-  return rgw_put_system_obj(dpp, svc_sysobj, obj.pool, obj.oid,
-                            bl, false, objv_tracker, real_time(), y);
-}
 
 #endif

@@ -302,6 +302,12 @@ std::unique_ptr<Notification> FilterDriver::get_notification(const DoutPrefixPro
   return std::make_unique<FilterNotification>(std::move(n));
 }
 
+std::unique_ptr<NotificationConfig> FilterDriver::get_notification_config(const std::string& tenant, std::optional<const std::string> subscription)
+{
+  std::unique_ptr<NotificationConfig> n = next->get_notification_config(tenant, subscription);
+  return std::make_unique<FilterNotificationConfig>(std::move(n));
+}
+
 RGWLC* FilterDriver::get_rgwlc()
 {
   return next->get_rgwlc();
@@ -852,6 +858,11 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
 int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct)
 {
   return next->abort_multiparts(dpp, cct);
+}
+
+std::unique_ptr<NotificationConfig> FilterBucket::get_notification_config()
+{
+  return next->get_notification_config();
 }
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,

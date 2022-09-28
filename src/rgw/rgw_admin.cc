@@ -10446,7 +10446,7 @@ next:
         return -ret;
       }
 
-      auto b = ps.get_bucket(bucket->get_key());
+      auto b = ps.get_bucket(bucket.get());
       ret = b->get_topics(&result);
       if (ret < 0) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;

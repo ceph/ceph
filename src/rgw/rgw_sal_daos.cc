@@ -42,6 +42,8 @@ namespace fs = std::filesystem;
 
 namespace rgw::sal {
 
+static std::string pubsub_oid_prefix = "pubsub.";
+
 using ::ceph::decode;
 using ::ceph::encode;
 
@@ -766,6 +768,12 @@ int DaosBucket::list_multiparts(
 int DaosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
                                  CephContext* cct) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
+}
+
+std::unique_ptr<NotificationConfig> DaosBucket::get_notification_config() {
+  return std::make_unique<DaosNotificationConfig>(this->store, get_tenant(),
+		pubsub_oid_prefix + get_tenant() + ".bucket." +
+		get_name() + "/" + get_marker());
 }
 
 void DaosStore::finalize(void) {
@@ -2372,6 +2380,15 @@ std::unique_ptr<Notification> DaosStore::get_notification(
     optional_yield y) {
   ldpp_dout(dpp, 20) << "get_notification" << dendl;
   return std::make_unique<DaosNotification>(obj, src_obj, event_type);
+}
+
+std::unique_ptr<NotificationConfig> DaosStore::get_notification_config(const std::string& tenant, std::optional<const std::string> subscription)
+{
+  if (subscription)
+    return std::make_unique<DaosNotificationConfig>(this, tenant,
+		  pubsub_oid_prefix + tenant + ".sub." + *subscription);
+  return std::make_unique<DaosNotificationConfig>(this, tenant,
+		  pubsub_oid_prefix + tenant);
 }
 
 int DaosStore::log_usage(const DoutPrefixProvider* dpp,

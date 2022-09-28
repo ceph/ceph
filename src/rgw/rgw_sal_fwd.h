@@ -25,6 +25,7 @@ namespace rgw { namespace sal {
   class Object;
   class MultipartUpload;
   class Lifecycle;
+  class NotificationConfig;
   class Notification;
   class Writer;
   class PlacementTier;

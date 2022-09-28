@@ -74,6 +74,7 @@ namespace rgw::sal {
 // default number of entries to list with each bucket listing call
 // (use marker to bridge between calls)
 static constexpr size_t listing_max_entries = 1000;
+static std::string pubsub_oid_prefix = "pubsub.";
 
 static int decode_policy(CephContext* cct,
                          bufferlist& bl,
@@ -471,7 +472,7 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
   // if bucket has notification definitions associated with it
   // they should be removed (note that any pending notifications on the bucket are still going to be sent)
   RGWPubSub ps(store, info.owner.tenant);
-  RGWPubSub::Bucket ps_bucket(&ps, info.bucket);
+  RGWPubSub::Bucket ps_bucket(&ps, this);
   const auto ps_ret = ps_bucket.remove_notifications(dpp, y);
   if (ps_ret < 0 && ps_ret != -ENOENT) {
     ldpp_dout(dpp, -1) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
@@ -1024,6 +1025,14 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+std::unique_ptr<NotificationConfig> RadosBucket::get_notification_config()
+{
+  return std::make_unique<RadosNotificationConfig>(this->store, get_tenant(),
+				store->svc()->zone->get_zone_params().log_pool,
+				pubsub_oid_prefix + get_tenant() + ".bucket." +
+				get_name() + "/" + get_marker());
+}
+
 std::unique_ptr<User> RadosStore::get_user(const rgw_user &u)
 {
   return std::make_unique<RadosUser>(this, u);
@@ -1281,6 +1290,18 @@ std::unique_ptr<Notification> RadosStore::get_notification(
 std::unique_ptr<Notification> RadosStore::get_notification(const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y)
 {
   return std::make_unique<RadosNotification>(dpp, this, obj, src_obj, event_type, _bucket, _user_id, _user_tenant, _req_id, y);
+}
+
+std::unique_ptr<NotificationConfig> RadosStore::get_notification_config(const std::string& tenant, std::optional<const std::string> subscription)
+{
+  if (subscription)
+    return std::make_unique<RadosNotificationConfig>(this, tenant,
+				   svc()->zone->get_zone_params().log_pool,
+				   pubsub_oid_prefix + tenant + ".sub." + *subscription);
+
+  return std::make_unique<RadosNotificationConfig>(this, tenant,
+				 svc()->zone->get_zone_params().log_pool,
+				 pubsub_oid_prefix + tenant);
 }
 
 int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
@@ -2930,6 +2951,49 @@ std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& 
 							     const std::string& cookie)
 {
   return std::make_unique<LCRadosSerializer>(store, oid, lock_name, cookie);
+}
+
+int RadosNotificationConfig::read(Result* data, RGWObjVersionTracker* objv_tracker)
+{
+  bufferlist bl;
+  int ret = rgw_get_system_obj(store->svc()->sysobj,
+                               meta_obj.pool, meta_obj.oid,
+                               bl,
+                               objv_tracker,
+                               nullptr, null_yield, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(*data, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RadosNotificationConfig::write(const Result& info, RGWObjVersionTracker* objv_tracker,
+		    optional_yield y, const DoutPrefixProvider *dpp)
+{
+  bufferlist bl;
+  encode(info, bl);
+
+  return rgw_put_system_obj(dpp, store->svc()->sysobj, meta_obj.pool, meta_obj.oid,
+                            bl, false, objv_tracker, real_time(), y);
+}
+
+int RadosNotificationConfig::remove(RGWObjVersionTracker* objv_tracker, optional_yield y,
+				    const DoutPrefixProvider *dpp)
+{
+  int ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, meta_obj.pool, meta_obj.oid, objv_tracker, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
 }
 
 int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)

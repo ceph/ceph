@@ -32,6 +32,8 @@ using namespace std;
 
 namespace rgw::sal {
 
+  static std::string pubsub_oid_prefix = "pubsub.";
+
   int DBUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
       const string& end_marker, uint64_t max, bool need_stats,
       BucketList &buckets, optional_yield y)
@@ -506,6 +508,12 @@ namespace rgw::sal {
   int DBBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct) {
     return 0;
+  }
+
+  std::unique_ptr<NotificationConfig> DBBucket::get_notification_config() {
+    return std::make_unique<DBNotificationConfig>(this->store, get_tenant(),
+				pubsub_oid_prefix + get_tenant() + ".bucket." +
+				get_name() + "/" + get_marker());
   }
 
   void DBStore::finalize(void)
@@ -1843,6 +1851,15 @@ namespace rgw::sal {
     optional_yield y)
   {
     return std::make_unique<DBNotification>(obj, src_obj, event_type);
+  }
+
+  std::unique_ptr<NotificationConfig> DBStore::get_notification_config(const std::string& tenant, std::optional<const std::string> subscription)
+  {
+    if (subscription)
+      return std::make_unique<DBNotificationConfig>(this, tenant,
+				  pubsub_oid_prefix + tenant + ".sub." + *subscription);
+    return std::make_unique<DBNotificationConfig>(this, tenant,
+				  pubsub_oid_prefix + tenant);
   }
 
   RGWLC* DBStore::get_rgwlc(void) {

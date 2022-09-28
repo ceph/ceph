@@ -168,6 +168,7 @@ class RadosStore : public StoreDriver {
     const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, 
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) override;
+    virtual std::unique_ptr<NotificationConfig> get_notification_config(const std::string& tenant, std::optional<const std::string> subscription) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
 
@@ -608,6 +609,7 @@ class RadosBucket : public StoreBucket {
 				bool *is_truncated) override;
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct) override;
+    virtual std::unique_ptr<NotificationConfig> get_notification_config() override;
 
   private:
     int link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
@@ -727,6 +729,27 @@ public:
   virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
 						       const std::string& oid,
 						       const std::string& cookie) override;
+};
+
+class RadosNotificationConfig : public StoreNotificationConfig {
+  RadosStore* store;
+  rgw_raw_obj meta_obj;
+
+  public:
+    RadosNotificationConfig(RadosStore* _store, const std::string& tenant, const rgw_pool& pool,
+			    const std::string& oid) :
+	  StoreNotificationConfig(tenant), store(_store), meta_obj(pool, oid) {}
+    ~RadosNotificationConfig() = default;
+
+  virtual int read(Result* data, RGWObjVersionTracker* objv_tracker) override;
+
+  virtual int write(const Result& info, RGWObjVersionTracker* obj_tracker,
+		    optional_yield y, const DoutPrefixProvider *dpp) override;
+
+  virtual int remove(RGWObjVersionTracker* objv_tracker, optional_yield y,
+		     const DoutPrefixProvider *dpp) override;
+
+  rgw_raw_obj& get_meta_obj() { return meta_obj; };
 };
 
 class RadosNotification : public StoreNotification {

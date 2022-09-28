@@ -133,6 +133,24 @@ struct DaosUserInfo {
 };
 WRITE_CLASS_ENCODER(DaosUserInfo);
 
+class DaosNotificationConfig : public StoreNotificationConfig {
+  DaosStore* store;
+  std::string oid;
+
+  public:
+    DaosNotificationConfig(DaosStore* _store, const std::string& tenant, const std::string& _oid) :
+	  StoreNotificationConfig(tenant), store(_store), oid(_oid) {}
+    ~DaosNotificationConfig() = default;
+
+  virtual int read(Result* data, RGWObjVersionTracker* objv_tracker) override { return 0; }
+
+  virtual int write(const Result& info, RGWObjVersionTracker* obj_tracker,
+		    optional_yield y, const DoutPrefixProvider *dpp) override { return 0; }
+
+  virtual int remove(RGWObjVersionTracker* objv_tracker, optional_yield y,
+		     const DoutPrefixProvider *dpp) override { return 0; }
+};
+
 class DaosNotification : public StoreNotification {
  public:
   DaosNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type)
@@ -362,6 +380,7 @@ class DaosBucket : public StoreBucket {
       bool* is_truncated) override;
   virtual int abort_multiparts(const DoutPrefixProvider* dpp,
                                CephContext* cct) override;
+  virtual std::unique_ptr<NotificationConfig> get_notification_config() override;
 
   int open(const DoutPrefixProvider* dpp);
   int close(const DoutPrefixProvider* dpp);
@@ -943,6 +962,9 @@ class DaosStore : public StoreDriver {
       rgw::sal::Bucket* _bucket, std::string& _user_id,
       std::string& _user_tenant, std::string& _req_id,
       optional_yield y) override;
+  virtual std::unique_ptr<NotificationConfig> get_notification_config(
+      const std::string& tenant,
+      std::optional<const std::string> subscription) override;
   virtual RGWLC* get_rgwlc(void) override { return NULL; }
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override {
     return NULL;

@@ -60,6 +60,24 @@ public:
 						       const std::string& cookie) override;
 };
 
+class DBNotificationConfig : public StoreNotificationConfig {
+  DBStore* store;
+  std::string oid;
+
+  public:
+    DBNotificationConfig(DBStore* _store, const std::string& tenant, const std::string& _oid) :
+	  StoreNotificationConfig(tenant), store(_store), oid(_oid) {}
+    ~DBNotificationConfig() = default;
+
+  virtual int read(Result* data, RGWObjVersionTracker* objv_tracker) override { return 0; }
+
+  virtual int write(const Result& info, RGWObjVersionTracker* obj_tracker,
+		    optional_yield y, const DoutPrefixProvider *dpp) override { return 0; }
+
+  virtual int remove(RGWObjVersionTracker* objv_tracker, optional_yield y,
+		     const DoutPrefixProvider *dpp) override { return 0; }
+};
+
 class DBNotification : public StoreNotification {
 protected:
   public:
@@ -234,6 +252,7 @@ protected:
 				bool *is_truncated) override;
       virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				   CephContext* cct) override;
+      virtual std::unique_ptr<NotificationConfig> get_notification_config() override;
 
       friend class DBStore;
   };
@@ -812,16 +831,19 @@ public:
       virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
       virtual std::unique_ptr<Completions> get_completions(void) override;
 
-  virtual std::unique_ptr<Notification> get_notification(
-    rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
-    rgw::notify::EventType event_type, optional_yield y, const std::string* object_name) override;
+      virtual std::unique_ptr<Notification> get_notification(
+	    rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
+	    rgw::notify::EventType event_type, optional_yield y, const std::string* object_name) override;
 
-  virtual std::unique_ptr<Notification> get_notification(
-    const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
-    rgw::sal::Object* src_obj,
-    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
-    std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
-    optional_yield y) override;
+      virtual std::unique_ptr<Notification> get_notification(
+	    const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
+	    rgw::sal::Object* src_obj,
+	    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
+	    std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
+	    optional_yield y) override;
+      virtual std::unique_ptr<NotificationConfig> get_notification_config(
+	    const std::string& tenant,
+	    std::optional<const std::string> subscription) override;
     
       virtual RGWLC* get_rgwlc(void) override;
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }

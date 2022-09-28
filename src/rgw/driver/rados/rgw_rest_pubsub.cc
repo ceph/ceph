@@ -741,7 +741,10 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
   }
 
   ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
-  auto b = ps->get_bucket(bucket_info.bucket);
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  if (driver->get_bucket(nullptr, bucket_info, &bucket) < 0)
+    return;
+  auto b = ps->get_bucket(bucket.get());
   ceph_assert(b);
 
   if(configurations.list.empty()) {
@@ -889,7 +892,10 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
   }
 
   ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
-  auto b = ps->get_bucket(bucket_info.bucket);
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  if (driver->get_bucket(nullptr, bucket_info, &bucket) < 0)
+    return;
+  auto b = ps->get_bucket(bucket.get());
   ceph_assert(b);
 
   // get all topics on a bucket
@@ -990,7 +996,10 @@ private:
 
 void RGWPSListNotifsOp::execute(optional_yield y) {
   ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
-  auto b = ps->get_bucket(bucket_info.bucket);
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  if (driver->get_bucket(nullptr, bucket_info, &bucket) < 0)
+    return;
+  auto b = ps->get_bucket(bucket.get());
   ceph_assert(b);
   
   // get all topics on a bucket
