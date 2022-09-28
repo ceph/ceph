@@ -42,13 +42,6 @@ static seastar::future<> test_monc()
     return crimson::common::sharded_perf_coll().start();
   }).then([]() mutable {
     auto msgr = crimson::net::Messenger::create(entity_name_t::OSD(0), "monc", 0);
-    auto& conf = crimson::common::local_conf();
-    if (conf->ms_crc_data) {
-      msgr->set_crc_data();
-    }
-    if (conf->ms_crc_header) {
-      msgr->set_crc_header();
-    }
     msgr->set_require_authorizer(false);
     return seastar::do_with(MonClient{*msgr, dummy_handler},
                             [msgr](auto& monc) mutable {

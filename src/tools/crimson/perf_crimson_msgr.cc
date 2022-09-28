@@ -67,7 +67,6 @@ struct client_config {
   unsigned msgtime;
   unsigned jobs;
   unsigned depth;
-  bool crc_enabled;
 
   std::string str() const {
     std::ostringstream out;
@@ -77,7 +76,6 @@ struct client_config {
         << ", msgtime=" << msgtime
         << ", jobs=" << jobs
         << ", depth=" << depth
-        << ", crc-enabled=" << crc_enabled
         << ")";
     return out.str();
   }
@@ -94,7 +92,6 @@ struct client_config {
     conf.jobs = options["jobs"].as<unsigned>();
     conf.depth = options["depth"].as<unsigned>();
     ceph_assert(conf.depth % conf.jobs == 0);
-    conf.crc_enabled = options["crc-enabled"].as<bool>();
     return conf;
   }
 };
@@ -103,14 +100,12 @@ struct server_config {
   entity_addr_t addr;
   unsigned block_size;
   unsigned core;
-  bool crc_enabled;
 
   std::string str() const {
     std::ostringstream out;
     out << "server[" << addr
         << "](bs=" << block_size
         << ", core=" << core
-        << ", crc-enabled=" << crc_enabled
         << ")";
     return out.str();
   }
@@ -123,7 +118,6 @@ struct server_config {
     conf.addr = addr;
     conf.block_size = options["sbs"].as<unsigned>();
     conf.core = options["core"].as<unsigned>();
-    conf.crc_enabled = options["crc-enabled"].as<bool>();
     return conf;
   }
 };
@@ -133,7 +127,8 @@ const unsigned SAMPLE_RATE = 7;
 static seastar::future<> run(
     perf_mode_t mode,
     const client_config& client_conf,
-    const server_config& server_conf)
+    const server_config& server_conf,
+    bool crc_enabled)
 {
   struct test_state {
     struct Server;
@@ -174,17 +169,13 @@ static seastar::future<> run(
         return {seastar::now()};
       }
 
-      seastar::future<> init(bool crc_enabled, const entity_addr_t& addr) {
-        return seastar::smp::submit_to(msgr_sid, [crc_enabled, addr, this] {
+      seastar::future<> init(const entity_addr_t& addr) {
+        return seastar::smp::submit_to(msgr_sid, [addr, this] {
           // server msgr is always with nonce 0
           msgr = crimson::net::Messenger::create(entity_name_t::OSD(msgr_sid), lname, 0);
           msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
           msgr->set_auth_client(&dummy_auth);
           msgr->set_auth_server(&dummy_auth);
-          if (crc_enabled) {
-            msgr->set_crc_header();
-            msgr->set_crc_data();
-          }
           return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
             return msgr->start({this});
           }, crimson::net::Messenger::bind_ertr::all_same_way(
@@ -340,18 +331,14 @@ static seastar::future<> run(
         return sid != 0 && sid <= jobs;
       }
 
-      seastar::future<> init(bool crc_enabled) {
-        return container().invoke_on_all([crc_enabled] (auto& client) {
+      seastar::future<> init() {
+        return container().invoke_on_all([] (auto& client) {
           if (client.is_active()) {
             client.msgr = crimson::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid);
             client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
             client.msgr->set_require_authorizer(false);
             client.msgr->set_auth_client(&client.dummy_auth);
             client.msgr->set_auth_server(&client.dummy_auth);
-            if (crc_enabled) {
-              client.msgr->set_crc_header();
-              client.msgr->set_crc_data();
-            }
             return client.msgr->start({&client});
           }
           return seastar::now();
@@ -657,6 +644,9 @@ static seastar::future<> run(
       create_sharded<test_state::Client>(client_conf.jobs, client_conf.block_size, client_conf.depth),
       crimson::common::sharded_conf().start(EntityName{}, std::string_view{"ceph"}).then([] {
         return crimson::common::local_conf().start();
+      }).then([crc_enabled] {
+        return crimson::common::local_conf().set_val(
+            "ms_crc_data", crc_enabled ? "true" : "false");
       })
   ).then([=](auto&& ret) {
     auto fp_server = std::move(std::get<0>(ret).get0());
@@ -670,8 +660,8 @@ static seastar::future<> run(
       ceph_assert(seastar::smp::count >= 1+server_conf.core);
       ceph_assert(server_conf.core == 0 || server_conf.core > client_conf.jobs);
       return seastar::when_all_succeed(
-        server->init(server_conf.crc_enabled, server_conf.addr),
-        client->init(client_conf.crc_enabled)
+        server->init(server_conf.addr),
+        client->init()
       ).then_unpack([client, addr = client_conf.server_addr] {
         return client->connect_wait_verify(addr);
       }).then([client, ramptime = client_conf.ramptime,
@@ -686,7 +676,7 @@ static seastar::future<> run(
       logger().info("\nperf settings:\n  {}\n", client_conf.str());
       ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
       ceph_assert(client_conf.jobs > 0);
-      return client->init(client_conf.crc_enabled
+      return client->init(
       ).then([client, addr = client_conf.server_addr] {
         return client->connect_wait_verify(addr);
       }).then([client, ramptime = client_conf.ramptime,
@@ -698,7 +688,7 @@ static seastar::future<> run(
     } else { // mode == perf_mode_t::server
       ceph_assert(seastar::smp::count >= 1+server_conf.core);
       logger().info("\nperf settings:\n  {}\n", server_conf.str());
-      return server->init(server_conf.crc_enabled, server_conf.addr
+      return server->init(server_conf.addr
       // dispatch ops
       ).then([server] {
         return server->wait();
@@ -743,9 +733,11 @@ int main(int argc, char** argv)
       auto mode = config["mode"].as<unsigned>();
       ceph_assert(mode <= 2);
       auto _mode = static_cast<perf_mode_t>(mode);
+      bool crc_enabled = config["crc-enabled"].as<bool>();
       auto server_conf = server_config::load(config);
       auto client_conf = client_config::load(config);
-      return run(_mode, client_conf, server_conf).then([] {
+      return run(_mode, client_conf, server_conf, crc_enabled
+      ).then([] {
           logger().info("\nsuccessful!\n");
         }).handle_exception([] (auto eptr) {
           logger().info("\nfailed!\n");
