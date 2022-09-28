@@ -148,10 +148,6 @@ if(WITH_RBD)
   endif()
 endif(WITH_RBD)
 
-if(WITH_SEASTAR)
-  add_subdirectory(crimson)
-endif()
-
 add_subdirectory(immutable_object_cache)
 add_subdirectory(ceph-dencoder)
 add_subdirectory(erasure-code)
