@@ -441,6 +441,16 @@ protected:
   }
 
 public:
+  /// Iterate over live ops
+  template <typename F>
+  void for_each_op(F &&f) const {
+    for (const auto &registry: registries) {
+      for (const auto &op: registry) {
+	std::invoke(f, op);
+      }
+    }
+  }
+
   /// Removes op from registry
   void remove_from_registry(Operation &op) {
     const auto op_type = op.get_type();
