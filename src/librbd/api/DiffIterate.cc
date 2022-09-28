@@ -198,7 +198,7 @@ int DiffIterate<I>::diff_iterate(I *ictx,
   }
 
   ictx->image_lock.lock_shared();
-  r = clip_io(ictx, off, &len);
+  r = clip_io(ictx, off, &len, io::ImageArea::DATA);
   ictx->image_lock.unlock_shared();
   if (r < 0) {
     return r;

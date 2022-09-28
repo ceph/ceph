@@ -36,7 +36,7 @@ void read_parent(ImageCtxT *image_ctx, uint64_t object_no,
                  const ZTracer::Trace &trace, Context* on_finish);
 
 template <typename ImageCtxT = librbd::ImageCtx>
-int clip_request(ImageCtxT *image_ctx, Extents *image_extents);
+int clip_request(ImageCtxT* image_ctx, Extents* image_extents, ImageArea area);
 
 inline uint64_t get_extents_length(const Extents &extents) {
   uint64_t total_bytes = 0;

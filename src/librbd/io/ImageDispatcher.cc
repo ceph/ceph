@@ -135,8 +135,11 @@ struct ImageDispatcher<I>::PreprocessVisitor
   }
 
   bool clip_request() const {
+    auto area = (image_dispatch_spec->image_dispatch_flags &
+        IMAGE_DISPATCH_FLAG_CRYPTO_HEADER ? ImageArea::CRYPTO_HEADER :
+                                            ImageArea::DATA);
     int r = util::clip_request(image_dispatcher->m_image_ctx,
-                               &image_dispatch_spec->image_extents);
+                               &image_dispatch_spec->image_extents, area);
     if (r < 0) {
       image_dispatch_spec->fail(r);
       return true;

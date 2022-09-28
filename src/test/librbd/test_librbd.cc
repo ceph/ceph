@@ -2804,6 +2804,97 @@ TEST_F(TestLibRBD, EncryptedResize)
   }
 }
 
+TEST_F(TestLibRBD, EncryptedFlattenSmallData)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+  std::string clone_name = get_temp_image_name();
+  uint64_t data_size = 5000;
+  uint64_t luks2_meta_size = 16 << 20;
+  std::string passphrase = "some passphrase";
+
+  {
+    int order = 22;
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(),
+                                 luks2_meta_size + data_size, &order));
+    librbd::Image parent;
+    ASSERT_EQ(0, rbd.open(ioctx, parent, parent_name.c_str(), nullptr));
+
+    librbd::encryption_luks2_format_options_t opts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, passphrase};
+    ASSERT_EQ(0, parent.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, &opts,
+                                          sizeof(opts)));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(data_size, 'a'));
+    ASSERT_EQ(data_size, parent.write(0, data_size, bl));
+
+    ASSERT_EQ(0, parent.snap_create("snap"));
+    ASSERT_EQ(0, parent.snap_protect("snap"));
+    uint64_t features;
+    ASSERT_EQ(0, parent.features(&features));
+    ASSERT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap", ioctx,
+                           clone_name.c_str(), features, &order));
+  }
+
+  {
+    librbd::Image clone;
+    ASSERT_EQ(0, rbd.open(ioctx, clone, clone_name.c_str(), nullptr));
+
+    librbd::encryption_luks_format_options_t opts = {passphrase};
+    ASSERT_EQ(0, clone.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, &opts,
+                                       sizeof(opts)));
+    uint64_t size;
+    ASSERT_EQ(0, clone.size(&size));
+    ASSERT_EQ(data_size, size);
+    uint64_t overlap;
+    ASSERT_EQ(0, clone.overlap(&overlap));
+    ASSERT_EQ(data_size, overlap);
+
+    ceph::bufferlist expected_bl;
+    expected_bl.append(std::string(data_size, 'a'));
+
+    ceph::bufferlist read_bl1;
+    ASSERT_EQ(data_size, clone.read(0, data_size, read_bl1));
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl1));
+
+    ASSERT_EQ(0, clone.flatten());
+
+    ceph::bufferlist read_bl2;
+    ASSERT_EQ(data_size, clone.read(0, data_size, read_bl2));
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl2));
+  }
+
+  {
+    librbd::Image clone;
+    ASSERT_EQ(0, rbd.open(ioctx, clone, clone_name.c_str(), nullptr));
+
+    librbd::encryption_luks_format_options_t opts = {passphrase};
+    ASSERT_EQ(0, clone.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, &opts,
+                                       sizeof(opts)));
+    uint64_t size;
+    ASSERT_EQ(0, clone.size(&size));
+    ASSERT_EQ(data_size, size);
+    uint64_t overlap;
+    ASSERT_EQ(0, clone.overlap(&overlap));
+    ASSERT_EQ(0, overlap);
+
+    ceph::bufferlist expected_bl;
+    expected_bl.append(std::string(data_size, 'a'));
+
+    ceph::bufferlist read_bl;
+    ASSERT_EQ(data_size, clone.read(0, data_size, read_bl));
+    ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+}
+
 #endif
 
 TEST_F(TestLibRBD, TestIOWithIOHint)
