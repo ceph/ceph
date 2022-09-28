@@ -431,6 +431,7 @@ int main(int argc, char** argv)
   auto addr = vm["addr"].as<std::string>();
   entity_addr_t cmd_peer_addr;
   cmd_peer_addr.parse(addr.c_str(), nullptr);
+  ceph_assert_always(cmd_peer_addr.is_msgr2());
   auto nonstop = vm["nonstop"].as<bool>();
 
   std::vector<const char*> args(argv, argv + argc);
