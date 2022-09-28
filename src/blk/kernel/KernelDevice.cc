@@ -242,7 +242,12 @@ int KernelDevice::open(const string& p)
       support_discard = blkdev_buffered.support_discard();
       optimal_io_size = blkdev_buffered.get_optimal_io_size();
       this->devname = devname;
-      _detect_vdo();
+      // check if any extended block device plugin recognizes this device
+      // detect_vdo has moved into the VDO plugin
+      int rc = extblkdev::detect_device(cct, devname, ebd_impl);
+      if (rc != 0) {
+	dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
+      }
     }
   }
 
@@ -305,10 +310,7 @@ void KernelDevice::close()
   _discard_stop();
   _pre_close();
 
-  if (vdo_fd >= 0) {
-    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
-    vdo_fd = -1;
-  }
+  extblkdev::release_device(ebd_impl);
 
   for (int i = 0; i < WRITE_LIFE_MAX; i++) {
     assert(fd_directs[i] >= 0);
@@ -335,11 +337,10 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   } else {
     (*pm)[prefix + "type"] = "ssd";
   }
-  if (vdo_fd >= 0) {
-    (*pm)[prefix + "vdo"] = "true";
-    uint64_t total, avail;
-    get_vdo_utilization(vdo_fd, &total, &avail);
-    (*pm)[prefix + "vdo_physical_size"] = stringify(total);
+  // if compression device detected, collect meta data for device
+  // VDO specific meta data has moved into VDO plugin
+  if (ebd_impl) {
+    ebd_impl->collect_metadata(prefix, pm);
   }
 
   {
@@ -407,24 +408,14 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   return 0;
 }
 
-void KernelDevice::_detect_vdo()
+int KernelDevice::get_ebd_state(ExtBlkDevState &state) const
 {
-  vdo_fd = get_vdo_stats_handle(devname.c_str(), &vdo_name);
-  if (vdo_fd >= 0) {
-    dout(1) << __func__ << " VDO volume " << vdo_name
-	    << " maps to " << devname << dendl;
-  } else {
-    dout(20) << __func__ << " no VDO volume maps to " << devname << dendl;
+  // use compression driver plugin to determine physical size and availability
+  // VDO specific get_thin_utilization has moved into VDO plugin
+  if (ebd_impl) {
+    return ebd_impl->get_state(state);
   }
-  return;
-}
-
-bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
-{
-  if (vdo_fd < 0) {
-    return false;
-  }
-  return get_vdo_utilization(vdo_fd, total, avail);
+  return -ENOENT;
 }
 
 int KernelDevice::choose_fd(bool buffered, int write_hint) const
