@@ -14,6 +14,7 @@
 #define dout_subsys ceph_subsys_rbd
 
 #include "wnbd_handler.h"
+#include "per_res.h"
 
 #define _NTSCSI_USER_MODE_
 #include <rpc.h>
@@ -257,6 +258,31 @@ void WnbdHandler::IOContext::set_sense(uint8_t sense_key, uint8_t asc)
   WnbdSetSense(&wnbd_status, sense_key, asc);
 }
 
+int WnbdHandler::IOContext::check_rsv_conflict()
+{
+  ceph_assert(handler);
+
+  if (handler->enable_pr) {
+    int r = check_pr_conflict(
+      handler->rados_ctx,
+      handler->image,
+      req_type,
+      handler->pr_initiator,
+      &wnbd_status);
+    if (r < 0) {
+      dout(5) << *this << "persistent reservation conflict" << dendl;
+      // send_io_response disposes *this, avoid using it after this call
+      handler->send_io_response(this);
+      return r;
+    }
+  } else {
+    dout(20) << *this << ": persistent reservations disabled" << dendl;
+  }
+
+  return 0;
+}
+
+
 void WnbdHandler::Read(
   PWNBD_DISK Disk,
   UINT64 RequestHandle,
@@ -282,6 +308,30 @@ void WnbdHandler::Read(
   }
 
   dout(20) << *ctx << ": start" << dendl;
+
+  // TODO: just like target_core_rbd, we're checking for persistent reservation
+  // conflicts before each IO request. There are some consequences in terms of:
+  //
+  // * performance - additional round-trip for every IO request
+  //
+  // * data consistency - if the node temporarily loses connection, gets
+  // preempted and then recovers network connectivity, queued IO operations may
+  // be submitted, ignoring the current reservations. This can be mitigated
+  // by carefully configuring timeouts. In the future, we may consider using
+  // Ceph blocklists.
+  //
+  // Eventually, we might be able to emulate persistent reservations using
+  // rbd locks and maybe ceph blocklists, however there are few key limitations
+  // that make it unfeasible: rbd locks are advisory, shared locks can't be
+  // preempted and blocklists apply to the entire host, not just a single
+  // client. Another option might be to use compound operations such as
+  // "compare and write", however the rbd api isn't as flexible as librados.
+  //
+  // Worth mentioning that PR PREEMPT is used by MS FC even for graceful CSV
+  // ownership changes (moves), not just in case of failures.
+  if (ctx->check_rsv_conflict()) {
+    return;
+  }
 
   librbd::RBD::AioCompletion *c = new librbd::RBD::AioCompletion(ctx, aio_callback);
   handler->image.aio_read2(ctx->req_from, ctx->req_size, ctx->data, c, op_flags);
@@ -317,6 +367,10 @@ void WnbdHandler::Write(
 
   dout(20) << *ctx << ": start" << dendl;
 
+  if (ctx->check_rsv_conflict()) {
+    return;
+  }
+
   librbd::RBD::AioCompletion *c = new librbd::RBD::AioCompletion(ctx, aio_callback);
   handler->image.aio_write2(ctx->req_from, ctx->req_size, ctx->data, c, op_flags);
 
@@ -340,6 +394,13 @@ void WnbdHandler::Flush(
   ctx->req_from = BlockAddress * handler->block_size;
 
   dout(20) << *ctx << ": start" << dendl;
+
+  // TODO: should we enforce that rbd caching is disabled when persistent
+  // reservations are enabled? in that case, we wouldn't receive flush
+  // requests.
+  if (ctx->check_rsv_conflict()) {
+    return;
+  }
 
   librbd::RBD::AioCompletion *c = new librbd::RBD::AioCompletion(ctx, aio_callback);
   handler->image.aio_flush(c);
@@ -366,8 +427,90 @@ void WnbdHandler::Unmap(
 
   dout(20) << *ctx << ": start" << dendl;
 
+  if (ctx->check_rsv_conflict()) {
+    return;
+  }
+
   librbd::RBD::AioCompletion *c = new librbd::RBD::AioCompletion(ctx, aio_callback);
   handler->image.aio_discard(ctx->req_from, ctx->req_size, c);
+
+  dout(20) << *ctx << ": submitted" << dendl;
+}
+
+void WnbdHandler::PersistResIn(
+  PWNBD_DISK Disk,
+  UINT64 RequestHandle,
+  UINT8 ServiceAction)
+{
+  WnbdHandler* handler = nullptr;
+  ceph_assert(!WnbdGetUserContext(Disk, (PVOID*)&handler));
+
+  WnbdHandler::IOContext* ctx = new WnbdHandler::IOContext();
+  ctx->handler = handler;
+  ctx->req_handle = RequestHandle;
+  ctx->req_type = WnbdReqTypePersistResIn;
+  ctx->req_from = 0;
+
+  dout(20) << *ctx << std::hex
+    << ", action=0x" << (int) ServiceAction
+    << ": start" << dendl;
+
+  // TODO: can/should this be async?
+  auto op = WnbdPerResInOperation(
+    handler->rados_ctx,
+    handler->image,
+    handler->pr_initiator,
+    ServiceAction,
+    ctx->data,
+    &ctx->wnbd_status);
+  op.execute();
+
+  ctx->handler->send_io_response(ctx);
+
+  dout(20) << *ctx << ": submitted" << dendl;
+}
+
+void WnbdHandler::PersistResOut(
+  PWNBD_DISK Disk,
+  UINT64 RequestHandle,
+  UINT8 ServiceAction,
+  UINT8 Scope,
+  UINT8 Type,
+  PVOID Buffer,
+  UINT32 ParameterListLength)
+{
+  WnbdHandler* handler = nullptr;
+  ceph_assert(!WnbdGetUserContext(Disk, (PVOID*)&handler));
+
+  WnbdHandler::IOContext* ctx = new WnbdHandler::IOContext();
+  ctx->handler = handler;
+  ctx->req_handle = RequestHandle;
+  ctx->req_type = WnbdReqTypePersistResOut;
+  ctx->req_size = ParameterListLength;
+  ctx->req_from = 0;
+
+  bufferptr ptr((char*)Buffer, ctx->req_size);
+  ctx->data.push_back(ptr);
+
+  dout(20) << *ctx << std::hex
+    << ", action=0x" << (uint) ServiceAction
+    << ", scope=0x" << (uint) Scope
+    << ", type=0x" << (uint) Type
+    << ", buffer_sz=0x" << (uint) ParameterListLength
+    << ": start" << dendl;
+  // TODO: can/should this be async?
+  auto op = WnbdPerResOutOperation(
+    handler->rados_ctx,
+    handler->image,
+    handler->pr_initiator,
+    ServiceAction,
+    Scope,
+    Type,
+    ctx->data,
+    &ctx->wnbd_status);
+  op.execute();
+
+  ctx->handler->send_io_response(ctx);
 
   dout(20) << *ctx << ": submitted" << dendl;
 }
@@ -445,6 +588,7 @@ int WnbdHandler::start()
 
   wnbd_props.Flags.ReadOnly = readonly;
   wnbd_props.Flags.UnmapSupported = 1;
+  wnbd_props.Flags.PersistResSupported = enable_pr;
   if (rbd_cache_enabled) {
     wnbd_props.Flags.FUASupported = 1;
     wnbd_props.Flags.FlushSupported = 1;
@@ -489,6 +633,12 @@ std::ostream &operator<<(std::ostream &os, const WnbdHandler::IOContext &ctx) {
     break;
   case WnbdReqTypeUnmap:
     os << " TRIM ";
+    break;
+  case WnbdReqTypePersistResIn:
+    os << " PERSISTENT_RESERVE_IN ";
+    break;
+  case WnbdReqTypePersistResOut:
+    os << " PERSISTENT_RESERVE_OUT ";
     break;
   default:
     os << " UNKNOWN(" << ctx.req_type << ") ";

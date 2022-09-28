@@ -861,6 +861,7 @@ Map options:
   --device <device path>  Optional mapping unique identifier
   --exclusive             Forbid writes by other clients
   --read-only             Map read-only
+  --enable-pr             Enable persistent reservations (EXPERIMENTAL)
   --non-persistent        Do not recreate the mapping when the Ceph service
                           restarts. By default, mappings are persistent
   --io-req-workers        The number of workers that dispatch IO requests.
@@ -1226,6 +1227,8 @@ static int parse_args(std::vector<const char*>& args,
       cfg->readonly = true;
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
       cfg->exclusive = true;
+    } else if (ceph_argparse_flag(args, i, "--enable-pr", (char *)NULL)) {
+      cfg->enable_pr = true;
     } else if (ceph_argparse_flag(args, i, "--non-persistent", (char *)NULL)) {
       cfg->persistent = false;
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {

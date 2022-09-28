@@ -24,6 +24,8 @@
 
 #include "global/global_context.h"
 
+#include "per_res.h"
+
 // TODO: make this configurable.
 #define RBD_WNBD_MAX_TRANSFER 2 * 1024 * 1024
 #define SOFT_REMOVE_RETRY_INTERVAL 2
@@ -61,6 +63,7 @@ public:
 class WnbdHandler
 {
 private:
+  librados::IoCtx &rados_ctx;
   librbd::Image &image;
   std::string instance_name;
   std::string snap_name;
@@ -68,26 +71,33 @@ private:
   uint32_t block_size;
   bool readonly;
   bool rbd_cache_enabled;
+  bool enable_pr;
+  std::string pr_initiator;
   uint32_t io_req_workers;
   uint32_t io_reply_workers;
   WnbdAdminHook* admin_hook;
   boost::asio::thread_pool* reply_tpool;
 
 public:
-  WnbdHandler(librbd::Image& _image, std::string _instance_name,
+  WnbdHandler(librados::IoCtx& _rados_ctx,
+              librbd::Image& _image,
+              std::string _instance_name,
               std::string _snap_name,
               uint64_t _block_count, uint32_t _block_size,
               bool _readonly, bool _rbd_cache_enabled,
+              bool _enable_pr,
               uint32_t _io_req_workers,
               uint32_t _io_reply_workers,
               AdminSocket* admin_socket)
-    : image(_image)
+    : rados_ctx(_rados_ctx)
+    , image(_image)
     , instance_name(_instance_name)
     , snap_name(_snap_name)
     , block_count(_block_count)
     , block_size(_block_size)
     , readonly(_readonly)
     , rbd_cache_enabled(_rbd_cache_enabled)
+    , enable_pr(_enable_pr)
     , io_req_workers(_io_req_workers)
     , io_reply_workers(_io_reply_workers)
   {
@@ -97,6 +107,7 @@ public:
     // are going to send the IO replies and thus be able to cache Windows
     // OVERLAPPED structures.
     reply_tpool = new boost::asio::thread_pool(_io_reply_workers);
+    pr_initiator = get_pr_initiator();
   }
 
   int resize(uint64_t new_size);
@@ -141,6 +152,8 @@ private:
 
     void set_sense(uint8_t sense_key, uint8_t asc, uint64_t info);
     void set_sense(uint8_t sense_key, uint8_t asc);
+
+    int check_rsv_conflict();
   };
 
   friend WnbdAdminHook;
@@ -177,6 +190,18 @@ private:
     UINT64 RequestHandle,
     PWNBD_UNMAP_DESCRIPTOR Descriptors,
     UINT32 Count);
+  static void PersistResIn(
+    PWNBD_DISK Disk,
+    UINT64 RequestHandle,
+    UINT8 ServiceAction);
+  static void PersistResOut(
+    PWNBD_DISK Disk,
+    UINT64 RequestHandle,
+    UINT8 ServiceAction,
+    UINT8 Scope,
+    UINT8 Type,
+    PVOID Buffer,
+    UINT32 ParameterListLength);
 
   static constexpr WNBD_INTERFACE RbdWnbdInterface =
   {
@@ -184,6 +209,8 @@ private:
     Write,
     Flush,
     Unmap,
+    PersistResIn,
+    PersistResOut,
   };
 };
 

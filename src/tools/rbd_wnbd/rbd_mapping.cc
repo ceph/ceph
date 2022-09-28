@@ -79,11 +79,18 @@ int RbdMapping::init()
   CephContext* cct = reinterpret_cast<CephContext*>(io_ctx.cct());
   ceph_assert(cct != nullptr);
 
-  handler = new WnbdHandler(image, cfg.devpath, cfg->snapname,
+  if (cfg.enable_pr) {
+    dout(0) << "warning: persistent reservation support is experimental"
+      << dendl;
+  }
+
+  handler = new WnbdHandler(io_ctx,
+                            image, cfg.devpath, cfg.snapname,
                             info.size / RBD_WNBD_BLKSIZE,
                             RBD_WNBD_BLKSIZE,
                             !cfg.snapname.empty() || cfg.readonly,
                             g_conf().get_val<bool>("rbd_cache"),
+                            cfg.enable_pr,
                             cfg.io_req_workers,
                             cfg.io_reply_workers,
                             cct->get_admin_socket());
