@@ -90,7 +90,7 @@ class TestPrepare(object):
     @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')
     def test_safe_prepare_exception_raised(self, m_valid_device, m_prepare, m_rollback_osd):
         m_valid_device.return_value = '/dev/foo'
-        m_prepare.side_effect=Exception('foo')
+        m_prepare.side_effect = Exception('foo')
         m_rollback_osd.return_value = 'foobar'
         with pytest.raises(Exception):
             raw.prepare.Prepare(argv=['--bluestore', '--data', '/dev/foo']).main()

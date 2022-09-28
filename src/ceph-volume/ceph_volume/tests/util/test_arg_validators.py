@@ -134,8 +134,11 @@ class TestValidZapDevice(object):
     @patch('ceph_volume.util.arg_validators.Device')
     @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
     @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
-    def test_device_has_no_partition(self,  m_get_single_lv, m_has_bs_label, mocked_device):
+    def test_device_has_no_partition(self,  m_get_single_lv, m_has_bs_label, mocked_device, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.arg_validators.get_osd_ids_up', lambda: [123])
+        monkeypatch.setattr('ceph_volume.util.disk.is_locked_raw_device', lambda dev_path: False)
         mocked_device.return_value = MagicMock(
+            has_bluestore_label=False,
             used_by_ceph=False,
             exists=True,
             has_partitions=False,
@@ -144,6 +147,24 @@ class TestValidZapDevice(object):
         )
         self.validator.zap = False
         assert self.validator('/dev/foo')
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_is_locked(self,  m_get_single_lv, m_has_bs_label, mocked_device, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.arg_validators.get_osd_ids_up', lambda: [123])
+        monkeypatch.setattr('ceph_volume.util.disk.is_locked_raw_device', lambda dev_path: True)
+        mocked_device.return_value = MagicMock(
+            has_bluestore_label=False,
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False
+        )
+        self.validator.zap = False
+        with pytest.raises(RuntimeError):
+            self.validator('/dev/foo')
 
 class TestValidDataDevice(object):
     def setup_method(self):

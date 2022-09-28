@@ -1,5 +1,6 @@
 import logging
 import os
+import fcntl
 import re
 import stat
 import time
@@ -740,12 +741,21 @@ def is_locked_raw_device(disk_path):
     To detect that case, the device is opened in Read/Write and exclusive mode
     """
     open_flags = (os.O_RDWR | os.O_EXCL)
+    lockf_flags = (fcntl.LOCK_EX | fcntl.LOCK_NB)
     open_mode = 0
     fd = None
 
     try:
         fd = os.open(disk_path, open_flags, open_mode)
+    except FileNotFoundError:
+        raise
     except OSError:
+        return 1
+
+    try:
+        fcntl.lockf(fd, lockf_flags)
+    except BlockingIOError:
+        os.close(fd)
         return 1
 
     try:

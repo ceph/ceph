@@ -1,7 +1,8 @@
 import argparse
 import os
 import math
-from ceph_volume import terminal, decorators, process
+import json
+from ceph_volume import terminal, decorators, process, conf
 from ceph_volume.util.device import Device
 from ceph_volume.util import disk
 
@@ -51,13 +52,47 @@ class ValidDevice(object):
         return self._device
 
 
+def get_osd_ids_up():
+    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
+    cmd = ['ceph', '--cluster', conf.cluster,
+            '--name', 'client.bootstrap-osd',
+            '--keyring', bootstrap_keyring,
+            'osd', 'tree', '-f', 'json']
+    stdout, stderr, returncode = process.call(
+        cmd,
+        show_command=False
+    )
+
+    if returncode != 0:
+        raise RuntimeError(f"Couldn't run command: '{' '.join(cmd)}'")
+
+    output = json.loads(''.join(stdout).strip())
+    osds = output['nodes']
+    return [osd["id"] for osd in osds if osd['type'] == "osd"]
+
+
 class ValidZapDevice(ValidDevice):
     def __call__(self, dev_path):
         super().get_device(dev_path)
-        return self._format_device(self._is_valid_device())
+        return self._format_device(self._is_valid_device(dev_path))
 
-    def _is_valid_device(self, raise_sys_exit=True):
+    def _is_valid_device(self, dev_path, raise_sys_exit=True):
         super()._is_valid_device()
+        if disk.is_locked_raw_device(dev_path):
+            raise RuntimeError(f"{dev_path} is locked, won't touch it.")
+        osd_ids_up = get_osd_ids_up()
+        d = Device(dev_path)
+        if d.has_bluestore_label:
+            from ceph_volume.devices.raw.list import List
+            dev = List([]).generate([dev_path])
+            osd_ids = [dev[d]['osd_id'] for d in dev]
+        if d.lvs:
+            osd_ids = [lv.tags['ceph.osd_id'] for lv in d.lvs]
+
+        for osd_id in osd_ids:
+            if int(osd_id) in osd_ids_up:
+                raise RuntimeError(f"There's an OSD present in the cluster attached to {dev_path}")
+
         return self._device
 
 

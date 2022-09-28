@@ -21,9 +21,12 @@ class TestZap(object):
         '/dev/dm-0',
     ])
     @patch('ceph_volume.util.arg_validators.Device')
-    def test_can_not_zap_mapper_device(self, mocked_device, monkeypatch, device_info, capsys, is_root, device_name):
+    def test_can_not_zap_mapper_device(self, mocked_device, monkeypatch, device_info, capsys, is_root, device_name, fake_filesystem):
         monkeypatch.setattr('os.path.exists', lambda x: True)
+        monkeypatch.setattr('ceph_volume.util.disk.is_locked_raw_device', lambda dev_path: False)
+        monkeypatch.setattr('ceph_volume.util.arg_validators.get_osd_ids_up', lambda: [123])
         mocked_device.return_value = MagicMock(
+            has_bluestore_label=False,
             is_mapper=True,
             is_mpath=False,
             used_by_ceph=True,

@@ -322,4 +322,5 @@ def fake_filesystem(fs):
     fs.create_dir('/sys/block/sda/slaves')
     fs.create_dir('/sys/block/sda/queue')
     fs.create_dir('/sys/block/rbd0')
+    fs.create_dir('/dev/mapper')
     yield fs
