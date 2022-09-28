@@ -54,7 +54,7 @@ class AgentEndpoint:
 
     def configure_routes(self) -> None:
         d = cherrypy.dispatch.RoutesDispatcher()
-        d.connect(name='host-data', route='/data',
+        d.connect(name='host-data', route='/data/',
                   controller=self.host_data.POST,
                   conditions=dict(method=['POST']))
         cherrypy.tree.mount(None, '/', config={'/': {'request.dispatch': d}})
