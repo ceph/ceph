@@ -4,8 +4,10 @@
 #ifndef CEPH_RGW_KEYSTONE_H
 #define CEPH_RGW_KEYSTONE_H
 
-#include <type_traits>
+#include <atomic>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 
 #include <boost/optional.hpp>
 
@@ -14,7 +16,6 @@
 #include "common/ceph_mutex.h"
 #include "global/global_init.h"
 
-#include <atomic>
 
 bool rgw_is_pki_token(const std::string& token);
 void rgw_get_token_id(const std::string& token, std::string& token_id);
@@ -197,7 +198,7 @@ public:
   bool has_role(const std::string& r) const;
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
-    return now >= static_cast<uint64_t>(get_expires());
+    return std::cmp_greater_equal(now, get_expires());
   }
   int parse(const DoutPrefixProvider *dpp, CephContext* cct,
             const std::string& token_str,

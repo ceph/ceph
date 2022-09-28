@@ -783,7 +783,7 @@ bool RGWQuotaInfoDefApplier::is_size_exceeded(const DoutPrefixProvider *dpp,
   const uint64_t cur_size = stats.size_rounded;
   const uint64_t new_size = rgw_rounded_objsize(size);
 
-  if (cur_size + new_size > static_cast<uint64_t>(qinfo.max_size)) {
+  if (std::cmp_greater(cur_size + new_size, qinfo.max_size)) {
     ldpp_dout(dpp, 10) << "quota exceeded: stats.size_rounded=" << stats.size_rounded
              << " size=" << new_size << " "
              << entity << "_quota.max_size=" << qinfo.max_size << dendl;
@@ -804,7 +804,7 @@ bool RGWQuotaInfoDefApplier::is_num_objs_exceeded(const DoutPrefixProvider *dpp,
     return false;
   }
 
-  if (stats.num_objects + num_objs > static_cast<uint64_t>(qinfo.max_objects)) {
+  if (std::cmp_greater(stats.num_objects + num_objs, qinfo.max_objects)) {
     ldpp_dout(dpp, 10) << "quota exceeded: stats.num_objects=" << stats.num_objects
              << " " << entity << "_quota.max_objects=" << qinfo.max_objects
              << dendl;
@@ -827,7 +827,7 @@ bool RGWQuotaInfoRawApplier::is_size_exceeded(const DoutPrefixProvider *dpp,
 
   const uint64_t cur_size = stats.size;
 
-  if (cur_size + size > static_cast<uint64_t>(qinfo.max_size)) {
+  if (std::cmp_greater(cur_size + size, qinfo.max_size)) {
     ldpp_dout(dpp, 10) << "quota exceeded: stats.size=" << stats.size
              << " size=" << size << " "
              << entity << "_quota.max_size=" << qinfo.max_size << dendl;
@@ -848,7 +848,7 @@ bool RGWQuotaInfoRawApplier::is_num_objs_exceeded(const DoutPrefixProvider *dpp,
     return false;
   }
 
-  if (stats.num_objects + num_objs > static_cast<uint64_t>(qinfo.max_objects)) {
+  if (std::cmp_greater(stats.num_objects + num_objs, qinfo.max_objects)) {
     ldpp_dout(dpp, 10) << "quota exceeded: stats.num_objects=" << stats.num_objects
              << " " << entity << "_quota.max_objects=" << qinfo.max_objects
              << dendl;

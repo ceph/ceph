@@ -1406,7 +1406,7 @@ int FIFO::push(const DoutPrefixProvider *dpp, const std::vector<cb::list>& data_
     canceled = false;
     retries = 0;
     batch_len = 0;
-    if (static_cast<unsigned>(r) == batch.size()) {
+    if (r == ssize(batch)) {
       batch.clear();
     } else  {
       batch.erase(batch.begin(), batch.begin() + r);
