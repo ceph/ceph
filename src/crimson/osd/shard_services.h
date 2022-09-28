@@ -322,6 +322,8 @@ class ShardServices : public OSDMapService {
   }
 
 #define FORWARD_TO_LOCAL(METHOD) FORWARD(METHOD, METHOD, local_state)
+#define FORWARD_TO_LOCAL_CONST(METHOD) FORWARD_CONST(	\
+    METHOD, METHOD, local_state)			\
 
 #define FORWARD_TO_OSD_SINGLETON_TARGET(METHOD, TARGET)		\
   template <typename... Args>					\
@@ -439,7 +441,7 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_pg_created)
   FORWARD_TO_OSD_SINGLETON(send_alive)
   FORWARD_TO_OSD_SINGLETON(send_pg_temp)
-  FORWARD_CONST(get_mnow, get_mnow, local_state)
+  FORWARD_TO_LOCAL_CONST(get_mnow)
   FORWARD_TO_LOCAL(get_hb_stamps)
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
@@ -508,6 +510,7 @@ public:
 #undef FORWARD
 #undef FORWARD_TO_OSD_SINGLETON
 #undef FORWARD_TO_LOCAL
+#undef FORWARD_TO_LOCAL_CONST
 };
 
 }
