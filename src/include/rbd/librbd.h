@@ -42,6 +42,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_AIO_FLUSH 1
 #define LIBRBD_SUPPORTS_AIO_OPEN 1
 #define LIBRBD_SUPPORTS_COMPARE_AND_WRITE 1
+#define LIBRBD_SUPPORTS_COMPARE_AND_WRITE_IOVEC 1
 #define LIBRBD_SUPPORTS_LOCKING 1
 #define LIBRBD_SUPPORTS_INVALIDATE 1
 #define LIBRBD_SUPPORTS_IOVEC 1
@@ -1195,6 +1196,15 @@ CEPH_RBD_API ssize_t rbd_aio_compare_and_write(rbd_image_t image,
                                                rbd_completion_t c,
                                                uint64_t *mismatch_off,
                                                int op_flags);
+CEPH_RBD_API ssize_t rbd_aio_compare_and_writev(rbd_image_t image,
+                                                uint64_t off,
+                                                const struct iovec *cmp_iov,
+                                                int cmp_iovcnt,
+                                                const struct iovec *iov,
+                                                int iovcnt,
+                                                rbd_completion_t c,
+                                                uint64_t *mismatch_off,
+                                                int op_flags);
 
 CEPH_RBD_API int rbd_aio_create_completion(void *cb_arg,
                                            rbd_callback_t complete_cb,
