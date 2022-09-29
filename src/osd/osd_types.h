@@ -373,6 +373,7 @@ enum {
 // pg stuff
 
 #define OSD_SUPERBLOCK_GOBJECT ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)))
+#define OSD_SUPERBLOCK_OMAP_KEY "osd_superblock"
 
 // placement seed (a hash value)
 typedef uint32_t ps_t;
