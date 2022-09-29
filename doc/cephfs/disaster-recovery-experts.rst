@@ -300,9 +300,8 @@ Ensure you have an MDS running and issue:
 
 .. note::
 
-   Symbolic links are recovered as empty regular files. `Symbolic link recovery
-   <https://tracker.ceph.com/issues/46166>`_ is scheduled to be supported in
-   Pacific.
+   The `Symbolic link recovery <https://tracker.ceph.com/issues/46166>`_ is supported from Quincy.
+   Symbolic links were recovered as empty regular files before.
 
 It is recommended to migrate any data from the recovery file system as soon as
 possible. Do not restore the old file system while the recovery file system is
