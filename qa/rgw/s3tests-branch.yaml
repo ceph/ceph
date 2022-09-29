@@ -1,4 +1,4 @@
 overrides:
   s3tests:
-    force-branch: fixes_related_to_new_csv_parser_2
-    git_remote: https://github.com/galsalomon66/
+    force-branch: ceph-master
+    # git_remote: https://github.com/ceph/
