@@ -78,5 +78,4 @@ public:
 
   int print_stats() const;
   int build_size_histogram(const std::string& prefix) const;
-  bool db_restore(const std::string& backup_dir);
 };

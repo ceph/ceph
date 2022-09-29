@@ -51,7 +51,6 @@ void usage(const char *pname)
     << "  destructive-repair  (use only as last resort! may corrupt healthy data)\n"
     << "  stats\n"
     << "  histogram [prefix]\n"
-    << "  db-restore <backup_dir>\n"
     << std::endl;
 }
 
@@ -99,7 +98,7 @@ int main(int argc, const char *argv[])
     return 1;
   }
 
-  bool to_repair = (cmd == "destructive-repair" || cmd == "db-restore");
+  bool to_repair = (cmd == "destructive-repair");
   bool need_stats = (cmd == "stats");
   StoreTool st(type, path, to_repair, need_stats);
 
@@ -354,18 +353,6 @@ int main(int argc, const char *argv[])
     if (argc > 4)
       prefix = url_unescape(argv[4]);
     st.build_size_histogram(prefix);
-  } else if (cmd == "db-restore") {
-    if (argc < 3)  {
-      usage(argv[0]);
-      return 1;
-    }
-    string backup_dir = args[3];
-    std::cout << "manul triggering osd db restore" << std::endl;
-    bool ret = st.db_restore(backup_dir);
-    if(ret)
-      std::cout << "finished osd db restore" << std::endl;
-    else
-      std::cout << "failed osd db restore" << std::endl;
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     return 1;
