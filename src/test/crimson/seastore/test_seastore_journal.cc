@@ -72,7 +72,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 
   std::default_random_engine generator;
 
-  seastore_off_t block_size;
+  extent_len_t block_size;
 
   SegmentManagerGroupRef sms;
 

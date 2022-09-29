@@ -117,7 +117,7 @@ public:
   size_t get_available_size() const final {
     return config.size;
   }
-  seastore_off_t get_block_size() const final {
+  extent_len_t get_block_size() const final {
     return config.block_size;
   }
   seastore_off_t get_segment_size() const final {

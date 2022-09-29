@@ -527,7 +527,7 @@ TransactionManager::get_extents_if_live(
   extent_types_t type,
   paddr_t paddr,
   laddr_t laddr,
-  seastore_off_t len)
+  extent_len_t len)
 {
   LOG_PREFIX(TransactionManager::get_extent_if_live);
   TRACET("{} {}~{} {}", t, type, laddr, len, paddr);
@@ -539,7 +539,7 @@ TransactionManager::get_extents_if_live(
   return cache->get_extent_if_cached(t, paddr, type
   ).si_then([=, this, &t](auto extent)
 	    -> get_extents_if_live_ret {
-    if (extent && extent->get_length() == (extent_len_t)len) {
+    if (extent && extent->get_length() == len) {
       DEBUGT("{} {}~{} {} is live in cache -- {}",
              t, type, laddr, len, paddr, *extent);
       std::list<CachedExtentRef> res;

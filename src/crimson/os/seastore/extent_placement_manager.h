@@ -100,7 +100,7 @@ public:
     return background_process.get_journal_type();
   }
 
-  seastore_off_t get_block_size() const {
+  extent_len_t get_block_size() const {
     assert(primary_device != nullptr);
     // assume all the devices have the same block size
     return primary_device->get_block_size();
@@ -141,7 +141,7 @@ public:
   alloc_result_t alloc_new_extent(
     Transaction& t,
     extent_types_t type,
-    seastore_off_t length,
+    extent_len_t length,
     placement_hint_t hint,
     reclaim_gen_t gen
   ) {

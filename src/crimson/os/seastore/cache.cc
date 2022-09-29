@@ -942,7 +942,7 @@ void Cache::on_transaction_destruct(Transaction& t)
 CachedExtentRef Cache::alloc_new_extent_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
-  seastore_off_t length, ///< [in] length
+  extent_len_t length,   ///< [in] length
   placement_hint_t hint, ///< [in] user hint
   reclaim_gen_t gen      ///< [in] reclaim generation
 )
@@ -1123,7 +1123,7 @@ record_t Cache::prepare_record(
 	   : L_ADDR_NULL),
 	  i->last_committed_crc,
 	  final_crc,
-	  (seastore_off_t)i->get_length(),
+	  i->get_length(),
 	  i->get_version() - 1,
 	  sseq,
 	  stype,
@@ -1897,7 +1897,7 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::_get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
   laddr_t laddr,
-  seastore_off_t length,
+  extent_len_t length,
   const Transaction::src_t* p_src,
   extent_init_func_t &&extent_init_func,
   extent_init_func_t &&on_cache)

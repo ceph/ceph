@@ -174,7 +174,7 @@ SegmentAllocator::write(ceph::bufferlist&& to_write)
 
   auto write_result = write_result_t{
     write_start_seq,
-    static_cast<seastore_off_t>(write_length)
+    write_length
   };
   written_to += write_length;
   segment_provider.update_segment_avail_bytes(
@@ -331,7 +331,7 @@ RecordBatch::encode_batch(
   submitting_mdlength = gsize.get_mdlength();
   auto bl = encode_records(pending, committed_to, segment_nonce);
   // Note: pending is cleared here
-  assert(bl.length() == (std::size_t)submitting_length);
+  assert(bl.length() == submitting_length);
   return std::make_pair(bl, gsize);
 }
 

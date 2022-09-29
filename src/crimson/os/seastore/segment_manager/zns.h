@@ -112,7 +112,7 @@ namespace crimson::os::seastore::segment_manager::zns {
       return metadata.size;
     };
 
-    seastore_off_t get_block_size() const final {
+    extent_len_t get_block_size() const final {
       return metadata.block_size;
     };
 

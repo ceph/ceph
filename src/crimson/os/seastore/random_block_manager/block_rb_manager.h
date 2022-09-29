@@ -221,7 +221,7 @@ public:
   write_ertr::future<> write_rbm_header();
 
   size_t get_size() const final { return super.size; };
-  size_t get_block_size() const final { return super.block_size; }
+  extent_len_t get_block_size() const final { return super.block_size; }
 
   // max block number a block can represent using bitmap
   uint64_t max_block_by_bitmap_block() {

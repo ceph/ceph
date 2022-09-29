@@ -92,7 +92,7 @@ public:
   virtual write_ertr::future<> complete_allocation(Transaction &t) = 0;
 
   virtual size_t get_size() const = 0;
-  virtual size_t get_block_size() const = 0;
+  virtual extent_len_t get_block_size() const = 0;
   virtual uint64_t get_free_blocks() const = 0;
   virtual device_id_t get_device_id() const = 0;
   virtual ~RandomBlockManager() {}
