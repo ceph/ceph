@@ -3482,6 +3482,17 @@ options:
   - dbstore
   - motr
   - daos
+- name: rgw_config_store
+  type: str
+  level: advanced
+  desc: Configuration storage backend
+  default: rados
+  services:
+  - rgw
+  enum_values:
+  - rados
+  - dbstore
+  - json
 - name: rgw_filter
   type: str
   level: advanced
@@ -3506,6 +3517,24 @@ options:
   level: advanced
   desc: prefix to the file names created by db backend store
   default: dbstore
+  services:
+  - rgw
+- name: dbstore_config_uri
+  type: str
+  level: advanced
+  desc: 'Config database URI. URIs beginning with file: refer to local files opened with SQLite.'
+  default: file:/var/lib/ceph/radosgw/dbstore-config.db
+  see_also:
+  - rgw_config_store
+  services:
+  - rgw
+- name: rgw_json_config
+  type: str
+  level: advanced
+  desc: Path to a json file that contains the static zone and zonegroup configuration. Requires rgw_config_store=json.
+  default: /var/lib/ceph/radosgw/config.json
+  see_also:
+  - rgw_config_store
   services:
   - rgw
 - name: motr_profile_fid

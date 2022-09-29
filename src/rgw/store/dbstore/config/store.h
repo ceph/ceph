@@ -15,27 +15,13 @@
 
 #pragma once
 
+#include <memory>
+#include "rgw_sal_config.h"
 
-namespace rgw { namespace sal {
+namespace rgw::dbstore {
 
-  class Store;
-  class User;
-  class Bucket;
-  class BucketList;
-  class Object;
-  class MultipartUpload;
-  class Lifecycle;
-  class Notification;
-  class Writer;
-  class PlacementTier;
-  class ZoneGroup;
-  class Zone;
-  class LuaManager;
-  struct RGWRoleInfo;
+// ConfigStore factory
+auto create_config_store(const DoutPrefixProvider* dpp, const std::string& uri)
+  -> std::unique_ptr<sal::ConfigStore>;
 
-  class ConfigStore;
-  class RealmWriter;
-  class ZoneGroupWriter;
-  class ZoneWriter;
-
-} } // namespace rgw::sal
+} // namespace rgw::dbstore
