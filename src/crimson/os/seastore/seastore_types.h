@@ -454,6 +454,19 @@ using internal_paddr_t = uint64_t;
 constexpr auto PADDR_BITS = std::numeric_limits<internal_paddr_t>::digits;
 static_assert(PADDR_BITS == SEGMENT_ID_BITS + SEGMENT_OFF_BITS);
 
+/**
+ * device_off_t
+ *
+ * Offset within a device, may be negative for relative offsets.
+ *
+ * TODO: replace block_off_t
+ */
+using device_off_t = int64_t;
+constexpr auto DEVICE_OFF_BITS = PADDR_BITS - DEVICE_ID_BITS;
+constexpr auto DEVICE_OFF_MAX =
+    std::numeric_limits<device_off_t>::max() >> DEVICE_ID_BITS;
+constexpr auto DEVICE_OFF_MIN = -(DEVICE_OFF_MAX + 1);
+
 using block_off_t = internal_paddr_t;
 constexpr auto BLOCK_OFF_BITS = PADDR_BITS - DEVICE_ID_BITS;
 constexpr auto BLOCK_OFF_MAX =
@@ -909,11 +922,11 @@ struct journal_seq_t {
   // produces a pseudo journal_seq_t relative to this by offset
   journal_seq_t add_offset(
       journal_type_t type,
-      seastore_off_t off,
+      device_off_t off,
       seastore_off_t roll_start,
       seastore_off_t roll_size) const;
 
-  seastore_off_t relative_to(
+  device_off_t relative_to(
       journal_type_t type,
       const journal_seq_t& r,
       seastore_off_t roll_start,
