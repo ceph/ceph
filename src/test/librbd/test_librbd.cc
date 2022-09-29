@@ -4233,14 +4233,11 @@ TEST_F(TestLibRBD, TestAioCompareAndWriteSuccessBufferlistGreaterLenPP)
     mismatch_bl.append(&mismatch_buffer[5], 5);
     mismatch_bl.append(&mismatch_buffer[10], 4);
 
-    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
-    ASSERT_EQ(cmp_bl.length(), written);
-
     /*
      * Test len < cmp_bl & write_bl => should succeed but only compare
      * len bytes resp. only write len bytes
      */
-    written = image.write(off, mismatch_bl.length(), mismatch_bl);
+    ssize_t written = image.write(off, mismatch_bl.length(), mismatch_bl);
     ASSERT_EQ(mismatch_bl.length(), written);
 
     size_t len_m1 = cmp_bl.length() - 1;
