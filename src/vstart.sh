@@ -880,6 +880,7 @@ start_mon() {
     local count=0
     for f in a b c d e f g h i j k l m n o p q r s t u v w x y z
     do
+        f=$HOSTNAME.$f
         [ $count -eq $CEPH_NUM_MON ] && break;
         count=$(($count + 1))
         if [ -z "$MONS" ]; then
@@ -1085,6 +1086,7 @@ start_mgr() {
     PROMETHEUS_PORT=9283
     for name in x y z a b c d e f g h i j k l m n o p
     do
+        name=$HOSTNAME.$name
         [ $mgr -eq $CEPH_NUM_MGR ] && break
         mgr=$(($mgr + 1))
         if [ "$new" -eq 1 ]; then
@@ -1174,6 +1176,7 @@ start_mds() {
     local mds=0
     for name in a b c d e f g h i j k l m n o p
     do
+        name=$HOSTNAME.$name
         [ $mds -eq $CEPH_NUM_MDS ] && break
         mds=$(($mds + 1))
 
@@ -1526,6 +1529,7 @@ fi
 fs=0
 for name in a b c d e f g h i j k l m n o p
 do
+    name=$HOSTNAME.$name
     [ $fs -eq $CEPH_NUM_FS ] && break
     fs=$(($fs + 1))
     if [ "$CEPH_MAX_MDS" -gt 1 ]; then
