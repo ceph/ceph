@@ -253,6 +253,67 @@ EOF
     fi
 }
 
+function populate_wheelhouse() {
+    in_jenkins && echo "CI_DEBUG: Running populate_wheelhouse() in install-deps.sh"
+    local install=$1
+    shift
+
+    # although pip comes with virtualenv, having a recent version
+    # of pip matters when it comes to using wheel packages
+    PIP_OPTS="--timeout 300 --exists-action i"
+    pip $PIP_OPTS $install \
+      'setuptools >= 0.8' 'pip >= 21.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
+    if test $# != 0 ; then
+        # '--use-feature=fast-deps --use-deprecated=legacy-resolver' added per
+        # https://github.com/pypa/pip/issues/9818 These should be able to be
+        # removed at some point in the future.
+        pip --use-feature=fast-deps --use-deprecated=legacy-resolver $PIP_OPTS $install $@ || return 1
+    fi
+}
+
+function activate_virtualenv() {
+    in_jenkins && echo "CI_DEBUG: Running activate_virtualenv() in install-deps.sh"
+    local top_srcdir=$1
+    local env_dir=$top_srcdir/install-deps-python3
+
+    if ! test -d $env_dir ; then
+        python3 -m venv ${env_dir}
+        . $env_dir/bin/activate
+        if ! populate_wheelhouse install ; then
+            rm -rf $env_dir
+            return 1
+        fi
+    fi
+    . $env_dir/bin/activate
+}
+
+function preload_wheels_for_tox() {
+    in_jenkins && echo "CI_DEBUG: Running preload_wheels_for_tox() in install-deps.sh"
+    local ini=$1
+    shift
+    pushd . > /dev/null
+    cd $(dirname $ini)
+    local require_files=$(ls *requirements*.txt 2>/dev/null) || true
+    local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
+    local require=$(echo -n "$require_files" | sed -e 's/^/-r /')
+    local constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
+    local md5=wheelhouse/md5
+    if test "$require"; then
+        if ! test -f $md5 || ! md5sum -c $md5 > /dev/null; then
+            rm -rf wheelhouse
+        fi
+    fi
+    if test "$require" && ! test -d wheelhouse ; then
+        type python3 > /dev/null 2>&1 || continue
+        activate_virtualenv $top_srcdir || exit 1
+        python3 -m pip install --upgrade pip
+        populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
+        mv $wip_wheelhouse wheelhouse
+        md5sum $require_files $constraint_files > $md5
+    fi
+    popd > /dev/null
+}
+
 for_make_check=false
 if tty -s; then
     # interactive
@@ -464,67 +525,6 @@ EOF
         ;;
     esac
 fi
-
-function populate_wheelhouse() {
-    in_jenkins && echo "CI_DEBUG: Running populate_wheelhouse() in install-deps.sh"
-    local install=$1
-    shift
-
-    # although pip comes with virtualenv, having a recent version
-    # of pip matters when it comes to using wheel packages
-    PIP_OPTS="--timeout 300 --exists-action i"
-    pip $PIP_OPTS $install \
-      'setuptools >= 0.8' 'pip >= 21.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
-    if test $# != 0 ; then
-        # '--use-feature=fast-deps --use-deprecated=legacy-resolver' added per
-        # https://github.com/pypa/pip/issues/9818 These should be able to be
-        # removed at some point in the future.
-        pip --use-feature=fast-deps --use-deprecated=legacy-resolver $PIP_OPTS $install $@ || return 1
-    fi
-}
-
-function activate_virtualenv() {
-    in_jenkins && echo "CI_DEBUG: Running activate_virtualenv() in install-deps.sh"
-    local top_srcdir=$1
-    local env_dir=$top_srcdir/install-deps-python3
-
-    if ! test -d $env_dir ; then
-        python3 -m venv ${env_dir}
-        . $env_dir/bin/activate
-        if ! populate_wheelhouse install ; then
-            rm -rf $env_dir
-            return 1
-        fi
-    fi
-    . $env_dir/bin/activate
-}
-
-function preload_wheels_for_tox() {
-    in_jenkins && echo "CI_DEBUG: Running preload_wheels_for_tox() in install-deps.sh"
-    local ini=$1
-    shift
-    pushd . > /dev/null
-    cd $(dirname $ini)
-    local require_files=$(ls *requirements*.txt 2>/dev/null) || true
-    local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
-    local require=$(echo -n "$require_files" | sed -e 's/^/-r /')
-    local constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
-    local md5=wheelhouse/md5
-    if test "$require"; then
-        if ! test -f $md5 || ! md5sum -c $md5 > /dev/null; then
-            rm -rf wheelhouse
-        fi
-    fi
-    if test "$require" && ! test -d wheelhouse ; then
-        type python3 > /dev/null 2>&1 || continue
-        activate_virtualenv $top_srcdir || exit 1
-        python3 -m pip install --upgrade pip
-        populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
-        mv $wip_wheelhouse wheelhouse
-        md5sum $require_files $constraint_files > $md5
-    fi
-    popd > /dev/null
-}
 
 # use pip cache if possible but do not store it outside of the source
 # tree
