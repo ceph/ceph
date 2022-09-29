@@ -18,11 +18,14 @@ def task(ctx, config):
     devs_by_remote = {}
     old_scratch_by_remote = {}
     for remote, roles in ctx.cluster.remotes.items():
+        if remote.is_container:
+            continue
         devs = teuthology.get_scratch_devices(remote)
         devs_by_remote[remote] = devs
         base = '/sys/kernel/config/nvmet'
         remote.run(
             args=[
+                'grep', '^nvme_loop', '/proc/modules', run.Raw('||'),
                 'sudo', 'modprobe', 'nvme_loop',
                 run.Raw('&&'),
                 'sudo', 'mkdir', '-p', f'{base}/hosts/{host}',
@@ -85,6 +88,8 @@ def task(ctx, config):
 
     finally:
         for remote, devs in devs_by_remote.items():
+            if remote.is_container:
+                continue
             for dev in devs:
                 short = dev.split('/')[-1]
                 log.info(f'Disconnecting nvme_loop {remote.shortname}:{dev}...')
