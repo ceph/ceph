@@ -44,7 +44,7 @@ public:
 TEST_F(TestNeoRADOS, MakeWithLibRADOS) {
   librados::Rados paleo_rados;
   auto result = connect_cluster_pp(paleo_rados);
-  ASSERT_EQ("", result);
+  EXPECT_EQ("", result);
 
   auto rados = RADOS::make_with_librados(paleo_rados);
 
@@ -53,7 +53,7 @@ TEST_F(TestNeoRADOS, MakeWithLibRADOS) {
   op.read(0, 0, &bl);
 
   // provide pool that doesn't exists -- just testing round-trip
-  ASSERT_THROW(
+  EXPECT_THROW(
     rados.execute({"dummy-obj"}, IOContext(std::numeric_limits<int64_t>::max()),
                   std::move(op), &bl, ceph::async::use_blocked),
     boost::system::system_error);
@@ -69,7 +69,7 @@ TEST_F(TestNeoRADOS, MakeWithCCT) {
   op.read(0, 0, &bl);
 
   // provide pool that doesn't exists -- just testing round-trip
-  ASSERT_THROW(
+  EXPECT_THROW(
       rados.execute({"dummy-obj"}, IOContext(std::numeric_limits<int64_t>::max()),
                   std::move(op), &bl, ceph::async::use_blocked),
       boost::system::system_error);
@@ -85,25 +85,29 @@ TEST_F(TestNeoRADOS, MakeWithBuilder) {
   op.read(0, 0, &bl);
 
   // provide pool that doesn't exists -- just testing round-trip
-  ASSERT_THROW(
+  EXPECT_THROW(
     rados.execute({"dummy-obj"}, IOContext(std::numeric_limits<int64_t>::max()),
           std::move(op), &bl, ceph::async::use_blocked),
     boost::system::system_error);
 }
 
 TEST_F(TestNeoRADOS, CreatePool) {
-  ceph::async::io_context_pool p(1);
-  auto rados = RADOS::make_with_cct(cct.get(), p,
-      ceph::async::use_blocked);
+  try {
+    ceph::async::io_context_pool p(1);
+    auto rados = RADOS::make_with_cct(cct.get(), p,
+        ceph::async::use_blocked);
 
-  const std::string pool_id{"piscine"};
-  auto pool_deleter = make_scope_guard([&]() {
-      rados.delete_pool(pool_id, ceph::async::use_blocked);
-    });
-  rados.create_pool(pool_id, std::nullopt, ceph::async::use_blocked);
-  auto pool = rados.lookup_pool(pool_id, ceph::async::use_blocked);
-
-  ASSERT_GT(pool, 0);
+    const std::string pool{"piscine"};
+    auto pool_deleter = make_scope_guard([&]() {
+        rados.delete_pool(pool, ceph::async::use_blocked);
+      });
+    rados.create_pool(pool, std::nullopt, ceph::async::use_blocked);
+    const auto pool_id = rados.lookup_pool(pool, ceph::async::use_blocked);
+    EXPECT_GT(pool_id, 0);
+  } catch (const std::exception& e) {
+    std::cout << "got exception: " << e.what() << std::endl;
+    ADD_FAILURE();
+  }
 }
 
 void fill_objects(int min, int max, std::set<std::string>& objects) {
@@ -114,39 +118,44 @@ void fill_objects(int min, int max, std::set<std::string>& objects) {
 }
 
 TEST_F(TestNeoRADOS, CreateAndListObjects) {
-  ceph::async::io_context_pool p(1);
-  auto rados = RADOS::make_with_cct(cct.get(), p,
-      ceph::async::use_blocked);
+  try {
+    ceph::async::io_context_pool p(1);
+    auto rados = RADOS::make_with_cct(cct.get(), p,
+        ceph::async::use_blocked);
 
-  const std::string pool_id{"piscine"};
-  auto pool_deleter = make_scope_guard([&]() {
-      rados.delete_pool(pool_id, ceph::async::use_blocked);
-    });
-  rados.create_pool(pool_id, std::nullopt, ceph::async::use_blocked);
-  const auto pool = rados.lookup_pool(pool_id, ceph::async::use_blocked);
-  IOContext io_ctx(pool);
-  std::set<std::string> objects;
-  fill_objects(1, 100, objects);
-  for (const auto& o : objects) {
-    WriteOp op;
-    ceph::bufferlist bl;
-    bl.append("nothing to see here");
-    op.write_full(std::move(bl));
-    rados.execute(o, io_ctx, std::move(op), ceph::async::use_blocked);
+    const std::string pool{"piscine"};
+    auto pool_deleter = make_scope_guard([&]() {
+        rados.delete_pool(pool, ceph::async::use_blocked);
+      });
+    rados.create_pool(pool, std::nullopt, ceph::async::use_blocked);
+    const auto pool_id = rados.lookup_pool(pool, ceph::async::use_blocked);
+    IOContext io_ctx(pool_id);
+    std::set<std::string> objects;
+    fill_objects(1, 100, objects);
+    for (const auto& o : objects) {
+      WriteOp op;
+      ceph::bufferlist bl;
+      bl.append("nothing to see here");
+      op.write_full(std::move(bl));
+      rados.execute(o, io_ctx, std::move(op), ceph::async::use_blocked);
+    }
+
+    std::set<std::string> fetched_objects;
+    auto b = Cursor::begin();
+    const auto e = Cursor::end();
+    std::vector<Entry> v;
+    Cursor next = Cursor::begin();
+    do {
+      std::tie(v, next) = rados.enumerate_objects(io_ctx, b, e, 1000, {}, ceph::async::use_blocked);
+      std::transform(v.cbegin(), v.cend(), 
+          std::inserter(fetched_objects, fetched_objects.begin()), 
+          [](const Entry& e){return e.oid;});
+    } while (next != Cursor::end());
+    EXPECT_EQ(fetched_objects, objects);
+  } catch (const std::exception& e) {
+    std::cout << "got exception: " << e.what() << std::endl;
+    ADD_FAILURE();
   }
-
-  std::set<std::string> fetched_objects;
-  auto b = Cursor::begin();
-  const auto e = Cursor::end();
-  std::vector<Entry> v;
-  Cursor next = Cursor::begin();
-  do {
-    std::tie(v, next) = rados.enumerate_objects(io_ctx, b, e, 1000, {}, ceph::async::use_blocked);
-    std::transform(v.cbegin(), v.cend(), 
-        std::inserter(fetched_objects, fetched_objects.begin()), 
-        [](const Entry& e){return e.oid;});
-  } while (next != Cursor::end());
-  ASSERT_EQ(fetched_objects, objects);
 }
 
 // return whether s1 is subset of s2
@@ -161,34 +170,39 @@ bool is_subset(const std::set<T>& s1, const std::set<T>& s2) {
 }
 
 TEST_F(TestNeoRADOS, ListPools) {
-  ceph::async::io_context_pool p(1);
-  auto rados = RADOS::make_with_cct(cct.get(), p,
-      ceph::async::use_blocked);
+  try {
+    ceph::async::io_context_pool p(1);
+    auto rados = RADOS::make_with_cct(cct.get(), p,
+        ceph::async::use_blocked);
 
-  const std::set<std::string> pools{"piscine", "piscina", "zwembad"};
+    const std::set<std::string> pools{"piscine", "piscina", "zwembad"};
 
-  auto pool_deleter = make_scope_guard([&]() {
-      std::for_each(pools.begin(), pools.end(), [&](const auto& pool) {
-        rados.delete_pool(pool, ceph::async::use_blocked);
+    auto pool_deleter = make_scope_guard([&]() {
+        std::for_each(pools.begin(), pools.end(), [&](const auto& pool) {
+          rados.delete_pool(pool, ceph::async::use_blocked);
+        });
       });
-    });
 
-  std::for_each(pools.begin(), pools.end(), [&](const auto& pool) {
-      rados.create_pool(pool, std::nullopt, ceph::async::use_blocked);
-    });
+    std::for_each(pools.begin(), pools.end(), [&](const auto& pool) {
+        rados.create_pool(pool, std::nullopt, ceph::async::use_blocked);
+      });
 
-  const auto list = rados.list_pools(ceph::async::use_blocked);
-  std::set<std::string> fetched_pools;
-  std::transform(list.begin(), list.end(), std::inserter(fetched_pools, fetched_pools.begin()), 
-      [](const auto& p){return p.second;});
+    const auto list = rados.list_pools(ceph::async::use_blocked);
+    std::set<std::string> fetched_pools;
+    std::transform(list.begin(), list.end(), std::inserter(fetched_pools, fetched_pools.begin()), 
+        [](const auto& p){return p.second;});
 
-  ASSERT_TRUE(is_subset(pools, fetched_pools));
+    EXPECT_TRUE(is_subset(pools, fetched_pools));
+  } catch (const std::exception& e) {
+    std::cout << "got exception: " << e.what() << std::endl;
+    ADD_FAILURE();
+  }
 }
 
 TEST_F(TestNeoRADOSAsync, MakeWithLibRADOS) {
   librados::Rados paleo_rados;
   auto result = connect_cluster_pp(paleo_rados);
-  ASSERT_EQ("", result);
+  EXPECT_EQ("", result);
 
   auto rados = RADOS::make_with_librados(paleo_rados);
 
@@ -197,7 +211,7 @@ TEST_F(TestNeoRADOSAsync, MakeWithLibRADOS) {
   op.read(0, 0, &bl);
 
   // provide pool that doesn't exists -- just testing round-trip
-  ASSERT_THROW(
+  EXPECT_THROW(
     rados.execute({"dummy-obj"}, IOContext(std::numeric_limits<int64_t>::max()),
                   std::move(op), &bl, boost::asio::use_future).get(),
     boost::system::system_error);
@@ -213,7 +227,7 @@ TEST_F(TestNeoRADOSAsync, MakeWithCCT) {
   op.read(0, 0, &bl);
 
   // provide pool that doesn't exists -- just testing round-trip
-  ASSERT_THROW(
+  EXPECT_THROW(
       rados.execute({"dummy-obj"}, IOContext(std::numeric_limits<int64_t>::max()),
                   std::move(op), &bl, boost::asio::use_future).get(),
       boost::system::system_error);
@@ -229,91 +243,106 @@ TEST_F(TestNeoRADOSAsync, MakeWithBuilder) {
   op.read(0, 0, &bl);
 
   // provide pool that doesn't exists -- just testing round-trip
-  ASSERT_THROW(
+  EXPECT_THROW(
     rados.execute({"dummy-obj"}, IOContext(std::numeric_limits<int64_t>::max()),
           std::move(op), &bl, boost::asio::use_future).get(),
     boost::system::system_error);
 }
 
 TEST_F(TestNeoRADOSAsync, CreatePool) {
-  ceph::async::io_context_pool p(1);
-  auto rados = RADOS::make_with_cct(cct.get(), p,
-      boost::asio::use_future).get();
+  try {
+    ceph::async::io_context_pool p(1);
+    auto rados = RADOS::make_with_cct(cct.get(), p,
+        boost::asio::use_future).get();
 
-  const std::string pool_id{"piscine"};
-  auto pool_deleter = make_scope_guard([&]() {
-      rados.delete_pool(pool_id, boost::asio::use_future).get();
-    });
-  rados.create_pool(pool_id, std::nullopt, boost::asio::use_future).get();
-  const auto pool = rados.lookup_pool(pool_id, boost::asio::use_future).get();
+    const std::string pool{"piscine"};
+    auto pool_deleter = make_scope_guard([&]() {
+        rados.delete_pool(pool, boost::asio::use_future).get();
+      });
+    rados.create_pool(pool, std::nullopt, boost::asio::use_future).get();
+    const auto pool_id = rados.lookup_pool(pool, boost::asio::use_future).get();
 
-  ASSERT_GT(pool, 0);
+    EXPECT_GT(pool_id, 0);
+  } catch (const std::exception& e) {
+    std::cout << "got exception: " << e.what() << std::endl;
+    ADD_FAILURE();
+  }
 }
 
 TEST_F(TestNeoRADOSAsync, CreateAndListObjects) {
-  ceph::async::io_context_pool p(1);
-  auto rados = RADOS::make_with_cct(cct.get(), p,
-      boost::asio::use_future).get();
+  try {
+    ceph::async::io_context_pool p(1);
+    auto rados = RADOS::make_with_cct(cct.get(), p,
+        boost::asio::use_future).get();
 
-  const std::string pool_id{"piscine"};
-  auto pool_deleter = make_scope_guard([&]() {
-      rados.delete_pool(pool_id, boost::asio::use_future).get();
-    });
-  rados.create_pool(pool_id, std::nullopt, boost::asio::use_future).get();
-  const auto pool = rados.lookup_pool(pool_id, boost::asio::use_future).get();
-  IOContext io_ctx(pool);
-  std::set<std::string> objects;
-  fill_objects(1, 100, objects);
-  std::vector<std::future<void>> waiters; 
-  for (const auto& o : objects) {
-    WriteOp op;
-    ceph::bufferlist bl;
-    bl.append("there is nothing to see here");
-    op.write_full(std::move(bl));
-    waiters.emplace_back(rados.execute(o, io_ctx, std::move(op), boost::asio::use_future));
+    const std::string pool{"piscine"};
+    auto pool_deleter = make_scope_guard([&]() {
+        rados.delete_pool(pool, boost::asio::use_future).get();
+      });
+    rados.create_pool(pool, std::nullopt, boost::asio::use_future).get();
+    const auto pool_id = rados.lookup_pool(pool, boost::asio::use_future).get();
+    IOContext io_ctx(pool_id);
+    std::set<std::string> objects;
+    fill_objects(1, 100, objects);
+    std::vector<std::future<void>> waiters; 
+    for (const auto& o : objects) {
+      WriteOp op;
+      ceph::bufferlist bl;
+      bl.append("there is nothing to see here");
+      op.write_full(std::move(bl));
+      waiters.emplace_back(rados.execute(o, io_ctx, std::move(op), boost::asio::use_future));
+    }
+
+    for (auto& w : waiters) {
+      w.get();
+    }
+
+    std::set<std::string> fetched_objects;
+    auto b = Cursor::begin();
+    const auto e = Cursor::end();
+    std::vector<Entry> v;
+    Cursor next = Cursor::begin();
+    do {
+      std::tie(v, next) = rados.enumerate_objects(io_ctx, b, e, 1000, {}, boost::asio::use_future).get();
+      std::transform(v.cbegin(), v.cend(), 
+        std::inserter(fetched_objects, fetched_objects.begin()), 
+        [](const Entry& e){return e.oid;});
+    } while (next != Cursor::end());
+    EXPECT_EQ(fetched_objects, objects);
+  } catch (const std::exception& e) {
+    std::cout << "got exception: " << e.what() << std::endl;
+    ADD_FAILURE();
   }
-
-  for (auto& w : waiters) {
-    w.get();
-  }
-
-  std::set<std::string> fetched_objects;
-  auto b = Cursor::begin();
-  const auto e = Cursor::end();
-  std::vector<Entry> v;
-  Cursor next = Cursor::begin();
-  do {
-    std::tie(v, next) = rados.enumerate_objects(io_ctx, b, e, 1000, {}, boost::asio::use_future).get();
-    std::transform(v.cbegin(), v.cend(), 
-      std::inserter(fetched_objects, fetched_objects.begin()), 
-      [](const Entry& e){return e.oid;});
-  } while (next != Cursor::end());
-  ASSERT_EQ(fetched_objects, objects);
 }
 
 TEST_F(TestNeoRADOSAsync, ListPools) {
-  ceph::async::io_context_pool p(1);
-  auto rados = RADOS::make_with_cct(cct.get(), p,
-      boost::asio::use_future).get();
+  try {
+    ceph::async::io_context_pool p(1);
+    auto rados = RADOS::make_with_cct(cct.get(), p,
+        boost::asio::use_future).get();
 
-  const std::set<std::string> pools{"piscine", "piscina", "zwembad"};
+    const std::set<std::string> pools{"piscine", "piscina", "zwembad"};
 
-  auto pool_deleter = make_scope_guard([&]() {
-      std::for_each(pools.begin(), pools.end(), [&](const auto& pool) {
-        rados.delete_pool(pool, boost::asio::use_future).get();
+    auto pool_deleter = make_scope_guard([&]() {
+        std::for_each(pools.begin(), pools.end(), [&](const auto& pool) {
+          rados.delete_pool(pool, boost::asio::use_future).get();
+        });
       });
-    });
 
-  std::for_each(pools.begin(), pools.end(), [&](const auto& pool) {
-      rados.create_pool(pool, std::nullopt, boost::asio::use_future).get();
-    });
+    std::for_each(pools.begin(), pools.end(), [&](const auto& pool) {
+        rados.create_pool(pool, std::nullopt, boost::asio::use_future).get();
+      });
 
-  const auto list = rados.list_pools(boost::asio::use_future).get();
-  std::set<std::string> fetched_pools;
-  std::transform(list.begin(), list.end(), std::inserter(fetched_pools, fetched_pools.begin()), 
-      [](const auto& p){return p.second;});
+    const auto list = rados.list_pools(boost::asio::use_future).get();
+    std::set<std::string> fetched_pools;
+    std::transform(list.begin(), list.end(), std::inserter(fetched_pools, fetched_pools.begin()), 
+        [](const auto& p){return p.second;});
 
-  ASSERT_TRUE(is_subset(pools, fetched_pools));
+    EXPECT_TRUE(is_subset(pools, fetched_pools));
+  } catch (const std::exception& e) {
+    std::cout << "got exception: " << e.what() << std::endl;
+    ADD_FAILURE();
+  }
 }
 
 TEST_F(TestNeoRADOSAsync, WriteAndReadObjects) {
@@ -328,7 +357,7 @@ TEST_F(TestNeoRADOSCoro, MakeWithLibRADOS) {
   boost::asio::io_context ctx;
   librados::Rados paleo_rados;
   auto result = connect_cluster_pp(paleo_rados);
-  ASSERT_EQ("", result);
+  EXPECT_EQ("", result);
 
   auto rados = RADOS::make_with_librados(paleo_rados);
   boost::system::error_code ec;
@@ -347,7 +376,7 @@ TEST_F(TestNeoRADOSCoro, MakeWithLibRADOS) {
     }
   );
 
-  ASSERT_THROW(
+  EXPECT_THROW(
     ctx.run(),
     boost::system::system_error);
 }
@@ -372,7 +401,7 @@ TEST_F(TestNeoRADOSCoro, MakeWithCCT) {
     }
   );
 
-  ASSERT_THROW(
+  EXPECT_THROW(
     ctx.run(),
     boost::system::system_error);
 }
@@ -396,7 +425,7 @@ TEST_F(TestNeoRADOSCoro, MakeWithBuilder) {
     }
   );
 
-  ASSERT_THROW(
+  EXPECT_THROW(
     ctx.run(),
     boost::system::system_error);
 }
@@ -404,34 +433,31 @@ TEST_F(TestNeoRADOSCoro, MakeWithBuilder) {
 TEST_F(TestNeoRADOSCoro, CreatePool) {
   boost::asio::io_context ctx;
   boost::system::error_code ec;
-  unsigned pool = 0;
+  const std::string pool{"piscine"};
+  unsigned pool_id = 0;
 
   boost::asio::co_spawn(ctx, 
     [&]() -> boost::asio::awaitable<void> {
       auto rados = co_await RADOS::Builder{}.build(ctx, boost::asio::use_awaitable);
-      const std::string pool_id{"piscine"};
-      auto pool_deleter = make_scope_guard([&]() {
-          rados.delete_pool(pool_id, boost::asio::detached);
-        });
-      co_await rados.create_pool(pool_id, std::nullopt, 
+      co_await rados.create_pool(pool, std::nullopt, 
           boost::asio::redirect_error(boost::asio::use_awaitable, ec));
       if (ec) throw boost::system::system_error(ec);
 
-      pool = co_await rados.lookup_pool(pool_id, 
+      pool_id = co_await rados.lookup_pool(pool, 
           boost::asio::redirect_error(boost::asio::use_awaitable, ec));
       if (ec) throw boost::system::system_error(ec);
-
-      co_await rados.delete_pool(pool_id, 
-          boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-      if (ec) throw boost::system::system_error(ec);
-      
     }, [](std::exception_ptr e) {
       if (e) std::rethrow_exception(e);
     }
   );
 
-  ASSERT_NO_THROW(ctx.run());
-  ASSERT_GT(pool, 0);
+  EXPECT_NO_THROW(ctx.run());
+  EXPECT_GT(pool_id, 0);
+
+  // cleanup pool
+  ceph::async::io_context_pool p(1);
+  auto rados = RADOS::make_with_cct(cct.get(), p, ceph::async::use_blocked);
+  rados.delete_pool(pool, ceph::async::use_blocked);
 }
 
 TEST_F(TestNeoRADOSCoro, CreateAndListObjects) {
@@ -441,23 +467,20 @@ TEST_F(TestNeoRADOSCoro, CreateAndListObjects) {
   std::set<std::string> objects;
   std::set<std::string> fetched_objects;
   fill_objects(1, 100, objects);
+  const std::string pool{"piscine"};
 
   boost::asio::co_spawn(ctx, 
     [&]() -> boost::asio::awaitable<void> {
       auto rados = co_await RADOS::Builder{}.build(ctx, boost::asio::use_awaitable);
-      const std::string pool_id{"piscine"};
-      auto pool_deleter = make_scope_guard([&]() {
-          rados.delete_pool(pool_id, boost::asio::detached);
-        });
-      co_await rados.create_pool(pool_id, std::nullopt, 
+      co_await rados.create_pool(pool, std::nullopt, 
           boost::asio::redirect_error(boost::asio::use_awaitable, ec));
       if (ec) throw boost::system::system_error(ec);
 
-      const auto pool = co_await rados.lookup_pool(pool_id, 
+      const auto pool_id = co_await rados.lookup_pool(pool, 
           boost::asio::redirect_error(boost::asio::use_awaitable, ec));
       if (ec) throw boost::system::system_error(ec);
 
-      IOContext io_ctx(pool);
+      IOContext io_ctx(pool_id);
       for (const auto& o : objects) {
         WriteOp op;
         ceph::bufferlist bl;
@@ -487,8 +510,13 @@ TEST_F(TestNeoRADOSCoro, CreateAndListObjects) {
     }
   );
 
-  ASSERT_NO_THROW(ctx.run());
-  ASSERT_EQ(fetched_objects, objects);
+  EXPECT_NO_THROW(ctx.run());
+  EXPECT_EQ(fetched_objects, objects);
+
+  // cleanup pool
+  ceph::async::io_context_pool p(1);
+  auto rados = RADOS::make_with_cct(cct.get(), p, ceph::async::use_blocked);
+  rados.delete_pool(pool, ceph::async::use_blocked);
 }
 
 TEST_F(TestNeoRADOSCoro, ListPools) {
@@ -501,11 +529,6 @@ TEST_F(TestNeoRADOSCoro, ListPools) {
   boost::asio::co_spawn(ctx, 
     [&]() -> boost::asio::awaitable<void> {
       auto rados = co_await RADOS::Builder{}.build(ctx, boost::asio::use_awaitable);
-      auto pool_deleter = make_scope_guard([&]() {
-          for (const auto& pool: pools) {
-            rados.delete_pool(pool, boost::asio::detached);
-          }
-        });
       for (const auto& pool: pools) {
         co_await rados.create_pool(pool, std::nullopt, 
           boost::asio::redirect_error(boost::asio::use_awaitable, ec));
@@ -521,8 +544,15 @@ TEST_F(TestNeoRADOSCoro, ListPools) {
       }
     );
 
-  ASSERT_NO_THROW(ctx.run());
-  ASSERT_TRUE(is_subset(pools, fetched_pools));
+  EXPECT_NO_THROW(ctx.run());
+  EXPECT_TRUE(is_subset(pools, fetched_pools));
+  
+  // cleanup pools
+  ceph::async::io_context_pool p(1);
+  auto rados = RADOS::make_with_cct(cct.get(), p, ceph::async::use_blocked);
+  std::for_each(pools.begin(), pools.end(), [&](const auto& pool) {
+    rados.delete_pool(pool, ceph::async::use_blocked);
+  });
 }
 
 TEST_F(TestNeoRADOSCoro, WriteAndReadObjects) {
