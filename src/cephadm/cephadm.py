@@ -7109,6 +7109,13 @@ def command_rm_daemon(ctx):
          verbosity=CallVerbosity.DEBUG)
     call(ctx, ['systemctl', 'disable', unit_name],
          verbosity=CallVerbosity.DEBUG)
+
+    # force remove rgw admin socket file if leftover
+    if daemon_type in ['rgw']:
+        rgw_asok_path = f'/var/run/ceph/{ctx.fsid}/ceph-client.{ctx.name}.*.asok'
+        call(ctx, ['rm', '-rf', rgw_asok_path],
+             verbosity=CallVerbosity.DEBUG)
+
     data_dir = get_data_dir(ctx.fsid, ctx.data_dir, daemon_type, daemon_id)
     if daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:
