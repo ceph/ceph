@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+        "notification"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -13,8 +14,8 @@ import (
 )
 
 func main() {
-	bucket := flag.String("b", "", "Name of the bucket to add notification to")
-	topic := flag.String("t", "", "The topic onto which the notification is attached to")
+	bucket := flag.String("b", "", "Name of the bucket to remove notification from")
+	notificationID := flag.String("t", "", "The notification identifier for a specific notification")
 	flag.Parse()
 
 	if *bucket == "" {
@@ -23,16 +24,15 @@ func main() {
 		return
 	}
 
-	if *topic == "" {
-		fmt.Println("You must supply the name of the topic ARN")
-		fmt.Println("-t TOPIC ARN")
+	if *notificationID == "" {
+		fmt.Println("You must supply the ID of the notification ")
+		fmt.Println("-t NOTIFICATION ID")
 		return
 	}
 
 	//Ceph RGW Credentials
 	access_key := "0555b35654ad1656d804"
 	secret_key := "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=="
-	token_id := ""
 	url := "http://127.0.0.1:8000"
 
 	defaultResolver := endpoints.DefaultResolver()
@@ -49,7 +49,7 @@ func main() {
 	sess := session.Must(session.NewSessionWithOptions(session.Options{
 		Config: aws.Config{
 			Region:           aws.String("default"),
-			Credentials:      credentials.NewStaticCredentials(access_key, secret_key, token_id),
+			Credentials:      credentials.NewStaticCredentials(access_key, secret_key, ""),
 			S3ForcePathStyle: aws.Bool(true),
 			EndpointResolver: endpoints.ResolverFunc(CustResolverFn),
 		},
@@ -57,32 +57,11 @@ func main() {
 
 	svc := s3.New(sess)
 
-	input := &s3.notification.DeleteBucketNotificationRequestInput{
+	input := &notification.DeleteBucketNotificationRequestInput{
 		Bucket: bucket,
 	}
 
-	_, err := svc.notification.DeleteBucketNotification(input, topic)
-
-	/*input := &s3.PutBucketNotificationConfigurationInput{
-		Bucket: bucket,
-		NotificationConfiguration: &s3.NotificationConfiguration{
-			TopicConfigurations: []*s3.TopicConfiguration{
-				{
-					Events: []*string{aws.String("s3:ObjectCreated:*")},
-					Filter: &s3.NotificationConfigurationFilter{
-						Key: &s3.KeyFilter{
-							FilterRules: suffixRule,
-						},
-					},
-					Id:       aws.String("notif1"), //Raises MalformedXML if absent
-					TopicArn: topic,
-				},
-			},
-		},
-	}
-
-	_, err := svc.PutBucketNotificationConfiguration(input)
-	*/
+	_, err := notification.DeleteBucketNotification(svc, input)
 
 	if err != nil {
 		exitErrorf("Unable to delete Put Bucket Notification because of %s", err)
