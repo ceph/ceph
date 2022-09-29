@@ -339,7 +339,7 @@ std::ostream &operator<<(std::ostream &os, const segments_info_t &infos)
 
 void JournalTrimmerImpl::config_t::validate() const
 {
-  ceph_assert(max_journal_bytes <= MAX_SEG_OFF);
+  ceph_assert(max_journal_bytes <= DEVICE_OFF_MAX);
   ceph_assert(max_journal_bytes > target_journal_dirty_bytes);
   ceph_assert(max_journal_bytes > target_journal_alloc_bytes);
   ceph_assert(rewrite_dirty_bytes_per_cycle > 0);
@@ -494,7 +494,7 @@ journal_seq_t JournalTrimmerImpl::get_tail_limit() const
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       journal_type,
-      -static_cast<seastore_off_t>(config.max_journal_bytes),
+      -static_cast<device_off_t>(config.max_journal_bytes),
       roll_start,
       roll_size);
   return ret;
@@ -505,7 +505,7 @@ journal_seq_t JournalTrimmerImpl::get_dirty_tail_target() const
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       journal_type,
-      -static_cast<seastore_off_t>(config.target_journal_dirty_bytes),
+      -static_cast<device_off_t>(config.target_journal_dirty_bytes),
       roll_start,
       roll_size);
   return ret;
@@ -516,7 +516,7 @@ journal_seq_t JournalTrimmerImpl::get_alloc_tail_target() const
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       journal_type,
-      -static_cast<seastore_off_t>(config.target_journal_alloc_bytes),
+      -static_cast<device_off_t>(config.target_journal_alloc_bytes),
       roll_start,
       roll_size);
   return ret;
