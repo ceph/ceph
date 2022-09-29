@@ -1274,7 +1274,6 @@ INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_multi_device_test_t,
   ::testing::Values (
-    "segmented",
-    "circularbounded"
+    "segmented"
   )
 );
