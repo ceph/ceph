@@ -1204,7 +1204,7 @@ struct delta_info_t {
   laddr_t laddr = L_ADDR_NULL;                 ///< logical address
   uint32_t prev_crc = 0;
   uint32_t final_crc = 0;
-  seastore_off_t length = NULL_SEG_OFF;         ///< extent length
+  extent_len_t length = NULL_SEG_OFF;          ///< extent length
   extent_version_t pversion;                   ///< prior version
   segment_seq_t ext_seq;		       ///< seq of the extent's segment
   segment_type_t seg_type;
@@ -1482,7 +1482,7 @@ class __attribute__((packed)) coll_root_le_t {
 public:
   coll_root_le_t() = default;
   
-  coll_root_le_t(laddr_t laddr, seastore_off_t size)
+  coll_root_le_t(laddr_t laddr, extent_len_t size)
     : addr(laddr), size(init_extent_len_le(size)) {}
 
 
@@ -1971,7 +1971,7 @@ try_decode_deltas(
 
 struct write_result_t {
   journal_seq_t start_seq;
-  seastore_off_t length;
+  extent_len_t length;
 
   journal_seq_t get_end_seq() const {
     return journal_seq_t{

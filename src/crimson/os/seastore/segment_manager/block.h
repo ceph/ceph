@@ -135,7 +135,7 @@ public:
   size_t get_available_size() const final {
     return superblock.size;
   }
-  seastore_off_t get_block_size() const {
+  extent_len_t get_block_size() const {
     return superblock.block_size;
   }
   seastore_off_t get_segment_size() const {

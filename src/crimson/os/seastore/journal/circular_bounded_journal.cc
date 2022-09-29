@@ -36,8 +36,7 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
 {
   LOG_PREFIX(CircularBoundedJournal::mkfs);
   assert(device);
-  assert(static_cast<seastore_off_t>(config.block_size) ==
-    device->get_block_size());
+  assert(config.block_size == device->get_block_size());
   ceph::bufferlist bl;
   CircularBoundedJournal::cbj_header_t head;
   head.block_size = config.block_size;
@@ -168,7 +167,7 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
 
   auto write_result = write_result_t{
     j_seq,
-    (seastore_off_t)encoded_size
+    encoded_size
   };
   auto write_fut = device_write_bl(target, to_write);
   return handle.enter(write_pipeline->device_submission
@@ -320,7 +319,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	  DEBUG("{} at {}", r_header, cursor_addr);
 	  auto write_result = write_result_t{
 	    r_header.committed_to,
-	    (seastore_off_t)bl.length()
+	    bl.length()
 	  };
 	  if (expected_seq == NULL_SEG_SEQ) {
 	    expected_seq = r_header.committed_to.segment_seq;
