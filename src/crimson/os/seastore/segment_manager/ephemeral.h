@@ -20,6 +20,15 @@ struct ephemeral_config_t {
   size_t size = 0;
   size_t block_size = 0;
   size_t segment_size = 0;
+
+  void validate() const {
+    ceph_assert_always(size > 0);
+    ceph_assert_always(size <= DEVICE_OFF_MAX);
+    ceph_assert_always(segment_size > 0);
+    ceph_assert_always(segment_size <= MAX_SEG_OFF);
+    ceph_assert_always(size / segment_size > 0);
+    ceph_assert_always(size / segment_size <= DEVICE_SEGMENT_ID_MAX);
+  }
 };
 
 constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
@@ -75,7 +84,10 @@ class EphemeralSegmentManager final : public SegmentManager {
 public:
   EphemeralSegmentManager(
     ephemeral_config_t config)
-    : config(config) {}
+    : config(config) {
+    config.validate();
+  }
+
   ~EphemeralSegmentManager();
 
   close_ertr::future<> close() final {
