@@ -92,6 +92,7 @@ static zns_sm_metadata_t make_metadata(
     zone_size,
     zone_size * RESERVED_ZONES,
     meta};
+  ret.validate();
   return ret;
 }
 
@@ -298,6 +299,7 @@ read_metadata(seastar::file &device, seastar::stat_data sd)
 	zns_sm_metadata_t ret;
 	auto bliter = bl.cbegin();
 	decode(ret, bliter);
+        ret.validate();
 	return ZNSSegmentManager::access_ertr::future<zns_sm_metadata_t>(
 	  ZNSSegmentManager::access_ertr::ready_future_marker{},
 	  ret);

@@ -47,9 +47,12 @@ struct block_sm_superblock_t {
     ceph_assert(block_size > 0);
     ceph_assert(segment_size > 0 &&
                 segment_size % block_size == 0);
+    ceph_assert_always(segment_size <= MAX_SEG_OFF);
     ceph_assert(size > segment_size &&
                 size % block_size == 0);
+    ceph_assert_always(size <= DEVICE_OFF_MAX);
     ceph_assert(segments > 0);
+    ceph_assert_always(segments <= DEVICE_SEGMENT_ID_MAX);
     ceph_assert(tracker_offset > 0 &&
                 tracker_offset % block_size == 0);
     ceph_assert(first_segment_offset > tracker_offset &&

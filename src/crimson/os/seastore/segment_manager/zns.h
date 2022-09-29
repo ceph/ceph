@@ -58,6 +58,15 @@ namespace crimson::os::seastore::segment_manager::zns {
       }
       DENC_FINISH(p);
     }
+
+    void validate() const {
+      ceph_assert_always(size > 0);
+      ceph_assert_always(size <= DEVICE_OFF_MAX);
+      ceph_assert_always(segment_capacity > 0);
+      ceph_assert_always(segment_capacity <= MAX_SEG_OFF);
+      ceph_assert_always(segments > 0);
+      ceph_assert_always(segments <= DEVICE_SEGMENT_ID_MAX);
+    }
   };
 
   using write_ertr = crimson::errorator<crimson::ct_error::input_output_error>;
