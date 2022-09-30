@@ -133,11 +133,6 @@ public:
     conn(conn)
   {}
 
-#if 0
-  std::tuple<
-  > tracking_events;
-#endif
-
   std::tuple<
     StartEvent,
     ConnectionPipeline::AwaitActive::BlockingEvent,
@@ -150,14 +145,6 @@ public:
     PGPeeringPipeline::Process::BlockingEvent,
     BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
     OSDPipeline::AwaitActive::BlockingEvent,
-#if 0
-    PGPipeline::WaitForActive::BlockingEvent,
-    PGActivationBlocker::BlockingEvent,
-    PGPipeline::RecoverMissing::BlockingEvent,
-    PGPipeline::GetOBC::BlockingEvent,
-    PGPipeline::WaitRepop::BlockingEvent,
-    PGPipeline::SendReply::BlockingEvent,
-#endif
     CompletionEvent
   > tracking_events;
 
@@ -194,14 +181,6 @@ public:
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGPeeringPipeline::Process::BlockingEvent,
     BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
-#if 0
-    PGPipeline::WaitForActive::BlockingEvent,
-    PGActivationBlocker::BlockingEvent,
-    PGPipeline::RecoverMissing::BlockingEvent,
-    PGPipeline::GetOBC::BlockingEvent,
-    PGPipeline::WaitRepop::BlockingEvent,
-    PGPipeline::SendReply::BlockingEvent,
-#endif
     CompletionEvent
   > tracking_events;
 };
