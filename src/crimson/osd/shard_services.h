@@ -75,6 +75,8 @@ class PerShardState {
   OSDOperationRegistry registry;
   OperationThrottler throttler;
 
+  seastar::future<> dump_ops_in_flight(Formatter *f) const;
+
   epoch_t up_epoch = 0;
   OSDMapService::cached_map_t osdmap;
   const auto &get_osdmap() const {
@@ -369,6 +371,9 @@ public:
   PerfCounters &get_perf_logger() {
     return *local_state.perf;
   }
+
+  // Diagnostics
+  FORWARD_TO_LOCAL_CONST(dump_ops_in_flight);
 
   // Local PG Management
   seastar::future<Ref<PG>> make_pg(
