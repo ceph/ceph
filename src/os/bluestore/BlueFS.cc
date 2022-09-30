@@ -915,6 +915,34 @@ int BlueFS::_bdev_read_random(uint8_t ndev, uint64_t off, uint64_t len,
   return bdev[ndev]->read_random(off, len, buf, buffered);
 }
 
+int BlueFS::rebuild_fs()
+{
+  dout(1) << __func__ << dendl;
+
+  _init_logger();
+  bluefs_super_t super0;
+  int r = _open_super();
+  if (r < 0) {
+    derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
+    goto out;
+  }
+  if (!super.memorized_layout) {
+    derr << __func__ << " legacy superblock, unsupported" << dendl;
+    r = -ENOTSUP;
+    goto out;
+  }
+  super0 = super;
+  r = mkfs(super0.osd_uuid, *super0.memorized_layout);
+  if (r < 0) {
+    derr << __func__ << " failed to re-mkfs: " << cpp_strerror(r) << dendl;
+    goto out;
+  }
+  return 0;
+out:
+  super = bluefs_super_t();
+  return r;
+}
+
 int BlueFS::mount()
 {
   dout(1) << __func__ << dendl;

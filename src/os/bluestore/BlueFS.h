@@ -548,6 +548,7 @@ public:
 
   // the super is always stored on bdev 0
   int mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout);
+  int rebuild_fs();
   int mount();
   int maybe_verify_layout(const bluefs_layout_t& layout) const;
   void umount(bool avoid_compact = false);

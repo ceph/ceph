@@ -5644,6 +5644,60 @@ void BlueStore::_close_bdev()
   bdev = NULL;
 }
 
+int BlueStore::_init_min_alloc_size()
+{
+  int r = 0;
+  // choose min_alloc_size
+  dout(5) << __func__ << " optimal_io_size 0x" << std::hex << optimal_io_size
+	  << " block_size: 0x" << block_size << std::dec << dendl;
+  if ((cct->_conf->bluestore_use_optimal_io_size_for_min_alloc_size) && (optimal_io_size != 0)) {
+    dout(5) << __func__ << " optimal_io_size 0x" << std::hex << optimal_io_size
+		<< " for min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+    min_alloc_size = optimal_io_size;
+  } else if (cct->_conf->bluestore_min_alloc_size) {
+    min_alloc_size = cct->_conf->bluestore_min_alloc_size;
+  } else {
+    ceph_assert(bdev);
+    if (_use_rotational_settings()) {
+      min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
+    } else {
+      min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
+    }
+  }
+
+  // make sure min_alloc_size is power of 2 aligned.
+  if (!std::has_single_bit(min_alloc_size)) {
+    derr << __func__ << " min_alloc_size 0x"
+	 << std::hex << min_alloc_size << std::dec
+	 << " is not power of 2 aligned!"
+	 << dendl;
+    r = -EINVAL;
+  } else if (min_alloc_size % block_size != 0) {
+    // make sure min_alloc_size is >= and aligned with block size
+    derr << __func__ << " min_alloc_size 0x"
+	 << std::hex << min_alloc_size
+	 << " is less or not aligned with block_size: 0x"
+	  << block_size << std::dec <<  dendl;
+    r = -EINVAL;
+  }
+  return r;
+}
+void BlueStore::_init_freelist_type()
+{
+  // choose freelist manager
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    freelist_type = "zoned";
+    zone_size = bdev->get_zone_size();
+    first_sequential_zone = bdev->get_conventional_region_size() / zone_size;
+  } else
+#endif
+  {
+    freelist_type = "bitmap";
+  }
+  dout(10) << __func__ << freelist_type << dendl;
+}
+
 int BlueStore::_open_fm(KeyValueDB::Transaction t,
                         bool read_only,
                         bool db_avail,
@@ -6308,9 +6362,9 @@ free_bluefs:
   return r;
 }
 
-int BlueStore::_open_bluefs(bool create, bool read_only)
+int BlueStore::_open_bluefs(BlueFSCreateMode create, bool read_only)
 {
-  int r = _minimal_open_bluefs(create);
+  int r = _minimal_open_bluefs(create == BLUEFS_CREATE_NEW);
   if (r < 0) {
     return r;
   }
@@ -6359,8 +6413,10 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
              == 0);
     }    
   }
-  if (create) {
+  if (create == BLUEFS_CREATE_NEW) {
     bluefs->mkfs(fsid, bluefs_layout);
+  } else if (create == BLUEFS_RECREATE) {
+    bluefs->rebuild_fs();
   }
   bluefs->set_volume_selector(vselector);
   r = bluefs->mount();
@@ -6383,9 +6439,9 @@ void BlueStore::_minimal_close_bluefs()
   bluefs = NULL;
 }
 
-int BlueStore::_is_bluefs(bool create, bool* ret)
+int BlueStore::_is_bluefs(BlueStore::BlueFSCreateMode create, bool* ret)
 {
-  if (create) {
+  if (create == BLUEFS_CREATE_NEW) {
     *ret = cct->_conf->bluestore_bluefs;
   } else {
     string s;
@@ -6457,7 +6513,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 
   // open in read-only first to read FM list and init allocator
   // as they might be needed for some BlueFS procedures
-  r = _open_db(false, false, true);
+  r = _open_db(BLUEFS_CREATE_NONE, false, true);
   if (r < 0)
     goto out_bdev;
 
@@ -6481,7 +6537,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   // And now it's time to do that
   //
   _close_db();
-  r = _open_db(false, to_repair, read_only);
+  r = _open_db(BLUEFS_CREATE_NONE, to_repair, read_only);
   if (r < 0) {
     goto out_alloc;
   }
@@ -6580,7 +6636,7 @@ BlueFS* BlueStore::get_bluefs() {
   return bluefs;
 }
 
-int BlueStore::_prepare_db_environment(bool create, bool read_only,
+int BlueStore::_prepare_db_environment(BlueFSCreateMode create, bool read_only,
 				       std::string* _fn, std::string* _kv_backend)
 {
   int r;
@@ -6590,7 +6646,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   fn = path + "/db";
   std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
 
-  if (create) {
+  if (create == BLUEFS_CREATE_NEW) {
     kv_backend = cct->_conf->bluestore_kvbackend;
   } else {
     r = read_meta("kv_backend", &kv_backend);
@@ -6627,7 +6683,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env* a = new BlueRocksEnv(bluefs);
       rocksdb::Env* b = rocksdb::Env::Default();
-      if (create) {
+      if (create != BLUEFS_CREATE_NONE) {
         string cmd = "rm -rf " + path + "/db " +
           path + "/db.slow " +
           path + "/db.wal";
@@ -6659,7 +6715,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
       dout(1) << __func__ << " set db_paths to " << db_paths.str() << dendl;
     }
 
-    if (create) {
+    if (create != BLUEFS_CREATE_NONE) {
       for (auto& p : paths) {
         env->CreateDir(p.first);
       }
@@ -6676,7 +6732,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   } else {
     string walfn = path + "/db.wal";
 
-    if (create) {
+    if (create != BLUEFS_CREATE_NONE) {
       int r = ::mkdir(fn.c_str(), 0755);
       if (r < 0)
 	r = -errno;
@@ -6729,10 +6785,10 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   return 0;
 }
 
-int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
+int BlueStore::_open_db(BlueStore::BlueFSCreateMode create, bool to_repair_db, bool read_only)
 {
   int r;
-  ceph_assert(!(create && read_only));
+  ceph_assert(!(create != BLUEFS_CREATE_NONE && read_only));
   string options;
   string options_annex;
   stringstream err;
@@ -7192,59 +7248,12 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
-  // choose freelist manager
-#ifdef HAVE_LIBZBD
-  if (bdev->is_smr()) {
-    freelist_type = "zoned";
-    zone_size = bdev->get_zone_size();
-    first_sequential_zone = bdev->get_conventional_region_size() / zone_size;
-    bdev->reset_all_zones();
-  } else
-#endif
-  {
-    freelist_type = "bitmap";
-  }
-  dout(10) << " freelist_type " << freelist_type << dendl;
-
-  // choose min_alloc_size
-  dout(5) << __func__ << " optimal_io_size 0x" << std::hex << optimal_io_size
-	  << " block_size: 0x" << block_size << std::dec << dendl;
-  if ((cct->_conf->bluestore_use_optimal_io_size_for_min_alloc_size) && (optimal_io_size != 0)) {
-    dout(5) << __func__ << " optimal_io_size 0x" << std::hex << optimal_io_size
-		<< " for min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
-    min_alloc_size = optimal_io_size;
-  }
-  else if (cct->_conf->bluestore_min_alloc_size) {
-    min_alloc_size = cct->_conf->bluestore_min_alloc_size;
-  } else {
-    ceph_assert(bdev);
-    if (_use_rotational_settings()) {
-      min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
-    } else {
-      min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
-    }
+  _init_freelist_type();
+  r = _init_min_alloc_size();
+  if (r < 0) {
+    goto out_close_bdev;
   }
   _validate_bdev();
-
-  // make sure min_alloc_size is power of 2 aligned.
-  if (!std::has_single_bit(min_alloc_size)) {
-    derr << __func__ << " min_alloc_size 0x"
-	 << std::hex << min_alloc_size << std::dec
-	 << " is not power of 2 aligned!"
-	 << dendl;
-    r = -EINVAL;
-    goto out_close_bdev;
-  }
-
-  // make sure min_alloc_size is >= and aligned with block size
-  if (min_alloc_size % block_size != 0) {
-    derr << __func__ << " min_alloc_size 0x"
-	 << std::hex << min_alloc_size
-	 << " is less or not aligned with block_size: 0x"
-	 << block_size << std::dec <<  dendl;
-    r = -EINVAL;
-    goto out_close_bdev;
-  }
 
   r = _create_alloc();
   if (r < 0) {
@@ -7262,7 +7271,7 @@ int BlueStore::mkfs()
   }
 #endif
 
-  r = _open_db(true);
+  r = _open_db(BLUEFS_CREATE_NEW);
   if (r < 0)
     goto out_close_alloc;
 
@@ -7357,6 +7366,123 @@ int BlueStore::mkfs()
     // indicate success by writing the 'mkfs_done' file
     r = write_meta("mkfs_done", "yes");
   }
+
+  if (r < 0) {
+    derr << __func__ << " failed, " << cpp_strerror(r) << dendl;
+  } else {
+    dout(0) << __func__ << " success" << dendl;
+  }
+  return r;
+}
+
+int BlueStore::rebuild_db(const std::string& backup_path)
+{
+  dout(1) << __func__ << " path " << path << dendl;
+  int r;
+  uuid_d old_fsid;
+  uint64_t reserved;
+  {
+    string done;
+    r = read_meta("mkfs_done", &done);
+    if (r != 0) {
+      derr << __func__ << " no valid object store present under  " << path << dendl;
+      return -EIO;
+    }
+  }
+
+  {
+    string type;
+    r = read_meta("type", &type);
+    if (r == 0) {
+      if (type != "bluestore") {
+	derr << __func__ << " expected bluestore, but type is " << type << dendl;
+	return -EIO;
+      }
+    } else {
+      derr << __func__ << " failed to obtain object store type" << dendl;
+      return -EIO;
+    }
+  }
+
+  r = _open_path();
+  if (r < 0)
+    return r;
+
+  r = _open_fsid(true);
+  if (r < 0)
+    goto out_path_fd;
+
+  r = _lock_fsid();
+  if (r < 0)
+    goto out_close_fsid;
+
+  r = _read_fsid(&old_fsid);
+  if (r < 0) {
+    // we'll write it later.
+    derr << __func__ << " failed to read on-disk fsid " << fsid << dendl;
+    r = -EINVAL;
+  } else {
+    if (!fsid.is_zero() && fsid != old_fsid) {
+      derr << __func__ << " on-disk fsid " << old_fsid
+	   << " != provided " << fsid << dendl;
+      r = -EINVAL;
+      goto out_close_fsid;
+    }
+    fsid = old_fsid;
+  }
+
+  r = _open_bdev(false);
+  if (r < 0)
+    goto out_close_fsid;
+
+  _init_freelist_type();
+  dout(10) << " freelist_type " << freelist_type << dendl;
+
+  r = _init_min_alloc_size();
+  if (r < 0) {
+    goto out_close_bdev;
+  }
+  r = _create_alloc();
+  if (r < 0) {
+    goto out_close_bdev;
+  }
+
+  reserved = _get_ondisk_reserved();
+  alloc->init_add_free(reserved,
+    p2align(bdev->get_size(), min_alloc_size) - reserved);
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr() && alloc != shared_alloc.a) {
+    shared_alloc.a->init_add_free(reserved,
+				  p2align(bdev->get_conventional_region_size(),
+					  min_alloc_size) - reserved);
+  }
+#endif
+
+  r = _open_db(BLUEFS_RECREATE);
+  if (r < 0)
+    goto out_close_alloc;
+  _close_db();
+  dout(10) << __func__ << " reopening for db restore..." << dendl;
+  r = _open_db(BLUEFS_CREATE_NONE, true);
+  if (r < 0)
+    goto out_close_alloc;
+  dout(10) << __func__ << " doing db restore..." << dendl;
+  if (!db->db_restore(backup_path.c_str())) {
+    derr << __func__ << " DB restore from a backup at " << backup_path
+         << " failed."
+         << dendl;
+    r = -EIO;
+  }
+
+ _close_db();
+ out_close_alloc:
+  _close_alloc();
+ out_close_bdev:
+  _close_bdev();
+ out_close_fsid:
+  _close_fsid();
+ out_path_fd:
+  _close_path();
 
   if (r < 0) {
     derr << __func__ << " failed, " << cpp_strerror(r) << dendl;

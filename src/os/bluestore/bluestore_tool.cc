@@ -168,7 +168,7 @@ void add_devices(
 
     // We provide no shared allocator which prevents bluefs to operate in R/W mode.
     // Read-only mode isn't strictly enforced though
-    int r = fs->add_block_device(e.second, e.first, false, 0); // 'reserved' is fake
+    int r = fs->add_block_device(e.second, e.first, false);
     if (r < 0) {
       cerr << "unable to open " << e.first << ": " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -193,6 +193,45 @@ BlueFS *open_bluefs_readonly(
     exit(EXIT_FAILURE);
   }
   return fs;
+}
+
+int db_export(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs,
+  const std::string& backup_path)
+{
+  validate_path(cct, path, true);
+  BlueStore bluestore(cct, path);
+
+  KeyValueDB *db_ptr;
+  int r = bluestore.open_db_environment(&db_ptr, true);
+  if (r < 0) {
+    cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  r = db_ptr->db_backup(backup_path);
+  if (r < 0) {
+    cerr << "error exporting db: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  return 0;
+}
+
+int db_import(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs,
+  const std::string& backup_path)
+{
+  validate_path(cct, path, true);
+  BlueStore bluestore(cct, path);
+  int r = bluestore.rebuild_db(backup_path);
+  if (r != 0) {
+    cerr << "error rebuilding db: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  return r;
 }
 
 void log_dump(
@@ -274,6 +313,7 @@ static void bluefs_import(
 int main(int argc, char **argv)
 {
   string out_dir;
+  string in_dir;
   string osd_instance;
   vector<string> devs;
   vector<string> devs_source;
@@ -296,6 +336,7 @@ int main(int argc, char **argv)
     (",i", po::value<string>(&osd_instance), "OSD instance. Requires access to monitor/ceph.conf")
     ("path", po::value<string>(&path), "bluestore path")
     ("out-dir", po::value<string>(&out_dir), "output directory")
+    ("in-dir", po::value<string>(&in_dir), "input directory")
     ("input-file", po::value<string>(&input_file), "import file")
     ("dest-file", po::value<string>(&dest_file), "destination file")
     ("log-file,l", po::value<string>(&log_file), "log file")
@@ -321,6 +362,8 @@ int main(int argc, char **argv)
         "quick-fix, "
         "bluefs-export, "
         "bluefs-import, "
+        "db-export, "
+        "db-import, "
         "bluefs-bdev-sizes, "
         "bluefs-bdev-expand, "
         "bluefs-bdev-new-db, "
@@ -470,6 +513,8 @@ int main(int argc, char **argv)
   }
   if (action == "bluefs-export" || 
       action == "bluefs-import" || 
+      action == "db-export" ||
+      action == "db-import" ||
       action == "bluefs-log-dump") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
@@ -485,6 +530,14 @@ int main(int argc, char **argv)
     }
     if (action == "bluefs-import" && dest_file.empty()) {
       cerr << "must specify dest_file to import bluefs" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if ((action == "db-export") && out_dir.empty()) {
+      cerr << "must specify out-dir to export db" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if ((action == "db-import") && in_dir.empty()) {
+      cerr << "must specify in-dir to import db from" << std::endl;
       exit(EXIT_FAILURE);
     }
     inferring_bluefs_devices(devs, path);
@@ -758,6 +811,12 @@ int main(int argc, char **argv)
   }
   else if (action == "bluefs-import") {
     bluefs_import(input_file, dest_file, cct.get(), path, devs);
+  }
+  else if (action == "db-export") {
+    db_export(cct.get(), path, devs, out_dir);
+  }
+  else if (action == "db-import") {
+    db_import(cct.get(), path, devs, in_dir);
   }
   else if (action == "bluefs-export") {
     BlueFS *fs = open_bluefs_readonly(cct.get(), path, devs);

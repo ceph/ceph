@@ -2612,6 +2612,8 @@ private:
 
   int _open_path();
   void _close_path();
+  int _init_min_alloc_size();
+  void _init_freelist_type();
   int _open_fsid(bool create);
   int _lock_fsid();
   int _read_fsid(uuid_d *f);
@@ -2633,10 +2635,7 @@ private:
 
   int _minimal_open_bluefs(bool create);
   void _minimal_close_bluefs();
-  int _open_bluefs(bool create, bool read_only);
-  void _close_bluefs();
 
-  int _is_bluefs(bool create, bool* ret);
   /*
   * opens both DB and dependant super_meta, FreelistManager and allocator
   * in the proper order
@@ -2645,14 +2644,22 @@ private:
   void _close_db_and_around();
   void _close_around_db();
 
-  int _prepare_db_environment(bool create, bool read_only,
+  enum BlueFSCreateMode {
+    BLUEFS_CREATE_NONE,
+    BLUEFS_CREATE_NEW,
+    BLUEFS_RECREATE
+  };
+  int _is_bluefs(BlueFSCreateMode create, bool* ret);
+  int _open_bluefs(BlueFSCreateMode create, bool read_only);
+  void _close_bluefs();
+  int _prepare_db_environment(BlueFSCreateMode create, bool read_only,
 			      std::string* kv_dir, std::string* kv_backend);
 
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
    * hold the rocksdb's file lock.
    */
-  int _open_db(bool create,
+  int _open_db(BlueFSCreateMode create,
 	       bool to_repair_db=false,
 	       bool read_only = false);
   void _close_db();
@@ -2959,6 +2966,7 @@ public:
   }
 
   int mkfs() override;
+  int rebuild_db(const std::string& backup_path);
   int mkjournal() override {
     return 0;
   }
