@@ -31,26 +31,26 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       "bluestore colls",
       this,
       "list all collections");
-    ceph_assert(r == 0);
+    //ceph_assert(r == 0);
     r = admin_socket->register_command(
       "bluestore list "
       "name=coll_name,type=CephString,req=true "
       "name=start,type=CephString,req=false",
       this,
       "list objects in specific collection");
-    ceph_assert(r == 0);
+    //ceph_assert(r == 0);
     r = admin_socket->register_command(
       "bluestore print "
       "name=object_name,type=CephString,req=true",
       this,
       "print object internals");
-    ceph_assert(r == 0);
+    //ceph_assert(r == 0);
     r = admin_socket->register_command(
       "bluestore blob "
       "name=blob_id,type=CephInt,req=true",
       this,
       "print blob");
-    ceph_assert(r == 0);
+    //ceph_assert(r == 0);
   }
 }
 

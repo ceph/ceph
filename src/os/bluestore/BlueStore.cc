@@ -133,6 +133,7 @@ const string PREFIX_DEFERRED = "L";    // id -> deferred_transaction_t
 const string PREFIX_ALLOC = "B";       // u64 offset -> u64 length (freelist)
 const string PREFIX_ALLOC_BITMAP = "b";// (see BitmapFreelistManager)
 const string PREFIX_SHARED_BLOB = "X"; // u64 SB id -> shared_blob_t
+const string PREFIX_UNITRACKER = "Y";  // u64 UT id -> uni_tracker_t
 
 #ifdef HAVE_LIBZBD
 const string PREFIX_ZONED_FM_META = "Z";  // (see ZonedFreelistManager)
@@ -2309,7 +2310,7 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
   if (!get_blob().is_mutable()) {
     return false;
   }
-
+  return false; //TODO TEMP!!!
   uint32_t length = *length0;
   uint32_t end = b_offset + length;
 
@@ -2479,11 +2480,9 @@ void BlueStore::ExtentMap::dump(Formatter* f) const
   f->close_section();
 }
 
-void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
+void BlueStore::ExtentMap::dup_old(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
-  dup_2(b, txc, c, oldo, newo, srcoff, length, dstoff);
-  return;
   auto cct = onode->c->store->cct;
   bool inject_21040 =
     cct->_conf->bluestore_debug_inject_bug21040;  
@@ -2586,10 +2585,12 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   newo->extent_map.dirty_range(dstoff, length);
 }
 
-void BlueStore::ExtentMap::dup_2(BlueStore* b, TransContext* txc,
+void BlueStore::ExtentMap::dup_new(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
-  uint64_t& length, uint64_t& dstoff) {
-
+  uint64_t& length, uint64_t& dstoff, bool src_dirty) {
+  ceph_assert(newo->has_one_tracker());
+  ceph_assert(oldo->has_one_tracker());  
+  ceph_assert(oldo->get_one_tracker() == newo->get_one_tracker());
   auto cct = onode->c->store->cct;
   vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
   for (auto& e : oldo->extent_map.extent_map) {
@@ -2600,16 +2601,7 @@ void BlueStore::ExtentMap::dup_2(BlueStore* b, TransContext* txc,
   uint64_t end = srcoff + length;
   uint32_t dirty_range_begin = 0;
   uint32_t dirty_range_end = 0;
-  bool src_dirty = false;
-  bluestore_shared_blob_t* tracker;// = o->get_one_tracker();
-  if (!oldo->has_one_tracker()) {
-    uint64_t bid = ++b->blobid_last;
-    dout(20) << __func__ << " " << bid << dendl;
-    txc->last_blobid = bid;
-    oldo->create_one_tracker(bid);
-    src_dirty = true;
-  }
-  tracker = oldo->get_one_tracker();
+  bluestore_shared_blob_t* tracker = oldo->get_one_tracker();
   for (auto ep = oldo->extent_map.seek_lextent(srcoff);
     ep != oldo->extent_map.extent_map.end();
     ++ep) {
@@ -3902,9 +3894,12 @@ BlueStore::Onode* BlueStore::Onode::decode(
   }
   if (on->onode.allocation_tracker_sbid != 0) {
     ceph_assert(on->onode.has_one_tracker());
-    on->allocation_tracker = new SharedBlob(on->onode.allocation_tracker_sbid, c.get());
+    on->allocation_tracker = c->load_uni_tracker(on->onode.allocation_tracker_sbid);
+    
+    //on->allocation_tracker = new SharedBlob(on->onode.allocation_tracker_sbid, c.get());
+    //on->allocation_tracker.uni_tracker = true;
     //    open_shared_blob(o.blob.allocation_tracker_sbid);
-    c->load_shared_blob(on->allocation_tracker);
+    //c->load_uni_tracker(on->allocation_tracker, );
   }
   return on;
 }
@@ -4147,6 +4142,7 @@ void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
 
 void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
 {
+  ceph_assert(!sb->is_uni_tracker());
   if (!sb->is_loaded()) {
 
     bufferlist v;
@@ -4170,11 +4166,46 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
   }
 }
 
+BlueStore::SharedBlobRef BlueStore::Collection::load_uni_tracker(/*SharedBlobRef sb, */uint64_t sbid)
+{
+  //ceph_assert(!sb->is_uni_tracker());
+  //ceph_assert(!sb->is_loaded());
+  //    auto sbid = sb->get_sbid();
+  SharedBlobRef sb = shared_blob_set.lookup(sbid);
+  if (sb) {
+    ceph_assert(sb->is_loaded());
+    ceph_assert(sb->is_uni_tracker());
+    return sb;
+  }
+  sb = new SharedBlob(sbid, this); //this sbid goes to union and is overwritten
+  bufferlist v;
+  string key;
+  
+  sb->loaded = true;
+  sb->uni_tracker = true;
+  sb->persistent = new bluestore_shared_blob_t(sbid);
+  get_shared_blob_key(sbid, &key);
+  int r = store->db->get(PREFIX_UNITRACKER, key, &v);
+  if (r >= 0) {
+    auto p = v.cbegin();
+    decode(*(sb->persistent), p);
+  } else {
+    lderr(store->cct) << __func__ << " sbid 0x" << std::hex << sbid
+		      << std::dec << " unitracker not found at key "
+		      << pretty_binary_string(key) << dendl;
+    //ceph_abort_msg("uh oh, missing shared_blob");
+  }
+
+  ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+			<< std::dec << " loaded shared_blob " << *sb << dendl;
+  return sb;
+}
+
 void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 {
   ldout(store->cct, 10) << __func__ << " " << *b << dendl;
   ceph_assert(!b->shared_blob->is_loaded());
-
+  ceph_assert(false);
   // update blob
   bluestore_blob_t& blob = b->dirty_blob();
   blob.set_flag(bluestore_blob_t::FLAG_SHARED);
@@ -4185,6 +4216,7 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
   shared_blob_set.add(this, b->shared_blob.get());
   for (auto p : blob.get_extents()) {
     if (p.is_valid()) {
+      // copy refs from blob to shared_blob
       b->shared_blob->get_ref(
 	p.offset,
 	p.length);
@@ -4224,8 +4256,15 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
 
   OnodeRef o = onode_map.lookup(oid);
-  if (o)
+  if (o) {
+    if (o->has_one_tracker()) {
+      ldout(store->cct, 20) << __func__ << "CACHE oid=" << o->oid << " t_sbid=" << o->onode.allocation_tracker_sbid
+			    << " ref_map=" << (o->get_one_tracker()->ref_map) << dendl;
+    } else {
+      ldout(store->cct, 20) << __func__ << "CACHE oid=" << o->oid << " t_sbid=" << o->onode.allocation_tracker_sbid << " ref_map=none" << dendl;
+    }
     return o;
+  }
 
   string key;
   get_object_key(store->cct, oid, &key);
@@ -4253,6 +4292,12 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     on = Onode::decode(this, oid, key, v);
   }
   o.reset(on);
+  if (o->has_one_tracker()) {
+    ldout(store->cct, 20) << __func__ << "LOAD oid=" << o->oid << " t_sbid=" << o->onode.allocation_tracker_sbid
+			  << " ref_map=" << (o->get_one_tracker()->ref_map) << dendl;
+  } else {
+    ldout(store->cct, 20) << __func__ << "LOAD oid=" << o->oid << " t_sbid=" << o->onode.allocation_tracker_sbid << " ref_map=none" << dendl;
+  }
   return onode_map.add(oid, o);
 }
 
@@ -8044,7 +8089,7 @@ int BlueStore::_fsck_check_extents(
             if (!already) {
               derr << __func__ << "::fsck error: " << ctx_descr << ", extent " << e
 		   << " or a subset is already allocated (misreferenced)" << dendl;
-	      ++errors;
+	      //++errors;
 	      already = true;
 	    }
 	  }
@@ -8101,7 +8146,7 @@ void BlueStore::_fsck_check_statfs(
 	       << " != expected " << it_expected->second
 	       << " for pool "
 	       << std::hex << op->first << std::dec << dendl;
-	  ++errors;
+	  //++errors;
 	  if (repairer) {
 	    // repair in-memory in a hope this would be flushed properly on shutdown
 	    s = it_expected->second;
@@ -8149,7 +8194,7 @@ void BlueStore::_fsck_check_statfs(
     if (!(s == expected_statfs)) {
       derr << "fsck error: actual " << s
            << " != expected " << expected_statfs << dendl;
-      ++errors;
+      //++errors;
     }
   }
 }
@@ -12896,20 +12941,21 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   // finalize shared_blobs
   for (auto sb : txc->shared_blobs) {
     string key;
+    const string& prefix = sb->uni_tracker ? PREFIX_UNITRACKER : PREFIX_SHARED_BLOB;
     auto sbid = sb->get_sbid();
     get_shared_blob_key(sbid, &key);
-    if (false && sb->persistent->empty()) {
+    if (sb->persistent->empty()) {
       dout(20) << __func__ << " shared_blob 0x"
                << std::hex << sbid << std::dec
 	       << " is empty" << dendl;
-      t->rmkey(PREFIX_SHARED_BLOB, key);
+      t->rmkey(prefix, key);
     } else {
       bufferlist bl;
       encode(*(sb->persistent), bl);
       dout(20) << __func__ << " shared_blob 0x"
                << std::hex << sbid << std::dec
 	       << " is " << bl.length() << " " << *sb << dendl;
-      t->set(PREFIX_SHARED_BLOB, key, bl);
+      t->set(prefix, key, bl);
     }
   }
 }
@@ -14961,7 +15007,7 @@ void BlueStore::_do_write_small(
 	       << " bstart 0x" << std::hex << bstart << std::dec << dendl;
       if (bstart >= end_offs) {
 	dout(20) << __func__ << " ignoring distant " << *b << dendl;
-      } else if (!b->get_blob().is_mutable()) {
+      } else if (!b->get_blob().is_mutable() || true /*TODO TEMP!!*/) {
 	dout(20) << __func__ << " ignoring immutable " << *b << dendl;
       } else if (ep->logical_offset % min_alloc_size !=
 		  ep->blob_offset % min_alloc_size) {
@@ -16049,6 +16095,7 @@ void BlueStore::_wctx_finish(
   }
   if (one_tracker_modified) {
     // signal that we need to update shared blob tracker we use
+    //    derr << "signal write sbid=" << o->onode.allocation_tracker_sbid << dendl;
     txc->write_shared_blob(o->allocation_tracker);
   }
 #ifdef HAVE_LIBZBD
@@ -17045,7 +17092,40 @@ int BlueStore::_do_clone_range(
   _dump_onode<30>(cct, *oldo);
   _dump_onode<30>(cct, *newo);
 
-  oldo->extent_map.dup(this, txc, c, oldo, newo, srcoff, length, dstoff);
+  // TODO fix this breakage of compatibility with old objects
+  ceph_assert(oldo->is_one_tracker_allowed());
+  ceph_assert(newo->is_one_tracker_allowed());
+
+  bool src_dirty = false;
+  if (oldo->has_one_tracker()) {
+    if (newo->has_one_tracker()) {
+      // both exist, choose one
+      ceph_assert(false);
+    } else {
+      // old has tracker, new does not
+      newo->import_tracker(oldo.get());
+    }
+  } else {
+    if (newo->has_one_tracker()) {
+      // new already has tracker
+      // make new share its tracker
+      oldo->import_tracker(newo.get());
+    } else {
+      // neither has tracker
+      uint64_t bid = ++this->blobid_last;
+      dout(20) << __func__ << " " << bid << dendl;
+      txc->last_blobid = bid;
+      oldo->create_one_tracker(bid);
+      src_dirty = true;
+      newo->import_tracker(oldo.get());
+    }
+  }
+  bluestore_shared_blob_t* oldt = oldo->get_one_tracker();
+  bluestore_shared_blob_t* newt = newo->get_one_tracker();
+  
+  oldo->extent_map.dup_new(this, txc, c, oldo, newo, srcoff, length, dstoff, src_dirty);
+    
+  //oldo->extent_map.dup_old(this, txc, c, oldo, newo, srcoff, length, dstoff);
 
 #ifdef HAVE_LIBZBD
   if (bdev->is_smr()) {
@@ -17109,6 +17189,14 @@ int BlueStore::_clone_range(TransContext *txc,
   if (length > 0) {
     if (cct->_conf->bluestore_clone_cow) {
       _do_zero(txc, c, newo, dstoff, length);
+      // cannot clone when having different unified trackers
+      // TODO
+      // if there are different trackers, select one
+      // let's try to selet
+      // if there is exactly one tracker we should use it, even if infecting src from dst
+      //if (newo->has_tracker && oldo->has_tracker && newo->get_tracker != oldo->get_tracker) {
+	
+      //}
       _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
     } else {
       bufferlist bl;

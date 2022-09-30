@@ -17,6 +17,8 @@
 #include "common/Checksummer.h"
 #include "include/stringify.h"
 
+#include "common/debug.h"
+
 using std::list;
 using std::map;
 using std::make_pair;
@@ -304,6 +306,7 @@ bool bluestore_extent_ref_map_t::put(PExtentVector& old_extents, PExtentVector& 
     }
     to_dealloc.emplace_back(off, len);
   };
+  lgeneric_subdout(g_ceph_context, bluestore, 20) << __func__ << " input map=" << *this << " old_extents=" << old_extents << dendl;
   const int ak = 0;
   bool ref_map_changed = false;
   for (auto& pextent: old_extents) {
@@ -488,11 +491,13 @@ bool bluestore_extent_ref_map_t::put(PExtentVector& old_extents, PExtentVector& 
       to_out(off, len);
     }
   }
+  lgeneric_subdout(g_ceph_context, bluestore, 20) << __func__ << " output map=" << *this << " to_dealloc=" << to_dealloc << " changed="<< ref_map_changed << dendl;
   return ref_map_changed;
 }
 
 void bluestore_extent_ref_map_t::on_dup(const PExtentVector& dup_extents)
 {
+  lgeneric_subdout(g_ceph_context, bluestore, 20) << __func__ << " input map=" << *this << " dup_extents=" << dup_extents << dendl;
   const int ak = 0;
   for (auto& pextent: dup_extents) {
     if (!pextent.is_valid()) {
@@ -642,6 +647,7 @@ void bluestore_extent_ref_map_t::on_dup(const PExtentVector& dup_extents)
       _maybe_merge_left(p);
     }
   }
+  lgeneric_subdout(g_ceph_context, bluestore, 20) << __func__ << " output map=" << *this << dendl;
 }
 
 bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) const

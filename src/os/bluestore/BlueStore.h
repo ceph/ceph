@@ -487,6 +487,7 @@ public:
 
     std::atomic_int nref = {0}; ///< reference count
     bool loaded = false;
+    bool uni_tracker = false; // signals that this is actually a uni_tracker, not SharedBlob
 
     CollectionRef coll;
     union {
@@ -539,7 +540,9 @@ public:
     inline bool is_loaded() const {
       return loaded;
     }
-
+    inline bool is_uni_tracker() const {
+      return uni_tracker;
+    }
   };
   typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
 
@@ -852,11 +855,12 @@ public:
 			     BlobRef& b);
   };
   typedef boost::intrusive::list<
+    OldExtent,
+    boost::intrusive::member_hook<
       OldExtent,
-      boost::intrusive::member_hook<
-        OldExtent,
-    boost::intrusive::list_member_hook<>,
-    &OldExtent::old_extent_item> > old_extent_map_t;
+      boost::intrusive::list_member_hook<>,
+      &OldExtent::old_extent_item>
+    > old_extent_map_t;
 
   struct Onode;
 
@@ -881,10 +885,10 @@ public:
     uint32_t needs_reshard_begin = 0;
     uint32_t needs_reshard_end = 0;
 
-    void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
+    void dup_old(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
-    void dup_2(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
-      uint64_t&, uint64_t&, uint64_t&);
+    void dup_new(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
+		 uint64_t&, uint64_t&, uint64_t&, bool src_dirty);
 
     bool needs_reshard() const {
       return needs_reshard_end > needs_reshard_begin;
@@ -1325,8 +1329,13 @@ public:
 	  get_blob().calc_offset(0, nullptr);
     }
 #endif
+    // Just checks if object is in SharedBlob mode, or in UniTracker mode
+    bool is_one_tracker_allowed() {
+      return onode.has_one_tracker();
+    }
     bool has_one_tracker() {
-      return onode.has_one_tracker() && allocation_tracker;
+      ceph_assert(is_one_tracker_allowed());
+      return allocation_tracker != nullptr; // I do not like implicit conversions ptr->bool
     }
     bluestore_shared_blob_t* get_one_tracker() {
       ceph_assert(onode.has_one_tracker());
@@ -1335,12 +1344,21 @@ public:
       return allocation_tracker->persistent;
     }
     void create_one_tracker(uint64_t bid) {
+      ceph_assert(is_one_tracker_allowed());
       ceph_assert(!has_one_tracker());
       allocation_tracker = new SharedBlob(c);
-      allocation_tracker->loaded = true;
       allocation_tracker->persistent = new bluestore_shared_blob_t(bid);
-      onode.set_flag(bluestore_onode_t::FLAG_ONE_TRACKER);
+      allocation_tracker->loaded = true;
+      allocation_tracker->uni_tracker = true;
+      //onode.set_flag(bluestore_onode_t::FLAG_ONE_TRACKER);
       onode.allocation_tracker_sbid = bid;
+    }
+    void import_tracker(Onode* src) {
+      ceph_assert(src->has_one_tracker());
+      ceph_assert(!has_one_tracker());
+      ceph_assert(onode.allocation_tracker_sbid == 0);
+      onode.allocation_tracker_sbid = src->onode.allocation_tracker_sbid;
+      allocation_tracker = src->allocation_tracker;
     }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
@@ -1565,6 +1583,7 @@ public:
     //  loaded = SharedBlob::shared_blob_t is loaded from kv store
     void open_shared_blob(uint64_t sbid, BlobRef b);
     void load_shared_blob(SharedBlobRef sb);
+    SharedBlobRef load_uni_tracker(uint64_t sbid);
     void make_blob_shared(uint64_t sbid, BlobRef b);
     uint64_t make_blob_unshared(SharedBlob *sb);
 
@@ -1809,6 +1828,7 @@ public:
     
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
     std::set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
+    //std::set<UniTrackerRef> uni_trackers;  ///< modified and need to be updated on transaction end
 
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions

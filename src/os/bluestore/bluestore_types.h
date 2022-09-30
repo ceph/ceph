@@ -28,6 +28,7 @@
 #include "common/Checksummer.h"
 #include "include/mempool.h"
 #include "include/ceph_hash.h"
+#include "common/debug.h"
 
 namespace ceph {
   class Formatter;
@@ -950,6 +951,9 @@ WRITE_CLASS_DENC(bluestore_shared_blob_t)
 
 std::ostream& operator<<(std::ostream& out, const bluestore_shared_blob_t& o);
 
+// TODO temporary using ref_map from shared_blob
+using bluestore_uni_tracker_t = bluestore_shared_blob_t;
+
 /// onode: per-object metadata
 struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
@@ -1018,7 +1022,6 @@ struct bluestore_onode_t {
   bool has_omap() const {
     return has_flag(FLAG_OMAP);
   }
-
   static bool is_pgmeta_omap(uint8_t flags) {
     return flags & FLAG_PGMETA_OMAP;
   }
@@ -1068,8 +1071,10 @@ struct bluestore_onode_t {
     if (struct_v >= 2) {
       denc(v.zone_offset_refs, p);
     }
+    ceph_assert(v.flags & FLAG_ONE_TRACKER);
     if (v.flags & FLAG_ONE_TRACKER) {
       denc_varint(v.allocation_tracker_sbid, p);
+      //      lgeneric_derr(g_ceph_context) << __func__ <<" one_sbid=" << v.allocation_tracker_sbid << dendl;
     }
     DENC_FINISH(p);
   }
