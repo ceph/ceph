@@ -38,6 +38,12 @@ class PMEMDevice : public BlockDevice {
   std::atomic_int injecting_crash;
   int _lock();
 
+#if defined(HAVE_LIBDML)
+  ceph::mutex list_lock = ceph::make_mutex("PMEMDevice::list_lock");
+  std::list<void *> waiting_jobs;
+
+  bool aio_stop = false;
+#endif
 public:
   PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv);
 
@@ -73,6 +79,18 @@ private:
             off < size &&
             off + len <= size);
   }
+
+  void _aio_thread();
+
+  struct AioCompletionThread : public Thread {
+    PMEMDevice *bdev;
+    explicit AioCompletionThread(PMEMDevice *b) : bdev(b) {}
+    void *entry() override {
+      bdev->_aio_thread();
+      return NULL;
+    }
+  } aio_thread;
+
 };
 
 #endif

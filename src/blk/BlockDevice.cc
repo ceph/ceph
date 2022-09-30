@@ -82,7 +82,7 @@ uint64_t IOContext::get_num_ios() const
   // a configurable (with different hdd and ssd defaults), and add
   // that to the bytes value.
   uint64_t ios = 0;
-#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO) || defined(HAVE_LIBDML)
   ios += pending_aios.size();
 #endif
 #ifdef HAVE_SPDK

@@ -38,8 +38,15 @@
 #include "common/blkdev.h"
 
 #if defined(HAVE_LIBDML)
+#include <dml/dml.h>
 #include <dml/dml.hpp>
+#include <stdlib.h>
 using execution_path = dml::automatic;
+
+struct dml_job {
+  dml_job_t *dml_job_ptr;
+  struct IOContext *ioc;
+};
 #endif
 
 #define dout_context cct
@@ -50,7 +57,8 @@ using execution_path = dml::automatic;
 PMEMDevice::PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     fd(-1), addr(0),
-    injecting_crash(0)
+    injecting_crash(0),
+    aio_thread(this)
 {
 }
 
@@ -154,12 +162,15 @@ int PMEMDevice::open(const std::string& p)
       << block_size << " anyway" << dendl;
   }
 
+  aio_thread.create("pmem_dsa");
+
   dout(1) << __func__
     << " size " << size
     << " (" << byte_u_t(size) << ")"
     << " block_size " << block_size
     << " (" << byte_u_t(block_size) << ")"
     << dendl;
+
   return 0;
 
  out_fail:
@@ -181,6 +192,9 @@ void PMEMDevice::close()
   ceph_assert(fd >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
+
+  aio_stop = true;
+  aio_thread.join();
 
   path.clear();
 }
@@ -261,16 +275,47 @@ int PMEMDevice::flush()
   return 0;
 }
 
-
 void PMEMDevice::aio_submit(IOContext *ioc)
 {
+#if defined(HAVE_LIBDML)
+  dout(20) << __func__ << " ioc " << ioc
+	   << " pending " << ioc->num_pending.load()
+	   << " running " << ioc->num_running.load()
+	   << dendl;
+
+  if (ioc->num_pending.load() == 0) {
+    return;
+  }
+
+  std::list<void *>::iterator e = ioc->running_jobs.begin();
+  ioc->running_jobs.splice(e, ioc->pending_jobs);
+
+  int pending = ioc->num_pending.load();
+  ioc->num_running += pending;
+  ioc->num_pending -= pending;
+  ceph_assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
+  ceph_assert(ioc->pending_aios.size() == 0);
+
+  dml_status_t status = DML_STATUS_OK;
+  for (auto& p : ioc->running_jobs) {
+    struct dml_job *job = static_cast<struct dml_job *>(p);
+
+    status = dml_submit_job(job->dml_job_ptr);
+    ceph_assert(status == DML_STATUS_OK);
+  }
+
+  std::lock_guard lock(list_lock);
+  e = waiting_jobs.end();
+  waiting_jobs.splice(e, ioc->running_jobs);
+#else
   if (ioc->priv) {
     ceph_assert(ioc->num_running == 0);
     aio_callback(aio_callback_priv, ioc->priv);
   } else {
     ioc->try_aio_wake();
   }
-  return;
+#endif
+   return;
 }
 
 int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered, int write_hint)
@@ -317,7 +362,100 @@ int PMEMDevice::aio_write(
   bool buffered,
   int write_hint)
 {
+#if defined(HAVE_LIBDML)
+  uint64_t len = bl.length();
+  dout(20) << __func__ << " " << off << "~" << len  << dendl;
+  ceph_assert(is_valid_io(off, len));
+
+  dout(40) << "data:\n";
+  bl.hexdump(*_dout);
+  *_dout << dendl;
+
+  if (g_conf()->bdev_inject_crash &&
+      rand() % g_conf()->bdev_inject_crash == 0) {
+    derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
+      << dendl;
+    ++injecting_crash;
+    return 0;
+  }
+
+  uint32_t  batch_buffer_length = 0, job_size = 0;
+  dml_status_t status = DML_STATUS_OK;
+  struct dml_job *job = (struct dml_job *)malloc(sizeof(struct dml_job));
+  job->ioc = ioc;
+
+  status = dml_get_job_size(DML_PATH_AUTO, &job_size);
+  ceph_assert(status == DML_STATUS_OK);
+
+  job->dml_job_ptr = (dml_job_t *)malloc(job_size);
+  ceph_assert(status == DML_STATUS_OK);
+
+  status = dml_init_job(DML_PATH_AUTO, job->dml_job_ptr);
+  ceph_assert(status == DML_STATUS_OK);
+
+  status = dml_get_batch_size(job->dml_job_ptr, bl.get_num_buffers(), &batch_buffer_length);
+
+  if (status == DML_STATUS_OK) {
+    uint8_t *batch_buffer_ptr = (uint8_t *)malloc(batch_buffer_length);
+
+    job->dml_job_ptr->operation = DML_OP_BATCH;
+    job->dml_job_ptr->destination_first_ptr = batch_buffer_ptr;
+    job->dml_job_ptr->destination_length = batch_buffer_length;
+
+    bufferlist::iterator p = bl.begin();
+    uint64_t off1 = off;
+    uint32_t index = 0;
+    while (len) {
+      const char *data;
+      uint32_t l = p.get_ptr_and_advance(len, &data);
+      status = dml_batch_set_mem_move_by_index(job->dml_job_ptr,
+					       index, (uint8_t *)data,
+					       (uint8_t *)(addr + off1), l, 0);
+      ceph_assert(status == DML_STATUS_OK);
+      len -= l;
+      off1 += l;
+      index++;
+    }
+
+    ioc->pending_jobs.push_back(job);
+    ++ioc->num_pending;
+  } else if (status == DML_STATUS_BATCH_SIZE_ERROR) {
+    bufferlist::iterator p = bl.begin();
+    uint64_t off1 = off;
+
+    do {
+      const char *data;
+      uint32_t l = p.get_ptr_and_advance(len, &data);
+
+      if (job == NULL) {
+	job = (struct dml_job *)malloc(sizeof(struct dml_job));
+	job->ioc = ioc;
+	job->dml_job_ptr = (dml_job_t *)malloc(job_size);
+
+	status = dml_init_job(DML_PATH_AUTO, job->dml_job_ptr);
+	ceph_assert(status == DML_STATUS_OK);
+      }
+
+      job->dml_job_ptr->operation = DML_OP_MEM_MOVE;
+      job->dml_job_ptr->source_first_ptr = (uint8_t *)data;
+      job->dml_job_ptr->destination_first_ptr = (uint8_t *)(addr + off1);
+      job->dml_job_ptr->source_length = l;
+      job->dml_job_ptr->destination_length = l;
+
+      ioc->pending_jobs.push_back(job);
+      ++ioc->num_pending;
+
+      len -= l;
+      off1 += l;
+
+      job = NULL;
+    } while (len);
+  }
+
+  return 0;
+#else
   return write(off, bl, buffered);
+#endif
 }
 
 
@@ -350,7 +488,39 @@ int PMEMDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 int PMEMDevice::aio_read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc)
 {
+#if defined(HAVE_LIBDML)
+  dout(5) << __func__ << " " << off << "~" << len  << dendl;
+  ceph_assert(is_valid_io(off, len));
+
+  uint32_t job_size = 0;
+  dml_status_t status = DML_STATUS_OK;
+  struct dml_job *job = (struct dml_job *)malloc(sizeof(struct dml_job));
+
+  job->ioc = ioc;
+
+  status = dml_get_job_size(DML_PATH_AUTO, &job_size);
+  ceph_assert(status == DML_STATUS_OK);
+
+  job->dml_job_ptr = (dml_job_t *)malloc(job_size);
+
+  status = dml_init_job(DML_PATH_AUTO, job->dml_job_ptr);
+  ceph_assert(status == DML_STATUS_OK);
+
+  pbl->push_back(buffer::create_small_page_aligned(len));
+
+  job->dml_job_ptr->operation = DML_OP_MEM_MOVE;
+  job->dml_job_ptr->source_first_ptr = (uint8_t *)(addr + off);
+  job->dml_job_ptr->destination_first_ptr = (uint8_t *)pbl->back().c_str();
+  job->dml_job_ptr->source_length = len;
+  job->dml_job_ptr->destination_length = len;
+
+  ioc->pending_jobs.push_back(job);
+  ++ioc->num_pending;
+
+  return 0;
+#else
   return read(off, len, pbl, ioc, false);
+#endif
 }
 
 int PMEMDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered)
@@ -368,11 +538,62 @@ int PMEMDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   return 0;
 }
 
-
 int PMEMDevice::invalidate_cache(uint64_t off, uint64_t len)
 {
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   return 0;
+}
+
+void PMEMDevice::_aio_thread()
+{
+  dout(10) << __func__ << " start" << dendl;
+
+  dml_status_t status = DML_STATUS_OK;
+  while (!aio_stop) {
+    std::list<void *> tmp;
+    {
+      std::lock_guard l(list_lock);
+      tmp.swap(waiting_jobs);
+    }
+
+    while (!tmp.empty()) {
+      for (auto p = tmp.begin(); p != tmp.end();) {
+	struct dml_job *job = static_cast<struct dml_job *>(*p);
+
+	status = dml_check_job(job->dml_job_ptr);
+	if (unlikely(status == DML_STATUS_JOB_CORRUPTED)) {
+	  ceph_abort_msg("got unexpected error from dml_check_job");
+	}
+
+	if (status == DML_STATUS_OK) {
+	  IOContext *ioc = job->ioc;
+	  // NOTE: once num_running and we either call the callback or
+	  // call aio_wake we cannot touch ioc or aio[] as the caller
+	  // may free it.
+	  if (ioc->priv) {
+	    if (--ioc->num_running == 0) {
+	      aio_callback(aio_callback_priv, ioc->priv);
+	    }
+	  } else {
+	    ioc->try_aio_wake();
+	  }
+
+	  dml_finalize_job(job->dml_job_ptr);
+	  p = tmp.erase(p);
+
+	  if (job->dml_job_ptr->operation == DML_OP_BATCH) {
+	    free(job->dml_job_ptr->destination_first_ptr);
+	  }
+	  free(job->dml_job_ptr);
+	  free(job);
+	} else {
+	  p++;
+	}
+      }
+    }
+  }
+
+  dout(10) << __func__ << " end" << dendl;
 }
 
 

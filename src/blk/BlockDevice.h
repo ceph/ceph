@@ -95,6 +95,12 @@ public:
   std::list<aio_t> pending_aios;    ///< not yet submitted
   std::list<aio_t> running_aios;    ///< submitting or submitted
 #endif
+
+#if defined(HAVE_LIBDML)
+  std::list<void *> pending_jobs; ///< not yet submitted
+  std::list<void *> running_jobs; ///< submitting or submitted
+#endif
+
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};
   bool allow_eio;
