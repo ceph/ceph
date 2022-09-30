@@ -117,7 +117,7 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     auto &s = rhs.as_seg_paddr();
     out << s.get_segment_id()
         << ","
-        << seastore_off_printer_t{s.get_segment_off()};
+        << s.get_segment_off();
   } else if (rhs.get_addr_type() == paddr_types_t::RANDOM_BLOCK) {
     auto &s = rhs.as_blk_paddr();
     out << device_id_printer_t{s.get_device_id()}

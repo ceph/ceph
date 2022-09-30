@@ -48,16 +48,16 @@ class EphemeralSegment final : public Segment {
   friend class EphemeralSegmentManager;
   EphemeralSegmentManager &manager;
   const segment_id_t id;
-  seastore_off_t write_pointer = 0;
+  segment_off_t write_pointer = 0;
 public:
   EphemeralSegment(EphemeralSegmentManager &manager, segment_id_t id);
 
   segment_id_t get_segment_id() const final { return id; }
-  seastore_off_t get_write_capacity() const final;
-  seastore_off_t get_write_ptr() const final { return write_pointer; }
+  segment_off_t get_write_capacity() const final;
+  segment_off_t get_write_ptr() const final { return write_pointer; }
   close_ertr::future<> close() final;
-  write_ertr::future<> write(seastore_off_t offset, ceph::bufferlist bl) final;
-  write_ertr::future<> advance_wp(seastore_off_t offset) final;
+  write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) final;
+  write_ertr::future<> advance_wp(segment_off_t offset) final;
 
   ~EphemeralSegment() {}
 };
@@ -120,7 +120,7 @@ public:
   extent_len_t get_block_size() const final {
     return config.block_size;
   }
-  seastore_off_t get_segment_size() const final {
+  segment_off_t get_segment_size() const final {
     return config.segment_size;
   }
 

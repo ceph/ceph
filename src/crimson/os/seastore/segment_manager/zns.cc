@@ -573,7 +573,7 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
 }
 
 Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
-  segment_id_t id, seastore_off_t write_pointer)
+  segment_id_t id, segment_off_t write_pointer)
 {
   LOG_PREFIX(ZNSSegmentManager::segment_close);
   return seastar::do_with(
@@ -631,7 +631,7 @@ magic_t ZNSSegmentManager::get_magic() const
   return metadata.magic;
 };
 
-seastore_off_t ZNSSegment::get_write_capacity() const
+segment_off_t ZNSSegment::get_write_capacity() const
 {
   return manager.get_segment_size();
 }
@@ -650,7 +650,7 @@ Segment::close_ertr::future<> ZNSSegment::close()
 }
 
 Segment::write_ertr::future<> ZNSSegment::write(
-  seastore_off_t offset, ceph::bufferlist bl)
+  segment_off_t offset, ceph::bufferlist bl)
 {
   LOG_PREFIX(ZNSSegment::write);
   if (offset != write_pointer || offset % manager.metadata.block_size != 0) {
@@ -699,7 +699,7 @@ Segment::write_ertr::future<> ZNSSegment::write_padding_bytes(
 
 // Advance write pointer, to given offset.
 Segment::write_ertr::future<> ZNSSegment::advance_wp(
-  seastore_off_t offset)
+  segment_off_t offset)
 {
   LOG_PREFIX(ZNSSegment::advance_wp);
 
