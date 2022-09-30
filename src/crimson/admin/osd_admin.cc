@@ -16,6 +16,7 @@
 #include "crimson/common/log.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/osd.h"
+#include "crimson/osd/pg.h"
 
 namespace {
 seastar::logger& logger()
@@ -120,32 +121,40 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<FlushPgStatsHook>(crims
 /// dump the history of PGs' peering state
 class DumpPGStateHistory final: public AdminSocketHook {
 public:
-  explicit DumpPGStateHistory(const crimson::osd::OSD &osd) :
+  explicit DumpPGStateHistory(const crimson::osd::PGShardManager &pg_shard_manager) :
     AdminSocketHook{"dump_pgstate_history",
                     "",
                     "dump history of PGs' peering state"},
-    osd{osd}
+    pg_shard_manager{pg_shard_manager}
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
                                       std::string_view format,
                                       ceph::bufferlist&& input) const final
   {
-    std::unique_ptr<Formatter> fref{Formatter::create(format,
-						      "json-pretty",
-						      "json-pretty")};
+    std::unique_ptr<Formatter> fref{
+      Formatter::create(format, "json-pretty", "json-pretty")};
     Formatter *f = fref.get();
     f->open_object_section("pgstate_history");
-    return osd.dump_pg_state_history(
-      f
-    ).then([fref=std::move(fref)]() mutable {
+    f->open_array_section("pgs");
+    return pg_shard_manager.for_each_pg([f](auto &pgid, auto &pg) {
+      f->open_object_section("pg");
+      f->dump_stream("pg") << pgid;
+      const auto& peering_state = pg->get_peering_state();
+      f->dump_string("currently", peering_state.get_current_state());
+      peering_state.dump_history(f);
+      f->close_section();
+    }).then([fref=std::move(fref)]() mutable {
+      fref->close_section();
       fref->close_section();
       return seastar::make_ready_future<tell_result_t>(std::move(fref));
     });
   }
+
 private:
-  const crimson::osd::OSD& osd;
+  const crimson::osd::PGShardManager &pg_shard_manager;
 };
-template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPGStateHistory>(const crimson::osd::OSD& osd);
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPGStateHistory>(
+  const crimson::osd::PGShardManager &);
 
 //dump the contents of perfcounters in osd and store
 class DumpPerfCountersHook final: public AdminSocketHook {
