@@ -536,7 +536,7 @@ Notify Us
 ---------
 
 In case The PR did not got a review within in a reasonable timeframe, please get in touch
-with the corresponding component lead of the :ref:`clt`.
+with the corresponding component lead :ref:`ctl`.
 
 Documentation Style Guide
 =========================

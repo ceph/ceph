@@ -90,7 +90,7 @@ governance body). The board is responsible for:
 The Ceph Foundation board is not responsible for and does not have any
 direct control over the technical governance of Ceph. Development and
 engineering activities are managed through traditional open source
-processes and are overseen by the :ref:`clt`. For more
+processes and are overseen by the :ref:`csc`. For more
 information see :ref:`governance`.
 
 Members
