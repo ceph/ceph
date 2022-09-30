@@ -13,11 +13,11 @@
                     i18n>No SMART data available.</cd-alert-panel>
 
     <ng-container *ngIf="!(data | pipeFunction:isEmpty)">
-      <ul ngbNav
-          #nav="ngbNav"
-          class="nav-tabs">
-        <li ngbNavItem
-            *ngFor="let device of data | keyvalue">
+      <nav ngbNav
+           #nav="ngbNav"
+           class="nav-tabs">
+        <ng-container ngbNavItem
+                      *ngFor="let device of data | keyvalue">
           <a ngbNavLink>{{ device.value.device }} ({{ device.value.identifier }})</a>
           <ng-template ngbNavContent>
             <ng-container *ngIf="device.value.error; else noError">
@@ -55,9 +55,9 @@
             </ng-template>
 
             <ng-container *ngIf="!(device.value.info | pipeFunction:isEmpty) || !(device.value.smart | pipeFunction:isEmpty)">
-              <ul ngbNav
-                  #innerNav="ngbNav"
-                  class="nav-tabs">
+              <nav ngbNav
+                   #innerNav="ngbNav"
+                   class="nav-tabs">
                 <li [ngbNavItem]="1">
                   <a ngbNavLink
                      i18n>Device Information</a>
@@ -93,13 +93,13 @@
                                     i18n>No SMART data available for this device.</cd-alert-panel>
                   </ng-template>
                 </li>
-              </ul>
+              </nav>
 
               <div [ngbNavOutlet]="innerNav"></div>
             </ng-container>
           </ng-template>
-        </li>
-      </ul>
+        </ng-container>
+      </nav>
 
       <div [ngbNavOutlet]="nav"></div>
     </ng-container>

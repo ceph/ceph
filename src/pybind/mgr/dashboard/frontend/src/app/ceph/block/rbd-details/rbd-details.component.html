@@ -3,11 +3,11 @@
 </ng-template>
 
 <ng-container *ngIf="selection && selection.source !== 'REMOVING'">
-  <ul ngbNav
-      #nav="ngbNav"
-      class="nav-tabs"
-      cdStatefulTab="rbd-details">
-    <li ngbNavItem="details">
+  <nav ngbNav
+       #nav="ngbNav"
+       class="nav-tabs"
+       cdStatefulTab="rbd-details">
+    <ng-container ngbNavItem="details">
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
@@ -124,8 +124,8 @@
           </tbody>
         </table>
       </ng-template>
-    </li>
-    <li ngbNavItem="snapshots">
+    </ng-container>
+    <ng-container ngbNavItem="snapshots">
       <a ngbNavLink
          i18n>Snapshots</a>
       <ng-template ngbNavContent>
@@ -136,16 +136,16 @@
                               [mirroring]="selection.mirror_mode"
                               [rbdName]="selection.name"></cd-rbd-snapshot-list>
       </ng-template>
-    </li>
-    <li ngbNavItem="configuration">
+    </ng-container>
+    <ng-container ngbNavItem="configuration">
       <a ngbNavLink
          i18n>Configuration</a>
       <ng-template ngbNavContent>
         <cd-rbd-configuration-table [data]="selection['configuration']"></cd-rbd-configuration-table>
       </ng-template>
-    </li>
+    </ng-container>
 
-    <li ngbNavItem="performance">
+    <ng-container ngbNavItem="performance">
       <a ngbNavLink
          i18n>Performance</a>
       <ng-template ngbNavContent>
@@ -157,8 +157,8 @@
                     grafanaStyle="one">
         </cd-grafana>
       </ng-template>
-    </li>
-  </ul>
+    </ng-container>
+  </nav>
 
   <div [ngbNavOutlet]="nav"></div>
 </ng-container>

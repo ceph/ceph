@@ -1,11 +1,11 @@
 <div *ngIf="contentData">
   <ng-container *ngTemplateOutlet="logFiltersTpl"></ng-container>
 
-  <ul ngbNav
-      #nav="ngbNav"
-      class="nav-tabs"
-      cdStatefulTab="logs">
-    <li ngbNavItem="cluster-logs">
+  <nav ngbNav
+       #nav="ngbNav"
+       class="nav-tabs"
+       cdStatefulTab="logs">
+    <ng-container ngbNavItem="cluster-logs">
       <a ngbNavLink
          i18n>Cluster Logs</a>
       <ng-template ngbNavContent>
@@ -35,8 +35,8 @@
           </div>
         </div>
       </ng-template>
-    </li>
-    <li ngbNavItem="audit-logs">
+    </ng-container>
+    <ng-container ngbNavItem="audit-logs">
       <a ngbNavLink
          i18n>Audit Logs</a>
       <ng-template ngbNavContent>
@@ -66,8 +66,8 @@
           </div>
         </div>
       </ng-template>
-    </li>
-    <li ngbNavItem="daemon-logs">
+    </ng-container>
+    <ng-container ngbNavItem="daemon-logs">
       <a ngbNavLink
          i18n>Daemon Logs</a>
       <ng-template ngbNavContent>
@@ -83,8 +83,8 @@
           </div>
         </ng-container>
       </ng-template>
-    </li>
-  </ul>
+    </ng-container>
+  </nav>
 
   <div [ngbNavOutlet]="nav"></div>
 </div>

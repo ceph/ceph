@@ -1,5 +1,4 @@
 import { Component } from '@angular/core';
-import { Router } from '@angular/router';
 
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -13,7 +12,7 @@ export class RbdTabsComponent {
   grafanaPermission: Permission;
   url: string;
 
-  constructor(private authStorageService: AuthStorageService, public router: Router) {
+  constructor(private authStorageService: AuthStorageService) {
     this.grafanaPermission = this.authStorageService.getPermissions().grafana;
   }
 }
