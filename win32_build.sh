@@ -35,21 +35,28 @@ SKIP_ZIP=${SKIP_ZIP:-}
 # well as llvm rely on mspdb*.dll in order to support this proprietary format.
 EMBEDDED_DBG_SYM=${EMBEDDED_DBG_SYM:-}
 # Allow for OS specific customizations through the OS flag.
-# Valid options are currently "ubuntu" and "suse".
+# Valid options are currently "ubuntu", "suse", and "rhel".
 
 OS=${OS}
 if [[ -z $OS ]]; then
-    if [[ -f /etc/os-release ]] && \
-            $(grep -q "^NAME=\".*SUSE.*\"" /etc/os-release);  then
+    source /etc/os-release
+    case "$ID" in
+    opensuse*|suse|sles)
         OS="suse"
-    elif [[ -f /etc/lsb-release ]] && \
-            $(grep -q "^DISTRIB_ID=Ubuntu" /etc/lsb-release);  then
+        ;;
+    rhel|centos)
+        OS="rhel"
+        ;;
+    ubuntu)
         OS="ubuntu"
-    else
-        echo "Unsupported Linux distro, only SUSE and Ubuntu are currently \
-supported. Set the OS variable to override"
+        ;;
+    *)
+        echo "Unsupported Linux distro $ID."
+        echo "only SUSE, Ubuntu and RHEL are supported."
+        echo "Set the OS environment variable to override."
         exit 1
-    fi
+        ;;
+    esac
 fi
 export OS="$OS"
 
@@ -205,6 +212,7 @@ if [[ -z $SKIP_DLL_COPY ]]; then
         $sslDir/bin/libssl-1_1-x64.dll
         $mingwTargetLibDir/libstdc++-6.dll
         $mingwTargetLibDir/libgcc_s_seh-1.dll
+        $mingwTargetLibDir/libssp*.dll
         $mingwLibpthreadDir/libwinpthread-1.dll
         $boostDir/lib/*.dll)
     echo "Copying required dlls to $binDir."
