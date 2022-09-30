@@ -25,7 +25,7 @@ struct ephemeral_config_t {
     ceph_assert_always(size > 0);
     ceph_assert_always(size <= DEVICE_OFF_MAX);
     ceph_assert_always(segment_size > 0);
-    ceph_assert_always(segment_size <= MAX_SEG_OFF);
+    ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
     ceph_assert_always(size / segment_size > 0);
     ceph_assert_always(size / segment_size <= DEVICE_SEGMENT_ID_MAX);
   }

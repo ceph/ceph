@@ -415,23 +415,6 @@ private:
   size_t total_segments = 0;
 };
 
-// Offset within a segment on disk, see SegmentManager
-// may be negative for relative offsets
-using seastore_off_t = int32_t;
-using u_seastore_off_t = uint32_t;
-constexpr seastore_off_t MAX_SEG_OFF =
-  std::numeric_limits<seastore_off_t>::max();
-constexpr seastore_off_t MIN_SEG_OFF =
-  std::numeric_limits<seastore_off_t>::min();
-constexpr seastore_off_t NULL_SEG_OFF = MAX_SEG_OFF;
-constexpr auto SEGMENT_OFF_BITS = std::numeric_limits<u_seastore_off_t>::digits;
-
-struct seastore_off_printer_t {
-  seastore_off_t off;
-};
-
-std::ostream &operator<<(std::ostream&, const seastore_off_printer_t&);
-
 /**
  * paddr_t
  *
@@ -452,14 +435,11 @@ std::ostream &operator<<(std::ostream&, const seastore_off_printer_t&);
 
 using internal_paddr_t = uint64_t;
 constexpr auto PADDR_BITS = std::numeric_limits<internal_paddr_t>::digits;
-static_assert(PADDR_BITS == SEGMENT_ID_BITS + SEGMENT_OFF_BITS);
 
 /**
  * device_off_t
  *
  * Offset within a device, may be negative for relative offsets.
- *
- * TODO: replace block_off_t
  */
 using device_off_t = int64_t;
 using u_device_off_t = uint64_t;
@@ -468,20 +448,17 @@ constexpr auto DEVICE_OFF_MAX =
     std::numeric_limits<device_off_t>::max() >> DEVICE_ID_BITS;
 constexpr auto DEVICE_OFF_MIN = -(DEVICE_OFF_MAX + 1);
 
-using block_off_t = internal_paddr_t;
-constexpr auto BLOCK_OFF_BITS = PADDR_BITS - DEVICE_ID_BITS;
-constexpr auto BLOCK_OFF_MAX =
-    std::numeric_limits<block_off_t>::max() >> DEVICE_ID_BITS;
-
 /**
  * segment_off_t
  *
  * Offset within a segment on disk, may be negative for relative offsets.
- *
- * TODO: replace seastore_off_t
  */
 using segment_off_t = int32_t;
 using u_segment_off_t = uint32_t;
+constexpr auto SEGMENT_OFF_MAX = std::numeric_limits<segment_off_t>::max();
+constexpr auto SEGMENT_OFF_MIN = std::numeric_limits<segment_off_t>::min();
+constexpr auto SEGMENT_OFF_BITS = std::numeric_limits<u_segment_off_t>::digits;
+static_assert(PADDR_BITS == SEGMENT_ID_BITS + SEGMENT_OFF_BITS);
 
 constexpr auto DEVICE_ID_MASK =
   ((internal_paddr_t(1) << DEVICE_ID_BITS) - 1) << DEVICE_OFF_BITS;
@@ -491,7 +468,6 @@ constexpr auto SEGMENT_ID_MASK =
   ((internal_paddr_t(1) << SEGMENT_ID_BITS) - 1) << SEGMENT_OFF_BITS;
 constexpr auto SEGMENT_OFF_MASK =
   (internal_paddr_t(1) << SEGMENT_OFF_BITS) - 1;
-constexpr auto SEASTORE_OFF_MASK = SEGMENT_OFF_MASK;
 
 constexpr internal_paddr_t encode_device_off(device_off_t off) {
   return static_cast<internal_paddr_t>(off) & DEVICE_OFF_MASK;
@@ -680,7 +656,7 @@ private:
 
   struct const_construct_t {};
   constexpr paddr_t(device_id_t d_id, device_off_t offset, const_construct_t)
-    : internal_paddr((static_cast<internal_paddr_t>(d_id) << BLOCK_OFF_BITS) |
+    : internal_paddr((static_cast<internal_paddr_t>(d_id) << DEVICE_OFF_BITS) |
                      static_cast<u_device_off_t>(offset)) {}
 
   friend struct paddr_le_t;
@@ -712,7 +688,7 @@ struct seg_paddr_t : public paddr_t {
   paddr_t add_offset(device_off_t o) const {
     device_off_t off = get_segment_off() + o;
     assert(off >= 0);
-    assert(off <= MAX_SEG_OFF);
+    assert(off <= SEGMENT_OFF_MAX);
     return paddr_t::make_seg_paddr(
         get_segment_id(), static_cast<segment_off_t>(off));
   }
@@ -1228,7 +1204,7 @@ struct delta_info_t {
   laddr_t laddr = L_ADDR_NULL;                 ///< logical address
   uint32_t prev_crc = 0;
   uint32_t final_crc = 0;
-  extent_len_t length = NULL_SEG_OFF;          ///< extent length
+  extent_len_t length = 0;                     ///< extent length
   extent_version_t pversion;                   ///< prior version
   segment_seq_t ext_seq;		       ///< seq of the extent's segment
   segment_type_t seg_type;
@@ -1933,7 +1909,7 @@ struct record_group_t {
       extent_len_t block_size) {
     size.account(record.size, block_size);
     records.push_back(std::move(record));
-    assert(size.get_encoded_length() < MAX_SEG_OFF);
+    assert(size.get_encoded_length() < SEGMENT_OFF_MAX);
   }
 
   void reserve(std::size_t limit) {

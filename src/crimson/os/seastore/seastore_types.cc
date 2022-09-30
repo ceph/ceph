@@ -66,15 +66,6 @@ std::ostream &operator<<(std::ostream &out, const segment_id_t &segment)
   }
 }
 
-std::ostream &operator<<(std::ostream &out, const seastore_off_printer_t &off)
-{
-  if (off.off == NULL_SEG_OFF) {
-    return out << "NULL_OFF";
-  } else {
-    return out << off.off;
-  }
-}
-
 std::ostream& operator<<(std::ostream& out, segment_type_t t)
 {
   switch(t) {
@@ -147,7 +138,6 @@ journal_seq_t journal_seq_t::add_offset(
   } else {
     assert(type == journal_type_t::RANDOM_BLOCK);
     auto boff = offset.as_blk_paddr().get_device_off();
-    assert(boff <= MAX_SEG_OFF);
     joff = boff;
   }
   auto roll_end = roll_start + roll_size;
