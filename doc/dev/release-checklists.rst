@@ -73,6 +73,7 @@ Mon
 ---
 
 - [x] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
+- [x] qa/standalone/mon/misc bump up `jqfilter='.monmap.features.persistent | length == N'` to `N+1`
 - [x] mon/MgrMonitor.cc adjust `always_on_modules`
 - [x] common/options/global.yaml.in define `mon_debug_no_require_X`
 - [x] common/options/global.yaml.in remove `mon_debug_no_require_X-2`
