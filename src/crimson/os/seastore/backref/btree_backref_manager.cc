@@ -125,7 +125,7 @@ BtreeBackrefManager::new_mapping(
     is_aligned(
       key.get_addr_type() == paddr_types_t::SEGMENT ?
 	key.as_seg_paddr().get_segment_off() :
-	key.as_blk_paddr().get_block_off(),
+	key.as_blk_paddr().get_device_off(),
       cache.get_block_size()));
   struct state_t {
     paddr_t last_end;

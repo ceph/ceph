@@ -103,7 +103,7 @@ using rbm_abs_addr = uint64_t;
 
 inline rbm_abs_addr convert_paddr_to_abs_addr(const paddr_t& paddr) {
   const blk_paddr_t& blk_addr = paddr.as_blk_paddr();
-  return blk_addr.get_block_off();
+  return blk_addr.get_device_off();
 }
 
 inline paddr_t convert_abs_addr_to_paddr(rbm_abs_addr addr, device_id_t d_id) {

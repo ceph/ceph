@@ -483,8 +483,8 @@ public:
     BackrefManager &backref_manager,
     config_t config,
     journal_type_t type,
-    seastore_off_t roll_start,
-    seastore_off_t roll_size);
+    device_off_t roll_start,
+    device_off_t roll_size);
 
   ~JournalTrimmerImpl() = default;
 
@@ -549,8 +549,8 @@ public:
       BackrefManager &backref_manager,
       config_t config,
       journal_type_t type,
-      seastore_off_t roll_start,
-      seastore_off_t roll_size) {
+      device_off_t roll_start,
+      device_off_t roll_size) {
     return std::make_unique<JournalTrimmerImpl>(
         backref_manager, config, type, roll_start, roll_size);
   }
@@ -575,8 +575,8 @@ private:
 
   config_t config;
   journal_type_t journal_type;
-  seastore_off_t roll_start;
-  seastore_off_t roll_size;
+  device_off_t roll_start;
+  device_off_t roll_size;
 
   journal_seq_t journal_head;
   journal_seq_t journal_dirty_tail;
