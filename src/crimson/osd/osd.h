@@ -138,7 +138,6 @@ public:
   seastar::future<> stop();
 
   void dump_status(Formatter*) const;
-  seastar::future<> dump_pg_state_history(Formatter*) const;
   void print(std::ostream&) const;
 
   /// @return the seq id of the pg stats being sent
