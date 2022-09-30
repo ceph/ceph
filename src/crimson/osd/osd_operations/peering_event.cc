@@ -42,6 +42,13 @@ void PeeringEvent<T>::dump_detail(Formatter *f) const
   f->dump_int("sent", evt.get_epoch_sent());
   f->dump_int("requested", evt.get_epoch_requested());
   f->dump_string("evt", evt.get_desc());
+  f->open_array_section("events");
+  {
+    std::apply([f](auto&... events) {
+      (..., events.dump(f));
+    }, static_cast<const T*>(this)->tracking_events);
+  }
+  f->close_section();
   f->close_section();
 }
 
