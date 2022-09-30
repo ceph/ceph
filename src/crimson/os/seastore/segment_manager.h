@@ -95,12 +95,12 @@ public:
   /**
    * min next write location
    */
-  virtual seastore_off_t get_write_ptr() const = 0;
+  virtual segment_off_t get_write_ptr() const = 0;
 
   /**
    * max capacity
    */
-  virtual seastore_off_t get_write_capacity() const = 0;
+  virtual segment_off_t get_write_capacity() const = 0;
 
   /**
    * close
@@ -129,7 +129,7 @@ public:
     crimson::ct_error::enospc              // write exceeds segment size
     >;
   virtual write_ertr::future<> write(
-    seastore_off_t offset, ceph::bufferlist bl) = 0;
+    segment_off_t offset, ceph::bufferlist bl) = 0;
 
   /**
    * advance_wp
@@ -139,7 +139,7 @@ public:
    * @param offset: advance write pointer till the given offset
    */
   virtual write_ertr::future<> advance_wp(
-    seastore_off_t offset) = 0;
+    segment_off_t offset) = 0;
 
   virtual ~Segment() {}
 };
@@ -175,7 +175,7 @@ public:
   virtual release_ertr::future<> release(segment_id_t id) = 0;
 
   /* Methods for discovering device geometry, segmentid set, etc */
-  virtual seastore_off_t get_segment_size() const = 0;
+  virtual segment_off_t get_segment_size() const = 0;
   virtual device_segment_id_t get_num_segments() const {
     ceph_assert(get_available_size() % get_segment_size() == 0);
     return ((device_segment_id_t)(get_available_size() / get_segment_size()));

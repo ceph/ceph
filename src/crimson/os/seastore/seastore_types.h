@@ -472,6 +472,16 @@ constexpr auto BLOCK_OFF_BITS = PADDR_BITS - DEVICE_ID_BITS;
 constexpr auto BLOCK_OFF_MAX =
     std::numeric_limits<block_off_t>::max() >> DEVICE_ID_BITS;
 
+/**
+ * segment_off_t
+ *
+ * Offset within a segment on disk, may be negative for relative offsets.
+ *
+ * TODO: replace seastore_off_t
+ */
+using segment_off_t = int32_t;
+using u_segment_off_t = uint32_t;
+
 constexpr auto DEVICE_ID_MASK =
   ((internal_paddr_t(1) << DEVICE_ID_BITS) - 1) << BLOCK_OFF_BITS;
 constexpr auto BLOCK_OFF_MASK =
@@ -492,14 +502,14 @@ public:
 
   static paddr_t make_seg_paddr(
     segment_id_t seg,
-    seastore_off_t offset) {
+    segment_off_t offset) {
     return paddr_t(seg, offset);
   }
 
   static paddr_t make_seg_paddr(
     device_id_t device,
     device_segment_id_t seg,
-    seastore_off_t offset) {
+    segment_off_t offset) {
     return paddr_t(segment_id_t(device, seg), offset);
   }
 
@@ -638,9 +648,9 @@ protected:
 
 private:
   // as seg
-  paddr_t(segment_id_t seg, seastore_off_t offset)
+  paddr_t(segment_id_t seg, segment_off_t offset)
     : paddr_t((static_cast<internal_paddr_t>(seg.segment) << SEGMENT_OFF_BITS) |
-              static_cast<u_seastore_off_t>(offset)) {}
+              static_cast<u_segment_off_t>(offset)) {}
 
   // as blk
   paddr_t(device_id_t d_id, block_off_t offset)
@@ -680,20 +690,22 @@ struct seg_paddr_t : public paddr_t {
            internal_paddr >> SEGMENT_OFF_BITS));
   }
 
-  seastore_off_t get_segment_off() const {
-    return seastore_off_t(internal_paddr & SEGMENT_OFF_MASK);
+  segment_off_t get_segment_off() const {
+    return segment_off_t(internal_paddr & SEGMENT_OFF_MASK);
   }
 
-  void set_segment_off(seastore_off_t off) {
+  void set_segment_off(segment_off_t off) {
     assert(off >= 0);
     internal_paddr = (internal_paddr & SEGMENT_ID_MASK);
-    internal_paddr |= static_cast<u_seastore_off_t>(off);
+    internal_paddr |= static_cast<u_segment_off_t>(off);
   }
 
   paddr_t add_offset(seastore_off_t o) const {
-    auto off = get_segment_off() + o;
-    assert(o >= 0 ? off >= get_segment_off() : off < get_segment_off());
-    return paddr_t::make_seg_paddr(get_segment_id(), off);
+    device_off_t off = get_segment_off() + o;
+    assert(off >= 0);
+    assert(off <= MAX_SEG_OFF);
+    return paddr_t::make_seg_paddr(
+        get_segment_id(), static_cast<segment_off_t>(off));
   }
 };
 
@@ -2015,11 +2027,11 @@ struct scan_valid_records_cursor {
     return seq.offset.as_seg_paddr().get_segment_id();
   }
 
-  seastore_off_t get_segment_offset() const {
+  segment_off_t get_segment_offset() const {
     return seq.offset.as_seg_paddr().get_segment_off();
   }
 
-  void increment_seq(seastore_off_t off) {
+  void increment_seq(segment_off_t off) {
     auto& seg_addr = seq.offset.as_seg_paddr();
     seg_addr.set_segment_off(
       seg_addr.get_segment_off() + off);

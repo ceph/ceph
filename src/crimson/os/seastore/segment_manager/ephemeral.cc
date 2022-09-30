@@ -63,7 +63,7 @@ EphemeralSegment::EphemeralSegment(
   EphemeralSegmentManager &manager, segment_id_t id)
   : manager(manager), id(id) {}
 
-seastore_off_t EphemeralSegment::get_write_capacity() const
+segment_off_t EphemeralSegment::get_write_capacity() const
 {
   return manager.get_segment_size();
 }
@@ -76,7 +76,7 @@ Segment::close_ertr::future<> EphemeralSegment::close()
 }
 
 Segment::write_ertr::future<> EphemeralSegment::write(
-  seastore_off_t offset, ceph::bufferlist bl)
+  segment_off_t offset, ceph::bufferlist bl)
 {
   if (offset < write_pointer || offset % manager.config.block_size != 0)
     return crimson::ct_error::invarg::make();
@@ -88,7 +88,7 @@ Segment::write_ertr::future<> EphemeralSegment::write(
 }
 
 Segment::write_ertr::future<> EphemeralSegment::advance_wp(
-  seastore_off_t offset)
+  segment_off_t offset)
 {
   return write_ertr::now();
 }

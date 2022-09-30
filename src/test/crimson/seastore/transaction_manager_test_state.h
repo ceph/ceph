@@ -326,7 +326,7 @@ public:
 
   size_t get_available_size() const final { return sm.get_available_size(); }
   extent_len_t get_block_size() const final { return sm.get_block_size(); }
-  seastore_off_t get_segment_size() const final {
+  segment_off_t get_segment_size() const final {
     return sm.get_segment_size();
   }
   const seastore_meta_t &get_meta() const final {

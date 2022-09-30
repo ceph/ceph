@@ -69,7 +69,7 @@ class SegmentAllocator {
     return current_segment_nonce;
   }
 
-  seastore_off_t get_written_to() const {
+  segment_off_t get_written_to() const {
     assert(can_write());
     return written_to;
   }
@@ -126,7 +126,7 @@ class SegmentAllocator {
   SegmentProvider &segment_provider;
   SegmentManagerGroup &sm_group;
   SegmentRef current_segment;
-  seastore_off_t written_to;
+  segment_off_t written_to;
   SegmentSeqAllocator &segment_seq_allocator;
   segment_nonce_t current_segment_nonce;
   JournalTrimmer *trimmer;
