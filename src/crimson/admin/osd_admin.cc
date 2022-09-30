@@ -17,6 +17,7 @@
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/osd.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/shard_services.h"
 
 namespace {
 seastar::logger& logger()
@@ -452,27 +453,32 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<InjectMDataErrorHook>(
  */
 class DumpInFlightOpsHook : public AdminSocketHook {
 public:
-  explicit DumpInFlightOpsHook(const crimson::osd::OSDOperationRegistry& op_registry) :
+  explicit DumpInFlightOpsHook(const crimson::osd::PGShardManager &pg_shard_manager) :
     AdminSocketHook{"dump_ops_in_flight", "", "show the ops currently in flight"},
-    op_registry(op_registry)
+    pg_shard_manager(pg_shard_manager)
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
 				      ceph::bufferlist&& input) const final
   {
-    logger().warn("{}", __func__);
-    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    unique_ptr<Formatter> fref{
+      Formatter::create(format, "json-pretty", "json-pretty")};
+    auto *f = fref.get();
     f->open_object_section("ops_in_flight");
-    op_registry.dump_client_requests(f.get());
-    f->close_section();
-    f->dump_int("num_ops", 0);
-    return seastar::make_ready_future<tell_result_t>(std::move(f));
+    f->open_array_section("ops_in_flight");
+    return pg_shard_manager.invoke_on_each_shard_seq([f](const auto &shard_services) {
+      return shard_services.dump_ops_in_flight(f);
+    }).then([fref=std::move(fref)]() mutable {
+      fref->close_section();
+      fref->close_section();
+      return seastar::make_ready_future<tell_result_t>(std::move(fref));
+    });
   }
 private:
-  const crimson::osd::OSDOperationRegistry& op_registry;
+  const crimson::osd::PGShardManager &pg_shard_manager;
 };
 template std::unique_ptr<AdminSocketHook>
-make_asok_hook<DumpInFlightOpsHook>(const crimson::osd::OSDOperationRegistry& op_registry);
+make_asok_hook<DumpInFlightOpsHook>(const crimson::osd::PGShardManager &);
 
 
 class DumpHistoricOpsHook : public AdminSocketHook {

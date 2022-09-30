@@ -50,6 +50,14 @@ PerShardState::PerShardState(
     startup_time(startup_time)
 {}
 
+seastar::future<> PerShardState::dump_ops_in_flight(Formatter *f) const
+{
+  registry.for_each_op([f](const auto &op) {
+    op.dump(f);
+  });
+  return seastar::now();
+}
+
 seastar::future<> PerShardState::stop_pgs()
 {
   assert_core();

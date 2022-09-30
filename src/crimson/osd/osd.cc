@@ -608,7 +608,7 @@ seastar::future<> OSD::start_asok_admin()
     // ops commands
     asok->register_command(
       make_asok_hook<DumpInFlightOpsHook>(
-	std::as_const(get_shard_services().get_registry())));
+	std::as_const(pg_shard_manager)));
     asok->register_command(
       make_asok_hook<DumpHistoricOpsHook>(
 	std::as_const(get_shard_services().get_registry())));
