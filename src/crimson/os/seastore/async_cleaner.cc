@@ -404,8 +404,8 @@ JournalTrimmerImpl::JournalTrimmerImpl(
   BackrefManager &backref_manager,
   config_t config,
   journal_type_t type,
-  seastore_off_t roll_start,
-  seastore_off_t roll_size)
+  device_off_t roll_start,
+  device_off_t roll_size)
   : backref_manager(backref_manager),
     config(config),
     journal_type(type),

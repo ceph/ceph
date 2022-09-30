@@ -108,11 +108,11 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     out << "MIN";
   } else if (rhs == P_ADDR_ZERO) {
     out << "ZERO";
-  } else if (has_seastore_off(id)) {
+  } else if (has_device_off(id)) {
     auto &s = rhs.as_res_paddr();
     out << device_id_printer_t{id}
         << ","
-        << seastore_off_printer_t{s.get_seastore_off()};
+        << s.get_device_off();
   } else if (rhs.get_addr_type() == paddr_types_t::SEGMENT) {
     auto &s = rhs.as_seg_paddr();
     out << s.get_segment_id()
@@ -122,7 +122,7 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     auto &s = rhs.as_blk_paddr();
     out << device_id_printer_t{s.get_device_id()}
         << ","
-        << s.get_block_off();
+        << s.get_device_off();
   } else {
     out << "INVALID!";
   }
@@ -132,8 +132,8 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 journal_seq_t journal_seq_t::add_offset(
       journal_type_t type,
       device_off_t off,
-      seastore_off_t roll_start,
-      seastore_off_t roll_size) const
+      device_off_t roll_start,
+      device_off_t roll_size) const
 {
   assert(offset.is_absolute());
   assert(off <= DEVICE_OFF_MAX && off >= DEVICE_OFF_MIN);
@@ -141,12 +141,12 @@ journal_seq_t journal_seq_t::add_offset(
   assert(roll_size > 0);
 
   segment_seq_t jseq = segment_seq;
-  seastore_off_t joff;
+  device_off_t joff;
   if (type == journal_type_t::SEGMENTED) {
     joff = offset.as_seg_paddr().get_segment_off();
   } else {
     assert(type == journal_type_t::RANDOM_BLOCK);
-    auto boff = offset.as_blk_paddr().get_block_off();
+    auto boff = offset.as_blk_paddr().get_device_off();
     assert(boff <= MAX_SEG_OFF);
     joff = boff;
   }
@@ -184,8 +184,8 @@ journal_seq_t journal_seq_t::add_offset(
 device_off_t journal_seq_t::relative_to(
       journal_type_t type,
       const journal_seq_t& r,
-      seastore_off_t roll_start,
-      seastore_off_t roll_size) const
+      device_off_t roll_start,
+      device_off_t roll_size) const
 {
   assert(offset.is_absolute());
   assert(r.offset.is_absolute());
@@ -199,8 +199,8 @@ device_off_t journal_seq_t::relative_to(
             static_cast<device_off_t>(r.offset.as_seg_paddr().get_segment_off()));
   } else {
     assert(type == journal_type_t::RANDOM_BLOCK);
-    ret += (static_cast<device_off_t>(offset.as_blk_paddr().get_block_off()) -
-            static_cast<device_off_t>(r.offset.as_blk_paddr().get_block_off()));
+    ret += offset.as_blk_paddr().get_device_off() -
+           r.offset.as_blk_paddr().get_device_off();
   }
   assert(ret <= DEVICE_OFF_MAX && ret >= DEVICE_OFF_MIN);
   return ret;
