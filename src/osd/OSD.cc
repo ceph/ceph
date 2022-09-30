@@ -3835,7 +3835,8 @@ int OSD::init()
     derr << "unable to obtain rotating service keys; retrying" << dendl;
     ++rotating_auth_attempts;
     if (rotating_auth_attempts > g_conf()->max_rotating_auth_attempts) {
-        derr << __func__ << " wait_auth_rotating timed out" << dendl;
+        derr << __func__ << " wait_auth_rotating timed out"
+	     <<" -- maybe I have a clock skew against the monitors?" << dendl;
 	exit(1);
     }
   }
