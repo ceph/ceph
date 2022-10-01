@@ -123,8 +123,11 @@ public:
    * Get future for pg with a bool indicating whether it's already being
    * created.
    */
-  std::pair<seastar::future<Ref<PG>>, bool>
-  wait_for_pg(PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
+  using wait_for_pg_ertr = crimson::errorator<
+    crimson::ct_error::ecanceled>;
+  using wait_for_pg_fut = wait_for_pg_ertr::future<Ref<PG>>;
+  using wait_for_pg_ret = std::pair<wait_for_pg_fut, bool>;
+  wait_for_pg_ret wait_for_pg(PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
 
   /**
    * get PG in non-blocking manner
@@ -145,6 +148,11 @@ public:
    * Add newly loaded pg
    */
   void pg_loaded(spg_t pgid, Ref<PG> pg);
+
+  /**
+   * Cancel pending creation of pgid.
+   */
+  void pg_creation_canceled(spg_t pgid);
 
   pgs_t& get_pgs() { return pgs; }
   const pgs_t& get_pgs() const { return pgs; }
