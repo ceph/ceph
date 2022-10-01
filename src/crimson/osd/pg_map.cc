@@ -64,10 +64,11 @@ void PGMap::pg_created(spg_t pgid, Ref<PG> pg)
   ceph_assert(!pgs.count(pgid));
   pgs.emplace(pgid, pg);
 
-  auto state = pgs_creating.find(pgid);
-  ceph_assert(state != pgs_creating.end());
-  state->second.promise.set_value(pg);
-  pgs_creating.erase(pgid);
+  auto creating_iter = pgs_creating.find(pgid);
+  ceph_assert(creating_iter != pgs_creating.end());
+  auto promise = std::move(creating_iter->second.promise);
+  pgs_creating.erase(creating_iter);
+  promise.set_value(pg);
 }
 
 void PGMap::pg_loaded(spg_t pgid, Ref<PG> pg)
