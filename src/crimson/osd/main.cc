@@ -8,7 +8,6 @@
 #include <fstream>
 #include <random>
 
-#include <seastar/apps/lib/stop_signal.hh>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/prometheus.hh>
@@ -27,6 +26,7 @@
 #include "crimson/common/fatal_signal.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
+#include "crimson/osd/stop_signal.h"
 #include "global/pidfile.h"
 #include "osd.h"
 
