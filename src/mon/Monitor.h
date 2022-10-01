@@ -434,7 +434,7 @@ private:
   void sync_reset_provider();
 
   /**
-   * Caled when a sync attempt times out (requester-side)
+   * Called when a sync attempt times out (requester-side)
    */
   void sync_timeout();
 
